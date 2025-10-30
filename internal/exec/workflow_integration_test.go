@@ -35,9 +35,10 @@ func TestWorkflowIntegration_MockProviderEnvironmentVariables(t *testing.T) {
 	envOutputFile := filepath.Join(tmpDir, "env-output.txt")
 
 	// Get OS-specific command to dump environment variables.
+	// On Windows, use cmd /c with proper quoting.
 	var dumpEnvCmd string
 	if runtime.GOOS == "windows" {
-		dumpEnvCmd = "set > " + envOutputFile
+		dumpEnvCmd = "cmd /c set > \"" + envOutputFile + "\""
 	} else {
 		dumpEnvCmd = "env > " + envOutputFile
 	}
@@ -103,7 +104,7 @@ func TestWorkflowIntegration_MultipleStepsWithDifferentIdentities(t *testing.T) 
 	// Get OS-specific command to dump environment variables.
 	var getDumpCmd func(string) string
 	if runtime.GOOS == "windows" {
-		getDumpCmd = func(file string) string { return "set > " + file }
+		getDumpCmd = func(file string) string { return "cmd /c set > \"" + file + "\"" }
 	} else {
 		getDumpCmd = func(file string) string { return "env > " + file }
 	}
@@ -182,7 +183,7 @@ func TestWorkflowIntegration_CommandLineIdentityOverride(t *testing.T) {
 	// Get OS-specific command to dump environment variables.
 	var getDumpCmd func(string) string
 	if runtime.GOOS == "windows" {
-		getDumpCmd = func(file string) string { return "set > " + file }
+		getDumpCmd = func(file string) string { return "cmd /c set > \"" + file + "\"" }
 	} else {
 		getDumpCmd = func(file string) string { return "env > " + file }
 	}
@@ -247,8 +248,8 @@ func TestWorkflowIntegration_AWSMockProviderEnvironment(t *testing.T) {
 	// Get OS-specific command to dump environment variables and grep for AWS vars.
 	var dumpEnvCmd string
 	if runtime.GOOS == "windows" {
-		// On Windows, use findstr to filter AWS variables.
-		dumpEnvCmd = "set > " + envOutputFile
+		// On Windows, use cmd /c with proper quoting.
+		dumpEnvCmd = "cmd /c set > \"" + envOutputFile + "\""
 	} else {
 		// On Unix, dump all env vars (we'll filter in Go).
 		dumpEnvCmd = "env > " + envOutputFile

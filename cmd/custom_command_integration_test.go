@@ -41,7 +41,7 @@ func TestCustomCommandIntegration_MockProviderEnvironment(t *testing.T) {
 	// Get OS-specific command to dump environment variables.
 	var dumpEnvCmd string
 	if runtime.GOOS == "windows" {
-		dumpEnvCmd = "set > " + envOutputFile
+		dumpEnvCmd = "cmd /c set > \"" + envOutputFile + "\""
 	} else {
 		dumpEnvCmd = "env > " + envOutputFile
 	}
@@ -112,7 +112,7 @@ func TestCustomCommandIntegration_IdentityFlagOverride(t *testing.T) {
 	// Get OS-specific command to dump environment variables.
 	var dumpEnvCmd string
 	if runtime.GOOS == "windows" {
-		dumpEnvCmd = "set > " + envOutputFile
+		dumpEnvCmd = "cmd /c set > \"" + envOutputFile + "\""
 	} else {
 		dumpEnvCmd = "env > " + envOutputFile
 	}
@@ -188,7 +188,7 @@ func TestCustomCommandIntegration_MultipleSteps(t *testing.T) {
 	// Get OS-specific command to dump environment variables.
 	var getDumpCmd func(string) string
 	if runtime.GOOS == "windows" {
-		getDumpCmd = func(file string) string { return "set > " + file }
+		getDumpCmd = func(file string) string { return "cmd /c set > \"" + file + "\"" }
 	} else {
 		getDumpCmd = func(file string) string { return "env > " + file }
 	}
@@ -283,7 +283,7 @@ func TestCustomCommandIntegration_NoIdentity(t *testing.T) {
 	// Get OS-specific command to dump environment variables.
 	var dumpEnvCmd string
 	if runtime.GOOS == "windows" {
-		dumpEnvCmd = "set > " + envOutputFile
+		dumpEnvCmd = "cmd /c set > \"" + envOutputFile + "\""
 	} else {
 		dumpEnvCmd = "env > " + envOutputFile
 	}
