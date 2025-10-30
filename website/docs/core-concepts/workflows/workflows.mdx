@@ -200,7 +200,7 @@ Each workflow definition must confirm to the following schema:
   <dd>Step-level Atmos stack (optional). If specified, the `command` will be executed for this Atmos stack. It overrides the workflow-level `stack` attribute, and can itself be overridden on the command line by using the `--stack` flag (`-s` for shorthand)</dd>
 
   <dt>`identity`</dt>
-  <dd>Step-level identity for authentication (optional). If specified, Atmos will authenticate using this identity before executing the step. The subprocess will receive environment variables pointing to temporary credential files (e.g., `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`). See [Authentication](/core-concepts/auth) for more details</dd>
+  <dd>Step-level identity for authentication (optional). If specified, Atmos will authenticate using this identity before executing the step. The subprocess will receive environment variables pointing to temporary credential files (e.g., `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`). See [Authentication](/cli/commands/auth/usage) for more details</dd>
 </dl>
 
 :::note
@@ -520,7 +520,7 @@ workflows:
 ```
 
 :::tip
-Configure identities in your [`atmos.yaml`](/cli/configuration) under the `auth` section. See the [Authentication documentation](/core-concepts/auth) for configuration details.
+Configure identities in your [`atmos.yaml`](/cli/configuration) under the `auth` section. See the [Authentication documentation](/cli/commands/auth/usage) for configuration details.
 :::
 
 ### Setting a Default Identity for All Steps
