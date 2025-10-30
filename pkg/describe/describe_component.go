@@ -2,6 +2,7 @@ package describe
 
 import (
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // ExecuteDescribeComponent describes component config and returns the final map of component configuration in the stack
@@ -12,5 +13,7 @@ func ExecuteDescribeComponent(
 	processYamlFunctions bool,
 	skip []string,
 ) (map[string]any, error) {
+	defer perf.Track(nil, "describe.ExecuteDescribeComponent")()
+
 	return e.ExecuteDescribeComponent(component, stack, processTemplates, processYamlFunctions, skip)
 }

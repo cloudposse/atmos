@@ -233,6 +233,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	err = auth.TerraformPreHook(&atmosConfig, &info)
 	if err != nil {
 		log.Error("Error executing 'atmos auth terraform pre-hook'", logFieldComponent, info.ComponentFromArg, "error", err)
+		return err
 	}
 
 	// Component working directory
@@ -280,6 +281,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if len(problematicVars) > 0 {
 		log.Warn("Detected environment variables that may interfere with Atmos's control of Terraform",
 			"variables", problematicVars)
+	}
+
+	// Convert ComponentEnvSection to ComponentEnvList.
+	// ComponentEnvSection is populated by auth hooks and stack config env sections.
+	for k, v := range info.ComponentEnvSection {
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("%s=%v", k, v))
 	}
 
 	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))

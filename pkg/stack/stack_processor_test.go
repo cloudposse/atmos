@@ -194,7 +194,15 @@ func TestStackProcessor(t *testing.T) {
 
 	yamlConfig, err := u.ConvertToYAML(mapConfig1)
 	assert.Nil(t, err)
-	t.Log(string(yamlConfig))
+	t.Cleanup(func() {
+		if t.Failed() {
+			if yamlConfig != "" {
+				t.Logf("Stack config:\n%s", yamlConfig)
+			} else {
+				t.Logf("Stack config (raw): %+v", mapConfig1)
+			}
+		}
+	})
 }
 
 func TestStackProcessorRelativePaths(t *testing.T) {

@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	IdentityFlagName = "identity"
+	IdentityFlagName        = "identity"
+	IdentityFlagSelectValue = "__SELECT__" // Special value when --identity is used without argument.
 )
 
 // authCmd groups authentication-related subcommands.
@@ -23,7 +24,15 @@ var authCmd = &cobra.Command{
 func init() {
 	// Avoid adding "stack" at the group level unless subcommands require it.
 	// AddStackCompletion(authCmd)
-	authCmd.PersistentFlags().StringP(IdentityFlagName, "i", "", "Specify the target identity to assume.")
+	authCmd.PersistentFlags().StringP(IdentityFlagName, "i", "", "Specify the target identity to assume. Use without value to interactively select.")
+
+	// Set NoOptDefVal to enable optional flag value.
+	// When --identity is used without a value, it will receive IdentityFlagSelectValue.
+	identityFlag := authCmd.PersistentFlags().Lookup(IdentityFlagName)
+	if identityFlag != nil {
+		identityFlag.NoOptDefVal = IdentityFlagSelectValue
+	}
+
 	// Bind to Viper and env (flags > env > config > defaults).
 	if err := viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"); err != nil {
 		log.Trace("Failed to bind identity environment variables", "error", err)

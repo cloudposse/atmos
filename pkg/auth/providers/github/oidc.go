@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -199,4 +200,31 @@ func (p *oidcProvider) Environment() (map[string]string, error) {
 	// GitHub OIDC provider doesn't set additional environment variables.
 	// The OIDC token is passed to downstream identities via credentials.
 	return map[string]string{}, nil
+}
+
+// PrepareEnvironment prepares environment variables for external processes.
+// For GitHub OIDC providers, we don't modify the environment since OIDC tokens
+// are used for authentication chains but not directly consumed by external processes.
+func (p *oidcProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	defer perf.Track(nil, "github.oidcProvider.PrepareEnvironment")()
+
+	// GitHub OIDC provider doesn't need to modify environment for external processes.
+	// The OIDC token is used during authentication to obtain cloud credentials,
+	// which are then managed by the respective cloud identities.
+	return environ, nil
+}
+
+// Logout removes provider-specific credential storage.
+func (p *oidcProvider) Logout(ctx context.Context) error {
+	// GitHub OIDC provider has no logout concept - tokens come from GitHub Actions environment.
+	// Credentials are only stored in keyring (handled by AuthManager).
+	// Return ErrLogoutNotSupported to indicate successful no-op (exit 0).
+	log.Debug("Logout not supported for GitHub OIDC provider (no files to clean up)", "provider", p.name)
+	return errUtils.ErrLogoutNotSupported
+}
+
+// GetFilesDisplayPath returns the display path for credential files.
+// GitHub OIDC provider doesn't use file-based credentials.
+func (p *oidcProvider) GetFilesDisplayPath() string {
+	return "" // No files for GitHub OIDC provider
 }

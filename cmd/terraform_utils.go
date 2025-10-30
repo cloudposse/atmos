@@ -4,13 +4,14 @@ import (
 	"errors"
 	"fmt"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -74,7 +75,46 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	identityFlag, err := flags.GetString("identity")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
-	info.Identity = identityFlag
+	// Check if user wants to interactively select identity.
+	forceSelect := identityFlag == IdentityFlagSelectValue
+
+	// Handle interactive selection when --identity is used without a value.
+	if forceSelect {
+		// Guard: Fail fast in CI/non-TTY environments instead of hanging.
+		// Interactive selector requires both stdin (for input) and stdout (for TUI rendering).
+		if !term.IsTTYSupportForStdin() || !term.IsTTYSupportForStdout() {
+			errUtils.CheckErrorPrintAndExit(
+				fmt.Errorf("%w: interactive identity selection requires a TTY", errUtils.ErrDefaultIdentity),
+				"",
+				"",
+			)
+		}
+
+		// Initialize CLI config to get auth configuration.
+		// Use false to skip stack processing - only auth config is needed.
+		atmosConfig, err := cfg.InitCliConfig(info, false)
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrInitializeCLIConfig, err), "", "")
+		}
+
+		// Create auth manager to enable identity selection.
+		authManager, err := createAuthManager(&atmosConfig.Auth)
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
+		}
+
+		// Get default identity with forced interactive selection.
+		selectedIdentity, err := authManager.GetDefaultIdentity(true)
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrDefaultIdentity, err), "", "")
+		}
+
+		info.Identity = selectedIdentity
+	} else if identityFlag != "" {
+		// Only override Identity if the flag was explicitly set (not empty).
+		// This preserves the ATMOS_IDENTITY environment variable set in ProcessCommandLineArgs.
+		info.Identity = identityFlag
+	}
 	// Check Terraform Single-Component and Multi-Component flags
 	err = checkTerraformFlags(&info)
 	errUtils.CheckErrorPrintAndExit(err, "", "")

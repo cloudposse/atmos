@@ -19,13 +19,13 @@ func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadR
 	if dto == nil {
 		return errors.Join(errUtils.ErrFailedToUploadInstanceStatus, errUtils.ErrNilRequestDTO)
 	}
-	// Use the correct endpoint format: /api/v1/repos/{owner}/{repo}/instances/{stack}/{component}
-	targetURL := fmt.Sprintf("%s/%s/repos/%s/%s/instances/%s/%s",
+	// Use the correct endpoint format: /api/v1/repos/{owner}/{repo}/instances?stack={stack}&component={component}.
+	targetURL := fmt.Sprintf("%s/%s/repos/%s/%s/instances?stack=%s&component=%s",
 		c.BaseURL, c.BaseAPIEndpoint,
 		url.PathEscape(dto.RepoOwner),
 		url.PathEscape(dto.RepoName),
-		url.PathEscape(dto.Stack),
-		url.PathEscape(dto.Component))
+		url.QueryEscape(dto.Stack),
+		url.QueryEscape(dto.Component))
 	log.Debug("Uploading drift status.", "url", targetURL)
 
 	// Map HasDrift to the correct status format

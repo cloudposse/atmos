@@ -63,7 +63,7 @@ func TestStoreCommand_NilOutputHandling(t *testing.T) {
 					ComponentFromArg: "test-component",
 					Stack:            "test-stack",
 				},
-				outputGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+				outputGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext) (any, bool, error) {
 					// Simulate different scenarios:
 					// - tt.mockOutput == nil && tt.expectError: simulate missing output (exists=false)
 					// - tt.mockOutput == nil && !tt.expectError: simulate legitimate null (exists=true, value=nil)
@@ -146,7 +146,7 @@ func TestStoreCommand_IntermittentFailureHandling(t *testing.T) {
 			mockStore.Clear()
 
 			// Simulate 10% failure rate (rate limit returns missing output)
-			mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+			mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext) (any, bool, error) {
 				// Simulate intermittent rate limit: 10% of calls return missing output
 				if iteration%10 == 0 {
 					nilReturned.Add(1)
@@ -225,7 +225,7 @@ func TestStoreCommand_RateLimitErrorHandling(t *testing.T) {
 	}
 
 	// Simulate AWS SDK retry behavior
-	mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+	mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext) (any, bool, error) {
 		attemptCount++
 
 		// Simulate SDK retry pattern:
@@ -282,7 +282,7 @@ func TestStoreCommand_ErrorVsLegitimateNull(t *testing.T) {
 	}{
 		{
 			name: "error propagates correctly",
-			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext) (any, bool, error) {
 				// Simulate explicit SDK error
 				return nil, false, errors.New("SDK error: rate limit exceeded")
 			},
@@ -291,7 +291,7 @@ func TestStoreCommand_ErrorVsLegitimateNull(t *testing.T) {
 		},
 		{
 			name: "missing output returns error",
-			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext) (any, bool, error) {
 				// Output doesn't exist
 				return nil, false, nil
 			},
@@ -300,7 +300,7 @@ func TestStoreCommand_ErrorVsLegitimateNull(t *testing.T) {
 		},
 		{
 			name: "valid value stored correctly",
-			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext) (any, bool, error) {
 				return "vpc-12345", true, nil
 			},
 			expectError:   false,
@@ -309,7 +309,7 @@ func TestStoreCommand_ErrorVsLegitimateNull(t *testing.T) {
 		},
 		{
 			name: "legitimate null value stored correctly",
-			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+			mockGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext) (any, bool, error) {
 				// Terraform output exists but has null value
 				return nil, true, nil
 			},
@@ -373,7 +373,7 @@ func TestStoreCommand_MockOutputGetter(t *testing.T) {
 		},
 	}
 
-	mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+	mockGetter := func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext) (any, bool, error) {
 		getterCalled = true
 		assert.Equal(t, "test-stack", stack)
 		assert.Equal(t, "test-component", component)
@@ -418,7 +418,7 @@ func TestStoreCommand_MissingOutputError(t *testing.T) {
 		Name:        "store",
 		atmosConfig: atmosConfig,
 		info:        &schema.ConfigAndStacksInfo{ComponentFromArg: "test-component", Stack: "test-stack"},
-		outputGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool) (any, bool, error) {
+		outputGetter: func(cfg *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext) (any, bool, error) {
 			// Return missing output to test that it errors
 			return nil, false, nil
 		},

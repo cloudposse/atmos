@@ -54,6 +54,8 @@ func NewDescribeComponentExec() *DescribeComponentExec {
 }
 
 func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentParams DescribeComponentParams) error {
+	defer perf.Track(nil, "exec.DescribeComponentExec.ExecuteDescribeComponentCmd")()
+
 	component := describeComponentParams.Component
 	stack := describeComponentParams.Stack
 	processTemplates := describeComponentParams.ProcessTemplates
@@ -74,8 +76,6 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 	if err != nil {
 		return err
 	}
-
-	defer perf.Track(&atmosConfig, "exec.ExecuteDescribeComponentCmd")()
 
 	// Enable provenance tracking if requested.
 	if provenance {

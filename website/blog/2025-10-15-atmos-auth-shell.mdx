@@ -1,0 +1,259 @@
+---
+slug: introducing-atmos-auth-shell
+title: "Introducing atmos auth shell: Isolated Shell Sessions for Secure Multi-Identity Workflows"
+authors: [atmos]
+tags: [feature, atmos-auth, security, workflows]
+---
+
+We're excited to introduce `atmos auth shell`, a new command that makes working with multiple cloud identities more secure.
+
+This command launches isolated shell sessions scoped to specific cloud identities. Think of it like `aws-vault exec`, but for all your cloud identities managed by Atmos—AWS, Azure, GCP, GitHub, SAML, and more.
+
+When you exit the shell, you return to your parent shell where those credentials were never present. It's a simple pattern that helps prevent credential leakage and reduces the risk of running commands against the wrong environment.
+
+<!-- truncate -->
+
+## The Problem
+
+The traditional approach to managing cloud credentials—storing multiple profiles in `~/.aws/credentials` or exporting variables in your main shell—is fundamentally unsafe. When all credentials are accessible simultaneously in a single shell session, it's dangerously easy to accidentally run commands against the wrong environment:
+
+- You think you're in `dev`, but you're actually authenticated to `prod`
+- You modify a staging database when you meant to update a development one
+- You deploy infrastructure changes to the wrong AWS account
+
+**Credential leakage is a real problem.** When you export credentials to your shell environment, they persist until you explicitly unset them or close the terminal. This creates dangerous scenarios:
+
+```shell
+# Traditional workflow - credentials persist indefinitely
+eval $(atmos auth env --identity prod-admin --format bash)
+aws s3 ls
+# ... hours later, you forget which identity is active ...
+kubectl delete deployment critical-service  # 😱 Which cluster am I in?!
+```
+
+Without clear session boundaries, you have no built-in protection against:
+- Running commands with the wrong credentials
+- Leaving privileged credentials active in your shell for hours
+- Mixing operations across multiple environments in a single terminal
+
+## The Solution: `atmos auth shell`
+
+The new `atmos auth shell` command solves this through isolation. Each shell session is scoped to exactly one identity with one set of credentials. When you run:
+
+```shell
+atmos auth shell --identity prod-admin
+```
+
+You get a dedicated shell where **only** those production credentials are available. When you exit, your parent shell's environment remains completely unchanged—no credential pollution, no confusion about which environment you're operating in.
+
+This isolation enables a useful workflow: **run multiple authenticated shells simultaneously, each scoped to a different identity**:
+
+```shell
+# Terminal 1: Production operations
+atmos auth shell --identity prod-admin
+
+# Terminal 2: Staging testing
+atmos auth shell --identity staging-dev
+
+# Terminal 3: Development work
+atmos auth shell --identity dev-sandbox
+```
+
+Each terminal operates in complete isolation. You can't accidentally run a production command in your development shell, and vice versa. Your credentials are **session-scoped**—when you close the shell, it's destroyed and you return to your parent shell where those credentials don't exist.
+
+No lingering environment variables, no shared credential files with overly broad access.
+
+The command supports multiple identities, custom shells (`--shell`), custom arguments (`--`), shell nesting tracking (`ATMOS_SHLVL`), and works cross-platform.
+
+:::tip Customize Your Prompt
+Want to see which identity is active in your prompt? You can customize your shell prompt by adding `ATMOS_IDENTITY` or `ATMOS_SHLVL` to your `PS1` (bash) or equivalent prompt variable in your shell configuration file (e.g., `.bashrc`, `.zshrc`).
+
+Example for bash:
+```bash
+export PS1='[\u@\h \W${ATMOS_IDENTITY:+ ($ATMOS_IDENTITY)}]\$ '
+```
+:::
+
+## Real-World Use Cases
+
+### Safe Production Operations
+
+```shell
+atmos auth shell --identity prod-admin
+# Now in authenticated shell, scoped ONLY to production
+aws s3 sync ./assets s3://prod-bucket/
+aws ecs update-service --cluster prod --service api --force-new-deployment
+aws rds describe-db-instances --region us-east-1
+exit
+# Back to parent shell—credentials never existed here
+```
+
+When you exit, you're back in your parent shell where those production credentials don't exist. You can't accidentally run a production command after switching contexts.
+
+### Debugging Cloud Resources
+
+```shell
+atmos auth shell --identity dev-debug
+# Isolated shell with ONLY dev credentials
+aws logs tail /aws/lambda/my-function --follow
+kubectl get pods -n development
+aws dynamodb scan --table-name dev-users
+exit
+```
+
+### Long-Running Operations with Multiple Steps
+
+```shell
+atmos auth shell --identity migration-role
+# Run multiple migration steps without re-authenticating
+./migrate-database.sh
+./update-dns-records.sh
+aws s3 sync ./backups s3://migration-bucket/
+./verify-migration.sh
+exit
+```
+
+### Multiple Concurrent Environments
+
+Open multiple terminals, each with different credentials:
+
+```shell
+# Terminal 1: Monitoring production
+atmos auth shell --identity prod-readonly
+watch aws cloudwatch get-metric-statistics ...
+
+# Terminal 2: Testing in staging
+atmos auth shell --identity staging-admin
+terraform apply -target=module.test_feature
+
+# Terminal 3: Development work
+atmos auth shell --identity dev-sandbox
+aws s3 cp ./test-data s3://dev-uploads/
+```
+
+Each terminal has **exactly one set of credentials**. No confusion, no accidents.
+
+## How It Works
+
+Under the hood, `atmos auth shell`:
+
+1. **Authenticates** with your configured identity provider
+2. **Retrieves** temporary credentials from your cloud provider
+3. **Writes** credentials to Atmos-managed configuration files
+4. **Sets** environment variables pointing to these config files (e.g., `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`)
+5. **Sets** `ATMOS_IDENTITY` to track which identity is active
+6. **Launches** your preferred shell with all environment variables configured
+7. **Propagates** the shell's exit code back to Atmos when you exit
+
+## Comparison to AWS Vault
+
+If you're familiar with `aws-vault exec`, you'll recognize this pattern. Both tools prioritize **temporary credentials** and **session isolation**:
+
+| Feature | aws-vault exec | atmos auth shell |
+|---------|---------------|------------------|
+| **Temporary credentials** | ✅ Yes | ✅ Yes |
+| **Isolated subshells** | ✅ Yes | ✅ Yes |
+| **Session boundaries** | ✅ Return to parent shell on exit | ✅ Return to parent shell on exit |
+| **Cloud providers** | AWS only | AWS, Azure, GCP, GitHub, SAML, and more |
+| **Integration** | Standalone tool | Part of Atmos infrastructure workflow |
+| **Identity management** | IAM profiles | Atmos identities (unified across clouds) |
+
+`atmos auth shell` brings the same security-first philosophy to **all your cloud identities**, not just AWS. If you manage infrastructure across multiple cloud providers, you get consistent, isolated authentication for everything—AWS SSO, Azure AD, GCP service accounts, GitHub Apps, and more.
+
+## Environment Variables
+
+When you're in an `atmos auth shell` session, you'll have access to:
+
+<dl>
+  <dt><code>ATMOS_IDENTITY</code></dt>
+  <dd>The name of the active identity</dd>
+
+  <dt><code>ATMOS_SHLVL</code></dt>
+  <dd>Shell nesting level (increments for nested shells)</dd>
+
+  <dt><code>AWS_SHARED_CREDENTIALS_FILE</code></dt>
+  <dd>Path to Atmos-managed credentials file (AWS identities only)</dd>
+
+  <dt><code>AWS_CONFIG_FILE</code></dt>
+  <dd>Path to Atmos-managed config file (AWS identities only)</dd>
+
+  <dt><code>AWS_PROFILE</code></dt>
+  <dd>Profile name corresponding to your identity (AWS identities only)</dd>
+</dl>
+
+These environment variables work seamlessly with any tool that uses the AWS SDK, such as Terraform, the AWS CLI, kubectl with AWS authentication, and more. Credentials are never exposed directly in environment variables—only secure file paths are set.
+
+## When to Use `atmos auth shell` vs `atmos auth env`
+
+Both commands serve important but different purposes:
+
+**Use `atmos auth shell` when:**
+- You need **session isolation** for security
+- Working with production or sensitive environments
+- Running multiple concurrent sessions with different identities
+- You want credentials to **automatically expire** when you exit
+- You need clear boundaries between different cloud contexts
+
+**Use `atmos auth env` when:**
+- Integrating with CI/CD pipelines that need to export variables
+- Writing scripts that source environment variables
+- You need credentials in a specific format (bash, fish, etc.)
+- Automating workflows where a subshell isn't appropriate
+
+Think of it this way: `atmos auth shell` is for **interactive work** where safety and isolation matter. `atmos auth env` is for **automation and integration** where you need to export credentials to your existing environment.
+
+## Getting Started
+
+The `atmos auth shell` command is available now in the latest version of Atmos. To start using it:
+
+1. **Configure your identity** in `atmos.yaml`:
+
+```yaml
+auth:
+  providers:
+    - type: aws
+      name: aws-sso
+      config:
+        sso_start_url: https://your-org.awsapps.com/start
+        sso_region: us-east-1
+
+  identities:
+    - name: dev-user
+      provider: aws-sso
+      config:
+        account_id: "123456789012"
+        role_name: DeveloperRole
+
+    - name: prod-admin
+      provider: aws-sso
+      config:
+        account_id: "987654321098"
+        role_name: AdminRole
+```
+
+2. **Launch your authenticated shell**:
+
+```shell
+atmos auth shell --identity dev-user
+```
+
+3. **Start working** with your cloud resources!
+
+## Learn More
+
+- [PR #1640](https://github.com/cloudposse/atmos/pull/1640)
+
+## What's Next?
+
+We're continuously improving Atmos authentication capabilities. Future enhancements may include:
+
+- Session duration customization
+- Automatic credential refresh
+- Multi-cloud authentication in a single shell
+- Integration with external secret managers
+
+Have feedback or suggestions? [Open an issue](https://github.com/cloudposse/atmos/issues) or join the discussion in our community!
+
+---
+
+Happy authenticating! 🚀

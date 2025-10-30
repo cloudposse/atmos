@@ -19,6 +19,7 @@ var (
 	ErrUnknownPackageType                    = errors.New("unknown package type")
 	ErrLocalMixinURICannotBeEmpty            = errors.New("local mixin URI cannot be empty")
 	ErrLocalMixinInstallationNotImplemented  = errors.New("local mixin installation not implemented")
+	ErrNotImplemented                        = errors.New("not implemented")
 	ErrFailedToInitializeTUIModel            = errors.New("failed to initialize TUI model: verify terminal capabilities and permissions")
 	ErrSetTempDirPermissions                 = errors.New("failed to set temp directory permissions")
 	ErrCopyPackageToTarget                   = errors.New("failed to copy package to target")
@@ -51,6 +52,11 @@ var (
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 
+	// ErrAuthConsole is returned when auth console command operations fail.
+	ErrAuthConsole          = errors.New("auth console operation failed")
+	ErrProviderNotSupported = errors.New("provider does not support this operation")
+	ErrUnknownServiceAlias  = errors.New("unknown service alias")
+
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
 
@@ -64,10 +70,24 @@ var (
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
 	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
 	ErrProcessTerraformStateFile        = errors.New("error processing terraform state file")
+	ErrLoadAwsConfig                    = errors.New("failed to load AWS config")
+	ErrGetObjectFromS3                  = errors.New("failed to get object from S3")
+	ErrReadS3ObjectBody                 = errors.New("failed to read S3 object body")
+	ErrCreateGCSClient                  = errors.New("failed to create GCS client")
+	ErrGetObjectFromGCS                 = errors.New("failed to get object from GCS")
+	ErrReadGCSObjectBody                = errors.New("failed to read GCS object body")
+	ErrGCSBucketRequired                = errors.New("bucket is required for gcs backend")
+	ErrInvalidBackendConfig             = errors.New("invalid backend configuration")
 
-	ErrLoadAwsConfig    = errors.New("failed to load AWS config")
-	ErrGetObjectFromS3  = errors.New("failed to get object from S3")
-	ErrReadS3ObjectBody = errors.New("failed to read S3 object body")
+	// Azure Blob Storage specific errors.
+	ErrGetBlobFromAzure       = errors.New("failed to get blob from Azure Blob Storage")
+	ErrReadAzureBlobBody      = errors.New("failed to read Azure blob body")
+	ErrCreateAzureCredential  = errors.New("failed to create Azure credential")
+	ErrCreateAzureClient      = errors.New("failed to create Azure Blob Storage client")
+	ErrAzureContainerRequired = errors.New("container_name is required for azurerm backend")
+	ErrStorageAccountRequired = errors.New("storage_account_name is required for azurerm backend")
+	ErrAzurePermissionDenied  = errors.New("permission denied accessing Azure blob")
+	ErrBackendConfigRequired  = errors.New("backend configuration is required")
 
 	// Git-related errors.
 	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")
@@ -95,6 +115,7 @@ var (
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
 	ErrFailedToFindImport  = errors.New("failed to find import")
+	ErrHTTPRequestFailed   = errors.New("HTTP request failed")
 
 	// Config loading errors.
 	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
@@ -121,6 +142,7 @@ var (
 	ErrHTTPBackendWorkspaces       = errors.New("workspaces are not supported for the HTTP backend")
 	ErrInvalidTerraformComponent   = errors.New("invalid Terraform component")
 	ErrNoTty                       = errors.New("no TTY attached")
+	ErrNoSuitableShell             = errors.New("no suitable shell found")
 	ErrFailedToLoadTerraformModule = errors.New("failed to load terraform module")
 
 	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
@@ -160,9 +182,20 @@ var (
 	ErrInvalidSpaceLiftSettings               = errors.New("invalid spacelift settings section")
 	ErrInvalidComponentMetadataInherits       = errors.New("invalid component metadata.inherits section")
 	ErrComponentNotDefined                    = errors.New("component not defined in any config files")
-	ErrInvalidTerraformBackend                = errors.New("invalid terraform.backend section")
-	ErrInvalidTerraformRemoteStateBackend     = errors.New("invalid terraform.remote_state_backend section")
-	ErrUnsupportedComponentType               = errors.New("unsupported component type. Valid types are 'terraform', 'helmfile', 'packer'")
+
+	// Component registry errors.
+	ErrComponentProviderNotFound          = errors.New("component provider not found")
+	ErrComponentProviderNil               = errors.New("component provider cannot be nil")
+	ErrComponentTypeEmpty                 = errors.New("component type cannot be empty")
+	ErrComponentConfigInvalid             = errors.New("component configuration invalid")
+	ErrComponentListFailed                = errors.New("failed to list components")
+	ErrComponentValidationFailed          = errors.New("component validation failed")
+	ErrComponentExecutionFailed           = errors.New("component execution failed")
+	ErrComponentArtifactGeneration        = errors.New("component artifact generation failed")
+	ErrComponentProviderRegistration      = errors.New("failed to register component provider")
+	ErrInvalidTerraformBackend            = errors.New("invalid terraform.backend section")
+	ErrInvalidTerraformRemoteStateBackend = errors.New("invalid terraform.remote_state_backend section")
+	ErrUnsupportedComponentType           = errors.New("unsupported component type. Valid types are 'terraform', 'helmfile', 'packer'")
 
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")
@@ -350,7 +383,9 @@ var (
 	ErrAwsAuth                      = errors.New("aws auth error")
 	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
+	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
+	ErrUserAborted                  = errors.New("user aborted")
 
 	// Auth manager and identity/provider resolution errors (centralized sentinels).
 	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")
@@ -362,6 +397,8 @@ var (
 	ErrInitializingCredentialStore   = errors.New("failed to initialize credential store")
 	ErrCircularDependency            = errors.New("circular dependency detected in identity chain")
 	ErrIdentityNotFound              = errors.New("identity not found")
+	ErrProviderNotFound              = errors.New("provider not found")
+	ErrMutuallyExclusiveFlags        = errors.New("mutually exclusive flags provided")
 	ErrNoDefaultIdentity             = errors.New("no default identity configured for authentication")
 	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
 	ErrNoIdentitiesAvailable         = errors.New("no identities available")
@@ -384,6 +421,18 @@ var (
 	ErrNilTerraformOutput = errors.New("terraform output returned nil")
 	ErrNilStoreValue      = errors.New("cannot store nil value")
 
+	// Logout errors.
+	ErrLogoutFailed         = errors.New("logout failed")
+	ErrPartialLogout        = errors.New("partial logout")
+	ErrLogoutNotSupported   = errors.New("logout not supported for this provider")
+	ErrLogoutNotImplemented = errors.New("logout not implemented for this provider")
+	ErrKeyringDeletion      = errors.New("keyring deletion failed")
+	ErrProviderLogout       = errors.New("provider logout failed")
+	ErrIdentityLogout       = errors.New("identity logout failed")
+	ErrIdentityNotInConfig  = errors.New("identity not found in configuration")
+	ErrProviderNotInConfig  = errors.New("provider not found in configuration")
+	ErrInvalidLogoutOption  = errors.New("invalid logout option")
+
 	// Vendor update/diff errors.
 	ErrComponentNotFound          = errors.New("component not found in vendor config")
 	ErrComponentFlagRequired      = errors.New("--component flag is required")
@@ -401,7 +450,6 @@ var (
 	ErrGitRefNotFound             = errors.New("git reference not found in remote repository")
 	ErrInvalidSemanticVersion     = errors.New("invalid semantic version")
 	ErrNoTagsFound                = errors.New("no tags found in repository")
-	ErrNotImplemented             = errors.New("not implemented")
 	ErrNoVersionsAvailable        = errors.New("no versions available")
 	ErrNoVersionsMatchConstraints = errors.New("no versions match the specified constraints")
 	ErrInvalidSemverConstraint    = errors.New("invalid semantic version constraint")

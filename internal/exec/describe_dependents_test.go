@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -36,10 +36,10 @@ func TestDescribeDependentsExec_Execute_Success_NoQuery(t *testing.T) {
 	}
 
 	// Mock functions
-	mockExecuteDescribeDependents := func(config *schema.AtmosConfiguration, component, stack string, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) ([]schema.Dependent, error) {
-		assert.Equal(t, "test-component", component)
-		assert.Equal(t, "test-stack", stack)
-		assert.False(t, includeSettings)
+	mockExecuteDescribeDependents := func(config *schema.AtmosConfiguration, args *DescribeDependentsArgs) ([]schema.Dependent, error) {
+		assert.Equal(t, "test-component", args.Component)
+		assert.Equal(t, "test-stack", args.Stack)
+		assert.False(t, args.IncludeSettings)
 		return dependents, nil
 	}
 
@@ -101,7 +101,7 @@ func TestDescribeDependentsExec_Execute_Success_WithQuery(t *testing.T) {
 
 	exec := &describeDependentsExec{
 		atmosConfig: atmosConfig,
-		executeDescribeDependents: func(atmosConfig *schema.AtmosConfiguration, component, stack string, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) ([]schema.Dependent, error) {
+		executeDescribeDependents: func(atmosConfig *schema.AtmosConfiguration, args *DescribeDependentsArgs) ([]schema.Dependent, error) {
 			return dependents, nil
 		},
 		newPageCreator:        newMockPageCreator,
@@ -131,7 +131,7 @@ func TestDescribeDependentsExec_Execute_ExecuteDescribeDependentsError(t *testin
 	pagerMock := pager.NewMockPageCreator(gomock.NewController(t))
 	exec := &describeDependentsExec{
 		atmosConfig: atmosConfig,
-		executeDescribeDependents: func(atmosConfig *schema.AtmosConfiguration, component, stack string, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) ([]schema.Dependent, error) {
+		executeDescribeDependents: func(atmosConfig *schema.AtmosConfiguration, args *DescribeDependentsArgs) ([]schema.Dependent, error) {
 			return nil, expectedError
 		},
 		newPageCreator:        pagerMock,
@@ -170,7 +170,7 @@ func TestDescribeDependentsExec_Execute_YqExpressionError(t *testing.T) {
 
 	exec := &describeDependentsExec{
 		atmosConfig: atmosConfig,
-		executeDescribeDependents: func(atmosConfig *schema.AtmosConfiguration, component, stack string, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) ([]schema.Dependent, error) {
+		executeDescribeDependents: func(atmosConfig *schema.AtmosConfiguration, args *DescribeDependentsArgs) ([]schema.Dependent, error) {
 			return dependents, nil
 		},
 		newPageCreator: mockPageCreator,
@@ -201,7 +201,7 @@ func TestDescribeDependentsExec_Execute_EmptyDependents(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	dependents := []schema.Dependent{}
 
-	mockExecuteDescribeDependents := func(config *schema.AtmosConfiguration, component, stack string, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) ([]schema.Dependent, error) {
+	mockExecuteDescribeDependents := func(config *schema.AtmosConfiguration, args *DescribeDependentsArgs) ([]schema.Dependent, error) {
 		return dependents, nil
 	}
 
@@ -259,7 +259,7 @@ func TestDescribeDependentsExec_Execute_DifferentFormatsAndFiles(t *testing.T) {
 			dependents := []schema.Dependent{{Component: "comp1", Stack: "stack1"}}
 			pagerMock := pager.NewMockPageCreator(gomock.NewController(t))
 			// Mock functions
-			mockExecuteDescribeDependents := func(config *schema.AtmosConfiguration, component, stack string, includeSettings bool, processTemplates bool, processFunctions bool, skip []string) ([]schema.Dependent, error) {
+			mockExecuteDescribeDependents := func(config *schema.AtmosConfiguration, args *DescribeDependentsArgs) ([]schema.Dependent, error) {
 				return dependents, nil
 			}
 
@@ -450,7 +450,15 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc // capture
 		t.Run(tc.name, func(t *testing.T) {
-			res, err := ExecuteDescribeDependents(&atmosConfig, tc.component, tc.stack, false, true, true, nil)
+			res, err := ExecuteDescribeDependents(&atmosConfig, &DescribeDependentsArgs{
+				Component:            tc.component,
+				Stack:                tc.stack,
+				IncludeSettings:      false,
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+				Skip:                 nil,
+				OnlyInStack:          "",
+			})
 			require.NoError(t, err)
 
 			// Order-agnostic equality on struct slices
@@ -643,7 +651,15 @@ func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc // capture
 		t.Run(tc.name, func(t *testing.T) {
-			res, err := ExecuteDescribeDependents(&atmosConfig, tc.component, tc.stack, false, true, true, nil)
+			res, err := ExecuteDescribeDependents(&atmosConfig, &DescribeDependentsArgs{
+				Component:            tc.component,
+				Stack:                tc.stack,
+				IncludeSettings:      false,
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+				Skip:                 nil,
+				OnlyInStack:          "",
+			})
 			require.NoError(t, err)
 
 			// Order-agnostic equality on struct slices

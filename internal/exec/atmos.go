@@ -115,7 +115,15 @@ func ExecuteAtmosCmd() error {
 	}
 
 	if selectedCommand == "describe dependents" {
-		data, err := ExecuteDescribeDependents(&atmosConfig, selectedComponent, selectedStack, false, true, true, nil)
+		data, err := ExecuteDescribeDependents(&atmosConfig, &DescribeDependentsArgs{
+			Component:            selectedComponent,
+			Stack:                selectedStack,
+			IncludeSettings:      false,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+			Skip:                 nil,
+			OnlyInStack:          "",
+		})
 		if err != nil {
 			return err
 		}

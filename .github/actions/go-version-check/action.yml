@@ -1,0 +1,149 @@
+name: 'Go Version Check'
+description: 'Detect and comment on Go version changes in pull requests'
+author: 'Cloud Posse'
+
+inputs:
+  base-ref:
+    description: 'Base branch reference to compare against'
+    required: true
+  token:
+    description: 'GitHub token for API access'
+    required: true
+    default: ${{ github.token }}
+
+outputs:
+  base-version:
+    description: 'Go version in base branch'
+    value: ${{ steps.compare.outputs.base-version }}
+  pr-version:
+    description: 'Go version in PR'
+    value: ${{ steps.compare.outputs.pr-version }}
+  changed:
+    description: 'Whether the Go version changed'
+    value: ${{ steps.compare.outputs.changed }}
+  is-upgrade:
+    description: 'Whether this is an upgrade (true) or downgrade (false)'
+    value: ${{ steps.compare.outputs.is-upgrade }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get base branch Go version
+      id: base-version
+      shell: bash
+      run: |
+        git fetch origin ${{ inputs.base-ref }}
+        BASE_VERSION=$(git show origin/${{ inputs.base-ref }}:go.mod | grep '^go ' | awk '{print $2}')
+        echo "version=$BASE_VERSION" >> $GITHUB_OUTPUT
+        echo "Base branch Go version: $BASE_VERSION"
+
+    - name: Get PR Go version
+      id: pr-version
+      shell: bash
+      run: |
+        PR_VERSION=$(grep '^go ' go.mod | awk '{print $2}')
+        echo "version=$PR_VERSION" >> $GITHUB_OUTPUT
+        echo "PR Go version: $PR_VERSION"
+
+    - name: Compare versions
+      id: compare
+      shell: bash
+      run: |
+        BASE="${{ steps.base-version.outputs.version }}"
+        PR="${{ steps.pr-version.outputs.version }}"
+
+        echo "base-version=$BASE" >> $GITHUB_OUTPUT
+        echo "pr-version=$PR" >> $GITHUB_OUTPUT
+
+        if [ "$BASE" != "$PR" ]; then
+          echo "changed=true" >> $GITHUB_OUTPUT
+          # Simple string comparison works for semantic versions
+          if [ "$BASE" \< "$PR" ]; then
+            echo "is-upgrade=true" >> $GITHUB_OUTPUT
+            echo "✅ Go version upgrade detected: $BASE → $PR"
+          else
+            echo "is-upgrade=false" >> $GITHUB_OUTPUT
+            echo "⚠️ Go version downgrade detected: $BASE → $PR"
+          fi
+        else
+          echo "changed=false" >> $GITHUB_OUTPUT
+          echo "✅ Go version unchanged: $PR"
+        fi
+
+    - name: Comment on PR
+      if: steps.compare.outputs.changed == 'true'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+          const baseVersion = '${{ steps.compare.outputs.base-version }}';
+          const prVersion = '${{ steps.compare.outputs.pr-version }}';
+          const baseRef = '${{ inputs.base-ref }}';
+          const isUpgrade = '${{ steps.compare.outputs.is-upgrade }}' === 'true';
+
+          const emoji = isUpgrade ? '🚀' : '⚠️';
+          const versionChange = isUpgrade ? '⬆️ Upgrade' : '⬇️ Downgrade';
+
+          // Build the comment
+          let comment = emoji + ' **Go Version Change Detected**\n\n';
+          comment += 'This PR changes the Go version:\n';
+          comment += '- **Base branch** (`' + baseRef + '`): `' + baseVersion + '`\n';
+          comment += '- **This PR**: `' + prVersion + '`\n';
+          comment += '- **Change**: ' + versionChange + '\n\n';
+
+          if (isUpgrade) {
+            comment += '> [!TIP]\n';
+            comment += '> ### Upgrade Checklist\n';
+            comment += '> - [ ] Verify all CI workflows pass with new Go version\n';
+            comment += '> - [ ] Check for new language features that could be leveraged\n';
+            comment += '> - [ ] Review release notes: https://go.dev/doc/go' + prVersion.replace(/\.\d+$/, '') + '\n';
+            comment += '> - [ ] Update `.tool-versions` if using asdf\n';
+            comment += '> - [ ] Update Dockerfile Go version if applicable\n';
+          } else {
+            comment += '> [!WARNING]\n';
+            comment += '> ### Downgrade Detected\n';
+            comment += '> Downgrading Go version may indicate:\n';
+            comment += '> - This PR was based on an outdated branch\n';
+            comment += '> - Consider rebasing on latest `' + baseRef + '`\n';
+            comment += '> - Verify this change is intentional\n';
+            comment += '>\n';
+            comment += '> **If unintentional, please:**\n';
+            comment += '> 1. Rebase on latest `' + baseRef + '`\n';
+            comment += '> 2. Run `go mod tidy`\n';
+            comment += '> 3. Push updated changes\n';
+          }
+
+          comment += '\n---\n';
+          comment += '<sub>This is an automated comment from the Go Version Check action.</sub>';
+
+          // Check if we already commented
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(comment =>
+            comment.user.type === 'Bot' &&
+            comment.body.includes('Go Version Change Detected')
+          );
+
+          if (botComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: comment
+            });
+            console.log('Updated existing Go version comment');
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+            console.log('Created new Go version comment');
+          }

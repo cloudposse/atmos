@@ -39,3 +39,39 @@ func TestFuncMap(t *testing.T) {
 	assert.Equal(t, atmosConfig, atmosFuncs.atmosConfig)
 	assert.Equal(t, configAndStacksInfo, atmosFuncs.configAndStacksInfo)
 }
+
+func TestAtmosFuncs_Component(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
+	ctx := context.TODO()
+	gomplateData := &data.Data{}
+
+	atmosFuncs := &AtmosFuncs{
+		atmosConfig:         atmosConfig,
+		configAndStacksInfo: configAndStacksInfo,
+		ctx:                 ctx,
+		gomplateData:        gomplateData,
+	}
+
+	// Test with empty parameters - should return error.
+	_, err := atmosFuncs.Component("", "")
+	assert.Error(t, err, "Component() should return error for empty parameters")
+}
+
+func TestAtmosFuncs_GomplateDatasource(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{}
+	ctx := context.TODO()
+	gomplateData := &data.Data{}
+
+	atmosFuncs := &AtmosFuncs{
+		atmosConfig:         atmosConfig,
+		configAndStacksInfo: configAndStacksInfo,
+		ctx:                 ctx,
+		gomplateData:        gomplateData,
+	}
+
+	// Test with invalid alias - should return error.
+	_, err := atmosFuncs.GomplateDatasource("nonexistent-alias")
+	assert.Error(t, err, "GomplateDatasource() should return error for invalid alias")
+}

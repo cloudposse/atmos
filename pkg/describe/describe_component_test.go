@@ -18,7 +18,15 @@ func TestDescribeComponent(t *testing.T) {
 
 	componentSectionYaml, err := u.ConvertToYAML(componentSection)
 	assert.Nil(t, err)
-	t.Log(componentSectionYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if componentSectionYaml != "" {
+				t.Logf("Component section:\n%s", componentSectionYaml)
+			} else {
+				t.Logf("Component section (raw): %+v", componentSection)
+			}
+		}
+	})
 }
 
 func TestDescribeTemplatedComponent(t *testing.T) {
@@ -40,7 +48,15 @@ func TestDescribeComponent2(t *testing.T) {
 
 	componentSectionYaml, err := u.ConvertToYAML(componentSection)
 	assert.Nil(t, err)
-	t.Log(componentSectionYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if componentSectionYaml != "" {
+				t.Logf("Component section:\n%s", componentSectionYaml)
+			} else {
+				t.Logf("Component section (raw): %+v", componentSection)
+			}
+		}
+	})
 }
 
 func TestDescribeComponent3(t *testing.T) {
@@ -52,7 +68,15 @@ func TestDescribeComponent3(t *testing.T) {
 
 	componentSectionYaml, err := u.ConvertToYAML(componentSection)
 	assert.Nil(t, err)
-	t.Log(componentSectionYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if componentSectionYaml != "" {
+				t.Logf("Component section:\n%s", componentSectionYaml)
+			} else {
+				t.Logf("Component section (raw): %+v", componentSection)
+			}
+		}
+	})
 }
 
 func TestDescribeComponent5(t *testing.T) {
@@ -64,7 +88,15 @@ func TestDescribeComponent5(t *testing.T) {
 
 	componentSectionYaml, err := u.ConvertToYAML(componentSection)
 	assert.Nil(t, err)
-	t.Log(componentSectionYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if componentSectionYaml != "" {
+				t.Logf("Component section:\n%s", componentSectionYaml)
+			} else {
+				t.Logf("Component section (raw): %+v", componentSection)
+			}
+		}
+	})
 }
 
 func TestDescribeComponent6(t *testing.T) {
@@ -76,7 +108,15 @@ func TestDescribeComponent6(t *testing.T) {
 
 	componentSectionYaml, err := u.ConvertToYAML(componentSection)
 	assert.Nil(t, err)
-	t.Log(componentSectionYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if componentSectionYaml != "" {
+				t.Logf("Component section:\n%s", componentSectionYaml)
+			} else {
+				t.Logf("Component section (raw): %+v", componentSection)
+			}
+		}
+	})
 }
 
 func TestDescribeComponent7(t *testing.T) {
@@ -88,5 +128,13 @@ func TestDescribeComponent7(t *testing.T) {
 
 	componentSectionYaml, err := u.ConvertToYAML(componentSection)
 	assert.Nil(t, err)
-	t.Log(componentSectionYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if componentSectionYaml != "" {
+				t.Logf("Component section:\n%s", componentSectionYaml)
+			} else {
+				t.Logf("Component section (raw): %+v", componentSection)
+			}
+		}
+	})
 }

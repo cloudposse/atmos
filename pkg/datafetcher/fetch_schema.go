@@ -16,7 +16,7 @@ type Fetcher interface {
 
 var ErrUnsupportedSource = errors.New("unsupported source type")
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DataFetcher interface {
 	GetData(source string) ([]byte, error)
 }
