@@ -69,7 +69,11 @@ func TestNoColorLog(t *testing.T) {
 	if strings.Contains(output, "\033[") {
 		t.Errorf("Expected no color in output, but got: %s", output)
 	}
-	t.Log(output, "output")
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("Command output: %s", output)
+		}
+	})
 }
 
 func TestInitFunction(t *testing.T) {

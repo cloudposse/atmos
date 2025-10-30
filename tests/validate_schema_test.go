@@ -2,7 +2,6 @@ package tests
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -41,7 +40,11 @@ func TestCliValidateSchema(t *testing.T) {
 		t.Fatalf("Failed to read from pipe: %v", err)
 	}
 	output := buf.String()
-	fmt.Println(output)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("Schema validation output:\n%s", output)
+		}
+	})
 	// Check the output
 	if strings.Contains(output, "ERRO") {
 		t.Errorf("should have no validation errors, but got: %s", output)
