@@ -7,8 +7,9 @@ package exec
 import (
 	reflect "reflect"
 
+	gomock "go.uber.org/mock/gomock"
+
 	schema "github.com/cloudposse/atmos/pkg/schema"
-	gomock "github.com/golang/mock/gomock"
 )
 
 // MockGitOperations is a mock of GitOperations interface.

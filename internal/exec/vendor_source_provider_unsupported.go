@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -18,11 +19,15 @@ func NewUnsupportedSourceProvider() VendorSourceProvider {
 
 // GetAvailableVersions implements VendorSourceProvider.GetAvailableVersions.
 func (u *UnsupportedSourceProvider) GetAvailableVersions(source string) ([]string, error) {
+	defer perf.Track(nil, "exec.UnsupportedSourceProvider.GetAvailableVersions")()
+
 	return nil, fmt.Errorf("%w: version listing not supported for this source type", errUtils.ErrUnsupportedVendorSource)
 }
 
 // VerifyVersion implements VendorSourceProvider.VerifyVersion.
 func (u *UnsupportedSourceProvider) VerifyVersion(source string, version string) (bool, error) {
+	defer perf.Track(nil, "exec.UnsupportedSourceProvider.VerifyVersion")()
+
 	return false, fmt.Errorf("%w: version verification not supported for this source type", errUtils.ErrUnsupportedVendorSource)
 }
 
@@ -38,6 +43,8 @@ func (u *UnsupportedSourceProvider) GetDiff(
 	contextLines int,
 	noColor bool,
 ) ([]byte, error) {
+	defer perf.Track(atmosConfig, "exec.UnsupportedSourceProvider.GetDiff")()
+
 	return nil, fmt.Errorf("%w: diff functionality not supported for this source type", errUtils.ErrUnsupportedVendorSource)
 }
 
