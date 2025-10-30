@@ -1,4 +1,6 @@
 AWS_CONFIG_FILE='/tmp/mock-config'
+AWS_DEFAULT_REGION='us-east-1'
 AWS_PROFILE='mock-identity'
+AWS_REGION='us-east-1'
 AWS_SHARED_CREDENTIALS_FILE='/tmp/mock-credentials'
 MOCK_IDENTITY='mock-identity'

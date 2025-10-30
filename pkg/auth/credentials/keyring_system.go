@@ -4,11 +4,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/zalando/go-keyring"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+const (
+	logKeyAlias         = "alias"
+	logKeyHasSessionTok = "has_session_token"
 )
 
 // systemKeyringStore implements the CredentialStore interface using the system keyring via Zalando go-keyring.
@@ -47,6 +54,18 @@ func (s *systemKeyringStore) Store(alias string, creds types.ICredentials) error
 	case *types.AWSCredentials:
 		typ = "aws"
 		raw, err = json.Marshal(c)
+		// Debug: Log what we're storing.
+		if expTime, expErr := c.GetExpiration(); expErr == nil && expTime != nil {
+			log.Debug("Storing AWS credentials in keyring",
+				logKeyAlias, alias,
+				"expiration", *expTime,
+				"expiration_str", c.Expiration,
+				logKeyHasSessionTok, c.SessionToken != "")
+		} else {
+			log.Debug("Storing AWS credentials in keyring (no expiration)",
+				logKeyAlias, alias,
+				logKeyHasSessionTok, c.SessionToken != "")
+		}
 	case *types.OIDCCredentials:
 		typ = "oidc"
 		raw, err = json.Marshal(c)
@@ -92,6 +111,19 @@ func (s *systemKeyringStore) Retrieve(alias string) (types.ICredentials, error) 
 		var c types.AWSCredentials
 		if err := json.Unmarshal(env.Data, &c); err != nil {
 			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal AWS credentials: %w", err))
+		}
+		// Debug: Log what we retrieved.
+		if expTime, expErr := c.GetExpiration(); expErr == nil && expTime != nil {
+			log.Debug("Retrieved AWS credentials from keyring",
+				logKeyAlias, alias,
+				"expiration", *expTime,
+				"expiration_str", c.Expiration,
+				"time_until_expiry", time.Until(*expTime),
+				logKeyHasSessionTok, c.SessionToken != "")
+		} else {
+			log.Debug("Retrieved AWS credentials from keyring (no expiration)",
+				logKeyAlias, alias,
+				logKeyHasSessionTok, c.SessionToken != "")
 		}
 		return &c, nil
 	case "oidc":

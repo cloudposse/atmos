@@ -10,106 +10,49 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// Logout removes credentials for the specified identity and its authentication chain.
+// Logout removes credentials for the specified identity only.
+// Provider and chain credentials are preserved for use by other identities.
 func (m *manager) Logout(ctx context.Context, identityName string) error {
 	defer perf.Track(nil, "auth.Manager.Logout")()
 
 	// Validate identity exists in configuration.
-	if _, exists := m.identities[identityName]; !exists {
+	identity, exists := m.identities[identityName]
+	if !exists {
 		return fmt.Errorf("%w: identity %q", errUtils.ErrIdentityNotInConfig, identityName)
 	}
 
-	// Build authentication chain to determine all credentials to remove.
-	chain, err := m.buildAuthenticationChain(identityName)
-	if err != nil {
-		log.Debug("Failed to build authentication chain for logout", logKeyIdentity, identityName, "error", err)
-		// Continue with best-effort cleanup of just the identity.
-		chain = []string{identityName}
-	}
-
-	log.Debug("Logout authentication chain", logKeyIdentity, identityName, "chain", chain)
+	log.Debug("Logout identity", logKeyIdentity, identityName)
 
 	var errs []error
-	removedCount := 0
 
-	// Step 1: Delete keyring entries for each step in the chain.
-	for _, alias := range chain {
-		if err := m.credentialStore.Delete(alias); err != nil {
-			log.Debug("Failed to delete keyring entry (may not exist)", "alias", alias, "error", err)
-			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, alias, err))
+	// Step 1: Delete keyring entry for this identity only.
+	if err := m.credentialStore.Delete(identityName); err != nil {
+		log.Debug("Failed to delete keyring entry (may not exist)", logKeyIdentity, identityName, "error", err)
+		errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, identityName, err))
+	} else {
+		log.Debug("Deleted keyring entry", logKeyIdentity, identityName)
+	}
+
+	// Step 2: Call identity-specific cleanup (each identity type handles its own file cleanup).
+	if err := identity.Logout(ctx); err != nil {
+		// ErrLogoutNotSupported is a successful no-op (exit 0).
+		if !errors.Is(err, errUtils.ErrLogoutNotSupported) {
+			log.Debug("Identity logout failed", logKeyIdentity, identityName, "error", err)
+			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrIdentityLogout, identityName, err))
 		} else {
-			log.Debug("Deleted keyring entry", "alias", alias)
-			removedCount++
+			log.Debug("Identity logout not supported (no-op)", logKeyIdentity, identityName)
 		}
+	} else {
+		log.Debug("Identity logout succeeded", logKeyIdentity, identityName)
 	}
 
-	// Step 2: Call provider-specific cleanup (files, etc.) unless skipped.
-	skipProviderLogout, _ := ctx.Value(skipProviderLogoutKey).(bool)
-	if len(chain) > 0 && !skipProviderLogout {
-		providerName := chain[0]
-		m.attemptProviderLogout(ctx, providerName, &errs)
-	}
+	log.Info("Logout completed", logKeyIdentity, identityName, "errors", len(errs))
 
-	// Step 3: Call identity-specific cleanup.
-	m.attemptIdentityLogout(ctx, identityName, &errs)
-
-	log.Info("Logout completed", logKeyIdentity, identityName, "removed", removedCount, "errors", len(errs))
-
-	// Return success if at least one credential was removed, even if there were errors.
-	if removedCount > 0 && len(errs) > 0 {
-		return errors.Join(append([]error{errUtils.ErrPartialLogout}, errs...)...)
-	}
 	if len(errs) > 0 {
-		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
+		return errors.Join(append([]error{errUtils.ErrPartialLogout}, errs...)...)
 	}
 
 	return nil
-}
-
-// attemptProviderLogout calls provider-specific cleanup for the given provider.
-func (m *manager) attemptProviderLogout(ctx context.Context, providerName string, errs *[]error) {
-	provider, exists := m.providers[providerName]
-	if !exists {
-		return
-	}
-
-	err := provider.Logout(ctx)
-	if err == nil {
-		log.Debug("Provider logout succeeded", logKeyProvider, providerName)
-		return
-	}
-
-	// ErrLogoutNotSupported is a successful no-op (exit 0).
-	if errors.Is(err, errUtils.ErrLogoutNotSupported) {
-		log.Debug("Provider logout not supported (no-op)", logKeyProvider, providerName)
-		return
-	}
-
-	log.Debug("Provider logout failed", logKeyProvider, providerName, "error", err)
-	*errs = append(*errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrProviderLogout, providerName, err))
-}
-
-// attemptIdentityLogout calls identity-specific cleanup for the given identity.
-func (m *manager) attemptIdentityLogout(ctx context.Context, identityName string, errs *[]error) {
-	identity, exists := m.identities[identityName]
-	if !exists {
-		return
-	}
-
-	err := identity.Logout(ctx)
-	if err == nil {
-		log.Debug("Identity logout succeeded", logKeyIdentity, identityName)
-		return
-	}
-
-	// ErrLogoutNotSupported is a successful no-op (exit 0).
-	if errors.Is(err, errUtils.ErrLogoutNotSupported) {
-		log.Debug("Identity logout not supported (no-op)", logKeyIdentity, identityName)
-		return
-	}
-
-	log.Debug("Identity logout failed", logKeyIdentity, identityName, "error", err)
-	*errs = append(*errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrIdentityLogout, identityName, err))
 }
 
 // resolveProviderForIdentity follows the Via chain to find the root provider for an identity.
@@ -154,12 +97,13 @@ func (m *manager) resolveProviderForIdentity(identityName string) string {
 	}
 }
 
-// LogoutProvider removes all credentials for the specified provider.
+// LogoutProvider removes all credentials for the specified provider and all identities that use it.
 func (m *manager) LogoutProvider(ctx context.Context, providerName string) error {
 	defer perf.Track(nil, "auth.Manager.LogoutProvider")()
 
 	// Validate provider exists in configuration.
-	if _, exists := m.providers[providerName]; !exists {
+	provider, exists := m.providers[providerName]
+	if !exists {
 		return fmt.Errorf("%w: provider %q", errUtils.ErrProviderNotInConfig, providerName)
 	}
 
@@ -179,12 +123,9 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 
 	var errs []error
 
-	// Set context flag to skip provider.Logout during per-identity cleanup.
-	ctxWithSkip := context.WithValue(ctx, skipProviderLogoutKey, true)
-
-	// Logout each identity (skipping provider-specific cleanup).
+	// Logout each identity (removes keyring entries and identity-specific files).
 	for _, identityName := range identityNames {
-		if err := m.Logout(ctxWithSkip, identityName); err != nil {
+		if err := m.Logout(ctx, identityName); err != nil {
 			log.Debug("Failed to logout identity", logKeyIdentity, identityName, "error", err)
 			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrIdentityLogout, identityName, err))
 		}
@@ -196,8 +137,18 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 		errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, providerName, err))
 	}
 
-	// Call provider-specific cleanup once for the entire provider.
-	m.attemptProviderLogout(ctx, providerName, &errs)
+	// Call provider-specific cleanup (deletes all provider files).
+	if err := provider.Logout(ctx); err != nil {
+		// ErrLogoutNotSupported is a successful no-op (exit 0).
+		if !errors.Is(err, errUtils.ErrLogoutNotSupported) {
+			log.Debug("Provider logout failed", logKeyProvider, providerName, "error", err)
+			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrProviderLogout, providerName, err))
+		} else {
+			log.Debug("Provider logout not supported (no-op)", logKeyProvider, providerName)
+		}
+	} else {
+		log.Debug("Provider logout succeeded", logKeyProvider, providerName)
+	}
 
 	log.Info("Provider logout completed", logKeyProvider, providerName, "identities", len(identityNames), "errors", len(errs))
 
@@ -208,11 +159,11 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 	return nil
 }
 
-// LogoutAll removes all cached credentials for all identities.
+// LogoutAll removes all cached credentials for all identities and providers.
 func (m *manager) LogoutAll(ctx context.Context) error {
 	defer perf.Track(nil, "auth.Manager.LogoutAll")()
 
-	log.Debug("Logout all identities")
+	log.Debug("Logout all identities and providers")
 
 	var errs []error
 
@@ -224,7 +175,29 @@ func (m *manager) LogoutAll(ctx context.Context) error {
 		}
 	}
 
-	log.Info("Logout all completed", "identities", len(m.config.Identities), "errors", len(errs))
+	// Logout each provider.
+	for providerName, provider := range m.providers {
+		// Delete provider credentials from keyring.
+		if err := m.credentialStore.Delete(providerName); err != nil {
+			log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, "error", err)
+			errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrKeyringDeletion, providerName, err))
+		}
+
+		// Call provider-specific cleanup (deletes all provider files).
+		if err := provider.Logout(ctx); err != nil {
+			// ErrLogoutNotSupported is a successful no-op (exit 0).
+			if !errors.Is(err, errUtils.ErrLogoutNotSupported) {
+				log.Debug("Provider logout failed", logKeyProvider, providerName, "error", err)
+				errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrProviderLogout, providerName, err))
+			} else {
+				log.Debug("Provider logout not supported (no-op)", logKeyProvider, providerName)
+			}
+		} else {
+			log.Debug("Provider logout succeeded", logKeyProvider, providerName)
+		}
+	}
+
+	log.Info("Logout all completed", "identities", len(m.config.Identities), "providers", len(m.providers), "errors", len(errs))
 
 	if len(errs) > 0 {
 		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
