@@ -523,3 +523,127 @@ commands:
                 "
 
 ```
+
+## Using Authentication with Custom Commands
+
+Custom commands can specify an `identity` field to authenticate before execution. This is useful when commands need to interact with cloud resources that require specific credentials or elevated permissions.
+
+When an identity is specified, Atmos will:
+1. Authenticate using the specified identity (prompting for MFA if required)
+2. Write temporary credentials to a file
+3. Set environment variables pointing to the credential files (`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`, etc.)
+4. Execute all command steps with these environment variables
+
+### Example: Custom Command with Authentication
+
+```yaml
+commands:
+  - name: deploy-infra
+    description: Deploy infrastructure with superadmin privileges
+    identity: superadmin  # Authenticate as superadmin before running
+    arguments:
+      - name: component
+        description: Component to deploy
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        description: Stack to deploy to
+        required: true
+    steps:
+      - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
+      - atmos terraform apply {{ .Arguments.component }} -s {{ .Flags.stack }} -auto-approve
+```
+
+To execute this command:
+
+```shell
+atmos deploy-infra vpc -s plat-ue2-prod
+```
+
+Atmos will:
+1. Authenticate as `superadmin` (prompting for MFA if configured)
+2. Set up environment variables pointing to temporary credential files
+3. Execute both `terraform plan` and `terraform apply` with those credentials
+
+### Example: Multi-Step Command with Authentication
+
+```yaml
+commands:
+  - name: audit-resources
+    description: Audit cloud resources with auditor credentials
+    identity: auditor
+    flags:
+      - name: region
+        shorthand: r
+        description: AWS region
+        required: true
+    steps:
+      - |
+        echo "Running audit in {{ .Flags.region }}..."
+        aws sts get-caller-identity
+      - |
+        aws ec2 describe-instances --region {{ .Flags.region }} \
+          --query 'Reservations[].Instances[].[InstanceId,State.Name,Tags[?Key==`Name`].Value|[0]]' \
+          --output table
+      - |
+        aws s3 ls --region {{ .Flags.region }}
+```
+
+All steps in this command will execute with the `auditor` identity credentials.
+
+### Authentication with Component Config
+
+You can combine identity authentication with component configuration:
+
+```yaml
+commands:
+  - name: provision-with-auth
+    description: Provision component with specific identity
+    identity: infrastructure-admin
+    arguments:
+      - name: component
+        description: Component to provision
+    flags:
+      - name: stack
+        shorthand: s
+        description: Stack name
+        required: true
+    component_config:
+      component: "{{ .Arguments.component }}"
+      stack: "{{ .Flags.stack }}"
+    env:
+      - key: COMPONENT_REGION
+        value: "{{ .ComponentConfig.vars.region }}"
+    steps:
+      - |
+        echo "Provisioning {{ .Arguments.component }} in {{ .ComponentConfig.vars.region }}"
+        echo "Using identity: infrastructure-admin"
+        aws sts get-caller-identity
+      - atmos terraform apply {{ .Arguments.component }} -s {{ .Flags.stack }}
+```
+
+:::tip
+Configure identities in your [`atmos.yaml`](/cli/configuration) under the `auth` section. See the [Authentication documentation](/cli/commands/auth/usage) for configuration details.
+:::
+
+### Overriding Identity at Runtime
+
+You can override the identity specified in the command configuration using the `--identity` flag:
+
+```shell
+# Use the identity from command config
+atmos deploy-infra vpc -s plat-ue2-prod
+
+# Override with a different identity
+atmos deploy-infra vpc -s plat-ue2-prod --identity developer
+
+# Use no identity (skip authentication even if configured)
+atmos deploy-infra vpc -s plat-ue2-prod --identity ""
+```
+
+The `--identity` flag is automatically added to all custom commands and takes precedence over the `identity` field in the command configuration.
+
+:::note
+The `identity` field applies to all steps in the custom command. If you need different identities for different operations, consider using separate custom commands or [workflows](/core-concepts/workflows) with per-step identity configuration.
+:::
