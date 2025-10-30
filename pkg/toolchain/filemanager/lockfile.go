@@ -45,7 +45,8 @@ func (m *LockFileManager) Enabled() bool {
 	return m.config.Toolchain.UseLockFile
 }
 
-// AddTool adds or updates a tool version.
+// AddTool adds or updates a tool version in the lock file with optional platform-specific metadata.
+// Creates a new lock file if one doesn't exist. Platform metadata can be specified via AddOption parameters.
 func (m *LockFileManager) AddTool(ctx context.Context, tool, version string, opts ...AddOption) error {
 	defer perf.Track(nil, "filemanager.LockFileManager.AddTool")()
 
@@ -120,7 +121,8 @@ func (m *LockFileManager) SetDefault(ctx context.Context, tool, version string) 
 	return m.AddTool(ctx, tool, version)
 }
 
-// GetTools returns all tools managed by this file.
+// GetTools returns all tools managed by the lock file as a map of tool names to version slices.
+// Each tool can have multiple versions listed, with the first being the default/active version.
 func (m *LockFileManager) GetTools(ctx context.Context) (map[string][]string, error) {
 	defer perf.Track(nil, "filemanager.LockFileManager.GetTools")()
 

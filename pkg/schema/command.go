@@ -3,8 +3,9 @@ package schema
 // Custom CLI commands
 
 type Command struct {
-	Name            string                 `yaml:"name" json:"name" mapstructure:"name"`
-	Description     string                 `yaml:"description" json:"description" mapstructure:"description"`
+	Name        string `yaml:"name" json:"name" mapstructure:"name"`
+	Description string `yaml:"description" json:"description" mapstructure:"description"`
+	// Dependencies specifies external tool dependencies that must be installed before running this command.
 	Dependencies    *Dependencies          `yaml:"dependencies,omitempty" json:"dependencies,omitempty" mapstructure:"dependencies"`
 	Env             []CommandEnv           `yaml:"env" json:"env" mapstructure:"env"`
 	Arguments       []CommandArgument      `yaml:"arguments" json:"arguments" mapstructure:"arguments"`

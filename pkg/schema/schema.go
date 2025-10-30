@@ -206,6 +206,7 @@ type EditorConfig struct {
 	DisableTrimTrailingWhitespace bool `yaml:"disable_trim_trailing_whitespace,omitempty" json:"disable_trim_trailing_whitespace,omitempty" mapstructure:"disable_trim_trailing_whitespace"`
 }
 
+// Toolchain configures the built-in CLI toolchain management system for installing and managing external tools.
 type Toolchain struct {
 	InstallPath     string              `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
 	FilePath        string              `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
