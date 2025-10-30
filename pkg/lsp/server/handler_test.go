@@ -8,8 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
-
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestNewHandler(t *testing.T) {

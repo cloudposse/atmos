@@ -40,8 +40,10 @@ func TestTextDocumentHover(t *testing.T) {
 			position:   protocol.Position{Line: 0, Character: 5}, // Middle of "components"
 			wantHover:  true,
 			checkHover: func(t *testing.T, hover *protocol.Hover) {
-				assert.Contains(t, hover.Contents.Value, "components")
-				assert.Contains(t, hover.Contents.Value, "Define infrastructure")
+				contents, ok := hover.Contents.(protocol.MarkupContent)
+				require.True(t, ok, "Contents should be MarkupContent")
+				assert.Contains(t, contents.Value, "components")
+				assert.Contains(t, contents.Value, "Define infrastructure")
 			},
 			description: "Should show hover for 'components' keyword",
 		},
@@ -51,8 +53,10 @@ func TestTextDocumentHover(t *testing.T) {
 			position:   protocol.Position{Line: 0, Character: 2},
 			wantHover:  true,
 			checkHover: func(t *testing.T, hover *protocol.Hover) {
-				assert.Contains(t, hover.Contents.Value, "vars")
-				assert.Contains(t, hover.Contents.Value, "variables")
+				contents, ok := hover.Contents.(protocol.MarkupContent)
+				require.True(t, ok, "Contents should be MarkupContent")
+				assert.Contains(t, contents.Value, "vars")
+				assert.Contains(t, contents.Value, "variables")
 			},
 			description: "Should show hover for 'vars' keyword",
 		},
@@ -62,8 +66,10 @@ func TestTextDocumentHover(t *testing.T) {
 			position:   protocol.Position{Line: 1, Character: 5},
 			wantHover:  true,
 			checkHover: func(t *testing.T, hover *protocol.Hover) {
-				assert.Contains(t, hover.Contents.Value, "terraform")
-				assert.Contains(t, hover.Contents.Value, "component type")
+				contents, ok := hover.Contents.(protocol.MarkupContent)
+				require.True(t, ok, "Contents should be MarkupContent")
+				assert.Contains(t, contents.Value, "terraform")
+				assert.Contains(t, contents.Value, "component type")
 			},
 			description: "Should show hover for 'terraform' keyword",
 		},
@@ -73,7 +79,9 @@ func TestTextDocumentHover(t *testing.T) {
 			position:   protocol.Position{Line: 1, Character: 5},
 			wantHover:  true,
 			checkHover: func(t *testing.T, hover *protocol.Hover) {
-				assert.Contains(t, hover.Contents.Value, "namespace")
+				contents, ok := hover.Contents.(protocol.MarkupContent)
+				require.True(t, ok, "Contents should be MarkupContent")
+				assert.Contains(t, contents.Value, "namespace")
 			},
 			description: "Should show hover for 'namespace' variable",
 		},

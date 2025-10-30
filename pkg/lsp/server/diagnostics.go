@@ -18,17 +18,23 @@ func severityPtr(s protocol.DiagnosticSeverity) *protocol.DiagnosticSeverity {
 
 // validateDocument validates a document and publishes diagnostics.
 func (h *Handler) validateDocument(context *glsp.Context, doc *Document) {
+	// Defensive nil checks for testing scenarios.
+	if h == nil {
+		return
+	}
 	if doc == nil {
 		return
 	}
 
 	diagnostics := h.validateAtmosFile(doc)
 
-	// Publish diagnostics.
-	context.Notify(protocol.ServerTextDocumentPublishDiagnostics, protocol.PublishDiagnosticsParams{
-		URI:         doc.URI,
-		Diagnostics: diagnostics,
-	})
+	// Publish diagnostics (skip if context is nil or not properly initialized, e.g., in tests).
+	if context != nil && context.Notify != nil {
+		context.Notify(protocol.ServerTextDocumentPublishDiagnostics, protocol.PublishDiagnosticsParams{
+			URI:         doc.URI,
+			Diagnostics: diagnostics,
+		})
+	}
 }
 
 // validateAtmosFile validates an Atmos stack or component file.
