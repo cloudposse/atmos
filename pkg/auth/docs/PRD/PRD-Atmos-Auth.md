@@ -1194,7 +1194,7 @@ identities:
 - **MFA Device ARN:** Not a secret - safe to store in version-controlled YAML configuration
 - **TOTP Codes:** Never stored - ephemeral input only, required for each authentication session
 - **Long-lived Credentials:** Stored securely in OS keychain, never in plain text
-- **Session Credentials:** Written to AWS files, automatically expire after 1 hour
+- **Session Credentials:** Written to AWS files, automatically expire after the configured duration (default: 12h; up to 36h with MFA)
 - **Defense-in-Depth:** Even if long-lived credentials are compromised, attacker needs physical access to MFA device
 
 **Implementation Details:**

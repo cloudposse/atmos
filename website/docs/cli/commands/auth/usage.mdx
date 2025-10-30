@@ -392,14 +392,14 @@ Atmos will:
 1. Read your long-lived credentials (access key + secret)
 2. Prompt for a 6-digit TOTP code from your authenticator app
 3. Call AWS STS `GetSessionToken` with MFA device ARN and TOTP code
-4. Store temporary session credentials (valid for 1 hour)
+4. Store temporary session credentials (valid for configured duration, default: 12h)
 5. Use session credentials for subsequent AWS API calls
 
 **Security Notes:**
 
 - **MFA Device ARN is not a secret** - It's safe to store in YAML configuration files
 - **TOTP codes are never stored** - You must enter them each time you authenticate
-- **Session tokens are cached** - Valid for 1 hour by default, avoiding repeated MFA prompts
+- **Session tokens are cached** - Valid for 12 hours by default (configurable up to 36h with MFA), avoiding repeated MFA prompts
 - **Long-lived credentials remain secure** - Stored in OS keychain, not in plain text
 
 **When to Use MFA:**
@@ -414,7 +414,7 @@ Atmos will:
 - **"MFA token must be 6 digits"** - Ensure you're entering exactly 6 digits from your authenticator app
 - **"Invalid MFA token"** - Check that your device's clock is synchronized (TOTP is time-based)
 - **"MFA device not found"** - Verify the MFA ARN matches your AWS IAM configuration
-- **Repeated MFA prompts** - Session tokens expire after 1 hour; re-authentication is required
+- **Repeated MFA prompts** - Session tokens expire after the configured duration (default: 12h); re-authentication is required
 
 ## CLI Commands
 
