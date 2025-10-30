@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/huh"
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -64,10 +63,10 @@ var authUserConfigureCmd = &cobra.Command{
 		// Check if all credentials are managed by Atmos configuration.
 		if yamlInfo.AllInYAML {
 			// All credentials are in YAML - nothing to configure in keyring.
-			log.Info("All credentials are managed by Atmos configuration (atmos.yaml)", "identity", choice)
-			log.Info("To update credentials, edit your atmos.yaml configuration file")
+			fmt.Fprintln(cmd.ErrOrStderr(), "All credentials are managed by Atmos configuration (atmos.yaml)")
+			fmt.Fprintln(cmd.ErrOrStderr(), "To update credentials, edit your atmos.yaml configuration file")
 			if yamlInfo.MfaArn != "" {
-				log.Info("MFA ARN is also managed by Atmos configuration", "mfa_arn", yamlInfo.MfaArn)
+				fmt.Fprintf(cmd.ErrOrStderr(), "MFA ARN is also managed by Atmos configuration: %s\n", yamlInfo.MfaArn)
 			}
 			return nil
 		}
@@ -136,9 +135,9 @@ var authUserConfigureCmd = &cobra.Command{
 		if err := store.Store(alias, creds); err != nil {
 			return errors.Join(errUtils.ErrAwsAuth, err)
 		}
-		log.Info("Saved credentials to keyring", "alias", alias)
+		fmt.Fprintf(cmd.ErrOrStderr(), "✓ Saved credentials to keyring: %s\n", alias)
 		if sessionDuration != "" {
-			log.Info("Session duration configured", "duration", sessionDuration)
+			fmt.Fprintf(cmd.ErrOrStderr(), "✓ Session duration configured: %s\n", sessionDuration)
 		}
 		return nil
 	},
