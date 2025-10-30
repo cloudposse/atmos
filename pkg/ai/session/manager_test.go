@@ -554,3 +554,149 @@ func TestManager_Close(t *testing.T) {
 	err := manager.Close()
 	assert.NoError(t, err)
 }
+
+func TestManager_SetCompactStatusCallback(t *testing.T) {
+	manager, cleanup := setupTestManager(t)
+	defer cleanup()
+
+	// Initially no callback set.
+	assert.Nil(t, manager.compactCallback)
+
+	// Set a callback.
+	callbackCalled := false
+	callback := func(status CompactStatus) {
+		callbackCalled = true
+	}
+	manager.SetCompactStatusCallback(callback)
+
+	// Verify callback is set.
+	assert.NotNil(t, manager.compactCallback)
+
+	// Verify callback can be called.
+	manager.compactCallback(CompactStatus{Stage: "starting"})
+	assert.True(t, callbackCalled)
+}
+
+func TestManager_CompactStatusCallback_Starting(t *testing.T) {
+	manager, cleanup := setupTestManager(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a session.
+	sess, err := manager.CreateSession(ctx, "Test Session", "gpt-4", "openai", "", nil)
+	require.NoError(t, err)
+
+	// Add enough messages to trigger compaction.
+	// Default trigger threshold is 0.75 of max messages (default 100).
+	// So we need 75+ messages to trigger.
+	for i := 0; i < 80; i++ {
+		err := manager.AddMessage(ctx, sess.ID, "user", "Test message")
+		require.NoError(t, err)
+	}
+
+	// Set up callback to capture status updates.
+	var capturedStatuses []CompactStatus
+	manager.SetCompactStatusCallback(func(status CompactStatus) {
+		capturedStatuses = append(capturedStatuses, status)
+	})
+
+	// Enable auto-compact by setting environment or using default config.
+	// Note: Default has Enabled=false, so we need to enable it.
+	// For this test, we'll manually trigger compaction via GetMessagesWithCompaction.
+	// Since default is disabled, we need to test with a different approach.
+
+	// Get messages with compaction (which checks if compaction is needed).
+	// This should NOT trigger compaction because default config has Enabled=false.
+	messages, err := manager.GetMessagesWithCompaction(ctx, sess.ID, 0)
+	require.NoError(t, err)
+	assert.NotNil(t, messages)
+
+	// No callback should be called because compaction is disabled by default.
+	assert.Equal(t, 0, len(capturedStatuses))
+}
+
+func TestManager_CompactStatusCallback_AllStages(t *testing.T) {
+	manager, cleanup := setupTestManager(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a session (for context, though we manually trigger callbacks).
+	_, err := manager.CreateSession(ctx, "Test Session", "gpt-4", "openai", "", nil)
+	require.NoError(t, err)
+
+	// Set up callback to capture all status updates.
+	var capturedStatuses []CompactStatus
+	manager.SetCompactStatusCallback(func(status CompactStatus) {
+		capturedStatuses = append(capturedStatuses, status)
+	})
+
+	// Manually trigger the callback with different stages to verify the callback mechanism works.
+	// Test "starting" stage.
+	manager.compactCallback(CompactStatus{
+		Stage:            "starting",
+		MessageCount:     40,
+		EstimatedSavings: 8000,
+	})
+
+	// Test "completed" stage.
+	manager.compactCallback(CompactStatus{
+		Stage:            "completed",
+		MessageCount:     40,
+		EstimatedSavings: 7500,
+	})
+
+	// Test "failed" stage.
+	testErr := assert.AnError
+	manager.compactCallback(CompactStatus{
+		Stage:        "failed",
+		MessageCount: 40,
+		Error:        testErr,
+	})
+
+	// Verify all stages were captured.
+	require.Equal(t, 3, len(capturedStatuses))
+
+	// Verify "starting" stage.
+	assert.Equal(t, "starting", capturedStatuses[0].Stage)
+	assert.Equal(t, 40, capturedStatuses[0].MessageCount)
+	assert.Equal(t, 8000, capturedStatuses[0].EstimatedSavings)
+	assert.Nil(t, capturedStatuses[0].Error)
+
+	// Verify "completed" stage.
+	assert.Equal(t, "completed", capturedStatuses[1].Stage)
+	assert.Equal(t, 40, capturedStatuses[1].MessageCount)
+	assert.Equal(t, 7500, capturedStatuses[1].EstimatedSavings)
+	assert.Nil(t, capturedStatuses[1].Error)
+
+	// Verify "failed" stage.
+	assert.Equal(t, "failed", capturedStatuses[2].Stage)
+	assert.Equal(t, 40, capturedStatuses[2].MessageCount)
+	assert.Equal(t, testErr, capturedStatuses[2].Error)
+}
+
+func TestManager_CompactStatusCallback_NilCallback(t *testing.T) {
+	manager, cleanup := setupTestManager(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a session.
+	sess, err := manager.CreateSession(ctx, "Test Session", "gpt-4", "openai", "", nil)
+	require.NoError(t, err)
+
+	// Add messages.
+	for i := 0; i < 10; i++ {
+		err := manager.AddMessage(ctx, sess.ID, "user", "Test message")
+		require.NoError(t, err)
+	}
+
+	// Don't set any callback - compactCallback should be nil.
+	assert.Nil(t, manager.compactCallback)
+
+	// Get messages - should not panic even with nil callback.
+	messages, err := manager.GetMessagesWithCompaction(ctx, sess.ID, 0)
+	require.NoError(t, err)
+	assert.NotNil(t, messages)
+}

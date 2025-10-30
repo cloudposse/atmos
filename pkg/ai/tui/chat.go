@@ -100,6 +100,7 @@ type ChatModel struct {
 	historyBuffer        string                // Temporary buffer for current input when navigating
 	providerSelectMode   bool                  // Whether we're in provider selection mode
 	selectedProviderIdx  int                   // Selected provider index in provider selection
+	program              *tea.Program          // Reference to the tea program for sending messages from callbacks
 	markdownRenderer     *glamour.TermRenderer // Cached markdown renderer for performance
 	renderedMessages     []string              // Cache of rendered messages to avoid re-rendering
 	cancelFunc           context.CancelFunc    // Function to cancel ongoing AI request
@@ -215,6 +216,23 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		maxHistoryTokens:     maxHistoryTokens,
 		agentRegistry:        agentRegistry,
 		currentAgent:         currentAgent,
+	}
+
+	// Register compaction status callback to show progress in chat.
+	if manager != nil {
+		manager.SetCompactStatusCallback(func(status session.CompactStatus) {
+			// Send message to TUI via tea.Send (will be handled in Update method).
+			// Note: This is called from a goroutine in the session manager,
+			// so we need to be careful about thread safety.
+			if model.program != nil {
+				model.program.Send(compactStatusMsg{
+					stage:        status.Stage,
+					messageCount: status.MessageCount,
+					savings:      status.EstimatedSavings,
+					err:          status.Error,
+				})
+			}
+		})
 	}
 
 	// Load existing messages from session if available.
@@ -454,6 +472,9 @@ func (m *ChatModel) handleMessage(msg tea.Msg, cmds *[]tea.Cmd) (bool, tea.Cmd) 
 	case aiResponseMsg, aiErrorMsg:
 		return m.handleAIMessage(msg), nil
 
+	case compactStatusMsg:
+		return m.handleCompactStatus(msg), nil
+
 	case spinner.TickMsg:
 		return m.handleSpinnerTick(msg, cmds), nil
 
@@ -593,6 +614,38 @@ func (m *ChatModel) handleAIMessage(msg tea.Msg) bool {
 
 	// Focus the textarea so the user can immediately type their next message.
 	m.textarea.Focus()
+
+	return true
+}
+
+// handleCompactStatus handles conversation compaction status updates.
+func (m *ChatModel) handleCompactStatus(msg compactStatusMsg) bool {
+	switch msg.stage {
+	case "starting":
+		// Show compacting message with spinner.
+		m.isLoading = true
+		compactMsg := fmt.Sprintf("Compacting conversation (%d messages)...", msg.messageCount)
+		m.addMessage(roleSystem, compactMsg)
+
+	case "completed":
+		// Show completion message.
+		m.isLoading = false
+		successMsg := fmt.Sprintf("Conversation compacted successfully (%d messages summarized, ~%d tokens saved)",
+			msg.messageCount, msg.savings)
+		m.addMessage(roleSystem, successMsg)
+
+	case "failed":
+		// Show error message.
+		m.isLoading = false
+		if msg.err != nil {
+			m.addMessage(roleSystem, fmt.Sprintf("Compaction failed: %v", msg.err))
+		} else {
+			m.addMessage(roleSystem, "Compaction failed")
+		}
+	}
+
+	// Update viewport content after adding message.
+	m.updateViewportContent()
 
 	return true
 }
@@ -1107,6 +1160,13 @@ type aiResponseMsg struct {
 }
 
 type aiErrorMsg string
+
+type compactStatusMsg struct {
+	stage        string // "starting", "completed", "failed"
+	messageCount int
+	savings      int
+	err          error
+}
 
 type providerSwitchedMsg struct {
 	provider       string
@@ -1888,6 +1948,10 @@ What would you like to know?`)
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(), // Enable mouse wheel scrolling
 	)
+
+	// Store program reference for sending messages from callbacks.
+	model.program = p
+
 	_, err = p.Run()
 	return err
 }

@@ -99,3 +99,15 @@ type CompactResult struct {
 	Success            bool
 	Error              error
 }
+
+// CompactStatus represents the status of a compaction operation.
+type CompactStatus struct {
+	Stage          string // "starting", "summarizing", "completed", "failed"
+	MessageCount   int    // Number of messages being compacted
+	EstimatedSavings int  // Estimated token savings
+	Error          error  // Error if failed
+}
+
+// CompactStatusCallback is called when compaction status changes.
+// This allows UI components to show compaction progress.
+type CompactStatusCallback func(status CompactStatus)

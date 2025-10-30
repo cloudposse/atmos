@@ -263,6 +263,34 @@ AI: "Based on our earlier discussion (in the summary), we chose 10.0.0.0/16
 ```
 </Terminal>
 
+### Visual Status Messages
+
+When auto-compact triggers, you'll see status messages **directly in the chat** (not in the terminal) to keep you informed:
+
+<Terminal title="Compaction Status Messages in Chat">
+```bash
+# When compaction starts:
+System: Compacting conversation (40 messages)...
+# (Spinner shows while AI is generating the summary)
+
+# When compaction completes:
+System: Conversation compacted successfully (40 messages summarized, ~8000 tokens saved)
+
+# If compaction fails:
+System: Compaction failed: <error details>
+```
+</Terminal>
+
+**Why status messages matter:**
+- ⏱️ **Transparency**: You know when compaction is happening (typically 5-10 seconds for AI summarization)
+- 💰 **Cost Awareness**: See exactly how many tokens you're saving
+- 🔍 **Troubleshooting**: Clear error messages if summarization fails
+- ✅ **Reassurance**: Confirms your conversation history is being preserved, not lost
+
+:::tip Status Messages in Full-Screen Mode
+Since Atmos AI runs in full-screen mode, all status messages appear **in the chat viewport**, not in your terminal. You'll never miss important compaction updates even when the TUI is active.
+:::
+
 ### Configuration
 
 Enable auto-compact in your `atmos.yaml`:

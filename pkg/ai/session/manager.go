@@ -21,11 +21,12 @@ const (
 
 // Manager handles session lifecycle and operations.
 type Manager struct {
-	storage     Storage
-	projectPath string
-	maxSessions int
-	compactor   Compactor
-	atmosConfig *schema.AtmosConfiguration
+	storage          Storage
+	projectPath      string
+	maxSessions      int
+	compactor        Compactor
+	atmosConfig      *schema.AtmosConfiguration
+	compactCallback  CompactStatusCallback
 }
 
 // NewManager creates a new session manager.
@@ -38,12 +39,19 @@ func NewManager(storage Storage, projectPath string, maxSessions int, atmosConfi
 	compactor := NewCompactor(storage, atmosConfig)
 
 	return &Manager{
-		storage:     storage,
-		projectPath: projectPath,
-		maxSessions: maxSessions,
-		compactor:   compactor,
-		atmosConfig: atmosConfig,
+		storage:         storage,
+		projectPath:     projectPath,
+		maxSessions:     maxSessions,
+		compactor:       compactor,
+		atmosConfig:     atmosConfig,
+		compactCallback: nil,
 	}
+}
+
+// SetCompactStatusCallback sets the callback for compaction status updates.
+// This allows UI components to be notified when compaction starts/completes.
+func (m *Manager) SetCompactStatusCallback(callback CompactStatusCallback) {
+	m.compactCallback = callback
 }
 
 // CreateSession creates a new session.
@@ -164,13 +172,38 @@ func (m *Manager) GetMessagesWithCompaction(ctx context.Context, sessionID strin
 		// Set session ID in plan.
 		plan.SessionID = sessionID
 
+		// Notify UI that compaction is starting.
+		if m.compactCallback != nil {
+			m.compactCallback(CompactStatus{
+				Stage:            "starting",
+				MessageCount:     len(plan.MessagesToCompact),
+				EstimatedSavings: plan.EstimatedSavings,
+			})
+		}
+
 		// Perform compaction.
-		_, err := m.compactor.Compact(ctx, plan, compactConfig)
+		result, err := m.compactor.Compact(ctx, plan, compactConfig)
 		if err != nil {
+			// Notify UI of failure.
+			if m.compactCallback != nil {
+				m.compactCallback(CompactStatus{
+					Stage:        "failed",
+					MessageCount: len(plan.MessagesToCompact),
+					Error:        err,
+				})
+			}
 			// Log error but continue - compaction failure shouldn't break the session.
 			// In production, this would use proper logging.
 			fmt.Printf("Warning: auto-compact failed: %v\n", err)
 		} else {
+			// Notify UI of success.
+			if m.compactCallback != nil {
+				m.compactCallback(CompactStatus{
+					Stage:            "completed",
+					MessageCount:     len(plan.MessagesToCompact),
+					EstimatedSavings: result.TokenCount,
+				})
+			}
 			// Reload active messages and summaries after compaction.
 			activeMessages, _ = m.storage.GetActiveMessages(ctx, sessionID, 0)
 			summaries, _ = m.storage.GetSummaries(ctx, sessionID)
