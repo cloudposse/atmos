@@ -20,6 +20,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/gcp"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -30,12 +31,16 @@ const maxGCSRetryCount = 2
 // This is a thin wrapper around the unified GCP authentication utility.
 // https://developer.hashicorp.com/terraform/language/settings/backends/gcs#credentials
 func GetGCSBackendCredentials(backend *map[string]any) string {
+	defer perf.Track(nil, "terraform_backend.GetGCSBackendCredentials")()
+
 	return gcp.GetCredentialsFromBackend(*backend)
 }
 
 // GetGCSBackendImpersonateServiceAccount returns the impersonation service account from the GCS backend config.
 // https://developer.hashicorp.com/terraform/language/settings/backends/gcs#impersonate_service_account
 func GetGCSBackendImpersonateServiceAccount(backend *map[string]any) string {
+	defer perf.Track(nil, "terraform_backend.GetGCSBackendImpersonateServiceAccount")()
+
 	if serviceAccount, ok := (*backend)["impersonate_service_account"].(string); ok {
 		return serviceAccount
 	}
@@ -63,6 +68,8 @@ type gcsClientImpl struct {
 }
 
 func (c *gcsClientImpl) Bucket(name string) GCSBucketHandle {
+	defer perf.Track(nil, "terraform_backend.gcsClientImpl.Bucket")()
+
 	return &gcsBucketHandleImpl{bucket: c.client.Bucket(name)}
 }
 
@@ -71,6 +78,8 @@ type gcsBucketHandleImpl struct {
 }
 
 func (b *gcsBucketHandleImpl) Object(name string) GCSObjectHandle {
+	defer perf.Track(nil, "terraform_backend.gcsBucketHandleImpl.Object")()
+
 	return &gcsObjectHandleImpl{object: b.bucket.Object(name)}
 }
 
@@ -79,6 +88,8 @@ type gcsObjectHandleImpl struct {
 }
 
 func (o *gcsObjectHandleImpl) NewReader(ctx context.Context) (io.ReadCloser, error) {
+	defer perf.Track(nil, "terraform_backend.gcsObjectHandleImpl.NewReader")()
+
 	return o.object.NewReader(ctx)
 }
 
@@ -123,6 +134,8 @@ func ReadTerraformBackendGCS(
 	componentSections *map[string]any,
 	_ *schema.AuthContext,
 ) ([]byte, error) {
+	defer perf.Track(nil, "terraform_backend.ReadTerraformBackendGCS")()
+
 	backend := GetComponentBackend(componentSections)
 
 	// Extract the GCS-specific configuration section (same pattern as stack processor).
@@ -186,6 +199,8 @@ func ReadTerraformBackendGCSInternal(
 	componentSections *map[string]any,
 	backend *map[string]any,
 ) ([]byte, error) {
+	defer perf.Track(nil, "terraform_backend.ReadTerraformBackendGCSInternal")()
+
 	// Build the path to the tfstate file in the GCS bucket.
 	// According to Terraform docs: "Named states for workspaces are stored in an object called `<prefix>/<workspace>.tfstate`".
 	prefix := GetBackendAttribute(backend, "prefix")
