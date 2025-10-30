@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -306,6 +307,11 @@ func (i *userIdentity) getSessionDuration(hasMfa bool, credentialsDuration strin
 				"configured", i.config.Session.Duration,
 				"default", fmt.Sprintf("%ds", defaultUserSessionSeconds),
 				"error", err)
+		} else if parsedSeconds <= 0 || parsedSeconds > math.MaxInt32 {
+			log.Warn("Session duration out of valid range in YAML config, using default",
+				logKeyIdentity, i.name,
+				"configured", parsedSeconds,
+				"default", fmt.Sprintf("%ds", defaultUserSessionSeconds))
 		} else {
 			duration = int32(parsedSeconds)
 			durationSource = "YAML config"
@@ -319,6 +325,11 @@ func (i *userIdentity) getSessionDuration(hasMfa bool, credentialsDuration strin
 				"configured", credentialsDuration,
 				"default", fmt.Sprintf("%ds", defaultUserSessionSeconds),
 				"error", err)
+		} else if parsedSeconds <= 0 || parsedSeconds > math.MaxInt32 {
+			log.Warn("Session duration out of valid range in keyring, using default",
+				logKeyIdentity, i.name,
+				"configured", parsedSeconds,
+				"default", fmt.Sprintf("%ds", defaultUserSessionSeconds))
 		} else {
 			duration = int32(parsedSeconds)
 			durationSource = "keyring"

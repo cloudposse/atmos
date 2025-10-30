@@ -795,6 +795,26 @@ func TestUserIdentity_GetSessionDuration(t *testing.T) {
 			description:         "Should parse integer as seconds",
 		},
 		{
+			name: "out of bounds - negative value",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "-1",
+			},
+			credentialsDuration: "",
+			hasMfa:              false,
+			expectedDuration:    43200, // Falls back to default
+			description:         "Should reject negative duration and use default",
+		},
+		{
+			name: "out of bounds - exceeds math.MaxInt32",
+			sessionConfig: &schema.SessionConfig{
+				Duration: "9999999999999", // Way beyond int32 range
+			},
+			credentialsDuration: "",
+			hasMfa:              false,
+			expectedDuration:    43200, // Falls back to default
+			description:         "Should reject duration beyond int32 range and use default",
+		},
+		{
 			name:                "integer format in keyring - 7200 seconds (2 hours)",
 			sessionConfig:       nil,
 			credentialsDuration: "7200",

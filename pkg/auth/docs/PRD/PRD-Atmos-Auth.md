@@ -1200,10 +1200,10 @@ identities:
 **Implementation Details:**
 
 - **File:** `pkg/auth/identities/aws/user.go`
-- **TOTP Prompt Function:** `promptMfaTokenFunc` (line 238) - uses Charm Bracelet `huh` library for interactive form
-- **MFA Form:** `newMfaForm` (line 264) - validates 6-digit TOTP, displays MFA device ARN
-- **Session Token Generation:** `generateSessionToken` (line 165) - calls AWS STS with MFA parameters
-- **Input Construction:** `buildGetSessionTokenInput` (line 247) - conditionally adds MFA parameters
+- **TOTP Prompt Function:** `promptMfaTokenFunc` (line 282) - uses Charm Bracelet `huh` library for interactive form
+- **MFA Form:** `newMfaForm` (line 381) - validates 6-digit TOTP, displays MFA device ARN
+- **Session Token Generation:** `generateSessionToken` (line 209) - calls AWS STS with MFA parameters
+- **Input Construction:** `buildGetSessionTokenInput` (line 360) - conditionally adds MFA parameters
 - **Credential Resolution:** `resolveLongLivedCredentials` (line 86) - prioritizes YAML config over keychain
 - **MFA ARN Storage:** `AWSCredentials.MfaArn` field (line 22 in `pkg/auth/types/aws_credentials.go`)
 
