@@ -380,13 +380,23 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	return selectedIdentity, nil
 }
 
-// ListIdentities returns all available identity names.
+// ListIdentities returns all available identity names with their original case.
+// Uses IdentityCaseMap to preserve the original case from YAML config,
+// working around Viper's lowercase conversion of map keys.
 func (m *manager) ListIdentities() []string {
 	defer perf.Track(nil, "auth.Manager.ListIdentities")()
 
 	var names []string
-	for name := range m.config.Identities {
-		names = append(names, name)
+	for lowercaseName := range m.config.Identities {
+		// Use original case from IdentityCaseMap if available, otherwise use lowercase.
+		if m.config.IdentityCaseMap != nil {
+			if originalName, exists := m.config.IdentityCaseMap[lowercaseName]; exists {
+				names = append(names, originalName)
+				continue
+			}
+		}
+		// Fallback to lowercase name if case map not available.
+		names = append(names, lowercaseName)
 	}
 	return names
 }
