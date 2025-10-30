@@ -195,6 +195,42 @@ func TestManager_ListIdentities(t *testing.T) {
 	assert.Contains(t, result, "identity3")
 }
 
+func TestManager_ListIdentities_WithCaseMap(t *testing.T) {
+	// Viper lowercases all map keys, so identities will be lowercase in the config.
+	identities := map[string]schema.Identity{
+		"superadmin":              {Kind: "aws/user", Default: true},
+		"core-identity/terraform": {Kind: "aws/permission-set", Default: false},
+		"devops":                  {Kind: "aws/assume-role", Default: false},
+	}
+
+	// IdentityCaseMap preserves the original case from YAML.
+	caseMap := map[string]string{
+		"superadmin":              "SuperAdmin",
+		"core-identity/terraform": "core-identity/Terraform",
+		"devops":                  "DevOps",
+	}
+
+	manager := &manager{
+		config: &schema.AuthConfig{
+			Identities:      identities,
+			IdentityCaseMap: caseMap,
+		},
+	}
+
+	result := manager.ListIdentities()
+
+	// Should return all identity names with original case preserved.
+	assert.Len(t, result, 3)
+	assert.Contains(t, result, "SuperAdmin")
+	assert.Contains(t, result, "core-identity/Terraform")
+	assert.Contains(t, result, "DevOps")
+
+	// Should NOT contain lowercase versions.
+	assert.NotContains(t, result, "superadmin")
+	assert.NotContains(t, result, "core-identity/terraform")
+	assert.NotContains(t, result, "devops")
+}
+
 func TestManager_promptForIdentity(t *testing.T) {
 	manager := &manager{}
 

@@ -1090,6 +1090,8 @@ AWS User identities support MFA devices for enhanced security. When an MFA devic
 identities:
   prod-admin:
     kind: aws/user
+    session:
+      duration: "12h"  # Session token duration (default: 12h, max: 36h with MFA)
     credentials:
       access_key_id: !env AWS_ACCESS_KEY_ID
       secret_access_key: !env AWS_SECRET_ACCESS_KEY
@@ -1101,6 +1103,8 @@ identities:
 identities:
   prod-admin:
     kind: aws/user
+    session:
+      duration: "24h"  # Extended session with MFA
     credentials:
       mfa_arn: arn:aws:iam::123456789012:mfa/username  # YAML overrides keyring
       region: us-east-1
@@ -1110,6 +1114,8 @@ identities:
 identities:
   prod-admin:
     kind: aws/user
+    session:
+      duration: "8h"   # Can also be configured in keyring via 'atmos auth user configure'
     credentials:
       region: us-east-1
 ```
@@ -1150,18 +1156,38 @@ This allows flexible configuration:
      - Long-lived credentials (access key + secret)
      - MFA device ARN (`SerialNumber` parameter)
      - TOTP code (`TokenCode` parameter)
-     - Session duration (3600 seconds = 1 hour)
+     - Session duration (configurable, default: 12 hours)
    - AWS validates MFA and returns temporary session credentials
 
 4. **Credential Storage:**
    - Temporary session credentials (access key + secret + session token) are written to AWS files
    - Long-lived credentials remain unchanged in keychain
-   - Session credentials are valid for 1 hour
+   - Session credentials are valid for configured duration
 
 5. **Subsequent Operations:**
    - All AWS API calls use temporary session credentials
-   - Session credentials expire after 1 hour
+   - Session credentials expire after configured duration
    - Re-authentication required after expiration (prompts for new TOTP)
+
+**Session Duration Configuration:**
+
+Session duration controls how long temporary credentials remain valid:
+
+```yaml
+providers:
+  company-sso:
+    kind: aws/iam-identity-center
+    session:
+      duration: "8h"
+
+identities:
+  prod-admin:
+    kind: aws/user
+    session:
+      duration: "24h"  # Formats: integers (seconds), Go durations ("1h"), or days ("1d")
+```
+
+**AWS IAM user limits**: 15m-12h (no MFA) or 15m-36h (with MFA). Default: 12h
 
 **Security Model:**
 

@@ -18,13 +18,17 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	atmosCredentials "github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	authUtils "github.com/cloudposse/atmos/pkg/auth/utils"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
-	defaultUserSessionSeconds = 3600
+	defaultUserSessionSeconds = 43200  // 12 hours - max for IAM user without MFA, recommended default
+	maxSessionSecondsNoMfa    = 43200  // 12 hours - AWS maximum for IAM user without MFA
+	maxSessionSecondsWithMfa  = 129600 // 36 hours - AWS maximum for IAM user with MFA
+	minSessionSeconds         = 900    // 15 minutes - AWS minimum
 	awsUserProviderName       = "aws-user"
 	logKeyIdentity            = "identity"
 	defaultRegion             = "us-east-1"
@@ -110,7 +114,7 @@ func (i *userIdentity) resolveLongLivedCredentials() (*types.AWSCredentials, err
 
 	// YAML has no credentials, fall back to keyring.
 	if keystoreErr != nil {
-		return nil, fmt.Errorf("%w: failed to retrieve AWS User credentials for %q: %w", errUtils.ErrAwsUserNotConfigured, i.name, keystoreErr)
+		return nil, fmt.Errorf("%w: AWS User credentials not found for identity %q. Please configure credentials by running: atmos auth user configure --identity %s", errUtils.ErrAwsUserNotConfigured, i.name, i.name)
 	}
 
 	// Deep merge: Start with keyring, override with non-empty YAML fields.
@@ -284,7 +288,80 @@ var promptMfaTokenFunc = func(longLivedCreds *types.AWSCredentials) (string, err
 	return mfaToken, nil
 }
 
+// getSessionDuration returns the configured session duration in seconds.
+// It validates the duration against AWS limits based on whether MFA is used.
+// Checks identity session config first, then keyring credentials.
+// Supports multiple duration formats: integers (seconds), Go duration ("1h30m"), and days ("2d").
+func (i *userIdentity) getSessionDuration(hasMfa bool, credentialsDuration string) int32 {
+	// Default duration.
+	duration := int32(defaultUserSessionSeconds)
+	var durationSource string
+
+	// Priority 1: Check identity session config (YAML).
+	if i.config.Session != nil && i.config.Session.Duration != "" {
+		parsedSeconds, err := authUtils.ParseDurationFlexible(i.config.Session.Duration)
+		if err != nil {
+			log.Warn("Invalid session duration format in YAML config, using default",
+				logKeyIdentity, i.name,
+				"configured", i.config.Session.Duration,
+				"default", fmt.Sprintf("%ds", defaultUserSessionSeconds),
+				"error", err)
+		} else {
+			duration = int32(parsedSeconds)
+			durationSource = "YAML config"
+		}
+	} else if credentialsDuration != "" {
+		// Priority 2: Check keyring credentials.
+		parsedSeconds, err := authUtils.ParseDurationFlexible(credentialsDuration)
+		if err != nil {
+			log.Warn("Invalid session duration format in keyring, using default",
+				logKeyIdentity, i.name,
+				"configured", credentialsDuration,
+				"default", fmt.Sprintf("%ds", defaultUserSessionSeconds),
+				"error", err)
+		} else {
+			duration = int32(parsedSeconds)
+			durationSource = "keyring"
+		}
+	} else {
+		durationSource = "default"
+	}
+
+	// Validate and clamp duration to AWS limits.
+	maxDuration := int32(maxSessionSecondsNoMfa)
+	if hasMfa {
+		maxDuration = int32(maxSessionSecondsWithMfa)
+	}
+
+	if duration < int32(minSessionSeconds) {
+		log.Warn("Session duration below AWS minimum, clamping to minimum",
+			logKeyIdentity, i.name,
+			"requested", duration,
+			"minimum", minSessionSeconds,
+			"source", durationSource)
+		duration = int32(minSessionSeconds)
+	} else if duration > maxDuration {
+		mfaStatus := "without MFA"
+		if hasMfa {
+			mfaStatus = "with MFA"
+		}
+		log.Warn("Session duration exceeds AWS maximum, clamping to maximum",
+			logKeyIdentity, i.name,
+			"requested", duration,
+			"maximum", maxDuration,
+			"mfa", mfaStatus,
+			"source", durationSource)
+		duration = maxDuration
+	}
+
+	return duration
+}
+
 func (i *userIdentity) buildGetSessionTokenInput(longLivedCreds *types.AWSCredentials) (*sts.GetSessionTokenInput, error) {
+	// Get configured session duration or use default.
+	// Pass the session duration from credentials (if stored in keyring).
+	durationSeconds := i.getSessionDuration(longLivedCreds.MfaArn != "", longLivedCreds.SessionDuration)
+
 	if longLivedCreds.MfaArn != "" {
 		token, err := promptMfaTokenFunc(longLivedCreds)
 		if err != nil {
@@ -293,11 +370,11 @@ func (i *userIdentity) buildGetSessionTokenInput(longLivedCreds *types.AWSCreden
 		return &sts.GetSessionTokenInput{
 			SerialNumber:    aws.String(longLivedCreds.MfaArn),
 			TokenCode:       aws.String(token),
-			DurationSeconds: aws.Int32(defaultUserSessionSeconds),
+			DurationSeconds: aws.Int32(durationSeconds),
 		}, nil
 	}
 	return &sts.GetSessionTokenInput{
-		DurationSeconds: aws.Int32(defaultUserSessionSeconds),
+		DurationSeconds: aws.Int32(durationSeconds),
 	}, nil
 }
 

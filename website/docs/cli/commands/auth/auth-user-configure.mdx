@@ -34,6 +34,7 @@ This command provides an interactive way to configure AWS IAM user credentials a
 - **AWS Access Key ID** (required) - Your IAM user's access key identifier
 - **AWS Secret Access Key** (required, masked input) - Your IAM user's secret key
 - **AWS User MFA ARN** (optional) - Your MFA device ARN for enhanced security
+- **Session Duration** (optional, default: 12h) - How long session tokens remain valid
 
 **Storage:**
 
@@ -52,7 +53,9 @@ atmos auth user configure
 ? AWS Access Key ID: AKIAIOSFODNN7EXAMPLE
 ? AWS Secret Access Key: ****************************************
 ? AWS User MFA ARN (optional): arn:aws:iam::123456789012:mfa/username
+? Session Duration (optional, default: 12h): 24h
 ✔ Saved credentials to keyring
+✔ Session duration configured: 24h
 ```
 
 ## Multi-Factor Authentication (MFA) for AWS
@@ -98,13 +101,13 @@ Atmos will:
 1. Retrieve your long-lived credentials from the keychain
 2. Prompt for a 6-digit TOTP code from your authenticator app (Google Authenticator, Authy, etc.)
 3. Call AWS STS `GetSessionToken` with your credentials, MFA ARN, and TOTP code
-4. Store temporary session credentials (valid for 1 hour)
+4. Store temporary session credentials (valid for configured duration, default: 12 hours)
 
 ### Security Considerations
 
 - **MFA ARN is not a secret** - It's an identifier, not a credential
 - **TOTP codes are never stored** - You must enter them for each authentication session
-- **Session tokens are cached** - Valid for 1 hour to avoid repeated MFA prompts
+- **Session tokens are cached** - Valid for configured duration (default: 12h, max: 36h with MFA)
 - **Long-lived credentials stay in keychain** - Never written to plain text files
 
 ### Alternative: MFA ARN in YAML
@@ -128,6 +131,21 @@ This is useful when:
 - Multiple team members share the same identity configuration
 - MFA device ARN is organization-standard
 - You want version-controlled authentication configuration
+
+## Session Duration Configuration
+
+The interactive command prompts for session duration, or you can configure it in YAML:
+
+```yaml
+auth:
+  identities:
+    emergency-user:
+      kind: aws/user
+      session:
+        duration: "24h"  # Formats: integers (seconds), Go durations ("1h"), or days ("1d")
+```
+
+**AWS limits**: 15m-12h (no MFA) or 15m-36h (with MFA). Default: 12h. YAML configuration takes precedence over keyring.
 
 ## Notes
 

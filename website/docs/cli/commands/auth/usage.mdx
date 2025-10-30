@@ -815,6 +815,30 @@ deploy:
 - Regularly rotate credentials
 - Use least-privilege access
 
+### Session Duration
+
+Configure session durations based on your security requirements:
+
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      session:
+        duration: "8h"  # Balance security and usability
+
+  identities:
+    prod-admin:
+      kind: aws/user
+      session:
+        duration: "1h"  # Shorter for high-security environments
+```
+
+**Supported formats**: Integers (seconds), Go durations (`"1h"`, `"8h"`), or days (`"1d"`)
+**IAM user limits**: 15m-12h (no MFA) or 15m-36h (with MFA)
+
+Shorter sessions are more secure but require more frequent re-authentication.
+
 ### Configuration Security
 
 - Validate configurations regularly: `atmos auth validate`

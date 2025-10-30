@@ -48,8 +48,16 @@ var authEnvCmd = &cobra.Command{
 			return fmt.Errorf("failed to create auth manager: %w", err)
 		}
 
-		// Get identity from flag or use default
-		identityName, _ := cmd.Flags().GetString("identity")
+		// Get identity from flag or use default.
+		// Check if flag was explicitly set by user to ensure command-line precedence.
+		var identityName string
+		if cmd.Flags().Changed(IdentityFlagName) {
+			// Flag was explicitly provided on command line (either with or without value).
+			identityName, _ = cmd.Flags().GetString(IdentityFlagName)
+		} else {
+			// Flag not provided on command line - fall back to viper (config/env).
+			identityName = viper.GetString(IdentityFlagName)
+		}
 
 		// Check if user wants to interactively select identity.
 		forceSelect := identityName == IdentityFlagSelectValue
@@ -164,9 +172,8 @@ func init() {
 		log.Trace("Failed to register format flag completion", "error", err)
 	}
 
-	if err := viper.BindPFlag("identity", authCmd.PersistentFlags().Lookup("identity")); err != nil {
-		log.Trace("Failed to bind identity flag", "error", err)
-	}
-	viper.MustBindEnv("identity", "ATMOS_IDENTITY")
+	// DO NOT bind identity flag to Viper - it breaks flag precedence.
+	// Identity flag binding is handled in cmd/auth.go via BindEnv only.
+
 	authCmd.AddCommand(authEnvCmd)
 }
