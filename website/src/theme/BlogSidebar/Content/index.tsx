@@ -13,12 +13,26 @@ import Heading from '@theme/Heading';
 function groupBlogSidebarItemsByYearMonth(
   items: BlogSidebarItem[],
 ): Map<string, Map<string, BlogSidebarItem[]>> {
-  const yearMonthMap = new Map<string, Map<string, BlogSidebarItem[]>>();
+  // Temporary structure to store month data with numeric values for sorting.
+  interface MonthData {
+    items: BlogSidebarItem[];
+    monthNum: number;
+  }
+  const yearMonthMap = new Map<string, Map<string, MonthData>>();
 
   items.forEach((item) => {
     const date = new Date(item.date);
+
+    // Validate date.
+    if (isNaN(date.getTime())) {
+      console.warn(`Invalid date for blog item: ${item.date}`);
+      return;
+    }
+
     const year = `${date.getFullYear()}`;
-    const month = date.toLocaleString('en-US', { month: 'long' });
+    // Use 'default' locale to respect site's i18n configuration.
+    const month = date.toLocaleString('default', { month: 'long' });
+    const monthNum = date.getMonth(); // 0-11
 
     if (!yearMonthMap.has(year)) {
       yearMonthMap.set(year, new Map());
@@ -26,10 +40,10 @@ function groupBlogSidebarItemsByYearMonth(
 
     const monthMap = yearMonthMap.get(year)!;
     if (!monthMap.has(month)) {
-      monthMap.set(month, []);
+      monthMap.set(month, { items: [], monthNum });
     }
 
-    monthMap.get(month)!.push(item);
+    monthMap.get(month)!.items.push(item);
   });
 
   // Sort years descending.
@@ -38,15 +52,14 @@ function groupBlogSidebarItemsByYearMonth(
 
   sortedYears.forEach((year) => {
     const monthMap = yearMonthMap.get(year)!;
-    // Sort months chronologically within each year (descending).
-    const monthOrder = ['December', 'November', 'October', 'September', 'August', 'July', 'June', 'May', 'April', 'March', 'February', 'January'];
-    const sortedMonths = Array.from(monthMap.keys()).sort((a, b) => {
-      return monthOrder.indexOf(a) - monthOrder.indexOf(b);
+    // Sort months chronologically within each year (descending) using numeric month values.
+    const sortedMonths = Array.from(monthMap.entries()).sort((a, b) => {
+      return b[1].monthNum - a[1].monthNum; // Descending order (11, 10, ..., 0)
     });
 
     const sortedMonthMap = new Map<string, BlogSidebarItem[]>();
-    sortedMonths.forEach((month) => {
-      sortedMonthMap.set(month, monthMap.get(month)!);
+    sortedMonths.forEach(([month, monthData]) => {
+      sortedMonthMap.set(month, monthData.items);
     });
 
     result.set(year, sortedMonthMap);
