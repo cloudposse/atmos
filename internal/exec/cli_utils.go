@@ -85,7 +85,7 @@ func ProcessCommandLineArgs(
 
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 
-	log.Info("DEBUG: ProcessCommandLineArgs input", "componentType", componentType, "args", args)
+	log.Debug("ProcessCommandLineArgs input", "componentType", componentType, "args", args)
 
 	cmd.DisableFlagParsing = false
 
@@ -94,9 +94,9 @@ func ProcessCommandLineArgs(
 		return configAndStacksInfo, err
 	}
 
-	// DEBUG: Check what Cobra parsed
+	// Check what Cobra parsed for identity flag.
 	if identityFlag := cmd.Flag("identity"); identityFlag != nil {
-		log.Info("DEBUG: After ParseFlags", "identity.Value", identityFlag.Value.String(), "identity.Changed", identityFlag.Changed)
+		log.Debug("After ParseFlags", "identity.Value", identityFlag.Value.String(), "identity.Changed", identityFlag.Changed)
 	}
 
 	argsAndFlagsInfo, err := processArgsAndFlags(componentType, args)
