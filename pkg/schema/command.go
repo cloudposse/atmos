@@ -14,6 +14,7 @@ type Command struct {
 	Steps           []string               `yaml:"steps" json:"steps" mapstructure:"steps"`
 	Commands        []Command              `yaml:"commands" json:"commands" mapstructure:"commands"`
 	Verbose         bool                   `yaml:"verbose" json:"verbose" mapstructure:"verbose"`
+	Identity        string                 `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }
 
 type CommandArgument struct {
