@@ -173,7 +173,7 @@ func TestDockerRuntime_Info(t *testing.T) {
 
 // TestDockerRuntime_Attach validates Docker's Attach() method logic for shell selection
 // and argument handling. Tests verify that options are correctly interpreted and passed
-// to the underlying Exec() call without actually executing commands.
+// to the underlying Exec() call by testing the buildAttachCommand builder function.
 //
 // Tests are intentionally duplicated to verify both implementations independently, ensuring
 // consistency across runtimes and allowing runtime-specific test evolution if needed.
@@ -181,30 +181,42 @@ func TestDockerRuntime_Info(t *testing.T) {
 //nolint:dupl // Docker and Podman implement identical Runtime interface with same Attach() behavior.
 func TestDockerRuntime_Attach(t *testing.T) {
 	tests := []struct {
-		name        string
-		opts        *AttachOptions
-		expectShell string
-		expectArgs  int
+		name         string
+		opts         *AttachOptions
+		expectShell  string
+		expectArgs   []string
+		expectUser   string
+		expectTTY    bool
+		expectAttach bool
 	}{
 		{
-			name:        "default bash with no options",
-			opts:        nil,
-			expectShell: "/bin/bash",
-			expectArgs:  0,
+			name:         "default bash with no options",
+			opts:         nil,
+			expectShell:  "/bin/bash",
+			expectArgs:   nil,
+			expectUser:   "",
+			expectTTY:    true,
+			expectAttach: true,
 		},
 		{
-			name:        "empty AttachOptions uses defaults",
-			opts:        &AttachOptions{},
-			expectShell: "/bin/bash",
-			expectArgs:  0,
+			name:         "empty AttachOptions uses defaults",
+			opts:         &AttachOptions{},
+			expectShell:  "/bin/bash",
+			expectArgs:   nil,
+			expectUser:   "",
+			expectTTY:    true,
+			expectAttach: true,
 		},
 		{
 			name: "custom shell",
 			opts: &AttachOptions{
 				Shell: "/bin/sh",
 			},
-			expectShell: "/bin/sh",
-			expectArgs:  0,
+			expectShell:  "/bin/sh",
+			expectArgs:   nil,
+			expectUser:   "",
+			expectTTY:    true,
+			expectAttach: true,
 		},
 		{
 			name: "shell with args",
@@ -212,41 +224,49 @@ func TestDockerRuntime_Attach(t *testing.T) {
 				Shell:     "/bin/bash",
 				ShellArgs: []string{"-l", "-i"},
 			},
-			expectShell: "/bin/bash",
-			expectArgs:  2,
+			expectShell:  "/bin/bash",
+			expectArgs:   []string{"-l", "-i"},
+			expectUser:   "",
+			expectTTY:    true,
+			expectAttach: true,
 		},
 		{
 			name: "custom user preserved in exec options",
 			opts: &AttachOptions{
 				User: "node",
 			},
-			expectShell: "/bin/bash",
-			expectArgs:  0,
+			expectShell:  "/bin/bash",
+			expectArgs:   nil,
+			expectUser:   "node",
+			expectTTY:    true,
+			expectAttach: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// We're testing the logic without actually calling Exec.
-			// The Attach method builds command args and ExecOptions, then calls Exec.
-			// We verify the command construction logic is correct.
+			// Call the builder function that constructs the command and exec options.
+			cmd, execOpts := buildAttachCommand(tt.opts)
 
-			// Expected behavior validation:
-			// 1. Default shell is /bin/bash
-			// 2. Custom shell overrides default
-			// 3. ShellArgs are appended to shell command
-			// 4. User option is passed to ExecOptions
-			// 5. TTY and attach flags are always set for interactive session
+			// Verify command structure: first element is shell, rest are args.
+			require.NotEmpty(t, cmd, "command should not be empty")
+			assert.Equal(t, tt.expectShell, cmd[0], "shell should match expected")
 
-			if tt.opts == nil || tt.opts.Shell == "" {
-				assert.Equal(t, "/bin/bash", tt.expectShell, "default shell should be bash")
+			// Verify shell args.
+			actualArgs := cmd[1:]
+			if tt.expectArgs == nil {
+				assert.Empty(t, actualArgs, "should have no shell args")
 			} else {
-				assert.Equal(t, tt.opts.Shell, tt.expectShell, "custom shell should be used")
+				assert.Equal(t, tt.expectArgs, actualArgs, "shell args should match expected")
 			}
 
-			if tt.opts != nil && len(tt.opts.ShellArgs) > 0 {
-				assert.Equal(t, len(tt.opts.ShellArgs), tt.expectArgs, "shell args should be preserved")
-			}
+			// Verify exec options.
+			require.NotNil(t, execOpts, "exec options should not be nil")
+			assert.Equal(t, tt.expectTTY, execOpts.Tty, "TTY flag should match expected")
+			assert.Equal(t, tt.expectAttach, execOpts.AttachStdin, "AttachStdin should match expected")
+			assert.Equal(t, tt.expectAttach, execOpts.AttachStdout, "AttachStdout should match expected")
+			assert.Equal(t, tt.expectAttach, execOpts.AttachStderr, "AttachStderr should match expected")
+			assert.Equal(t, tt.expectUser, execOpts.User, "User should match expected")
 		})
 	}
 }

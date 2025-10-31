@@ -35,20 +35,7 @@ func NewDockerRuntime() *DockerRuntime {
 func (d *DockerRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	defer perf.Track(nil, "container.DockerRuntime.Build")()
 
-	args := []string{"build"}
-
-	// Add build args
-	for key, value := range config.Args {
-		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", key, value))
-	}
-
-	// Add tags
-	for _, tag := range config.Tags {
-		args = append(args, "-t", tag)
-	}
-
-	// Add context and dockerfile
-	args = append(args, "-f", config.Dockerfile, config.Context)
+	args := buildBuildArgs(config)
 
 	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	output, err := cmd.CombinedOutput()
@@ -97,7 +84,9 @@ func (d *DockerRuntime) Stop(ctx context.Context, containerID string, timeout ti
 	defer perf.Track(nil, "container.DockerRuntime.Stop")()
 
 	timeoutSecs := int(timeout.Seconds())
-	cmd := exec.CommandContext(ctx, dockerCmd, "stop", "-t", fmt.Sprintf("%d", timeoutSecs), containerID) //nolint:gosec // docker command is intentional
+	args := buildStopArgs(containerID, timeoutSecs)
+
+	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: docker stop failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
@@ -111,11 +100,7 @@ func (d *DockerRuntime) Stop(ctx context.Context, containerID string, timeout ti
 func (d *DockerRuntime) Remove(ctx context.Context, containerID string, force bool) error {
 	defer perf.Track(nil, "container.DockerRuntime.Remove")()
 
-	args := []string{"rm"}
-	if force {
-		args = append(args, "-f")
-	}
-	args = append(args, containerID)
+	args := buildRemoveArgs(containerID, force)
 
 	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	output, err := cmd.CombinedOutput()
@@ -221,33 +206,7 @@ func (d *DockerRuntime) Exec(ctx context.Context, containerID string, cmd []stri
 func (d *DockerRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions) error {
 	defer perf.Track(nil, "container.DockerRuntime.Attach")()
 
-	shell := "/bin/bash"
-	var shellArgs []string
-
-	if opts != nil {
-		if opts.Shell != "" {
-			shell = opts.Shell
-		}
-		if len(opts.ShellArgs) > 0 {
-			shellArgs = opts.ShellArgs
-		}
-	}
-
-	// Build command: shell + args.
-	cmd := []string{shell}
-	cmd = append(cmd, shellArgs...)
-
-	execOpts := &ExecOptions{
-		Tty:          true,
-		AttachStdin:  true,
-		AttachStdout: true,
-		AttachStderr: true,
-	}
-
-	if opts != nil && opts.User != "" {
-		execOpts.User = opts.User
-	}
-
+	cmd, execOpts := buildAttachCommand(opts)
 	return d.Exec(ctx, containerID, cmd, execOpts)
 }
 
@@ -268,17 +227,7 @@ func (d *DockerRuntime) Pull(ctx context.Context, image string) error {
 func (d *DockerRuntime) Logs(ctx context.Context, containerID string, follow bool, tail string) error {
 	defer perf.Track(nil, "container.DockerRuntime.Logs")()
 
-	args := []string{"logs"}
-
-	if follow {
-		args = append(args, "--follow")
-	}
-
-	if tail != "" && tail != "all" {
-		args = append(args, "--tail", tail)
-	}
-
-	args = append(args, containerID)
+	args := buildLogsArgs(containerID, follow, tail)
 
 	cmd := exec.CommandContext(ctx, dockerCmd, args...)
 	cmd.Stdout = os.Stdout

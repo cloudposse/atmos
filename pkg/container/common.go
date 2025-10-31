@@ -130,6 +130,99 @@ func addExecOptions(args []string, opts *ExecOptions) []string {
 	return args
 }
 
+// buildBuildArgs builds the arguments for a container image build operation.
+// This function is shared between Docker and Podman runtimes to avoid duplication.
+// Extracted to allow testing the argument building logic without executing commands.
+func buildBuildArgs(config *BuildConfig) []string {
+	args := []string{"build"}
+
+	// Add build args.
+	for key, value := range config.Args {
+		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", key, value))
+	}
+
+	// Add tags.
+	for _, tag := range config.Tags {
+		args = append(args, "-t", tag)
+	}
+
+	// Add context and dockerfile.
+	args = append(args, "-f", config.Dockerfile, config.Context)
+
+	return args
+}
+
+// buildRemoveArgs builds the arguments for a container remove operation.
+// This function is shared between Docker and Podman runtimes to avoid duplication.
+// Extracted to allow testing the argument building logic without executing commands.
+func buildRemoveArgs(containerID string, force bool) []string {
+	args := []string{"rm"}
+	if force {
+		args = append(args, "-f")
+	}
+	args = append(args, containerID)
+	return args
+}
+
+// buildStopArgs builds the arguments for a container stop operation.
+// This function is shared between Docker and Podman runtimes to avoid duplication.
+// Extracted to allow testing the argument building logic without executing commands.
+func buildStopArgs(containerID string, timeoutSecs int) []string {
+	return []string{"stop", "-t", fmt.Sprintf("%d", timeoutSecs), containerID}
+}
+
+// buildLogsArgs builds the arguments for a container logs operation.
+// This function is shared between Docker and Podman runtimes to avoid duplication.
+// Extracted to allow testing the argument building logic without executing commands.
+func buildLogsArgs(containerID string, follow bool, tail string) []string {
+	args := []string{"logs"}
+
+	if follow {
+		args = append(args, "--follow")
+	}
+
+	if tail != "" && tail != "all" {
+		args = append(args, "--tail", tail)
+	}
+
+	args = append(args, containerID)
+	return args
+}
+
+// buildAttachCommand builds the shell command and exec options for an attach operation.
+// This function is shared between Docker and Podman runtimes to avoid duplication.
+// Extracted to allow testing the command building logic without executing commands.
+func buildAttachCommand(opts *AttachOptions) ([]string, *ExecOptions) {
+	shell := "/bin/bash"
+	var shellArgs []string
+
+	if opts != nil {
+		if opts.Shell != "" {
+			shell = opts.Shell
+		}
+		if len(opts.ShellArgs) > 0 {
+			shellArgs = opts.ShellArgs
+		}
+	}
+
+	// Build command: shell + args.
+	cmd := []string{shell}
+	cmd = append(cmd, shellArgs...)
+
+	execOpts := &ExecOptions{
+		Tty:          true,
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	if opts != nil && opts.User != "" {
+		execOpts.User = opts.User
+	}
+
+	return cmd, execOpts
+}
+
 // execWithRuntime executes a command in a container using the specified runtime.
 // This function is shared between Docker and Podman runtimes to avoid duplication.
 func execWithRuntime(ctx context.Context, runtimeName string, containerID string, cmd []string, opts *ExecOptions) error {

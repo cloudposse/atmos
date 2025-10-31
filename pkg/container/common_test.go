@@ -667,3 +667,339 @@ func TestAddExecOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildAttachCommand(t *testing.T) {
+	tests := []struct {
+		name            string
+		opts            *AttachOptions
+		expectedCmd     []string
+		expectedExecOpt *ExecOptions
+	}{
+		{
+			name:        "nil options - uses defaults",
+			opts:        nil,
+			expectedCmd: []string{"/bin/bash"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+		{
+			name:        "empty options - uses defaults",
+			opts:        &AttachOptions{},
+			expectedCmd: []string{"/bin/bash"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+		{
+			name: "custom shell",
+			opts: &AttachOptions{
+				Shell: "/bin/sh",
+			},
+			expectedCmd: []string{"/bin/sh"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+		{
+			name: "shell with args",
+			opts: &AttachOptions{
+				Shell:     "/bin/bash",
+				ShellArgs: []string{"-l", "-i"},
+			},
+			expectedCmd: []string{"/bin/bash", "-l", "-i"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+			},
+		},
+		{
+			name: "custom user",
+			opts: &AttachOptions{
+				User: "node",
+			},
+			expectedCmd: []string{"/bin/bash"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+				User:         "node",
+			},
+		},
+		{
+			name: "all options",
+			opts: &AttachOptions{
+				Shell:     "/bin/zsh",
+				ShellArgs: []string{"-c", "echo hello"},
+				User:      "developer",
+			},
+			expectedCmd: []string{"/bin/zsh", "-c", "echo hello"},
+			expectedExecOpt: &ExecOptions{
+				Tty:          true,
+				AttachStdin:  true,
+				AttachStdout: true,
+				AttachStderr: true,
+				User:         "developer",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, execOpts := buildAttachCommand(tt.opts)
+
+			// Verify command.
+			assert.Equal(t, tt.expectedCmd, cmd, "command should match expected")
+
+			// Verify exec options.
+			assert.Equal(t, tt.expectedExecOpt, execOpts, "exec options should match expected")
+		})
+	}
+}
+
+func TestBuildBuildArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *BuildConfig
+		expected []string
+	}{
+		{
+			name: "minimal build - no args or tags",
+			config: &BuildConfig{
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+			},
+			expected: []string{"build", "-f", "Dockerfile", "."},
+		},
+		{
+			name: "build with build args",
+			config: &BuildConfig{
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Args: map[string]string{
+					"NODE_VERSION": "18",
+					"APP_ENV":      "production",
+				},
+			},
+			expected: []string{
+				"build",
+				"--build-arg", "NODE_VERSION=18",
+				"--build-arg", "APP_ENV=production",
+				"-f", "Dockerfile", ".",
+			},
+		},
+		{
+			name: "build with tags",
+			config: &BuildConfig{
+				Dockerfile: "Dockerfile",
+				Context:    ".",
+				Tags:       []string{"myapp:latest", "myapp:v1.0"},
+			},
+			expected: []string{
+				"build",
+				"-t", "myapp:latest",
+				"-t", "myapp:v1.0",
+				"-f", "Dockerfile", ".",
+			},
+		},
+		{
+			name: "build with custom dockerfile and context",
+			config: &BuildConfig{
+				Dockerfile: "docker/Dockerfile.prod",
+				Context:    "./app",
+			},
+			expected: []string{"build", "-f", "docker/Dockerfile.prod", "./app"},
+		},
+		{
+			name: "build with all options",
+			config: &BuildConfig{
+				Dockerfile: "Dockerfile.dev",
+				Context:    "/path/to/context",
+				Args: map[string]string{
+					"VERSION": "1.0",
+				},
+				Tags: []string{"myapp:dev", "myapp:latest"},
+			},
+			expected: []string{
+				"build",
+				"--build-arg", "VERSION=1.0",
+				"-t", "myapp:dev",
+				"-t", "myapp:latest",
+				"-f", "Dockerfile.dev", "/path/to/context",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildBuildArgs(tt.config)
+
+			// For configs with maps (args), we need to check presence rather than exact order.
+			if len(tt.config.Args) > 0 {
+				// Verify all expected args are present.
+				for _, expectedArg := range tt.expected {
+					assert.Contains(t, result, expectedArg)
+				}
+				// Verify length matches.
+				assert.Equal(t, len(tt.expected), len(result))
+			} else {
+				// For configs without maps, order is deterministic.
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestBuildRemoveArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		containerID string
+		force       bool
+		expected    []string
+	}{
+		{
+			name:        "remove without force",
+			containerID: "abc123",
+			force:       false,
+			expected:    []string{"rm", "abc123"},
+		},
+		{
+			name:        "remove with force",
+			containerID: "abc123",
+			force:       true,
+			expected:    []string{"rm", "-f", "abc123"},
+		},
+		{
+			name:        "remove container with name",
+			containerID: "my-container",
+			force:       false,
+			expected:    []string{"rm", "my-container"},
+		},
+		{
+			name:        "force remove container with name",
+			containerID: "my-container",
+			force:       true,
+			expected:    []string{"rm", "-f", "my-container"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildRemoveArgs(tt.containerID, tt.force)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildStopArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		containerID string
+		timeoutSecs int
+		expected    []string
+	}{
+		{
+			name:        "stop with default timeout",
+			containerID: "abc123",
+			timeoutSecs: 10,
+			expected:    []string{"stop", "-t", "10", "abc123"},
+		},
+		{
+			name:        "stop with zero timeout",
+			containerID: "abc123",
+			timeoutSecs: 0,
+			expected:    []string{"stop", "-t", "0", "abc123"},
+		},
+		{
+			name:        "stop with long timeout",
+			containerID: "abc123",
+			timeoutSecs: 300,
+			expected:    []string{"stop", "-t", "300", "abc123"},
+		},
+		{
+			name:        "stop container with name",
+			containerID: "my-container",
+			timeoutSecs: 15,
+			expected:    []string{"stop", "-t", "15", "my-container"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildStopArgs(tt.containerID, tt.timeoutSecs)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildLogsArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		containerID string
+		follow      bool
+		tail        string
+		expected    []string
+	}{
+		{
+			name:        "logs without options",
+			containerID: "abc123",
+			follow:      false,
+			tail:        "",
+			expected:    []string{"logs", "abc123"},
+		},
+		{
+			name:        "logs with follow",
+			containerID: "abc123",
+			follow:      true,
+			tail:        "",
+			expected:    []string{"logs", "--follow", "abc123"},
+		},
+		{
+			name:        "logs with tail",
+			containerID: "abc123",
+			follow:      false,
+			tail:        "100",
+			expected:    []string{"logs", "--tail", "100", "abc123"},
+		},
+		{
+			name:        "logs with tail=all (should be ignored)",
+			containerID: "abc123",
+			follow:      false,
+			tail:        "all",
+			expected:    []string{"logs", "abc123"},
+		},
+		{
+			name:        "logs with follow and tail",
+			containerID: "abc123",
+			follow:      true,
+			tail:        "50",
+			expected:    []string{"logs", "--follow", "--tail", "50", "abc123"},
+		},
+		{
+			name:        "logs for named container",
+			containerID: "my-container",
+			follow:      false,
+			tail:        "10",
+			expected:    []string{"logs", "--tail", "10", "my-container"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildLogsArgs(tt.containerID, tt.follow, tt.tail)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

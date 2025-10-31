@@ -42,20 +42,7 @@ func NewPodmanRuntime() *PodmanRuntime {
 func (p *PodmanRuntime) Build(ctx context.Context, config *BuildConfig) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Build")()
 
-	args := []string{"build"}
-
-	// Add build args
-	for key, value := range config.Args {
-		args = append(args, "--build-arg", fmt.Sprintf("%s=%s", key, value))
-	}
-
-	// Add tags
-	for _, tag := range config.Tags {
-		args = append(args, "-t", tag)
-	}
-
-	// Add context and dockerfile
-	args = append(args, "-f", config.Dockerfile, config.Context)
+	args := buildBuildArgs(config)
 
 	cmd := exec.CommandContext(ctx, podmanCmd, args...)
 	output, err := cmd.CombinedOutput()
@@ -119,7 +106,9 @@ func (p *PodmanRuntime) Stop(ctx context.Context, containerID string, timeout ti
 	defer perf.Track(nil, "container.PodmanRuntime.Stop")()
 
 	timeoutSecs := int(timeout.Seconds())
-	cmd := exec.CommandContext(ctx, podmanCmd, "stop", "-t", fmt.Sprintf("%d", timeoutSecs), containerID) //nolint:gosec // podman command is intentional
+	args := buildStopArgs(containerID, timeoutSecs)
+
+	cmd := exec.CommandContext(ctx, podmanCmd, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: podman stop failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, cleanPodmanOutput(output))
@@ -133,11 +122,7 @@ func (p *PodmanRuntime) Stop(ctx context.Context, containerID string, timeout ti
 func (p *PodmanRuntime) Remove(ctx context.Context, containerID string, force bool) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Remove")()
 
-	args := []string{"rm"}
-	if force {
-		args = append(args, "-f")
-	}
-	args = append(args, containerID)
+	args := buildRemoveArgs(containerID, force)
 
 	cmd := exec.CommandContext(ctx, podmanCmd, args...)
 	output, err := cmd.CombinedOutput()
@@ -265,33 +250,7 @@ func (p *PodmanRuntime) Exec(ctx context.Context, containerID string, cmd []stri
 func (p *PodmanRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Attach")()
 
-	shell := "/bin/bash"
-	var shellArgs []string
-
-	if opts != nil {
-		if opts.Shell != "" {
-			shell = opts.Shell
-		}
-		if len(opts.ShellArgs) > 0 {
-			shellArgs = opts.ShellArgs
-		}
-	}
-
-	// Build command: shell + args.
-	cmd := []string{shell}
-	cmd = append(cmd, shellArgs...)
-
-	execOpts := &ExecOptions{
-		Tty:          true,
-		AttachStdin:  true,
-		AttachStdout: true,
-		AttachStderr: true,
-	}
-
-	if opts != nil && opts.User != "" {
-		execOpts.User = opts.User
-	}
-
+	cmd, execOpts := buildAttachCommand(opts)
 	return p.Exec(ctx, containerID, cmd, execOpts)
 }
 
@@ -312,17 +271,7 @@ func (p *PodmanRuntime) Pull(ctx context.Context, image string) error {
 func (p *PodmanRuntime) Logs(ctx context.Context, containerID string, follow bool, tail string) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Logs")()
 
-	args := []string{"logs"}
-
-	if follow {
-		args = append(args, "--follow")
-	}
-
-	if tail != "" && tail != "all" {
-		args = append(args, "--tail", tail)
-	}
-
-	args = append(args, containerID)
+	args := buildLogsArgs(containerID, follow, tail)
 
 	cmd := exec.CommandContext(ctx, podmanCmd, args...)
 	cmd.Stdout = os.Stdout
