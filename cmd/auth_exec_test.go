@@ -49,7 +49,7 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 		{
 			name:          "identity flag with no value before double dash",
 			args:          []string{"--identity", "--", "echo", "test"},
-			expectedError: "authentication failed", // Should use default identity since --identity has no value
+			expectedError: "requires a TTY", // Interactive selection requires TTY.
 		},
 		{
 			name: "valid command with default identity",
