@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -84,11 +85,18 @@ func ProcessCommandLineArgs(
 
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 
+	log.Info("DEBUG: ProcessCommandLineArgs input", "componentType", componentType, "args", args)
+
 	cmd.DisableFlagParsing = false
 
 	err := cmd.ParseFlags(args)
 	if err != nil && !errors.Is(err, pflag.ErrHelp) {
 		return configAndStacksInfo, err
+	}
+
+	// DEBUG: Check what Cobra parsed
+	if identityFlag := cmd.Flag("identity"); identityFlag != nil {
+		log.Info("DEBUG: After ParseFlags", "identity.Value", identityFlag.Value.String(), "identity.Changed", identityFlag.Changed)
 	}
 
 	argsAndFlagsInfo, err := processArgsAndFlags(componentType, args)
