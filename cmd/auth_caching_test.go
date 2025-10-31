@@ -214,7 +214,7 @@ func TestAuth_MultipleIdentities(t *testing.T) {
 	for _, identity := range identities {
 		t.Run("login to "+identity, func(t *testing.T) {
 			// Don't create new TestKit - preserve file keyring state.
-			RootCmd.SetArgs([]string{"auth", "login", "--identity", identity})
+			RootCmd.SetArgs([]string{"auth", "login", "--identity=" + identity})
 			err := RootCmd.Execute()
 			require.NoError(t, err, "Login should succeed for %s", identity)
 		})
@@ -224,7 +224,7 @@ func TestAuth_MultipleIdentities(t *testing.T) {
 	for _, identity := range identities {
 		t.Run("whoami for "+identity, func(t *testing.T) {
 			// Don't create new TestKit - preserve file keyring state.
-			RootCmd.SetArgs([]string{"auth", "whoami", "--identity", identity})
+			RootCmd.SetArgs([]string{"auth", "whoami", "--identity=" + identity})
 
 			start := time.Now()
 			err := RootCmd.Execute()
@@ -259,7 +259,7 @@ func TestAuth_MultipleIdentitiesSameProvider_ProviderCacheReuse(t *testing.T) {
 
 	// Step 1: Authenticate first identity (this will cache provider credentials).
 	t.Run("first identity authenticates provider", func(t *testing.T) {
-		RootCmd.SetArgs([]string{"auth", "login", "--identity", identities[0]})
+		RootCmd.SetArgs([]string{"auth", "login", "--identity=" + identities[0]})
 		err := RootCmd.Execute()
 		require.NoError(t, err, "First identity login should succeed")
 	})
@@ -270,7 +270,7 @@ func TestAuth_MultipleIdentitiesSameProvider_ProviderCacheReuse(t *testing.T) {
 		// Set log level to Debug to see provider authentication attempts.
 		tk.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
-		RootCmd.SetArgs([]string{"auth", "login", "--identity", identities[1]})
+		RootCmd.SetArgs([]string{"auth", "login", "--identity=" + identities[1]})
 
 		start := time.Now()
 		err := RootCmd.Execute()
@@ -291,7 +291,7 @@ func TestAuth_MultipleIdentitiesSameProvider_ProviderCacheReuse(t *testing.T) {
 	// Step 3: Verify both identities have valid cached credentials.
 	for _, identity := range identities {
 		t.Run("verify cached credentials for "+identity, func(t *testing.T) {
-			RootCmd.SetArgs([]string{"auth", "whoami", "--identity", identity})
+			RootCmd.SetArgs([]string{"auth", "whoami", "--identity=" + identity})
 
 			start := time.Now()
 			err := RootCmd.Execute()

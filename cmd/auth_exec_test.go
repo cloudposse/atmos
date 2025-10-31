@@ -28,7 +28,7 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 	}{
 		{
 			name:          "identity flag without command",
-			args:          []string{"--identity", "test-user"},
+			args:          []string{"--identity=test-user"},
 			expectedError: "no command specified",
 		},
 		{
@@ -38,12 +38,12 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 		},
 		{
 			name:          "identity flag with double dash but no command",
-			args:          []string{"--identity", "test-user", "--"},
+			args:          []string{"--identity=test-user", "--"},
 			expectedError: "no command specified",
 		},
 		{
 			name:          "nonexistent identity",
-			args:          []string{"--identity", "nonexistent", "--", "echo", "test"},
+			args:          []string{"--identity=nonexistent", "--", "echo", "test"},
 			expectedError: "identity not found",
 		},
 		{
@@ -59,7 +59,7 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 		},
 		{
 			name:          "valid command with specific identity and double dash",
-			args:          []string{"--identity", "test-user", "--", "echo", "hello"},
+			args:          []string{"--identity=test-user", "--", "echo", "hello"},
 			skipOnWindows: true, // echo behaves differently on Windows
 			// This will fail with auth errors since we don't have real AWS credentials.
 			expectedError: "authentication failed",
@@ -127,7 +127,7 @@ func TestExtractIdentityFlag(t *testing.T) {
 		},
 		{
 			name:                "identity with value, double dash, command",
-			args:                []string{"--identity", "test-user", "--", "echo", "hello"},
+			args:                []string{"--identity=test-user", "--", "echo", "hello"},
 			expectedIdentity:    "test-user",
 			expectedCommandArgs: []string{"echo", "hello"},
 		},
@@ -175,7 +175,7 @@ func TestExtractIdentityFlag(t *testing.T) {
 		},
 		{
 			name:                "no double dash, identity with value",
-			args:                []string{"--identity", "test-user", "terraform", "plan"},
+			args:                []string{"--identity=test-user", "terraform", "plan"},
 			expectedIdentity:    "test-user",
 			expectedCommandArgs: []string{"terraform", "plan"},
 		},
