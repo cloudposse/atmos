@@ -971,6 +971,275 @@ fmt.Println(jsonOutput)
 // (jq processes stdout, ignores stderr UI messages)
 ```
 
+### Global Flags Consistency (MANDATORY)
+
+**EVERY new command MUST support applicable global flags** defined in `cmd/root.go`. Ensure new commands inherit and respect these flags when contextually appropriate.
+
+#### Core Global Flags (Persistent across all commands)
+
+**Navigation and Context:**
+```go
+--chdir, -C <path>        // Change working directory before processing
+--base-path <path>        // Base path for Atmos project
+--config <paths>          // Paths to configuration files (comma-separated or repeated)
+--config-path <paths>     // Paths to configuration directories
+```
+
+**Identity and Authentication:**
+```go
+--identity, -i [value]    // Specify target identity to assume
+                          // Without value: interactive selection
+                          // With value: use specific identity
+```
+
+**Output Control:**
+```go
+--no-color                // Disable colored output
+--pager [pager]           // Enable/configure pager (--pager, --pager=less, --pager=false)
+--logs-level <level>      // Trace, Debug, Info, Warning, Off
+--logs-file <path>        // Where to write logs (/dev/stderr, /dev/stdout, /dev/null, file)
+--redirect-stderr <fd>    // Redirect stderr to file descriptor
+```
+
+**Development and Debugging:**
+```go
+--profiler-enabled        // Enable pprof profiling server
+--profiler-port <port>    // Port for profiling (default: from profiler package)
+--profiler-host <host>    // Host for profiling (default: localhost)
+--profile-file <path>     // Write profiling data to file
+--profile-type <type>     // cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace
+--heatmap                 // Show performance heatmap after execution
+--heatmap-mode <mode>     // bar, sparkline, table
+```
+
+**Version:**
+```go
+--version                 // Display Atmos CLI version
+```
+
+#### When to Support Global Flags
+
+**ALWAYS support** (inherited via RootCmd.PersistentFlags):
+- `--chdir` / `-C` - All commands benefit from directory context
+- `--no-color` - All visual output must respect this
+- `--logs-level` / `--logs-file` - All commands use logging
+- `--version` - Available on all commands
+
+**Support when authentication-aware:**
+- `--identity` / `-i` - Commands that interact with cloud providers (AWS, Azure, GCP)
+  - Example: `atmos auth login --identity prod-admin`
+  - Example: `atmos terraform plan --identity readonly`
+  - Add as PersistentFlag on parent command (e.g., `authCmd`, `terraformCmd`)
+
+**Support when handling configuration:**
+- `--base-path`, `--config`, `--config-path` - Commands that load atmos.yaml
+  - Most commands use these via atmosConfig
+  - Automatically available through RootCmd
+
+**Support when outputting data:**
+- `--pager` - Commands with long output (lists, describes, logs)
+  - Enable pagination for better UX
+  - Detect TTY and disable in CI/CD automatically
+
+#### Example: Adding `--identity` to New Command
+
+```go
+// cmd/cloudformation/cloudformation.go
+package cloudformation
+
+import (
+    "github.com/cloudposse/atmos/cmd"
+    "github.com/spf13/cobra"
+)
+
+var cloudformationCmd = &cobra.Command{
+    Use:   "cloudformation",
+    Short: "Execute CloudFormation commands",
+}
+
+func init() {
+    // Add --identity flag to parent command (affects all subcommands)
+    cloudformationCmd.PersistentFlags().StringP("identity", "i", "",
+        "Specify the identity to authenticate before running CloudFormation. Use without value to select interactively.")
+
+    // Enable interactive selection when --identity is used without value
+    if identityFlag := cloudformationCmd.PersistentFlags().Lookup("identity"); identityFlag != nil {
+        identityFlag.NoOptDefVal = cmd.IdentityFlagSelectValue  // "__SELECT__"
+    }
+
+    // Bind to viper for config file + env var support
+    viper.BindPFlag("identity", cloudformationCmd.PersistentFlags().Lookup("identity"))
+    viper.BindEnv("identity", "ATMOS_IDENTITY")
+}
+```
+
+#### Example: Respecting `--no-color`
+
+```go
+import (
+    "github.com/charmbracelet/lipgloss"
+    "github.com/spf13/viper"
+)
+
+func renderOutput() string {
+    // ALWAYS check --no-color flag
+    noColor := viper.GetBool("no-color")
+
+    style := lipgloss.NewStyle().
+        Foreground(lipgloss.Color("205")).
+        Bold(true)
+
+    if noColor {
+        // Disable all styling when --no-color is set
+        style = lipgloss.NewStyle()  // Plain style
+    }
+
+    return style.Render("Success!")
+}
+```
+
+#### Example: Interactive Selection with `--identity`
+
+```go
+import (
+    "github.com/cloudposse/atmos/cmd"
+    "github.com/spf13/cobra"
+    "github.com/spf13/viper"
+)
+
+func runCommand(cobraCmd *cobra.Command, args []string) error {
+    identity := viper.GetString("identity")
+
+    // Check if interactive selection was requested
+    if identity == cmd.IdentityFlagSelectValue {
+        // User passed --identity without value → show selector
+        selected, err := showIdentitySelector()
+        if err != nil {
+            return err
+        }
+        identity = selected
+    } else if identity == "" {
+        // No --identity flag → use default or prompt if no default
+        if defaultIdentity := getDefaultIdentity(); defaultIdentity != "" {
+            identity = defaultIdentity
+        } else {
+            selected, err := showIdentitySelector()
+            if err != nil {
+                return err
+            }
+            identity = selected
+        }
+    }
+
+    // Use identity for authentication
+    return authenticateAndRun(identity, args)
+}
+```
+
+#### Global Flag Testing Requirements
+
+**ALWAYS test global flags on new commands:**
+
+```go
+func TestMyCommand_GlobalFlags(t *testing.T) {
+    tests := []struct {
+        name     string
+        args     []string
+        validate func(t *testing.T)
+    }{
+        {
+            name: "--chdir changes working directory",
+            args: []string{"--chdir", "/tmp", "mycommand"},
+            validate: func(t *testing.T) {
+                // Verify command runs in /tmp context
+            },
+        },
+        {
+            name: "--no-color disables styling",
+            args: []string{"--no-color", "mycommand"},
+            validate: func(t *testing.T) {
+                // Verify output has no ANSI codes
+            },
+        },
+        {
+            name: "--identity with value uses specific identity",
+            args: []string{"--identity", "prod-admin", "mycommand"},
+            validate: func(t *testing.T) {
+                // Verify prod-admin identity is used
+            },
+        },
+        {
+            name: "--identity without value shows selector",
+            args: []string{"--identity", "mycommand"},
+            validate: func(t *testing.T) {
+                // Verify interactive selector appears
+            },
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            tk := cmd.NewTestKit(t)  // Isolation
+            tk.Cmd.SetArgs(tt.args)
+            _ = tk.Cmd.Execute()
+            tt.validate(t)
+        })
+    }
+}
+```
+
+#### Common Mistakes to Avoid
+
+❌ **BAD: Not supporting `--no-color`**
+```go
+// This will still show colors even with --no-color
+fmt.Println(lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render("Text"))
+```
+
+✅ **GOOD: Respecting `--no-color`**
+```go
+style := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+if viper.GetBool("no-color") {
+    style = lipgloss.NewStyle()
+}
+fmt.Println(style.Render("Text"))
+```
+
+❌ **BAD: Ignoring `--identity` on auth-aware commands**
+```go
+// Command needs AWS credentials but doesn't support --identity
+func runCommand(cmd *cobra.Command, args []string) error {
+    // Just uses ambient AWS credentials
+    return runAWSCommand()
+}
+```
+
+✅ **GOOD: Supporting `--identity` for auth-aware commands**
+```go
+func runCommand(cmd *cobra.Command, args []string) error {
+    identity := viper.GetString("identity")
+    if identity != "" {
+        // Authenticate with specified identity
+        if err := authenticateWithIdentity(identity); err != nil {
+            return err
+        }
+    }
+    return runAWSCommand()
+}
+```
+
+❌ **BAD: Adding `--identity` as local flag**
+```go
+// WRONG: Local flag won't affect subcommands
+myCmd.Flags().StringP("identity", "i", "", "Identity")
+```
+
+✅ **GOOD: Adding `--identity` as persistent flag**
+```go
+// CORRECT: Persistent flag affects all subcommands
+myCmd.PersistentFlags().StringP("identity", "i", "", "Identity")
+```
+
 ## Critical Evaluation Criteria
 
 As CLI developer, you are CRITICAL of:
@@ -1152,6 +1421,9 @@ Before finalizing CLI implementation:
 - ✅ **Positive flags**: No negative flags (except `--no-*` conventions like `--no-color`)
 - ✅ **Flexible flags**: Flags work across use cases, not too specific
 - ✅ **Conventional flags**: Uses standard flag names (`-s, -r, -o, -v, -q, -f, -d`)
+- ✅ **Global flags support**: Implements applicable global flags (`--chdir`, `--no-color`, `--identity` when auth-aware)
+- ✅ **--no-color respected**: All visual output checks `viper.GetBool("no-color")`
+- ✅ **--identity pattern**: Uses PersistentFlags with NoOptDefVal for interactive selection
 - ✅ **viper.BindEnv**: NEVER uses `os.Getenv`, always `viper.BindEnv`
 - ✅ **Interactive fallbacks**: Prompts when info missing (if TTY)
 - ✅ **TTY detection**: Different output for TTY vs non-TTY
@@ -1167,6 +1439,7 @@ Before finalizing CLI implementation:
 - ✅ **Cross-platform**: Works on Linux/macOS/Windows
 - ✅ **Testable design**: Interfaces, DI, mockable dependencies
 - ✅ **Test coverage**: 80%+ with Test Automation Expert collaboration
+- ✅ **Global flag tests**: Tests verify `--chdir`, `--no-color`, `--identity` behavior
 
 ## Success Criteria
 
