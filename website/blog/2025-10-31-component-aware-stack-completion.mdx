@@ -30,10 +30,11 @@ dev  prod  # Only stacks containing the vpc component
 
 This enhancement improves the developer experience by:
 
-- **Reducing cognitive load** - You only see relevant options
-- **Preventing errors** - Less chance of selecting an invalid stack/component combination
-- **Faster navigation** - Fewer completions to scroll through
-- **Better discoverability** - Quickly see which stacks include a particular component
+- **Scales with your infrastructure** - In large organizations with hundreds of stacks, you only see the handful that are relevant
+- **Reducing cognitive load** - No more scrolling through dozens or hundreds of irrelevant stacks
+- **Preventing errors** - Impossible to select an invalid stack/component combination
+- **Faster navigation** - Only see applicable stacks, not your entire infrastructure
+- **Better discoverability** - Instantly see which stacks include a particular component
 
 ## How It Works
 
@@ -66,3 +67,22 @@ Tab completion will now show:
 - `atmos terraform plan myapp --stack <TAB>` → `dev` only
 
 This works across all Terraform commands: `plan`, `apply`, `deploy`, `destroy`, and more.
+
+### Scale Matters
+
+In organizations with large infrastructures, this becomes invaluable:
+
+```bash
+# Without filtering: overwhelming
+$ atmos terraform plan vpc --stack <TAB>
+dev-us-east-1  dev-us-west-2  dev-eu-west-1  dev-ap-south-1
+staging-us-east-1  staging-us-west-2  staging-eu-west-1
+prod-us-east-1  prod-us-west-2  prod-eu-west-1  prod-ap-south-1
+sandbox-alice  sandbox-bob  sandbox-charlie
+... (100+ more stacks)
+
+# With filtering: manageable
+$ atmos terraform plan vpc --stack <TAB>
+dev-us-east-1  staging-us-east-1  prod-us-east-1
+# Only the 3 stacks that actually have the vpc component
+```
