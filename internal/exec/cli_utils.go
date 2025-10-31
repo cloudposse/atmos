@@ -537,16 +537,25 @@ func processArgsAndFlags(
 		}
 
 		if arg == cfg.IdentityFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
+			// Check if next arg exists and is not another flag.
+			if len(inputArgsAndFlags) > (i+1) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
+				// Has value: --identity <value>.
+				info.Identity = inputArgsAndFlags[i+1]
+			} else {
+				// No value: --identity (interactive selection).
+				info.Identity = cfg.IdentityFlagSelectValue
 			}
-			info.Identity = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.IdentityFlag) {
 			parts := strings.Split(arg, "=")
 			if len(parts) != 2 {
 				return info, fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
 			}
-			info.Identity = parts[1]
+			if parts[1] == "" {
+				// Empty value: --identity= (interactive selection).
+				info.Identity = cfg.IdentityFlagSelectValue
+			} else {
+				info.Identity = parts[1]
+			}
 		}
 
 		if arg == cfg.FromPlanFlag {
