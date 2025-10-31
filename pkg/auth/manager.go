@@ -313,8 +313,14 @@ func (m *manager) Validate() error {
 func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	defer perf.Track(nil, "auth.Manager.GetDefaultIdentity")()
 
-	// If forceSelect is true and we're in interactive mode, always show selector.
-	if forceSelect && isInteractive() {
+	// If forceSelect is true, user explicitly requested identity selection.
+	if forceSelect {
+		// Check if we're in interactive mode (have TTY).
+		if !isInteractive() {
+			// User requested interactive selection but we don't have a TTY.
+			return "", errUtils.ErrIdentitySelectionRequiresTTY
+		}
+		// We have a TTY - show selector.
 		return m.promptForIdentity("Select an identity:", m.ListIdentities())
 	}
 
@@ -585,7 +591,7 @@ func (m *manager) setIdentityManager(identityName string) error {
 
 	// Get root provider name from the chain.
 	if len(m.chain) == 0 {
-		return fmt.Errorf("authentication chain not built")
+		return errUtils.ErrAuthenticationChainNotBuilt
 	}
 	rootProviderName := m.chain[0]
 

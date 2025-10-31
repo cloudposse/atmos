@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -126,6 +127,12 @@ func TestGetIdentityFromFlags(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// Reset Viper state for test isolation.
+			viper.Reset()
+
+			// Bind Viper to ATMOS_IDENTITY environment variable (mimics cmd/auth.go initialization).
+			_ = viper.BindEnv("identity", "ATMOS_IDENTITY", "IDENTITY")
+
 			// Set up environment variable if specified.
 			if tc.envVar != "" {
 				t.Setenv(tc.envVar, tc.envValue)

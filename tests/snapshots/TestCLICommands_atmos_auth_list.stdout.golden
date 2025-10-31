@@ -1,11 +1,11 @@
  Authentication Configuration 
 └──mock-provider (mock-aws)
    └──Identities
-      ├──● mock-identity (mock-aws) [DEFAULT] 650141h2m
+      ├──● mock-identity (mock-aws) [DEFAULT] 650139h2m
       │  └──Principal
       │     └──account
       │        └──id: 123456789012
-      └──● mock-identity-2 (mock-aws) 650141h2m
+      └──● mock-identity-2 (mock-aws) 650139h2m
          └──Principal
             └──account
                └──id: 987654321098

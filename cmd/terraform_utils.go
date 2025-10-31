@@ -169,12 +169,11 @@ func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
 		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrInitializeCLIConfig, err), "", "")
 	}
 
-	// Check if auth is configured. If not, skip identity selection.
+	// Check if auth is configured. If not, we can't select an identity.
 	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
-		log.Debug("Identity selection skipped: no authentication configured")
-		// Continue without setting identity - this is not an error.
-		info.Identity = ""
-		return
+		// User explicitly requested identity selection (--identity or --identity=)
+		// but no authentication is configured. This is an error.
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: no authentication configured", errUtils.ErrNoIdentitiesAvailable), "", "")
 	}
 
 	// Create auth manager to enable identity selection.
