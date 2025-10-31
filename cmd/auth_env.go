@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -49,15 +50,8 @@ var authEnvCmd = &cobra.Command{
 		}
 
 		// Get identity from flag or use default.
-		// Check if flag was explicitly set by user to ensure command-line precedence.
-		var identityName string
-		if cmd.Flags().Changed(IdentityFlagName) {
-			// Flag was explicitly provided on command line (either with or without value).
-			identityName, _ = cmd.Flags().GetString(IdentityFlagName)
-		} else {
-			// Flag not provided on command line - fall back to viper (config/env).
-			identityName = viper.GetString(IdentityFlagName)
-		}
+		// Use GetIdentityFromFlags which handles Cobra's NoOptDefVal quirk correctly.
+		identityName := GetIdentityFromFlags(cmd, os.Args)
 
 		// Check if user wants to interactively select identity.
 		forceSelect := identityName == IdentityFlagSelectValue
