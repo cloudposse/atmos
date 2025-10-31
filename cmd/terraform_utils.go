@@ -72,16 +72,24 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.Components = components
 	info.DryRun = dryRun
 
+	// DEBUG: Log identity value from ProcessCommandLineArgs.
+	log.Info("Identity from ProcessCommandLineArgs", "identity", info.Identity)
+
 	// Handle --identity flag if explicitly provided.
 	// Note: ProcessCommandLineArgs already sets info.Identity from env vars and args,
 	// so we only need to handle the special case where --identity is provided without a value.
+	log.Info("DEBUG: Checking identity flag", "changed", flags.Changed(IdentityFlagName))
 	if flags.Changed(IdentityFlagName) {
 		// Flag was explicitly provided on command line (either with or without value).
 		identityFlag, err := flags.GetString(IdentityFlagName)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
+		log.Info("DEBUG: Identity flag value from Cobra", "identityFlag", identityFlag, "selectValue", IdentityFlagSelectValue)
+
 		// Check if user wants to interactively select identity.
 		forceSelect := identityFlag == IdentityFlagSelectValue
+
+		log.Info("DEBUG: Force select decision", "forceSelect", forceSelect)
 
 		if forceSelect {
 			// Guard: Fail fast in CI/non-TTY environments instead of hanging.
