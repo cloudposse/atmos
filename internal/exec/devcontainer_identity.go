@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -138,7 +138,9 @@ func getAtmosXDGEnvironment(config *devcontainer.Config) map[string]string {
 	}
 
 	// Calculate container-relative .atmos path.
-	atmosPath := filepath.Join(containerBasePath, ".atmos")
+	// Use path.Join (not filepath.Join) to ensure Unix-style paths for containers.
+	//nolint:forbidigo // Container paths must use Unix separators (/) not OS-specific separators
+	atmosPath := path.Join(containerBasePath, ".atmos")
 
 	return map[string]string{
 		// XDG Base Directory Specification paths.
@@ -156,14 +158,18 @@ func translatePath(hostFilePath, hostWorkspace, containerWorkspace, userHome str
 	// If path starts with host workspace, translate to container path.
 	if strings.HasPrefix(hostFilePath, hostWorkspace) {
 		relPath := strings.TrimPrefix(hostFilePath, hostWorkspace)
-		return filepath.Join(containerWorkspace, relPath)
+		// Use path.Join (not filepath.Join) to ensure Unix-style paths for containers.
+		//nolint:forbidigo // Container paths must use Unix separators (/) not OS-specific separators
+		return path.Join(containerWorkspace, relPath)
 	}
 
 	// If path is under user home, translate to container workspace.
 	// Example: ~/.aws/config → /workspace/.aws/config
 	if userHome != "" && strings.HasPrefix(hostFilePath, userHome) {
 		relPath := strings.TrimPrefix(hostFilePath, userHome)
-		return filepath.Join(containerWorkspace, relPath)
+		// Use path.Join (not filepath.Join) to ensure Unix-style paths for containers.
+		//nolint:forbidigo // Container paths must use Unix separators (/) not OS-specific separators
+		return path.Join(containerWorkspace, relPath)
 	}
 
 	// No translation needed.
