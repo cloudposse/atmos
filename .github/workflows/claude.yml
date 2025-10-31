@@ -1,15 +1,16 @@
-name: CLAUDE.md
+name: Claude Documentation Size Check
 on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
       - 'CLAUDE.md'
+      - '.claude/agents/**/*.md'
       - '.github/workflows/claude.yml'
       - '.github/actions/check-claude-md-size/**'
 
 jobs:
   size-check:
-    name: Check file size
+    name: Check file sizes
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -21,3 +22,55 @@ jobs:
           file-path: CLAUDE.md
           max-size: 40000
           github-token: ${{ github.token }}
+
+      - name: Find all agent files
+        id: find-agents
+        run: |
+          # Find all agent markdown files
+          AGENT_FILES=$(find .claude/agents -name "*.md" -type f | tr '\n' ' ')
+          echo "agent-files=$AGENT_FILES" >> $GITHUB_OUTPUT
+          echo "Found agent files: $AGENT_FILES"
+
+      - name: Check agent file sizes
+        if: steps.find-agents.outputs.agent-files != ''
+        run: |
+          MAX_SIZE=40000
+          FAILED=0
+
+          echo "Checking agent file sizes (max: $MAX_SIZE characters)..."
+          echo ""
+
+          for FILE in ${{ steps.find-agents.outputs.agent-files }}; do
+            if [ ! -f "$FILE" ]; then
+              continue
+            fi
+
+            SIZE=$(wc -c < "$FILE" | tr -d ' ')
+            USAGE_PERCENT=$((SIZE * 100 / MAX_SIZE))
+
+            if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+              EXCESS=$((SIZE - MAX_SIZE))
+              EXCESS_PERCENT=$((EXCESS * 100 / MAX_SIZE))
+              echo "❌ $FILE: $SIZE chars (OVER LIMIT by $EXCESS chars, ~${EXCESS_PERCENT}%)"
+              FAILED=1
+            else
+              echo "✅ $FILE: $SIZE chars (${USAGE_PERCENT}% of limit)"
+            fi
+          done
+
+          echo ""
+
+          if [ "$FAILED" -eq 1 ]; then
+            echo "❌ ERROR: One or more agent files exceed the 40k character limit"
+            echo ""
+            echo "Please compress the large files by:"
+            echo "  - Removing verbose explanations"
+            echo "  - Consolidating redundant examples"
+            echo "  - Keeping only essential requirements"
+            echo "  - Moving detailed guides to docs/"
+            echo ""
+            echo "All MANDATORY requirements must be preserved."
+            exit 1
+          else
+            echo "✅ All agent files are within the size limit"
+          fi
