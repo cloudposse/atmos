@@ -693,6 +693,24 @@ func TestLoadConfig(t *testing.T) {
 			expectError: true,
 			errorMsg:    "must be a map",
 		},
+		{
+			name: "validation fails - no image or build",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: map[string]any{
+						"invalid": map[string]any{
+							"spec": map[string]any{
+								"name": "test",
+								// Missing both image and build
+							},
+						},
+					},
+				},
+			},
+			dcName:      "invalid",
+			expectError: true,
+			errorMsg:    "must specify either 'image' or 'build'",
+		},
 	}
 
 	for _, tt := range tests {
@@ -817,6 +835,7 @@ func TestExtractSettings(t *testing.T) {
 		devMap      map[string]any
 		dcName      string
 		expectError bool
+		errorMsg    string
 		assert      func(t *testing.T, settings *Settings)
 	}{
 		{
@@ -849,6 +868,7 @@ func TestExtractSettings(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
 			} else {
 				require.NoError(t, err)
 				tt.assert(t, settings)
@@ -896,6 +916,20 @@ func TestExtractAndValidateSpec(t *testing.T) {
 			},
 		},
 		{
+			name: "spec with overridecommand false",
+			devMap: map[string]any{
+				"spec": map[string]any{
+					"image":           "alpine:latest",
+					"overridecommand": false,
+				},
+			},
+			dcName:      "test",
+			expectError: false,
+			assert: func(t *testing.T, config *Config) {
+				assert.False(t, config.OverrideCommand) // Explicitly set to false
+			},
+		},
+		{
 			name: "missing spec section",
 			devMap: map[string]any{
 				"settings": map[string]any{},
@@ -912,6 +946,32 @@ func TestExtractAndValidateSpec(t *testing.T) {
 			dcName:      "test",
 			expectError: true,
 			errorMsg:    "must be a map",
+		},
+		{
+			name: "spec fails validation - no image or build",
+			devMap: map[string]any{
+				"spec": map[string]any{
+					"name": "test-no-image",
+					// Missing both image and build
+				},
+			},
+			dcName:      "test",
+			expectError: true,
+			errorMsg:    "must specify either 'image' or 'build'",
+		},
+		{
+			name: "spec with build but missing dockerfile",
+			devMap: map[string]any{
+				"spec": map[string]any{
+					"build": map[string]any{
+						"context": ".",
+						// Missing dockerfile
+					},
+				},
+			},
+			dcName:      "test",
+			expectError: true,
+			errorMsg:    "dockerfile is required",
 		},
 	}
 
