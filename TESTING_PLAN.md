@@ -245,11 +245,14 @@ Given the scale (2000 lines of untested code), we'll use an iterative commit str
 - **Coverage achieved: 71.5% (devcontainer pkg), 35.7% (container pkg - up from 19.9%)**
 - **Commit checkpoint**
 
-### Iteration 3: Execution Layer (Target: 70-80% coverage)
-- Devcontainer helpers tests
-- Identity/credential tests
-- Core exec functions
-- **Commit checkpoint**
+### Iteration 3: Execution Layer (Target: 80-90% coverage) 🔄 IN PROGRESS
+- ⏳ Devcontainer helpers tests - internal/exec/devcontainer_helpers_test.go
+  - ✅ TestIsContainerRunning - comprehensive status checking (12 scenarios)
+  - Note: Other helpers require mocking Runtime interface (complex, may need interface generation)
+- ⏳ Identity/credential tests - TODO
+- ⏳ Core exec functions - TODO
+- **Current progress: Foundation test for isContainerRunning helper**
+- **Commit checkpoint (phase 1)**
 
 ### Iteration 4: Polish (Target: 80-90% coverage)
 - Edge cases
