@@ -7,12 +7,13 @@
 
 ## Executive Summary
 
-**Verdict:** Atmos AI has strong domain-specific advantages and matches or exceeds Gemini CLI in most areas. However, Gemini CLI has several innovative features that could significantly enhance Atmos AI.
+**Verdict:** Atmos AI has strong domain-specific advantages and matches or exceeds Gemini CLI in most areas. With the completion of non-interactive mode and structured JSON output, Atmos AI now supports full automation and CI/CD integration.
 
 **Key Findings:**
 - ✅ **Atmos AI Advantages:** Multi-provider support, specialized agents, LSP integration, infrastructure-specific tools
-- ⚠️ **Missing Features:** Conversation checkpointing, non-interactive mode, structured JSON output, GitHub Actions integration
-- 💡 **Improvement Opportunities:** 10 high-value features identified for roadmap
+- ✅ **Recently Completed (2025-10-31):** Non-interactive mode, structured JSON output, CI/CD pipeline integration, API access
+- ⚠️ **Remaining Gaps:** Conversation checkpointing, GitHub Actions integration, directory scoping
+- 💡 **Improvement Opportunities:** 8 high-value features identified for roadmap (2 completed)
 
 ---
 
@@ -22,7 +23,7 @@
 |-----------------|----------|------------|--------|-------|
 | **Core Capabilities** | | | | |
 | Interactive Chat | ✅ Full TUI | ✅ Basic terminal | 🟢 Atmos | Better UX with Bubble Tea TUI |
-| Non-Interactive Mode | ❌ No | ✅ `-p "prompt"` | 🔴 Gemini | Scripting/automation gap |
+| Non-Interactive Mode | ✅ `atmos ai exec` | ✅ `-p "prompt"` | 🟡 Tie | ✅ **COMPLETED** 2025-10-31 |
 | Multi-Provider | ✅ 7 providers | ❌ Gemini only | 🟢 Atmos | Major flexibility advantage |
 | Local/Offline | ✅ Ollama | ❌ Cloud only | 🟢 Atmos | Privacy and compliance win |
 | **Session Management** | | | | |
@@ -49,13 +50,13 @@
 | **Output & Formatting** | | | | |
 | Markdown Rendering | ✅ Rich TUI | ✅ Basic | 🟢 Atmos | Better presentation |
 | Syntax Highlighting | ✅ Chroma | ⚠️ Limited | 🟢 Atmos | Better code display |
-| JSON Output | ❌ No | ✅ `--output-format json` | 🔴 Gemini | Missing for automation |
+| JSON Output | ✅ `--format json` | ✅ `--output-format json` | 🟡 Tie | ✅ **COMPLETED** 2025-10-31 |
 | Streaming Output | ✅ Real-time | ✅ `stream-json` | 🟡 Tie | Both support streaming |
 | **Integration & Automation** | | | | |
 | GitHub Actions | ❌ No | ✅ Official action | 🔴 Gemini | Missing CI/CD integration |
-| CI/CD Pipelines | ❌ Limited | ✅ Non-interactive mode | 🔴 Gemini | Automation gap |
+| CI/CD Pipelines | ✅ `atmos ai exec` | ✅ Non-interactive mode | 🟡 Tie | ✅ **COMPLETED** 2025-10-31 |
 | IDE Integration | ✅ MCP server | ✅ VS Code extension | 🟡 Tie | Different approaches |
-| API Access | ❌ No programmatic API | ✅ JSON output | 🔴 Gemini | Missing automation API |
+| API Access | ✅ JSON output + exit codes | ✅ JSON output | 🟡 Tie | ✅ **COMPLETED** 2025-10-31 |
 | **Enterprise Features** | | | | |
 | Enterprise Providers | ✅ Bedrock, Azure | ✅ Vertex AI | 🟡 Tie | Both support enterprise |
 | Audit Logging | ✅ Detailed | ⚠️ Telemetry | 🟢 Atmos | Better audit trail |
@@ -69,8 +70,14 @@
 
 **Score Summary:**
 - 🟢 **Atmos AI Wins:** 11 categories
-- 🔴 **Gemini CLI Wins:** 11 categories
-- 🟡 **Tie:** 8 categories
+- 🔴 **Gemini CLI Wins:** 7 categories (↓ from 11)
+- 🟡 **Tie:** 12 categories (↑ from 8)
+
+**Recent Updates (2025-10-31):**
+- ✅ Non-Interactive Mode: COMPLETED (`atmos ai exec`)
+- ✅ Structured JSON Output: COMPLETED (`--format json`)
+- ✅ CI/CD Pipeline Integration: COMPLETED (exit codes, stdin support)
+- ✅ API Access: COMPLETED (JSON output with metadata)
 
 ---
 
@@ -163,10 +170,10 @@
 
 ---
 
-### 2. ❌ Missing Features (High Priority for Roadmap)
+### 2. ✅ Recently Completed Features
 
-#### 2.1 Non-Interactive Mode ⭐⭐⭐ **HIGH PRIORITY**
-**Status:** Critical gap for automation
+#### 2.1 Non-Interactive Mode ⭐⭐⭐ ✅ **COMPLETED 2025-10-31**
+**Status:** Implemented with full feature parity
 
 **Gemini CLI:**
 ```bash
@@ -177,40 +184,51 @@ gemini -p "Analyze VPC configuration"
 result=$(gemini -p "List all prod stacks" --output-format json)
 ```
 
-**Current Atmos AI:**
-- Only `atmos ai ask` (interactive prompt)
-- No JSON output
-- No scripting support
-
-**Recommendation:** **IMPLEMENT**
+**Implemented Atmos AI:**
 ```bash
-# Proposed commands
+# Direct prompt execution
 atmos ai exec "Analyze VPC configuration"
+
+# With output format
 atmos ai exec "List all prod stacks" --format json
+
+# Session support for multi-turn
 atmos ai exec --session my-session "Continue analysis" --format json
 
-# Stdout is AI response, stderr is logging
+# Stdin support
+echo "Validate config" | atmos ai exec --format json
+
+# File output
+atmos ai exec "Analyze prod" --output report.json --format json
+
+# Provider override
+atmos ai exec "Complex task" --provider anthropic --format json
 ```
 
-**Benefits:**
-- ✅ CI/CD pipeline integration
-- ✅ Shell scripting
-- ✅ Automation workflows
-- ✅ Programmatic access
+**Implemented Features:**
+- ✅ Non-interactive `atmos ai exec` command
+- ✅ Multiple output formats: `json`, `text`, `markdown`
+- ✅ Stdin support for piping prompts
+- ✅ File output with `--output` flag
+- ✅ Standard exit codes: 0 (success), 1 (AI error), 2 (tool error)
+- ✅ Session support with `--session` for multi-turn execution
+- ✅ Provider override with `--provider`
+- ✅ Tool execution control with `--no-tools`
+- ✅ Context injection with `--context`
 
-**Implementation Plan:**
-1. Add `atmos ai exec` command (non-interactive)
-2. Add `--format json|text|markdown` flag
-3. Add `--output <file>` flag for file output
-4. Support stdin for prompts: `echo "prompt" | atmos ai exec`
-5. Exit codes: 0 (success), 1 (AI error), 2 (tool error)
+**Implementation Details:**
+- Created `pkg/ai/formatter/` package with JSON/Text/Markdown formatters
+- Created `pkg/ai/executor/` package for non-interactive execution
+- Implemented multi-round tool execution with iteration limits
+- Added comprehensive test coverage
+- Full documentation in `/cli/commands/ai/exec`
 
-**Estimated Effort:** 2-3 days
+**Actual Effort:** 3 days (including tests and documentation)
 
 ---
 
-#### 2.2 Structured JSON Output ⭐⭐⭐ **HIGH PRIORITY**
-**Status:** Required for automation
+#### 2.2 Structured JSON Output ⭐⭐⭐ ✅ **COMPLETED 2025-10-31**
+**Status:** Fully implemented with rich metadata
 
 **Gemini CLI:**
 ```bash
@@ -224,49 +242,76 @@ gemini -p "List files" --output-format json
 }
 ```
 
-**Current Atmos AI:**
-- Only plain text output
-- No structured format
-
-**Recommendation:** **IMPLEMENT**
+**Implemented Atmos AI:**
 ```bash
 atmos ai exec "List stacks" --format json
-# Output:
+```
+
+**Output Structure:**
+```json
 {
   "success": true,
   "response": "Stack list:\n- prod-vpc\n- staging-vpc",
   "tool_calls": [
     {
       "tool": "atmos_list_stacks",
+      "args": {"filter": "prod"},
       "duration_ms": 45,
-      "result": {"stacks": ["prod-vpc", "staging-vpc"]}
+      "success": true,
+      "result": {"stacks": ["prod-vpc", "staging-vpc"]},
+      "error": null
     }
   ],
-  "tokens": {"prompt": 120, "completion": 80, "total": 200},
-  "model": "claude-sonnet-4-20250514",
-  "provider": "anthropic",
-  "session_id": "abc123"
+  "tokens": {
+    "prompt": 120,
+    "completion": 80,
+    "total": 200,
+    "cached": 50,
+    "cache_creation": 10
+  },
+  "metadata": {
+    "model": "claude-sonnet-4-20250514",
+    "provider": "anthropic",
+    "duration_ms": 1234,
+    "timestamp": "2025-10-31T10:00:00Z",
+    "tools_enabled": true,
+    "stop_reason": "end_turn",
+    "session_id": "abc123"
+  },
+  "error": null
 }
 ```
 
-**Use Cases:**
-- Parse AI responses in scripts
-- Extract tool results programmatically
-- Track token usage
-- Build automation workflows
+**Implemented Features:**
+- ✅ Complete JSON formatter with pretty printing
+- ✅ Detailed tool execution metadata (args, duration, success, results)
+- ✅ Comprehensive token usage tracking (including cached tokens)
+- ✅ Rich metadata (model, provider, duration, timestamps)
+- ✅ Error information with structured format
+- ✅ Session tracking
+- ✅ Alternative formats: `text` (default), `markdown`
 
-**Implementation Plan:**
-1. Create JSON response formatter
-2. Include tool execution details
-3. Token usage tracking
-4. Session metadata
-5. Error handling in JSON format
+**Use Cases Enabled:**
+- ✅ Parse AI responses in shell scripts with `jq`
+- ✅ Extract tool results programmatically
+- ✅ Track token usage and costs
+- ✅ Build CI/CD automation workflows
+- ✅ Monitor AI performance metrics
+- ✅ Debug tool execution issues
 
-**Estimated Effort:** 2-3 days
+**Implementation Details:**
+- Created type-safe formatter interfaces
+- JSON encoder with proper indentation
+- Comprehensive error serialization
+- Test coverage for all output scenarios
+
+**Actual Effort:** Included in non-interactive mode implementation (3 days total)
 
 ---
 
-#### 2.3 Conversation Checkpointing ⭐⭐ **MEDIUM PRIORITY**
+### 3. ⚠️ Remaining Missing Features (Roadmap)
+
+#### 3.1 Conversation Checkpointing ⭐⭐ **MEDIUM PRIORITY**
 **Status:** Useful for sharing/export
 
 **Gemini CLI:**
@@ -323,7 +368,7 @@ atmos ai sessions import session.json --name restored-session
 
 ---
 
-#### 2.4 Directory Scoping & Auto-Discovery ⭐⭐ **MEDIUM PRIORITY**
+#### 3.2 Directory Scoping & Auto-Discovery ⭐⭐ **MEDIUM PRIORITY**
 **Status:** Better context loading
 
 **Gemini CLI:**
@@ -392,7 +437,7 @@ atmos ai chat --no-auto-context
 
 ---
 
-#### 2.5 GitHub Actions Integration ⭐⭐ **MEDIUM PRIORITY**
+#### 3.3 GitHub Actions Integration ⭐⭐ **MEDIUM PRIORITY**
 **Status:** Missing CI/CD integration
 
 **Gemini CLI:**
@@ -459,7 +504,7 @@ jobs:
 
 ---
 
-#### 2.6 Multimodal Input Support ⭐ **LOW PRIORITY**
+#### 3.4 Multimodal Input Support ⭐ **LOW PRIORITY**
 **Status:** Nice to have, not critical for infrastructure
 
 **Gemini CLI:**
@@ -489,7 +534,7 @@ jobs:
 
 ---
 
-#### 2.7 Real-time Grounding with Google Search ⭐ **LOW PRIORITY**
+#### 3.5 Real-time Grounding with Google Search ⭐ **LOW PRIORITY**
 **Status:** Could reduce hallucinations
 
 **Gemini CLI:**
@@ -542,7 +587,7 @@ settings:
 
 ---
 
-#### 2.8 Token Caching ⭐⭐⭐ **HIGH PRIORITY** ✅ UPDATED
+#### 3.6 Token Caching ⭐⭐⭐ **HIGH PRIORITY** ✅ UPDATED
 **Status:** Cost optimization (Supported by 6 of 7 providers!)
 
 **Research Update:** Token caching is **more widely supported** than initially documented. Most providers support it **automatically** with no code changes!
@@ -662,7 +707,7 @@ settings:
 
 ---
 
-#### 2.9 Streaming JSON Output ⭐ **LOW PRIORITY**
+#### 3.7 Streaming JSON Output ⭐ **LOW PRIORITY**
 **Status:** Better UX for long operations
 
 **Gemini CLI:**
@@ -705,7 +750,7 @@ atmos ai exec "Analyze all prod stacks" --format stream-json
 
 ---
 
-#### 2.10 Shell Command Execution ⚠️ **SECURITY TRADEOFF**
+#### 3.8 Shell Command Execution ⚠️ **SECURITY TRADEOFF**
 **Status:** Powerful but risky
 
 **Gemini CLI:**
@@ -758,9 +803,9 @@ Consider for v2+ with robust security:
 
 ---
 
-### 3. 🟡 Features to Enhance (Both Have, Can Improve)
+### 4. 🟡 Features to Enhance (Both Have, Can Improve)
 
-#### 3.1 MCP Integration
+#### 4.1 MCP Integration
 **Status:** Both support, different roles
 
 **Gemini CLI:** MCP client (connects to servers)
@@ -804,7 +849,7 @@ settings:
 
 ---
 
-#### 3.2 Project Memory (ATMOS.md / GEMINI.md)
+#### 4.2 Project Memory (ATMOS.md / GEMINI.md)
 **Status:** Both have, Gemini might have better auto-update
 
 **Enhancement Opportunity:**
@@ -835,35 +880,40 @@ settings:
 
 ## Prioritized Roadmap
 
-### Phase 1: Critical Automation Features (2-3 weeks)
+### Phase 1: Critical Automation Features ✅ **PARTIALLY COMPLETED**
 
 **Goal:** Enable CI/CD and scripting use cases
 
-1. **Non-Interactive Mode** ⭐⭐⭐
+1. ✅ **Non-Interactive Mode** ⭐⭐⭐ **COMPLETED 2025-10-31**
    - `atmos ai exec` command
    - Stdout/stderr separation
-   - Exit codes
-   - Estimated: 2-3 days
+   - Exit codes: 0 (success), 1 (AI error), 2 (tool error)
+   - Stdin support for piping
+   - Multiple output formats (JSON, text, markdown)
+   - Session support for multi-turn execution
+   - **Actual Effort:** 3 days
 
-2. **Structured JSON Output** ⭐⭐⭐
+2. ✅ **Structured JSON Output** ⭐⭐⭐ **COMPLETED 2025-10-31**
    - `--format json` flag
    - Tool execution details
-   - Token tracking
-   - Estimated: 2-3 days
+   - Token tracking (including cached tokens)
+   - Rich metadata (model, provider, duration, timestamps)
+   - **Actual Effort:** Included in non-interactive mode
 
-3. **Conversation Checkpointing** ⭐⭐
+3. **Conversation Checkpointing** ⭐⭐ **PENDING**
    - Export/import sessions
    - JSON format
    - Team sharing
    - Estimated: 2-3 days
 
-4. **GitHub Actions Integration** ⭐⭐
+4. **GitHub Actions Integration** ⭐⭐ **PENDING**
    - Official GitHub Action
    - PR review automation
    - Multiple providers
    - Estimated: 3-4 days
 
-**Total Estimated Effort:** 10-13 days
+**Status:** 2/4 completed (50%)
+**Remaining Effort:** 5-7 days
 
 ---
 

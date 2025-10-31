@@ -319,6 +319,93 @@ tools:
 
 Every tool execution logged with timestamp, user, and context.
 
+### 9. Non-Interactive Execution & CI/CD Integration
+
+**NEW:** Atmos AI now supports non-interactive execution for automation, scripting, and CI/CD pipelines.
+
+Execute AI prompts programmatically with structured output:
+
+```bash
+# Simple execution
+atmos ai exec "List all production stacks"
+
+# JSON output for parsing
+atmos ai exec "Analyze VPC configuration" --format json > analysis.json
+
+# CI/CD integration
+result=$(atmos ai exec "Check for security issues" --format json)
+if echo "$result" | jq -e '.success == false'; then
+  exit 1
+fi
+
+# Pipe from stdin
+echo "Validate production config" | atmos ai exec --format json
+
+# Multi-turn automation
+SESSION="deploy-$(date +%s)"
+atmos ai exec "Plan deployment" --session "$SESSION" --format json
+atmos ai exec "What are the risks?" --session "$SESSION" --format json
+```
+
+**Key Features:**
+- **Multiple Output Formats:** JSON, text, markdown
+- **Standard Exit Codes:** 0 (success), 1 (AI error), 2 (tool error)
+- **Stdin Support:** Pipe prompts from other commands
+- **Session Context:** Multi-turn conversations in scripts
+- **File Output:** Direct file writing with `--output`
+- **Provider Override:** Choose AI provider per execution
+
+**JSON Output Structure:**
+```json
+{
+  "success": true,
+  "response": "Analysis complete...",
+  "tool_calls": [
+    {
+      "tool": "atmos_list_stacks",
+      "duration_ms": 45,
+      "success": true,
+      "result": {...}
+    }
+  ],
+  "tokens": {
+    "prompt": 120,
+    "completion": 80,
+    "total": 200,
+    "cached": 50
+  },
+  "metadata": {
+    "model": "claude-sonnet-4-20250514",
+    "provider": "anthropic",
+    "duration_ms": 1234
+  }
+}
+```
+
+**CI/CD Example:**
+```yaml
+# .github/workflows/ai-review.yml
+- name: AI Infrastructure Review
+  run: |
+    result=$(atmos ai exec "Review infrastructure changes" --format json)
+    echo "$result" | jq -r '.response' >> $GITHUB_STEP_SUMMARY
+
+    # Fail on errors
+    if echo "$result" | jq -e '.success == false'; then
+      exit 1
+    fi
+```
+
+**Use Cases:**
+- Pre-deployment validation in CI/CD
+- Automated security audits
+- Infrastructure analysis reports
+- Configuration validation pipelines
+- Cost optimization analysis
+- Compliance checking workflows
+
+Learn more: [atmos ai exec documentation](/cli/commands/ai/exec)
+
 ## Real-World Use Cases
 
 ### 1. New Team Member Onboarding
@@ -530,11 +617,23 @@ atmos ai chat --agent security-auditor
 
 **Quick Questions:**
 ```bash
-# Single-shot query
+# Single-shot query (interactive)
 atmos ai ask "What components are in production?"
 
 # With specific provider
 atmos ai ask --provider bedrock "List all stacks"
+```
+
+**Non-Interactive Execution:**
+```bash
+# For scripting and automation
+atmos ai exec "List all production stacks"
+
+# JSON output for parsing
+atmos ai exec "Analyze VPC config" --format json
+
+# CI/CD integration
+atmos ai exec "Security audit" --format json > report.json
 ```
 
 **Session Management:**
@@ -717,15 +816,25 @@ tools:
 
 ## What's Next?
 
-We're continuously improving Atmos AI. Upcoming features:
+We're continuously improving Atmos AI. Recent completions and upcoming features:
+
+### Recently Completed ✅
+- ✅ **Non-Interactive Execution** (`atmos ai exec`) - Automation and CI/CD support
+- ✅ **Structured JSON Output** - Machine-parseable responses with metadata
+- ✅ **Standard Exit Codes** - Reliable automation with proper error handling
+- ✅ **Stdin Support** - Shell integration and piping
 
 ### Short-term (Next 3 Months)
+- **Conversation Checkpointing** - Export/import sessions for team sharing
+- **GitHub Actions Integration** - Official action for PR reviews and validation
 - **Agent Marketplace** - Install community agents
 - **Enhanced LSP** - More language servers (HCL, JSON Schema)
 - **Advanced Analytics** - Token usage tracking, cost analysis
 - **Auto-Fix Suggestions** - AI-powered configuration fixes
 
 ### Medium-term (3-6 Months)
+- **Directory Scoping** - Auto-discovery with .gitignore support
+- **Token Caching** - Cost optimization for supported providers
 - **Multi-Agent Workflows** - Agent delegation and collaboration
 - **Enhanced Memory** - Automatic memory updates from conversations
 - **IDE Plugins** - Native VSCode/JetBrains integration

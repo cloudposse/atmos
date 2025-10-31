@@ -16,6 +16,14 @@ The Atmos AI Assistant is an AI-powered terminal agent that helps with Atmos inf
 
 ## Features
 
+### Non-Interactive Execution
+- **Automation Support**: Execute AI prompts non-interactively for scripting and CI/CD (`atmos ai exec`)
+- **Structured Output**: JSON, text, or markdown formats for parsing and integration
+- **Stdin Piping**: Read prompts from pipes or redirects for shell integration
+- **Standard Exit Codes**: 0 (success), 1 (AI error), 2 (tool error) for automation workflows
+- **Output Redirection**: Save results to files for further processing
+- **CI/CD Integration**: Integrate AI assistance into deployment pipelines and validation workflows
+
 ### Conversation Management
 - **Interactive Chat Interface**: Terminal-based chat session for extended conversations
 - **Multi-Provider Support**: Configure and use multiple AI providers simultaneously (see [Providers](/ai/providers))
@@ -180,6 +188,18 @@ atmos ai ask "What components are available?"
 
 # Topic help
 atmos ai help stacks
+
+# Non-interactive execution (for scripting/CI-CD)
+atmos ai exec "List all available stacks"
+
+# With JSON output for parsing
+atmos ai exec "Describe the vpc component" --format json
+
+# Pipe prompt from stdin
+echo "Validate stack configuration" | atmos ai exec --format json
+
+# Save output to file
+atmos ai exec "Analyze prod stack" --output analysis.json --format json
 
 # Start MCP server for Claude Desktop integration
 atmos mcp-server
@@ -379,6 +399,94 @@ atmos ai ask "How do I use Gomplate functions in my templates?"
 atmos ai ask "What's the best way to handle secrets in Atmos?"
 ```
 </Terminal>
+
+### Automation and CI/CD Integration
+
+The `atmos ai exec` command enables AI assistance in automated workflows:
+
+<Terminal title="automation examples">
+```bash
+# Validate configuration in CI pipeline
+atmos ai exec "Check for security issues in prod stacks" --format json > security-report.json
+if jq -e '.success == false' security-report.json; then
+  exit 1
+fi
+
+# Generate infrastructure analysis report
+atmos ai exec "Analyze all VPC configurations" --output vpc-analysis.md --format markdown
+
+# Automated stack validation
+for stack in $(atmos list stacks); do
+  atmos ai exec "Validate stack $stack configuration" --format json --no-tools
+done
+
+# Pre-deployment checks
+atmos ai exec "Review changes in staging environment" --format json | \
+  jq -r '.response' | mail -s "Staging Review" team@example.com
+
+# Integration with GitHub Actions
+- name: AI Configuration Review
+  run: |
+    atmos ai exec "Review terraform changes" --format json > review.json
+    cat review.json | jq -r '.response' >> $GITHUB_STEP_SUMMARY
+```
+</Terminal>
+
+**Output Formats:**
+
+- **`text`** (default): Plain text response for human reading
+- **`json`**: Structured output with metadata, tool calls, and token usage
+  ```json
+  {
+    "success": true,
+    "response": "AI response text...",
+    "tool_calls": [...],
+    "tokens": {...},
+    "metadata": {...}
+  }
+  ```
+- **`markdown`**: Formatted response with tool execution summaries
+
+**Exit Codes:**
+
+- **`0`**: Success
+- **`1`**: AI error (API failure, invalid response)
+- **`2`**: Tool execution error
+
+**Command Options:**
+
+<dl>
+  <dt>`--format, -f`</dt>
+  <dd>Output format: `text`, `json`, `markdown` (default: `text`)</dd>
+
+  <dt>`--output, -o`</dt>
+  <dd>Output file path (default: stdout)</dd>
+
+  <dt>`--no-tools`</dt>
+  <dd>Disable tool execution for faster, simpler queries</dd>
+
+  <dt>`--context`</dt>
+  <dd>Include stack context in the prompt</dd>
+
+  <dt>`--provider, -p`</dt>
+  <dd>Override AI provider (anthropic, openai, gemini, etc.)</dd>
+
+  <dt>`--session, -s`</dt>
+  <dd>Session ID for conversation context (allows multi-turn execution)</dd>
+</dl>
+
+:::tip Multi-Turn Automation
+Use `--session` to maintain context across multiple exec calls in automation scripts:
+
+```bash
+SESSION="deploy-$(date +%s)"
+
+atmos ai exec "Plan deployment for staging" --session "$SESSION" --format json
+# AI remembers this context in next call
+atmos ai exec "What are the risks?" --session "$SESSION" --format json
+# AI can reference the deployment plan from the first call
+```
+:::
 
 ## Security and Privacy
 

@@ -1,0 +1,416 @@
+---
+title: atmos ai exec
+sidebar_label: exec
+sidebar_class_name: command
+id: exec
+description: Execute AI prompts non-interactively for automation and CI/CD integration
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Execute AI prompts non-interactively with structured output formats, designed for scripting, automation, and CI/CD integration.
+</Intro>
+
+<Screengrab title="atmos ai exec --help" slug="atmos-ai-exec--help" />
+
+## Description
+
+The `atmos ai exec` command provides non-interactive AI execution with structured output formats. Unlike `atmos ai ask` which is designed for human-readable terminal output, `exec` is optimized for:
+
+- **Automation and Scripting**: Reliable exit codes and machine-parseable output
+- **CI/CD Pipelines**: Integration with deployment and validation workflows
+- **Batch Processing**: Process multiple prompts programmatically
+- **Output Parsing**: JSON format with metadata, tool calls, and token usage
+- **File Output**: Save results directly to files for further processing
+
+## Usage
+
+```shell
+atmos ai exec [prompt] [flags]
+```
+
+The prompt can be provided as:
+- **Command argument**: `atmos ai exec "your prompt"`
+- **Stdin pipe**: `echo "your prompt" | atmos ai exec`
+
+## Arguments
+
+<dl>
+  <dt>`prompt`</dt>
+  <dd>The prompt to execute (optional if using stdin). Use quotes for multi-word prompts.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--format, -f`</dt>
+  <dd>Output format: `text`, `json`, `markdown` (default: `text`)</dd>
+
+  <dt>`--output, -o`</dt>
+  <dd>Output file path (default: stdout)</dd>
+
+  <dt>`--no-tools`</dt>
+  <dd>Disable tool execution for faster, simpler queries</dd>
+
+  <dt>`--context`</dt>
+  <dd>Include stack context in the prompt</dd>
+
+  <dt>`--provider, -p`</dt>
+  <dd>Override AI provider (anthropic, openai, gemini, grok, ollama, bedrock, azureopenai)</dd>
+
+  <dt>`--session, -s`</dt>
+  <dd>Session ID for conversation context (enables multi-turn execution)</dd>
+</dl>
+
+## Exit Codes
+
+The command uses standard Unix exit codes for automation:
+
+| Code | Description |
+|------|-------------|
+| `0` | Success |
+| `1` | AI error (API failure, invalid response, configuration error) |
+| `2` | Tool execution error |
+
+## Output Formats
+
+### Text Format (Default)
+
+Plain text response, suitable for human reading and logging:
+
+```shell
+atmos ai exec "List all available stacks"
+```
+
+Output:
+```
+Based on your configuration, here are the available stacks:
+1. dev-us-east-1
+2. staging-us-east-1
+3. prod-us-east-1
+...
+```
+
+### JSON Format
+
+Structured output with complete metadata:
+
+```shell
+atmos ai exec "Describe the vpc component" --format json
+```
+
+Output:
+```json
+{
+  "success": true,
+  "response": "The VPC component creates a Virtual Private Cloud...",
+  "tool_calls": [
+    {
+      "tool": "atmos_describe_component",
+      "args": {"component": "vpc", "stack": "dev-us-east-1"},
+      "duration_ms": 245,
+      "success": true,
+      "result": {...}
+    }
+  ],
+  "tokens": {
+    "prompt": 1234,
+    "completion": 567,
+    "total": 1801,
+    "cached": 890
+  },
+  "metadata": {
+    "model": "claude-sonnet-4-20250514",
+    "provider": "anthropic",
+    "duration_ms": 2340,
+    "timestamp": "2025-10-31T10:00:00Z",
+    "tools_enabled": true,
+    "stop_reason": "end_turn"
+  }
+}
+```
+
+### Markdown Format
+
+Formatted output with tool execution summaries:
+
+```shell
+atmos ai exec "Analyze prod stacks" --format markdown
+```
+
+Output:
+```markdown
+The production stacks are configured with:
+- High availability across 3 AZs
+- Auto-scaling enabled
+- Enhanced monitoring
+
+---
+
+## Tool Executions (3)
+
+1. ✅ **atmos_list_stacks** (45ms)
+2. ✅ **atmos_describe_component** (120ms)
+3. ❌ **atmos_validate_component** (89ms)
+```
+
+## Configuration
+
+Configure AI providers in your `atmos.yaml`:
+
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-20250514"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+
+    # Optional: Enable tool execution
+    tools:
+      enabled: true
+      require_confirmation: false  # Set to false for automation
+      allowed_tools:
+        - atmos_describe_component
+        - atmos_list_stacks
+        - atmos_validate_component
+
+    # Optional: Performance tuning
+    timeout_seconds: 60
+```
+
+## Examples
+
+### Basic Execution
+
+<Terminal title="basic examples">
+```bash
+# Simple question
+atmos ai exec "What is Atmos?"
+
+# With JSON output
+atmos ai exec "List all stacks" --format json
+
+# Save to file
+atmos ai exec "Analyze VPC configuration" --output analysis.md --format markdown
+
+# Disable tools for faster execution
+atmos ai exec "Explain Atmos concepts" --no-tools
+```
+</Terminal>
+
+### Stdin Piping
+
+<Terminal title="stdin examples">
+```bash
+# Pipe prompt from stdin
+echo "Validate stack configuration" | atmos ai exec --format json
+
+# From file
+cat prompt.txt | atmos ai exec --format json > result.json
+
+# Multi-line prompt
+atmos ai exec --format json <<EOF
+Analyze the following stacks:
+- dev-us-east-1
+- staging-us-east-1
+- prod-us-east-1
+EOF
+```
+</Terminal>
+
+### CI/CD Integration
+
+<Terminal title="ci/cd examples">
+```bash
+# Validate configuration in pipeline
+atmos ai exec "Check for security issues" --format json > security.json
+if jq -e '.success == false' security.json; then
+  echo "Security issues found"
+  exit 1
+fi
+
+# Generate deployment report
+atmos ai exec "Analyze prod environment" \
+  --output deployment-report.md \
+  --format markdown
+
+# Pre-deployment validation
+for stack in $(atmos list stacks); do
+  echo "Validating $stack..."
+  atmos ai exec "Validate stack $stack" --format json --no-tools
+done
+
+# GitHub Actions integration
+- name: AI Review
+  run: |
+    result=$(atmos ai exec "Review changes" --format json)
+    echo "$result" | jq -r '.response' >> $GITHUB_STEP_SUMMARY
+```
+</Terminal>
+
+### Multi-Turn Automation
+
+Use `--session` to maintain context across multiple calls:
+
+<Terminal title="multi-turn examples">
+```bash
+SESSION="deploy-$(date +%s)"
+
+# First call - establish context
+atmos ai exec "Plan deployment for staging" \
+  --session "$SESSION" \
+  --format json > plan.json
+
+# Second call - AI remembers the plan
+atmos ai exec "What are the risks?" \
+  --session "$SESSION" \
+  --format json > risks.json
+
+# Third call - build on previous context
+atmos ai exec "Generate rollback procedure" \
+  --session "$SESSION" \
+  --format json > rollback.json
+```
+</Terminal>
+
+### Batch Processing
+
+<Terminal title="batch processing">
+```bash
+#!/bin/bash
+
+# Process multiple stacks
+stacks=$(atmos list stacks)
+for stack in $stacks; do
+  echo "Analyzing $stack..."
+  atmos ai exec "Analyze stack $stack for cost optimization" \
+    --format json \
+    --output "reports/${stack}-cost-analysis.json"
+done
+
+# Aggregate results
+jq -s '.' reports/*.json > aggregated-report.json
+```
+</Terminal>
+
+### Error Handling
+
+<Terminal title="error handling">
+```bash
+#!/bin/bash
+
+# Check exit code
+if ! atmos ai exec "Validate configuration" --format json; then
+  echo "Validation failed with exit code $?"
+  exit 1
+fi
+
+# Parse JSON for errors
+result=$(atmos ai exec "Check stacks" --format json)
+if echo "$result" | jq -e '.success == false'; then
+  error_type=$(echo "$result" | jq -r '.error.type')
+  error_msg=$(echo "$result" | jq -r '.error.message')
+  echo "Error ($error_type): $error_msg"
+  exit 1
+fi
+
+# Tool execution error handling
+result=$(atmos ai exec "Complex analysis" --format json)
+tool_errors=$(echo "$result" | jq '[.tool_calls[] | select(.success == false)]')
+if [ "$(echo "$tool_errors" | jq 'length')" -gt 0 ]; then
+  echo "Tool execution errors detected:"
+  echo "$tool_errors" | jq -r '.[] | "- \(.tool): \(.error)"'
+fi
+```
+</Terminal>
+
+### Provider Override
+
+<Terminal title="provider override">
+```bash
+# Use specific provider for a task
+atmos ai exec "Complex reasoning task" --provider anthropic --format json
+
+# Fast provider for simple queries
+atmos ai exec "List stacks" --provider openai --format json --no-tools
+
+# Local provider for privacy
+atmos ai exec "Analyze sensitive config" --provider ollama --format json
+```
+</Terminal>
+
+## Advanced Usage
+
+### Output Parsing with jq
+
+```bash
+# Extract just the response
+atmos ai exec "Question" --format json | jq -r '.response'
+
+# Check for specific tool execution
+atmos ai exec "Analyze" --format json | \
+  jq '.tool_calls[] | select(.tool == "atmos_describe_component")'
+
+# Get token usage
+atmos ai exec "Question" --format json | jq '.tokens'
+
+# Check execution time
+atmos ai exec "Question" --format json | jq '.metadata.duration_ms'
+```
+
+### Integration Patterns
+
+**Email Reports:**
+```bash
+atmos ai exec "Weekly infrastructure summary" --format markdown | \
+  mail -s "Weekly Report" team@example.com
+```
+
+**Slack Notifications:**
+```bash
+result=$(atmos ai exec "Check production health" --format json)
+response=$(echo "$result" | jq -r '.response')
+curl -X POST $SLACK_WEBHOOK -d "{\"text\":\"$response\"}"
+```
+
+**Ticket Creation:**
+```bash
+analysis=$(atmos ai exec "Identify issues in prod" --format json)
+if echo "$analysis" | jq -e '.success == true'; then
+  issues=$(echo "$analysis" | jq -r '.response')
+  # Create ticket with issues
+  gh issue create --title "Infrastructure Issues" --body "$issues"
+fi
+```
+
+## Comparison with Other Commands
+
+| Command | Interactive | Output Format | Use Case |
+|---------|------------|---------------|----------|
+| `atmos ai ask` | ❌ No | Human-readable text | Quick terminal questions |
+| `atmos ai chat` | ✅ Yes | Rich TUI with markdown | Extended conversations |
+| `atmos ai exec` | ❌ No | JSON/Text/Markdown | Automation, scripting, CI/CD |
+
+## Best Practices
+
+1. **Use `--format json` for automation** - Provides structured, parseable output
+2. **Set `--no-tools` for simple queries** - Faster execution when tools aren't needed
+3. **Use `--session` for multi-turn workflows** - Maintains context across calls
+4. **Check exit codes in scripts** - Handle errors appropriately
+5. **Disable tool confirmation in CI/CD** - Set `require_confirmation: false` in config
+6. **Use `--output` for file persistence** - Avoid shell redirection issues
+7. **Parse JSON with jq** - Robust handling of structured output
+8. **Set appropriate timeouts** - Adjust `timeout_seconds` based on your needs
+
+## Related Commands
+
+- [`atmos ai ask`](/cli/commands/ai/ask) - Quick command-line questions
+- [`atmos ai chat`](/cli/commands/ai/chat) - Interactive chat sessions
+- [`atmos ai help`](/cli/commands/ai/ai-help) - Topic-specific help
