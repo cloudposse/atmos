@@ -72,7 +72,8 @@ Global Flags:
                                       TUI) (default bar)
 
     -i, --identity string             Specify the identity to authenticate to
-                                      before running Terraform commands
+                                      before running Terraform commands. Use
+                                      without value to interactively select.
 
         --include-dependents          For each affected component, detect the
                                       dependent components and process them in

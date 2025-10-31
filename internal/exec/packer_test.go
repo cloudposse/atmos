@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -406,4 +406,80 @@ func TestExecutePacker_Errors(t *testing.T) {
 		err := ExecutePacker(&info, &packerFlags)
 		assert.Error(t, err)
 	})
+}
+
+// TestPackerComponentEnvSectionConversion verifies that ComponentEnvSection is properly
+// converted to ComponentEnvList in Packer execution. This ensures auth environment variables
+// and stack config env sections are passed to Packer commands.
+//
+//nolint:dupl // Test logic is intentionally similar across terraform/helmfile/packer for consistency
+func TestPackerComponentEnvSectionConversion(t *testing.T) {
+	tests := []struct {
+		name            string
+		envSection      map[string]any
+		expectedEnvList map[string]string
+	}{
+		{
+			name: "converts AWS auth environment variables for Packer",
+			envSection: map[string]any{
+				"AWS_CONFIG_FILE":             "/path/to/config",
+				"AWS_SHARED_CREDENTIALS_FILE": "/path/to/credentials",
+				"AWS_PROFILE":                 "packer-profile",
+				"AWS_REGION":                  "us-west-2",
+			},
+			expectedEnvList: map[string]string{
+				"AWS_CONFIG_FILE":             "/path/to/config",
+				"AWS_SHARED_CREDENTIALS_FILE": "/path/to/credentials",
+				"AWS_PROFILE":                 "packer-profile",
+				"AWS_REGION":                  "us-west-2",
+			},
+		},
+		{
+			name: "handles custom environment variables",
+			envSection: map[string]any{
+				"PACKER_LOG":      "1",
+				"PACKER_LOG_PATH": "/var/log/packer.log",
+				"CUSTOM_VAR":      "custom-value",
+			},
+			expectedEnvList: map[string]string{
+				"PACKER_LOG":      "1",
+				"PACKER_LOG_PATH": "/var/log/packer.log",
+				"CUSTOM_VAR":      "custom-value",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a test ConfigAndStacksInfo with ComponentEnvSection populated.
+			info := schema.ConfigAndStacksInfo{
+				ComponentEnvSection: tt.envSection,
+				ComponentEnvList:    []string{},
+			}
+
+			// Call the production conversion function.
+			ConvertComponentEnvSectionToList(&info)
+
+			// Verify all expected environment variables are in ComponentEnvList.
+			envListMap := make(map[string]string)
+			for _, envVar := range info.ComponentEnvList {
+				parts := strings.SplitN(envVar, "=", 2)
+				if len(parts) == 2 {
+					envListMap[parts[0]] = parts[1]
+				}
+			}
+
+			// Check that all expected vars are present with correct values.
+			for key, expectedValue := range tt.expectedEnvList {
+				actualValue, exists := envListMap[key]
+				assert.True(t, exists, "Expected environment variable %s to be in ComponentEnvList", key)
+				assert.Equal(t, expectedValue, actualValue,
+					"Environment variable %s should have value %s, got %s", key, expectedValue, actualValue)
+			}
+
+			// Verify count matches.
+			assert.Equal(t, len(tt.expectedEnvList), len(envListMap),
+				"ComponentEnvList should contain exactly %d variables", len(tt.expectedEnvList))
+		})
+	}
 }

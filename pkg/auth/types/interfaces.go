@@ -64,6 +64,7 @@ type PostAuthenticateParams struct {
 	ProviderName string
 	IdentityName string
 	Credentials  ICredentials
+	Manager      AuthManager // Auth manager for resolving provider chains
 }
 
 // Identity defines the interface that all authentication identities must implement.
@@ -140,7 +141,21 @@ type AuthManager interface {
 	Validate() error
 
 	// GetDefaultIdentity returns the name of the default identity, if any.
-	GetDefaultIdentity() (string, error)
+	//
+	// Parameters:
+	//   - forceSelect: When true and terminal is interactive, always displays the identity
+	//     selector even if a default identity is configured. This allows users to override
+	//     the default choice interactively.
+	//
+	// Returns:
+	//   - string: The name of the selected or default identity
+	//   - error: An error if no identity is available or selection fails
+	//
+	// Behavior:
+	//   - If forceSelect is true: Displays interactive selector (if terminal supports it)
+	//   - If forceSelect is false: Returns configured default identity if available
+	//   - If no default and not interactive: Returns error indicating no identity available
+	GetDefaultIdentity(forceSelect bool) (string, error)
 
 	// ListIdentities returns all available identity names.
 	ListIdentities() []string
@@ -189,6 +204,15 @@ type AuthManager interface {
 	// This is useful for commands like `atmos env` that just need to show what
 	// environment variables would be set, without requiring valid credentials.
 	GetEnvironmentVariables(identityName string) (map[string]string, error)
+
+	// PrepareShellEnvironment prepares environment variables for subprocess execution.
+	// Takes current environment list and returns it with auth credentials configured.
+	// This calls identity.PrepareEnvironment() internally to configure file-based credentials,
+	// credential paths, regions, and clear conflicting variables.
+	// The input currentEnv should include any previous transformations (component env, workflow env, etc.).
+	// Returns environment variables as a list of "KEY=VALUE" strings ready for subprocess.
+	// Use this for all subprocess invocations: Terraform, Helmfile, Packer, workflows, custom commands, auth shell, etc.
+	PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error)
 }
 
 // CredentialStore defines the interface for storing and retrieving credentials.

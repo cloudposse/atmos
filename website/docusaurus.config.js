@@ -190,7 +190,9 @@ const config = {
                 blog: {
                     routeBasePath: 'changelog',
                     showReadingTime: true,
-                    postsPerPage: 10,
+                    postsPerPage: 'ALL',
+                    blogSidebarCount: 'ALL',
+                    blogSidebarTitle: 'All posts',
                     blogTitle: 'Atmos Changelog',
                     blogDescription: 'Release notes for Atmos',
                     include: ['**/*.{md,mdx}'],
