@@ -19,6 +19,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 const (
@@ -49,10 +50,11 @@ const (
 )
 
 // isInteractive checks if we're running in an interactive terminal.
-// Interactive mode requires both stdin (for input) and stdout (for TUI rendering).
+// Interactive mode requires both stdin (for input) and stdout (for TUI rendering),
+// and must not be running in a CI environment.
 // This is used to determine if we can prompt the user for input.
 func isInteractive() bool {
-	return term.IsTTYSupportForStdin() && term.IsTTYSupportForStdout()
+	return term.IsTTYSupportForStdin() && term.IsTTYSupportForStdout() && !telemetry.IsCI()
 }
 
 // manager implements the AuthManager interface.

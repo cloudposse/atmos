@@ -13,6 +13,7 @@ import (
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
@@ -164,8 +165,9 @@ func checkTerraformFlags(info *schema.ConfigAndStacksInfo) error {
 // handleInteractiveIdentitySelection handles the case where --identity was used without a value.
 func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
 	// Guard: Fail fast in CI/non-TTY environments instead of hanging.
-	// Interactive selector requires both stdin (for input) and stdout (for TUI rendering).
-	if !term.IsTTYSupportForStdin() || !term.IsTTYSupportForStdout() {
+	// Interactive selector requires both stdin (for input) and stdout (for TUI rendering),
+	// and must not be running in a CI environment.
+	if !term.IsTTYSupportForStdin() || !term.IsTTYSupportForStdout() || telemetry.IsCI() {
 		errUtils.CheckErrorPrintAndExit(
 			fmt.Errorf("%w: interactive identity selection requires a TTY", errUtils.ErrDefaultIdentity),
 			"",
