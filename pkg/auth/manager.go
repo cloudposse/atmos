@@ -48,10 +48,11 @@ const (
 	skipProviderLogoutKey contextKey = "skipProviderLogout"
 )
 
-// isInteractive checks if we're running in an interactive terminal (has stdin TTY).
+// isInteractive checks if we're running in an interactive terminal.
+// Interactive mode requires both stdin (for input) and stdout (for TUI rendering).
 // This is used to determine if we can prompt the user for input.
 func isInteractive() bool {
-	return term.IsTTYSupportForStdin()
+	return term.IsTTYSupportForStdin() && term.IsTTYSupportForStdout()
 }
 
 // manager implements the AuthManager interface.
