@@ -75,11 +75,17 @@ linters:
         - pattern: ^path\.Join$
           msg: Use `filepath.Join` for OS-appropriate path separators instead of `path.Join` (which always uses forward slashes)
         - pattern: term\.IsTerminal\(
-          msg: Use `term.IsTTYSupportForStdout()`, `term.IsTTYSupportForStderr()`, or `term.IsTTYSupportForStdin()` instead of `term.IsTerminal()` for consistent and mockable TTY detection
+          msg: Use `term.IsTTYSupportForStdout()`, `term.IsTTYSupportForStderr()`, or `term.IsTYSupportForStdin()` instead of `term.IsTerminal()` for consistent and mockable TTY detection
         - pattern: github\.com/golang/mock
           msg: Use `go.uber.org/mock` instead of archived `github.com/golang/mock`
         - pattern: github\.com/mitchellh/go-homedir
           msg: Use `github.com/cloudposse/atmos/pkg/config/homedir` (our forked version) instead of `github.com/mitchellh/go-homedir`
+        - pattern: log\.Info\(.*[Dd][Ee][Bb][Uu][Gg]
+          msg: Use `log.Debug()` for debug messages instead of `log.Info()` with "DEBUG" in the message
+        - pattern: log\.Warn\(.*[Dd][Ee][Bb][Uu][Gg]
+          msg: Use `log.Debug()` for debug messages instead of `log.Warn()` with "DEBUG" in the message
+        - pattern: log\.Error\(.*[Dd][Ee][Bb][Uu][Gg]
+          msg: Use `log.Debug()` for debug messages instead of `log.Error()` with "DEBUG" in the message
       exclude-godoc-examples: false
       analyze-types: true
     funlen:
