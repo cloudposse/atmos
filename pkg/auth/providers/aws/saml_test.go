@@ -98,12 +98,16 @@ type stubSamlMgr struct {
 	idmap map[string]schema.Identity
 }
 
+func (s stubSamlMgr) GetCachedCredentials(context.Context, string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+
 func (s stubSamlMgr) Authenticate(context.Context, string) (*types.WhoamiInfo, error) {
 	return nil, nil
 }
 func (s stubSamlMgr) Whoami(context.Context, string) (*types.WhoamiInfo, error) { return nil, nil }
 func (s stubSamlMgr) Validate() error                                           { return nil }
-func (s stubSamlMgr) GetDefaultIdentity() (string, error)                       { return "", nil }
+func (s stubSamlMgr) GetDefaultIdentity(_ bool) (string, error)                 { return "", nil }
 func (s stubSamlMgr) ListIdentities() []string                                  { return nil }
 func (s stubSamlMgr) GetProviderForIdentity(string) string                      { return "" }
 func (s stubSamlMgr) GetFilesDisplayPath(string) string                         { return "~/.aws/atmos" }
@@ -116,6 +120,13 @@ func (s stubSamlMgr) GetProviders() map[string]schema.Provider                  
 func (s stubSamlMgr) Logout(context.Context, string) error                      { return nil }
 func (s stubSamlMgr) LogoutProvider(context.Context, string) error              { return nil }
 func (s stubSamlMgr) LogoutAll(context.Context) error                           { return nil }
+func (s stubSamlMgr) GetEnvironmentVariables(string) (map[string]string, error) {
+	return make(map[string]string), nil
+}
+
+func (s stubSamlMgr) PrepareShellEnvironment(context.Context, string, []string) ([]string, error) {
+	return nil, nil
+}
 
 func TestSAMLProvider_PreAuthenticate(t *testing.T) {
 	p, err := NewSAMLProvider("p", &schema.Provider{Kind: "aws/saml", URL: "https://idp.example.com/saml", Region: "us-east-1"})
@@ -740,7 +751,7 @@ func TestSAMLProvider_GetFilesDisplayPath(t *testing.T) {
 				URL:    "https://idp.example.com/saml",
 				Region: "us-east-1",
 			},
-			expected: "~/.aws/atmos",
+			expected: "atmos/aws", // XDG path contains atmos/aws
 		},
 		{
 			name: "custom base_path",

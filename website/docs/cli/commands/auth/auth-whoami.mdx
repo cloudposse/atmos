@@ -27,8 +27,17 @@ atmos auth whoami [--identity <name>] [--output json]
 # Show current identity (human-friendly)
 atmos auth whoami
 
+# Interactively select identity to inspect
+atmos auth whoami --identity
+
 # Show a specific identity
 atmos auth whoami --identity dev-admin
+
+# Use short form of identity flag
+atmos auth whoami -i dev-admin
+
+# Interactive selection with short form
+atmos auth whoami -i
 
 # JSON output (redacts home directory from paths)
 atmos auth whoami --output json
@@ -45,7 +54,15 @@ atmos auth whoami --output json
 
 <dl>
   <dt>`--identity` <em>(alias `-i`)</em></dt>
-  <dd>Specify the target identity to inspect. If omitted, the default identity is used.</dd>
+  <dd>
+    Specify the target identity to inspect. This flag has three modes:
+
+    - **With value** (`--identity admin`): Use the specified identity
+    - **Without value** (`--identity`): Show interactive selector to choose identity
+    - **Omitted**: Use the default identity configured in `atmos.yaml`, or prompt if no default is set
+
+    **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
+  </dd>
 
   <dt>`--output` <em>(alias `-o`)</em></dt>
   <dd>Output format. Supported: `json`. Default is human-readable.</dd>

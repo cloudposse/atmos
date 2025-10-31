@@ -88,7 +88,7 @@ func TestAuthenticationIgnoresExternalAWSEnvVars(t *testing.T) {
 	assert.Equal(t, "us-west-2", os.Getenv("AWS_REGION"))
 
 	// Get default identity (this should work despite env vars).
-	defaultIdentity, err := authManager.GetDefaultIdentity()
+	defaultIdentity, err := authManager.GetDefaultIdentity(false)
 	require.NoError(t, err)
 	assert.Equal(t, "test-permission-set", defaultIdentity)
 }

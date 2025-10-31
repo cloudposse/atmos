@@ -9,9 +9,11 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -51,8 +53,8 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 		return errors.Join(errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
 	}
 
-	// Load atmos configuration
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
@@ -63,21 +65,43 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Get identity from flag or use default
-	identityName, _ := cmd.Flags().GetString("identity")
-	if identityName == "" {
-		defaultIdentity, err := authManager.GetDefaultIdentity()
+	// Get identity from flag or use default.
+	// Check if flag was explicitly set by user to ensure command-line precedence.
+	var identityName string
+	if cmd.Flags().Changed(IdentityFlagName) {
+		// Flag was explicitly provided on command line (either with or without value).
+		identityName, _ = cmd.Flags().GetString(IdentityFlagName)
+	} else {
+		// Flag not provided on command line - fall back to viper (config/env).
+		identityName = viper.GetString(IdentityFlagName)
+	}
+
+	// Check if user wants to interactively select identity.
+	forceSelect := identityName == IdentityFlagSelectValue
+
+	if identityName == "" || forceSelect {
+		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
 			return errors.Join(errUtils.ErrNoDefaultIdentity, err)
 		}
 		identityName = defaultIdentity
 	}
 
-	// Authenticate and get environment variables
+	// Try to use cached credentials first (passive check, no prompts).
+	// Only authenticate if cached credentials are not available or expired.
 	ctx := context.Background()
-	whoami, err := authManager.Authenticate(ctx, identityName)
+	whoami, err := authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
-		return errors.Join(errUtils.ErrAuthenticationFailed, err)
+		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
+		// No valid cached credentials - perform full authentication.
+		whoami, err = authManager.Authenticate(ctx, identityName)
+		if err != nil {
+			// Check for user cancellation - return clean error without wrapping.
+			if errors.Is(err, errUtils.ErrUserAborted) {
+				return errUtils.ErrUserAborted
+			}
+			return errors.Join(errUtils.ErrAuthenticationFailed, err)
+		}
 	}
 
 	// Get environment variables from authentication result

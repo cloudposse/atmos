@@ -138,12 +138,16 @@ func TestSimpleArrayDebug(t *testing.T) {
 	lines := strings.Split(yaml, "\n")
 	pathMap := buildYAMLPathMap(lines)
 
-	t.Log("\n=== PATH MAP ===")
-	for i := 0; i < len(lines); i++ {
-		if info, ok := pathMap[i]; ok {
-			t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Log("\n=== PATH MAP ===")
+			for i := 0; i < len(lines); i++ {
+				if info, ok := pathMap[i]; ok {
+					t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+				}
+			}
 		}
-	}
+	})
 }
 
 // TestRootLevelArrayOfScalars tests that root-level arrays of scalars get indexed correctly.
@@ -157,13 +161,17 @@ func TestRootLevelArrayOfScalars(t *testing.T) {
 	lines := strings.Split(yaml, "\n")
 	pathMap := buildYAMLPathMap(lines)
 
-	// Debug: print all paths
-	t.Log("\n=== ROOT SCALAR ARRAY PATH MAP ===")
-	for i := 0; i < len(lines); i++ {
-		if info, ok := pathMap[i]; ok {
-			t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+	// Debug: print all paths on failure
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Log("\n=== ROOT SCALAR ARRAY PATH MAP ===")
+			for i := 0; i < len(lines); i++ {
+				if info, ok := pathMap[i]; ok {
+					t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+				}
+			}
 		}
-	}
+	})
 
 	// Line 0: "- item1" should be [0]
 	if info, ok := pathMap[0]; ok {
@@ -200,13 +208,17 @@ func TestRootLevelArrayOfMaps(t *testing.T) {
 	lines := strings.Split(yaml, "\n")
 	pathMap := buildYAMLPathMap(lines)
 
-	// Debug: print all paths
-	t.Log("\n=== ROOT ARRAY PATH MAP ===")
-	for i := 0; i < len(lines); i++ {
-		if info, ok := pathMap[i]; ok {
-			t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+	// Debug: print all paths on failure
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Log("\n=== ROOT ARRAY PATH MAP ===")
+			for i := 0; i < len(lines); i++ {
+				if info, ok := pathMap[i]; ok {
+					t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+				}
+			}
 		}
-	}
+	})
 
 	// Line 0: "- key: value1" should be [0].key
 	if info, ok := pathMap[0]; ok {
@@ -256,13 +268,17 @@ func TestNestedArrayOfScalars(t *testing.T) {
 	lines := strings.Split(yaml, "\n")
 	pathMap := buildYAMLPathMap(lines)
 
-	// Debug: print all paths
-	t.Log("\n=== NESTED SCALAR ARRAY PATH MAP ===")
-	for i := 0; i < len(lines); i++ {
-		if info, ok := pathMap[i]; ok {
-			t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+	// Debug: print all paths on failure
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Log("\n=== NESTED SCALAR ARRAY PATH MAP ===")
+			for i := 0; i < len(lines); i++ {
+				if info, ok := pathMap[i]; ok {
+					t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+				}
+			}
 		}
-	}
+	})
 
 	// Line 2: "- scalar1" should be vars.items[0] (not just items[0])
 	if info, ok := pathMap[2]; ok {
@@ -306,13 +322,17 @@ func TestRootArrayWithNestedMaps(t *testing.T) {
 	lines := strings.Split(yaml, "\n")
 	pathMap := buildYAMLPathMap(lines)
 
-	// Debug: print all paths
-	t.Log("\n=== ROOT ARRAY WITH NESTED MAPS PATH MAP ===")
-	for i := 0; i < len(lines); i++ {
-		if info, ok := pathMap[i]; ok {
-			t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+	// Debug: print all paths on failure
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Log("\n=== ROOT ARRAY WITH NESTED MAPS PATH MAP ===")
+			for i := 0; i < len(lines); i++ {
+				if info, ok := pathMap[i]; ok {
+					t.Logf("Line %d: %q -> Path: %q", i, strings.TrimSpace(lines[i]), info.Path)
+				}
+			}
 		}
-	}
+	})
 
 	// Line 0: "- metadata:" should be [0].metadata
 	if info, ok := pathMap[0]; ok {

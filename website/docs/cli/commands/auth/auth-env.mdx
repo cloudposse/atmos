@@ -48,6 +48,9 @@ atmos auth env [--identity <name>] [--format bash|json|dotenv]
 # Export for the default identity (bash format)
 atmos auth env
 
+# Interactively select identity
+atmos auth env --identity
+
 # JSON format for a specific identity
 atmos auth env --identity prod-admin --format json
 
@@ -59,7 +62,13 @@ atmos auth env --format dotenv
 
 <dl>
   <dt>`--identity` <em>(alias `-i`)</em></dt>
-  <dd>Specify the identity to use. If omitted, the default identity is used.</dd>
+  <dd>
+    Specify the identity to use. This flag has three modes:
+
+    - **With value** (`--identity admin`): Use the specified identity
+    - **Without value** (`--identity`): Show interactive selector to choose identity
+    - **Omitted**: Use the default identity configured in `atmos.yaml`
+  </dd>
 
   <dt>`--format` <em>(alias `-f`)</em></dt>
   <dd>Output format. Supported: `bash`, `json`, `dotenv`. Default: `bash`.</dd>

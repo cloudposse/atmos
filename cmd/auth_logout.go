@@ -30,6 +30,12 @@ This command removes:
   • AWS credential files (~/.aws/atmos/<provider>/credentials)
   • AWS config files (~/.aws/atmos/<provider>/config)
 
+You can specify what to logout:
+  • Specific identity: atmos auth logout <identity>
+  • All identities: atmos auth logout --all
+  • Specific provider: atmos auth logout --provider <provider>
+  • Interactive mode: atmos auth logout (no arguments)
+
 Note: This only removes local credentials. Your browser session with the
 identity provider (AWS SSO, Okta, etc.) may still be active. To completely
 end your session, visit your identity provider's website and sign out.`,
@@ -58,19 +64,40 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 
 	// Get flags.
 	providerFlag, _ := cmd.Flags().GetString("provider")
+	allFlag, _ := cmd.Flags().GetBool("all")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
+
+	// Get identity from flag or positional argument.
+	// Note: "identity" is a persistent flag on parent authCmd, so it's automatically available.
+	identityFlag := ""
+	if flag := cmd.Flag("identity"); flag != nil {
+		identityFlag = flag.Value.String()
+	}
 
 	ctx := context.Background()
 
 	// Determine what to logout.
+	if allFlag {
+		// Logout all identities.
+		return performLogoutAll(ctx, authManager, dryRun)
+	}
+
 	if providerFlag != "" {
 		// Logout specific provider.
 		return performProviderLogout(ctx, authManager, providerFlag, dryRun)
 	}
 
+	// Support both positional argument and --identity flag for consistency with other auth commands.
+	// Positional argument takes precedence if both are provided.
+	var identityName string
 	if len(args) > 0 {
+		identityName = args[0]
+	} else if identityFlag != "" {
+		identityName = identityFlag
+	}
+
+	if identityName != "" {
 		// Logout specific identity.
-		identityName := args[0]
 		return performIdentityLogout(ctx, authManager, identityName, dryRun)
 	}
 
@@ -113,16 +140,16 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	if err := authManager.Logout(ctx, identityName); err != nil {
 		// Check if it's a partial logout.
 		if errors.Is(err, errUtils.ErrPartialLogout) {
-			u.PrintfMarkdownToTUI("\n%s Logged out **%s** with warnings\n\n", theme.Styles.Checkmark, identityName)
+			u.PrintfMessageToTUI("\n%s Logged out %s with warnings\n\n", theme.Styles.Checkmark, identityName)
 			u.PrintfMessageToTUI("Some credentials could not be removed:\n")
 			u.PrintfMessageToTUI("  %v\n\n", err)
 		} else {
-			u.PrintfMarkdownToTUI("\n%s Failed to log out **%s**\n\n", theme.Styles.XMark, identityName)
+			u.PrintfMessageToTUI("\n%s Failed to log out %s\n\n", theme.Styles.XMark, identityName)
 			u.PrintfMessageToTUI("Error: %v\n\n", err)
 			return err
 		}
 	} else {
-		u.PrintfMarkdownToTUI("\n%s Logged out **%s**\n\n", theme.Styles.Checkmark, identityName)
+		u.PrintfMessageToTUI("\n%s Logged out %s\n\n", theme.Styles.Checkmark, identityName)
 	}
 
 	// Display browser session warning.
@@ -181,7 +208,7 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 		return err
 	}
 
-	u.PrintfMarkdownToTUI("\n%s Logged out provider **%s** (%d identities)\n\n", theme.Styles.Checkmark, providerName, len(identitiesForProvider))
+	u.PrintfMessageToTUI("\n%s Logged out provider %s (%d identities)\n\n", theme.Styles.Checkmark, providerName, len(identitiesForProvider))
 
 	// Display browser session warning.
 	displayBrowserWarning()
@@ -331,6 +358,7 @@ func displayBrowserWarning() {
 
 func init() {
 	authLogoutCmd.Flags().String("provider", "", "Logout from specific provider")
+	authLogoutCmd.Flags().Bool("all", false, "Logout from all identities and providers")
 	authLogoutCmd.Flags().Bool("dry-run", false, "Preview what would be removed without deleting")
 	authCmd.AddCommand(authLogoutCmd)
 }

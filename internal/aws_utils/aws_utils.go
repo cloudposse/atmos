@@ -81,18 +81,24 @@ func LoadAWSConfigWithAuth(
 		if region == "" && authContext.Region != "" {
 			region = authContext.Region
 		}
+	} else {
+		log.Debug("Using standard AWS SDK credential resolution (no auth context provided)")
 	}
 
 	// Set region if provided.
 	if region != "" {
+		log.Debug("Using explicit region", "region", region)
 		cfgOpts = append(cfgOpts, config.WithRegion(region))
 	}
 
 	// Load base config.
+	log.Debug("Loading AWS SDK config", "num_options", len(cfgOpts))
 	baseCfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
 	if err != nil {
+		log.Debug("Failed to load AWS config", "error", err)
 		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAwsConfig, err)
 	}
+	log.Debug("Successfully loaded AWS SDK config", "region", baseCfg.Region)
 
 	// Conditionally assume role if specified.
 	if roleArn != "" {

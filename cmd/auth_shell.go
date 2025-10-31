@@ -5,6 +5,8 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -60,8 +62,8 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	// Get the non-flag arguments (shell arguments after --).
 	shellArgs := cmd.Flags().Args()
 
-	// Load atmos configuration (store as pointer for downstream use).
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
@@ -73,34 +75,67 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Get identity from viper (respects CLI → ENV → config precedence).
-	identityName := viper.GetString(IdentityFlagName)
-	if identityName == "" {
-		defaultIdentity, err := authManager.GetDefaultIdentity()
+	// Get identity from flag or use default.
+	// Check if flag was explicitly set by user to ensure command-line precedence.
+	var identityName string
+	if cmd.Flags().Changed(IdentityFlagName) {
+		// Flag was explicitly provided on command line (either with or without value).
+		identityName, _ = cmd.Flags().GetString(IdentityFlagName)
+	} else {
+		// Flag not provided on command line - fall back to viper (config/env).
+		identityName = viper.GetString(IdentityFlagName)
+	}
+
+	// Check if user wants to interactively select identity.
+	forceSelect := identityName == IdentityFlagSelectValue
+
+	if identityName == "" || forceSelect {
+		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
 			return errors.Join(errUtils.ErrNoDefaultIdentity, err)
 		}
 		identityName = defaultIdentity
 	}
 
-	// Authenticate and get environment variables.
+	// Try to use cached credentials first (passive check, no prompts).
+	// Only authenticate if cached credentials are not available or expired.
 	ctx := context.Background()
-	whoami, err := authManager.Authenticate(ctx, identityName)
+	_, err = authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
-		return errors.Join(errUtils.ErrAuthenticationFailed, err)
+		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
+		// No valid cached credentials - perform full authentication.
+		_, err = authManager.Authenticate(ctx, identityName)
+		if err != nil {
+			// Check for user cancellation - return clean error without wrapping.
+			if errors.Is(err, errUtils.ErrUserAborted) {
+				return errUtils.ErrUserAborted
+			}
+			return errors.Join(errUtils.ErrAuthenticationFailed, err)
+		}
 	}
 
-	// Get environment variables from authentication result.
-	envVars := whoami.Environment
-	if envVars == nil {
-		envVars = make(map[string]string)
+	// Prepare shell environment with file-based credentials.
+	// Start with current OS environment and let PrepareShellEnvironment configure auth.
+	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, os.Environ())
+	if err != nil {
+		return fmt.Errorf("failed to prepare shell environment: %w", err)
 	}
 
 	// Get shell from flag/viper.
 	shell := viper.GetString(shellFlagName)
 
 	// Execute the shell with authentication environment.
-	return exec.ExecAuthShellCommand(atmosConfigPtr, identityName, envVars, shell, shellArgs)
+	// ExecAuthShellCommand expects env vars as a map, so convert the list.
+	envMap := make(map[string]string)
+	for _, envVar := range envList {
+		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
+			key := envVar[:idx]
+			value := envVar[idx+1:]
+			envMap[key] = value
+		}
+	}
+
+	return exec.ExecAuthShellCommand(atmosConfigPtr, identityName, envMap, shell, shellArgs)
 }
 
 func init() {

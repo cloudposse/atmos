@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -33,8 +33,11 @@ var authEnvCmd = &cobra.Command{
 			return fmt.Errorf("%w invalid format: %s", errUtils.ErrInvalidArgumentError, format)
 		}
 
-		// Load atmos configuration
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		// Get login flag
+		login, _ := cmd.Flags().GetBool("login")
+
+		// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		if err != nil {
 			return fmt.Errorf("failed to load atmos config: %w", err)
 		}
@@ -45,27 +48,60 @@ var authEnvCmd = &cobra.Command{
 			return fmt.Errorf("failed to create auth manager: %w", err)
 		}
 
-		// Get identity from flag or use default
-		identityName, _ := cmd.Flags().GetString("identity")
-		if identityName == "" {
-			defaultIdentity, err := authManager.GetDefaultIdentity()
+		// Get identity from flag or use default.
+		// Check if flag was explicitly set by user to ensure command-line precedence.
+		var identityName string
+		if cmd.Flags().Changed(IdentityFlagName) {
+			// Flag was explicitly provided on command line (either with or without value).
+			identityName, _ = cmd.Flags().GetString(IdentityFlagName)
+		} else {
+			// Flag not provided on command line - fall back to viper (config/env).
+			identityName = viper.GetString(IdentityFlagName)
+		}
+
+		// Check if user wants to interactively select identity.
+		forceSelect := identityName == IdentityFlagSelectValue
+
+		if identityName == "" || forceSelect {
+			defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 			if err != nil {
 				return fmt.Errorf("no default identity configured and no identity specified: %w", err)
 			}
 			identityName = defaultIdentity
 		}
 
-		// Authenticate and get environment variables
-		ctx := context.Background()
-		whoami, err := authManager.Authenticate(ctx, identityName)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
+		var envVars map[string]string
 
-		// Get environment variables from authentication result
-		envVars := whoami.Environment
-		if envVars == nil {
-			envVars = make(map[string]string)
+		if login {
+			// Try to use cached credentials first (passive check, no prompts).
+			// Only authenticate if cached credentials are not available or expired.
+			ctx := cmd.Context()
+			whoami, err := authManager.GetCachedCredentials(ctx, identityName)
+			if err != nil {
+				log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
+				// No valid cached credentials - perform full authentication.
+				whoami, err = authManager.Authenticate(ctx, identityName)
+				if err != nil {
+					// Check for user cancellation - return clean error without wrapping.
+					if errors.Is(err, errUtils.ErrUserAborted) {
+						return errUtils.ErrUserAborted
+					}
+					// Wrap with ErrAuthenticationFailed sentinel while preserving original error.
+					return fmt.Errorf("%w: %w", errUtils.ErrAuthenticationFailed, err)
+				}
+			}
+			envVars = whoami.Environment
+			if envVars == nil {
+				envVars = make(map[string]string)
+			}
+		} else {
+			// Get environment variables WITHOUT authentication/validation.
+			// This allows users to see what environment variables would be set
+			// even if they don't have valid credentials yet.
+			envVars, err = authManager.GetEnvironmentVariables(identityName)
+			if err != nil {
+				return fmt.Errorf("failed to get environment variables: %w", err)
+			}
 		}
 
 		switch format {
@@ -122,6 +158,8 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 
 func init() {
 	authEnvCmd.Flags().StringP("format", "f", "bash", "Output format: bash, json, dotenv.")
+	authEnvCmd.Flags().Bool("login", false, "Trigger authentication if credentials are missing or expired (default: false)")
+
 	if err := viper.BindEnv("auth_env_format", "ATMOS_AUTH_ENV_FORMAT"); err != nil {
 		log.Trace("Failed to bind auth_env_format environment variable", "error", err)
 	}
@@ -134,9 +172,8 @@ func init() {
 		log.Trace("Failed to register format flag completion", "error", err)
 	}
 
-	if err := viper.BindPFlag("identity", authCmd.PersistentFlags().Lookup("identity")); err != nil {
-		log.Trace("Failed to bind identity flag", "error", err)
-	}
-	viper.MustBindEnv("identity", "ATMOS_IDENTITY")
+	// DO NOT bind identity flag to Viper - it breaks flag precedence.
+	// Identity flag binding is handled in cmd/auth.go via BindEnv only.
+
 	authCmd.AddCommand(authEnvCmd)
 }

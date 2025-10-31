@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -16,13 +19,17 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	atmosCredentials "github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	authUtils "github.com/cloudposse/atmos/pkg/auth/utils"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
-	defaultUserSessionSeconds = 3600
+	defaultUserSessionSeconds = 43200  // 12 hours - max for IAM user without MFA, recommended default
+	maxSessionSecondsNoMfa    = 43200  // 12 hours - AWS maximum for IAM user without MFA
+	maxSessionSecondsWithMfa  = 129600 // 36 hours - AWS maximum for IAM user with MFA
+	minSessionSeconds         = 900    // 15 minutes - AWS minimum
 	awsUserProviderName       = "aws-user"
 	logKeyIdentity            = "identity"
 	defaultRegion             = "us-east-1"
@@ -79,13 +86,53 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 	return i.generateSessionToken(ctx, longLivedCreds, region)
 }
 
-// resolveLongLivedCredentials returns long-lived credentials either from the identity config.
-// (access_key_id/secret_access_key with optional mfa_arn) or from the keyring store.
+// resolveLongLivedCredentials returns long-lived credentials with deep merge precedence.
+// Precedence order (per field): YAML config > Keyring store.
+// This allows users to store credentials in keyring but override specific fields (e.g., MFA ARN) in YAML.
 func (i *userIdentity) resolveLongLivedCredentials() (*types.AWSCredentials, error) {
-	if creds, err := i.credentialsFromConfig(); err != nil || creds != nil {
-		return creds, err
+	// Start with keyring credentials as base (if available).
+	keystoreCreds, keystoreErr := i.credentialsFromStore()
+
+	// Get YAML config values (may be empty or !env that resolved to empty).
+	yamlAccessKeyID, _ := i.config.Credentials["access_key_id"].(string)
+	yamlSecretAccessKey, _ := i.config.Credentials["secret_access_key"].(string)
+	yamlMfaArn, _ := i.config.Credentials["mfa_arn"].(string)
+
+	// If YAML has complete credentials (access key + secret), use YAML entirely.
+	if yamlAccessKeyID != "" && yamlSecretAccessKey != "" {
+		log.Debug("Using credentials from YAML config", logKeyIdentity, i.name, "hasAccessKey", true, "hasMFA", yamlMfaArn != "")
+		return &types.AWSCredentials{
+			AccessKeyID:     yamlAccessKeyID,
+			SecretAccessKey: yamlSecretAccessKey,
+			MfaArn:          yamlMfaArn,
+		}, nil
 	}
-	return i.credentialsFromStore()
+
+	// If YAML has partial credentials, that's an error.
+	if yamlAccessKeyID != "" || yamlSecretAccessKey != "" {
+		return nil, fmt.Errorf("%w: access_key_id and secret_access_key must both be provided or both be empty for identity %q", errUtils.ErrInvalidAuthConfig, i.name)
+	}
+
+	// YAML has no credentials, fall back to keyring.
+	if keystoreErr != nil {
+		return nil, fmt.Errorf("%w: AWS User credentials not found for identity %q. Please configure credentials by running: atmos auth user configure --identity %s", errUtils.ErrAwsUserNotConfigured, i.name, i.name)
+	}
+
+	// Deep merge: Start with keyring, override with non-empty YAML fields.
+	result := &types.AWSCredentials{
+		AccessKeyID:     keystoreCreds.AccessKeyID,
+		SecretAccessKey: keystoreCreds.SecretAccessKey,
+		MfaArn:          keystoreCreds.MfaArn, // Start with keyring MFA ARN
+	}
+
+	// Override MFA ARN from YAML if present (allows version-controlled MFA config).
+	if yamlMfaArn != "" {
+		log.Debug("Overriding MFA ARN from YAML config", logKeyIdentity, i.name, "yaml_mfa_arn", yamlMfaArn, "keyring_mfa_arn", keystoreCreds.MfaArn)
+		result.MfaArn = yamlMfaArn
+	}
+
+	log.Debug("Using credentials from keyring", logKeyIdentity, i.name, "mfa_source", map[bool]string{true: "yaml", false: "keyring"}[yamlMfaArn != ""])
+	return result, nil
 }
 
 // credentialsFromConfig builds AWS credentials from identity config if present.
@@ -146,12 +193,12 @@ func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string)
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
 
-	// Write credentials to ~/.aws/atmos/aws-user/credentials.
+	// Write credentials to XDG config directory (e.g., ~/.config/atmos/aws/aws-user/credentials on Linux).
 	if err := awsFileManager.WriteCredentials(awsUserProviderName, i.name, creds); err != nil {
 		return fmt.Errorf("%w: failed to write AWS credentials: %w", errUtils.ErrAwsAuth, err)
 	}
 
-	// Write config to ~/.aws/atmos/aws-user/config.
+	// Write config to XDG config directory (e.g., ~/.config/atmos/aws/aws-user/config on Linux).
 	if err := awsFileManager.WriteConfig(awsUserProviderName, i.name, region, ""); err != nil {
 		return fmt.Errorf("%w: failed to write AWS config: %w", errUtils.ErrAwsAuth, err)
 	}
@@ -178,6 +225,7 @@ func (i *userIdentity) generateSessionToken(ctx context.Context, longLivedCreds 
 
 	// Create AWS config with long-lived credentials.
 	// Use isolated environment to avoid conflicts with external AWS env vars.
+	// Note: We provide explicit credentials via configOpts, so we don't need shared config loading.
 	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrAwsAuth, err)
@@ -241,7 +289,90 @@ var promptMfaTokenFunc = func(longLivedCreds *types.AWSCredentials) (string, err
 	return mfaToken, nil
 }
 
+// getSessionDuration returns the configured session duration in seconds.
+// It validates the duration against AWS limits based on whether MFA is used.
+// Checks identity session config first, then keyring credentials.
+// Supports multiple duration formats: integers (seconds), Go duration ("1h30m"), and days ("2d").
+func (i *userIdentity) getSessionDuration(hasMfa bool, credentialsDuration string) int32 {
+	// Default duration.
+	duration := int32(defaultUserSessionSeconds)
+	var durationSource string
+
+	// Priority 1: Check identity session config (YAML).
+	if i.config.Session != nil && i.config.Session.Duration != "" {
+		parsedSeconds, err := authUtils.ParseDurationFlexible(i.config.Session.Duration)
+		if err != nil {
+			log.Warn("Invalid session duration format in YAML config, using default",
+				logKeyIdentity, i.name,
+				"configured", i.config.Session.Duration,
+				"default", fmt.Sprintf("%ds", defaultUserSessionSeconds),
+				"error", err)
+		} else if parsedSeconds <= 0 || parsedSeconds > math.MaxInt32 {
+			log.Warn("Session duration out of valid range in YAML config, using default",
+				logKeyIdentity, i.name,
+				"configured", parsedSeconds,
+				"default", fmt.Sprintf("%ds", defaultUserSessionSeconds))
+		} else {
+			duration = int32(parsedSeconds)
+			durationSource = "YAML config"
+		}
+	} else if credentialsDuration != "" {
+		// Priority 2: Check keyring credentials.
+		parsedSeconds, err := authUtils.ParseDurationFlexible(credentialsDuration)
+		if err != nil {
+			log.Warn("Invalid session duration format in keyring, using default",
+				logKeyIdentity, i.name,
+				"configured", credentialsDuration,
+				"default", fmt.Sprintf("%ds", defaultUserSessionSeconds),
+				"error", err)
+		} else if parsedSeconds <= 0 || parsedSeconds > math.MaxInt32 {
+			log.Warn("Session duration out of valid range in keyring, using default",
+				logKeyIdentity, i.name,
+				"configured", parsedSeconds,
+				"default", fmt.Sprintf("%ds", defaultUserSessionSeconds))
+		} else {
+			duration = int32(parsedSeconds)
+			durationSource = "keyring"
+		}
+	} else {
+		durationSource = "default"
+	}
+
+	// Validate and clamp duration to AWS limits.
+	maxDuration := int32(maxSessionSecondsNoMfa)
+	if hasMfa {
+		maxDuration = int32(maxSessionSecondsWithMfa)
+	}
+
+	if duration < int32(minSessionSeconds) {
+		log.Warn("Session duration below AWS minimum, clamping to minimum",
+			logKeyIdentity, i.name,
+			"requested", duration,
+			"minimum", minSessionSeconds,
+			"source", durationSource)
+		duration = int32(minSessionSeconds)
+	} else if duration > maxDuration {
+		mfaStatus := "without MFA"
+		if hasMfa {
+			mfaStatus = "with MFA"
+		}
+		log.Warn("Session duration exceeds AWS maximum, clamping to maximum",
+			logKeyIdentity, i.name,
+			"requested", duration,
+			"maximum", maxDuration,
+			"mfa", mfaStatus,
+			"source", durationSource)
+		duration = maxDuration
+	}
+
+	return duration
+}
+
 func (i *userIdentity) buildGetSessionTokenInput(longLivedCreds *types.AWSCredentials) (*sts.GetSessionTokenInput, error) {
+	// Get configured session duration or use default.
+	// Pass the session duration from credentials (if stored in keyring).
+	durationSeconds := i.getSessionDuration(longLivedCreds.MfaArn != "", longLivedCreds.SessionDuration)
+
 	if longLivedCreds.MfaArn != "" {
 		token, err := promptMfaTokenFunc(longLivedCreds)
 		if err != nil {
@@ -250,11 +381,11 @@ func (i *userIdentity) buildGetSessionTokenInput(longLivedCreds *types.AWSCreden
 		return &sts.GetSessionTokenInput{
 			SerialNumber:    aws.String(longLivedCreds.MfaArn),
 			TokenCode:       aws.String(token),
-			DurationSeconds: aws.Int32(defaultUserSessionSeconds),
+			DurationSeconds: aws.Int32(durationSeconds),
 		}, nil
 	}
 	return &sts.GetSessionTokenInput{
-		DurationSeconds: aws.Int32(defaultUserSessionSeconds),
+		DurationSeconds: aws.Int32(durationSeconds),
 	}, nil
 }
 
@@ -307,6 +438,28 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	}
 
 	return env, nil
+}
+
+// PrepareEnvironment prepares environment variables for external processes.
+// For AWS user identities, we use the shared AWS PrepareEnvironment helper
+// which configures credential files, profile, region, and disables IMDS fallback.
+func (i *userIdentity) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
+	defer perf.Track(nil, "aws.userIdentity.PrepareEnvironment")()
+
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
+	}
+
+	// AWS user identities always use "aws-user" as their provider name.
+	credentialsFile := awsFileManager.GetCredentialsPath(awsUserProviderName)
+	configFile := awsFileManager.GetConfigPath(awsUserProviderName)
+
+	// Get region from identity config if available.
+	region := i.resolveRegion()
+
+	// Use shared AWS environment preparation helper.
+	return awsCloud.PrepareEnvironment(environ, i.name, credentialsFile, configFile, region), nil
 }
 
 // IsStandaloneAWSUserChain checks if the authentication chain represents a standalone AWS user identity.
@@ -383,24 +536,79 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostA
 	return nil
 }
 
+// CredentialsExist checks if credentials exist for this identity.
+func (i *userIdentity) CredentialsExist() (bool, error) {
+	defer perf.Track(nil, "aws.userIdentity.CredentialsExist")()
+
+	mgr, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return false, err
+	}
+
+	credPath := mgr.GetCredentialsPath(awsUserProviderName)
+
+	// Load and parse the credentials file to verify the identity section exists.
+	cfg, err := awsCloud.LoadINIFile(credPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("load credentials file: %w", err)
+	}
+
+	// Check if this identity's section exists in the credentials file.
+	sec, err := cfg.GetSection(i.name)
+	if err != nil {
+		// Section doesn't exist - credentials don't exist for this identity.
+		return false, nil
+	}
+
+	// Verify the section has actual credential keys (not just an empty section).
+	if strings.TrimSpace(sec.Key("aws_access_key_id").String()) == "" {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// LoadCredentials loads AWS credentials from files using environment variables.
+// This is used with noop keyring to enable credential validation in whoami.
+func (i *userIdentity) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
+	defer perf.Track(nil, "aws.userIdentity.LoadCredentials")()
+
+	// Get environment variables that specify where credentials are stored.
+	env, err := i.Environment()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment variables: %w", err)
+	}
+
+	// Load credentials from files using AWS SDK.
+	creds, err := loadAWSCredentialsFromEnvironment(ctx, env)
+	if err != nil {
+		return nil, err
+	}
+
+	return creds, nil
+}
+
 // Logout removes identity-specific credential storage.
 func (i *userIdentity) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "aws.userIdentity.Logout")()
 
 	// AWS user identities use "aws-user" as their provider name.
-	// Clean up files under ~/.aws/atmos/aws-user/.
+	// Clean up files under XDG config directory (e.g., ~/.config/atmos/aws/aws-user/ on Linux).
 	fileManager, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		return errors.Join(errUtils.ErrLogoutFailed, err)
 	}
 
-	// Use CleanupIdentity to remove only this identity's sections from shared INI files.
+	// Use DeleteIdentity to remove only this identity's sections from shared INI files.
 	// This preserves credentials for other identities using the same provider.
-	if err := fileManager.CleanupIdentity(ctx, "aws-user", i.name); err != nil {
-		log.Debug("Failed to cleanup AWS files for user identity", "identity", i.name, "error", err)
+	if err := fileManager.DeleteIdentity(ctx, "aws-user", i.name); err != nil {
+		log.Debug("Failed to delete AWS files for user identity", "identity", i.name, "error", err)
 		return errors.Join(errUtils.ErrLogoutFailed, err)
 	}
 
-	log.Debug("Cleaned up AWS files for user identity", "identity", i.name)
+	log.Debug("Deleted AWS files for user identity", "identity", i.name)
 	return nil
 }

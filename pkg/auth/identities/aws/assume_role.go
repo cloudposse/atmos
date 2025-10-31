@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -24,10 +25,12 @@ const maxSessionNameLength = 64
 
 // assumeRoleIdentity implements AWS assume role identity.
 type assumeRoleIdentity struct {
-	name    string
-	config  *schema.Identity
-	region  string
-	roleArn string
+	name             string
+	config           *schema.Identity
+	region           string
+	roleArn          string
+	manager          types.AuthManager // Auth manager for resolving root provider
+	rootProviderName string            // Cached root provider name from PostAuthenticate
 }
 
 // newSTSClient creates an STS client using the base credentials and configured region.
@@ -185,8 +188,8 @@ func (i *assumeRoleIdentity) Validate() error {
 func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
-	// Get provider name for AWS file paths.
-	providerName, err := i.GetProviderName()
+	// Get root provider name for file storage.
+	providerName, err := i.resolveRootProviderName()
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +214,35 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// PrepareEnvironment prepares environment variables for external processes.
+// For AWS assume role identities, we use the shared AWS PrepareEnvironment helper
+// which configures credential files, profile, region, and disables IMDS fallback.
+func (i *assumeRoleIdentity) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
+	defer perf.Track(nil, "aws.assumeRoleIdentity.PrepareEnvironment")()
+
+	// Get root provider name for file storage.
+	providerName, err := i.resolveRootProviderName()
+	if err != nil {
+		return environ, fmt.Errorf("failed to get provider name: %w", err)
+	}
+
+	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
+	}
+
+	credentialsFile := awsFileManager.GetCredentialsPath(providerName)
+	configFile := awsFileManager.GetConfigPath(providerName)
+
+	// Get region from identity if available.
+	region := i.region
+
+	// Use shared AWS environment preparation helper.
+	return awsCloud.PrepareEnvironment(environ, i.name, credentialsFile, configFile, region), nil
+}
+
 // GetProviderName extracts the provider name from the identity configuration.
+// For chained identities, this returns the via identity name for caching purposes.
 func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 	if i.config.Via != nil && i.config.Via.Provider != "" {
 		return i.config.Via.Provider, nil
@@ -224,6 +255,39 @@ func (i *assumeRoleIdentity) GetProviderName() (string, error) {
 	return "", fmt.Errorf("%w: assume role identity %q has no valid via configuration", errUtils.ErrInvalidIdentityConfig, i.name)
 }
 
+// resolveRootProviderName resolves the root provider name for file storage.
+// Tries manager first (if available), then falls back to cached value or config.
+func (i *assumeRoleIdentity) resolveRootProviderName() (string, error) {
+	// Try manager first (available after PostAuthenticate).
+	if i.manager != nil {
+		if providerName := i.manager.GetProviderForIdentity(i.name); providerName != "" {
+			return providerName, nil
+		}
+	}
+
+	// Fall back to cached value or config.
+	return i.getRootProviderFromVia()
+}
+
+// getRootProviderFromVia gets the root provider name using available information.
+// This is used when manager is not available (e.g., LoadCredentials before PostAuthenticate).
+// Tries in order: cached value from PostAuthenticate, via.provider from config.
+func (i *assumeRoleIdentity) getRootProviderFromVia() (string, error) {
+	// First try cached value set during PostAuthenticate.
+	if i.rootProviderName != "" {
+		return i.rootProviderName, nil
+	}
+
+	// Fall back to via.provider from config (works for single-hop chains).
+	if i.config.Via != nil && i.config.Via.Provider != "" {
+		return i.config.Via.Provider, nil
+	}
+
+	// Can't determine root provider - return error.
+	// This happens when LoadCredentials is called before PostAuthenticate on a multi-hop chain.
+	return "", fmt.Errorf("%w: cannot determine root provider for identity %q before authentication", errUtils.ErrInvalidAuthConfig, i.name)
+}
+
 // PostAuthenticate sets up AWS files and populates auth context after authentication.
 func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
 	// Guard against nil parameters to avoid panics.
@@ -233,6 +297,10 @@ func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, params *types
 	if params.Credentials == nil {
 		return fmt.Errorf("%w: credentials are required", errUtils.ErrInvalidAuthConfig)
 	}
+
+	// Store manager reference and root provider name for resolving in file operations.
+	i.manager = params.Manager
+	i.rootProviderName = params.ProviderName
 
 	// Setup AWS files using shared AWS cloud package.
 	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, ""); err != nil {
@@ -300,13 +368,89 @@ func sanitizeRoleSessionNameLengthAndTrim(name string) string {
 	return name
 }
 
+// CredentialsExist checks if credentials exist for this identity.
+func (i *assumeRoleIdentity) CredentialsExist() (bool, error) {
+	defer perf.Track(nil, "aws.assumeRoleIdentity.CredentialsExist")()
+
+	// Get root provider name for file storage.
+	providerName, err := i.resolveRootProviderName()
+	if err != nil {
+		return false, err
+	}
+
+	mgr, err := awsCloud.NewAWSFileManager("")
+	if err != nil {
+		return false, err
+	}
+
+	credPath := mgr.GetCredentialsPath(providerName)
+
+	// Load and parse the credentials file to verify the identity section exists.
+	cfg, err := awsCloud.LoadINIFile(credPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("load credentials file: %w", err)
+	}
+
+	// Check if this identity's section exists in the credentials file.
+	sec, err := cfg.GetSection(i.name)
+	if err != nil {
+		// Section doesn't exist - credentials don't exist for this identity.
+		return false, nil
+	}
+
+	// Verify the section has actual credential keys (not just an empty section).
+	if strings.TrimSpace(sec.Key("aws_access_key_id").String()) == "" {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// LoadCredentials loads AWS credentials from files using environment variables.
+// This is used with noop keyring to enable credential validation in whoami.
+func (i *assumeRoleIdentity) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
+	defer perf.Track(nil, "aws.assumeRoleIdentity.LoadCredentials")()
+
+	// Get environment variables that specify where credentials are stored.
+	env, err := i.Environment()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get environment variables: %w", err)
+	}
+
+	// Load credentials from files using AWS SDK.
+	creds, err := loadAWSCredentialsFromEnvironment(ctx, env)
+	if err != nil {
+		return nil, err
+	}
+
+	return creds, nil
+}
+
 // Logout removes identity-specific credential storage.
 func (i *assumeRoleIdentity) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "aws.assumeRoleIdentity.Logout")()
 
-	// AWS assume-role identities don't have identity-specific storage.
-	// File cleanup is handled by the provider's Logout method.
-	// Keyring cleanup is handled by AuthManager.
-	log.Debug("Logout called for assume-role identity (no identity-specific cleanup)", "identity", i.name)
+	log.Debug("Logout assume-role identity", "identity", i.name, "provider", i.rootProviderName)
+
+	// Get base_path from provider spec if configured (requires manager to lookup provider config).
+	// For now, use empty string (default XDG path) since SetupFiles uses empty string too.
+	basePath := ""
+
+	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	if err != nil {
+		log.Debug("Failed to create file manager for logout", "identity", i.name, "error", err)
+		return fmt.Errorf("failed to create AWS file manager: %w", err)
+	}
+
+	// Remove this identity's profile from the provider's config files.
+	if err := fileManager.DeleteIdentity(ctx, i.rootProviderName, i.name); err != nil {
+		log.Debug("Failed to delete identity files", "identity", i.name, "error", err)
+		return fmt.Errorf("failed to delete identity files: %w", err)
+	}
+
+	log.Debug("Successfully deleted assume-role identity", "identity", i.name)
 	return nil
 }

@@ -445,6 +445,34 @@ See `docs/developing-atmos-commands.md` and `docs/prd/command-registry-pattern.m
 ### Documentation (MANDATORY)
 All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` for args/flags. Build: `cd website && npm run build`
 
+**Verifying Documentation Links (MANDATORY):**
+Before adding links to documentation pages, ALWAYS verify the correct URL:
+
+```bash
+# Example: Finding the correct URL for auth user configure command
+# Step 1: Find the doc file
+find website/docs/cli/commands -name "*user-configure*"
+# Output: website/docs/cli/commands/auth/auth-user-configure.mdx
+
+# Step 2: Check the slug in frontmatter
+head -10 website/docs/cli/commands/auth/auth-user-configure.mdx | grep slug
+# Output: slug: /cli/commands/auth/auth-user-configure
+
+# Step 3: Verify by checking existing links
+grep -r "/cli/commands/auth/auth-user-configure" website/docs/
+```
+
+**Common mistakes:**
+- Using command name instead of filename (e.g., `/cli/commands/auth/atmos_auth` when file is `usage.mdx`)
+- Not checking the `slug` frontmatter which can override default URLs
+- Guessing URLs instead of verifying against existing documentation structure
+
+**Correct approach:**
+1. Find the target doc file: `find website/docs/cli/commands -name "*keyword*"`
+2. Check for `slug:` in frontmatter: `head -10 <file> | grep slug`
+3. If no slug, URL is path from `docs/` without extension (e.g., `auth-user-configure.mdx` → `/cli/commands/auth/auth-user-configure`)
+4. Verify by searching for existing links: `grep -r "<url>" website/docs/`
+
 ### PRD Documentation (MANDATORY)
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames. Examples: `command-registry-pattern.md`, `error-handling-strategy.md`, `testing-strategy.md`
 
@@ -452,7 +480,8 @@ All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use keba
 Follow template (what/why/references).
 
 **Blog Posts (CI Enforced):**
-- PRs labeled `minor` or `major` MUST include blog post in `website/blog/YYYY-MM-DD-feature-name.md`
+- PRs labeled `minor` or `major` MUST include blog post in `website/blog/YYYY-MM-DD-feature-name.mdx`
+- Blog posts must use `.mdx` extension with YAML front matter
 - Include `<!--truncate-->` after intro paragraph
 - Tag `feature`/`enhancement`/`bugfix` (user-facing) or `contributors` (internal changes)
 - CI will fail without blog post

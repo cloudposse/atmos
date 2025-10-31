@@ -61,13 +61,13 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	assert.NoError(t, err)
 
-	d := processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 foo", stack)
+	d := processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 foo", stack, nil)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 bar", stack)
+	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 bar", stack, nil)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 nonprod baz", "")
+	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-1 nonprod baz", "", nil)
 	assert.Equal(t, "component-1-c", d)
 
 	res, err := ExecuteDescribeComponent(
@@ -101,13 +101,13 @@ func TestYamlFuncTerraformOutput(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 foo", stack)
+	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 foo", stack, nil)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 nonprod bar", stack)
+	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 nonprod bar", stack, nil)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 nonprod baz", "")
+	d = processTagTerraformOutput(&atmosConfig, "!terraform.output component-2 nonprod baz", "", nil)
 	assert.Equal(t, "component-1-c", d)
 
 	res, err = ExecuteDescribeComponent(
