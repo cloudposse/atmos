@@ -20,7 +20,8 @@ README.yaml   @cloudposse/engineering @cloudposse/approvers
 README.md     @cloudposse/engineering @cloudposse/approvers
 docs/*.md     @cloudposse/engineering @cloudposse/approvers
 
-# Cloud Posse Admins must review all changes to CODEOWNERS, mergify configuration, or Claude agents
+# Cloud Posse Admins must review all changes to CODEOWNERS, mergify configuration, Claude agents, or coding standards
 .github/mergify.yml @cloudposse/admins
 .github/CODEOWNERS  @cloudposse/admins
 .claude/            @cloudposse/admins
+CLAUDE.md           @cloudposse/admins
