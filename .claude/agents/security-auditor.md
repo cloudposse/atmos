@@ -88,6 +88,151 @@ Multiple layers of security controls:
 
 ## Library Selection and Best Practices
 
+### Library Vetting Requirements (MANDATORY)
+
+Before approving any new library dependency, verify:
+
+#### 1. Maintenance Status
+
+**Check that library is actively maintained:**
+
+```bash
+# Check GitHub repository
+# Look for:
+# - Recent commits (within last 6 months)
+# - Active issue triage and PRs
+# - Not archived or deprecated
+# - Active maintainers responding to issues
+```
+
+✅ **GOOD: Active maintenance indicators**
+- Recent commits (within 6 months)
+- Regular releases
+- Active issue triage
+- Maintained by reputable organization or community
+- Security advisories addressed promptly
+
+❌ **BAD: Abandoned/archived indicators**
+- No commits in 12+ months
+- GitHub repo archived or read-only
+- Many unaddressed security issues
+- Maintainer explicitly abandoned project
+- No response to critical bugs
+
+**Forbidden libraries (archived/abandoned):**
+```go
+// NEVER use archived libraries
+import "github.com/golang/mock"  // ❌ ARCHIVED - use go.uber.org/mock
+import "github.com/mitchellh/go-homedir"  // ❌ Use pkg/config/homedir (forked)
+```
+
+#### 2. License Compatibility (MANDATORY)
+
+**ALL dependencies MUST be Apache 2.0 compatible:**
+
+✅ **Compatible licenses:**
+- Apache 2.0
+- MIT
+- BSD (2-clause, 3-clause)
+- ISC
+- MPL 2.0 (Mozilla Public License 2.0)
+
+⚠️ **Incompatible licenses (FORBIDDEN):**
+- GPL, LGPL, AGPL (copyleft - incompatible with Apache 2.0)
+- Proprietary/Commercial licenses
+- Unknown/Custom licenses (require legal review)
+
+**How to verify license:**
+```bash
+# Check go.mod for license info
+go mod download -json github.com/example/library | jq -r '.GoMod'
+
+# Check GitHub repository for LICENSE file
+# Look for SPDX identifier or OSI-approved license
+
+# Use go-licenses tool for verification
+go install github.com/google/go-licenses@latest
+go-licenses check ./...
+```
+
+**License validation checklist:**
+- ✅ License file present in repository
+- ✅ License is OSI-approved
+- ✅ License compatible with Apache 2.0
+- ✅ No additional restrictions or commercial terms
+- ❌ Block any GPL/LGPL/AGPL dependencies
+
+#### 3. Security Track Record
+
+**Verify library has good security practices:**
+
+✅ **Security indicators:**
+- CVEs addressed promptly (within 30 days)
+- Security policy documented (SECURITY.md)
+- Responsible disclosure process
+- Regular security audits (for critical libraries)
+- No history of malicious code or backdoors
+
+❌ **Security red flags:**
+- Unpatched CVEs
+- History of security incidents
+- No security contact or policy
+- Suspicious ownership changes
+- Malware/backdoor reports
+
+**Check for vulnerabilities:**
+```bash
+# Use Govulncheck
+go install golang.org/x/vuln/cmd/govulncheck@latest
+govulncheck ./...
+
+# GitHub Advisory Database
+# Check: https://github.com/advisories
+
+# Snyk vulnerability database
+# Check: https://snyk.io/vuln/
+```
+
+#### 4. Code Quality Standards (CodeQL Compliance)
+
+**Library must meet our code quality standards:**
+
+Verify library code quality aligns with our **CodeQL workflow** requirements:
+
+✅ **Go code quality checks (from .golangci.yml):**
+- **errorlint**: Proper error wrapping with `%w`, uses `errors.Is`/`errors.As`
+- **gosec**: No security vulnerabilities (SQL injection, command injection, etc.)
+- **cyclop**: Reasonable cognitive complexity (< 15)
+- **forbidigo**: Doesn't use forbidden patterns:
+  - No `os.Getenv` (should use `viper.BindEnv`)
+  - No `path.Join` (should use `filepath.Join` for cross-platform)
+  - No archived dependencies (e.g., `github.com/golang/mock`)
+- **bodyclose**: Proper HTTP response body closing
+- **err113**: Proper static error definitions
+- **loggercheck**: Structured logging patterns
+
+**JavaScript/TypeScript quality checks (CodeQL):**
+- No XSS vulnerabilities
+- No prototype pollution
+- Proper input validation
+- No unsafe DOM manipulation
+- CSP (Content Security Policy) compliant
+
+**Review library code quality:**
+```bash
+# Run golangci-lint on library code (if Go)
+cd $(go list -f '{{.Dir}}' github.com/example/library)
+golangci-lint run
+
+# Check CodeQL findings
+# Review: https://github.com/<org>/<repo>/security/code-scanning
+```
+
+**Decision matrix:**
+- ✅ **APPROVED**: Actively maintained, Apache 2.0 compatible, good security record, passes code quality checks
+- ⚠️ **NEEDS REVIEW**: Minor issues (outdated but maintained, uncommon license requiring review)
+- ❌ **BLOCKED**: Archived, incompatible license, security vulnerabilities, poor code quality
+
 ### Cryptography Libraries (MANDATORY)
 
 **ALWAYS use standard Go crypto libraries:**
