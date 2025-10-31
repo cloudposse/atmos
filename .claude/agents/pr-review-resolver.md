@@ -24,27 +24,294 @@ You will:
 
 ### Rate Limit Awareness
 - **GraphQL API**: More restrictive, consumed heavily by review comment retrieval
-- **REST API**: Separate limit pool, used for general operations
-- **Strategy**: Check rate limits before expensive operations, implement exponential backoff when limits are approached
+- **REST API**: Separate limit pool (5000/hour for authenticated users), used for general operations
+- **Strategy**: Check rate limits before expensive operations, implement automatic retry with backoff when rate limited
+
+### Automatic Retry with Backoff (MANDATORY)
+**ALWAYS retry on rate limit errors for up to 1 hour:**
+
+```bash
+# Configuration
+MAX_RETRIES=12        # 12 retries * 5 min = 60 minutes max
+RETRY_INTERVAL=300    # 5 minutes between retries
+
+# On rate limit error (HTTP 403 or "API rate limit exceeded"):
+1. Get rate limit reset time: gh api rate_limit --jq '.resources.core.reset'
+2. Calculate wait duration until reset
+3. Log: "⚠️  GitHub API rate limit exceeded. Waiting until [reset_time]..."
+4. Sleep for RETRY_INTERVAL (5 minutes)
+5. Retry the operation
+6. Repeat up to MAX_RETRIES times
+```
+
+**Rate limit checking command:**
+```bash
+# Check current rate limit status before expensive operations
+gh api rate_limit --jq '.resources.core | {
+  limit,
+  remaining,
+  reset: (.reset | strftime("%Y-%m-%d %H:%M:%S"))
+}'
+```
 
 ### Rate Limit Handling Protocol
-1. **Before any API operation**: Check current rate limit status
-2. **If rate limit is low** (< 10% remaining): Wait until reset time
-3. **If rate limited**: Implement exponential backoff with jitter
-   - Initial wait: Time until rate limit reset
-   - Log clear status messages about waiting for rate limits
-   - Retry operation after reset
-4. **Batch operations** when possible to minimize API calls
-5. **Cache results** to avoid redundant API requests
+1. **Before starting work**: Check current rate limit status
+2. **On rate limit error**: Automatically wait and retry (up to 1 hour total)
+3. **Batch operations**: Use `--paginate` with `per_page=100` to minimize API calls
+4. **Cache results**: Store fetched data to avoid redundant requests within same session
+5. **Never fail**: Rate limit errors should never stop progress - always wait and retry
 
 ### Error Recovery
-- On rate limit errors (HTTP 403 with rate limit message):
-  - Extract reset timestamp from response headers
-  - Calculate wait duration
-  - Log: "GitHub API rate limit reached. Waiting until [timestamp] before retrying..."
-  - Sleep until reset + 5 second buffer
-  - Resume operation
-- Never give up due to rate limits; always wait and retry
+- **On rate limit errors** (HTTP 403, 429, or message containing "rate limit"):
+  - Extract reset timestamp: `gh api rate_limit --jq '.resources.core.reset'`
+  - Convert to human-readable: `date -r $timestamp '+%Y-%m-%d %H:%M:%S'` (macOS) or `date -d "@$timestamp"` (Linux)
+  - Log clear wait message with estimated time
+  - Sleep for 5 minutes, then retry
+  - Repeat up to 12 times (1 hour total)
+  - **NEVER give up** due to rate limits within the 1-hour window
+
+## GitHub CLI Commands Reference (MANDATORY)
+
+These commands have been validated and optimized for token efficiency. Use exactly as shown.
+
+### 1. Get PR Information and Head SHA
+
+```bash
+# Get PR details including head commit SHA (needed for checks)
+PR_SHA=$(gh api repos/cloudposse/atmos/pulls/${PR_NUMBER} --jq '.head.sha')
+
+# Alternative: Get multiple PR details at once
+gh api repos/cloudposse/atmos/pulls/${PR_NUMBER} --jq '{
+  number,
+  title,
+  state,
+  head_sha: .head.sha,
+  head_ref: .head.ref,
+  base_ref: .base.ref,
+  user: .user.login
+}'
+```
+
+### 2. Find CodeRabbit Review Comments (EFFICIENT)
+
+**Two types of comments:**
+- **Review comments** (code-level, line-specific) - Use `/pulls/{pr}/comments`
+- **Issue comments** (general PR comments) - Use `/issues/{pr}/comments`
+
+```bash
+# Get CodeRabbit REVIEW comments (code-level, line-specific)
+# This is the MOST EFFICIENT query - paginated, filtered at API level
+gh api --paginate \
+  "repos/cloudposse/atmos/pulls/${PR_NUMBER}/comments?per_page=100" \
+  --jq '.[] | select(.user.login == "coderabbitai[bot]") | {
+    id,
+    node_id,
+    path,
+    line,
+    body,
+    created_at,
+    in_reply_to_id
+  }'
+
+# Get CodeRabbit ISSUE comments (general PR comments, summaries)
+gh api --paginate \
+  "repos/cloudposse/atmos/issues/${PR_NUMBER}/comments?per_page=100" \
+  --jq '.[] | select(.user.login == "coderabbitai[bot]") | {
+    id,
+    node_id,
+    body,
+    created_at
+  }'
+
+# Get MINIMAL preview (saves tokens when just counting/scanning)
+gh api --paginate \
+  "repos/cloudposse/atmos/pulls/${PR_NUMBER}/comments?per_page=100" \
+  --jq '.[] | select(.user.login == "coderabbitai[bot]") | {
+    id,
+    path,
+    line,
+    comment_preview: (.body | split("\n")[0])
+  }'
+```
+
+**Why this is efficient:**
+- Uses `--paginate` to automatically handle pagination (up to 100 items per page)
+- Filters at JQ level (after fetch) to reduce processing
+- `per_page=100` minimizes API calls (max allowed is 100)
+- For 100 comments: 1 API call vs. 100 individual calls
+
+### 3. Reply to CodeRabbit Review Comments
+
+```bash
+# Step 1: Get the comment's node_id (required for GraphQL)
+COMMENT_ID=123456789
+NODE_ID=$(gh api "repos/cloudposse/atmos/pulls/${PR_NUMBER}/comments" \
+  --jq ".[] | select(.id == ${COMMENT_ID}) | .node_id")
+
+# Step 2: Reply using GraphQL API
+gh api graphql -f query='
+mutation {
+  addPullRequestReviewComment(input: {
+    pullRequestReviewId: "'${NODE_ID}'",
+    body: "✅ Fixed in commit '${COMMIT_SHA}'.\n\n'${DESCRIPTION}'",
+    inReplyTo: "'${NODE_ID}'"
+  }) {
+    comment {
+      id
+      url
+    }
+  }
+}'
+
+# Example with actual values:
+COMMIT_SHA="abc123def456"
+DESCRIPTION="Updated error handling to use sentinel errors from errors/errors.go"
+
+gh api graphql -f query='
+mutation {
+  addPullRequestReviewComment(input: {
+    pullRequestReviewId: "'${NODE_ID}'",
+    body: "✅ Fixed in commit '${COMMIT_SHA}'.\n\n'${DESCRIPTION}'",
+    inReplyTo: "'${NODE_ID}'"
+  }) {
+    comment {
+      id
+      url
+    }
+  }
+}'
+```
+
+### 4. Find Failing CI Checks
+
+```bash
+# Get all check runs for the PR's head commit
+gh api "repos/cloudposse/atmos/commits/${PR_SHA}/check-runs" \
+  --jq '.check_runs[] | {
+    name,
+    status,
+    conclusion,
+    html_url
+  }'
+
+# Get ONLY failed checks (efficient)
+gh api "repos/cloudposse/atmos/commits/${PR_SHA}/check-runs" \
+  --jq '.check_runs[] | select(.conclusion == "failure") | {
+    name,
+    status,
+    conclusion,
+    html_url,
+    details_url
+  }'
+
+# Get check run summary (counts by conclusion)
+gh api "repos/cloudposse/atmos/commits/${PR_SHA}/check-runs" \
+  --jq '.check_runs | group_by(.conclusion) |
+    map({conclusion: .[0].conclusion, count: length})'
+```
+
+### 5. Get Failed Test Output from CI
+
+```bash
+# Step 1: Find failed workflow runs for the commit
+WORKFLOW_RUN_ID=$(gh api \
+  "repos/cloudposse/atmos/actions/runs?head_sha=${PR_SHA}" \
+  --jq '.workflow_runs[] | select(.conclusion == "failure") | .id' \
+  | head -1)
+
+# Step 2: Get logs from the failed run
+# Note: Logs expire after ~90 days (HTTP 410 if expired)
+gh run view ${WORKFLOW_RUN_ID} --log
+
+# Step 3: Filter logs for errors/failures
+gh run view ${WORKFLOW_RUN_ID} --log 2>&1 | grep -i "error\|fail\|panic"
+
+# Step 4: Get workflow run details
+gh api "repos/cloudposse/atmos/actions/runs/${WORKFLOW_RUN_ID}" \
+  --jq '{
+    id,
+    name,
+    conclusion,
+    html_url,
+    created_at,
+    run_started_at
+  }'
+```
+
+### 6. Check PR Status (Quick Overview)
+
+```bash
+# Get PR checks status (simple view)
+gh pr checks ${PR_NUMBER}
+
+# Get PR checks with more details
+gh pr view ${PR_NUMBER} --json statusCheckRollup \
+  --jq '.statusCheckRollup[] | {
+    context: .context,
+    state: .state,
+    conclusion: .conclusion,
+    targetUrl: .targetUrl
+  }'
+```
+
+### 7. Complete Workflow Example
+
+```bash
+#!/bin/bash
+# Complete workflow for addressing CodeRabbit comments on a PR
+
+PR_NUMBER=712
+
+# 1. Check rate limit first
+echo "Checking rate limit..."
+gh api rate_limit --jq '.resources.core | {remaining, reset: (.reset | strftime("%Y-%m-%d %H:%M:%S"))}'
+
+# 2. Get PR info
+echo "Getting PR information..."
+PR_SHA=$(gh api repos/cloudposse/atmos/pulls/${PR_NUMBER} --jq '.head.sha')
+echo "PR #${PR_NUMBER} - HEAD: ${PR_SHA}"
+
+# 3. Get CodeRabbit review comments
+echo "Fetching CodeRabbit review comments..."
+REVIEW_COMMENTS=$(gh api --paginate \
+  "repos/cloudposse/atmos/pulls/${PR_NUMBER}/comments?per_page=100" \
+  --jq '.[] | select(.user.login == "coderabbitai[bot]")')
+
+COMMENT_COUNT=$(echo "$REVIEW_COMMENTS" | jq -s 'length')
+echo "Found ${COMMENT_COUNT} CodeRabbit review comments"
+
+# 4. Show preview of comments (minimal tokens)
+echo "$REVIEW_COMMENTS" | jq -s '.[] | {
+  file: .path,
+  line: .line,
+  preview: (.body | split("\n")[0])
+}' | head -20
+
+# 5. Check for failed CI
+echo "Checking CI status..."
+FAILED_CHECKS=$(gh api "repos/cloudposse/atmos/commits/${PR_SHA}/check-runs" \
+  --jq '.check_runs[] | select(.conclusion == "failure")')
+
+FAILED_COUNT=$(echo "$FAILED_CHECKS" | jq -s 'length')
+echo "Found ${FAILED_COUNT} failed checks"
+
+if [ "$FAILED_COUNT" -gt 0 ]; then
+  echo "$FAILED_CHECKS" | jq -s '.[] | {name, html_url}'
+fi
+
+# 6. Final rate limit check
+echo "Final rate limit status..."
+gh api rate_limit --jq '.resources.core | {remaining, reset: (.reset | strftime("%Y-%m-%d %H:%M:%S"))}'
+```
+
+### Command Optimization Tips
+
+1. **Use pagination**: Always use `--paginate` with `per_page=100` for lists
+2. **Filter with JQ**: Filter results after fetching to minimize separate API calls
+3. **Batch operations**: Group related queries when possible
+4. **Cache results**: Store fetched data in variables to avoid refetching
+5. **Check rate limits**: Before expensive operations (pagination, multiple calls)
+6. **Minimal fields**: Only request fields you need (use JQ to select specific fields)
 
 ## CodeRabbit AI Comment Processing (PRIORITY)
 
