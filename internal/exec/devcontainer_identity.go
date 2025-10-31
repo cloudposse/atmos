@@ -158,6 +158,10 @@ func translatePath(hostFilePath, hostWorkspace, containerWorkspace, userHome str
 	// If path starts with host workspace, translate to container path.
 	if strings.HasPrefix(hostFilePath, hostWorkspace) {
 		relPath := strings.TrimPrefix(hostFilePath, hostWorkspace)
+		// TrimPrefix leaves leading separator; strip it so path.Join doesn't treat as absolute.
+		relPath = strings.TrimLeft(relPath, `/\`)
+		// Replace all backslashes with forward slashes for container paths.
+		relPath = strings.ReplaceAll(relPath, `\`, `/`)
 		// Use path.Join (not filepath.Join) to ensure Unix-style paths for containers.
 		//nolint:forbidigo // Container paths must use Unix separators (/) not OS-specific separators
 		return path.Join(containerWorkspace, relPath)
@@ -167,6 +171,10 @@ func translatePath(hostFilePath, hostWorkspace, containerWorkspace, userHome str
 	// Example: ~/.aws/config → /workspace/.aws/config
 	if userHome != "" && strings.HasPrefix(hostFilePath, userHome) {
 		relPath := strings.TrimPrefix(hostFilePath, userHome)
+		// TrimPrefix leaves leading separator; strip it so path.Join doesn't treat as absolute.
+		relPath = strings.TrimLeft(relPath, `/\`)
+		// Replace all backslashes with forward slashes for container paths.
+		relPath = strings.ReplaceAll(relPath, `\`, `/`)
 		// Use path.Join (not filepath.Join) to ensure Unix-style paths for containers.
 		//nolint:forbidigo // Container paths must use Unix separators (/) not OS-specific separators
 		return path.Join(containerWorkspace, relPath)
