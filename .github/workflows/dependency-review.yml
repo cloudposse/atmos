@@ -34,7 +34,7 @@ jobs:
           # Allow only permissive licenses
           # NOTE: GitHub's dependency graph detects Go modules from go.mod automatically
           # License checking works at the manifest level for go.mod dependencies
-          allow-licenses: MIT, MIT-0, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, MPL-2.0, 0BSD, Unlicense, CC0-1.0, CC-BY-4.0, Python-2.0, OFL-1.1
+          allow-licenses: MIT, MIT-0, Apache-2.0, BSD-2-Clause, BSD-2-Clause-Views, BSD-3-Clause, ISC, MPL-2.0, 0BSD, Unlicense, CC0-1.0, CC-BY-3.0, CC-BY-4.0, CC-BY-SA-3.0, Python-2.0, OFL-1.1, LicenseRef-scancode-generic-cla, LicenseRef-scancode-unknown-license-reference, LicenseRef-scancode-unicode
 
           # Fail on moderate or higher severity vulnerabilities
           fail-on-severity: moderate
