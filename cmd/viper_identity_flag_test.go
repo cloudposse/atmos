@@ -7,13 +7,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestTerraformCIRegressionNoAuth reproduces the EXACT bug reported:
-// User runs: atmos terraform plan component --stack dwtsandbox
-// Environment: CI (non-TTY), NO auth configured, NO --identity flag
-// Expected: Command should work (or fail gracefully for other reasons)
-// Actual (v1.196.0): Fails with "interactive identity selection requires a TTY"
+// TestTerraformCIRegressionNoAuth verifies correct identity resolution in CI environments.
+// Scenario: CI (non-TTY) with NO auth configured and NO --identity flag.
+// Expected behavior:
+// - viper.GetString("identity") should return empty string (not "__SELECT__")
+// - No identity selection should be attempted
+// - Command should execute without requiring TTY
 //
-// This test simulates what viper.GetString("identity") returns in various CI scenarios.
+// This test verifies viper configuration does not incorrectly trigger identity selection.
 func TestTerraformCIRegressionNoAuth(t *testing.T) {
 	_ = NewTestKit(t)
 
@@ -136,11 +137,13 @@ func TestIdentifyWhyViperReturnsSelect(t *testing.T) {
 	})
 }
 
-// TestOriginalCodeBugPath traces the EXACT buggy code path.
+// TestOriginalCodeBugPath verifies correct behavior when viper contains unexpected values.
+// This tests the scenario where viper might have a stale value that should not affect
+// terraform commands when --identity flag is not explicitly provided.
 func TestOriginalCodeBugPath(t *testing.T) {
 	_ = NewTestKit(t)
 
-	t.Run("REPRODUCTION: Original code with viper returning __SELECT__", func(t *testing.T) {
+	t.Run("viper contains __SELECT__ value should not affect terraform commands", func(t *testing.T) {
 		viper.Reset()
 
 		// Setup: Somehow viper has __SELECT__ value (we don't know how yet)

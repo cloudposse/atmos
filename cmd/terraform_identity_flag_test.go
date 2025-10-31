@@ -9,14 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestTerraformWithNoAuthConfiguration reproduces the bug where running
-// `atmos terraform plan` in CI (non-TTY) fails with "interactive identity selection requires a TTY"
-// even when:
-// - NO auth configuration exists
-// - NO --identity flag provided
-// - NO ATMOS_IDENTITY env var set
-//
-// This is the exact scenario reported by the user.
+// TestTerraformWithNoAuthConfiguration verifies that terraform commands execute successfully
+// in CI/non-TTY environments when no authentication is configured and no identity is specified.
+// Expected behavior:
+// - NO --identity flag provided → no identity selection attempted
+// - NO ATMOS_IDENTITY env var → no identity selection attempted
+// - NO auth configuration → no identity selection attempted
+// - Command should execute without requiring TTY or triggering identity selection.
 func TestTerraformWithNoAuthConfiguration(t *testing.T) {
 	_ = NewTestKit(t)
 
@@ -112,8 +111,9 @@ func TestTerraformWithNoAuthConfiguration(t *testing.T) {
 	}
 }
 
-// TestViperBehaviorWithNoValue tests what viper.GetString returns in different scenarios
-// to understand the root cause of the bug.
+// TestViperBehaviorWithNoValue verifies that viper.GetString returns the correct value
+// based on environment variable configuration and explicit settings.
+// This ensures that identity resolution follows the correct precedence order.
 func TestViperBehaviorWithNoValue(t *testing.T) {
 	tests := []struct {
 		name          string

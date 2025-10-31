@@ -9,11 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestViperBindPFlagPollutesGlobalState tests if viper.BindPFlag causes
-// the flag's NoOptDefVal to pollute viper's global state when flag is used without value.
+// TestViperBindPFlagPollutesGlobalState verifies that viper.BindPFlag creates
+// a two-way binding that can cause flag values to persist globally across commands.
 //
-// This reproduces the ACTUAL bug: auth shell uses BindPFlag, which causes
-// viper to persist the __SELECT__ value globally, affecting subsequent commands.
+// Expected behavior:
+// - When a flag with NoOptDefVal is used without a value, viper should NOT
+//   persist that NoOptDefVal value globally
+// - Subsequent commands should not see the previous command's flag value
+//
+// This test documents why BindPFlag should be avoided for flags with NoOptDefVal.
 func TestViperBindPFlagPollutesGlobalState(t *testing.T) {
 	_ = NewTestKit(t)
 
@@ -21,7 +25,7 @@ func TestViperBindPFlagPollutesGlobalState(t *testing.T) {
 	// Command 1: atmos auth shell --identity
 	// Command 2: atmos terraform plan (no --identity flag)
 
-	t.Run("REPRODUCTION: auth shell with BindPFlag pollutes viper for terraform", func(t *testing.T) {
+	t.Run("BindPFlag causes value pollution across commands", func(t *testing.T) {
 		viper.Reset()
 
 		// ===== COMMAND 1: atmos auth shell --identity =====
