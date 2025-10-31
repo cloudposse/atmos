@@ -801,6 +801,91 @@ System: Conversation compacted successfully (40 messages summarized, ~8000 token
 
 Learn more: [Sessions Documentation](/ai/sessions#auto-compact-extended-conversations)
 
+### Conversation Checkpointing
+
+Export and import AI chat sessions for team collaboration, backup, and knowledge sharing.
+
+**Why Checkpointing?**
+- Share troubleshooting sessions with your team
+- Back up important architectural discussions
+- Transfer knowledge to new team members
+- Archive critical incident resolutions
+- Resume conversations across different environments
+
+**Export Sessions:**
+```bash
+# Export to JSON for programmatic use
+atmos ai sessions export vpc-migration --output session.json
+
+# Export to YAML for version control
+atmos ai sessions export prod-incident --output incident.yaml --context
+
+# Export to Markdown for documentation
+atmos ai sessions export architecture-review --output docs/architecture.md
+```
+
+**Import Sessions:**
+```bash
+# Import session from teammate
+atmos ai sessions import colleague-session.json
+
+# Import with custom name
+atmos ai sessions import backup.yaml --name restored-session
+
+# Overwrite existing session
+atmos ai sessions import session.json --overwrite
+```
+
+**Checkpoint Contents:**
+- ✅ Complete message history with timestamps
+- ✅ Session metadata (model, provider, settings)
+- ✅ Project context (ATMOS.md, working directory)
+- ✅ Session statistics (message counts, token usage)
+- ✅ Version compatibility information
+
+**Supported Formats:**
+- **JSON** - Machine-readable, perfect for automation and archival
+- **YAML** - Human-readable, great for version control and git
+- **Markdown** - Beautiful reports for documentation and sharing
+
+**Team Collaboration Workflow:**
+```bash
+# Developer A: Export troubleshooting session
+atmos ai sessions export db-migration-issue \
+  --output db-migration.json \
+  --context
+
+# Share file via git/Slack/email
+
+# Developer B: Import and continue conversation
+atmos ai sessions import db-migration.json \
+  --name db-migration-collab
+
+atmos ai chat --session db-migration-collab
+> "Let's try a different migration approach..."
+```
+
+**Use Cases:**
+- **Team Collaboration** - Share complex troubleshooting sessions
+- **Knowledge Transfer** - Onboard new team members with real examples
+- **Incident Response** - Archive incident resolutions for retrospectives
+- **Architecture Decisions** - Document reasoning with full AI context
+- **Cross-Project Learning** - Reuse solutions from other projects
+
+**Session Management:**
+```bash
+# List all sessions
+atmos ai sessions list
+
+# Clean old sessions (30 days default)
+atmos ai sessions clean --older-than 30d
+
+# Clean sessions older than 7 days
+atmos ai sessions clean --older-than 7d
+```
+
+Learn more: [Sessions Documentation](/cli/commands/ai/sessions)
+
 ### Agent Marketplace (Coming Soon)
 
 Install community-created specialized agents:
@@ -899,9 +984,9 @@ We're continuously improving Atmos AI. Recent completions and upcoming features:
 - ✅ **Standard Exit Codes** - Reliable automation with proper error handling
 - ✅ **Stdin Support** - Shell integration and piping
 - ✅ **Token Caching (Prompt Caching)** - Save up to 90% on API costs with automatic caching
+- ✅ **Conversation Checkpointing** - Export/import sessions for team collaboration and backup
 
 ### Short-term (Next 3 Months)
-- **Conversation Checkpointing** - Export/import sessions for team sharing
 - **GitHub Actions Integration** - Official action for PR reviews and validation
 - **Agent Marketplace** - Install community agents
 - **Enhanced LSP** - More language servers (HCL, JSON Schema)

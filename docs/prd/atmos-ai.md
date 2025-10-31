@@ -18,6 +18,7 @@ Atmos AI is an intelligent assistant integrated directly into Atmos CLI, designe
 
 - **7 AI Providers** - Anthropic, OpenAI, Google Gemini, xAI Grok, Ollama, AWS Bedrock, Azure OpenAI
 - **Session Management** - SQLite-backed persistence with full CRUD operations
+- **Conversation Checkpointing** - Export/import sessions for team collaboration and backup
 - **Project Memory** - ATMOS.md for persistent context across sessions
 - **Tool Execution** - 19 tools with granular permission system
 - **Agent System** - 5 built-in specialized agents + marketplace (production ready)
@@ -1458,6 +1459,93 @@ settings:
 - Updated chat.go and executor.go to use cached method
 - Cache metrics tracked and returned in ExecutionResult
 - Comprehensive test coverage with updated mock clients
+
+**Conversation Checkpointing (Session Export/Import)** - *Completed: October 2025*
+- **Purpose:** Export and import AI chat sessions for team collaboration, backup, and knowledge sharing
+- **Commands:** `atmos ai sessions export`, `atmos ai sessions import`
+- **Formats:** JSON (machine-readable), YAML (human-editable), Markdown (reports)
+- **Contents:** Complete message history, session metadata, project context, statistics
+- **Use Cases:** Team collaboration, knowledge transfer, incident archival, cross-project learning
+
+**Implementation:**
+- Created checkpoint data structures with versioning (version 1.0)
+- Implemented `ExportSession()` and `ImportSession()` in Manager
+- Supports auto-detection of format from file extension
+- Comprehensive validation for checkpoint integrity
+- Overwrite protection with explicit flag
+- Optional project context inclusion (ATMOS.md, working directory, files accessed)
+
+**File Structure:**
+```json
+{
+  "version": "1.0",
+  "exported_at": "2025-10-31T...",
+  "exported_by": "username",
+  "session": {
+    "name": "session-name",
+    "provider": "anthropic",
+    "model": "claude-sonnet-4",
+    "project_path": "/path/to/project",
+    "created_at": "...",
+    "updated_at": "...",
+    "metadata": {}
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": "...",
+      "created_at": "...",
+      "archived": false
+    }
+  ],
+  "context": {
+    "project_memory": "ATMOS.md content",
+    "files_accessed": [],
+    "working_directory": "/path"
+  },
+  "statistics": {
+    "message_count": 10,
+    "user_messages": 5,
+    "assistant_messages": 5,
+    "total_tokens": 1000,
+    "tool_calls": 3
+  }
+}
+```
+
+**CLI Examples:**
+```bash
+# Export to JSON
+atmos ai sessions export vpc-migration --output session.json
+
+# Export to YAML with context
+atmos ai sessions export prod-incident --output backup.yaml --context
+
+# Export to Markdown for documentation
+atmos ai sessions export review --output docs/review.md
+
+# Import session
+atmos ai sessions import session.json
+
+# Import with custom name
+atmos ai sessions import backup.yaml --name restored-session
+
+# Import and overwrite existing
+atmos ai sessions import session.json --overwrite
+```
+
+**Benefits:**
+- ✅ Share troubleshooting sessions across teams
+- ✅ Backup critical conversations
+- ✅ Transfer knowledge to new team members
+- ✅ Archive incident resolutions for retrospectives
+- ✅ Document architectural decisions with full AI context
+- ✅ Cross-project learning and solution reuse
+
+**Documentation:**
+- CLI commands: `website/docs/cli/commands/ai/sessions.mdx`
+- Implementation: `pkg/ai/session/{checkpoint.go,export.go,import.go}`
+- Tests: `pkg/ai/session/checkpoint_test.go` (comprehensive coverage)
 
 ---
 

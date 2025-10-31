@@ -1,0 +1,319 @@
+---
+title: atmos ai sessions
+sidebar_label: sessions
+sidebar_class_name: command
+id: sessions
+description: Manage AI chat sessions including list, clean, export, and import operations
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to manage your AI chat sessions. List active sessions, clean old ones, export sessions for backup or sharing, and import sessions from checkpoint files.
+</Intro>
+
+<Screengrab title="atmos ai sessions --help" slug="atmos-ai-sessions--help" />
+
+## Description
+
+The `atmos ai sessions` command provides session management capabilities for Atmos AI conversations. Sessions allow you to:
+- Save and resume conversations with full context
+- Share AI interactions with your team via checkpoint files
+- Back up important troubleshooting sessions
+- Clean up old sessions to manage storage
+- Import sessions from other team members or projects
+
+Each session maintains its own message history, allowing you to have multiple ongoing conversations about different aspects of your infrastructure.
+
+## Subcommands
+
+### `atmos ai sessions list`
+
+Lists all available AI chat sessions with their details.
+
+**Usage:**
+```shell
+atmos ai sessions list
+```
+
+**Output includes:**
+- Session name and ID
+- Creation and last update timestamps
+- Number of messages in the session
+- AI model and provider used
+
+**Example:**
+```shell
+atmos ai sessions list
+
+# Output:
+# Found 2 session(s):
+#
+# Name: vpc-migration
+#   ID: abc123...
+#   Created: 2025-10-30 14:30:00
+#   Updated: 2025-10-31 09:15:00
+#   Messages: 42
+#   Model: claude-sonnet-4-20250514
+#   Provider: anthropic
+#
+# Name: eks-troubleshooting
+#   ID: def456...
+#   Created: 2025-10-29 11:20:00
+#   Updated: 2025-10-29 16:45:00
+#   Messages: 18
+#   Model: gpt-4o
+#   Provider: openai
+```
+
+### `atmos ai sessions clean`
+
+Remove old AI chat sessions based on retention policy.
+
+**Usage:**
+```shell
+atmos ai sessions clean [flags]
+```
+
+**Flags:**
+
+<dl>
+  <dt>`--older-than <duration>`</dt>
+  <dd>Delete sessions older than this duration. Supported units: `h` (hours), `d` (days), `w` (weeks), `m` (months). Default: `30d`</dd>
+</dl>
+
+**Examples:**
+```shell
+# Delete sessions older than 30 days (default)
+atmos ai sessions clean
+
+# Delete sessions older than 7 days
+atmos ai sessions clean --older-than 7d
+
+# Delete sessions older than 24 hours
+atmos ai sessions clean --older-than 24h
+
+# Delete sessions older than 2 weeks
+atmos ai sessions clean --older-than 2w
+
+# Delete sessions older than 3 months
+atmos ai sessions clean --older-than 3m
+```
+
+### `atmos ai sessions export`
+
+Export an AI chat session to a checkpoint file for backup or sharing.
+
+**Usage:**
+```shell
+atmos ai sessions export <session-name> [flags]
+```
+
+**Flags:**
+
+<dl>
+  <dt>`-o, --output <file>`</dt>
+  <dd>Output file path (required). Format is auto-detected from file extension.</dd>
+
+  <dt>`-f, --format <format>`</dt>
+  <dd>Explicit output format: `json`, `yaml`, or `markdown`. If not specified, format is detected from the file extension.</dd>
+
+  <dt>`--context`</dt>
+  <dd>Include project context (ATMOS.md content, files accessed). Default: `false`</dd>
+
+  <dt>`--metadata`</dt>
+  <dd>Include session metadata. Default: `true`</dd>
+</dl>
+
+**Export Formats:**
+
+- **JSON** - Machine-readable format, perfect for programmatic processing and archival
+- **YAML** - Human-readable and editable, good for version control
+- **Markdown** - Human-readable report format, ideal for documentation and sharing
+
+**Examples:**
+```shell
+# Export to JSON (auto-detected from extension)
+atmos ai sessions export vpc-migration --output session.json
+
+# Export to YAML with project context
+atmos ai sessions export eks-troubleshooting --output backup.yaml --context
+
+# Export to Markdown for documentation
+atmos ai sessions export security-audit --output report.md --format markdown
+
+# Export with explicit JSON format
+atmos ai sessions export my-session --output backup.txt --format json
+```
+
+**Checkpoint File Contents:**
+
+A checkpoint file contains:
+- **Version** - Checkpoint format version for compatibility
+- **Exported metadata** - Export timestamp and user
+- **Session information** - Name, model, provider, timestamps, custom metadata
+- **Complete message history** - All user and assistant messages with timestamps
+- **Session statistics** - Message counts by role, token usage (if tracked)
+- **Project context** (optional) - ATMOS.md content, working directory, files accessed
+
+### `atmos ai sessions import`
+
+Import an AI chat session from a checkpoint file.
+
+**Usage:**
+```shell
+atmos ai sessions import <checkpoint-file> [flags]
+```
+
+**Flags:**
+
+<dl>
+  <dt>`-n, --name <name>`</dt>
+  <dd>Name for the imported session. If not specified, uses the checkpoint's session name.</dd>
+
+  <dt>`--overwrite`</dt>
+  <dd>Overwrite existing session with the same name. Default: `false` (will error if session exists)</dd>
+
+  <dt>`--context`</dt>
+  <dd>Include project context from checkpoint. Default: `true`</dd>
+</dl>
+
+**Examples:**
+```shell
+# Import session from JSON checkpoint
+atmos ai sessions import session.json
+
+# Import with custom name
+atmos ai sessions import backup.yaml --name restored-session
+
+# Import and overwrite existing session
+atmos ai sessions import session.json --overwrite
+
+# Import without project context
+atmos ai sessions import backup.json --context=false
+```
+
+**After Import:**
+
+Once imported, the session can be resumed with:
+```shell
+atmos ai chat --session <imported-session-name>
+```
+
+## Configuration
+
+Sessions must be enabled in your `atmos.yaml` configuration:
+
+```yaml
+settings:
+  ai:
+    enabled: true
+    sessions:
+      enabled: true                      # Enable session management
+      max_sessions: 100                  # Maximum sessions to keep
+      storage_path: ".atmos/ai/sessions" # SQLite database location
+```
+
+## Use Cases
+
+### Team Collaboration
+
+Export and share sessions with your team to collaborate on complex infrastructure problems:
+
+```shell
+# Developer exports troubleshooting session
+atmos ai sessions export db-migration-issue --output db-migration.json
+
+# Share file with team (git, Slack, email)
+
+# Team member imports and continues the conversation
+atmos ai sessions import db-migration.json --name db-migration-collab
+atmos ai chat --session db-migration-collab
+```
+
+### Session Backup and Archival
+
+Back up important sessions for future reference:
+
+```shell
+# Export critical sessions as markdown documentation
+atmos ai sessions export prod-incident-2025-10 --output docs/incidents/2025-10-incident.md
+
+# Export to YAML for version control
+atmos ai sessions export architecture-decisions --output .atmos/archives/architecture.yaml
+```
+
+### Knowledge Transfer
+
+New team members can import sessions from experienced colleagues:
+
+```shell
+# Senior engineer exports onboarding session
+atmos ai sessions export atmos-getting-started --output onboarding/atmos-intro.json --context
+
+# New team member imports and reviews
+atmos ai sessions import onboarding/atmos-intro.json --name my-onboarding
+atmos ai sessions export my-onboarding --output onboarding-review.md --format markdown
+```
+
+### Cross-Project Learning
+
+Import sessions from other projects to reuse solutions:
+
+```shell
+# Export session from project A
+cd /path/to/project-a
+atmos ai sessions export vpc-setup --output ~/vpc-setup.json --context
+
+# Import to project B with new name
+cd /path/to/project-b
+atmos ai sessions import ~/vpc-setup.json --name vpc-reference
+```
+
+## Session Lifecycle
+
+1. **Create** - Sessions are created automatically when you start a new chat:
+   ```shell
+   atmos ai chat --session my-new-session
+   ```
+
+2. **List** - View all your sessions:
+   ```shell
+   atmos ai sessions list
+   ```
+
+3. **Resume** - Continue a previous conversation:
+   ```shell
+   atmos ai chat --session my-new-session
+   ```
+
+4. **Export** - Save a session for backup or sharing:
+   ```shell
+   atmos ai sessions export my-new-session --output backup.json
+   ```
+
+5. **Import** - Restore or share a session:
+   ```shell
+   atmos ai sessions import backup.json
+   ```
+
+6. **Clean** - Remove old sessions:
+   ```shell
+   atmos ai sessions clean --older-than 30d
+   ```
+
+## Related Commands
+
+- [`atmos ai chat`](/cli/commands/ai/chat) - Start or resume an AI chat session
+- [`atmos ai ask`](/cli/commands/ai/ask) - Ask a one-time question without saving session
+- [`atmos ai memory`](/cli/commands/ai/memory) - Manage project memory (ATMOS.md)
+
+## Tips
+
+- **Use descriptive session names** - Makes it easier to find and resume sessions later
+- **Export before major changes** - Create checkpoints before significant configuration changes
+- **Regular cleanup** - Use `atmos ai sessions clean` regularly to manage storage
+- **Markdown exports for docs** - Export important sessions as Markdown for team documentation
+- **YAML for version control** - YAML format works well with git and is human-readable
+- **JSON for automation** - Use JSON format for programmatic processing and archival

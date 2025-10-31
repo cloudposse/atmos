@@ -445,6 +445,7 @@ var (
 	ErrAIResponseNotText            = errors.New("response part does not contain text")
 	ErrAINoResponseChoices          = errors.New("no response choices returned")
 	ErrAISessionNotFound            = errors.New("AI session not found")
+	ErrAISessionAlreadyExists       = errors.New("AI session already exists")
 	ErrAIToolNotFound               = errors.New("AI tool not found")
 	ErrAIToolExecutionDenied        = errors.New("AI tool execution denied by user")
 	ErrAIToolExecutionFailed        = errors.New("AI tool execution failed")

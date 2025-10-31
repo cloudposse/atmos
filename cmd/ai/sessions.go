@@ -69,6 +69,47 @@ Examples:
 	RunE: cleanSessionsCommand,
 }
 
+// aiSessionsExportCmd exports a session to a checkpoint file.
+var sessionsExportCmd = &cobra.Command{
+	Use:   "export <session-name>",
+	Short: "Export an AI chat session to a checkpoint file",
+	Long: `Export an AI chat session to a checkpoint file for backup or sharing.
+
+The checkpoint file contains the complete session including:
+- Session metadata (name, model, provider, timestamps)
+- Complete message history
+- Project context (optional)
+- Statistics
+
+Supports multiple formats: JSON (default), YAML, Markdown
+
+Examples:
+  atmos ai sessions export vpc-migration --output session.json
+  atmos ai sessions export my-session --output backup.yaml --context
+  atmos ai sessions export analysis --output report.md --format markdown`,
+	Args: cobra.ExactArgs(1),
+	RunE: exportSessionCommand,
+}
+
+// aiSessionsImportCmd imports a session from a checkpoint file.
+var sessionsImportCmd = &cobra.Command{
+	Use:   "import <checkpoint-file>",
+	Short: "Import an AI chat session from a checkpoint file",
+	Long: `Import an AI chat session from a checkpoint file.
+
+Restores a session from a checkpoint file created with 'atmos ai sessions export'.
+The imported session can be resumed with 'atmos ai chat --session <name>'.
+
+Supports JSON and YAML checkpoint files.
+
+Examples:
+  atmos ai sessions import session.json
+  atmos ai sessions import backup.yaml --name restored-session
+  atmos ai sessions import session.json --overwrite`,
+	Args: cobra.ExactArgs(1),
+	RunE: importSessionCommand,
+}
+
 func init() {
 	// Add sessions command to ai command.
 	aiCmd.AddCommand(sessionsCmd)
@@ -76,9 +117,23 @@ func init() {
 	// Add subcommands to sessions command.
 	sessionsCmd.AddCommand(sessionsListCmd)
 	sessionsCmd.AddCommand(sessionsCleanCmd)
+	sessionsCmd.AddCommand(sessionsExportCmd)
+	sessionsCmd.AddCommand(sessionsImportCmd)
 
 	// Add flags for clean command.
 	sessionsCleanCmd.Flags().String("older-than", "30d", "Delete sessions older than this duration (e.g., 30d, 7d, 24h)")
+
+	// Add flags for export command.
+	sessionsExportCmd.Flags().StringP("output", "o", "", "Output file path (required)")
+	sessionsExportCmd.Flags().StringP("format", "f", "", "Output format: json, yaml, markdown (auto-detected from file extension if not specified)")
+	sessionsExportCmd.Flags().Bool("context", false, "Include project context (ATMOS.md, files accessed)")
+	sessionsExportCmd.Flags().Bool("metadata", true, "Include session metadata")
+	_ = sessionsExportCmd.MarkFlagRequired("output")
+
+	// Add flags for import command.
+	sessionsImportCmd.Flags().StringP("name", "n", "", "Name for the imported session (uses checkpoint name if not specified)")
+	sessionsImportCmd.Flags().Bool("overwrite", false, "Overwrite existing session with the same name")
+	sessionsImportCmd.Flags().Bool("context", true, "Include project context from checkpoint")
 }
 
 // initSessionManager initializes and validates session management.
@@ -237,4 +292,106 @@ func parseDuration(durationStr string) (int, error) {
 	default:
 		return 0, fmt.Errorf("%w: '%s', use 'h' (hours), 'd' (days), 'w' (weeks), or 'm' (months)", errUtils.ErrAIUnsupportedDurationUnit, unit)
 	}
+}
+
+// exportSessionCommand exports a session to a checkpoint file.
+func exportSessionCommand(cmd *cobra.Command, args []string) error {
+	sessionName := args[0]
+
+	// Get flags.
+	outputPath, err := cmd.Flags().GetString("output")
+	if err != nil {
+		return fmt.Errorf("failed to get output flag: %w", err)
+	}
+
+	format, err := cmd.Flags().GetString("format")
+	if err != nil {
+		return fmt.Errorf("failed to get format flag: %w", err)
+	}
+
+	includeContext, err := cmd.Flags().GetBool("context")
+	if err != nil {
+		return fmt.Errorf("failed to get context flag: %w", err)
+	}
+
+	includeMetadata, err := cmd.Flags().GetBool("metadata")
+	if err != nil {
+		return fmt.Errorf("failed to get metadata flag: %w", err)
+	}
+
+	log.Debug(fmt.Sprintf("Exporting session '%s' to '%s'", sessionName, outputPath))
+
+	manager, cleanup, err := initSessionManager()
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	// Export session.
+	ctx := context.Background()
+	opts := session.ExportOptions{
+		IncludeContext:  includeContext,
+		IncludeMetadata: includeMetadata,
+		Format:          format,
+	}
+
+	if err := manager.ExportSessionByName(ctx, sessionName, outputPath, opts); err != nil {
+		return fmt.Errorf("failed to export session: %w", err)
+	}
+
+	u.PrintMessage(fmt.Sprintf("✅ Session '%s' exported to '%s'", sessionName, outputPath))
+
+	return nil
+}
+
+// importSessionCommand imports a session from a checkpoint file.
+func importSessionCommand(cmd *cobra.Command, args []string) error {
+	checkpointPath := args[0]
+
+	// Get flags.
+	sessionName, err := cmd.Flags().GetString("name")
+	if err != nil {
+		return fmt.Errorf("failed to get name flag: %w", err)
+	}
+
+	overwrite, err := cmd.Flags().GetBool("overwrite")
+	if err != nil {
+		return fmt.Errorf("failed to get overwrite flag: %w", err)
+	}
+
+	includeContext, err := cmd.Flags().GetBool("context")
+	if err != nil {
+		return fmt.Errorf("failed to get context flag: %w", err)
+	}
+
+	log.Debug(fmt.Sprintf("Importing session from '%s'", checkpointPath))
+
+	manager, cleanup, err := initSessionManager()
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	// Import session.
+	ctx := context.Background()
+	opts := session.ImportOptions{
+		Name:              sessionName,
+		OverwriteExisting: overwrite,
+		IncludeContext:    includeContext,
+	}
+
+	importedSession, err := manager.ImportSession(ctx, checkpointPath, opts)
+	if err != nil {
+		return fmt.Errorf("failed to import session: %w", err)
+	}
+
+	u.PrintMessage(fmt.Sprintf("✅ Session '%s' imported successfully", importedSession.Name))
+	u.PrintMessage(fmt.Sprintf("  ID: %s", importedSession.ID))
+	u.PrintMessage(fmt.Sprintf("  Model: %s", importedSession.Model))
+	u.PrintMessage(fmt.Sprintf("  Provider: %s", importedSession.Provider))
+	u.PrintMessage(fmt.Sprintf("  Messages: %d", importedSession.MessageCount))
+	u.PrintMessage("")
+	u.PrintMessage("Resume the session with: atmos ai chat --session " + importedSession.Name)
+
+	return nil
 }
