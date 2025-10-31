@@ -551,6 +551,16 @@ func (m *manager) ensureIdentityHasManager(identityName string) error {
 		return m.setIdentityManager(identityName)
 	}
 
+	// If chain exists but for a DIFFERENT identity, don't overwrite it!
+	// This happens when loading cached credentials for an intermediate identity
+	// (e.g., permission set) while authenticating a target identity (e.g., assume role).
+	// The existing chain is for the target identity and should not be replaced.
+	if len(m.chain) > 0 {
+		// Chain exists for a different identity - just set manager reference
+		// using the existing chain without rebuilding.
+		return m.setIdentityManager(identityName)
+	}
+
 	// Build the authentication chain so GetProviderForIdentity() can resolve the root provider.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
@@ -600,18 +610,13 @@ func (m *manager) authenticateChain(ctx context.Context, targetIdentity string) 
 
 	if validFromIndex != -1 {
 		log.Debug("Found valid cached credentials", "validFromIndex", validFromIndex, "chainStep", m.getChainStepName(validFromIndex))
-
-		// If target identity (last element in chain) has valid cached credentials, use them.
-		if validFromIndex == len(m.chain)-1 {
-			last := m.chain[len(m.chain)-1]
-			if cachedCreds, err := m.credentialStore.Retrieve(last); err == nil {
-				log.Debug("Using cached credentials for target identity", logKeyIdentity, targetIdentity)
-				return cachedCreds, nil
-			}
-		}
 	}
 
 	// Step 2: Selective re-authentication from first invalid point down to target.
+	// CRITICAL: Always re-authenticate through the full chain, even if the target identity
+	// has cached credentials. This ensures assume-role identities perform the actual
+	// AssumeRole API call rather than using potentially incorrect cached credentials
+	// (e.g., permission set creds incorrectly cached as assume-role creds).
 	return m.authenticateFromIndex(ctx, validFromIndex)
 }
 
@@ -760,7 +765,11 @@ func (m *manager) fetchCachedCredentials(startIndex int) (types.ICredentials, in
 		log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
 		return nil, 0
 	}
-	// Skip re-authenticating the identity at startIndex, since we already have its output.
+	// Return cached credentials as OUTPUT of step at startIndex, so authentication
+	// continues from the NEXT step (startIndex + 1). The cached credentials become
+	// the input to the next identity in the chain.
+	// Example: If permission set creds are cached at index 1, return them with startIndex=2
+	// so the assume-role identity at index 2 uses the permission set creds as input.
 	return currentCreds, startIndex + 1
 }
 
