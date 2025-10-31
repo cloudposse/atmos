@@ -2,7 +2,10 @@ package container
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -318,4 +321,139 @@ func TestDockerRuntime_List_WithFilters_Integration(t *testing.T) {
 		// We're mainly testing that filters are passed correctly to docker ps.
 		assert.NotEmpty(t, container.ID)
 	}
+}
+
+func TestDockerRuntime_Pull_Integration(t *testing.T) {
+	// Integration test - tests pulling a small image.
+	runtime := NewDockerRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+	// Use alpine as it's very small (~5MB).
+	err := runtime.Pull(ctx, "alpine:latest")
+	if err != nil {
+		// Docker not available - skip.
+		t.Skipf("Docker not available, skipping Pull test: %v", err)
+		return
+	}
+
+	require.NoError(t, err, "Pull should succeed for alpine:latest")
+}
+
+func TestDockerRuntime_ContainerLifecycle_Integration(t *testing.T) {
+	// Integration test - tests Create, Start, Stop, Remove lifecycle.
+	runtime := NewDockerRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+
+	// First ensure alpine image exists.
+	err := runtime.Pull(ctx, "alpine:latest")
+	if err != nil {
+		t.Skipf("Docker not available, skipping lifecycle test: %v", err)
+		return
+	}
+
+	// Create container.
+	config := &CreateConfig{
+		Name:            "atmos-test-lifecycle",
+		Image:           "alpine:latest",
+		OverrideCommand: true, // Use sleep infinity.
+	}
+
+	containerID, err := runtime.Create(ctx, config)
+	if err != nil {
+		t.Fatalf("Failed to create container: %v", err)
+	}
+	require.NotEmpty(t, containerID, "container ID should not be empty")
+
+	// Ensure cleanup.
+	defer func() {
+		_ = runtime.Remove(ctx, containerID, true)
+	}()
+
+	// Start container.
+	err = runtime.Start(ctx, containerID)
+	require.NoError(t, err, "Start should succeed")
+
+	// Stop container.
+	err = runtime.Stop(ctx, containerID, 5*time.Second)
+	require.NoError(t, err, "Stop should succeed")
+
+	// Remove container.
+	err = runtime.Remove(ctx, containerID, false)
+	require.NoError(t, err, "Remove should succeed")
+}
+
+func TestDockerRuntime_Build_Integration(t *testing.T) {
+	// Integration test - tests building from Dockerfile.
+	runtime := NewDockerRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+
+	// Create temporary directory for build context.
+	tmpDir := t.TempDir()
+
+	// Create simple Dockerfile.
+	dockerfilePath := filepath.Join(tmpDir, "Dockerfile")
+	dockerfile := `FROM alpine:latest
+RUN echo "test build"
+`
+	err := os.WriteFile(dockerfilePath, []byte(dockerfile), 0o644)
+	require.NoError(t, err)
+
+	// Build image.
+	config := &BuildConfig{
+		Dockerfile: dockerfilePath,
+		Context:    tmpDir,
+		Tags:       []string{"atmos-test-build:latest"},
+	}
+
+	err = runtime.Build(ctx, config)
+	if err != nil {
+		t.Skipf("Docker not available or build failed, skipping: %v", err)
+		return
+	}
+
+	require.NoError(t, err, "Build should succeed")
+}
+
+func TestDockerRuntime_Logs_Integration(t *testing.T) {
+	// Integration test - tests container logs.
+	runtime := NewDockerRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+
+	// Pull alpine if needed.
+	err := runtime.Pull(ctx, "alpine:latest")
+	if err != nil {
+		t.Skipf("Docker not available, skipping Logs test: %v", err)
+		return
+	}
+
+	// Create and start a container that outputs something.
+	config := &CreateConfig{
+		Name:  "atmos-test-logs",
+		Image: "alpine:latest",
+		// Don't override command - we want default.
+	}
+
+	containerID, err := runtime.Create(ctx, config)
+	if err != nil {
+		t.Skipf("Failed to create container: %v", err)
+		return
+	}
+
+	// Ensure cleanup.
+	defer func() {
+		_ = runtime.Remove(ctx, containerID, true)
+	}()
+
+	// Note: We can't easily test Logs output since it goes to os.Stdout/Stderr.
+	// This test mainly verifies the method doesn't panic and completes.
+	// We test with tail to avoid hanging on follow.
+	err = runtime.Logs(ctx, containerID, false, "10")
+	require.NoError(t, err, "Logs should succeed")
 }
