@@ -1,0 +1,133 @@
+# Example: Security Scan with Atmos AI
+#
+# This workflow demonstrates how to use Atmos AI to perform security
+# audits on infrastructure configurations.
+#
+# To use this workflow:
+# 1. Copy to .github/workflows/ (remove the 'examples/' directory)
+# 2. Add your AI provider API key as a GitHub secret
+# 3. Adjust security checks for your requirements
+
+name: Atmos AI Security Scan
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  schedule:
+    # Run security scan daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write  # For SARIF upload
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Security Audit
+        id: security
+        uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        with:
+          prompt: |
+            Perform a comprehensive security audit of the infrastructure:
+
+            **Authentication & Authorization:**
+            - IAM policies follow least privilege principle
+            - No hardcoded credentials or secrets
+            - MFA enabled where required
+            - Service accounts properly scoped
+
+            **Network Security:**
+            - Security groups properly configured
+            - No unrestricted inbound rules (0.0.0.0/0)
+            - VPC flow logs enabled
+            - Network ACLs configured
+
+            **Data Protection:**
+            - Encryption at rest enabled
+            - Encryption in transit configured
+            - S3 buckets not publicly accessible
+            - Database encryption enabled
+            - Backup encryption enabled
+
+            **Compliance:**
+            - Required tags present
+            - Logging and monitoring configured
+            - Audit trails enabled
+            - Data residency requirements met
+
+            **Secrets Management:**
+            - No secrets in configuration files
+            - Secrets stored in secure vaults
+            - Rotation policies configured
+
+            Output format: JSON with findings categorized by severity (CRITICAL, HIGH, MEDIUM, LOW).
+
+          provider: anthropic
+          model: claude-sonnet-4-20250514
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          format: json
+          post-comment: ${{ github.event_name == 'pull_request' }}
+          fail-on-error: false
+          comment-header: '🔒 Security Audit Results'
+
+      - name: Parse security findings
+        id: parse
+        run: |
+          RESPONSE='${{ steps.security.outputs.response }}'
+
+          # Count findings by severity
+          CRITICAL=$(echo "$RESPONSE" | grep -o "CRITICAL" | wc -l || echo "0")
+          HIGH=$(echo "$RESPONSE" | grep -o "HIGH" | wc -l || echo "0")
+
+          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high=$HIGH" >> $GITHUB_OUTPUT
+
+          echo "Security Findings:"
+          echo "  Critical: $CRITICAL"
+          echo "  High: $HIGH"
+
+      - name: Fail on critical findings
+        if: steps.parse.outputs.critical > 0
+        run: |
+          echo "::error::${{ steps.parse.outputs.critical }} critical security issues found!"
+          exit 1
+
+      - name: Warn on high findings
+        if: steps.parse.outputs.high > 0
+        run: |
+          echo "::warning::${{ steps.parse.outputs.high }} high-severity security issues found"
+
+      - name: Create security report
+        if: always()
+        run: |
+          cat << EOF > security-report.md
+          # Security Audit Report
+
+          **Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          **Commit:** ${{ github.sha }}
+
+          ## Findings
+
+          ${{ steps.security.outputs.response }}
+
+          ## Summary
+
+          - Critical: ${{ steps.parse.outputs.critical }}
+          - High: ${{ steps.parse.outputs.high }}
+
+          EOF
+
+      - name: Upload security report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: security-report.md
+          retention-days: 30

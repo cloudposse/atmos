@@ -1,0 +1,77 @@
+# Example: Automated PR Review with Atmos AI
+#
+# This workflow demonstrates how to use Atmos AI to automatically review
+# pull requests for infrastructure changes.
+#
+# To use this workflow:
+# 1. Copy to .github/workflows/ (remove the 'examples/' directory)
+# 2. Add your AI provider API key as a GitHub secret
+# 3. Customize the review prompts for your needs
+
+name: Atmos AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'stacks/**'
+      - 'components/**'
+      - 'atmos.yaml'
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write  # Required to post comments
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: AI Code Review
+        uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        with:
+          prompt: |
+            Review this pull request for infrastructure changes:
+
+            1. **Configuration Errors**
+               - Check for syntax errors
+               - Validate required fields
+               - Flag undefined variables
+
+            2. **Security Issues**
+               - Exposed secrets or API keys
+               - Overly permissive IAM policies
+               - Unencrypted data stores
+               - Public S3 buckets
+
+            3. **Best Practices**
+               - Resource naming conventions
+               - Tagging standards
+               - Component structure
+               - Stack inheritance
+
+            4. **Breaking Changes**
+               - Resource replacements
+               - Destructive changes
+               - State file conflicts
+
+            5. **Cost Impact**
+               - Expensive resources added
+               - Resource scaling changes
+
+            Provide a summary with severity levels (CRITICAL, WARNING, INFO).
+
+          provider: anthropic
+          model: claude-sonnet-4-20250514
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          format: json
+          post-comment: true
+          fail-on-error: false
+          comment-header: '🔍 Atmos AI Code Review'
+
+      - name: Check for critical issues
+        if: contains(steps.review.outputs.response, 'CRITICAL')
+        run: |
+          echo "::warning::Critical issues found in PR. Please review before merging."

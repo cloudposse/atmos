@@ -1,0 +1,428 @@
+---
+title: Atmos AI GitHub Action
+sidebar_position: 7
+sidebar_label: Atmos AI
+description: Automate infrastructure analysis, PR reviews, and security scans with AI-powered workflows
+id: atmos-ai
+slug: /integrations/github-actions/atmos-ai
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The Atmos AI GitHub Action enables automated infrastructure analysis, PR reviews, security scans, and cost analysis in your CI/CD pipelines.
+</Intro>
+
+## Overview
+
+The Atmos AI GitHub Action executes AI-powered analysis of your infrastructure configurations directly in GitHub Actions workflows. It supports all 7 AI providers, posts results as PR comments, and provides structured outputs for automation.
+
+**Key Features:**
+- 🤖 Automated PR reviews with infrastructure expertise
+- 🔒 Security audits and compliance checks
+- 💰 Cost impact analysis
+- ✅ Configuration validation
+- 📊 Token usage tracking and caching
+- 💬 PR comments with detailed analysis
+- 🔄 Multi-provider support (Anthropic, OpenAI, Gemini, Grok, Bedrock, Azure OpenAI, Ollama)
+
+## Quick Start
+
+### Basic PR Review
+
+```yaml
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        with:
+          prompt: |
+            Review this PR for:
+            1. Configuration errors
+            2. Security issues
+            3. Best practices violations
+            4. Breaking changes
+          provider: anthropic
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          post-comment: true
+```
+
+## Action Inputs
+
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `prompt` | The prompt or command to send to the AI | ✅ Yes | - |
+| `provider` | AI provider: `anthropic`, `openai`, `gemini`, `grok`, `bedrock`, `azureopenai`, `ollama` | No | From atmos.yaml |
+| `model` | AI model to use | No | From atmos.yaml |
+| `api-key` | API key for the AI provider (from secrets) | No | - |
+| `format` | Output format: `json`, `text`, `markdown` | No | `json` |
+| `post-comment` | Post AI response as PR comment | No | `false` |
+| `fail-on-error` | Fail workflow if AI execution fails | No | `true` |
+| `atmos-version` | Atmos version to install | No | `latest` |
+| `working-directory` | Directory where atmos.yaml is located | No | `.` |
+| `session` | Session name for multi-turn conversations | No | - |
+| `token` | GitHub token for PR comments | No | `${{ github.token }}` |
+| `comment-header` | Header text for PR comments | No | `🤖 Atmos AI Analysis` |
+
+## Action Outputs
+
+| Output | Description |
+|--------|-------------|
+| `response` | AI response text |
+| `success` | Whether execution succeeded (`true`/`false`) |
+| `tool-calls` | Number of tool calls executed |
+| `tokens-used` | Total tokens used |
+| `cached-tokens` | Number of cached tokens used |
+| `exit-code` | Exit code (0=success, 1=AI error, 2=tool error) |
+
+## Use Cases
+
+### 1. Automated PR Reviews
+
+Catch configuration errors and security issues before merge:
+
+<File title=".github/workflows/ai-pr-review.yml">
+```yaml
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'stacks/**'
+      - 'components/**'
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        with:
+          prompt: |
+            Review this PR for:
+            1. **Configuration Errors**
+               - Syntax errors
+               - Required fields
+               - Undefined variables
+
+            2. **Security Issues**
+               - Exposed secrets
+               - Overly permissive policies
+               - Unencrypted resources
+
+            3. **Best Practices**
+               - Naming conventions
+               - Tagging standards
+               - Component structure
+
+            4. **Breaking Changes**
+               - Resource replacements
+               - Destructive changes
+
+            Provide summary with severity levels (CRITICAL, WARNING, INFO).
+          provider: anthropic
+          model: claude-sonnet-4-20250514
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          post-comment: true
+          comment-header: '🔍 AI Code Review'
+```
+</File>
+
+### 2. Security Scanning
+
+Perform daily security audits:
+
+<File title=".github/workflows/security-scan.yml">
+```yaml
+name: Security Scan
+
+on:
+  pull_request:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        id: scan
+        with:
+          prompt: |
+            Perform security audit:
+            - No hardcoded secrets
+            - IAM follows least privilege
+            - Network security properly configured
+            - Encryption at rest/transit enabled
+            - Logging and monitoring configured
+
+            Output: JSON with findings by severity.
+          provider: anthropic
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          format: json
+          post-comment: ${{ github.event_name == 'pull_request' }}
+
+      - name: Fail on critical findings
+        run: |
+          if echo '${{ steps.scan.outputs.response }}' | grep -q "CRITICAL"; then
+            echo "::error::Critical security issues found!"
+            exit 1
+          fi
+```
+</File>
+
+### 3. Cost Analysis
+
+Analyze cost impact of infrastructure changes:
+
+<File title=".github/workflows/cost-analysis.yml">
+```yaml
+name: Cost Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'stacks/**'
+      - 'components/terraform/**'
+
+jobs:
+  cost-analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        with:
+          prompt: |
+            Analyze cost impact:
+            1. New resources and monthly costs
+            2. Resource scaling changes
+            3. Expensive services (NAT, ALB, RDS)
+            4. Cost optimization opportunities
+
+            Estimate monthly cost change and flag >$1000/month as HIGH COST.
+          provider: anthropic
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          post-comment: true
+          comment-header: '💰 Cost Analysis'
+```
+</File>
+
+### 4. Multi-Step Analysis with Sessions
+
+Use sessions for complex, multi-turn analysis:
+
+<File title=".github/workflows/detailed-analysis.yml">
+```yaml
+name: Detailed Analysis
+
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initial Review
+        uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        with:
+          prompt: "Review all stack configuration changes"
+          session: pr-${{ github.event.pull_request.number }}
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          post-comment: false
+
+      - name: Security Deep Dive
+        uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        with:
+          prompt: "Based on the previous review, perform detailed security analysis"
+          session: pr-${{ github.event.pull_request.number }}
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          post-comment: true
+```
+</File>
+
+## Configuration
+
+### Setup API Keys
+
+Store AI provider API keys as GitHub secrets:
+
+1. Go to **Settings** → **Secrets and variables** → **Actions**
+2. Click **New repository secret**
+3. Add your provider's API key:
+   - `ANTHROPIC_API_KEY`
+   - `OPENAI_API_KEY`
+   - `GEMINI_API_KEY`
+   - `XAI_API_KEY` (for Grok)
+   - For Bedrock: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+   - For Azure: `AZURE_OPENAI_API_KEY`
+
+### Configure Atmos AI
+
+Ensure `atmos.yaml` has AI configured:
+
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-20250514"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+```
+
+## Advanced Usage
+
+### Use with Multiple Providers
+
+Run analysis with multiple AI providers:
+
+```yaml
+jobs:
+  multi-provider-review:
+    strategy:
+      matrix:
+        provider: [anthropic, openai, gemini]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        with:
+          prompt: "Review infrastructure changes"
+          provider: ${{ matrix.provider }}
+          api-key: ${{ secrets[format('{0}_API_KEY', matrix.provider)] }}
+          comment-header: '🤖 ${{ matrix.provider }} Analysis'
+          post-comment: true
+```
+
+### Using Outputs
+
+Access AI analysis results in subsequent steps:
+
+```yaml
+- name: AI Analysis
+  id: analysis
+  uses: cloudposse/atmos/.github/actions/atmos-ai@main
+  with:
+    prompt: "Analyze configuration"
+    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+- name: Process Results
+  run: |
+    echo "Success: ${{ steps.analysis.outputs.success }}"
+    echo "Response: ${{ steps.analysis.outputs.response }}"
+    echo "Tokens Used: ${{ steps.analysis.outputs.tokens-used }}"
+    echo "Cached: ${{ steps.analysis.outputs.cached-tokens }}"
+```
+
+### Conditional Execution
+
+Only run on specific changes:
+
+```yaml
+on:
+  pull_request:
+    paths:
+      - 'stacks/**'
+      - 'components/terraform/**'
+      - 'atmos.yaml'
+```
+
+## Cost Optimization
+
+The action automatically benefits from token caching:
+
+- **Anthropic**: 90% savings on cached tokens
+- **OpenAI**: 50% savings on cached tokens
+- **Gemini**: Free cached tokens
+- **Grok**: 75% savings on cached tokens
+
+Cached tokens are reported in outputs and PR comments.
+
+## Examples
+
+The Atmos repository includes complete example workflows:
+
+- [PR Review Example](https://github.com/cloudposse/atmos/tree/main/.github/workflows/examples/atmos-ai-pr-review.yml)
+- [Security Scan Example](https://github.com/cloudposse/atmos/tree/main/.github/workflows/examples/atmos-ai-security-scan.yml)
+- [Cost Analysis Example](https://github.com/cloudposse/atmos/tree/main/.github/workflows/examples/atmos-ai-cost-analysis.yml)
+
+## Troubleshooting
+
+### API Key Issues
+
+**Problem**: "API key not found" error
+
+**Solution**:
+- Verify secret name matches the action input
+- Check secret value is correct
+- Ensure provider is enabled in `atmos.yaml`
+
+### PR Comments Not Posted
+
+**Problem**: AI analysis runs but no PR comment appears
+
+**Solution**:
+- Set `post-comment: true`
+- Ensure workflow has `pull-requests: write` permission
+- Verify running on `pull_request` event
+
+### High Token Usage
+
+**Problem**: Token usage exceeds budget
+
+**Solution**:
+- Enable token caching in `atmos.yaml`
+- Use more efficient prompts
+- Choose appropriate models (Haiku for simple tasks)
+- Set token limits in provider config
+
+## Related Documentation
+
+- [Atmos AI Overview](/ai)
+- [Atmos AI Configuration](/ai/configuration)
+- [Atmos AI Providers](/ai/providers)
+- [Atmos AI CLI Reference](/cli/commands/ai)
+- [GitHub Actions Examples](https://github.com/cloudposse/atmos/tree/main/.github/workflows/examples)
+
+## Support
+
+- [GitHub Issues](https://github.com/cloudposse/atmos/issues)
+- [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
+- [Cloud Posse Slack](https://slack.cloudposse.com)

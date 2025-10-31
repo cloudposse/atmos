@@ -886,6 +886,99 @@ atmos ai sessions clean --older-than 7d
 
 Learn more: [Sessions Documentation](/cli/commands/ai/sessions)
 
+### GitHub Actions Integration
+
+Automate infrastructure analysis, PR reviews, and security scans directly in your CI/CD pipelines with the official Atmos AI GitHub Action.
+
+**Why GitHub Actions?**
+- Automated PR reviews on every pull request
+- Continuous security scanning
+- Cost impact analysis
+- Configuration validation before merge
+- Team-wide visibility via PR comments
+
+**Quick Start:**
+```yaml
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        with:
+          prompt: |
+            Review this PR for:
+            1. Configuration errors
+            2. Security issues
+            3. Best practices violations
+            4. Breaking changes
+          provider: anthropic
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          post-comment: true
+```
+
+**Use Cases:**
+- **PR Reviews** - Catch issues before merge with AI-powered analysis
+- **Security Scans** - Daily automated security audits
+- **Cost Analysis** - Estimate cost impact of infrastructure changes
+- **Compliance Checks** - Validate against company policies
+
+**Key Features:**
+- ✅ Works with all 7 AI providers
+- ✅ Posts analysis as PR comments
+- ✅ JSON output for automation
+- ✅ Session support for multi-turn analysis
+- ✅ Token usage tracking
+- ✅ Automatic Atmos installation
+- ✅ Configurable failure behavior
+
+**Example PR Comment:**
+```
+🤖 Atmos AI Code Review
+
+### AI Response
+
+Configuration looks good overall. Found 2 warnings:
+
+WARNING: Stack prod-east-vpc uses outdated instance types (t2.micro)
+  Recommendation: Upgrade to t3.micro for better performance/cost
+
+WARNING: Missing required tags on 3 resources
+  Required tags: Environment, Owner, CostCenter
+
+📊 Execution Details
+| Metric | Value |
+|--------|-------|
+| Status | ✅ Success |
+| Tool Calls | 5 |
+| Tokens Used | 1,234 |
+| Cached Tokens | 890 (72%) |
+```
+
+**Advanced: Multi-Provider Analysis**
+```yaml
+strategy:
+  matrix:
+    provider: [anthropic, openai, gemini]
+steps:
+  - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+    with:
+      provider: ${{ matrix.provider }}
+      prompt: "Review infrastructure changes"
+```
+
+**Cost Optimization:**
+The action automatically benefits from token caching, reducing costs by 50-90% depending on the provider.
+
+Learn more: [GitHub Actions Integration](/integrations/github-actions/atmos-ai)
+
 ### Agent Marketplace (Coming Soon)
 
 Install community-created specialized agents:
@@ -985,16 +1078,16 @@ We're continuously improving Atmos AI. Recent completions and upcoming features:
 - ✅ **Stdin Support** - Shell integration and piping
 - ✅ **Token Caching (Prompt Caching)** - Save up to 90% on API costs with automatic caching
 - ✅ **Conversation Checkpointing** - Export/import sessions for team collaboration and backup
+- ✅ **GitHub Actions Integration** - Official action for automated PR reviews and CI/CD workflows
 
 ### Short-term (Next 3 Months)
-- **GitHub Actions Integration** - Official action for PR reviews and validation
+- **Directory Scoping** - Auto-discovery with .gitignore support
 - **Agent Marketplace** - Install community agents
 - **Enhanced LSP** - More language servers (HCL, JSON Schema)
 - **Advanced Analytics** - Token usage tracking, cost analysis
 - **Auto-Fix Suggestions** - AI-powered configuration fixes
 
 ### Medium-term (3-6 Months)
-- **Directory Scoping** - Auto-discovery with .gitignore support
 - **Multi-Agent Workflows** - Agent delegation and collaboration
 - **Enhanced Memory** - Automatic memory updates from conversations
 - **IDE Plugins** - Native VSCode/JetBrains integration

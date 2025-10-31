@@ -19,6 +19,7 @@ Atmos AI is an intelligent assistant integrated directly into Atmos CLI, designe
 - **7 AI Providers** - Anthropic, OpenAI, Google Gemini, xAI Grok, Ollama, AWS Bedrock, Azure OpenAI
 - **Session Management** - SQLite-backed persistence with full CRUD operations
 - **Conversation Checkpointing** - Export/import sessions for team collaboration and backup
+- **GitHub Actions Integration** - Automated PR reviews, security scans, and cost analysis in CI/CD
 - **Project Memory** - ATMOS.md for persistent context across sessions
 - **Tool Execution** - 19 tools with granular permission system
 - **Agent System** - 5 built-in specialized agents + marketplace (production ready)
@@ -1546,6 +1547,121 @@ atmos ai sessions import session.json --overwrite
 - CLI commands: `website/docs/cli/commands/ai/sessions.mdx`
 - Implementation: `pkg/ai/session/{checkpoint.go,export.go,import.go}`
 - Tests: `pkg/ai/session/checkpoint_test.go` (comprehensive coverage)
+
+**GitHub Actions Integration** - *Completed: October 2025*
+- **Purpose:** Automate infrastructure analysis, PR reviews, security scans, and cost analysis in CI/CD pipelines
+- **Action:** `.github/actions/atmos-ai/action.yml`
+- **Features:** Automated PR reviews, security scanning, cost analysis, compliance checks
+- **Providers:** Works with all 7 AI providers
+
+**Implementation:**
+- Composite GitHub Action with automatic Atmos installation
+- Supports all 7 AI providers (Anthropic, OpenAI, Gemini, Grok, Bedrock, Azure OpenAI, Ollama)
+- Posts results as PR comments with detailed analysis
+- JSON output with structured data (response, tool calls, tokens, exit code)
+- Configurable failure behavior (`fail-on-error`)
+- Session support for multi-turn analysis
+- Token usage tracking and caching metrics
+
+**Action Inputs:**
+```yaml
+- prompt: AI command/question (required)
+- provider: AI provider (optional, from atmos.yaml)
+- model: AI model (optional, from atmos.yaml)
+- api-key: API key from secrets
+- format: json | text | markdown (default: json)
+- post-comment: Post as PR comment (default: false)
+- fail-on-error: Fail on errors (default: true)
+- atmos-version: Atmos version (default: latest)
+- working-directory: Project directory (default: .)
+- session: Session name for multi-turn
+- token: GitHub token for comments
+- comment-header: PR comment header
+```
+
+**Action Outputs:**
+```yaml
+- response: AI response text
+- success: Execution success (true/false)
+- tool-calls: Number of tool calls
+- tokens-used: Total tokens
+- cached-tokens: Cached tokens
+- exit-code: Exit code (0/1/2)
+```
+
+**Use Cases:**
+- **Automated PR Reviews:** Review every PR for configuration errors, security issues, best practices
+- **Security Scanning:** Daily security audits with findings posted as issues
+- **Cost Analysis:** Estimate cost impact of infrastructure changes
+- **Compliance Checks:** Validate against company policies before merge
+- **Multi-Provider Analysis:** Run analysis with multiple AI providers for comparison
+
+**Example Workflows:**
+```yaml
+# PR Review
+name: AI PR Review
+on:
+  pull_request:
+    types: [opened, synchronize]
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        with:
+          prompt: "Review for errors, security issues, and best practices"
+          provider: anthropic
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          post-comment: true
+
+# Security Scan
+name: Security Scan
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        with:
+          prompt: "Perform comprehensive security audit"
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          format: json
+
+# Cost Analysis
+name: Cost Analysis
+on:
+  pull_request:
+    paths: ['stacks/**', 'components/**']
+jobs:
+  cost:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        with:
+          prompt: "Analyze cost impact and flag expensive changes"
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          post-comment: true
+          comment-header: '💰 Cost Analysis'
+```
+
+**Benefits:**
+- ✅ Automated PR reviews catch issues before merge
+- ✅ Continuous security scanning
+- ✅ Cost visibility and optimization
+- ✅ Team-wide visibility via PR comments
+- ✅ Multi-provider support for flexibility
+- ✅ Token caching for cost optimization
+- ✅ No manual Atmos setup required
+
+**Documentation:**
+- Action README: `.github/actions/atmos-ai/README.md`
+- Website docs: `website/docs/integrations/github-actions/atmos-ai.mdx`
+- Example workflows: `.github/workflows/examples/`
 
 ---
 

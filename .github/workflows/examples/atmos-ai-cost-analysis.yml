@@ -1,0 +1,134 @@
+# Example: Cost Analysis with Atmos AI
+#
+# This workflow demonstrates how to use Atmos AI to analyze
+# infrastructure costs and flag expensive changes.
+#
+# To use this workflow:
+# 1. Copy to .github/workflows/ (remove the 'examples/' directory)
+# 2. Add your AI provider API key as a GitHub secret
+# 3. Customize cost thresholds for your organization
+
+name: Atmos AI Cost Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'stacks/**'
+      - 'components/terraform/**'
+
+jobs:
+  cost-analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+        with:
+          files: |
+            stacks/**
+            components/terraform/**
+
+      - name: Cost Analysis
+        id: cost
+        uses: cloudposse/atmos/.github/actions/atmos-ai@main
+        with:
+          prompt: |
+            Analyze the cost impact of these infrastructure changes:
+
+            Changed files:
+            ${{ steps.changed-files.outputs.all_changed_files }}
+
+            Please provide:
+
+            1. **New Resources**
+               - List all new resources being added
+               - Estimate monthly cost for each
+               - Flag resources with high ongoing costs
+
+            2. **Modified Resources**
+               - Identify scaling changes (instance types, counts, sizes)
+               - Estimate cost delta (increase/decrease)
+
+            3. **Expensive Services**
+               - NAT Gateways
+               - Load Balancers
+               - Large EC2 instances
+               - RDS instances
+               - Data transfer
+               - Storage volumes
+
+            4. **Cost Optimization Opportunities**
+               - Reserved instances candidates
+               - Spot instance opportunities
+               - Storage class optimizations
+               - Unused resources
+
+            5. **Total Impact**
+               - Estimated monthly cost change
+               - Annual cost projection
+               - Cost vs. benefit analysis
+
+            Provide estimates in USD and flag changes >$1000/month as HIGH COST.
+
+          provider: anthropic
+          model: claude-sonnet-4-20250514
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          format: json
+          post-comment: true
+          fail-on-error: false
+          comment-header: '💰 Cost Impact Analysis'
+
+      - name: Check for high-cost changes
+        id: check-cost
+        run: |
+          RESPONSE='${{ steps.cost.outputs.response }}'
+
+          # Check if response mentions high cost
+          if echo "$RESPONSE" | grep -i "HIGH COST" > /dev/null; then
+            echo "high-cost=true" >> $GITHUB_OUTPUT
+            echo "::warning::This PR includes high-cost infrastructure changes"
+          else
+            echo "high-cost=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Request approval for high-cost changes
+        if: steps.check-cost.outputs.high-cost == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `⚠️ **High-Cost Change Detected**
+
+            This PR includes infrastructure changes that may significantly impact monthly costs.
+
+            **Action Required:**
+            - [ ] Review cost analysis above
+            - [ ] Confirm cost increase is justified
+            - [ ] Obtain approval from infrastructure team
+            - [ ] Consider reserved instances or cost optimization
+
+            /cc @infrastructure-team`
+            });
+
+      - name: Add cost-review label
+        if: steps.check-cost.outputs.high-cost == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['cost-review-required']
+            });
