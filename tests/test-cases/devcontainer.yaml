@@ -1,0 +1,137 @@
+tests:
+  # List devcontainers
+  - name: "atmos devcontainer list"
+    description: "List all configured devcontainers"
+    enabled: true
+    workdir: "fixtures/scenarios/devcontainer-basic"
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "list"
+    short: false  # Not a short test - requires container runtime
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 0
+      stdout:
+        - "test-alpine"
+        - "alpine:latest"
+
+  # Show devcontainer config
+  - name: "atmos devcontainer config test-alpine"
+    description: "Show devcontainer configuration"
+    enabled: true
+    workdir: "fixtures/scenarios/devcontainer-basic"
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "config"
+      - "test-alpine"
+    short: false
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Name: test-alpine"
+        - "Image: alpine:latest"
+        - "Remote User: root"
+        - "TEST_VAR: test-value"
+
+  # Start devcontainer (will create and start)
+  - name: "atmos devcontainer start test-alpine"
+    description: "Start a devcontainer (creates if needed)"
+    enabled: true
+    workdir: "fixtures/scenarios/devcontainer-basic"
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "start"
+      - "test-alpine"
+      - "--instance"
+      - "test-instance"
+    short: false
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 0
+      timeout: "2m"  # Container operations can take time
+      stderr:
+        - "Container.*atmos-devcontainer-test-alpine-test-instance.*started"
+
+  # Stop devcontainer
+  - name: "atmos devcontainer stop test-alpine"
+    description: "Stop a running devcontainer"
+    enabled: true
+    workdir: "fixtures/scenarios/devcontainer-basic"
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "stop"
+      - "test-alpine"
+      - "--instance"
+      - "test-instance"
+    short: false
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 0
+      timeout: "1m"
+      stderr:
+        - "Stopping container"
+
+  # Show devcontainer logs
+  - name: "atmos devcontainer logs test-alpine"
+    description: "Show devcontainer logs"
+    enabled: true
+    workdir: "fixtures/scenarios/devcontainer-basic"
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "logs"
+      - "test-alpine"
+      - "--instance"
+      - "test-instance"
+      - "--tail"
+      - "10"
+    short: false
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 0
+      timeout: "30s"
+
+  # Error case: non-existent devcontainer
+  - name: "atmos devcontainer start nonexistent"
+    description: "Error when starting non-existent devcontainer"
+    enabled: true
+    workdir: "fixtures/scenarios/devcontainer-basic"
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "start"
+      - "nonexistent"
+    short: false
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 1
+      stderr:
+        - "devcontainer.*not found|does not exist"
+
+  # List with no devcontainers configured
+  - name: "atmos devcontainer list (no devcontainers)"
+    description: "List when no devcontainers are configured"
+    enabled: true
+    workdir: "../fixtures/scenarios/atmos-configuration"  # Has no devcontainers
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "list"
+    short: false
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 0
+      stdout:
+        - "No devcontainers configured"
