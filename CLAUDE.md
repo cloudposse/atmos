@@ -369,6 +369,43 @@ Reply to threads: Use `gh api graphql` with `addPullRequestReviewThreadReply`
 ### Git (MANDATORY)
 Don't commit: todos, research, scratch files. Do commit: code, tests, requested docs, schemas. Update `.gitignore` for patterns only.
 
+### Scratch Folder Convention (MANDATORY)
+**ALL temporary, working, and non-deliverable files MUST go in `.scratch/`:**
+
+```
+.scratch/               # Temporary working files (gitignored except README)
+├── README.md          # Documents scratch folder purpose (committed)
+├── analysis.md        # Temporary analysis (not committed)
+├── planning.md        # Working notes (not committed)
+└── research.md        # Investigation findings (not committed)
+```
+
+**What goes in `.scratch/`:**
+- ✅ Planning documents and analysis
+- ✅ Working notes during development
+- ✅ Research and investigation findings
+- ✅ Draft documents (before moving to permanent location)
+- ✅ Temporary output files
+- ✅ Any file not part of the final deliverable
+
+**What does NOT go in `.scratch/`:**
+- ❌ Code (goes in appropriate package directories)
+- ❌ Tests (goes with code in `*_test.go`)
+- ❌ PRDs (goes in `docs/prd/`)
+- ❌ Documentation (goes in `website/docs/`)
+- ❌ Examples (goes in `examples/`)
+- ❌ Agent definitions (goes in `.claude/agents/`)
+
+**NEVER write temporary files across the filesystem.** All temporary work goes in `.scratch/`.
+
+**Migration Path:**
+When content in `.scratch/` becomes permanent:
+- PRDs → `docs/prd/`
+- Documentation → `website/docs/`
+- Examples → `examples/`
+- Agent definitions → `.claude/agents/`
+- Code → appropriate package directories
+
 ### Test Coverage (MANDATORY)
 80% minimum (CodeCov enforced). All features need tests. `make testacc-coverage` for reports.
 
