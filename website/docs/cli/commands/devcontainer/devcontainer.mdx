@@ -16,6 +16,68 @@ Devcontainers provide isolated, reproducible development environments with all r
 
 <Screengrab title="atmos devcontainer --help" slug="atmos-devcontainer--help" />
 
+## Prerequisites
+
+### Container Runtime Required
+
+Atmos devcontainers require either **Docker** or **Podman** to be installed and running on your system.
+
+#### Docker
+
+**Installation:**
+- **macOS**: [Docker Desktop for Mac](https://docs.docker.com/desktop/install/mac-install/)
+- **Windows**: [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/)
+- **Linux**: [Docker Engine](https://docs.docker.com/engine/install/)
+
+**Starting Docker:**
+```bash
+# macOS/Windows: Start Docker Desktop application
+# Linux:
+sudo systemctl start docker
+sudo systemctl enable docker  # Enable on boot
+```
+
+#### Podman (Recommended for Linux)
+
+**Installation:**
+- **macOS**: `brew install podman` ([Podman Desktop](https://podman-desktop.io/))
+- **Windows**: [Podman Desktop for Windows](https://podman.io/docs/installation#windows)
+- **Linux**:
+  - **Ubuntu/Debian**: `sudo apt-get install podman`
+  - **Fedora/RHEL**: `sudo dnf install podman`
+  - **Arch**: `sudo pacman -S podman`
+
+**Starting Podman:**
+```bash
+# macOS/Windows with Podman Desktop
+podman machine init
+podman machine start
+
+# Linux (rootless mode - no daemon required)
+# Podman runs without a daemon on Linux
+```
+
+#### Verification
+
+Verify your container runtime is working:
+
+```bash
+# For Docker:
+docker --version
+docker ps
+
+# For Podman:
+podman --version
+podman ps
+```
+
+### Runtime Selection
+
+Atmos automatically detects the available container runtime:
+1. Checks for Docker first
+2. Falls back to Podman if Docker is unavailable
+3. You can override with `ATMOS_CONTAINER_RUNTIME=docker` or `ATMOS_CONTAINER_RUNTIME=podman`
+
 ## Usage
 
 ```shell
