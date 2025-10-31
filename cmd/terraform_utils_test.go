@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -169,16 +168,7 @@ func TestTerraformIdentityFlagHandling(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Set up environment variable if specified.
 			if tc.envVar != "" {
-				originalValue := os.Getenv(tc.envVar)
-				err := os.Setenv(tc.envVar, tc.envValue)
-				assert.NoError(t, err)
-				defer func() {
-					if originalValue != "" {
-						_ = os.Setenv(tc.envVar, originalValue)
-					} else {
-						_ = os.Unsetenv(tc.envVar)
-					}
-				}()
+				t.Setenv(tc.envVar, tc.envValue)
 			}
 
 			// Create a minimal command for testing.

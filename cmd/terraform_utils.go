@@ -72,68 +72,17 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.Components = components
 	info.DryRun = dryRun
 
-	// DEBUG: Log identity value from ProcessCommandLineArgs.
-	log.Info("Identity from ProcessCommandLineArgs", "identity", info.Identity)
-
-	// Handle --identity flag if explicitly provided.
-	// Note: ProcessCommandLineArgs already sets info.Identity from env vars and args,
-	// so we only need to handle the special case where --identity is provided without a value.
-	log.Info("DEBUG: Checking identity flag", "changed", flags.Changed(IdentityFlagName))
-	if flags.Changed(IdentityFlagName) {
-		// Flag was explicitly provided on command line (either with or without value).
-		identityFlag, err := flags.GetString(IdentityFlagName)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-
-		log.Info("DEBUG: Identity flag value from Cobra", "identityFlag", identityFlag, "selectValue", IdentityFlagSelectValue)
-
-		// Check if user wants to interactively select identity.
-		forceSelect := identityFlag == IdentityFlagSelectValue
-
-		log.Info("DEBUG: Force select decision", "forceSelect", forceSelect)
-
-		if forceSelect {
-			// Guard: Fail fast in CI/non-TTY environments instead of hanging.
-			// Interactive selector requires both stdin (for input) and stdout (for TUI rendering).
-			if !term.IsTTYSupportForStdin() || !term.IsTTYSupportForStdout() {
-				errUtils.CheckErrorPrintAndExit(
-					fmt.Errorf("%w: interactive identity selection requires a TTY", errUtils.ErrDefaultIdentity),
-					"",
-					"",
-				)
-			}
-
-			// Initialize CLI config to get auth configuration.
-			// Use false to skip stack processing - only auth config is needed.
-			atmosConfig, err := cfg.InitCliConfig(info, false)
-			if err != nil {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrInitializeCLIConfig, err), "", "")
-			}
-
-			// Check if auth is configured. If not, skip identity selection.
-			if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
-				log.Debug("Identity selection skipped: no authentication configured")
-				// Continue without setting identity - this is not an error
-			} else {
-				// Create auth manager to enable identity selection.
-				authManager, err := createAuthManager(&atmosConfig.Auth)
-				if err != nil {
-					errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
-				}
-
-				// Get default identity with forced interactive selection.
-				selectedIdentity, err := authManager.GetDefaultIdentity(true)
-				if err != nil {
-					errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrDefaultIdentity, err), "", "")
-				}
-
-				info.Identity = selectedIdentity
-			}
-		} else {
-			// Flag was explicitly provided with a value - override ProcessCommandLineArgs setting.
-			info.Identity = identityFlag
-		}
+	// Handle --identity flag for interactive selection.
+	// ProcessCommandLineArgs already parsed the identity value correctly via processArgsAndFlags.
+	// We only need to handle the special case where --identity was used without a value (interactive selection).
+	// Note: We cannot use flags.GetString("identity") here because Cobra's NoOptDefVal behavior
+	// with positional args causes it to return "__SELECT__" even when a value was provided
+	// (e.g., "atmos terraform plan vpc --identity asd" treats "asd" as positional, not flag value).
+	if info.Identity == cfg.IdentityFlagSelectValue {
+		handleInteractiveIdentitySelection(&info)
 	}
-	// If flag was not provided, info.Identity already has the correct value from ProcessCommandLineArgs.
+	// Otherwise, info.Identity already has the correct value from ProcessCommandLineArgs
+	// (either from --identity <value>, ATMOS_IDENTITY env var, or empty string).
 	// Check Terraform Single-Component and Multi-Component flags
 	err = checkTerraformFlags(&info)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -210,4 +159,46 @@ func checkTerraformFlags(info *schema.ConfigAndStacksInfo) error {
 	}
 
 	return nil
+}
+
+// handleInteractiveIdentitySelection handles the case where --identity was used without a value.
+func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
+	// Guard: Fail fast in CI/non-TTY environments instead of hanging.
+	// Interactive selector requires both stdin (for input) and stdout (for TUI rendering).
+	if !term.IsTTYSupportForStdin() || !term.IsTTYSupportForStdout() {
+		errUtils.CheckErrorPrintAndExit(
+			fmt.Errorf("%w: interactive identity selection requires a TTY", errUtils.ErrDefaultIdentity),
+			"",
+			"",
+		)
+	}
+
+	// Initialize CLI config to get auth configuration.
+	// Use false to skip stack processing - only auth config is needed.
+	atmosConfig, err := cfg.InitCliConfig(*info, false)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrInitializeCLIConfig, err), "", "")
+	}
+
+	// Check if auth is configured. If not, skip identity selection.
+	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
+		log.Debug("Identity selection skipped: no authentication configured")
+		// Continue without setting identity - this is not an error.
+		info.Identity = ""
+		return
+	}
+
+	// Create auth manager to enable identity selection.
+	authManager, err := createAuthManager(&atmosConfig.Auth)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
+	}
+
+	// Get default identity with forced interactive selection.
+	selectedIdentity, err := authManager.GetDefaultIdentity(true)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrDefaultIdentity, err), "", "")
+	}
+
+	info.Identity = selectedIdentity
 }

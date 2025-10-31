@@ -1006,7 +1006,7 @@ func (m *manager) GetEnvironmentVariables(identityName string) (map[string]strin
 	// Get environment variables from the identity.
 	env, err := identity.Environment()
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get environment variables: %w", err)
+		return nil, fmt.Errorf("%w: failed to get environment variables: %w", errUtils.ErrAuthManager, err)
 	}
 
 	return env, nil
