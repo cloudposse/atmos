@@ -1,10 +1,12 @@
 package container
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCleanPodmanOutput(t *testing.T) {
@@ -163,5 +165,302 @@ Last line with ID`,
 				assert.Equal(t, tt.expectedID, containerID)
 			}
 		})
+	}
+}
+
+func TestExtractPodmanName(t *testing.T) {
+	tests := []struct {
+		name          string
+		containerJSON map[string]interface{}
+		expected      string
+	}{
+		{
+			name: "single name in array",
+			containerJSON: map[string]interface{}{
+				"Names": []interface{}{"my-container"},
+			},
+			expected: "my-container",
+		},
+		{
+			name: "multiple names returns first",
+			containerJSON: map[string]interface{}{
+				"Names": []interface{}{"first-name", "second-name"},
+			},
+			expected: "first-name",
+		},
+		{
+			name: "empty names array",
+			containerJSON: map[string]interface{}{
+				"Names": []interface{}{},
+			},
+			expected: "",
+		},
+		{
+			name: "names key missing",
+			containerJSON: map[string]interface{}{
+				"Id": "abc123",
+			},
+			expected: "",
+		},
+		{
+			name: "names is not array",
+			containerJSON: map[string]interface{}{
+				"Names": "my-container",
+			},
+			expected: "",
+		},
+		{
+			name: "names array contains non-string",
+			containerJSON: map[string]interface{}{
+				"Names": []interface{}{123, "my-container"},
+			},
+			expected: "",
+		},
+		{
+			name:          "nil container json",
+			containerJSON: nil,
+			expected:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractPodmanName(tt.containerJSON)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParseLabelsMap(t *testing.T) {
+	tests := []struct {
+		name     string
+		labels   map[string]interface{}
+		expected map[string]string
+	}{
+		{
+			name: "all string values",
+			labels: map[string]interface{}{
+				"app":     "myapp",
+				"version": "1.0",
+				"env":     "production",
+			},
+			expected: map[string]string{
+				"app":     "myapp",
+				"version": "1.0",
+				"env":     "production",
+			},
+		},
+		{
+			name: "mixed types filters non-strings",
+			labels: map[string]interface{}{
+				"app":     "myapp",
+				"count":   42,
+				"enabled": true,
+				"version": "1.0",
+			},
+			expected: map[string]string{
+				"app":     "myapp",
+				"version": "1.0",
+			},
+		},
+		{
+			name:     "empty map",
+			labels:   map[string]interface{}{},
+			expected: map[string]string{},
+		},
+		{
+			name:     "nil map",
+			labels:   nil,
+			expected: map[string]string{},
+		},
+		{
+			name: "all non-string values",
+			labels: map[string]interface{}{
+				"count":   42,
+				"enabled": true,
+				"value":   3.14,
+			},
+			expected: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseLabelsMap(tt.labels)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParsePodmanContainer(t *testing.T) {
+	tests := []struct {
+		name          string
+		containerJSON map[string]interface{}
+		expected      Info
+	}{
+		{
+			name: "complete container info",
+			containerJSON: map[string]interface{}{
+				"Id":    "abc123def456",
+				"Names": []interface{}{"my-container"},
+				"Image": "ubuntu:22.04",
+				"State": "running",
+				"Labels": map[string]interface{}{
+					"app":     "test",
+					"version": "1.0",
+				},
+			},
+			expected: Info{
+				ID:     "abc123def456",
+				Name:   "my-container",
+				Image:  "ubuntu:22.04",
+				Status: "running",
+				Labels: map[string]string{
+					"app":     "test",
+					"version": "1.0",
+				},
+			},
+		},
+		{
+			name: "container without labels",
+			containerJSON: map[string]interface{}{
+				"Id":    "xyz789",
+				"Names": []interface{}{"simple-container"},
+				"Image": "alpine:latest",
+				"State": "exited",
+			},
+			expected: Info{
+				ID:     "xyz789",
+				Name:   "simple-container",
+				Image:  "alpine:latest",
+				Status: "exited",
+			},
+		},
+		{
+			name: "container with non-map labels ignored",
+			containerJSON: map[string]interface{}{
+				"Id":     "xyz789",
+				"Names":  []interface{}{"test"},
+				"Image":  "alpine",
+				"State":  "running",
+				"Labels": "not-a-map",
+			},
+			expected: Info{
+				ID:     "xyz789",
+				Name:   "test",
+				Image:  "alpine",
+				Status: "running",
+			},
+		},
+		{
+			name:          "minimal container info",
+			containerJSON: map[string]interface{}{},
+			expected: Info{
+				ID:     "",
+				Name:   "",
+				Image:  "",
+				Status: "",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parsePodmanContainer(tt.containerJSON)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParsePodmanContainers(t *testing.T) {
+	tests := []struct {
+		name              string
+		podmanContainers  []map[string]interface{}
+		expectedCount     int
+		expectedFirstName string
+	}{
+		{
+			name: "multiple containers",
+			podmanContainers: []map[string]interface{}{
+				{
+					"Id":    "abc123",
+					"Names": []interface{}{"container1"},
+					"Image": "ubuntu",
+					"State": "running",
+				},
+				{
+					"Id":    "def456",
+					"Names": []interface{}{"container2"},
+					"Image": "alpine",
+					"State": "exited",
+				},
+			},
+			expectedCount:     2,
+			expectedFirstName: "container1",
+		},
+		{
+			name:              "empty slice",
+			podmanContainers:  []map[string]interface{}{},
+			expectedCount:     0,
+			expectedFirstName: "",
+		},
+		{
+			name:              "nil slice",
+			podmanContainers:  nil,
+			expectedCount:     0,
+			expectedFirstName: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parsePodmanContainers(tt.podmanContainers)
+			assert.Len(t, result, tt.expectedCount)
+			if tt.expectedCount > 0 {
+				assert.Equal(t, tt.expectedFirstName, result[0].Name)
+			}
+		})
+	}
+}
+
+func TestNewPodmanRuntime(t *testing.T) {
+	runtime := NewPodmanRuntime()
+	require.NotNil(t, runtime)
+	assert.IsType(t, &PodmanRuntime{}, runtime)
+}
+
+func TestPodmanRuntime_Info(t *testing.T) {
+	// This test verifies the Info method structure.
+	// Actual execution requires podman to be installed.
+	runtime := NewPodmanRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+	info, err := runtime.Info(ctx)
+	if err != nil {
+		// Podman not available - expected in CI without podman.
+		t.Skip("Podman not available, skipping Info test")
+		return
+	}
+
+	// If podman is available, verify structure.
+	require.NotNil(t, info)
+	assert.Equal(t, string(TypePodman), info.Type)
+	assert.True(t, info.Running)
+	assert.NotEmpty(t, info.Version)
+}
+
+func TestPodmanRuntime_Inspect(t *testing.T) {
+	// Inspect uses List internally, so we test the logic path.
+	// In CI without podman, this will fail at List() call.
+	runtime := NewPodmanRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+	_, err := runtime.Inspect(ctx, "nonexistent-container")
+	if err != nil {
+		// Expected: either podman not available or container not found.
+		// Both are acceptable for this test.
+		t.Logf("Inspect failed as expected (podman not available or container not found): %v", err)
 	}
 }

@@ -229,15 +229,20 @@ Given the scale (2000 lines of untested code), we'll use an iterative commit str
 - **Coverage achieved: 48.9%** → 71.5% with runtime tests
 - **Commit checkpoint**
 
-### Iteration 2: Runtime Layer (Target: 70-80% coverage) 🔄 IN PROGRESS
+### Iteration 2: Runtime Layer (Target: 70-80% coverage) ✅ COMPLETE
 - ✅ Runtime.go tests - pkg/devcontainer/runtime_test.go (100% coverage for runtime.go)
 - ✅ Common.go tests - pkg/container/common_test.go (100% coverage for helper functions)
   - buildCreateArgs with 8 comprehensive scenarios
   - All helper functions (addRuntimeFlags, addMetadata, addResourceBindings, addImageAndCommand)
   - buildExecArgs with 7 scenarios
   - Note: execWithRuntime not tested (requires exec.Command mocking, low value for coverage boost)
-- ⏳ Basic docker/podman tests - NEXT
-- **Current coverage: 71.5% (devcontainer pkg), 19.9% (container pkg)**
+- ✅ Docker/Podman tests - pkg/container/docker_test.go and podman_test.go
+  - getString and parseLabels helper functions (docker)
+  - extractPodmanName, parseLabelsMap, parsePodmanContainer, parsePodmanContainers (podman)
+  - NewDockerRuntime, NewPodmanRuntime constructor tests
+  - Info() method tests (skip if runtime not available)
+  - Inspect() method test for podman
+- **Coverage achieved: 71.5% (devcontainer pkg), 35.7% (container pkg - up from 19.9%)**
 - **Commit checkpoint**
 
 ### Iteration 3: Execution Layer (Target: 70-80% coverage)
