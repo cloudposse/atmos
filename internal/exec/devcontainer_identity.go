@@ -15,11 +15,20 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/xdg"
+)
+
+const (
+	// XdgDirPermissions is the default permission for XDG directories.
+	xdgDirPermissions = 0o755
 )
 
 // injectIdentityEnvironment injects authenticated identity environment variables into container config.
 // This is provider-agnostic - it works with AWS, Azure, GitHub, GCP, or any auth provider.
+//
+//nolint:revive // Function orchestrates multiple steps but each is clear and necessary
 func injectIdentityEnvironment(ctx context.Context, config *devcontainer.Config, identityName string) error {
 	defer func() {
 		// Use nil for atmosConfig since we're in a utility function.
@@ -66,6 +75,11 @@ func injectIdentityEnvironment(ctx context.Context, config *devcontainer.Config,
 
 	// 6. Convert credential paths to container mounts (provider-agnostic!).
 	if err := addCredentialMounts(config, whoami.Paths); err != nil {
+		return err
+	}
+
+	// 6b. Add Atmos XDG directories as mounts.
+	if err := addAtmosXDGMounts(config); err != nil {
 		return err
 	}
 
@@ -123,6 +137,58 @@ func addCredentialMounts(config *devcontainer.Config, paths []types.Path) error 
 			config.Mounts = []string{}
 		}
 		config.Mounts = append(config.Mounts, mountStr)
+	}
+
+	return nil
+}
+
+// addAtmosXDGMounts adds Atmos XDG directories as mounts to the devcontainer config.
+// This ensures the container can access the host's Atmos cache, config, and data directories.
+func addAtmosXDGMounts(config *devcontainer.Config) error {
+	hostPath, containerPath := parseMountPaths(config.WorkspaceMount, config.WorkspaceFolder)
+
+	// Get the Atmos XDG directories from the host.
+	// We use empty subpath "" to get the base atmos directory.
+	atmosCacheDir, err := xdg.GetXDGCacheDir("", xdgDirPermissions)
+	if err != nil {
+		return fmt.Errorf("failed to get Atmos cache directory: %w", err)
+	}
+
+	atmosConfigDir, err := xdg.GetXDGConfigDir("", xdgDirPermissions)
+	if err != nil {
+		return fmt.Errorf("failed to get Atmos config directory: %w", err)
+	}
+
+	atmosDataDir, err := xdg.GetXDGDataDir("", xdgDirPermissions)
+	if err != nil {
+		return fmt.Errorf("failed to get Atmos data directory: %w", err)
+	}
+
+	// Translate host paths to container paths.
+	userHome, _ := homedir.Dir()
+
+	// Mount each XDG directory as writable.
+	xdgDirs := []struct {
+		hostDir string
+		purpose string
+	}{
+		{atmosCacheDir, "Atmos cache directory (XDG_CACHE_HOME/atmos)"},
+		{atmosConfigDir, "Atmos config directory (XDG_CONFIG_HOME/atmos)"},
+		{atmosDataDir, "Atmos data directory (XDG_DATA_HOME/atmos)"},
+	}
+
+	for _, dir := range xdgDirs {
+		containerMountPath := translatePath(dir.hostDir, hostPath, containerPath, userHome)
+
+		// Build mount string - XDG directories must be writable.
+		mountStr := fmt.Sprintf("type=bind,source=%s,target=%s", dir.hostDir, containerMountPath)
+
+		if config.Mounts == nil {
+			config.Mounts = []string{}
+		}
+		config.Mounts = append(config.Mounts, mountStr)
+
+		log.Debug("Added Atmos XDG mount", "host", dir.hostDir, "container", containerMountPath, "purpose", dir.purpose)
 	}
 
 	return nil
