@@ -15,12 +15,14 @@ import (
 // command flags.
 //
 // Pattern:
-//   atmos <command> <atmos-flags> -- <native-flags>
+//
+//	atmos <command> <atmos-flags> -- <native-flags>
 //
 // Examples:
-//   atmos terraform plan myapp -s dev -- -var foo=bar
-//   atmos auth exec --identity admin -- terraform apply -auto-approve
-//   atmos helmfile apply -s prod -- --set image.tag=v1.0
+//
+//	atmos terraform plan myapp -s dev -- -var foo=bar
+//	atmos auth exec --identity admin -- terraform apply -auto-approve
+//	atmos helmfile apply -s prod -- --set image.tag=v1.0
 type SeparatedCommandArgs struct {
 	// BeforeSeparator contains arguments before the -- marker.
 	// These are processed by Atmos (stack, component, identity, etc.)
@@ -42,9 +44,10 @@ type SeparatedCommandArgs struct {
 // the -- end-of-args pattern.
 //
 // Why we need os.Args:
-//   When DisableFlagParsing=true, Cobra consumes the -- separator and we lose
-//   information about where it was. We need os.Args to find the original position
-//   and extract trailing args correctly.
+//
+//	When DisableFlagParsing=true, Cobra consumes the -- separator and we lose
+//	information about where it was. We need os.Args to find the original position
+//	and extract trailing args correctly.
 //
 // Parameters:
 //   - cmd: The Cobra command (may have DisableFlagParsing=true)
@@ -139,9 +142,10 @@ func (s *SeparatedCommandArgs) GetAfterSeparatorAsString() string {
 // as it ensures argument boundaries and whitespace are preserved when the shell re-parses the string.
 //
 // Example:
-//   args after --: ["echo", "hello  world"]  (note: two spaces)
-//   GetAfterSeparatorAsString():       "echo hello  world"  (when shell re-parses: loses boundary!)
-//   GetAfterSeparatorAsQuotedString(): "echo 'hello  world'" (shell correctly preserves!)
+//
+//	args after --: ["echo", "hello  world"]  (note: two spaces)
+//	GetAfterSeparatorAsString():       "echo hello  world"  (when shell re-parses: loses boundary!)
+//	GetAfterSeparatorAsQuotedString(): "echo 'hello  world'" (shell correctly preserves!)
 func (s *SeparatedCommandArgs) GetAfterSeparatorAsQuotedString() (string, error) {
 	if !s.HasSeparator || len(s.AfterSeparator) == 0 {
 		return "", nil

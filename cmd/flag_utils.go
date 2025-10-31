@@ -9,8 +9,9 @@ import (
 // and arguments after -- are passed through to a subprocess or subcommand.
 //
 // Example: atmos auth exec --identity admin -- terraform apply -auto-approve
-//   BeforeDash: ["--identity", "admin"]  (parsed by Cobra into flags)
-//   AfterDash:  ["terraform", "apply", "-auto-approve"]  (passed to subprocess)
+//
+//	BeforeDash: ["--identity", "admin"]  (parsed by Cobra into flags)
+//	AfterDash:  ["terraform", "apply", "-auto-approve"]  (passed to subprocess)
 type SeparatedArgs struct {
 	// AfterDash contains all arguments after the -- separator.
 	// These are typically passed through to a subprocess or external command.

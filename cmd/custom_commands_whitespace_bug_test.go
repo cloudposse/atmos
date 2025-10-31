@@ -21,7 +21,7 @@ func TestCustomCommands_WhitespaceBug(t *testing.T) {
 	osArgs := []string{"atmos", "mycmd", "run", "--", "echo", "hello  world"}
 
 	// extractTrailingArgs joins with space:
-	trailingArgsSlice := osArgs[4:] // ["echo", "hello  world"]
+	trailingArgsSlice := osArgs[4:]                            // ["echo", "hello  world"]
 	trailingArgsString := strings.Join(trailingArgsSlice, " ") // "echo hello  world"
 
 	assert.Equal(t, "echo hello  world", trailingArgsString, "Join preserves internal whitespace")

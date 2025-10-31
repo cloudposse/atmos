@@ -510,7 +510,6 @@ func executeCustomCommand(
 	}
 }
 
-
 // cloneCommand clones a custom command config into a new struct.
 func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	origJSON, err := json.Marshal(orig)
