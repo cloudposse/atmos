@@ -126,6 +126,8 @@ When new features are implemented:
 ### Follow Atmos Documentation Conventions
 
 - **HTML definition lists** (`<dl>`, `<dt>`, `<dd>`) for arguments, flags, configuration options
+- **Environment variables** (MANDATORY): Document corresponding `ATMOS_` env var for EVERY flag
+- **Configuration precedence**: Flags → Environment variables → Config files → Defaults
 - **Admonitions** (tip, note, warning, danger) sparingly and only when adding genuine value
 - **Clear, descriptive headings** for structure
 - **Code blocks** with appropriate language tags
@@ -247,7 +249,11 @@ atmos command [subcommand] [flags]
 
 <dl>
   <dt>--flag-name</dt>
-  <dd>Description of what this flag does</dd>
+  <dd>
+    Description of what this flag does
+
+    **Environment variable:** `ATMOS_FLAG_NAME`
+  </dd>
 </dl>
 
 ## Examples

@@ -725,53 +725,30 @@ cmd.Flags().StringP("region", "r", "", "Cloud region (AWS, GCP, Azure)")
 
 ### Environment Variables (MANDATORY)
 
-**ALWAYS use `viper.BindEnv()` instead of `os.Getenv()`:**
+**ALWAYS use `viper.BindEnv()` (NEVER `os.Getenv()`):**
 
-✅ **GOOD: Using viper.BindEnv**
 ```go
-import "github.com/spf13/viper"
+// ✅ CORRECT: viper.BindEnv with ATMOS_ prefix (MANDATORY)
+viper.BindEnv("base_path", "ATMOS_BASE_PATH")
+viper.BindEnv("stack", "ATMOS_STACK", "FALLBACK_VAR")  // Multiple env vars
 
-func initConfig() {
-    // Bind environment variables with ATMOS_ prefix
-    viper.BindEnv("base_path", "ATMOS_BASE_PATH")
-    viper.BindEnv("stack", "ATMOS_STACK")
-    viper.BindEnv("logs_level", "ATMOS_LOGS_LEVEL")
-
-    // Now can access via viper
-    basePath := viper.GetString("base_path")
-    stack := viper.GetString("stack")
-}
-
-// Bind flags to config keys
+// Bind flag to same config key
 cmd.Flags().StringP("stack", "s", "", "Stack name")
 viper.BindPFlag("stack", cmd.Flags().Lookup("stack"))
+
+basePath := viper.GetString("base_path")  // Respects precedence
+
+// ❌ WRONG: os.Getenv (forbidden - linter will flag)
+stack := os.Getenv("ATMOS_STACK")
 ```
 
-❌ **BAD: Using os.Getenv (FORBIDDEN)**
-```go
-// NEVER use os.Getenv for new code
-stack := os.Getenv("ATMOS_STACK")  // ❌ Linter will flag this
+**Configuration precedence** (automatic via Viper):
+1. CLI flags → 2. Environment variables → 3. Config files → 4. Defaults
 
-// Why it's bad:
-// - No unified config management
-// - Can't override from config file
-// - No default value handling
-// - Harder to test
-```
-
-**Configuration precedence (Viper handles this automatically):**
-1. CLI flags (highest priority)
-2. Environment variables
-3. Config file values
-4. Default values (lowest priority)
-
-**Why viper.BindEnv is better:**
-- Unified configuration management
-- Automatic precedence handling
-- Config file support
-- Easy to test (can mock viper)
-- Type-safe getters (GetString, GetInt, GetBool)
-- Default value support
+**Environment variable naming** (MANDATORY):
+- Prefix: `ATMOS_` (required for all Atmos env vars)
+- Format: `ATMOS_<FLAG_NAME>` (uppercase, underscores)
+- Example: `--base-path` → `ATMOS_BASE_PATH`
 
 ### Interactive Fallbacks
 

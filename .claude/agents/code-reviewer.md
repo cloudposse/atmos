@@ -637,13 +637,24 @@ make testacc-cover
 
 ### 8. Additional Standards Checks
 
-#### Environment Variables
-```go
-// GOOD: Proper Viper binding with ATMOS_ prefix
-viper.BindEnv("base_path", "ATMOS_BASE_PATH")
+#### Environment Variables (CRITICAL)
+**Check**: Every flag MUST have corresponding environment variable with `ATMOS_` prefix
+**Check**: Configuration precedence MUST be: CLI flags → ENV vars → config files → defaults
 
-// BAD: No ATMOS_ prefix
-viper.BindEnv("base_path", "BASE_PATH")  // ❌
+```go
+// ✅ CORRECT: viper.BindEnv with ATMOS_ prefix
+viper.BindEnv("base_path", "ATMOS_BASE_PATH")
+viper.BindPFlag("base_path", cmd.Flags().Lookup("base-path"))
+
+// ❌ WRONG: No ATMOS_ prefix
+viper.BindEnv("base_path", "BASE_PATH")
+
+// ❌ WRONG: Using os.Getenv (forbidden)
+basePath := os.Getenv("ATMOS_BASE_PATH")
+
+// ❌ WRONG: Missing BindPFlag (breaks precedence)
+viper.BindEnv("base_path", "ATMOS_BASE_PATH")
+// Missing: viper.BindPFlag("base_path", ...)
 ```
 
 #### Logging vs UI
@@ -663,13 +674,36 @@ log.Info("Processing stacks...")  // ❌ Don't use logging for UI
 // pkg/datafetcher/schema/atmos/atmos.json
 ```
 
-#### Cross-Platform Compatibility
+#### Cross-Platform Compatibility (CRITICAL)
+**Check**: All file paths use `filepath` functions (never hardcoded separators)
+**Check**: XDG functions for cache/data (not project files)
+**Check**: Named constants for file permissions (no magic numbers)
+**Check**: Terminal width uses `templates.GetTerminalWidth()` (no hardcoded widths)
+
 ```go
-// GOOD: Cross-platform file paths
+// ✅ CORRECT: filepath functions
 path := filepath.Join("dir", "subdir", "file.txt")
 
-// BAD: Hardcoded separators
-path := "dir/subdir/file.txt"  // ❌ Fails on Windows
+// ❌ WRONG: Hardcoded separators
+path := "dir/subdir/file.txt"  // Fails on Windows
+
+// ✅ CORRECT: XDG for cache
+cacheDir, _ := xdg.GetXDGCacheDir("providers", 0755)
+
+// ❌ WRONG: XDG for project files
+configDir, _ := xdg.GetXDGConfigDir("stacks", 0755)  // stacks are project-specific!
+
+// ✅ CORRECT: Named constants
+os.WriteFile(file, data, FilePermissionUserReadWrite)
+
+// ❌ WRONG: Magic numbers
+os.WriteFile(file, data, 0600)
+
+// ✅ CORRECT: Dynamic terminal width
+termWidth := templates.GetTerminalWidth()
+
+// ❌ WRONG: Hardcoded width
+const termWidth = 80
 ```
 
 ## Review Output Format
