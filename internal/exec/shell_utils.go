@@ -310,6 +310,7 @@ func execTerraformShellCommand(
 func ExecAuthShellCommand(
 	atmosConfig *schema.AtmosConfiguration,
 	identityName string,
+	providerName string,
 	authEnvVars map[string]string,
 	shellOverride string,
 	shellArgs []string,
@@ -337,7 +338,7 @@ func ExecAuthShellCommand(
 	log.Debug("Setting the ENV vars in the shell")
 
 	// Print user-facing message about entering the shell.
-	printShellEnterMessage(identityName)
+	printShellEnterMessage(identityName, providerName)
 
 	// Merge env vars, ensuring authEnvList takes precedence.
 	mergedEnv := mergeEnvVarsSimple(authEnvList)
@@ -354,7 +355,7 @@ func ExecAuthShellCommand(
 	err := executeShellProcess(shellCommand, shellCommandArgs, mergedEnv)
 
 	// Print user-facing message about exiting the shell.
-	printShellExitMessage(identityName)
+	printShellExitMessage(identityName, providerName)
 
 	return err
 }
@@ -556,7 +557,7 @@ func mergeEnvVarsSimple(newEnvList []string) []string {
 }
 
 // printShellEnterMessage prints a user-facing message when entering an Atmos-managed shell.
-func printShellEnterMessage(identityName string) {
+func printShellEnterMessage(identityName, providerName string) {
 	headerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.ColorGreen)).
 		Bold(true)
@@ -564,26 +565,41 @@ func printShellEnterMessage(identityName string) {
 	identityStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.ColorCyan))
 
+	providerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorGray))
+
 	hintStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.ColorGray))
 
+	// Build identity display with provider name in parentheses.
+	identityDisplay := identityName
+	if providerName != "" {
+		identityDisplay = fmt.Sprintf("%s %s", identityName, providerStyle.Render(fmt.Sprintf("(%s)", providerName)))
+	}
+
 	fmt.Fprintf(os.Stderr, "\n%s %s\n",
 		headerStyle.Render("→ Entering Atmos shell with identity:"),
-		identityStyle.Render(identityName))
+		identityStyle.Render(identityDisplay))
 
 	fmt.Fprintf(os.Stderr, "%s\n\n",
 		hintStyle.Render("  Type 'exit' to return to your normal shell"))
 }
 
 // printShellExitMessage prints a user-facing message when exiting an Atmos-managed shell.
-func printShellExitMessage(identityName string) {
+func printShellExitMessage(identityName, providerName string) {
 	headerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.ColorGray))
 
 	identityStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.ColorGray))
 
+	// Build identity display with provider name in parentheses.
+	identityDisplay := identityName
+	if providerName != "" {
+		identityDisplay = fmt.Sprintf("%s (%s)", identityName, providerName)
+	}
+
 	fmt.Fprintf(os.Stderr, "\n%s %s\n\n",
 		headerStyle.Render("← Exited Atmos shell for identity:"),
-		identityStyle.Render(identityName))
+		identityStyle.Render(identityDisplay))
 }

@@ -86,13 +86,14 @@ func TestAuthShellCmd_CommandStructure(t *testing.T) {
 	assert.Equal(t, "shell", authShellCmd.Use)
 	assert.True(t, authShellCmd.DisableFlagParsing, "DisableFlagParsing should be true to allow pass-through of shell arguments")
 
-	// Verify identity flag exists.
-	identityFlag := authShellCmd.Flags().Lookup("identity")
-	require.NotNil(t, identityFlag, "identity flag should be registered")
+	// Verify identity flag exists (inherited from parent authCmd).
+	identityFlag := authShellCmd.Flag("identity")
+	require.NotNil(t, identityFlag, "identity flag should be inherited from parent authCmd")
 	assert.Equal(t, "i", identityFlag.Shorthand)
 	assert.Equal(t, "", identityFlag.DefValue)
+	assert.Equal(t, IdentityFlagSelectValue, identityFlag.NoOptDefVal, "NoOptDefVal should be __SELECT__")
 
-	// Verify shell flag exists.
+	// Verify shell flag exists (local flag).
 	shellFlag := authShellCmd.Flags().Lookup("shell")
 	require.NotNil(t, shellFlag, "shell flag should be registered")
 	assert.Equal(t, "", shellFlag.DefValue)

@@ -47,6 +47,11 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 			expectedError: "identity not found",
 		},
 		{
+			name:          "identity flag with no value before double dash",
+			args:          []string{"--identity", "--", "echo", "test"},
+			expectedError: "authentication failed", // Should use default identity since --identity has no value
+		},
+		{
 			name: "valid command with default identity",
 			args: []string{"echo", "test"},
 			// This will fail with auth errors since we don't have real AWS SSO configured.
@@ -99,11 +104,114 @@ func TestAuthExecCmd_CommandStructure(t *testing.T) {
 	assert.Equal(t, "exec", authExecCmd.Use)
 	assert.True(t, authExecCmd.DisableFlagParsing, "DisableFlagParsing should be true to allow pass-through of command flags")
 
-	// Verify identity flag exists.
-	identityFlag := authExecCmd.Flags().Lookup("identity")
-	require.NotNil(t, identityFlag, "identity flag should be registered")
+	// Verify identity flag exists (inherited from parent authCmd).
+	identityFlag := authExecCmd.Flag("identity")
+	require.NotNil(t, identityFlag, "identity flag should be inherited from parent authCmd")
 	assert.Equal(t, "i", identityFlag.Shorthand)
 	assert.Equal(t, "", identityFlag.DefValue)
+	assert.Equal(t, IdentityFlagSelectValue, identityFlag.NoOptDefVal, "NoOptDefVal should be __SELECT__")
+}
+
+func TestExtractIdentityFlag(t *testing.T) {
+	tests := []struct {
+		name                string
+		args                []string
+		expectedIdentity    string
+		expectedCommandArgs []string
+	}{
+		{
+			name:                "no flags, just command",
+			args:                []string{"echo", "hello"},
+			expectedIdentity:    "",
+			expectedCommandArgs: []string{"echo", "hello"},
+		},
+		{
+			name:                "identity with value, double dash, command",
+			args:                []string{"--identity", "test-user", "--", "echo", "hello"},
+			expectedIdentity:    "test-user",
+			expectedCommandArgs: []string{"echo", "hello"},
+		},
+		{
+			name:                "identity equals syntax",
+			args:                []string{"--identity=test-user", "--", "echo", "hello"},
+			expectedIdentity:    "test-user",
+			expectedCommandArgs: []string{"echo", "hello"},
+		},
+		{
+			name:                "identity flag without value before double dash",
+			args:                []string{"--identity", "--", "echo", "hello"},
+			expectedIdentity:    IdentityFlagSelectValue,
+			expectedCommandArgs: []string{"echo", "hello"},
+		},
+		{
+			name:                "identity flag without value, no double dash",
+			args:                []string{"--identity", "echo", "hello"},
+			expectedIdentity:    "echo",
+			expectedCommandArgs: []string{"hello"},
+		},
+		{
+			name:                "short flag -i with value",
+			args:                []string{"-i", "test-user", "--", "aws", "s3", "ls"},
+			expectedIdentity:    "test-user",
+			expectedCommandArgs: []string{"aws", "s3", "ls"},
+		},
+		{
+			name:                "short flag -i without value before double dash",
+			args:                []string{"-i", "--", "aws", "s3", "ls"},
+			expectedIdentity:    IdentityFlagSelectValue,
+			expectedCommandArgs: []string{"aws", "s3", "ls"},
+		},
+		{
+			name:                "double dash with no identity flag",
+			args:                []string{"--", "echo", "hello"},
+			expectedIdentity:    "",
+			expectedCommandArgs: []string{"echo", "hello"},
+		},
+		{
+			name:                "identity equals empty string",
+			args:                []string{"--identity=", "--", "echo", "hello"},
+			expectedIdentity:    IdentityFlagSelectValue,
+			expectedCommandArgs: []string{"echo", "hello"},
+		},
+		{
+			name:                "no double dash, identity with value",
+			args:                []string{"--identity", "test-user", "terraform", "plan"},
+			expectedIdentity:    "test-user",
+			expectedCommandArgs: []string{"terraform", "plan"},
+		},
+		{
+			name:                "identity at end with no value",
+			args:                []string{"echo", "hello", "--identity"},
+			expectedIdentity:    IdentityFlagSelectValue,
+			expectedCommandArgs: []string{"echo", "hello"},
+		},
+		{
+			name:                "empty args",
+			args:                []string{},
+			expectedIdentity:    "",
+			expectedCommandArgs: nil,
+		},
+		{
+			name:                "only identity flag",
+			args:                []string{"--identity"},
+			expectedIdentity:    IdentityFlagSelectValue,
+			expectedCommandArgs: nil,
+		},
+		{
+			name:                "only double dash",
+			args:                []string{"--"},
+			expectedIdentity:    "",
+			expectedCommandArgs: nil, // No args after "--"
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity, commandArgs := extractIdentityFlag(tt.args)
+			assert.Equal(t, tt.expectedIdentity, identity, "identity value mismatch")
+			assert.Equal(t, tt.expectedCommandArgs, commandArgs, "command args mismatch")
+		})
+	}
 }
 
 func TestExecuteCommandWithEnv(t *testing.T) {
