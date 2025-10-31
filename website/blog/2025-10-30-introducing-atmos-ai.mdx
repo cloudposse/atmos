@@ -406,6 +406,81 @@ atmos ai exec "What are the risks?" --session "$SESSION" --format json
 
 Learn more: [atmos ai exec documentation](/cli/commands/ai/exec)
 
+### 10. Token Caching for Cost Savings
+
+**NEW:** Atmos AI now supports **prompt caching** (token caching) to dramatically reduce API costs by reusing frequently-sent content like system prompts and project memory.
+
+**Cost Savings:**
+- **Anthropic:** 90% discount on cached tokens
+- **OpenAI/Azure:** 50% discount on cached tokens
+- **Gemini:** Free automatic caching
+- **Grok:** 75% discount on cached tokens
+- **Bedrock:** Up to 90% discount on cached tokens
+
+**Real Example (Anthropic):**
+- System prompt: 2,000 tokens
+- ATMOS.md content: 8,000 tokens
+- User message: 100 tokens
+
+Without caching:
+- Input: 10,100 tokens × $3/1M = $0.0303
+- **Total: $0.0378 per message**
+
+With caching (90% cached):
+- Cached: 10,000 tokens × $0.30/1M = $0.0030 (90% discount)
+- Fresh: 100 tokens × $3/1M = $0.0003
+- **Total: $0.0108 per message**
+
+**Savings: 71%** 💰
+
+**Provider Support:**
+
+| Provider | Caching | Configuration |
+|----------|---------|--------------|
+| **Anthropic** | 90% discount | Configure in atmos.yaml |
+| **OpenAI** | 50% discount | Automatic |
+| **Gemini** | Free | Automatic |
+| **Grok** | 75% discount | Automatic |
+| **Bedrock** | Up to 90% | Automatic |
+| **Azure OpenAI** | 50-100% | Automatic |
+
+**Configuration (Anthropic):**
+
+Most providers cache automatically with no configuration. For Anthropic, enable explicit cache markers:
+
+```yaml
+settings:
+  ai:
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-20250514"
+        cache:
+          enabled: true              # Enable prompt caching
+          cache_system_prompt: true  # Cache agent system prompt
+          cache_project_memory: true # Cache ATMOS.md content
+```
+
+**How It Works:**
+1. First message creates cache entries (normal cost)
+2. Subsequent messages reuse cached content (90% discount)
+3. Cache expires after 5 minutes of inactivity
+4. Cache automatically refreshes when active
+
+**JSON Output Includes Cache Metrics:**
+```json
+{
+  "tokens": {
+    "prompt": 120,
+    "completion": 80,
+    "total": 200,
+    "cached": 50,           // Tokens read from cache
+    "cache_creation": 10    // Tokens used to create cache
+  }
+}
+```
+
+Learn more: [Token Caching documentation](/ai/providers#token-caching-prompt-caching)
+
 ## Real-World Use Cases
 
 ### 1. New Team Member Onboarding
@@ -823,6 +898,7 @@ We're continuously improving Atmos AI. Recent completions and upcoming features:
 - ✅ **Structured JSON Output** - Machine-parseable responses with metadata
 - ✅ **Standard Exit Codes** - Reliable automation with proper error handling
 - ✅ **Stdin Support** - Shell integration and piping
+- ✅ **Token Caching (Prompt Caching)** - Save up to 90% on API costs with automatic caching
 
 ### Short-term (Next 3 Months)
 - **Conversation Checkpointing** - Export/import sessions for team sharing
@@ -834,7 +910,6 @@ We're continuously improving Atmos AI. Recent completions and upcoming features:
 
 ### Medium-term (3-6 Months)
 - **Directory Scoping** - Auto-discovery with .gitignore support
-- **Token Caching** - Cost optimization for supported providers
 - **Multi-Agent Workflows** - Agent delegation and collaboration
 - **Enhanced Memory** - Automatic memory updates from conversations
 - **IDE Plugins** - Native VSCode/JetBrains integration

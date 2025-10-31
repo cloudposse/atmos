@@ -73,6 +73,18 @@ func (m *mockAIClient) GetMaxTokens() int {
 	return m.maxTokens
 }
 
+func (m *mockAIClient) SendMessageWithSystemPromptAndTools(ctx context.Context, systemPrompt string, atmosMemory string, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	// For testing, just return the mock response
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &types.Response{
+		Content:    m.response,
+		ToolCalls:  []types.ToolCall{},
+		StopReason: types.StopReasonEndTurn,
+	}, nil
+}
+
 func TestNewChatModel(t *testing.T) {
 	t.Run("successful initialization", func(t *testing.T) {
 		client := &mockAIClient{

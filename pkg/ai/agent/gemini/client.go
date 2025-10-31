@@ -199,6 +199,43 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 	return parseGeminiResponse(response)
 }
 
+// SendMessageWithSystemPromptAndTools sends messages with system prompt, conversation history, and available tools.
+// For Gemini, caching happens automatically and is free.
+// The system prompt and atmosMemory are prepended as system messages (converted to user role).
+func (c *Client) SendMessageWithSystemPromptAndTools(
+	ctx context.Context,
+	systemPrompt string,
+	atmosMemory string,
+	messages []types.Message,
+	availableTools []tools.Tool,
+) (*types.Response, error) {
+	// Build messages with system prompts prepended.
+	systemMessages := make([]types.Message, 0, 2+len(messages))
+
+	// Add system prompt if provided.
+	if systemPrompt != "" {
+		systemMessages = append(systemMessages, types.Message{
+			Role:    types.RoleSystem,
+			Content: systemPrompt,
+		})
+	}
+
+	// Add ATMOS.md content if provided.
+	if atmosMemory != "" {
+		systemMessages = append(systemMessages, types.Message{
+			Role:    types.RoleSystem,
+			Content: atmosMemory,
+		})
+	}
+
+	// Add conversation history.
+	systemMessages = append(systemMessages, messages...)
+
+	// Call existing method with system messages prepended.
+	// Gemini automatically caches content (free, any length).
+	return c.SendMessageWithToolsAndHistory(ctx, systemMessages, availableTools)
+}
+
 // convertMessagesToGeminiFormat converts our Message slice to Gemini's Content format.
 func convertMessagesToGeminiFormat(messages []types.Message) []*genai.Content {
 	geminiContents := make([]*genai.Content, 0, len(messages))

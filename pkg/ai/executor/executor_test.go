@@ -51,6 +51,19 @@ func (m *mockClient) SendMessageWithToolsAndHistory(ctx context.Context, message
 	return response, nil
 }
 
+func (m *mockClient) SendMessageWithSystemPromptAndTools(ctx context.Context, systemPrompt string, atmosMemory string, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	if m.callIndex >= len(m.responses) {
+		return &types.Response{
+			Content:    "Final response",
+			StopReason: types.StopReasonEndTurn,
+		}, nil
+	}
+
+	response := m.responses[m.callIndex]
+	m.callIndex++
+	return response, nil
+}
+
 func (m *mockClient) GetModel() string {
 	return "mock-model"
 }

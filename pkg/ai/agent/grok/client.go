@@ -205,6 +205,43 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 	return parseGrokResponse(response)
 }
 
+// SendMessageWithSystemPromptAndTools sends messages with system prompt, conversation history, and available tools.
+// For Grok, caching happens automatically with 75% discount and >90% hit rate.
+// The system prompt and atmosMemory are prepended as system messages.
+func (c *Client) SendMessageWithSystemPromptAndTools(
+	ctx context.Context,
+	systemPrompt string,
+	atmosMemory string,
+	messages []types.Message,
+	availableTools []tools.Tool,
+) (*types.Response, error) {
+	// Build messages with system prompts prepended.
+	systemMessages := make([]types.Message, 0, 2+len(messages))
+
+	// Add system prompt if provided.
+	if systemPrompt != "" {
+		systemMessages = append(systemMessages, types.Message{
+			Role:    types.RoleSystem,
+			Content: systemPrompt,
+		})
+	}
+
+	// Add ATMOS.md content if provided.
+	if atmosMemory != "" {
+		systemMessages = append(systemMessages, types.Message{
+			Role:    types.RoleSystem,
+			Content: atmosMemory,
+		})
+	}
+
+	// Add conversation history.
+	systemMessages = append(systemMessages, messages...)
+
+	// Call existing method with system messages prepended.
+	// Grok automatically caches content with 75% discount and >90% hit rate.
+	return c.SendMessageWithToolsAndHistory(ctx, systemMessages, availableTools)
+}
+
 // setTokenLimit sets the appropriate token limit parameter based on the model.
 // Newer models (gpt-5, o1-preview, o1-mini, chatgpt-4o-latest) use max_completion_tokens,
 // while older models use max_tokens.

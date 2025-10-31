@@ -1297,14 +1297,17 @@ Always take action using tools rather than describing what action you would take
 				systemPrompt = m.currentAgent.SystemPrompt
 			}
 
-			// Prepend system prompt.
-			messages = append([]aiTypes.Message{{
-				Role:    aiTypes.RoleSystem,
-				Content: systemPrompt,
-			}}, messages...)
+			// Get ATMOS.md content for caching.
+			var atmosMemory string
+			if m.memoryMgr != nil {
+				atmosMemory = m.memoryMgr.GetContext()
+			}
 
-			// Send messages with tools and full history.
-			response, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
+			// Send messages with system prompt and tools (enables caching).
+			// The system prompt and ATMOS.md are passed separately to enable prompt caching.
+			// For Anthropic: 90% cost savings on cached content.
+			// For other providers: automatic caching (OpenAI 50%, Gemini free, etc.).
+			response, err := m.client.SendMessageWithSystemPromptAndTools(ctx, systemPrompt, atmosMemory, messages, availableTools)
 			if err != nil {
 				return aiErrorMsg(formatAPIError(err))
 			}
@@ -1331,8 +1334,8 @@ Always take action using tools rather than describing what action you would take
 					Content: "Please use the available tools to perform that action now, rather than just describing what you would do.",
 				})
 
-				// Send the prompt again.
-				retryResponse, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
+				// Send the prompt again with caching.
+				retryResponse, err := m.client.SendMessageWithSystemPromptAndTools(ctx, systemPrompt, atmosMemory, messages, availableTools)
 				if err != nil {
 					return aiErrorMsg(formatAPIError(err))
 				}
@@ -1476,8 +1479,29 @@ func (m *ChatModel) handleToolExecutionFlowWithAccumulator(ctx context.Context, 
 		Content: fmt.Sprintf("Tool execution results:\n\n%s\n\nPlease provide your final response based on these results.", toolResultsContent),
 	})
 
-	// Call AI again with tool results to get final response.
-	finalResponse, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
+	// Get system prompt and ATMOS.md for caching.
+	systemPrompt := `You are an AI assistant for Atmos infrastructure management. You have access to tools that allow you to perform actions.
+
+IMPORTANT: When you need to perform an action (read files, edit files, search, execute commands, etc.), you MUST use the available tools. Do NOT just describe what you would do - actually use the tools to do it.
+
+For example:
+- If you need to read a file, use the read_file tool immediately
+- If you need to edit a file, use the edit_file tool immediately
+- If you need to search for files, use the search_files tool immediately
+- If you need to execute an Atmos command, use the execute_atmos_command tool immediately
+
+Always take action using tools rather than describing what action you would take.`
+
+	if m.currentAgent != nil && m.currentAgent.SystemPrompt != "" {
+		systemPrompt = m.currentAgent.SystemPrompt
+	}
+	var atmosMemory string
+	if m.memoryMgr != nil {
+		atmosMemory = m.memoryMgr.GetContext()
+	}
+
+	// Call AI again with tool results to get final response (with caching).
+	finalResponse, err := m.client.SendMessageWithSystemPromptAndTools(ctx, systemPrompt, atmosMemory, messages, availableTools)
 	if err != nil {
 		return aiErrorMsg(formatAPIError(err))
 	}
@@ -1518,8 +1542,8 @@ func (m *ChatModel) handleToolExecutionFlowWithAccumulator(ctx context.Context, 
 			Content: "Please use the available tools to perform that action now, rather than just describing what you would do.",
 		})
 
-		// Retry with the prompt.
-		retryResponse, err := m.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
+		// Retry with the prompt (with caching).
+		retryResponse, err := m.client.SendMessageWithSystemPromptAndTools(ctx, systemPrompt, atmosMemory, messages, availableTools)
 		if err != nil {
 			return aiErrorMsg(formatAPIError(err))
 		}

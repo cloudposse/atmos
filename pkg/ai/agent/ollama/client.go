@@ -205,6 +205,43 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 	return parseOllamaResponse(response)
 }
 
+// SendMessageWithSystemPromptAndTools sends messages with system prompt, conversation history, and available tools.
+// For Ollama (local), there are no API costs and no caching needed.
+// The system prompt and atmosMemory are prepended as system messages.
+func (c *Client) SendMessageWithSystemPromptAndTools(
+	ctx context.Context,
+	systemPrompt string,
+	atmosMemory string,
+	messages []types.Message,
+	availableTools []tools.Tool,
+) (*types.Response, error) {
+	// Build messages with system prompts prepended.
+	systemMessages := make([]types.Message, 0, 2+len(messages))
+
+	// Add system prompt if provided.
+	if systemPrompt != "" {
+		systemMessages = append(systemMessages, types.Message{
+			Role:    types.RoleSystem,
+			Content: systemPrompt,
+		})
+	}
+
+	// Add ATMOS.md content if provided.
+	if atmosMemory != "" {
+		systemMessages = append(systemMessages, types.Message{
+			Role:    types.RoleSystem,
+			Content: atmosMemory,
+		})
+	}
+
+	// Add conversation history.
+	systemMessages = append(systemMessages, messages...)
+
+	// Call existing method with system messages prepended.
+	// Ollama runs locally, so no API costs or caching concerns.
+	return c.SendMessageWithToolsAndHistory(ctx, systemMessages, availableTools)
+}
+
 // convertMessagesToOllamaFormat converts our Message slice to Ollama/OpenAI's message format.
 func convertMessagesToOllamaFormat(messages []types.Message) []openai.ChatCompletionMessageParamUnion {
 	ollamaMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))

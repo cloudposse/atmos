@@ -2,7 +2,7 @@
 
 **Status:** Production Ready
 **Version:** 2.0
-**Last Updated:** 2025-10-30
+**Last Updated:** 2025-10-31
 
 ---
 
@@ -24,6 +24,7 @@ Atmos AI is an intelligent assistant integrated directly into Atmos CLI, designe
 - **MCP Integration** - stdio/HTTP transports for external clients
 - **LSP Integration** - YAML/Terraform validation with real-time diagnostics
 - **Enhanced TUI** - Markdown rendering, syntax highlighting, session management
+- **Token Caching** - Save up to 90% on API costs with prompt caching (6/7 providers)
 
 ---
 
@@ -1436,6 +1437,27 @@ settings:
         filetypes: ["tf", "tfvars", "hcl"]
         root_patterns: [".terraform", ".git"]
 ```
+
+---
+
+## Roadmap
+
+### Recently Completed Features
+
+**Token Caching (Prompt Caching)** - *Completed: October 2025*
+- **Provider Support:** 6 of 7 providers support token caching (all except Ollama)
+- **Cost Savings:** Up to 90% reduction on cached tokens (Anthropic: 90%, OpenAI/Azure: 50%, Gemini: free, Grok: 75%, Bedrock: 90%)
+- **Implementation:** Automatic for most providers, explicit configuration for Anthropic
+- **Cache Metrics:** Token usage includes `cached` and `cache_creation` fields in JSON output
+- **Documentation:** Complete in website/docs/ai/providers.mdx
+- **Impact:** Reduces API costs by 50-74% in typical usage with system prompts and ATMOS.md
+
+**Technical Details:**
+- Added `SendMessageWithSystemPromptAndTools()` to Client interface
+- Implemented for all 7 providers (Anthropic, OpenAI, Gemini, Grok, Bedrock, Azure, Ollama)
+- Updated chat.go and executor.go to use cached method
+- Cache metrics tracked and returned in ExecutionResult
+- Comprehensive test coverage with updated mock clients
 
 ---
 

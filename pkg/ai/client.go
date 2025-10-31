@@ -23,6 +23,18 @@ type Client interface {
 	// SendMessageWithToolsAndHistory sends messages with full conversation history and available tools.
 	SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error)
 
+	// SendMessageWithSystemPromptAndTools sends messages with system prompt, conversation history, and available tools.
+	// The system prompt and atmosMemory (ATMOS.md content) are passed separately to enable caching.
+	// For providers that support prompt caching (e.g., Anthropic), this can reduce API costs by up to 90%.
+	// For providers without caching, the system prompt is treated as a regular system message.
+	SendMessageWithSystemPromptAndTools(
+		ctx context.Context,
+		systemPrompt string,
+		atmosMemory string,
+		messages []types.Message,
+		availableTools []tools.Tool,
+	) (*types.Response, error)
+
 	// GetModel returns the configured model name.
 	GetModel() string
 

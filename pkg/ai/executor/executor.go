@@ -7,6 +7,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/formatter"
+	"github.com/cloudposse/atmos/pkg/ai/memory"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -118,13 +119,35 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *
 		},
 	}
 
+	// Load ATMOS.md content for caching (if available).
+	var atmosMemory string
+	if e.atmosConfig != nil && e.atmosConfig.Settings.AI.Memory.Enabled {
+		// Try to load project memory for caching benefits.
+		memConfig := &memory.Config{
+			Enabled:         e.atmosConfig.Settings.AI.Memory.Enabled,
+			FilePath:        e.atmosConfig.Settings.AI.Memory.FilePath,
+			AutoUpdate:      e.atmosConfig.Settings.AI.Memory.AutoUpdate,
+			CreateIfMiss:    e.atmosConfig.Settings.AI.Memory.CreateIfMiss,
+		}
+		memoryMgr := memory.NewManager(e.atmosConfig.BasePath, memConfig)
+		if memoryMgr != nil {
+			_, _ = memoryMgr.Load(ctx) // Ignore error - it's OK if memory doesn't exist
+			atmosMemory = memoryMgr.GetContext()
+		}
+	}
+
+	// For non-interactive execution, we don't use agent system prompts.
+	// Just use empty system prompt and ATMOS.md for caching.
+	systemPrompt := ""
+
 	// Tool execution loop (with iteration limit to prevent infinite loops).
 	var accumulatedResponse string
 	var totalUsage *types.Usage
 
 	for iteration := 0; iteration < MaxToolIterations; iteration++ {
-		// Call AI with tools.
-		response, err := e.client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
+		// Call AI with tools and caching support.
+		// Even without a custom system prompt, passing ATMOS.md enables caching for providers that support it.
+		response, err := e.client.SendMessageWithSystemPromptAndTools(ctx, systemPrompt, atmosMemory, messages, availableTools)
 		if err != nil {
 			result.Success = false
 			result.Error = &formatter.ErrorInfo{
