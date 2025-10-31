@@ -1,4 +1,4 @@
- Authentication Configuration 
+ Authentication Configuration
 └──mock-provider (mock-aws)
    └──Identities
       ├──● mock-identity (mock-aws) [DEFAULT] 650139h2m

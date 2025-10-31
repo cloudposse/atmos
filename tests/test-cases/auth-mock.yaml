@@ -257,14 +257,14 @@ tests:
     description: "Test list command shows all identities"
     workdir: "fixtures/scenarios/atmos-auth-mock/"
     command: "atmos"
+    env:
+      ATMOS_TEST_NOW: "2025-10-31T20:57:59Z"  # Fixed "now" for deterministic expiration countdown (→ 650139h2m)
     args:
       - "auth"
       - "list"
     expect:
       ignore_trailing_whitespace: true  # Lipgloss table formatting varies by platform
-      diff:
-        - "65013"  # Ignore expiration countdown (changes minute by minute - matches first 5 digits of ~650k hours)
-        - "65014"  # Ignore expiration countdown (changes minute by minute - matches first 5 digits of ~650k hours)
+      diff: []  # No diff ignore patterns needed with deterministic time
       stdout:
         - "mock-identity"
         - "mock-identity-2"
