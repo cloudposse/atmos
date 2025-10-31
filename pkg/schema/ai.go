@@ -23,10 +23,18 @@ type AISettings struct {
 
 // AIProviderConfig contains configuration for a specific AI provider.
 type AIProviderConfig struct {
-	Model     string `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`
-	ApiKeyEnv string `yaml:"api_key_env,omitempty" json:"api_key_env,omitempty" mapstructure:"api_key_env"`
-	MaxTokens int    `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty" mapstructure:"max_tokens"`
-	BaseURL   string `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"` // For Ollama or custom endpoints
+	Model     string           `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`
+	ApiKeyEnv string           `yaml:"api_key_env,omitempty" json:"api_key_env,omitempty" mapstructure:"api_key_env"`
+	MaxTokens int              `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty" mapstructure:"max_tokens"`
+	BaseURL   string           `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"`  // For Ollama or custom endpoints
+	Cache     *AICacheSettings `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache,squash"` // Token caching settings
+}
+
+// AICacheSettings contains token caching configuration.
+type AICacheSettings struct {
+	Enabled             bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`                                           // Enable token caching
+	CacheSystemPrompt   bool `yaml:"cache_system_prompt,omitempty" json:"cache_system_prompt,omitempty" mapstructure:"cache_system_prompt"`    // Cache system prompt (Anthropic only)
+	CacheProjectMemory  bool `yaml:"cache_project_memory,omitempty" json:"cache_project_memory,omitempty" mapstructure:"cache_project_memory"` // Cache ATMOS.md content (Anthropic only)
 }
 
 // AISessionSettings contains session management configuration.

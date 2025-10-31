@@ -109,6 +109,10 @@ settings:
         model: "claude-sonnet-4-20250514"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
+        cache:
+          enabled: true              # Enable token caching (90% cost savings)
+          cache_system_prompt: true  # Cache agent system prompt
+          cache_project_memory: true # Cache ATMOS.md content
 
     # Optional: Enable persistent sessions
     sessions:
@@ -138,6 +142,12 @@ settings:
     max_context_lines: 500      # Default: 500
 ```
 </File>
+
+:::tip Token Caching
+Save up to 90% on API costs with token caching! Most providers support automatic caching with no configuration. For Anthropic, enable caching (shown above) to cache system prompts and project memory.
+
+See [Token Caching](/ai/providers#token-caching-prompt-caching) for detailed cost savings, configuration options, and provider comparison.
+:::
 
 :::info Multiple Providers
 Atmos supports 7 AI providers including cloud (Claude, GPT, Gemini, Grok), local (Ollama), and enterprise (AWS Bedrock, Azure OpenAI).

@@ -28,10 +28,13 @@ type SimpleClient struct {
 
 // SimpleAIConfig holds basic configuration for the AI client.
 type SimpleAIConfig struct {
-	Enabled   bool
-	Model     string
-	APIKeyEnv string
-	MaxTokens int
+	Enabled             bool
+	Model               string
+	APIKeyEnv           string
+	MaxTokens           int
+	CacheEnabled        bool
+	CacheSystemPrompt   bool
+	CacheProjectMemory  bool
 }
 
 // NewSimpleClient creates a new simple AI client from Atmos configuration.
@@ -65,10 +68,13 @@ func NewSimpleClient(atmosConfig *schema.AtmosConfiguration) (*SimpleClient, err
 func extractSimpleAIConfig(atmosConfig *schema.AtmosConfiguration) *SimpleAIConfig {
 	// Set defaults.
 	config := &SimpleAIConfig{
-		Enabled:   false,
-		Model:     "claude-sonnet-4-20250514",
-		APIKeyEnv: "ANTHROPIC_API_KEY",
-		MaxTokens: DefaultMaxTokens,
+		Enabled:             false,
+		Model:               "claude-sonnet-4-20250514",
+		APIKeyEnv:           "ANTHROPIC_API_KEY",
+		MaxTokens:           DefaultMaxTokens,
+		CacheEnabled:        true,  // Enable caching by default
+		CacheSystemPrompt:   true,  // Cache system prompt by default
+		CacheProjectMemory:  true,  // Cache project memory by default
 	}
 
 	// Check if AI is enabled.
@@ -89,6 +95,35 @@ func extractSimpleAIConfig(atmosConfig *schema.AtmosConfiguration) *SimpleAIConf
 			if providerConfig.MaxTokens > 0 {
 				config.MaxTokens = providerConfig.MaxTokens
 			}
+
+			// Extract cache settings.
+			// Default behavior: caching enabled (all true)
+			// User can explicitly disable by setting cache.enabled: false in config.
+
+			// Cache is a pointer, so we can distinguish:
+			// - nil: User didn't configure caching → use defaults (all true)
+			// - non-nil: User explicitly configured caching → process settings.
+
+			if providerConfig.Cache != nil {
+				// User explicitly configured cache settings.
+				if !providerConfig.Cache.Enabled {
+					// Explicitly disabled.
+					config.CacheEnabled = false
+					config.CacheSystemPrompt = false
+					config.CacheProjectMemory = false
+				} else {
+					// Explicitly enabled - use fine-grained settings.
+					config.CacheSystemPrompt = providerConfig.Cache.CacheSystemPrompt
+					config.CacheProjectMemory = providerConfig.Cache.CacheProjectMemory
+
+					// If no fine-grained settings provided, default both to true.
+					if !config.CacheSystemPrompt && !config.CacheProjectMemory {
+						config.CacheSystemPrompt = true
+						config.CacheProjectMemory = true
+					}
+				}
+			}
+			// If Cache is nil, keep defaults (all true).
 		}
 	}
 
@@ -319,4 +354,86 @@ func (c *SimpleClient) GetModel() string {
 // GetMaxTokens returns the configured max tokens.
 func (c *SimpleClient) GetMaxTokens() int {
 	return c.config.MaxTokens
+}
+
+// buildSystemPrompt builds a system prompt text block with optional cache control.
+// If caching is enabled, it marks the content for caching.
+func (c *SimpleClient) buildSystemPrompt(systemPrompt string, enableCache bool) anthropic.TextBlockParam {
+	textBlock := anthropic.TextBlockParam{
+		Text: systemPrompt,
+	}
+
+	// Add cache control if enabled.
+	if c.config.CacheEnabled && enableCache {
+		textBlock.CacheControl = anthropic.NewCacheControlEphemeralParam()
+	}
+
+	return textBlock
+}
+
+// buildSystemPrompts builds multiple system prompt text blocks with cache control.
+// This is useful when you have both agent system prompt and project memory.
+func (c *SimpleClient) buildSystemPrompts(prompts []struct {
+	content string
+	cache   bool
+}) []anthropic.TextBlockParam {
+	result := make([]anthropic.TextBlockParam, 0, len(prompts))
+
+	for _, prompt := range prompts {
+		result = append(result, c.buildSystemPrompt(prompt.content, prompt.cache))
+	}
+
+	return result
+}
+
+// SendMessageWithSystemPromptAndTools sends messages with system prompt, conversation history, and available tools.
+// The system prompt can be cached to reduce API costs (up to 90% for repeated content).
+// If atmosMemory is provided, it will be cached separately.
+func (c *SimpleClient) SendMessageWithSystemPromptAndTools(
+	ctx context.Context,
+	systemPrompt string,
+	atmosMemory string,
+	messages []types.Message,
+	availableTools []tools.Tool,
+) (*types.Response, error) {
+	// Convert messages to Anthropic format.
+	anthropicMessages := convertMessagesToAnthropicFormat(messages)
+
+	// Convert tools to Anthropic format.
+	anthropicTools := convertToolsToAnthropicFormat(availableTools)
+
+	// Build system prompts with cache control.
+	var systemPrompts []anthropic.TextBlockParam
+
+	// Add agent system prompt (cached if enabled).
+	if systemPrompt != "" {
+		systemPrompts = append(systemPrompts, c.buildSystemPrompt(systemPrompt, c.config.CacheSystemPrompt))
+	}
+
+	// Add ATMOS.md content (cached if enabled).
+	if atmosMemory != "" {
+		systemPrompts = append(systemPrompts, c.buildSystemPrompt(atmosMemory, c.config.CacheProjectMemory))
+	}
+
+	// Build request params.
+	params := anthropic.MessageNewParams{
+		Model:     anthropic.Model(c.config.Model),
+		MaxTokens: int64(c.config.MaxTokens),
+		Messages:  anthropicMessages,
+		Tools:     anthropicTools,
+	}
+
+	// Add system prompts if any.
+	if len(systemPrompts) > 0 {
+		params.System = systemPrompts
+	}
+
+	// Send message.
+	response, err := c.client.Messages.New(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send message with system prompt and tools: %w", err)
+	}
+
+	// Parse response.
+	return parseAnthropicResponse(response)
 }
