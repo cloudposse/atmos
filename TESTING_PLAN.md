@@ -242,16 +242,22 @@ Given the scale (2000 lines of untested code), we'll use an iterative commit str
   - NewDockerRuntime, NewPodmanRuntime constructor tests
   - Info() method tests (skip if runtime not available)
   - Inspect() method test for podman
-- **Coverage achieved: 71.5% (devcontainer pkg), 35.7% (container pkg - up from 19.9%)**
+  - Attach() behavioral tests with nolint:dupl justification (both Docker and Podman)
+  - List() integration tests (skip if runtime not available, accept nil as valid for empty results)
+- **Coverage achieved: 71.5% (devcontainer pkg), 37.8% (container pkg - up from 19.9%)**
+- **Rationale for container pkg at 37.8%**: ~60% of code wraps exec.Command calls (inherently hard to test). All testable pure functions have 100% coverage. Integration tests provided for Docker/Podman when available.
 - **Commit checkpoint**
 
 ### Iteration 3: Execution Layer (Target: 80-90% coverage) 🔄 IN PROGRESS
-- ⏳ Devcontainer helpers tests - internal/exec/devcontainer_helpers_test.go
-  - ✅ TestIsContainerRunning - comprehensive status checking (12 scenarios)
+- ✅ Devcontainer helpers tests - internal/exec/devcontainer_helpers_test.go
+  - ✅ TestIsContainerRunning - comprehensive status checking (12 scenarios) with nolint:dupl justification
   - Note: Other helpers require mocking Runtime interface (complex, may need interface generation)
 - ⏳ Identity/credential tests - TODO
 - ⏳ Core exec functions - TODO
-- **Current progress: Foundation test for isContainerRunning helper**
+- **Current progress: Foundation test for isContainerRunning helper, CI fixes for integration tests**
+- **Latest fixes**:
+  - Fixed Docker/Podman List integration tests to accept nil as valid for empty container lists
+  - Fixed mockIdentityForShellEnv missing Paths() method after main branch merge
 - **Commit checkpoint (phase 1)**
 
 ### Iteration 4: Polish (Target: 80-90% coverage)
