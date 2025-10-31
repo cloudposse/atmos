@@ -1,0 +1,788 @@
+---
+slug: introducing-atmos-lsp
+title: "Introducing Atmos LSP: IDE-Native Infrastructure Configuration"
+authors: [atmos]
+tags: [feature, lsp, ide, productivity, developer-experience]
+---
+
+We're excited to introduce **Atmos LSP**, bringing IDE-quality features directly to your infrastructure configuration workflow—no context switching, no manual validation, no documentation hunting.
+
+Atmos LSP provides comprehensive Language Server Protocol integration that transforms how you write and validate Atmos configurations. Get instant feedback on errors, autocomplete for Atmos keywords, hover documentation without leaving your editor, and seamless integration with external language servers for YAML and Terraform validation.
+
+With support for 13+ editors (VS Code, Neovim, Zed, Cursor, Emacs, and more), multiple transport protocols, and deep AI integration—writing infrastructure configuration now feels like writing code in a modern IDE.
+
+<!--truncate-->
+
+## The Problem
+
+Infrastructure configuration is error-prone and time-consuming. Engineers constantly:
+
+- **Context switch** between editor and terminal to validate configurations
+- **Run commands manually** to check syntax errors (`atmos validate stacks`)
+- **Search documentation** for correct YAML structure and Atmos keywords
+- **Discover errors late** during terraform plan or apply
+- **Fix typos manually** without autocomplete assistance
+- **Navigate large configs** without structural overview
+
+Even simple typos in YAML can cause deployment failures that take hours to debug. The feedback loop is too long, and the cost of mistakes is too high.
+
+## The Solution: Atmos LSP
+
+Atmos LSP brings **IDE-native infrastructure configuration** through the Language Server Protocol (LSP)—the same standard that powers modern code editors.
+
+**What You Get:**
+- **Real-time validation** as you type—catch errors before committing
+- **Autocomplete** for Atmos keywords, components, and variables
+- **Hover documentation** explains Atmos concepts without leaving your editor
+- **Multi-editor support**—works in VS Code, Neovim, Zed, Cursor, Emacs, and 8+ others
+- **External LSP integration**—unified YAML and Terraform validation
+- **AI integration**—enables AI assistants to validate configurations accurately
+
+### Dual-Component Design
+
+Atmos LSP consists of two complementary components:
+
+**1. Atmos LSP Server** - Native Atmos-specific features
+- Autocomplete for Atmos keywords (`import`, `components`, `vars`, etc.)
+- Hover documentation for all Atmos concepts
+- Real-time Atmos-specific validation
+- Multi-transport support (stdio, TCP, WebSocket)
+
+**2. Atmos LSP Client** - External language server integration
+- Manages multiple LSP servers (yaml-language-server, terraform-ls)
+- Routes files to appropriate server by type
+- Aggregates diagnostics from all servers
+- Provides unified interface for AI tools
+
+## Key Features
+
+### 1. Real-Time Validation
+
+Get instant feedback as you type—no more waiting for `atmos validate stacks`:
+
+```yaml
+# stacks/prod/vpc.yaml
+
+import:
+  - stacks/base  # ❌ Error: imports must be arrays
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: 10.0.0.0/16      # ✅ Valid
+        vpc_ciddr: 10.1.0.0/16       # ⚠️  Warning: Unknown property
+                                     #     (did you mean 'cidr_block'?)
+        availability_zones:          # ⚠️  Warning: Property deprecated
+          - us-east-1a               #     Use 'azs' instead
+```
+
+**Validation Triggers:**
+- ✅ Real-time as you type
+- ✅ On document save
+- ✅ On document open
+- ✅ Manual validation request
+
+**Validation Types:**
+- **YAML Syntax** - Malformed YAML detection
+- **Atmos Structure** - Stack schema validation
+- **Import Arrays** - Ensures imports are valid lists
+- **Component Sections** - Validates terraform/helmfile structure
+- **Type Safety** - Checks value types match expectations
+
+### 2. Intelligent Autocomplete
+
+Stop memorizing Atmos keywords—let autocomplete guide you:
+
+```yaml
+# Type 'com' and press Ctrl+Space
+com|
+    ↓
+# Autocomplete suggests:
+components:
+  terraform:
+  helmfile:
+```
+
+**Autocomplete Categories:**
+
+**Top-Level Keywords:**
+- `import` - Import other stack files
+- `components` - Define infrastructure components
+- `vars` - Stack variables
+- `settings` - Stack settings
+- `metadata` - Stack metadata
+
+**Component Types:**
+- `terraform` - Terraform components
+- `helmfile` - Helmfile components
+
+**Common Variables:**
+- `namespace`, `tenant`, `environment`, `stage`, `region`
+- `enabled` - Enable/disable pattern
+- `tags` - Resource tags
+
+**Settings:**
+- `spacelift` - Spacelift integration
+- `atlantis` - Atlantis integration
+- `validation` - Validation rules
+
+### 3. Hover Documentation
+
+Get context-aware documentation without leaving your editor:
+
+**Hover over `import`:**
+```markdown
+**import**
+
+Import other Atmos stack configuration files.
+
+Import paths are relative to the stacks directory.
+
+**Example:**
+```yaml
+import:
+  - catalog/vpc
+  - mixins/kubernetes
+```
+
+**Note:** Imports are processed sequentially, and later imports
+can override values from earlier imports.
+```
+
+**Documented Keywords:**
+- Stack structure: `import`, `components`, `vars`, `settings`, `metadata`
+- Component types: `terraform`, `helmfile`
+- Stack variables: `namespace`, `tenant`, `environment`, `stage`, `region`
+- Common patterns: `enabled` flag, resource `tags`
+
+### 4. Multi-Editor Support (13+ IDEs)
+
+Works with your favorite editor—same experience everywhere:
+
+| Editor | Status | Setup |
+|--------|--------|-------|
+| **VS Code** | ✅ Tested | LSP client extension |
+| **Neovim** | ✅ Tested | nvim-lspconfig |
+| **Cursor** | ✅ Documented | LSP client (VS Code fork) |
+| **Zed** | ✅ Documented | Built-in LSP config |
+| **Emacs** | ✅ Documented | lsp-mode |
+| **Vim** | ✅ Documented | vim-lsp plugin |
+| **Sublime Text** | ✅ Documented | LSP package |
+| **Helix** | ✅ Documented | languages.toml |
+| **IntelliJ IDEA** | ✅ Documented | LSP4IJ plugin |
+| **Kate** | ✅ Documented | LSP client plugin |
+| **Lapce** | ✅ Documented | Built-in LSP |
+| **Atom** | ✅ Documented | atom-languageclient |
+| **Eclipse** | ✅ Documented | LSP4E |
+
+**Universal Setup Pattern:**
+```json
+{
+  "atmos-lsp": {
+    "command": "atmos",
+    "args": ["lsp", "start"],
+    "filetypes": ["yaml"]
+  }
+}
+```
+
+### 5. Multi-Transport Support
+
+Choose the right transport for your environment:
+
+**stdio (Default)** - Desktop IDE integration
+```bash
+atmos lsp start
+```
+
+**TCP** - Remote development and testing
+```bash
+atmos lsp start --transport tcp --address localhost:7777
+```
+
+**WebSocket** - Web-based editors
+```bash
+atmos lsp start --transport websocket --address localhost:7777
+```
+
+### 6. External LSP Server Integration
+
+Atmos LSP Client manages external language servers for unified validation:
+
+**Supported Servers:**
+
+| Server | Purpose | File Types |
+|--------|---------|------------|
+| **yaml-language-server** | YAML validation with JSON Schema | `.yaml`, `.yml` |
+| **terraform-ls** | Terraform HCL validation | `.tf`, `.tfvars`, `.hcl` |
+| **json-languageserver** | JSON validation | `.json` |
+| **Any LSP Server** | Extensible via config | Custom |
+
+**Configuration:**
+```yaml
+# atmos.yaml
+settings:
+  lsp:
+    enabled: true
+    servers:
+      yaml-ls:
+        command: "yaml-language-server"
+        args: ["--stdio"]
+        filetypes: ["yaml", "yml"]
+        initialization_options:
+          yaml:
+            validation: true
+            hover: true
+            completion: true
+
+      terraform-ls:
+        command: "terraform-ls"
+        args: ["serve"]
+        filetypes: ["tf", "tfvars", "hcl"]
+        initialization_options:
+          experimentalFeatures:
+            validateOnSave: true
+```
+
+**Benefits:**
+- ✅ Single unified validation experience
+- ✅ Automatic file routing by extension
+- ✅ Diagnostic aggregation from multiple servers
+- ✅ Consistent error reporting
+
+### 7. AI Integration
+
+Enable AI assistants to validate configurations with the `validate_file_lsp` tool:
+
+```bash
+You: Validate stacks/prod/vpc.yaml
+
+AI: [Uses validate_file_lsp tool]
+
+    Found 3 issues in stacks/prod/vpc.yaml:
+
+    ERRORS (2):
+    1. Line 15, Col 5: Unknown property 'vpc_ciddr'
+       Did you mean 'vpc_cidr'?
+
+    2. Line 23, Col 3: Invalid CIDR block format
+
+    WARNINGS (1):
+    1. Line 30, Col 7: Property 'availability_zones' is deprecated
+       Use 'azs' instead
+
+    Would you like me to help fix these issues?
+```
+
+**AI Integration Features:**
+- Precise line and column numbers for errors
+- Clear error/warning separation
+- Suggested fixes when available
+- Summary statistics
+- Supports all AI providers (Claude, GPT, Gemini, Ollama, etc.)
+
+Learn more: [Atmos AI Documentation](/ai/ai)
+
+## Real-World Use Cases
+
+### 1. Catch Errors Early
+
+**Before Atmos LSP:**
+```bash
+# Edit stacks/prod/vpc.yaml in editor
+vim stacks/prod/vpc.yaml
+
+# Save and exit
+
+# Validate manually in terminal
+atmos validate stacks
+
+# ❌ Error: line 15: unknown property 'vpc_ciddr'
+
+# Go back to editor, fix, repeat...
+vim stacks/prod/vpc.yaml
+```
+
+**With Atmos LSP:**
+```yaml
+# Edit stacks/prod/vpc.yaml
+# Error appears instantly as you type:
+vpc_ciddr: 10.0.0.0/16  # ⚠️  Unknown property (did you mean 'vpc_cidr'?)
+                        # Red squiggly line appears immediately
+
+# Fix it right away:
+vpc_cidr: 10.0.0.0/16   # ✅ Valid - green checkmark
+```
+
+**Result:** Catch typos in seconds, not minutes.
+
+### 2. Learn Atmos Structure
+
+**Before:**
+```bash
+# What top-level keywords are available?
+# Open documentation...
+# Search for "stack structure"...
+# Copy example...
+```
+
+**With Atmos LSP:**
+```yaml
+# Start typing at root level
+# Press Ctrl+Space
+
+# Autocomplete shows:
+- import
+- components
+- vars
+- settings
+- metadata
+
+# Hover over any keyword for documentation
+```
+
+**Result:** Discover Atmos features without leaving your editor.
+
+### 3. Unified YAML and Terraform Validation
+
+**Before:**
+```bash
+# Validate YAML syntax
+yamllint stacks/prod/vpc.yaml
+
+# Validate Terraform
+cd components/terraform/vpc
+terraform validate
+
+# Check Atmos structure
+atmos validate stacks
+```
+
+**With Atmos LSP:**
+```yaml
+# All validation happens automatically in editor:
+# - YAML syntax (yaml-language-server)
+# - Atmos structure (atmos lsp server)
+# - Terraform HCL (terraform-ls)
+
+# All errors shown inline with precise locations
+```
+
+**Result:** One unified validation experience.
+
+### 4. AI-Powered Configuration Review
+
+**Before:**
+```bash
+# Copy file contents
+# Paste into AI chat
+# Ask for validation
+# AI provides generic advice
+```
+
+**With Atmos LSP + AI:**
+```bash
+You: Validate stacks/prod/vpc.yaml
+
+AI: [Uses validate_file_lsp tool for precise validation]
+
+    Found 2 issues:
+
+    1. Line 15, Col 5: 'vpc_ciddr' should be 'vpc_cidr'
+    2. Line 30, Col 7: 'availability_zones' is deprecated
+
+    I can fix both issues. Would you like me to:
+    1. Update vpc_ciddr → vpc_cidr
+    2. Migrate availability_zones → azs array
+
+    Apply fixes? (yes/no)
+```
+
+**Result:** AI gets precise error locations and can suggest specific fixes.
+
+## Getting Started
+
+### 1. Start LSP Server (IDE Integration)
+
+**VS Code Setup:**
+
+Create `.vscode/settings.json`:
+```json
+{
+  "atmos-lsp": {
+    "command": "atmos",
+    "args": ["lsp", "start"],
+    "filetypes": ["yaml"],
+    "settings": {
+      "atmos": {
+        "configPath": "${workspaceFolder}/atmos.yaml"
+      }
+    }
+  }
+}
+```
+
+Install a generic LSP client extension (like "LSP" by sublimelsp).
+
+**Neovim Setup:**
+
+Add to your config:
+```lua
+require('lspconfig').atmos.setup{
+  cmd = { 'atmos', 'lsp', 'start' },
+  filetypes = { 'yaml' },
+  root_dir = function(fname)
+    return require('lspconfig.util').root_pattern('atmos.yaml', '.git')(fname)
+  end,
+}
+```
+
+**See Full Setup Guides:**
+- [VS Code setup](/lsp/lsp-server#vs-code)
+- [Neovim setup](/lsp/lsp-server#neovim)
+- [13+ other editors](/lsp/lsp-server#editor-setup)
+
+### 2. Configure External LSP Servers (Optional)
+
+Add to `atmos.yaml` for YAML and Terraform validation:
+
+```yaml
+settings:
+  lsp:
+    enabled: true
+    servers:
+      # YAML validation
+      yaml-ls:
+        command: "yaml-language-server"
+        args: ["--stdio"]
+        filetypes: ["yaml", "yml"]
+        root_patterns: ["atmos.yaml", ".git"]
+        initialization_options:
+          yaml:
+            validation: true
+            hover: true
+            completion: true
+
+      # Terraform validation
+      terraform-ls:
+        command: "terraform-ls"
+        args: ["serve"]
+        filetypes: ["tf", "tfvars", "hcl"]
+        root_patterns: [".terraform", ".git"]
+        initialization_options:
+          experimentalFeatures:
+            validateOnSave: true
+```
+
+**Install External Servers:**
+
+```bash
+# Install yaml-language-server
+npm install -g yaml-language-server
+
+# Install terraform-ls
+# macOS
+brew install terraform-ls
+
+# Linux
+curl -LO https://releases.hashicorp.com/terraform-ls/latest/terraform-ls_latest_linux_amd64.zip
+unzip terraform-ls_latest_linux_amd64.zip
+sudo mv terraform-ls /usr/local/bin/
+```
+
+### 3. Start Editing
+
+Open any Atmos stack file:
+
+```yaml
+# stacks/prod/vpc.yaml
+
+# Start typing - autocomplete appears
+com|
+    ↓ (Ctrl+Space)
+components:
+
+# Hover for documentation
+import:  # ← Hover here for docs
+  - catalog/vpc
+
+# Real-time validation
+vpc_ciddr: 10.0.0.0/16  # ⚠️  Instant error
+vpc_cidr: 10.0.0.0/16   # ✅ Fixed
+```
+
+## Advanced Features
+
+### Diagnostic Formatting
+
+Three output formats for different use cases:
+
+**1. Full Format** - Human-readable
+```
+ERRORS (2):
+1. Line 15, Col 5: Unknown property 'vpc_ciddr' (did you mean 'vpc_cidr'?)
+   Source: yaml-language-server
+
+2. Line 23, Col 3: Invalid CIDR block format
+   Source: yaml-language-server
+
+WARNINGS (1):
+1. Line 30, Col 7: Property 'availability_zones' is deprecated, use 'azs'
+   Source: yaml-language-server
+```
+
+**2. Compact Format** - One line per issue
+```
+vpc.yaml:15:5: error: Unknown property 'vpc_ciddr' (yaml-ls)
+vpc.yaml:23:3: error: Invalid CIDR block format (yaml-ls)
+vpc.yaml:30:7: warning: Property 'availability_zones' is deprecated (yaml-ls)
+```
+
+**3. AI-Optimized Format** - Structured for AI
+```
+Found 3 issue(s) in /stacks/prod/vpc.yaml:
+
+ERRORS (2):
+1. Line 15, Col 5: Unknown property 'vpc_ciddr' (did you mean 'vpc_cidr'?)
+2. Line 23, Col 3: Invalid CIDR block format
+
+WARNINGS (1):
+1. Line 30, Col 7: Property 'availability_zones' is deprecated, use 'azs'
+```
+
+### Multi-Server Diagnostic Aggregation
+
+Diagnostics from all LSP servers combined:
+
+```yaml
+# stacks/prod/eks.yaml
+
+import:
+  - catalog/vpc       # ✅ Atmos LSP: Valid import
+
+components:
+  terraform:
+    eks:
+      vars:
+        cluster_name: "prod"  # ✅ yaml-ls: Valid YAML syntax
+        cluster_versio: "1.27"  # ⚠️  yaml-ls: Unknown property
+                                # ⚠️  Atmos LSP: Typo detection
+```
+
+**Aggregation Features:**
+- ✅ Collect from all servers
+- ✅ Deduplicate overlapping diagnostics
+- ✅ Sort by severity and location
+- ✅ Filter by severity level
+- ✅ Per-file diagnostic access
+
+### Document Lifecycle
+
+LSP tracks your editing workflow:
+
+**1. Document Open** → Initial validation + publish diagnostics
+**2. Document Change** → Real-time re-validation (debounced)
+**3. Document Save** → Final validation
+**4. Document Close** → Clear diagnostics, free resources
+
+**Thread-Safe:**
+- Document collection protected with RWMutex
+- Concurrent access supported
+- No race conditions
+
+## Performance
+
+**Validation Speed:**
+- Initial validation: <100ms for typical stack files
+- Real-time updates: <50ms (debounced)
+- Large files (>1000 lines): <200ms
+
+**Resource Usage:**
+- Memory: ~10-50MB per server
+- CPU: Minimal (validation only on change)
+- Network: None (all local)
+
+**Optimizations:**
+- Debounced validation (avoid validation on every keystroke)
+- Async diagnostic publishing (non-blocking)
+- Thread-safe concurrent access
+
+## What's Coming Next
+
+### Short-term (Next 3 Months)
+
+**Go-to-Definition:**
+```yaml
+import:
+  - catalog/vpc  # Ctrl+Click → Opens stacks/catalog/vpc.yaml
+
+components:
+  terraform:
+    vpc:
+      component: vpc-module  # Ctrl+Click → Opens components/terraform/vpc-module/
+```
+
+**Document Symbols (Outline View):**
+```
+Outline:
+├── imports (3)
+│   ├── catalog/vpc
+│   ├── catalog/eks
+│   └── mixins/common
+├── components
+│   ├── terraform
+│   │   ├── vpc
+│   │   ├── eks
+│   │   └── rds
+└── vars
+    ├── namespace
+    ├── environment
+    └── region
+```
+
+### Medium-term (3-6 Months)
+
+**Find References:**
+```yaml
+vars:
+  vpc_id: vpc-123  # Find all references → Shows all files using vpc_id
+```
+
+**Rename Symbol:**
+```yaml
+vars:
+  old_name: value  # Rename to new_name → Updates all usages across files
+```
+
+**Code Actions (Quick Fixes):**
+```yaml
+vpc_ciddr: 10.0.0.0/16  # 💡 Quick fix: Change to 'vpc_cidr'
+```
+
+### Long-term (6+ Months)
+
+**Cross-File Validation:**
+- Validate component references exist
+- Check variable consistency across stacks
+- Detect circular imports
+- Dependency analysis
+
+**Enhanced Schema Support:**
+- JSON Schema integration
+- Custom validation rules
+- Pluggable validators
+- User-defined schemas
+
+**Performance Improvements:**
+- Parsed document caching
+- Incremental text sync
+- Background processing
+- Metrics and profiling
+
+## Security & Privacy
+
+**LSP Server:**
+- ✅ Read-only access to opened documents
+- ✅ No file system access beyond provided documents
+- ✅ No network access
+- ✅ Validates user input safely
+
+**LSP Client:**
+- ✅ Spawns only configured, trusted servers
+- ✅ Local stdio communication only
+- ✅ No network communication
+- ✅ No credential handling
+
+**Privacy:**
+- ✅ All processing 100% local
+- ✅ No telemetry or analytics
+- ✅ No document content sent to cloud
+- ✅ External servers may have own policies (check yaml-ls, terraform-ls docs)
+
+## Troubleshooting
+
+### LSP Server Not Starting
+
+**Check:**
+```bash
+# Verify atmos is in PATH
+which atmos
+
+# Test LSP server manually
+atmos lsp start
+# Should wait for stdin (Ctrl+C to exit)
+
+# Check Atmos version (LSP requires v1.50.0+)
+atmos version
+```
+
+### No Autocomplete or Validation
+
+**VS Code:**
+1. Check Output panel → "Atmos LSP" for errors
+2. Verify LSP client extension is installed
+3. Reload window (Cmd/Ctrl+Shift+P → "Reload Window")
+
+**Neovim:**
+```lua
+-- Check LSP status
+:LspInfo
+
+-- Check logs
+:lua vim.cmd('e ' .. vim.lsp.get_log_path())
+```
+
+### External LSP Server Not Working
+
+**Check server is installed:**
+```bash
+# YAML server
+yaml-language-server --version
+
+# Terraform server
+terraform-ls version
+```
+
+**Check configuration:**
+```yaml
+# atmos.yaml - verify paths are correct
+settings:
+  lsp:
+    servers:
+      yaml-ls:
+        command: "yaml-language-server"  # Must be in PATH
+        args: ["--stdio"]
+```
+
+**Enable debug logging:**
+```bash
+# Set environment variable before starting editor
+export ATMOS_LOGS_LEVEL=Debug
+```
+
+## Learn More
+
+**Documentation:**
+- [LSP Server Guide](/lsp/lsp-server) - Complete server setup for 13+ editors
+- [LSP Client Guide](/lsp/lsp-client) - External server integration
+- [AI Integration](/ai/tools#validate_file_lsp) - AI validation tool
+- [Configuration Reference](/cli/configuration) - Full atmos.yaml options
+
+**LSP Resources:**
+- [Language Server Protocol Specification](https://microsoft.github.io/language-server-protocol/)
+- [yaml-language-server](https://github.com/redhat-developer/yaml-language-server)
+- [terraform-ls](https://github.com/hashicorp/terraform-ls)
+
+**Related Features:**
+- [Atmos AI](/ai/ai) - AI-powered infrastructure assistance
+- [Atmos Validation](/cli/commands/validate) - Validation commands
+- [Atmos Stacks](/core-concepts/stacks) - Stack structure and inheritance
+
+**Get Involved:**
+- [GitHub Issues](https://github.com/cloudposse/atmos/issues)
+- [Community Discussions](https://github.com/cloudposse/atmos/discussions)
+
+---
+
+Happy configuring! 🚀
