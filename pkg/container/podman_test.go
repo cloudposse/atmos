@@ -559,8 +559,8 @@ func TestPodmanRuntime_List_Integration(t *testing.T) {
 	}
 
 	// If podman is available, verify the structure of returned data.
-	// We don't assert specific containers exist, just that the data structure is correct.
-	assert.NotNil(t, containers)
+	// containers can be nil or empty if no containers exist - both are valid.
+	require.NoError(t, err, "List should not return error when Podman is available")
 	for _, container := range containers {
 		// Each container should have at least an ID.
 		assert.NotEmpty(t, container.ID, "container should have an ID")
