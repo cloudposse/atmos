@@ -36,8 +36,8 @@ const (
 	ssoDefaultSessionMinutes = 60
 	ssoTokenCacheSubdir      = "aws-sso"
 	ssoTokenCacheFilename    = "token.json"
-	ssoTokenCacheDirPerms    = 0700
-	ssoTokenCacheFilePerms   = 0600
+	ssoTokenCacheDirPerms    = 0o700
+	ssoTokenCacheFilePerms   = 0o600
 )
 
 // ssoTokenCache represents a cached SSO access token.
