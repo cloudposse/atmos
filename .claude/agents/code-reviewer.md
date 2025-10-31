@@ -96,7 +96,329 @@ make lint
 - ✅ **APPROVED**: `make lint` passes with no errors
 - ❌ **BLOCKED**: Any linting errors present - must be fixed before commit
 
-### 3. Function Naming and Conventions (MANDATORY)
+### 3. Error Handling (MANDATORY)
+
+Code reviewer is **deeply familiar** with error handling conventions from docs folder.
+
+#### Sentinel Errors (MANDATORY)
+
+**ALWAYS use static sentinel errors from `errors/errors.go`:**
+
+✅ **GOOD: Using sentinel errors**
+```go
+import errUtils "github.com/cloudposse/atmos/pkg/errors"
+
+func LoadStack(name string) (*Stack, error) {
+    if name == "" {
+        return nil, errUtils.ErrStackNameRequired
+    }
+
+    stack, err := readStackFile(name)
+    if os.IsNotExist(err) {
+        return nil, fmt.Errorf("%w: %s", errUtils.ErrStackNotFound, name)
+    }
+
+    return stack, nil
+}
+```
+
+❌ **BAD: Dynamic error strings**
+```go
+// NEVER create dynamic errors
+if name == "" {
+    return nil, errors.New("stack name is required")  // ❌ Can't test with errors.Is
+}
+
+// NEVER use string formatting as the error
+if name == "" {
+    return nil, fmt.Errorf("stack name is required")  // ❌ Can't compare reliably
+}
+```
+
+#### Error Wrapping with Context (MANDATORY)
+
+**ALWAYS wrap errors with context using `%w`:**
+
+✅ **GOOD: Wrapping with context**
+```go
+func ProcessStack(stack *Stack) error {
+    components, err := loadComponents(stack.ComponentsPath)
+    if err != nil {
+        return fmt.Errorf("%w: failed to load components from %s: %w",
+            errUtils.ErrProcessingFailed, stack.ComponentsPath, err)
+    }
+
+    if err := validateComponents(components); err != nil {
+        return fmt.Errorf("%w: component validation failed: %w",
+            errUtils.ErrValidationFailed, err)
+    }
+
+    return nil
+}
+```
+
+❌ **BAD: No wrapping or context**
+```go
+// NEVER return errors without context
+func ProcessStack(stack *Stack) error {
+    components, err := loadComponents(stack.ComponentsPath)
+    if err != nil {
+        return err  // ❌ Lost context about what failed
+    }
+}
+
+// NEVER use %v (loses error chain)
+if err != nil {
+    return fmt.Errorf("failed to load: %v", err)  // ❌ Can't use errors.Is/As
+}
+```
+
+#### Error Comparison (MANDATORY)
+
+**ALWAYS use `errors.Is()` or `errors.As()` - NEVER string comparison:**
+
+✅ **GOOD: Using errors.Is**
+```go
+func HandleError(err error) {
+    if errors.Is(err, errUtils.ErrStackNotFound) {
+        // Handle missing stack
+        return
+    }
+
+    if errors.Is(err, errUtils.ErrConfigInvalid) {
+        // Handle invalid config
+        return
+    }
+}
+```
+
+✅ **GOOD: Using errors.As for error types**
+```go
+var validationErr *ValidationError
+if errors.As(err, &validationErr) {
+    // Access validation-specific fields
+    fmt.Println("Validation failed:", validationErr.Field)
+}
+```
+
+❌ **BAD: String comparison or substring matching**
+```go
+// NEVER compare error strings
+if err.Error() == "stack not found" {  // ❌ Fragile, breaks with wording changes
+    // ...
+}
+
+// NEVER use Contains on error strings
+if strings.Contains(err.Error(), "not found") {  // ❌ Too broad, unreliable
+    // ...
+}
+
+// NEVER type assert directly
+if _, ok := err.(*ValidationError); ok {  // ❌ Use errors.As instead
+    // ...
+}
+```
+
+#### Error Types with Metadata (when needed)
+
+**Use custom error types when you need to attach metadata:**
+
+✅ **GOOD: Custom error type with metadata**
+```go
+// Define error type
+type ValidationError struct {
+    Field   string
+    Value   interface{}
+    Message string
+}
+
+func (e *ValidationError) Error() string {
+    return fmt.Sprintf("validation failed for %s: %s", e.Field, e.Message)
+}
+
+// Use it
+func ValidateStack(stack *Stack) error {
+    if stack.Name == "" {
+        return &ValidationError{
+            Field:   "name",
+            Value:   stack.Name,
+            Message: "name is required",
+        }
+    }
+    return nil
+}
+
+// Check it
+var valErr *ValidationError
+if errors.As(err, &valErr) {
+    log.Error("Validation error", "field", valErr.Field, "value", valErr.Value)
+}
+```
+
+#### No Deep Exits (MANDATORY)
+
+**NEW code paths must NEVER use os.Exit() - return errors instead:**
+
+✅ **GOOD: Return errors, let caller decide**
+```go
+func ProcessCommand() error {
+    if err := validateInput(); err != nil {
+        return fmt.Errorf("%w: %w", errUtils.ErrInvalidInput, err)
+    }
+
+    if err := executeOperation(); err != nil {
+        return fmt.Errorf("%w: %w", errUtils.ErrOperationFailed, err)
+    }
+
+    return nil
+}
+
+// Caller handles exit
+func main() {
+    if err := ProcessCommand(); err != nil {
+        fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+        os.Exit(1)
+    }
+}
+```
+
+❌ **BAD: Deep exits (FORBIDDEN in new code)**
+```go
+// NEVER use os.Exit() in library code or business logic
+func ProcessCommand() {
+    if err := validateInput(); err != nil {
+        fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+        os.Exit(1)  // ❌ FORBIDDEN - can't test, can't handle gracefully
+    }
+}
+
+// NEVER use log.Fatal in library code
+func LoadConfig() {
+    config, err := readConfig()
+    if err != nil {
+        log.Fatal(err)  // ❌ FORBIDDEN - log.Fatal calls os.Exit
+    }
+}
+```
+
+**Exception:** Existing code may have deep exits, but **new code MUST NOT** add more.
+
+#### Semantic Logging (MANDATORY)
+
+**Use structured logging, never string formatting:**
+
+✅ **GOOD: Structured semantic logging**
+```go
+import log "github.com/hashicorp/go-hclog"
+
+func ProcessStack(stack *Stack) error {
+    log.Info("Processing stack",
+        "stack", stack.Name,
+        "environment", stack.Environment,
+        "region", stack.Region)
+
+    if err := validate(stack); err != nil {
+        log.Error("Stack validation failed",
+            "stack", stack.Name,
+            "error", err)
+        return fmt.Errorf("%w: %w", errUtils.ErrValidationFailed, err)
+    }
+
+    log.Info("Stack processed successfully",
+        "stack", stack.Name,
+        "components_count", len(stack.Components))
+
+    return nil
+}
+```
+
+❌ **BAD: String formatting in logs**
+```go
+// NEVER use string formatting for logs
+log.Info(fmt.Sprintf("Processing stack %s in %s", stack.Name, stack.Region))  // ❌
+
+// NEVER embed errors in format strings
+log.Error(fmt.Sprintf("Failed to process: %v", err))  // ❌
+```
+
+**Logging conventions:**
+- Use key-value pairs: `"key", value`
+- Use descriptive keys: `"stack_name"` not `"s"`
+- Always include error key when logging errors: `"error", err`
+- Use appropriate log levels:
+  - `log.Debug()` - Development/troubleshooting info
+  - `log.Info()` - Normal operation events
+  - `log.Warn()` - Recoverable issues
+  - `log.Error()` - Errors requiring attention
+
+### 4. Registry Pattern Verification (MANDATORY)
+
+**All extensible/pluggable features MUST use registry pattern:**
+
+#### Command Registry (MANDATORY for new commands)
+
+✅ **GOOD: Using command registry**
+```go
+// cmd/mycommand/provider.go
+package mycommand
+
+import (
+    "github.com/cloudposse/atmos/cmd/internal/registry"
+    "github.com/spf13/cobra"
+)
+
+type Provider struct{}
+
+func (p *Provider) ProvideCommand() *cobra.Command {
+    return &cobra.Command{
+        Use:   "mycommand",
+        Short: "Description",
+        RunE:  execute,
+    }
+}
+
+func init() {
+    registry.Register("root", &Provider{})
+}
+```
+
+❌ **BAD: Direct command registration**
+```go
+// NEVER add commands directly to RootCmd
+func init() {
+    cmd.RootCmd.AddCommand(myCommand)  // ❌ Violates registry pattern
+}
+```
+
+#### Component Registry
+
+**Check that new component types register properly:**
+
+```go
+// GOOD: Component registers with registry
+func init() {
+    componentRegistry.Register("terraform", &TerraformComponent{})
+    componentRegistry.Register("helmfile", &HelmfileComponent{})
+}
+```
+
+#### Store Registry
+
+**Check that new store providers register:**
+
+```go
+// GOOD: Store provider registers
+func init() {
+    storeRegistry.Register("ssm", &SSMStore{})
+    storeRegistry.Register("azure-keyvault", &AzureKeyVaultStore{})
+}
+```
+
+**Decision:**
+- ✅ **APPROVED**: New extensible features use registry pattern
+- ❌ **BLOCKED**: Direct registration or hard-coded extensions
+
+### 5. Function Naming and Conventions (MANDATORY)
 
 **Verify function names follow Go conventions:**
 
@@ -144,7 +466,7 @@ func (this *Provider) GetCredentials() (*Credentials, error)  // "this" not idio
 - Boolean functions: `IsValid()`, `HasPermission()`, `CanAccess()`
 - Avoid generic names: `helper`, `util`, `manager`, `handler` (be specific)
 
-### 4. Code Reuse Verification (MANDATORY)
+### 6. Code Reuse Verification (MANDATORY)
 
 **Critical check: Ensure code reuses existing functionality instead of reimplementing.**
 
@@ -193,7 +515,7 @@ func MyNewFunction() {
 - ⚠️ **NEEDS DISCUSSION**: Potential duplication - discuss with developer if extension is better
 - ❌ **BLOCKED**: Clear duplication of existing functionality - must refactor to reuse
 
-### 5. Automated Tests Verification (MANDATORY)
+### 7. Automated Tests Verification (MANDATORY)
 
 **Every code change MUST include appropriate automated tests.**
 
@@ -313,7 +635,7 @@ make testacc-cover
 - ⚠️ **NEEDS IMPROVEMENT**: Tests present but quality issues (add specific feedback)
 - ❌ **BLOCKED**: Missing tests, tautological tests, or coverage < 80%
 
-### 6. Additional Standards Checks
+### 8. Additional Standards Checks
 
 #### Environment Variables
 ```go
