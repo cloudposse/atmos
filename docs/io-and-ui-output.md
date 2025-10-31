@@ -166,6 +166,80 @@ func ExecuteAbout(cmd *cobra.Command, args []string) error {
 
 One line. Renders beautifully, degrades gracefully when piped.
 
+## Global Writers (Third-Party Integration)
+
+For integrating with third-party libraries that expect `io.Writer` interfaces (loggers, progress bars, TUI frameworks), use the global writers:
+
+```go
+import iolib "github.com/cloudposse/atmos/pkg/io"
+
+// Global writers - available after initialization
+iolib.Data   // io.Writer for stdout (automatically masked)
+iolib.UI     // io.Writer for stderr (automatically masked)
+```
+
+### Use Cases
+
+1. **Passing to third-party loggers:**
+   ```go
+   logger := log.New(iolib.UI, "[APP] ", log.LstdFlags)
+   logger.Printf("Starting process...") // Goes to stderr, automatically masked
+   ```
+
+2. **Custom file handles with masking:**
+   ```go
+   f, _ := os.Create("output.log")
+   maskedFile := iolib.MaskWriter(f)
+   fmt.Fprintf(maskedFile, "Token: %s\n", token) // Automatically masked in file
+   ```
+
+3. **Direct usage (simple cases):**
+   ```go
+   fmt.Fprintf(iolib.Data, `{"status":"success"}`) // stdout
+   fmt.Fprintf(iolib.UI, "Processing...\n")        // stderr
+   ```
+
+### Registering Secrets Globally
+
+```go
+// Register secret with all encodings (base64, URL, JSON)
+iolib.RegisterSecret("my-api-key-abc123")
+
+// Register simple value (no encodings)
+iolib.RegisterValue("session-id")
+
+// Register regex pattern
+iolib.RegisterPattern(`AKIA[0-9A-Z]{16}`)
+
+// Now all output through global writers is automatically masked
+fmt.Fprintf(iolib.Data, "Key: my-api-key-abc123\n")
+// Output: Key: ***MASKED***
+```
+
+### Auto-Registration
+
+Common secrets are automatically registered from environment variables on initialization:
+- AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`)
+- GitHub tokens (`GITHUB_TOKEN`, `GH_TOKEN`)
+- GitLab tokens (`GITLAB_TOKEN`)
+- Datadog API keys (`DATADOG_API_KEY`, `DD_API_KEY`)
+- Common patterns (GitHub PATs, Bearer tokens)
+
+### When to Use
+
+**Prefer `ui` and `data` package functions for direct output:**
+```go
+ui.Success("Done!")       // Simpler API, better for direct output
+data.WriteJSON(result)    // More features (JSON/YAML serialization)
+```
+
+**Use global writers for third-party integration:**
+```go
+logger := log.New(iolib.UI, "[APP] ", log.LstdFlags)  // Need io.Writer
+progress := NewProgressBar(iolib.UI)                   // Need io.Writer
+maskedFile := iolib.MaskWriter(file)                   // Custom file handles
+```
+
 ## Secret Masking
 
 **All output is automatically masked** - both UI and Data channels flow through `io.Write()` which applies masking transparently.

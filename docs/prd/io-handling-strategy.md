@@ -2,7 +2,7 @@
 
 **Status**: Adopted
 **Created**: 2025-10-24
-**Updated**: 2025-10-27
+**Updated**: 2025-10-31
 **Owner**: Engineering Team
 
 ## Executive Summary
@@ -616,6 +616,281 @@ fmt.Fprint(io.UI(), errorMarkdown)   // Error details → stderr (UI)
 - **Separation:** I/O (channels) vs UI (formatting) are distinct concepts
 - **Flexibility:** Markdown can go to either channel depending on context
 - **Simplicity:** Just use `fmt.Fprintf()` - no need to learn new Print methods
+
+## Global Writers (Enhancement)
+
+### Problem: Third-Party Library Integration
+
+The package-level functions (`ui.Success()`, `data.Write()`) work great for direct output in commands. However, when integrating with third-party libraries that expect `io.Writer` interfaces (like loggers, progress bars, TUI frameworks), we need a way to pass file handles that automatically apply masking.
+
+**Use cases:**
+- Passing file handles to Charmbracelet logger
+- Integrating with progress bar libraries
+- Writing to custom file handles (logs, reports)
+- Using with any library expecting `io.Writer`
+
+### Solution: Global Writers
+
+Provide package-level `io.Writer` instances that can be passed to any third-party library:
+
+```go
+import iolib "github.com/cloudposse/atmos/pkg/io"
+
+// Global writers - available after Initialize()
+iolib.Data   // io.Writer for stdout (automatically masked)
+iolib.UI     // io.Writer for stderr (automatically masked)
+
+// Usage with third-party libraries
+logger := log.New(iolib.UI, "[APP] ", log.LstdFlags)
+logger.Printf("Using token: %s", token)  // Automatically masked
+
+// Direct usage
+fmt.Fprintf(iolib.Data, `{"result": "success"}`)
+fmt.Fprintf(iolib.UI, "Processing...\n")
+```
+
+### Implementation
+
+```go
+// pkg/io/global.go
+
+var (
+    // Data is the global writer for machine-readable output (stdout).
+    // All writes are automatically masked based on registered secrets.
+    Data io.Writer
+
+    // UI is the global writer for human-readable output (stderr).
+    // All writes are automatically masked based on registered secrets.
+    UI io.Writer
+
+    globalContext Context
+    initOnce      sync.Once
+)
+
+// Initialize sets up global writers (called by cmd/root.go).
+func Initialize() error {
+    initOnce.Do(func() {
+        globalContext, initErr = NewContext()
+        if initErr != nil {
+            Data = os.Stdout
+            UI = os.Stderr
+            return
+        }
+        registerCommonSecrets(globalContext.Masker())
+        Data = globalContext.Streams().Output()
+        UI = globalContext.Streams().Error()
+    })
+    return initErr
+}
+
+// MaskWriter wraps any io.Writer with automatic masking.
+// Use this to add masking to custom file handles.
+func MaskWriter(w io.Writer) io.Writer {
+    if globalContext == nil {
+        _ = Initialize()
+    }
+    if globalContext == nil {
+        return w
+    }
+    return &maskedWriter{
+        underlying: w,
+        masker:     globalContext.Masker(),
+    }
+}
+
+// RegisterSecret registers a secret value for masking.
+// The secret and its encodings (base64, URL, JSON) will be masked.
+func RegisterSecret(secret string) {
+    if globalContext == nil {
+        _ = Initialize()
+    }
+    if globalContext != nil {
+        globalContext.Masker().RegisterSecret(secret)
+    }
+}
+
+// RegisterValue registers a literal value for masking (without encodings).
+func RegisterValue(value string) {
+    if globalContext == nil {
+        _ = Initialize()
+    }
+    if globalContext != nil {
+        globalContext.Masker().RegisterValue(value)
+    }
+}
+
+// RegisterPattern registers a regex pattern for masking.
+func RegisterPattern(pattern string) error {
+    if globalContext == nil {
+        _ = Initialize()
+    }
+    if globalContext == nil {
+        return errors.New("failed to initialize I/O context")
+    }
+    return globalContext.Masker().RegisterPattern(pattern)
+}
+
+// GetContext returns the global I/O context for advanced usage.
+func GetContext() Context {
+    if globalContext == nil {
+        _ = Initialize()
+    }
+    return globalContext
+}
+```
+
+### Auto-Registration of Common Secrets
+
+The `Initialize()` function automatically registers common secrets from environment variables:
+
+```go
+func registerCommonSecrets(masker Masker) {
+    // AWS credentials
+    if key := os.Getenv("AWS_ACCESS_KEY_ID"); key != "" {
+        masker.RegisterValue(key)
+    }
+    if secret := os.Getenv("AWS_SECRET_ACCESS_KEY"); secret != "" {
+        masker.RegisterSecret(secret)
+    }
+    if token := os.Getenv("AWS_SESSION_TOKEN"); token != "" {
+        masker.RegisterSecret(token)
+    }
+
+    // GitHub tokens
+    if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+        masker.RegisterSecret(token)
+    }
+    if token := os.Getenv("GH_TOKEN"); token != "" {
+        masker.RegisterSecret(token)
+    }
+
+    // GitLab tokens
+    if token := os.Getenv("GITLAB_TOKEN"); token != "" {
+        masker.RegisterSecret(token)
+    }
+
+    // Datadog API keys
+    if key := os.Getenv("DATADOG_API_KEY"); key != "" {
+        masker.RegisterSecret(key)
+    }
+    if key := os.Getenv("DD_API_KEY"); key != "" {
+        masker.RegisterSecret(key)
+    }
+
+    // Common secret patterns
+    _ = masker.RegisterPattern(`ghp_[A-Za-z0-9]{36}`)             // GitHub PAT
+    _ = masker.RegisterPattern(`gho_[A-Za-z0-9]{36}`)             // GitHub OAuth
+    _ = masker.RegisterPattern(`Bearer [A-Za-z0-9\-._~+/]+=*`)    // Bearer tokens
+}
+```
+
+### Usage Patterns
+
+#### Pattern 1: Third-Party Logger Integration
+
+```go
+import (
+    "log"
+    iolib "github.com/cloudposse/atmos/pkg/io"
+)
+
+// Initialize once (done in cmd/root.go)
+_ = iolib.Initialize()
+
+// Pass UI writer to logger - output goes to stderr, automatically masked
+logger := log.New(iolib.UI, "[APP] ", log.LstdFlags)
+
+// Register secret
+apiKey := os.Getenv("API_KEY")
+iolib.RegisterSecret(apiKey)
+
+// Logger output is automatically masked
+logger.Printf("Connecting with key: %s", apiKey)
+// Output: [APP] 2025/10/31 10:30:00 Connecting with key: ***MASKED***
+```
+
+#### Pattern 2: Custom File Handle with Masking
+
+```go
+import iolib "github.com/cloudposse/atmos/pkg/io"
+
+// Create file handle
+f, _ := os.Create("output.log")
+defer f.Close()
+
+// Wrap with automatic masking
+maskedFile := iolib.MaskWriter(f)
+
+// Register secret
+dbPassword := "super-secret-password"
+iolib.RegisterSecret(dbPassword)
+
+// Writes to file are automatically masked
+fmt.Fprintf(maskedFile, "DB Password: %s\n", dbPassword)
+// File contains: DB Password: ***MASKED***
+```
+
+#### Pattern 3: Simple Direct Usage
+
+```go
+import (
+    "fmt"
+    iolib "github.com/cloudposse/atmos/pkg/io"
+)
+
+// Write data to stdout
+fmt.Fprintf(iolib.Data, `{"status":"success"}`)
+
+// Write UI message to stderr
+fmt.Fprintf(iolib.UI, "Processing...\n")
+
+// Register and mask secret
+token := "ghp_1234567890abcdefghijklmnopqrstuvwxyz"
+iolib.RegisterSecret(token)
+
+fmt.Fprintf(iolib.Data, "Token: %s\n", token)
+// Output: Token: ***MASKED***
+```
+
+#### Pattern 4: Pattern-Based Masking
+
+```go
+import iolib "github.com/cloudposse/atmos/pkg/io"
+
+// Register pattern for AWS access keys
+_ = iolib.RegisterPattern(`AKIA[0-9A-Z]{16}`)
+
+// Any matching pattern is automatically masked
+fmt.Fprintf(iolib.Data, "Key: AKIAIOSFODNN7EXAMPLE\n")
+// Output: Key: ***MASKED***
+```
+
+### Benefits
+
+1. **Simplified Integration**: Pass `iolib.Data` or `iolib.UI` to any library expecting `io.Writer`
+2. **Automatic Masking**: All output through global writers is masked automatically
+3. **Zero Boilerplate**: No context retrieval, no manual masking setup
+4. **Thread-Safe**: `sync.Once` ensures single initialization, `sync.RWMutex` in masker
+5. **Auto-Discovery**: Common secrets automatically registered from environment
+6. **Flexible**: Can wrap custom file handles with `MaskWriter()`
+
+### Design Decisions
+
+**Q: Why global variables instead of dependency injection?**
+
+A: For third-party library integration, we need simple `io.Writer` instances that can be passed anywhere. Global writers provide the logging-style simplicity needed for this use case, while the existing `io.Context` interface remains available for more controlled usage.
+
+**Q: How does this relate to package-level functions (`ui.Success()`, `data.Write()`)?**
+
+A: These complement each other:
+- **Package-level functions**: Best for direct output in commands (simpler API)
+- **Global writers**: Best for third-party library integration (standard `io.Writer`)
+
+Commands should prefer package-level functions. Use global writers when you need to pass file handles to libraries.
+
+**Q: Is this safe for concurrent access?**
+
+A: Yes. Initialization uses `sync.Once` to ensure it happens exactly once. The underlying masker uses `sync.RWMutex` for thread-safe secret registration and masking operations.
 
 ## Implementation Strategy
 

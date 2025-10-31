@@ -150,9 +150,16 @@ func buildConfig() *Config {
 	cfg := &Config{
 		// From flags (bound via viper in cmd/root.go)
 		RedirectStderr: viper.GetString("redirect-stderr"),
-		// Mask flag: --mask (default true) means masking is enabled.
-		// Invert for DisableMasking field (true = disabled).
-		DisableMasking: !viper.GetBool("mask"),
+	}
+
+	// Mask flag: --mask (default true) means masking is enabled.
+	// Invert for DisableMasking field (true = disabled).
+	// If the flag isn't set (e.g., in tests), default to masking enabled.
+	if viper.IsSet("mask") {
+		cfg.DisableMasking = !viper.GetBool("mask")
+	} else {
+		// Default: masking enabled
+		cfg.DisableMasking = false
 	}
 
 	// Load atmos.yaml config (if available)

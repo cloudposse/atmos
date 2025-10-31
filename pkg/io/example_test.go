@@ -208,3 +208,34 @@ func Example_keyPrinciples() {
 	msg := formatter.Success("Done!")
 	fmt.Fprintf(ioCtx.UI(), "%s\n", msg)
 }
+
+// Global writer usage examples.
+// NOTE: Example tests are not provided here due to test isolation issues with global state.
+// See TestGlobalWriters_AutomaticMasking, TestRegisterSecret, TestRegisterPattern,
+// and TestRegisterValue in global_test.go for comprehensive tests with examples.
+//
+// Usage pattern for global writers:
+//
+//	import iolib "github.com/cloudposse/atmos/pkg/io"
+//
+//	// Initialize I/O (normally done automatically in cmd/root.go)
+//	_ = iolib.Initialize()
+//
+//	// Write data to stdout (for piping/automation)
+//	fmt.Fprintf(iolib.Data, `{"status":"success"}`)
+//
+//	// Register a secret - it will be masked in ALL output
+//	apiKey := "sk-1234567890abcdef"
+//	iolib.RegisterSecret(apiKey)
+//
+//	// Secret is automatically masked
+//	fmt.Fprintf(iolib.Data, "API Key: %s\n", apiKey)
+//	// Output: API Key: ***MASKED***
+//
+//	// Pass global writers to any library expecting io.Writer
+//	logger := log.New(iolib.UI, "[APP] ", log.LstdFlags)
+//
+//	// Wrap any io.Writer with automatic masking
+//	f, _ := os.Create("output.log")
+//	maskedFile := iolib.MaskWriter(f)
+//	fmt.Fprintf(maskedFile, "Token: %s\n", apiKey)
