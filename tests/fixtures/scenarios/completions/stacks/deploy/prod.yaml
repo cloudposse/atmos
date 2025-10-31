@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: prod
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
