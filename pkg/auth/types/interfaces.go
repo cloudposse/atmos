@@ -249,6 +249,15 @@ type AuthManager interface {
 	// This is useful for commands like `atmos env` that just need to show what
 	// environment variables would be set, without requiring valid credentials.
 	GetEnvironmentVariables(identityName string) (map[string]string, error)
+
+	// PrepareShellEnvironment prepares environment variables for subprocess execution.
+	// Takes current environment list and returns it with auth credentials configured.
+	// This calls identity.PrepareEnvironment() internally to configure file-based credentials,
+	// credential paths, regions, and clear conflicting variables.
+	// The input currentEnv should include any previous transformations (component env, workflow env, etc.).
+	// Returns environment variables as a list of "KEY=VALUE" strings ready for subprocess.
+	// Use this for all subprocess invocations: Terraform, Helmfile, Packer, workflows, custom commands, auth shell, etc.
+	PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error)
 }
 
 // CredentialStore defines the interface for storing and retrieving credentials.

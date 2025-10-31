@@ -624,6 +624,21 @@ func (mr *MockAuthManagerMockRecorder) LogoutProvider(ctx, providerName any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutProvider", reflect.TypeOf((*MockAuthManager)(nil).LogoutProvider), ctx, providerName)
 }
 
+// PrepareShellEnvironment mocks base method.
+func (m *MockAuthManager) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PrepareShellEnvironment", ctx, identityName, currentEnv)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PrepareShellEnvironment indicates an expected call of PrepareShellEnvironment.
+func (mr *MockAuthManagerMockRecorder) PrepareShellEnvironment(ctx, identityName, currentEnv any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareShellEnvironment", reflect.TypeOf((*MockAuthManager)(nil).PrepareShellEnvironment), ctx, identityName, currentEnv)
+}
+
 // Validate mocks base method.
 func (m *MockAuthManager) Validate() error {
 	m.ctrl.T.Helper()

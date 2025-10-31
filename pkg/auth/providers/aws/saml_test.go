@@ -125,6 +125,10 @@ func (s stubSamlMgr) GetEnvironmentVariables(string) (map[string]string, error) 
 	return make(map[string]string), nil
 }
 
+func (s stubSamlMgr) PrepareShellEnvironment(context.Context, string, []string) ([]string, error) {
+	return nil, nil
+}
+
 func TestSAMLProvider_PreAuthenticate(t *testing.T) {
 	p, err := NewSAMLProvider("p", &schema.Provider{Kind: "aws/saml", URL: "https://idp.example.com/saml", Region: "us-east-1"})
 	require.NoError(t, err)
