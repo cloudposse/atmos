@@ -302,6 +302,8 @@ func (p *ssoProvider) Environment() (map[string]string, error) {
 }
 
 // Paths returns credential files/directories used by this provider.
+//
+//nolint:dupl // SSO and SAML providers have identical path logic but are separate implementations
 func (p *ssoProvider) Paths() ([]authTypes.Path, error) {
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
@@ -311,7 +313,7 @@ func (p *ssoProvider) Paths() ([]authTypes.Path, error) {
 		return nil, err
 	}
 
-	return []authTypes.Path{
+	paths := []authTypes.Path{
 		{
 			Location: fileManager.GetCredentialsPath(p.name),
 			Type:     authTypes.PathTypeFile,
@@ -330,7 +332,24 @@ func (p *ssoProvider) Paths() ([]authTypes.Path, error) {
 				"read_only": "true",
 			},
 		},
-	}, nil
+	}
+
+	// Add AWS cache directory if it can be determined (contains SSO and CLI cache).
+	// This directory should be writable so the AWS SDK can update cache.
+	awsCacheDir := fileManager.GetCachePath()
+	if awsCacheDir != "" {
+		paths = append(paths, authTypes.Path{
+			Location: awsCacheDir,
+			Type:     authTypes.PathTypeDirectory,
+			Required: false, // Cache is optional - AWS SDK will create if needed.
+			Purpose:  "AWS SDK cache directory (SSO tokens, CLI cache)",
+			Metadata: map[string]string{
+				"read_only": "false", // Cache must be writable.
+			},
+		})
+	}
+
+	return paths, nil
 }
 
 // PrepareEnvironment prepares environment variables for external processes.

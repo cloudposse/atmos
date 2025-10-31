@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
+	"github.com/spf13/viper"
 	ini "gopkg.in/ini.v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -25,6 +26,9 @@ import (
 const (
 	PermissionRWX = 0o700
 	PermissionRW  = 0o600
+
+	// Directory names.
+	awsCacheDirName = "aws" // AWS SDK cache directory name under XDG_CACHE_HOME.
 
 	// File locking timeouts.
 	fileLockTimeout = 10 * time.Second
@@ -566,6 +570,33 @@ func (m *AWSFileManager) GetCredentialsPath(providerName string) string {
 // GetConfigPath returns the path to the config file for the provider.
 func (m *AWSFileManager) GetConfigPath(providerName string) string {
 	return filepath.Join(m.baseDir, providerName, "config")
+}
+
+// GetCachePath returns the AWS SDK cache directory path.
+// AWS SDK uses ~/.aws/sso/cache or $XDG_CACHE_HOME/aws/sso/cache for SSO cache.
+// Returns empty string if cache directory cannot be determined.
+func (m *AWSFileManager) GetCachePath() string {
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		return ""
+	}
+
+	// Check for XDG_CACHE_HOME environment variable.
+	// Use viper to respect environment variable precedence.
+	v := viper.New()
+	if err := v.BindEnv("XDG_CACHE_HOME"); err != nil {
+		// Fall back to default if binding fails.
+		return filepath.Join(homeDir, ".cache", awsCacheDirName)
+	}
+
+	cacheDir := v.GetString("XDG_CACHE_HOME")
+	if cacheDir == "" {
+		// XDG not set, use default ~/.cache/aws.
+		return filepath.Join(homeDir, ".cache", awsCacheDirName)
+	}
+
+	// XDG is set, use $XDG_CACHE_HOME/aws.
+	return filepath.Join(cacheDir, awsCacheDirName)
 }
 
 // GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice.
