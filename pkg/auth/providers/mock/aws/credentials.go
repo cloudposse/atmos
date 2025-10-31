@@ -18,11 +18,19 @@ type Credentials struct {
 
 // IsExpired checks if the credentials are expired.
 func (c *Credentials) IsExpired() bool {
+	// Zero time means no expiration set.
+	if c.Expiration.IsZero() {
+		return false
+	}
 	return time.Now().After(c.Expiration)
 }
 
 // GetExpiration returns the expiration time of the credentials.
 func (c *Credentials) GetExpiration() (*time.Time, error) {
+	// Zero time means no expiration set.
+	if c.Expiration.IsZero() {
+		return nil, nil
+	}
 	return &c.Expiration, nil
 }
 

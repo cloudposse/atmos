@@ -169,12 +169,20 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 	return nil
 }
 
-// CredentialsExist always returns true for mock identities (credentials are in-memory).
+// CredentialsExist checks if credentials have been stored to disk.
 func (i *Identity) CredentialsExist() (bool, error) {
 	defer perf.Track(nil, "mock.Identity.CredentialsExist")()
 
-	// Mock identities don't use file-based storage.
-	// Credentials are always available in-memory.
+	// Check if credentials file exists on disk.
+	// PostAuthenticate writes credentials to this path.
+	credPath := i.getCredentialsFilePath()
+	_, err := os.Stat(credPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check credentials file %s: %w", credPath, err)
+	}
 	return true, nil
 }
 

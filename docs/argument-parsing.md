@@ -48,7 +48,7 @@ type SeparatedCommandArgs struct {
 ```go
 func executeMyCommand(cmd *cobra.Command, args []string) error {
     // Extract separated args
-    separated := cmd.ExtractSeparatedArgs(cmd, args, os.Args)
+    separated := ExtractSeparatedArgs(cmd, args, os.Args)
 
     if !separated.HasSeparator {
         return errors.New("command requires -- separator")
