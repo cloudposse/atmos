@@ -8,12 +8,10 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
@@ -164,17 +162,6 @@ func checkTerraformFlags(info *schema.ConfigAndStacksInfo) error {
 
 // handleInteractiveIdentitySelection handles the case where --identity was used without a value.
 func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
-	// Guard: Fail fast in CI/non-TTY environments instead of hanging.
-	// Interactive selector requires both stdin (for input) and stdout (for TUI rendering),
-	// and must not be running in a CI environment.
-	if !term.IsTTYSupportForStdin() || !term.IsTTYSupportForStdout() || telemetry.IsCI() {
-		errUtils.CheckErrorPrintAndExit(
-			fmt.Errorf("%w: interactive identity selection requires a TTY", errUtils.ErrDefaultIdentity),
-			"",
-			"",
-		)
-	}
-
 	// Initialize CLI config to get auth configuration.
 	// Use false to skip stack processing - only auth config is needed.
 	atmosConfig, err := cfg.InitCliConfig(*info, false)
@@ -197,6 +184,7 @@ func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
 	}
 
 	// Get default identity with forced interactive selection.
+	// GetDefaultIdentity() handles TTY and CI detection via isInteractive().
 	selectedIdentity, err := authManager.GetDefaultIdentity(true)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrDefaultIdentity, err), "", "")
