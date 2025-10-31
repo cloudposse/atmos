@@ -114,10 +114,11 @@ func TestIsInteractive(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Preserve and restore CI environment variables.
+			// Use t.Cleanup to ensure restoration happens after t.Setenv cleanups.
 			preservedEnv := telemetry.PreserveCIEnvVars()
-			defer func() {
+			t.Cleanup(func() {
 				telemetry.RestoreCIEnvVars(preservedEnv)
-			}()
+			})
 
 			// Setup test environment.
 			cleanup := tt.setupEnv(t)
@@ -220,10 +221,11 @@ func TestIsInteractive_StdinBehavior(t *testing.T) {
 // TestIsInteractive_Integration tests isInteractive() with actual CI environment variables.
 func TestIsInteractive_Integration(t *testing.T) {
 	// Preserve original CI environment.
+	// Use t.Cleanup to ensure restoration happens after all t.Setenv cleanups.
 	preservedEnv := telemetry.PreserveCIEnvVars()
-	defer func() {
+	t.Cleanup(func() {
 		telemetry.RestoreCIEnvVars(preservedEnv)
-	}()
+	})
 
 	// Test 1: No CI environment - result depends on stdin TTY (will be false in test env).
 	t.Run("no CI environment", func(t *testing.T) {
@@ -261,10 +263,11 @@ func TestIsInteractive_Integration(t *testing.T) {
 // TestIsInteractive_EdgeCases tests edge cases and boundary conditions.
 func TestIsInteractive_EdgeCases(t *testing.T) {
 	// Preserve original CI environment.
+	// Use t.Cleanup to ensure restoration happens after all t.Setenv cleanups.
 	preservedEnv := telemetry.PreserveCIEnvVars()
-	defer func() {
+	t.Cleanup(func() {
 		telemetry.RestoreCIEnvVars(preservedEnv)
-	}()
+	})
 
 	t.Run("CI env var with empty string", func(t *testing.T) {
 		t.Setenv("CI", "")
