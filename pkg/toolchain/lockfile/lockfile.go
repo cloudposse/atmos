@@ -133,6 +133,7 @@ func Save(filePath string, lockFile *LockFile) error {
 `
 	content := header + string(data)
 
+	//nolint:gosec // G306: Lock file needs to be readable by other processes/users
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("failed to write lock file: %w", err)
 	}

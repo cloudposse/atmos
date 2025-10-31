@@ -84,7 +84,7 @@ func NewAquaRegistry() *AquaRegistry {
 func (ar *AquaRegistry) get(url string) (*http.Response, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("%w: failed to create request: %w", registry.ErrHTTPRequest, err)
 	}
 
 	resp, err := ar.client.Do(req)
@@ -166,7 +166,7 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*r
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read registry file: %w", err)
+		return nil, fmt.Errorf("%w: failed to read registry file: %w", registry.ErrHTTPRequest, err)
 	}
 
 	// Parse the full registry file with version overrides
@@ -291,7 +291,7 @@ func (ar *AquaRegistry) fetchRegistryFile(url string) (*registry.Tool, error) {
 	// Read response
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, fmt.Errorf("%w: failed to read response: %w", registry.ErrHTTPRequest, err)
 	}
 
 	// Cache the response
@@ -377,12 +377,12 @@ func (ar *AquaRegistry) BuildAssetURL(tool *registry.Tool, version string) (stri
 	// Parse and execute template
 	tmpl, err := template.New("asset").Funcs(funcMap).Parse(tool.Asset)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse asset template: %w", err)
+		return "", fmt.Errorf("%w: failed to parse asset template: %w", registry.ErrNoAssetTemplate, err)
 	}
 
 	var assetName strings.Builder
 	if err := tmpl.Execute(&assetName, data); err != nil {
-		return "", fmt.Errorf("failed to execute asset template: %w", err)
+		return "", fmt.Errorf("%w: failed to execute asset template: %w", registry.ErrNoAssetTemplate, err)
 	}
 
 	// For http type tools, the URL is already complete
@@ -422,7 +422,7 @@ func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
+		return "", fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, err)
 	}
 
 	// Parse the JSON response to find the latest non-prerelease version
@@ -432,7 +432,7 @@ func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 	}
 
 	if err := json.Unmarshal(body, &releases); err != nil {
-		return "", fmt.Errorf("failed to parse releases JSON: %w", err)
+		return "", fmt.Errorf("%w: failed to parse releases JSON: %w", registry.ErrRegistryParse, err)
 	}
 
 	// Find the first non-prerelease release
@@ -466,7 +466,7 @@ func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, erro
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, err)
 	}
 
 	// Parse the JSON response
@@ -476,7 +476,7 @@ func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, erro
 	}
 
 	if err := json.Unmarshal(body, &releases); err != nil {
-		return nil, fmt.Errorf("failed to parse releases JSON: %w", err)
+		return nil, fmt.Errorf("%w: failed to parse releases JSON: %w", registry.ErrRegistryParse, err)
 	}
 
 	// Extract all non-prerelease versions
@@ -695,12 +695,12 @@ func (ar *AquaRegistry) fetchRegistryIndex(ctx context.Context) ([]*registry.Too
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, indexURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("%w: failed to create request: %w", registry.ErrHTTPRequest, err)
 	}
 
 	resp, err := ar.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch registry index: %w", err)
+		return nil, fmt.Errorf("%w: failed to fetch registry index: %w", registry.ErrHTTPRequest, err)
 	}
 	defer resp.Body.Close()
 
@@ -711,7 +711,7 @@ func (ar *AquaRegistry) fetchRegistryIndex(ctx context.Context) ([]*registry.Too
 	// Read response body.
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read registry index: %w", err)
+		return nil, fmt.Errorf("%w: failed to read registry index: %w", registry.ErrHTTPRequest, err)
 	}
 
 	// Parse the index.
@@ -743,7 +743,7 @@ func (ar *AquaRegistry) parseIndexYAML(data []byte) ([]*registry.Tool, error) {
 	}
 
 	if err := yaml.Unmarshal(data, &index); err != nil {
-		return nil, fmt.Errorf("failed to parse registry index: %w", err)
+		return nil, fmt.Errorf("%w: failed to parse registry index: %w", registry.ErrRegistryParse, err)
 	}
 
 	// Convert to Tool objects.

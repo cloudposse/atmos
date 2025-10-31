@@ -118,13 +118,13 @@ func parseToolConfig(owner, repo string, config map[string]any) (*registry.Tool,
 	tool.Type = toolType
 
 	// Parse URL/asset template (required).
-	if url, ok := config["url"].(string); ok && url != "" {
-		tool.URL = url
-		// Asset is used for template rendering in BuildAssetURL for both types.
-		tool.Asset = url
-	} else {
+	url, ok := config["url"].(string)
+	if !ok || url == "" {
 		return nil, fmt.Errorf("%w: 'url' field is required and must be a string", ErrMissingRequiredField)
 	}
+	tool.URL = url
+	// Asset is used for template rendering in BuildAssetURL for both types.
+	tool.Asset = url
 
 	// Parse optional fields.
 	if format, ok := config["format"].(string); ok {

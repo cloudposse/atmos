@@ -207,12 +207,13 @@ Warning: failed to delete %s: permission denied
 			// Format expected output based on the number of placeholders
 			var expectedOutput string
 			if tt.expectedOutput != "" {
-				if strings.Contains(tt.expectedOutput, "Warning") {
+				switch {
+				case strings.Contains(tt.expectedOutput, "Warning"):
 					// For permission errors, use simplified placeholder (flexible comparison handles details)
 					expectedOutput = fmt.Sprintf(tt.expectedOutput, cacheDir, cacheDir, toolsDir, tempCacheDir)
-				} else if strings.Count(tt.expectedOutput, "%s") == 1 {
+				case strings.Count(tt.expectedOutput, "%s") == 1:
 					expectedOutput = fmt.Sprintf(tt.expectedOutput, toolsDir)
-				} else {
+				default:
 					expectedOutput = fmt.Sprintf(tt.expectedOutput, toolsDir, cacheDir, tempCacheDir)
 				}
 			}

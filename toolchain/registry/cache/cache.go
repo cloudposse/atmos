@@ -105,6 +105,7 @@ func (fs *FileStore) Set(ctx context.Context, key string, data []byte, ttl time.
 	}
 
 	// Write to file.
+	//nolint:gosec // G306: Cache file needs to be readable by other processes/users
 	if err := os.WriteFile(cachePath, entryData, 0o644); err != nil {
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}

@@ -100,7 +100,7 @@ func (i *Installer) Install(owner, repo, version string) (string, error) {
 	// Get tool from registry
 	tool, err := i.findTool(owner, repo, version)
 	if err != nil {
-		return "", fmt.Errorf("failed to get tool from registry: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrToolNotFound, err)
 	}
 	return i.installFromTool(tool, version)
 }
@@ -109,20 +109,20 @@ func (i *Installer) Install(owner, repo, version string) (string, error) {
 func (i *Installer) installFromTool(tool *registry.Tool, version string) (string, error) {
 	assetURL, err := i.buildAssetURL(tool, version)
 	if err != nil {
-		return "", fmt.Errorf("failed to build asset URL: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrInvalidToolSpec, err)
 	}
 	log.Debug("Downloading tool", "owner", tool.RepoOwner, "repo", tool.RepoName, "version", version, "url", assetURL)
 
 	assetPath, err := i.downloadAssetWithVersionFallback(tool, version, assetURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to download asset: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrHTTPRequest, err)
 	}
 	binaryPath, err := i.extractAndInstall(tool, assetPath, version)
 	if err != nil {
-		return "", fmt.Errorf("failed to extract and install: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrFileOperation, err)
 	}
 	if err := os.Chmod(binaryPath, defaultMkdirPermissions); err != nil {
-		return "", fmt.Errorf("failed to make binary executable: %w", err)
+		return "", fmt.Errorf("%w: failed to make binary executable: %w", ErrFileOperation, err)
 	}
 	// Set mod time to now so install date reflects installation, not archive timestamp
 	now := time.Now()
@@ -259,12 +259,12 @@ func (i *Installer) buildAssetURL(tool *registry.Tool, version string) (string, 
 
 		tmpl, err := template.New("asset").Funcs(funcMap).Parse(tool.Asset)
 		if err != nil {
-			return "", fmt.Errorf("failed to parse asset template: %w", err)
+			return "", fmt.Errorf("%w: failed to parse asset template: %w", ErrNoAssetTemplate, err)
 		}
 
 		var url strings.Builder
 		if err := tmpl.Execute(&url, data); err != nil {
-			return "", fmt.Errorf("failed to execute asset template: %w", err)
+			return "", fmt.Errorf("%w: failed to execute asset template: %w", ErrNoAssetTemplate, err)
 		}
 
 		return url.String(), nil
@@ -319,12 +319,12 @@ func (i *Installer) buildAssetURL(tool *registry.Tool, version string) (string, 
 
 		tmpl, err := template.New("asset").Funcs(funcMap).Parse(assetTemplate)
 		if err != nil {
-			return "", fmt.Errorf("failed to parse asset template: %w", err)
+			return "", fmt.Errorf("%w: failed to parse asset template: %w", ErrNoAssetTemplate, err)
 		}
 
 		var assetName strings.Builder
 		if err := tmpl.Execute(&assetName, data); err != nil {
-			return "", fmt.Errorf("failed to execute asset template: %w", err)
+			return "", fmt.Errorf("%w: failed to execute asset template: %w", ErrNoAssetTemplate, err)
 		}
 
 		// Construct the full GitHub release URL
@@ -414,14 +414,14 @@ func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, versio
 	}
 	fallbackURL, buildErr := i.buildAssetURL(tool, fallbackVersion)
 	if buildErr != nil {
-		return "", fmt.Errorf("failed to build fallback asset URL: %w", buildErr)
+		return "", fmt.Errorf("%w: %w", ErrInvalidToolSpec, buildErr)
 	}
 	log.Warn("Asset 404, trying fallback version", "original", assetURL, "fallback", fallbackURL)
 	assetPath, err = i.downloadAsset(fallbackURL)
 	if err == nil {
 		return assetPath, nil
 	}
-	return "", fmt.Errorf("failed to download asset: tried %s and %s: %w", assetURL, fallbackURL, err)
+	return "", fmt.Errorf("%w: tried %s and %s: %w", ErrHTTPRequest, assetURL, fallbackURL, err)
 }
 
 // isHTTP404 returns true if the error is a 404 from downloadAsset.
@@ -447,7 +447,7 @@ func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version st
 
 	// For now, just copy the file (simplified extraction)
 	if err := i.simpleExtract(assetPath, binaryPath, tool); err != nil {
-		return "", fmt.Errorf("failed to extract: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrFileOperation, err)
 	}
 
 	return binaryPath, nil
@@ -458,7 +458,7 @@ func (i *Installer) simpleExtract(assetPath, binaryPath string, tool *registry.T
 	// Detect file type using magic bytes
 	mime, err := mimetype.DetectFile(assetPath)
 	if err != nil {
-		return fmt.Errorf("failed to detect file type: %w", err)
+		return fmt.Errorf("%w: failed to detect file type: %w", ErrFileOperation, err)
 	}
 
 	log.Debug("Detected file type", "mime", mime.String(), "extension", mime.Extension())
@@ -499,13 +499,13 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *registry.Tool) 
 
 	tempDir, err := os.MkdirTemp("", "installer-extract-")
 	if err != nil {
-		return fmt.Errorf("failed to create temp dir: %w", err)
+		return fmt.Errorf("%w: failed to create temp dir: %w", ErrFileOperation, err)
 	}
 	defer os.RemoveAll(tempDir)
 
 	err = Unzip(zipPath, tempDir)
 	if err != nil {
-		return fmt.Errorf("failed to extract ZIP: %w", err)
+		return fmt.Errorf("%w: failed to extract ZIP: %w", ErrFileOperation, err)
 	}
 
 	binaryName := tool.Name
@@ -526,7 +526,7 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *registry.Tool) 
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to search extracted files: %w", err)
+		return fmt.Errorf("%w: failed to search extracted files: %w", ErrFileOperation, err)
 	}
 	if found == "" {
 		return fmt.Errorf("%w: binary %s not found in extracted archive", ErrToolNotFound, binaryName)
@@ -540,7 +540,7 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *registry.Tool) 
 
 	// Move the binary into place
 	if err := MoveFile(found, binaryPath); err != nil {
-		return fmt.Errorf("failed to move extracted binary: %w", err)
+		return fmt.Errorf("%w: failed to move extracted binary: %w", ErrFileOperation, err)
 	}
 
 	return nil
@@ -642,13 +642,13 @@ func ExtractTarGz(src, dest string) error {
 
 	f, err := os.Open(src)
 	if err != nil {
-		return fmt.Errorf("failed to open source file: %w", err)
+		return fmt.Errorf("%w: failed to open source file: %w", ErrFileOperation, err)
 	}
 	defer f.Close()
 
 	gzr, err := gzip.NewReader(f)
 	if err != nil {
-		return fmt.Errorf("failed to create gzip reader: %w", err)
+		return fmt.Errorf("%w: failed to create gzip reader: %w", ErrFileOperation, err)
 	}
 	defer gzr.Close()
 
@@ -659,7 +659,7 @@ func ExtractTarGz(src, dest string) error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("error reading tar: %w", err)
+			return fmt.Errorf("%w: error reading tar: %w", ErrFileOperation, err)
 		}
 
 		if err := extractEntry(tr, header, dest); err != nil {
@@ -670,6 +670,7 @@ func ExtractTarGz(src, dest string) error {
 }
 
 func extractEntry(tr *tar.Reader, header *tar.Header, dest string) error {
+	//nolint:gosec // G305: Path is validated by isSafePath check on next line
 	targetPath := filepath.Join(dest, header.Name)
 	if !isSafePath(targetPath, dest) {
 		return fmt.Errorf("%w: illegal file path: %s", ErrFileOperation, header.Name)
@@ -703,25 +704,21 @@ func extractDir(path string, header *tar.Header) error {
 
 func extractFile(tr *tar.Reader, path string, header *tar.Header) error {
 	if err := os.MkdirAll(filepath.Dir(path), defaultMkdirPermissions); err != nil {
-		return fmt.Errorf("failed to create parent directory: %w", err)
+		return fmt.Errorf("%w: failed to create parent directory: %w", ErrFileOperation, err)
 	}
-	var outFile *os.File
-	var err error
-	if header.Mode >= 0 && header.Mode <= math.MaxUint32 {
-		outFile, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
-		if err != nil {
-			return fmt.Errorf("failed to create file: %w", err)
-		}
-	} else {
+	// Validate header.Mode is within uint32 range
+	if header.Mode < 0 || header.Mode > math.MaxUint32 {
 		return fmt.Errorf("%w: header.Mode out of uint32 range: %d", ErrFileOperation, header.Mode)
 	}
+
+	outFile, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
 	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
+		return fmt.Errorf("%w: failed to create file: %w", ErrFileOperation, err)
 	}
 	defer outFile.Close()
 
 	if _, err := io.Copy(outFile, tr); err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
+		return fmt.Errorf("%w: failed to write file: %w", ErrFileOperation, err)
 	}
 	return nil
 }
@@ -732,12 +729,12 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *registry.Tool
 
 	tempDir, err := os.MkdirTemp("", "installer-extract-")
 	if err != nil {
-		return fmt.Errorf("failed to create temp dir: %w", err)
+		return fmt.Errorf("%w: failed to create temp dir: %w", ErrFileOperation, err)
 	}
 	defer os.RemoveAll(tempDir)
 
 	if err = ExtractTarGz(tarPath, tempDir); err != nil {
-		return fmt.Errorf("failed to extract tar.gz: %w", err)
+		return fmt.Errorf("%w: failed to extract tar.gz: %w", ErrFileOperation, err)
 	}
 
 	binaryName := tool.Name
@@ -758,7 +755,7 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *registry.Tool
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to search extracted files: %w", err)
+		return fmt.Errorf("%w: failed to search extracted files: %w", ErrFileOperation, err)
 	}
 	if found == "" {
 		return fmt.Errorf("%w: binary %s not found in extracted archive", ErrToolNotFound, binaryName)
@@ -772,7 +769,7 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *registry.Tool
 
 	// Move the binary into place
 	if err := MoveFile(found, binaryPath); err != nil {
-		return fmt.Errorf("failed to move extracted binary: %w", err)
+		return fmt.Errorf("%w: failed to move extracted binary: %w", ErrFileOperation, err)
 	}
 
 	return nil
@@ -785,15 +782,15 @@ func MoveFile(src, dst string) error {
 
 	// Ensure target dir exists
 	if err := os.MkdirAll(filepath.Dir(dst), defaultMkdirPermissions); err != nil {
-		return fmt.Errorf("failed to create target dir: %w", err)
+		return fmt.Errorf("%w: failed to create target dir: %w", ErrFileOperation, err)
 	}
 
 	if err := os.Rename(src, dst); err != nil {
 		if err := copyFile(src, dst); err != nil {
-			return fmt.Errorf("failed to copy during move fallback: %w", err)
+			return fmt.Errorf("%w: failed to copy during move fallback: %w", ErrFileOperation, err)
 		}
 		if err := os.Remove(src); err != nil {
-			return fmt.Errorf("failed to remove source after copy: %w", err)
+			return fmt.Errorf("%w: failed to remove source after copy: %w", ErrFileOperation, err)
 		}
 		return nil
 	}
@@ -827,24 +824,25 @@ func (i *Installer) extractGzip(gzPath, binaryPath string) error {
 
 	in, err := os.Open(gzPath)
 	if err != nil {
-		return fmt.Errorf("failed to open gzip file: %w", err)
+		return fmt.Errorf("%w: failed to open gzip file: %w", ErrFileOperation, err)
 	}
 	defer in.Close()
 
 	gzr, err := gzip.NewReader(in)
 	if err != nil {
-		return fmt.Errorf("failed to create gzip reader: %w", err)
+		return fmt.Errorf("%w: failed to create gzip reader: %w", ErrFileOperation, err)
 	}
 	defer gzr.Close()
 
 	out, err := os.Create(binaryPath)
 	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
+		return fmt.Errorf("%w: failed to create output file: %w", ErrFileOperation, err)
 	}
 	defer out.Close()
 
+	//nolint:gosec // G110: Single binary extraction from trusted GitHub releases, size limited by GitHub's release size limits
 	if _, err := io.Copy(out, gzr); err != nil {
-		return fmt.Errorf("failed to decompress gzip: %w", err)
+		return fmt.Errorf("%w: failed to decompress gzip: %w", ErrFileOperation, err)
 	}
 
 	return nil
@@ -856,19 +854,19 @@ func (i *Installer) copyFile(src, dst string) error {
 
 	source, err := os.Open(src)
 	if err != nil {
-		return fmt.Errorf("failed to open source file: %w", err)
+		return fmt.Errorf("%w: failed to open source file: %w", ErrFileOperation, err)
 	}
 	defer source.Close()
 
 	destination, err := os.Create(dst)
 	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
+		return fmt.Errorf("%w: failed to create destination file: %w", ErrFileOperation, err)
 	}
 	defer destination.Close()
 
 	_, err = io.Copy(destination, source)
 	if err != nil {
-		return fmt.Errorf("failed to copy file: %w", err)
+		return fmt.Errorf("%w: failed to copy file: %w", ErrFileOperation, err)
 	}
 
 	return nil
@@ -897,7 +895,7 @@ func (i *Installer) Uninstall(owner, repo, version string) error {
 
 	// Remove the binary file
 	if err := os.Remove(binaryPath); err != nil {
-		return fmt.Errorf("failed to remove binary %s: %w", binaryPath, err)
+		return fmt.Errorf("%w: failed to remove binary %s: %w", ErrFileOperation, binaryPath, err)
 	}
 
 	// Try to remove the directory if it's empty
@@ -933,7 +931,7 @@ func (i *Installer) FindBinaryPath(owner, repo, version string) (string, error) 
 	if version == "latest" {
 		actualVersion, err := i.ReadLatestFile(owner, repo)
 		if err != nil {
-			return "", fmt.Errorf("failed to read latest version for %s/%s: %w", owner, repo, err)
+			return "", fmt.Errorf("%w: failed to read latest version for %s/%s: %w", ErrFileOperation, owner, repo, err)
 		}
 		version = actualVersion
 	}
@@ -986,7 +984,7 @@ func (i *Installer) ReadLatestFile(owner, repo string) (string, error) {
 
 	data, err := os.ReadFile(latestFilePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read latest file: %w", err)
+		return "", fmt.Errorf("%w: failed to read latest file: %w", ErrFileOperation, err)
 	}
 
 	version := strings.TrimSpace(string(data))

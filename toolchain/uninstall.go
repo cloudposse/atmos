@@ -330,16 +330,20 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 	}
 	resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
 	fmt.Fprintln(os.Stderr)
-	if totalTools == 0 {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s no tools to uninstall", theme.Styles.Checkmark))
-	} else if failedCount == 0 && alreadyRemovedCount == 0 {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s uninstalled %d tools", theme.Styles.Checkmark, installedCount))
-	} else if failedCount == 0 && alreadyRemovedCount > 0 {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s uninstalled %d tools, skipped %d", theme.Styles.Checkmark, installedCount, alreadyRemovedCount))
-	} else if failedCount > 0 {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s uninstalled %d tools, %d failed, skipped %d", theme.Styles.XMark, installedCount, failedCount, alreadyRemovedCount))
-	} else {
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s uninstalled %d tools, %d failed, skipped %d", theme.Styles.Checkmark, installedCount, failedCount, alreadyRemovedCount))
+
+	// Print summary message based on results
+	isTerminal := term.IsTerminal(int(os.Stderr.Fd()))
+	switch {
+	case totalTools == 0:
+		printStatusLine(os.Stderr, isTerminal, fmt.Sprintf("%s no tools to uninstall", theme.Styles.Checkmark))
+	case failedCount == 0 && alreadyRemovedCount == 0:
+		printStatusLine(os.Stderr, isTerminal, fmt.Sprintf("%s uninstalled %d tools", theme.Styles.Checkmark, installedCount))
+	case failedCount == 0 && alreadyRemovedCount > 0:
+		printStatusLine(os.Stderr, isTerminal, fmt.Sprintf("%s uninstalled %d tools, skipped %d", theme.Styles.Checkmark, installedCount, alreadyRemovedCount))
+	case failedCount > 0:
+		printStatusLine(os.Stderr, isTerminal, fmt.Sprintf("%s uninstalled %d tools, %d failed, skipped %d", theme.Styles.XMark, installedCount, failedCount, alreadyRemovedCount))
+	default:
+		printStatusLine(os.Stderr, isTerminal, fmt.Sprintf("%s uninstalled %d tools, %d failed, skipped %d", theme.Styles.Checkmark, installedCount, failedCount, alreadyRemovedCount))
 	}
 
 	return nil

@@ -915,7 +915,7 @@ packages:
 
 	// Use the test server as the registry
 	ar := NewAquaRegistry()
-	// ar.cache.baseDir = t.TempDir() // avoid polluting real cache
+	// Note: Cache pollution is acceptable for this integration test
 
 	// Directly call fetchFromRegistry with the test server URL
 	tool, err := ar.GetTool("helm", "helm")
