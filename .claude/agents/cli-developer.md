@@ -619,24 +619,159 @@ func runLongOperation() error {
 
 ## DX-Focused Design
 
-### Question Flag Requirements
+### Question Flag Requirements (CRITICAL)
+
+**AVOID adding too many flags.** Every flag adds cognitive load and complexity.
 
 **Before adding a flag, ask:**
 1. Can this be inferred from context?
-2. Can this come from config file?
+2. Can this come from config file (via `viper.BindEnv`)?
 3. Can we prompt interactively instead?
 4. Is there a sensible default?
 5. Can we make it optional?
+6. Can existing flags be made more flexible instead?
 
 **Example transformation:**
 ```go
-// BEFORE: 5 required flags
+// BEFORE: 5 required flags (TOO MANY)
 atmos deploy --stack prod --region us-east-1 --component vpc --account 123 --env production
 
 // AFTER: Smart defaults + optional overrides
 atmos deploy vpc -s prod
 // Region from config, account from AWS credentials, env from stack name
 ```
+
+### Flag Naming Conventions (MANDATORY)
+
+#### Avoid Negative Flags (CRITICAL)
+
+**NEVER create negative flags** - they create confusing double negatives:
+
+❌ **BAD: Negative flags**
+```go
+// WRONG: Creates double negative when disabling
+cmd.Flags().Bool("disable-cache", false, "Disable caching")
+
+// Usage becomes confusing:
+atmos command --disable-cache           # Disable cache (ok)
+atmos command --disable-cache=false     # Enable cache (double negative!)
+```
+
+✅ **GOOD: Positive flags**
+```go
+// CORRECT: Positive flag
+cmd.Flags().Bool("cache", true, "Enable caching")
+
+// Usage is clear:
+atmos command --cache           # Enable cache (default)
+atmos command --cache=false     # Disable cache (clear)
+atmos command --no-cache        # Disable cache (convention)
+```
+
+**Exception: Standard CLI conventions**
+
+Some negative flags are standard CLI conventions and should be used:
+
+✅ **Allowed negative flags (CLI conventions):**
+```go
+// These are standard conventions across CLI tools
+cmd.Flags().Bool("no-color", false, "Disable colored output")
+cmd.Flags().Bool("no-verify", false, "Skip verification")
+cmd.Flags().Bool("no-cache", false, "Disable caching")
+```
+
+**Pattern:** `--no-<feature>` is acceptable when it's a standard CLI convention.
+
+#### Make Flags Flexible and Reusable
+
+**Prefer flexible flags over narrow ones:**
+
+❌ **BAD: Too specific**
+```go
+cmd.Flags().String("aws-region", "", "AWS region")
+cmd.Flags().String("gcp-region", "", "GCP region")
+cmd.Flags().String("azure-region", "", "Azure region")
+// Three flags for the same concept!
+```
+
+✅ **GOOD: Flexible, reusable**
+```go
+cmd.Flags().StringP("region", "r", "", "Cloud region (AWS, GCP, Azure)")
+// One flag works for all providers
+```
+
+#### Use Conventional Flag Names
+
+**Follow established CLI conventions:**
+
+```go
+// Standard short flags
+-s, --stack      // Stack selection
+-r, --region     // Region
+-o, --output     // Output format
+-v, --verbose    // Verbose output
+-q, --quiet      // Quiet mode
+-f, --file       // File path
+-d, --dry-run    // Preview mode
+-h, --help       // Help (automatic with Cobra)
+
+// Standard flags
+--config         // Config file path
+--profile        // Profile selection
+--debug          // Debug mode
+--json           // JSON output
+--yaml           // YAML output
+```
+
+### Environment Variables (MANDATORY)
+
+**ALWAYS use `viper.BindEnv()` instead of `os.Getenv()`:**
+
+✅ **GOOD: Using viper.BindEnv**
+```go
+import "github.com/spf13/viper"
+
+func initConfig() {
+    // Bind environment variables with ATMOS_ prefix
+    viper.BindEnv("base_path", "ATMOS_BASE_PATH")
+    viper.BindEnv("stack", "ATMOS_STACK")
+    viper.BindEnv("logs_level", "ATMOS_LOGS_LEVEL")
+
+    // Now can access via viper
+    basePath := viper.GetString("base_path")
+    stack := viper.GetString("stack")
+}
+
+// Bind flags to config keys
+cmd.Flags().StringP("stack", "s", "", "Stack name")
+viper.BindPFlag("stack", cmd.Flags().Lookup("stack"))
+```
+
+❌ **BAD: Using os.Getenv (FORBIDDEN)**
+```go
+// NEVER use os.Getenv for new code
+stack := os.Getenv("ATMOS_STACK")  // ❌ Linter will flag this
+
+// Why it's bad:
+// - No unified config management
+// - Can't override from config file
+// - No default value handling
+// - Harder to test
+```
+
+**Configuration precedence (Viper handles this automatically):**
+1. CLI flags (highest priority)
+2. Environment variables
+3. Config file values
+4. Default values (lowest priority)
+
+**Why viper.BindEnv is better:**
+- Unified configuration management
+- Automatic precedence handling
+- Config file support
+- Easy to test (can mock viper)
+- Type-safe getters (GetString, GetInt, GetBool)
+- Default value support
 
 ### Interactive Fallbacks
 
@@ -929,22 +1064,95 @@ Frontend Developer: "Here's the style pattern that matches our theme..."
 CLI Developer: "Applied theme styles, output now consistent"
 ```
 
-### Working with Test Automation Expert
+### Working with Test Automation Expert (CRITICAL)
+
+**CLI Developer works CLOSELY with Test Automation Expert to ensure all CLI features are testable.**
 
 ```
-CLI Developer: "Implemented new CLI command"
+CLI Developer: "Implementing new 'atmos auth login' command"
 
-Test Automation Expert:
-- Creates tests using cmd.NewTestKit(t)
-- Creates golden snapshots for output
+Test Automation Expert: "Design it with testability in mind:"
+- Use interfaces for external dependencies (can be mocked)
+- Separate business logic from CLI presentation
+- Make TTY detection injectable for testing
+- Ensure output is capturable for golden snapshots
+
+CLI Developer: Implements with:
+- Interface-based design for authentication flow
+- TTY detection via dependency injection
+- Output captured via io.Writer injection
+- State isolated using cmd.NewTestKit(t)
+
+Test Automation Expert: Creates comprehensive tests:
+- Unit tests with mocked dependencies
+- Golden snapshot tests for output
 - Tests both TTY and non-TTY modes
+- Tests interactive prompts (if applicable)
+- Tests error conditions and edge cases
 ```
+
+**Testability requirements for CLI features:**
+
+✅ **Design CLI features to be testable:**
+```go
+// GOOD: Testable CLI command design
+type CommandRunner struct {
+    writer io.Writer       // Injectable output
+    tty    TTYDetector     // Injectable TTY detection
+    auth   Authenticator   // Injectable business logic
+}
+
+func (r *CommandRunner) Execute() error {
+    if r.tty.IsTTY() {
+        // Interactive mode
+        fmt.Fprintln(r.writer, "Interactive prompt...")
+    } else {
+        // Non-interactive mode
+        fmt.Fprintln(r.writer, "Non-interactive mode...")
+    }
+    return r.auth.Authenticate()
+}
+
+// Test becomes easy
+func TestCommandRunner(t *testing.T) {
+    var buf bytes.Buffer
+    runner := &CommandRunner{
+        writer: &buf,
+        tty:    &mockTTY{isTTY: false},
+        auth:   &mockAuth{},
+    }
+    err := runner.Execute()
+    assert.NoError(t, err)
+    assert.Contains(t, buf.String(), "Non-interactive")
+}
+```
+
+❌ **BAD: Hard to test**
+```go
+// Hard to test - hardcoded dependencies
+func Execute() error {
+    if term.IsTerminal(int(os.Stdout.Fd())) {  // Can't mock
+        fmt.Println("Interactive")  // Can't capture
+    }
+    return authenticate()  // Can't mock
+}
+```
+
+**Key collaboration points:**
+- CLI Developer designs for testability (interfaces, DI)
+- Test Automation Expert provides feedback on testability
+- Both ensure 80%+ test coverage for CLI features
+- Golden snapshots maintained for all CLI output
 
 ## Quality Checklist
 
 Before finalizing CLI implementation:
 
-- ✅ **Minimal flags**: Only essential flags required
+- ✅ **Minimal flags**: Only essential flags required - questioned flag proliferation
+- ✅ **Positive flags**: No negative flags (except `--no-*` conventions like `--no-color`)
+- ✅ **Flexible flags**: Flags work across use cases, not too specific
+- ✅ **Conventional flags**: Uses standard flag names (`-s, -r, -o, -v, -q, -f, -d`)
+- ✅ **viper.BindEnv**: NEVER uses `os.Getenv`, always `viper.BindEnv`
 - ✅ **Interactive fallbacks**: Prompts when info missing (if TTY)
 - ✅ **TTY detection**: Different output for TTY vs non-TTY
 - ✅ **Theme styles**: Uses theme colors from `pkg/ui/theme/colors.go`
@@ -957,6 +1165,8 @@ Before finalizing CLI implementation:
 - ✅ **Command registry**: Uses registry pattern (MANDATORY)
 - ✅ **Performance tracking**: `defer perf.Track()` in public functions
 - ✅ **Cross-platform**: Works on Linux/macOS/Windows
+- ✅ **Testable design**: Interfaces, DI, mockable dependencies
+- ✅ **Test coverage**: 80%+ with Test Automation Expert collaboration
 
 ## Success Criteria
 
