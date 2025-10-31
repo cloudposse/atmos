@@ -265,8 +265,8 @@ func TestDockerRuntime_List_Integration(t *testing.T) {
 	}
 
 	// If docker is available, verify the structure of returned data.
-	// We don't assert specific containers exist, just that the data structure is correct.
-	assert.NotNil(t, containers)
+	// containers can be nil or empty if no containers exist - both are valid.
+	require.NoError(t, err, "List should not return error when Docker is available")
 	for _, container := range containers {
 		// Each container should have at least an ID.
 		assert.NotEmpty(t, container.ID, "container should have an ID")
@@ -290,8 +290,9 @@ func TestDockerRuntime_List_WithFilters_Integration(t *testing.T) {
 		return
 	}
 
-	// If docker is available and there are exited containers, verify they match the filter.
-	assert.NotNil(t, containers)
+	// If docker is available, verify list succeeds with filters.
+	// containers can be nil or empty if no matching containers exist - both are valid.
+	require.NoError(t, err, "List should not return error when Docker is available")
 	for _, container := range containers {
 		// Status check is not strict because Docker status strings vary.
 		// We're mainly testing that filters are passed correctly to docker ps.
