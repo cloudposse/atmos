@@ -31,7 +31,15 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*tool
 
 	log.Debug(fmt.Sprintf("Registered %d tools", registry.Count()))
 
-	// Create permission checker.
+	// Initialize permission cache for persistent decisions.
+	permCache, err := permission.NewPermissionCache(atmosConfig.BasePath)
+	if err != nil {
+		log.Warn(fmt.Sprintf("Failed to initialize permission cache: %v", err))
+		// Continue without cache - will prompt every time.
+		permCache = nil
+	}
+
+	// Create permission checker with cache-aware prompter.
 	permConfig := &permission.Config{
 		Mode:            getPermissionMode(atmosConfig),
 		AllowedTools:    atmosConfig.Settings.AI.Tools.AllowedTools,
@@ -39,7 +47,13 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*tool
 		BlockedTools:    atmosConfig.Settings.AI.Tools.BlockedTools,
 		YOLOMode:        atmosConfig.Settings.AI.Tools.YOLOMode,
 	}
-	permChecker := permission.NewChecker(permConfig, permission.NewCLIPrompter())
+	var prompter permission.Prompter
+	if permCache != nil {
+		prompter = permission.NewCLIPrompterWithCache(permCache)
+	} else {
+		prompter = permission.NewCLIPrompter()
+	}
+	permChecker := permission.NewChecker(permConfig, prompter)
 
 	// Create tool executor.
 	executor := tools.NewExecutor(registry, permChecker, tools.DefaultTimeout)

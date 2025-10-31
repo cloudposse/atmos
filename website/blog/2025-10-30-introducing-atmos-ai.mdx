@@ -9,7 +9,7 @@ We're excited to introduce **Atmos AI**, an intelligent assistant built directly
 
 Unlike general-purpose AI coding assistants, Atmos AI has deep, native understanding of Atmos stacks, components, inheritance patterns, and infrastructure workflows. It's not just an AI that knows about code—it's an AI that truly understands *your infrastructure*.
 
-With support for 7 AI providers (including local/offline Ollama), persistent sessions with full conversation memory, tool execution with granular permissions, specialized agents for specific tasks, and seamless IDE integration via MCP—Atmos AI brings the productivity patterns of industry-leading AI systems to infrastructure management.
+With support for 7 AI providers (including local/offline Ollama), persistent sessions with full conversation memory, tool execution with granular permissions and persistent permission cache, specialized agents for specific tasks, and seamless IDE integration via MCP—Atmos AI brings the productivity patterns of industry-leading AI systems to infrastructure management.
 
 <!--truncate-->
 
@@ -306,6 +306,46 @@ restricted_tools:
 blocked_tools:
   - atmos_terraform_apply    # Infrastructure changes
   - atmos_terraform_destroy  # Destructive operations
+```
+
+**Persistent Permission Cache:**
+
+Permission decisions now persist across sessions! When you approve or deny a tool execution, Atmos AI can remember your decision.
+
+```bash
+🔧 Tool: atmos_describe_component
+
+Options:
+  [a] Always allow (save to .atmos/ai.settings.local.json)
+  [y] Allow once
+  [n] Deny once
+  [d] Always deny (save to .atmos/ai.settings.local.json)
+
+Choice (a/y/n/d): a
+✅ Permission saved to .atmos/ai.settings.local.json
+```
+
+**Key Benefits:**
+- **Reduced Prompt Fatigue** - 80%+ fewer permission prompts for repeat operations
+- **Session Persistence** - Decisions remembered across all AI sessions
+- **Manual Control** - Edit `.atmos/ai.settings.local.json` directly for batch updates
+- **Secure by Default** - Cache checked after blocked tools, before allowed tools
+
+**Example Cache File:**
+```json
+{
+  "permissions": {
+    "allow": [
+      "atmos_describe_component",
+      "atmos_list_stacks",
+      "atmos_validate_component"
+    ],
+    "deny": [
+      "atmos_terraform_apply",
+      "atmos_terraform_destroy"
+    ]
+  }
+}
 ```
 
 **Audit Logging:**

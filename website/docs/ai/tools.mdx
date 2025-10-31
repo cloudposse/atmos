@@ -1297,6 +1297,7 @@ When a tool requires confirmation, you'll see a detailed prompt:
 <Terminal title="atmos ai chat">
 ```bash
 🔧 Tool Execution Request
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Tool: atmos_describe_component
 Description: Describe an Atmos component configuration in a specific stack
 
@@ -1304,13 +1305,21 @@ Parameters:
   component: vpc
   stack: prod-use1
 
-Allow execution? (y/N):
+Options:
+  [a] Always allow (save to .atmos/ai.settings.local.json)
+  [y] Allow once
+  [n] Deny once
+  [d] Always deny (save to .atmos/ai.settings.local.json)
+
+Choice (a/y/n/d):
 ```
 </Terminal>
 
 **Responses:**
-- `y` or `yes` - Allow this execution
-- `n`, `no`, or Enter - Deny this execution
+- `a` or `always` - Always allow this tool (saves to persistent cache)
+- `y` or `yes` - Allow this execution once
+- `n` or `no` or Enter - Deny this execution once
+- `d` or `deny` - Always deny this tool (saves to persistent cache)
 
 ### Prompt Information
 
@@ -1320,6 +1329,66 @@ Each prompt shows:
 - **Parameters** - All parameters being passed to the tool
 
 This allows you to make informed decisions about tool execution.
+
+### Persistent Permission Cache
+
+When you choose "always allow" or "always deny", Atmos saves your decision to `.atmos/ai.settings.local.json`. This file stores your permission preferences so you're not repeatedly prompted for the same tools.
+
+**Cache File Structure:**
+
+<File title=".atmos/ai.settings.local.json">
+```json
+{
+  "permissions": {
+    "allow": [
+      "atmos_describe_component",
+      "atmos_list_stacks",
+      "atmos_validate_component"
+    ],
+    "deny": [
+      "atmos_terraform_apply",
+      "atmos_terraform_destroy"
+    ]
+  }
+}
+```
+</File>
+
+**Key Features:**
+
+- **Automatic Creation** - File is created automatically when you save your first permission decision
+- **User-Specific** - Located in your project's `.atmos` directory (gitignored by default)
+- **Manual Editing** - You can edit this file directly to add or remove permissions
+- **Pattern Matching** - Tool names are matched exactly (future versions may support wildcards)
+- **Session Persistence** - Decisions persist across all AI sessions
+
+**Manual Management:**
+
+You can edit the cache file directly to manage permissions:
+
+<Terminal title="shell">
+```bash
+# View current permissions
+cat .atmos/ai.settings.local.json
+
+# Edit permissions manually
+vim .atmos/ai.settings.local.json
+
+# Clear all cached permissions
+rm .atmos/ai.settings.local.json
+```
+</Terminal>
+
+**Priority Order:**
+
+Permission decisions follow this priority (highest to lowest):
+
+1. **Blocked Tools** (from `atmos.yaml`) - Always blocked, cannot be overridden
+2. **Cached Denials** (from `.atmos/ai.settings.local.json`) - User denied previously
+3. **Allowed Tools** (from `atmos.yaml`) - Pre-approved in config
+4. **Cached Allowances** (from `.atmos/ai.settings.local.json`) - User allowed previously
+5. **Restricted Tools** (from `atmos.yaml`) - Requires prompt if not cached
+6. **Default Behavior** - Prompt based on `require_confirmation` setting
 
 ## Security Best Practices
 
@@ -1391,6 +1460,50 @@ Only use YOLO mode in:
 - ✅ Read-only analysis environments
 - ✅ Sandboxed testing environments
 
+### Use Persistent Cache Wisely
+
+The permission cache (`.atmos/ai.settings.local.json`) is convenient but requires careful use:
+
+**Safe for "Always Allow":**
+- ✅ Read-only tools (`atmos_describe_*`, `atmos_list_*`, `atmos_validate_*`)
+- ✅ Information gathering tools you use frequently
+- ✅ Non-destructive analysis tools
+
+**Avoid "Always Allow" for:**
+- ❌ State-modifying operations (`atmos_terraform_*`)
+- ❌ File write operations (`write_component_file`, `write_stack_file`)
+- ❌ Workflow execution tools
+- ❌ Any tool that could impact infrastructure
+
+**Best Practice:**
+
+<Terminal title="atmos ai chat">
+```bash
+# First time using a describe tool
+🔧 Tool: atmos_describe_component
+Choice (a/y/n/d): a  # Safe to always allow
+
+# First time with a destructive tool
+🔧 Tool: atmos_terraform_apply
+Choice (a/y/n/d): d  # Always deny, use manual workflows instead
+```
+</Terminal>
+
+**Review Cache Regularly:**
+
+<Terminal title="shell">
+```bash
+# Review your cached permissions
+cat .atmos/ai.settings.local.json
+
+# Audit what you've allowed
+jq '.permissions.allow[]' .atmos/ai.settings.local.json
+
+# Clear cache if needed
+rm .atmos/ai.settings.local.json
+```
+</Terminal>
+
 ### Review Permissions Regularly
 
 Audit your tool configuration as new tools are added:
@@ -1399,6 +1512,9 @@ Audit your tool configuration as new tools are added:
 ```bash
 # Review current configuration
 grep -A 20 "tools:" atmos.yaml
+
+# Review cached permissions
+cat .atmos/ai.settings.local.json
 
 # Test permission system
 atmos ai chat
