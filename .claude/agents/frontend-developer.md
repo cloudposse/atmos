@@ -1,6 +1,6 @@
 ---
 name: frontend-developer
-description: Use this agent when making changes to the Docusaurus documentation website, creating or modifying React components, styling updates, or any frontend development work. This agent should be consulted for all website-related changes and works closely with the tech-docs-writer agent when new components are needed.
+description: Use this agent when making changes to the Docusaurus documentation website, creating or modifying React components, styling updates, or any frontend development work. This agent should be consulted for all website-related changes and works closely with the documentation-writer agent when new components are needed.
 
 **Examples:**
 
@@ -13,7 +13,7 @@ assistant: "I'll use the frontend-developer agent to check if we have an existin
 
 <example>
 Context: Tech docs writer needs a component for complex content.
-user: "The tech-docs-writer needs a better way to display CLI command options with descriptions"
+user: "The documentation-writer needs a better way to display CLI command options with descriptions"
 assistant: "I'll use the frontend-developer agent to create or enhance a component for structured CLI documentation."
 <uses Task tool to launch frontend-developer agent>
 </example>

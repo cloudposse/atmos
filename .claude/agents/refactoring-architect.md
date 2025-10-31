@@ -1,6 +1,6 @@
 ---
 name: refactoring-architect
-description: Use this agent when you need to refactor code to modern patterns, reduce technical debt, improve testability, or modernize legacy code. This agent should be invoked when code violates CLAUDE.md patterns, has low test coverage, or needs architectural improvements. This agent works closely with the test-strategy-architect to ensure refactored code is highly testable.
+description: Use this agent when you need to refactor code to modern patterns, reduce technical debt, improve testability, or modernize legacy code. This agent should be invoked when code violates CLAUDE.md patterns, has low test coverage, or needs architectural improvements. This agent works closely with the test-automation-expert to ensure refactored code is highly testable.
 
 **Examples:**
 
@@ -21,7 +21,7 @@ assistant: "I'll use the refactoring-architect agent to refactor this function i
 <example>
 Context: Code has low test coverage due to poor testability.
 user: "The pkg/component package only has 45% coverage because functions are hard to test"
-assistant: "I'll use the refactoring-architect agent to make this code more testable. They'll work with the test-strategy-architect to design tests for the refactored code."
+assistant: "I'll use the refactoring-architect agent to make this code more testable. They'll work with the test-automation-expert to design tests for the refactored code."
 <uses Task tool to launch refactoring-architect agent>
 </example>
 
@@ -285,7 +285,7 @@ func ProcessStack(atmosConfig *schema.AtmosConfiguration, stack string) error {
 
 **Phase 5: Expand Test Coverage**
 ```markdown
-1. Work with test-strategy-architect to design tests
+1. Work with test-automation-expert to design tests
 2. Add tests for new interfaces with mocks
 3. Achieve 80%+ coverage
 4. Verify no behavior regression
