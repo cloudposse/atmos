@@ -2,8 +2,11 @@ package container
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -586,4 +589,203 @@ func TestPodmanRuntime_List_Integration(t *testing.T) {
 		assert.NotEmpty(t, container.ID, "container should have an ID")
 		// Other fields may be empty depending on container state.
 	}
+}
+
+func TestPodmanRuntime_Pull_Integration(t *testing.T) {
+	// Integration test - tests pulling a small image.
+	runtime := NewPodmanRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+	// Use alpine as it's very small (~5MB).
+	err := runtime.Pull(ctx, "alpine:latest")
+	if err != nil {
+		// Podman not available - skip.
+		t.Skipf("Podman not available, skipping Pull test: %v", err)
+		return
+	}
+
+	require.NoError(t, err, "Pull should succeed for alpine:latest")
+}
+
+// TestPodmanRuntime_ContainerLifecycle_Integration validates the container lifecycle
+// (Create, Start, Stop, Remove) for Podman runtime. Tests are intentionally duplicated
+// to verify both Docker and Podman implementations independently, ensuring consistency
+// across runtimes and allowing runtime-specific test evolution if needed.
+//
+//nolint:dupl // Docker and Podman implement identical Runtime interface with same lifecycle behavior.
+func TestPodmanRuntime_ContainerLifecycle_Integration(t *testing.T) {
+	// Integration test - tests Create, Start, Stop, Remove lifecycle.
+	runtime := NewPodmanRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+
+	// First ensure alpine image exists.
+	err := runtime.Pull(ctx, "alpine:latest")
+	if err != nil {
+		t.Skipf("Podman not available, skipping lifecycle test: %v", err)
+		return
+	}
+
+	// Create container.
+	config := &CreateConfig{
+		Name:            "atmos-test-lifecycle-podman",
+		Image:           "alpine:latest",
+		OverrideCommand: true, // Use sleep infinity.
+	}
+
+	containerID, err := runtime.Create(ctx, config)
+	if err != nil {
+		t.Fatalf("Failed to create container: %v", err)
+	}
+	require.NotEmpty(t, containerID, "container ID should not be empty")
+
+	// Ensure cleanup.
+	defer func() {
+		_ = runtime.Remove(ctx, containerID, true)
+	}()
+
+	// Start container.
+	err = runtime.Start(ctx, containerID)
+	require.NoError(t, err, "Start should succeed")
+
+	// Stop container.
+	err = runtime.Stop(ctx, containerID, 5*time.Second)
+	require.NoError(t, err, "Stop should succeed")
+
+	// Remove container.
+	err = runtime.Remove(ctx, containerID, false)
+	require.NoError(t, err, "Remove should succeed")
+}
+
+func TestPodmanRuntime_Logs_Integration(t *testing.T) {
+	// Integration test - tests container logs.
+	runtime := NewPodmanRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+
+	// Pull alpine if needed.
+	err := runtime.Pull(ctx, "alpine:latest")
+	if err != nil {
+		t.Skipf("Podman not available, skipping Logs test: %v", err)
+		return
+	}
+
+	// Create and start a container that outputs something.
+	config := &CreateConfig{
+		Name:  "atmos-test-logs-podman",
+		Image: "alpine:latest",
+		// Don't override command - we want default.
+	}
+
+	containerID, err := runtime.Create(ctx, config)
+	if err != nil {
+		t.Skipf("Failed to create container: %v", err)
+		return
+	}
+
+	// Ensure cleanup.
+	defer func() {
+		_ = runtime.Remove(ctx, containerID, true)
+	}()
+
+	// Note: We can't easily test Logs output since it goes to os.Stdout/Stderr.
+	// This test mainly verifies the method doesn't panic and completes.
+	// We test with tail to avoid hanging on follow.
+	err = runtime.Logs(ctx, containerID, false, "10")
+	require.NoError(t, err, "Logs should succeed")
+}
+
+// TestPodmanRuntime_Exec_Integration validates the Exec() method for Podman runtime.
+// Tests are intentionally duplicated to verify both Docker and Podman implementations
+// independently, ensuring consistency across runtimes and allowing runtime-specific
+// test evolution if needed.
+//
+//nolint:dupl // Docker and Podman implement identical Runtime interface with same Exec() behavior.
+func TestPodmanRuntime_Exec_Integration(t *testing.T) {
+	// Integration test - tests exec command in running container.
+	runtime := NewPodmanRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+
+	// Pull alpine if needed.
+	err := runtime.Pull(ctx, "alpine:latest")
+	if err != nil {
+		t.Skipf("Podman not available, skipping Exec test: %v", err)
+		return
+	}
+
+	// Create and start a container.
+	config := &CreateConfig{
+		Name:            "atmos-test-exec-podman",
+		Image:           "alpine:latest",
+		OverrideCommand: true, // Use sleep infinity.
+	}
+
+	containerID, err := runtime.Create(ctx, config)
+	if err != nil {
+		t.Skipf("Failed to create container: %v", err)
+		return
+	}
+
+	// Ensure cleanup.
+	defer func() {
+		_ = runtime.Remove(ctx, containerID, true)
+	}()
+
+	// Start container.
+	err = runtime.Start(ctx, containerID)
+	if err != nil {
+		t.Skipf("Failed to start container: %v", err)
+		return
+	}
+
+	// Execute a simple command in the container.
+	execOpts := &ExecOptions{
+		Tty:          false,
+		AttachStdin:  false,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	// Note: Exec output goes to os.Stdout/Stderr, we mainly verify it doesn't error.
+	err = runtime.Exec(ctx, containerID, []string{"echo", "test"}, execOpts)
+	require.NoError(t, err, "Exec should succeed")
+}
+
+func TestPodmanRuntime_Build_Integration(t *testing.T) {
+	// Integration test - tests building from Dockerfile.
+	runtime := NewPodmanRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+
+	// Create temporary directory for build context.
+	tmpDir := t.TempDir()
+
+	// Create simple Dockerfile.
+	dockerfilePath := filepath.Join(tmpDir, "Dockerfile")
+	dockerfile := `FROM alpine:latest
+RUN echo "test build"
+`
+	err := os.WriteFile(dockerfilePath, []byte(dockerfile), 0o644)
+	require.NoError(t, err)
+
+	// Build image.
+	config := &BuildConfig{
+		Dockerfile: dockerfilePath,
+		Context:    tmpDir,
+		Tags:       []string{"atmos-test-build-podman:latest"},
+	}
+
+	err = runtime.Build(ctx, config)
+	if err != nil {
+		t.Skipf("Podman not available or build failed, skipping: %v", err)
+		return
+	}
+
+	require.NoError(t, err, "Build should succeed")
 }

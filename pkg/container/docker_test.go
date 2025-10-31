@@ -340,6 +340,12 @@ func TestDockerRuntime_Pull_Integration(t *testing.T) {
 	require.NoError(t, err, "Pull should succeed for alpine:latest")
 }
 
+// TestDockerRuntime_ContainerLifecycle_Integration validates the container lifecycle
+// (Create, Start, Stop, Remove) for Docker runtime. Tests are intentionally duplicated
+// to verify both Docker and Podman implementations independently, ensuring consistency
+// across runtimes and allowing runtime-specific test evolution if needed.
+//
+//nolint:dupl // Docker and Podman implement identical Runtime interface with same lifecycle behavior.
 func TestDockerRuntime_ContainerLifecycle_Integration(t *testing.T) {
 	// Integration test - tests Create, Start, Stop, Remove lifecycle.
 	runtime := NewDockerRuntime()
@@ -456,4 +462,62 @@ func TestDockerRuntime_Logs_Integration(t *testing.T) {
 	// We test with tail to avoid hanging on follow.
 	err = runtime.Logs(ctx, containerID, false, "10")
 	require.NoError(t, err, "Logs should succeed")
+}
+
+// TestDockerRuntime_Exec_Integration validates the Exec() method for Docker runtime.
+// Tests are intentionally duplicated to verify both Docker and Podman implementations
+// independently, ensuring consistency across runtimes and allowing runtime-specific
+// test evolution if needed.
+//
+//nolint:dupl // Docker and Podman implement identical Runtime interface with same Exec() behavior.
+func TestDockerRuntime_Exec_Integration(t *testing.T) {
+	// Integration test - tests exec command in running container.
+	runtime := NewDockerRuntime()
+	require.NotNil(t, runtime)
+
+	ctx := context.Background()
+
+	// Pull alpine if needed.
+	err := runtime.Pull(ctx, "alpine:latest")
+	if err != nil {
+		t.Skipf("Docker not available, skipping Exec test: %v", err)
+		return
+	}
+
+	// Create and start a container.
+	config := &CreateConfig{
+		Name:            "atmos-test-exec",
+		Image:           "alpine:latest",
+		OverrideCommand: true, // Use sleep infinity.
+	}
+
+	containerID, err := runtime.Create(ctx, config)
+	if err != nil {
+		t.Skipf("Failed to create container: %v", err)
+		return
+	}
+
+	// Ensure cleanup.
+	defer func() {
+		_ = runtime.Remove(ctx, containerID, true)
+	}()
+
+	// Start container.
+	err = runtime.Start(ctx, containerID)
+	if err != nil {
+		t.Skipf("Failed to start container: %v", err)
+		return
+	}
+
+	// Execute a simple command in the container.
+	execOpts := &ExecOptions{
+		Tty:          false,
+		AttachStdin:  false,
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+
+	// Note: Exec output goes to os.Stdout/Stderr, we mainly verify it doesn't error.
+	err = runtime.Exec(ctx, containerID, []string{"echo", "test"}, execOpts)
+	require.NoError(t, err, "Exec should succeed")
 }
