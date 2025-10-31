@@ -1,0 +1,764 @@
+---
+slug: introducing-atmos-ai
+title: "Introducing Atmos AI: Your Infrastructure-Aware AI Assistant"
+authors: [atmos]
+tags: [feature, ai, productivity, infrastructure]
+---
+
+We're excited to introduce **Atmos AI**, an intelligent assistant built directly into Atmos CLI that understands your infrastructure-as-code like no other AI assistant can.
+
+Unlike general-purpose AI coding assistants, Atmos AI has deep, native understanding of Atmos stacks, components, inheritance patterns, and infrastructure workflows. It's not just an AI that knows about code—it's an AI that truly understands *your infrastructure*.
+
+With support for 7 AI providers (including local/offline Ollama), persistent sessions with full conversation memory, tool execution with granular permissions, specialized agents for specific tasks, and seamless IDE integration via MCP—Atmos AI brings the productivity patterns of industry-leading AI systems to infrastructure management.
+
+<!--truncate-->
+
+## The Problem
+
+Infrastructure-as-code management is complex. Engineers spend hours:
+
+- **Searching documentation** for the right Atmos command or configuration pattern
+- **Debugging YAML configurations** with cryptic validation errors
+- **Understanding stack inheritance** and component relationships across dozens of files
+- **Reviewing configurations** for security issues or best practices
+- **Onboarding team members** who need to learn organizational conventions
+
+Even experienced teams lose productivity to context switching, documentation hunting, and configuration debugging. The problem isn't lack of tools—it's the **cognitive overhead** of managing complex infrastructure.
+
+## The Solution: Atmos AI
+
+Atmos AI solves this through **infrastructure-aware intelligence** that understands your Atmos configurations, not just generic code. It's like having an expert Atmos engineer available 24/7, ready to analyze your stacks, validate configurations, answer questions, and help with best practices.
+
+### What Makes Atmos AI Different?
+
+**Deep Atmos Understanding:**
+- Knows Atmos stack structure and inheritance patterns
+- Understands component relationships and dependencies
+- Can analyze your actual infrastructure configurations
+- Provides context-aware recommendations
+
+**Full Conversation Memory:**
+- Remembers entire chat history within sessions
+- Understands follow-up questions and references
+- Resume conversations days or weeks later with full context
+- Build on previous discussions naturally
+
+**Tool Execution:**
+- Can analyze your infrastructure automatically
+- Execute read-only operations (`describe`, `list`, `validate`)
+- Real-time YAML/Terraform validation via LSP integration
+- Granular permission system for safety
+
+**Multi-Provider Support:**
+- 7 AI providers: Claude, GPT, Gemini, Grok, Ollama, AWS Bedrock, Azure OpenAI
+- Switch providers mid-conversation (Ctrl+P)
+- Each session remembers its provider
+- Local/offline option with Ollama
+
+**Persistent Sessions:**
+- SQLite-backed conversation storage
+- Named sessions for organization
+- Auto-compact for extended conversations
+- Cross-platform session management
+
+## Key Features
+
+### 1. Infrastructure-Aware Intelligence
+
+Atmos AI isn't just a chatbot—it has **native tools** to inspect your infrastructure:
+
+```bash
+You: What VPC CIDR does production use?
+
+AI: Let me check your configuration...
+    [Executes: atmos describe component vpc -s prod-use1-network]
+
+    Your production VPC (prod-use1-network) uses CIDR 10.2.0.0/16.
+
+    I can see you're also using:
+    - Public subnets: 10.2.0.0/24, 10.2.1.0/24, 10.2.2.0/24
+    - Private subnets: 10.2.10.0/24, 10.2.11.0/24, 10.2.12.0/24
+    - NAT Gateway: Enabled in all AZs
+
+    Would you like me to analyze the security groups as well?
+```
+
+**Available Tools:**
+- `atmos_describe_component` - Analyze component configurations
+- `atmos_describe_stacks` - Review all stacks
+- `atmos_list_stacks` - List available stacks
+- `atmos_list_components` - List components
+- `atmos_validate_stacks` - Validate configurations
+- `validate_file_lsp` - Real-time YAML/Terraform validation
+- File operations (read/write/search)
+- Web search for documentation
+
+### 2. Real-Time Validation with LSP
+
+Atmos AI integrates with Language Server Protocol (LSP) to provide **IDE-quality validation** directly in the chat:
+
+```bash
+You: Validate stacks/prod/vpc.yaml
+
+AI: [Uses LSP to validate file]
+
+    Found 2 issues in /project/stacks/prod/vpc.yaml:
+
+    ERRORS (1):
+    • Line 15, Col 5: Unknown property 'vpc_ciddr'
+      Did you mean 'vpc_cidr'?
+
+    WARNINGS (1):
+    • Line 23, Col 3: Property 'availability_zones' is deprecated
+      Use 'azs' instead
+
+    Would you like me to fix these issues for you?
+```
+
+**Supported Languages:**
+- YAML (stack files)
+- Terraform (components)
+- HCL (configurations)
+
+### 3. Persistent Sessions with Full Memory
+
+Unlike basic chatbots that forget context, Atmos AI **remembers everything** within a session:
+
+```bash
+# Day 1: Start architecture discussion
+atmos ai chat --session vpc-migration
+> "Let's plan migrating from 10.0.0.0/16 to 10.1.0.0/16"
+[Detailed discussion about migration approach...]
+
+# Day 2: Resume with full context
+atmos ai chat --session vpc-migration
+> "Show me the plan we discussed yesterday"
+# ✅ AI has complete context from Day 1
+
+# Week later: Reference earlier decisions
+atmos ai chat --session vpc-migration
+> "Why did we choose /16 instead of /24 again?"
+# ✅ AI can answer based on original discussion
+```
+
+**Session Features:**
+- SQLite storage for reliability
+- Named sessions for organization
+- Provider-aware (remembers which AI you used)
+- Auto-compact for extended conversations
+- Cross-platform session management
+- Visual session picker in TUI (Ctrl+L)
+
+### 4. Specialized AI Agents
+
+Different tasks need different expertise. Atmos AI provides **5 built-in specialized agents**:
+
+**1. General (Default)** - Everyday infrastructure questions
+- All-purpose assistant
+- Full tool access
+- Best for learning and exploration
+
+**2. Stack Analyzer** - Architecture analysis
+- Analyzes stack configurations and dependencies
+- Tools: `describe_*`, `list_*`, `read_stack_file`
+- Use case: Architecture reviews, dependency analysis
+
+**3. Component Refactor** - Code improvements
+- Refactors Terraform/Helmfile components
+- Tools: `read_*`, `write_*`, `search_files`
+- Use case: Modernization, code improvements
+
+**4. Security Auditor** - Security reviews
+- Security analysis of infrastructure
+- Tools: `describe_*`, `read_*`, `validate_*`
+- Use case: Security audits, compliance checks
+
+**5. Config Validator** - Configuration troubleshooting
+- Validates Atmos configurations
+- Tools: `validate_*`, `read_stack_file`, `validate_file_lsp`
+- Use case: Debugging config issues
+
+**Switch agents with Ctrl+A** during conversations!
+
+### 5. Multi-Provider Support
+
+Choose the right AI for your needs:
+
+| Provider | Best For | Privacy |
+|----------|----------|---------|
+| **Anthropic (Claude)** | Complex reasoning, analysis | Cloud |
+| **OpenAI (GPT)** | Code generation, refactoring | Cloud |
+| **Google (Gemini)** | Large context windows | Cloud |
+| **xAI (Grok)** | Real-time knowledge | Cloud |
+| **Ollama (Local)** | **Complete privacy, offline** | **100% Local** |
+| **AWS Bedrock** | Enterprise, AWS-native | AWS |
+| **Azure OpenAI** | Enterprise, Azure-native | Azure |
+
+**Privacy-First Option:**
+
+[Ollama](/ai/providers#ollama) runs AI models **entirely on your machine**:
+- **Zero API costs** - No per-token charges
+- **Complete privacy** - Data never leaves your computer
+- **Offline capable** - No internet required
+- **No rate limits** - Query as much as hardware allows
+- **Compliance ready** - HIPAA, GDPR, air-gapped environments
+
+Requires 8GB+ RAM (64GB+ recommended for large models).
+
+**Enterprise Options:**
+
+AWS Bedrock and Azure OpenAI provide:
+- Data residency controls (data stays in your cloud)
+- Enterprise SLAs and compliance certifications
+- VPC/VNet isolation
+- Audit logging and cost allocation
+- IAM/Azure AD integration
+
+### 6. Project Memory (ATMOS.md)
+
+The AI can remember **project-specific context** across all sessions via `ATMOS.md`:
+
+```markdown
+# Atmos Project Memory
+
+## Project Context
+**Organization:** acme-corp
+**Environments:** dev, staging, prod
+**Stack Naming:** {org}-{env}-{region}-{stage}
+
+## Common Commands
+### Deploy VPC
+```bash
+atmos terraform plan vpc -s acme-prod-use1-network
+atmos terraform apply vpc -s acme-prod-use1-network
+```
+
+## Stack Patterns
+### Network Stack Structure
+All network stacks inherit from:
+- catalog/stacks/network/baseline
+- catalog/stacks/network/security-groups
+
+### CIDR Blocks
+- dev: 10.0.0.0/16
+- staging: 10.1.0.0/16
+- prod: 10.2.0.0/16
+```
+
+This memory file:
+- ✅ Shared with AI automatically
+- ✅ Human-readable Markdown
+- ✅ Version-controlled with your repo
+- ✅ Reduces repetitive context loading
+- ✅ Customizable sections
+
+### 7. Model Context Protocol (MCP) Integration
+
+Use Atmos tools from **any MCP-compatible client**:
+
+**Claude Desktop Integration:**
+
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp-server"]
+    }
+  }
+}
+```
+
+Now Claude Desktop can:
+- Describe your Atmos components
+- List and validate stacks
+- Read configuration files
+- Provide infrastructure analysis
+
+**Also works with:**
+- VSCode/Cursor
+- Custom MCP clients
+- Remote environments (HTTP transport)
+
+Learn more: [MCP Server documentation](/ai/mcp-server)
+
+### 8. Permission System
+
+**Three-tier security model** protects your infrastructure:
+
+**1. Allowed Tools** - Execute without prompting
+```yaml
+allowed_tools:
+  - atmos_describe_*    # Read-only analysis
+  - atmos_list_*        # Safe queries
+  - file_read           # Read files
+```
+
+**2. Restricted Tools** - Require confirmation
+```yaml
+restricted_tools:
+  - file_write              # File modifications
+  - atmos_terraform_plan    # Planning operations
+```
+
+**3. Blocked Tools** - Never execute
+```yaml
+blocked_tools:
+  - atmos_terraform_apply    # Infrastructure changes
+  - atmos_terraform_destroy  # Destructive operations
+```
+
+**Audit Logging:**
+```yaml
+tools:
+  audit:
+    enabled: true
+    path: .atmos/ai-audit.log
+    retention_days: 90
+```
+
+Every tool execution logged with timestamp, user, and context.
+
+## Real-World Use Cases
+
+### 1. New Team Member Onboarding
+
+```bash
+atmos ai chat --session onboarding
+
+You: I just joined the team. Can you explain our stack structure?
+
+AI: Welcome! Let me analyze your Atmos configuration...
+    [Analyzes stacks automatically]
+
+    Your organization uses a three-tier stack structure:
+
+    1. Base stacks (catalog/stacks/base/)
+       - Shared across all environments
+       - Network, IAM, and security baselines
+
+    2. Environment stacks (catalog/stacks/envs/)
+       - dev, staging, prod configurations
+       - Inherits from base, adds env-specific settings
+
+    3. Deployment stacks (stacks/)
+       - Actual deployment configurations
+       - Combines base + env + region-specific settings
+
+    Your naming convention: {org}-{env}-{region}-{stage}
+
+    Example: acme-prod-use1-network
+
+    Would you like me to walk through a specific stack?
+```
+
+### 2. Security Audit
+
+```bash
+atmos ai chat --agent security-auditor
+
+You: Audit our production VPC security
+
+AI: [Switches to Security Auditor agent]
+    [Analyzes prod VPC configuration]
+
+    Security Analysis for prod-use1-network:
+
+    ✅ STRENGTHS:
+    • VPC Flow Logs enabled (CloudWatch)
+    • Private subnets properly configured
+    • NAT Gateways in all AZs
+    • Network ACLs configured
+
+    ⚠️  RECOMMENDATIONS:
+    • Security group sg-12345 allows 0.0.0.0/0 on port 22
+      Consider restricting SSH to VPN CIDR
+    • No GuardDuty findings integration
+      Recommend enabling for threat detection
+    • S3 endpoint not configured
+      Add for better security and cost savings
+
+    Priority: Address SSH security group immediately
+
+    Would you like me to generate a secure security group config?
+```
+
+### 3. Configuration Debugging
+
+```bash
+atmos ai chat --agent config-validator
+
+You: My stack validation is failing with "undefined variable"
+
+AI: [Switches to Config Validator]
+    Let me validate your configuration...
+    [Validates via LSP]
+
+    Found the issue in stacks/prod/vpc.yaml:
+
+    Line 15: var.vpc_cidr
+    Problem: This variable isn't defined in your vars section
+
+    Checking component definition...
+    [Reads component file]
+
+    Your component expects 'cidr_block' not 'vpc_cidr'
+
+    Fix:
+    ```yaml
+    # Change line 15 from:
+    vpc_cidr: var.vpc_cidr
+
+    # To:
+    cidr_block: "10.2.0.0/16"
+    ```
+
+    Would you like me to apply this fix?
+```
+
+### 4. Multi-Day Architecture Discussion
+
+```bash
+# Monday: Start discussion
+atmos ai chat --session architecture-review
+> "We need to design a new multi-region setup"
+[2-hour discussion about regions, replication, disaster recovery...]
+
+# Tuesday: Continue with full context
+atmos ai chat --session architecture-review
+> "What regions did we decide on yesterday?"
+AI: "We discussed using us-east-1 (primary) and us-west-2 (DR)..."
+
+# Wednesday: Reference earlier decisions
+atmos ai chat --session architecture-review
+> "Generate the stack configs based on our discussion"
+AI: [Remembers all architectural decisions from Mon/Tue]
+    [Generates configs matching the agreed design]
+```
+
+## Getting Started
+
+### 1. Configure Atmos AI
+
+Add to your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"  # or openai, gemini, ollama, etc.
+
+    # Configure your provider
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-20250514"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+
+      # Or use Ollama for complete privacy
+      ollama:
+        model: "llama3.3:70b"
+        base_url: "http://localhost:11434/v1"
+        # No API key needed!
+
+    # Enable sessions
+    sessions:
+      enabled: true
+      storage: "sqlite"
+      path: ".atmos/sessions"
+      retention_days: 30
+
+    # Enable tools
+    tools:
+      enabled: true
+      require_confirmation: true
+      allowed_tools:
+        - atmos_describe_*
+        - atmos_list_*
+        - file_read
+
+    # Enable project memory
+    memory:
+      enabled: true
+      file_path: "ATMOS.md"
+      create_if_missing: true
+```
+</File>
+
+### 2. Set Up Your Provider
+
+**For Claude (Anthropic):**
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+**For GPT (OpenAI):**
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+**For Ollama (Local/Offline):**
+```bash
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Download a model
+ollama pull llama3.3:70b
+
+# Ready to use! (no API key needed)
+```
+
+See [AI Providers](/ai/providers) for all provider setup instructions.
+
+### 3. Start Using Atmos AI
+
+**Interactive Chat:**
+```bash
+# Start new session
+atmos ai chat
+
+# Named session
+atmos ai chat --session infrastructure-review
+
+# Specific provider
+atmos ai chat --provider ollama
+
+# Specific agent
+atmos ai chat --agent security-auditor
+```
+
+**Quick Questions:**
+```bash
+# Single-shot query
+atmos ai ask "What components are in production?"
+
+# With specific provider
+atmos ai ask --provider bedrock "List all stacks"
+```
+
+**Session Management:**
+```bash
+# List sessions
+atmos ai sessions list
+
+# Delete old sessions
+atmos ai sessions clean --older-than 30d
+```
+
+**Project Memory:**
+```bash
+# Initialize ATMOS.md
+atmos ai memory init
+
+# Edit in your $EDITOR
+atmos ai memory edit
+
+# View current memory
+atmos ai memory view
+```
+
+**MCP Server (Claude Desktop):**
+```bash
+# Start MCP server
+atmos mcp-server
+
+# Or with HTTP transport
+atmos mcp-server --transport http --port 3000
+```
+
+## TUI Keyboard Shortcuts
+
+**Chat Interface:**
+- **Ctrl+N** - Create new session with provider selection
+- **Ctrl+L** - Switch between sessions
+- **Ctrl+P** - Switch AI provider mid-conversation
+- **Ctrl+A** - Switch AI agent
+- **↑/↓** - Navigate message history
+- **Ctrl+J** - Add newline (alternative to Shift+Enter)
+- **Ctrl+C** - Quit
+
+**Session Manager:**
+- **↑/↓** or **j/k** - Navigate sessions
+- **Enter** - Switch to selected session
+- **d** - Delete session (with confirmation)
+- **r** - Rename session
+- **f** - Filter by provider (All/Claude/GPT/Gemini/Grok/Ollama/Bedrock/Azure)
+- **n** - Create new session
+- **Esc** - Return to chat
+
+## Advanced Features
+
+### Auto-Compact for Extended Conversations
+
+Long conversations eventually hit provider token limits. Atmos AI solves this with **intelligent auto-compact**:
+
+**How It Works:**
+1. Monitors message count and token usage
+2. Triggers when 75% of limit reached
+3. Uses AI to summarize oldest 40% of conversation
+4. Preserves recent messages for context continuity
+5. Maintains semantic meaning while reducing tokens
+
+**Configuration:**
+```yaml
+sessions:
+  auto_compact:
+    enabled: true  # Opt-in feature
+    trigger_threshold: 0.75
+    compact_ratio: 0.4
+    preserve_recent: 10
+    use_ai_summary: true
+    summary_provider: anthropic
+    summary_model: claude-3-5-haiku-20241022  # Fast & cheap
+```
+
+**Benefits:**
+- ✅ Extend conversations indefinitely
+- ✅ Reduce token costs by ~40%
+- ✅ Preserve conversation semantics
+- ✅ Automatic rate limit management
+
+**User Experience:**
+```
+System: Compacting conversation (40 messages)...
+System: Conversation compacted successfully (40 messages summarized, ~8000 tokens saved)
+```
+
+Learn more: [Sessions Documentation](/ai/sessions#auto-compact-extended-conversations)
+
+### Agent Marketplace (Coming Soon)
+
+Install community-created specialized agents:
+
+```bash
+# Install custom agent
+atmos ai agent install github.com/cloudposse/agent-cost-analyzer
+
+# Use it
+atmos ai chat --agent cost-analyzer
+> "Analyze infrastructure costs across all environments"
+```
+
+**Coming features:**
+- Version management
+- Agent dependencies
+- Private agent registries
+- Agent composition
+
+## Security & Privacy
+
+### Data Privacy Options
+
+**Complete Privacy (Ollama):**
+- 100% local processing
+- No data sent to external services
+- HIPAA/GDPR compliant out-of-the-box
+- Air-gapped environment support
+
+**Enterprise Privacy (Bedrock/Azure):**
+- Data stays in your cloud (AWS/Azure)
+- VPC/VNet isolation
+- Customer-managed encryption keys
+- Compliance certifications (SOC2, HIPAA, ISO)
+
+**Cloud Providers (Claude/GPT/Gemini/Grok):**
+- Data sent to provider APIs
+- Review provider privacy policies
+- Enable zero-data retention when available
+- Use for non-sensitive workloads
+
+### Permission Controls
+
+**Recommended Production Settings:**
+```yaml
+tools:
+  # Read-only by default
+  allowed_tools:
+    - atmos_describe_*
+    - atmos_list_*
+
+  # Block destructive operations
+  blocked_tools:
+    - atmos_terraform_destroy
+    - atmos_terraform_apply
+
+  # Enable audit logging
+  audit:
+    enabled: true
+    path: .atmos/ai-audit.log
+```
+
+**Best Practices:**
+1. Use enterprise providers (Bedrock/Azure) for production
+2. Enable audit logging
+3. Configure tool restrictions
+4. Review `.atmosignore` for sensitive files
+5. Use Ollama for sensitive workloads
+6. Regular session cleanup
+
+## Performance
+
+**Session Operations:**
+- Create session: <10ms
+- Load session: <50ms
+- Add message: <10ms
+- List sessions: <100ms
+
+**Tool Execution:**
+- Read operations: Varies by tool
+- Validation (LSP): <1s
+- Stack analysis: Varies by complexity
+
+**AI Response Times:**
+- Streaming: First token in 500ms-2s
+- Full response: Varies by provider and complexity
+- Ollama: Depends on hardware (GPU recommended)
+
+## What's Next?
+
+We're continuously improving Atmos AI. Upcoming features:
+
+### Short-term (Next 3 Months)
+- **Agent Marketplace** - Install community agents
+- **Enhanced LSP** - More language servers (HCL, JSON Schema)
+- **Advanced Analytics** - Token usage tracking, cost analysis
+- **Auto-Fix Suggestions** - AI-powered configuration fixes
+
+### Medium-term (3-6 Months)
+- **Multi-Agent Workflows** - Agent delegation and collaboration
+- **Enhanced Memory** - Automatic memory updates from conversations
+- **IDE Plugins** - Native VSCode/JetBrains integration
+- **Team Collaboration** - Shared sessions across teams
+
+### Long-term (6-12 Months)
+- **Private Agent Registries** - Company-specific agents
+- **Advanced Security** - Agent sandboxing, GPG signatures
+- **Centralized Management** - Organization-wide policies
+- **Advanced Workflows** - Task decomposition, parallel execution
+
+## Learn More
+
+**Documentation:**
+- [Configuration Guide](/ai/configuration) - Complete configuration reference
+- [AI Providers](/ai/providers) - All 7 providers with setup instructions
+- [Tool System](/ai/tools) - Tool execution and permissions
+- [AI Agents](/ai/agents) - Built-in agents and agent system
+- [Sessions](/ai/sessions) - Session management and auto-compact
+- [Project Memory](/ai/memory) - ATMOS.md documentation
+- [MCP Server](/ai/mcp-server) - Claude Desktop integration
+- [Claude Code Integration](/ai/claude-code-integration) - IDE integration
+- [Troubleshooting](/ai/troubleshooting) - Common issues and solutions
+
+**Related Links:**
+- [Atmos Documentation](https://atmos.tools)
+- [Model Context Protocol](https://modelcontextprotocol.io)
+- [Ollama](https://ollama.com)
+
+**Get Involved:**
+- [GitHub Issues](https://github.com/cloudposse/atmos/issues)
+- [Community Discussions](https://github.com/cloudposse/atmos/discussions)
+
+---
+
+Happy infrastructure engineering! 🚀
