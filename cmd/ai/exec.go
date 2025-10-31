@@ -73,6 +73,9 @@ Examples:
 		includeContext, _ := cmd.Flags().GetBool("context")
 		providerName, _ := cmd.Flags().GetString("provider")
 		sessionID, _ := cmd.Flags().GetString("session")
+		includePatterns, _ := cmd.Flags().GetStringSlice("include")
+		excludePatterns, _ := cmd.Flags().GetStringSlice("exclude")
+		noAutoContext, _ := cmd.Flags().GetBool("no-auto-context")
 
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -90,6 +93,17 @@ Examples:
 		// Override provider if specified.
 		if providerName != "" {
 			atmosConfig.Settings.AI.DefaultProvider = providerName
+		}
+
+		// Apply context discovery overrides.
+		if noAutoContext {
+			atmosConfig.Settings.AI.Context.Enabled = false
+		}
+		if len(includePatterns) > 0 {
+			atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+		}
+		if len(excludePatterns) > 0 {
+			atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
 		}
 
 		// Get prompt from args or stdin.
@@ -236,6 +250,11 @@ func init() {
 	execCmd.Flags().Bool("context", false, "Include stack context in prompt")
 	execCmd.Flags().StringP("provider", "p", "", "Override AI provider (anthropic, openai, gemini, etc.)")
 	execCmd.Flags().StringP("session", "s", "", "Session ID for conversation context")
+
+	// Context discovery flags.
+	execCmd.Flags().StringSlice("include", nil, "Add glob patterns to include in context (can be repeated)")
+	execCmd.Flags().StringSlice("exclude", nil, "Add glob patterns to exclude from context (can be repeated)")
+	execCmd.Flags().Bool("no-auto-context", false, "Disable automatic context discovery")
 
 	// Add to ai command.
 	aiCmd.AddCommand(execCmd)

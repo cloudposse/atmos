@@ -979,6 +979,70 @@ The action automatically benefits from token caching, reducing costs by 50-90% d
 
 Learn more: [GitHub Actions Integration](/integrations/github-actions/atmos-ai)
 
+### Automatic Context Discovery
+
+Atmos AI can automatically discover and include relevant project files in conversations using intelligent pattern matching, eliminating the need to manually specify files.
+
+**Why Context Discovery?**
+- Better AI responses with access to relevant project files
+- No need to copy-paste file contents
+- Intelligent filtering respects `.gitignore` for security
+- Configurable limits prevent context overflow
+- Cached discovery for fast performance
+
+**Quick Example:**
+
+<Terminal title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    context:
+      enabled: true
+      auto_include:
+        - "stacks/**/*.yaml"      # All stack configs
+        - "components/**/*.tf"    # Terraform components
+        - "README.md"             # Documentation
+        - "docs/**/*.md"
+      exclude:
+        - "**/*_test.go"          # Exclude tests
+        - "**/node_modules/**"    # Exclude dependencies
+      max_files: 100              # Limit total files
+      max_size_mb: 10             # Limit total size
+      follow_gitignore: true      # Respect .gitignore
+      cache_enabled: true         # Cache for performance
+```
+</Terminal>
+
+**CLI Overrides:**
+
+<Terminal title="atmos ai">
+```bash
+# Add specific patterns for this query
+atmos ai ask "Review my Go code" --include "**/*.go" --exclude "**/*_test.go"
+
+# Analyze Terraform with custom patterns
+atmos ai exec "Check configurations" --include "**/*.tf" --exclude "**/.terraform/**"
+
+# Disable auto-discovery when not needed
+atmos ai exec "General question" --no-auto-context
+```
+</Terminal>
+
+**How It Works:**
+1. **Pattern Matching** - Glob patterns like `**/*.yaml` find all matching files recursively
+2. **Gitignore Filtering** - Files in `.gitignore` are automatically excluded
+3. **Size Limits** - Discovery stops at `max_files` or `max_size_mb` to prevent overwhelming context
+4. **Caching** - Discovered files are cached with configurable TTL for faster subsequent queries
+5. **Context Injection** - Matched files are automatically included in AI prompts for better responses
+
+**Security:**
+- `.gitignore` respect prevents exposing secrets
+- Exclude patterns for sensitive directories
+- Size limits prevent excessive data transmission
+- File list visibility control with `show_files` setting
+
+Learn more: [Context Discovery Documentation](/ai#automatic-context-discovery)
+
 ### Agent Marketplace (Coming Soon)
 
 Install community-created specialized agents:
@@ -1079,9 +1143,9 @@ We're continuously improving Atmos AI. Recent completions and upcoming features:
 - ✅ **Token Caching (Prompt Caching)** - Save up to 90% on API costs with automatic caching
 - ✅ **Conversation Checkpointing** - Export/import sessions for team collaboration and backup
 - ✅ **GitHub Actions Integration** - Official action for automated PR reviews and CI/CD workflows
+- ✅ **Automatic Context Discovery** - Intelligent file discovery with .gitignore support and caching
 
 ### Short-term (Next 3 Months)
-- **Directory Scoping** - Auto-discovery with .gitignore support
 - **Agent Marketplace** - Install community agents
 - **Enhanced LSP** - More language servers (HCL, JSON Schema)
 - **Advanced Analytics** - Token usage tracking, cost analysis

@@ -75,6 +75,14 @@ Wondering how AI tool execution works and what data is sent to AI providers? See
 - **Customizable Sections**: Control what context is shared with AI
 - **Team Collaboration**: Share memory file with your team via version control
 
+### Automatic Context Discovery
+- **Smart File Detection**: Automatically discover relevant project files using glob patterns
+- **Gitignore Awareness**: Respect `.gitignore` to prevent exposing sensitive files
+- **Size Limits**: Configurable max files and size limits to control context size
+- **Pattern Matching**: Include/exclude patterns for precise control over discovered files
+- **Caching**: Automatic caching of discovered files for faster responses
+- **CLI Overrides**: Override discovery patterns with `--include` and `--exclude` flags
+
 ### MCP Server Integration
 - **Universal Compatibility**: Expose Atmos tools via Model Context Protocol (MCP)
 - **Claude Desktop Integration**: Use Atmos directly in Claude conversations
@@ -144,9 +152,27 @@ settings:
       create_if_missing: true    # Auto-create template
       auto_update: false         # Manual updates only (recommended)
 
+    # Optional: Automatic context discovery
+    context:
+      enabled: true              # Auto-discover project files
+      auto_include:              # Glob patterns to include
+        - "stacks/**/*.yaml"
+        - "components/**/*.tf"
+        - "README.md"
+        - "docs/**/*.md"
+      exclude:                   # Patterns to exclude
+        - "**/*_test.go"
+        - "**/node_modules/**"
+      max_files: 100             # Max files to include (default: 100)
+      max_size_mb: 10            # Max total size in MB (default: 10)
+      follow_gitignore: true     # Respect .gitignore (default: true)
+      show_files: false          # Show discovered files (default: false)
+      cache_enabled: true        # Cache discovered files (default: true)
+      cache_ttl_seconds: 300     # Cache TTL (default: 300)
+
     # Optional: Performance tuning
     timeout_seconds: 60         # Default: 60
-    max_context_files: 10       # Default: 10
+    max_context_files: 10       # Default: 10 (legacy, use context.max_files)
     max_context_lines: 500      # Default: 500
 ```
 </File>
@@ -201,10 +227,80 @@ echo "Validate stack configuration" | atmos ai exec --format json
 # Save output to file
 atmos ai exec "Analyze prod stack" --output analysis.json --format json
 
+# Override context discovery patterns
+atmos ai ask "Review my code" --include "**/*.go" --exclude "**/*_test.go"
+
+# Disable automatic context discovery
+atmos ai exec "General question" --no-auto-context
+
 # Start MCP server for Claude Desktop integration
 atmos mcp-server
 ```
 </Terminal>
+
+## Automatic Context Discovery
+
+Atmos AI can automatically discover and include relevant project files in the conversation context using glob patterns. This provides better responses without manually specifying files.
+
+### Configuration
+
+Enable context discovery in `atmos.yaml`:
+
+```yaml
+settings:
+  ai:
+    context:
+      enabled: true
+      auto_include:
+        - "stacks/**/*.yaml"      # All stack configs
+        - "components/**/*.tf"    # Terraform components
+        - "README.md"             # Project docs
+        - "docs/**/*.md"
+      exclude:
+        - "**/*_test.go"          # Exclude tests
+        - "**/node_modules/**"     # Exclude dependencies
+      max_files: 100              # Limit total files
+      max_size_mb: 10             # Limit total size (MB)
+      follow_gitignore: true      # Respect .gitignore
+      cache_enabled: true         # Cache for performance
+      cache_ttl_seconds: 300      # Cache duration
+```
+
+### CLI Overrides
+
+Override patterns on the command line:
+
+<Terminal title="atmos ai">
+```bash
+# Add additional include patterns
+atmos ai ask "Review my Go code" --include "**/*.go"
+
+# Add exclusion patterns
+atmos ai exec "Analyze configs" --exclude "**/*.backup"
+
+# Combine include and exclude
+atmos ai ask "Check Terraform" --include "**/*.tf" --exclude "**/.terraform/**"
+
+# Disable auto-discovery for this query
+atmos ai exec "What is Atmos?" --no-auto-context
+```
+</Terminal>
+
+### How It Works
+
+1. **Pattern Matching**: Glob patterns like `stacks/**/*.yaml` find all matching files
+2. **Gitignore Filtering**: Files in `.gitignore` are automatically excluded
+3. **Size Limits**: Discovery stops when `max_files` or `max_size_mb` is reached
+4. **Caching**: Discovered files are cached to avoid re-scanning on every query
+5. **Context Injection**: Matched files are automatically included in AI prompts
+
+### Benefits
+
+- **Better Responses**: AI has access to relevant project files automatically
+- **No Manual File Selection**: No need to copy-paste file contents
+- **Security**: Gitignore respect prevents exposing sensitive files
+- **Performance**: Caching and size limits keep responses fast
+- **Flexibility**: Override patterns per command for specific queries
 
 ## Conversation Memory
 

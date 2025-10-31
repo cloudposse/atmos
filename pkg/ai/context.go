@@ -9,8 +9,10 @@ import (
 
 	"github.com/spf13/viper"
 
+	aiContext "github.com/cloudposse/atmos/pkg/ai/context"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 const (
@@ -65,6 +67,41 @@ func formatFileContent(file string, maxLines int) string {
 // GatherStackContext reads stack configurations and returns them as context for AI.
 func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	var context strings.Builder
+
+	// Try automatic context discovery first if enabled.
+	if atmosConfig.Settings.AI.Context.Enabled {
+		log.Debug("Using automatic context discovery")
+
+		discoverer, err := aiContext.NewDiscoverer(atmosConfig.BasePath, atmosConfig.Settings.AI.Context)
+		if err != nil {
+			log.Warn(fmt.Sprintf("Failed to create context discoverer: %v", err))
+		} else {
+			result, err := discoverer.Discover()
+			if err != nil {
+				log.Warn(fmt.Sprintf("Failed to discover context files: %v", err))
+			} else if len(result.Files) > 0 {
+				// Use discovered files as context.
+				discoveredContext := aiContext.FormatFilesContext(result)
+				if discoveredContext != "" {
+					context.WriteString(discoveredContext)
+
+					// Show file list if configured.
+					if atmosConfig.Settings.AI.Context.ShowFiles {
+						log.Info(fmt.Sprintf("Auto-discovered %d files for context", len(result.Files)))
+						for _, file := range result.Files {
+							log.Debug(fmt.Sprintf("  - %s (%d bytes)", file.RelativePath, file.Size))
+						}
+					}
+
+					// Return early if we got discovered context.
+					return context.String(), nil
+				}
+			}
+		}
+	}
+
+	// Fallback to original stack file gathering.
+	log.Debug("Using legacy stack file context gathering")
 
 	// Get stacks path.
 	stacksPath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)

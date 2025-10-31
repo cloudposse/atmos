@@ -20,6 +20,7 @@ Atmos AI is an intelligent assistant integrated directly into Atmos CLI, designe
 - **Session Management** - SQLite-backed persistence with full CRUD operations
 - **Conversation Checkpointing** - Export/import sessions for team collaboration and backup
 - **GitHub Actions Integration** - Automated PR reviews, security scans, and cost analysis in CI/CD
+- **Automatic Context Discovery** - Intelligent file discovery with glob patterns and gitignore filtering
 - **Project Memory** - ATMOS.md for persistent context across sessions
 - **Tool Execution** - 19 tools with granular permission system
 - **Agent System** - 5 built-in specialized agents + marketplace (production ready)
@@ -1662,6 +1663,107 @@ jobs:
 - Action README: `.github/actions/atmos-ai/README.md`
 - Website docs: `website/docs/integrations/github-actions/atmos-ai.mdx`
 - Example workflows: `.github/workflows/examples/`
+
+**Automatic Context Discovery** - *Completed: October 2025*
+- **Purpose:** Intelligently discover and include relevant project files in AI conversations using glob patterns and gitignore filtering
+- **Implementation:** `pkg/ai/context/discovery.go`, `gitignore.go`, `cache.go`
+- **Features:** Pattern matching, gitignore filtering, size limits, caching, CLI overrides
+- **Integration:** Integrated into `atmos ai ask`, `atmos ai exec`, and `atmos ai chat` commands
+
+**Core Functionality:**
+- **Glob Pattern Matching:** Use doublestar library for recursive pattern matching (`stacks/**/*.yaml`)
+- **Gitignore Integration:** Respects `.gitignore` files to prevent exposing sensitive files
+- **Configurable Limits:** Max files (default: 100), max size (default: 10MB) to control context size
+- **Intelligent Caching:** TTL-based caching (default: 300s) for fast subsequent queries
+- **Pattern Exclusion:** Exclude patterns to filter out unwanted files
+- **CLI Overrides:** Runtime pattern overrides with `--include`, `--exclude`, `--no-auto-context` flags
+
+**Configuration Schema:**
+```yaml
+settings:
+  ai:
+    context:
+      enabled: true                 # Enable context discovery
+      auto_include:                 # Glob patterns to include
+        - "stacks/**/*.yaml"
+        - "components/**/*.tf"
+        - "README.md"
+        - "docs/**/*.md"
+      exclude:                      # Patterns to exclude
+        - "**/*_test.go"
+        - "**/node_modules/**"
+      max_files: 100                # Max files (default: 100)
+      max_size_mb: 10               # Max size in MB (default: 10)
+      follow_gitignore: true        # Respect .gitignore (default: true)
+      show_files: false             # Show discovered files (default: false)
+      cache_enabled: true           # Enable caching (default: true)
+      cache_ttl_seconds: 300        # Cache TTL (default: 300)
+```
+
+**CLI Usage:**
+```bash
+# Use configuration from atmos.yaml
+atmos ai ask "Review my infrastructure"
+
+# Override include patterns
+atmos ai ask "Check Go code" --include "**/*.go" --exclude "**/*_test.go"
+
+# Analyze Terraform with custom patterns
+atmos ai exec "Review configs" --include "**/*.tf" --exclude "**/.terraform/**"
+
+# Disable auto-discovery
+atmos ai exec "General question" --no-auto-context
+```
+
+**Implementation Details:**
+- **Discovery Service:** `Discoverer` struct manages file discovery with caching
+- **Gitignore Filter:** `GitignoreFilter` parses `.gitignore` and applies patterns
+- **Discovery Cache:** `DiscoveryCache` provides TTL-based caching of results
+- **Format Function:** `FormatFilesContext()` formats discovered files as markdown for AI
+- **Validation:** `ValidateConfig()` ensures configuration correctness
+
+**How It Works:**
+1. Check cache for previously discovered files (if enabled)
+2. Iterate through `auto_include` patterns using glob matching
+3. Filter files based on `exclude` patterns and `.gitignore`
+4. Apply size and count limits (`max_files`, `max_size_mb`)
+5. Read file contents and create formatted context
+6. Cache results for future queries (if enabled)
+7. Return formatted context to be included in AI prompts
+
+**Security Features:**
+- `.gitignore` respect prevents exposing secrets
+- Exclude patterns for sensitive directories
+- Size limits prevent excessive data transmission
+- File visibility control with `show_files` setting
+- Pattern validation to prevent malicious patterns
+
+**Benefits:**
+- ✅ Better AI responses with access to relevant project files
+- ✅ No manual file selection required
+- ✅ Automatic security filtering via gitignore
+- ✅ Performance optimization with caching
+- ✅ Flexible pattern matching for different use cases
+- ✅ CLI overrides for per-query customization
+- ✅ Size limits prevent context overflow
+
+**Testing:**
+- Comprehensive test coverage in `pkg/ai/context/*_test.go`
+- Tests for pattern matching, gitignore filtering, caching, limits
+- Integration tests with AI commands
+- Golden snapshot tests for output formatting
+
+**Documentation:**
+- Configuration: `website/docs/ai/ai.mdx` (Automatic Context Discovery section)
+- Schema: `pkg/schema/ai.go` (`AIContextSettings` struct)
+- Blog post: `website/blog/2025-10-30-introducing-atmos-ai.mdx`
+
+**Future Enhancements:**
+- Pattern suggestions based on project structure
+- Automatic pattern optimization
+- Context relevance scoring
+- Multi-level caching (file-level + discovery-level)
+- Integration with MCP server for IDE clients
 
 ---
 

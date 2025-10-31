@@ -33,6 +33,11 @@ Examples:
   atmos ai ask "Describe the vpc component in the dev stack"`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Get flags.
+		includePatterns, _ := cmd.Flags().GetStringSlice("include")
+		excludePatterns, _ := cmd.Flags().GetStringSlice("exclude")
+		noAutoContext, _ := cmd.Flags().GetBool("no-auto-context")
+
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -44,6 +49,17 @@ Examples:
 		if !isAIEnabled(&atmosConfig) {
 			return fmt.Errorf("%w: Set 'settings.ai.enabled: true' in your atmos.yaml configuration",
 				errUtils.ErrAINotEnabled)
+		}
+
+		// Apply context discovery overrides.
+		if noAutoContext {
+			atmosConfig.Settings.AI.Context.Enabled = false
+		}
+		if len(includePatterns) > 0 {
+			atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+		}
+		if len(excludePatterns) > 0 {
+			atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
 		}
 
 		// Join all arguments as the question.
@@ -103,5 +119,10 @@ Examples:
 }
 
 func init() {
+	// Context discovery flags.
+	askCmd.Flags().StringSlice("include", nil, "Add glob patterns to include in context (can be repeated)")
+	askCmd.Flags().StringSlice("exclude", nil, "Add glob patterns to exclude from context (can be repeated)")
+	askCmd.Flags().Bool("no-auto-context", false, "Disable automatic context discovery")
+
 	aiCmd.AddCommand(askCmd)
 }

@@ -18,6 +18,7 @@ type AISettings struct {
 	Tools              AIToolSettings               `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
 	Memory             AIMemorySettings             `yaml:"memory,omitempty" json:"memory,omitempty" mapstructure:"memory"`
 	WebSearch          AIWebSearchSettings          `yaml:"web_search,omitempty" json:"web_search,omitempty" mapstructure:"web_search"`
+	Context            AIContextSettings            `yaml:"context,omitempty" json:"context,omitempty" mapstructure:"context"`
 	UseLSP             bool                         `yaml:"use_lsp,omitempty" json:"use_lsp,omitempty" mapstructure:"use_lsp"` // Enable LSP integration for diagnostics
 }
 
@@ -89,6 +90,19 @@ type AIWebSearchSettings struct {
 	GoogleCSEID    string `yaml:"google_cse_id,omitempty" json:"google_cse_id,omitempty" mapstructure:"google_cse_id"`    // Google Custom Search Engine ID
 	MaxResults     int    `yaml:"max_results,omitempty" json:"max_results,omitempty" mapstructure:"max_results"`          // Maximum results to return
 	TimeoutSeconds int    `yaml:"timeout_seconds,omitempty" json:"timeout_seconds,omitempty" mapstructure:"timeout_seconds"`
+}
+
+// AIContextSettings contains automatic context discovery configuration.
+type AIContextSettings struct {
+	Enabled         bool     `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`                                  // Enable automatic context loading
+	AutoInclude     []string `yaml:"auto_include,omitempty" json:"auto_include,omitempty" mapstructure:"auto_include"`                   // Glob patterns for files to auto-include
+	Exclude         []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`                                  // Glob patterns for files to exclude
+	MaxFiles        int      `yaml:"max_files,omitempty" json:"max_files,omitempty" mapstructure:"max_files"`                            // Maximum number of files to include (default: 100)
+	MaxSizeMB       int      `yaml:"max_size_mb,omitempty" json:"max_size_mb,omitempty" mapstructure:"max_size_mb"`                      // Maximum total size in MB (default: 10)
+	FollowGitignore bool     `yaml:"follow_gitignore,omitempty" json:"follow_gitignore,omitempty" mapstructure:"follow_gitignore"`       // Respect .gitignore files (default: true)
+	ShowFiles       bool     `yaml:"show_files,omitempty" json:"show_files,omitempty" mapstructure:"show_files"`                         // Show list of included files in UI (default: false)
+	CacheEnabled    bool     `yaml:"cache_enabled,omitempty" json:"cache_enabled,omitempty" mapstructure:"cache_enabled"`                // Cache discovered files (default: true)
+	CacheTTL        int      `yaml:"cache_ttl_seconds,omitempty" json:"cache_ttl_seconds,omitempty" mapstructure:"cache_ttl_seconds"` // Cache TTL in seconds (default: 300)
 }
 
 // AIAgentConfig contains configuration for a custom AI agent.
