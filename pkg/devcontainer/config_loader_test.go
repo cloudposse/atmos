@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestDeserializeStringFields(t *testing.T) {
@@ -564,6 +566,507 @@ func TestDeserializeSpec(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, config)
 			tt.assert(t, config)
+		})
+	}
+}
+
+func TestLoadConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		dcName      string
+		expectError bool
+		errorMsg    string
+		assert      func(t *testing.T, config *Config, settings *Settings)
+	}{
+		{
+			name: "valid devcontainer with settings",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: map[string]any{
+						"test-alpine": map[string]any{
+							"settings": map[string]any{
+								"runtime": "podman",
+							},
+							"spec": map[string]any{
+								"image":           "alpine:latest",
+								"workspacefolder": "/workspace",
+								"remoteuser":      "root",
+							},
+						},
+					},
+				},
+			},
+			dcName:      "test-alpine",
+			expectError: false,
+			assert: func(t *testing.T, config *Config, settings *Settings) {
+				assert.NotNil(t, config)
+				assert.NotNil(t, settings)
+				assert.Equal(t, "alpine:latest", config.Image)
+				assert.Equal(t, "/workspace", config.WorkspaceFolder)
+				assert.Equal(t, "root", config.RemoteUser)
+				assert.Equal(t, "podman", settings.Runtime)
+			},
+		},
+		{
+			name: "valid devcontainer without settings",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: map[string]any{
+						"test-ubuntu": map[string]any{
+							"spec": map[string]any{
+								"image":      "ubuntu:22.04",
+								"remoteuser": "vscode",
+							},
+						},
+					},
+				},
+			},
+			dcName:      "test-ubuntu",
+			expectError: false,
+			assert: func(t *testing.T, config *Config, settings *Settings) {
+				assert.NotNil(t, config)
+				assert.NotNil(t, settings)
+				assert.Equal(t, "ubuntu:22.04", config.Image)
+				assert.Equal(t, "vscode", config.RemoteUser)
+				assert.Equal(t, "", settings.Runtime) // Empty when not specified
+			},
+		},
+		{
+			name: "no devcontainers configured",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: nil,
+				},
+			},
+			dcName:      "test",
+			expectError: true,
+			errorMsg:    "no devcontainers configured",
+		},
+		{
+			name: "devcontainer not found",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: map[string]any{
+						"existing": map[string]any{
+							"spec": map[string]any{
+								"image": "alpine:latest",
+							},
+						},
+					},
+				},
+			},
+			dcName:      "nonexistent",
+			expectError: true,
+			errorMsg:    "not found",
+		},
+		{
+			name: "missing spec section",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: map[string]any{
+						"invalid": map[string]any{
+							"settings": map[string]any{
+								"runtime": "docker",
+							},
+							// Missing 'spec' section
+						},
+					},
+				},
+			},
+			dcName:      "invalid",
+			expectError: true,
+			errorMsg:    "missing 'spec' section",
+		},
+		{
+			name: "spec is not a map",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: map[string]any{
+						"invalid": map[string]any{
+							"spec": "not a map",
+						},
+					},
+				},
+			},
+			dcName:      "invalid",
+			expectError: true,
+			errorMsg:    "must be a map",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, settings, err := LoadConfig(tt.atmosConfig, tt.dcName)
+
+			if tt.expectError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+				assert.Nil(t, config)
+				assert.Nil(t, settings)
+			} else {
+				require.NoError(t, err)
+				tt.assert(t, config, settings)
+			}
+		})
+	}
+}
+
+func TestLoadAllConfigs(t *testing.T) {
+	tests := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		expectError bool
+		assert      func(t *testing.T, configs map[string]*Config)
+	}{
+		{
+			name: "multiple valid devcontainers",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: map[string]any{
+						"alpine": map[string]any{
+							"spec": map[string]any{
+								"image": "alpine:latest",
+							},
+						},
+						"ubuntu": map[string]any{
+							"spec": map[string]any{
+								"image": "ubuntu:22.04",
+							},
+						},
+						"python": map[string]any{
+							"spec": map[string]any{
+								"image": "python:3.11",
+							},
+						},
+					},
+				},
+			},
+			expectError: false,
+			assert: func(t *testing.T, configs map[string]*Config) {
+				assert.Len(t, configs, 3)
+				assert.NotNil(t, configs["alpine"])
+				assert.NotNil(t, configs["ubuntu"])
+				assert.NotNil(t, configs["python"])
+				assert.Equal(t, "alpine:latest", configs["alpine"].Image)
+				assert.Equal(t, "ubuntu:22.04", configs["ubuntu"].Image)
+				assert.Equal(t, "python:3.11", configs["python"].Image)
+			},
+		},
+		{
+			name: "no devcontainers configured",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: nil,
+				},
+			},
+			expectError: false,
+			assert: func(t *testing.T, configs map[string]*Config) {
+				assert.Empty(t, configs)
+			},
+		},
+		{
+			name: "empty devcontainers map",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: map[string]any{},
+				},
+			},
+			expectError: false,
+			assert: func(t *testing.T, configs map[string]*Config) {
+				assert.Empty(t, configs)
+			},
+		},
+		{
+			name: "one valid one invalid",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: map[string]any{
+						"valid": map[string]any{
+							"spec": map[string]any{
+								"image": "alpine:latest",
+							},
+						},
+						"invalid": map[string]any{
+							// Missing spec section
+						},
+					},
+				},
+			},
+			expectError: true, // Should fail on the invalid one
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configs, err := LoadAllConfigs(tt.atmosConfig)
+
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				tt.assert(t, configs)
+			}
+		})
+	}
+}
+
+func TestExtractSettings(t *testing.T) {
+	tests := []struct {
+		name        string
+		devMap      map[string]any
+		dcName      string
+		expectError bool
+		assert      func(t *testing.T, settings *Settings)
+	}{
+		{
+			name: "settings with runtime",
+			devMap: map[string]any{
+				"settings": map[string]any{
+					"runtime": "podman",
+				},
+			},
+			dcName:      "test",
+			expectError: false,
+			assert: func(t *testing.T, settings *Settings) {
+				assert.Equal(t, "podman", settings.Runtime)
+			},
+		},
+		{
+			name:        "no settings section",
+			devMap:      map[string]any{},
+			dcName:      "test",
+			expectError: false,
+			assert: func(t *testing.T, settings *Settings) {
+				assert.Equal(t, "", settings.Runtime)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings, err := extractSettings(tt.devMap, tt.dcName)
+
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				tt.assert(t, settings)
+			}
+		})
+	}
+}
+
+func TestExtractAndValidateSpec(t *testing.T) {
+	tests := []struct {
+		name        string
+		devMap      map[string]any
+		dcName      string
+		expectError bool
+		errorMsg    string
+		assert      func(t *testing.T, config *Config)
+	}{
+		{
+			name: "valid spec with image",
+			devMap: map[string]any{
+				"spec": map[string]any{
+					"image": "alpine:latest",
+				},
+			},
+			dcName:      "test",
+			expectError: false,
+			assert: func(t *testing.T, config *Config) {
+				assert.Equal(t, "alpine:latest", config.Image)
+				assert.Equal(t, "test", config.Name)   // Name defaults to dcName
+				assert.True(t, config.OverrideCommand) // Defaults to true
+			},
+		},
+		{
+			name: "spec with explicit name",
+			devMap: map[string]any{
+				"spec": map[string]any{
+					"name":  "custom-name",
+					"image": "ubuntu:22.04",
+				},
+			},
+			dcName:      "test",
+			expectError: false,
+			assert: func(t *testing.T, config *Config) {
+				assert.Equal(t, "custom-name", config.Name) // Uses spec name
+			},
+		},
+		{
+			name: "missing spec section",
+			devMap: map[string]any{
+				"settings": map[string]any{},
+			},
+			dcName:      "test",
+			expectError: true,
+			errorMsg:    "missing 'spec' section",
+		},
+		{
+			name: "spec is not a map",
+			devMap: map[string]any{
+				"spec": "not a map",
+			},
+			dcName:      "test",
+			expectError: true,
+			errorMsg:    "must be a map",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, err := extractAndValidateSpec(tt.devMap, tt.dcName)
+
+			if tt.expectError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				require.NoError(t, err)
+				tt.assert(t, config)
+			}
+		})
+	}
+}
+
+func TestGetDevcontainerMap(t *testing.T) {
+	tests := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		dcName      string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "valid devcontainer exists",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: map[string]any{
+						"test": map[string]any{
+							"spec": map[string]any{
+								"image": "alpine:latest",
+							},
+						},
+					},
+				},
+			},
+			dcName:      "test",
+			expectError: false,
+		},
+		{
+			name: "no devcontainers configured",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: nil,
+				},
+			},
+			dcName:      "test",
+			expectError: true,
+			errorMsg:    "no devcontainers configured",
+		},
+		{
+			name: "devcontainer not found",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: map[string]any{
+						"existing": map[string]any{},
+					},
+				},
+			},
+			dcName:      "nonexistent",
+			expectError: true,
+			errorMsg:    "not found",
+		},
+		{
+			name: "devcontainer is not a map",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Devcontainer: map[string]any{
+						"invalid": "not a map",
+					},
+				},
+			},
+			dcName:      "invalid",
+			expectError: true,
+			errorMsg:    "must be a map",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			devMap, err := getDevcontainerMap(tt.atmosConfig, tt.dcName)
+
+			if tt.expectError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+				assert.Nil(t, devMap)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, devMap)
+			}
+		})
+	}
+}
+
+func TestValidateConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      *Config
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "valid config with image",
+			config: &Config{
+				Name:  "test",
+				Image: "alpine:latest",
+			},
+			expectError: false,
+		},
+		{
+			name: "valid config with dockerfile",
+			config: &Config{
+				Name: "test",
+				Build: &Build{
+					Dockerfile: "Dockerfile",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:        "missing name",
+			config:      &Config{Image: "alpine:latest"},
+			expectError: true,
+			errorMsg:    "name is required",
+		},
+		{
+			name:        "missing both image and dockerfile",
+			config:      &Config{Name: "test"},
+			expectError: true,
+			errorMsg:    "must specify either 'image' or 'build'",
+		},
+		{
+			name: "build missing dockerfile",
+			config: &Config{
+				Name:  "test",
+				Build: &Build{},
+			},
+			expectError: true,
+			errorMsg:    "dockerfile is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateConfig(tt.config)
+
+			if tt.expectError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				require.NoError(t, err)
+			}
 		})
 	}
 }
