@@ -28,22 +28,27 @@ import (
 //	    // Use explicit identity
 //	}
 func GetIdentityFromFlags(cmd *cobra.Command, osArgs []string) string {
-	// First, try to get identity from manual parsing of os.Args.
-	// This bypasses Cobra's NoOptDefVal issue with positional arguments.
-	identity := extractIdentityFromArgs(osArgs)
-	if identity != "" {
-		return identity
-	}
-
-	// If not found in os.Args, check if flag was set via Cobra.
-	// This handles cases where the command doesn't have positional args
-	// or where the flag appears before positional args.
+	// Check if flag was set via Cobra first (handles both SetArgs in tests and real CLI).
+	// For commands without positional args, this is reliable.
+	// For commands with positional args, we'll use os.Args parsing as a fallback.
 	if cmd.Flags().Changed(IdentityFlagName) {
 		value, _ := cmd.Flags().GetString(IdentityFlagName)
+		// Only trust this value if it's not the NoOptDefVal issue.
+		// If we got "__SELECT__" but there might be a real value in os.Args, check os.Args.
+		if value != cfg.IdentityFlagSelectValue {
+			return value
+		}
+		// Got __SELECT__ - check if os.Args has an actual value.
+		identity := extractIdentityFromArgs(osArgs)
+		if identity != "" && identity != cfg.IdentityFlagSelectValue {
+			// Found actual value in os.Args - use that instead.
+			return identity
+		}
+		// No value in os.Args either - return __SELECT__.
 		return value
 	}
 
-	// Fall back to environment variable.
+	// Flag not changed - fall back to environment variable.
 	return viper.GetString(IdentityFlagName)
 }
 

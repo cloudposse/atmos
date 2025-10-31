@@ -52,7 +52,7 @@ func TestAuth_CredentialCaching(t *testing.T) {
 
 	// Step 1: Authenticate (this caches credentials).
 	t.Run("initial login caches credentials", func(t *testing.T) {
-		RootCmd.SetArgs([]string{"auth", "login", "--identity", "mock-identity"})
+		RootCmd.SetArgs([]string{"auth", "login", "--identity=mock-identity"})
 
 		start := time.Now()
 		err := RootCmd.Execute()
@@ -70,19 +70,19 @@ func TestAuth_CredentialCaching(t *testing.T) {
 	}{
 		{
 			name: "auth whoami with cached credentials",
-			args: []string{"auth", "whoami", "--identity", "mock-identity"},
+			args: []string{"auth", "whoami", "--identity=mock-identity"},
 		},
 		{
 			name: "auth env json with cached credentials",
-			args: []string{"auth", "env", "--format", "json", "--identity", "mock-identity"},
+			args: []string{"auth", "env", "--format", "json", "--identity=mock-identity"},
 		},
 		{
 			name: "auth env bash with cached credentials",
-			args: []string{"auth", "env", "--format", "bash", "--identity", "mock-identity"},
+			args: []string{"auth", "env", "--format", "bash", "--identity=mock-identity"},
 		},
 		{
 			name: "auth env dotenv with cached credentials",
-			args: []string{"auth", "env", "--format", "dotenv", "--identity", "mock-identity"},
+			args: []string{"auth", "env", "--format", "dotenv", "--identity=mock-identity"},
 		},
 	}
 
@@ -120,16 +120,16 @@ func TestAuth_NoBrowserPromptForCachedCredentials(t *testing.T) {
 
 	// Step 1: Initial login to cache credentials.
 	t.Log("Step 1: Performing initial login to cache credentials")
-	RootCmd.SetArgs([]string{"auth", "login", "--identity", "mock-identity"})
+	RootCmd.SetArgs([]string{"auth", "login", "--identity=mock-identity"})
 	err := RootCmd.Execute()
 	require.NoError(t, err, "Initial login should succeed")
 
 	// Step 2: Simulate a typical workflow with multiple commands.
 	// All of these should use cached credentials without triggering browser auth.
 	workflowCommands := [][]string{
-		{"auth", "whoami", "--identity", "mock-identity"},
+		{"auth", "whoami", "--identity=mock-identity"},
 		{"auth", "list"},
-		{"auth", "env", "--identity", "mock-identity"},
+		{"auth", "env", "--identity=mock-identity"},
 		{"auth", "validate"},
 	}
 
@@ -176,7 +176,7 @@ func TestAuth_AutoAuthenticationWhenNoCachedCredentials(t *testing.T) {
 	// Commands like 'auth env' and 'auth exec' trigger auto-authentication,
 	// while 'auth whoami' only checks existing credentials.
 	t.Run("auth env succeeds with auto-authentication", func(t *testing.T) {
-		RootCmd.SetArgs([]string{"auth", "env", "--identity", "mock-identity"})
+		RootCmd.SetArgs([]string{"auth", "env", "--identity=mock-identity"})
 
 		err := RootCmd.Execute()
 
@@ -188,7 +188,7 @@ func TestAuth_AutoAuthenticationWhenNoCachedCredentials(t *testing.T) {
 	t.Run("whoami succeeds with cached credentials from auto-auth", func(t *testing.T) {
 		// Don't create new TestKit - preserve file keyring state.
 		// Now whoami should work because env cached the credentials.
-		RootCmd.SetArgs([]string{"auth", "whoami", "--identity", "mock-identity"})
+		RootCmd.SetArgs([]string{"auth", "whoami", "--identity=mock-identity"})
 
 		start := time.Now()
 		err := RootCmd.Execute()
