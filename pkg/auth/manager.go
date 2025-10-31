@@ -50,11 +50,11 @@ const (
 )
 
 // isInteractive checks if we're running in an interactive terminal.
-// Interactive mode requires both stdin (for input) and stdout (for TUI rendering),
-// and must not be running in a CI environment.
-// This is used to determine if we can prompt the user for input.
+// Interactive mode requires stdin to be a TTY (for user input) and must not be in CI.
+// We don't check stdout because users should be able to pipe output (e.g., | cat)
+// while still interacting via stdin.
 func isInteractive() bool {
-	return term.IsTTYSupportForStdin() && term.IsTTYSupportForStdout() && !telemetry.IsCI()
+	return term.IsTTYSupportForStdin() && !telemetry.IsCI()
 }
 
 // manager implements the AuthManager interface.
