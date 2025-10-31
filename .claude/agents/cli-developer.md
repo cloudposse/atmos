@@ -1413,6 +1413,33 @@ func Execute() error {
 - Both ensure 80%+ test coverage for CLI features
 - Golden snapshots maintained for all CLI output
 
+### XDG Base Directory (MANDATORY)
+
+Use `pkg/xdg` for cache/credentials. NOT for atmos.yaml, stacks/\*, components/\*.
+
+```go
+import "github.com/cloudposse/atmos/pkg/xdg"
+
+xdg.GetXDGCacheDir("subpath", 0755)   // ~/.cache/atmos/
+xdg.GetXDGDataDir("subpath", 0700)     // ~/.local/share/atmos/
+xdg.GetXDGConfigDir("subpath", 0700)   // ~/.config/atmos/
+```
+
+Precedence: `ATMOS_XDG_*_HOME` → `XDG_*_HOME`
+
+### Cross-Platform File Operations (MANDATORY)
+
+```go
+// Use filepath.Join (not "/"), filepath.Clean, .Abs, .Dir, .Base, .Ext
+path := filepath.Join(baseDir, "config", "atmos.yaml")
+```
+
+**File permissions**: Use named constants, not magic numbers (e.g., `FilePermissionUserReadWrite = 0600`).
+
+### Terminal Width
+
+Use `templates.GetTerminalWidth()` for dynamic sizing. Use named constants (e.g., `MinTerminalWidth = 40`).
+
 ## Quality Checklist
 
 Before finalizing CLI implementation:
@@ -1436,6 +1463,10 @@ Before finalizing CLI implementation:
 - ✅ **Completion**: Shell completion for args and flags
 - ✅ **Command registry**: Uses registry pattern (MANDATORY)
 - ✅ **Performance tracking**: `defer perf.Track()` in public functions
+- ✅ **XDG usage**: Uses `pkg/xdg` for cache/data/config (not project files)
+- ✅ **filepath functions**: Uses `filepath.Join`, `filepath.Clean`, etc (no hardcoded separators)
+- ✅ **Named constants**: No magic numbers for permissions, widths, etc
+- ✅ **Terminal width**: Uses `templates.GetTerminalWidth()` for dynamic sizing
 - ✅ **Cross-platform**: Works on Linux/macOS/Windows
 - ✅ **Testable design**: Interfaces, DI, mockable dependencies
 - ✅ **Test coverage**: 80%+ with Test Automation Expert collaboration
