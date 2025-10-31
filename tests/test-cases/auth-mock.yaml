@@ -261,8 +261,10 @@ tests:
       - "auth"
       - "list"
     expect:
+      ignore_trailing_whitespace: true  # Lipgloss table formatting varies by platform
       diff:
-        - "65014"  # Ignore expiration countdown (changes minute by minute)
+        - "65013"  # Ignore expiration countdown (changes minute by minute - matches first 5 digits of ~650k hours)
+        - "65014"  # Ignore expiration countdown (changes minute by minute - matches first 5 digits of ~650k hours)
       stdout:
         - "mock-identity"
         - "mock-identity-2"
