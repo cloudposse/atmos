@@ -1,20 +1,14 @@
 
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 
-# Authenticate With Provider
+# Identityname
 
-authentication failed: SSO device flow requires an interactive terminal (no TTY detected). Use environment credentials or service account authentication in headless environments
-
-
-
-# Authenticate Credential Chain
-
-authentication failed: failed to authenticate via credential chain for identity "test-admin": authentication failed: provider=test-sso: authentication failed: SSO device flow requires an interactive terminal (no TTY detected). Use environment credentials or service account authentication in headless environments
+invalid auth configIdentity specified was not found in the auth config.
 
 
 
 # Error
 
-no credentials found for identity: identity=test-admin, provider=test-sso, credential_store=keyring-placeholder: failed to load credentials from identity storage for "test-admin": failed to load AWS config from files: failed to get shared config profile, test-admin
+identity not found: nonexistent
 
 

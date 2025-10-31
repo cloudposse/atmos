@@ -298,10 +298,9 @@ tests:
     expect:
       ignore_trailing_whitespace: true
       diff: []
-      # Note: Currently falls back to default identity (test-admin) when identity not found.
-      # This behavior needs investigation - see related issue about default fallback logic.
+      # Correctly rejects nonexistent identity immediately instead of falling back to default.
       stderr:
-        - "no credentials found"
+        - "identity not found"
       exit_code: 1
 
   # Mock Provider Tests (enabled with mock authentication)

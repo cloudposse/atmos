@@ -25,9 +25,7 @@ func TestCLITerraformClean(t *testing.T) {
 	workDir := "fixtures/scenarios/basic"
 	t.Chdir(workDir)
 
-	// Force clean everything
-	runTerraformCleanCommand(t, "--force")
-	// Clean everything with force (no TTY available in CI)
+	// Force clean everything (no TTY available in CI)
 	runTerraformCleanCommand(t, "--force")
 	// Clean specific component with force (no TTY available in CI)
 	runTerraformCleanCommand(t, "mycomponent", "--force")

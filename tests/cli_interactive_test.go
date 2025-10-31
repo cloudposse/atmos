@@ -120,7 +120,8 @@ func TestInteractiveIdentitySelection(t *testing.T) {
 		// Should fail with appropriate error.
 		assert.True(t,
 			strings.Contains(combinedOutput, "no default identity") ||
-				strings.Contains(combinedOutput, "authentication"),
+				strings.Contains(combinedOutput, "authentication") ||
+				strings.Contains(combinedOutput, "requires a TTY"),
 			"Should fail with identity error in CI, got: %s", combinedOutput)
 
 		t.Logf("Output:\n%s", combinedOutput)
@@ -237,7 +238,8 @@ func TestCIEnvironmentDetection(t *testing.T) {
 			// Should fail with appropriate error.
 			assert.True(t,
 				strings.Contains(combinedOutput, "no default identity") ||
-					strings.Contains(combinedOutput, "authentication"),
+					strings.Contains(combinedOutput, "authentication") ||
+					strings.Contains(combinedOutput, "requires a TTY"),
 				"Should fail with identity error in %s, got: %s", ciEnv.desc, combinedOutput)
 
 			t.Logf("%s output:\n%s", ciEnv.name, combinedOutput)

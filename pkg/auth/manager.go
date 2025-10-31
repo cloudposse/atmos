@@ -557,14 +557,28 @@ func (m *manager) ensureIdentityHasManager(identityName string) error {
 		return m.setIdentityManager(identityName)
 	}
 
-	// If chain exists but for a DIFFERENT identity, don't overwrite it!
-	// This happens when loading cached credentials for an intermediate identity
-	// (e.g., permission set) while authenticating a target identity (e.g., assume role).
-	// The existing chain is for the target identity and should not be replaced.
+	// If chain exists, check if the requested identity is part of it.
+	// If the identity is in the chain, we can reuse it. Otherwise, rebuild.
 	if len(m.chain) > 0 {
-		// Chain exists for a different identity - just set manager reference
-		// using the existing chain without rebuilding.
-		return m.setIdentityManager(identityName)
+		// Check if identityName is present in the existing chain.
+		identityInChain := false
+		for _, chainIdentity := range m.chain {
+			if chainIdentity == identityName {
+				identityInChain = true
+				break
+			}
+		}
+
+		if identityInChain {
+			// Identity is in the existing chain - set manager reference.
+			// This happens when loading cached credentials for an intermediate identity
+			// (e.g., permission set) while authenticating a target identity (e.g., assume role).
+			return m.setIdentityManager(identityName)
+		}
+
+		// Identity is NOT in the existing chain - must rebuild for this identity.
+		// Clear the stale chain and fall through to rebuild.
+		m.chain = nil
 	}
 
 	// Build the authentication chain so GetProviderForIdentity() can resolve the root provider.
