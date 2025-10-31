@@ -13,9 +13,9 @@ import (
 // a two-way binding that can cause flag values to persist globally across commands.
 //
 // Expected behavior:
-// - When a flag with NoOptDefVal is used without a value, viper should NOT
-//   persist that NoOptDefVal value globally
-// - Subsequent commands should not see the previous command's flag value
+//   - When a flag with NoOptDefVal is used without a value, viper should NOT
+//     persist that NoOptDefVal value globally
+//   - Subsequent commands should not see the previous command's flag value
 //
 // This test documents why BindPFlag should be avoided for flags with NoOptDefVal.
 func TestViperBindPFlagPollutesGlobalState(t *testing.T) {
