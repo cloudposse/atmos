@@ -1075,6 +1075,7 @@ func TestValidateConfig(t *testing.T) {
 		config      *Config
 		expectError bool
 		errorMsg    string
+		assert      func(t *testing.T, config *Config)
 	}{
 		{
 			name: "valid config with image",
@@ -1085,14 +1086,29 @@ func TestValidateConfig(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name: "valid config with dockerfile",
+			name: "valid config with dockerfile and context",
 			config: &Config{
 				Name: "test",
 				Build: &Build{
 					Dockerfile: "Dockerfile",
+					Context:    "./build",
 				},
 			},
 			expectError: false,
+		},
+		{
+			name: "valid config with dockerfile without context - defaults to current dir",
+			config: &Config{
+				Name: "test",
+				Build: &Build{
+					Dockerfile: "Dockerfile",
+					// Context is empty - should default to "."
+				},
+			},
+			expectError: false,
+			assert: func(t *testing.T, config *Config) {
+				assert.Equal(t, ".", config.Build.Context, "Context should default to current directory")
+			},
 		},
 		{
 			name:        "missing name",
@@ -1126,6 +1142,9 @@ func TestValidateConfig(t *testing.T) {
 				assert.Contains(t, err.Error(), tt.errorMsg)
 			} else {
 				require.NoError(t, err)
+				if tt.assert != nil {
+					tt.assert(t, tt.config)
+				}
 			}
 		})
 	}
