@@ -1,0 +1,220 @@
+---
+slug: shell-argument-quoting-fix
+title: "Critical Fix: Proper Shell Argument Quoting in Custom Commands"
+authors: [atmos]
+tags: [atmos, bugfix, security, custom-commands]
+date: 2025-10-31
+---
+
+We've fixed a critical bug in how Atmos handles arguments passed to custom commands via `{{ .TrailingArgs }}`. This fix improves security and ensures whitespace and special characters are preserved correctly.
+
+<!--truncate-->
+
+## What Changed
+
+Custom commands that use `{{ .TrailingArgs }}` now properly quote arguments before passing them to the shell. This prevents data loss and potential command injection vulnerabilities.
+
+### The Problem
+
+Previously, when you used trailing arguments in custom commands, Atmos would join them with spaces but **not apply proper shell quoting**. This caused issues when arguments contained:
+
+- **Multiple spaces**: `"hello  world"` became `"hello world"` (spaces lost)
+- **Special characters**: `"$VAR"` would expand instead of staying literal
+- **Shell metacharacters**: `"foo;bar"` could split into two commands (security risk!)
+
+#### Example of the Bug
+
+```yaml
+# Custom command definition
+commands:
+  - name: run-script
+    steps:
+      - "my-script {{ .TrailingArgs }}"
+```
+
+```bash
+# User runs with double spaces
+atmos run-script -- echo "hello  world"
+
+# Before fix: Shell saw
+my-script echo hello world  # Double space lost!
+
+# After fix: Shell sees
+my-script echo 'hello  world'  # Properly quoted, spaces preserved!
+```
+
+### Security Impact
+
+The most serious issue was potential **command injection** when shell metacharacters weren't properly quoted:
+
+```bash
+# Dangerous input
+atmos mycmd -- echo "foo;rm -rf /"
+
+# Before fix: Shell parsed as TWO commands
+echo foo
+rm -rf /  # DANGEROUS!
+
+# After fix: Shell sees ONE safe command
+echo 'foo;rm -rf /'  # Semicolon is literal
+```
+
+## What You Need to Do
+
+### If You're NOT Using `{{ .TrailingArgs }}`
+
+**No action required.** This fix only affects custom commands that use the `{{ .TrailingArgs }}` template variable.
+
+### If You ARE Using `{{ .TrailingArgs }}`
+
+**Most users need no changes** - your commands will now work correctly with whitespace and special characters.
+
+However, if you **worked around the bug** by manually escaping or quoting, you may need to adjust:
+
+#### Scenario 1: Manual Escaping (Unlikely)
+
+```bash
+# If you were doing this to preserve double spaces:
+atmos mycmd -- echo 'hello\ \ world'
+
+# After fix, this becomes:
+echo 'hello\ \ world'  # Double-escaped, backslashes will show
+
+# Change to:
+atmos mycmd -- echo "hello  world"  # Natural quoting works now
+```
+
+#### Scenario 2: Nested Quoting
+
+```bash
+# If you had complex nested quoting to work around the bug:
+atmos mycmd -- bash -c 'echo "hello  world"'
+
+# This still works, but you can now simplify to:
+atmos mycmd -- echo "hello  world"
+```
+
+## Testing Your Commands
+
+We recommend testing any custom commands that use `{{ .TrailingArgs }}`, especially if they:
+
+1. Pass arguments with **multiple consecutive spaces**
+2. Use **special shell characters** like `$`, `;`, `|`, `&`, `` ` ``
+3. Include **variable names** that should stay literal
+4. Have **complex quoting** that might have been a workaround
+
+### Test Examples
+
+```bash
+# Test whitespace preservation
+atmos mycmd -- echo "hello  world"
+# Should output: hello  world (with 2 spaces)
+
+# Test special characters stay literal
+atmos mycmd -- echo '$HOME'
+# Should output: $HOME (literal, not expanded)
+
+# Test semicolons are safe
+atmos mycmd -- echo "foo;bar"
+# Should output: foo;bar (not execute 'bar' as command)
+```
+
+## Technical Details
+
+### How Arguments Are Now Quoted
+
+Atmos uses the industry-standard shell quoting library (`mvdan.cc/sh/v3/syntax`) to properly quote each argument:
+
+| Input | Quoted Output | Why |
+|-------|---------------|-----|
+| `hello  world` | `'hello  world'` | Preserves spaces |
+| `$VAR` | `'$VAR'` | Prevents expansion |
+| `foo;bar` | `'foo;bar'` | Treats `;` as literal |
+| Empty string | `''` | Preserves empty argument |
+| `line1\nline2` | `$'line1\nline2'` | Preserves newlines |
+
+### Other Commands Not Affected
+
+This fix **only** affects custom commands using `{{ .TrailingArgs }}` in shell execution. These commands are **not affected**:
+
+- ✅ `atmos terraform` - passes arguments directly to Terraform SDK
+- ✅ `atmos helmfile` - passes arguments directly to Helmfile
+- ✅ `atmos packer` - passes arguments directly to Packer
+- ✅ `atmos auth exec` - passes arguments directly to subprocess
+- ✅ `atmos auth shell` - passes arguments to shell initialization
+
+## What We Learned
+
+This bug highlights the importance of **proper shell quoting**. Key lessons:
+
+1. **Never use `strings.Join()` for shell arguments** - always use proper quoting
+2. **Test with edge cases** - whitespace, special characters, and injection attempts
+3. **Fragmentation breeds bugs** - we consolidated 5 different parsing implementations into one safe utility
+
+## Unified Argument Parsing
+
+As part of this fix, we've consolidated all argument parsing logic into a single, well-tested utility (`ExtractSeparatedArgs`). This reduces code duplication and makes the `--` separator pattern consistent across all Atmos commands.
+
+**Test coverage**: 70+ test cases covering edge cases, security scenarios, and integration with the actual shell parser.
+
+## Migration Guide
+
+### Common Scenarios
+
+#### You're passing simple arguments
+
+```bash
+# This always worked and continues to work
+atmos mycmd -- arg1 arg2 arg3
+```
+
+**No change needed.**
+
+#### You're passing arguments with spaces
+
+```bash
+# Before: Spaces might have been lost
+atmos mycmd -- echo "hello  world"
+
+# After: Spaces are preserved correctly
+atmos mycmd -- echo "hello  world"
+```
+
+**Your commands now work correctly!** No changes needed.
+
+#### You have complex shell commands
+
+```yaml
+commands:
+  - name: deploy
+    steps:
+      - "kubectl apply -f - << EOF\n{{ .TrailingArgs }}\nEOF"
+```
+
+If you're doing **complex shell scripting** with heredocs or multi-line commands, test your custom commands to ensure they still work as expected.
+
+## Documentation Updates
+
+We've updated the [Custom Commands documentation](/core-concepts/custom-commands/custom-commands) with:
+
+- Security best practices for `{{ .TrailingArgs }}`
+- Examples showing proper quoting behavior
+- Guidance on when to use trailing arguments
+
+We've also added a comprehensive [Safe Argument Parsing PRD](/docs/prd/safe-argument-parsing.md) documenting the issue, fix, and best practices.
+
+## Getting Help
+
+If you encounter any issues with this change:
+
+1. Check if you were manually escaping arguments (and can now remove that)
+2. Test your custom commands with the examples above
+3. [Open an issue](https://github.com/cloudposse/atmos/issues) if you find unexpected behavior
+
+## Conclusion
+
+This fix makes Atmos custom commands **safer and more correct**. Arguments with whitespace, special characters, and shell metacharacters now work as users naturally expect.
+
+Thank you to everyone who uses Atmos! Your security and data integrity are our top priorities.
+
+For technical details, see the [Safe Argument Parsing PRD](https://github.com/cloudposse/atmos/blob/main/docs/prd/safe-argument-parsing.md).

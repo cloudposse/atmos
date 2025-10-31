@@ -96,46 +96,6 @@ func TestContains(t *testing.T) {
 	}
 }
 
-func TestExtractTrailingArgs(t *testing.T) {
-	tests := []struct {
-		name           string
-		args           []string
-		osArgs         []string
-		expectedArgs   []string
-		expectedString string
-	}{
-		{
-			name:           "no trailing args",
-			args:           []string{"arg1", "arg2"},
-			osArgs:         []string{"program", "arg1", "arg2"},
-			expectedArgs:   []string{"arg1", "arg2"},
-			expectedString: "",
-		},
-		{
-			name:           "with trailing args",
-			args:           []string{"arg1", "--", "trail1", "trail2"},
-			osArgs:         []string{"program", "arg1", "--", "trail1", "trail2"},
-			expectedArgs:   []string{"arg1"},
-			expectedString: "trail1 trail2",
-		},
-		{
-			name:           "double dash at end",
-			args:           []string{"arg1", "--"},
-			osArgs:         []string{"program", "arg1", "--"},
-			expectedArgs:   []string{"arg1"},
-			expectedString: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			args, str := extractTrailingArgs(tt.args, tt.osArgs)
-			assert.Equal(t, tt.expectedArgs, args)
-			assert.Equal(t, tt.expectedString, str)
-		})
-	}
-}
-
 func TestIsVersionCommand(t *testing.T) {
 	tests := []struct {
 		name     string

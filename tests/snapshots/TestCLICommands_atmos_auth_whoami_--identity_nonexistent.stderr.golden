@@ -7,9 +7,9 @@ authentication failed: SSO device flow requires an interactive terminal (no TTY 
 
 
 
-# Authenticate Hierarchical
+# Authenticate Credential Chain
 
-authentication failed: failed to authenticate hierarchically for identity "test-admin": authentication failed: provider=test-sso: authentication failed: SSO device flow requires an interactive terminal (no TTY detected). Use environment credentials or service account authentication in headless environments
+authentication failed: failed to authenticate via credential chain for identity "test-admin": authentication failed: provider=test-sso: authentication failed: SSO device flow requires an interactive terminal (no TTY detected). Use environment credentials or service account authentication in headless environments
 
 
 

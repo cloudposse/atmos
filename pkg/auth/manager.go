@@ -174,11 +174,11 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	m.chain = chain
 	log.Debug("Authentication chain discovered", logKeyIdentity, identityName, "chainLength", len(chain), "chain", chain)
 
-	// Perform hierarchical credential validation (bottom-up).
+	// Perform credential chain authentication (bottom-up).
 	finalCreds, err := m.authenticateChain(ctx, identityName)
 	if err != nil {
-		wrappedErr := fmt.Errorf("%w: failed to authenticate hierarchically for identity %q: %w", errUtils.ErrAuthenticationFailed, identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Hierarchical", "")
+		wrappedErr := fmt.Errorf("%w: failed to authenticate via credential chain for identity %q: %w", errUtils.ErrAuthenticationFailed, identityName, err)
+		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Credential Chain", "")
 		return nil, wrappedErr
 	}
 
@@ -531,7 +531,66 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	return "", fmt.Errorf("%w: provider %q not found in configuration", errUtils.ErrInvalidAuthConfig, providerName)
 }
 
-// authenticateChain performs hierarchical authentication with bottom-up validation.
+// ensureIdentityHasManager ensures the identity has the authentication chain context.
+// This is needed when using cached credentials where the chain was not built in this session.
+// Building the chain and setting manager reference allows identity to resolve the root provider.
+func (m *manager) ensureIdentityHasManager(identityName string) error {
+	// If we don't have config, we can't build the chain - skip this step.
+	// This happens in unit tests where manager is created without full config.
+	if m.config == nil {
+		return nil
+	}
+
+	// If chain is already built for this identity, we're good.
+	if len(m.chain) > 0 && m.chain[len(m.chain)-1] == identityName {
+		// Chain exists - still need to ensure identity has manager reference.
+		// Call PostAuthenticate with minimal params to set manager field.
+		return m.setIdentityManager(identityName)
+	}
+
+	// Build the authentication chain so GetProviderForIdentity() can resolve the root provider.
+	chain, err := m.buildAuthenticationChain(identityName)
+	if err != nil {
+		return fmt.Errorf("failed to build authentication chain: %w", err)
+	}
+
+	// Store the chain in the manager so GetProviderForIdentity() can use it.
+	m.chain = chain
+
+	// Set manager reference on the identity.
+	return m.setIdentityManager(identityName)
+}
+
+// setIdentityManager sets the manager reference on AWS identities.
+// This allows the identity to use manager.GetProviderForIdentity() to resolve the root provider.
+// For AWS permission set and assume role identities, we can set the manager field directly.
+func (m *manager) setIdentityManager(identityName string) error {
+	identity, exists := m.identities[identityName]
+	if !exists {
+		return nil // Identity not found, skip
+	}
+
+	// Get root provider name from the chain.
+	if len(m.chain) == 0 {
+		return fmt.Errorf("authentication chain not built")
+	}
+	rootProviderName := m.chain[0]
+
+	// Type assert to AWS permission set identity and set manager directly.
+	// This is safe because we're only dealing with permission set identities here.
+	type awsIdentityWithManager interface {
+		SetManagerAndProvider(types.AuthManager, string)
+	}
+
+	if awsIdentity, ok := identity.(awsIdentityWithManager); ok {
+		awsIdentity.SetManagerAndProvider(m, rootProviderName)
+	}
+
+	// If identity doesn't implement SetManagerAndProvider, that's OK - it may not need it.
+	return nil
+}
+
+// authenticateChain performs credential chain authentication with bottom-up validation.
 func (m *manager) authenticateChain(ctx context.Context, targetIdentity string) (types.ICredentials, error) {
 	// Step 1: Bottom-up validation - check cached credentials from target to root.
 	validFromIndex := m.findFirstValidCachedCredentials()
@@ -653,12 +712,15 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 	var err error
 
 	// Determine actual starting point for authentication.
+	// When startIndex is -1 (no valid cached credentials), this returns 0 (start from provider).
+	// When startIndex is >= 0, this returns the same index (valid cached credentials exist).
 	actualStartIndex := m.determineStartingIndex(startIndex)
 
 	// Retrieve cached credentials if starting from a cached point.
-	// Important: if we start from index N (>=0) because cached creds exist at that step,
-	// those creds are the OUTPUT of provider/identity N and should be used as the base for the NEXT step (N+1).
-	if actualStartIndex >= 0 {
+	// Important: Only fetch cached credentials if we had valid ones (startIndex >= 0).
+	// If startIndex was -1 (no valid cached creds), actualStartIndex becomes 0 but we should NOT
+	// fetch cached credentials - we should start fresh from provider authentication.
+	if startIndex >= 0 && actualStartIndex >= 0 {
 		currentCreds, actualStartIndex = m.fetchCachedCredentials(actualStartIndex)
 	}
 
@@ -747,6 +809,12 @@ func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName 
 	if !exists {
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrIdentityNotInConfig, identityName)
 	}
+
+	// Ensure the identity has access to manager for resolving provider information.
+	// This builds the authentication chain and sets manager reference so the identity
+	// can resolve the root provider for file-based credentials.
+	// This is best-effort - if it fails, LoadCredentials will fail with a clear error.
+	_ = m.ensureIdentityHasManager(identityName)
 
 	// Delegate to identity's LoadCredentials method.
 	// Each identity type knows how to load its own credentials from storage.
@@ -929,11 +997,16 @@ func (m *manager) GetEnvironmentVariables(identityName string) (map[string]strin
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
+	// Ensure the identity has access to manager for resolving provider information.
+	// This builds the authentication chain and sets manager reference so the identity
+	// can resolve the root provider for file-based credentials.
+	// This is best-effort - if it fails, the identity will fall back to config-based resolution.
+	_ = m.ensureIdentityHasManager(identityName)
+
 	// Get environment variables from the identity.
 	env, err := identity.Environment()
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get environment variables for identity %q: %w",
-			errUtils.ErrInvalidAuthConfig, identityName, err)
+		return nil, fmt.Errorf("%w: failed to get environment variables: %w", err)
 	}
 
 	return env, nil
@@ -950,6 +1023,10 @@ func (m *manager) PrepareShellEnvironment(ctx context.Context, identityName stri
 	if !exists {
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
+
+	// Ensure the identity has access to manager for resolving provider information.
+	// This is best-effort - if it fails, the identity will fall back to config-based resolution.
+	_ = m.ensureIdentityHasManager(identityName)
 
 	// Convert input environment list to map for identity.PrepareEnvironment().
 	envMap := environListToMap(currentEnv)

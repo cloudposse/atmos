@@ -76,11 +76,11 @@ var authEnvCmd = &cobra.Command{
 			// Try to use cached credentials first (passive check, no prompts).
 			// Only authenticate if cached credentials are not available or expired.
 			ctx := cmd.Context()
-			whoami, err := authManager.GetCachedCredentials(ctx, identityName)
+			_, err := authManager.GetCachedCredentials(ctx, identityName)
 			if err != nil {
 				log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
 				// No valid cached credentials - perform full authentication.
-				whoami, err = authManager.Authenticate(ctx, identityName)
+				_, err = authManager.Authenticate(ctx, identityName)
 				if err != nil {
 					// Check for user cancellation - return clean error without wrapping.
 					if errors.Is(err, errUtils.ErrUserAborted) {
@@ -90,9 +90,12 @@ var authEnvCmd = &cobra.Command{
 					return fmt.Errorf("%w: %w", errUtils.ErrAuthenticationFailed, err)
 				}
 			}
-			envVars = whoami.Environment
-			if envVars == nil {
-				envVars = make(map[string]string)
+
+			// Get environment variables using file-based credentials.
+			// This ensures we use valid credential files rather than potentially expired keyring credentials.
+			envVars, err = authManager.GetEnvironmentVariables(identityName)
+			if err != nil {
+				return fmt.Errorf("failed to get environment variables: %w", err)
 			}
 		} else {
 			// Get environment variables WITHOUT authentication/validation.
