@@ -142,21 +142,20 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
 	// Get root provider name for file storage.
+	// If we can't resolve it (e.g., before authentication), skip AWS file vars.
 	providerName, err := i.resolveRootProviderName()
-	if err != nil {
-		return nil, err
-	}
+	if err == nil {
+		// Get AWS file environment variables.
+		awsFileManager, err := awsCloud.NewAWSFileManager("")
+		if err != nil {
+			return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
+		}
+		awsEnvVars := awsFileManager.GetEnvironmentVariables(providerName, i.name)
 
-	// Get AWS file environment variables.
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
-	if err != nil {
-		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
-	}
-	awsEnvVars := awsFileManager.GetEnvironmentVariables(providerName, i.name)
-
-	// Convert to map format.
-	for _, envVar := range awsEnvVars {
-		env[envVar.Key] = envVar.Value
+		// Convert to map format.
+		for _, envVar := range awsEnvVars {
+			env[envVar.Key] = envVar.Value
+		}
 	}
 
 	// Add environment variables from identity config.
@@ -378,9 +377,10 @@ func (i *permissionSetIdentity) CredentialsExist() (bool, error) {
 	defer perf.Track(nil, "aws.permissionSetIdentity.CredentialsExist")()
 
 	// Get root provider name for file storage.
+	// If we can't resolve it (e.g., before authentication), credentials don't exist yet.
 	providerName, err := i.resolveRootProviderName()
 	if err != nil {
-		return false, err
+		return false, nil
 	}
 
 	mgr, err := awsCloud.NewAWSFileManager("")

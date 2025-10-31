@@ -261,7 +261,8 @@ tests:
       - "auth"
       - "list"
     expect:
-      diff: []
+      diff:
+        - "65014"  # Ignore expiration countdown (changes minute by minute)
       stdout:
         - "mock-identity"
         - "mock-identity-2"
