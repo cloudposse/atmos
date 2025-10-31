@@ -255,6 +255,96 @@ func TestDeserializeForwardPorts(t *testing.T) {
 	}
 }
 
+func TestDeserializePortsAttributes(t *testing.T) {
+	tests := []struct {
+		name     string
+		specMap  map[string]any
+		expected map[string]PortAttributes
+	}{
+		{
+			name: "with label and protocol",
+			specMap: map[string]any{
+				"portsattributes": map[string]any{
+					"3000": map[string]any{
+						"label":    "Application",
+						"protocol": "https",
+					},
+					"8080": map[string]any{
+						"label":    "API Server",
+						"protocol": "http",
+					},
+				},
+			},
+			expected: map[string]PortAttributes{
+				"3000": {Label: "Application", Protocol: "https"},
+				"8080": {Label: "API Server", Protocol: "http"},
+			},
+		},
+		{
+			name: "with only label",
+			specMap: map[string]any{
+				"portsattributes": map[string]any{
+					"3000": map[string]any{
+						"label": "Web Server",
+					},
+				},
+			},
+			expected: map[string]PortAttributes{
+				"3000": {Label: "Web Server", Protocol: ""},
+			},
+		},
+		{
+			name: "with only protocol",
+			specMap: map[string]any{
+				"portsattributes": map[string]any{
+					"3000": map[string]any{
+						"protocol": "https",
+					},
+				},
+			},
+			expected: map[string]PortAttributes{
+				"3000": {Label: "", Protocol: "https"},
+			},
+		},
+		{
+			name:     "missing portsattributes key",
+			specMap:  map[string]any{},
+			expected: nil,
+		},
+		{
+			name: "invalid portsattributes type",
+			specMap: map[string]any{
+				"portsattributes": "not a map",
+			},
+			expected: nil,
+		},
+		{
+			name: "invalid port attributes type",
+			specMap: map[string]any{
+				"portsattributes": map[string]any{
+					"3000": "not a map",
+				},
+			},
+			expected: map[string]PortAttributes{},
+		},
+		{
+			name: "empty portsattributes",
+			specMap: map[string]any{
+				"portsattributes": map[string]any{},
+			},
+			expected: map[string]PortAttributes{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &Config{}
+			deserializePortsAttributes(tt.specMap, config)
+			assert.Equal(t, tt.expected, config.PortsAttributes)
+		})
+	}
+}
+
 func TestDeserializeContainerEnv(t *testing.T) {
 	tests := []struct {
 		name     string

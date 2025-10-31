@@ -92,3 +92,4 @@ performance-optimization/
 # Merge conflict artifacts
 *.orig
 *.rej
+.scratch
