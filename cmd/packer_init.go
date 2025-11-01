@@ -22,16 +22,16 @@ To see all available options, refer to https://developer.hashicorp.com/packer/do
 
 // packerInitCmd represents the `atmos packer init` command.
 var packerInitCmd = &cobra.Command{
-	Use:                "init",
-	Aliases:            []string{},
-	Short:              packerInitShort,
-	Long:               packerInitLong,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Use:     "init",
+	Aliases: []string{},
+	Short:   packerInitShort,
+	Long:    packerInitLong, RunE: func(cmd *cobra.Command, args []string) error {
 		return packerRun(cmd, "init", args)
 	},
 }
 
 func init() {
+	// Register Atmos flags on this subcommand
+	packerParser.RegisterFlags(packerInitCmd)
 	packerCmd.AddCommand(packerInitCmd)
 }

@@ -22,16 +22,16 @@ To see all available options, refer to https://developer.hashicorp.com/packer/do
 
 // packerBuildCmd represents the `atmos packer build` command.
 var packerBuildCmd = &cobra.Command{
-	Use:                "build",
-	Aliases:            []string{},
-	Short:              packerBuildShort,
-	Long:               packerBuildLong,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Use:     "build",
+	Aliases: []string{},
+	Short:   packerBuildShort,
+	Long:    packerBuildLong, RunE: func(cmd *cobra.Command, args []string) error {
 		return packerRun(cmd, "build", args)
 	},
 }
 
 func init() {
+	// Register Atmos flags on this subcommand
+	packerParser.RegisterFlags(packerBuildCmd)
 	packerCmd.AddCommand(packerBuildCmd)
 }

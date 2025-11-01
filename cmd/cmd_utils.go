@@ -685,8 +685,7 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 }
 
 // enableHeatmapIfRequested checks os.Args for --heatmap and --heatmap-mode flags.
-// This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
-// where Cobra doesn't parse the flags, so PersistentPreRun can't detect them.
+// This is a fallback for edge cases where PersistentPreRun might not detect the flags.
 // We only enable tracking if --heatmap is present; --heatmap-mode is only relevant when --heatmap is set.
 func enableHeatmapIfRequested() {
 	for _, arg := range os.Args {

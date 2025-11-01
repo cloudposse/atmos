@@ -9,6 +9,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flagparser"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -39,7 +40,18 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
+func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, parsedConfig *flagparser.ParsedConfig) error {
+	// Build args array from ParsedConfig for getConfigAndStacksInfo
+	// Format: [subcommand, component, ...pass-through-args]
+	args := []string{}
+	if parsedConfig.SubCommand != "" {
+		args = append(args, parsedConfig.SubCommand)
+	}
+	if parsedConfig.ComponentName != "" {
+		args = append(args, parsedConfig.ComponentName)
+	}
+	args = append(args, parsedConfig.PassThroughArgs...)
+
 	info := getConfigAndStacksInfo(cfg.TerraformComponentType, cmd, args)
 
 	if info.NeedHelp {

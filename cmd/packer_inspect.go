@@ -20,16 +20,16 @@ Example usage:
 
 // packerInspectCmd represents the `atmos packer inspect` command.
 var packerInspectCmd = &cobra.Command{
-	Use:                "inspect",
-	Aliases:            []string{},
-	Short:              packerInspectShort,
-	Long:               packerInspectLong,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Use:     "inspect",
+	Aliases: []string{},
+	Short:   packerInspectShort,
+	Long:    packerInspectLong, RunE: func(cmd *cobra.Command, args []string) error {
 		return packerRun(cmd, "inspect", args)
 	},
 }
 
 func init() {
+	// Register Atmos flags on this subcommand
+	packerParser.RegisterFlags(packerInspectCmd)
 	packerCmd.AddCommand(packerInspectCmd)
 }

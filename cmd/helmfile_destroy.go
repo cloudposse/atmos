@@ -15,16 +15,16 @@ Example usage:
 
 // helmfileDestroyCmd represents the base command for all helmfile sub-commands
 var helmfileDestroyCmd = &cobra.Command{
-	Use:                "destroy",
-	Aliases:            []string{},
-	Short:              helmfileDestroyShort,
-	Long:               helmfileDestroyLong,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Use:     "destroy",
+	Aliases: []string{},
+	Short:   helmfileDestroyShort,
+	Long:    helmfileDestroyLong, RunE: func(cmd *cobra.Command, args []string) error {
 		return helmfileRun(cmd, "destroy", args)
 	},
 }
 
 func init() {
+	// Register Atmos flags on this subcommand
+	helmfileParser.RegisterFlags(helmfileDestroyCmd)
 	helmfileCmd.AddCommand(helmfileDestroyCmd)
 }

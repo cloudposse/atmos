@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -305,28 +304,31 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 	commands := getTerraformCommands()
 
 	for _, cmd := range commands {
-		cmd.FParseErrWhitelist.UnknownFlags = true
-		cmd.DisableFlagParsing = true
+		// NOTE: We no longer disable flag parsing.
+		// The flagparser handles Atmos flags while passing through unknown flags.
+
+		// Register Atmos flags on each subcommand.
+		// This ensures flags like --stack, --identity, --dry-run work on all terraform subcommands.
+		terraformParser.RegisterFlags(cmd)
+
 		if setFlags, ok := commandMaps[cmd.Use]; ok {
 			setFlags(cmd)
 		}
 		cmd.ValidArgsFunction = ComponentsArgCompletion
 		cmd.RunE = func(cmd_ *cobra.Command, args []string) error {
-			// Because we disable flag parsing we require manual handle help Request
 			handleHelpRequest(cmd, args)
-			// Enable heatmap tracking if --heatmap flag is present in os.Args
-			// (needed because flag parsing is disabled for terraform commands).
-			enableHeatmapIfRequested()
-			if len(os.Args) > 2 {
-				args = os.Args[2:]
-			}
+			// Heatmap is now tracked via persistent flag, no need for manual check.
 
-			err := terraformRun(parentCmd, cmd_, args)
+			// Parse args with flagparser.
+			// This extracts Atmos flags and separates pass-through args.
+			ctx := cmd_.Context()
+			parsedConfig, err := terraformParser.Parse(ctx, args)
 			if err != nil {
 				return err
 			}
 
-			return nil
+			// Pass ParsedConfig to terraformRun instead of raw args.
+			return terraformRun(parentCmd, cmd_, parsedConfig)
 		}
 		parentCmd.AddCommand(cmd)
 	}

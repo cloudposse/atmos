@@ -16,16 +16,16 @@ Example usage:
 
 // packerVersionCmd represents the `atmos packer version` command.
 var packerVersionCmd = &cobra.Command{
-	Use:                "version",
-	Aliases:            []string{},
-	Short:              packerVersionShort,
-	Long:               packerVersionLong,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Use:     "version",
+	Aliases: []string{},
+	Short:   packerVersionShort,
+	Long:    packerVersionLong, RunE: func(cmd *cobra.Command, args []string) error {
 		return packerRun(cmd, "version", args)
 	},
 }
 
 func init() {
+	// Register Atmos flags on this subcommand
+	packerParser.RegisterFlags(packerVersionCmd)
 	packerCmd.AddCommand(packerVersionCmd)
 }

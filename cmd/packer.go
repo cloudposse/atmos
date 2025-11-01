@@ -2,24 +2,37 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flagparser"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// packerParser handles flag parsing for packer commands.
+var packerParser *flagparser.PassThroughFlagParser
+
 // packerCmd represents the base command for all Packer sub-commands.
 var packerCmd = &cobra.Command{
-	Use:                "packer",
-	Aliases:            []string{"pk"},
-	Short:              "Manage packer-based machine images for multiple platforms",
-	Long:               `Run Packer commands for creating identical machine images for multiple platforms from a single source configuration.`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	Args:               cobra.NoArgs,
+	Use:     "packer",
+	Aliases: []string{"pk"},
+	Short:   "Manage packer-based machine images for multiple platforms",
+	Long:    `Run Packer commands for creating identical machine images for multiple platforms from a single source configuration.`,
+	Args:    cobra.NoArgs,
 }
 
 func init() {
-	packerCmd.DisableFlagParsing = true
-	packerCmd.PersistentFlags().Bool("", false, doubleDashHint)
+	// Create parser with Packer flags.
+	// This replaces DisableFlagParsing and manual flag handling.
+	packerParser = flagparser.NewPassThroughFlagParser(
+		flagparser.WithPackerFlags(),
+	)
+
+	// Register flags with Cobra.
+	packerParser.RegisterFlags(packerCmd)
+	packerParser.BindToViper(viper.GetViper())
+
+	// Packer-specific flags
 	packerCmd.PersistentFlags().StringP("template", "t", "", "Packer template for building machine images")
 	packerCmd.PersistentFlags().StringP("query", "q", "", "YQ expression to read an output from the Packer manifest")
 
@@ -29,12 +42,22 @@ func init() {
 
 func packerRun(cmd *cobra.Command, commandName string, args []string) error {
 	handleHelpRequest(cmd, args)
-	// Enable heatmap tracking if --heatmap flag is present in os.Args
-	// (needed because flag parsing is disabled for packer commands).
-	enableHeatmapIfRequested()
-	diffArgs := []string{commandName}
-	diffArgs = append(diffArgs, args...)
-	info := getConfigAndStacksInfo("packer", cmd, diffArgs)
+
+	// Parse args with flagparser
+	ctx := cmd.Context()
+	parsedConfig, err := packerParser.Parse(ctx, args)
+	if err != nil {
+		return err
+	}
+
+	// Build args array from ParsedConfig for getConfigAndStacksInfo
+	fullArgs := []string{commandName}
+	if parsedConfig.ComponentName != "" {
+		fullArgs = append(fullArgs, parsedConfig.ComponentName)
+	}
+	fullArgs = append(fullArgs, parsedConfig.PassThroughArgs...)
+
+	info := getConfigAndStacksInfo("packer", cmd, fullArgs)
 	info.CliArgs = []string{"packer", commandName}
 
 	flags := cmd.Flags()

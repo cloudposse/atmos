@@ -17,16 +17,16 @@ Example usage:
 
 // helmfileDiffCmd represents the base command for all helmfile sub-commands
 var helmfileDiffCmd = &cobra.Command{
-	Use:                "diff",
-	Aliases:            []string{},
-	Short:              helmfileDiffShort,
-	Long:               helmfileDiffLong,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Use:     "diff",
+	Aliases: []string{},
+	Short:   helmfileDiffShort,
+	Long:    helmfileDiffLong, RunE: func(cmd *cobra.Command, args []string) error {
 		return helmfileRun(cmd, "diff", args)
 	},
 }
 
 func init() {
+	// Register Atmos flags on this subcommand
+	helmfileParser.RegisterFlags(helmfileDiffCmd)
 	helmfileCmd.AddCommand(helmfileDiffCmd)
 }

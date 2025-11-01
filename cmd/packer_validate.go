@@ -22,16 +22,16 @@ To see all available options, refer to https://developer.hashicorp.com/packer/do
 
 // packerValidateCmd represents the `atmos packer validate` command.
 var packerValidateCmd = &cobra.Command{
-	Use:                "validate",
-	Aliases:            []string{},
-	Short:              packerValidateShort,
-	Long:               packerValidateLong,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Use:     "validate",
+	Aliases: []string{},
+	Short:   packerValidateShort,
+	Long:    packerValidateLong, RunE: func(cmd *cobra.Command, args []string) error {
 		return packerRun(cmd, "validate", args)
 	},
 }
 
 func init() {
+	// Register Atmos flags on this subcommand
+	packerParser.RegisterFlags(packerValidateCmd)
 	packerCmd.AddCommand(packerValidateCmd)
 }

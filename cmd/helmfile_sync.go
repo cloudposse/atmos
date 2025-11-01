@@ -15,16 +15,16 @@ Example usage:
 
 // helmfileSyncCmd represents the base command for all helmfile sub-commands
 var helmfileSyncCmd = &cobra.Command{
-	Use:                "sync",
-	Aliases:            []string{},
-	Short:              helmfileSyncShort,
-	Long:               helmfileSyncLong,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Use:     "sync",
+	Aliases: []string{},
+	Short:   helmfileSyncShort,
+	Long:    helmfileSyncLong, RunE: func(cmd *cobra.Command, args []string) error {
 		return helmfileRun(cmd, "sync", args)
 	},
 }
 
 func init() {
+	// Register Atmos flags on this subcommand
+	helmfileParser.RegisterFlags(helmfileSyncCmd)
 	helmfileCmd.AddCommand(helmfileSyncCmd)
 }

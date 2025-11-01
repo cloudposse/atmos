@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/flagparser"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -26,7 +27,11 @@ func TestTerraformRun1(t *testing.T) {
 			Short: "test",
 		}
 
-		terraformRun(cmd, cmd, []string{})
+		parsedConfig := &flagparser.ParsedConfig{
+			AtmosFlags:      make(map[string]interface{}),
+			PassThroughArgs: []string{},
+		}
+		terraformRun(cmd, cmd, parsedConfig)
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])
@@ -58,7 +63,11 @@ func TestTerraformRun2(t *testing.T) {
 
 		cmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 
-		terraformRun(cmd, cmd, []string{})
+		parsedConfig := &flagparser.ParsedConfig{
+			AtmosFlags:      make(map[string]interface{}),
+			PassThroughArgs: []string{},
+		}
+		terraformRun(cmd, cmd, parsedConfig)
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])
@@ -91,7 +100,11 @@ func TestTerraformRun3(t *testing.T) {
 		cmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 		cmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing terraform commands")
 
-		terraformRun(cmd, cmd, []string{})
+		parsedConfig := &flagparser.ParsedConfig{
+			AtmosFlags:      make(map[string]interface{}),
+			PassThroughArgs: []string{},
+		}
+		terraformRun(cmd, cmd, parsedConfig)
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])
@@ -109,7 +122,6 @@ func TestTerraformRun3(t *testing.T) {
 
 func TestTerraformHeatmapFlag(t *testing.T) {
 	// Test that --heatmap flag is properly detected and enables tracking
-	// even though DisableFlagParsing=true for terraform commands.
 
 	// Save original os.Args
 	oldArgs := os.Args

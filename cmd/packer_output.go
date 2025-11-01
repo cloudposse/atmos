@@ -21,16 +21,16 @@ Example usage:
 
 // packerOutputCmd represents the `atmos packer output` command.
 var packerOutputCmd = &cobra.Command{
-	Use:                "output",
-	Aliases:            []string{},
-	Short:              packerOutputShort,
-	Long:               packerOutputLong,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Use:     "output",
+	Aliases: []string{},
+	Short:   packerOutputShort,
+	Long:    packerOutputLong, RunE: func(cmd *cobra.Command, args []string) error {
 		return packerRun(cmd, "output", args)
 	},
 }
 
 func init() {
+	// Register Atmos flags on this subcommand
+	packerParser.RegisterFlags(packerOutputCmd)
 	packerCmd.AddCommand(packerOutputCmd)
 }

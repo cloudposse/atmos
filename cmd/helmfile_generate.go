@@ -14,5 +14,7 @@ var helmfileGenerateCmd = &cobra.Command{
 }
 
 func init() {
+	// Register Atmos flags on this subcommand
+	helmfileParser.RegisterFlags(helmfileGenerateCmd)
 	helmfileCmd.AddCommand(helmfileGenerateCmd)
 }
