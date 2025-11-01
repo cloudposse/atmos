@@ -1,0 +1,23 @@
+components:
+  terraform:
+    base_path: components/terraform
+
+  # Devcontainer configuration for testing
+  devcontainer:
+    test-alpine:
+      spec:
+        image: "alpine:latest"
+        remoteUser: "root"
+        workspaceFolder: "/workspace"
+        forwardPorts:
+          - 8080
+        containerEnv:
+          TEST_VAR: "test-value"
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{tenant}-{environment}-{stage}"

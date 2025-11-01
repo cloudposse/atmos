@@ -608,7 +608,10 @@ func checkPreconditions(t *testing.T, preconditions []string) {
 
 	// Map of precondition names to their check functions
 	preconditionChecks := map[string]func(*testing.T){
-		"github_token": RequireOCIAuthentication,
+		"github_token":      RequireOCIAuthentication,
+		"container-runtime": func(t *testing.T) { RequireContainerRuntime(t) },
+		"docker":            RequireDocker,
+		"podman":            RequirePodman,
 	}
 
 	// Check each precondition

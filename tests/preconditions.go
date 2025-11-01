@@ -446,3 +446,83 @@ func SkipOnDarwinARM64(t *testing.T, reason string) {
 		t.Skipf("Skipping on darwin/arm64: %s. Set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true to override", reason)
 	}
 }
+
+const (
+	// Container runtime names.
+	containerRuntimeDocker = "docker"
+	containerRuntimePodman = "podman"
+)
+
+// RequireContainerRuntime checks if a container runtime (Docker or Podman) is available.
+// It prefers Docker but will accept Podman if Docker is not available.
+// Returns the name of the available runtime ("docker" or "podman").
+func RequireContainerRuntime(t *testing.T) string {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return containerRuntimeDocker // Default assumption when checks are disabled
+	}
+
+	// Try Docker first
+	if cmd := exec.Command(containerRuntimeDocker, "version"); cmd.Run() == nil {
+		t.Logf("Container runtime available: Docker")
+		return containerRuntimeDocker
+	}
+
+	// Try Podman as fallback
+	if cmd := exec.Command(containerRuntimePodman, "version"); cmd.Run() == nil {
+		t.Logf("Container runtime available: Podman")
+		return containerRuntimePodman
+	}
+
+	t.Skipf("No container runtime available. Install Docker (https://docs.docker.com/get-docker/) or Podman (https://podman.io/getting-started/installation), or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	return ""
+}
+
+// RequireDocker checks if Docker is available and running.
+// Use this for tests that specifically require Docker (not Podman).
+func RequireDocker(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Check if docker command exists
+	_, err := exec.LookPath(containerRuntimeDocker)
+	if err != nil {
+		t.Skipf("Docker not found in PATH. Install Docker (https://docs.docker.com/get-docker/) or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	// Check if Docker daemon is running
+	cmd := exec.Command(containerRuntimeDocker, "info")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("Docker daemon not running. Start Docker or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	t.Logf("Docker is available and running")
+}
+
+// RequirePodman checks if Podman is available and running.
+// Use this for tests that specifically require Podman (not Docker).
+func RequirePodman(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Check if podman command exists
+	_, err := exec.LookPath(containerRuntimePodman)
+	if err != nil {
+		t.Skipf("Podman not found in PATH. Install Podman (https://podman.io/getting-started/installation) or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	// Check if Podman is working
+	cmd := exec.Command(containerRuntimePodman, "info")
+	if err := cmd.Run(); err != nil {
+		t.Skipf("Podman not working properly. Check Podman installation or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true")
+	}
+
+	t.Logf("Podman is available and working")
+}
