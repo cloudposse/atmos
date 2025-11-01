@@ -305,6 +305,99 @@ data.WriteJSON(map[string]string{"password": "password123"})
 
 For advanced scenarios requiring direct I/O context access (TTY detection, terminal capabilities, custom masking), see the [I/O Handling Strategy PRD](prd/io-handling-strategy.md).
 
+## Secret Pattern Configuration
+
+Atmos integrates Gitleaks pattern library for comprehensive secret detection. Configure in atmos.yaml:
+
+```yaml
+# atmos.yaml (complete example)
+settings:
+  terminal:
+    mask:
+      # Global masking control
+      enabled: true                         # Default: true
+      replacement: "***MASKED***"           # What to replace secrets with
+
+      # Pattern library configuration
+      patterns:
+        library: "gitleaks"                 # Options: "gitleaks", "builtin", "none"
+
+        # Category controls (when library="gitleaks")
+        categories:
+          aws: true
+          github: true
+          gitlab: true
+          slack: true
+          datadog: true
+          openai: true
+          anthropic: true
+          google: true
+          azure: true
+          generic: true
+
+        # Rule-level controls (advanced)
+        disabled_rules: []                  # Blacklist specific rule IDs
+        # OR
+        # enabled_rules: []                 # Whitelist specific rule IDs (mutually exclusive)
+
+        # Custom patterns (added to library patterns)
+        custom:
+          - id: "company-internal-key"
+            description: "Company Internal API Key"
+            regex: 'ACME_[A-Z0-9]{32}'
+
+      # Literal values to always mask
+      literals:
+        - "my-hardcoded-secret"
+
+      # Environment variables to auto-mask values
+      env_vars:
+        - AWS_SECRET_ACCESS_KEY
+        - GITHUB_TOKEN
+        - DATADOG_API_KEY
+        - ANTHROPIC_API_KEY
+```
+
+### Configuration Levels
+
+**Global**: Enable/disable entire pattern library
+```yaml
+settings:
+  terminal:
+    mask:
+      patterns:
+        library: "gitleaks"  # or "builtin" or "none"
+```
+
+**Category-Level**: Enable/disable specific secret types
+```yaml
+settings:
+  terminal:
+    mask:
+      patterns:
+        library: "gitleaks"
+        categories:
+          aws: true
+          github: true
+          generic: false  # Disable generic patterns (reduce false positives)
+```
+
+**Rule-Level** (Advanced): Fine-grained control over individual patterns
+```yaml
+settings:
+  terminal:
+    mask:
+      patterns:
+        library: "gitleaks"
+        disabled_rules:
+          - "generic-api-key"  # Too many false positives
+```
+
+**CLI Override**: Disable masking for debugging
+```bash
+atmos terraform plan --mask=false
+```
+
 ## See Also
 
 - [PRD: I/O Handling Strategy](prd/io-handling-strategy.md) - Architecture and advanced patterns

@@ -1,10 +1,12 @@
 package io
 
 import (
+	"fmt"
 	stdio "io"
 	"os"
 	"sync"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -216,10 +218,12 @@ func RegisterPattern(pattern string) error {
 	}
 
 	if globalContext == nil {
-		_ = Initialize()
+		if err := Initialize(); err != nil {
+			return fmt.Errorf("failed to initialize global I/O context: %w", err)
+		}
 	}
 	if globalContext == nil {
-		return nil
+		return errUtils.ErrIOContextNotInitialized
 	}
 
 	return globalContext.Masker().RegisterPattern(pattern)

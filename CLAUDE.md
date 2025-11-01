@@ -258,6 +258,37 @@ atmos terraform output | jq .vpc_id
 
 See `pkg/io/example_test.go` for comprehensive examples.
 
+### Secret Masking with Gitleaks
+
+Atmos uses Gitleaks pattern library (120+ patterns) for comprehensive secret detection:
+
+```yaml
+# atmos.yaml
+settings:
+  terminal:
+    mask:
+      patterns:
+        library: "gitleaks"  # Use Gitleaks patterns (default)
+        categories:
+          aws: true          # Enable AWS secret detection
+          github: true       # Enable GitHub token detection
+```
+
+Disable specific categories to reduce false positives:
+```yaml
+settings:
+  terminal:
+    mask:
+      patterns:
+        categories:
+          generic: false  # Disable generic patterns
+```
+
+Disable masking for debugging:
+```bash
+atmos terraform plan --mask=false
+```
+
 ### Package Organization (MANDATORY)
 - **Avoid utils package bloat** - Don't add new functions to `pkg/utils/`
 - **Create purpose-built packages** - New functionality gets its own package in `pkg/`

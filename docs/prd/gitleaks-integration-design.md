@@ -14,7 +14,7 @@ Currently, Atmos has only 8 hardcoded patterns in `pkg/io/global.go`. We need co
 - Manually maintaining hundreds of patterns
 - Breaking existing functionality
 - Degrading performance
-- Losing configurability
+- Losing configurability.
 
 ## Solution: Gitleaks Pattern Library Integration
 
@@ -22,12 +22,12 @@ Currently, Atmos has only 8 hardcoded patterns in `pkg/io/global.go`. We need co
 
 **YES - Gitleaks is perfect for our masking use case:**
 
-1. **Pattern-Based Detection**: Gitleaks uses regex patterns to detect secrets - exactly what our masker needs
+1. **Pattern-Based Detection**: Gitleaks uses regex patterns to detect secrets - exactly what our masker needs.
 2. **Comprehensive Coverage**: 120+ patterns for AWS, GitHub, GitLab, Slack, Datadog, OpenAI, etc.
-3. **License Compatible**: MIT license (compatible with Apache-2.0)
-4. **No Network Calls**: Pure regex matching (no verification attempts)
-5. **Simple Format**: TOML configuration file easy to parse and embed
-6. **Community Maintained**: Active project with regular pattern updates
+3. **License Compatible**: MIT license (compatible with Apache-2.0).
+4. **No Network Calls**: Pure regex matching (no verification attempts).
+5. **Simple Format**: TOML configuration file easy to parse and embed.
+6. **Community Maintained**: Active project with regular pattern updates.
 
 **How It Maps to Our Masker:**
 
@@ -752,7 +752,6 @@ Disable masking for debugging:
 ```bash
 atmos terraform plan --mask=false
 ```
-```
 
 ### 2. docs/io-and-ui-output.md
 
@@ -784,16 +783,16 @@ New page documenting all masking configuration options.
 ## Open Questions
 
 1. **Should we vendor the Gitleaks TOML or fetch from GitHub on build?**
-   - **Recommendation**: Vendor it (commit to repo) for build reproducibility
-   - Update periodically via script or manual PR
+   - **Recommendation**: Vendor it (commit to repo) for build reproducibility.
+   - Update periodically via script or manual PR.
 
 2. **Should generic patterns be enabled by default?**
-   - **Recommendation**: Yes by default, document how to disable if too many false positives
-   - Let users opt-out rather than opt-in
+   - **Recommendation**: Yes by default, document how to disable if too many false positives.
+   - Let users opt-out rather than opt-in.
 
 3. **Should we support entropy-based detection?**
-   - **Recommendation**: Phase 2 enhancement (after basic integration works)
-   - Gitleaks has entropy thresholds we could leverage
+   - **Recommendation**: Phase 2 enhancement (after basic integration works).
+   - Gitleaks has entropy thresholds we could leverage.
 
 ## References
 
