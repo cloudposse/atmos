@@ -16,14 +16,6 @@ The Atmos AI Assistant is an AI-powered terminal agent that helps with Atmos inf
 
 ## Features
 
-### Non-Interactive Execution
-- **Automation Support**: Execute AI prompts non-interactively for scripting and CI/CD (`atmos ai exec`)
-- **Structured Output**: JSON, text, or markdown formats for parsing and integration
-- **Stdin Piping**: Read prompts from pipes or redirects for shell integration
-- **Standard Exit Codes**: 0 (success), 1 (AI error), 2 (tool error) for automation workflows
-- **Output Redirection**: Save results to files for further processing
-- **CI/CD Integration**: Integrate AI assistance into deployment pipelines and validation workflows
-
 ### Conversation Management
 - **Interactive Chat Interface**: Terminal-based chat session for extended conversations
 - **Multi-Provider Support**: Configure and use multiple AI providers simultaneously (see [Providers](/ai/providers))
@@ -61,13 +53,13 @@ The Atmos AI Assistant is an AI-powered terminal agent that helps with Atmos inf
 - **Multi-Language Support**: YAML for stacks, Terraform for components, HCL for configurations
 - **IDE-Quality Feedback**: Same validation as modern code editors, directly in the AI chat
 
-:::tip Understanding Tool Calling
-Wondering how AI tool execution works and what data is sent to AI providers? See [How Tool Calling Works](/ai/tools#how-tool-calling-works) for a detailed explanation with diagrams showing:
-- The tool calling process flow
-- What gets sent to AI servers (and when)
-- Privacy and security implications
-- Tool execution security features
-:::
+### Non-Interactive Execution
+- **Automation Support**: Execute AI prompts non-interactively for scripting and CI/CD (`atmos ai exec`)
+- **Structured Output**: JSON, text, or markdown formats for parsing and integration
+- **Stdin Piping**: Read prompts from pipes or redirects for shell integration
+- **Standard Exit Codes**: 0 (success), 1 (AI error), 2 (tool error) for automation workflows
+- **Output Redirection**: Save results to files for further processing
+- **CI/CD Integration**: Integrate AI assistance into deployment pipelines and validation workflows
 
 ### Project Memory
 - **Persistent Context**: AI remembers project-specific patterns and conventions
@@ -103,6 +95,14 @@ Wondering how AI tool execution works and what data is sent to AI providers? See
 - **Isolated Context**: External IDE integration with independent conversations
 - **Tool Control**: Granular permissions for different team members
 - **Development Workflow**: Get Atmos help directly in your code editor
+
+:::tip Understanding Tool Calling
+Wondering how AI tool execution works and what data is sent to AI providers? See [How Tool Calling Works](/ai/tools#how-tool-calling-works) for a detailed explanation with diagrams showing:
+- The tool calling process flow
+- What gets sent to AI servers (and when)
+- Privacy and security implications
+- Tool execution security features
+:::
 
 :::tip Specialized AI Agents
 Want task-specific AI assistance? See [AI Agents](/ai/agents) to learn about built-in agents for stack analysis, security auditing, and more. For IDE integration, see [Claude Code Integration](/ai/claude-code-integration).

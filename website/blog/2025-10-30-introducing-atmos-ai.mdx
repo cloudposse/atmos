@@ -2,7 +2,7 @@
 slug: introducing-atmos-ai
 title: "Introducing Atmos AI: Your Infrastructure-Aware AI Assistant"
 authors: [atmos]
-tags: [feature, ai, productivity, infrastructure]
+tags: [ai, productivity, infrastructure]
 ---
 
 We're excited to introduce **Atmos AI**, an intelligent assistant built directly into Atmos CLI that understands your infrastructure-as-code like no other AI assistant can.
@@ -60,6 +60,14 @@ Atmos AI solves this through **infrastructure-aware intelligence** that understa
 - Named sessions for organization
 - Auto-compact for extended conversations
 - Cross-platform session management
+
+** Non-Interactive Execution:**
+- **Automation Support**: Execute AI prompts non-interactively for scripting and CI/CD (`atmos ai exec`)
+- **Structured Output**: JSON, text, or markdown formats for parsing and integration
+- **Stdin Piping**: Read prompts from pipes or redirects for shell integration
+- **Standard Exit Codes**: 0 (success), 1 (AI error), 2 (tool error) for automation workflows
+- **Output Redirection**: Save results to files for further processing
+- **CI/CD Integration**: Integrate AI assistance into deployment pipelines and validation workflows
 
 ## Key Features
 
@@ -645,47 +653,47 @@ AI: [Remembers all architectural decisions from Mon/Tue]
 Add to your `atmos.yaml`:
 
 <File title="atmos.yaml">
-```yaml
-settings:
-  ai:
+    ```yaml
+    settings:
+    ai:
     enabled: true
-    default_provider: "anthropic"  # or openai, gemini, ollama, etc.
+    default_provider: "anthropic" # or openai, gemini, ollama, etc.
 
     # Configure your provider
     providers:
-      anthropic:
-        model: "claude-sonnet-4-20250514"
-        api_key_env: "ANTHROPIC_API_KEY"
-        max_tokens: 4096
+    anthropic:
+    model: "claude-sonnet-4-20250514"
+    api_key_env: "ANTHROPIC_API_KEY"
+    max_tokens: 4096
 
-      # Or use Ollama for complete privacy
-      ollama:
-        model: "llama3.3:70b"
-        base_url: "http://localhost:11434/v1"
-        # No API key needed!
+    # Or use Ollama for complete privacy
+    ollama:
+    model: "llama3.3:70b"
+    base_url: "http://localhost:11434/v1"
+    # No API key needed!
 
     # Enable sessions
     sessions:
-      enabled: true
-      storage: "sqlite"
-      path: ".atmos/sessions"
-      retention_days: 30
+    enabled: true
+    storage: "sqlite"
+    path: ".atmos/sessions"
+    retention_days: 30
 
     # Enable tools
     tools:
-      enabled: true
-      require_confirmation: true
-      allowed_tools:
-        - atmos_describe_*
-        - atmos_list_*
-        - file_read
+    enabled: true
+    require_confirmation: true
+    allowed_tools:
+    - atmos_describe_*
+    - atmos_list_*
+    - file_read
 
     # Enable project memory
     memory:
-      enabled: true
-      file_path: "ATMOS.md"
-      create_if_missing: true
-```
+    enabled: true
+    file_path: "ATMOS.md"
+    create_if_missing: true
+    ```
 </File>
 
 ### 2. Set Up Your Provider
@@ -1033,39 +1041,39 @@ Atmos AI can automatically discover and include relevant project files in conver
 **Quick Example:**
 
 <Terminal title="atmos.yaml">
-```yaml
-settings:
-  ai:
+    ```yaml
+    settings:
+    ai:
     context:
-      enabled: true
-      auto_include:
-        - "stacks/**/*.yaml"      # All stack configs
-        - "components/**/*.tf"    # Terraform components
-        - "README.md"             # Documentation
-        - "docs/**/*.md"
-      exclude:
-        - "**/*_test.go"          # Exclude tests
-        - "**/node_modules/**"    # Exclude dependencies
-      max_files: 100              # Limit total files
-      max_size_mb: 10             # Limit total size
-      follow_gitignore: true      # Respect .gitignore
-      cache_enabled: true         # Cache for performance
-```
+    enabled: true
+    auto_include:
+    - "stacks/**/*.yaml" # All stack configs
+    - "components/**/*.tf" # Terraform components
+    - "README.md" # Documentation
+    - "docs/**/*.md"
+    exclude:
+    - "**/*_test.go" # Exclude tests
+    - "**/node_modules/**" # Exclude dependencies
+    max_files: 100 # Limit total files
+    max_size_mb: 10 # Limit total size
+    follow_gitignore: true # Respect .gitignore
+    cache_enabled: true # Cache for performance
+    ```
 </Terminal>
 
 **CLI Overrides:**
 
 <Terminal title="atmos ai">
-```bash
-# Add specific patterns for this query
-atmos ai ask "Review my Go code" --include "**/*.go" --exclude "**/*_test.go"
+    ```bash
+    # Add specific patterns for this query
+    atmos ai ask "Review my Go code" --include "**/*.go" --exclude "**/*_test.go"
 
-# Analyze Terraform with custom patterns
-atmos ai exec "Check configurations" --include "**/*.tf" --exclude "**/.terraform/**"
+    # Analyze Terraform with custom patterns
+    atmos ai exec "Check configurations" --include "**/*.tf" --exclude "**/.terraform/**"
 
-# Disable auto-discovery when not needed
-atmos ai exec "General question" --no-auto-context
-```
+    # Disable auto-discovery when not needed
+    atmos ai exec "General question" --no-auto-context
+    ```
 </Terminal>
 
 **How It Works:**

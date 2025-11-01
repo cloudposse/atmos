@@ -19,7 +19,6 @@ Atmos AI is an intelligent assistant integrated directly into Atmos CLI, designe
 - **7 AI Providers** - Anthropic, OpenAI, Google Gemini, xAI Grok, Ollama, AWS Bedrock, Azure OpenAI
 - **Session Management** - SQLite-backed persistence with full CRUD operations
 - **Conversation Checkpointing** - Export/import sessions for team collaboration and backup
-- **GitHub Actions Integration** - Automated PR reviews, security scans, and cost analysis in CI/CD
 - **Automatic Context Discovery** - Intelligent file discovery with glob patterns and gitignore filtering
 - **Project Memory** - ATMOS.md for persistent context across sessions
 - **Tool Execution** - 19 tools with granular permission system
@@ -29,6 +28,7 @@ Atmos AI is an intelligent assistant integrated directly into Atmos CLI, designe
 - **LSP Integration** - YAML/Terraform validation with real-time diagnostics
 - **Enhanced TUI** - Markdown rendering, syntax highlighting, session management
 - **Token Caching** - Save up to 90% on API costs with prompt caching (6/7 providers)
+- **GitHub Actions Integration** - Automated PR reviews, security scans, and cost analysis in CI/CD
 
 ---
 
