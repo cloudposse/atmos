@@ -294,6 +294,13 @@ func (i *assumeRoleIdentity) getRootProviderFromVia() (string, error) {
 	return "", fmt.Errorf("%w: cannot determine root provider for identity %q before authentication", errUtils.ErrInvalidAuthConfig, i.name)
 }
 
+// SetManagerAndProvider sets the manager and root provider name on the identity.
+// This is used when loading cached credentials to allow the identity to resolve provider information.
+func (i *assumeRoleIdentity) SetManagerAndProvider(manager types.AuthManager, rootProviderName string) {
+	i.manager = manager
+	i.rootProviderName = rootProviderName
+}
+
 // PostAuthenticate sets up AWS files and populates auth context after authentication.
 func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
 	// Guard against nil parameters to avoid panics.

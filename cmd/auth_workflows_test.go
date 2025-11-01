@@ -18,7 +18,7 @@ func TestAuth_EnvCommand_E2E(t *testing.T) {
 
 	// Step 1: Login to cache credentials.
 	t.Run("login", func(t *testing.T) {
-		RootCmd.SetArgs([]string{"auth", "login", "--identity", "mock-identity"})
+		RootCmd.SetArgs([]string{"auth", "login", "--identity=mock-identity"})
 		err := RootCmd.Execute()
 		require.NoError(t, err, "Login should succeed")
 	})
@@ -67,7 +67,7 @@ func TestAuth_EnvCommand_E2E(t *testing.T) {
 			r, w, _ := os.Pipe()
 			os.Stdout = w
 
-			RootCmd.SetArgs([]string{"auth", "env", "--format", tc.format, "--identity", "mock-identity"})
+			RootCmd.SetArgs([]string{"auth", "env", "--format", tc.format, "--identity=mock-identity"})
 
 			start := time.Now()
 			err := RootCmd.Execute()
@@ -108,7 +108,7 @@ func TestAuth_ExecCommand_E2E(t *testing.T) {
 
 	// Step 1: Login to cache credentials.
 	t.Run("login", func(t *testing.T) {
-		RootCmd.SetArgs([]string{"auth", "login", "--identity", "mock-identity"})
+		RootCmd.SetArgs([]string{"auth", "login", "--identity=mock-identity"})
 		err := RootCmd.Execute()
 		require.NoError(t, err, "Login should succeed")
 	})
@@ -136,7 +136,7 @@ func TestAuth_ExecCommand_E2E(t *testing.T) {
 			_ = NewTestKit(t)
 
 			// Build args: auth exec --identity mock-identity -- <command>.
-			args := []string{"auth", "exec", "--identity", "mock-identity", "--"}
+			args := []string{"auth", "exec", "--identity=mock-identity", "--"}
 			args = append(args, tc.command...)
 
 			// Capture stdout.
@@ -183,14 +183,14 @@ func TestAuth_WhoamiCommand_E2E(t *testing.T) {
 
 	// Step 1: Login to cache credentials.
 	t.Run("login", func(t *testing.T) {
-		RootCmd.SetArgs([]string{"auth", "login", "--identity", "mock-identity"})
+		RootCmd.SetArgs([]string{"auth", "login", "--identity=mock-identity"})
 		err := RootCmd.Execute()
 		require.NoError(t, err, "Login should succeed")
 	})
 
 	// Step 2: Test whoami command.
 	t.Run("whoami with cached credentials", func(t *testing.T) {
-		RootCmd.SetArgs([]string{"auth", "whoami", "--identity", "mock-identity"})
+		RootCmd.SetArgs([]string{"auth", "whoami", "--identity=mock-identity"})
 
 		start := time.Now()
 		err := RootCmd.Execute()
@@ -212,7 +212,7 @@ func TestAuth_WhoamiCommand_E2E(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 
-		RootCmd.SetArgs([]string{"auth", "whoami", "--identity", "mock-identity", "--output", "json"})
+		RootCmd.SetArgs([]string{"auth", "whoami", "--identity=mock-identity", "--output", "json"})
 
 		err := RootCmd.Execute()
 
@@ -256,9 +256,9 @@ func TestAuth_CompleteWorkflow_E2E(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"login", []string{"auth", "login", "--identity", "mock-identity"}},
-		{"whoami", []string{"auth", "whoami", "--identity", "mock-identity"}},
-		{"env", []string{"auth", "env", "--identity", "mock-identity"}},
+		{"login", []string{"auth", "login", "--identity=mock-identity"}},
+		{"whoami", []string{"auth", "whoami", "--identity=mock-identity"}},
+		{"env", []string{"auth", "env", "--identity=mock-identity"}},
 		{"list", []string{"auth", "list"}},
 		{"validate", []string{"auth", "validate"}},
 	}
@@ -301,14 +301,14 @@ func TestAuth_MultipleIdentities_E2E(t *testing.T) {
 
 	// Login to identity.
 	t.Run("login", func(t *testing.T) {
-		RootCmd.SetArgs([]string{"auth", "login", "--identity", "mock-identity"})
+		RootCmd.SetArgs([]string{"auth", "login", "--identity=mock-identity"})
 		err := RootCmd.Execute()
 		require.NoError(t, err, "Login should succeed")
 	})
 
 	// Verify identity works with whoami.
 	t.Run("whoami uses cached credentials", func(t *testing.T) {
-		RootCmd.SetArgs([]string{"auth", "whoami", "--identity", "mock-identity"})
+		RootCmd.SetArgs([]string{"auth", "whoami", "--identity=mock-identity"})
 		start := time.Now()
 		err := RootCmd.Execute()
 		duration := time.Since(start)
@@ -318,7 +318,7 @@ func TestAuth_MultipleIdentities_E2E(t *testing.T) {
 
 	// Verify identity works with env.
 	t.Run("env uses cached credentials", func(t *testing.T) {
-		RootCmd.SetArgs([]string{"auth", "env", "--identity", "mock-identity"})
+		RootCmd.SetArgs([]string{"auth", "env", "--identity=mock-identity"})
 		start := time.Now()
 		err := RootCmd.Execute()
 		duration := time.Since(start)

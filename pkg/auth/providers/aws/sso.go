@@ -42,10 +42,11 @@ func isInteractive() bool {
 
 // ssoProvider implements AWS IAM Identity Center authentication.
 type ssoProvider struct {
-	name     string
-	config   *schema.Provider
-	startURL string
-	region   string
+	name         string
+	config       *schema.Provider
+	startURL     string
+	region       string
+	cacheStorage CacheStorage
 }
 
 // NewSSOProvider creates a new AWS SSO provider.
@@ -66,10 +67,11 @@ func NewSSOProvider(name string, config *schema.Provider) (*ssoProvider, error) 
 	}
 
 	return &ssoProvider{
-		name:     name,
-		config:   config,
-		startURL: config.StartURL,
-		region:   config.Region,
+		name:         name,
+		config:       config,
+		startURL:     config.StartURL,
+		region:       config.Region,
+		cacheStorage: &defaultCacheStorage{}, // Use default filesystem operations.
 	}, nil
 }
 
@@ -92,6 +94,22 @@ func (p *ssoProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
 	// Note: SSO provider no longer caches credentials directly.
 	// Caching is handled at the manager level to prevent duplicates.
+
+	// Check for cached SSO token first to avoid unnecessary device authorization.
+	cachedToken, cachedExpiry, err := p.loadCachedToken()
+	if err != nil {
+		log.Debug("Error loading cached token, will proceed with device authorization", "error", err)
+	}
+	if cachedToken != "" {
+		log.Debug("Using cached SSO token", "expiresAt", cachedExpiry)
+		return &authTypes.AWSCredentials{
+			AccessKeyID: cachedToken, // Used by identities to get actual credentials
+			Region:      p.region,
+			Expiration:  cachedExpiry.Format(time.RFC3339),
+		}, nil
+	}
+
+	// No valid cached token, proceed with device authorization flow.
 
 	// Check if we're in a headless environment - SSO device flow requires user interaction.
 	if !isInteractive() {
@@ -161,6 +179,11 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		expiration = time.Now().Add(time.Duration(p.getSessionDuration()) * time.Minute)
 	}
 	log.Debug("Authentication successful", "expiration", expiration)
+
+	// Save token to cache for future use (non-fatal if fails).
+	if err := p.saveCachedToken(accessToken, expiration); err != nil {
+		log.Debug("Failed to cache SSO token", "error", err)
+	}
 
 	return &authTypes.AWSCredentials{
 		AccessKeyID: accessToken, // Used by identities to get actual credentials
@@ -559,6 +582,11 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 // Logout removes provider-specific credential storage.
 func (p *ssoProvider) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "aws.ssoProvider.Logout")()
+
+	// Delete cached SSO token (non-fatal if fails).
+	if err := p.deleteCachedToken(); err != nil {
+		log.Debug("Failed to delete cached SSO token", "error", err)
+	}
 
 	// Get base_path from provider spec if configured.
 	basePath := awsCloud.GetFilesBasePath(p.config)

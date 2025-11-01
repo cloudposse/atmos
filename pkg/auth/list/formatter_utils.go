@@ -3,6 +3,7 @@ package list
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"time"
 
@@ -113,7 +114,7 @@ func getIdentityAuthStatus(authManager authTypes.AuthManager, identityName strin
 	}
 
 	// Check if expired or expiring soon.
-	now := time.Now()
+	now := getCurrentTime()
 	timeUntilExpiry := whoami.Expiration.Sub(now)
 
 	if timeUntilExpiry <= 0 {
@@ -175,7 +176,7 @@ func getExpirationInfo(authManager authTypes.AuthManager, identityName string) (
 	}
 
 	// Calculate time remaining.
-	now := time.Now()
+	now := getCurrentTime()
 	remaining := whoami.Expiration.Sub(now)
 
 	// Determine status.
@@ -191,6 +192,18 @@ func getExpirationInfo(authManager authTypes.AuthManager, identityName string) (
 	// Format duration.
 	formatted := formatDuration(remaining)
 	return formatted, status
+}
+
+// getCurrentTime returns the current time.
+// For testing, this can be overridden via ATMOS_TEST_NOW environment variable (RFC3339 format).
+// This ensures deterministic snapshot testing with fixed expiration countdowns.
+func getCurrentTime() time.Time {
+	if testNow := os.Getenv("ATMOS_TEST_NOW"); testNow != "" {
+		if parsed, err := time.Parse(time.RFC3339, testNow); err == nil {
+			return parsed
+		}
+	}
+	return time.Now()
 }
 
 // formatDuration formats a duration into a human-readable string.

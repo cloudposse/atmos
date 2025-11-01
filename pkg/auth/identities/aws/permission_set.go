@@ -142,21 +142,20 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
 	// Get root provider name for file storage.
+	// If we can't resolve it (e.g., before authentication), skip AWS file vars.
 	providerName, err := i.resolveRootProviderName()
-	if err != nil {
-		return nil, err
-	}
+	if err == nil {
+		// Get AWS file environment variables.
+		awsFileManager, err := awsCloud.NewAWSFileManager("")
+		if err != nil {
+			return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
+		}
+		awsEnvVars := awsFileManager.GetEnvironmentVariables(providerName, i.name)
 
-	// Get AWS file environment variables.
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
-	if err != nil {
-		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
-	}
-	awsEnvVars := awsFileManager.GetEnvironmentVariables(providerName, i.name)
-
-	// Convert to map format.
-	for _, envVar := range awsEnvVars {
-		env[envVar.Key] = envVar.Value
+		// Convert to map format.
+		for _, envVar := range awsEnvVars {
+			env[envVar.Key] = envVar.Value
+		}
 	}
 
 	// Add environment variables from identity config.
@@ -229,20 +228,24 @@ func (i *permissionSetIdentity) resolveRootProviderName() (string, error) {
 
 // getRootProviderFromVia gets the root provider name using available information.
 // This is used when manager is not available (e.g., LoadCredentials before PostAuthenticate).
-// Tries in order: cached value from PostAuthenticate, via.provider from config.
+// Only returns the cached value from PostAuthenticate. Does NOT fall back to via.provider
+// because via.provider is the immediate parent, not necessarily the root provider in the chain.
 func (i *permissionSetIdentity) getRootProviderFromVia() (string, error) {
-	// First try cached value set during PostAuthenticate.
+	// Try cached value set during PostAuthenticate or SetManagerAndProvider.
 	if i.rootProviderName != "" {
 		return i.rootProviderName, nil
 	}
 
-	// Fall back to via.provider from config (permission sets always have via.provider).
-	if i.config.Via != nil && i.config.Via.Provider != "" {
-		return i.config.Via.Provider, nil
-	}
-
-	// Can't determine root provider - return error.
+	// Can't determine root provider without authentication chain.
+	// The manager.ensureIdentityHasManager() should have set this before calling Environment().
 	return "", fmt.Errorf("%w: cannot determine root provider for identity %q before authentication", errUtils.ErrInvalidAuthConfig, i.name)
+}
+
+// SetManagerAndProvider sets the manager and root provider name on the identity.
+// This is used when loading cached credentials to allow the identity to resolve provider information.
+func (i *permissionSetIdentity) SetManagerAndProvider(manager types.AuthManager, rootProviderName string) {
+	i.manager = manager
+	i.rootProviderName = rootProviderName
 }
 
 // PostAuthenticate sets up AWS files and populates auth context after authentication.
@@ -329,11 +332,9 @@ func (i *permissionSetIdentity) newSSOClient(ctx context.Context, awsBase *types
 	// Build config options
 	configOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(awsBase.Region),
-		config.WithCredentialsProvider(awssdk.CredentialsProviderFunc(func(ctx context.Context) (awssdk.Credentials, error) {
-			return awssdk.Credentials{
-				AccessKeyID: awsBase.AccessKeyID, // This is actually the SSO access token
-			}, nil
-		})),
+		// SSO API operations (ListAccounts, GetRoleCredentials) use access token authentication,
+		// not AWS signature authentication. Use anonymous credentials to avoid signing errors.
+		config.WithCredentialsProvider(awssdk.AnonymousCredentials{}),
 	}
 
 	// Add custom endpoint resolver if configured
@@ -382,9 +383,10 @@ func (i *permissionSetIdentity) CredentialsExist() (bool, error) {
 	defer perf.Track(nil, "aws.permissionSetIdentity.CredentialsExist")()
 
 	// Get root provider name for file storage.
+	// If we can't resolve it (e.g., before authentication), credentials don't exist yet.
 	providerName, err := i.resolveRootProviderName()
 	if err != nil {
-		return false, err
+		return false, nil
 	}
 
 	mgr, err := awsCloud.NewAWSFileManager("")

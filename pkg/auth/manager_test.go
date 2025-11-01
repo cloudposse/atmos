@@ -1253,6 +1253,8 @@ func TestManager_fetchCachedCredentials(t *testing.T) {
 	}
 
 	// Test successful retrieval.
+	// nextIndex is incremented because cached credentials at index N become input to step N+1.
+	// Example: Cached permission set creds at index 1 are used as input to assume-role at index 2.
 	retrievedCreds, nextIndex := m.fetchCachedCredentials(1)
 	assert.NotNil(t, retrievedCreds)
 	assert.Equal(t, 2, nextIndex)

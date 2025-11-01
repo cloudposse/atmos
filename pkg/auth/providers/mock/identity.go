@@ -97,22 +97,15 @@ func (i *Identity) Validate() error {
 }
 
 // Environment returns mock environment variables.
-// For mock AWS-like identities, we return file paths similar to real AWS identities.
+// For generic mock identities, we only return non-provider-specific variables.
+// AWS-specific variables are handled by mock/aws provider.
 func (i *Identity) Environment() (map[string]string, error) {
 	defer perf.Track(nil, "mock.Identity.Environment")()
 
 	env := map[string]string{
-		"MOCK_IDENTITY": i.name,
+		"MOCK_IDENTITY":  i.name,
+		"ATMOS_IDENTITY": i.name,
 	}
-
-	// For testing purposes, provide mock AWS config paths that would be used
-	// by the AWS SDK. These point to non-existent paths but allow testing
-	// of the environment variable flow without exposing real credentials.
-	env["AWS_SHARED_CREDENTIALS_FILE"] = "/tmp/mock-credentials"
-	env["AWS_CONFIG_FILE"] = "/tmp/mock-config"
-	env["AWS_PROFILE"] = i.name
-	env["AWS_REGION"] = MockRegion
-	env["AWS_DEFAULT_REGION"] = MockRegion
 
 	return env, nil
 }
