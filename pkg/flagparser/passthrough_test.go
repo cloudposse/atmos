@@ -447,3 +447,99 @@ func TestPassThroughFlagParser_GetIdentityFromCmd(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "admin", identity)
 }
+
+func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
+	// Test cases for DisablePositionalExtraction feature used by auth exec/shell commands.
+	tests := []struct {
+		name                        string
+		args                        []string
+		disablePositionalExtraction bool
+		expectedAtmosFlags          map[string]interface{}
+		expectedPassThroughArgs     []string
+		expectedSubCommand          string
+		expectedComponentName       string
+	}{
+		{
+			name:                        "with positional extraction enabled (default)",
+			args:                        []string{"--identity=test-user", "--", "echo", "hello"},
+			disablePositionalExtraction: false,
+			expectedAtmosFlags:          map[string]interface{}{"identity": "test-user"},
+			expectedPassThroughArgs:     []string{}, // "echo" and "hello" are extracted as positionals
+			expectedSubCommand:          "echo",     // First positional
+			expectedComponentName:       "hello",    // Second positional
+		},
+		{
+			name:                        "with positional extraction disabled (auth commands)",
+			args:                        []string{"--identity=test-user", "--", "echo", "hello"},
+			disablePositionalExtraction: true,
+			expectedAtmosFlags:          map[string]interface{}{"identity": "test-user"},
+			expectedPassThroughArgs:     []string{"echo", "hello"}, // All args after -- are passed through
+			expectedSubCommand:          "",                        // Not extracted
+			expectedComponentName:       "",                        // Not extracted
+		},
+		{
+			name:                        "auth exec with multiple command args",
+			args:                        []string{"--identity=admin", "--", "aws", "s3", "ls", "s3://bucket"},
+			disablePositionalExtraction: true,
+			expectedAtmosFlags:          map[string]interface{}{"identity": "admin"},
+			expectedPassThroughArgs:     []string{"aws", "s3", "ls", "s3://bucket"},
+			expectedSubCommand:          "",
+			expectedComponentName:       "",
+		},
+		{
+			name:                        "auth shell with shell args",
+			args:                        []string{"--identity=test-user", "--", "-c", "echo $HOME"},
+			disablePositionalExtraction: true,
+			expectedAtmosFlags:          map[string]interface{}{"identity": "test-user"},
+			expectedPassThroughArgs:     []string{"-c", "echo $HOME"},
+			expectedSubCommand:          "",
+			expectedComponentName:       "",
+		},
+		{
+			name:                        "no separator with disabled positional extraction",
+			args:                        []string{"--identity=test-user", "echo", "hello"},
+			disablePositionalExtraction: true,
+			expectedAtmosFlags:          map[string]interface{}{"identity": "test-user"},
+			expectedPassThroughArgs:     []string{"echo", "hello"}, // All non-flag args passed through
+			expectedSubCommand:          "",
+			expectedComponentName:       "",
+		},
+		{
+			name:                        "identity flag without value (NoOptDefVal)",
+			args:                        []string{"--identity", "--", "echo", "test"},
+			disablePositionalExtraction: true,
+			expectedAtmosFlags:          map[string]interface{}{"identity": "__SELECT__"},
+			expectedPassThroughArgs:     []string{"echo", "test"},
+			expectedSubCommand:          "",
+			expectedComponentName:       "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewPassThroughFlagParser(
+				WithStringFlag("identity", "i", "", "Identity flag"),
+			)
+
+			// Set NoOptDefVal for identity flag (like auth commands do).
+			registry := parser.GetRegistry()
+			if identityFlag := registry.Get("identity"); identityFlag != nil {
+				if sf, ok := identityFlag.(*StringFlag); ok {
+					sf.NoOptDefVal = "__SELECT__"
+				}
+			}
+
+			if tt.disablePositionalExtraction {
+				parser.DisablePositionalExtraction()
+			}
+
+			result, err := parser.Parse(context.Background(), tt.args)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.expectedAtmosFlags, result.AtmosFlags, "AtmosFlags mismatch")
+			assert.Equal(t, tt.expectedPassThroughArgs, result.PassThroughArgs, "PassThroughArgs mismatch")
+			assert.Equal(t, tt.expectedSubCommand, result.SubCommand, "SubCommand mismatch")
+			assert.Equal(t, tt.expectedComponentName, result.ComponentName, "ComponentName mismatch")
+		})
+	}
+}
