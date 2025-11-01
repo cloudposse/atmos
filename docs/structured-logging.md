@@ -4,6 +4,14 @@
 
 **Semantic logging** goes a step further by **standardizing the keys**. Using predictable fields like `component`, `operation`, `request_id`, and `error` makes logs interpretable across different systems and teams.
 
+## Logging vs I/O Output
+
+**Don't confuse logging with I/O & UI output:**
+- **Logging** (this document) - For developers: diagnostics, debugging
+- **I/O & UI output** - For users: status messages, data results
+
+**See:** [I/O and UI Output Guide](io-and-ui-output.md) for user-facing output.
+
 ## Why We Use It
 
 Structured and semantic logging provide:

@@ -94,6 +94,10 @@ Flags:
                                       init to dynamically configure backends
                                       (default false)
 
+        --mask                        Enable automatic masking of sensitive data
+                                      in output (use --mask=false to disable)
+                                      (default true)
+
         --process-functions           Enable/disable YAML functions processing
                                       in Atmos stack manifests when executing
                                       terraform commands (default true)
@@ -167,6 +171,13 @@ Global Flags:
         --config-path stringSlice    Paths to configuration directories
                                      (comma-separated or repeated flag) (default
                                      [])
+
+        --force-color                Force color output even when not a TTY
+                                     (useful for screenshots) (default false)
+
+        --force-tty                  Force TTY mode with sane defaults when
+                                     terminal detection fails (useful for
+                                     screenshots) (default false)
 
         --heatmap                    Show performance heatmap visualization
                                      after command execution (includes P95

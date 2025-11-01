@@ -27,6 +27,13 @@ Global Flags:
                                      (comma-separated or repeated flag) (default
                                      [])
 
+        --force-color                Force color output even when not a TTY
+                                     (useful for screenshots) (default false)
+
+        --force-tty                  Force TTY mode with sane defaults when
+                                     terminal detection fails (useful for
+                                     screenshots) (default false)
+
         --heatmap                    Show performance heatmap visualization
                                      after command execution (includes P95
                                      latency) (default false)
@@ -48,6 +55,10 @@ Global Flags:
                                      Debug, Info, Warning, Off. If the log level
                                      is set to Off, Atmos will not log any
                                      messages (default Info)
+
+        --mask                       Enable automatic masking of sensitive data
+                                     in output (use --mask=false to disable)
+                                     (default true)
 
         --no-color                   Disable color output (default false)
 
