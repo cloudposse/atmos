@@ -143,7 +143,7 @@ func TestCustomCommandIntegration_IdentityFlagOverride(t *testing.T) {
 	require.NotNil(t, customCmd, "Custom command should be registered")
 
 	// Set command line args to simulate calling with --identity flag.
-	RootCmd.SetArgs([]string{"test-identity-override", "--identity", "mock-identity-2"})
+	RootCmd.SetArgs([]string{"test-identity-override", "--identity=mock-identity-2"})
 
 	// Execute the command through RootCmd to properly handle flags.
 	err = RootCmd.Execute()

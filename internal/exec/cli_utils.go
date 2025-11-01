@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -84,11 +85,18 @@ func ProcessCommandLineArgs(
 
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 
+	log.Debug("ProcessCommandLineArgs input", "componentType", componentType, "args", args)
+
 	cmd.DisableFlagParsing = false
 
 	err := cmd.ParseFlags(args)
 	if err != nil && !errors.Is(err, pflag.ErrHelp) {
 		return configAndStacksInfo, err
+	}
+
+	// Check what Cobra parsed for identity flag.
+	if identityFlag := cmd.Flag("identity"); identityFlag != nil {
+		log.Debug("After ParseFlags", "identity.Value", identityFlag.Value.String(), "identity.Changed", identityFlag.Changed)
 	}
 
 	argsAndFlagsInfo, err := processArgsAndFlags(componentType, args)
@@ -537,16 +545,25 @@ func processArgsAndFlags(
 		}
 
 		if arg == cfg.IdentityFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
+			// Check if next arg exists and is not another flag.
+			if len(inputArgsAndFlags) > (i+1) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
+				// Has value: --identity <value>.
+				info.Identity = inputArgsAndFlags[i+1]
+			} else {
+				// No value: --identity (interactive selection).
+				info.Identity = cfg.IdentityFlagSelectValue
 			}
-			info.Identity = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.IdentityFlag) {
 			parts := strings.Split(arg, "=")
 			if len(parts) != 2 {
 				return info, fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
 			}
-			info.Identity = parts[1]
+			if parts[1] == "" {
+				// Empty value: --identity= (interactive selection).
+				info.Identity = cfg.IdentityFlagSelectValue
+			} else {
+				info.Identity = parts[1]
+			}
 		}
 
 		if arg == cfg.FromPlanFlag {

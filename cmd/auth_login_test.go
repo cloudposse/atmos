@@ -57,7 +57,7 @@ func TestAuthLoginCmd(t *testing.T) {
 		},
 		{
 			name: "successful login with specific identity",
-			args: []string{"--identity", "test-identity"},
+			args: []string{"--identity=test-identity"},
 			setupConfig: func() *schema.AtmosConfiguration {
 				return &schema.AtmosConfiguration{
 					Auth: schema.AuthConfig{
@@ -98,7 +98,7 @@ func TestAuthLoginCmd(t *testing.T) {
 		},
 		{
 			name: "invalid identity specified",
-			args: []string{"--identity", "nonexistent"},
+			args: []string{"--identity=nonexistent"},
 			setupConfig: func() *schema.AtmosConfiguration {
 				return &schema.AtmosConfiguration{
 					Auth: schema.AuthConfig{
@@ -319,7 +319,7 @@ func TestExecuteAuthLoginCommand(t *testing.T) {
 			cmd.Flags().StringP("identity", "i", "", "Specify the identity to authenticate to")
 
 			if tt.identityFlag != "" {
-				cmd.SetArgs([]string{"--identity", tt.identityFlag})
+				cmd.SetArgs([]string{"--identity=" + tt.identityFlag})
 			}
 
 			// Execute command (this will fail in test environment without proper config).
