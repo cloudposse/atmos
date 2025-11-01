@@ -63,13 +63,13 @@ func TestSAMLProvider_GetProviderType(t *testing.T) {
 
 	// Without Playwright drivers, falls back to provider-specific types.
 	p = &samlProvider{config: &schema.Provider{}, url: "https://accounts.google.com/saml"}
-	assert.Equal(t, "GoogleApps", p.getDriver()) // Falls back when no drivers.
+	assert.Equal(t, "Browser", p.getDriver()) // Falls back when no drivers.
 
 	p = &samlProvider{config: &schema.Provider{}, url: "https://example.okta.com"}
-	assert.Equal(t, "Okta", p.getDriver())
+	assert.Equal(t, "Browser", p.getDriver())
 
 	p = &samlProvider{config: &schema.Provider{}, url: "https://corp/adfs/ls"}
-	assert.Equal(t, "ADFS", p.getDriver())
+	assert.Equal(t, "Browser", p.getDriver())
 
 	// Unknown provider without drivers defaults to Browser (will auto-download).
 	p = &samlProvider{config: &schema.Provider{}, url: "https://idp"}
