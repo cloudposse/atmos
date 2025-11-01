@@ -1,0 +1,132 @@
+---
+title: "`!append` YAML Function"
+sidebar_label: "!append"
+sidebar_class_name: command
+sidebar_position: 1
+id: append
+description: Append items to lists during configuration merging
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `!append` YAML function concatenates lists during stack inheritance instead of replacing them. This provides fine-grained control over list merging behavior on a per-field basis.
+</Intro>
+
+## Use-cases
+
+- **Dependency Management**: Append additional `depends_on` items without losing base dependencies
+- **Security Groups**: Add environment-specific security rules to a base configuration
+- **IAM Policies**: Extend base policies with additional statements
+- **Tags and Labels**: Add extra tags while preserving organizational defaults
+- **Node Groups**: Extend base cluster configurations with additional node pools
+
+## Example
+
+```yaml title="stacks/base.yaml"
+components:
+  terraform:
+    eks:
+      vars:
+        cluster_name: main
+      settings:
+        depends_on:
+          - vpc
+          - iam-role
+```
+
+```yaml title="stacks/prod.yaml"
+import:
+  - base
+
+components:
+  terraform:
+    eks:
+      settings:
+        # Without !append: [rds, elasticache] replaces [vpc, iam-role]
+        # With !append: results in [vpc, iam-role, rds, elasticache]
+        depends_on: !append
+          - rds
+          - elasticache
+```
+
+## Behavior
+
+The `!append` function:
+- **Applies to lists only** - Can only be used on YAML sequences
+- **Works per-field** - Does not affect other lists in the configuration
+- **Operates during merging** - Executes when stack configurations are merged
+- **Preserves order** - Base items appear first, appended items follow
+
+## Interaction with Global Settings
+
+The `!append` tag works independently of the global `list_merge_strategy` setting:
+
+| Global Setting | Field without `!append` | Field with `!append` |
+|---------------|-------------------------|---------------------|
+| `replace` (default) | Replaces entire list | Appends to base list |
+| `append` | Appends to base list | Appends to base list |
+| `merge` | Deep merges list items | Appends to base list |
+
+## Advanced Examples
+
+### Multiple Inheritance Levels
+
+```yaml title="stacks/base.yaml"
+components:
+  terraform:
+    app:
+      settings:
+        security_groups:
+          - sg-base
+```
+
+```yaml title="stacks/staging-base.yaml"
+import:
+  - base
+
+components:
+  terraform:
+    app:
+      settings:
+        security_groups: !append
+          - sg-staging
+```
+
+```yaml title="stacks/staging-east.yaml"
+import:
+  - staging-base
+
+components:
+  terraform:
+    app:
+      settings:
+        security_groups: !append
+          - sg-east-region
+        # Result: [sg-base, sg-staging, sg-east-region]
+```
+
+### Mixed List Behaviors
+
+```yaml title="stacks/config.yaml"
+components:
+  terraform:
+    database:
+      vars:
+        # This list uses normal replacement
+        availability_zones:
+          - us-east-1c
+          - us-east-1d
+      settings:
+        # This list uses append
+        backup_retention_policies: !append
+          - daily-snapshots
+          - weekly-archive
+```
+
+## Notes
+
+- The `!append` function only affects the specific list it's applied to
+- Cannot be used on non-list values (maps, strings, numbers)
+- Appended items maintain their original structure and type
+- Works with all list item types: strings, numbers, maps, or nested lists

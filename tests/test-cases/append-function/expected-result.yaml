@@ -1,0 +1,39 @@
+# Expected result after merging base.yaml with override-with-append.yaml
+# This demonstrates what the !append function should produce
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+        region: "us-east-1"
+    
+    eks:
+      vars:
+        cluster_name: "production"  # Overridden
+        node_groups:  # Appended due to !append tag
+          - name: "default"
+            instance_type: "t3.medium"
+            min_size: 1
+            max_size: 3
+          - name: "spot"
+            instance_type: "t3.large"
+            min_size: 0
+            max_size: 10
+      settings:
+        depends_on:  # Appended due to !append tag
+          - vpc
+          - iam-role
+          - rds
+          - elasticache
+          - s3-bucket
+    
+    rds:
+      vars:
+        engine: "postgres"
+        instance_class: "db.r5.large"  # Overridden
+      settings:
+        depends_on:  # Appended due to !append tag
+          - vpc
+          - security-groups
+          - kms-key
