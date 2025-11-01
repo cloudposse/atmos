@@ -5,7 +5,7 @@ tests:
   - name: "atmos devcontainer list"
     description: "List all configured devcontainers"
     enabled: false  # Disabled: requires container runtime (not available on macOS runners)
-    workdir: "tests/fixtures/scenarios/devcontainer-basic"
+    workdir: "fixtures/scenarios/devcontainer-basic"
     command: "atmos"
     args:
       - "devcontainer"
@@ -23,7 +23,7 @@ tests:
   - name: "atmos devcontainer config test-alpine"
     description: "Show devcontainer configuration"
     enabled: false  # Disabled: requires container runtime (not available on macOS runners)
-    workdir: "tests/fixtures/scenarios/devcontainer-basic"
+    workdir: "fixtures/scenarios/devcontainer-basic"
     command: "atmos"
     args:
       - "devcontainer"
@@ -44,7 +44,7 @@ tests:
   - name: "atmos devcontainer start test-alpine"
     description: "Start a devcontainer (creates if needed)"
     enabled: false  # Disabled: requires container runtime (not available on macOS runners)
-    workdir: "tests/fixtures/scenarios/devcontainer-basic"
+    workdir: "fixtures/scenarios/devcontainer-basic"
     command: "atmos"
     args:
       - "devcontainer"
@@ -65,7 +65,7 @@ tests:
   - name: "atmos devcontainer stop test-alpine"
     description: "Stop a running devcontainer"
     enabled: false  # Disabled: requires container runtime (not available on macOS runners)
-    workdir: "tests/fixtures/scenarios/devcontainer-basic"
+    workdir: "fixtures/scenarios/devcontainer-basic"
     command: "atmos"
     args:
       - "devcontainer"
@@ -89,7 +89,7 @@ tests:
   - name: "atmos devcontainer logs test-alpine"
     description: "Show devcontainer logs"
     enabled: false
-    workdir: "tests/fixtures/scenarios/devcontainer-basic"
+    workdir: "fixtures/scenarios/devcontainer-basic"
     command: "atmos"
     args:
       - "devcontainer"
@@ -110,7 +110,7 @@ tests:
   - name: "atmos devcontainer start nonexistent"
     description: "Error when starting non-existent devcontainer"
     enabled: false  # Disabled: requires container runtime (not available on macOS runners)
-    workdir: "tests/fixtures/scenarios/devcontainer-basic"
+    workdir: "fixtures/scenarios/devcontainer-basic"
     command: "atmos"
     args:
       - "devcontainer"
