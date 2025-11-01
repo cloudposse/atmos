@@ -95,3 +95,7 @@ performance-optimization/
 # Merge conflict artifacts
 *.orig
 *.rej
+
+# Backup files
+*.bak
+*~
