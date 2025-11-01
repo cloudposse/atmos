@@ -10,7 +10,7 @@ tests:
     args:
       - "non-existent"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos terraform
     enabled: true
     snapshot: true
@@ -22,7 +22,7 @@ tests:
     args:
       - "terraform"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos terraform help
     enabled: true
     snapshot: true
@@ -109,7 +109,7 @@ tests:
       - "terraform"
       - "non-existent"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos terraform plan non-existent in non workspace
     enabled: true
     snapshot: true
@@ -123,7 +123,7 @@ tests:
       - "plan"
       - "non-existent"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos terraform plan non-existent in workspace
     enabled: true
     snapshot: true
@@ -137,7 +137,7 @@ tests:
       - "plan"
       - "non-existent"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos helmfile
     enabled: true
     snapshot: true
@@ -147,7 +147,7 @@ tests:
     args:
       - "helmfile"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos helmfile non-existent
     enabled: true
     description: "Should show usage for helmfile and non-existent subcommand"
@@ -159,7 +159,7 @@ tests:
       - "helmfile"
       - "non-existent"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos helmfile help
     enabled: true
     snapshot: true
@@ -208,7 +208,7 @@ tests:
       - "apply"
       - "non-existent"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos helmfile apply
     enabled: true
     snapshot: true
@@ -221,7 +221,7 @@ tests:
       - "helmfile"
       - "apply"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos helmfile apply help
     enabled: true
     snapshot: true
@@ -271,7 +271,7 @@ tests:
     args:
       - "atlantis"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos atlantis help
     enabled: true
     snapshot: true
@@ -321,7 +321,7 @@ tests:
       - "atlantis"
       - "generate"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos atlantis generate help
     enabled: true
     snapshot: true
@@ -378,7 +378,7 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
-      exit_code: 1
+      exit_code: 2
   - name: atmos atlantis generate repo-config help
     enabled: true
     snapshot: true
@@ -436,7 +436,7 @@ tests:
       - "repo-config"
       - "non-existent"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos validate editorconfig help
     enabled: true
     description: "Should show help for 'atmos validate editorconfig help'"
@@ -487,7 +487,7 @@ tests:
       - "editorconfig"
       - "non-existent"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos about non-existent
     enabled: true
     snapshot: true
@@ -500,7 +500,7 @@ tests:
       - "about"
       - "non-existent"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos about --help
     enabled: true
     snapshot: true
@@ -532,7 +532,7 @@ tests:
       - "--check"
       - "--non-existent"
     expect:
-      exit_code: 1
+      exit_code: 2
   - name: atmos terraform --help alias subcommand check
     enabled: true
     snapshot: true

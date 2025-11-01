@@ -141,12 +141,20 @@ var listCmd = &cobra.Command{
 
 		// Validate limit.
 		if listLimit < 1 || listLimit > listMaxLimit {
-			return fmt.Errorf("%w: got %d", errUtils.ErrInvalidLimit, listLimit)
+			return errUtils.Build(errUtils.ErrInvalidLimit).
+				WithExplanationf("Received %d", listLimit).
+				WithHintf("Limit must be between 1 and %d", listMaxLimit).
+				WithExitCode(2).
+				Err()
 		}
 
 		// Validate offset.
 		if listOffset < 0 {
-			return fmt.Errorf("%w: got %d", errUtils.ErrInvalidOffset, listOffset)
+			return errUtils.Build(errUtils.ErrInvalidOffset).
+				WithExplanationf("Received %d", listOffset).
+				WithHint("Offset must be 0 or greater").
+				WithExitCode(2).
+				Err()
 		}
 
 		// Validate format.

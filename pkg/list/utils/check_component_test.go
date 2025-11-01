@@ -9,6 +9,7 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
 )
 
 // TestCheckComponentExists_EmptyComponentName tests early return at utils.go:18-20.
@@ -21,6 +22,12 @@ func TestCheckComponentExists_EmptyComponentName(t *testing.T) {
 
 // TestCheckComponentExists_ExecuteDescribeStacksError tests error path at utils.go:23-26.
 func TestCheckComponentExists_ExecuteDescribeStacksError(t *testing.T) {
+	// Skip on ARM64 macOS due to gomonkey incompatibility with memory protection
+	// See: https://github.com/agiledragon/gomonkey/issues/146 (SIGBUS panics)
+	//      https://github.com/agiledragon/gomonkey/issues/122 (ARM64 permission denied)
+	//      https://github.com/agiledragon/gomonkey/issues/169 (Mac M3 failures)
+	tests.SkipOnDarwinARM64(t, "gomonkey causes SIGBUS panics on ARM64 macOS due to memory protection")
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Mock ExecuteDescribeStacks to return an error
@@ -36,6 +43,11 @@ func TestCheckComponentExists_ExecuteDescribeStacksError(t *testing.T) {
 
 // TestCheckComponentExists_EmptyStacksMap tests path at utils.go:29.
 func TestCheckComponentExists_EmptyStacksMap(t *testing.T) {
+	// Skip on ARM64 macOS due to gomonkey incompatibility with memory protection
+	// See: https://github.com/agiledragon/gomonkey/issues/146 (SIGBUS panics)
+	//      https://github.com/agiledragon/gomonkey/issues/122 (ARM64 permission denied)
+	//      https://github.com/agiledragon/gomonkey/issues/169 (Mac M3 failures)
+	tests.SkipOnDarwinARM64(t, "gomonkey causes SIGBUS panics on ARM64 macOS due to memory protection")
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Mock ExecuteDescribeStacks to return empty map
@@ -51,6 +63,11 @@ func TestCheckComponentExists_EmptyStacksMap(t *testing.T) {
 
 // TestCheckComponentExists_InvalidStackData tests type assertion at utils.go:30-33.
 func TestCheckComponentExists_InvalidStackData(t *testing.T) {
+	// Skip on ARM64 macOS due to gomonkey incompatibility with memory protection
+	// See: https://github.com/agiledragon/gomonkey/issues/146 (SIGBUS panics)
+	//      https://github.com/agiledragon/gomonkey/issues/122 (ARM64 permission denied)
+	//      https://github.com/agiledragon/gomonkey/issues/169 (Mac M3 failures)
+	tests.SkipOnDarwinARM64(t, "gomonkey causes SIGBUS panics on ARM64 macOS due to memory protection")
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Mock ExecuteDescribeStacks to return invalid stack data
@@ -68,6 +85,11 @@ func TestCheckComponentExists_InvalidStackData(t *testing.T) {
 
 // TestCheckComponentExists_NoComponentsKey tests path at utils.go:35-38.
 func TestCheckComponentExists_NoComponentsKey(t *testing.T) {
+	// Skip on ARM64 macOS due to gomonkey incompatibility with memory protection
+	// See: https://github.com/agiledragon/gomonkey/issues/146 (SIGBUS panics)
+	//      https://github.com/agiledragon/gomonkey/issues/122 (ARM64 permission denied)
+	//      https://github.com/agiledragon/gomonkey/issues/169 (Mac M3 failures)
+	tests.SkipOnDarwinARM64(t, "gomonkey causes SIGBUS panics on ARM64 macOS due to memory protection")
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Mock ExecuteDescribeStacks to return stack without components key
@@ -88,6 +110,11 @@ func TestCheckComponentExists_NoComponentsKey(t *testing.T) {
 
 // TestCheckComponentExists_InvalidComponentsType tests type assertion at utils.go:35-38.
 func TestCheckComponentExists_InvalidComponentsType(t *testing.T) {
+	// Skip on ARM64 macOS due to gomonkey incompatibility with memory protection
+	// See: https://github.com/agiledragon/gomonkey/issues/146 (SIGBUS panics)
+	//      https://github.com/agiledragon/gomonkey/issues/122 (ARM64 permission denied)
+	//      https://github.com/agiledragon/gomonkey/issues/169 (Mac M3 failures)
+	tests.SkipOnDarwinARM64(t, "gomonkey causes SIGBUS panics on ARM64 macOS due to memory protection")
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Mock ExecuteDescribeStacks to return invalid components type
@@ -107,6 +134,11 @@ func TestCheckComponentExists_InvalidComponentsType(t *testing.T) {
 
 // TestCheckComponentExists_InvalidComponentTypeMap tests type assertion at utils.go:41-44.
 func TestCheckComponentExists_InvalidComponentTypeMap(t *testing.T) {
+	// Skip on ARM64 macOS due to gomonkey incompatibility with memory protection
+	// See: https://github.com/agiledragon/gomonkey/issues/146 (SIGBUS panics)
+	//      https://github.com/agiledragon/gomonkey/issues/122 (ARM64 permission denied)
+	//      https://github.com/agiledragon/gomonkey/issues/169 (Mac M3 failures)
+	tests.SkipOnDarwinARM64(t, "gomonkey causes SIGBUS panics on ARM64 macOS due to memory protection")
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Mock ExecuteDescribeStacks to return invalid component type map
@@ -128,6 +160,11 @@ func TestCheckComponentExists_InvalidComponentTypeMap(t *testing.T) {
 
 // TestCheckComponentExists_ComponentNotFound tests path at utils.go:46-49 (not found).
 func TestCheckComponentExists_ComponentNotFound(t *testing.T) {
+	// Skip on ARM64 macOS due to gomonkey incompatibility with memory protection
+	// See: https://github.com/agiledragon/gomonkey/issues/146 (SIGBUS panics)
+	//      https://github.com/agiledragon/gomonkey/issues/122 (ARM64 permission denied)
+	//      https://github.com/agiledragon/gomonkey/issues/169 (Mac M3 failures)
+	tests.SkipOnDarwinARM64(t, "gomonkey causes SIGBUS panics on ARM64 macOS due to memory protection")
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Mock ExecuteDescribeStacks to return stacks without the target component
@@ -172,6 +209,11 @@ func TestCheckComponentExists_EmptyComponentName_NilConfig(t *testing.T) {
 
 // TestCheckComponentExists_RealComponentName_NilConfig tests nil config handling.
 func TestCheckComponentExists_RealComponentName_NilConfig(t *testing.T) {
+	// Skip on ARM64 macOS due to gomonkey incompatibility with memory protection
+	// See: https://github.com/agiledragon/gomonkey/issues/146 (SIGBUS panics)
+	//      https://github.com/agiledragon/gomonkey/issues/122 (ARM64 permission denied)
+	//      https://github.com/agiledragon/gomonkey/issues/169 (Mac M3 failures)
+	tests.SkipOnDarwinARM64(t, "gomonkey causes SIGBUS panics on ARM64 macOS due to memory protection")
 	// Mock ExecuteDescribeStacks to handle nil config gracefully
 	patches := gomonkey.ApplyFunc(e.ExecuteDescribeStacks,
 		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string) (map[string]any, error) {

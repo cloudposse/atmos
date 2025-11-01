@@ -1,12 +1,11 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -19,7 +18,7 @@ func prepareNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 		var err error
 		opts.NewPlanFile, err = generateNewPlanFile(atmosConfig, info, opts.ComponentPath, opts.TmpDir)
 		if err != nil {
-			return "", errors.Wrap(err, "error generating new plan file")
+			return "", fmt.Errorf("error generating new plan file: %w", err)
 		}
 	} else if !filepath.IsAbs(opts.NewPlanFile) {
 		// If the path is relative, make it absolute based on the component directory
@@ -28,7 +27,7 @@ func prepareNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 
 	// Make sure the new plan file exists
 	if _, err := os.Stat(opts.NewPlanFile); os.IsNotExist(err) {
-		return "", errors.Errorf("new plan file '%s' does not exist", opts.NewPlanFile)
+		return "", fmt.Errorf("%w: '%s'", errUtils.ErrNewPlanFileNotExist, opts.NewPlanFile)
 	}
 
 	return opts.NewPlanFile, nil

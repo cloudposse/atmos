@@ -17,12 +17,12 @@ import (
 )
 
 func TestMergeEnvVars(t *testing.T) {
-	// Set up test environment variables
+	// Set up test environment variables.
 	t.Setenv("PATH", "/usr/bin")
 	t.Setenv("TF_CLI_ARGS_plan", "-lock=false")
 	t.Setenv("HOME", "/home/test")
 
-	// Atmos environment variables to merge
+	// Atmos environment variables to merge.
 	componentEnv := []string{
 		"TF_CLI_ARGS_plan=-compact-warnings",
 		"ATMOS_VAR=value",
@@ -32,7 +32,7 @@ func TestMergeEnvVars(t *testing.T) {
 
 	merged := mergeEnvVars(componentEnv)
 
-	// Convert the merged list back to a map for easier assertions
+	// Convert the merged list back to a map for easier assertions.
 	mergedMap := make(map[string]string)
 	for _, env := range merged {
 		parts := strings.SplitN(env, "=", 2)
@@ -467,9 +467,9 @@ func TestExecAuthShellCommand_ExitCodePropagation(t *testing.T) {
 				assert.NoError(t, err)
 			} else {
 				require.Error(t, err)
-				var exitCodeErr errUtils.ExitCodeError
-				require.True(t, errors.As(err, &exitCodeErr), "error should be ExitCodeError")
-				assert.Equal(t, tt.expectedCode, exitCodeErr.Code)
+				var execErr *errUtils.ExecError
+				require.True(t, errors.As(err, &execErr), "error should be ExecError")
+				assert.Equal(t, tt.expectedCode, execErr.ExitCode)
 			}
 		})
 	}
@@ -532,7 +532,7 @@ func TestExecuteShellCommand(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
-		// Verify file was created and contains output
+		// Verify file was created and contains output.
 		_, err = os.Stat(logFile)
 		assert.NoError(t, err, "log file should exist")
 	})
@@ -627,7 +627,7 @@ func TestExecuteShell(t *testing.T) {
 	})
 
 	t.Run("custom env vars override parent env", func(t *testing.T) {
-		// Test that custom env vars can override parent environment variables
+		// Test that custom env vars can override parent environment variables.
 		// while still inheriting everything else like PATH.
 		if runtime.GOOS == "windows" {
 			t.Skip("Skipping Unix-specific test on Windows")

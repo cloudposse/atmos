@@ -1,6 +1,6 @@
 
 
-Outputs environment variables for the assumed identity, suitable for use by external tools such as Terraform or Helm.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+Outputs environment variables for the assumed identity, suitable for use by external tools such as Terraform or Helm.
 
 Usage:
 
@@ -83,9 +83,12 @@ Global Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
+        --verbose                    Show detailed error messages with full
+                                     stack traces (default false)
+
         --version                    Display the Atmos CLI version
 
 
-Use atmos auth env --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+Use atmos auth env --help for more information about a command.
 
 

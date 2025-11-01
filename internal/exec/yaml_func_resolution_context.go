@@ -163,31 +163,52 @@ func (ctx *ResolutionContext) Pop(atmosConfig *schema.AtmosConfiguration) {
 	}
 }
 
+const (
+	newline = "\n"
+)
+
 // buildCircularDependencyError creates a detailed error message showing the dependency chain.
 func (ctx *ResolutionContext) buildCircularDependencyError(newNode DependencyNode) error {
-	var builder strings.Builder
+	// Build dependency chain as a string builder for the error message.
+	var errMsg strings.Builder
 
-	builder.WriteString(fmt.Sprintf("%s\n\n", errUtils.ErrCircularDependency))
-	builder.WriteString("Dependency chain:\n")
+	// Add dependency chain header.
+	errMsg.WriteString("Dependency chain:")
+	errMsg.WriteString(newline + newline)
 
-	// Show the full call stack
+	// Add each node in the call stack.
 	for i, node := range ctx.CallStack {
-		builder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s'\n",
-			i+1, node.Component, node.Stack))
-		builder.WriteString(fmt.Sprintf("     → %s\n", node.FunctionCall))
+		errMsg.WriteString(fmt.Sprintf("%d. Component '%s' in stack '%s'", i+1, node.Component, node.Stack))
+		errMsg.WriteString(newline)
+		errMsg.WriteString(fmt.Sprintf("   → %s", node.FunctionCall))
+		errMsg.WriteString(newline)
 	}
 
-	// Show where the cycle completes
-	builder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s' (cycle detected)\n",
-		len(ctx.CallStack)+1, newNode.Component, newNode.Stack))
-	builder.WriteString(fmt.Sprintf("     → %s\n\n", newNode.FunctionCall))
+	// Add the new node that creates the cycle.
+	errMsg.WriteString(fmt.Sprintf("%d. Component '%s' in stack '%s' (cycle detected)", len(ctx.CallStack)+1, newNode.Component, newNode.Stack))
+	errMsg.WriteString(newline)
+	errMsg.WriteString(fmt.Sprintf("   → %s", newNode.FunctionCall))
+	errMsg.WriteString(newline + newline)
 
-	builder.WriteString("To fix this issue:\n")
-	builder.WriteString("  - Review your component dependencies and break the circular reference\n")
-	builder.WriteString("  - Consider using Terraform data sources or direct remote state instead\n")
-	builder.WriteString("  - Ensure dependencies flow in one direction only\n")
+	// Add fix suggestions.
+	errMsg.WriteString("To fix this issue:")
+	errMsg.WriteString(newline)
+	errMsg.WriteString("• Review your component dependencies and break the circular reference")
+	errMsg.WriteString(newline)
+	errMsg.WriteString("• Consider using Terraform data sources or direct remote state instead")
+	errMsg.WriteString(newline)
+	errMsg.WriteString("• Ensure dependencies flow in one direction only")
 
-	return fmt.Errorf("%w: %s", errUtils.ErrCircularDependency, builder.String())
+	// Wrap the sentinel error with the complete message.
+	// This ensures err.Error() returns the full formatted message for tests.
+	err := fmt.Errorf("%w"+newline+newline+"%s", errUtils.ErrCircularDependency, errMsg.String())
+
+	// Add structured metadata for the formatter and Sentry.
+	return errUtils.Build(err).
+		WithContext("component", newNode.Component).
+		WithContext("stack", newNode.Stack).
+		WithExitCode(1).
+		Err()
 }
 
 // Clone creates a copy of the resolution context for use in concurrent operations.

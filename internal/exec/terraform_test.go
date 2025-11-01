@@ -655,9 +655,9 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 			// Check the output for drift/no drift and pro warning
 			assert.Contains(t, output, "Changes to Outputs", "Expected 'Changes to Outputs' in output")
 			if tc.checkProWarning {
-				assert.Contains(t, output, "Pro is not enabled. Skipping upload of Terraform result.")
+				assert.Contains(t, output, "Atmos Pro is not enabled for this component. Skipping upload of Terraform plan result.")
 			} else {
-				assert.NotContains(t, output, "Pro is not enabled. Skipping upload of Terraform result.")
+				assert.NotContains(t, output, "Atmos Pro is not enabled for this component. Skipping upload of Terraform plan result.")
 			}
 		})
 	}

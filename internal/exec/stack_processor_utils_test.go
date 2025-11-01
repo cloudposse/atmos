@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"io/fs"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -264,6 +265,9 @@ func TestProcessYAMLConfigFileMissingFilesReturnError(t *testing.T) {
 	filePath := "../../tests/fixtures/scenarios/invalid-stacks/stacks/orgs/acme/platform/not-present.yaml"
 
 	atmosConfig := schema.AtmosConfiguration{
+		Stacks: schema.Stacks{
+			BasePath: "stacks",
+		},
 		Templates: schema.Templates{
 			Settings: schema.TemplatesSettings{
 				Enabled: true,
@@ -294,7 +298,15 @@ func TestProcessYAMLConfigFileMissingFilesReturnError(t *testing.T) {
 		"",
 	)
 
+	// Verify error is returned.
 	assert.Error(t, err)
+
+	// Verify it's a file not found error (from os.ReadFile).
+	assert.ErrorIs(t, err, fs.ErrNotExist)
+
+	// Verify error message contains file path.
+	errMsg := err.Error()
+	assert.Contains(t, errMsg, "not-present.yaml")
 }
 
 func TestProcessYAMLConfigFileEmptyManifest(t *testing.T) {

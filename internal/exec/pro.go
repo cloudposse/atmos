@@ -59,7 +59,11 @@ func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmd
 	}
 
 	if component == "" || stack == "" {
-		return ProLockUnlockCmdArgs{}, errUtils.ErrComponentAndStackRequired
+		return ProLockUnlockCmdArgs{}, errUtils.Build(errUtils.ErrComponentAndStackRequired).
+			WithHint("Provide a component as the first argument").
+			WithHint("Specify the stack using the '--stack' or '-s' flag").
+			WithExitCode(2).
+			Err()
 	}
 
 	result := ProLockUnlockCmdArgs{
@@ -269,8 +273,8 @@ func shouldUploadStatus(info *schema.ConfigAndStacksInfo) bool {
 		}
 	}
 
-	// Log warning if pro is not enabled
-	log.Warn("Pro is not enabled. Skipping upload of Terraform result.")
+	// Log warning if pro is not enabled (only reaches here if upload was explicitly requested)
+	log.Warn("Atmos Pro is not enabled for this component. Skipping upload of Terraform plan result.", "component", info.Component, "stack", info.Stack)
 
 	return false
 }

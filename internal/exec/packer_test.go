@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
@@ -351,7 +352,7 @@ func TestExecutePacker_Errors(t *testing.T) {
 
 		err := ExecutePacker(&info, &packerFlags)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "`component` is required")
+		assert.ErrorIs(t, err, errUtils.ErrMissingComponent)
 	})
 
 	t.Run("invalid packer template syntax", func(t *testing.T) {

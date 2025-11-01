@@ -13,7 +13,7 @@ tests:
       diff: []
       stderr:
         - 'ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion\? current=11, max=10'
-        - 'subcommand exited with code 1'
+        - 'workflow step execution failed with exit code 1'
       exit_code: 1
   - name: atmos workflow pla --file workflow1
     enabled: true
@@ -29,10 +29,10 @@ tests:
     expect:
       diff: []
       stderr:
-        - "No workflow exists"
+        - "does not exist"
         - "test-1"
         - "terraform-plan-all-test-components"
-      exit_code: 1
+      exit_code: 2
   - name: atmos invalidCommand
     enabled: true
     snapshot: true

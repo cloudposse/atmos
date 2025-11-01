@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -21,7 +22,7 @@ func (e DescribeConfigFormatError) Error() string {
 	return fmt.Sprintf("invalid 'format': %s", e.format)
 }
 
-var ErrTTYNotSupported = fmt.Errorf("tty not supported for this command")
+var ErrTTYNotSupported = errors.New("tty not supported for this command")
 
 type describeConfigExec struct {
 	atmosConfig           *schema.AtmosConfiguration

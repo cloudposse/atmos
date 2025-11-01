@@ -81,12 +81,13 @@ func ExecuteWorkflow(
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
-		errUtils.CheckErrorAndPrint(
-			ErrWorkflowNoSteps,
-			WorkflowErrTitle,
-			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", workflow),
-		)
-		return ErrWorkflowNoSteps
+		err := errUtils.Build(ErrWorkflowNoSteps).
+			WithTitle(WorkflowErrTitle).
+			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", workflow).
+			WithExitCode(2).
+			Err()
+		errUtils.CheckErrorAndPrint(err, "", "")
+		return err
 	}
 
 	// Check if the workflow steps have the `name` attribute
@@ -109,11 +110,11 @@ func ExecuteWorkflow(
 
 		if len(steps) == 0 {
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
-			errUtils.CheckErrorAndPrint(
-				ErrInvalidFromStep,
-				WorkflowErrTitle,
-				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, FormatList(stepNames)),
-			)
+			err := errUtils.Build(ErrInvalidFromStep).
+				WithTitle(WorkflowErrTitle).
+				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.\n\n### Available steps:\n%s", fromStep, workflow, FormatList(stepNames)).
+				Err()
+			errUtils.CheckErrorAndPrint(err, "", "")
 			return ErrInvalidFromStep
 		}
 	}
@@ -232,16 +233,19 @@ func ExecuteWorkflow(
 				ExecuteShellCommand,
 				atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
 		} else {
-			errUtils.CheckErrorAndPrint(
-				ErrInvalidWorkflowStepType,
-				WorkflowErrTitle,
-				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, FormatList([]string{"atmos", "shell"})),
-			)
-			return ErrInvalidWorkflowStepType
+			err := errUtils.Build(ErrInvalidWorkflowStepType).
+				WithTitle(WorkflowErrTitle).
+				WithExplanationf("Step type `%s` is not supported. Each step must specify a valid type.\n\n### Available types:\n%s", commandType, FormatList([]string{"atmos", "shell"})).
+				Err()
+			errUtils.CheckErrorAndPrint(err, "", "")
+			return err
 		}
 
 		if err != nil {
 			log.Debug("Workflow failed", "error", err)
+
+			// Extract exit code from error.
+			exitCode := errUtils.GetExitCode(err)
 
 			// Remove the workflow base path, stacks/workflows
 			workflowFileName := strings.TrimPrefix(filepath.ToSlash(workflowPath), filepath.ToSlash(atmosConfig.Workflows.BasePath))
@@ -258,7 +262,7 @@ func ExecuteWorkflow(
 				step.Name,
 			)
 
-			// Add stack parameter to resume command if a stack was used
+			// Add stack parameter to resume command if a stack was used.
 			if finalStack != "" {
 				resumeCommand = fmt.Sprintf("%s -s %s", resumeCommand, finalStack)
 			}
@@ -266,22 +270,26 @@ func ExecuteWorkflow(
 			failedCmd := command
 			if commandType == config.AtmosCommand {
 				failedCmd = config.AtmosCommand + " " + command
-				// Add stack parameter to failed command if a stack was used
+				// Add stack parameter to failed command if a stack was used.
 				if finalStack != "" {
 					failedCmd = fmt.Sprintf("%s -s %s", failedCmd, finalStack)
 				}
 			}
 
-			errUtils.CheckErrorAndPrint(
-				ErrWorkflowStepFailed,
-				WorkflowErrTitle,
-				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
-			)
-			// Return joined error to preserve classification and exit-code unwrapping.
-			// Returning only the underlying err drops ErrWorkflowStepFailed from the error chain,
-			// which can hinder classification and checks. Join both so callers can use
-			// errors.Is(err, ErrWorkflowStepFailed) and still unwrap ExitCodeError for proper exit codes.
-			return errors.Join(ErrWorkflowStepFailed, err)
+			// Build workflow error with structured context.
+			// Use WorkflowStepError to distinguish workflow orchestration failures
+			// from raw command execution failures (ExecError).
+			baseErr := errUtils.Build(ErrWorkflowStepFailed).
+				WithTitle("Workflow Error").
+				WithExplanationf("The following command failed to execute:\n\n%s", failedCmd).
+				WithHintf("To resume the workflow from this step, run:\n\n%s", resumeCommand).
+				Err()
+
+			// Wrap in WorkflowStepError to preserve workflow context and exit code.
+			stepErr := errUtils.NewWorkflowStepError(workflow, step.Name, failedCmd, exitCode, baseErr)
+
+			errUtils.CheckErrorAndPrint(stepErr, "", "")
+			return stepErr
 		}
 	}
 
@@ -308,7 +316,12 @@ func ExecuteDescribeWorkflows(
 	allResult := make(map[string]schema.WorkflowManifest)
 
 	if atmosConfig.Workflows.BasePath == "" {
-		return nil, nil, nil, errUtils.ErrWorkflowBasePathNotConfigured
+		return nil, nil, nil, errUtils.Build(errUtils.ErrWorkflowBasePathNotConfigured).
+			WithHint("Configure 'workflows.base_path' in atmos.yaml").
+			WithHint("Set the base path where workflow manifests are stored").
+			WithHint("See https://atmos.tools/cli/configuration for details").
+			WithExitCode(1).
+			Err()
 	}
 
 	// If `workflows.base_path` is a relative path, join it with `stacks.base_path`
@@ -321,7 +334,14 @@ func ExecuteDescribeWorkflows(
 
 	isDirectory, err := u.IsDirectory(workflowsDir)
 	if err != nil || !isDirectory {
-		return nil, nil, nil, fmt.Errorf("the workflow directory '%s' does not exist. Review 'workflows.base_path' in 'atmos.yaml'", workflowsDir)
+		err := errUtils.Build(errUtils.ErrWorkflowDirectoryDoesNotExist).
+			WithExplanationf("The workflow directory '%s' does not exist", workflowsDir).
+			WithHintf("Create the directory: mkdir -p %s", workflowsDir).
+			WithHintf("Or update `workflows.base_path` in `atmos.yaml` (currently: %s)", atmosConfig.Workflows.BasePath).
+			WithHint("See https://atmos.tools/core-concepts/workflows for workflow configuration").
+			WithExitCode(2).
+			Err()
+		return nil, nil, nil, err
 	}
 
 	files, err := u.GetAllYamlFilesInDir(workflowsDir)

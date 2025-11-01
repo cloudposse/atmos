@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -13,8 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
+	"github.com/cockroachdb/errors"
 	"github.com/open-policy-agent/opa/loader"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/sdk"
@@ -22,6 +20,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -67,7 +66,14 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 			if err2 != nil {
 				return false, err2
 			}
-			return false, errors.Join(errUtils.ErrValidation, fmt.Errorf("%s", string(b)))
+			err := errUtils.Build(errors.Join(errUtils.ErrValidation, fmt.Errorf("%s", string(b)))).
+				WithContext("schema", schemaName).
+				WithHintf("Review the JSON schema: `%s`", schemaName).
+				WithHint("Fix the validation errors listed above in your configuration").
+				WithHint("Use `atmos validate component <component> -s <stack>` to revalidate").
+				WithExitCode(2).
+				Err()
+			return false, err
 		default:
 			return false, err
 		}
@@ -164,7 +170,14 @@ func ValidateWithOpa(
 		return false, fmt.Errorf(errContextFormat, errUtils.ErrInvalidRegoPolicy, schemaPath)
 	}
 	if len(ers) > 0 {
-		return false, fmt.Errorf(errContextFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		err := errUtils.Build(fmt.Errorf(errContextFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))).
+			WithContext("policy", schemaPath).
+			WithHintf("Review the OPA policy in `%s`", schemaPath).
+			WithHint("Fix the violations listed above in your component configuration").
+			WithHint("Use `atmos describe component <component> -s <stack>` to see the full configuration").
+			WithExitCode(2).
+			Err()
+		return false, err
 	}
 
 	return true, nil
@@ -257,7 +270,14 @@ func ValidateWithOpaLegacy(
 
 	ers, ok := result.Result.([]any)
 	if ok && len(ers) > 0 {
-		return false, fmt.Errorf(errContextFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		err := errUtils.Build(fmt.Errorf(errContextFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))).
+			WithContext("policy", schemaName).
+			WithHintf("Review the OPA policy in `%s`", schemaName).
+			WithHint("Fix the violations listed above in your component configuration").
+			WithHint("See https://atmos.tools/core-concepts/validate for validation documentation").
+			WithExitCode(2).
+			Err()
+		return false, err
 	}
 
 	return true, nil
@@ -268,7 +288,7 @@ func ValidateWithOpaLegacy(
 func ValidateWithCue(data any, schemaName string, schemaText string) (bool, error) {
 	defer perf.Track(nil, "exec.ValidateWithCue")()
 
-	return false, errors.New("validation using CUE is not supported yet")
+	return false, errUtils.ErrCUEValidationUnsupported
 }
 
 // isWindowsOPALoadError checks if the error is likely a Windows-specific OPA loading issue.

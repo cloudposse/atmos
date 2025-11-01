@@ -26,9 +26,7 @@ lint: deps lintroller gomodcheck custom-gcl
 # Build custom golangci-lint binary with lintroller plugin.
 # Uses a temporary directory to prevent git corruption during pre-commit hooks
 custom-gcl: tools/lintroller/.lintroller .custom-gcl.yml
-	@echo "Building custom golangci-lint binary with lintroller plugin..."
-	@GOFLAGS="-buildvcs=false" golangci-lint custom
-	@echo "Custom golangci-lint binary built successfully: ./custom-gcl"
+	@./scripts/build-custom-golangci-lint.sh
 
 # Custom linter for Atmos-specific rules (t.Setenv misuse, os.Setenv in tests, os.MkdirTemp in tests).
 .PHONY: lintroller

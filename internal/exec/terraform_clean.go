@@ -21,18 +21,18 @@ var (
 	ErrParseTerraformComponents  = errors.New("could not parse Terraform components")
 	ErrParseComponentsAttributes = errors.New("could not parse component attributes")
 	ErrDescribeStack             = errors.New("error describe stacks")
-	ErrEmptyPath                 = errors.New("path cannot be empty")
-	ErrPathNotExist              = errors.New("path not exist")
-	ErrFileStat                  = errors.New("error get file stat")
-	ErrMatchPattern              = errors.New("error matching pattern")
-	ErrReadDir                   = errors.New("error reading directory")
+	ErrEmptyPath                 = errors.New("path is empty")
+	ErrPathNotExist              = errors.New("path does not exist")
+	ErrFileStat                  = errors.New("failed to get file stat")
+	ErrMatchPattern              = errors.New("pattern matching failed")
+	ErrReadDir                   = errors.New("failed to read directory")
 	ErrFailedFoundStack          = errors.New("failed to find stack folders")
 	ErrCollectFiles              = errors.New("failed to collect files")
-	ErrEmptyEnvDir               = errors.New("ENV TF_DATA_DIR is empty")
-	ErrResolveEnvDir             = errors.New("error resolving TF_DATA_DIR path")
+	ErrEmptyEnvDir               = errors.New("TF_DATA_DIR environment variable is empty")
+	ErrResolveEnvDir             = errors.New("failed to resolve TF_DATA_DIR path")
 	ErrRefusingToDeleteDir       = errors.New("refusing to delete root directory")
-	ErrRefusingToDelete          = errors.New("refusing to delete directory containing")
-	ErrRootPath                  = errors.New("root path cannot be empty")
+	ErrRefusingToDelete          = errors.New("refusing to delete directory")
+	ErrRootPath                  = errors.New("root path is empty")
 	ErrUserAborted               = errors.New("mission aborted")
 )
 
@@ -104,7 +104,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 	addFileInfo := func(filePath string) (*ObjectInfo, error) {
 		relativePath, err := filepath.Rel(basePath, filePath)
 		if err != nil {
-			return nil, fmt.Errorf("%w  %s: %v", ErrRelPath, filePath, err)
+			return nil, fmt.Errorf("%w  %s: %w", errUtils.ErrRelPath, filePath, err)
 		}
 		info, err := os.Stat(filePath)
 		if os.IsNotExist(err) {
@@ -125,7 +125,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 	createFolder := func(folderPath string, folderName string) (*Directory, error) {
 		relativePath, err := filepath.Rel(basePath, folderPath)
 		if err != nil {
-			return nil, fmt.Errorf("%w %s: %v", ErrRelPath, folderPath, err)
+			return nil, fmt.Errorf("%w %s: %w", errUtils.ErrRelPath, folderPath, err)
 		}
 
 		return &Directory{

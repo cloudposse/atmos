@@ -2,7 +2,6 @@ package exec
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -60,7 +59,11 @@ func (c *componentPathPatternCache) getComponentPathPattern(
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, component)
 	default:
 		// Unknown component type - return pattern without caching.
-		return "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
+		return "", errUtils.Build(errUtils.ErrUnsupportedComponentType).
+			WithExplanationf("Received component type: %s", componentType).
+			WithHint("Supported component types are: terraform, helmfile, packer").
+			WithExitCode(1).
+			Err()
 	}
 
 	componentPathAbs, err := filepath.Abs(componentPath)

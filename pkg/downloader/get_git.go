@@ -118,7 +118,11 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 	}
 
 	if _, err := exec.LookPath(gitCommand); err != nil {
-		return errUtils.ErrGitNotAvailable
+		return errUtils.Build(errUtils.ErrGitNotAvailable).
+			WithHint("Ensure git is installed on your system").
+			WithHint("Verify git is in your PATH environment variable").
+			WithExitCode(1).
+			Err()
 	}
 
 	// The port number must be parseable as an integer. If not, the user

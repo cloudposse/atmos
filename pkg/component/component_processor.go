@@ -102,8 +102,14 @@ func ProcessComponentFromContext(
 		}
 
 	default:
-		log.Error(errUtils.ErrMissingStackNameTemplateAndPattern)
-		return nil, errUtils.ErrMissingStackNameTemplateAndPattern
+		err := errUtils.Build(errUtils.ErrMissingStackNameTemplateAndPattern).
+			WithHint("Configure 'stacks.name_template' in atmos.yaml to use template-based naming").
+			WithHint("Or configure 'stacks.name_pattern' in atmos.yaml to use pattern-based naming").
+			WithHint("See https://atmos.tools/cli/configuration for details").
+			WithExitCode(1).
+			Err()
+		log.Error(err)
+		return nil, err
 	}
 
 	return ProcessComponentInStack(component, stack, atmosCliConfigPath, atmosBasePath)

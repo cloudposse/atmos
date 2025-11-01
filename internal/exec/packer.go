@@ -59,7 +59,7 @@ func ExecutePacker(
 	}
 
 	if len(info.Stack) < 1 {
-		return errUtils.ErrMissingStack
+		return errUtils.WithExitCode(errUtils.ErrMissingStack, 2)
 	}
 
 	if !info.ComponentIsEnabled {
@@ -138,7 +138,14 @@ func ExecutePacker(
 		}
 	}
 	if template == "" {
-		return errUtils.ErrMissingPackerTemplate
+		return errUtils.Build(errUtils.ErrMissingPackerTemplate).
+			WithHint("Specify the template in the `settings.packer.template` section in your component manifest").
+			WithHint("Or provide it on the command line: `atmos packer build <component> -s <stack> --template <template>`").
+			WithHint("Use the shorthand flag: `-t <template>`").
+			WithContext("component", info.ComponentFromArg).
+			WithContext("stack", info.Stack).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Print component variables.

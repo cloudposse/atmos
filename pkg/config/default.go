@@ -5,18 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
 var (
-	NotFound = errors.New("\n'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
-		"\nYou can download a sample config and adapt it to your requirements from " +
-		"https://raw.githubusercontent.com/cloudposse/atmos/main/examples/quick-start-advanced/atmos.yaml")
+	// NotFound is deprecated. Use errUtils.ErrAtmosConfigNotFound instead.
+	NotFound = errUtils.ErrAtmosConfigNotFound
 
 	defaultCliConfig = schema.AtmosConfiguration{
 		Default:  true,

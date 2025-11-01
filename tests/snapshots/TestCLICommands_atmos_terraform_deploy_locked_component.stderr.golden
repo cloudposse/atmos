@@ -1,6 +1,16 @@
 
-# Error                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-locked component cannot be provisioned: component 'mock' cannot be modified (metadata.locked: true)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+# Error
+
+**Error:** locked component cannot be provisioned
+
+## Explanation
+
+component 'mock' cannot be modified (metadata.locked: true)
+
+## Hints
+
+💡 Remove metadata.locked: true from the component configuration to enable modifications
+
+💡 Locked components are read-only to prevent accidental changes
 
 

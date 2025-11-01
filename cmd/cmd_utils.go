@@ -4,14 +4,13 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
@@ -163,7 +162,11 @@ func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string)
 
 	// If the command doesn't exist, create it
 	if cmd == nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias), "", "")
+		err := errUtils.Build(errUtils.ErrInvalidArguments).
+			WithHintf("Subcommand `%s` not found for alias `%s`.", parts[0], alias).
+			WithExitCode(2).
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	// If there are more parts, recurse for the next level
@@ -245,8 +248,12 @@ func preCustomCommand(
 			errUtils.Exit(1)
 		} else {
 			// truly invalid, nothing to do
-			er := errors.New(fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()))
-			errUtils.CheckErrorPrintAndExit(er, "Invalid Command", "https://atmos.tools/cli/configuration/commands")
+			baseErr := fmt.Errorf("%w: The `%s` command has no steps or subcommands configured", errUtils.ErrInvalidArguments, cmd.CommandPath())
+			er := errUtils.Build(baseErr).
+				WithTitle("Invalid Command").
+				WithHint("For more information, refer to the docs at https://atmos.tools/cli/configuration/commands").
+				Err()
+			errUtils.CheckErrorPrintAndExit(er, "", "")
 		}
 	}
 
@@ -275,7 +282,11 @@ func preCustomCommand(
 		if len(args) > 0 {
 			sb.WriteString(fmt.Sprintf("\nReceived %d argument(s): %s\n", len(args), strings.Join(args, ", ")))
 		}
-		errUtils.CheckErrorPrintAndExit(errors.New(sb.String()), "", "")
+		err := errUtils.Build(errUtils.ErrInvalidArguments).
+			WithHint(sb.String()).
+			WithExitCode(2).
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	// Merge user-supplied arguments with defaults
@@ -290,7 +301,11 @@ func preCustomCommand(
 			} else {
 				// This theoretically shouldn't happen:
 				sb.WriteString(fmt.Sprintf("Missing required argument '%s' with no default!\n", arg.Name))
-				errUtils.CheckErrorPrintAndExit(errors.New(sb.String()), "", "")
+				err := errUtils.Build(errUtils.ErrInvalidArguments).
+					WithHint(sb.String()).
+					WithExitCode(2).
+					Err()
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 		}
 	}
@@ -427,16 +442,22 @@ func executeCustomCommand(
 			component, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if component == "" || component == "<no value>" {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
-					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
+				err := errUtils.Build(errUtils.ErrInvalidArguments).
+					WithHintf("Invalid `component_config.component`: %s in %s.", commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension).
+					WithExitCode(2).
+					Err()
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
 			// Process Go templates in the command's 'component_config.stack'
 			stack, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if stack == "" || stack == "<no value>" {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
-					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
+				err := errUtils.Build(errUtils.ErrInvalidArguments).
+					WithHintf("Invalid `component_config.stack`: %s in %s.", commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension).
+					WithExitCode(2).
+					Err()
+				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
 
 			// Get the config for the component in the stack
@@ -543,12 +564,41 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
 			printMessageForMissingAtmosConfig(atmosConfig)
-			errUtils.Exit(1)
 		}
 	}
 }
 
-// printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
+// buildMissingAtmosConfigError builds an enhanced error when Atmos stacks directory doesn't exist.
+func buildMissingAtmosConfigError(atmosConfig *schema.AtmosConfiguration) error {
+	// Create structured error with context and hints
+	stacksErr := errUtils.ErrStacksDirectoryDoesNotExist
+
+	// Add explanation with resolved path
+	stacksErr = errors.WithDetail(stacksErr, fmt.Sprintf(
+		"The `atmos.yaml` config file specifies the stacks directory as `%s`, "+
+			"but the resolved absolute path does not exist:\n\n    %s",
+		atmosConfig.Stacks.BasePath,
+		atmosConfig.StacksBaseAbsolutePath))
+
+	// Get current directory
+	cwd, _ := os.Getwd()
+
+	// Build with context using ErrorBuilder
+	return errUtils.Build(stacksErr).
+		WithTitle("Missing Configuration").
+		WithContext("config_file", atmosConfig.CliConfigPath).
+		WithContext("base_path", atmosConfig.BasePath).
+		WithContext("stacks_base_path", atmosConfig.Stacks.BasePath).
+		WithContext("cwd", cwd).
+		WithContext("resolved_path", atmosConfig.StacksBaseAbsolutePath).
+		WithHint("Unset `base_path` in `atmos.yaml` to use auto-detection (recommended)").
+		WithHint("Run Atmos from your Git repository root - it will auto-detect paths").
+		WithHint("Or set `base_path` to the directory containing your `atmos.yaml`").
+		WithExitCode(2).
+		Err()
+}
+
+// printMessageForMissingAtmosConfig prints Atmos logo and error message when stacks directory doesn't exist.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	fmt.Println()
 	err := tuiUtils.PrintStyledText("ATMOS")
@@ -557,22 +607,9 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	// Check if we're in a git repo. Warn if not.
 	verifyInsideGitRepo()
 
-	stacksDir := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
-
-	u.PrintfMarkdownToTUI("\n")
-
-	if atmosConfig.Default {
-		// If Atmos did not find an `atmos.yaml` config file and is using the default config.
-		u.PrintfMarkdownToTUI(missingConfigDefaultMarkdown, stacksDir)
-	} else {
-		// If Atmos found an `atmos.yaml` config file, but it defines invalid paths to Atmos stacks and components.
-		u.PrintfMarkdownToTUI(missingConfigFoundMarkdown, stacksDir)
-	}
-
-	u.PrintfMarkdownToTUI("\n")
-
-	// Use markdown formatting for consistent output to stderr.
-	u.PrintfMarkdownToTUI("%s", gettingStartedMarkdown)
+	// Build the error and print it with exit.
+	enrichedErr := buildMissingAtmosConfigError(&atmosConfig)
+	errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
 }
 
 // CheckForAtmosUpdateAndPrintMessage checks if a version update is needed and prints a message if a newer version is found.
@@ -651,17 +688,15 @@ func showUsageAndExit(cmd *cobra.Command, args []string) {
 }
 
 func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
-	unknownCommand := fmt.Sprintf("%v for command `%s`\n\n", err.Error(), cmd.CommandPath())
-	args := strings.Split(err.Error(), ": ")
-	if len(args) == 2 {
-		if strings.Contains(args[0], "flag needs an argument") {
-			unknownCommand = fmt.Sprintf("`%s` %s for command `%s`\n\n", args[1], args[0], cmd.CommandPath())
-		} else {
-			unknownCommand = fmt.Sprintf("%s `%s` for command `%s`\n\n", args[0], args[1], cmd.CommandPath())
-		}
-	}
-	showUsageExample(cmd, unknownCommand)
-	errUtils.Exit(1)
+	// Build error message with hint using cockroachdb/errors.
+	flagErr := fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, err.Error())
+	flagErr = errors.WithHintf(flagErr, "Run `%s --help` for usage", cmd.CommandPath())
+
+	// Use error formatter with markdown support (works even if atmosConfig is nil).
+	// Verbose mode is controlled by --verbose flag, ATMOS_VERBOSE env var, or config file.
+	formatted := errUtils.Format(flagErr, errUtils.DefaultFormatterConfig())
+	u.PrintfMessageToTUI("%s\n", formatted)
+	errUtils.Exit(2)
 	return nil
 }
 
@@ -742,10 +777,13 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 	} else {
 		if len(cmd.Commands()) > 0 {
 			details += "\nValid subcommands are:\n"
-		}
-		// Retrieve valid subcommands dynamically
-		for _, subCmd := range cmd.Commands() {
-			details = details + "* " + subCmd.Name() + "\n"
+			// Retrieve valid subcommands dynamically
+			for _, subCmd := range cmd.Commands() {
+				details = details + "* " + subCmd.Name() + "\n"
+			}
+		} else {
+			// No subcommands available for this command
+			details += "\nThis command does not accept subcommands.\n"
 		}
 	}
 	showUsageExample(cmd, details)
@@ -753,12 +791,40 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 
 func showUsageExample(cmd *cobra.Command, details string) {
 	contentName := strings.ReplaceAll(strings.ReplaceAll(cmd.CommandPath(), " ", "_"), "-", "_")
-	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
+
+	// Build error message - details already contains formatted content
+	// We wrap it to preserve the sentinel error type
+	baseErr := fmt.Errorf("%w\n\n%s", errUtils.ErrInvalidArguments, strings.TrimSpace(details))
+
+	// Build error with title and exit code
+	errBuilder := errUtils.Build(baseErr).
+		WithTitle("Incorrect Usage").
+		WithExitCode(2)
+
+	// Add usage examples or default help hint
 	if exampleContent, ok := examples[contentName]; ok {
-		suggestion = exampleContent.Suggestion
-		details += "\n## Usage Examples:\n" + exampleContent.Content
+		if exampleContent.Content != "" {
+			errBuilder = errBuilder.WithExample(exampleContent.Content)
+		}
+		if exampleContent.Suggestion != "" {
+			// If suggestion is a URL, add "For more information" prefix
+			suggestion := exampleContent.Suggestion
+			if strings.HasPrefix(suggestion, "http://") || strings.HasPrefix(suggestion, "https://") {
+				suggestion = fmt.Sprintf("For more information, refer to the docs at %s", suggestion)
+			}
+			errBuilder = errBuilder.WithHint(suggestion)
+		} else {
+			// No suggestion provided, add default help hint using current command
+			errBuilder = errBuilder.WithHintf("Run `%s --help` for usage", cmd.CommandPath())
+		}
+	} else {
+		// No example found, add default help hint using current command
+		errBuilder = errBuilder.WithHintf("Run `%s --help` for usage", cmd.CommandPath())
 	}
-	errUtils.CheckErrorPrintAndExit(errors.New(details), "Incorrect Usage", suggestion)
+
+	// Use CheckErrorPrintAndExit - pass empty strings since we're using error builder
+	err := errBuilder.Err()
+	errUtils.CheckErrorPrintAndExit(err, "", "")
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

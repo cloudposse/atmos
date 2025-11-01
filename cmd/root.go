@@ -48,6 +48,8 @@ const (
 	logFileMode = 0o644
 	// DefaultTopFunctionsMax is the default number of top functions to display in performance summary.
 	defaultTopFunctionsMax = 50
+	// VerboseFlagName is the name of the verbose flag.
+	verboseFlagName = "verbose"
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -111,11 +113,21 @@ func processChdirFlag(cmd *cobra.Command) error {
 
 // RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
-	Use:                "atmos",
-	Short:              "Universal Tool for DevOps and Cloud Automation",
-	Long:               `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
-	FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
+	Use:           "atmos",
+	Short:         "Universal Tool for DevOps and Cloud Automation",
+	Long:          `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+	SilenceErrors: true,
+	SilenceUsage:  true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Set verbose flag for error formatting before any command execution or fatal exits.
+		if cmd.Flags().Changed(verboseFlagName) {
+			verbose, flagErr := cmd.Flags().GetBool(verboseFlagName)
+			if flagErr != nil {
+				errUtils.CheckErrorPrintAndExit(flagErr, "", "")
+			}
+			errUtils.SetVerboseFlag(verbose)
+		}
+
 		// Determine if the command is a help command or if the help flag is set.
 		isHelpCommand := cmd.Name() == "help"
 		helpFlag := cmd.Flags().Changed("help")
@@ -156,7 +168,11 @@ var RootCmd = &cobra.Command{
 					log.Warn(err.Error())
 				}
 			} else {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				// Only exit on config errors if this is not the version command.
+				// Version command should work even with invalid config.
+				if !isVersionCommand() {
+					errUtils.CheckErrorPrintAndExit(err, "", "")
+				}
 			}
 		}
 
@@ -185,8 +201,8 @@ var RootCmd = &cobra.Command{
 			perf.EnableTracking(true)
 		}
 
-		// Print telemetry disclosure if needed (skip for completion commands and when CLI config not found).
-		if !isCompletionCommand(cmd) && err == nil {
+		// Print telemetry disclosure if needed (skip for completion commands, help commands, and when CLI config not found).
+		if !isCompletionCommand(cmd) && !isHelpRequested && err == nil {
 			telemetry.PrintTelemetryDisclosure()
 		}
 	},
@@ -295,6 +311,11 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetOutput(output)
 	}
 	if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+		validLevels := log.GetValidLogLevels()
+		err = errUtils.Build(err).
+			WithHintf("Valid options are: %v", validLevels).
+			WithExitCode(1).
+			Err()
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 	log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
@@ -509,14 +530,17 @@ func Execute() error {
 	// Set atmosConfig for version command (needs access to config).
 	version.SetAtmosConfig(&atmosConfig)
 
-	utils.InitializeMarkdown(atmosConfig)
-	errUtils.InitializeMarkdown(atmosConfig)
+	utils.InitializeMarkdown(&atmosConfig)
+	errUtils.InitializeMarkdown(&atmosConfig)
 
+	// Store config error but don't return it yet - we need to parse flags first
+	// to provide better error messages for invalid flags.
+	var configErr error
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
 			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		} else {
-			return initErr
+			configErr = initErr
 		}
 	}
 
@@ -542,13 +566,23 @@ func Execute() error {
 	cmd, err := RootCmd.ExecuteC()
 
 	telemetry.CaptureCmd(cmd, err)
+
+	// Handle Cobra errors (invalid commands, flags) before config errors.
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
 			command := getInvalidCommandName(err.Error())
-			showUsageAndExit(RootCmd, []string{command})
+			showUsageAndExit(cmd, []string{command})
 		}
+		// Unknown flag errors are handled by SetFlagErrorFunc (showFlagUsageAndExit).
+		return err
 	}
-	return err
+
+	// Now return config errors if flag parsing succeeded.
+	if configErr != nil {
+		return configErr
+	}
+
+	return nil
 }
 
 // isCompletionCommand checks if the current invocation is for shell completion.
@@ -674,6 +708,10 @@ func init() {
 	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
+	RootCmd.PersistentFlags().Bool(verboseFlagName, false, "Show detailed error messages with full stack traces")
+	_ = viper.BindPFlag(verboseFlagName, RootCmd.PersistentFlags().Lookup(verboseFlagName))
+	viper.SetEnvPrefix("ATMOS")
+	_ = viper.BindEnv(verboseFlagName, "ATMOS_VERBOSE")
 	RootCmd.PersistentFlags().String("pager", "", "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)")
 	// Set NoOptDefVal so --pager without value means "true".
 	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"

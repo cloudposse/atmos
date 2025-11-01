@@ -4,10 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
-	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
@@ -15,18 +14,19 @@ import (
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
-	ErrGettingCommonFlags    = pkgerrors.New("error getting common flags")
-	ErrGettingAbstractFlag   = pkgerrors.New("error getting abstract flag")
-	ErrGettingVarsFlag       = pkgerrors.New("error getting vars flag")
-	ErrInitializingCLIConfig = pkgerrors.New("error initializing CLI config")
-	ErrDescribingStacks      = pkgerrors.New("error describing stacks")
-	ErrComponentNameRequired = pkgerrors.New("component name is required")
-	ErrInvalidArguments      = pkgerrors.New("invalid arguments: the command requires one argument 'component'")
+	ErrGettingCommonFlags    = errors.New("error getting common flags")
+	ErrGettingAbstractFlag   = errors.New("error getting abstract flag")
+	ErrGettingVarsFlag       = errors.New("error getting vars flag")
+	ErrInitializingCLIConfig = errors.New("error initializing CLI config")
+	ErrDescribingStacks      = errors.New("error describing stacks")
+	ErrComponentNameRequired = errors.New("component name is required")
+	ErrInvalidArguments      = errors.New("invalid arguments")
 )
 
 // Error format strings.
@@ -55,7 +55,11 @@ var listValuesCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 1 {
-			return ErrInvalidArguments
+			return errUtils.Build(ErrInvalidArguments).
+				WithHint("Provide exactly one argument: the component name").
+				WithHint("Example: atmos list values vpc -s prod").
+				WithExitCode(2).
+				Err()
 		}
 
 		// Check Atmos configuration

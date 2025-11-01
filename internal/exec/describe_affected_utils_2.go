@@ -273,7 +273,11 @@ func isComponentFolderChanged(
 	case cfg.PackerComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, component)
 	default:
-		return false, fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
+		return false, errUtils.Build(errUtils.ErrUnsupportedComponentType).
+			WithExplanationf("Received component type: %s", componentType).
+			WithHint("Supported component types are: terraform, helmfile, packer").
+			WithExitCode(1).
+			Err()
 	}
 
 	componentPathAbs, err := filepath.Abs(componentPath)
@@ -483,17 +487,21 @@ func addAffectedSpaceliftAdminStack(
 								}
 
 								if spaceliftWorkspaceEnabled, ok := componentSettingsSpaceliftSection["workspace_enabled"].(bool); !ok || !spaceliftWorkspaceEnabled {
-									return nil, errors.New(fmt.Sprintf(
-										"component '%s' in the stack '%s' has the section 'settings.spacelift.admin_stack_selector' "+
-											"to point to the Spacelift admin component '%s' in the stack '%s', "+
-											"but that component has Spacelift workspace disabled "+
-											"in the 'settings.spacelift.workspace_enabled' section "+
-											"and can't be added to the affected stacks",
-										currentComponentName,
-										currentStackName,
-										componentName,
-										stackName,
-									))
+									return nil, errUtils.Build(errUtils.ErrSpaceliftAdminStackWorkspaceNotEnabled).
+										WithContext("component", currentComponentName).
+										WithContext("stack", currentStackName).
+										WithContext("admin_component", componentName).
+										WithContext("admin_stack", stackName).
+										WithHintf(
+											"Component '%s' in stack '%s' references Spacelift admin component '%s' in stack '%s' via 'settings.spacelift.admin_stack_selector', "+
+												"but the admin component has workspace disabled in 'settings.spacelift.workspace_enabled'",
+											currentComponentName,
+											currentStackName,
+											componentName,
+											stackName,
+										).
+										WithHint("Enable Spacelift workspace for the admin component by setting 'settings.spacelift.workspace_enabled: true'").
+										Err()
 								}
 
 								affectedSpaceliftAdminStack := schema.Affected{

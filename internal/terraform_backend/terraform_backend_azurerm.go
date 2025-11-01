@@ -27,7 +27,7 @@ const (
 	// StatusCodeForbiddenAzure represents the HTTP 403 status code.
 	statusCodeForbiddenAzure = 403
 	// Error format for wrapping errors with context.
-	errWrapFormat = "%w: %v"
+	errWrapFormat = "%w: %w"
 )
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
