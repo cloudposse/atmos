@@ -28,6 +28,9 @@ func init() {
 		flagparser.WithStringFlag("identity", "i", "", "Specify the target identity to assume. Use without value to interactively select."),
 	)
 
+	// Disable positional extraction - all args after flags are command args.
+	authExecParser.DisablePositionalExtraction()
+
 	// Set NoOptDefVal for identity flag to support --identity without value.
 	registry := authExecParser.GetRegistry()
 	if identityFlag := registry.Get("identity"); identityFlag != nil {

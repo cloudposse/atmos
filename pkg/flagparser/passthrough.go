@@ -49,11 +49,13 @@ const (
 //	// cfg.AtmosFlags contains Atmos flags
 //	// cfg.PassThroughArgs contains args to pass to terraform
 type PassThroughFlagParser struct {
-	registry          *FlagRegistry
-	viperPrefix       string
-	atmosFlagNames    []string          // Known Atmos flag names for extraction
-	shorthandToFull   map[string]string // Maps shorthand (e.g., "s") to full name (e.g., "stack")
-	optionalBoolFlags []string          // Flags that support --flag or --flag=value
+	registry            *FlagRegistry
+	viperPrefix         string
+	atmosFlagNames      []string          // Known Atmos flag names for extraction
+	shorthandToFull     map[string]string // Maps shorthand (e.g., "s") to full name (e.g., "stack")
+	optionalBoolFlags   []string          // Flags that support --flag or --flag=value
+	extractPositionals  bool              // Whether to extract positional args (subcommand, component)
+	positionalArgsCount int               // Number of positional args to extract (default: 2)
 }
 
 // NewPassThroughFlagParser creates a new PassThroughFlagParser with the given options.
@@ -95,11 +97,13 @@ func NewPassThroughFlagParser(opts ...Option) *PassThroughFlagParser {
 	}
 
 	return &PassThroughFlagParser{
-		registry:          config.registry,
-		viperPrefix:       config.viperPrefix,
-		atmosFlagNames:    atmosFlagNames,
-		shorthandToFull:   shorthandToFull,
-		optionalBoolFlags: optionalBoolFlags,
+		registry:            config.registry,
+		viperPrefix:         config.viperPrefix,
+		atmosFlagNames:      atmosFlagNames,
+		shorthandToFull:     shorthandToFull,
+		optionalBoolFlags:   optionalBoolFlags,
+		extractPositionals:  true, // Default: extract positional args for terraform/helmfile/packer
+		positionalArgsCount: 2,    // Default: 2 positional args (subcommand, component)
 	}
 }
 
@@ -109,6 +113,14 @@ func (p *PassThroughFlagParser) GetRegistry() *FlagRegistry {
 	defer perf.Track(nil, "flagparser.PassThroughFlagParser.GetRegistry")()
 
 	return p.registry
+}
+
+// DisablePositionalExtraction disables extraction of positional arguments.
+// Use this for commands like auth exec/shell where all args after flags should be passed through.
+func (p *PassThroughFlagParser) DisablePositionalExtraction() {
+	defer perf.Track(nil, "flagparser.PassThroughFlagParser.DisablePositionalExtraction")()
+
+	p.extractPositionals = false
 }
 
 // RegisterFlags implements FlagParser.
@@ -242,15 +254,21 @@ func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*Pars
 		toolArgs = remaining
 	}
 
-	// Extract positional arguments (subcommand, component)
+	// Extract positional arguments (subcommand, component) if enabled.
+	// For commands like auth exec/shell, skip positional extraction - all toolArgs go to PassThroughArgs.
+	if !p.extractPositionals {
+		result.PassThroughArgs = toolArgs
+		return result, nil
+	}
+
 	// Expected pattern: terraform plan vpc
 	//                   ^^^^^^^^^^^^^^ ^^^
 	//                   subcommand     component
-	positional, remainingTool, err := p.ExtractPositionalArgs(toolArgs, 2)
+	positional, remainingTool, err := p.ExtractPositionalArgs(toolArgs, p.positionalArgsCount)
 	if err != nil {
 		// Not an error - some commands don't have positional args
-		positional = nil
-		remainingTool = toolArgs
+		result.PassThroughArgs = toolArgs
+		return result, nil
 	}
 
 	if len(positional) > 0 {
@@ -261,7 +279,6 @@ func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*Pars
 	}
 
 	result.PassThroughArgs = remainingTool
-
 	return result, nil
 }
 

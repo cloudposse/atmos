@@ -37,6 +37,9 @@ func init() {
 		flagparser.WithStringFlag("shell", "s", "", "Specify the shell to launch (default: $SHELL or /bin/sh)"),
 	)
 
+	// Disable positional extraction - all args after flags are shell args.
+	authShellParser.DisablePositionalExtraction()
+
 	// Set NoOptDefVal for identity flag to support --identity without value.
 	registry := authShellParser.GetRegistry()
 	if identityFlag := registry.Get("identity"); identityFlag != nil {
