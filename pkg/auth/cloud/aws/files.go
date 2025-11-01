@@ -576,27 +576,39 @@ func (m *AWSFileManager) GetConfigPath(providerName string) string {
 // AWS SDK uses ~/.aws/sso/cache or $XDG_CACHE_HOME/aws/sso/cache for SSO cache.
 // Returns empty string if cache directory cannot be determined.
 func (m *AWSFileManager) GetCachePath() string {
+	// Check for XDG_CACHE_HOME environment variable first.
+	// Use viper to respect environment variable precedence.
+	v := viper.New()
+	if err := v.BindEnv("XDG_CACHE_HOME"); err != nil {
+		// Binding failed, fall back to default path.
+		return m.getDefaultCachePath()
+	}
+
+	cacheDir := strings.TrimSpace(v.GetString("XDG_CACHE_HOME"))
+	if cacheDir == "" {
+		// XDG not set, fall back to default path.
+		return m.getDefaultCachePath()
+	}
+
+	// Expand tilde if present.
+	if strings.HasPrefix(cacheDir, "~") {
+		homeDir, err := homedir.Dir()
+		if err == nil {
+			cacheDir = filepath.Join(homeDir, cacheDir[1:])
+		}
+	}
+
+	// XDG is set, use $XDG_CACHE_HOME/aws/sso/cache.
+	return filepath.Join(cacheDir, awsCacheDirName, "sso", "cache")
+}
+
+// getDefaultCachePath returns the default AWS cache path ~/.aws/sso/cache.
+func (m *AWSFileManager) getDefaultCachePath() string {
 	homeDir, err := homedir.Dir()
 	if err != nil {
 		return ""
 	}
-
-	// Check for XDG_CACHE_HOME environment variable.
-	// Use viper to respect environment variable precedence.
-	v := viper.New()
-	if err := v.BindEnv("XDG_CACHE_HOME"); err != nil {
-		// Fall back to default if binding fails.
-		return filepath.Join(homeDir, ".cache", awsCacheDirName)
-	}
-
-	cacheDir := v.GetString("XDG_CACHE_HOME")
-	if cacheDir == "" {
-		// XDG not set, use default ~/.cache/aws.
-		return filepath.Join(homeDir, ".cache", awsCacheDirName)
-	}
-
-	// XDG is set, use $XDG_CACHE_HOME/aws.
-	return filepath.Join(cacheDir, awsCacheDirName)
+	return filepath.Join(homeDir, ".aws", "sso", "cache")
 }
 
 // GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice.

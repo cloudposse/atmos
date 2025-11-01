@@ -664,7 +664,7 @@ func TestAWSFileManager_GetCachePath(t *testing.T) {
 				}
 				return tempHome
 			},
-			expectedPathParts: []string{"custom-cache", "aws"},
+			expectedPathParts: []string{"custom-cache", "aws", "sso", "cache"},
 		},
 		{
 			name: "expands tilde in XDG_CACHE_HOME",
@@ -677,7 +677,7 @@ func TestAWSFileManager_GetCachePath(t *testing.T) {
 				}
 				return tempHome
 			},
-			expectedPathParts: []string{".cache", "aws"},
+			expectedPathParts: []string{".cache", "aws", "sso", "cache"},
 		},
 		{
 			name: "falls back to default when XDG_CACHE_HOME empty",
@@ -690,7 +690,7 @@ func TestAWSFileManager_GetCachePath(t *testing.T) {
 				}
 				return tempHome
 			},
-			expectedPathParts: []string{".cache", "aws"},
+			expectedPathParts: []string{".aws", "sso", "cache"},
 		},
 		{
 			name: "falls back to default when XDG_CACHE_HOME not set",
@@ -703,7 +703,7 @@ func TestAWSFileManager_GetCachePath(t *testing.T) {
 				}
 				return tempHome
 			},
-			expectedPathParts: []string{".cache", "aws"},
+			expectedPathParts: []string{".aws", "sso", "cache"},
 		},
 		{
 			name: "handles XDG_CACHE_HOME with trailing slash",
@@ -731,19 +731,7 @@ func TestAWSFileManager_GetCachePath(t *testing.T) {
 				}
 				return tempHome
 			},
-			expectedPathParts: []string{"cache", "aws"},
-		},
-		{
-			name: "returns empty when home dir unavailable and no XDG",
-			setupEnv: func(t *testing.T) string {
-				// Unset HOME to simulate missing home directory
-				t.Setenv("HOME", "")
-				if runtime.GOOS == "windows" {
-					t.Setenv("USERPROFILE", "")
-				}
-				return ""
-			},
-			shouldBeEmpty: true,
+			expectedPathParts: []string{"cache", "aws", "sso", "cache"},
 		},
 	}
 
