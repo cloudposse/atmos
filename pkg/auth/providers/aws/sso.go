@@ -2,11 +2,9 @@ package aws
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,133 +27,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
 	ssoDefaultSessionMinutes = 60
-	ssoTokenCacheSubdir      = "aws-sso"
-	ssoTokenCacheFilename    = "token.json"
-	ssoTokenCacheDirPerms    = 0o700
-	ssoTokenCacheFilePerms   = 0o600
 )
-
-// ssoTokenCache represents a cached SSO access token.
-type ssoTokenCache struct {
-	AccessToken string    `json:"accessToken"`
-	ExpiresAt   time.Time `json:"expiresAt"`
-	Region      string    `json:"region"`
-	StartURL    string    `json:"startUrl"`
-}
-
-// getTokenCachePath returns the XDG-compliant cache path for SSO token.
-// Path format: ~/.cache/atmos/aws-sso/<provider-name>/token.json.
-func (p *ssoProvider) getTokenCachePath() (string, error) {
-	cacheDir, err := xdg.GetXDGCacheDir(ssoTokenCacheSubdir, ssoTokenCacheDirPerms)
-	if err != nil {
-		return "", fmt.Errorf("failed to get XDG cache directory: %w", err)
-	}
-
-	// Create provider-specific subdirectory.
-	providerCacheDir := filepath.Join(cacheDir, p.name)
-	if err := os.MkdirAll(providerCacheDir, ssoTokenCacheDirPerms); err != nil {
-		return "", fmt.Errorf("failed to create provider cache directory: %w", err)
-	}
-
-	return filepath.Join(providerCacheDir, ssoTokenCacheFilename), nil
-}
-
-// loadCachedToken loads and validates a cached SSO token.
-// Returns the token and expiration if valid, or empty values if cache miss or expired.
-func (p *ssoProvider) loadCachedToken() (string, time.Time, error) {
-	tokenPath, err := p.getTokenCachePath()
-	if err != nil {
-		// If we can't get cache path, just skip caching.
-		log.Debug("Failed to get token cache path, skipping cache check", "error", err)
-		return "", time.Time{}, nil
-	}
-
-	// Check if cache file exists.
-	data, err := os.ReadFile(tokenPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			log.Debug("No cached SSO token found", "path", tokenPath)
-			return "", time.Time{}, nil
-		}
-		log.Debug("Failed to read cached token", "error", err)
-		return "", time.Time{}, nil
-	}
-
-	// Parse cached token.
-	var cache ssoTokenCache
-	if err := json.Unmarshal(data, &cache); err != nil {
-		log.Debug("Failed to parse cached token, will re-authenticate", "error", err)
-		return "", time.Time{}, nil
-	}
-
-	// Validate token hasn't expired (with 5 minute buffer).
-	if time.Now().Add(5 * time.Minute).After(cache.ExpiresAt) {
-		log.Debug("Cached SSO token expired", "expiresAt", cache.ExpiresAt)
-		return "", time.Time{}, nil
-	}
-
-	// Validate token matches current provider config.
-	if cache.Region != p.region || cache.StartURL != p.startURL {
-		log.Debug("Cached token config mismatch", "cachedRegion", cache.Region, "configRegion", p.region)
-		return "", time.Time{}, nil
-	}
-
-	log.Debug("Using cached SSO token", "expiresAt", cache.ExpiresAt)
-	return cache.AccessToken, cache.ExpiresAt, nil
-}
-
-// saveCachedToken saves an SSO access token to the cache.
-func (p *ssoProvider) saveCachedToken(accessToken string, expiresAt time.Time) error {
-	tokenPath, err := p.getTokenCachePath()
-	if err != nil {
-		// If we can't get cache path, just skip caching (non-fatal).
-		log.Debug("Failed to get token cache path, skipping cache save", "error", err)
-		return nil
-	}
-
-	cache := ssoTokenCache{
-		AccessToken: accessToken,
-		ExpiresAt:   expiresAt,
-		Region:      p.region,
-		StartURL:    p.startURL,
-	}
-
-	data, err := json.MarshalIndent(cache, "", "  ")
-	if err != nil {
-		log.Debug("Failed to marshal token cache", "error", err)
-		return nil // Non-fatal.
-	}
-
-	if err := os.WriteFile(tokenPath, data, ssoTokenCacheFilePerms); err != nil {
-		log.Debug("Failed to write token cache", "error", err)
-		return nil // Non-fatal.
-	}
-
-	log.Debug("Saved SSO token to cache", "path", tokenPath, "expiresAt", expiresAt)
-	return nil
-}
-
-// deleteCachedToken removes the cached SSO token.
-func (p *ssoProvider) deleteCachedToken() error {
-	tokenPath, err := p.getTokenCachePath()
-	if err != nil {
-		// If we can't get cache path, nothing to delete.
-		return nil
-	}
-
-	if err := os.Remove(tokenPath); err != nil && !os.IsNotExist(err) {
-		log.Debug("Failed to delete cached token", "error", err)
-		return nil // Non-fatal.
-	}
-
-	log.Debug("Deleted cached SSO token", "path", tokenPath)
-	return nil
-}
 
 // isInteractive checks if we're running in an interactive terminal.
 // For SSO device flow, we need stderr to be a TTY so the user can see the authentication URL.
@@ -166,10 +42,11 @@ func isInteractive() bool {
 
 // ssoProvider implements AWS IAM Identity Center authentication.
 type ssoProvider struct {
-	name     string
-	config   *schema.Provider
-	startURL string
-	region   string
+	name         string
+	config       *schema.Provider
+	startURL     string
+	region       string
+	cacheStorage CacheStorage
 }
 
 // NewSSOProvider creates a new AWS SSO provider.
@@ -190,10 +67,11 @@ func NewSSOProvider(name string, config *schema.Provider) (*ssoProvider, error) 
 	}
 
 	return &ssoProvider{
-		name:     name,
-		config:   config,
-		startURL: config.StartURL,
-		region:   config.Region,
+		name:         name,
+		config:       config,
+		startURL:     config.StartURL,
+		region:       config.Region,
+		cacheStorage: &defaultCacheStorage{}, // Use default filesystem operations.
 	}, nil
 }
 
