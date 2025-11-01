@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -59,6 +60,9 @@ func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 	// Parse args with flagparser to extract --identity and command args.
 	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	parsedConfig, err := authExecParser.Parse(ctx, args)
 	if err != nil {
 		return err

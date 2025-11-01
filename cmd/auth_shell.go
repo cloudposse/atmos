@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -74,6 +75,9 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 
 	// Parse args with flagparser to extract --identity, --shell, and shell args.
 	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	parsedConfig, err := authShellParser.Parse(ctx, args)
 	if err != nil {
 		return err
