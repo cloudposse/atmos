@@ -28,6 +28,9 @@ func init() {
 		flagparser.WithPackerFlags(),
 	)
 
+	// Packer passes subcommand separately to packerRun, so only extract 1 positional arg (component).
+	packerParser.SetPositionalArgsCount(1)
+
 	// Register flags with Cobra.
 	packerParser.RegisterFlags(packerCmd)
 	_ = packerParser.BindToViper(viper.GetViper())

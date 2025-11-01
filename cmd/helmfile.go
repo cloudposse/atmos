@@ -27,6 +27,9 @@ func init() {
 		flagparser.WithHelmfileFlags(),
 	)
 
+	// Helmfile passes subcommand separately to helmfileRun, so only extract 1 positional arg (component).
+	helmfileParser.SetPositionalArgsCount(1)
+
 	// Register flags with Cobra.
 	helmfileParser.RegisterFlags(helmfileCmd)
 	_ = helmfileParser.BindToViper(viper.GetViper())

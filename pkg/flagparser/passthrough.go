@@ -123,6 +123,14 @@ func (p *PassThroughFlagParser) DisablePositionalExtraction() {
 	p.extractPositionals = false
 }
 
+// SetPositionalArgsCount sets the number of positional arguments to extract.
+// Default is 2 (subcommand, component). Use 1 for packer (component only).
+func (p *PassThroughFlagParser) SetPositionalArgsCount(count int) {
+	defer perf.Track(nil, "flagparser.PassThroughFlagParser.SetPositionalArgsCount")()
+
+	p.positionalArgsCount = count
+}
+
 // RegisterFlags implements FlagParser.
 func (p *PassThroughFlagParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.PassThroughFlagParser.RegisterFlags")()
@@ -261,9 +269,9 @@ func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*Pars
 		return result, nil
 	}
 
-	// Expected pattern: terraform plan vpc
-	//                   ^^^^^^^^^^^^^^ ^^^
-	//                   subcommand     component
+	// Expected patterns:
+	//   terraform plan vpc  (2 positional args: subcommand, component)
+	//   packer vpc          (1 positional arg: component only, subcommand passed separately)
 	positional, remainingTool, err := p.ExtractPositionalArgs(toolArgs, p.positionalArgsCount)
 	if err != nil {
 		// Not an error - some commands don't have positional args
@@ -271,11 +279,17 @@ func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*Pars
 		return result, nil
 	}
 
-	if len(positional) > 0 {
-		result.SubCommand = positional[0]
-	}
-	if len(positional) > 1 {
-		result.ComponentName = positional[1]
+	// For 1 positional arg, it's the component (packer/helmfile pattern).
+	// For 2+ positional args, first is subcommand, second is component (terraform pattern).
+	if p.positionalArgsCount == 1 && len(positional) > 0 {
+		result.ComponentName = positional[0]
+	} else {
+		if len(positional) > 0 {
+			result.SubCommand = positional[0]
+		}
+		if len(positional) > 1 {
+			result.ComponentName = positional[1]
+		}
 	}
 
 	result.PassThroughArgs = remainingTool
