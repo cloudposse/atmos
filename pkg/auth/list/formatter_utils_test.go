@@ -1,9 +1,8 @@
 package list
 
 import (
-	"time"
-
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -121,6 +120,7 @@ func containsCharacter(s, char string) bool {
 	}
 	return false
 }
+
 // TestGetCurrentTime tests the getCurrentTime function with and without ATMOS_TEST_NOW override.
 func TestGetCurrentTime(t *testing.T) {
 	defer perf.Track(nil, "list.TestGetCurrentTime")()
