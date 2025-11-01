@@ -23,6 +23,7 @@ var helmfileApplyCmd = &cobra.Command{
 	Short:              helmfileApplyShort,
 	Long:               helmfileApplyLong,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+	Args:               cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return helmfileRun(cmd, "apply", args)
 	},

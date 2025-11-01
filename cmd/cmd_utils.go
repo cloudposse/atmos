@@ -93,6 +93,7 @@ func processCustomCommands(
 				Use:   commandConfig.Name,
 				Short: commandConfig.Description,
 				Long:  commandConfig.Description,
+				Args:  cobra.ArbitraryArgs, // Accept component names and other positional args
 				PreRun: func(cmd *cobra.Command, args []string) {
 					preCustomCommand(cmd, args, parentCommand, commandConfig)
 				},

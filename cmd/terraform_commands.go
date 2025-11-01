@@ -307,6 +307,10 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 		// NOTE: We no longer disable flag parsing.
 		// The flagparser handles Atmos flags while passing through unknown flags.
 
+		// Accept arbitrary positional arguments (component names, etc.)
+		// This prevents Cobra from treating component names as unknown subcommands
+		cmd.Args = cobra.ArbitraryArgs
+
 		// Register Atmos flags on each subcommand.
 		// This ensures flags like --stack, --identity, --dry-run work on all terraform subcommands.
 		terraformParser.RegisterFlags(cmd)
