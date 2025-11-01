@@ -144,7 +144,10 @@ func TestGetCurrentTime(t *testing.T) {
 		t.Setenv("ATMOS_TEST_NOW", testTime)
 
 		got := getCurrentTime()
-		expected, _ := time.Parse(time.RFC3339, testTime)
+		expected, err := time.Parse(time.RFC3339, testTime)
+		if err != nil {
+			t.Fatalf("Failed to parse test time %q: %v", testTime, err)
+		}
 
 		if !got.Equal(expected) {
 			t.Errorf("getCurrentTime() = %v, want %v", got, expected)

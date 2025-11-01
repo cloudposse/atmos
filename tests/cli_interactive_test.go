@@ -308,8 +308,11 @@ func TestExplicitIdentityAlwaysWorks(t *testing.T) {
 		{
 			name: "with stdin from /dev/null",
 			setupCmd: func(cmd *exec.Cmd) {
-				devNull, _ := os.Open("/dev/null")
-				cmd.Stdin = devNull
+				// Use os.DevNull for cross-platform compatibility (/dev/null on Unix, NUL on Windows).
+				devNull, err := os.Open(os.DevNull)
+				if err == nil {
+					cmd.Stdin = devNull
+				}
 			},
 			desc: "Explicit identity should work with redirected stdin",
 		},
