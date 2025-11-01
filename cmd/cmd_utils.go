@@ -329,7 +329,16 @@ func executeCustomCommand(
 	commandConfig *schema.Command,
 ) {
 	var err error
-	args, trailingArgs := extractTrailingArgs(args, os.Args)
+
+	// Extract arguments after "--" separator using safe shell quoting.
+	separated := ExtractSeparatedArgs(cmd, args, os.Args)
+	args = separated.BeforeSeparator
+	trailingArgs, err := separated.GetAfterSeparatorAsQuotedString()
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: failed to quote trailing arguments: %w",
+			errUtils.ErrFailedToProcessArgs, err), "", "")
+	}
+
 	if commandConfig.Verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
@@ -499,35 +508,6 @@ func executeCustomCommand(
 		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, env, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
-}
-
-// Extracts native arguments (everything after "--") signifying the end of Atmos-specific arguments.
-// Because of the flag hint for double dash, args is already consumed by Cobra.
-// So we need to perform manual parsing of os.Args to extract the "trailing args" after the "--" end of args marker.
-func extractTrailingArgs(args []string, osArgs []string) ([]string, string) {
-	doubleDashIndex := lo.IndexOf(osArgs, "--")
-	mainArgs := args
-	trailingArgs := ""
-	if doubleDashIndex > 0 {
-		mainArgs = lo.Slice(osArgs, 0, doubleDashIndex)
-		trailingArgs = strings.Join(lo.Slice(osArgs, doubleDashIndex+1, len(osArgs)), " ")
-		result := []string{}
-		lookup := make(map[string]bool)
-
-		// Populate a lookup map for quick existence check
-		for _, val := range mainArgs {
-			lookup[val] = true
-		}
-
-		// Iterate over leftArr and collect matching elements in order
-		for _, val := range args {
-			if lookup[val] {
-				result = append(result, val)
-			}
-		}
-		mainArgs = result
-	}
-	return mainArgs, trailingArgs
 }
 
 // cloneCommand clones a custom command config into a new struct.

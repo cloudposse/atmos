@@ -54,13 +54,9 @@ func executeAuthShellCommand(cmd *cobra.Command, args []string) error {
 func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "cmd.executeAuthShellCommandCore")()
 
-	// Manually parse flags since DisableFlagParsing is true.
-	if err := cmd.Flags().Parse(args); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrInvalidSubcommand, err)
-	}
-
-	// Get the non-flag arguments (shell arguments after --).
-	shellArgs := cmd.Flags().Args()
+	// Extract Atmos flags without using pflag parser to avoid issues with "--" end-of-flags marker.
+	// When DisableFlagParsing is true, manually parsing can incorrectly treat "--" as a flag value.
+	identityValue, shellValue, shellArgs := extractAuthShellFlags(args)
 
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -75,12 +71,15 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Get identity from flag or use default.
-	// Check if flag was explicitly set by user to ensure command-line precedence.
+	// Get identity from extracted flag or use default.
+	// identityValue will be:
+	// - "" if --identity was not provided
+	// - IdentityFlagSelectValue if --identity was provided without a value
+	// - the actual value if --identity=value or --identity value was provided
 	var identityName string
-	if cmd.Flags().Changed(IdentityFlagName) {
-		// Flag was explicitly provided on command line (either with or without value).
-		identityName, _ = cmd.Flags().GetString(IdentityFlagName)
+	if identityValue != "" {
+		// Flag was explicitly provided on command line.
+		identityName = identityValue
 	} else {
 		// Flag not provided on command line - fall back to viper (config/env).
 		identityName = viper.GetString(IdentityFlagName)
@@ -121,8 +120,14 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to prepare shell environment: %w", err)
 	}
 
-	// Get shell from flag/viper.
-	shell := viper.GetString(shellFlagName)
+	// Get shell from extracted flag or viper.
+	shell := shellValue
+	if shell == "" {
+		shell = viper.GetString(shellFlagName)
+	}
+
+	// Get provider name from the identity to display in shell messages.
+	providerName := authManager.GetProviderForIdentity(identityName)
 
 	// Execute the shell with authentication environment.
 	// ExecAuthShellCommand expects env vars as a map, so convert the list.
@@ -135,17 +140,96 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return exec.ExecAuthShellCommand(atmosConfigPtr, identityName, envMap, shell, shellArgs)
+	return exec.ExecAuthShellCommand(atmosConfigPtr, identityName, providerName, envMap, shell, shellArgs)
+}
+
+// extractAuthShellFlags extracts --identity and --shell flags from args and returns the remaining shell args.
+// This function properly handles the "--" end-of-flags marker similar to extractIdentityFlag.
+func extractAuthShellFlags(args []string) (identityValue, shellValue string, shellArgs []string) {
+	var identityFlagSeen bool
+	var skipNext bool
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		// Handle skipping the next arg (it was consumed as a flag value).
+		if skipNext {
+			skipNext = false
+			continue
+		}
+
+		// Once we see "--", everything after is shell args.
+		if arg == "--" {
+			// If --identity was seen but not yet assigned a value, use select value.
+			if identityFlagSeen && identityValue == "" {
+				identityValue = IdentityFlagSelectValue
+			}
+			// If --shell was seen but not yet assigned a value, leave it empty.
+			// Everything after "--" is shell args.
+			shellArgs = append(shellArgs, args[i+1:]...)
+			break
+		}
+
+		// Check for --identity=value format.
+		if strings.HasPrefix(arg, "--identity=") {
+			identityValue = strings.TrimPrefix(arg, "--identity=")
+			if identityValue == "" {
+				identityValue = IdentityFlagSelectValue
+			}
+			identityFlagSeen = true
+			continue
+		}
+
+		// Check for --shell=value format.
+		if strings.HasPrefix(arg, "--shell=") {
+			shellValue = strings.TrimPrefix(arg, "--shell=")
+			continue
+		}
+
+		// Check for --identity or -i flag.
+		if arg == "--identity" || arg == "-i" {
+			identityFlagSeen = true
+			// Check if next arg exists and is not a flag or "--".
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") && args[i+1] != "--" {
+				// Next arg is the value.
+				identityValue = args[i+1]
+				skipNext = true
+			} else {
+				// No value provided - user wants interactive selection.
+				identityValue = IdentityFlagSelectValue
+			}
+			continue
+		}
+
+		// Check for --shell flag.
+		if arg == "--shell" {
+			// Check if next arg exists and is not a flag or "--".
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") && args[i+1] != "--" {
+				// Next arg is the value.
+				shellValue = args[i+1]
+				skipNext = true
+			}
+			// If no value, leave shellValue empty (will use viper default).
+			continue
+		}
+
+		// Not a recognized Atmos flag - treat as shell arg.
+		shellArgs = append(shellArgs, arg)
+	}
+
+	// If --identity was seen but we never hit "--" and no value was set, use select value.
+	if identityFlagSeen && identityValue == "" {
+		identityValue = IdentityFlagSelectValue
+	}
+
+	return identityValue, shellValue, shellArgs
 }
 
 func init() {
-	authShellCmd.Flags().StringP("identity", "i", "", "Specify the identity to use for authentication")
-	authShellCmd.Flags().String(shellFlagName, "", "Specify the shell to use (defaults to $SHELL, then bash, then sh)")
+	// NOTE: --identity flag is inherited from parent authCmd (PersistentFlags in cmd/auth.go:27).
+	// DO NOT redefine it here - that would create a duplicate local flag that shadows the parent.
 
-	// Bind identity flag to viper (CLI → ENV → config precedence).
-	if err := viper.BindPFlag(IdentityFlagName, authShellCmd.Flags().Lookup(IdentityFlagName)); err != nil {
-		log.Trace("Failed to bind identity flag", "error", err)
-	}
+	authShellCmd.Flags().String(shellFlagName, "", "Specify the shell to use (defaults to $SHELL, then bash, then sh)")
 
 	if err := viper.BindEnv(shellFlagName, "ATMOS_SHELL", "SHELL"); err != nil {
 		log.Trace("Failed to bind shell environment variables", "error", err)
@@ -154,8 +238,7 @@ func init() {
 		log.Trace("Failed to bind shell flag", "error", err)
 	}
 
-	// Add shell completion for identity flag.
-	AddIdentityCompletion(authShellCmd)
+	// Identity flag completion is already added by parent authCmd (cmd/auth.go:45).
 
 	authCmd.AddCommand(authShellCmd)
 }

@@ -4,12 +4,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 const (
-	IdentityFlagName        = "identity"
-	IdentityFlagSelectValue = "__SELECT__" // Special value when --identity is used without argument.
+	IdentityFlagName = "identity"
+	// IdentityFlagSelectValue is imported from cfg.IdentityFlagSelectValue.
+	IdentityFlagSelectValue = cfg.IdentityFlagSelectValue
 )
 
 // authCmd groups authentication-related subcommands.
