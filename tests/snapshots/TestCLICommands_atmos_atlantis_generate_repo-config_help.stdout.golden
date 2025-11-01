@@ -101,6 +101,10 @@ Global Flags:
                                      is set to Off, Atmos will not log any
                                      messages (default Info)
 
+        --mask                       Enable automatic masking of sensitive data
+                                     in output (use --mask=false to disable)
+                                     (default true)
+
         --no-color                   Disable color output (default false)
 
         --pager string               Enable pager for output (--pager or
