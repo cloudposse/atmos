@@ -1,7 +1,8 @@
 ---
 slug: version-list-show-commands
 title: "Browse and Explore Atmos Releases from Your Terminal"
-authors: [atmos]
+sidebar_label: "Browse Atmos Releases"
+authors: [osterman]
 tags: [feature, atmos-core]
 date: 2025-10-17
 ---
