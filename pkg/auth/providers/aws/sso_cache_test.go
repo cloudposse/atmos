@@ -12,11 +12,11 @@ import (
 
 // mockCacheStorage is a mock implementation of CacheStorage for testing.
 type mockCacheStorage struct {
-	readFileFunc        func(path string) ([]byte, error)
-	writeFileFunc       func(path string, data []byte, perm os.FileMode) error
-	removeFunc          func(path string) error
-	mkdirAllFunc        func(path string, perm os.FileMode) error
-	getXDGCacheDirFunc  func(subdir string, perm os.FileMode) (string, error)
+	readFileFunc       func(path string) ([]byte, error)
+	writeFileFunc      func(path string, data []byte, perm os.FileMode) error
+	removeFunc         func(path string) error
+	mkdirAllFunc       func(path string, perm os.FileMode) error
+	getXDGCacheDirFunc func(subdir string, perm os.FileMode) (string, error)
 }
 
 func (m *mockCacheStorage) ReadFile(path string) ([]byte, error) {

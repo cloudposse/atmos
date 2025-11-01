@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	ssoTokenCacheSubdir   = "aws-sso"
-	ssoTokenCacheFilename = "token.json"
-	ssoTokenCacheDirPerms = 0o700
+	ssoTokenCacheSubdir    = "aws-sso"
+	ssoTokenCacheFilename  = "token.json"
+	ssoTokenCacheDirPerms  = 0o700
 	ssoTokenCacheFilePerms = 0o600
 )
 
