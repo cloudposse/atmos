@@ -871,3 +871,42 @@ func TestSAMLProvider_Environment_AutoDownload(t *testing.T) {
 		})
 	}
 }
+
+func TestSAMLProvider_Paths(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+
+	// Disable homedir cache to ensure our test environment is used.
+	homedir.DisableCache = true
+	t.Cleanup(func() { homedir.DisableCache = false })
+
+	provider, err := NewSAMLProvider("test-saml", &schema.Provider{
+		Kind:   "aws/saml",
+		URL:    "https://idp.example.com/saml",
+		Region: "us-west-2",
+	})
+	require.NoError(t, err)
+
+	paths, err := provider.Paths()
+	assert.NoError(t, err)
+	assert.Len(t, paths, 3, "should return credentials, config, and cache paths")
+
+	// Verify credentials file.
+	assert.Equal(t, types.PathTypeFile, paths[0].Type)
+	assert.True(t, paths[0].Required)
+	assert.Contains(t, paths[0].Location, "credentials")
+	assert.Equal(t, "true", paths[0].Metadata["read_only"])
+
+	// Verify config file.
+	assert.Equal(t, types.PathTypeFile, paths[1].Type)
+	assert.False(t, paths[1].Required, "config file is optional")
+	assert.Contains(t, paths[1].Location, "config")
+	assert.Equal(t, "true", paths[1].Metadata["read_only"])
+
+	// Verify cache directory.
+	assert.Equal(t, types.PathTypeDirectory, paths[2].Type)
+	assert.False(t, paths[2].Required, "cache is optional")
+	assert.Contains(t, paths[2].Purpose, "cache")
+	assert.Equal(t, "false", paths[2].Metadata["read_only"], "cache must be writable")
+}
