@@ -15,7 +15,9 @@ var (
 	//
 	// Example:
 	//   fmt.Fprintf(io.Data, `{"version": "%s"}\n`, version)
-	Data stdio.Writer
+	//
+	// Safe default: Falls back to os.Stdout until Initialize() is called.
+	Data stdio.Writer = os.Stdout
 
 	// UI is the global writer for human-readable output (stderr).
 	// All writes are automatically masked based on registered secrets.
@@ -24,7 +26,9 @@ var (
 	// Example:
 	//   fmt.Fprintf(io.UI, "Processing...\n")
 	//   logger := log.New(io.UI)
-	UI stdio.Writer
+	//
+	// Safe default: Falls back to os.Stderr until Initialize() is called.
+	UI stdio.Writer = os.Stderr
 
 	// GlobalContext holds the I/O context for advanced usage.
 	globalContext Context
