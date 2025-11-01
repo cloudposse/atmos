@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
@@ -83,7 +83,7 @@ jobs:
       security-events: write
     steps:
       - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -207,7 +207,7 @@ jobs:
       issues: write
     steps:
       # Checkout is required for local composite actions
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
 
       # Remove Dependabot's auto-added semver labels
@@ -247,7 +247,7 @@ jobs:
       issues: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: PR Size Labeler
         uses: ./.github/actions/pr-sizer
