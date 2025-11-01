@@ -28,7 +28,7 @@ func init() {
 	// Register flags with Cobra.
 	// Cobra will now parse known Atmos flags and pass through unknown flags.
 	terraformParser.RegisterFlags(terraformCmd)
-	terraformParser.BindToViper(viper.GetViper())
+	_ = terraformParser.BindToViper(viper.GetViper())
 
 	AddStackCompletion(terraformCmd)
 	attachTerraformCommands(terraformCmd)

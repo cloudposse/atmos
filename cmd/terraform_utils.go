@@ -40,6 +40,9 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// revive:disable-next-line:cyclomatic,function-length
+//
+//nolint:funlen // Orchestrates terraform execution with multiple conditional paths.
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, parsedConfig *flagparser.ParsedConfig) error {
 	// Build args array from ParsedConfig for getConfigAndStacksInfo
 	// Format: [subcommand, component, ...pass-through-args]

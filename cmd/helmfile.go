@@ -29,7 +29,7 @@ func init() {
 
 	// Register flags with Cobra.
 	helmfileParser.RegisterFlags(helmfileCmd)
-	helmfileParser.BindToViper(viper.GetViper())
+	_ = helmfileParser.BindToViper(viper.GetViper())
 
 	AddStackCompletion(helmfileCmd)
 	RootCmd.AddCommand(helmfileCmd)

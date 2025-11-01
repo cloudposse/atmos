@@ -30,7 +30,7 @@ func init() {
 
 	// Register flags with Cobra.
 	packerParser.RegisterFlags(packerCmd)
-	packerParser.BindToViper(viper.GetViper())
+	_ = packerParser.BindToViper(viper.GetViper())
 
 	// Packer-specific flags
 	packerCmd.PersistentFlags().StringP("template", "t", "", "Packer template for building machine images")
