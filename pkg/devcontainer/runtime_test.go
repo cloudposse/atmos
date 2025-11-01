@@ -478,6 +478,64 @@ func TestExpandDevcontainerVars(t *testing.T) {
 	}
 }
 
+// TestExpandDevcontainerVars_EnvVars tests environment variable expansion.
+func TestExpandDevcontainerVars_EnvVars(t *testing.T) {
+	// Set up test environment variables
+	t.Setenv("TEST_VAR", "test_value")
+	t.Setenv("PATH_VAR", "/test/path")
+
+	tests := []struct {
+		name     string
+		input    string
+		cwd      string
+		expected string
+	}{
+		{
+			name:     "expand single env var",
+			input:    "source=${localEnv:TEST_VAR}",
+			cwd:      "/workspace",
+			expected: "source=test_value",
+		},
+		{
+			name:     "expand env var in path",
+			input:    "${localEnv:PATH_VAR}/bin",
+			cwd:      "/workspace",
+			expected: "/test/path/bin",
+		},
+		{
+			name:     "expand multiple env vars",
+			input:    "${localEnv:TEST_VAR}:${localEnv:PATH_VAR}",
+			cwd:      "/workspace",
+			expected: "test_value:/test/path",
+		},
+		{
+			name:     "expand env var with workspace folder",
+			input:    "${localWorkspaceFolder}/${localEnv:TEST_VAR}",
+			cwd:      "/project",
+			expected: "/project/test_value",
+		},
+		{
+			name:     "missing closing brace",
+			input:    "${localEnv:TEST_VAR",
+			cwd:      "/workspace",
+			expected: "${localEnv:TEST_VAR",
+		},
+		{
+			name:     "empty env var",
+			input:    "${localEnv:NONEXISTENT_VAR}",
+			cwd:      "/workspace",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := expandDevcontainerVars(tt.input, tt.cwd)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestParseMountPart(t *testing.T) {
 	tests := []struct {
 		name     string
