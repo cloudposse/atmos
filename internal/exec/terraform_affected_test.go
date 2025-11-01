@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/agiledragon/gomonkey/v2"
@@ -12,6 +13,13 @@ import (
 )
 
 func TestGetAffectedComponents(t *testing.T) {
+	// Skip on ARM64 due to gomonkey incompatibility with Apple Silicon.
+	// GoMonkey requires runtime code patching which macOS memory protection prevents.
+	// See: https://github.com/agiledragon/gomonkey/issues/169
+	if runtime.GOARCH == "arm64" {
+		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	}
+
 	tests := []struct {
 		name          string
 		args          *DescribeAffectedCmdArgs
