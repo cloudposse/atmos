@@ -53,15 +53,16 @@ func TestInteractiveIdentitySelection(t *testing.T) {
 	})
 
 	t.Run("identity flag without value should fail gracefully in non-TTY", func(t *testing.T) {
-		// Scenario: build/atmos auth login --identity < /dev/null
+		// Scenario: build/atmos auth login --identity < /dev/null (or NUL on Windows)
 		// Expected: Fails with "no default identity" or TTY error, does not hang.
 		t.Chdir("fixtures/scenarios/basic")
 
 		cmd := atmosRunner.Command("auth", "login", "--identity")
 
-		// Redirect stdin from /dev/null to simulate < /dev/null.
-		devNull, err := os.Open("/dev/null")
-		require.NoError(t, err, "Failed to open /dev/null")
+		// Redirect stdin from null device to simulate < /dev/null.
+		// Use os.DevNull for cross-platform compatibility (/dev/null on Unix, NUL on Windows).
+		devNull, err := os.Open(os.DevNull)
+		require.NoError(t, err, "Failed to open null device")
 		defer devNull.Close()
 		cmd.Stdin = devNull
 
