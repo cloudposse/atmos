@@ -1003,3 +1003,39 @@ func TestBuildLogsArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestType_String(t *testing.T) {
+	tests := []struct {
+		name     string
+		typ      Type
+		expected string
+	}{
+		{
+			name:     "Docker type",
+			typ:      TypeDocker,
+			expected: "docker",
+		},
+		{
+			name:     "Podman type",
+			typ:      TypePodman,
+			expected: "podman",
+		},
+		{
+			name:     "Custom type",
+			typ:      Type("custom"),
+			expected: "custom",
+		},
+		{
+			name:     "Empty type",
+			typ:      Type(""),
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.typ.String()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
