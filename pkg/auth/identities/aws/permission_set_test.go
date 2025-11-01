@@ -258,6 +258,10 @@ func TestPermissionSetIdentity_CredentialsExist(t *testing.T) {
 			})
 			require.NoError(t, err)
 
+			// Set root provider name so the identity can resolve file paths.
+			psIdentity := identity.(*permissionSetIdentity)
+			psIdentity.SetManagerAndProvider(nil, "aws-sso")
+
 			if tt.setupFiles {
 				t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
 				credPath := filepath.Join(tmpDir, "atmos", "aws", "aws-sso", "credentials")
@@ -305,6 +309,10 @@ func TestPermissionSetIdentity_LoadCredentials(t *testing.T) {
 				},
 			})
 			require.NoError(t, err)
+
+			// Set root provider name so the identity can resolve file paths.
+			psIdentity := identity.(*permissionSetIdentity)
+			psIdentity.SetManagerAndProvider(nil, "aws-sso")
 
 			if tt.setupFiles {
 				t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
