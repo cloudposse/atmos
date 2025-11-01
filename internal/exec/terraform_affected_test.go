@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/agiledragon/gomonkey/v2"
@@ -12,6 +13,13 @@ import (
 )
 
 func TestGetAffectedComponents(t *testing.T) {
+	// Skip on ARM64 due to gomonkey incompatibility with Apple Silicon.
+	// GoMonkey requires runtime code patching which macOS memory protection prevents.
+	// See: https://github.com/agiledragon/gomonkey/issues/169
+	if runtime.GOARCH == "arm64" {
+		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	}
+
 	tests := []struct {
 		name          string
 		args          *DescribeAffectedCmdArgs
@@ -318,6 +326,13 @@ func setupExecuteAffectedComponentsMock(
 }
 
 func TestExecuteAffectedComponents(t *testing.T) {
+	// Skip on ARM64 due to gomonkey incompatibility with Apple Silicon.
+	// GoMonkey requires runtime code patching which macOS memory protection prevents.
+	// See: https://github.com/agiledragon/gomonkey/issues/169
+	if runtime.GOARCH == "arm64" {
+		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	}
+
 	tests := []struct {
 		name                      string
 		affectedList              []schema.Affected
@@ -538,6 +553,13 @@ func TestExecuteAffectedComponents(t *testing.T) {
 }
 
 func TestExecuteTerraformAffected(t *testing.T) {
+	// Skip on ARM64 due to gomonkey incompatibility with Apple Silicon.
+	// GoMonkey requires runtime code patching which macOS memory protection prevents.
+	// See: https://github.com/agiledragon/gomonkey/issues/169
+	if runtime.GOARCH == "arm64" {
+		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	}
+
 	tests := []struct {
 		name          string
 		args          *DescribeAffectedCmdArgs
@@ -763,6 +785,13 @@ func TestExecuteTerraformAffected(t *testing.T) {
 
 // Benchmark tests.
 func BenchmarkGetAffectedComponents(b *testing.B) {
+	// Skip on ARM64 due to gomonkey incompatibility with Apple Silicon.
+	// GoMonkey requires runtime code patching which macOS memory protection prevents.
+	// See: https://github.com/agiledragon/gomonkey/issues/169
+	if runtime.GOARCH == "arm64" {
+		b.Skip("Skipping gomonkey benchmark on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	}
+
 	args := &DescribeAffectedCmdArgs{
 		CLIConfig: &schema.AtmosConfiguration{},
 		RepoPath:  "/path/to/repo",
@@ -794,6 +823,13 @@ func BenchmarkGetAffectedComponents(b *testing.B) {
 }
 
 func BenchmarkExecuteAffectedComponents(b *testing.B) {
+	// Skip on ARM64 due to gomonkey incompatibility with Apple Silicon.
+	// GoMonkey requires runtime code patching which macOS memory protection prevents.
+	// See: https://github.com/agiledragon/gomonkey/issues/169
+	if runtime.GOARCH == "arm64" {
+		b.Skip("Skipping gomonkey benchmark on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	}
+
 	affectedList := []schema.Affected{
 		{Component: "vpc", Stack: "prod", IncludedInDependents: false},
 		{Component: "eks", Stack: "prod", IncludedInDependents: false},

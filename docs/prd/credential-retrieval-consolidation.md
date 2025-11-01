@@ -452,3 +452,89 @@ func TestCredentialRetrieval_ConsistentBehavior(t *testing.T) {
 1. **Caching:** Should we cache identity storage lookups to avoid repeated file reads?
 2. **Metrics:** Should we track how often fallback is used to understand user patterns?
 3. **Configuration:** Should users be able to configure retrieval order (skip keyring entirely)?
+
+## Related Issue: Container Authentication Chain Truncation Bug
+
+> **Status: ✅ FIXED**
+> Fixed in commit [838d40c70](https://github.com/cloudposse/atmos/commit/838d40c70)
+> See also: [container-auth-fixes.md](./container-auth-fixes.md) for complete details
+
+### The Issue
+
+After implementing `loadCredentialsWithFallback()` to fix terraform credential retrieval, a second related bug was discovered: **authentication chain truncation in container environments**.
+
+**Symptom:** In containers (with noop keyring), assume-role identities were receiving permission set credentials instead of properly assumed role credentials.
+
+### How loadCredentialsWithFallback Exposed This Bug
+
+The `loadCredentialsWithFallback()` method correctly retrieves credentials from either keyring or identity storage. However, it also calls `ensureIdentityHasManager()` to set the manager reference on identities:
+
+```go
+// From pkg/auth/manager.go:819 in loadCredentialsWithFallback
+_ = m.ensureIdentityHasManager(identityName)
+```
+
+In **container environments with noop keyring**, this created a chain reaction:
+
+1. `Authenticate("assume-role")` builds 3-element chain: `[provider, permission-set, assume-role]`
+2. During `findFirstValidCachedCredentials()`, checks each identity from bottom-up
+3. Noop keyring returns "not found" for permission-set credentials
+4. Falls back to `loadCredentialsWithFallback("permission-set")` ← **This is correct behavior from our fix!**
+5. **BUG**: `ensureIdentityHasManager("permission-set")` rebuilds chain for permission-set: `[provider, permission-set]`
+6. **Overwrites `m.chain`**, truncating from 3 to 2 elements
+7. `authenticateIdentityChain()` uses truncated chain, only authenticates through permission-set
+8. `PostAuthenticate()` writes permission-set credentials to assume-role profile
+
+### Root Cause
+
+**The `ensureIdentityHasManager()` function** (pkg/auth/manager.go:540) was unconditionally rebuilding the authentication chain when called with intermediate identities, overwriting the chain built for the target identity.
+
+This wasn't a problem with native (system keyring) because:
+- Keyring stores and returns credentials without calling `ensureIdentityHasManager`
+- No fallback to `loadCredentialsWithFallback` means no chain rebuilding
+
+But with containers (noop keyring):
+- Noop keyring ALWAYS returns "not found"
+- ALWAYS triggers fallback to `loadCredentialsWithFallback`
+- `ensureIdentityHasManager` gets called for EVERY credential check
+- Chain gets repeatedly overwritten
+
+### The Fix
+
+Added check in `ensureIdentityHasManager()` to preserve existing authentication chains:
+
+```go
+// If chain exists but for a DIFFERENT identity, don't overwrite it!
+// This happens when loading cached credentials for an intermediate identity
+// (e.g., permission set) while authenticating a target identity (e.g., assume role).
+// The existing chain is for the target identity and should not be replaced.
+if len(m.chain) > 0 {
+    // Chain exists for a different identity - just set manager reference
+    // using the existing chain without rebuilding.
+    return m.setIdentityManager(identityName)
+}
+```
+
+### Key Insight: Fallback Pattern Amplifies Container-Specific Bugs
+
+This bug demonstrates an important principle:
+
+**When adding fallback logic (like `loadCredentialsWithFallback`), you must carefully audit ALL side effects that occur during the fallback path.**
+
+In our case:
+- ✅ Credential retrieval from identity storage: **Correct**
+- ✅ Setting manager reference on identity: **Correct intent**
+- ❌ Rebuilding authentication chain as side effect: **Incorrect in container environments**
+
+The fallback path gets executed **much more frequently** in container environments (every credential check vs. once per session natively), so bugs in the fallback path manifest as container-specific failures.
+
+### Testing Implications
+
+When testing credential retrieval consolidation:
+
+1. ✅ Test with system keyring (native environment)
+2. ✅ Test with noop keyring (container environment)
+3. ✅ Test multi-step authentication chains (permission-set → assume-role)
+4. ✅ Test that intermediate credential checks don't corrupt authentication state
+
+See [container-auth-fixes.md](./container-auth-fixes.md) for complete documentation of this issue.

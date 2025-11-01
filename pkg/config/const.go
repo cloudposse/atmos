@@ -122,7 +122,8 @@ const (
 	StackStr     = "stack"
 
 	// Auth flags.
-	IdentityFlag = "--identity"
+	IdentityFlag            = "--identity"
+	IdentityFlagSelectValue = "__SELECT__" // Special value when --identity is used without argument.
 
 	// Performance profiling flags.
 	ProfilerEnabledFlag = "--profiler-enabled"
