@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -805,6 +807,52 @@ func TestIsInteractive(t *testing.T) {
 	result := isInteractive()
 	// In test environment, this typically returns false, but we just verify it doesn't panic.
 	assert.IsType(t, false, result)
+}
+
+func TestSSOProvider_Paths(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", tempHome)
+	}
+
+	provider, err := NewSSOProvider("test-sso", &schema.Provider{
+		Kind:     "aws/iam-identity-center",
+		StartURL: testStartURL,
+		Region:   testRegion,
+	})
+	require.NoError(t, err)
+
+	paths, err := provider.Paths()
+	assert.NoError(t, err)
+	assert.Len(t, paths, 3, "should return credentials, config, and cache paths")
+
+	// Verify credentials file
+	assert.Equal(t, authTypes.PathTypeFile, paths[0].Type)
+	assert.True(t, paths[0].Required)
+	assert.Contains(t, paths[0].Location, "credentials")
+	assert.Contains(t, paths[0].Purpose, "credentials")
+	assert.Equal(t, "true", paths[0].Metadata["read_only"])
+
+	// Verify config file
+	assert.Equal(t, authTypes.PathTypeFile, paths[1].Type)
+	assert.False(t, paths[1].Required, "config file is optional")
+	assert.Contains(t, paths[1].Location, "config")
+	assert.Contains(t, paths[1].Purpose, "config")
+	assert.Equal(t, "true", paths[1].Metadata["read_only"])
+
+	// Verify cache directory
+	assert.Equal(t, authTypes.PathTypeDirectory, paths[2].Type)
+	assert.False(t, paths[2].Required, "cache is optional")
+	assert.Contains(t, paths[2].Purpose, "cache")
+	assert.Equal(t, "false", paths[2].Metadata["read_only"], "cache must be writable")
+
+	t.Logf("Provider paths:")
+	for i, p := range paths {
+		t.Logf("  [%d] %s: %s (type=%s, required=%v)",
+			i, p.Purpose, p.Location, p.Type, p.Required)
+	}
 }
 
 // stringPtr is a helper to create string pointers.
