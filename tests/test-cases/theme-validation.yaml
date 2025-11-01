@@ -1,0 +1,127 @@
+tests:
+  - name: "Invalid Theme in Config File"
+    enabled: true
+    snapshot: true
+    description: "Test validation of invalid theme in atmos.yaml config file"
+    workdir: "fixtures/scenarios/invalid-theme"
+    command: "atmos"
+    args:
+      - version
+    expect:
+      stderr:
+        - "Theme validation failed"
+        - "invalid theme 'non-existent-theme'"
+        - "Available themes"
+      exit_code: 1
+
+  - name: "Invalid Theme in Environment Variable"
+    enabled: true
+    snapshot: true
+    description: "Test validation of invalid theme in ATMOS_THEME env var"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - version
+    env:
+      ATMOS_THEME: "invalid-theme-name"
+      CI: "true"
+    expect:
+      stderr:
+        - "Theme validation failed"
+        - "invalid theme 'invalid-theme-name'"
+        - "Available themes"
+      exit_code: 1
+
+  - name: "Valid Theme in Config File"
+    enabled: true
+    snapshot: true
+    description: "Test validation of valid theme in atmos.yaml config file"
+    workdir: "fixtures/scenarios/valid-theme-dracula"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      CI: "true"
+    command: "atmos"
+    args:
+      - version
+    expect:
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n$'
+      exit_code: 0
+
+  - name: "Valid Theme in Environment Variable"
+    enabled: true
+    snapshot: true
+    description: "Test validation of valid theme in ATMOS_THEME env var"
+    workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_THEME: "dracula"
+      CI: "true"
+    command: "atmos"
+    args:
+      - version
+    expect:
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
+      exit_code: 0
+
+  - name: "Empty Theme (Should Use Default)"
+    enabled: true
+    snapshot: true
+    description: "Test that empty theme uses default without error"
+    workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_THEME: ""
+      CI: "true"
+    command: "atmos"
+    args:
+      - version
+    expect:
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
+      exit_code: 0
+
+  - name: "Case Insensitive Theme Validation"
+    enabled: true
+    snapshot: true
+    description: "Test that theme names are case insensitive"
+    workdir: "../"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_THEME: "DRACULA"
+      CI: "true"
+    command: "atmos"
+    args:
+      - version
+    expect:
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
+      exit_code: 0
+
+  - name: "Theme Priority - Environment Over Config"
+    enabled: true
+    snapshot: true
+    description: "Test that ATMOS_THEME env var takes priority over config file"
+    workdir: "fixtures/scenarios/valid-theme-dracula"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_THEME: "gruvbox light"
+      CI: "true"
+    command: "atmos"
+    args:
+      - version
+    expect:
+      diff:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stdout:
+        - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n'
+      exit_code: 0

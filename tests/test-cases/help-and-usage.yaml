@@ -419,7 +419,7 @@ tests:
         - "Atmos Releases:"
         - "Install Atmos:"
       stdout:
-        - "Flags:"
+        - "FLAGS"
         - "--affected-only"
         - "--config-template"
       exit_code: 0

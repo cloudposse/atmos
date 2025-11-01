@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/config"
@@ -57,8 +55,8 @@ var listVendorCmd = &cobra.Command{
 			return err
 		}
 
-		// Print output
-		fmt.Println(output)
+		// Print the formatted output directly (table/json/yaml/csv already formatted)
+		cmd.Print(output)
 
 		return nil
 	},
