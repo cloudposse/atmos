@@ -15,7 +15,6 @@ import (
 
 var (
 	ErrVendorConfigNotExist       = errors.New("the '--everything' flag is set, but vendor config file does not exist")
-	ErrExecuteVendorDiffCmd       = errors.New("'atmos vendor diff' is not implemented yet")
 	ErrValidateComponentFlag      = errors.New("either '--component' or '--tags' flag can be provided, but not both")
 	ErrValidateComponentStackFlag = errors.New("either '--component' or '--stack' flag can be provided, but not both")
 	ErrValidateEverythingFlag     = errors.New("'--everything' flag cannot be combined with '--component', '--stack', or '--tags' flags")
@@ -28,11 +27,6 @@ func ExecuteVendorPullCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteVendorPullCmd")()
 
 	return ExecuteVendorPullCommand(cmd, args)
-}
-
-// ExecuteVendorDiffCmd executes `vendor diff` commands.
-func ExecuteVendorDiffCmd(cmd *cobra.Command, args []string) error {
-	return ErrExecuteVendorDiffCmd
 }
 
 type VendorFlags struct {
