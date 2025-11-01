@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -14,9 +13,28 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flagparser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// authExecParser handles flag parsing for auth exec command.
+var authExecParser *flagparser.PassThroughFlagParser
+
+func init() {
+	// Create parser with identity flag only (auth exec doesn't use stack/component flags).
+	authExecParser = flagparser.NewPassThroughFlagParser(
+		flagparser.WithStringFlag("identity", "i", "", "Specify the target identity to assume. Use without value to interactively select."),
+	)
+
+	// Set NoOptDefVal for identity flag to support --identity without value.
+	registry := authExecParser.GetRegistry()
+	if identityFlag := registry.Get("identity"); identityFlag != nil {
+		if sf, ok := identityFlag.(*flagparser.StringFlag); ok {
+			sf.NoOptDefVal = cfg.IdentityFlagSelectValue
+		}
+	}
+}
 
 // authExecCmd executes a command with authentication environment variables.
 var authExecCmd = &cobra.Command{
@@ -25,11 +43,8 @@ var authExecCmd = &cobra.Command{
 	Long:  "Execute a command with the authenticated identity's environment variables set. Use `--` to separate Atmos flags from the command's native arguments.",
 	Example: `  # Run terraform with the authenticated identity
   atmos auth exec -- terraform plan -var-file=env.tfvars`,
-	Args:               cobra.MinimumNArgs(1),
-	DisableFlagParsing: true,
-
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	RunE:               executeAuthExecCommand,
+	Args: cobra.ArbitraryArgs,
+	RunE: executeAuthExecCommand,
 }
 
 // executeAuthExecCommand is the main execution function for auth exec command.
@@ -42,9 +57,23 @@ func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 
 // executeAuthExecCommandCore contains the core business logic for auth exec, separated for testability.
 func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
-	// Extract Atmos flags without using pflag parser to avoid issues with "--" end-of-flags marker.
-	// When DisableFlagParsing is true, manually parsing can incorrectly treat "--" as a flag value.
-	identityValue, commandArgs := extractIdentityFlag(args)
+	// Parse args with flagparser to extract --identity and command args.
+	ctx := cmd.Context()
+	parsedConfig, err := authExecParser.Parse(ctx, args)
+	if err != nil {
+		return err
+	}
+
+	// Get identity from parsed config.
+	var identityValue string
+	if id, ok := parsedConfig.AtmosFlags["identity"]; ok {
+		if idStr, ok := id.(string); ok {
+			identityValue = idStr
+		}
+	}
+
+	// Command args are everything that's not an Atmos flag.
+	commandArgs := parsedConfig.PassThroughArgs
 
 	// Validate command args before attempting authentication.
 	if len(commandArgs) == 0 {
@@ -90,7 +119,6 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 
 	// Try to use cached credentials first (passive check, no prompts).
 	// Only authenticate if cached credentials are not available or expired.
-	ctx := context.Background()
 	_, err = authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
 		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
@@ -240,8 +268,15 @@ func extractIdentityFlag(args []string) (identityValue string, commandArgs []str
 }
 
 func init() {
-	// NOTE: --identity flag is inherited from parent authCmd (PersistentFlags in cmd/auth.go:27).
-	// DO NOT redefine it here - that would create a duplicate local flag that shadows the parent.
-	// Identity flag completion is already added by parent authCmd (cmd/auth.go:45).
+	// Register Atmos flags with Cobra using our parser.
+	// This replaces the manual extractIdentityFlag() approach.
+	authExecParser.RegisterFlags(authExecCmd)
+	_ = authExecParser.BindToViper(viper.GetViper())
+
+	// Set NoOptDefVal on the registered flag to support --identity without value.
+	if identityFlag := authExecCmd.Flags().Lookup("identity"); identityFlag != nil {
+		identityFlag.NoOptDefVal = cfg.IdentityFlagSelectValue
+	}
+
 	authCmd.AddCommand(authExecCmd)
 }

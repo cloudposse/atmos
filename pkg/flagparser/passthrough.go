@@ -103,6 +103,14 @@ func NewPassThroughFlagParser(opts ...Option) *PassThroughFlagParser {
 	}
 }
 
+// GetRegistry returns the underlying FlagRegistry.
+// This allows callers to modify flags after parser creation (e.g., set NoOptDefVal).
+func (p *PassThroughFlagParser) GetRegistry() *FlagRegistry {
+	defer perf.Track(nil, "flagparser.PassThroughFlagParser.GetRegistry")()
+
+	return p.registry
+}
+
 // RegisterFlags implements FlagParser.
 func (p *PassThroughFlagParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.PassThroughFlagParser.RegisterFlags")()
