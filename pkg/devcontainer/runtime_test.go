@@ -477,3 +477,105 @@ func TestExpandDevcontainerVars(t *testing.T) {
 		})
 	}
 }
+
+func TestParseMountPart(t *testing.T) {
+	tests := []struct {
+		name     string
+		part     string
+		initial  container.Mount
+		expected container.Mount
+	}{
+		{
+			name:     "type field",
+			part:     "type=bind",
+			initial:  container.Mount{},
+			expected: container.Mount{Type: "bind"},
+		},
+		{
+			name:     "source field",
+			part:     "source=/host/path",
+			initial:  container.Mount{},
+			expected: container.Mount{Source: "/host/path"},
+		},
+		{
+			name:     "src alias",
+			part:     "src=/host/path",
+			initial:  container.Mount{},
+			expected: container.Mount{Source: "/host/path"},
+		},
+		{
+			name:     "target field",
+			part:     "target=/container/path",
+			initial:  container.Mount{},
+			expected: container.Mount{Target: "/container/path"},
+		},
+		{
+			name:     "dst alias",
+			part:     "dst=/container/path",
+			initial:  container.Mount{},
+			expected: container.Mount{Target: "/container/path"},
+		},
+		{
+			name:     "destination alias",
+			part:     "destination=/container/path",
+			initial:  container.Mount{},
+			expected: container.Mount{Target: "/container/path"},
+		},
+		{
+			name:     "readonly flag without value",
+			part:     "readonly",
+			initial:  container.Mount{},
+			expected: container.Mount{ReadOnly: true},
+		},
+		{
+			name:     "readonly with true value",
+			part:     "readonly=true",
+			initial:  container.Mount{},
+			expected: container.Mount{ReadOnly: true},
+		},
+		{
+			name:     "readonly with 1 value",
+			part:     "readonly=1",
+			initial:  container.Mount{},
+			expected: container.Mount{ReadOnly: true},
+		},
+		{
+			name:     "ro alias with true",
+			part:     "ro=true",
+			initial:  container.Mount{},
+			expected: container.Mount{ReadOnly: true},
+		},
+		{
+			name:     "readonly with false value",
+			part:     "readonly=false",
+			initial:  container.Mount{},
+			expected: container.Mount{ReadOnly: false},
+		},
+		{
+			name:     "part with spaces",
+			part:     "  source = /host/path  ",
+			initial:  container.Mount{},
+			expected: container.Mount{Source: "/host/path"},
+		},
+		{
+			name:     "unknown field ignored",
+			part:     "unknown=value",
+			initial:  container.Mount{Type: "bind"},
+			expected: container.Mount{Type: "bind"},
+		},
+		{
+			name:     "modifies existing mount",
+			part:     "readonly",
+			initial:  container.Mount{Type: "bind", Source: "/src"},
+			expected: container.Mount{Type: "bind", Source: "/src", ReadOnly: true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mount := tt.initial
+			parseMountPart(tt.part, &mount)
+			assert.Equal(t, tt.expected, mount)
+		})
+	}
+}

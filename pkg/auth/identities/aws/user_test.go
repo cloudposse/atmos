@@ -957,3 +957,15 @@ func TestUserIdentity_BuildGetSessionTokenInput_UsesConfiguredDuration(t *testin
 		})
 	}
 }
+
+func TestUserIdentity_Paths(t *testing.T) {
+	id, err := NewUserIdentity("dev", &schema.Identity{
+		Kind: "aws/user",
+	})
+	require.NoError(t, err)
+
+	// AWS user identities don't add additional credential files beyond the provider.
+	paths, err := id.Paths()
+	assert.NoError(t, err)
+	assert.Empty(t, paths, "AWS user identities should not return additional paths")
+}
