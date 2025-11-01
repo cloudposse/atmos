@@ -34,9 +34,17 @@ atmos docs --help
 atmos pro lock --help
 atmos pro unlock --help
 atmos terraform --help
+atmos terraform apply --help
 atmos terraform clean --help
 atmos terraform deploy --help
+atmos terraform destroy --help
 atmos terraform generate --help
+atmos terraform import --help
+atmos terraform init --help
+atmos terraform output --help
+atmos terraform plan --help
+atmos terraform refresh --help
+atmos terraform state --help
 atmos terraform generate backend --help
 atmos terraform generate backends --help
 atmos terraform generate planfile --help
