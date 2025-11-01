@@ -381,8 +381,8 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 			expectError: true,
 			// The error will be about missing role since PreAuthenticate wasn't called
 			// or about missing token. Since we don't set the role, we get the role error first.
-			errorMsg:    "no role to assume",
-			setupMock:   func(m *mockSTSClient) {},
+			errorMsg:  "no role to assume",
+			setupMock: func(m *mockSTSClient) {},
 		},
 		{
 			name: "missing OIDC URL",
@@ -397,8 +397,8 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 			expectError: true,
 			setOidcUrl:  false,
 			// The error will be about missing role since PreAuthenticate wasn't called
-			errorMsg:    "no role to assume",
-			setupMock:   func(m *mockSTSClient) {},
+			errorMsg:  "no role to assume",
+			setupMock: func(m *mockSTSClient) {},
 		},
 	}
 
@@ -607,7 +607,7 @@ func TestOIDCProvider_NameAndPreAuthenticate(t *testing.T) {
 	p, err := NewOIDCProvider("github-oidc", &schema.Provider{Kind: "github/oidc", Region: "us-east-1", Spec: map[string]interface{}{"audience": "test"}})
 	require.NoError(t, err)
 	require.Equal(t, "github-oidc", p.Name())
-	
+
 	// PreAuthenticate with empty chain (provider only)
 	manager := &mockAuthManager{
 		chain:      []string{"github-oidc"},
@@ -622,7 +622,6 @@ func TestOIDCProvider_Logout(t *testing.T) {
 
 	ctx := context.Background()
 	err = p.Logout(ctx)
-
 	// GitHub OIDC provider now cleans up AWS credential files
 	// The error could be nil (success) or an error if cleanup fails
 	// Since we don't have actual files in this test, it might succeed or fail gracefully
