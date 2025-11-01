@@ -38,9 +38,11 @@ import (
 
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
-	_ "github.com/cloudposse/atmos/cmd/about"
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/version"
+
+	_ "github.com/cloudposse/atmos/cmd/about"
+	_ "github.com/cloudposse/atmos/cmd/toolchain"
 )
 
 const (
@@ -692,6 +694,9 @@ func init() {
 	if err := viper.BindEnv("ATMOS_GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"); err != nil {
 		log.Error("Failed to bind ATMOS_GITHUB_TOKEN environment variable", "error", err)
 	}
+
+	// Note: Toolchain command is now registered via the command registry pattern.
+	// The blank import of cmd/toolchain automatically registers it.
 
 	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)

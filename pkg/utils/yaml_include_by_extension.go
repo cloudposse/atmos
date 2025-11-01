@@ -11,6 +11,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -209,14 +210,31 @@ func processLocalFile(localFile string, forceRaw bool) (any, error) {
 func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile string, forceRaw bool) (any, error) {
 	defer perf.Track(atmosConfig, "utils.processRemoteFile")()
 
+	// Convert GitHub URLs to raw URLs if needed
+	downloadURL := includeFile
+	if isGitHubURL(includeFile) {
+		rawURL, err := github.ConvertToRawURL(includeFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert GitHub URL to raw URL: %w", err)
+		}
+		downloadURL = rawURL
+	}
+
 	dl := downloader.NewGoGetterDownloader(atmosConfig)
 
 	if forceRaw {
 		// Always return raw content for !include.raw
-		return dl.FetchAndParseRaw(includeFile)
+		return dl.FetchAndParseRaw(downloadURL)
 	}
 	// Use extension-based parsing for regular !include
-	return dl.FetchAndParseByExtension(includeFile)
+	return dl.FetchAndParseByExtension(downloadURL)
+}
+
+// isGitHubURL checks if the URL is a GitHub URL that needs conversion.
+func isGitHubURL(url string) bool {
+	return strings.HasPrefix(url, "https://github.com/") ||
+		strings.HasPrefix(url, "http://github.com/") ||
+		strings.HasPrefix(url, "github://")
 }
 
 // handleCommentString updates the node for string values that start with '#'.

@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -100,6 +101,26 @@ func ExecutePacker(
 			return fmt.Errorf("%w: component `%s` is locked and cannot be modified (`metadata.locked = true`)",
 				errUtils.ErrLockedComponentCantBeProvisioned,
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
+		}
+	}
+
+	// Resolve and install component dependencies.
+	resolver := dependencies.NewResolver(&atmosConfig)
+	deps, err := resolver.ResolveComponentDependencies("packer", info.StackSection, info.ComponentSection)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+	}
+
+	if len(deps) > 0 {
+		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
+		installer := dependencies.NewInstaller(&atmosConfig)
+		if err := installer.EnsureTools(deps); err != nil {
+			return fmt.Errorf("failed to install component dependencies: %w", err)
+		}
+
+		// Update PATH to include installed tools.
+		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
+			return fmt.Errorf("failed to update PATH for component: %w", err)
 		}
 	}
 
