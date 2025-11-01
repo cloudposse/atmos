@@ -61,8 +61,7 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 
 			// Create a command instance with the same flags as the real authShellCmd.
 			testCmd := &cobra.Command{
-				Use:                "shell",
-				DisableFlagParsing: true,
+				Use: "shell",
 			}
 			testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
@@ -84,18 +83,18 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 func TestAuthShellCmd_CommandStructure(t *testing.T) {
 	// Test that the real authShellCmd has the expected structure.
 	assert.Equal(t, "shell", authShellCmd.Use)
-	assert.True(t, authShellCmd.DisableFlagParsing, "DisableFlagParsing should be true to allow pass-through of shell arguments")
 
-	// Verify identity flag exists (inherited from parent authCmd).
+	// Verify identity flag exists (registered via PassThroughFlagParser).
 	identityFlag := authShellCmd.Flag("identity")
-	require.NotNil(t, identityFlag, "identity flag should be inherited from parent authCmd")
+	require.NotNil(t, identityFlag, "identity flag should be registered via PassThroughFlagParser")
 	assert.Equal(t, "i", identityFlag.Shorthand)
 	assert.Equal(t, "", identityFlag.DefValue)
 	assert.Equal(t, IdentityFlagSelectValue, identityFlag.NoOptDefVal, "NoOptDefVal should be __SELECT__")
 
-	// Verify shell flag exists (local flag).
+	// Verify shell flag exists (registered via PassThroughFlagParser).
 	shellFlag := authShellCmd.Flags().Lookup("shell")
-	require.NotNil(t, shellFlag, "shell flag should be registered")
+	require.NotNil(t, shellFlag, "shell flag should be registered via PassThroughFlagParser")
+	assert.Equal(t, "s", shellFlag.Shorthand)
 	assert.Equal(t, "", shellFlag.DefValue)
 }
 
@@ -106,8 +105,7 @@ func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", testDir)
 
 	testCmd := &cobra.Command{
-		Use:                "shell",
-		DisableFlagParsing: true,
+		Use: "shell",
 	}
 	testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
@@ -124,8 +122,7 @@ func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", testDir)
 
 	testCmd := &cobra.Command{
-		Use:                "shell",
-		DisableFlagParsing: true,
+		Use: "shell",
 	}
 	testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
@@ -138,16 +135,11 @@ func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
 
 func TestAuthShellCmd_HelpRequest(t *testing.T) {
 	// Test that the command handles help request arguments.
-	// When DisableFlagParsing is true, Cobra doesn't add the help flag automatically,
-	// so handleHelpRequest in cmd/helpers.go handles --help and -h manually.
+	// Help is handled by handleHelpRequest which is called in executeAuthShellCommand.
 	testDir := "../tests/fixtures/scenarios/atmos-auth"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
 	t.Setenv("ATMOS_BASE_PATH", testDir)
 
-	// The command should have DisableFlagParsing enabled.
-	assert.True(t, authShellCmd.DisableFlagParsing, "DisableFlagParsing should be true")
-
-	// Help is handled by handleHelpRequest which is called in executeAuthShellCommand.
 	// We can't easily test this without capturing stdout, but we verify the structure.
 	assert.NotNil(t, authShellCmd.RunE, "RunE should be set")
 }
@@ -217,8 +209,7 @@ func TestAuthShellCmd_WithMockProvider(t *testing.T) {
 			t.Setenv("ATMOS_BASE_PATH", testDir)
 
 			testCmd := &cobra.Command{
-				Use:                "shell",
-				DisableFlagParsing: true,
+				Use: "shell",
 			}
 			testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
@@ -244,8 +235,7 @@ func TestAuthShellCmd_MockProviderEnvironmentVariables(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", testDir)
 
 	testCmd := &cobra.Command{
-		Use:                "shell",
-		DisableFlagParsing: true,
+		Use: "shell",
 	}
 	testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
