@@ -295,30 +295,32 @@ func TestExplicitIdentityAlwaysWorks(t *testing.T) {
 
 	scenarios := []struct {
 		name     string
-		setupCmd func(*exec.Cmd)
+		setupCmd func(*testing.T, *exec.Cmd)
 		desc     string
 	}{
 		{
 			name: "with CI=true",
-			setupCmd: func(cmd *exec.Cmd) {
+			setupCmd: func(t *testing.T, cmd *exec.Cmd) {
 				cmd.Env = append(os.Environ(), "CI=true")
 			},
 			desc: "Explicit identity should work even in CI",
 		},
 		{
 			name: "with stdin from /dev/null",
-			setupCmd: func(cmd *exec.Cmd) {
+			setupCmd: func(t *testing.T, cmd *exec.Cmd) {
 				// Use os.DevNull for cross-platform compatibility (/dev/null on Unix, NUL on Windows).
 				devNull, err := os.Open(os.DevNull)
-				if err == nil {
-					cmd.Stdin = devNull
-				}
+				require.NoError(t, err, "failed to open null device")
+				cmd.Stdin = devNull
+				t.Cleanup(func() {
+					_ = devNull.Close()
+				})
 			},
 			desc: "Explicit identity should work with redirected stdin",
 		},
 		{
 			name: "with GitHub Actions CI",
-			setupCmd: func(cmd *exec.Cmd) {
+			setupCmd: func(t *testing.T, cmd *exec.Cmd) {
 				cmd.Env = append(os.Environ(), "GITHUB_ACTIONS=true")
 			},
 			desc: "Explicit identity should work in GitHub Actions",
@@ -332,7 +334,7 @@ func TestExplicitIdentityAlwaysWorks(t *testing.T) {
 			cmd := atmosRunner.Command("auth", "login", "--identity", "my-explicit-identity")
 
 			// Apply scenario setup.
-			scenario.setupCmd(cmd)
+			scenario.setupCmd(t, cmd)
 
 			var stdout strings.Builder
 			var stderr strings.Builder
