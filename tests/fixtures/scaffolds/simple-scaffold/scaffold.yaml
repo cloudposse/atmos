@@ -1,0 +1,36 @@
+name: "Simple Scaffold Configuration"
+description: "Simple configuration for scaffold template"
+version: "1.0.0"
+target_dir: "simple-scaffold-example"
+template_id: "simple-scaffold"
+
+fields:
+  name:
+    key: "name"
+    type: "input"
+    label: "Name"
+    description: "The name of your scaffold template"
+    default: "my-simple-project"
+    required: true
+    placeholder: "Enter name"
+
+  author:
+    key: "author"
+    type: "input"
+    label: "Author"
+    description: "Your name or organization"
+    default: ""
+    required: true
+    placeholder: "Your name"
+
+  environment:
+    key: "environment"
+    type: "select"
+    label: "Environment"
+    description: "The environment this project will run in"
+    default: "dev"
+    required: true
+    options:
+      - "dev"
+      - "staging"
+      - "prod"
