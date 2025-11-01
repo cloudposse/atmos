@@ -133,6 +133,8 @@ var (
 	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
 
 	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
+	ErrRequiredFlagNotProvided            = errors.New("required flag not provided")
+	ErrRequiredFlagEmpty                  = errors.New("required flag cannot be empty")
 	ErrInvalidComponent                   = errors.New("invalid component")
 	ErrInvalidComponentMapType            = errors.New("invalid component map type")
 	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")

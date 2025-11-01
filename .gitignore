@@ -76,6 +76,9 @@ FUTURE_IMPROVEMENTS.md
 PHASE_4_*.md
 TEST_QUALITY_*.md
 
+# Scratch directory for working notes (local tracking only)
+.scratch/
+
 # Lintroller and other custom tools
 /lintroller
 /.lintroller
