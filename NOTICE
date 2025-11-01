@@ -463,7 +463,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - go.uber.org/mock/gomock
     License: Apache-2.0
-    URL: https://github.com/uber/mock/blob/v0.6.0/LICENSE
+    URL: Unknown
 
   - go.yaml.in/yaml/v2
     License: Apache-2.0
