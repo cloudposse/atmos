@@ -92,3 +92,7 @@ performance-optimization/
 # Merge conflict artifacts
 *.orig
 *.rej
+
+# Scratch directory for temporary working files
+.scratch/*
+!.scratch/README.md
