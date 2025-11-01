@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flagparser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -26,6 +26,25 @@ const (
 //go:embed markdown/atmos_auth_shell_usage.md
 var authShellUsageMarkdown string
 
+// authShellParser handles flag parsing for auth shell command.
+var authShellParser *flagparser.PassThroughFlagParser
+
+func init() {
+	// Create parser with identity and shell flags.
+	authShellParser = flagparser.NewPassThroughFlagParser(
+		flagparser.WithStringFlag("identity", "i", "", "Specify the target identity to assume. Use without value to interactively select."),
+		flagparser.WithStringFlag("shell", "s", "", "Specify the shell to launch (default: $SHELL or /bin/sh)"),
+	)
+
+	// Set NoOptDefVal for identity flag to support --identity without value.
+	registry := authShellParser.GetRegistry()
+	if identityFlag := registry.Get("identity"); identityFlag != nil {
+		if sf, ok := identityFlag.(*flagparser.StringFlag); ok {
+			sf.NoOptDefVal = cfg.IdentityFlagSelectValue
+		}
+	}
+}
+
 // authShellCmd launches an interactive shell with authentication environment variables.
 var authShellCmd = &cobra.Command{
 	Use:   "shell",
@@ -33,11 +52,10 @@ var authShellCmd = &cobra.Command{
 	Long: `The 'atmos auth shell' command authenticates with the specified identity and launches an interactive shell with the authentication environment variables configured.
 
 In this shell, you can execute commands that require cloud credentials without needing to manually configure authentication. The shell will have all necessary environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, etc.) pre-configured based on your authenticated identity.`,
-	Example:            authShellUsageMarkdown,
-	DisableFlagParsing: true,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	ValidArgsFunction:  cobra.NoFileCompletions,
-	RunE:               executeAuthShellCommand,
+	Example:           authShellUsageMarkdown,
+	Args:              cobra.ArbitraryArgs,
+	ValidArgsFunction: cobra.NoFileCompletions,
+	RunE:              executeAuthShellCommand,
 }
 
 // executeAuthShellCommand is the main execution function for auth shell command.
@@ -54,9 +72,31 @@ func executeAuthShellCommand(cmd *cobra.Command, args []string) error {
 func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "cmd.executeAuthShellCommandCore")()
 
-	// Extract Atmos flags without using pflag parser to avoid issues with "--" end-of-flags marker.
-	// When DisableFlagParsing is true, manually parsing can incorrectly treat "--" as a flag value.
-	identityValue, shellValue, shellArgs := extractAuthShellFlags(args)
+	// Parse args with flagparser to extract --identity, --shell, and shell args.
+	ctx := cmd.Context()
+	parsedConfig, err := authShellParser.Parse(ctx, args)
+	if err != nil {
+		return err
+	}
+
+	// Get identity from parsed config.
+	var identityValue string
+	if id, ok := parsedConfig.AtmosFlags["identity"]; ok {
+		if idStr, ok := id.(string); ok {
+			identityValue = idStr
+		}
+	}
+
+	// Get shell from parsed config.
+	var shellValue string
+	if sh, ok := parsedConfig.AtmosFlags["shell"]; ok {
+		if shStr, ok := sh.(string); ok {
+			shellValue = shStr
+		}
+	}
+
+	// Shell args are everything that's not an Atmos flag.
+	shellArgs := parsedConfig.PassThroughArgs
 
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -98,7 +138,6 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 
 	// Try to use cached credentials first (passive check, no prompts).
 	// Only authenticate if cached credentials are not available or expired.
-	ctx := context.Background()
 	_, err = authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
 		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
@@ -226,19 +265,15 @@ func extractAuthShellFlags(args []string) (identityValue, shellValue string, she
 }
 
 func init() {
-	// NOTE: --identity flag is inherited from parent authCmd (PersistentFlags in cmd/auth.go:27).
-	// DO NOT redefine it here - that would create a duplicate local flag that shadows the parent.
+	// Register Atmos flags with Cobra using our parser.
+	// This replaces the manual extractAuthShellFlags() approach.
+	authShellParser.RegisterFlags(authShellCmd)
+	_ = authShellParser.BindToViper(viper.GetViper())
 
-	authShellCmd.Flags().String(shellFlagName, "", "Specify the shell to use (defaults to $SHELL, then bash, then sh)")
-
-	if err := viper.BindEnv(shellFlagName, "ATMOS_SHELL", "SHELL"); err != nil {
-		log.Trace("Failed to bind shell environment variables", "error", err)
+	// Set NoOptDefVal on the registered identity flag to support --identity without value.
+	if identityFlag := authShellCmd.Flags().Lookup("identity"); identityFlag != nil {
+		identityFlag.NoOptDefVal = cfg.IdentityFlagSelectValue
 	}
-	if err := viper.BindPFlag(shellFlagName, authShellCmd.Flags().Lookup(shellFlagName)); err != nil {
-		log.Trace("Failed to bind shell flag", "error", err)
-	}
-
-	// Identity flag completion is already added by parent authCmd (cmd/auth.go:45).
 
 	authCmd.AddCommand(authShellCmd)
 }
