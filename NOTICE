@@ -467,7 +467,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - go.uber.org/mock/gomock
     License: Apache-2.0
-    URL: Unknown
+    URL: https://github.com/uber/mock/blob/v0.6.0/LICENSE
 
   - go.yaml.in/yaml/v2
     License: Apache-2.0
@@ -825,7 +825,7 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/go-getter
     License: MPL-2.0
-    URL: https://github.com/hashicorp/go-getter/blob/v1.8.3/LICENSE
+    URL: https://github.com/hashicorp/go-getter/blob/v1.8.2/LICENSE
 
   - github.com/hashicorp/go-immutable-radix
     License: MPL-2.0
