@@ -137,8 +137,14 @@ func TestValidateProvider_ErrorCases(t *testing.T) {
 			errMsg:   "region is required",
 		},
 		{
-			name:     "GitHub OIDC missing audience",
+			name:     "GitHub OIDC missing region",
 			provider: &schema.Provider{Kind: "github/oidc"},
+			wantErr:  true,
+			errMsg:   "region is required",
+		},
+		{
+			name:     "GitHub OIDC missing audience",
+			provider: &schema.Provider{Kind: "github/oidc", Region: "us-east-1"},
 			wantErr:  true,
 			errMsg:   "audience is required",
 		},
