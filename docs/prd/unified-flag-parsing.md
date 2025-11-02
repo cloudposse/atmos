@@ -1085,6 +1085,676 @@ atmos terraform plan vpc -s prod -var-file=prod.tfvars
 
 **Design decision**: Encourage `--` separator in documentation, but maintain backward compatibility with implicit mode.
 
+## Strongly-Typed Command Interpreters
+
+### Design Philosophy
+
+Instead of weakly-typed string-based flag access (like Cobra's `GetString("flag")`), we use **strongly-typed interpreters** (like Viper's schema-first approach). Each command type has its own interpreter struct with properly typed fields.
+
+**See also**:
+- `docs/prd/strongly-typed-interpreters/global-flags-pattern.md` - Handling global/persistent flags via struct embedding
+- `docs/prd/strongly-typed-interpreters/global-flags-examples.md` - Real examples with `--logs-level` and `--identity`
+- `docs/prd/strongly-typed-interpreters/default-values-pattern.md` - Default value handling across all layers
+
+### Why Strongly Typed?
+
+**Problem with weak typing (Cobra-style):**
+```go
+stack := interpreter.GetString("stack")        // ❌ Runtime error if typo
+dryRun := interpreter.GetBool("dry-run")       // ❌ No autocomplete
+identity := interpreter.Flags["identity"].(string) // ❌ Type assertion
+```
+
+**Solution with strong typing (Viper-style):**
+```go
+stack := interpreter.Stack                     // ✅ Compile-time safety
+dryRun := interpreter.DryRun                   // ✅ IDE autocomplete
+identity := interpreter.Identity.Value()       // ✅ No assertions
+```
+
+### Interface Design
+
+```go
+// CommandInterpreter is the base interface all interpreters implement.
+type CommandInterpreter interface {
+    GetGlobalFlags() *GlobalFlags
+    GetPositionalArgs() []string
+    GetPassThroughArgs() []string
+}
+
+// GlobalFlags contains all persistent flags available to every command.
+// These are inherited from RootCmd.PersistentFlags() and embedded in all interpreters.
+// See docs/prd/global-flags-pattern.md for detailed design.
+type GlobalFlags struct {
+    Chdir      string
+    BasePath   string
+    Config     []string
+    ConfigPath []string
+    LogsLevel  string
+    LogsFile   string
+    NoColor    bool
+    Pager      PagerSelector
+    // ... 13+ global flags
+}
+```
+
+### Command-Specific Interpreters
+
+Each command defines its own strongly-typed interpreter:
+
+#### Terraform Interpreter
+```go
+type TerraformInterpreter struct {
+    GlobalFlags  // Embedded: provides all 13+ global flags (logs-level, no-color, pager, etc.)
+
+    // All values have precedence resolved: CLI > ENV > config > defaults
+    Stack        string
+    Identity     IdentitySelector  // Special type for identity semantics
+    DryRun       bool
+    SkipInit     bool
+    FromPlan     string
+    UploadStatus bool
+
+    // Parsed structure
+    Subcommand string
+    Component  string
+
+    positionalArgs  []string
+    passThroughArgs []string
+}
+
+// Usage examples:
+// interpreter.LogsLevel    // ✅ From GlobalFlags (embedded)
+// interpreter.NoColor      // ✅ From GlobalFlags (embedded)
+// interpreter.Stack        // ✅ From TerraformInterpreter
+// interpreter.DryRun       // ✅ From TerraformInterpreter
+```
+
+#### Helmfile Interpreter
+```go
+type HelmfileInterpreter struct {
+    GlobalFlags  // Embedded: same global flags as Terraform
+
+    Stack     string
+    Identity  IdentitySelector
+    DryRun    bool
+    Component string
+
+    positionalArgs  []string
+    passThroughArgs []string
+}
+
+// Usage examples:
+// interpreter.LogsLevel    // ✅ From GlobalFlags
+// interpreter.Pager        // ✅ From GlobalFlags
+// interpreter.Stack        // ✅ From HelmfileInterpreter
+```
+
+#### Custom Command Interpreter
+For custom commands where schema isn't known at compile time:
+
+```go
+type CustomCommandInterpreter struct {
+    GlobalFlags  // Embedded: same global flags
+
+    // Generic map for dynamic flags from atmos.yaml
+    Flags map[string]interface{}
+
+    positionalArgs  []string
+    passThroughArgs []string
+}
+
+// Convenience methods
+func (c *CustomCommandInterpreter) GetString(key string) string
+func (c *CustomCommandInterpreter) GetBool(key string) bool
+func (c *CustomCommandInterpreter) Has(key string) bool
+
+// Usage examples:
+// interpreter.LogsLevel            // ✅ From GlobalFlags
+// interpreter.Flags["environment"] // ✅ From custom YAML config
+```
+
+### Identity Selector Type
+
+Identity flag has special semantics (interactive selection), modeled as a special type:
+
+```go
+// IdentitySelector represents the state of the identity flag.
+type IdentitySelector struct {
+    value    string
+    provided bool
+}
+
+// IsInteractiveSelector returns true if --identity was used without a value.
+func (i IdentitySelector) IsInteractiveSelector() bool {
+    return i.value == cfg.IdentityFlagSelectValue // "__SELECT__"
+}
+
+// Value returns the identity value.
+func (i IdentitySelector) Value() string {
+    return i.value
+}
+
+// IsEmpty returns true if no identity was provided.
+func (i IdentitySelector) IsEmpty() bool {
+    return i.value == ""
+}
+```
+
+### Universal Precedence Resolution
+
+**Key Principle**: Precedence (CLI > ENV > config > defaults) is resolved ONCE, universally, by the parser:
+
+```go
+// parseWithPrecedence is the universal precedence resolver.
+// ALL parsers use this to resolve flag values with proper precedence.
+func (p *baseParser) parseWithPrecedence(registry *FlagRegistry, viper *viper.Viper) map[string]interface{} {
+    resolved := make(map[string]interface{})
+
+    if viper == nil {
+        return resolved
+    }
+
+    // Viper handles precedence automatically
+    // We just need type-specific getters for proper conversion
+    for _, flag := range registry.All() {
+        flagName := flag.GetName()
+        viperKey := getViperKey(flagName)
+
+        if viper.IsSet(viperKey) {
+            switch flag.(type) {
+            case *BoolFlag:
+                resolved[flagName] = viper.GetBool(viperKey)
+            case *IntFlag:
+                resolved[flagName] = viper.GetInt(viperKey)
+            case *StringFlag:
+                resolved[flagName] = viper.GetString(viperKey)
+            }
+        }
+    }
+
+    return resolved
+}
+```
+
+### Parser Implementation
+
+Parsers resolve precedence and return strongly-typed interpreters:
+
+```go
+type TerraformParser struct {
+    registry *FlagRegistry
+    viper    *viper.Viper
+}
+
+func (p *TerraformParser) Parse(ctx context.Context, args []string) (*TerraformInterpreter, error) {
+    // Step 1: Extract CLI flags and args
+    positionals, passthrough, err := p.extractArgs(args)
+    if err != nil {
+        return nil, err
+    }
+
+    // Step 2: UNIVERSAL PRECEDENCE RESOLUTION
+    // This is the ONLY place precedence is handled
+    resolvedFlags := p.parseWithPrecedence(p.registry, p.viper)
+
+    // Step 3: Build strongly-typed interpreter
+    return NewTerraformInterpreter(resolvedFlags, positionals, passthrough), nil
+}
+```
+
+### Usage Examples
+
+```go
+// cmd/terraform_utils.go
+func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
+    // Parser resolves precedence and returns strongly-typed interpreter
+    interpreter, err := terraformParser.Parse(ctx, args)
+    if err != nil {
+        return err
+    }
+
+    // ✅ Strongly typed - no GetString() calls!
+    // ✅ Precedence already applied by parser
+    // ✅ IDE autocomplete works
+    info.Stack = interpreter.Stack
+    info.DryRun = interpreter.DryRun
+
+    // ✅ Clear identity handling
+    if interpreter.Identity.IsInteractiveSelector() {
+        handleInteractiveIdentitySelection(&info)
+    } else if !interpreter.Identity.IsEmpty() {
+        info.Identity = interpreter.Identity.Value()
+    }
+}
+
+// cmd/helmfile.go
+func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
+    interpreter, err := helmfileParser.Parse(ctx, args)
+
+    // ✅ Different type, different structure, same precedence!
+    info.Stack = interpreter.Stack
+    info.DryRun = interpreter.DryRun
+}
+```
+
+### Benefits
+
+1. **Type Safety**: Compiler catches typos and type errors
+2. **IDE Support**: Autocomplete shows available fields
+3. **Self-Documenting**: Interpreter struct shows exactly what's available
+4. **No Magic Strings**: `interpreter.Stack` not `interpreter.GetString("stack")`
+5. **Refactoring**: Rename fields and compiler finds all usages
+6. **Testing**: Easy to mock - `&TerraformInterpreter{Stack: "test"}`
+7. **Precedence Transparency**: Users don't think about precedence, it just works
+
+## Rollout Difficulty Assessment
+
+### Overview
+
+The strongly-typed interpreter design is a **significant architectural change** but can be implemented **incrementally** without breaking existing functionality. Below is a detailed analysis of effort, risks, and migration strategy.
+
+### Effort Estimation
+
+| Phase | Scope | Estimated Effort | Complexity |
+|-------|-------|------------------|------------|
+| **Phase 1: Core Infrastructure** | Create interpreter interfaces and base parser | 3-4 days | Medium |
+| **Phase 2: First Command Migration** | Terraform command (most complex) | 5-7 days | High |
+| **Phase 3: Remaining Pass-Through** | Helmfile, Packer commands | 2-3 days | Medium |
+| **Phase 4: Standard Commands** | Describe, Validate, Workflow, etc. (8-10 commands) | 4-5 days | Low-Medium |
+| **Phase 5: Custom Commands** | Dynamic interpreter for custom commands | 3-4 days | Medium |
+| **Phase 6: Testing & Cleanup** | Comprehensive tests, remove old code | 3-4 days | Medium |
+| **Total** | | **20-27 days** (~4-5 weeks) | |
+
+### Lines of Code Impact
+
+**New code to write:**
+- `pkg/flagparser/interpreter.go` - Base interfaces (~100 lines)
+- `pkg/flagparser/terraform_interpreter.go` - Terraform interpreter (~150 lines)
+- `pkg/flagparser/helmfile_interpreter.go` - Helmfile interpreter (~100 lines)
+- `pkg/flagparser/custom_interpreter.go` - Custom command interpreter (~150 lines)
+- `pkg/flagparser/identity.go` - IdentitySelector type (~80 lines)
+- Parser updates to return typed interpreters (~200 lines across all parsers)
+- **Total new code: ~780 lines**
+
+**Code to modify:**
+- `cmd/terraform_utils.go` - Update to use TerraformInterpreter (~50 line changes)
+- `cmd/helmfile.go` - Update to use HelmfileInterpreter (~40 line changes)
+- `cmd/packer.go` - Update to use PackerInterpreter (~40 line changes)
+- `cmd/auth_exec.go` - Update to use IdentitySelector (~30 line changes)
+- Custom command handling - Dynamic interpreter (~60 line changes)
+- **Total modifications: ~220 lines**
+
+**Code to remove:**
+- None! Old code stays during migration, removed after verification.
+- Post-migration cleanup: ~150 lines of old flag access patterns
+
+**Net change: +780 lines (new) + 220 lines (modified) = ~1,000 lines of code**
+
+### Breaking vs. Non-Breaking Changes
+
+**✅ NON-BREAKING (99% of changes):**
+- All interpreter changes are **internal only**
+- User-facing CLI syntax stays **identical**
+- All existing flags, env vars, configs work **as-is**
+- Precedence behavior remains **unchanged**
+- Backward compatibility **100% maintained**
+
+**⚠️ POTENTIALLY BREAKING (minimal risk):**
+- If custom code directly accesses `parsedConfig.AtmosFlags` map
+  - **Mitigation**: Deprecated accessors can be provided for transition period
+  - **Example**: Keep `parsedConfig.AtmosFlags["stack"]` working alongside `interpreter.Stack`
+- If tests rely on internal parser structures
+  - **Mitigation**: Update tests incrementally, provide test helpers
+
+### Migration Complexity by Command Type
+
+#### 1. **Pass-Through Commands** (Terraform, Helmfile, Packer)
+**Complexity: HIGH (first one), MEDIUM (subsequent)**
+
+**Terraform (first migration):**
+- Most complex command with most flags
+- Multiple flag types: bool, string, optional bool
+- Identity integration
+- Pass-through args handling
+- **Effort: 5-7 days** (includes building infrastructure)
+
+**Helmfile, Packer (subsequent):**
+- Reuse patterns from Terraform
+- Similar structure, fewer flags
+- **Effort: 1-2 days each**
+
+**Changes required:**
+```go
+// BEFORE (current)
+info.Stack = parsedConfig.AtmosFlags["stack"].(string)
+info.DryRun = parsedConfig.AtmosFlags["dry-run"].(bool)
+
+// AFTER (strongly-typed)
+info.Stack = interpreter.Stack
+info.DryRun = interpreter.DryRun
+```
+
+**Test updates:**
+```go
+// BEFORE (current)
+mock := &ParsedConfig{
+    AtmosFlags: map[string]interface{}{
+        "stack": "test-stack",
+        "dry-run": true,
+    },
+}
+
+// AFTER (strongly-typed)
+mock := &TerraformInterpreter{
+    Stack: "test-stack",
+    DryRun: true,
+}
+```
+
+**Effort breakdown:**
+- Create TerraformInterpreter struct: 1 hour
+- Update parser to return interpreter: 2-3 hours
+- Update command code to use typed fields: 2-3 hours
+- Update tests: 4-6 hours
+- Integration testing: 3-4 hours
+
+#### 2. **Standard Commands** (Describe, Validate, Workflow, etc.)
+**Complexity: LOW-MEDIUM**
+
+**Why easier:**
+- No pass-through args complexity
+- Fewer flags per command
+- Standard patterns
+- Well-defined schemas
+
+**Commands to migrate (~8-10 commands):**
+- `describe` (stack, component, config)
+- `validate` (component, stack, stacks)
+- `workflow`
+- `list`
+- `vendor`
+- `version`
+- `atlantis`
+- `aws`
+
+**Per command effort: 2-4 hours**
+
+**Pattern (nearly identical across commands):**
+```go
+type DescribeInterpreter struct {
+    BaseInterpreter
+
+    Stack     string
+    Format    string
+    Validate  bool
+    Component string
+}
+```
+
+#### 3. **Custom Commands**
+**Complexity: MEDIUM**
+
+**Why medium:**
+- Dynamic schema from YAML
+- Need generic interpreter
+- NoOptDefVal support
+- Type validation at runtime
+
+**Effort: 3-4 days**
+
+**Approach:**
+```go
+type CustomCommandInterpreter struct {
+    BaseInterpreter
+
+    Flags map[string]interface{}  // Dynamic flags
+}
+
+// Convenience methods for common types
+func (c *CustomCommandInterpreter) GetString(key string) string
+func (c *CustomCommandInterpreter) GetBool(key string) bool
+func (c *CustomCommandInterpreter) Has(key string) bool
+```
+
+**Schema extension needed:**
+```yaml
+# atmos.yaml
+commands:
+  - name: deploy-app
+    flags:
+      - name: environment
+        type: string
+        required: true
+      - name: identity
+        type: string
+        no_opt_default: "__SELECT__"  # NEW: Enable identity pattern
+```
+
+#### 4. **Identity Flag Integration**
+**Complexity: MEDIUM**
+
+**Why medium:**
+- Special semantics (interactive selection)
+- Used across multiple commands
+- NoOptDefVal interaction
+- Needs dedicated type
+
+**Effort: 1-2 days**
+
+**IdentitySelector type:**
+```go
+type IdentitySelector struct {
+    value    string
+    provided bool
+}
+
+func (i IdentitySelector) IsInteractiveSelector() bool
+func (i IdentitySelector) Value() string
+func (i IdentitySelector) IsEmpty() bool
+```
+
+**Usage update:**
+```go
+// BEFORE (current)
+identity := parsedConfig.AtmosFlags["identity"].(string)
+if identity == IdentityFlagSelectValue {
+    handleInteractiveSelection()
+}
+
+// AFTER (strongly-typed)
+if interpreter.Identity.IsInteractiveSelector() {
+    handleInteractiveSelection()
+} else if !interpreter.Identity.IsEmpty() {
+    identity := interpreter.Identity.Value()
+}
+```
+
+### Testing Requirements
+
+#### Unit Tests
+**Coverage target: 85-90%**
+
+**New tests needed:**
+- Interpreter construction from resolved flags (~10 tests per interpreter type)
+- IdentitySelector behavior (~8 tests)
+- Parser returns correct interpreter type (~5 tests per parser)
+- Type safety edge cases (~10 tests)
+- **Estimated: 150-200 new test cases**
+- **Effort: 2-3 days**
+
+#### Integration Tests
+**Existing tests should mostly pass unchanged**
+
+**Updates needed:**
+- Mock parsedConfig → Mock interpreter in test helpers
+- Update assertions to use typed fields
+- Verify backward compatibility
+- **Estimated: 50-80 test updates**
+- **Effort: 1-2 days**
+
+#### Regression Tests
+**Critical: Ensure nothing breaks**
+
+**Test scenarios:**
+- All existing CLI commands with current syntax
+- Environment variable precedence
+- Config file precedence
+- Flag precedence
+- Pass-through args
+- Identity flag patterns
+- Custom commands
+- **Effort: Built into each phase, ~1 day dedicated verification**
+
+### Risk Assessment
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|-----------|--------|------------|
+| **Breaking existing functionality** | Low | High | Comprehensive integration tests, backward compatibility layer |
+| **Type assertion errors** | Medium | Medium | Extensive unit tests, defensive programming |
+| **Performance regression** | Low | Low | Benchmark tests, profiling |
+| **Incomplete migration** | Medium | Medium | Phase-by-phase rollout, feature flags |
+| **Test maintenance burden** | Medium | Low | Update tests incrementally, provide helpers |
+| **IdentitySelector complexity** | Low | Low | Well-defined interface, clear documentation |
+
+### Migration Strategy
+
+#### Phase-by-Phase Rollout
+
+**Phase 1: Infrastructure (3-4 days)**
+- Create interpreter interfaces
+- Create IdentitySelector type
+- Update base parser infrastructure
+- Add universal precedence helper
+- **Risk: Low** (no user impact)
+- **Validation: Unit tests only**
+
+**Phase 2: Terraform Command (5-7 days)**
+- Most complex command, sets the pattern
+- Create TerraformInterpreter
+- Update parser to return typed interpreter
+- Update command code
+- Comprehensive testing
+- **Risk: Medium** (most-used command)
+- **Validation: Integration tests + manual testing**
+
+**Phase 3: Helmfile & Packer (2-3 days)**
+- Reuse Terraform patterns
+- Create interpreters
+- Update parsers and commands
+- **Risk: Low** (pattern proven)
+- **Validation: Integration tests**
+
+**Phase 4: Standard Commands (4-5 days)**
+- Migrate 8-10 simpler commands
+- Nearly identical pattern per command
+- Batch testing
+- **Risk: Low** (simpler structure)
+- **Validation: Existing test suites**
+
+**Phase 5: Custom Commands (3-4 days)**
+- Generic interpreter
+- YAML schema extension
+- Dynamic flag handling
+- **Risk: Medium** (dynamic nature)
+- **Validation: Custom command test suite**
+
+**Phase 6: Cleanup (3-4 days)**
+- Remove deprecated code
+- Update documentation
+- Final regression testing
+- **Risk: Low**
+- **Validation: Full integration test suite**
+
+#### Backward Compatibility Strategy
+
+**Transition period (2-3 releases):**
+1. **Release N**: Introduce interpreters, keep map access working
+2. **Release N+1**: Deprecate map access, add warnings
+3. **Release N+2**: Remove map access (breaking change, major version bump)
+
+**Compatibility layer:**
+```go
+// Provide deprecated access during transition
+type ParsedConfig struct {
+    // New: strongly-typed interpreters
+    TerraformFlags *TerraformInterpreter
+    HelmfileFlags  *HelmfileInterpreter
+
+    // Deprecated: for backward compatibility (kept 2-3 releases)
+    AtmosFlags map[string]interface{}
+}
+
+// Auto-populate map from interpreter (transition period only)
+func (p *ParsedConfig) PopulateDeprecatedMap() {
+    if p.TerraformFlags != nil {
+        p.AtmosFlags["stack"] = p.TerraformFlags.Stack
+        p.AtmosFlags["dry-run"] = p.TerraformFlags.DryRun
+        // ... etc
+    }
+}
+```
+
+### Success Criteria
+
+**Must achieve before rollout:**
+- [ ] **Zero breaking changes** in user-facing CLI
+- [ ] **100% backward compatibility** for existing syntax
+- [ ] **85%+ test coverage** for interpreter code
+- [ ] **All existing tests pass** with new implementation
+- [ ] **Performance neutral** (no measurable regression)
+
+**Quality gates per phase:**
+- [ ] All unit tests pass
+- [ ] All integration tests pass
+- [ ] Manual testing checklist completed
+- [ ] Code review approved
+- [ ] Documentation updated
+
+### Rollback Plan
+
+**Per-phase rollback:**
+- Each phase is a separate PR
+- Can revert individual PRs without cascading failures
+- Old code remains until all phases complete
+- Feature flags for gradual rollout (if needed)
+
+**Emergency rollback:**
+- Revert to previous commit
+- Old implementation still present during transition
+- Can disable new parsers via config flag
+
+### Recommendations
+
+**Recommended approach: INCREMENTAL**
+
+1. **Start with Terraform** (highest complexity, most benefit)
+   - Validates entire architecture
+   - Sets pattern for other commands
+   - Provides immediate value for most-used command
+
+2. **Complete pass-through commands** (Helmfile, Packer)
+   - Proves pattern scales
+   - Completes most complex commands
+
+3. **Batch standard commands**
+   - Low risk, high velocity
+   - Nearly identical patterns
+
+4. **Finish with custom commands**
+   - Requires infrastructure from previous phases
+   - Tests dynamic interpreter approach
+
+5. **Clean up after all migrations complete**
+   - Remove old code only when safe
+   - Maintain compatibility during transition
+
+**Timeline: 4-5 weeks** for full implementation
+
+**Effort: ~20-27 developer-days**
+
+**Risk: LOW to MEDIUM** with incremental approach
+
 ## Architecture
 
 ### Package Structure
@@ -1916,4 +2586,10 @@ func NewTerraformCmd(
 - [Docker CLI TopLevelCommand Pattern](https://github.com/docker/cli/blob/master/cli/cobra.go)
 - [Testing Flag Parsing in Go](https://eli.thegreenplace.net/2020/testing-flag-parsing-in-go-programs/)
 - [Functional Options Pattern](https://www.codingexplorations.com/blog/functional-options-pattern-go)
-- Atmos existing docs: `docs/prd/command-registry-pattern.md`, `docs/prd/testing-strategy.md`
+- Atmos existing PRDs:
+  - `docs/prd/command-registry-pattern.md` - Command registration system
+  - `docs/prd/testing-strategy.md` - Testing approach and coverage
+  - `docs/prd/strongly-typed-interpreters/` - Strongly-typed interpreter system (NEW)
+    - `global-flags-pattern.md` - Global flags handling via embedding
+    - `global-flags-examples.md` - Real-world examples with --logs-level and --identity
+    - `default-values-pattern.md` - Default value handling across all layers
