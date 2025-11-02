@@ -1,6 +1,6 @@
 ---
 slug: clean-user-files-set-by-user
-title: "Clean User Ffiles set by User"
+title: "Clean User Files Set by Users"
 authors: [atmos]
 tags: [enhancement]
 ---
