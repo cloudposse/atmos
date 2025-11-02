@@ -30,6 +30,7 @@ type DescribeComponentParams struct {
 	Format               string
 	File                 string
 	Provenance           bool
+	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 }
 
 type DescribeComponentExec struct {
@@ -96,6 +97,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 			ProcessTemplates:     processTemplates,
 			ProcessYamlFunctions: processYamlFunctions,
 			Skip:                 skip,
+			AuthManager:          describeComponentParams.AuthManager,
 		})
 		if err != nil {
 			return err
@@ -114,7 +116,7 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 			ProcessTemplates:     processTemplates,
 			ProcessYamlFunctions: processYamlFunctions,
 			Skip:                 skip,
-			AuthManager:          nil,
+			AuthManager:          describeComponentParams.AuthManager,
 		})
 		if err != nil {
 			return err

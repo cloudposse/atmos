@@ -451,7 +451,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 		atmosConfig,
 		info.StackFromArg,
 		FilterComponents,
-		nil, nil, false, false, false, false, nil)
+		nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrDescribeStack, err)
 	}

@@ -24,6 +24,10 @@ Execute the `atmos describe component` command like this:
 atmos describe component <component> -s <stack>
 ```
 
+:::info YAML Functions and Authentication
+By default, `atmos describe component` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during component processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
+:::
+
 :::tip
 Run `atmos describe component --help` to see all the available options
 :::
@@ -60,6 +64,13 @@ atmos describe component vpc -s plat-ue2-prod -q .settings
 atmos describe component vpc -s plat-ue2-prod --pager=more
 
 atmos describe component vpc -s tenant1-ue2-dev --provenance
+
+# Authenticate before describing (when YAML functions require credentials)
+atmos describe component vpc -s tenant1-ue2-dev --identity my-aws-identity
+
+atmos describe component vpc -s tenant1-ue2-dev --identity # Interactive selection
+
+atmos describe component vpc -s tenant1-ue2-dev -i my-aws-identity
 ```
 
 ## Arguments
@@ -121,6 +132,9 @@ atmos describe component vpc -s tenant1-ue2-dev --provenance
 
   <dt>`--pager` <em>(optional)</em></dt>
   <dd>Disable/Enable the paging user experience.</dd>
+
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before describing the component.<br/>This is required when YAML template functions (e.g., `!terraform.state`, `!terraform.output`)<br/>need to access remote resources requiring authentication.<br/>Use without a value for interactive identity selection:<br/>`atmos describe component <c> -s <stack> --identity` (interactive)<br/>`atmos describe component <c> -s <stack> --identity my-aws-identity` (specific identity)<br/><br/>For more details, refer to [Authentication](/cli/authentication).</dd>
 </dl>
 
 ## Output
