@@ -40,7 +40,7 @@ jobs:
       # gofumpt
       - name: Get changed Go files
         id: changed-files
-        uses: tj-actions/changed-files@e7b157b1c4ad44acfc8d9be14b8cd8f5058636e3 # v45.0.6
+        uses: tj-actions/changed-files@0ff001de0805038ff3f118de4875002200057732 # v45.0.6
         with:
           use_rest_api: "true"
           files: |
@@ -67,4 +67,4 @@ jobs:
       - name: Generate NOTICE file
         run: ./scripts/generate-notice.sh
 
-      - uses: autofix-ci/action@ff86a557419858bb967097bfc916833f5647fa8c # v1.3.2
+      - uses: autofix-ci/action@635ffb0c9798bd160680f18fd73371e355b85f27 # v1.3.2
