@@ -203,3 +203,41 @@ func (r *FlagRegistry) Validate(flagValues map[string]interface{}) error {
 
 	return nil
 }
+
+// RegisterStringFlag is a convenience method to register a string flag.
+func (r *FlagRegistry) RegisterStringFlag(name, shorthand, defaultValue, description string, required bool) {
+	defer perf.Track(nil, "flagparser.FlagRegistry.RegisterStringFlag")()
+
+	r.Register(&StringFlag{
+		Name:        name,
+		Shorthand:   shorthand,
+		Default:     defaultValue,
+		Description: description,
+		Required:    required,
+	})
+}
+
+// RegisterBoolFlag is a convenience method to register a boolean flag.
+func (r *FlagRegistry) RegisterBoolFlag(name, shorthand string, defaultValue bool, description string) {
+	defer perf.Track(nil, "flagparser.FlagRegistry.RegisterBoolFlag")()
+
+	r.Register(&BoolFlag{
+		Name:        name,
+		Shorthand:   shorthand,
+		Default:     defaultValue,
+		Description: description,
+	})
+}
+
+// RegisterIntFlag is a convenience method to register an integer flag.
+func (r *FlagRegistry) RegisterIntFlag(name, shorthand string, defaultValue int, description string, required bool) {
+	defer perf.Track(nil, "flagparser.FlagRegistry.RegisterIntFlag")()
+
+	r.Register(&IntFlag{
+		Name:        name,
+		Shorthand:   shorthand,
+		Default:     defaultValue,
+		Description: description,
+		Required:    required,
+	})
+}

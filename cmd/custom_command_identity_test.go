@@ -114,9 +114,10 @@ func TestCustomCommandIdentityFlagOverride(t *testing.T) {
 	}
 	require.NotNil(t, cobraCmd, "test-identity command should be registered as a Cobra command")
 
-	// Verify that --identity flag is automatically added.
-	identityFlag := cobraCmd.PersistentFlags().Lookup("identity")
+	// Verify that --identity flag is automatically added by the flag parser.
+	// With the unified flag parser, flags are registered on Flags() not PersistentFlags().
+	identityFlag := cobraCmd.Flags().Lookup("identity")
 	require.NotNil(t, identityFlag, "--identity flag should be automatically added to custom commands")
 	assert.Equal(t, "string", identityFlag.Value.Type())
-	assert.Contains(t, identityFlag.Usage, "overrides identity in command config")
+	assert.Contains(t, identityFlag.Usage, "Identity to use for authentication")
 }

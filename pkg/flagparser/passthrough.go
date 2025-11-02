@@ -141,6 +141,7 @@ func (p *PassThroughFlagParser) RegisterFlags(cmd *cobra.Command) {
 }
 
 // registerFlag registers a single flag with Cobra based on its type.
+// Uses PersistentFlags to ensure flags are available to subcommands.
 func (p *PassThroughFlagParser) registerFlag(cmd *cobra.Command, flag Flag) {
 	switch f := flag.(type) {
 	case *StringFlag:
@@ -489,4 +490,37 @@ func (p *PassThroughFlagParser) GetIdentityFromCmd(cmd *cobra.Command, v *viper.
 	// Fall back to Viper
 	viperKey := p.getViperKey(flagName)
 	return v.GetString(viperKey), nil
+}
+
+// NewPassThroughFlagParserFromRegistry creates a PassThroughFlagParser from an existing FlagRegistry.
+// This is useful for custom commands that need to dynamically register flags from configuration.
+//
+// Usage:
+//
+//	registry := flagparser.CommonFlags()
+//	registry.RegisterStringFlag("custom-flag", "c", "", "Custom flag description", false)
+//	parser := flagparser.NewPassThroughFlagParserFromRegistry(registry)
+func NewPassThroughFlagParserFromRegistry(registry *FlagRegistry) *PassThroughFlagParser {
+	defer perf.Track(nil, "flagparser.NewPassThroughFlagParserFromRegistry")()
+
+	// Build flag name lists from registry
+	var atmosFlagNames []string
+	shorthandToFull := make(map[string]string)
+
+	for _, flag := range registry.All() {
+		atmosFlagNames = append(atmosFlagNames, flag.GetName())
+		if flag.GetShorthand() != "" {
+			shorthandToFull[flag.GetShorthand()] = flag.GetName()
+		}
+	}
+
+	return &PassThroughFlagParser{
+		registry:            registry,
+		viperPrefix:         "",
+		atmosFlagNames:      atmosFlagNames,
+		shorthandToFull:     shorthandToFull,
+		optionalBoolFlags:   []string{},
+		extractPositionals:  true, // Default: extract positionals
+		positionalArgsCount: 2,    // Default: subcommand and component
+	}
 }
