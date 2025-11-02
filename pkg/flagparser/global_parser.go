@@ -141,6 +141,22 @@ func GlobalFlagsRegistry() *FlagRegistry {
 		EnvVars:     []string{"ATMOS_BASE_PATH"},
 	})
 
+	registry.Register(&StringSliceFlag{
+		Name:        "config",
+		Shorthand:   "",
+		Default:     []string{},
+		Description: "Paths to configuration files (comma-separated or repeated flag)",
+		EnvVars:     []string{"ATMOS_CONFIG"},
+	})
+
+	registry.Register(&StringSliceFlag{
+		Name:        "config-path",
+		Shorthand:   "",
+		Default:     []string{},
+		Description: "Paths to configuration directories (comma-separated or repeated flag)",
+		EnvVars:     []string{"ATMOS_CONFIG_PATH"},
+	})
+
 	// Logging flags.
 	registry.Register(&StringFlag{
 		Name:        "logs-level",

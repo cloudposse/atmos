@@ -209,3 +209,69 @@ func (f *IntFlag) GetEnvVars() []string {
 
 	return f.EnvVars
 }
+
+// StringSliceFlag represents a string slice flag.
+// This allows a flag to be provided multiple times to build a list:
+//
+//	--config file1.yaml --config file2.yaml
+//
+// or with comma-separated values:
+//
+//	--config file1.yaml,file2.yaml
+type StringSliceFlag struct {
+	Name        string
+	Shorthand   string
+	Default     []string
+	Description string
+	Required    bool
+	EnvVars     []string // Environment variables to bind.
+}
+
+// GetName implements Flag.
+func (f *StringSliceFlag) GetName() string {
+	defer perf.Track(nil, "flagparser.StringSliceFlag.GetName")()
+
+	return f.Name
+}
+
+// GetShorthand implements Flag.
+func (f *StringSliceFlag) GetShorthand() string {
+	defer perf.Track(nil, "flagparser.StringSliceFlag.GetShorthand")()
+
+	return f.Shorthand
+}
+
+// GetDescription implements Flag.
+func (f *StringSliceFlag) GetDescription() string {
+	defer perf.Track(nil, "flagparser.StringSliceFlag.GetDescription")()
+
+	return f.Description
+}
+
+// GetDefault implements Flag.
+func (f *StringSliceFlag) GetDefault() interface{} {
+	defer perf.Track(nil, "flagparser.StringSliceFlag.GetDefault")()
+
+	return f.Default
+}
+
+// IsRequired implements Flag.
+func (f *StringSliceFlag) IsRequired() bool {
+	defer perf.Track(nil, "flagparser.StringSliceFlag.IsRequired")()
+
+	return f.Required
+}
+
+// GetNoOptDefVal implements Flag.
+func (f *StringSliceFlag) GetNoOptDefVal() string {
+	defer perf.Track(nil, "flagparser.StringSliceFlag.GetNoOptDefVal")()
+
+	return "" // StringSlice flags don't use NoOptDefVal.
+}
+
+// GetEnvVars implements Flag.
+func (f *StringSliceFlag) GetEnvVars() []string {
+	defer perf.Track(nil, "flagparser.StringSliceFlag.GetEnvVars")()
+
+	return f.EnvVars
+}

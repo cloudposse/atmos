@@ -278,6 +278,8 @@ func TestGlobalFlagsRegistry(t *testing.T) {
 	expectedFlags := []string{
 		"chdir",
 		"base-path",
+		"config",
+		"config-path",
 		"logs-level",
 		"logs-file",
 		"no-color",
@@ -331,6 +333,20 @@ func TestGlobalFlagsRegistry(t *testing.T) {
 		envVars := flag.GetEnvVars()
 		assert.Contains(t, envVars, "ATMOS_IDENTITY")
 		assert.Contains(t, envVars, "IDENTITY")
+	})
+
+	t.Run("config is StringSliceFlag", func(t *testing.T) {
+		flag := registry.Get("config")
+		_, ok := flag.(*StringSliceFlag)
+		assert.True(t, ok, "config should be StringSliceFlag")
+		assert.Equal(t, []string{}, flag.GetDefault(), "config default should be empty slice")
+	})
+
+	t.Run("config-path is StringSliceFlag", func(t *testing.T) {
+		flag := registry.Get("config-path")
+		_, ok := flag.(*StringSliceFlag)
+		assert.True(t, ok, "config-path should be StringSliceFlag")
+		assert.Equal(t, []string{}, flag.GetDefault(), "config-path default should be empty slice")
 	})
 }
 
