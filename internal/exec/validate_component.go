@@ -74,8 +74,11 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 
 	_, err = ExecuteValidateComponent(&atmosConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
 	if err != nil {
+		u.PrintfMessageToTUI("\r✗ Component validation failed\n")
 		return "", "", err
 	}
+	u.PrintfMessageToTUI("\r✓ Component validated successfully\n")
+	log.Debug("Component validation completed", "component", componentName, "stack", stack)
 
 	return componentName, stack, nil
 }

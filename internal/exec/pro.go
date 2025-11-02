@@ -14,6 +14,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -158,10 +160,8 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 		return errors.Join(errUtils.ErrFailedToLockStack, err)
 	}
 
-	log.Info("Stack successfully locked.\n")
-	log.Info(fmt.Sprintf("Key: %s", lock.Data.Key))
-	log.Info(fmt.Sprintf("LockID: %s", lock.Data.ID))
-	log.Info(fmt.Sprintf("Expires %s", lock.Data.ExpiresAt))
+	u.PrintfMessageToTUI("\n%s Stack successfully locked\n\n", theme.Styles.Checkmark)
+	log.Debug("Stack lock acquired", "key", lock.Data.Key, "lockID", lock.Data.ID, "expires", lock.Data.ExpiresAt)
 
 	return nil
 }
@@ -202,7 +202,8 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 		return errors.Join(errUtils.ErrFailedToUnlockStack, err)
 	}
 
-	log.Info(fmt.Sprintf("Key '%s' successfully unlocked.\n", dto.Key))
+	u.PrintfMessageToTUI("\n%s Stack successfully unlocked\n\n", theme.Styles.Checkmark)
+	log.Debug("Stack lock released", "key", dto.Key)
 
 	return nil
 }

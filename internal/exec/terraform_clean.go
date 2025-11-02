@@ -281,8 +281,7 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 
 	fileInfo, err := os.Lstat(fullPath)
 	if os.IsNotExist(err) {
-		xMark := theme.Styles.XMark
-		fmt.Fprintf(os.Stderr, "%s Cannot delete %s: path does not exist\n", xMark, normalizedObjectName)
+		u.PrintfMessageToTUI("%s Cannot delete %s: path does not exist\n", theme.Styles.XMark, normalizedObjectName)
 		return err
 	}
 	if fileInfo.Mode()&os.ModeSymlink != 0 {
@@ -291,12 +290,10 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 	// Proceed with deletion
 	err = os.RemoveAll(fullPath)
 	if err != nil {
-		xMark := theme.Styles.XMark
-		fmt.Fprintf(os.Stderr, "%s Error deleting %s\n", xMark, normalizedObjectName)
+		u.PrintfMessageToTUI("%s Error deleting %s\n", theme.Styles.XMark, normalizedObjectName)
 		return err
 	}
-	checkMark := theme.Styles.Checkmark
-	fmt.Fprintf(os.Stderr, "%s Deleted %s\n", checkMark, normalizedObjectName)
+	u.PrintfMessageToTUI("%s Deleted %s\n", theme.Styles.Checkmark, normalizedObjectName)
 	return nil
 }
 

@@ -61,7 +61,13 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	err = ValidateStacks(&atmosConfig)
-	return err
+	if err != nil {
+		u.PrintfMessageToTUI("\r✗ Stack validation failed\n")
+		return err
+	}
+	u.PrintfMessageToTUI("\r✓ All stacks validated successfully\n")
+	log.Debug("Stack validation completed")
+	return nil
 }
 
 // ValidateStacks validates Atmos stack configuration.
