@@ -136,14 +136,21 @@ func (i *assumeRoleIdentity) Kind() string {
 func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.ICredentials) (types.ICredentials, error) {
 	// Note: Caching is now handled at the manager level to prevent duplicates.
 
-	awsBase, ok := baseCreds.(*types.AWSCredentials)
-	if !ok {
-		return nil, fmt.Errorf("%w: base AWS credentials are required for assume-role", errUtils.ErrInvalidIdentityConfig)
-	}
-
 	// Validate identity configuration, sets roleArn and region.
 	if err := i.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: invalid assume role identity: %w", errUtils.ErrInvalidIdentityConfig, err)
+	}
+
+	// Check if base credentials are OIDC credentials.
+	if oidcCreds, ok := baseCreds.(*types.OIDCCredentials); ok {
+		// Use AssumeRoleWithWebIdentity for OIDC credentials.
+		return i.assumeRoleWithWebIdentity(ctx, oidcCreds)
+	}
+
+	// Otherwise, use standard AssumeRole with AWS credentials.
+	awsBase, ok := baseCreds.(*types.AWSCredentials)
+	if !ok {
+		return nil, fmt.Errorf("%w: base AWS credentials or OIDC credentials are required for assume-role", errUtils.ErrInvalidIdentityConfig)
 	}
 
 	// Create STS client with base credentials.
@@ -160,6 +167,95 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.I
 		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
 	}
 	return i.toAWSCredentials(result)
+}
+
+// assumeRoleWithWebIdentity performs AssumeRoleWithWebIdentity using OIDC token.
+func (i *assumeRoleIdentity) assumeRoleWithWebIdentity(ctx context.Context, oidcCreds *types.OIDCCredentials) (types.ICredentials, error) {
+	// Resolve region from identity config or default.
+	region := i.region
+	if region == "" {
+		region = "us-east-1"
+	}
+	i.region = region
+
+	// Build config options.
+	configOpts := []func(*config.LoadOptions) error{
+		config.WithRegion(region),
+	}
+
+	// Add custom endpoint resolver if configured.
+	if resolverOpt := awsCloud.GetResolverConfigOption(i.config, nil); resolverOpt != nil {
+		configOpts = append(configOpts, resolverOpt)
+	}
+
+	// Load config with isolated environment to avoid conflicts with external AWS env vars.
+	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrInvalidIdentityConfig, err)
+	}
+
+	// Create STS client.
+	stsClient := sts.NewFromConfig(cfg)
+
+	// Build AssumeRoleWithWebIdentity input.
+	input := i.buildAssumeRoleWithWebIdentityInput(oidcCreds)
+
+	// Call AssumeRoleWithWebIdentity.
+	result, err := stsClient.AssumeRoleWithWebIdentity(ctx, input)
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
+	}
+
+	return i.toAWSCredentialsFromWebIdentity(result)
+}
+
+// buildAssumeRoleWithWebIdentityInput constructs the STS AssumeRoleWithWebIdentityInput.
+func (i *assumeRoleIdentity) buildAssumeRoleWithWebIdentityInput(oidcCreds *types.OIDCCredentials) *sts.AssumeRoleWithWebIdentityInput {
+	raw := fmt.Sprintf("atmos-%s-%d", i.name, time.Now().Unix())
+	sessionName := sanitizeRoleSessionName(raw)
+
+	input := &sts.AssumeRoleWithWebIdentityInput{
+		RoleArn:          aws.String(i.roleArn),
+		RoleSessionName:  aws.String(sessionName),
+		WebIdentityToken: aws.String(oidcCreds.Token),
+	}
+
+	// Add duration if specified.
+	if durationStr, ok := i.config.Principal["duration"].(string); ok && durationStr != "" {
+		if duration, err := time.ParseDuration(durationStr); err == nil {
+			input.DurationSeconds = aws.Int32(int32(duration.Seconds()))
+		} else {
+			log.Warn("Invalid duration specified for assume role with web identity", "duration", durationStr)
+		}
+	}
+
+	return input
+}
+
+// toAWSCredentialsFromWebIdentity converts STS AssumeRoleWithWebIdentity output to AWSCredentials.
+func (i *assumeRoleIdentity) toAWSCredentialsFromWebIdentity(result *sts.AssumeRoleWithWebIdentityOutput) (types.ICredentials, error) {
+	if result == nil || result.Credentials == nil {
+		return nil, fmt.Errorf("%w: STS returned empty credentials", errUtils.ErrAuthenticationFailed)
+	}
+
+	expiration := ""
+	if result.Credentials != nil && result.Credentials.Expiration != nil {
+		expiration = result.Credentials.Expiration.Format(time.RFC3339)
+	}
+
+	// Ensure a non-empty region is serialized.
+	finalRegion := i.region
+	if finalRegion == "" {
+		finalRegion = "us-east-1"
+	}
+
+	return &types.AWSCredentials{
+		AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
+		SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
+		SessionToken:    aws.ToString(result.Credentials.SessionToken),
+		Region:          finalRegion,
+		Expiration:      expiration,
+	}, nil
 }
 
 // Validate validates the identity configuration.

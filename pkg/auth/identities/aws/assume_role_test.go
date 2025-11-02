@@ -282,18 +282,7 @@ func TestAssumeRoleIdentity_Authenticate_ErrorCases(t *testing.T) {
 			},
 			inputCreds:  nil,
 			expectError: true,
-			errorMsg:    "base AWS credentials are required",
-		},
-		{
-			name: "invalid credentials type",
-			identity: &assumeRoleIdentity{
-				name:    "test-role",
-				config:  &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{"assume_role": "arn:aws:iam::123456789012:role/TestRole"}},
-				roleArn: "arn:aws:iam::123456789012:role/TestRole",
-			},
-			inputCreds:  &types.OIDCCredentials{Token: "test"},
-			expectError: true,
-			errorMsg:    "base AWS credentials are required",
+			errorMsg:    "base AWS credentials or OIDC credentials are required",
 		},
 	}
 
@@ -699,4 +688,283 @@ output = json
 			}
 		})
 	}
+}
+
+// OIDC Web Identity Tests
+
+func TestAssumeRoleIdentity_Authenticate_WithOIDCCredentials(t *testing.T) {
+	// Test that Authenticate detects OIDC credentials and uses AssumeRoleWithWebIdentity.
+	identity := &assumeRoleIdentity{
+		name: "test-role",
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Provider: "github-oidc"},
+			Principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/GitHubActionsRole",
+				"region":      "us-east-1",
+			},
+		},
+	}
+
+	// Validate to populate roleArn and region.
+	require.NoError(t, identity.Validate())
+
+	oidcCreds := &types.OIDCCredentials{
+		Token:    "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyZXBvOm93bmVyL3JlcG86cmVmOnJlZnMvaGVhZHMvbWFpbiIsImF1ZCI6InN0czphbWF6b25hd3MuY29tIiwiZXhwIjo5OTk5OTk5OTk5fQ.test",
+		Provider: "github",
+		Audience: "sts:amazonaws.com",
+	}
+
+	// We can't actually call AWS without real credentials, but we can verify the flow is triggered.
+	// We'll test the helper methods separately.
+	_, err := identity.Authenticate(context.Background(), oidcCreds)
+	// Expect an error since we don't have real AWS connectivity, but it should be an AWS error, not a type error.
+	assert.Error(t, err)
+	// The error should not be about credentials type.
+	assert.NotContains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
+}
+
+func TestAssumeRoleIdentity_buildAssumeRoleWithWebIdentityInput(t *testing.T) {
+	tests := []struct {
+		name           string
+		identityName   string
+		principal      map[string]interface{}
+		oidcToken      string
+		expectDuration bool
+		durationSecs   int32
+	}{
+		{
+			name:         "basic input without duration",
+			identityName: "github-role",
+			principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/GitHubActionsRole",
+			},
+			oidcToken:      "test-token",
+			expectDuration: false,
+		},
+		{
+			name:         "input with duration",
+			identityName: "github-role",
+			principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/GitHubActionsRole",
+				"duration":    "1h",
+			},
+			oidcToken:      "test-token",
+			expectDuration: true,
+			durationSecs:   3600,
+		},
+		{
+			name:         "input with invalid duration (ignored)",
+			identityName: "github-role",
+			principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/GitHubActionsRole",
+				"duration":    "invalid",
+			},
+			oidcToken:      "test-token",
+			expectDuration: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity := &assumeRoleIdentity{
+				name: tt.identityName,
+				config: &schema.Identity{
+					Kind:      "aws/assume-role",
+					Principal: tt.principal,
+				},
+			}
+
+			// Validate to populate roleArn.
+			require.NoError(t, identity.Validate())
+
+			oidcCreds := &types.OIDCCredentials{
+				Token: tt.oidcToken,
+			}
+
+			input := identity.buildAssumeRoleWithWebIdentityInput(oidcCreds)
+
+			assert.NotNil(t, input)
+			assert.Equal(t, "arn:aws:iam::123456789012:role/GitHubActionsRole", *input.RoleArn)
+			assert.Equal(t, tt.oidcToken, *input.WebIdentityToken)
+			assert.NotEmpty(t, *input.RoleSessionName)
+			assert.Contains(t, *input.RoleSessionName, "atmos-"+tt.identityName)
+
+			if tt.expectDuration {
+				require.NotNil(t, input.DurationSeconds)
+				assert.Equal(t, tt.durationSecs, *input.DurationSeconds)
+			} else {
+				assert.Nil(t, input.DurationSeconds)
+			}
+		})
+	}
+}
+
+func TestAssumeRoleIdentity_toAWSCredentialsFromWebIdentity(t *testing.T) {
+	identity := &assumeRoleIdentity{
+		name:   "github-role",
+		region: "us-west-2",
+	}
+
+	tests := []struct {
+		name        string
+		input       *sts.AssumeRoleWithWebIdentityOutput
+		expectError bool
+		expectCreds bool
+	}{
+		{
+			name:        "nil result",
+			input:       nil,
+			expectError: true,
+			expectCreds: false,
+		},
+		{
+			name: "nil credentials",
+			input: &sts.AssumeRoleWithWebIdentityOutput{
+				Credentials: nil,
+			},
+			expectError: true,
+			expectCreds: false,
+		},
+		{
+			name: "valid credentials",
+			input: &sts.AssumeRoleWithWebIdentityOutput{
+				Credentials: &ststypes.Credentials{
+					AccessKeyId:     aws.String("AKIAIOSFODNN7EXAMPLE"),
+					SecretAccessKey: aws.String("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+					SessionToken:    aws.String("FwoGZXIvYXdzEBExample"),
+					Expiration:      aws.Time(time.Now().Add(1 * time.Hour)),
+				},
+			},
+			expectError: false,
+			expectCreds: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			creds, err := identity.toAWSCredentialsFromWebIdentity(tt.input)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, creds)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, creds)
+
+				if tt.expectCreds {
+					awsCreds, ok := creds.(*types.AWSCredentials)
+					require.True(t, ok)
+					assert.Equal(t, "AKIAIOSFODNN7EXAMPLE", awsCreds.AccessKeyID)
+					assert.Equal(t, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", awsCreds.SecretAccessKey)
+					assert.Equal(t, "FwoGZXIvYXdzEBExample", awsCreds.SessionToken)
+					assert.Equal(t, "us-west-2", awsCreds.Region)
+					assert.NotEmpty(t, awsCreds.Expiration)
+				}
+			}
+		})
+	}
+}
+
+func TestAssumeRoleIdentity_toAWSCredentialsFromWebIdentity_DefaultRegion(t *testing.T) {
+	// When region is empty, should default to us-east-1.
+	identity := &assumeRoleIdentity{
+		name:   "github-role",
+		region: "",
+	}
+
+	output := &sts.AssumeRoleWithWebIdentityOutput{
+		Credentials: &ststypes.Credentials{
+			AccessKeyId:     aws.String("AKIAIOSFODNN7EXAMPLE"),
+			SecretAccessKey: aws.String("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+			SessionToken:    aws.String("FwoGZXIvYXdzEBExample"),
+			Expiration:      aws.Time(time.Now().Add(1 * time.Hour)),
+		},
+	}
+
+	creds, err := identity.toAWSCredentialsFromWebIdentity(output)
+	require.NoError(t, err)
+
+	awsCreds, ok := creds.(*types.AWSCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "us-east-1", awsCreds.Region)
+}
+
+func TestAssumeRoleIdentity_Authenticate_WithOIDCAndAWSCredentials(t *testing.T) {
+	// Test that both OIDC and AWS credentials work with the same identity.
+	identity := &assumeRoleIdentity{
+		name: "test-role",
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Provider: "test-provider"},
+			Principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/TestRole",
+				"region":      "us-east-1",
+			},
+		},
+	}
+
+	require.NoError(t, identity.Validate())
+
+	// Test with OIDC credentials - should trigger web identity flow.
+	oidcCreds := &types.OIDCCredentials{
+		Token:    "test-oidc-token",
+		Provider: "github",
+		Audience: "sts:amazonaws.com",
+	}
+
+	_, err := identity.Authenticate(context.Background(), oidcCreds)
+	// Expect AWS error (no real connectivity), not type error.
+	assert.Error(t, err)
+	assert.NotContains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
+
+	// Test with AWS credentials - should trigger standard assume role flow.
+	awsCreds := &types.AWSCredentials{
+		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		SessionToken:    "FwoGZXIvYXdzEBExample",
+		Region:          "us-east-1",
+	}
+
+	_, err = identity.Authenticate(context.Background(), awsCreds)
+	// Expect AWS error (no real connectivity), not type error.
+	assert.Error(t, err)
+	assert.NotContains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
+}
+
+// mockInvalidCredentials is a mock credentials type that implements ICredentials
+// but is neither AWSCredentials nor OIDCCredentials, for testing error handling.
+type mockInvalidCredentials struct{}
+
+func (m *mockInvalidCredentials) IsExpired() bool                        { return false }
+func (m *mockInvalidCredentials) GetExpiration() (*time.Time, error)     { return nil, nil }
+func (m *mockInvalidCredentials) BuildWhoamiInfo(info *types.WhoamiInfo) {}
+func (m *mockInvalidCredentials) Validate(ctx context.Context) (*types.ValidationInfo, error) {
+	return nil, nil
+}
+
+var _ types.ICredentials = (*mockInvalidCredentials)(nil)
+
+func TestAssumeRoleIdentity_Authenticate_WithInvalidCredentialsType(t *testing.T) {
+	// Test that invalid credentials type returns appropriate error.
+	identity := &assumeRoleIdentity{
+		name: "test-role",
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Provider: "test-provider"},
+			Principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/TestRole",
+				"region":      "us-east-1",
+			},
+		},
+	}
+
+	require.NoError(t, identity.Validate())
+
+	// Create a mock credentials type that's neither AWS nor OIDC.
+	invalidCreds := &mockInvalidCredentials{}
+
+	_, err := identity.Authenticate(context.Background(), invalidCreds)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
 }
