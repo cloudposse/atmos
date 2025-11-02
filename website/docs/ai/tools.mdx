@@ -352,7 +352,8 @@ settings:
 
     tools:
       enabled: true                        # Enable tool execution
-      require_confirmation: true           # Prompt before executing tools
+      # require_confirmation: true         # Default: true (secure by default)
+                                            # Set to false to opt-out of prompts
 
       # Tools that can execute without user confirmation
       allowed_tools:
@@ -383,7 +384,7 @@ settings:
   <dd>Enable or disable AI tool execution capabilities (default: `false`)</dd>
 
   <dt>`tools.require_confirmation`</dt>
-  <dd>Prompt user before executing any tool not in the `allowed_tools` list (default: `true`)</dd>
+  <dd>Prompt user before executing tools (default: `true` for security). Set to `false` to opt-out of prompts and allow all tools except `restricted_tools` to execute automatically.</dd>
 
   <dt>`tools.allowed_tools`</dt>
   <dd>List of tools that can execute without user confirmation. Supports wildcard patterns like `atmos_*` (default: `[]`)</dd>
@@ -1140,27 +1141,31 @@ The permission system provides granular control over what tools the AI can execu
 
 ### Permission Modes
 
-#### Prompt Mode (Default)
+#### Prompt Mode (Default - Secure by Default)
 
-User is prompted for each tool execution:
+By default, users are prompted for each tool execution (secure by default):
 
 <File title="atmos.yaml">
 ```yaml
 tools:
   enabled: true
-  require_confirmation: true  # Default mode
+  # require_confirmation: true  # This is the default - no need to specify
+
+  # OR explicitly set to true
+  require_confirmation: true
 ```
 </File>
 
-#### Allow Mode
+#### Allow Mode (Opt-Out)
 
-All tools execute without prompts (except restricted tools):
+Opt-out of prompts - all tools execute automatically (except restricted tools):
 
 <File title="atmos.yaml">
 ```yaml
 tools:
   enabled: true
-  require_confirmation: false
+  require_confirmation: false  # Explicitly opt-out of security prompts
+
   # Still prompt for restricted_tools
   restricted_tools:
     - atmos_terraform_plan
@@ -1388,30 +1393,38 @@ Permission decisions follow this priority (highest to lowest):
 3. **Allowed Tools** (from `atmos.yaml`) - Pre-approved in config
 4. **Cached Allowances** (from `.atmos/ai.settings.local.json`) - User allowed previously
 5. **Restricted Tools** (from `atmos.yaml`) - Requires prompt if not cached
-6. **Default Behavior** - Prompt based on `require_confirmation` setting
+6. **Default Behavior** - Defaults to prompting for security (unless `require_confirmation: false` is set to opt-out)
 
 ## Security Best Practices
 
 ### Start Conservative
 
-Begin with strict permissions and relax over time:
+Begin with strict permissions (the default) and relax over time:
 
 <File title="atmos.yaml">
 ```yaml
-# Day 1: Prompt for everything
+# Day 1: Use the secure default - prompt for everything (no config needed!)
 tools:
   enabled: true
-  require_confirmation: true
-  allowed_tools: []
+  # require_confirmation defaults to true - no need to specify
+  # No allowed_tools means you'll be prompted for each tool
 
 # After trust is established: Allow read-only tools
 tools:
   enabled: true
-  require_confirmation: true
+  # Still use default require_confirmation: true
   allowed_tools:
-    - atmos_describe_*
+    - atmos_describe_*         # Pre-approve safe read-only tools
     - atmos_list_*
     - atmos_validate_*
+
+# Advanced: Opt-out of prompts for convenience (after trust is established)
+tools:
+  enabled: true
+  require_confirmation: false  # Opt-out - allow all tools automatically
+  restricted_tools:
+    - write_*                  # Still prompt for write operations
+    - atmos_terraform_*        # Still prompt for terraform operations
 ```
 </File>
 

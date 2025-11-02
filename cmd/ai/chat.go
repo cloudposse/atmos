@@ -195,9 +195,18 @@ func getPermissionMode(atmosConfig *schema.AtmosConfiguration) permission.Mode {
 		return permission.ModeYOLO
 	}
 
-	if atmosConfig.Settings.AI.Tools.RequireConfirmation {
+	// Default behavior: require confirmation (prompt user).
+	// Users can opt-out by setting require_confirmation: false.
+	if atmosConfig.Settings.AI.Tools.RequireConfirmation == nil {
+		// Not set - default to prompting for security.
 		return permission.ModePrompt
 	}
 
+	if *atmosConfig.Settings.AI.Tools.RequireConfirmation {
+		// Explicitly set to true - prompt.
+		return permission.ModePrompt
+	}
+
+	// Explicitly set to false - opt-out of prompting.
 	return permission.ModeAllow
 }

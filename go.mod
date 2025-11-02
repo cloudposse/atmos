@@ -103,7 +103,7 @@ require (
 	golang.org/x/term v0.36.0
 	golang.org/x/text v0.30.0
 	google.golang.org/api v0.254.0
-	google.golang.org/genai v1.32.0
+	google.golang.org/genai v1.33.0
 	google.golang.org/grpc v1.76.0
 	gopkg.in/ini.v1 v1.67.0
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473

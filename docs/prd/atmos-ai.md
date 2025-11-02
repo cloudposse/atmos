@@ -419,7 +419,8 @@ settings:
   ai:
     tools:
       enabled: true
-      require_confirmation: true
+      # require_confirmation: true    # Default: true (secure by default)
+                                       # Set to false to opt-out of prompts
 
       allowed_tools:
         - atmos_describe_*
@@ -547,7 +548,7 @@ Tool Execution Requested
 3. **Allowed Tools** (config) - Pre-approved in configuration
 4. **Cached Allowances** (.atmos/ai.settings.local.json) - User allowed previously
 5. **Restricted Tools** (config) - Requires prompt if not cached
-6. **Default Behavior** - Based on `require_confirmation` setting
+6. **Default Behavior** - Defaults to prompting (secure by default) unless `require_confirmation: false` is set to opt-out
 
 **Key Features:**
 
@@ -1553,7 +1554,8 @@ settings:
     # Tool execution
     tools:
       enabled: true
-      require_confirmation: true
+      # require_confirmation: true    # Default: true (secure by default)
+                                       # Set to false to opt-out of prompts
 
       allowed_tools:
         - atmos_describe_*

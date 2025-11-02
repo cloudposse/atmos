@@ -9,6 +9,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// boolPtr returns a pointer to the given boolean value.
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 func TestGetProviderFromConfig(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -225,12 +230,12 @@ func TestGetPermissionMode(t *testing.T) {
 			expectedMode: permission.ModeYOLO,
 		},
 		{
-			name: "require confirmation mode",
+			name: "require confirmation explicitly enabled",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
 						Tools: schema.AIToolSettings{
-							RequireConfirmation: true,
+							RequireConfirmation: boolPtr(true),
 						},
 					},
 				},
@@ -238,15 +243,17 @@ func TestGetPermissionMode(t *testing.T) {
 			expectedMode: permission.ModePrompt,
 		},
 		{
-			name: "default allow mode",
+			name: "default prompt mode (not configured)",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
-						Tools: schema.AIToolSettings{},
+						Tools: schema.AIToolSettings{
+							// RequireConfirmation not set (nil) - defaults to prompt
+						},
 					},
 				},
 			},
-			expectedMode: permission.ModeAllow,
+			expectedMode: permission.ModePrompt,
 		},
 		{
 			name: "YOLO takes precedence over confirmation",
@@ -255,7 +262,7 @@ func TestGetPermissionMode(t *testing.T) {
 					AI: schema.AISettings{
 						Tools: schema.AIToolSettings{
 							YOLOMode:            true,
-							RequireConfirmation: true,
+							RequireConfirmation: boolPtr(true),
 						},
 					},
 				},
@@ -263,13 +270,13 @@ func TestGetPermissionMode(t *testing.T) {
 			expectedMode: permission.ModeYOLO,
 		},
 		{
-			name: "both disabled defaults to allow",
+			name: "explicitly disabled (opt-out) defaults to allow",
 			atmosConfig: &schema.AtmosConfiguration{
 				Settings: schema.AtmosSettings{
 					AI: schema.AISettings{
 						Tools: schema.AIToolSettings{
 							YOLOMode:            false,
-							RequireConfirmation: false,
+							RequireConfirmation: boolPtr(false),
 						},
 					},
 				},

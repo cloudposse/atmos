@@ -66,7 +66,7 @@ type AIAutoCompactConfig struct {
 // AIToolSettings contains tool execution configuration.
 type AIToolSettings struct {
 	Enabled             bool     `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	RequireConfirmation bool     `yaml:"require_confirmation,omitempty" json:"require_confirmation,omitempty" mapstructure:"require_confirmation"`
+	RequireConfirmation *bool    `yaml:"require_confirmation,omitempty" json:"require_confirmation,omitempty" mapstructure:"require_confirmation"`
 	AllowedTools        []string `yaml:"allowed_tools,omitempty" json:"allowed_tools,omitempty" mapstructure:"allowed_tools"`
 	RestrictedTools     []string `yaml:"restricted_tools,omitempty" json:"restricted_tools,omitempty" mapstructure:"restricted_tools"`
 	BlockedTools        []string `yaml:"blocked_tools,omitempty" json:"blocked_tools,omitempty" mapstructure:"blocked_tools"`
