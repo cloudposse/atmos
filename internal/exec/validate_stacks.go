@@ -19,6 +19,7 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -62,10 +63,10 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 
 	err = ValidateStacks(&atmosConfig)
 	if err != nil {
-		u.PrintfMessageToTUI("\r✗ Stack validation failed\n")
+		u.PrintfMessageToTUI("\r%s Stack validation failed\n", theme.Styles.XMark)
 		return err
 	}
-	u.PrintfMessageToTUI("\r✓ All stacks validated successfully\n")
+	u.PrintfMessageToTUI("\r%s All stacks validated successfully\n", theme.Styles.Checkmark)
 	log.Debug("Stack validation completed")
 	return nil
 }
