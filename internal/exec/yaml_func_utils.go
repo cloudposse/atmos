@@ -119,7 +119,7 @@ func processContextAwareTags(
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, bool) {
 	if matchesPrefix(input, u.AtmosYamlFuncTerraformOutput, skip) {
-		return processTagTerraformOutputWithContext(atmosConfig, input, currentStack, resolutionCtx), true
+		return processTagTerraformOutputWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo), true
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncTerraformState, skip) {
 		return processTagTerraformStateWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo), true

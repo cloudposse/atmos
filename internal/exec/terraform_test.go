@@ -8,10 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/stretchr/testify/assert"
-
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -225,7 +227,11 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 	}
 	output := buf.String()
 
-	t.Log(output)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("Terraform output:\n%s", output)
+		}
+	})
 
 	// Check the output
 	if !strings.Contains(output, "{{ .settings.config.a }}") {
@@ -782,6 +788,159 @@ func TestExecuteTerraform_OpaValidationFunctionality(t *testing.T) {
 			} else {
 				assert.NoError(t, err, "Expected test to pass for %s", tt.description)
 			}
+		})
+	}
+}
+
+// TestExecuteTerraform_AuthPreHookErrorPropagation verifies that errors from the auth pre-hook
+// are properly propagated and cause terraform execution to abort.
+// This ensures that when authentication fails (e.g., user presses Ctrl+C during SSO),
+// the terraform command does not continue executing.
+//
+// This test verifies the fix in terraform.go:236 where auth pre-hook errors were logged
+// but not returned, causing terraform execution to continue even when authentication failed.
+func TestExecuteTerraform_AuthPreHookErrorPropagation(t *testing.T) {
+	defer perf.Track(nil, "exec.TestExecuteTerraform_AuthPreHookErrorPropagation")()
+
+	// Use the existing atmos-auth fixture which has valid auth configuration.
+	workDir := "../../tests/fixtures/scenarios/atmos-auth"
+	t.Chdir(workDir)
+
+	// Create a stack that references a nonexistent identity to trigger auth error.
+	stacksDir := "stacks/deploy"
+	stackContent := `
+vars:
+  stage: error-propagation-test
+import:
+  - catalog/mock
+components:
+  terraform:
+    error-propagation-test:
+      metadata:
+        component: mock_caller_identity
+      auth:
+        # Reference a nonexistent identity to trigger auth error
+        identity: nonexistent-identity
+`
+	stackFile := filepath.Join(stacksDir, "error-propagation-test.yaml")
+	err := os.WriteFile(stackFile, []byte(stackContent), 0o644)
+	require.NoError(t, err)
+
+	defer os.Remove(stackFile)
+
+	// Attempt to execute terraform - should fail during auth pre-hook.
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "error-propagation-test",
+		Stack:            "error-propagation-test",
+		ComponentType:    "terraform",
+		SubCommand:       "plan",
+	}
+
+	// Redirect stderr to suppress error output during test.
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err = ExecuteTerraform(info)
+
+	// Restore stderr.
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+
+	// Verify error was returned (not just logged and ignored).
+	// The key assertion: ExecuteTerraform MUST return an error when auth pre-hook fails.
+	require.Error(t, err, "ExecuteTerraform must return error when auth pre-hook fails")
+
+	// The error should be related to authentication/provider/identity.
+	errMsg := err.Error()
+	hasAuthError := strings.Contains(errMsg, "identity") ||
+		strings.Contains(errMsg, "auth") ||
+		strings.Contains(errMsg, "provider") ||
+		strings.Contains(errMsg, "credential")
+	assert.True(t, hasAuthError, "Expected auth-related error, got: %v", err)
+}
+
+// TestComponentEnvSectionConversion verifies that ComponentEnvSection is properly
+// converted to ComponentEnvList. This is a unit test that proves the conversion logic
+// works correctly when auth hooks populate ComponentEnvSection.
+//
+//nolint:dupl // Test logic is intentionally similar across terraform/helmfile/packer for consistency
+func TestComponentEnvSectionConversion(t *testing.T) {
+	tests := []struct {
+		name            string
+		envSection      map[string]any
+		expectedEnvList map[string]string // map for easier checking
+	}{
+		{
+			name: "converts AWS auth environment variables",
+			envSection: map[string]any{
+				"AWS_CONFIG_FILE":             "/path/to/config",
+				"AWS_SHARED_CREDENTIALS_FILE": "/path/to/credentials",
+				"AWS_PROFILE":                 "test-profile",
+				"AWS_REGION":                  "us-east-1",
+				"AWS_EC2_METADATA_DISABLED":   "true",
+			},
+			expectedEnvList: map[string]string{
+				"AWS_CONFIG_FILE":             "/path/to/config",
+				"AWS_SHARED_CREDENTIALS_FILE": "/path/to/credentials",
+				"AWS_PROFILE":                 "test-profile",
+				"AWS_REGION":                  "us-east-1",
+				"AWS_EC2_METADATA_DISABLED":   "true",
+			},
+		},
+		{
+			name:            "handles empty ComponentEnvSection",
+			envSection:      map[string]any{},
+			expectedEnvList: map[string]string{},
+		},
+		{
+			name: "converts mixed types to strings",
+			envSection: map[string]any{
+				"STRING_VAR": "value",
+				"INT_VAR":    42,
+				"BOOL_VAR":   true,
+			},
+			expectedEnvList: map[string]string{
+				"STRING_VAR": "value",
+				"INT_VAR":    "42",
+				"BOOL_VAR":   "true",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a test ConfigAndStacksInfo with ComponentEnvSection populated.
+			info := schema.ConfigAndStacksInfo{
+				ComponentEnvSection: tt.envSection,
+				ComponentEnvList:    []string{},
+			}
+
+			// Call the production conversion function.
+			ConvertComponentEnvSectionToList(&info)
+
+			// Verify all expected environment variables are in ComponentEnvList.
+			envListMap := make(map[string]string)
+			for _, envVar := range info.ComponentEnvList {
+				parts := strings.SplitN(envVar, "=", 2)
+				if len(parts) == 2 {
+					envListMap[parts[0]] = parts[1]
+				}
+			}
+
+			// Check that all expected vars are present with correct values.
+			for key, expectedValue := range tt.expectedEnvList {
+				actualValue, exists := envListMap[key]
+				assert.True(t, exists, "Expected environment variable %s to be in ComponentEnvList", key)
+				assert.Equal(t, expectedValue, actualValue,
+					"Environment variable %s should have value %s, got %s", key, expectedValue, actualValue)
+			}
+
+			// Verify count matches (no extra vars).
+			assert.Equal(t, len(tt.expectedEnvList), len(envListMap),
+				"ComponentEnvList should contain exactly %d variables", len(tt.expectedEnvList))
 		})
 	}
 }

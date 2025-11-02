@@ -13,6 +13,27 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/providers/mock"
 )
 
+// setupMockAuthDir configures the TestKit with the mock auth scenario and file keyring.
+// It returns the absolute path to the mock directory for use in tests.
+func setupMockAuthDir(t *testing.T, tk *TestKit) string {
+	t.Helper()
+
+	mockDir := "../tests/fixtures/scenarios/atmos-auth-mock"
+	absPath, err := filepath.Abs(mockDir)
+	require.NoError(t, err, "Failed to resolve absolute path")
+
+	tk.Chdir(mockDir)
+	tempDir := t.TempDir()
+	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
+	tk.Setenv("ATMOS_KEYRING_FILE_PATH", filepath.Join(tempDir, "keyring.json"))
+	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
+	// Set ATMOS_CLI_CONFIG_PATH to use the mock auth scenario config.
+	tk.Setenv("ATMOS_CLI_CONFIG_PATH", absPath)
+	tk.Setenv("ATMOS_BASE_PATH", absPath)
+
+	return absPath
+}
+
 // TestAuth_CredentialCaching verifies that credentials are cached after login
 // and reused for subsequent commands without triggering re-authentication.
 //
@@ -27,15 +48,11 @@ func TestAuth_CredentialCaching(t *testing.T) {
 
 	// Use mock auth scenario with file keyring for test isolation.
 	// Memory keyring doesn't persist between RootCmd.Execute() calls.
-	tk.Chdir("../tests/fixtures/scenarios/atmos-auth-mock")
-	tempDir := t.TempDir()
-	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
-	tk.Setenv("ATMOS_KEYRING_FILE_PATH", tempDir+"/keyring.json")
-	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
+	setupMockAuthDir(t, tk)
 
 	// Step 1: Authenticate (this caches credentials).
 	t.Run("initial login caches credentials", func(t *testing.T) {
-		RootCmd.SetArgs([]string{"auth", "login", "--identity", "mock-identity"})
+		RootCmd.SetArgs([]string{"auth", "login", "--identity=mock-identity"})
 
 		start := time.Now()
 		err := RootCmd.Execute()
@@ -53,19 +70,19 @@ func TestAuth_CredentialCaching(t *testing.T) {
 	}{
 		{
 			name: "auth whoami with cached credentials",
-			args: []string{"auth", "whoami", "--identity", "mock-identity"},
+			args: []string{"auth", "whoami", "--identity=mock-identity"},
 		},
 		{
 			name: "auth env json with cached credentials",
-			args: []string{"auth", "env", "--format", "json", "--identity", "mock-identity"},
+			args: []string{"auth", "env", "--format", "json", "--identity=mock-identity"},
 		},
 		{
 			name: "auth env bash with cached credentials",
-			args: []string{"auth", "env", "--format", "bash", "--identity", "mock-identity"},
+			args: []string{"auth", "env", "--format", "bash", "--identity=mock-identity"},
 		},
 		{
 			name: "auth env dotenv with cached credentials",
-			args: []string{"auth", "env", "--format", "dotenv", "--identity", "mock-identity"},
+			args: []string{"auth", "env", "--format", "dotenv", "--identity=mock-identity"},
 		},
 	}
 
@@ -99,24 +116,20 @@ func TestAuth_NoBrowserPromptForCachedCredentials(t *testing.T) {
 	tk := NewTestKit(t)
 
 	// Setup mock auth scenario with file keyring.
-	tk.Chdir("../tests/fixtures/scenarios/atmos-auth-mock")
-	tempDir := t.TempDir()
-	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
-	tk.Setenv("ATMOS_KEYRING_FILE_PATH", tempDir+"/keyring.json")
-	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
+	setupMockAuthDir(t, tk)
 
 	// Step 1: Initial login to cache credentials.
 	t.Log("Step 1: Performing initial login to cache credentials")
-	RootCmd.SetArgs([]string{"auth", "login", "--identity", "mock-identity"})
+	RootCmd.SetArgs([]string{"auth", "login", "--identity=mock-identity"})
 	err := RootCmd.Execute()
 	require.NoError(t, err, "Initial login should succeed")
 
 	// Step 2: Simulate a typical workflow with multiple commands.
 	// All of these should use cached credentials without triggering browser auth.
 	workflowCommands := [][]string{
-		{"auth", "whoami", "--identity", "mock-identity"},
+		{"auth", "whoami", "--identity=mock-identity"},
 		{"auth", "list"},
-		{"auth", "env", "--identity", "mock-identity"},
+		{"auth", "env", "--identity=mock-identity"},
 		{"auth", "validate"},
 	}
 
@@ -156,18 +169,14 @@ func TestAuth_NoBrowserPromptForCachedCredentials(t *testing.T) {
 func TestAuth_AutoAuthenticationWhenNoCachedCredentials(t *testing.T) {
 	tk := NewTestKit(t)
 
-	tk.Chdir("../tests/fixtures/scenarios/atmos-auth-mock")
-	tempDir := t.TempDir()
-	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
-	tk.Setenv("ATMOS_KEYRING_FILE_PATH", tempDir+"/keyring.json")
-	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
+	setupMockAuthDir(t, tk)
 
 	// Note: Mock provider auto-authenticates when no cached credentials exist.
 	// This test verifies that commands succeed even without explicit login.
 	// Commands like 'auth env' and 'auth exec' trigger auto-authentication,
 	// while 'auth whoami' only checks existing credentials.
 	t.Run("auth env succeeds with auto-authentication", func(t *testing.T) {
-		RootCmd.SetArgs([]string{"auth", "env", "--identity", "mock-identity"})
+		RootCmd.SetArgs([]string{"auth", "env", "--identity=mock-identity"})
 
 		err := RootCmd.Execute()
 
@@ -179,7 +188,7 @@ func TestAuth_AutoAuthenticationWhenNoCachedCredentials(t *testing.T) {
 	t.Run("whoami succeeds with cached credentials from auto-auth", func(t *testing.T) {
 		// Don't create new TestKit - preserve file keyring state.
 		// Now whoami should work because env cached the credentials.
-		RootCmd.SetArgs([]string{"auth", "whoami", "--identity", "mock-identity"})
+		RootCmd.SetArgs([]string{"auth", "whoami", "--identity=mock-identity"})
 
 		start := time.Now()
 		err := RootCmd.Execute()
@@ -197,11 +206,7 @@ func TestAuth_AutoAuthenticationWhenNoCachedCredentials(t *testing.T) {
 func TestAuth_MultipleIdentities(t *testing.T) {
 	tk := NewTestKit(t)
 
-	tk.Chdir("../tests/fixtures/scenarios/atmos-auth-mock")
-	tempDir := t.TempDir()
-	tk.Setenv("ATMOS_KEYRING_TYPE", "file")
-	tk.Setenv("ATMOS_KEYRING_FILE_PATH", tempDir+"/keyring.json")
-	tk.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-for-file-keyring")
+	setupMockAuthDir(t, tk)
 
 	identities := []string{"mock-identity", "mock-identity-2"}
 
@@ -209,7 +214,7 @@ func TestAuth_MultipleIdentities(t *testing.T) {
 	for _, identity := range identities {
 		t.Run("login to "+identity, func(t *testing.T) {
 			// Don't create new TestKit - preserve file keyring state.
-			RootCmd.SetArgs([]string{"auth", "login", "--identity", identity})
+			RootCmd.SetArgs([]string{"auth", "login", "--identity=" + identity})
 			err := RootCmd.Execute()
 			require.NoError(t, err, "Login should succeed for %s", identity)
 		})
@@ -219,7 +224,7 @@ func TestAuth_MultipleIdentities(t *testing.T) {
 	for _, identity := range identities {
 		t.Run("whoami for "+identity, func(t *testing.T) {
 			// Don't create new TestKit - preserve file keyring state.
-			RootCmd.SetArgs([]string{"auth", "whoami", "--identity", identity})
+			RootCmd.SetArgs([]string{"auth", "whoami", "--identity=" + identity})
 
 			start := time.Now()
 			err := RootCmd.Execute()
@@ -228,6 +233,73 @@ func TestAuth_MultipleIdentities(t *testing.T) {
 			require.NoError(t, err, "Whoami should succeed for %s", identity)
 			assert.Less(t, duration, 2*time.Second,
 				"Whoami for %s took too long (%v) - credentials may not be cached", identity, duration)
+		})
+	}
+}
+
+// TestAuth_MultipleIdentitiesSameProvider_ProviderCacheReuse verifies that when
+// multiple identities use the same provider, the provider credentials are cached
+// and reused across identities without triggering re-authentication.
+//
+// This is a regression test for the issue where users with multiple identities
+// using the same IAM Identity Center provider had to authenticate the provider
+// multiple times instead of reusing the cached provider credentials.
+//
+// Expected behavior:
+// 1. First identity login: Authenticate provider + derive identity credentials.
+// 2. Second identity login: Reuse cached provider credentials + derive new identity credentials.
+// 3. Provider authentication should only happen ONCE, not per identity.
+func TestAuth_MultipleIdentitiesSameProvider_ProviderCacheReuse(t *testing.T) {
+	tk := NewTestKit(t)
+
+	setupMockAuthDir(t, tk)
+
+	// Both mock-identity and mock-identity-2 use the same provider: mock-provider.
+	identities := []string{"mock-identity", "mock-identity-2"}
+
+	// Step 1: Authenticate first identity (this will cache provider credentials).
+	t.Run("first identity authenticates provider", func(t *testing.T) {
+		RootCmd.SetArgs([]string{"auth", "login", "--identity=" + identities[0]})
+		err := RootCmd.Execute()
+		require.NoError(t, err, "First identity login should succeed")
+	})
+
+	// Step 2: Authenticate second identity using the SAME provider.
+	// This should reuse the cached provider credentials and NOT trigger provider re-authentication.
+	t.Run("second identity reuses cached provider credentials", func(t *testing.T) {
+		// Set log level to Debug to see provider authentication attempts.
+		tk.Setenv("ATMOS_LOGS_LEVEL", "Debug")
+
+		RootCmd.SetArgs([]string{"auth", "login", "--identity=" + identities[1]})
+
+		start := time.Now()
+		err := RootCmd.Execute()
+		duration := time.Since(start)
+
+		require.NoError(t, err, "Second identity login should succeed")
+
+		// Second identity authentication should be fast (<1 second) because:
+		// - Provider credentials are already cached (no browser prompt)
+		// - Only need to derive identity credentials from cached provider credentials.
+		//
+		// If this fails (takes >1 second), it means provider re-authentication occurred,
+		// which would trigger a browser prompt in real SSO scenarios.
+		assert.Less(t, duration, 1*time.Second,
+			"Second identity authentication took %v - provider may have been re-authenticated instead of using cache", duration)
+	})
+
+	// Step 3: Verify both identities have valid cached credentials.
+	for _, identity := range identities {
+		t.Run("verify cached credentials for "+identity, func(t *testing.T) {
+			RootCmd.SetArgs([]string{"auth", "whoami", "--identity=" + identity})
+
+			start := time.Now()
+			err := RootCmd.Execute()
+			duration := time.Since(start)
+
+			require.NoError(t, err, "Whoami should succeed for %s", identity)
+			assert.Less(t, duration, 1*time.Second,
+				"Whoami for %s took too long (%v)", identity, duration)
 		})
 	}
 }

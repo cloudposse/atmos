@@ -215,6 +215,7 @@ func TestExecuteWorkflow(t *testing.T) {
 				tt.dryRun,
 				tt.commandLineStack,
 				tt.fromStep,
+				"", // No command-line identity for these tests
 			)
 
 			if tt.wantErr {

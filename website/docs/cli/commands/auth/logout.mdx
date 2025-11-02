@@ -51,10 +51,17 @@ atmos auth logout [identity] [options]
 ### Logout from Specific Identity
 
 ```shell
+# Using positional argument
 atmos auth logout dev-admin
+
+# Using --identity flag
+atmos auth logout --identity dev-admin
+
+# Using short form
+atmos auth logout -i dev-admin
 ```
 
-This removes credentials for the `dev-admin` identity and all identities in its authentication chain.
+This removes only this identity's credentials from the system keyring and removes only this identity's profile from AWS config files. Other identities using the same provider are **not affected** and remain usable. The identity configuration in `atmos.yaml` is preserved and can be re-authenticated by running `atmos auth login`.
 
 **Example output:**
 
@@ -68,9 +75,36 @@ Removing credentials...
   ✓ Keyring: aws-sso
   ✓ Keyring: dev-org-admin
   ✓ Keyring: dev-admin
-  ✓ Files: ~/.aws/atmos/aws-sso/
+  ✓ Files: ~/.config/atmos/aws/aws-sso/ (XDG-compliant)
 
 Successfully logged out from 3 identities
+
+⚠️  Note: This only removes local credentials. Your browser session
+   may still be active. Visit your identity provider to end your
+   browser session.
+```
+
+### Logout from All Identities
+
+```shell
+atmos auth logout --all
+```
+
+This removes all identity credentials from the system keyring and removes all identity profiles from AWS config files for all providers. All identity configurations remain in `atmos.yaml` and can be re-authenticated. This is useful when troubleshooting authentication issues or performing a complete credential cleanup.
+
+**Example output:**
+
+```
+Logging out from all identities...
+
+Removing all credentials...
+  ✓ Keyring: aws-sso
+  ✓ Keyring: dev-org-admin
+  ✓ Keyring: dev-admin
+  ✓ Keyring: prod-admin
+  ✓ Files: ~/.config/atmos/aws/aws-sso/ (XDG-compliant)
+
+Successfully logged out from 4 identities
 
 ⚠️  Note: This only removes local credentials. Your browser session
    may still be active. Visit your identity provider to end your
@@ -83,7 +117,7 @@ Successfully logged out from 3 identities
 atmos auth logout --provider aws-sso
 ```
 
-This removes all credentials associated with the `aws-sso` provider, including all identities that authenticate through it.
+This removes all credentials from the system keyring for the provider and all identities that use it, and deletes the entire AWS config directory for the provider (all files). This is the most thorough cleanup and is useful when completely switching providers or AWS organizations.
 
 **Example output:**
 
@@ -95,7 +129,7 @@ Removing all credentials for provider...
   ✓ Keyring: dev-org-admin (via aws-sso)
   ✓ Keyring: dev-admin (via aws-sso)
   ✓ Keyring: prod-admin (via aws-sso)
-  ✓ Files: ~/.aws/atmos/aws-sso/
+  ✓ Files: ~/.config/atmos/aws/aws-sso/ (XDG-compliant)
 
 Successfully logged out from 4 identities
 ```
@@ -132,22 +166,71 @@ Would remove from identity: dev-admin
   • Keyring: aws-sso
   • Keyring: dev-org-admin
   • Keyring: dev-admin
-  • Files: ~/.aws/atmos/aws-sso/credentials
-  • Files: ~/.aws/atmos/aws-sso/config
+  • Files: ~/.config/atmos/aws/aws-sso/credentials
+  • Files: ~/.config/atmos/aws/aws-sso/config
 
 3 identities would be logged out
 ```
+
+You can also use `--dry-run` with `--all` to preview a complete logout:
+
+```shell
+atmos auth logout --all --dry-run
+```
+
+```
+Dry run mode: No credentials will be removed
+
+Would remove:
+  • All identity keyring entries
+  • All provider keyring entries
+  • Files:
+    - ~/.config/atmos/aws/aws-sso/
+    - ~/.config/atmos/aws/backup-provider/
+```
+
+## Quick Reference
+
+Understanding what gets removed:
+
+| Command | Keyring Entries | AWS Config Files | `atmos.yaml` Configuration | Use When |
+|---------|----------------|------------------|---------------------------|----------|
+| `atmos auth logout <identity>` | **Identity only** | **Identity profile removed** | **Not affected** | Done with specific identity |
+| `atmos auth logout --provider <name>` | Provider + all identities | **Entire provider directory** | **Not affected** | Switching providers or AWS organizations |
+| `atmos auth logout --all` | All identities | All identity profiles | **Not affected** | Complete cleanup or troubleshooting |
+
+:::tip Selective Cleanup
+`atmos auth logout <identity>` only removes **that specific identity**. Other identities using the same provider remain authenticated and usable. Use `--provider` for complete provider cleanup.
+:::
+
+:::tip Re-authentication
+All logout commands preserve your `atmos.yaml` configuration. Simply run `atmos auth login` to authenticate again with any configured identity.
+:::
 
 ## Arguments
 
 <dl>
   <dt>`identity`</dt>
-  <dd>Name of the identity to logout from. Must match an identity defined in `atmos.yaml`. If omitted, enters interactive mode.</dd>
+  <dd>Name of the identity to logout from. Must match an identity defined in `atmos.yaml`. If omitted, enters interactive mode. Can also be specified via the `--identity` flag.</dd>
 </dl>
 
 ## Flags
 
 <dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    Specify the identity to logout from. Alternative to using the positional argument. This flag has three modes:
+
+    - **With value** (`--identity admin`): Logout from the specified identity
+    - **Without value** (`--identity`): Show interactive selector to choose identity (same as omitting both flag and argument)
+    - **Omitted**: Enter interactive mode if no positional argument is provided
+
+    **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
+  </dd>
+
+  <dt>`--all`</dt>
+  <dd>Logout from all identities and providers. Removes all cached credentials from the system keyring and credential files. Useful when switching AWS organizations or troubleshooting authentication issues.</dd>
+
   <dt>`--provider`</dt>
   <dd>Logout from a specific provider instead of an identity. Removes all identities that authenticate through this provider.</dd>
 
@@ -157,22 +240,31 @@ Would remove from identity: dev-admin
 
 ## How It Works
 
-### Authentication Chain Resolution
+### Selective Identity Logout
 
-Atmos builds the complete authentication chain for the specified identity and removes credentials at each step:
+When you log out of a specific identity, Atmos performs **selective cleanup** to preserve other identities:
 
-```
-Provider → Identity 1 → Identity 2 → Target Identity
-   ↓           ↓            ↓              ↓
- Removed    Removed      Removed        Removed
-```
+**Example:** For `atmos auth logout dev-admin` with chain `aws-sso → dev-org-admin → dev-admin`:
 
-**Example:** For identity `dev-admin` with chain `aws-sso → dev-org-admin → dev-admin`:
+1. Removes keyring entry for **only** `dev-admin`
+2. Removes `dev-admin` profile from `~/.config/atmos/aws/aws-sso/credentials`
+3. Removes `dev-admin` profile from `~/.config/atmos/aws/aws-sso/config`
+4. Keyring entries for `aws-sso` and `dev-org-admin` are **preserved**
+5. Other identity profiles in the config files are **preserved**
 
-1. Removes keyring entry for `aws-sso` (provider credentials)
-2. Removes keyring entry for `dev-org-admin` (intermediate identity)
-3. Removes keyring entry for `dev-admin` (target identity)
-4. Removes AWS credential files in `~/.aws/atmos/aws-sso/`
+Other identities using `aws-sso` (like `prod-admin`, `staging-admin`) remain fully functional.
+
+### Provider Logout (Complete Cleanup)
+
+When you log out of a provider using `--provider`, Atmos performs **complete cleanup**:
+
+**Example:** For `atmos auth logout --provider aws-sso`:
+
+1. Logs out each identity using the provider (removes keyring + profiles)
+2. Removes provider keyring entry: `aws-sso`
+3. Deletes entire provider directory: `~/.config/atmos/aws/aws-sso/`
+
+This is the nuclear option - all identities using that provider will need to re-authenticate.
 
 ### Credential Storage Locations
 
@@ -195,9 +287,9 @@ Some providers (like AWS) also write credential files for compatibility with oth
 - **AWS credentials**: `<base_path>/<provider>/credentials`
 - **AWS config**: `<base_path>/<provider>/config`
 
-The default base path is `~/.aws/atmos`, but this can be customized (see [Custom File Paths](#custom-file-paths)).
+The default base path follows XDG Base Directory Specification (`~/.config/atmos/aws/` on both Linux and macOS), but this can be customized (see [Custom File Paths](#custom-file-paths)).
 
-The logout command removes both keyring entries and file storage.
+**Identity logout** selectively removes only that identity's profile from the config files using file locking to prevent conflicts. **Provider logout** (`--provider` flag) deletes the entire provider directory.
 
 ### Error Handling
 
@@ -216,7 +308,7 @@ Building authentication chain...
 Removing credentials...
   ✓ Keyring: aws-sso
   ✗ Keyring: dev-admin (not found - already logged out)
-  ✓ Files: ~/.aws/atmos/aws-sso/
+  ✓ Files: ~/.config/atmos/aws/aws-sso/ (XDG-compliant)
 
 Logged out with warnings (2/3 successful)
 
@@ -250,8 +342,8 @@ To completely end your session and fully logout:
 Logout removes:
 
 - ✅ Credentials stored in system keyring
-- ✅ AWS credential files (`~/.aws/atmos/<provider>/credentials`)
-- ✅ AWS config files (`~/.aws/atmos/<provider>/config`)
+- ✅ AWS credential files (XDG-compliant: `~/.config/atmos/aws/<provider>/credentials` on Linux)
+- ✅ AWS config files (XDG-compliant: `~/.config/atmos/aws/<provider>/config` on Linux)
 - ✅ Empty provider directories
 
 Logout does NOT remove:
@@ -313,13 +405,17 @@ Error: failed to delete credentials from keyring: access denied
 ### Files Not Removed
 
 ```
-✗ Files: ~/.aws/atmos/aws-sso/ (permission denied)
+✗ Files: ~/.config/atmos/aws/aws-sso/ (permission denied)
 ```
 
-**Solution**: Ensure you have write permissions to the `~/.aws/atmos/` directory. Check file ownership and permissions:
+**Solution**: Ensure you have write permissions to the Atmos config directory. Check file ownership and permissions:
 
 ```shell
-ls -la ~/.aws/atmos/
+# On Linux:
+ls -la ~/.config/atmos/
+
+# On macOS:
+ls -la ~/Library/Application\ Support/atmos/
 ```
 
 ## Related Commands
@@ -394,7 +490,7 @@ auth:
 The file path is resolved using this precedence order:
 
 1. **Provider configuration** (`spec.files.base_path` in `atmos.yaml`)
-2. **Default** (`~/.aws/atmos`)
+2. **Default** (XDG-compliant: `~/.config/atmos/aws/` on both Linux and macOS)
 
 #### Path Expansion
 
@@ -434,7 +530,11 @@ atmos auth login prod-admin
 Remove credentials when ending your work session for security:
 
 ```shell
+# Logout from specific provider
 atmos auth logout --provider aws-sso
+
+# Or logout from all identities
+atmos auth logout --all
 ```
 
 ### 3. Use Dry Run for Verification

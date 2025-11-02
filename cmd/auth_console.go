@@ -3,12 +3,14 @@ package cmd
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsAuth "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -72,11 +74,21 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Authenticate and get whoami info.
+	// Try to use cached credentials first (passive check, no prompts).
+	// Only authenticate if cached credentials are not available or expired.
 	ctx := context.Background()
-	whoami, err := authManager.Authenticate(ctx, identityName)
+	whoami, err := authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf("%w: authentication failed: %w", errUtils.ErrAuthConsole, err)
+		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
+		// No valid cached credentials - perform full authentication.
+		whoami, err = authManager.Authenticate(ctx, identityName)
+		if err != nil {
+			// Check for user cancellation - return clean error without wrapping.
+			if errors.Is(err, errUtils.ErrUserAborted) {
+				return errUtils.ErrUserAborted
+			}
+			return fmt.Errorf("%w: authentication failed: %w", errUtils.ErrAuthConsole, err)
+		}
 	}
 
 	// Retrieve credentials.
@@ -107,7 +119,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 
 	consoleURL, duration, err := consoleProvider.GetConsoleURL(ctx, creds, options)
 	if err != nil {
-		return fmt.Errorf("%w: failed to generate console URL: %w", errUtils.ErrAuthConsole, err)
+		return fmt.Errorf("%w: failed to generate console URL for identity %q: %w", errUtils.ErrAuthConsole, identityName, err)
 	}
 
 	if consolePrintOnly {
@@ -228,12 +240,25 @@ func initializeAuthManager() (types.AuthManager, error) {
 func resolveIdentityName(cmd *cobra.Command, authManager types.AuthManager) (string, error) {
 	defer perf.Track(nil, "cmd.resolveIdentityName")()
 
-	identityName, _ := cmd.Flags().GetString(IdentityFlagName)
-	if identityName != "" {
+	// Get identity from flag or use default.
+	// Check if flag was explicitly set by user to ensure command-line precedence.
+	var identityName string
+	if cmd.Flags().Changed(IdentityFlagName) {
+		// Flag was explicitly provided on command line (either with or without value).
+		identityName, _ = cmd.Flags().GetString(IdentityFlagName)
+	} else {
+		// Flag not provided on command line - fall back to viper (config/env).
+		identityName = viper.GetString(IdentityFlagName)
+	}
+
+	// Check if user wants to interactively select identity.
+	forceSelect := identityName == IdentityFlagSelectValue
+
+	if identityName != "" && !forceSelect {
 		return identityName, nil
 	}
 
-	identityName, err := authManager.GetDefaultIdentity()
+	identityName, err := authManager.GetDefaultIdentity(forceSelect)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to get default identity: %w", errUtils.ErrAuthConsole, err)
 	}

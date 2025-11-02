@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -97,6 +101,11 @@ func processCustomCommands(
 				},
 			}
 			customCommand.PersistentFlags().Bool("", false, doubleDashHint)
+
+			// Add --identity flag to all custom commands to allow runtime override
+			customCommand.PersistentFlags().String("identity", "", "Identity to use for authentication (overrides identity in command config)")
+			AddIdentityCompletion(customCommand)
+
 			// Process and add flags to the command
 			for _, flag := range commandConfig.Flags {
 				if flag.Type == "bool" {
@@ -320,7 +329,16 @@ func executeCustomCommand(
 	commandConfig *schema.Command,
 ) {
 	var err error
-	args, trailingArgs := extractTrailingArgs(args, os.Args)
+
+	// Extract arguments after "--" separator using safe shell quoting.
+	separated := ExtractSeparatedArgs(cmd, args, os.Args)
+	args = separated.BeforeSeparator
+	trailingArgs, err := separated.GetAfterSeparatorAsQuotedString()
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: failed to quote trailing arguments: %w",
+			errUtils.ErrFailedToProcessArgs, err), "", "")
+	}
+
 	if commandConfig.Verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
@@ -330,6 +348,46 @@ func executeCustomCommand(
 	if mergedArgsStr == "" {
 		// If for some reason no annotation was set, just fallback
 		finalArgs = args
+	}
+
+	// Create auth manager if identity is specified for this custom command.
+	// Check for --identity flag first (it overrides the config).
+	var authManager auth.AuthManager
+	identityFlag, _ := cmd.Flags().GetString("identity")
+	commandIdentity := strings.TrimSpace(identityFlag)
+	if commandIdentity == "" {
+		// Fall back to identity from command config
+		commandIdentity = strings.TrimSpace(commandConfig.Identity)
+	}
+
+	if commandIdentity != "" {
+		credStore := credentials.NewCredentialStore()
+		validator := validation.NewValidator()
+		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, nil)
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
+		}
+
+		ctx := context.Background()
+
+		// Try to use cached credentials first (passive check, no prompts).
+		// Only authenticate if cached credentials are not available or expired.
+		_, err = authManager.GetCachedCredentials(ctx, commandIdentity)
+		if err != nil {
+			log.Debug("No valid cached credentials found, authenticating", "identity", commandIdentity, "error", err)
+			// No valid cached credentials - perform full authentication.
+			_, err = authManager.Authenticate(ctx, commandIdentity)
+			if err != nil {
+				// Check for user cancellation - return clean error without wrapping.
+				if errors.Is(err, errUtils.ErrUserAborted) {
+					errUtils.CheckErrorPrintAndExit(errUtils.ErrUserAborted, "", "")
+				}
+				errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w for identity %q in custom command %q: %w",
+					errUtils.ErrAuthenticationFailed, commandIdentity, commandConfig.Name, err), "", "")
+			}
+		}
+
+		log.Debug("Authenticated with identity for custom command", "identity", commandIdentity, "command", commandConfig.Name)
 	}
 
 	// Execute custom command's steps
@@ -427,6 +485,17 @@ func executeCustomCommand(
 			log.Debug("Using custom ENV vars", "env", envVarsList)
 		}
 
+		// Prepare shell environment with authentication credentials if identity is specified.
+		if commandIdentity != "" && authManager != nil {
+			ctx := context.Background()
+			env, err = authManager.PrepareShellEnvironment(ctx, commandIdentity, env)
+			if err != nil {
+				errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to prepare shell environment for identity %q in custom command %q step %d: %w",
+					commandIdentity, commandConfig.Name, i, err), "", "")
+			}
+			log.Debug("Prepared environment with identity for custom command step", "identity", commandIdentity, "command", commandConfig.Name, "step", i)
+		}
+
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step, data, false)
@@ -439,35 +508,6 @@ func executeCustomCommand(
 		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, env, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
-}
-
-// Extracts native arguments (everything after "--") signifying the end of Atmos-specific arguments.
-// Because of the flag hint for double dash, args is already consumed by Cobra.
-// So we need to perform manual parsing of os.Args to extract the "trailing args" after the "--" end of args marker.
-func extractTrailingArgs(args []string, osArgs []string) ([]string, string) {
-	doubleDashIndex := lo.IndexOf(osArgs, "--")
-	mainArgs := args
-	trailingArgs := ""
-	if doubleDashIndex > 0 {
-		mainArgs = lo.Slice(osArgs, 0, doubleDashIndex)
-		trailingArgs = strings.Join(lo.Slice(osArgs, doubleDashIndex+1, len(osArgs)), " ")
-		result := []string{}
-		lookup := make(map[string]bool)
-
-		// Populate a lookup map for quick existence check
-		for _, val := range mainArgs {
-			lookup[val] = true
-		}
-
-		// Iterate over leftArr and collect matching elements in order
-		for _, val := range args {
-			if lookup[val] {
-				result = append(result, val)
-			}
-		}
-		mainArgs = result
-	}
-	return mainArgs, trailingArgs
 }
 
 // cloneCommand clones a custom command config into a new struct.

@@ -387,6 +387,31 @@ func sanitizeOutput(output string) (string, error) {
 	expiresRegex := regexp.MustCompile(`(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4})\s+\([^)]+\)`)
 	result = expiresRegex.ReplaceAllString(result, "$1 (1h 0m)")
 
+	// 10. Normalize debug log timestamps (Go time.Time string format).
+	// These appear in debug logs like: expiration="2025-10-26 23:04:36.236866 -0500 CDT m=+3600.098519710"
+	// Replace with a constant timestamp to avoid snapshot mismatches.
+	debugTimestampRegex := regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
+	result = debugTimestampRegex.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
+
+	// 11. Normalize "Last Updated" timestamps in auth whoami output.
+	// These appear as "Last Updated  2025-10-28 13:10:27 CDT" in table output.
+	// Replace with a fixed timestamp to avoid snapshot mismatches.
+	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
+	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
+
+	// 12. Normalize credential expiration durations in auth list output.
+	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
+	// The duration changes every minute, so normalize to "1h 0m" like other duration normalizations.
+	// Matches patterns like "650202h14m", "650194h", "1h30m", "45m", etc. at the end of identity lines.
+	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h(?:\d+m)?\b`)
+	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
+
+	// 13. Normalize credential_store values in error messages.
+	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
+	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
+	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
+	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
+
 	return result, nil
 }
 
@@ -730,6 +755,18 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 				t.Fatalf("Failed to clean directory %q: %v", tc.Workdir, err)
 			}
 		}
+
+		// Set ATMOS_CLI_CONFIG_PATH to ensure test isolation.
+		// This forces Atmos to use the workdir's atmos.yaml instead of searching
+		// up the directory tree or using ~/.config/atmos/atmos.yaml.
+		atmosConfigPath := filepath.Join(absoluteWorkdir, "atmos.yaml")
+		if _, err := os.Stat(atmosConfigPath); err == nil {
+			if tc.Env == nil {
+				tc.Env = make(map[string]string)
+			}
+			tc.Env["ATMOS_CLI_CONFIG_PATH"] = absoluteWorkdir
+			logger.Debug("Setting ATMOS_CLI_CONFIG_PATH for test isolation", "path", absoluteWorkdir)
+		}
 	}
 
 	// Include the system PATH in the test environment
@@ -827,6 +864,66 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 				break
 			}
 		}
+	}
+
+	// Filter out ATMOS_* environment variables that shouldn't be inherited from developer's shell.
+	// This ensures test reproducibility between local and CI environments.
+	// Only allow ATMOS_* vars explicitly set in tc.Env.
+	atmosVarsToFilter := []string{
+		"ATMOS_LOGS_LEVEL", // Can change log verbosity and affect snapshot output
+		"ATMOS_CHDIR",      // Can change working directory resolution
+		"ATMOS_LOGS_FILE",  // Can redirect logs to unexpected locations
+	}
+
+	for _, atmosVar := range atmosVarsToFilter {
+		// Skip if test explicitly sets this variable
+		if _, exists := tc.Env[atmosVar]; exists {
+			continue
+		}
+
+		// Remove from inherited environment
+		for i, env := range envVars {
+			if strings.HasPrefix(env, atmosVar+"=") {
+				envVars = append(envVars[:i], envVars[i+1:]...)
+				break
+			}
+		}
+	}
+
+	// Set up XDG directories in temp locations to ensure test isolation.
+	// This prevents tests from:
+	// 1. Reading user's telemetry acknowledgment state (causing inconsistent telemetry notices)
+	// 2. Writing to user's cache/config/data directories
+	// 3. Being affected by user's XDG environment settings
+	//
+	// Use the existing tempDir to ensure XDG paths share the same root directory.
+	// This preserves isolation and avoids bypass issues when tc.Env already contains XDG vars.
+	xdgTempDir := filepath.Join(tempDir, "xdg")
+	xdgVars := map[string]string{
+		"XDG_CACHE_HOME":        filepath.Join(xdgTempDir, "cache"),
+		"XDG_CONFIG_HOME":       filepath.Join(xdgTempDir, "config"),
+		"XDG_DATA_HOME":         filepath.Join(xdgTempDir, "data"),
+		"ATMOS_XDG_CACHE_HOME":  filepath.Join(xdgTempDir, "cache"),
+		"ATMOS_XDG_CONFIG_HOME": filepath.Join(xdgTempDir, "config"),
+		"ATMOS_XDG_DATA_HOME":   filepath.Join(xdgTempDir, "data"),
+	}
+
+	// Add XDG vars to environment unless test explicitly sets them.
+	for xdgVar, xdgPath := range xdgVars {
+		if _, exists := tc.Env[xdgVar]; exists {
+			continue // Test explicitly set this, don't override
+		}
+
+		// Remove any inherited XDG var first
+		for i, env := range envVars {
+			if strings.HasPrefix(env, xdgVar+"=") {
+				envVars = append(envVars[:i], envVars[i+1:]...)
+				break
+			}
+		}
+
+		// Add our isolated XDG var
+		envVars = append(envVars, fmt.Sprintf("%s=%s", xdgVar, xdgPath))
 	}
 
 	cmd.Env = envVars
@@ -1288,8 +1385,14 @@ func getSnapshotFilenames(testName string, isTty bool) (stdout, stderr, tty stri
 // verifyTTYSnapshot handles snapshot verification for TTY mode tests.
 func verifyTTYSnapshot(t *testing.T, tc *TestCase, ttyPath, combinedOutput string, regenerate bool) bool {
 	if regenerate {
+		// Strip trailing whitespace from output before saving snapshot if requested.
+		outputToSave := combinedOutput
+		if tc.Expect.IgnoreTrailingWhitespace {
+			outputToSave = stripTrailingWhitespace(combinedOutput)
+		}
+
 		t.Logf("Updating TTY snapshot at %q", ttyPath)
-		updateSnapshot(ttyPath, combinedOutput)
+		updateSnapshot(ttyPath, outputToSave)
 		return true
 	}
 
@@ -1372,10 +1475,18 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Non-TTY mode: separate stdout and stderr snapshots
 	if regenerate {
+		// Strip trailing whitespace from output before saving snapshot if requested.
+		stdoutToSave := stdoutOutput
+		stderrToSave := stderrOutput
+		if tc.Expect.IgnoreTrailingWhitespace {
+			stdoutToSave = stripTrailingWhitespace(stdoutOutput)
+			stderrToSave = stripTrailingWhitespace(stderrOutput)
+		}
+
 		t.Logf("Updating stdout snapshot at %q", stdoutPath)
-		updateSnapshot(stdoutPath, stdoutOutput)
+		updateSnapshot(stdoutPath, stdoutToSave)
 		t.Logf("Updating stderr snapshot at %q", stderrPath)
-		updateSnapshot(stderrPath, stderrOutput)
+		updateSnapshot(stderrPath, stderrToSave)
 		return true
 	}
 

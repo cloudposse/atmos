@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -118,7 +120,7 @@ func TestManager_GetDefaultIdentity(t *testing.T) {
 			}
 
 			// Call the function.
-			result, err := manager.GetDefaultIdentity()
+			result, err := manager.GetDefaultIdentity(false)
 
 			// Assert results.
 			if tt.expectedError != "" {
@@ -158,7 +160,7 @@ func TestManager_GetDefaultIdentity_MultipleDefaultsOrder(t *testing.T) {
 		},
 	}
 
-	_, err := manager.GetDefaultIdentity()
+	_, err := manager.GetDefaultIdentity(false)
 	require.Error(t, err)
 
 	// The error should contain all three default identities.
@@ -191,6 +193,42 @@ func TestManager_ListIdentities(t *testing.T) {
 	assert.Contains(t, result, "identity1")
 	assert.Contains(t, result, "identity2")
 	assert.Contains(t, result, "identity3")
+}
+
+func TestManager_ListIdentities_WithCaseMap(t *testing.T) {
+	// Viper lowercases all map keys, so identities will be lowercase in the config.
+	identities := map[string]schema.Identity{
+		"superadmin":              {Kind: "aws/user", Default: true},
+		"core-identity/terraform": {Kind: "aws/permission-set", Default: false},
+		"devops":                  {Kind: "aws/assume-role", Default: false},
+	}
+
+	// IdentityCaseMap preserves the original case from YAML.
+	caseMap := map[string]string{
+		"superadmin":              "SuperAdmin",
+		"core-identity/terraform": "core-identity/Terraform",
+		"devops":                  "DevOps",
+	}
+
+	manager := &manager{
+		config: &schema.AuthConfig{
+			Identities:      identities,
+			IdentityCaseMap: caseMap,
+		},
+	}
+
+	result := manager.ListIdentities()
+
+	// Should return all identity names with original case preserved.
+	assert.Len(t, result, 3)
+	assert.Contains(t, result, "SuperAdmin")
+	assert.Contains(t, result, "core-identity/Terraform")
+	assert.Contains(t, result, "DevOps")
+
+	// Should NOT contain lowercase versions.
+	assert.NotContains(t, result, "superadmin")
+	assert.NotContains(t, result, "core-identity/terraform")
+	assert.NotContains(t, result, "devops")
 }
 
 func TestManager_promptForIdentity(t *testing.T) {
@@ -229,9 +267,11 @@ func (c *testCreds) IsExpired() bool {
 	}
 	return time.Now().After(*c.exp)
 }
-func (c *testCreds) GetExpiration() (*time.Time, error)               { return c.exp, nil }
-func (c *testCreds) BuildWhoamiInfo(info *types.WhoamiInfo)           {}
-func (c *testCreds) Validate(ctx context.Context) (*time.Time, error) { return c.exp, nil }
+func (c *testCreds) GetExpiration() (*time.Time, error)     { return c.exp, nil }
+func (c *testCreds) BuildWhoamiInfo(info *types.WhoamiInfo) {}
+func (c *testCreds) Validate(ctx context.Context) (*types.ValidationInfo, error) {
+	return &types.ValidationInfo{Expiration: c.exp}, nil
+}
 
 func (s *testStore) Store(alias string, creds types.ICredentials) error {
 	if s.data == nil {
@@ -264,6 +304,7 @@ func (s *testStore) IsExpired(alias string) (bool, error) {
 	}
 	return false, nil
 }
+func (s *testStore) Type() string { return "test" }
 
 func (p *testProvider) Kind() string {
 	if p.kind == "" {
@@ -286,6 +327,9 @@ func (p *testProvider) Validate() error                         { return nil }
 func (p *testProvider) Environment() (map[string]string, error) { return map[string]string{}, nil }
 func (p *testProvider) Logout(_ context.Context) error          { return nil }
 func (p *testProvider) GetFilesDisplayPath() string             { return "~/.aws/atmos" }
+func (p *testProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
+}
 
 func TestManager_getProviderForIdentity_NameAndAlias(t *testing.T) {
 	m := &manager{
@@ -328,27 +372,37 @@ func TestManager_buildAuthenticationChain_Errors(t *testing.T) {
 
 func TestManager_isCredentialValid(t *testing.T) {
 	now := time.Now().UTC()
-	s := &testStore{expired: map[string]bool{"ok": false, "expired": true}}
+	s := &testStore{}
 	m := &manager{credentialStore: s}
 
-	// Expired -> false.
-	valid, exp := m.isCredentialValid("expired", &testCreds{exp: ptrTime(now.Add(1 * time.Hour))})
+	// Expired credentials (expiration in the past) -> false, returns expiration time.
+	pastExp := now.Add(-1 * time.Hour)
+	valid, exp := m.isCredentialValid("expired", &testCreds{exp: &pastExp})
 	assert.False(t, valid)
-	assert.Nil(t, exp)
+	assert.NotNil(t, exp) // Returns the expiration time even when invalid.
+	assert.Equal(t, pastExp, *exp)
 
-	// Not expired, far future -> true, non-nil exp.
-	texp := now.Add(10 * time.Minute)
-	valid, exp = m.isCredentialValid("ok", &testCreds{exp: &texp})
+	// Expiring soon (less than 15 minutes) -> false, returns expiration time.
+	soonExp := now.Add(10 * time.Minute)
+	valid, exp = m.isCredentialValid("expiring-soon", &testCreds{exp: &soonExp})
+	assert.False(t, valid)
+	assert.NotNil(t, exp)
+	assert.Equal(t, soonExp, *exp)
+
+	// Valid credentials with future expiration (>15 minutes) -> true, returns expiration.
+	futureExp := now.Add(20 * time.Minute)
+	valid, exp = m.isCredentialValid("valid", &testCreds{exp: &futureExp})
 	assert.True(t, valid)
 	require.NotNil(t, exp)
+	assert.Equal(t, futureExp, *exp)
 
-	// Not expired, no expiration -> true, nil exp.
-	valid, exp = m.isCredentialValid("ok", &testCreds{exp: nil})
+	// Non-expiring credentials (no expiration info) -> true, nil expiration.
+	valid, exp = m.isCredentialValid("non-expiring", &testCreds{exp: nil})
 	assert.True(t, valid)
 	assert.Nil(t, exp)
 }
 
-func TestManager_Whoami_Paths(t *testing.T) {
+func TestManager_GetCachedCredentials_Paths(t *testing.T) {
 	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
 	m := &manager{
 		config: &schema.AuthConfig{Identities: map[string]schema.Identity{
@@ -360,27 +414,125 @@ func TestManager_Whoami_Paths(t *testing.T) {
 		credentialStore: s,
 	}
 	// Not found.
-	_, err := m.Whoami(context.Background(), "ghost")
+	_, err := m.GetCachedCredentials(context.Background(), "ghost")
 	assert.Error(t, err)
 
 	// No creds.
-	_, err = m.Whoami(context.Background(), "dev")
+	_, err = m.GetCachedCredentials(context.Background(), "dev")
 	assert.Error(t, err)
 
 	// Expired.
-	s.data["dev"] = &testCreds{}
-	s.expired["dev"] = true
-	_, err = m.Whoami(context.Background(), "dev")
+	expiredTime := time.Now().Add(-1 * time.Hour)
+	s.data["dev"] = &testCreds{exp: &expiredTime}
+	_, err = m.GetCachedCredentials(context.Background(), "dev")
 	assert.Error(t, err)
 
 	// Success.
+	validTime := time.Now().Add(1 * time.Hour)
+	s.data["dev"] = &testCreds{exp: &validTime}
+	info, err := m.GetCachedCredentials(context.Background(), "dev")
+	require.NoError(t, err)
+	assert.Equal(t, "p", info.Provider)
+	assert.Equal(t, "dev", info.Identity)
+	assert.Equal(t, "dev", info.CredentialsRef)
+	assert.NotNil(t, info.Credentials) // Credentials are preserved in WhoamiInfo.
+}
+
+func TestManager_Whoami_WithCachedCredentials(t *testing.T) {
+	// Test that Whoami successfully retrieves cached credentials when available.
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	m := &manager{
+		config: &schema.AuthConfig{Identities: map[string]schema.Identity{
+			"dev": {Kind: "aws/user"},
+		}},
+		identities: map[string]types.Identity{
+			"dev": stubIdentity{provider: "p"},
+		},
+		credentialStore: s,
+	}
+
+	// Setup valid cached credentials.
+	s.data["dev"] = &testCreds{}
 	s.expired["dev"] = false
+
+	// Whoami should use GetCachedCredentials and succeed.
 	info, err := m.Whoami(context.Background(), "dev")
 	require.NoError(t, err)
 	assert.Equal(t, "p", info.Provider)
 	assert.Equal(t, "dev", info.Identity)
 	assert.Equal(t, "dev", info.CredentialsRef)
-	assert.Nil(t, info.Credentials)
+	assert.NotNil(t, info.Credentials) // Credentials are preserved in WhoamiInfo.
+}
+
+func TestManager_Whoami_FallbackAuthenticationFails(t *testing.T) {
+	// Test that Whoami returns error when both GetCachedCredentials and Authenticate fail.
+	// This covers the case where no cached credentials exist and reauthentication also fails.
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"p": {Kind: "test"},
+			},
+			Identities: map[string]schema.Identity{
+				"dev": {Kind: "test", Via: &schema.IdentityVia{Provider: "p"}},
+			},
+		},
+		identities: map[string]types.Identity{
+			"dev": stubPSIdentity{provider: "p"},
+		},
+		providers: map[string]types.Provider{
+			// Provider that fails authentication.
+			"p": &testProvider{name: "p", authErr: fmt.Errorf("provider auth failed")},
+		},
+		credentialStore: s,
+		validator:       dummyValidator{},
+	}
+
+	// No cached credentials exist (empty store).
+	// Whoami should try GetCachedCredentials (fail), then fall back to Authenticate (also fail).
+	info, err := m.Whoami(context.Background(), "dev")
+
+	// Should return error.
+	// Note: Returns the original GetCachedCredentials error, not the Authenticate error.
+	assert.Error(t, err)
+	assert.Nil(t, info)
+	assert.Contains(t, err.Error(), "no credentials found")
+}
+
+func TestManager_Whoami_FallbackAuthenticationSucceeds(t *testing.T) {
+	// Test that Whoami succeeds via fallback authentication when no cached credentials exist.
+	// This covers the case where provider credentials exist (e.g., in AWS files) and can be used
+	// to derive identity credentials without interactive prompts.
+	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"p": {Kind: "test"},
+			},
+			Identities: map[string]schema.Identity{
+				"dev": {Kind: "test", Via: &schema.IdentityVia{Provider: "p"}},
+			},
+		},
+		identities: map[string]types.Identity{
+			"dev": stubPSIdentity{provider: "p", out: &testCreds{}},
+		},
+		providers: map[string]types.Provider{
+			// Provider that succeeds authentication.
+			"p": &testProvider{name: "p", creds: &testCreds{}},
+		},
+		credentialStore: s,
+		validator:       dummyValidator{},
+	}
+
+	// No cached credentials exist (empty store).
+	// Whoami should try GetCachedCredentials (fail), then fall back to Authenticate (succeed).
+	info, err := m.Whoami(context.Background(), "dev")
+
+	// Should succeed via fallback authentication.
+	require.NoError(t, err)
+	assert.Equal(t, "p", info.Provider)
+	assert.Equal(t, "dev", info.Identity)
+	assert.NotNil(t, info.Credentials)
 }
 
 func TestManager_authenticateWithProvider_Paths(t *testing.T) {
@@ -404,14 +556,113 @@ func TestManager_retrieveCachedCredentials_and_determineStart(t *testing.T) {
 	assert.Equal(t, 2, m.determineStartingIndex(2))
 
 	// Retrieve credentials succeeds.
-	_, err := m.retrieveCachedCredentials(m.chain, 0)
+	_, err := m.getChainCredentials(m.chain, 0)
 	assert.NoError(t, err)
 
 	// Retrieve credentials returns error.
 	s2 := &testStore{retrieveErr: map[string]error{"y": assert.AnError}}
 	m2 := &manager{credentialStore: s2, chain: []string{"y"}}
-	_, err = m2.retrieveCachedCredentials(m2.chain, 0)
+	_, err = m2.getChainCredentials(m2.chain, 0)
 	assert.Error(t, err)
+}
+
+// TestManager_retrieveCachedCredentials_TerraformFlow_Regression reproduces the original bug.
+// Where terraform commands failed to use file-based credentials even though auth whoami worked.
+// This test specifically covers the code path used during terraform execution (via fetchCachedCredentials).
+// Before the fix, this test would fail because getChainCredentials didn't fall back to identity storage.
+// After the fix, this test passes because getChainCredentials now has the same fallback logic.
+func TestManager_retrieveCachedCredentials_TerraformFlow_Regression(t *testing.T) {
+	// Setup: Simulate the exact scenario from the bug report.
+	// - Credentials exist in identity storage (AWS credential files).
+	// - Credentials do NOT exist in keyring (noop keyring in Docker/Geodesic).
+	// - User has successfully authenticated via SSO and files are up-to-date.
+
+	// Create a keyring that always returns "not found" (simulates noop keyring).
+	store := &testStore{
+		retrieveErr: map[string]error{
+			"test-identity": credentials.ErrCredentialsNotFound,
+		},
+	}
+
+	// Create an identity that has credentials in storage (simulates AWS credential files).
+	identity := &mockIdentityForFallback{
+		hasCredentials: true,
+		creds:          &testCreds{},
+	}
+
+	m := &manager{
+		config: &schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"test-identity": {Kind: "test"},
+			},
+		},
+		identities: map[string]types.Identity{
+			"test-identity": identity,
+		},
+		credentialStore: store,
+		chain:           []string{"test-provider", "test-identity"},
+	}
+
+	// This is the EXACT code path used by terraform execution:
+	// ExecuteTerraform → TerraformPreHook → Authenticate → authenticateChain
+	// → authenticateFromIndex → authenticateProviderChain → fetchCachedCredentials
+	// → getChainCredentials
+	creds, err := m.getChainCredentials(m.chain, 1) // Index 1 = test-identity
+
+	// BEFORE FIX: This fails with "credentials not found" because getChainCredentials
+	//             only checks keyring and doesn't fall back to identity storage.
+	// AFTER FIX: This succeeds by loading from identity storage (AWS files).
+	require.NoError(t, err, "getChainCredentials should fall back to identity storage when keyring is empty")
+	assert.NotNil(t, creds, "Credentials should be loaded from identity storage")
+}
+
+// mockIdentityForFallback is a minimal mock identity for testing fallback behavior.
+type mockIdentityForFallback struct {
+	hasCredentials bool
+	creds          types.ICredentials
+}
+
+func (m *mockIdentityForFallback) Kind() string {
+	return "mock"
+}
+
+func (m *mockIdentityForFallback) GetProviderName() (string, error) {
+	return "test-provider", nil
+}
+
+func (m *mockIdentityForFallback) Authenticate(ctx context.Context, previousCredentials types.ICredentials) (types.ICredentials, error) {
+	return nil, fmt.Errorf("authenticate should not be called in retrieval path")
+}
+
+func (m *mockIdentityForFallback) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
+	if !m.hasCredentials {
+		return nil, fmt.Errorf("no credentials in identity storage")
+	}
+	return m.creds, nil
+}
+
+func (m *mockIdentityForFallback) Environment() (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+func (m *mockIdentityForFallback) CredentialsExist() (bool, error) {
+	return m.hasCredentials, nil
+}
+
+func (m *mockIdentityForFallback) Validate() error {
+	return nil
+}
+
+func (m *mockIdentityForFallback) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
+	return nil
+}
+
+func (m *mockIdentityForFallback) Logout(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockIdentityForFallback) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
 }
 
 func TestManager_initializeProvidersAndIdentities(t *testing.T) {
@@ -436,25 +687,25 @@ func TestManager_GetProviderKindForIdentity_UnknownProvider(t *testing.T) {
 func ptrTime(t time.Time) *time.Time { return &t }
 
 func TestManager_findFirstValidCachedCredentials(t *testing.T) {
-	s := &testStore{data: map[string]any{}, expired: map[string]bool{}}
-	now := time.Now().UTC().Add(10 * time.Minute)
+	s := &testStore{data: map[string]any{}}
+	now := time.Now().UTC()
+	validExp := now.Add(20 * time.Minute) // Valid: expires in 20 minutes (> 15 min buffer).
+	expiredExp := now.Add(-1 * time.Hour) // Expired: expired 1 hour ago.
 	m := &manager{credentialStore: s, chain: []string{"prov", "id1", "id2"}}
 
-	// Seed: id2 valid, id1 valid.
-	s.data["id2"] = &testCreds{exp: &now}
-	s.expired["id2"] = false
-	s.data["id1"] = &testCreds{exp: &now}
-	s.expired["id1"] = false
+	// Both id1 and id2 have valid credentials -> should return id2 (last in chain).
+	s.data["id2"] = &testCreds{exp: &validExp}
+	s.data["id1"] = &testCreds{exp: &validExp}
 	idx := m.findFirstValidCachedCredentials()
 	require.Equal(t, 2, idx)
 
-	// Mark id2 expired, should pick id1.
-	s.expired["id2"] = true
+	// id2 expired, id1 still valid -> should pick id1.
+	s.data["id2"] = &testCreds{exp: &expiredExp}
 	idx = m.findFirstValidCachedCredentials()
 	require.Equal(t, 1, idx)
 
-	// Both expired -> -1.
-	s.expired["id1"] = true
+	// Both expired -> should return -1 (no valid credentials).
+	s.data["id1"] = &testCreds{exp: &expiredExp}
 	idx = m.findFirstValidCachedCredentials()
 	require.Equal(t, -1, idx)
 }
@@ -477,7 +728,12 @@ func (s stubUserID) Environment() (map[string]string, error) { return map[string
 func (s stubUserID) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
-func (s stubUserID) Logout(_ context.Context) error { return nil }
+func (s stubUserID) Logout(_ context.Context) error                                { return nil }
+func (s stubUserID) CredentialsExist() (bool, error)                               { return true, nil }
+func (s stubUserID) LoadCredentials(_ context.Context) (types.ICredentials, error) { return nil, nil }
+func (s stubUserID) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
+}
 
 func TestManager_authenticateFromIndex_StandaloneAWSUser(t *testing.T) {
 	creds := &testCreds{}
@@ -508,7 +764,7 @@ func TestManager_buildWhoamiInfo_SetsRefAndEnv(t *testing.T) {
 	assert.Equal(t, "p", info.Provider)
 	assert.Equal(t, "dev", info.Identity)
 	assert.Equal(t, "dev", info.CredentialsRef)
-	assert.Nil(t, info.Credentials)
+	assert.NotNil(t, info.Credentials) // Credentials are preserved for validation purposes.
 }
 
 // dummyValidator implements types.Validator for tests.
@@ -549,7 +805,15 @@ func (s stubPSIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthent
 	}
 	return s.postErr
 }
-func (s stubPSIdentity) Logout(_ context.Context) error { return nil }
+func (s stubPSIdentity) Logout(_ context.Context) error  { return nil }
+func (s stubPSIdentity) CredentialsExist() (bool, error) { return true, nil }
+func (s stubPSIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) {
+	return nil, nil
+}
+
+func (s stubPSIdentity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
+}
 
 func TestNewAuthManager_ParamValidation(t *testing.T) {
 	t.Run("nil config", func(t *testing.T) {
@@ -623,7 +887,7 @@ func TestManager_Authenticate_SuccessFlow(t *testing.T) {
 	assert.Equal(t, "p", info.Provider)
 	assert.Equal(t, "dev", info.Identity)
 	assert.Equal(t, "dev", info.CredentialsRef)
-	assert.Nil(t, info.Credentials)
+	assert.NotNil(t, info.Credentials) // Credentials are preserved in WhoamiInfo.
 	assert.Equal(t, "BAR", info.Environment["FOO"])
 	assert.True(t, called, "PostAuthenticate should be called")
 }
@@ -793,7 +1057,12 @@ func (s stubIdentity) Environment() (map[string]string, error) { return nil, nil
 func (s stubIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
-func (s stubIdentity) Logout(_ context.Context) error { return nil }
+func (s stubIdentity) Logout(_ context.Context) error                                { return nil }
+func (s stubIdentity) CredentialsExist() (bool, error)                               { return true, nil }
+func (s stubIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) { return nil, nil }
+func (s stubIdentity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
+}
 
 func TestBuildAuthenticationChain_Basic(t *testing.T) {
 	m := &manager{config: &schema.AuthConfig{
@@ -976,6 +1245,8 @@ func TestManager_fetchCachedCredentials(t *testing.T) {
 	}
 
 	// Test successful retrieval.
+	// nextIndex is incremented because cached credentials at index N become input to step N+1.
+	// Example: Cached permission set creds at index 1 are used as input to assume-role at index 2.
 	retrievedCreds, nextIndex := m.fetchCachedCredentials(1)
 	assert.NotNil(t, retrievedCreds)
 	assert.Equal(t, 2, nextIndex)
@@ -1011,7 +1282,7 @@ func TestManager_GetFilesDisplayPath(t *testing.T) {
 			name:         "provider not found",
 			providerName: "non-existent",
 			provider:     nil,
-			expected:     "~/.aws/atmos", // Default fallback
+			expected:     "~/.config/atmos", // Default fallback (XDG base directory)
 		},
 	}
 
@@ -1027,6 +1298,233 @@ func TestManager_GetFilesDisplayPath(t *testing.T) {
 
 			path := m.GetFilesDisplayPath(tt.providerName)
 			assert.Equal(t, tt.expected, path)
+		})
+	}
+}
+
+// stubEnvIdentity is a test stub for testing GetEnvironmentVariables and buildWhoamiInfoFromEnvironment.
+type stubEnvIdentity struct {
+	provider         string
+	env              map[string]string
+	envErr           error
+	loadCreds        types.ICredentials
+	loadCredsErr     error
+	credentialsExist bool
+}
+
+func (s *stubEnvIdentity) Kind() string { return "test" }
+func (s *stubEnvIdentity) GetProviderName() (string, error) {
+	if s.provider == "" {
+		return "test-provider", nil
+	}
+	return s.provider, nil
+}
+
+func (s *stubEnvIdentity) Authenticate(_ context.Context, base types.ICredentials) (types.ICredentials, error) {
+	return base, nil
+}
+func (s *stubEnvIdentity) Validate() error { return nil }
+func (s *stubEnvIdentity) Environment() (map[string]string, error) {
+	return s.env, s.envErr
+}
+
+func (s *stubEnvIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
+	return nil
+}
+func (s *stubEnvIdentity) Logout(_ context.Context) error { return nil }
+func (s *stubEnvIdentity) CredentialsExist() (bool, error) {
+	return s.credentialsExist, nil
+}
+
+func (s *stubEnvIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) {
+	return s.loadCreds, s.loadCredsErr
+}
+
+func (s *stubEnvIdentity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	return environ, nil
+}
+
+func TestManager_GetEnvironmentVariables(t *testing.T) {
+	tests := []struct {
+		name         string
+		identityName string
+		identity     types.Identity
+		expectError  bool
+		expectedVars map[string]string
+	}{
+		{
+			name:         "identity exists with environment variables",
+			identityName: "test-identity",
+			identity: &stubEnvIdentity{
+				env: map[string]string{
+					"AWS_PROFILE":     "test-profile",
+					"AWS_CONFIG_FILE": "/path/to/config",
+				},
+			},
+			expectError: false,
+			expectedVars: map[string]string{
+				"AWS_PROFILE":     "test-profile",
+				"AWS_CONFIG_FILE": "/path/to/config",
+			},
+		},
+		{
+			name:         "identity not found",
+			identityName: "nonexistent",
+			identity:     nil,
+			expectError:  true,
+		},
+		{
+			name:         "identity with empty environment",
+			identityName: "empty-identity",
+			identity: &stubEnvIdentity{
+				env: map[string]string{},
+			},
+			expectError:  false,
+			expectedVars: map[string]string{},
+		},
+		{
+			name:         "identity environment returns error",
+			identityName: "error-identity",
+			identity: &stubEnvIdentity{
+				envErr: fmt.Errorf("environment generation failed"),
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &manager{
+				identities: make(map[string]types.Identity),
+			}
+
+			if tt.identity != nil {
+				m.identities[tt.identityName] = tt.identity
+			}
+
+			vars, err := m.GetEnvironmentVariables(tt.identityName)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, vars)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedVars, vars)
+			}
+		})
+	}
+}
+
+func TestManager_buildWhoamiInfoFromEnvironment(t *testing.T) {
+	tests := []struct {
+		name         string
+		identityName string
+		identity     types.Identity
+		providerName string
+		expectEnv    map[string]string
+		expectCreds  bool
+	}{
+		{
+			name:         "identity with environment and credentials",
+			identityName: "test-identity",
+			providerName: "test-provider",
+			identity: &stubEnvIdentity{
+				provider: "test-provider",
+				env: map[string]string{
+					"AWS_PROFILE":     "test-profile",
+					"AWS_CONFIG_FILE": "/path/to/config",
+				},
+				loadCreds: &testCreds{},
+			},
+			expectEnv: map[string]string{
+				"AWS_PROFILE":     "test-profile",
+				"AWS_CONFIG_FILE": "/path/to/config",
+			},
+			expectCreds: true,
+		},
+		{
+			name:         "identity with environment but no credentials",
+			identityName: "env-only",
+			providerName: "test-provider",
+			identity: &stubEnvIdentity{
+				provider: "test-provider",
+				env: map[string]string{
+					"FOO": "bar",
+				},
+				loadCreds: nil,
+			},
+			expectEnv: map[string]string{
+				"FOO": "bar",
+			},
+			expectCreds: false,
+		},
+		{
+			name:         "identity with credentials load error",
+			identityName: "creds-error",
+			providerName: "test-provider",
+			identity: &stubEnvIdentity{
+				provider: "test-provider",
+				env: map[string]string{
+					"FOO": "bar",
+				},
+				loadCredsErr: fmt.Errorf("failed to load credentials"),
+			},
+			expectEnv: map[string]string{
+				"FOO": "bar",
+			},
+			expectCreds: false,
+		},
+		{
+			name:         "identity with environment error",
+			identityName: "env-error",
+			providerName: "test-provider",
+			identity: &stubEnvIdentity{
+				provider:  "test-provider",
+				envErr:    fmt.Errorf("environment error"),
+				loadCreds: &testCreds{},
+			},
+			expectEnv:   nil,
+			expectCreds: true,
+		},
+		{
+			name:         "identity not found",
+			identityName: "nonexistent",
+			providerName: "",
+			identity:     nil,
+			expectEnv:    nil,
+			expectCreds:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &manager{
+				identities: make(map[string]types.Identity),
+				providers:  make(map[string]types.Provider),
+			}
+
+			if tt.identity != nil {
+				m.identities[tt.identityName] = tt.identity
+				if tt.providerName != "" {
+					m.providers[tt.providerName] = &testProvider{name: tt.providerName}
+				}
+			}
+
+			info := m.buildWhoamiInfoFromEnvironment(tt.identityName)
+
+			assert.NotNil(t, info)
+			assert.Equal(t, tt.identityName, info.Identity)
+			assert.Equal(t, tt.providerName, info.Provider)
+
+			if tt.expectEnv != nil {
+				assert.Equal(t, tt.expectEnv, info.Environment)
+			}
+
+			if tt.expectCreds {
+				assert.NotNil(t, info.Credentials)
+			} else {
+				assert.Nil(t, info.Credentials)
+			}
 		})
 	}
 }

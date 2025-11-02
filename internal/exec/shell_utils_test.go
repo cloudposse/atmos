@@ -461,7 +461,7 @@ func TestExecAuthShellCommand_ExitCodePropagation(t *testing.T) {
 				"TEST_VAR": "test_value",
 			}
 
-			err := ExecAuthShellCommand(nil, "test-identity", envVars, "/bin/sh", tt.shellArgs)
+			err := ExecAuthShellCommand(nil, "test-identity", "test-provider", envVars, "/bin/sh", tt.shellArgs)
 
 			if tt.expectedCode == 0 {
 				assert.NoError(t, err)
@@ -624,5 +624,93 @@ func TestExecuteShell(t *testing.T) {
 			false,
 		)
 		assert.NoError(t, err)
+	})
+
+	t.Run("custom env vars override parent env", func(t *testing.T) {
+		// Test that custom env vars can override parent environment variables
+		// while still inheriting everything else like PATH.
+		if runtime.GOOS == "windows" {
+			t.Skip("Skipping Unix-specific test on Windows")
+		}
+
+		// Set a test environment variable in the parent process.
+		t.Setenv("TEST_OVERRIDE", "parent_value")
+
+		// Pass a custom env that overrides TEST_OVERRIDE.
+		// The shell command should see the override value, not the parent value,
+		// but should still have access to PATH.
+		err := ExecuteShell(
+			"test \"$TEST_OVERRIDE\" = \"custom_value\" && env | grep -q PATH",
+			"test-shell",
+			".",
+			[]string{"TEST_OVERRIDE=custom_value"},
+			false,
+		)
+		assert.NoError(t, err, "custom env var should override parent, and PATH should be inherited")
+	})
+
+	t.Run("empty env should inherit PATH from parent process", func(t *testing.T) {
+		// This test demonstrates the bug reported in DEV-3725.
+		// When ExecuteShell is called with an empty env slice (as workflow commands do),
+		// it should still be able to find executables in PATH.
+		// However, due to a bug, ExecuteShell appends ATMOS_SHLVL to the empty slice,
+		// making it non-empty, which causes ShellRunner to use ONLY that env variable,
+		// losing PATH and all other environment variables.
+
+		if runtime.GOOS == "windows" {
+			t.Skip("Skipping Unix-specific PATH test on Windows")
+		}
+
+		// Call ExecuteShell with empty env slice, just like workflow commands do.
+		err := ExecuteShell(
+			"env",
+			"test-shell",
+			".",
+			[]string{}, // Empty slice - should fallback to os.Environ()
+			false,
+		)
+
+		// This currently fails with "env": executable file not found in $PATH
+		// because ExecuteShell adds ATMOS_SHLVL to the empty slice, making it non-empty,
+		// and ShellRunner then uses ONLY that environment, losing PATH.
+		assert.NoError(t, err, "should be able to execute 'env' command when PATH is inherited")
+	})
+
+	t.Run("empty env should inherit PATH for common commands", func(t *testing.T) {
+		// Test various common Unix commands that should be findable in PATH.
+		// Note: Some commands like 'pwd' and 'echo' are shell builtins and don't require PATH,
+		// but external executables like 'ls' and 'env' require PATH to be set.
+		if runtime.GOOS == "windows" {
+			t.Skip("Skipping Unix-specific PATH test on Windows")
+		}
+
+		testCases := []struct {
+			cmd          string
+			requiresPATH bool
+		}{
+			{"ls", true},          // External executable - requires PATH
+			{"env", true},         // External executable - requires PATH
+			{"pwd", false},        // Shell builtin - works without PATH
+			{"echo hello", false}, // Shell builtin - works without PATH
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.cmd, func(t *testing.T) {
+				err := ExecuteShell(
+					tc.cmd,
+					"test-shell",
+					".",
+					[]string{}, // Empty slice - workflow commands pass this
+					false,
+				)
+				if tc.requiresPATH {
+					// These currently fail due to the bug - PATH is not inherited.
+					assert.NoError(t, err, "should be able to execute '%s' when PATH is inherited", tc.cmd)
+				} else {
+					// Shell builtins work even without PATH.
+					assert.NoError(t, err, "shell builtin '%s' should work", tc.cmd)
+				}
+			})
+		}
 	})
 }

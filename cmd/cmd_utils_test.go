@@ -96,46 +96,6 @@ func TestContains(t *testing.T) {
 	}
 }
 
-func TestExtractTrailingArgs(t *testing.T) {
-	tests := []struct {
-		name           string
-		args           []string
-		osArgs         []string
-		expectedArgs   []string
-		expectedString string
-	}{
-		{
-			name:           "no trailing args",
-			args:           []string{"arg1", "arg2"},
-			osArgs:         []string{"program", "arg1", "arg2"},
-			expectedArgs:   []string{"arg1", "arg2"},
-			expectedString: "",
-		},
-		{
-			name:           "with trailing args",
-			args:           []string{"arg1", "--", "trail1", "trail2"},
-			osArgs:         []string{"program", "arg1", "--", "trail1", "trail2"},
-			expectedArgs:   []string{"arg1"},
-			expectedString: "trail1 trail2",
-		},
-		{
-			name:           "double dash at end",
-			args:           []string{"arg1", "--"},
-			osArgs:         []string{"program", "arg1", "--"},
-			expectedArgs:   []string{"arg1"},
-			expectedString: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			args, str := extractTrailingArgs(tt.args, tt.osArgs)
-			assert.Equal(t, tt.expectedArgs, args)
-			assert.Equal(t, tt.expectedString, str)
-		})
-	}
-}
-
 func TestIsVersionCommand(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -515,4 +475,46 @@ func TestAddStackCompletion(t *testing.T) {
 			assert.NotNil(t, completionFunc, "Completion function should not be nil")
 		})
 	}
+}
+
+// TestIdentityArgCompletionSorting tests that identityArgCompletion returns sorted identities.
+func TestIdentityArgCompletionSorting(t *testing.T) {
+	// Change to demo-auth directory (automatically reverted after test).
+	t.Chdir("../examples/demo-auth")
+
+	// Create a test command.
+	cmd := &cobra.Command{
+		Use:   "test",
+		Short: "Test command",
+	}
+
+	// Call completion function with no previous args (first positional argument).
+	completions, directive := identityArgCompletion(cmd, []string{}, "")
+
+	// Verify completions are in sorted order.
+	assert.NotEmpty(t, completions)
+	sortedCompletions := make([]string, len(completions))
+	copy(sortedCompletions, completions)
+	sort.Strings(sortedCompletions)
+	assert.Equal(t, sortedCompletions, completions, "Completions should be sorted alphabetically")
+	assert.Equal(t, 4, int(directive)) // cobra.ShellCompDirectiveNoFileComp
+}
+
+// TestIdentityArgCompletionOnlyFirstArg tests that identityArgCompletion only completes the first arg.
+func TestIdentityArgCompletionOnlyFirstArg(t *testing.T) {
+	// Change to demo-auth directory (automatically reverted after test).
+	t.Chdir("../examples/demo-auth")
+
+	// Create a test command.
+	cmd := &cobra.Command{
+		Use:   "test",
+		Short: "Test command",
+	}
+
+	// Call completion function with an existing arg (second positional argument).
+	completions, directive := identityArgCompletion(cmd, []string{"existing-arg"}, "")
+
+	// Should return no completions for second arg.
+	assert.Empty(t, completions)
+	assert.Equal(t, 4, int(directive)) // cobra.ShellCompDirectiveNoFileComp
 }

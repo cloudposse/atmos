@@ -70,10 +70,14 @@ var (
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
 	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
 	ErrProcessTerraformStateFile        = errors.New("error processing terraform state file")
-
-	ErrLoadAwsConfig    = errors.New("failed to load AWS config")
-	ErrGetObjectFromS3  = errors.New("failed to get object from S3")
-	ErrReadS3ObjectBody = errors.New("failed to read S3 object body")
+	ErrLoadAwsConfig                    = errors.New("failed to load AWS config")
+	ErrGetObjectFromS3                  = errors.New("failed to get object from S3")
+	ErrReadS3ObjectBody                 = errors.New("failed to read S3 object body")
+	ErrCreateGCSClient                  = errors.New("failed to create GCS client")
+	ErrGetObjectFromGCS                 = errors.New("failed to get object from GCS")
+	ErrReadGCSObjectBody                = errors.New("failed to read GCS object body")
+	ErrGCSBucketRequired                = errors.New("bucket is required for gcs backend")
+	ErrInvalidBackendConfig             = errors.New("invalid backend configuration")
 
 	// Azure Blob Storage specific errors.
 	ErrGetBlobFromAzure       = errors.New("failed to get blob from Azure Blob Storage")
@@ -379,7 +383,9 @@ var (
 	ErrAwsAuth                      = errors.New("aws auth error")
 	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
+	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
+	ErrUserAborted                  = errors.New("user aborted")
 
 	// Auth manager and identity/provider resolution errors (centralized sentinels).
 	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")
@@ -396,6 +402,8 @@ var (
 	ErrNoDefaultIdentity             = errors.New("no default identity configured for authentication")
 	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
 	ErrNoIdentitiesAvailable         = errors.New("no identities available")
+	ErrIdentitySelectionRequiresTTY  = errors.New("interactive identity selection requires a TTY")
+	ErrAuthenticationChainNotBuilt   = errors.New("authentication chain not built")
 	ErrInvalidStackConfig            = errors.New("invalid stack config")
 	ErrNoCommandSpecified            = errors.New("no command specified")
 	ErrCommandNotFound               = errors.New("command not found")
