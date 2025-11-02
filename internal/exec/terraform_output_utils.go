@@ -411,7 +411,14 @@ func GetTerraformOutput(
 		defer StopSpinner(p, spinnerDone)
 	}
 
-	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
+	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	if err != nil {
 		u.PrintfMessageToTUI("\r✗ %s\n", message)
 		return nil, false, fmt.Errorf("failed to describe the component %s in the stack %s: %w", component, stack, err)

@@ -146,13 +146,14 @@ func ExecuteDescribeDependents(
 		return nil, err
 	}
 
-	providedComponentSection, err := ExecuteDescribeComponent(
-		args.Component,
-		args.Stack,
-		args.ProcessTemplates,
-		args.ProcessYamlFunctions,
-		args.Skip,
-	)
+	providedComponentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            args.Component,
+		Stack:                args.Stack,
+		ProcessTemplates:     args.ProcessTemplates,
+		ProcessYamlFunctions: args.ProcessYamlFunctions,
+		Skip:                 args.Skip,
+		AuthManager:          nil,
+	})
 	if err != nil {
 		return nil, err
 	}

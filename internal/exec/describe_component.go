@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -36,7 +37,7 @@ type DescribeComponentExec struct {
 	printOrWriteToFile       func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error
 	IsTTYSupportForStdout    func() bool
 	initCliConfig            func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
-	executeDescribeComponent func(component string, stack string, processTemplates bool, processYamlFunctions bool, skip []string) (map[string]any, error)
+	executeDescribeComponent func(params *ExecuteDescribeComponentParams) (map[string]any, error)
 	evaluateYqExpression     func(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error)
 }
 
@@ -107,13 +108,14 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 		componentSection = FilterComputedFields(componentSection)
 	} else {
 		// Use the standard version
-		componentSection, err = d.executeDescribeComponent(
-			component,
-			stack,
-			processTemplates,
-			processYamlFunctions,
-			skip,
-		)
+		componentSection, err = d.executeDescribeComponent(&ExecuteDescribeComponentParams{
+			Component:            component,
+			Stack:                stack,
+			ProcessTemplates:     processTemplates,
+			ProcessYamlFunctions: processYamlFunctions,
+			Skip:                 skip,
+			AuthManager:          nil,
+		})
 		if err != nil {
 			return err
 		}
@@ -194,23 +196,28 @@ type DescribeComponentResult struct {
 	StackFile        string // The stack manifest file being described
 }
 
+// ExecuteDescribeComponentParams contains parameters for ExecuteDescribeComponent.
+type ExecuteDescribeComponentParams struct {
+	Component            string
+	Stack                string
+	ProcessTemplates     bool
+	ProcessYamlFunctions bool
+	Skip                 []string
+	AuthManager          auth.AuthManager
+}
+
 // ExecuteDescribeComponent describes component config.
-func ExecuteDescribeComponent(
-	component string,
-	stack string,
-	processTemplates bool,
-	processYamlFunctions bool,
-	skip []string,
-) (map[string]any, error) {
+func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[string]any, error) {
 	defer perf.Track(nil, "exec.ExecuteDescribeComponent")()
 
 	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
 		AtmosConfig:          nil,
-		Component:            component,
-		Stack:                stack,
-		ProcessTemplates:     processTemplates,
-		ProcessYamlFunctions: processYamlFunctions,
-		Skip:                 skip,
+		Component:            params.Component,
+		Stack:                params.Stack,
+		ProcessTemplates:     params.ProcessTemplates,
+		ProcessYamlFunctions: params.ProcessYamlFunctions,
+		Skip:                 params.Skip,
+		AuthManager:          params.AuthManager,
 	})
 	if err != nil {
 		return nil, err
@@ -369,6 +376,7 @@ type DescribeComponentContextParams struct {
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
+	AuthManager          auth.AuthManager // Optional: Auth manager for credential management
 }
 
 // componentTypeProcessParams contains parameters for tryProcessWithComponentType.
@@ -449,6 +457,20 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 
 	// Clear any previous merge contexts before processing
 	ClearMergeContexts()
+
+	// Populate AuthContext from AuthManager if provided.
+	// This enables YAML template functions (!terraform.state, !terraform.output)
+	// to access authenticated credentials for S3 backends and other remote state.
+	if params.AuthManager != nil {
+		// Get the stack info from the auth manager which should contain
+		// the populated AuthContext from the authentication process.
+		managerStackInfo := params.AuthManager.GetStackInfo()
+		if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+			// Copy the AuthContext from the manager's stack info
+			configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+			log.Debug("Populated AuthContext from AuthManager for template functions")
+		}
+	}
 
 	// Detect component type (Terraform, Helmfile, or Packer)
 	configAndStacksInfo, err = detectComponentType(atmosConfig, &configAndStacksInfo, params)

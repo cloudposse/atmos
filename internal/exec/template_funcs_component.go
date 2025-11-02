@@ -41,7 +41,14 @@ func componentFunc(
 		return existingSections, nil
 	}
 
-	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
+	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	if err != nil {
 		return nil, err
 	}

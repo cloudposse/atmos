@@ -103,7 +103,14 @@ func ExecuteAtmosCmd() error {
 	log.Info("Executing", "command", c)
 
 	if selectedCommand == "describe component" {
-		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack, true, true, nil)
+		data, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			Component:            selectedComponent,
+			Stack:                selectedStack,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+			Skip:                 nil,
+			AuthManager:          nil,
+		})
 		if err != nil {
 			return err
 		}

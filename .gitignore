@@ -68,6 +68,10 @@ coverage/
 .gocoverdir/
 tests.test
 
+# Test binaries
+*.test
+**/*.test
+
 **/llms.txt
 **/llms-full.txt
 
@@ -89,6 +93,9 @@ tools/gomodcheck/.gomodcheck
 
 performance-optimization/
 
-# Merge conflict artifacts
+# Merge conflict artifacts and backup files
 *.orig
 *.rej
+*.bak
+*.go.bak
+**/*.go.bak
