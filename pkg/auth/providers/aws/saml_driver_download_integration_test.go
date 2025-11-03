@@ -18,8 +18,15 @@ import (
 
 // TestPlaywrightDriverDownload_Integration validates that the actual Playwright driver download works.
 // This is an integration test that downloads real browser drivers (~100-300MB).
-// It is skipped by default and must be run with: go test -v -run TestPlaywrightDriverDownload_Integration.
+// It is skipped by default and must be explicitly enabled with:
+//
+//	RUN_PLAYWRIGHT_INTEGRATION=1 go test -v -run TestPlaywrightDriverDownload_Integration.
 func TestPlaywrightDriverDownload_Integration(t *testing.T) {
+	// Skip unless explicitly opted in via environment variable.
+	if os.Getenv("RUN_PLAYWRIGHT_INTEGRATION") != "1" {
+		t.Skip("Skipping Playwright integration test (set RUN_PLAYWRIGHT_INTEGRATION=1 to run)")
+	}
+
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -197,6 +204,11 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 // TestPlaywrightDriverDownload_WithSAML2AWS validates that saml2aws actually uses LoginDetails.DownloadBrowser.
 // This test simulates the saml2aws workflow without making actual network calls.
 func TestPlaywrightDriverDownload_WithSAML2AWS(t *testing.T) {
+	// Skip unless explicitly opted in via environment variable.
+	if os.Getenv("RUN_PLAYWRIGHT_INTEGRATION") != "1" {
+		t.Skip("Skipping Playwright integration test (set RUN_PLAYWRIGHT_INTEGRATION=1 to run)")
+	}
+
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
