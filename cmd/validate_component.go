@@ -30,7 +30,7 @@ var validateComponentCmd = &cobra.Command{
 		// Check Atmos configuration
 		checkAtmosConfig()
 
-		opts, err := validateComponentParser.Parse(context.Background(), args)
+		opts, err := validateComponentParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
 		}

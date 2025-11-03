@@ -272,8 +272,8 @@ func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
 func resolveConsoleDuration(opts *flags.AuthOptions, authManager types.AuthManager, providerName string) (time.Duration, error) {
 	defer perf.Track(nil, "cmd.resolveConsoleDuration")()
 
-	// If duration was explicitly set (non-zero), use it.
-	if opts.Duration > 0 {
+	// If duration was explicitly provided via flag, use it (even if zero).
+	if opts.DurationProvided {
 		return opts.Duration, nil
 	}
 

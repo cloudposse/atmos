@@ -58,6 +58,7 @@ func (p *AuthParser) Parse(ctx context.Context, args []string) (*AuthOptions, er
 	}
 
 	// Convert to strongly-typed options.
+	durationStr := getString(parsedConfig.Flags, "duration")
 	opts := AuthOptions{
 		GlobalFlags: GlobalFlags{
 			Chdir:           getString(parsedConfig.Flags, "chdir"),
@@ -79,13 +80,14 @@ func (p *AuthParser) Parse(ctx context.Context, args []string) (*AuthOptions, er
 			RedirectStderr:  getString(parsedConfig.Flags, "redirect-stderr"),
 			Version:         getBool(parsedConfig.Flags, "version"),
 		},
-		Verbose:     getBool(parsedConfig.Flags, "verbose"),
-		Output:      getString(parsedConfig.Flags, "output"),
-		Destination: getString(parsedConfig.Flags, "destination"),
-		Duration:    parseDuration(getString(parsedConfig.Flags, "duration")),
-		Issuer:      getString(parsedConfig.Flags, "issuer"),
-		PrintOnly:   getBool(parsedConfig.Flags, "print-only"),
-		NoOpen:      getBool(parsedConfig.Flags, "no-open"),
+		Verbose:          getBool(parsedConfig.Flags, "verbose"),
+		Output:           getString(parsedConfig.Flags, "output"),
+		Destination:      getString(parsedConfig.Flags, "destination"),
+		Duration:         parseDuration(durationStr),
+		DurationProvided: durationStr != "", // Flag was provided if non-empty
+		Issuer:           getString(parsedConfig.Flags, "issuer"),
+		PrintOnly:        getBool(parsedConfig.Flags, "print-only"),
+		NoOpen:           getBool(parsedConfig.Flags, "no-open"),
 	}
 
 	return &opts, nil

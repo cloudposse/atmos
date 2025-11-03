@@ -19,11 +19,12 @@ type AuthOptions struct {
 	Output  string // Output format: table, json, yaml (--output, -o)
 
 	// Console-specific flags (for auth console command).
-	Destination string        // Console page to navigate to (--destination)
-	Duration    time.Duration // Console session duration (--duration)
-	Issuer      string        // Issuer identifier for console session (--issuer)
-	PrintOnly   bool          // Print URL to stdout without opening browser (--print-only)
-	NoOpen      bool          // Don't open browser automatically (--no-open)
+	Destination      string        // Console page to navigate to (--destination)
+	Duration         time.Duration // Console session duration (--duration)
+	DurationProvided bool          // True if --duration was explicitly provided
+	Issuer           string        // Issuer identifier for console session (--issuer)
+	PrintOnly        bool          // Print URL to stdout without opening browser (--print-only)
+	NoOpen           bool          // Don't open browser automatically (--no-open)
 }
 
 // Value returns the resolved auth options for use in command execution.
