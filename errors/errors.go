@@ -371,6 +371,7 @@ var (
 	ErrProfilerCreateFile      = errors.New("profiler: failed to create profile file")
 
 	// Auth package errors.
+	ErrAuthNotConfigured            = errors.New("authentication not configured in atmos.yaml")
 	ErrInvalidAuthConfig            = errors.New("invalid auth config")
 	ErrInvalidIdentityKind          = errors.New("invalid identity kind")
 	ErrInvalidIdentityConfig        = errors.New("invalid identity config")
