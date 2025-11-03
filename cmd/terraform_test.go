@@ -27,11 +27,8 @@ func TestTerraformRun1(t *testing.T) {
 			Short: "test",
 		}
 
-		parsedConfig := &flagparser.ParsedConfig{
-			AtmosFlags:      make(map[string]interface{}),
-			PassThroughArgs: []string{},
-		}
-		terraformRun(cmd, cmd, parsedConfig)
+		interpreter := &flagparser.TerraformInterpreter{}
+		terraformRun(cmd, cmd, interpreter)
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])
@@ -63,11 +60,8 @@ func TestTerraformRun2(t *testing.T) {
 
 		cmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 
-		parsedConfig := &flagparser.ParsedConfig{
-			AtmosFlags:      make(map[string]interface{}),
-			PassThroughArgs: []string{},
-		}
-		terraformRun(cmd, cmd, parsedConfig)
+		interpreter := &flagparser.TerraformInterpreter{}
+		terraformRun(cmd, cmd, interpreter)
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])
@@ -100,11 +94,8 @@ func TestTerraformRun3(t *testing.T) {
 		cmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 		cmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing terraform commands")
 
-		parsedConfig := &flagparser.ParsedConfig{
-			AtmosFlags:      make(map[string]interface{}),
-			PassThroughArgs: []string{},
-		}
-		terraformRun(cmd, cmd, parsedConfig)
+		interpreter := &flagparser.TerraformInterpreter{}
+		terraformRun(cmd, cmd, interpreter)
 		return
 	}
 	execPath, err := exec.LookPath(os.Args[0])

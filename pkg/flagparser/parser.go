@@ -5,6 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // FlagParser handles flag registration, parsing, and Viper binding for commands.
@@ -127,6 +129,8 @@ type ParsedConfig struct {
 //  2. Update commands to use interpreter instead of AtmosFlags map
 //  3. Eventually replace Parse() to return interpreter directly
 func (p *ParsedConfig) ToTerraformInterpreter() TerraformInterpreter {
+	defer perf.Track(nil, "flagparser.ParsedConfig.ToTerraformInterpreter")()
+
 	return TerraformInterpreter{
 		GlobalFlags: GlobalFlags{
 			Chdir:           getString(p.AtmosFlags, "chdir"),
@@ -148,14 +152,14 @@ func (p *ParsedConfig) ToTerraformInterpreter() TerraformInterpreter {
 			RedirectStderr:  getString(p.AtmosFlags, "redirect-stderr"),
 			Version:         getBool(p.AtmosFlags, "version"),
 		},
-		Stack:            getString(p.AtmosFlags, "stack"),
-		Identity:         getIdentitySelector(p.AtmosFlags, "identity"),
-		DryRun:           getBool(p.AtmosFlags, "dry-run"),
-		UploadStatus:     getBool(p.AtmosFlags, "upload-status"),
-		SkipInit:         getBool(p.AtmosFlags, "skip-init"),
-		FromPlan:         getString(p.AtmosFlags, "from-plan"),
-		positionalArgs:   p.PositionalArgs,
-		passThroughArgs:  p.PassThroughArgs,
+		Stack:           getString(p.AtmosFlags, "stack"),
+		Identity:        getIdentitySelector(p.AtmosFlags, "identity"),
+		DryRun:          getBool(p.AtmosFlags, "dry-run"),
+		UploadStatus:    getBool(p.AtmosFlags, "upload-status"),
+		SkipInit:        getBool(p.AtmosFlags, "skip-init"),
+		FromPlan:        getString(p.AtmosFlags, "from-plan"),
+		positionalArgs:  p.PositionalArgs,
+		passThroughArgs: p.PassThroughArgs,
 	}
 }
 

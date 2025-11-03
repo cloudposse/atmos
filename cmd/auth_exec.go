@@ -20,28 +20,12 @@ import (
 )
 
 // authExecParser handles flag parsing for auth exec command.
-var authExecParser *flagparser.PassThroughFlagParser
+var authExecParser *flagparser.AuthParser
 
 func init() {
 	// Create parser with identity flag only (auth exec doesn't use stack/component flags).
-	// Configure identity flag with ENV var support for precedence (CLI > ENV > defaults).
-	authExecParser = flagparser.NewPassThroughFlagParser(
-		flagparser.WithRegistry(func() *flagparser.FlagRegistry {
-			registry := flagparser.NewFlagRegistry()
-			registry.Register(&flagparser.StringFlag{
-				Name:        "identity",
-				Shorthand:   "i",
-				Default:     "",
-				Description: "Specify the target identity to assume. Use without value to interactively select.",
-				NoOptDefVal: cfg.IdentityFlagSelectValue,
-				EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
-			})
-			return registry
-		}()),
-	)
-
-	// Disable positional extraction - all args after flags are command args.
-	authExecParser.DisablePositionalExtraction()
+	// Returns strongly-typed AuthInterpreter.
+	authExecParser = flagparser.NewAuthExecParser()
 }
 
 // authExecCmd executes a command with authentication environment variables.
@@ -70,22 +54,16 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	parsedConfig, err := authExecParser.Parse(ctx, args)
+	interpreter, err := authExecParser.Parse(ctx, args)
 	if err != nil {
 		return err
 	}
 
-	// Get identity from parsed config with precedence (CLI > ENV > defaults).
-	// parsedConfig.AtmosFlags contains values resolved by Viper with proper precedence handling.
-	var identityName string
-	if id, ok := parsedConfig.AtmosFlags["identity"]; ok {
-		if idStr, ok := id.(string); ok {
-			identityName = idStr
-		}
-	}
+	// Get identity from strongly-typed interpreter with precedence (CLI > ENV > defaults).
+	identityName := interpreter.Identity.Value()
 
 	// Command args are everything that's not an Atmos flag.
-	commandArgs := parsedConfig.PassThroughArgs
+	commandArgs := interpreter.GetPassThroughArgs()
 
 	// Validate command args before attempting authentication.
 	if len(commandArgs) == 0 {
@@ -104,10 +82,10 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Check if user wants to interactively select identity.
-	forceSelect := identityName == IdentityFlagSelectValue
-
-	if identityName == "" || forceSelect {
+	// Handle --identity flag for interactive selection.
+	// If identity is "__SELECT__", prompt for interactive selection.
+	if interpreter.Identity.IsInteractiveSelector() || interpreter.Identity.IsEmpty() {
+		forceSelect := interpreter.Identity.IsInteractiveSelector()
 		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
 			return errors.Join(errUtils.ErrNoDefaultIdentity, err)

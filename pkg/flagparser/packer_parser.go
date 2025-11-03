@@ -19,6 +19,8 @@ type PackerParser struct {
 
 // NewPackerParser creates a parser for Packer commands.
 func NewPackerParser() *PackerParser {
+	defer perf.Track(nil, "flagparser.NewPackerParser")()
+
 	return &PackerParser{
 		parser: NewPassThroughFlagParser(WithPackerFlags()),
 	}
@@ -26,6 +28,8 @@ func NewPackerParser() *PackerParser {
 
 // RegisterFlags adds Packer flags to the Cobra command.
 func (p *PackerParser) RegisterFlags(cmd *cobra.Command) {
+	defer perf.Track(nil, "flagparser.PackerParser.RegisterFlags")()
+
 	p.cmd = cmd
 	// Packer passes subcommand separately to packerRun, so only extract 1 positional arg (component).
 	p.parser.SetPositionalArgsCount(1)
@@ -34,6 +38,8 @@ func (p *PackerParser) RegisterFlags(cmd *cobra.Command) {
 
 // BindToViper binds flags to Viper for precedence handling.
 func (p *PackerParser) BindToViper(v *viper.Viper) error {
+	defer perf.Track(nil, "flagparser.PackerParser.BindToViper")()
+
 	p.viper = v
 	return p.parser.BindToViper(v)
 }
@@ -70,11 +76,11 @@ func (p *PackerParser) Parse(ctx context.Context, args []string) (*PackerInterpr
 			RedirectStderr:  getString(parsedConfig.AtmosFlags, "redirect-stderr"),
 			Version:         getBool(parsedConfig.AtmosFlags, "version"),
 		},
-		Stack:            getString(parsedConfig.AtmosFlags, "stack"),
-		Identity:         getIdentitySelector(parsedConfig.AtmosFlags, "identity"),
-		DryRun:           getBool(parsedConfig.AtmosFlags, "dry-run"),
-		positionalArgs:   parsedConfig.PositionalArgs,
-		passThroughArgs:  parsedConfig.PassThroughArgs,
+		Stack:           getString(parsedConfig.AtmosFlags, "stack"),
+		Identity:        getIdentitySelector(parsedConfig.AtmosFlags, "identity"),
+		DryRun:          getBool(parsedConfig.AtmosFlags, "dry-run"),
+		positionalArgs:  parsedConfig.PositionalArgs,
+		passThroughArgs: parsedConfig.PassThroughArgs,
 	}
 
 	return &interpreter, nil

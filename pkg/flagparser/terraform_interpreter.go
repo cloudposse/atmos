@@ -89,11 +89,15 @@ func ParseTerraformFlags(cmd *cobra.Command, v *viper.Viper, positionalArgs, pas
 
 // GetPositionalArgs returns positional arguments (e.g., ["plan", "vpc"]).
 func (t *TerraformInterpreter) GetPositionalArgs() []string {
+	defer perf.Track(nil, "flagparser.TerraformInterpreter.GetPositionalArgs")()
+
 	return t.positionalArgs
 }
 
 // GetPassThroughArgs returns pass-through arguments (e.g., ["-var", "foo=bar"]).
 func (t *TerraformInterpreter) GetPassThroughArgs() []string {
+	defer perf.Track(nil, "flagparser.TerraformInterpreter.GetPassThroughArgs")()
+
 	return t.passThroughArgs
 }
 

@@ -31,6 +31,8 @@ type TerraformParser struct {
 //	    return errors.New("stack is required")
 //	}
 func NewTerraformParser() *TerraformParser {
+	defer perf.Track(nil, "flagparser.NewTerraformParser")()
+
 	return &TerraformParser{
 		parser: NewPassThroughFlagParser(WithTerraformFlags()),
 	}
@@ -38,12 +40,16 @@ func NewTerraformParser() *TerraformParser {
 
 // RegisterFlags adds Terraform flags to the Cobra command.
 func (p *TerraformParser) RegisterFlags(cmd *cobra.Command) {
+	defer perf.Track(nil, "flagparser.TerraformParser.RegisterFlags")()
+
 	p.cmd = cmd
 	p.parser.RegisterFlags(cmd)
 }
 
 // BindToViper binds flags to Viper for precedence handling.
 func (p *TerraformParser) BindToViper(v *viper.Viper) error {
+	defer perf.Track(nil, "flagparser.TerraformParser.BindToViper")()
+
 	p.viper = v
 	return p.parser.BindToViper(v)
 }

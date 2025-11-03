@@ -64,11 +64,15 @@ func ParseHelmfileFlags(cmd *cobra.Command, v *viper.Viper, positionalArgs, pass
 
 // GetPositionalArgs returns positional arguments (e.g., ["sync", "vpc"]).
 func (h *HelmfileInterpreter) GetPositionalArgs() []string {
+	defer perf.Track(nil, "flagparser.HelmfileInterpreter.GetPositionalArgs")()
+
 	return h.positionalArgs
 }
 
 // GetPassThroughArgs returns pass-through arguments (e.g., ["--args", "foo"]).
 func (h *HelmfileInterpreter) GetPassThroughArgs() []string {
+	defer perf.Track(nil, "flagparser.HelmfileInterpreter.GetPassThroughArgs")()
+
 	return h.passThroughArgs
 }
 

@@ -903,8 +903,11 @@ func executeCustomCommandWithParser(
 			errUtils.ErrFailedToProcessArgs, err), "", "")
 	}
 
+	// Get pass-through args (everything after flags or --)
+	passThroughArgs := parsedConfig.PassThroughArgs
+
 	// Extract trailing args (args after --)
-	trailingArgs, err := getQuotedTrailingArgs(parsedConfig.PassThroughArgs)
+	trailingArgs, err := getQuotedTrailingArgs(passThroughArgs)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: failed to quote trailing arguments: %w",
 			errUtils.ErrFailedToProcessArgs, err), "", "")
@@ -918,7 +921,7 @@ func executeCustomCommandWithParser(
 	finalArgs := strings.Split(mergedArgsStr, ",")
 	if mergedArgsStr == "" {
 		// If for some reason no annotation was set, just fallback
-		finalArgs = parsedConfig.PassThroughArgs
+		finalArgs = passThroughArgs
 	}
 
 	// Create auth manager if identity is specified for this custom command.

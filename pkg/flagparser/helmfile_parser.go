@@ -19,6 +19,8 @@ type HelmfileParser struct {
 
 // NewHelmfileParser creates a parser for Helmfile commands.
 func NewHelmfileParser() *HelmfileParser {
+	defer perf.Track(nil, "flagparser.NewHelmfileParser")()
+
 	return &HelmfileParser{
 		parser: NewPassThroughFlagParser(WithHelmfileFlags()),
 	}
@@ -26,6 +28,8 @@ func NewHelmfileParser() *HelmfileParser {
 
 // RegisterFlags adds Helmfile flags to the Cobra command.
 func (p *HelmfileParser) RegisterFlags(cmd *cobra.Command) {
+	defer perf.Track(nil, "flagparser.HelmfileParser.RegisterFlags")()
+
 	p.cmd = cmd
 	// Helmfile passes subcommand separately to helmfileRun, so only extract 1 positional arg (component).
 	p.parser.SetPositionalArgsCount(1)
@@ -34,6 +38,8 @@ func (p *HelmfileParser) RegisterFlags(cmd *cobra.Command) {
 
 // BindToViper binds flags to Viper for precedence handling.
 func (p *HelmfileParser) BindToViper(v *viper.Viper) error {
+	defer perf.Track(nil, "flagparser.HelmfileParser.BindToViper")()
+
 	p.viper = v
 	return p.parser.BindToViper(v)
 }
@@ -70,11 +76,11 @@ func (p *HelmfileParser) Parse(ctx context.Context, args []string) (*HelmfileInt
 			RedirectStderr:  getString(parsedConfig.AtmosFlags, "redirect-stderr"),
 			Version:         getBool(parsedConfig.AtmosFlags, "version"),
 		},
-		Stack:            getString(parsedConfig.AtmosFlags, "stack"),
-		Identity:         getIdentitySelector(parsedConfig.AtmosFlags, "identity"),
-		DryRun:           getBool(parsedConfig.AtmosFlags, "dry-run"),
-		positionalArgs:   parsedConfig.PositionalArgs,
-		passThroughArgs:  parsedConfig.PassThroughArgs,
+		Stack:           getString(parsedConfig.AtmosFlags, "stack"),
+		Identity:        getIdentitySelector(parsedConfig.AtmosFlags, "identity"),
+		DryRun:          getBool(parsedConfig.AtmosFlags, "dry-run"),
+		positionalArgs:  parsedConfig.PositionalArgs,
+		passThroughArgs: parsedConfig.PassThroughArgs,
 	}
 
 	return &interpreter, nil

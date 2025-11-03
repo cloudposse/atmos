@@ -28,25 +28,12 @@ const (
 var authShellUsageMarkdown string
 
 // authShellParser handles flag parsing for auth shell command.
-var authShellParser *flagparser.PassThroughFlagParser
+var authShellParser *flagparser.AuthParser
 
 func init() {
 	// Create parser with identity and shell flags.
-	authShellParser = flagparser.NewPassThroughFlagParser(
-		flagparser.WithStringFlag("identity", "i", "", "Specify the target identity to assume. Use without value to interactively select."),
-		flagparser.WithStringFlag("shell", "s", "", "Specify the shell to launch (default: $SHELL or /bin/sh)"),
-	)
-
-	// Disable positional extraction - all args after flags are shell args.
-	authShellParser.DisablePositionalExtraction()
-
-	// Set NoOptDefVal for identity flag to support --identity without value.
-	registry := authShellParser.GetRegistry()
-	if identityFlag := registry.Get("identity"); identityFlag != nil {
-		if sf, ok := identityFlag.(*flagparser.StringFlag); ok {
-			sf.NoOptDefVal = cfg.IdentityFlagSelectValue
-		}
-	}
+	// Returns strongly-typed AuthInterpreter.
+	authShellParser = flagparser.NewAuthShellParser()
 }
 
 // authShellCmd launches an interactive shell with authentication environment variables.
@@ -81,29 +68,17 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	parsedConfig, err := authShellParser.Parse(ctx, args)
+	interpreter, err := authShellParser.Parse(ctx, args)
 	if err != nil {
 		return err
 	}
 
-	// Get identity from parsed config.
-	var identityValue string
-	if id, ok := parsedConfig.AtmosFlags["identity"]; ok {
-		if idStr, ok := id.(string); ok {
-			identityValue = idStr
-		}
-	}
-
-	// Get shell from parsed config.
-	var shellValue string
-	if sh, ok := parsedConfig.AtmosFlags["shell"]; ok {
-		if shStr, ok := sh.(string); ok {
-			shellValue = shStr
-		}
-	}
+	// Get identity and shell from strongly-typed interpreter.
+	identityValue := interpreter.Identity.Value()
+	shellValue := interpreter.Shell
 
 	// Shell args are everything that's not an Atmos flag.
-	shellArgs := parsedConfig.PassThroughArgs
+	shellArgs := interpreter.GetPassThroughArgs()
 
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -118,29 +93,18 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Get identity from extracted flag or use default.
-	// identityValue will be:
-	// - "" if --identity was not provided
-	// - IdentityFlagSelectValue if --identity was provided without a value
-	// - the actual value if --identity=value or --identity value was provided
+	// Handle --identity flag for interactive selection.
+	// If identity is "__SELECT__", prompt for interactive selection.
 	var identityName string
-	if identityValue != "" {
-		// Flag was explicitly provided on command line.
-		identityName = identityValue
-	} else {
-		// Flag not provided on command line - fall back to viper (config/env).
-		identityName = viper.GetString(IdentityFlagName)
-	}
-
-	// Check if user wants to interactively select identity.
-	forceSelect := identityName == IdentityFlagSelectValue
-
-	if identityName == "" || forceSelect {
+	if interpreter.Identity.IsInteractiveSelector() || interpreter.Identity.IsEmpty() {
+		forceSelect := interpreter.Identity.IsInteractiveSelector()
 		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
 			return errors.Join(errUtils.ErrNoDefaultIdentity, err)
 		}
 		identityName = defaultIdentity
+	} else {
+		identityName = identityValue
 	}
 
 	// Try to use cached credentials first (passive check, no prompts).
@@ -166,11 +130,8 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to prepare shell environment: %w", err)
 	}
 
-	// Get shell from extracted flag or viper.
+	// Use shell from interpreter (already resolved via Viper precedence).
 	shell := shellValue
-	if shell == "" {
-		shell = viper.GetString(shellFlagName)
-	}
 
 	// Get provider name from the identity to display in shell messages.
 	providerName := authManager.GetProviderForIdentity(identityName)

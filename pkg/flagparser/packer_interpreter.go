@@ -64,11 +64,15 @@ func ParsePackerFlags(cmd *cobra.Command, v *viper.Viper, positionalArgs, passTh
 
 // GetPositionalArgs returns positional arguments (e.g., ["build", "image"]).
 func (p *PackerInterpreter) GetPositionalArgs() []string {
+	defer perf.Track(nil, "flagparser.PackerInterpreter.GetPositionalArgs")()
+
 	return p.positionalArgs
 }
 
 // GetPassThroughArgs returns pass-through arguments (e.g., ["-var", "foo=bar"]).
 func (p *PackerInterpreter) GetPassThroughArgs() []string {
+	defer perf.Track(nil, "flagparser.PackerInterpreter.GetPassThroughArgs")()
+
 	return p.passThroughArgs
 }
 
