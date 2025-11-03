@@ -147,8 +147,8 @@ func convertGoValueToCty(v any) (cty.Value, error) {
 	case float32:
 		return cty.NumberFloatVal(float64(val)), nil
 	default:
-		// For unsupported types, skip (return nil to avoid writing invalid HCL).
-		// This maintains backwards compatibility by silently skipping unknown types.
+		// For unsupported types, return cty.NilVal which will be silently excluded from HCL output.
+		// This maintains backwards compatibility by not writing invalid HCL for unknown types.
 		return cty.NilVal, nil
 	}
 }
