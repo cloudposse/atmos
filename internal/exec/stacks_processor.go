@@ -50,5 +50,6 @@ func (d *DefaultStacksProcessor) ExecuteDescribeStacks(
 		processYamlFunctions,
 		includeEmptyStacks,
 		skip,
+		nil, // AuthManager - not needed for internal stack processing
 	)
 }
