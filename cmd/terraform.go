@@ -16,6 +16,8 @@ var terraformCmd = &cobra.Command{
 	Aliases: []string{"tf"},
 	Short:   "Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations",
 	Long:    `This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.`,
+	// Allow arbitrary args so subcommands can accept positional arguments
+	Args: cobra.ArbitraryArgs,
 }
 
 func init() {

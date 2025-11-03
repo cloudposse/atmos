@@ -18,7 +18,8 @@ var packerCmd = &cobra.Command{
 	Aliases: []string{"pk"},
 	Short:   "Manage packer-based machine images for multiple platforms",
 	Long:    `Run Packer commands for creating identical machine images for multiple platforms from a single source configuration.`,
-	Args:    cobra.NoArgs,
+	// Allow arbitrary args so subcommands can accept positional arguments
+	Args: cobra.ArbitraryArgs,
 }
 
 func init() {

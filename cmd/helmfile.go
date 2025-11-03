@@ -17,7 +17,8 @@ var helmfileCmd = &cobra.Command{
 	Aliases: []string{"hf"},
 	Short:   "Manage Helmfile-based Kubernetes deployments",
 	Long:    `This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.`,
-	Args:    cobra.NoArgs,
+	// Allow arbitrary args so subcommands can accept positional arguments
+	Args: cobra.ArbitraryArgs,
 }
 
 func init() {
