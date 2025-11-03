@@ -13,17 +13,23 @@ This document consolidates exploration of future enhancements to Atmos's secret 
 
 **What We Have:**
 - 8 hardcoded patterns in `pkg/io/global.go`
+- Public API for dynamic patterns: `io.RegisterPattern(regex)`, `io.RegisterValue(literal)`, `io.RegisterSecret(value)`
+- Configuration schema defined: `settings.terminal.mask.patterns` and `settings.terminal.mask.literals`
 - Automatic masking via global writers (`io.Data`, `io.UI`)
 - CLI control via `--mask` flag
 - Thread-safe masking engine
 - Format-aware masking (base64, URL-encoded, hex)
 
+**What's Missing:**
+- **Configuration loading** - Schema exists but patterns/literals from atmos.yaml not loaded into masker
+- Environment variable registration from config (currently only hardcoded env vars)
+
 **Why This Is Sufficient:**
 - Covers most common secrets (AWS, GitHub, OpenAI, generic tokens)
-- Zero dependencies
+- Developers can register patterns programmatically: `io.RegisterPattern("ACME_[A-Z0-9]{32}")`
+- Zero library dependencies
 - Fast initialization (<50ms)
 - Simple to maintain and test
-- No external file dependencies
 
 ## Pattern Library Options
 
@@ -385,27 +391,47 @@ settings:
 - ✅ Format-aware masking
 - ✅ Test coverage
 
-### Phase 2: Custom Patterns (Future)
-- Add `patterns` list in atmos.yaml
-- Support user-defined regex patterns
-- Add literal values and env vars
-- Validate regex patterns at startup
+### Phase 2: Load Custom Patterns from Configuration (High Priority)
 
-**Example:**
+**Status**: Schema exists, loading NOT implemented
+
+**What's Already Built:**
+- ✅ Schema defined: `settings.terminal.mask.patterns` ([]string) and `literals` ([]string)
+- ✅ Public API: `io.RegisterPattern()`, `io.RegisterValue()`
+- ✅ Validation and thread safety in masker
+
+**What's Missing:**
+- ❌ Load patterns/literals from atmos.yaml during initialization
+- ❌ Validate regex patterns at config load time
+- ❌ Error handling for invalid patterns
+
+**Implementation:**
+```go
+// In cmd/root.go PersistentPreRun, after io.Initialize():
+for _, pattern := range atmosConfig.Settings.Terminal.Mask.Patterns {
+    if err := io.RegisterPattern(pattern); err != nil {
+        // Log warning, don't fail
+    }
+}
+for _, literal := range atmosConfig.Settings.Terminal.Mask.Literals {
+    io.RegisterValue(literal)
+}
+```
+
+**Example Configuration:**
 ```yaml
 settings:
   terminal:
     mask:
+      enabled: true
       patterns:
-        - id: company-api-key
-          regex: 'ACME_[A-Z0-9]{32}'
-
+        - 'ACME_[A-Z0-9]{32}'           # Company API keys
+        - 'api_key=[A-Za-z0-9]+'        # API key parameters
       literals:
         - "my-hardcoded-secret"
-
-      env_vars:
-        - COMPANY_API_KEY
 ```
+
+**Priority**: HIGH - This is the reason we're not implementing pattern libraries yet.
 
 ### Phase 3: Pattern Library Integration (Future)
 - Implement library registry pattern
@@ -588,24 +614,36 @@ settings:
 
 ## Decision: Why Not Now?
 
-**Key Reasons:**
-1. **Current implementation is sufficient** - 8 patterns cover most common secrets
-2. **Complexity burden** - Pattern libraries add significant complexity
-3. **Maintenance overhead** - Need to track upstream changes
-4. **Performance impact** - 120+ patterns slower than 8
-5. **Diminishing returns** - Most users don't need 120+ patterns
+**Primary Reason:**
+**We support user-defined patterns, but haven't hooked up config loading yet.** Pattern libraries would be premature optimization when users can already define custom patterns via:
+1. Public API: `io.RegisterPattern("ACME_[A-Z0-9]{32}")`
+2. Configuration (schema defined, loading not implemented):
+   ```yaml
+   settings:
+     terminal:
+       mask:
+         patterns: ['ACME_[A-Z0-9]{32}']
+   ```
+
+**Secondary Reasons:**
+1. **8 hardcoded patterns cover most common cases** - AWS, GitHub, OpenAI, generic tokens
+2. **Complexity burden** - Pattern libraries add significant complexity (parsing TOML, managing categories)
+3. **Maintenance overhead** - Need to track upstream changes, handle breaking changes
+4. **Performance impact** - 120+ patterns vs 8 (3-5x slower)
+5. **Diminishing returns** - Most users need <20 patterns total
 6. **Zero dependencies** - Keep Atmos self-contained
 
-**When to Reconsider:**
-- Users report missing secret patterns frequently
-- Security audit requires comprehensive coverage
-- Competition offers pattern library integration
-- Community contributes high-quality pattern library
+**Next Steps (Before Pattern Libraries):**
+1. **Implement config loading** - Hook up `mask.patterns` and `mask.literals` to masker
+2. **Document pattern API** - Show users how to register custom patterns
+3. **Gather usage data** - See what patterns users actually need
+4. **Evaluate need** - Only add pattern libraries if custom patterns aren't sufficient
 
-**What Changed Our Mind Could Look Like:**
-- 10+ user reports of leaked secrets not caught by current patterns
-- Security team mandate for Gitleaks integration
-- Pattern library with <50ms overhead and zero dependencies
+**When to Reconsider Pattern Libraries:**
+- Users consistently need 50+ custom patterns (indicates library would help)
+- Security audit requires comprehensive coverage (e.g., SOC2, FedRAMP)
+- Community demand (multiple feature requests)
+- Custom patterns prove insufficient (too much maintenance burden on users)
 
 ---
 
