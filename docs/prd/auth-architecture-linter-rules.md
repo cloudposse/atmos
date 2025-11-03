@@ -157,7 +157,7 @@ When adding a new provider (e.g., Okta, Auth0):
 2. Create `pkg/auth/identities/okta/` if needed for identities
 3. **No changes needed to depguard rules** - exclusions already cover `providers/` and `identities/`
 4. Implement `types.Provider` and `types.Identity` interfaces
-5. Register in `pkg/auth/factory/factory.go`
+5. Register in `pkg/auth/factory/factory.go`.
 
 The linter will automatically:
 - ✅ Allow Okta SDK imports in `pkg/auth/providers/okta/`
