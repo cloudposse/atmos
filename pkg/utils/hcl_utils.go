@@ -138,8 +138,17 @@ func convertGoValueToCty(v any) (cty.Value, error) {
 			vals[i] = ctyVal
 		}
 		return cty.TupleVal(vals), nil
+	case int32:
+		return cty.NumberIntVal(int64(val)), nil
+	case uint:
+		return cty.NumberUIntVal(uint64(val)), nil
+	case uint32:
+		return cty.NumberUIntVal(uint64(val)), nil
+	case float32:
+		return cty.NumberFloatVal(float64(val)), nil
 	default:
-		// For other types, try to convert using reflection (handles int32, etc.).
+		// For unsupported types, skip (return nil to avoid writing invalid HCL).
+		// This maintains backwards compatibility by silently skipping unknown types.
 		return cty.NilVal, nil
 	}
 }

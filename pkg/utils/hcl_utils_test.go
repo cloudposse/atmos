@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zclconf/go-cty/cty"
 )
 
 // TestWriteTerraformBackendConfigToFileAsHcl tests writing backend config with complex types.
@@ -279,5 +280,33 @@ func TestConvertGoValueToCty(t *testing.T) {
 		val, err := convertGoValueToCty(nil)
 		require.NoError(t, err)
 		assert.True(t, val.IsNull())
+	})
+
+	t.Run("converts int32", func(t *testing.T) {
+		val, err := convertGoValueToCty(int32(42))
+		require.NoError(t, err)
+		assert.NotNil(t, val)
+		assert.Equal(t, cty.Number, val.Type())
+	})
+
+	t.Run("converts uint32", func(t *testing.T) {
+		val, err := convertGoValueToCty(uint32(42))
+		require.NoError(t, err)
+		assert.NotNil(t, val)
+		assert.Equal(t, cty.Number, val.Type())
+	})
+
+	t.Run("converts uint", func(t *testing.T) {
+		val, err := convertGoValueToCty(uint(42))
+		require.NoError(t, err)
+		assert.NotNil(t, val)
+		assert.Equal(t, cty.Number, val.Type())
+	})
+
+	t.Run("converts float32", func(t *testing.T) {
+		val, err := convertGoValueToCty(float32(3.14))
+		require.NoError(t, err)
+		assert.NotNil(t, val)
+		assert.Equal(t, cty.Number, val.Type())
 	})
 }
