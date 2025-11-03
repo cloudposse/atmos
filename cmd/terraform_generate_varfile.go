@@ -45,7 +45,6 @@ var terraformGenerateVarfileCmd = &cobra.Command{
 }
 
 func init() {
-	terraformGenerateVarfileCmd.DisableFlagParsing = true // IMPORTANT: Manual parsing required for our unified parser
 
 	// Register StandardOptions flags.
 	terraformGenerateVarfileParser.RegisterFlags(terraformGenerateVarfileCmd)

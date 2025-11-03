@@ -136,6 +136,10 @@ func (p *PassThroughFlagParser) SetPositionalArgsCount(count int) {
 func (p *PassThroughFlagParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.PassThroughFlagParser.RegisterFlags")()
 
+	// IMPORTANT: Disable Cobra's flag parsing so our parser can handle it.
+	// This allows proper pass-through argument separation (everything after --).
+	cmd.DisableFlagParsing = true
+
 	for _, flag := range p.registry.All() {
 		p.registerFlag(cmd, flag)
 	}

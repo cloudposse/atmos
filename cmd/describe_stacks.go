@@ -101,7 +101,6 @@ func getRunnableDescribeStacksCmd(
 }
 
 func init() {
-	describeStacksCmd.DisableFlagParsing = true // IMPORTANT: Manual parsing required for our unified parser
 
 	// Register DescribeStacksOptions flags.
 	describeStacksParser.RegisterFlags(describeStacksCmd)

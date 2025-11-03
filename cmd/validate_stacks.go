@@ -42,7 +42,6 @@ var ValidateStacksCmd = &cobra.Command{
 }
 
 func init() {
-	ValidateStacksCmd.DisableFlagParsing = true // IMPORTANT: Manual parsing required for our unified parser
 
 	validateStacksParser.RegisterFlags(ValidateStacksCmd)
 	_ = validateStacksParser.BindToViper(viper.GetViper())

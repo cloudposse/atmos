@@ -42,7 +42,6 @@ var describeConfigCmd = &cobra.Command{
 }
 
 func init() {
-	describeConfigCmd.DisableFlagParsing = true // IMPORTANT: Manual parsing required for our unified parser
 	describeConfigParser.RegisterFlags(describeConfigCmd)
 	_ = describeConfigParser.BindToViper(viper.GetViper())
 

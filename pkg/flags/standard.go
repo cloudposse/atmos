@@ -71,8 +71,17 @@ func NewStandardFlagParser(opts ...Option) *StandardFlagParser {
 }
 
 // RegisterFlags implements FlagParser.
+// Automatically sets DisableFlagParsing=true to ensure our parser handles flag parsing
+// instead of Cobra, which allows proper positional arg extraction and Viper precedence.
 func (p *StandardFlagParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.StandardFlagParser.RegisterFlags")()
+
+	// IMPORTANT: Disable Cobra's flag parsing so our parser can handle it.
+	// This is critical for:
+	// - Proper positional argument extraction (component names, workflow names, etc.)
+	// - Viper precedence handling (CLI → ENV → config → defaults)
+	// - Short flag support (-s, -f, -i, etc.)
+	cmd.DisableFlagParsing = true
 
 	for _, flag := range p.registry.All() {
 		p.registerFlag(cmd, flag)

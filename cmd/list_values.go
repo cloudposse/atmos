@@ -86,7 +86,6 @@ var listValuesCmd = &cobra.Command{
 		// Check Atmos configuration.
 		checkAtmosConfig()
 
-		// Parse flags with Viper precedence (CLI > ENV > config > defaults).
 		v := viper.New()
 		_ = listValuesParser.BindFlagsToViper(cmd, v)
 
@@ -122,7 +121,6 @@ var listVarsCmd = &cobra.Command{
 		// Check Atmos configuration.
 		checkAtmosConfig()
 
-		// Parse flags with Viper precedence (CLI > ENV > config > defaults).
 		v := viper.New()
 		_ = listVarsParser.BindFlagsToViper(cmd, v)
 
@@ -164,7 +162,6 @@ var listVarsCmd = &cobra.Command{
 
 func init() {
 	// Register parser flags for listValuesCmd.
-	listValuesCmd.DisableFlagParsing = true // IMPORTANT: Manual parsing required for our unified parser
 	listValuesParser.RegisterFlags(listValuesCmd)
 	_ = listValuesParser.BindToViper(viper.GetViper())
 
@@ -177,7 +174,6 @@ func init() {
 	AddStackCompletion(listValuesCmd)
 
 	// Register parser flags for listVarsCmd.
-	listVarsCmd.DisableFlagParsing = true // IMPORTANT: Manual parsing required for our unified parser
 	listVarsParser.RegisterFlags(listVarsCmd)
 	_ = listVarsParser.BindToViper(viper.GetViper())
 

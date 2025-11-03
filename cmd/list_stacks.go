@@ -46,14 +46,12 @@ func init() {
 		WithComponent(false). // Optional component flag → .Component field
 		Build()
 
-	listStacksCmd.DisableFlagParsing = true // IMPORTANT: Manual parsing required for our unified parser
 	listStacksParser.RegisterFlags(listStacksCmd)
 	_ = listStacksParser.BindToViper(viper.GetViper())
 	listCmd.AddCommand(listStacksCmd)
 }
 
 func listStacks(cmd *cobra.Command, args []string) ([]string, error) {
-	// Parse flags with Viper precedence (CLI > ENV > config > defaults)
 	v := viper.New()
 	_ = listStacksParser.BindFlagsToViper(cmd, v)
 

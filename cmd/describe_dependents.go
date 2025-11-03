@@ -88,7 +88,6 @@ func getRunnableDescribeDependentsCmd(
 }
 
 func init() {
-	describeDependentsCmd.DisableFlagParsing = true // IMPORTANT: Manual parsing required for our unified parser
 
 	// Register StandardOptions flags (includes required stack flag via WithStack(true)).
 	describeDependentsParser.RegisterFlags(describeDependentsCmd)

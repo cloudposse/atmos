@@ -46,7 +46,6 @@ var validateComponentCmd = &cobra.Command{
 }
 
 func init() {
-	validateComponentCmd.DisableFlagParsing = true // IMPORTANT: Manual parsing required for our unified parser
 
 	// Register StandardOptions flags (includes required stack flag via WithStack(true)).
 	validateComponentParser.RegisterFlags(validateComponentCmd)
