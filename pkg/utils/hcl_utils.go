@@ -91,6 +91,59 @@ func ConvertToHclAst(data any) (ast.Node, error) {
 	return astree.Node, nil
 }
 
+// convertGoValueToCty converts a Go value to a cty.Value recursively.
+func convertGoValueToCty(v any) (cty.Value, error) {
+	if v == nil {
+		return cty.NilVal, nil
+	}
+
+	switch val := v.(type) {
+	case string:
+		return cty.StringVal(val), nil
+	case bool:
+		return cty.BoolVal(val), nil
+	case int:
+		return cty.NumberIntVal(int64(val)), nil
+	case int64:
+		return cty.NumberIntVal(val), nil
+	case uint64:
+		return cty.NumberUIntVal(val), nil
+	case float64:
+		return cty.NumberFloatVal(val), nil
+	case map[string]any:
+		// Convert map to cty.ObjectVal.
+		if len(val) == 0 {
+			return cty.EmptyObjectVal, nil
+		}
+		attrs := make(map[string]cty.Value)
+		for k, v := range val {
+			ctyVal, err := convertGoValueToCty(v)
+			if err != nil {
+				return cty.NilVal, err
+			}
+			attrs[k] = ctyVal
+		}
+		return cty.ObjectVal(attrs), nil
+	case []any:
+		// Convert slice to cty.TupleVal.
+		if len(val) == 0 {
+			return cty.EmptyTupleVal, nil
+		}
+		vals := make([]cty.Value, len(val))
+		for i, v := range val {
+			ctyVal, err := convertGoValueToCty(v)
+			if err != nil {
+				return cty.NilVal, err
+			}
+			vals[i] = ctyVal
+		}
+		return cty.TupleVal(vals), nil
+	default:
+		// For other types, try to convert using reflection (handles int32, etc.).
+		return cty.NilVal, nil
+	}
+}
+
 // WriteTerraformBackendConfigToFileAsHcl writes the provided Terraform backend config to the specified file.
 // https://dev.to/pdcommunity/write-terraform-files-in-go-with-hclwrite-2e1j
 // https://pkg.go.dev/github.com/hashicorp/hcl/v2/hclwrite
@@ -113,18 +166,14 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	for _, name := range backendConfigSortedKeys {
 		v := backendConfig[name]
 
-		if v == nil {
-			backendBlockBody.SetAttributeValue(name, cty.NilVal)
-		} else if i, ok := v.(string); ok {
-			backendBlockBody.SetAttributeValue(name, cty.StringVal(i))
-		} else if i, ok := v.(bool); ok {
-			backendBlockBody.SetAttributeValue(name, cty.BoolVal(i))
-		} else if i, ok := v.(int64); ok {
-			backendBlockBody.SetAttributeValue(name, cty.NumberIntVal(i))
-		} else if i, ok := v.(uint64); ok {
-			backendBlockBody.SetAttributeValue(name, cty.NumberUIntVal(i))
-		} else if i, ok := v.(float64); ok {
-			backendBlockBody.SetAttributeValue(name, cty.NumberFloatVal(i))
+		ctyVal, err := convertGoValueToCty(v)
+		if err != nil {
+			return err
+		}
+
+		// Only set the attribute if we got a valid cty value.
+		if ctyVal != cty.NilVal {
+			backendBlockBody.SetAttributeValue(name, ctyVal)
 		}
 	}
 
