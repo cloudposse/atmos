@@ -89,6 +89,44 @@ func TestParseGlobalFlags(t *testing.T) {
 				HeatmapMode: "sparkline",
 			},
 		},
+		{
+			name: "single config file",
+			setup: func(cmd *cobra.Command, v *viper.Viper) {
+				v.Set("config", []string{"atmos.yaml"})
+			},
+			expected: GlobalFlags{
+				Config: []string{"atmos.yaml"},
+			},
+		},
+		{
+			name: "multiple config files",
+			setup: func(cmd *cobra.Command, v *viper.Viper) {
+				v.Set("config", []string{"atmos.yaml", "atmos-override.yaml", "atmos-local.yaml"})
+			},
+			expected: GlobalFlags{
+				Config: []string{"atmos.yaml", "atmos-override.yaml", "atmos-local.yaml"},
+			},
+		},
+		{
+			name: "multiple config paths",
+			setup: func(cmd *cobra.Command, v *viper.Viper) {
+				v.Set("config-path", []string{"/etc/atmos", "/home/user/.atmos", "./config"})
+			},
+			expected: GlobalFlags{
+				ConfigPath: []string{"/etc/atmos", "/home/user/.atmos", "./config"},
+			},
+		},
+		{
+			name: "config and config-path together",
+			setup: func(cmd *cobra.Command, v *viper.Viper) {
+				v.Set("config", []string{"atmos.yaml", "overrides.yaml"})
+				v.Set("config-path", []string{"/etc/atmos", "./config"})
+			},
+			expected: GlobalFlags{
+				Config:     []string{"atmos.yaml", "overrides.yaml"},
+				ConfigPath: []string{"/etc/atmos", "./config"},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -133,6 +171,12 @@ func TestParseGlobalFlags(t *testing.T) {
 			}
 			if tt.expected.HeatmapMode != "" {
 				assert.Equal(t, tt.expected.HeatmapMode, got.HeatmapMode)
+			}
+			if len(tt.expected.Config) > 0 {
+				assert.Equal(t, tt.expected.Config, got.Config)
+			}
+			if len(tt.expected.ConfigPath) > 0 {
+				assert.Equal(t, tt.expected.ConfigPath, got.ConfigPath)
 			}
 		})
 	}
