@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=schema.json
+# UI output tests for commands that use colored checkmarks and X marks
+
+tests:
+  - name: "atmos docs generate readme with UI output"
+    enabled: true
+    snapshot: true
+    description: "Verify docs generate shows checkmark on success"
+    workdir: "fixtures/scenarios/docs-generate/terraform/"
+    command: "atmos"
+    args:
+      - "docs"
+      - "generate"
+      - "readme"
+    expect:
+      exit_code: 0
+      stderr:
+        - "✓ Generated docs"
+      file_exists:
+        - "README.md"
+
+  - name: "atmos validate component success with UI output"
+    enabled: true
+    snapshot: true
+    description: "Verify validate component shows checkmark on success"
+    workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - "validate"
+      - "component"
+      - "test/test-component-override"
+      - "-s"
+      - "tenant1-ue2-dev"
+    expect:
+      exit_code: 0
+      stderr:
+        - "✓.*validated successfully"
+
+  - name: "atmos validate component failure with UI output"
+    enabled: true
+    snapshot: true
+    description: "Verify validate component shows X mark on failure"
+    workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - "validate"
+      - "component"
+      - "infra/vpc"
+      - "-s"
+      - "tenant1-ue2-dev"
+    expect:
+      exit_code: 1
+      stderr:
+        - "✗ Component validation failed"
+
+  - name: "atmos validate schema success with UI output"
+    enabled: true
+    snapshot: true
+    description: "Verify validate schema shows checkmark for valid files"
+    workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - "validate"
+      - "schema"
+      - "-f"
+      - "stacks/catalog/terraform/test-component.yaml"
+    expect:
+      exit_code: 0
+      stderr:
+        - "✓.*Validated"
