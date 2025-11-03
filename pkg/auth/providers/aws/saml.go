@@ -24,15 +24,18 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
-	samlTimeoutSeconds    = 30
-	samlDefaultSessionSec = 3600
-	logFieldRole          = "role"
-	logFieldDriver        = "driver"
-	minSTSSeconds         = 900
-	maxSTSSeconds         = 43200
+	samlTimeoutSeconds            = 30
+	samlDefaultSessionSec         = 3600
+	logFieldRole                  = "role"
+	logFieldDriver                = "driver"
+	minSTSSeconds                 = 900
+	maxSTSSeconds                 = 43200
+	playwrightCacheDir            = "ms-playwright"
+	playwrightCacheDirPermissions = 0o755
 )
 
 type assumeRoleWithSAMLClient interface {
@@ -412,17 +415,24 @@ func (p *samlProvider) PrepareEnvironment(_ context.Context, environ map[string]
 // playwrightDriversInstalled checks if valid Playwright drivers are installed in standard locations.
 // Returns true if drivers are found, false if not found or home directory cannot be determined.
 func (p *samlProvider) playwrightDriversInstalled() bool {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Debug("Cannot determine home directory for driver detection", "error", err)
-		return false
+	var playwrightPaths []string
+
+	// Check Atmos XDG cache directory first (allows users to consolidate all Atmos data).
+	if xdgCacheDir, err := xdg.GetXDGCacheDir(playwrightCacheDir, playwrightCacheDirPermissions); err == nil {
+		playwrightPaths = append(playwrightPaths, xdgCacheDir)
 	}
 
-	// Check common Playwright cache locations.
-	playwrightPaths := []string{
-		filepath.Join(homeDir, ".cache", "ms-playwright"),            // Linux.
-		filepath.Join(homeDir, "Library", "Caches", "ms-playwright"), // macOS.
-		filepath.Join(homeDir, "AppData", "Local", "ms-playwright"),  // Windows.
+	// Check playwright-go's hardcoded cache locations.
+	// Note: playwright-go does NOT respect XDG_CACHE_HOME, it uses its own hardcoded paths.
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		playwrightPaths = append(playwrightPaths,
+			filepath.Join(homeDir, ".cache", playwrightCacheDir),            // Linux (playwright-go default).
+			filepath.Join(homeDir, "Library", "Caches", playwrightCacheDir), // macOS (playwright-go default).
+			filepath.Join(homeDir, "AppData", "Local", playwrightCacheDir),  // Windows (playwright-go default).
+		)
+	} else {
+		log.Debug("Cannot determine home directory for driver detection", "error", err)
 	}
 
 	for _, path := range playwrightPaths {
