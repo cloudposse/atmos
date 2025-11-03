@@ -46,6 +46,14 @@ func (p *TerraformParser) RegisterFlags(cmd *cobra.Command) {
 	p.parser.RegisterFlags(cmd)
 }
 
+// RegisterPersistentFlags adds Terraform flags as persistent flags (inherited by subcommands).
+func (p *TerraformParser) RegisterPersistentFlags(cmd *cobra.Command) {
+	defer perf.Track(nil, "flagparser.TerraformParser.RegisterPersistentFlags")()
+
+	p.cmd = cmd
+	p.parser.RegisterPersistentFlags(cmd)
+}
+
 // BindToViper binds flags to Viper for precedence handling.
 func (p *TerraformParser) BindToViper(v *viper.Viper) error {
 	defer perf.Track(nil, "flagparser.TerraformParser.BindToViper")()

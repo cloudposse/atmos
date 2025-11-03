@@ -21,8 +21,9 @@ var helmfileCmd = &cobra.Command{
 }
 
 func init() {
-	// https://github.com/spf13/cobra/issues/739
-	helmfileCmd.DisableFlagParsing = true
+	// NOTE: We do NOT set DisableFlagParsing on helmfile command.
+	// It needs to register flags normally. Helmfile commands use manual parsing
+	// in their RunE handlers via helmfileParser.Parse().
 
 	// Create parser with Helmfile flags.
 	// Returns strongly-typed HelmfileInterpreter.

@@ -269,7 +269,8 @@ Arguments:
 // attachTerraformCommands attaches static Terraform commands to a provided parent command.
 func attachTerraformCommands(parentCmd *cobra.Command) {
 	parentCmd.PersistentFlags().String("append-user-agent", "", fmt.Sprintf("Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string in Terraform provider requests. Example: `Atmos/%s (Cloud Posse; +https://atmos.tools)`. This flag works with almost all commands.", version.Version))
-	parentCmd.PersistentFlags().Bool("skip-init", false, "Skip running `terraform init` before executing terraform commands")
+	// NOTE: skip-init is already registered by TerraformFlags() via RegisterPersistentFlags()
+	// parentCmd.PersistentFlags().Bool("skip-init", false, "Skip running `terraform init` before executing terraform commands")
 	parentCmd.PersistentFlags().Bool("init-pass-vars", false, "Pass the generated varfile to `terraform init` using the `--var-file` flag. OpenTofu supports passing a varfile to `init` to dynamically configure backends")
 	parentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 	parentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing terraform commands")
@@ -281,7 +282,8 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 
 	parentCmd.PersistentFlags().StringP("query", "q", "", "Execute `atmos terraform <command>` on the components filtered by a YQ expression, in all stacks or in a specific stack")
 	parentCmd.PersistentFlags().StringSlice("components", nil, "Filter by specific components")
-	parentCmd.PersistentFlags().Bool("dry-run", false, "Simulate the command without making any changes")
+	// NOTE: dry-run is already registered by CommonFlags() via RegisterPersistentFlags()
+	// parentCmd.PersistentFlags().Bool("dry-run", false, "Simulate the command without making any changes")
 
 	// Flags related to `--affected` (similar to `atmos describe affected`)
 	// These flags are only used then executing `atmos terraform <command> --affected`
