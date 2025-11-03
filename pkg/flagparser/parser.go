@@ -84,9 +84,14 @@ type PassThroughHandler interface {
 
 // ParsedConfig contains the results of parsing command-line arguments.
 // Different fields are populated depending on command type (standard vs pass-through).
+//
+// DEPRECATED: This map-based approach is being replaced by strongly-typed interpreters.
+// Use ToTerraformInterpreter(), ToHelmfileInterpreter(), etc. instead of accessing AtmosFlags directly.
 type ParsedConfig struct {
 	// AtmosFlags contains parsed Atmos-specific flags (--stack, --identity, etc.).
 	// Keys are flag names, values are the parsed values.
+	//
+	// DEPRECATED: Use ToTerraformInterpreter() for type-safe access instead.
 	AtmosFlags map[string]interface{}
 
 	// PassThroughArgs contains arguments to pass to external tools.
@@ -101,4 +106,104 @@ type ParsedConfig struct {
 	//   - For auth exec: [] (no positional args, everything is pass-through)
 	// Callers should interpret these based on their command's semantics.
 	PositionalArgs []string
+}
+
+// ToTerraformInterpreter converts ParsedConfig to strongly-typed TerraformInterpreter.
+//
+// This provides compile-time type safety instead of runtime map access:
+//
+//	// ❌ Weak typing (runtime errors possible)
+//	stack := parsedConfig.AtmosFlags["stack"].(string)
+//
+//	// ✅ Strong typing (compile-time safety)
+//	interpreter := parsedConfig.ToTerraformInterpreter()
+//	stack := interpreter.Stack
+//
+// Migration path:
+//  1. Add this method to enable gradual migration
+//  2. Update commands to use interpreter instead of AtmosFlags map
+//  3. Eventually replace Parse() to return interpreter directly
+func (p *ParsedConfig) ToTerraformInterpreter() TerraformInterpreter {
+	return TerraformInterpreter{
+		GlobalFlags: GlobalFlags{
+			Chdir:           getString(p.AtmosFlags, "chdir"),
+			BasePath:        getString(p.AtmosFlags, "base-path"),
+			Config:          getStringSlice(p.AtmosFlags, "config"),
+			ConfigPath:      getStringSlice(p.AtmosFlags, "config-path"),
+			LogsLevel:       getString(p.AtmosFlags, "logs-level"),
+			LogsFile:        getString(p.AtmosFlags, "logs-file"),
+			NoColor:         getBool(p.AtmosFlags, "no-color"),
+			Pager:           getPagerSelector(p.AtmosFlags, "pager"),
+			Identity:        getIdentitySelector(p.AtmosFlags, "identity"),
+			ProfilerEnabled: getBool(p.AtmosFlags, "profiler-enabled"),
+			ProfilerPort:    getInt(p.AtmosFlags, "profiler-port"),
+			ProfilerHost:    getString(p.AtmosFlags, "profiler-host"),
+			ProfileFile:     getString(p.AtmosFlags, "profile-file"),
+			ProfileType:     getString(p.AtmosFlags, "profile-type"),
+			Heatmap:         getBool(p.AtmosFlags, "heatmap"),
+			HeatmapMode:     getString(p.AtmosFlags, "heatmap-mode"),
+			RedirectStderr:  getString(p.AtmosFlags, "redirect-stderr"),
+			Version:         getBool(p.AtmosFlags, "version"),
+		},
+		Stack:            getString(p.AtmosFlags, "stack"),
+		Identity:         getIdentitySelector(p.AtmosFlags, "identity"),
+		DryRun:           getBool(p.AtmosFlags, "dry-run"),
+		UploadStatus:     getBool(p.AtmosFlags, "upload-status"),
+		SkipInit:         getBool(p.AtmosFlags, "skip-init"),
+		FromPlan:         getString(p.AtmosFlags, "from-plan"),
+		positionalArgs:   p.PositionalArgs,
+		passThroughArgs:  p.PassThroughArgs,
+	}
+}
+
+// Helper functions for safe map access with type conversion.
+
+func getString(m map[string]interface{}, key string) string {
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func getStringSlice(m map[string]interface{}, key string) []string {
+	if v, ok := m[key]; ok {
+		if slice, ok := v.([]string); ok {
+			return slice
+		}
+	}
+	return nil
+}
+
+func getBool(m map[string]interface{}, key string) bool {
+	if v, ok := m[key]; ok {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+	}
+	return false
+}
+
+func getInt(m map[string]interface{}, key string) int {
+	if v, ok := m[key]; ok {
+		if i, ok := v.(int); ok {
+			return i
+		}
+	}
+	return 0
+}
+
+func getIdentitySelector(m map[string]interface{}, key string) IdentitySelector {
+	value := getString(m, key)
+	// Check if identity was explicitly provided by checking if the key exists.
+	_, provided := m[key]
+	return NewIdentitySelector(value, provided)
+}
+
+func getPagerSelector(m map[string]interface{}, key string) PagerSelector {
+	value := getString(m, key)
+	// Check if pager was explicitly provided by checking if the key exists.
+	_, provided := m[key]
+	return NewPagerSelector(value, provided)
 }
