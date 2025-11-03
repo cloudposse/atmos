@@ -87,7 +87,7 @@ linters:
         - pattern: log\.Error\(.*[Dd][Ee][Bb][Uu][Gg]
           msg: Use `log.Debug()` for debug messages instead of `log.Error()` with "DEBUG" in the message
         - pattern: '(cmd|flags)\.Flags\(\)\.(GetString|GetBool|GetInt|GetStringSlice)\('
-          msg: Use `parsedConfig.AtmosFlags` for flags that support precedence (CLI > ENV > defaults). Direct `cmd.Flags().Get*()` bypasses ENV vars. See docs/prd/unified-flag-parsing.md
+          msg: Use strongly-typed Options (StandardOptions, TerraformOptions, etc.) for common flags. Direct `cmd.Flags().Get*()` bypasses Viper precedence (CLI > ENV > config). See docs/prd/flag-handling/
       exclude-godoc-examples: false
       analyze-types: true
     funlen:
@@ -248,13 +248,13 @@ linters:
           - err113
         path: ".*"
         source: 'errors\.Join\(.*errUtils\..*fmt\.Errorf'
-      # Allow cmd.Flags().Get*() for flags not yet in flagparser (process-templates, process-functions, skip, components, etc.)
-      # These flags need to be migrated to flagparser for precedence support
+      # Allow cmd.Flags().Get*() for command-specific flags not in Options types
+      # Common flags (stack, component, identity, dry-run, etc.) should use Options pattern
       - linters:
           - forbidigo
-        source: '(cmd|flags)\.Flags\(\)\.Get(String|Bool|Int|StringSlice)\("(process-templates|process-functions|skip|components|base-path|config|config-path|template|query|file|format|verbose|include-spacelift-admin-stacks|include-settings|upload|append-user-agent|init-pass-vars|ref|sha|repo-path|ssh-key|ssh-key-password|include-dependents|clone-target-ref|all|affected|from)"'
-      # Allow cmd.Flags().Get*() in internal/exec since it doesn't have access to parsedConfig
-      # TODO: Refactor internal/exec to accept parsedConfig or flag values as parameters
+        source: '(cmd|flags)\.Flags\(\)\.Get(String|Bool|Int|StringSlice)\("(format|login|provider|all|verbose|include-spacelift-admin-stacks|include-settings|upload|append-user-agent|init-pass-vars|ref|sha|repo-path|ssh-key|ssh-key-password|include-dependents|clone-target-ref|affected|from|template|query|process-templates|process-functions|skip|components|skip-init|from-plan|upload-status|parallel|clean-before-init)"'
+      # Allow cmd.Flags().Get*() in internal/exec since it receives values as parameters
+      # internal/exec functions accept flag values rather than cmd objects
       - linters:
           - forbidigo
         path: internal/exec/.*

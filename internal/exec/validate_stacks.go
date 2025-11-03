@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/datafetcher"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -25,7 +25,7 @@ import (
 const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 
 // ExecuteValidateStacksCmd executes `validate stacks` command.
-func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
+func ExecuteValidateStacksCmd(opts *flags.StandardOptions) error {
 	defer perf.Track(nil, "exec.ExecuteValidateStacksCmd")()
 
 	// Initialize spinner
@@ -38,25 +38,15 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	defer StopSpinner(p, spinnerDone)
 
 	// Process CLI arguments
-	info, err := ProcessCommandLineArgs("", cmd, args, nil)
-	if err != nil {
-		return err
-	}
-
+	info := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
 	}
 
-	flags := cmd.Flags()
-	schemasAtmosManifestFlag, err := flags.GetString("schemas-atmos-manifest")
-	if err != nil {
-		return err
-	}
-
-	if schemasAtmosManifestFlag != "" {
+	if opts.SchemasAtmosManifest != "" {
 		atmosConfig.Schemas["atmos"] = schema.SchemaRegistry{
-			Manifest: schemasAtmosManifestFlag,
+			Manifest: opts.SchemasAtmosManifest,
 		}
 	}
 

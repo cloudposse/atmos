@@ -1,15 +1,27 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 )
 
-// workflowCmd executes a workflow
+// workflowParser is created once at package initialization using builder pattern.
+var workflowParser = flags.NewWorkflowOptionsBuilder().
+	WithFile(false).  // Optional file flag → .File field
+	WithDryRun().     // Dry-run flag → .DryRun field
+	WithFromStep().   // From-step flag → .FromStep field
+	WithStack(false). // Optional stack flag → .Stack field
+	WithIdentity().   // Identity flag → .Identity field
+	Build()
+
+// workflowCmd executes a workflow.
 var workflowCmd = &cobra.Command{
 	Use:   "workflow",
 	Short: "Run predefined tasks using workflows",
@@ -17,6 +29,13 @@ var workflowCmd = &cobra.Command{
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
+
+		// Parse command-line arguments and get strongly-typed options.
+		opts, err := workflowParser.Parse(context.Background(), args)
+		if err != nil {
+			return err
+		}
+
 		// If no arguments are provided, start the workflow UI
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
@@ -25,11 +44,8 @@ var workflowCmd = &cobra.Command{
 			}
 		}
 
-		// Get the --file flag value
-		workflowFile, _ := cmd.Flags().GetString("file")
-
 		// If no file is provided, show the usage information
-		if workflowFile == "" {
+		if opts.File == "" {
 			err := cmd.Usage()
 			if err != nil {
 				return err
@@ -37,7 +53,7 @@ var workflowCmd = &cobra.Command{
 		}
 
 		// Execute the workflow command
-		err := e.ExecuteWorkflowCmd(cmd, args)
+		err = e.ExecuteWorkflowCmd(cmd, args)
 		if err != nil {
 			// Check if it's a known error that's already printed in ExecuteWorkflowCmd.
 			// If it is, we don't need to print it again, but we do need to exit with a non-zero exit code.
@@ -58,11 +74,12 @@ var workflowCmd = &cobra.Command{
 
 func init() {
 	workflowCmd.DisableFlagParsing = false
-	workflowCmd.PersistentFlags().StringP("file", "f", "", "Specify the workflow file to run")
-	workflowCmd.PersistentFlags().Bool("dry-run", false, "Simulate the workflow without making any changes")
+
+	// Register flags to the command.
+	workflowParser.RegisterFlags(workflowCmd)
+	_ = workflowParser.BindToViper(viper.GetViper())
+
 	AddStackCompletion(workflowCmd)
-	workflowCmd.PersistentFlags().String("from-step", "", "Resume the workflow from the specified step")
-	workflowCmd.PersistentFlags().String("identity", "", "Identity to use for workflow steps that don't specify their own identity")
 	AddIdentityCompletion(workflowCmd)
 
 	RootCmd.AddCommand(workflowCmd)

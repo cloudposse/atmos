@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -17,24 +17,21 @@ import (
 )
 
 // ExecuteValidateComponentCmd executes `validate component` command.
-func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, string, error) {
+func ExecuteValidateComponentCmd(opts *flags.StandardOptions) (string, string, error) {
 	defer perf.Track(nil, "exec.ExecuteValidateComponentCmd")()
 
-	info, err := ProcessCommandLineArgs("", cmd, args, nil)
-	if err != nil {
-		return "", "", err
-	}
-
+	info := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return "", "", err
 	}
 
-	if len(args) != 1 {
+	positionalArgs := opts.GetPositionalArgs()
+	if len(positionalArgs) != 1 {
 		return "", "", errUtils.ErrInvalidComponentArgument
 	}
 
-	componentName := args[0]
+	componentName := positionalArgs[0]
 
 	// Initialize spinner.
 	message := fmt.Sprintf("Validating Atmos Component: %s", componentName)
@@ -45,39 +42,12 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 	// Ensure the spinner is stopped before returning
 	defer StopSpinner(p, spinnerDone)
 
-	flags := cmd.Flags()
-
-	stack, err := flags.GetString("stack")
+	_, err = ExecuteValidateComponent(&atmosConfig, info, componentName, opts.Stack, opts.SchemaPath, opts.SchemaType, opts.ModulePaths, opts.Timeout)
 	if err != nil {
 		return "", "", err
 	}
 
-	schemaPath, err := flags.GetString("schema-path")
-	if err != nil {
-		return "", "", err
-	}
-
-	schemaType, err := flags.GetString("schema-type")
-	if err != nil {
-		return "", "", err
-	}
-
-	modulePaths, err := flags.GetStringSlice("module-paths")
-	if err != nil {
-		return "", "", err
-	}
-
-	timeout, err := flags.GetInt("timeout")
-	if err != nil {
-		return "", "", err
-	}
-
-	_, err = ExecuteValidateComponent(&atmosConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
-	if err != nil {
-		return "", "", err
-	}
-
-	return componentName, stack, nil
+	return componentName, opts.Stack, nil
 }
 
 // ExecuteValidateComponent validates a component in a stack using JsonSchema or OPA schema documents.

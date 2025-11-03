@@ -5,10 +5,9 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -24,14 +23,14 @@ var (
 )
 
 // ExecuteVendorPullCmd executes `vendor pull` commands.
-func ExecuteVendorPullCmd(cmd *cobra.Command, args []string) error {
+func ExecuteVendorPullCmd(opts *flags.StandardOptions) error {
 	defer perf.Track(nil, "exec.ExecuteVendorPullCmd")()
 
-	return ExecuteVendorPullCommand(cmd, args)
+	return ExecuteVendorPullCommand(opts)
 }
 
 // ExecuteVendorDiffCmd executes `vendor diff` commands.
-func ExecuteVendorDiffCmd(cmd *cobra.Command, args []string) error {
+func ExecuteVendorDiffCmd(opts *flags.StandardOptions) error {
 	return ErrExecuteVendorDiffCmd
 }
 
@@ -45,25 +44,34 @@ type VendorFlags struct {
 }
 
 // ExecuteVendorPullCommand executes `atmos vendor` commands.
-func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
+func ExecuteVendorPullCommand(opts *flags.StandardOptions) error {
 	defer perf.Track(nil, "exec.ExecuteVendorPullCommand")()
 
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
-	if err != nil {
-		return err
-	}
-
-	flags := cmd.Flags()
-	processStacks := flags.Changed("stack")
+	info := schema.ConfigAndStacksInfo{}
+	processStacks := opts.Stack != ""
 
 	atmosConfig, err := cfg.InitCliConfig(info, processStacks)
 	if err != nil {
 		return fmt.Errorf("failed to initialize CLI config: %w", err)
 	}
 
-	vendorFlags, err := parseVendorFlags(flags)
-	if err != nil {
-		return err
+	// Convert opts to VendorFlags
+	vendorFlags := VendorFlags{
+		DryRun:        opts.DryRun,
+		Component:     opts.Component,
+		Stack:         opts.Stack,
+		Everything:    opts.Everything,
+		ComponentType: opts.Type,
+	}
+
+	// Parse tags from comma-separated string
+	if opts.Tags != "" {
+		vendorFlags.Tags = strings.Split(opts.Tags, ",")
+	}
+
+	// Set default for 'everything' if no specific flags are provided
+	if !vendorFlags.Everything && vendorFlags.Component == "" && vendorFlags.Stack == "" && len(vendorFlags.Tags) == 0 {
+		vendorFlags.Everything = true
 	}
 
 	if err := validateVendorFlags(&vendorFlags); err != nil {
@@ -74,56 +82,7 @@ func ExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 		return ExecuteStackVendorInternal(vendorFlags.Stack, vendorFlags.DryRun)
 	}
 
-	return handleVendorConfig(&atmosConfig, &vendorFlags, args)
-}
-
-func parseVendorFlags(flags *pflag.FlagSet) (VendorFlags, error) {
-	vendorFlags := VendorFlags{}
-	var err error
-
-	if vendorFlags.DryRun, err = flags.GetBool("dry-run"); err != nil {
-		return vendorFlags, err
-	}
-
-	if vendorFlags.Component, err = flags.GetString("component"); err != nil {
-		return vendorFlags, err
-	}
-
-	if vendorFlags.Stack, err = flags.GetString("stack"); err != nil {
-		return vendorFlags, err
-	}
-
-	tagsCsv, err := flags.GetString("tags")
-	if err != nil {
-		return vendorFlags, err
-	}
-	if tagsCsv != "" {
-		vendorFlags.Tags = strings.Split(tagsCsv, ",")
-	}
-
-	if vendorFlags.Everything, err = flags.GetBool("everything"); err != nil {
-		return vendorFlags, err
-	}
-
-	// Set default for 'everything' if no specific flags are provided
-	setDefaultEverythingFlag(flags, &vendorFlags)
-
-	// Handle 'type' flag only if it exists
-	if flags.Lookup("type") != nil {
-		if vendorFlags.ComponentType, err = flags.GetString("type"); err != nil {
-			return vendorFlags, err
-		}
-	}
-
-	return vendorFlags, nil
-}
-
-// Helper function to set the default for 'everything' if no specific flags are provided.
-func setDefaultEverythingFlag(flags *pflag.FlagSet, vendorFlags *VendorFlags) {
-	if !vendorFlags.Everything && !flags.Changed("everything") &&
-		vendorFlags.Component == "" && vendorFlags.Stack == "" && len(vendorFlags.Tags) == 0 {
-		vendorFlags.Everything = true
-	}
+	return handleVendorConfig(&atmosConfig, &vendorFlags, []string{})
 }
 
 func validateVendorFlags(flg *VendorFlags) error {

@@ -9,7 +9,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/flagparser"
+	"github.com/cloudposse/atmos/pkg/flags"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -43,7 +43,7 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 // revive:disable-next-line:cyclomatic,function-length
 //
 //nolint:funlen // Orchestrates terraform execution with multiple conditional paths.
-func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, interpreter *flagparser.TerraformInterpreter) error {
+func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, interpreter *flags.TerraformOptions) error {
 	// Build args array from interpreter for getConfigAndStacksInfo
 	// Format: [subcommand, component, ...pass-through-args]
 	args := append(interpreter.GetPositionalArgs(), interpreter.GetPassThroughArgs()...)

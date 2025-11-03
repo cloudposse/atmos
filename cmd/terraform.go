@@ -4,11 +4,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/atmos/pkg/flagparser"
+	"github.com/cloudposse/atmos/pkg/flags"
 )
 
 // terraformParser handles flag parsing for terraform commands.
-var terraformParser *flagparser.TerraformParser
+var terraformParser *flags.TerraformParser
 
 // terraformCmd represents the base command for all terraform sub-commands
 var terraformCmd = &cobra.Command{
@@ -21,7 +21,7 @@ var terraformCmd = &cobra.Command{
 func init() {
 	// Create parser with Terraform flags.
 	// Returns strongly-typed TerraformInterpreter instead of weak map-based ParsedConfig.
-	terraformParser = flagparser.NewTerraformParser()
+	terraformParser = flags.NewTerraformParser()
 
 	// Register flags with Cobra.
 	// Cobra will now parse known Atmos flags and pass through unknown flags.

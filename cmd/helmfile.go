@@ -5,11 +5,11 @@ import (
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/flagparser"
+	"github.com/cloudposse/atmos/pkg/flags"
 )
 
 // helmfileParser handles flag parsing for helmfile commands.
-var helmfileParser *flagparser.HelmfileParser
+var helmfileParser *flags.HelmfileParser
 
 // helmfileCmd represents the base command for all helmfile sub-commands
 var helmfileCmd = &cobra.Command{
@@ -23,7 +23,7 @@ var helmfileCmd = &cobra.Command{
 func init() {
 	// Create parser with Helmfile flags.
 	// Returns strongly-typed HelmfileInterpreter.
-	helmfileParser = flagparser.NewHelmfileParser()
+	helmfileParser = flags.NewHelmfileParser()
 
 	// Register flags with Cobra.
 	helmfileParser.RegisterFlags(helmfileCmd)

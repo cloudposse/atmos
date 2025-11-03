@@ -47,7 +47,7 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 	flags.Bool("everything", false, "")
 
 	// Execute vendor pull command.
-	err := ExecuteVendorPullCommand(cmd, []string{})
+	err := testExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Vendor pull command should execute without error")
 
 	// Check that the target directory was created.
@@ -133,7 +133,7 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 	flags.Bool("everything", false, "")
 
 	// Execute vendor pull command with tags filter.
-	err := ExecuteVendorPullCommand(cmd, []string{})
+	err := testExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Vendor pull command should execute without error even with multiple vendor files")
 
 	// Check that the s3-bucket component was pulled (it has the 'aws' tag).

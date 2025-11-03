@@ -24,7 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/flagparser"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -743,7 +743,7 @@ func showUsageExample(cmd *cobra.Command, details string) {
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	output, err := listStacks(cmd)
+	output, err := listStacks(cmd, args)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -847,9 +847,9 @@ func Contains(slice []string, target string) bool {
 
 // createCustomCommandParser creates a PassThroughFlagParser with dynamically registered flags
 // from the custom command configuration.
-func createCustomCommandParser(commandConfig *schema.Command) *flagparser.PassThroughFlagParser {
+func createCustomCommandParser(commandConfig *schema.Command) *flags.PassThroughFlagParser {
 	// Start with common flags (stack, identity, dry-run)
-	registry := flagparser.CommonFlags()
+	registry := flags.CommonFlags()
 
 	// Dynamically register flags from command config
 	for _, flag := range commandConfig.Flags {
@@ -869,7 +869,7 @@ func createCustomCommandParser(commandConfig *schema.Command) *flagparser.PassTh
 	}
 
 	// Create parser with the registry
-	parser := flagparser.NewPassThroughFlagParserFromRegistry(registry)
+	parser := flags.NewPassThroughFlagParserFromRegistry(registry)
 
 	// Disable positional extraction since custom commands handle args differently
 	parser.DisablePositionalExtraction()
@@ -887,7 +887,7 @@ func executeCustomCommandWithParser(
 	args []string,
 	parentCommand *cobra.Command,
 	commandConfig *schema.Command,
-	parser *flagparser.PassThroughFlagParser,
+	parser *flags.PassThroughFlagParser,
 ) {
 	var err error
 

@@ -31,7 +31,6 @@ var packerBuildCmd = &cobra.Command{
 }
 
 func init() {
-	// Register Atmos flags on this subcommand
-	packerParser.RegisterFlags(packerBuildCmd)
+	// Flags are inherited from parent packerCmd as persistent flags
 	packerCmd.AddCommand(packerBuildCmd)
 }

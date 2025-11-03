@@ -1,15 +1,18 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
@@ -20,9 +23,6 @@ import (
 )
 
 var (
-	ErrGettingCommonFlags    = pkgerrors.New("error getting common flags")
-	ErrGettingAbstractFlag   = pkgerrors.New("error getting abstract flag")
-	ErrGettingVarsFlag       = pkgerrors.New("error getting vars flag")
 	ErrInitializingCLIConfig = pkgerrors.New("error initializing CLI config")
 	ErrDescribingStacks      = pkgerrors.New("error describing stacks")
 	ErrComponentNameRequired = pkgerrors.New("component name is required")
@@ -39,6 +39,31 @@ type ProcessingOptions struct {
 	Templates bool
 	Functions bool
 }
+
+// listValuesParser is created once at package initialization using builder pattern.
+var listValuesParser = flags.NewStandardOptionsBuilder().
+	WithStack(false).           // Optional stack flag for filtering.
+	WithFormat("").             // Format flag (empty default, will use table).
+	WithQuery().                // Query flag for YQ expressions.
+	WithProcessTemplates(true). // Process templates (default true).
+	WithProcessFunctions(true). // Process functions (default true).
+	WithAbstract().             // Include abstract components flag.
+	WithVars().                 // Show only vars section flag.
+	WithMaxColumns(0).          // Maximum columns for table output.
+	WithDelimiter("").          // Delimiter for CSV/TSV output.
+	Build()
+
+// listVarsParser is created once at package initialization using builder pattern.
+var listVarsParser = flags.NewStandardOptionsBuilder().
+	WithStack(false).           // Optional stack flag for filtering.
+	WithFormat("").             // Format flag (empty default, will use table).
+	WithQuery().                // Query flag for YQ expressions (will be set to .vars).
+	WithProcessTemplates(true). // Process templates (default true).
+	WithProcessFunctions(true). // Process functions (default true).
+	WithAbstract().             // Include abstract components flag.
+	WithMaxColumns(0).          // Maximum columns for table output.
+	WithDelimiter("").          // Delimiter for CSV/TSV output.
+	Build()
 
 // listValuesCmd lists component values across stacks.
 var listValuesCmd = &cobra.Command{
@@ -58,10 +83,20 @@ var listValuesCmd = &cobra.Command{
 			return ErrInvalidArguments
 		}
 
-		// Check Atmos configuration
+		// Check Atmos configuration.
 		checkAtmosConfig()
 
-		output, err := listValues(cmd, args)
+		// Parse flags with Viper precedence (CLI > ENV > config > defaults).
+		v := viper.New()
+		_ = listValuesParser.BindFlagsToViper(cmd, v)
+
+		// Parse command-line arguments and get strongly-typed options.
+		opts, err := listValuesParser.Parse(context.Background(), args)
+		if err != nil {
+			return err
+		}
+
+		output, err := listValuesWithOptions(cmd, args, opts)
 		if err != nil {
 			return err
 		}
@@ -84,15 +119,28 @@ var listVarsCmd = &cobra.Command{
 		"atmos list vars vpc --format csv",
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration
+		// Check Atmos configuration.
 		checkAtmosConfig()
 
-		// Set the query flag to .vars
+		// Parse flags with Viper precedence (CLI > ENV > config > defaults).
+		v := viper.New()
+		_ = listVarsParser.BindFlagsToViper(cmd, v)
+
+		// Set the query flag to .vars.
 		if err := cmd.Flags().Set("query", ".vars"); err != nil {
 			return fmt.Errorf("failed to set query flag: %w", err)
 		}
 
-		output, err := listValues(cmd, args)
+		// Parse command-line arguments and get strongly-typed options.
+		opts, err := listVarsParser.Parse(context.Background(), args)
+		if err != nil {
+			return err
+		}
+
+		// Override query to .vars for vars command.
+		opts.Query = ".vars"
+
+		output, err := listValuesWithOptions(cmd, args, opts)
 		if err != nil {
 			var componentVarsNotFoundErr *listerrors.ComponentVarsNotFoundError
 			if errors.As(err, &componentVarsNotFoundErr) {
@@ -115,94 +163,35 @@ var listVarsCmd = &cobra.Command{
 }
 
 func init() {
-	// Add common flags
-	fl.AddCommonListFlags(listValuesCmd)
+	// Register parser flags for listValuesCmd.
+	listValuesCmd.DisableFlagParsing = false
+	listValuesParser.RegisterFlags(listValuesCmd)
+	_ = listValuesParser.BindToViper(viper.GetViper())
+
+	// Update query flag usage.
 	if queryFlag := listValuesCmd.PersistentFlags().Lookup("query"); queryFlag != nil {
 		queryFlag.Usage = "Filter the results using YQ expressions"
 	}
 
-	// Add additional flags
-	listValuesCmd.PersistentFlags().Bool("abstract", false, "Include abstract components")
-	listValuesCmd.PersistentFlags().Bool("vars", false, "Show only vars (equivalent to `--query .vars`)")
-	listValuesCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
-	listValuesCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
+	// Add stack pattern completion.
+	AddStackCompletion(listValuesCmd)
 
-	// Add common flags to vars command
-	fl.AddCommonListFlags(listVarsCmd)
+	// Register parser flags for listVarsCmd.
+	listVarsCmd.DisableFlagParsing = false
+	listVarsParser.RegisterFlags(listVarsCmd)
+	_ = listVarsParser.BindToViper(viper.GetViper())
+
+	// Update query flag usage.
 	if queryFlag := listVarsCmd.PersistentFlags().Lookup("query"); queryFlag != nil {
 		queryFlag.Usage = "Filter the results using YQ expressions"
 	}
 
-	// Add abstract flag to vars command
-	listVarsCmd.PersistentFlags().Bool("abstract", false, "Include abstract components")
-	listVarsCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
-	listVarsCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
-
-	// Add stack pattern completion
-	AddStackCompletion(listValuesCmd)
+	// Add stack pattern completion.
 	AddStackCompletion(listVarsCmd)
 
-	// Add commands to list command
+	// Add commands to list command.
 	listCmd.AddCommand(listValuesCmd)
 	listCmd.AddCommand(listVarsCmd)
-}
-
-// getBoolFlagWithDefault gets a boolean flag value or returns the default if error.
-func getBoolFlagWithDefault(cmd *cobra.Command, flagName string, defaultValue bool) bool {
-	if cmd.Flags().Lookup(flagName) == nil {
-		return defaultValue
-	}
-
-	value, err := cmd.Flags().GetBool(flagName)
-	if err != nil {
-		log.Warn("Failed to get flag, using default",
-			"flag", flagName,
-			"default", defaultValue,
-			"error", err)
-		return defaultValue
-	}
-
-	return value
-}
-
-// getListValuesFlags extracts and processes all flags needed for list values command.
-func getListValuesFlags(cmd *cobra.Command) (*l.FilterOptions, *fl.ProcessingFlags, error) {
-	// Get common flags
-	commonFlags, err := fl.GetCommonListFlags(cmd)
-	if err != nil {
-		return nil, nil, fmt.Errorf(ErrFmtWrapErr, ErrGettingCommonFlags, err)
-	}
-
-	// Get additional flags
-	abstractFlag, err := cmd.Flags().GetBool("abstract")
-	if err != nil {
-		return nil, nil, fmt.Errorf(ErrFmtWrapErr, ErrGettingAbstractFlag, err)
-	}
-
-	// Get vars flag and adjust query if needed
-	varsFlag := getBoolFlagWithDefault(cmd, "vars", false)
-	if varsFlag {
-		commonFlags.Query = ".vars"
-	}
-
-	// Set appropriate default delimiter based on format
-	if f.Format(commonFlags.Format) == f.FormatCSV && commonFlags.Delimiter == f.DefaultTSVDelimiter {
-		commonFlags.Delimiter = f.DefaultCSVDelimiter
-	}
-
-	// Get processing flags
-	processingFlags := fl.GetProcessingFlags(cmd)
-
-	filterOptions := &l.FilterOptions{
-		Query:           commonFlags.Query,
-		IncludeAbstract: abstractFlag,
-		MaxColumns:      commonFlags.MaxColumns,
-		FormatStr:       commonFlags.Format,
-		Delimiter:       commonFlags.Delimiter,
-		StackPattern:    commonFlags.Stack,
-	}
-
-	return filterOptions, processingFlags, nil
 }
 
 // logNoValuesFoundMessage logs an appropriate message when no values or vars are found.
@@ -212,38 +201,6 @@ func logNoValuesFoundMessage(componentName string, query string) {
 	} else {
 		log.Info("No values found", "component", componentName)
 	}
-}
-
-// prepareListValuesOptions prepares filter options based on component name and flags.
-func prepareListValuesOptions(cmd *cobra.Command, componentName string) (*l.FilterOptions, *fl.ProcessingFlags, error) {
-	// Get all flags and options
-	filterOptions, processingFlags, err := getListValuesFlags(cmd)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Use ComponentFilter instead of Component for filtering by component name
-	// This allows the extractComponentValues function to handle it properly
-	filterOptions.ComponentFilter = componentName
-
-	// For vars command (using .vars query), we clear the Component field
-	// to let the system determine the correct query path
-	if filterOptions.Query == ".vars" {
-		// Using ComponentFilter with empty Component
-		// lets the system build the correct YQ expression
-		filterOptions.Component = ""
-	} else {
-		// For other cases where we're not querying vars, use the standard approach
-		filterOptions.Component = componentName
-	}
-
-	// Log the component name
-	log.Debug("Processing component",
-		"component", componentName,
-		"component_field", filterOptions.Component,
-		"component_filter", filterOptions.ComponentFilter)
-
-	return filterOptions, processingFlags, nil
 }
 
 // initAtmosAndDescribeStacksForList initializes Atmos config and describes stacks.
@@ -269,26 +226,58 @@ func initAtmosAndDescribeStacksForList(componentName string, processingFlags *fl
 	return atmosConfig, stacksMap, nil
 }
 
-func listValues(cmd *cobra.Command, args []string) (string, error) {
-	// Ensure we have a component name
+// listValuesWithOptions lists component values using parsed options.
+func listValuesWithOptions(cmd *cobra.Command, args []string, opts *flags.StandardOptions) (string, error) {
+	// Ensure we have a component name.
 	if len(args) == 0 {
 		return "", ErrComponentNameRequired
 	}
 	componentName := args[0]
 
-	// Prepare filter options and processing flags
-	filterOptions, processingFlags, err := prepareListValuesOptions(cmd, componentName)
-	if err != nil {
-		return "", err
+	// Use flags from parsed options (no direct Cobra access).
+	// Vars flag takes precedence over query.
+	if opts.Vars {
+		opts.Query = ".vars"
 	}
 
-	// Initialize Atmos config and get stacks
+	// Set appropriate default delimiter based on format.
+	delimiter := opts.Delimiter
+	if f.Format(opts.Format) == f.FormatCSV && delimiter == "" {
+		delimiter = f.DefaultCSVDelimiter
+	} else if delimiter == "" {
+		delimiter = f.DefaultTSVDelimiter
+	}
+
+	// Prepare filter options.
+	filterOptions := &l.FilterOptions{
+		Query:           opts.Query,
+		IncludeAbstract: opts.Abstract,
+		MaxColumns:      opts.MaxColumns,
+		FormatStr:       opts.Format,
+		Delimiter:       delimiter,
+		StackPattern:    opts.Stack,
+		ComponentFilter: componentName,
+	}
+
+	// For vars command (using .vars query), we clear the Component field
+	// to let the system determine the correct query path.
+	if filterOptions.Query == ".vars" {
+		filterOptions.Component = ""
+	} else {
+		filterOptions.Component = componentName
+	}
+
+	// Initialize Atmos config and get stacks.
+	processingFlags := &fl.ProcessingFlags{
+		Templates: opts.ProcessTemplates,
+		Functions: opts.ProcessYamlFunctions,
+	}
 	_, stacksMap, err := initAtmosAndDescribeStacksForList(componentName, processingFlags)
 	if err != nil {
 		return "", err
 	}
 
-	// Log the filter options
+	// Log the filter options.
 	log.Debug("Filtering values",
 		"component", componentName,
 		"componentFilter", filterOptions.ComponentFilter,
@@ -300,7 +289,7 @@ func listValues(cmd *cobra.Command, args []string) (string, error) {
 		"processTemplates", processingFlags.Templates,
 		"processYamlFunctions", processingFlags.Functions)
 
-	// Filter and list component values across stacks
+	// Filter and list component values across stacks.
 	output, err := l.FilterAndListValues(stacksMap, filterOptions)
 	if err != nil {
 		var noValuesErr *listerrors.NoValuesFoundError

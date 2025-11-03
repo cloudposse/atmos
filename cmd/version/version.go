@@ -2,19 +2,28 @@ package version
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var (
-	checkFlag     bool
-	versionFormat string
 	// AtmosConfigPtr will be set by SetAtmosConfig before command execution.
 	atmosConfigPtr *schema.AtmosConfiguration
+	// versionParser handles flag parsing with Viper precedence.
+	versionParser *flags.StandardParser
 )
+
+// VersionOptions contains parsed flags for the version command.
+type VersionOptions struct {
+	flags.GlobalFlags
+	Check  bool
+	Format string
+}
 
 // SetAtmosConfig sets the Atmos configuration for the version command.
 // This is called from root.go after atmosConfig is initialized.
@@ -29,16 +38,45 @@ var versionCmd = &cobra.Command{
 	Long:    `This command shows the version of the Atmos CLI you are currently running and checks if a newer version is available. Use this command to verify your installation and ensure you are up to date.`,
 	Example: "atmos version",
 	Args:    cobra.NoArgs,
-	RunE: func(c *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "version.RunE")()
 
-		return exec.NewVersionExec(atmosConfigPtr).Execute(checkFlag, versionFormat)
+		// Parse flags using new options pattern.
+		v := viper.New()
+		if err := versionParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		opts, err := parseVersionOptions(cmd, v, args)
+		if err != nil {
+			return err
+		}
+
+		return exec.NewVersionExec(atmosConfigPtr).Execute(opts.Check, opts.Format)
 	},
 }
 
+// parseVersionOptions parses command flags into VersionOptions.
+func parseVersionOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*VersionOptions, error) {
+	return &VersionOptions{
+		GlobalFlags: flags.ParseGlobalFlags(cmd, v),
+		Check:       v.GetBool("check"),
+		Format:      v.GetString("format"),
+	}, nil
+}
+
 func init() {
-	versionCmd.Flags().BoolVarP(&checkFlag, "check", "c", false, "Run additional checks after displaying version info")
-	versionCmd.Flags().StringVar(&versionFormat, "format", "", "Specify the output format")
+	// Create parser with version-specific flags using functional options.
+	versionParser = flags.NewStandardParser(
+		flags.WithBoolFlag("check", "c", false, "Run additional checks after displaying version info"),
+		flags.WithStringFlag("format", "", "", "Specify the output format"),
+		flags.WithEnvVars("check", "ATMOS_VERSION_CHECK"),
+		flags.WithEnvVars("format", "ATMOS_VERSION_FORMAT"),
+	)
+
+	// Register flags with command.
+	versionParser.RegisterFlags(versionCmd)
+	_ = versionParser.BindToViper(viper.GetViper())
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.

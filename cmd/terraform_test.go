@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudposse/atmos/pkg/flagparser"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -27,7 +27,7 @@ func TestTerraformRun1(t *testing.T) {
 			Short: "test",
 		}
 
-		interpreter := &flagparser.TerraformInterpreter{}
+		interpreter := &flags.TerraformOptions{}
 		terraformRun(cmd, cmd, interpreter)
 		return
 	}
@@ -60,7 +60,7 @@ func TestTerraformRun2(t *testing.T) {
 
 		cmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 
-		interpreter := &flagparser.TerraformInterpreter{}
+		interpreter := &flags.TerraformOptions{}
 		terraformRun(cmd, cmd, interpreter)
 		return
 	}
@@ -94,7 +94,7 @@ func TestTerraformRun3(t *testing.T) {
 		cmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 		cmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing terraform commands")
 
-		interpreter := &flagparser.TerraformInterpreter{}
+		interpreter := &flags.TerraformOptions{}
 		terraformRun(cmd, cmd, interpreter)
 		return
 	}

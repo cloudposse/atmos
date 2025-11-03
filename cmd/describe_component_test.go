@@ -20,9 +20,9 @@ func TestDescribeComponentCmd_Error(t *testing.T) {
 }
 
 func TestDescribeComponentCmd_ProvenanceFlag(t *testing.T) {
-	// Test that the --provenance flag is properly registered
-	// Use PersistentFlags() since that's where the flag is registered
-	provenanceFlag := describeComponentCmd.PersistentFlags().Lookup("provenance")
+	// Test that the --provenance flag is properly registered.
+	// Use Flags() since that's where the new flag parser registers flags.
+	provenanceFlag := describeComponentCmd.Flags().Lookup("provenance")
 	require.NotNil(t, provenanceFlag, "provenance flag should be registered")
 	assert.Equal(t, "bool", provenanceFlag.Value.Type(), "provenance flag should be a boolean")
 	assert.Equal(t, "false", provenanceFlag.DefValue, "provenance flag should default to false")
@@ -39,15 +39,15 @@ func TestDescribeComponentCmd_ProvenanceWithFormatJSON(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	// Reset flags for this test
-	describeComponentCmd.PersistentFlags().Set("stack", "plat-ue2-dev")
-	describeComponentCmd.PersistentFlags().Set("format", "json")
-	describeComponentCmd.PersistentFlags().Set("provenance", "true")
+	// Reset flags for this test.
+	describeComponentCmd.Flags().Set("stack", "plat-ue2-dev")
+	describeComponentCmd.Flags().Set("format", "json")
+	describeComponentCmd.Flags().Set("provenance", "true")
 
 	defer func() {
-		describeComponentCmd.PersistentFlags().Set("stack", "")
-		describeComponentCmd.PersistentFlags().Set("format", "yaml")
-		describeComponentCmd.PersistentFlags().Set("provenance", "false")
+		describeComponentCmd.Flags().Set("stack", "")
+		describeComponentCmd.Flags().Set("format", "yaml")
+		describeComponentCmd.Flags().Set("provenance", "false")
 	}()
 
 	// Note: JSON format with provenance should work (provenance is embedded in the data)
@@ -75,15 +75,15 @@ func TestDescribeComponentCmd_ProvenanceWithFileOutput(t *testing.T) {
 	tmpFile := filepath.Join(os.TempDir(), "test-provenance-output.yaml")
 	defer os.Remove(tmpFile)
 
-	// Reset flags for this test
-	describeComponentCmd.PersistentFlags().Set("stack", "plat-ue2-dev")
-	describeComponentCmd.PersistentFlags().Set("file", tmpFile)
-	describeComponentCmd.PersistentFlags().Set("provenance", "true")
+	// Reset flags for this test.
+	describeComponentCmd.Flags().Set("stack", "plat-ue2-dev")
+	describeComponentCmd.Flags().Set("file", tmpFile)
+	describeComponentCmd.Flags().Set("provenance", "true")
 
 	defer func() {
-		describeComponentCmd.PersistentFlags().Set("stack", "")
-		describeComponentCmd.PersistentFlags().Set("file", "")
-		describeComponentCmd.PersistentFlags().Set("provenance", "false")
+		describeComponentCmd.Flags().Set("stack", "")
+		describeComponentCmd.Flags().Set("file", "")
+		describeComponentCmd.Flags().Set("provenance", "false")
 	}()
 
 	err := describeComponentCmd.RunE(describeComponentCmd, []string{"vpc"})

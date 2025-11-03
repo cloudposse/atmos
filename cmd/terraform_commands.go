@@ -274,14 +274,8 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 	parentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing terraform commands")
 	parentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing terraform commands")
 	parentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing specific YAML functions in the Atmos stack manifests when executing terraform commands")
-	parentCmd.PersistentFlags().StringP("identity", "i", "", "Specify the identity to authenticate to before running Terraform commands. Use without value to interactively select.")
 
-	// Set NoOptDefVal to enable optional flag value for identity.
-	// When --identity is used without a value, it will receive IdentityFlagSelectValue.
-	if identityFlag := parentCmd.PersistentFlags().Lookup("identity"); identityFlag != nil {
-		identityFlag.NoOptDefVal = IdentityFlagSelectValue
-	}
-
+	// NOTE: Identity flag is registered via terraformParser.RegisterPersistentFlags() in terraform.go init().
 	// Register shell completion for identity flag.
 	AddIdentityCompletion(parentCmd)
 
@@ -323,7 +317,7 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 			handleHelpRequest(cmd, args)
 			// Heatmap is now tracked via persistent flag, no need for manual check.
 
-			// Parse args with flagparser.
+			// Parse args with flags.
 			// Returns strongly-typed TerraformInterpreter instead of weak map-based ParsedConfig.
 			ctx := cmd_.Context()
 			interpreter, err := terraformParser.Parse(ctx, args)

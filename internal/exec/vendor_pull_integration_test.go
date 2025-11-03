@@ -3,15 +3,78 @@ package exec
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
+
+// testExecuteVendorPullCmd is a test helper that wraps ExecuteVendorPullCmd for old-style tests.
+// It parses flags from cmd and converts them to StandardOptions.
+func testExecuteVendorPullCmd(cmd *cobra.Command, args []string) error {
+	cmdFlags := cmd.Flags()
+
+	// Parse flags from cmd
+	component, _ := cmdFlags.GetString("component")
+	stack, _ := cmdFlags.GetString("stack")
+	typ, _ := cmdFlags.GetString("type")
+	dryRun, _ := cmdFlags.GetBool("dry-run")
+	tagsStr, _ := cmdFlags.GetString("tags")
+	everything, _ := cmdFlags.GetBool("everything")
+
+	// Create StandardOptions
+	opts := &flags.StandardOptions{
+		Component:  component,
+		Stack:      stack,
+		Type:       typ,
+		DryRun:     dryRun,
+		Tags:       tagsStr,
+		Everything: everything,
+	}
+
+	return ExecuteVendorPullCmd(opts)
+}
+
+// testExecuteVendorPullCommand is a test helper for ExecuteVendorPullCommand.
+func testExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
+	cmdFlags := cmd.Flags()
+
+	// Parse flags from cmd
+	component, _ := cmdFlags.GetString("component")
+	stack, _ := cmdFlags.GetString("stack")
+	typ, _ := cmdFlags.GetString("type")
+	dryRun, _ := cmdFlags.GetBool("dry-run")
+	tagsStr, _ := cmdFlags.GetString("tags")
+	everything, _ := cmdFlags.GetBool("everything")
+
+	// Create StandardOptions
+	var tagsList []string
+	if tagsStr != "" {
+		tagsList = strings.Split(tagsStr, ",")
+	}
+
+	opts := &flags.StandardOptions{
+		Component:  component,
+		Stack:      stack,
+		Type:       typ,
+		DryRun:     dryRun,
+		Tags:       tagsStr,
+		Everything: everything,
+	}
+
+	// Set default for 'everything' if no specific flags are provided
+	if !opts.Everything && opts.Component == "" && opts.Stack == "" && len(tagsList) == 0 {
+		opts.Everything = true
+	}
+
+	return ExecuteVendorPullCommand(opts)
+}
 
 // TestVendorPullBasicExecution tests basic vendor pull command execution.
 // It verifies the command runs without errors using the vendor2 fixture.
@@ -37,7 +100,7 @@ func TestVendorPullBasicExecution(t *testing.T) {
 		Long:               "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources.",
 		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 		Args:               cobra.NoArgs,
-		RunE:               ExecuteVendorPullCmd,
+		RunE:               testExecuteVendorPullCmd,
 	}
 
 	cmd.DisableFlagParsing = false
@@ -102,7 +165,7 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 	flags.Bool("everything", false, "")
 
 	// Test 1: Execute vendor pull and verify files are created.
-	err := ExecuteVendorPullCommand(cmd, []string{})
+	err := testExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Failed to execute vendor pull command")
 
 	expectedFiles := []string{
@@ -144,7 +207,7 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 	err = flags.Set("dry-run", "true")
 	require.NoError(t, err, "Failed to set dry-run flag")
 
-	err = ExecuteVendorPullCommand(cmd, []string{})
+	err = testExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Dry run should execute without error")
 
 	// Test 3: Tag filtering should work.
@@ -154,7 +217,7 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 	err = flags.Set("tags", "demo")
 	require.NoError(t, err, "Failed to set tags flag")
 
-	err = ExecuteVendorPullCommand(cmd, []string{})
+	err = testExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Tag filtering should execute without error")
 }
 
@@ -188,7 +251,7 @@ func TestVendorPullTripleSlashNormalization(t *testing.T) {
 	flags.Bool("everything", false, "")
 
 	// Execute vendor pull command.
-	err := ExecuteVendorPullCommand(cmd, []string{})
+	err := testExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Vendor pull command with triple-slash URI should execute without error")
 
 	// Verify target directory was created.

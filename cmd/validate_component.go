@@ -1,25 +1,42 @@
 package cmd
 
 import (
-	log "github.com/cloudposse/atmos/pkg/logger"
+	"context"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
+
+var validateComponentParser = flags.NewStandardOptionsBuilder().
+	WithStack(true).
+	WithSchemaPath("").
+	WithSchemaType("").
+	WithModulePaths().
+	WithTimeout(0).
+	Build()
 
 // validateComponentCmd validates atmos components
 var validateComponentCmd = &cobra.Command{
-	Use:                "component",
-	Short:              "Validate an Atmos component in a stack using JSON Schema or OPA policies",
-	Long:               "This command validates an Atmos component within a stack using JSON Schema or OPA policies.",
-	ValidArgsFunction:  ComponentsArgCompletion,
+	Use:               "component",
+	Short:             "Validate an Atmos component in a stack using JSON Schema or OPA policies",
+	Long:              "This command validates an Atmos component within a stack using JSON Schema or OPA policies.",
+	ValidArgsFunction: ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
 		checkAtmosConfig()
 
-		component, stack, err := e.ExecuteValidateComponentCmd(cmd, args)
+		opts, err := validateComponentParser.Parse(context.Background(), args)
+		if err != nil {
+			return err
+		}
+
+		component, stack, err := e.ExecuteValidateComponentCmd(opts)
 		if err != nil {
 			return err
 		}
@@ -32,11 +49,9 @@ var validateComponentCmd = &cobra.Command{
 func init() {
 	validateComponentCmd.DisableFlagParsing = false
 
+	validateComponentParser.RegisterFlags(validateComponentCmd)
 	AddStackCompletion(validateComponentCmd)
-	validateComponentCmd.PersistentFlags().String("schema-path", "", "Specify the path to the schema file used for validating the component configuration in the given stack, supporting schema types like jsonschema or opa.")
-	validateComponentCmd.PersistentFlags().String("schema-type", "", "Validate the specified component configuration in the given stack using the provided schema file path and schema type (`jsonschema` or `opa`).")
-	validateComponentCmd.PersistentFlags().StringSlice("module-paths", nil, "Specify the paths to OPA policy modules or catalogs used for validating the component configuration in the given stack.")
-	validateComponentCmd.PersistentFlags().Int("timeout", 0, "Validation timeout in seconds")
+	_ = validateComponentParser.BindToViper(viper.GetViper())
 
 	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {
