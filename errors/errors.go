@@ -478,6 +478,8 @@ var (
 	ErrAIAgentNameEmpty             = errors.New("AI agent name cannot be empty")
 	ErrAIAgentNotFound              = errors.New("AI agent not found")
 	ErrAIAgentAlreadyRegistered     = errors.New("AI agent already registered")
+	ErrAIPromptRequired             = errors.New("prompt is required")
+	ErrAIExecutionFailed            = errors.New("AI execution failed")
 
 	// Web search errors.
 	ErrWebSearchFailed      = errors.New("web search request failed")

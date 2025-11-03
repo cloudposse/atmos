@@ -113,7 +113,7 @@ Examples:
 		}
 
 		if prompt == "" {
-			return exitWithError(1, "input_error", fmt.Errorf("no prompt provided: specify prompt as argument or pipe via stdin"))
+			return exitWithError(1, "input_error", fmt.Errorf("%w: specify prompt as argument or pipe via stdin", errUtils.ErrAIPromptRequired))
 		}
 
 		log.Debug("Executing AI prompt", "prompt", prompt, "format", format, "tools_enabled", !noTools)
@@ -180,12 +180,12 @@ Examples:
 			if result.Error != nil {
 				switch result.Error.Type {
 				case "tool_error":
-					return exitWithError(2, result.Error.Type, fmt.Errorf("%s", result.Error.Message))
+					return exitWithError(2, result.Error.Type, fmt.Errorf("%w: %s", errUtils.ErrAIToolExecutionFailed, result.Error.Message))
 				default:
-					return exitWithError(1, result.Error.Type, fmt.Errorf("%s", result.Error.Message))
+					return exitWithError(1, result.Error.Type, fmt.Errorf("%w: %s", errUtils.ErrAIExecutionFailed, result.Error.Message))
 				}
 			}
-			return exitWithError(1, "unknown_error", fmt.Errorf("execution failed"))
+			return exitWithError(1, "unknown_error", errUtils.ErrAIExecutionFailed)
 		}
 
 		return nil
