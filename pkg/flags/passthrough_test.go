@@ -526,3 +526,100 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 		})
 	}
 }
+
+// TestPassThroughFlagParser_EdgeCases tests edge cases that were previously tested
+// in the deleted extractIdentityFlag function to ensure we maintain test coverage.
+func TestPassThroughFlagParser_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name                        string
+		args                        []string
+		expectedIdentity            interface{}
+		expectedPassThroughArgs     []string
+		expectedPositionalArgs      []string
+		disablePositionalExtraction bool
+	}{
+		{
+			name:                        "short flag -i with space-separated value and --",
+			args:                        []string{"-i", "test-user", "--", "aws", "s3", "ls"},
+			expectedIdentity:            "test-user",
+			expectedPassThroughArgs:     []string{"aws", "s3", "ls"},
+			expectedPositionalArgs:      []string{},
+			disablePositionalExtraction: true,
+		},
+		{
+			name:                        "short flag -i without value before --",
+			args:                        []string{"-i", "--", "aws", "s3", "ls"},
+			expectedIdentity:            "__SELECT__", // NoOptDefVal triggers
+			expectedPassThroughArgs:     []string{"aws", "s3", "ls"},
+			expectedPositionalArgs:      []string{},
+			disablePositionalExtraction: true,
+		},
+		{
+			name:                        "identity equals empty string",
+			args:                        []string{"--identity=", "--", "echo", "hello"},
+			expectedIdentity:            "", // Empty string is treated as explicit empty value, not NoOptDefVal
+			expectedPassThroughArgs:     []string{"echo", "hello"},
+			expectedPositionalArgs:      []string{},
+			disablePositionalExtraction: true,
+		},
+		{
+			name:                        "no double dash with identity equals value",
+			args:                        []string{"--identity=test-user", "terraform", "plan"},
+			expectedIdentity:            "test-user",
+			expectedPassThroughArgs:     []string{"terraform", "plan"},
+			expectedPositionalArgs:      []string{},
+			disablePositionalExtraction: true,
+		},
+		{
+			name:                        "identity flag at end without value",
+			args:                        []string{"echo", "hello", "--identity"},
+			expectedIdentity:            "__SELECT__",
+			expectedPassThroughArgs:     []string{"echo", "hello"},
+			expectedPositionalArgs:      []string{},
+			disablePositionalExtraction: true,
+		},
+		{
+			name:                        "only identity flag without command",
+			args:                        []string{"--identity"},
+			expectedIdentity:            "__SELECT__",
+			expectedPassThroughArgs:     []string{}, // Parser returns empty slice, not nil
+			expectedPositionalArgs:      []string{},
+			disablePositionalExtraction: true,
+		},
+		{
+			name:                        "short flag -i with equals syntax",
+			args:                        []string{"-i=test-user", "--", "aws", "s3", "ls"},
+			expectedIdentity:            "test-user",
+			expectedPassThroughArgs:     []string{"aws", "s3", "ls"},
+			expectedPositionalArgs:      []string{},
+			disablePositionalExtraction: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewPassThroughFlagParser(
+				WithStringFlag("identity", "i", "", "Identity flag"),
+			)
+
+			// Set NoOptDefVal for identity flag (like auth commands do).
+			registry := parser.GetRegistry()
+			if identityFlag := registry.Get("identity"); identityFlag != nil {
+				if sf, ok := identityFlag.(*StringFlag); ok {
+					sf.NoOptDefVal = "__SELECT__"
+				}
+			}
+
+			if tt.disablePositionalExtraction {
+				parser.DisablePositionalExtraction()
+			}
+
+			result, err := parser.Parse(context.Background(), tt.args)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.expectedIdentity, result.Flags["identity"], "identity flag mismatch")
+			assert.Equal(t, tt.expectedPassThroughArgs, result.PassThroughArgs, "PassThroughArgs mismatch")
+			assert.Equal(t, tt.expectedPositionalArgs, result.PositionalArgs, "PositionalArgs mismatch")
+		})
+	}
+}
