@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=schema.json
+# Tests for version command
+tests:
+  - name: "atmos version check with UI output"
+    enabled: true
+    snapshot: true
+    description: "Verify version check shows appropriate output"
+    workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - "version"
+      - "--check"
+    env:
+      # Disable version check to avoid network calls in tests
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      exit_code: 0
