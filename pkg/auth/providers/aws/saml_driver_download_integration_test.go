@@ -10,6 +10,8 @@ import (
 	"github.com/playwright-community/playwright-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/versent/saml2aws/v2/pkg/cfg"
+	"github.com/versent/saml2aws/v2/pkg/creds"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -371,6 +373,10 @@ func TestPlaywrightDriverDownload_ConfigMapping(t *testing.T) {
 	assert.Equal(t, "alice@example.com", loginDetails.Username)
 	assert.Equal(t, "secret123", loginDetails.Password)
 	assert.True(t, loginDetails.DownloadBrowser)
+
+	// Verify type compatibility with saml2aws.
+	assert.IsType(t, &cfg.IDPAccount{}, samlConfig, "samlConfig should be *cfg.IDPAccount")
+	assert.IsType(t, &creds.LoginDetails{}, loginDetails, "loginDetails should be *creds.LoginDetails")
 
 	t.Log("Config mapping validated successfully")
 }
