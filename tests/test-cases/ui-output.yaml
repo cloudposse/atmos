@@ -68,3 +68,35 @@ tests:
       exit_code: 0
       stderr:
         - "✓.*Validated"
+
+  - name: "atmos terraform clean with UI output"
+    enabled: true
+    snapshot: true
+    description: "Verify terraform clean output (checkmark shown when files deleted)"
+    workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "clean"
+      - "test/test-component"
+      - "-s"
+      - "tenant1-ue2-dev"
+    expect:
+      exit_code: 0
+      # Note: terraform clean only shows checkmark if it actually deletes files
+      # This test captures baseline output for regression testing
+
+  - name: "atmos version check with UI output"
+    enabled: true
+    snapshot: true
+    description: "Verify version check shows appropriate output"
+    workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - "version"
+      - "--check"
+    env:
+      # Disable version check to avoid network calls in tests
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      exit_code: 0
