@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -13,12 +14,18 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var SupportedFormats = []string{"json", "bash", "dotenv"}
+
+var authEnvParser = flags.NewStandardOptionsBuilder().
+	WithFormat("bash").
+	WithLogin().
+	Build()
 
 // authEnvCmd exports authentication environment variables.
 var authEnvCmd = &cobra.Command{
@@ -27,22 +34,24 @@ var authEnvCmd = &cobra.Command{
 	Long:  "Outputs environment variables for the assumed identity, suitable for use by external tools such as Terraform or Helm.",
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get output format
-		format, _ := cmd.Flags().GetString("format")
-		if !slices.Contains(SupportedFormats, format) {
-			return fmt.Errorf("%w invalid format: %s", errUtils.ErrInvalidArgumentError, format)
+		// Parse flags using StandardOptions.
+		opts, err := authEnvParser.Parse(context.Background(), args)
+		if err != nil {
+			return err
 		}
 
-		// Get login flag
-		login, _ := cmd.Flags().GetBool("login")
+		// Validate format.
+		if !slices.Contains(SupportedFormats, opts.Format) {
+			return fmt.Errorf("%w invalid format: %s", errUtils.ErrInvalidArgumentError, opts.Format)
+		}
 
-		// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
+		// Load atmos configuration (processStacks=false since auth commands don't require stack manifests).
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		if err != nil {
 			return fmt.Errorf("failed to load atmos config: %w", err)
 		}
 
-		// Create auth manager
+		// Create auth manager.
 		authManager, err := createAuthManager(&atmosConfig.Auth)
 		if err != nil {
 			return fmt.Errorf("failed to create auth manager: %w", err)
@@ -65,7 +74,7 @@ var authEnvCmd = &cobra.Command{
 
 		var envVars map[string]string
 
-		if login {
+		if opts.Login {
 			// Try to use cached credentials first (passive check, no prompts).
 			// Only authenticate if cached credentials are not available or expired.
 			ctx := cmd.Context()
@@ -100,7 +109,7 @@ var authEnvCmd = &cobra.Command{
 			}
 		}
 
-		switch format {
+		switch opts.Format {
 		case "json":
 			return outputEnvAsJSON(&atmosConfig, envVars)
 		case "bash":
@@ -145,7 +154,7 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 
 	for _, key := range keys {
 		value := envVars[key]
-		// Use the same safe single-quoted escaping as bash output
+		// Use the same safe single-quoted escaping as bash output.
 		safe := strings.ReplaceAll(value, "'", "'\\''")
 		fmt.Printf("%s='%s'\n", key, safe)
 	}
@@ -153,15 +162,11 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 }
 
 func init() {
-	authEnvCmd.Flags().StringP("format", "f", "bash", "Output format: bash, json, dotenv.")
-	authEnvCmd.Flags().Bool("login", false, "Trigger authentication if credentials are missing or expired (default: false)")
+	// Register StandardOptions flags.
+	authEnvParser.RegisterFlags(authEnvCmd)
+	_ = authEnvParser.BindToViper(viper.GetViper())
 
-	if err := viper.BindEnv("auth_env_format", "ATMOS_AUTH_ENV_FORMAT"); err != nil {
-		log.Trace("Failed to bind auth_env_format environment variable", "error", err)
-	}
-	if err := viper.BindPFlag("auth_env_format", authEnvCmd.Flags().Lookup("format")); err != nil {
-		log.Trace("Failed to bind auth_env_format flag", "error", err)
-	}
+	// Register flag completion for format.
 	if err := authEnvCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return SupportedFormats, cobra.ShellCompDirectiveNoFileComp
 	}); err != nil {

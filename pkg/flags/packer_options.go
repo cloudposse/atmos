@@ -12,10 +12,10 @@ import (
 // Example usage:
 //
 //	parser := flagparser.NewPackerParser()
-//	interpreter := flagparser.ParsePackerFlags(cmd, viper.GetViper(), positionalArgs, passThroughArgs)
+//	opts := flagparser.ParsePackerFlags(cmd, viper.GetViper(), positionalArgs, passThroughArgs)
 //
 //	// Type-safe access to flags:
-//	if interpreter.Stack == "" {
+//	if opts.Stack == "" {
 //	    return errors.New("stack is required")
 //	}
 //

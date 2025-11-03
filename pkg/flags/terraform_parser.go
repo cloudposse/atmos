@@ -75,6 +75,6 @@ func (p *TerraformParser) Parse(ctx context.Context, args []string) (*TerraformO
 	}
 
 	// Convert to strongly-typed interpreter.
-	interpreter := parsedConfig.ToTerraformOptions()
-	return &interpreter, nil
+	opts := parsedConfig.ToTerraformOptions()
+	return &opts, nil
 }

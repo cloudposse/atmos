@@ -43,26 +43,26 @@ func packerRun(cmd *cobra.Command, commandName string, args []string) error {
 
 	// Parse args with flagparser
 	ctx := cmd.Context()
-	interpreter, err := packerParser.Parse(ctx, args)
+	opts, err := packerParser.Parse(ctx, args)
 	if err != nil {
 		return err
 	}
 
 	// Build args array from interpreter for getConfigAndStacksInfo
 	// PositionalArgs contains [component] for packer commands
-	fullArgs := append([]string{commandName}, interpreter.GetPositionalArgs()...)
-	fullArgs = append(fullArgs, interpreter.GetPassThroughArgs()...)
+	fullArgs := append([]string{commandName}, opts.GetPositionalArgs()...)
+	fullArgs = append(fullArgs, opts.GetPassThroughArgs()...)
 
 	info := getConfigAndStacksInfo("packer", cmd, fullArgs)
 
 	// Use strongly-typed interpreter fields - no runtime assertions!
-	info.Stack = interpreter.Stack
-	info.Identity = interpreter.Identity.Value()
-	info.DryRun = interpreter.DryRun
+	info.Stack = opts.Stack
+	info.Identity = opts.Identity.Value()
+	info.DryRun = opts.DryRun
 
 	// Handle --identity flag for interactive selection.
 	// If identity is "__SELECT__", prompt for interactive selection.
-	if interpreter.Identity.IsInteractiveSelector() {
+	if opts.Identity.IsInteractiveSelector() {
 		handleInteractiveIdentitySelection(&info)
 	}
 

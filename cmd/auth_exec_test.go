@@ -84,7 +84,7 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 			testCmd.SetErr(&buf)
 
 			// Call the core business logic directly, bypassing handleHelpRequest and checkAtmosConfig.
-			err := executeAuthExecCommandCore(testCmd, tt.args)
+			err := executeAuthExecCommandCore(tt.args)
 
 			if tt.expectedError != "" {
 				assert.Error(t, err)

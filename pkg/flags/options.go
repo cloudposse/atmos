@@ -193,17 +193,18 @@ func WithEnvVars(flagName string, envVars ...string) Option {
 			return
 		}
 
-		// Update the flag with env vars based on type
+		// Update the flag with env vars based on type.
+		// Note: No need to re-register - the flag is already in the registry.
+		// We're just updating its EnvVars field in place.
 		switch f := flag.(type) {
 		case *StringFlag:
 			f.EnvVars = envVars
-			cfg.registry.Register(f)
 		case *BoolFlag:
 			f.EnvVars = envVars
-			cfg.registry.Register(f)
 		case *IntFlag:
 			f.EnvVars = envVars
-			cfg.registry.Register(f)
+		case *StringSliceFlag:
+			f.EnvVars = envVars
 		}
 	}
 }
@@ -222,7 +223,7 @@ func WithNoOptDefVal(flagName, value string) Option {
 		flag := cfg.registry.Get(flagName)
 		if strFlag, ok := flag.(*StringFlag); ok {
 			strFlag.NoOptDefVal = value
-			cfg.registry.Register(strFlag)
+			// Note: No need to re-register - we're just updating the field in place.
 		}
 	}
 }

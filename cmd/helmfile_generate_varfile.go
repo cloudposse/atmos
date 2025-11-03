@@ -1,13 +1,22 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 )
 
-// helmfileGenerateVarfileCmd generates varfile for a helmfile component
+var helmfileGenerateVarfileParser = flags.NewStandardOptionsBuilder().
+	WithStack(true). // Required.
+	WithFile().
+	Build()
+
+// helmfileGenerateVarfileCmd generates varfile for a helmfile component.
 var helmfileGenerateVarfileCmd = &cobra.Command{
 	Use:               "varfile",
 	Short:             "Generate a values file for a Helmfile component",
@@ -15,21 +24,35 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 	ValidArgsFunction: ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
-		// Check Atmos configuration
+		// Check Atmos configuration.
 		checkAtmosConfig()
 
-		err := e.ExecuteHelmfileGenerateVarfileCmd(cmd, args)
+		// Parse flags using StandardOptions.
+		_, err := helmfileGenerateVarfileParser.Parse(context.Background(), args)
+		if err != nil {
+			return err
+		}
+
+		// Validate component argument.
+		if len(args) != 1 {
+			return errUtils.ErrInvalidArgumentError
+		}
+
+		// Call original implementation with cmd (it needs cmd for other flags like process-templates).
+		err = e.ExecuteHelmfileGenerateVarfileCmd(cmd, args)
 		return err
 	},
 }
 
 func init() {
 	helmfileGenerateVarfileCmd.DisableFlagParsing = false
-	AddStackCompletion(helmfileGenerateVarfileCmd)
-	helmfileGenerateVarfileCmd.PersistentFlags().StringP("file", "f", "", "Generate a variables file for the specified Helmfile component in the given stack and write the output to the provided file path.")
 
-	err := helmfileGenerateVarfileCmd.MarkPersistentFlagRequired("stack")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	// Register StandardOptions flags.
+	helmfileGenerateVarfileParser.RegisterFlags(helmfileGenerateVarfileCmd)
+	_ = helmfileGenerateVarfileParser.BindToViper(viper.GetViper())
+
+	// Add stack completion.
+	AddStackCompletion(helmfileGenerateVarfileCmd)
 
 	helmfileGenerateCmd.AddCommand(helmfileGenerateVarfileCmd)
 }

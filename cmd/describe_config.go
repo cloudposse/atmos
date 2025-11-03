@@ -1,28 +1,30 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+var describeConfigParser = flags.NewStandardOptionsBuilder().
+	WithFormat("json").
+	WithQuery().
+	Build()
+
 // describeComponentCmd describes configuration for components
 var describeConfigCmd = &cobra.Command{
-	Use:                "config",
-	Short:              "Display the final merged CLI configuration",
-	Long:               "This command displays the final, deep-merged CLI configuration after combining all relevant configuration files.",
-	Args:               cobra.NoArgs,
+	Use:   "config",
+	Short: "Display the final merged CLI configuration",
+	Long:  "This command displays the final, deep-merged CLI configuration after combining all relevant configuration files.",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		flags := cmd.Flags()
-
-		format, err := flags.GetString("format")
-		if err != nil {
-			return err
-		}
-
-		query, err := flags.GetString("query")
+		opts, err := describeConfigParser.Parse(context.Background(), args)
 		if err != nil {
 			return err
 		}
@@ -34,14 +36,15 @@ var describeConfigCmd = &cobra.Command{
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 
-		err = e.NewDescribeConfig(&atmosConfig).ExecuteDescribeConfigCmd(query, format, "")
+		err = e.NewDescribeConfig(&atmosConfig).ExecuteDescribeConfigCmd(opts.Query, opts.Format, "")
 		return err
 	},
 }
 
 func init() {
 	describeConfigCmd.DisableFlagParsing = false
-	describeConfigCmd.PersistentFlags().StringP("format", "f", "json", "The output format")
+	describeConfigParser.RegisterFlags(describeConfigCmd)
+	_ = describeConfigParser.BindToViper(viper.GetViper())
 
 	describeCmd.AddCommand(describeConfigCmd)
 }

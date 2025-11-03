@@ -26,21 +26,24 @@ func TestFlagRegistry_Register(t *testing.T) {
 	assert.Equal(t, flag, registry.Get("test"))
 }
 
-func TestFlagRegistry_RegisterReplaces(t *testing.T) {
+func TestFlagRegistry_RegisterPanicsOnDuplicate(t *testing.T) {
 	registry := NewFlagRegistry()
 
 	flag1 := &StringFlag{Name: "test", Default: "first"}
 	registry.Register(flag1)
 
+	// Attempting to register the same flag name twice should panic.
 	flag2 := &StringFlag{Name: "test", Default: "second"}
-	registry.Register(flag2)
+	assert.Panics(t, func() {
+		registry.Register(flag2)
+	})
 
-	// Should have only one flag (replaced)
+	// Should still have only one flag (the first one)
 	assert.Equal(t, 1, registry.Count())
 
 	retrieved := registry.Get("test")
 	stringFlag := retrieved.(*StringFlag)
-	assert.Equal(t, "second", stringFlag.Default)
+	assert.Equal(t, "first", stringFlag.Default)
 }
 
 func TestFlagRegistry_Get(t *testing.T) {

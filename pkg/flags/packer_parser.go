@@ -55,7 +55,7 @@ func (p *PackerParser) Parse(ctx context.Context, args []string) (*PackerOptions
 	}
 
 	// Convert to strongly-typed interpreter.
-	interpreter := PackerOptions{
+	opts := PackerOptions{
 		GlobalFlags: GlobalFlags{
 			Chdir:           getString(parsedConfig.Flags, "chdir"),
 			BasePath:        getString(parsedConfig.Flags, "base-path"),
@@ -83,7 +83,7 @@ func (p *PackerParser) Parse(ctx context.Context, args []string) (*PackerOptions
 		passThroughArgs: parsedConfig.PassThroughArgs,
 	}
 
-	return &interpreter, nil
+	return &opts, nil
 }
 
 // RegisterPersistentFlags adds Packer flags to the Cobra command as persistent flags (inherited by subcommands).

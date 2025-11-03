@@ -9,12 +9,14 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authList "github.com/cloudposse/atmos/pkg/auth/list"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -27,6 +29,12 @@ const (
 	providersKey  = "providers"
 	identitiesKey = "identities"
 )
+
+var authListParser = flags.NewStandardOptionsBuilder().
+	WithFormat("tree", []string{"table", "tree", "json", "yaml", "graphviz", "mermaid", "markdown"}...).
+	WithProviders().
+	WithIdentities().
+	Build()
 
 // authListCmd lists authentication providers and identities.
 var authListCmd = &cobra.Command{
@@ -41,20 +49,17 @@ Supports multiple output formats:
 - **graphviz**: DOT format for Graphviz visualization
 - **mermaid**: Mermaid diagram syntax for rendering in compatible tools
 - **markdown**: Markdown document with embedded Mermaid diagram`,
-	Example:            authListUsageMarkdown,
-	ValidArgsFunction:  cobra.NoFileCompletions,
-	RunE:               executeAuthListCommand,
+	Example:           authListUsageMarkdown,
+	ValidArgsFunction: cobra.NoFileCompletions,
+	RunE:              executeAuthListCommand,
 }
 
 func init() {
 	defer perf.Track(nil, "cmd.init.authListCmd")()
 
-	// Format flag.
-	authListCmd.Flags().StringP("format", "f", "tree", "Output format: tree, table, json, yaml, graphviz, mermaid, markdown")
-
-	// Filter flags with optional string values.
-	authListCmd.Flags().String("providers", "", "Show only providers (optionally filter by name: --providers=aws-sso,okta)")
-	authListCmd.Flags().String("identities", "", "Show only identities (optionally filter by name: --identities=admin,dev)")
+	// Register StandardOptions flags.
+	authListParser.RegisterFlags(authListCmd)
+	_ = authListParser.BindToViper(viper.GetViper())
 
 	// Register flag completion functions.
 	if err := authListCmd.RegisterFlagCompletionFunc("format", formatFlagCompletion); err != nil {
@@ -129,8 +134,14 @@ func executeAuthListCommand(cmd *cobra.Command, args []string) error {
 
 	handleHelpRequest(cmd, args)
 
+	// Parse flags using StandardOptions.
+	opts, err := authListParser.Parse(cmd.Context(), args)
+	if err != nil {
+		return err
+	}
+
 	// Parse and validate filters.
-	filters, err := parseFilterFlags(cmd)
+	filters, err := parseFilterFlags(opts)
 	if err != nil {
 		return err
 	}
@@ -151,11 +162,8 @@ func executeAuthListCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Get output format.
-	format, _ := cmd.Flags().GetString("format")
-
 	// Route to appropriate formatter.
-	output, err := renderOutput(authManager, filteredProviders, filteredIdentities, format)
+	output, err := renderOutput(authManager, filteredProviders, filteredIdentities, opts.Format)
 	if err != nil {
 		return err
 	}
@@ -166,14 +174,14 @@ func executeAuthListCommand(cmd *cobra.Command, args []string) error {
 }
 
 // parseFilterFlags parses and validates filter flags.
-func parseFilterFlags(cmd *cobra.Command) (*filterConfig, error) {
+func parseFilterFlags(opts *flags.StandardOptions) (*filterConfig, error) {
 	defer perf.Track(nil, "cmd.parseFilterFlags")()
 
-	providersFlag, _ := cmd.Flags().GetString(providersKey)
-	identitiesFlag, _ := cmd.Flags().GetString(identitiesKey)
+	providersFlag := opts.Providers
+	identitiesFlag := opts.Identities
 
-	hasProvidersFlag := cmd.Flags().Changed(providersKey)
-	hasIdentitiesFlag := cmd.Flags().Changed(identitiesKey)
+	hasProvidersFlag := providersFlag != ""
+	hasIdentitiesFlag := identitiesFlag != ""
 
 	// Validate mutual exclusivity.
 	if hasProvidersFlag && hasIdentitiesFlag {

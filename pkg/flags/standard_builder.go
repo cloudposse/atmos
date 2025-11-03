@@ -1,6 +1,9 @@
 package flags
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -8,7 +11,7 @@ import (
 // with strongly-typed flag definitions that map directly to StandardOptions fields.
 //
 // Benefits:
-//   - Compile-time guarantee that flags map to interpreter fields
+//   - Compile-time guarantee that flags map to StandardOptions fields
 //   - Refactoring-safe: renaming struct fields updates flag definitions
 //   - Clear intent: method names match struct field names
 //   - Testable: each method can be unit tested independently
@@ -21,9 +24,9 @@ import (
 //	    WithQuery().            // Optional query flag → .Query field
 //	    Build()
 //
-//	interpreter, _ := parser.Parse(ctx, args)
-//	fmt.Println(interpreter.Stack)   // Type-safe!
-//	fmt.Println(interpreter.Format)  // Type-safe!
+//	opts, _ := parser.Parse(ctx, args)
+//	fmt.Println(opts.Stack)   // Type-safe!
+//	fmt.Println(opts.Format)  // Type-safe!
 type StandardOptionsBuilder struct {
 	options []Option
 }
@@ -67,14 +70,32 @@ func (b *StandardOptionsBuilder) WithComponent(required bool) *StandardOptionsBu
 	return b
 }
 
-// WithFormat adds the format flag with specified default value.
+// WithFormat adds the format flag with specified default value and optional valid values.
 // Maps to StandardOptions.Format field.
 //
 // Parameters:
-//   - defaultValue: default format (e.g., "yaml", "json")
-func (b *StandardOptionsBuilder) WithFormat(defaultValue string) *StandardOptionsBuilder {
-	b.options = append(b.options, WithStringFlag("format", "f", defaultValue, "Output format"))
+//   - defaultValue: default format (e.g., "yaml", "json", "table")
+//   - validFormats: optional list of valid format values for help text (e.g., []string{"json", "yaml"})
+//
+// Example:
+//
+//	WithFormat("yaml", []string{"json", "yaml"})  // describe stacks
+//	WithFormat("table", []string{"table", "tree", "json", "yaml", "graphviz", "mermaid", "markdown"})  // auth list
+//	WithFormat("json")  // backward compatible - no validation list
+func (b *StandardOptionsBuilder) WithFormat(defaultValue string, validFormats ...string) *StandardOptionsBuilder {
+	description := "Output format"
+	if len(validFormats) > 0 {
+		description = fmt.Sprintf("Output format (valid: %s)", strings.Join(validFormats, ", "))
+	}
+	b.options = append(b.options, WithStringFlag("format", "f", defaultValue, description))
 	b.options = append(b.options, WithEnvVars("format", "ATMOS_FORMAT"))
+
+	// Add validation for valid formats if provided.
+	// TODO: Implement WithValidValues for validation.
+	// if len(validFormats) > 0 {
+	// 	b.options = append(b.options, WithValidValues("format", validFormats))
+	// }
+
 	return b
 }
 
@@ -294,5 +315,147 @@ func (b *StandardOptionsBuilder) Build() *StandardParser {
 func (b *StandardOptionsBuilder) WithEverything() *StandardOptionsBuilder {
 	b.options = append(b.options, WithBoolFlag("everything", "", false, "Vendor all components"))
 	b.options = append(b.options, WithEnvVars("everything", "ATMOS_EVERYTHING"))
+	return b
+}
+
+// WithRef adds the ref flag for Git reference comparison.
+func (b *StandardOptionsBuilder) WithRef(defaultValue string) *StandardOptionsBuilder {
+	b.options = append(b.options, WithStringFlag("ref", "", defaultValue, "Git reference for comparison"))
+	b.options = append(b.options, WithEnvVars("ref", "ATMOS_REF"))
+	return b
+}
+
+// WithSha adds the sha flag for Git commit SHA comparison.
+func (b *StandardOptionsBuilder) WithSha(defaultValue string) *StandardOptionsBuilder {
+	b.options = append(b.options, WithStringFlag("sha", "", defaultValue, "Git commit SHA for comparison"))
+	b.options = append(b.options, WithEnvVars("sha", "ATMOS_SHA"))
+	return b
+}
+
+// WithRepoPath adds the repo-path flag for target repository path.
+func (b *StandardOptionsBuilder) WithRepoPath(defaultValue string) *StandardOptionsBuilder {
+	b.options = append(b.options, WithStringFlag("repo-path", "", defaultValue, "Path to cloned target repository"))
+	b.options = append(b.options, WithEnvVars("repo-path", "ATMOS_REPO_PATH"))
+	return b
+}
+
+// WithSSHKey adds the ssh-key flag for SSH private key path.
+func (b *StandardOptionsBuilder) WithSSHKey(defaultValue string) *StandardOptionsBuilder {
+	b.options = append(b.options, WithStringFlag("ssh-key", "", defaultValue, "Path to SSH private key"))
+	b.options = append(b.options, WithEnvVars("ssh-key", "ATMOS_SSH_KEY"))
+	return b
+}
+
+// WithSSHKeyPassword adds the ssh-key-password flag.
+func (b *StandardOptionsBuilder) WithSSHKeyPassword(defaultValue string) *StandardOptionsBuilder {
+	b.options = append(b.options, WithStringFlag("ssh-key-password", "", defaultValue, "Password for encrypted SSH key"))
+	b.options = append(b.options, WithEnvVars("ssh-key-password", "ATMOS_SSH_KEY_PASSWORD"))
+	return b
+}
+
+// WithIncludeSpaceliftAdminStacks adds the include-spacelift-admin-stacks flag.
+func (b *StandardOptionsBuilder) WithIncludeSpaceliftAdminStacks() *StandardOptionsBuilder {
+	b.options = append(b.options, WithBoolFlag("include-spacelift-admin-stacks", "", false, "Include Spacelift admin stacks"))
+	b.options = append(b.options, WithEnvVars("include-spacelift-admin-stacks", "ATMOS_INCLUDE_SPACELIFT_ADMIN_STACKS"))
+	return b
+}
+
+// WithIncludeDependents adds the include-dependents flag.
+func (b *StandardOptionsBuilder) WithIncludeDependents() *StandardOptionsBuilder {
+	b.options = append(b.options, WithBoolFlag("include-dependents", "", false, "Include dependent components"))
+	b.options = append(b.options, WithEnvVars("include-dependents", "ATMOS_INCLUDE_DEPENDENTS"))
+	return b
+}
+
+// WithIncludeSettings adds the include-settings flag.
+func (b *StandardOptionsBuilder) WithIncludeSettings() *StandardOptionsBuilder {
+	b.options = append(b.options, WithBoolFlag("include-settings", "", false, "Include settings section"))
+	b.options = append(b.options, WithEnvVars("include-settings", "ATMOS_INCLUDE_SETTINGS"))
+	return b
+}
+
+// WithUpload adds the upload flag for HTTP endpoint upload.
+func (b *StandardOptionsBuilder) WithUpload() *StandardOptionsBuilder {
+	b.options = append(b.options, WithBoolFlag("upload", "", false, "Upload to HTTP endpoint"))
+	b.options = append(b.options, WithEnvVars("upload", "ATMOS_UPLOAD"))
+	return b
+}
+
+// WithCloneTargetRef adds the clone-target-ref flag.
+func (b *StandardOptionsBuilder) WithCloneTargetRef() *StandardOptionsBuilder {
+	b.options = append(b.options, WithBoolFlag("clone-target-ref", "", false, "Clone target ref instead of checkout"))
+	b.options = append(b.options, WithEnvVars("clone-target-ref", "ATMOS_CLONE_TARGET_REF"))
+	return b
+}
+
+// WithVerbose adds the verbose flag (deprecated).
+func (b *StandardOptionsBuilder) WithVerbose() *StandardOptionsBuilder {
+	b.options = append(b.options, WithBoolFlag("verbose", "", false, "Deprecated. Use --logs-level=Debug"))
+	b.options = append(b.options, WithEnvVars("verbose", "ATMOS_VERBOSE"))
+	return b
+}
+
+// WithExcludeLocked adds the exclude-locked flag.
+func (b *StandardOptionsBuilder) WithExcludeLocked() *StandardOptionsBuilder {
+	b.options = append(b.options, WithBoolFlag("exclude-locked", "", false, "Exclude locked components"))
+	b.options = append(b.options, WithEnvVars("exclude-locked", "ATMOS_EXCLUDE_LOCKED"))
+	return b
+}
+
+// WithComponents adds the components flag for filtering by specific components.
+// Maps to StandardOptions.Components field.
+func (b *StandardOptionsBuilder) WithComponents() *StandardOptionsBuilder {
+	b.options = append(b.options, func(cfg *parserConfig) {
+		cfg.registry.Register(&StringSliceFlag{
+			Name:        "components",
+			Shorthand:   "",
+			Default:     []string{},
+			Description: "Filter by specific components",
+			EnvVars:     []string{"ATMOS_COMPONENTS"},
+		})
+	})
+	return b
+}
+
+// WithComponentTypes adds the component-types flag for filtering by component types.
+// Maps to StandardOptions.ComponentTypes field.
+func (b *StandardOptionsBuilder) WithComponentTypes() *StandardOptionsBuilder {
+	b.options = append(b.options, func(cfg *parserConfig) {
+		cfg.registry.Register(&StringSliceFlag{
+			Name:        "component-types",
+			Shorthand:   "",
+			Default:     []string{},
+			Description: "Filter by component types (terraform, helmfile)",
+			EnvVars:     []string{"ATMOS_COMPONENT_TYPES"},
+		})
+	})
+	return b
+}
+
+// WithOutput adds the output flag for output type selection with optional validation.
+// Maps to StandardOptions.Output field.
+//
+// Parameters:
+//   - defaultValue: default output type (e.g., "list", "map")
+//   - validOutputs: optional list of valid output values for validation (e.g., []string{"list", "map", "all"})
+//
+// Example:
+//
+//	WithOutput("list", []string{"list", "map", "all"})  // describe workflows
+//	WithOutput("table")  // backward compatible - no validation list
+func (b *StandardOptionsBuilder) WithOutput(defaultValue string, validOutputs ...string) *StandardOptionsBuilder {
+	description := "Output type"
+	if len(validOutputs) > 0 {
+		description = fmt.Sprintf("Output type (valid: %s)", strings.Join(validOutputs, ", "))
+	}
+	b.options = append(b.options, WithStringFlag("output", "o", defaultValue, description))
+	b.options = append(b.options, WithEnvVars("output", "ATMOS_OUTPUT"))
+
+	// Add validation for valid outputs if provided.
+	// TODO: Implement WithValidValues for validation.
+	// if len(validOutputs) > 0 {
+	// 	b.options = append(b.options, WithValidValues("output", validOutputs))
+	// }
+
 	return b
 }

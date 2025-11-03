@@ -13,9 +13,13 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// authExecParser handles flag parsing for auth exec command.
+var authExecParser = flags.NewAuthExecParser()
 
 // authExecCmd executes a command with authentication environment variables.
 var authExecCmd = &cobra.Command{
@@ -24,11 +28,8 @@ var authExecCmd = &cobra.Command{
 	Long:  "Execute a command with the authenticated identity's environment variables set. Use `--` to separate Atmos flags from the command's native arguments.",
 	Example: `  # Run terraform with the authenticated identity
   atmos auth exec -- terraform plan -var-file=env.tfvars`,
-	Args:               cobra.MinimumNArgs(1),
-	DisableFlagParsing: true,
-
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	RunE:               executeAuthExecCommand,
+	Args: cobra.ArbitraryArgs,
+	RunE: executeAuthExecCommand,
 }
 
 // executeAuthExecCommand is the main execution function for auth exec command.
@@ -36,50 +37,45 @@ func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 	checkAtmosConfig()
 
-	return executeAuthExecCommandCore(cmd, args)
+	return executeAuthExecCommandCore(args)
 }
 
 // executeAuthExecCommandCore contains the core business logic for auth exec, separated for testability.
-func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
-	// Manually parse flags since DisableFlagParsing is true.
-	if err := cmd.Flags().Parse(args); err != nil {
+func executeAuthExecCommandCore(args []string) error {
+	// Parse args with the parser.
+	ctx := context.Background()
+	opts, err := authExecParser.Parse(ctx, args)
+	if err != nil {
 		return fmt.Errorf("%w: %v", errUtils.ErrInvalidSubcommand, err)
 	}
-	// Get the non-flag arguments (the actual command to execute).
-	commandArgs := cmd.Flags().Args()
+
+	// Get the command to execute (positional + pass-through args).
+	commandArgs := append(opts.GetPositionalArgs(), opts.GetPassThroughArgs()...)
 
 	// Validate command args before attempting authentication.
 	if len(commandArgs) == 0 {
 		return errors.Join(errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
 	}
 
-	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
+	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests).
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
 
-	// Create auth manager
+	// Create auth manager.
 	authManager, err := createAuthManager(&atmosConfig.Auth)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Get identity from flag or use default.
-	// Check if flag was explicitly set by user to ensure command-line precedence.
-	var identityName string
-	if cmd.Flags().Changed(IdentityFlagName) {
-		// Flag was explicitly provided on command line (either with or without value).
-		identityName, _ = cmd.Flags().GetString(IdentityFlagName)
-	} else {
-		// Flag not provided on command line - fall back to viper (config/env).
-		identityName = viper.GetString(IdentityFlagName)
-	}
+	// Get identity from parsed options.
+	identityName := opts.Identity.Value()
 
 	// Check if user wants to interactively select identity.
-	forceSelect := identityName == IdentityFlagSelectValue
+	forceSelect := opts.Identity.IsInteractiveSelector()
 
-	if identityName == "" || forceSelect {
+	if opts.Identity.IsEmpty() || forceSelect {
 		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
 			return errors.Join(errUtils.ErrNoDefaultIdentity, err)
@@ -89,7 +85,6 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 
 	// Try to use cached credentials first (passive check, no prompts).
 	// Only authenticate if cached credentials are not available or expired.
-	ctx := context.Background()
 	whoami, err := authManager.GetCachedCredentials(ctx, identityName)
 	if err != nil {
 		log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
@@ -104,13 +99,13 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Get environment variables from authentication result
+	// Get environment variables from authentication result.
 	envVars := whoami.Environment
 	if envVars == nil {
 		envVars = make(map[string]string)
 	}
 
-	// Execute the command with authentication environment
+	// Execute the command with authentication environment.
 	return executeCommandWithEnv(commandArgs, envVars)
 }
 
@@ -160,7 +155,13 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 }
 
 func init() {
-	authExecCmd.Flags().StringP("identity", "i", "", "Specify the identity to use for authentication")
+	// Register flags using the parser.
+	authExecParser.RegisterFlags(authExecCmd)
+	_ = authExecParser.BindToViper(viper.GetViper())
+
+	// Add identity completion.
 	AddIdentityCompletion(authExecCmd)
+
+	// Add command to parent.
 	authCmd.AddCommand(authExecCmd)
 }

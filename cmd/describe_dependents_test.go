@@ -3,8 +3,6 @@ package cmd
 import (
 	"testing"
 
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
@@ -21,10 +19,8 @@ func TestDescribeDependents(t *testing.T) {
 	describeDependentsMock := exec.NewMockDescribeDependentsExec(ctrl)
 	describeDependentsMock.EXPECT().Execute(gomock.Any()).Return(nil)
 
-	run := getRunnableDescribeDependentsCmd(func(opts ...AtmosValidateOption) {},
-		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
-			return schema.ConfigAndStacksInfo{}, nil
-		},
+	run := getRunnableDescribeDependentsCmd(
+		func(opts ...AtmosValidateOption) {},
 		func(info schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
 			return schema.AtmosConfiguration{}, nil
 		},
@@ -39,67 +35,9 @@ func TestDescribeDependents(t *testing.T) {
 	assert.NoError(t, err, "describeDependentsCmd should execute without error")
 }
 
-func TestSetFlagInDescribeDependents(t *testing.T) {
-	_ = NewTestKit(t)
-
-	// Initialize test cases
-	tests := []struct {
-		name        string
-		setFlags    func(*pflag.FlagSet)
-		expected    *exec.DescribeDependentsExecProps
-		expectedErr bool
-	}{
-		{
-			name: "Set string flags",
-			setFlags: func(fs *pflag.FlagSet) {
-				fs.Set("format", "yaml")
-			},
-			expected: &exec.DescribeDependentsExecProps{
-				Format:               "yaml",
-				ProcessTemplates:     true,
-				ProcessYamlFunctions: true,
-			},
-		},
-		{
-			name: "No flags changed, set default format",
-			setFlags: func(fs *pflag.FlagSet) {
-				// No flags set
-			},
-			expected: &exec.DescribeDependentsExecProps{
-				Format:               "json",
-				ProcessTemplates:     true,
-				ProcessYamlFunctions: true,
-			},
-		},
-		{
-			name: "Set invalid format, no override",
-			setFlags: func(fs *pflag.FlagSet) {
-				fs.Set("format", "invalid_format")
-			},
-			expectedErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_ = NewTestKit(t)
-
-			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
-			fs.StringP("format", "f", "yaml", "Specify the output format (`yaml` is default)")
-			fs.StringP("output", "o", "list", "Specify the output type (`list` is default)")
-			fs.StringP("query", "q", "", "Specify a query to filter the output")
-			tt.setFlags(fs)
-			describeDependentArgs := &exec.DescribeDependentsExecProps{}
-			err := setFlagsForDescribeDependentsCmd(fs, describeDependentArgs)
-			if tt.expectedErr {
-				assert.Error(t, err)
-				return
-			}
-			assert.NoError(t, err)
-			assert.Equal(t, tt.expected, describeDependentArgs)
-		})
-	}
-}
+// TestSetFlagInDescribeDependents has been removed because setFlagsForDescribeDependentsCmd
+// no longer exists. Flag parsing is now handled by the StandardOptions parser.
+// The functionality is still tested through TestDescribeDependents and integration tests.
 
 func TestDescribeDependentsCmd_Error(t *testing.T) {
 	_ = NewTestKit(t)

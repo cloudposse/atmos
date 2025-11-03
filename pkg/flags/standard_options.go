@@ -61,6 +61,25 @@ type StandardOptions struct {
 	All        bool   // Apply to all items (--all)
 	Everything bool   // Vendor all components (--everything)
 
+	// Describe affected command specific flags.
+	Ref                         string // Git reference for comparison (--ref)
+	Sha                         string // Git commit SHA for comparison (--sha)
+	RepoPath                    string // Path to cloned target repository (--repo-path)
+	SSHKey                      string // Path to SSH private key (--ssh-key)
+	SSHKeyPassword              string // Password for encrypted SSH key (--ssh-key-password)
+	IncludeSpaceliftAdminStacks bool   // Include Spacelift admin stacks (--include-spacelift-admin-stacks)
+	IncludeDependents           bool   // Include dependent components (--include-dependents)
+	IncludeSettings             bool   // Include settings section (--include-settings)
+	Upload                      bool   // Upload to HTTP endpoint (--upload)
+	CloneTargetRef              bool   // Clone target ref instead of checkout (--clone-target-ref)
+	Verbose                     bool   // Deprecated verbose flag (--verbose)
+	ExcludeLocked               bool   // Exclude locked components (--exclude-locked)
+
+	// Describe workflows command specific flags.
+	Components     []string // Filter by specific components (--components)
+	ComponentTypes []string // Filter by component types (--component-types)
+	Output         string   // Output type: list, detail (--output)
+
 	// Positional arguments (component name, etc.).
 	positionalArgs []string
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -32,16 +33,16 @@ const (
 	consoleOutputFormat = "%s %s\n"
 )
 
-var (
-	consoleDestination string
-	consoleDuration    time.Duration
-	consoleIssuer      string
-	consolePrintOnly   bool
-	consoleSkipOpen    bool
-)
-
 //go:embed markdown/atmos_auth_console_usage.md
 var authConsoleUsageMarkdown string
+
+var authConsoleParser = flags.NewAuthOptionsBuilder().
+	WithDestination().
+	WithDuration("1h").
+	WithIssuer("atmos").
+	WithPrintOnly().
+	WithNoOpen().
+	Build()
 
 // authConsoleCmd opens the cloud provider web console using authenticated credentials.
 var authConsoleCmd = &cobra.Command{
@@ -52,8 +53,8 @@ var authConsoleCmd = &cobra.Command{
 This command generates a temporary console sign-in URL using your authenticated identity's
 credentials and opens it in your default browser. Supports AWS, Azure, GCP, and other providers
 that implement console access.`,
-	Example:            authConsoleUsageMarkdown,
-	RunE:               executeAuthConsoleCommand,
+	Example: authConsoleUsageMarkdown,
+	RunE:    executeAuthConsoleCommand,
 }
 
 func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
@@ -61,16 +62,28 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 
 	handleHelpRequest(cmd, args)
 
+	// Parse flags using AuthOptions.
+	opts, err := authConsoleParser.Parse(context.Background(), args)
+	if err != nil {
+		return err
+	}
+
 	// Initialize auth manager.
 	authManager, err := initializeAuthManager()
 	if err != nil {
 		return err
 	}
 
-	// Get identity name.
-	identityName, err := resolveIdentityName(cmd, authManager)
-	if err != nil {
-		return err
+	// Get identity from parsed options or use default.
+	identityName := opts.Identity.Value()
+	forceSelect := opts.Identity.IsInteractiveSelector()
+
+	if opts.Identity.IsEmpty() || forceSelect {
+		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
+		if err != nil {
+			return fmt.Errorf("%w: failed to get default identity: %w", errUtils.ErrAuthConsole, err)
+		}
+		identityName = defaultIdentity
 	}
 
 	// Try to use cached credentials first (passive check, no prompts).
@@ -103,17 +116,17 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Resolve session duration (flag takes precedence over provider config).
-	sessionDuration, err := resolveConsoleDuration(cmd, authManager, whoami.Provider)
+	sessionDuration, err := resolveConsoleDuration(opts, authManager, whoami.Provider)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrAuthConsole, err)
 	}
 
 	// Generate console URL.
 	options := types.ConsoleURLOptions{
-		Destination:     consoleDestination,
+		Destination:     opts.Destination,
 		SessionDuration: sessionDuration,
-		Issuer:          consoleIssuer,
-		OpenInBrowser:   !consoleSkipOpen && !consolePrintOnly,
+		Issuer:          opts.Issuer,
+		OpenInBrowser:   !opts.NoOpen && !opts.PrintOnly,
 	}
 
 	consoleURL, duration, err := consoleProvider.GetConsoleURL(ctx, creds, options)
@@ -121,7 +134,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%w: failed to generate console URL for identity %q: %w", errUtils.ErrAuthConsole, identityName, err)
 	}
 
-	if consolePrintOnly {
+	if opts.PrintOnly {
 		// Print to stdout for piping.
 		fmt.Println(consoleURL)
 		return nil
@@ -129,14 +142,14 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 
 	// Print formatted output and handle browser opening.
 	printConsoleInfo(whoami, duration, false, "")
-	handleBrowserOpen(consoleURL)
+	handleBrowserOpen(opts, consoleURL)
 
 	return nil
 }
 
 // handleBrowserOpen handles opening the console URL in the browser or displaying it.
-func handleBrowserOpen(consoleURL string) {
-	if !consoleSkipOpen && !telemetry.IsCI() {
+func handleBrowserOpen(opts *flags.AuthOptions, consoleURL string) {
+	if !opts.NoOpen && !telemetry.IsCI() {
 		fmt.Fprintf(os.Stderr, "\n")
 		if err := u.OpenUrl(consoleURL); err != nil {
 			// Show URL on error so user can manually open it.
@@ -235,40 +248,6 @@ func initializeAuthManager() (types.AuthManager, error) {
 	return authManager, nil
 }
 
-// resolveIdentityName gets identity from flag or uses default.
-func resolveIdentityName(cmd *cobra.Command, authManager types.AuthManager) (string, error) {
-	defer perf.Track(nil, "cmd.resolveIdentityName")()
-
-	// Get identity from flag or use default.
-	// Check if flag was explicitly set by user to ensure command-line precedence.
-	var identityName string
-	if cmd.Flags().Changed(IdentityFlagName) {
-		// Flag was explicitly provided on command line (either with or without value).
-		identityName, _ = cmd.Flags().GetString(IdentityFlagName)
-	} else {
-		// Flag not provided on command line - fall back to viper (config/env).
-		identityName = viper.GetString(IdentityFlagName)
-	}
-
-	// Check if user wants to interactively select identity.
-	forceSelect := identityName == IdentityFlagSelectValue
-
-	if identityName != "" && !forceSelect {
-		return identityName, nil
-	}
-
-	identityName, err := authManager.GetDefaultIdentity(forceSelect)
-	if err != nil {
-		return "", fmt.Errorf("%w: failed to get default identity: %w", errUtils.ErrAuthConsole, err)
-	}
-
-	if identityName == "" {
-		return "", fmt.Errorf("%w: no default identity configured", errUtils.ErrAuthConsole)
-	}
-
-	return identityName, nil
-}
-
 // retrieveCredentials retrieves credentials from whoami info.
 func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
 	defer perf.Track(nil, "cmd.retrieveCredentials")()
@@ -290,26 +269,26 @@ func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
 
 // resolveConsoleDuration resolves console session duration from flag or provider config.
 // Flag takes precedence over provider configuration.
-func resolveConsoleDuration(cmd *cobra.Command, authManager types.AuthManager, providerName string) (time.Duration, error) {
+func resolveConsoleDuration(opts *flags.AuthOptions, authManager types.AuthManager, providerName string) (time.Duration, error) {
 	defer perf.Track(nil, "cmd.resolveConsoleDuration")()
 
-	// Check if flag was explicitly set by user.
-	if cmd.Flags().Changed("duration") {
-		return consoleDuration, nil
+	// If duration was explicitly set (non-zero), use it.
+	if opts.Duration > 0 {
+		return opts.Duration, nil
 	}
 
 	// Get provider configuration.
 	providers := authManager.GetProviders()
 	provider, exists := providers[providerName]
 	if !exists {
-		// No provider config found, use default from flag.
-		return consoleDuration, nil
+		// No provider config found, use default (1 hour).
+		return 1 * time.Hour, nil
 	}
 
 	// Check if provider has console configuration.
 	if provider.Console == nil || provider.Console.SessionDuration == "" {
-		// No console config, use default from flag.
-		return consoleDuration, nil
+		// No console config, use default (1 hour).
+		return 1 * time.Hour, nil
 	}
 
 	// Parse provider's session duration.
@@ -322,16 +301,9 @@ func resolveConsoleDuration(cmd *cobra.Command, authManager types.AuthManager, p
 }
 
 func init() {
-	authConsoleCmd.Flags().StringVar(&consoleDestination, "destination", "",
-		"Console page to navigate to. Supports full URLs or shorthand aliases like 's3', 'ec2', 'lambda', etc.")
-	authConsoleCmd.Flags().DurationVar(&consoleDuration, "duration", 1*time.Hour,
-		"Console session duration (provider may have max limits)")
-	authConsoleCmd.Flags().StringVar(&consoleIssuer, "issuer", "atmos",
-		"Issuer identifier for the console session (AWS only)")
-	authConsoleCmd.Flags().BoolVar(&consolePrintOnly, "print-only", false,
-		"Print the console URL to stdout without opening browser")
-	authConsoleCmd.Flags().BoolVar(&consoleSkipOpen, "no-open", false,
-		"Generate URL but don't open browser automatically")
+	// Register AuthOptions flags.
+	authConsoleParser.RegisterFlags(authConsoleCmd)
+	_ = authConsoleParser.BindToViper(viper.GetViper())
 
 	// Register autocomplete for destination flag (AWS service aliases).
 	if err := authConsoleCmd.RegisterFlagCompletionFunc("destination", destinationFlagCompletion); err != nil {

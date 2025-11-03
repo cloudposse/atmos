@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -49,14 +48,12 @@ var validateComponentCmd = &cobra.Command{
 func init() {
 	validateComponentCmd.DisableFlagParsing = false
 
+	// Register StandardOptions flags (includes required stack flag via WithStack(true)).
 	validateComponentParser.RegisterFlags(validateComponentCmd)
-	AddStackCompletion(validateComponentCmd)
 	_ = validateComponentParser.BindToViper(viper.GetViper())
 
-	err := validateComponentCmd.MarkPersistentFlagRequired("stack")
-	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
+	// Register stack completion after flags are registered.
+	_ = validateComponentCmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
 
 	validateCmd.AddCommand(validateComponentCmd)
 }

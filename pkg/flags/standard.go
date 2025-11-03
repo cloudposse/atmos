@@ -3,6 +3,7 @@ package flags
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -32,9 +33,11 @@ import (
 //	parser.RegisterFlags(cmd)
 //	parser.BindToViper(viper.GetViper())
 type StandardFlagParser struct {
-	registry    *FlagRegistry
-	viper       *viper.Viper // Viper instance for precedence handling
-	viperPrefix string
+	registry       *FlagRegistry
+	viper          *viper.Viper // Viper instance for precedence handling
+	viperPrefix    string
+	validValues    map[string][]string // Valid values for flags (flag name -> valid values)
+	validationMsgs map[string]string   // Custom validation error messages (flag name -> message)
 }
 
 // NewStandardFlagParser creates a new StandardFlagParser with the given options.
@@ -61,6 +64,9 @@ func NewStandardFlagParser(opts ...Option) *StandardFlagParser {
 	return &StandardFlagParser{
 		registry:    config.registry,
 		viperPrefix: config.viperPrefix,
+		// TODO: Add validation support when WithValidValues is implemented.
+		// validValues:    config.validValues,
+		// validationMsgs: config.validationMsgs,
 	}
 }
 
@@ -71,6 +77,9 @@ func (p *StandardFlagParser) RegisterFlags(cmd *cobra.Command) {
 	for _, flag := range p.registry.All() {
 		p.registerFlag(cmd, flag)
 	}
+
+	// Auto-register completion functions for flags with valid values.
+	p.registerCompletions(cmd)
 }
 
 // registerFlag registers a single flag with Cobra based on its type.
@@ -112,6 +121,27 @@ func (p *StandardFlagParser) registerFlag(cmd *cobra.Command, flag Flag) {
 	default:
 		// Unknown flag type - skip
 		// In production, this could log a warning
+	}
+}
+
+// registerCompletions automatically registers shell completion functions
+// for flags that have valid values configured.
+func (p *StandardFlagParser) registerCompletions(cmd *cobra.Command) {
+	if p.validValues == nil || len(p.validValues) == 0 {
+		return
+	}
+
+	for flagName, validValues := range p.validValues {
+		// Only register if the flag actually exists.
+		if cmd.Flags().Lookup(flagName) == nil {
+			continue
+		}
+
+		// Create a closure to capture the validValues for this specific flag.
+		values := validValues
+		_ = cmd.RegisterFlagCompletionFunc(flagName, func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			return values, cobra.ShellCompDirectiveNoFileComp
+		})
 	}
 }
 
@@ -198,7 +228,61 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 		}
 	}
 
+	// Validate flag values against valid values constraints.
+	if err := p.validateFlagValues(result.Flags); err != nil {
+		return nil, err
+	}
+
 	return result, nil
+}
+
+// validateFlagValues validates flag values against configured valid values constraints.
+// Returns error if any flag value is not in its valid values list.
+func (p *StandardFlagParser) validateFlagValues(flags map[string]interface{}) error {
+	defer perf.Track(nil, "flagparser.StandardFlagParser.validateFlagValues")()
+
+	if p.validValues == nil {
+		return nil
+	}
+
+	for flagName, validValues := range p.validValues {
+		value, exists := flags[flagName]
+		if !exists {
+			continue
+		}
+
+		// Convert value to string for comparison.
+		strValue, ok := value.(string)
+		if !ok {
+			continue // Only validate string flags
+		}
+
+		// Skip empty values (not set).
+		if strValue == "" {
+			continue
+		}
+
+		// Check if value is in valid values list.
+		valid := false
+		for _, validValue := range validValues {
+			if strValue == validValue {
+				valid = true
+				break
+			}
+		}
+
+		if !valid {
+			// Check for custom error message.
+			if msg, hasMsg := p.validationMsgs[flagName]; hasMsg {
+				return fmt.Errorf("%s", msg)
+			}
+			// Default error message.
+			return fmt.Errorf("invalid value %q for flag --%s (valid values: %s)",
+				strValue, flagName, strings.Join(validValues, ", "))
+		}
+	}
+
+	return nil
 }
 
 // getViperKey returns the Viper key for a flag name.

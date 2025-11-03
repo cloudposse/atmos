@@ -55,7 +55,7 @@ func (p *HelmfileParser) Parse(ctx context.Context, args []string) (*HelmfileOpt
 	}
 
 	// Convert to strongly-typed interpreter.
-	interpreter := HelmfileOptions{
+	opts := HelmfileOptions{
 		GlobalFlags: GlobalFlags{
 			Chdir:           getString(parsedConfig.Flags, "chdir"),
 			BasePath:        getString(parsedConfig.Flags, "base-path"),
@@ -83,5 +83,5 @@ func (p *HelmfileParser) Parse(ctx context.Context, args []string) (*HelmfileOpt
 		passThroughArgs: parsedConfig.PassThroughArgs,
 	}
 
-	return &interpreter, nil
+	return &opts, nil
 }

@@ -1,16 +1,26 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// listWorkflowsCmd lists atmos workflows
+var listWorkflowsParser = flags.NewStandardOptionsBuilder().
+	WithFile().
+	WithFormat("table", "table", "json", "csv").
+	WithDelimiter("\t").
+	Build()
+
+// listWorkflowsCmd lists atmos workflows.
 var listWorkflowsCmd = &cobra.Command{
 	Use:   "workflows",
 	Short: "List all Atmos workflows",
@@ -18,19 +28,8 @@ var listWorkflowsCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		checkAtmosConfig(WithStackValidation(false))
 
-		flags := cmd.Flags()
-
-		fileFlag, err := flags.GetString("file")
-		if err != nil {
-			return err
-		}
-
-		formatFlag, err := flags.GetString("format")
-		if err != nil {
-			return err
-		}
-
-		delimiterFlag, err := flags.GetString("delimiter")
+		// Parse flags using StandardOptions.
+		opts, err := listWorkflowsParser.Parse(context.Background(), args)
 		if err != nil {
 			return err
 		}
@@ -41,7 +40,7 @@ var listWorkflowsCmd = &cobra.Command{
 			return err
 		}
 
-		output, err := l.FilterAndListWorkflows(fileFlag, atmosConfig.Workflows.List, formatFlag, delimiterFlag)
+		output, err := l.FilterAndListWorkflows(opts.File, atmosConfig.Workflows.List, opts.Format, opts.Delimiter)
 		if err != nil {
 			return err
 		}
@@ -52,8 +51,9 @@ var listWorkflowsCmd = &cobra.Command{
 }
 
 func init() {
-	listWorkflowsCmd.PersistentFlags().StringP("file", "f", "", "Filter workflows by file (e.g., atmos list workflows -f workflow1)")
-	listWorkflowsCmd.PersistentFlags().String("format", "", "Output format (table, json, csv)")
-	listWorkflowsCmd.PersistentFlags().String("delimiter", "\t", "Delimiter for csv output")
+	// Register StandardOptions flags.
+	listWorkflowsParser.RegisterFlags(listWorkflowsCmd)
+	_ = listWorkflowsParser.BindToViper(viper.GetViper())
+
 	listCmd.AddCommand(listWorkflowsCmd)
 }

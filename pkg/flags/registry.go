@@ -32,7 +32,7 @@ func (r *FlagRegistry) Register(flag Flag) {
 
 	flagName := flag.GetName()
 	if r.Has(flagName) {
-		panic(fmt.Sprintf("%w: flag '%s' is already registered. This is a programming error - "+
+		panic(fmt.Errorf("%w: flag '%s' is already registered. This is a programming error - "+
 			"flags should only be registered once. Check for duplicate flag definitions in "+
 			"registry functions (CommonFlags, TerraformFlags, etc.) or duplicate manual registrations "+
 			"in command init() functions.", errUtils.ErrDuplicateFlagRegistration, flagName))

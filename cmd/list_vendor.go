@@ -1,14 +1,23 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+var listVendorParser = flags.NewStandardOptionsBuilder().
+	WithStack(false).
+	WithFormat("table", "table", "json", "yaml", "csv", "tsv").
+	WithDelimiter(",").
+	Build()
 
 // listVendorCmd lists vendor configurations.
 var listVendorCmd = &cobra.Command{
@@ -19,45 +28,33 @@ var listVendorCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		checkAtmosConfig(WithStackValidation(false))
 
-		// Get flags
-		flags := cmd.Flags()
-
-		formatFlag, err := flags.GetString("format")
+		// Parse flags using StandardOptions.
+		opts, err := listVendorParser.Parse(context.Background(), args)
 		if err != nil {
 			return err
 		}
 
-		stackFlag, err := flags.GetString("stack")
-		if err != nil {
-			return err
-		}
-
-		delimiterFlag, err := flags.GetString("delimiter")
-		if err != nil {
-			return err
-		}
-
-		// Initialize CLI config
+		// Initialize CLI config.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			return err
 		}
 
-		// Set options
+		// Set options.
 		options := &l.FilterOptions{
-			FormatStr:    formatFlag,
-			StackPattern: stackFlag,
-			Delimiter:    delimiterFlag,
+			FormatStr:    opts.Format,
+			StackPattern: opts.Stack,
+			Delimiter:    opts.Delimiter,
 		}
 
-		// Call list vendor function
+		// Call list vendor function.
 		output, err := l.FilterAndListVendor(&atmosConfig, options)
 		if err != nil {
 			return err
 		}
 
-		// Print output
+		// Print output.
 		fmt.Println(output)
 
 		return nil
@@ -65,10 +62,12 @@ var listVendorCmd = &cobra.Command{
 }
 
 func init() {
-	AddStackCompletion(listVendorCmd)
-	listCmd.AddCommand(listVendorCmd)
+	// Register StandardOptions flags.
+	listVendorParser.RegisterFlags(listVendorCmd)
+	_ = listVendorParser.BindToViper(viper.GetViper())
 
-	// Add flags
-	listVendorCmd.Flags().StringP("format", "f", "", "Output format: table, json, yaml, csv, tsv")
-	listVendorCmd.Flags().StringP("delimiter", "d", "", "Delimiter for CSV/TSV output")
+	// Add stack completion.
+	_ = listVendorCmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
+
+	listCmd.AddCommand(listVendorCmd)
 }

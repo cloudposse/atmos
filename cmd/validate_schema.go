@@ -1,14 +1,21 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
+
+var validateSchemaParser = flags.NewStandardOptionsBuilder().
+	WithSchemasAtmosManifest("").
+	Build()
 
 // ValidateSchemaCmd represents the 'atmos validate schema' command.
 //
@@ -41,20 +48,23 @@ For every schema entry:
 This command helps ensure that configuration files follow a defined structure
 and are compliant with expected formats, reducing configuration drift and runtime errors.
 `,
-	Args:               cobra.MaximumNArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration
+		// Check Atmos configuration.
 		checkAtmosConfig()
 
-		schema := ""
-		key := ""
-		if len(args) > 0 {
-			key = args[0] // Use provided argument
+		// Parse flags using StandardOptions.
+		opts, err := validateSchemaParser.Parse(context.Background(), args)
+		if err != nil {
+			return err
 		}
 
-		if cmd.Flags().Changed("schemas-atmos-manifest") {
-			schema, _ = cmd.Flags().GetString("schemas-atmos-manifest")
+		key := ""
+		if len(opts.GetPositionalArgs()) > 0 {
+			key = opts.GetPositionalArgs()[0] // Use provided argument.
 		}
+
+		schema := opts.SchemasAtmosManifest
 
 		if key == "" && schema != "" {
 			log.Error("key not provided for the schema to be used")
@@ -73,6 +83,9 @@ and are compliant with expected formats, reducing configuration drift and runtim
 }
 
 func init() {
-	ValidateSchemaCmd.PersistentFlags().String("schemas-atmos-manifest", "", "Specifies the path to a JSON schema file used to validate the structure and content of the Atmos manifest file")
+	// Register StandardOptions flags.
+	validateSchemaParser.RegisterFlags(ValidateSchemaCmd)
+	_ = validateSchemaParser.BindToViper(viper.GetViper())
+
 	validateCmd.AddCommand(ValidateSchemaCmd)
 }

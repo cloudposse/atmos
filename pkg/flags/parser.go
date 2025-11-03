@@ -113,6 +113,18 @@ type ParsedConfig struct {
 	PositionalArgs []string
 }
 
+// GetIdentity returns the identity value from parsed flags with proper type safety.
+// Returns empty string if identity is not set.
+func (p *ParsedConfig) GetIdentity() string {
+	return getString(p.Flags, "identity")
+}
+
+// GetStack returns the stack value from parsed flags with proper type safety.
+// Returns empty string if stack is not set.
+func (p *ParsedConfig) GetStack() string {
+	return getString(p.Flags, "stack")
+}
+
 // ToTerraformOptions converts ParsedConfig to strongly-typed TerraformOptions.
 //
 // This provides compile-time type safety instead of runtime map access:

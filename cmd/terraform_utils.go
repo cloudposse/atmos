@@ -43,10 +43,10 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 // revive:disable-next-line:cyclomatic,function-length
 //
 //nolint:funlen // Orchestrates terraform execution with multiple conditional paths.
-func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, interpreter *flags.TerraformOptions) error {
+func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, opts *flags.TerraformOptions) error {
 	// Build args array from interpreter for getConfigAndStacksInfo
 	// Format: [subcommand, component, ...pass-through-args]
-	args := append(interpreter.GetPositionalArgs(), interpreter.GetPassThroughArgs()...)
+	args := append(opts.GetPositionalArgs(), opts.GetPassThroughArgs()...)
 
 	info := getConfigAndStacksInfo(cfg.TerraformComponentType, cmd, args)
 
@@ -58,9 +58,9 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, interpreter *fla
 
 	// Use strongly-typed interpreter fields instead of weak map access.
 	// Type-safe: No runtime assertions needed!
-	info.Stack = interpreter.Stack
-	info.Identity = interpreter.Identity.Value()
-	info.DryRun = interpreter.DryRun
+	info.Stack = opts.Stack
+	info.Identity = opts.Identity.Value()
+	info.DryRun = opts.DryRun
 
 	flags := cmd.Flags()
 

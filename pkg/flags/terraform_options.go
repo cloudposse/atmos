@@ -14,13 +14,13 @@ import (
 //	parser := flagparser.NewPassThroughFlagParser(
 //	    flagparser.WithTerraformFlags(),
 //	)
-//	interpreter := flagparser.ParseTerraformFlags(cmd, viper.GetViper(), positionalArgs, passThroughArgs)
+//	opts := flagparser.ParseTerraformFlags(cmd, viper.GetViper(), positionalArgs, passThroughArgs)
 //
 //	// Type-safe access to flags:
-//	if interpreter.Stack == "" {
+//	if opts.Stack == "" {
 //	    return errors.New("stack is required")
 //	}
-//	if interpreter.UploadStatus {
+//	if opts.UploadStatus {
 //	    uploadPlanToAtmosPro()
 //	}
 //
@@ -118,9 +118,11 @@ func TerraformFlagsRegistry() *FlagRegistry {
 	registry := GlobalFlagsRegistry()
 
 	// Add all common + terraform-specific flags from TerraformFlags().
-	// This avoids duplicating flag definitions.
+	// Skip flags that already exist in GlobalFlagsRegistry (e.g., identity flag).
 	for _, flag := range TerraformFlags().All() {
-		registry.Register(flag)
+		if !registry.Has(flag.GetName()) {
+			registry.Register(flag)
+		}
 	}
 
 	return registry

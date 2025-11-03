@@ -17,6 +17,7 @@ import (
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -26,17 +27,26 @@ const (
 	logKeyIdentity = "identity"
 )
 
+var authWhoamiParser = flags.NewStandardOptionsBuilder().
+	WithOutput("", "table", "json").
+	Build()
+
 // authWhoamiCmd shows current authentication status.
 var authWhoamiCmd = &cobra.Command{
 	Use:   "whoami",
 	Short: "Show current authentication status",
 	Long:  "Display information about the current effective authentication principal.",
-
-	RunE:               executeAuthWhoamiCommand,
+	RunE:  executeAuthWhoamiCommand,
 }
 
 func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
+
+	// Parse flags using StandardOptions.
+	opts, err := authWhoamiParser.Parse(context.Background(), args)
+	if err != nil {
+		return err
+	}
 
 	// Load atmos config and auth manager.
 	authManager, err := loadAuthManager()
@@ -61,7 +71,7 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	isValid := validateCredentials(ctx, whoami)
 
 	// Output.
-	if viper.GetString("auth.whoami.output") == "json" {
+	if opts.Output == "json" {
 		return printWhoamiJSON(whoami)
 	}
 	printWhoamiHuman(whoami, isValid)
@@ -284,17 +294,9 @@ func sanitizeEnvMap(in map[string]string, homeDir string) map[string]string {
 }
 
 func init() {
-	authWhoamiCmd.Flags().StringP("output", "o", "", "Output format (json)")
-	if err := viper.BindPFlag("auth.whoami.output", authWhoamiCmd.Flags().Lookup("output")); err != nil {
-		log.Trace("Failed to bind auth.whoami.output flag", "error", err)
-	}
-	if err := viper.BindEnv("auth.whoami.output", "ATMOS_AUTH_WHOAMI_OUTPUT"); err != nil {
-		log.Trace("Failed to bind auth.whoami.output environment variable", "error", err)
-	}
-	if err := authWhoamiCmd.RegisterFlagCompletionFunc("output", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{"json"}, cobra.ShellCompDirectiveNoFileComp
-	}); err != nil {
-		log.Trace("Failed to register output flag completion", "error", err)
-	}
+	// Register StandardOptions flags.
+	authWhoamiParser.RegisterFlags(authWhoamiCmd)
+	_ = authWhoamiParser.BindToViper(viper.GetViper())
+
 	authCmd.AddCommand(authWhoamiCmd)
 }

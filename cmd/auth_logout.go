@@ -7,17 +7,25 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+var authLogoutParser = flags.NewStandardOptionsBuilder().
+	WithProvider().
+	WithAll().
+	WithDryRun().
+	Build()
 
 // authLogoutCmd logs out by removing local credentials.
 var authLogoutCmd = &cobra.Command{
@@ -40,12 +48,18 @@ Note: This only removes local credentials. Your browser session with the
 identity provider (AWS SSO, Okta, etc.) may still be active. To completely
 end your session, visit your identity provider's website and sign out.`,
 
-	ValidArgsFunction:  identityArgCompletion,
-	RunE:               executeAuthLogoutCommand,
+	ValidArgsFunction: identityArgCompletion,
+	RunE:              executeAuthLogoutCommand,
 }
 
 func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
+
+	// Parse flags using StandardOptions.
+	opts, err := authLogoutParser.Parse(context.Background(), args)
+	if err != nil {
+		return err
+	}
 
 	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -61,11 +75,6 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrAuthManager, err)
 	}
 
-	// Get flags.
-	providerFlag, _ := cmd.Flags().GetString("provider")
-	allFlag, _ := cmd.Flags().GetBool("all")
-	dryRun, _ := cmd.Flags().GetBool("dry-run")
-
 	// Get identity from flag or positional argument.
 	// Note: "identity" is a persistent flag on parent authCmd, so it's automatically available.
 	identityFlag := ""
@@ -76,14 +85,14 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
 	// Determine what to logout.
-	if allFlag {
+	if opts.All {
 		// Logout all identities.
-		return performLogoutAll(ctx, authManager, dryRun)
+		return performLogoutAll(ctx, authManager, opts.DryRun)
 	}
 
-	if providerFlag != "" {
+	if opts.Provider != "" {
 		// Logout specific provider.
-		return performProviderLogout(ctx, authManager, providerFlag, dryRun)
+		return performProviderLogout(ctx, authManager, opts.Provider, opts.DryRun)
 	}
 
 	// Support both positional argument and --identity flag for consistency with other auth commands.
@@ -97,11 +106,11 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 
 	if identityName != "" {
 		// Logout specific identity.
-		return performIdentityLogout(ctx, authManager, identityName, dryRun)
+		return performIdentityLogout(ctx, authManager, identityName, opts.DryRun)
 	}
 
 	// Interactive mode: prompt user to choose.
-	return performInteractiveLogout(ctx, authManager, dryRun)
+	return performInteractiveLogout(ctx, authManager, opts.DryRun)
 }
 
 // performIdentityLogout removes credentials for a specific identity.
@@ -356,8 +365,9 @@ func displayBrowserWarning() {
 }
 
 func init() {
-	authLogoutCmd.Flags().String("provider", "", "Logout from specific provider")
-	authLogoutCmd.Flags().Bool("all", false, "Logout from all identities and providers")
-	authLogoutCmd.Flags().Bool("dry-run", false, "Preview what would be removed without deleting")
+	// Register StandardOptions flags.
+	authLogoutParser.RegisterFlags(authLogoutCmd)
+	_ = authLogoutParser.BindToViper(viper.GetViper())
+
 	authCmd.AddCommand(authLogoutCmd)
 }

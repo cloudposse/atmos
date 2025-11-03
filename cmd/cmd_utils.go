@@ -301,197 +301,6 @@ func getTopLevelCommands() map[string]*cobra.Command {
 	return existingTopLevelCommands
 }
 
-// executeCustomCommand executes a custom command.
-func executeCustomCommand(
-	atmosConfig schema.AtmosConfiguration,
-	cmd *cobra.Command,
-	args []string,
-	parentCommand *cobra.Command,
-	commandConfig *schema.Command,
-) {
-	var err error
-
-	// Extract arguments after "--" separator using safe shell quoting.
-	separated := ExtractSeparatedArgs(cmd, args, os.Args)
-	args = separated.BeforeSeparator
-	trailingArgs, err := separated.GetAfterSeparatorAsQuotedString()
-	if err != nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: failed to quote trailing arguments: %w",
-			errUtils.ErrFailedToProcessArgs, err), "", "")
-	}
-
-	if commandConfig.Verbose {
-		atmosConfig.Logs.Level = u.LogLevelTrace
-	}
-
-	mergedArgsStr := cmd.Annotations["resolvedArgs"]
-	finalArgs := strings.Split(mergedArgsStr, ",")
-	if mergedArgsStr == "" {
-		// If for some reason no annotation was set, just fallback
-		finalArgs = args
-	}
-
-	// Create auth manager if identity is specified for this custom command.
-	// Check for --identity flag first (it overrides the config).
-	var authManager auth.AuthManager
-	identityFlag, _ := cmd.Flags().GetString("identity")
-	commandIdentity := strings.TrimSpace(identityFlag)
-	if commandIdentity == "" {
-		// Fall back to identity from command config
-		commandIdentity = strings.TrimSpace(commandConfig.Identity)
-	}
-
-	if commandIdentity != "" {
-		credStore := credentials.NewCredentialStore()
-		validator := validation.NewValidator()
-		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, nil)
-		if err != nil {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
-		}
-
-		ctx := context.Background()
-
-		// Try to use cached credentials first (passive check, no prompts).
-		// Only authenticate if cached credentials are not available or expired.
-		_, err = authManager.GetCachedCredentials(ctx, commandIdentity)
-		if err != nil {
-			log.Debug("No valid cached credentials found, authenticating", "identity", commandIdentity, "error", err)
-			// No valid cached credentials - perform full authentication.
-			_, err = authManager.Authenticate(ctx, commandIdentity)
-			if err != nil {
-				// Check for user cancellation - return clean error without wrapping.
-				if errors.Is(err, errUtils.ErrUserAborted) {
-					errUtils.CheckErrorPrintAndExit(errUtils.ErrUserAborted, "", "")
-				}
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w for identity %q in custom command %q: %w",
-					errUtils.ErrAuthenticationFailed, commandIdentity, commandConfig.Name, err), "", "")
-			}
-		}
-
-		log.Debug("Authenticated with identity for custom command", "identity", commandIdentity, "command", commandConfig.Name)
-	}
-
-	// Execute custom command's steps
-	for i, step := range commandConfig.Steps {
-		// Prepare template data for arguments
-		argumentsData := map[string]string{}
-		for ix, arg := range commandConfig.Arguments {
-			argumentsData[arg.Name] = finalArgs[ix]
-		}
-
-		// Prepare template data for flags
-		flags := cmd.Flags()
-		flagsData := map[string]any{}
-		for _, fl := range commandConfig.Flags {
-			switch fl.Type {
-			case "", "string":
-				providedFlag, err := flags.GetString(fl.Name)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
-				flagsData[fl.Name] = providedFlag
-			case "bool":
-				boolFlag, err := flags.GetBool(fl.Name)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
-				flagsData[fl.Name] = boolFlag
-			}
-		}
-
-		// Prepare template data
-		data := map[string]any{
-			"Arguments":    argumentsData,
-			"Flags":        flagsData,
-			"TrailingArgs": trailingArgs,
-		}
-
-		// If the custom command defines 'component_config' section with 'component' and 'stack' attributes,
-		// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
-			// Process Go templates in the command's 'component_config.component'
-			component, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
-			if component == "" || component == "<no value>" {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.component: %s' in '%s'",
-					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
-			}
-
-			// Process Go templates in the command's 'component_config.stack'
-			stack, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
-			if stack == "" || stack == "<no value>" {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("the command defines an invalid 'component_config.stack: %s' in '%s'",
-					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
-			}
-
-			// Get the config for the component in the stack
-			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true, nil)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
-			data["ComponentConfig"] = componentConfig
-		}
-
-		// Prepare ENV vars
-		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		// Start with current environment to inherit PATH and other variables.
-		env := os.Environ()
-		for _, v := range commandConfig.Env {
-			key := strings.TrimSpace(v.Key)
-			value := v.Value
-			valCommand := v.ValueCommand
-
-			if value != "" && valCommand != "" {
-				err = fmt.Errorf("either 'value' or 'valueCommand' can be specified for the ENV var, but not both.\n"+
-					"Custom command '%s %s' defines 'value=%s' and 'valueCommand=%s' for the ENV var '%s'",
-					parentCommand.Name(), commandConfig.Name, value, valCommand, key)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
-			}
-
-			// If the command to get the value for the ENV var is provided, execute it
-			if valCommand != "" {
-				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
-				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, env, false)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
-				value = strings.TrimRight(res, "\r\n")
-			} else {
-				// Process Go templates in the values of the command's ENV vars
-				value, err = e.ProcessTmpl(&atmosConfig, fmt.Sprintf("env-var-%d", i), value, data, false)
-				errUtils.CheckErrorPrintAndExit(err, "", "")
-			}
-
-			// Add or update the environment variable in the env slice
-			env = u.UpdateEnvVar(env, key, value)
-		}
-
-		if len(commandConfig.Env) > 0 && commandConfig.Verbose {
-			var envVarsList []string
-			for _, v := range commandConfig.Env {
-				envVarsList = append(envVarsList, fmt.Sprintf("%s=%s", strings.TrimSpace(v.Key), "***"))
-			}
-			log.Debug("Using custom ENV vars", "env", envVarsList)
-		}
-
-		// Prepare shell environment with authentication credentials if identity is specified.
-		if commandIdentity != "" && authManager != nil {
-			ctx := context.Background()
-			env, err = authManager.PrepareShellEnvironment(ctx, commandIdentity, env)
-			if err != nil {
-				errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to prepare shell environment for identity %q in custom command %q step %d: %w",
-					commandIdentity, commandConfig.Name, i, err), "", "")
-			}
-			log.Debug("Prepared environment with identity for custom command step", "identity", commandIdentity, "command", commandConfig.Name, "step", i)
-		}
-
-		// Process Go templates in the command's steps.
-		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step, data, false)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-
-		// Execute the command step
-		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
-
-		// Pass the prepared environment with custom variables to the subprocess
-		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, env, false)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
-}
-
 // cloneCommand clones a custom command config into a new struct.
 func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	origJSON, err := json.Marshal(orig)
@@ -851,8 +660,14 @@ func createCustomCommandParser(commandConfig *schema.Command) *flags.PassThrough
 	// Start with common flags (stack, identity, dry-run)
 	registry := flags.CommonFlags()
 
-	// Dynamically register flags from command config
+	// Dynamically register flags from command config.
+	// Skip flags that are already registered (e.g., by CommonFlags).
 	for _, flag := range commandConfig.Flags {
+		// Skip if flag already exists (avoid duplicate registration).
+		if registry.Has(flag.Name) {
+			continue
+		}
+
 		description := flag.Usage
 		if description == "" {
 			description = flag.Description
@@ -897,14 +712,14 @@ func executeCustomCommandWithParser(
 		ctx = context.Background()
 	}
 
-	parsedConfig, err := parser.Parse(ctx, args)
+	opts, err := parser.Parse(ctx, args)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: failed to parse custom command flags: %w",
 			errUtils.ErrFailedToProcessArgs, err), "", "")
 	}
 
 	// Get pass-through args (everything after flags or --)
-	passThroughArgs := parsedConfig.PassThroughArgs
+	passThroughArgs := opts.PassThroughArgs
 
 	// Extract trailing args (args after --)
 	trailingArgs, err := getQuotedTrailingArgs(passThroughArgs)
@@ -925,16 +740,14 @@ func executeCustomCommandWithParser(
 	}
 
 	// Create auth manager if identity is specified for this custom command.
-	// Check for --identity flag first (it overrides the config).
-	// NOTE: Cobra has already parsed flags by the time we get here, so we must get them from cmd.Flags()
+	// Use the identity value from opts which respects full precedence:
+	// CLI flags → ENV vars → config file → command config default
 	var authManager auth.AuthManager
 
-	// Get identity from Cobra flags (Cobra has already parsed them)
-	identityFromFlag, _ := cmd.Flags().GetString("identity")
-	var identityValue string
-	if identityFromFlag != "" {
-		identityValue = identityFromFlag
-	} else {
+	// Get identity from opts using type-safe helper (respects CLI flags, ENV vars, config file)
+	identityValue := opts.GetIdentity()
+	if identityValue == "" {
+		// Fall back to identity from command config
 		identityValue = strings.TrimSpace(commandConfig.Identity)
 	}
 

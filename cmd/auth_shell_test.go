@@ -66,7 +66,7 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 			testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
 			// Call the core business logic directly, bypassing handleHelpRequest and checkAtmosConfig.
-			err := executeAuthShellCommandCore(testCmd, tt.args)
+			err := executeAuthShellCommandCore(tt.args)
 
 			if tt.expectedError != "" {
 				assert.Error(t, err)
@@ -110,7 +110,7 @@ func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
 	testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
 	// Test with invalid flag format.
-	err := executeAuthShellCommandCore(testCmd, []string{"--invalid-flag-format="})
+	err := executeAuthShellCommandCore([]string{"--invalid-flag-format="})
 	assert.Error(t, err)
 }
 
@@ -127,7 +127,7 @@ func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
 	testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
 	// This will fail at authentication but will exercise the env var initialization path.
-	err := executeAuthShellCommandCore(testCmd, []string{"--identity=test-user"})
+	err := executeAuthShellCommandCore([]string{"--identity=test-user"})
 	assert.Error(t, err)
 	// Should contain authentication failed, not nil pointer errors.
 	assert.Contains(t, err.Error(), "authentication failed")
@@ -213,7 +213,7 @@ func TestAuthShellCmd_WithMockProvider(t *testing.T) {
 			}
 			testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
-			err := executeAuthShellCommandCore(testCmd, tt.args)
+			err := executeAuthShellCommandCore(tt.args)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -250,7 +250,7 @@ func TestAuthShellCmd_MockProviderEnvironmentVariables(t *testing.T) {
 		args = []string{"--identity=mock-identity", "--shell", "/bin/sh", "--", "-c", "exit 0"}
 	}
 
-	err := executeAuthShellCommandCore(testCmd, args)
+	err := executeAuthShellCommandCore(args)
 	assert.NoError(t, err, "shell should execute successfully with mock credentials")
 }
 
