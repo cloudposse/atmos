@@ -130,14 +130,21 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	repo, err := git.GetLocalRepo()
+	gitRepo := git.NewDefaultGitRepo()
+
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToGetLocalRepo, err)
+		return errors.Join(errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
-	repoInfo, err := git.GetRepoInfo(repo)
+	return executeProLock(&a, apiClient, gitRepo)
+}
+
+// executeProLock is the core lock logic extracted for testability.
+func executeProLock(a *ProLockCmdArgs, apiClient pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
+	repoInfo, err := gitRepo.GetLocalRepoInfo()
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToGetRepoInfo, err)
+		return errors.Join(errUtils.ErrFailedToGetLocalRepo, err)
 	}
 
 	owner := repoInfo.RepoOwner
@@ -148,11 +155,6 @@ func ExecuteProLockCommand(cmd *cobra.Command, args []string) error {
 		TTL:         a.LockTTL,
 		LockMessage: a.LockMessage,
 		Properties:  nil,
-	}
-
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
-	if err != nil {
-		return errors.Join(errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
 	lock, err := apiClient.LockStack(&dto)
@@ -175,14 +177,21 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	repo, err := git.GetLocalRepo()
+	gitRepo := git.NewDefaultGitRepo()
+
+	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToGetLocalRepo, err)
+		return errors.Join(errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
-	repoInfo, err := git.GetRepoInfo(repo)
+	return executeProUnlock(&a, apiClient, gitRepo)
+}
+
+// executeProUnlock is the core unlock logic extracted for testability.
+func executeProUnlock(a *ProUnlockCmdArgs, apiClient pro.AtmosProAPIClientInterface, gitRepo git.GitRepoInterface) error {
+	repoInfo, err := gitRepo.GetLocalRepoInfo()
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToGetRepoInfo, err)
+		return errors.Join(errUtils.ErrFailedToGetLocalRepo, err)
 	}
 
 	owner := repoInfo.RepoOwner
@@ -190,11 +199,6 @@ func ExecuteProUnlockCommand(cmd *cobra.Command, args []string) error {
 
 	dto := dtos.UnlockStackRequest{
 		Key: fmt.Sprintf("%s/%s/%s/%s", owner, repoName, a.Stack, a.Component),
-	}
-
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&a.AtmosConfig)
-	if err != nil {
-		return errors.Join(errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
 	_, err = apiClient.UnlockStack(&dto)
