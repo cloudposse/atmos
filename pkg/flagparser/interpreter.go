@@ -8,13 +8,13 @@ import (
 // Each command type (Terraform, Helmfile, Auth, etc.) has its own interpreter struct
 // that embeds GlobalFlags and provides command-specific fields.
 //
-// This enables strongly-typed access to flags instead of weak string-based access:
+// This enables strongly-typed access to flags instead of weak map-based access:
 //
-//	// ❌ Weak typing (old way)
-//	stack := parsedConfig.AtmosFlags["stack"].(string)
+//	// ❌ Weak typing (old way with map access)
+//	stack := atmosFlags["stack"].(string)  // runtime type assertion, can panic
 //
-//	// ✅ Strong typing (new way)
-//	stack := interpreter.Stack
+//	// ✅ Strong typing (new way with interpreter)
+//	stack := interpreter.Stack  // compile-time type safety
 type CommandInterpreter interface {
 	// GetGlobalFlags returns the global flags available to all commands.
 	GetGlobalFlags() *GlobalFlags
