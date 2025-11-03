@@ -43,10 +43,10 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 // revive:disable-next-line:cyclomatic,function-length
 //
 //nolint:funlen // Orchestrates terraform execution with multiple conditional paths.
-func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, parsedConfig *flagparser.ParsedConfig) error {
-	// Build args array from ParsedConfig for getConfigAndStacksInfo
+func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, interpreter *flagparser.TerraformInterpreter) error {
+	// Build args array from interpreter for getConfigAndStacksInfo
 	// Format: [subcommand, component, ...pass-through-args]
-	args := append(parsedConfig.PositionalArgs, parsedConfig.PassThroughArgs...)
+	args := append(interpreter.GetPositionalArgs(), interpreter.GetPassThroughArgs()...)
 
 	info := getConfigAndStacksInfo(cfg.TerraformComponentType, cmd, args)
 
@@ -56,17 +56,11 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, parsedConfig *fl
 		return nil
 	}
 
-	// Override info fields with values from parsedConfig.AtmosFlags to respect precedence (CLI > ENV > defaults).
-	// parsedConfig.AtmosFlags contains values resolved by Viper with proper precedence handling.
-	if val, ok := parsedConfig.AtmosFlags["stack"]; ok {
-		info.Stack = val.(string)
-	}
-	if val, ok := parsedConfig.AtmosFlags["identity"]; ok {
-		info.Identity = val.(string)
-	}
-	if val, ok := parsedConfig.AtmosFlags["dry-run"]; ok {
-		info.DryRun = val.(bool)
-	}
+	// Use strongly-typed interpreter fields instead of weak map access.
+	// Type-safe: No runtime assertions needed!
+	info.Stack = interpreter.Stack
+	info.Identity = interpreter.Identity.Value()
+	info.DryRun = interpreter.DryRun
 
 	flags := cmd.Flags()
 

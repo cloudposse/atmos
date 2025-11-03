@@ -324,15 +324,15 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 			// Heatmap is now tracked via persistent flag, no need for manual check.
 
 			// Parse args with flagparser.
-			// This extracts Atmos flags and separates pass-through args.
+			// Returns strongly-typed TerraformInterpreter instead of weak map-based ParsedConfig.
 			ctx := cmd_.Context()
-			parsedConfig, err := terraformParser.Parse(ctx, args)
+			interpreter, err := terraformParser.Parse(ctx, args)
 			if err != nil {
 				return err
 			}
 
-			// Pass ParsedConfig to terraformRun instead of raw args.
-			return terraformRun(parentCmd, cmd_, parsedConfig)
+			// Pass interpreter to terraformRun for type-safe flag access.
+			return terraformRun(parentCmd, cmd_, interpreter)
 		}
 		parentCmd.AddCommand(cmd)
 	}

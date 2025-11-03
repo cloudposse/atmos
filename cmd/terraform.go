@@ -8,7 +8,7 @@ import (
 )
 
 // terraformParser handles flag parsing for terraform commands.
-var terraformParser *flagparser.PassThroughFlagParser
+var terraformParser *flagparser.TerraformParser
 
 // terraformCmd represents the base command for all terraform sub-commands
 var terraformCmd = &cobra.Command{
@@ -20,10 +20,8 @@ var terraformCmd = &cobra.Command{
 
 func init() {
 	// Create parser with Terraform flags.
-	// This replaces DisableFlagParsing and manual flag handling.
-	terraformParser = flagparser.NewPassThroughFlagParser(
-		flagparser.WithTerraformFlags(),
-	)
+	// Returns strongly-typed TerraformInterpreter instead of weak map-based ParsedConfig.
+	terraformParser = flagparser.NewTerraformParser()
 
 	// Register flags with Cobra.
 	// Cobra will now parse known Atmos flags and pass through unknown flags.

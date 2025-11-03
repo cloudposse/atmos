@@ -83,15 +83,18 @@ type PassThroughHandler interface {
 }
 
 // ParsedConfig contains the results of parsing command-line arguments.
-// Different fields are populated depending on command type (standard vs pass-through).
 //
-// DEPRECATED: This map-based approach is being replaced by strongly-typed interpreters.
-// Use ToTerraformInterpreter(), ToHelmfileInterpreter(), etc. instead of accessing AtmosFlags directly.
+// DEPRECATED: The map-based AtmosFlags field is deprecated. Use the strongly-typed
+// interpreter methods instead: ToTerraformInterpreter(), ToHelmfileInterpreter(), etc.
+//
+// This type exists for backward compatibility during migration. Eventually, Parse()
+// methods will return interpreters directly.
 type ParsedConfig struct {
 	// AtmosFlags contains parsed Atmos-specific flags (--stack, --identity, etc.).
 	// Keys are flag names, values are the parsed values.
 	//
 	// DEPRECATED: Use ToTerraformInterpreter() for type-safe access instead.
+	// This map will be removed in a future version.
 	AtmosFlags map[string]interface{}
 
 	// PassThroughArgs contains arguments to pass to external tools.
