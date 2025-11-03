@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/editorconfig-checker/editorconfig-checker/v3/pkg/config"
 	er "github.com/editorconfig-checker/editorconfig-checker/v3/pkg/error"
@@ -35,7 +34,7 @@ var editorConfigParser = flags.NewEditorConfigOptionsBuilder().
 	WithIgnoreDefaults().
 	WithDryRun().
 	WithShowVersion().
-	WithFormat("default").
+	WithFormat(""). // No default - empty means not provided
 	WithDisableTrimTrailingWhitespace().
 	WithDisableEndOfLine().
 	WithDisableInsertFinalNewline().
@@ -93,8 +92,8 @@ func initializeConfig(opts *flags.EditorConfigOptions) {
 	if opts.Exclude != "" {
 		currentConfig.Exclude = append(currentConfig.Exclude, opts.Exclude)
 	} else if len(atmosConfig.Validate.EditorConfig.Exclude) > 0 {
-		excludeStr := strings.Join(atmosConfig.Validate.EditorConfig.Exclude, ",")
-		currentConfig.Exclude = append(currentConfig.Exclude, excludeStr)
+		// Append each exclude pattern individually (not joined into one string)
+		currentConfig.Exclude = append(currentConfig.Exclude, atmosConfig.Validate.EditorConfig.Exclude...)
 	}
 
 	// Build cliConfig from opts and atmos.yaml precedence.
@@ -103,9 +102,14 @@ func initializeConfig(opts *flags.EditorConfigOptions) {
 	cliConfig.Verbose = opts.LogsLevel == u.LogLevelTrace
 
 	// Handle format flag with validation.
+	// Only use config if flag was not provided (empty string).
 	formatStr := opts.Format
-	if formatStr == "default" && atmosConfig.Validate.EditorConfig.Format != "" {
+	if formatStr == "" && atmosConfig.Validate.EditorConfig.Format != "" {
 		formatStr = atmosConfig.Validate.EditorConfig.Format
+	}
+	// If still empty, use default
+	if formatStr == "" {
+		formatStr = "default"
 	}
 	format := outputformat.OutputFormat(formatStr)
 	if ok := format.IsValid(); !ok {

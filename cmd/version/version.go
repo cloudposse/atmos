@@ -42,7 +42,8 @@ var versionCmd = &cobra.Command{
 		defer perf.Track(atmosConfigPtr, "version.RunE")()
 
 		// Parse flags using new options pattern.
-		v := viper.New()
+		// Reuse global Viper to preserve env/config precedence
+		v := viper.GetViper()
 		if err := versionParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}

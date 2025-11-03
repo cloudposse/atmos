@@ -31,7 +31,7 @@ const (
 )
 
 var authListParser = flags.NewStandardOptionsBuilder().
-	WithFormat("tree", []string{"table", "tree", "json", "yaml", "graphviz", "mermaid", "markdown"}...).
+	WithFormat("tree", []string{"table", "tree", "json", "yaml", "graphviz", "mermaid", "markdown", "dot", "md"}...).
 	WithProviders().
 	WithIdentities().
 	Build()
@@ -162,8 +162,14 @@ func executeAuthListCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Resolve format (use default if empty).
+	format := opts.Format
+	if format == "" {
+		format = "tree" // Default format
+	}
+
 	// Route to appropriate formatter.
-	output, err := renderOutput(authManager, filteredProviders, filteredIdentities, opts.Format)
+	output, err := renderOutput(authManager, filteredProviders, filteredIdentities, format)
 	if err != nil {
 		return err
 	}

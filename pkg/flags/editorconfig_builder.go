@@ -73,11 +73,11 @@ func (b *EditorConfigOptionsBuilder) WithDryRun() *EditorConfigOptionsBuilder {
 	return b
 }
 
-// WithShowVersion adds the version flag.
+// WithShowVersion adds the show-version flag.
 // Maps to EditorConfigOptions.ShowVersion field.
 func (b *EditorConfigOptionsBuilder) WithShowVersion() *EditorConfigOptionsBuilder {
-	b.options = append(b.options, WithBoolFlag("version", "", false, "Print the version number"))
-	b.options = append(b.options, WithEnvVars("version", "ATMOS_EDITORCONFIG_VERSION"))
+	b.options = append(b.options, WithBoolFlag("show-version", "", false, "Print the version number"))
+	b.options = append(b.options, WithEnvVars("show-version", "ATMOS_EDITORCONFIG_SHOW_VERSION"))
 	return b
 }
 

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -675,11 +676,26 @@ func createCustomCommandParser(commandConfig *schema.Command) *flags.PassThrough
 
 		switch flag.Type {
 		case "bool":
-			registry.RegisterBoolFlag(flag.Name, flag.Shorthand, false, description)
+			// Parse default value for bool flags
+			defaultVal := false
+			if flag.Default != "" {
+				if parsed, err := strconv.ParseBool(flag.Default); err == nil {
+					defaultVal = parsed
+				}
+			}
+			registry.RegisterBoolFlag(flag.Name, flag.Shorthand, defaultVal, description)
 		case "int":
-			registry.RegisterIntFlag(flag.Name, flag.Shorthand, 0, description, flag.Required)
+			// Parse default value for int flags
+			defaultVal := 0
+			if flag.Default != "" {
+				if parsed, err := strconv.Atoi(flag.Default); err == nil {
+					defaultVal = parsed
+				}
+			}
+			registry.RegisterIntFlag(flag.Name, flag.Shorthand, defaultVal, description, flag.Required)
 		default: // string or empty type (default to string)
-			registry.RegisterStringFlag(flag.Name, flag.Shorthand, "", description, flag.Required)
+			// Use default value directly for string flags
+			registry.RegisterStringFlag(flag.Name, flag.Shorthand, flag.Default, description, flag.Required)
 		}
 	}
 

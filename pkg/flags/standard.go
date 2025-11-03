@@ -34,7 +34,8 @@ import (
 //	parser.BindToViper(viper.GetViper())
 type StandardFlagParser struct {
 	registry       *FlagRegistry
-	viper          *viper.Viper // Viper instance for precedence handling
+	cmd            *cobra.Command // Command for manual flag parsing
+	viper          *viper.Viper   // Viper instance for precedence handling
 	viperPrefix    string
 	validValues    map[string][]string // Valid values for flags (flag name -> valid values)
 	validationMsgs map[string]string   // Custom validation error messages (flag name -> message)
@@ -75,6 +76,9 @@ func NewStandardFlagParser(opts ...Option) *StandardFlagParser {
 // instead of Cobra, which allows proper positional arg extraction and Viper precedence.
 func (p *StandardFlagParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.StandardFlagParser.RegisterFlags")()
+
+	// Store command for manual flag parsing in Parse()
+	p.cmd = cmd
 
 	// IMPORTANT: Disable Cobra's flag parsing so our parser can handle it.
 	// This is critical for:
@@ -155,15 +159,31 @@ func (p *StandardFlagParser) registerCompletions(cmd *cobra.Command) {
 }
 
 // BindToViper implements FlagParser.
+// Binds both environment variables and Cobra pflags (if command is available) to Viper.
 func (p *StandardFlagParser) BindToViper(v *viper.Viper) error {
 	defer perf.Track(nil, "flagparser.StandardFlagParser.BindToViper")()
 
 	// Store Viper instance for precedence handling in Parse()
 	p.viper = v
 
+	// Bind environment variables for each flag
 	for _, flag := range p.registry.All() {
 		if err := p.bindFlag(v, flag); err != nil {
 			return err
+		}
+	}
+
+	// Also bind Cobra pflags to Viper if command is available
+	// This enables CLI flag values to be read by Viper with proper precedence
+	if p.cmd != nil {
+		for _, flag := range p.registry.All() {
+			viperKey := p.getViperKey(flag.GetName())
+			cobraFlag := p.cmd.Flags().Lookup(flag.GetName())
+			if cobraFlag != nil {
+				if err := v.BindPFlag(viperKey, cobraFlag); err != nil {
+					return fmt.Errorf("failed to bind pflag %s to viper: %w", flag.GetName(), err)
+				}
+			}
 		}
 	}
 
@@ -207,37 +227,50 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 
 	result := &ParsedConfig{
 		Flags:           make(map[string]interface{}),
-		PositionalArgs:  args, // For standard commands, all args are positional (e.g., component name)
+		PositionalArgs:  []string{},
 		PassThroughArgs: []string{},
 	}
 
-	// Populate AtmosFlags from Viper with precedence applied
-	// Viper contains: CLI flags > ENV vars > config files > defaults
+	// Step 1: Manually parse args into Cobra FlagSet (since DisableFlagParsing=true)
+	// This populates the pflags which are bound to Viper
+	if p.cmd != nil && len(args) > 0 {
+		if err := p.cmd.Flags().Parse(args); err != nil {
+			return nil, fmt.Errorf("failed to parse flags: %w", err)
+		}
+		// Extract positional args (non-flag args)
+		result.PositionalArgs = p.cmd.Flags().Args()
+	} else {
+		// No command or no args - all args are positional
+		result.PositionalArgs = args
+	}
+
+	// Step 2: Populate Flags map from Viper with precedence applied
+	// Viper contains: CLI flags (from pflags bound above) > ENV vars > config files > defaults
+	// ALWAYS read values (even defaults) from Viper to ensure defaults are included
 	if p.viper != nil {
 		for _, flag := range p.registry.All() {
 			flagName := flag.GetName()
 			viperKey := p.getViperKey(flagName)
-			if p.viper.IsSet(viperKey) {
-				// Use type-specific getters to ensure proper type conversion
-				// (ENV vars come in as strings and need conversion)
-				switch flag.(type) {
-				case *BoolFlag:
-					result.Flags[flagName] = p.viper.GetBool(viperKey)
-				case *IntFlag:
-					result.Flags[flagName] = p.viper.GetInt(viperKey)
-				case *StringFlag:
-					result.Flags[flagName] = p.viper.GetString(viperKey)
-				case *StringSliceFlag:
-					result.Flags[flagName] = p.viper.GetStringSlice(viperKey)
-				default:
-					// Fallback for unknown types
-					result.Flags[flagName] = p.viper.Get(viperKey)
-				}
+			// Use type-specific getters to ensure proper type conversion
+			// (ENV vars come in as strings and need conversion)
+			// GetX methods return the default if key is not explicitly set
+			switch flag.(type) {
+			case *BoolFlag:
+				result.Flags[flagName] = p.viper.GetBool(viperKey)
+			case *IntFlag:
+				result.Flags[flagName] = p.viper.GetInt(viperKey)
+			case *StringFlag:
+				result.Flags[flagName] = p.viper.GetString(viperKey)
+			case *StringSliceFlag:
+				result.Flags[flagName] = p.viper.GetStringSlice(viperKey)
+			default:
+				// Fallback for unknown types
+				result.Flags[flagName] = p.viper.Get(viperKey)
 			}
 		}
 	}
 
-	// Validate flag values against valid values constraints.
+	// Step 3: Validate flag values against valid values constraints.
 	if err := p.validateFlagValues(result.Flags); err != nil {
 		return nil, err
 	}

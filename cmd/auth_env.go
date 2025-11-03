@@ -40,10 +40,19 @@ var authEnvCmd = &cobra.Command{
 			return err
 		}
 
-		// Validate format.
-		if !slices.Contains(SupportedFormats, opts.Format) {
-			return fmt.Errorf("%w invalid format: %s", errUtils.ErrInvalidArgumentError, opts.Format)
+		// Resolve format (use default if empty).
+		format := opts.Format
+		if format == "" {
+			format = "bash" // Default format
 		}
+
+		// Validate format.
+		if !slices.Contains(SupportedFormats, format) {
+			return fmt.Errorf("%w invalid format: %s", errUtils.ErrInvalidArgumentError, format)
+		}
+
+		// Store resolved format back for use below.
+		opts.Format = format
 
 		// Load atmos configuration (processStacks=false since auth commands don't require stack manifests).
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)

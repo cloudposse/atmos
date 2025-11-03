@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"context"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -46,7 +44,6 @@ var validateComponentCmd = &cobra.Command{
 }
 
 func init() {
-
 	// Register StandardOptions flags (includes required stack flag via WithStack(true)).
 	validateComponentParser.RegisterFlags(validateComponentCmd)
 	_ = validateComponentParser.BindToViper(viper.GetViper())

@@ -79,7 +79,7 @@ func (p *EditorConfigParser) Parse(ctx context.Context, args []string) (*EditorC
 		Init:                          getBool(parsedConfig.Flags, "init"),
 		IgnoreDefaults:                getBool(parsedConfig.Flags, "ignore-defaults"),
 		DryRun:                        getBool(parsedConfig.Flags, "dry-run"),
-		ShowVersion:                   getBool(parsedConfig.Flags, "version"),
+		ShowVersion:                   getBool(parsedConfig.Flags, "show-version"),
 		Format:                        getString(parsedConfig.Flags, "format"),
 		DisableTrimTrailingWhitespace: getBool(parsedConfig.Flags, "disable-trim-trailing-whitespace"),
 		DisableEndOfLine:              getBool(parsedConfig.Flags, "disable-end-of-line"),

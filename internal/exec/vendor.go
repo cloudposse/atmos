@@ -47,7 +47,10 @@ type VendorFlags struct {
 func ExecuteVendorPullCommand(opts *flags.StandardOptions) error {
 	defer perf.Track(nil, "exec.ExecuteVendorPullCommand")()
 
-	info := schema.ConfigAndStacksInfo{}
+	// Populate ConfigAndStacksInfo with stack from opts to preserve CLI overrides
+	info := schema.ConfigAndStacksInfo{
+		Stack: opts.Stack,
+	}
 	processStacks := opts.Stack != ""
 
 	atmosConfig, err := cfg.InitCliConfig(info, processStacks)

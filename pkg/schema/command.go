@@ -29,6 +29,7 @@ type CommandFlag struct {
 	Description string `yaml:"description" json:"description" mapstructure:"description"`
 	Usage       string `yaml:"usage" json:"usage" mapstructure:"usage"`
 	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
+	Default     string `yaml:"default" json:"default" mapstructure:"default"`
 }
 
 type CommandEnv struct {

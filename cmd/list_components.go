@@ -43,7 +43,7 @@ var listComponentsCmd = &cobra.Command{
 			return fmt.Errorf("error initializing CLI config: %v", err)
 		}
 
-		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, true, true, false, false, nil, nil)
 		if err != nil {
 			return fmt.Errorf("error describing stacks: %v", err)
 		}
@@ -84,7 +84,7 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 		return nil, fmt.Errorf("error initializing CLI config: %v", err)
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, true, true, false, false, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error describing stacks: %v", err)
 	}

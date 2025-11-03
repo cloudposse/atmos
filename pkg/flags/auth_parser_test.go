@@ -157,7 +157,7 @@ func TestAuthParser_Parse(t *testing.T) {
 				WithVerbose().
 				WithOutput("").
 				WithDestination().
-				WithDuration("1h").
+				WithDuration(""). // Empty default so tests can verify zero values
 				WithIssuer("").
 				WithPrintOnly().
 				WithNoOpen().

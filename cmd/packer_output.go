@@ -24,7 +24,8 @@ var packerOutputCmd = &cobra.Command{
 	Use:     "output",
 	Aliases: []string{},
 	Short:   packerOutputShort,
-	Long:    packerOutputLong, RunE: func(cmd *cobra.Command, args []string) error {
+	Long:    packerOutputLong,
+	RunE: func(cmd *cobra.Command, args []string) error {
 		return packerRun(cmd, "output", args)
 	},
 }

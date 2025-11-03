@@ -38,8 +38,11 @@ func ExecuteValidateStacksCmd(opts *flags.StandardOptions) error {
 	// Ensure the spinner is stopped before returning
 	defer StopSpinner(p, spinnerDone)
 
-	// Process CLI arguments
-	info := schema.ConfigAndStacksInfo{}
+	// Process CLI arguments - populate from opts to preserve CLI overrides
+	info := schema.ConfigAndStacksInfo{
+		BasePath: opts.BasePath,
+		Stack:    opts.Stack,
+	}
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return err
