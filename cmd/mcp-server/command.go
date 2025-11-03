@@ -300,7 +300,7 @@ func getPermissionMode(atmosConfig *schema.AtmosConfiguration) permission.Mode {
 		return permission.ModeYOLO
 	}
 
-	if atmosConfig.Settings.AI.Tools.RequireConfirmation {
+	if atmosConfig.Settings.AI.Tools.RequireConfirmation != nil && *atmosConfig.Settings.AI.Tools.RequireConfirmation {
 		return permission.ModePrompt
 	}
 

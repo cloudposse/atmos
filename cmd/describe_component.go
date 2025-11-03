@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"errors"
+	"os"
 
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // describeComponentCmd describes configuration for components
@@ -68,6 +71,22 @@ var describeComponentCmd = &cobra.Command{
 
 		component := args[0]
 
+		// Load atmos configuration to get auth config.
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+			ComponentFromArg: component,
+			Stack:            stack,
+		}, false)
+		if err != nil {
+			return errors.Join(errUtils.ErrFailedToInitConfig, err)
+		}
+
+		// Get identity from flag and create AuthManager if provided.
+		identityName := GetIdentityFromFlags(cmd, os.Args)
+		authManager, err := CreateAuthManagerFromIdentity(identityName, &atmosConfig.Auth)
+		if err != nil {
+			return err
+		}
+
 		err = e.NewDescribeComponentExec().ExecuteDescribeComponentCmd(e.DescribeComponentParams{
 			Component:            component,
 			Stack:                stack,
@@ -78,6 +97,7 @@ var describeComponentCmd = &cobra.Command{
 			Format:               format,
 			File:                 file,
 			Provenance:           provenance,
+			AuthManager:          authManager,
 		})
 		return err
 	},

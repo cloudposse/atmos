@@ -1,13 +1,17 @@
 package cmd
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestExtractIdentityFromArgs(t *testing.T) {
@@ -153,6 +157,62 @@ func TestGetIdentityFromFlags(t *testing.T) {
 
 			result := GetIdentityFromFlags(cmd, tc.osArgs)
 			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestCreateAuthManagerFromIdentity_NoAuthConfigured(t *testing.T) {
+	tests := []struct {
+		name          string
+		identityName  string
+		authConfig    *schema.AuthConfig
+		expectError   bool
+		expectedError error
+	}{
+		{
+			name:          "nil authConfig with identity specified - should return error",
+			identityName:  "my-identity",
+			authConfig:    nil,
+			expectError:   true,
+			expectedError: errUtils.ErrAuthNotConfigured,
+		},
+		{
+			name:         "empty identities with identity specified - should return error",
+			identityName: "my-identity",
+			authConfig: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{},
+			},
+			expectError:   true,
+			expectedError: errUtils.ErrAuthNotConfigured,
+		},
+		{
+			name:         "nil authConfig without identity - should return nil",
+			identityName: "",
+			authConfig:   nil,
+			expectError:  false,
+		},
+		{
+			name:         "empty identities without identity - should return nil",
+			identityName: "",
+			authConfig: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			authManager, err := CreateAuthManagerFromIdentity(tc.identityName, tc.authConfig)
+
+			if tc.expectError {
+				require.Error(t, err, "Expected error but got nil")
+				assert.True(t, errors.Is(err, tc.expectedError), "Expected error to be %v, got %v", tc.expectedError, err)
+				assert.Nil(t, authManager, "Expected authManager to be nil when error occurs")
+			} else {
+				require.NoError(t, err, "Expected no error but got: %v", err)
+				assert.Nil(t, authManager, "Expected authManager to be nil when no identity specified")
+			}
 		})
 	}
 }

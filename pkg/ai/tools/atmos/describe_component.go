@@ -73,8 +73,14 @@ func (t *DescribeComponentTool) Execute(ctx context.Context, params map[string]i
 	}
 
 	// Execute describe component.
-	// ExecuteDescribeComponent(component, stack, processTemplates, processYamlFunctions, skip)
-	output, err := exec.ExecuteDescribeComponent(component, stack, false, false, nil)
+	output, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	if err != nil {
 		return &tools.Result{
 			Success: false,

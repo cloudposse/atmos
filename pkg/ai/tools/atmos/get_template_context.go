@@ -75,7 +75,14 @@ func (t *GetTemplateContextTool) Execute(ctx context.Context, params map[string]
 	log.Debug(fmt.Sprintf("Getting template context for component '%s' in stack '%s'", component, stack))
 
 	// Get component configuration which contains the template context.
-	componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true, []string{})
+	componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{},
+		AuthManager:          nil,
+	})
 	if err != nil {
 		return &tools.Result{
 			Success: false,

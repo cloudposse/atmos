@@ -55,7 +55,7 @@ func (t *ListStacksTool) Execute(ctx context.Context, params map[string]interfac
 
 	// Execute list stacks.
 	// ExecuteDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections,
-	//                       ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip)
+	//                       ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager)
 	stacks, err := exec.ExecuteDescribeStacks(
 		t.atmosConfig,
 		"",    // filterByStack - empty means all stacks
@@ -67,6 +67,7 @@ func (t *ListStacksTool) Execute(ctx context.Context, params map[string]interfac
 		false, // processYamlFunctions
 		false, // includeEmptyStacks
 		nil,   // skip
+		nil,   // authManager
 	)
 	if err != nil {
 		return &tools.Result{
