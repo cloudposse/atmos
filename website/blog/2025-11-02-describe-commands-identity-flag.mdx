@@ -198,6 +198,30 @@ atmos describe stacks --identity my-aws-identity --format yaml > stacks.yaml
 - Use `--process-functions=false` to skip YAML functions
 - Use `--process-templates=false` to skip Go templates
 
+### Error Handling
+
+**When authentication is not configured:**
+
+If your `atmos.yaml` does not have an `auth` section or has no identities configured, the behavior depends on whether you use the `--identity` flag:
+
+✅ **Without `--identity` flag** - Commands work normally using ambient credentials (environment variables, AWS profiles, instance metadata)
+
+```bash
+# Works when auth not configured - uses ambient credentials
+atmos describe stacks
+```
+
+❌ **With `--identity` flag** - Commands fail with a clear error message
+
+```bash
+# Fails when auth not configured but --identity provided
+atmos describe stacks --identity my-identity
+# Error: authentication not configured in atmos.yaml
+#        the --identity flag requires authentication to be configured in atmos.yaml with at least one identity
+```
+
+This prevents confusing authentication failures and guides you to configure the `auth` section before using identity-based authentication.
+
 ### Authentication Flow
 
 When you specify `--identity`:

@@ -239,6 +239,33 @@ if params.AuthManager != nil {
 }
 ```
 
+## Error Handling
+
+### Authentication Not Configured
+
+When the `--identity` flag is provided but authentication is not configured in `atmos.yaml` (no `auth` section or empty identities), the command will fail with a clear error message:
+
+```bash
+$ atmos describe stacks --identity my-identity
+Error: authentication not configured in atmos.yaml
+       the --identity flag requires authentication to be configured in atmos.yaml with at least one identity
+```
+
+This prevents confusing authentication failures and guides users to configure the `auth` section before using identity-based authentication.
+
+### Graceful Degradation
+
+When authentication is not configured and the `--identity` flag is NOT provided, describe commands continue to work normally using ambient credentials (environment variables, AWS profiles, instance metadata).
+
+```bash
+# Works when auth not configured - uses ambient credentials
+$ atmos describe stacks
+
+# Fails when auth not configured but --identity provided
+$ atmos describe stacks --identity my-identity
+Error: authentication not configured in atmos.yaml
+```
+
 ## Testing Strategy
 
 ### Unit Tests

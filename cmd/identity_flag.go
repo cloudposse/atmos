@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -109,6 +110,7 @@ func extractIdentityFromArgs(args []string) string {
 
 // CreateAuthManagerFromIdentity creates and authenticates an AuthManager from an identity name.
 // Returns nil if identityName is empty (no authentication requested).
+// Returns error if identityName is provided but auth is not configured in atmos.yaml.
 // This helper reduces nested complexity in describe commands.
 func CreateAuthManagerFromIdentity(
 	identityName string,
@@ -116,6 +118,11 @@ func CreateAuthManagerFromIdentity(
 ) (auth.AuthManager, error) {
 	if identityName == "" {
 		return nil, nil
+	}
+
+	// Check if auth is configured when --identity flag is provided.
+	if authConfig == nil || len(authConfig.Identities) == 0 {
+		return nil, fmt.Errorf("%w: the --identity flag requires authentication to be configured in atmos.yaml with at least one identity", errUtils.ErrAuthNotConfigured)
 	}
 
 	// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
