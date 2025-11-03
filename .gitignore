@@ -48,6 +48,7 @@
 **/.atmos/cache.yaml
 **/.atmos/sessions/
 **/cache.*.txt
+**/.atmos/ai.settings.local.json
 
 # Development configs - track only specific files
 .atmos.d/*
@@ -100,4 +101,3 @@ performance-optimization/
 *.bak
 *.go.bak
 **/*.go.bak
-.atmos/ai.settings.local.json
