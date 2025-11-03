@@ -242,14 +242,13 @@ auth:
       kind: aws/saml
       region: us-east-1
       url: https://company.okta.com/app/amazon_aws/abc123/sso/saml
-      idp_arn: arn:aws:iam::123456789012:saml-provider/okta-saml
-      # Optional: Specify SAML driver (Browser, GoogleApps, Okta, ADFS).
-      # Note: provider_type is deprecated; use driver instead.
-      # If not specified, Atmos automatically selects the best driver based on:
-      # 1. Browser (if Playwright drivers are installed)
-      # 2. Provider-specific fallback (GoogleApps for Google, Okta for Okta, ADFS for ADFS)
-      # 3. Browser with auto-download
+
+      # Optional: Specify SAML driver (Browser, GoogleApps, Okta, ADFS)
+      # If not specified, Atmos automatically selects the best option
       driver: Browser
+
+      # Optional: Auto-download browser drivers on first use (recommended for Browser driver)
+      download_browser_driver: true
 
   identities:
     saml-admin:
@@ -265,17 +264,38 @@ auth:
 
 The `driver` field controls how Atmos authenticates with your SAML identity provider:
 
-- **`Browser`** (recommended): Opens your system browser for authentication. Requires Playwright drivers to be installed or enables auto-download when supported.
-  ```bash
-  # Install Playwright drivers
-  go run github.com/playwright-community/playwright-go/cmd/playwright@latest install
+- **`Browser`** (recommended): Opens a browser for authentication. Browser drivers are managed automatically:
+
+  **Recommended: Automatic Download**
+  ```yaml
+  providers:
+    my-saml:
+      kind: aws/saml
+      driver: Browser
+      download_browser_driver: true  # Auto-downloads Chromium (~140 MB) on first use
   ```
 
-- **`GoogleApps`**: Uses Google Apps SAML API (no browser needed)
-- **`Okta`**: Uses Okta SAML API (no browser needed)
-- **`ADFS`**: Uses Active Directory Federation Services API (no browser needed)
+  With this configuration, Atmos automatically downloads Chromium on your first authentication attempt and stores it in your user cache directory:
+  - macOS: `~/Library/Caches/ms-playwright-go/`
+  - Linux: `~/.cache/ms-playwright-go/`
+  - Windows: `%USERPROFILE%\AppData\Local\ms-playwright-go\`
 
-If `driver` is not specified, Atmos automatically selects the best option based on your SAML URL and available drivers.
+  :::info Manual Installation
+  Manual browser installation is **not recommended** because:
+  - Version compatibility must be carefully managed between Atmos, saml2aws, and playwright-go
+  - Different installation methods use different cache directories which may not be detected
+  - The automatic download option handles everything correctly
+
+  The `download_browser_driver: true` option is the simplest and most reliable approach.
+  :::
+
+  **Note**: Browser drivers do not need to be in your system PATH. Atmos uses Chromium by default for maximum compatibility with SAML identity providers.
+
+- **`GoogleApps`**: Uses Google Apps SAML API (no browser automation needed)
+- **`Okta`**: Uses Okta SAML API (no browser automation needed)
+- **`ADFS`**: Uses Active Directory Federation Services API (no browser automation needed)
+
+**Auto-Detection**: If `driver` is not specified, Atmos automatically selects the best option based on your SAML URL and whether browser drivers are available.
 
 ### GitHub Actions OIDC
 

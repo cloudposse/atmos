@@ -234,10 +234,84 @@ func TestSAMLProvider_createSAMLConfig_LoginDetails(t *testing.T) {
 	assert.Equal(t, "https://idp.example.com", ld.URL)
 	assert.Equal(t, "user", ld.Username)
 	assert.Equal(t, "pass", ld.Password)
+	assert.True(t, ld.DownloadBrowser, "LoginDetails.DownloadBrowser should be set when DownloadBrowserDriver is true")
+}
+
+func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
+	tests := []struct {
+		name                  string
+		downloadBrowserDriver bool
+		explicitDriver        string
+		setup                 func(t *testing.T) string // Returns home directory.
+	}{
+		{
+			name:                  "explicitly enabled",
+			downloadBrowserDriver: true,
+			setup: func(t *testing.T) string {
+				return t.TempDir()
+			},
+		},
+		{
+			name:                  "auto-enabled when no drivers found and using Browser driver",
+			downloadBrowserDriver: false,
+			setup: func(t *testing.T) string {
+				// No drivers installed -> should auto-enable.
+				return t.TempDir()
+			},
+		},
+		{
+			name:                  "disabled when using GoogleApps driver",
+			downloadBrowserDriver: false,
+			explicitDriver:        "GoogleApps",
+			setup: func(t *testing.T) string {
+				return t.TempDir()
+			},
+		},
+		{
+			name:                  "disabled when drivers already installed",
+			downloadBrowserDriver: false,
+			setup: func(t *testing.T) string {
+				homeDir := t.TempDir()
+				playwrightDir := filepath.Join(homeDir, "Library", "Caches", "ms-playwright", "1.47.2")
+				require.NoError(t, os.MkdirAll(playwrightDir, 0o755))
+				// Create fake browser.
+				browserFile := filepath.Join(playwrightDir, "chromium-1234")
+				require.NoError(t, os.Mkdir(browserFile, 0o755))
+				return homeDir
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			homeDir := tt.setup(t)
+
+			// Override home directory for cross-platform compatibility.
+			t.Setenv("HOME", homeDir)        // Linux/macOS.
+			t.Setenv("USERPROFILE", homeDir) // Windows.
+
+			p, err := NewSAMLProvider("p", &schema.Provider{
+				Kind:                  "aws/saml",
+				URL:                   "https://accounts.google.com/saml",
+				Region:                "us-east-1",
+				DownloadBrowserDriver: tt.downloadBrowserDriver,
+				Driver:                tt.explicitDriver,
+			})
+			require.NoError(t, err)
+			sp := p.(*samlProvider)
+
+			ld := sp.createLoginDetails()
+
+			// Verify DownloadBrowser matches shouldDownloadBrowser().
+			expectedDownload := sp.shouldDownloadBrowser()
+			assert.Equal(t, expectedDownload, ld.DownloadBrowser,
+				"LoginDetails.DownloadBrowser should match shouldDownloadBrowser()")
+		})
+	}
 }
 
 func TestSAMLProvider_authenticateAndGetAssertion_SuccessAndEmpty(t *testing.T) {
-	sp := &samlProvider{name: "p", url: "https://idp", region: "us-east-1"}
+	sp := &samlProvider{name: "p", url: "https://idp", region: "us-east-1", config: &schema.Provider{}}
 
 	// Success.
 	out, err := sp.authenticateAndGetAssertion(stubSAMLClient{assertion: "abc"}, &creds.LoginDetails{})

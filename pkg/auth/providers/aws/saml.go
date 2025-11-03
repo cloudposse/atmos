@@ -190,8 +190,9 @@ func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
 // createLoginDetails creates the login details for saml2aws.
 func (p *samlProvider) createLoginDetails() *creds.LoginDetails {
 	loginDetails := &creds.LoginDetails{
-		URL:      p.url,
-		Username: p.config.Username,
+		URL:             p.url,
+		Username:        p.config.Username,
+		DownloadBrowser: p.shouldDownloadBrowser(), // Enable automatic driver installation.
 	}
 
 	// If password is provided in config, use it; otherwise prompt.
@@ -419,9 +420,9 @@ func (p *samlProvider) playwrightDriversInstalled() bool {
 
 	// Check common Playwright cache locations.
 	playwrightPaths := []string{
-		filepath.Join(homeDir, ".cache", "ms-playwright"),               // Linux.
-		filepath.Join(homeDir, "Library", "Caches", "ms-playwright-go"), // macOS (Go specific).
-		filepath.Join(homeDir, "AppData", "Local", "ms-playwright"),     // Windows.
+		filepath.Join(homeDir, ".cache", "ms-playwright"),            // Linux.
+		filepath.Join(homeDir, "Library", "Caches", "ms-playwright"), // macOS.
+		filepath.Join(homeDir, "AppData", "Local", "ms-playwright"),  // Windows.
 	}
 
 	for _, path := range playwrightPaths {
