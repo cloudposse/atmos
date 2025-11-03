@@ -90,6 +90,7 @@ tools/gomodcheck/.gomodcheck
 # Claude Code and Hive Mind development tools
 .claude-flow/
 .hive-mind/
+.scratch/
 
 performance-optimization/
 
