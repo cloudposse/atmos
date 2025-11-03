@@ -26,7 +26,6 @@ var docsCmd = &cobra.Command{
 	Long:               `This command opens the Atmos docs or displays the documentation for a specified Atmos component.`,
 	Example:            "atmos docs vpc",
 	Args:               cobra.MaximumNArgs(1),
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 1 {

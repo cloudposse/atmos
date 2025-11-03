@@ -26,7 +26,6 @@ var authEnvCmd = &cobra.Command{
 	Short: "Export temporary cloud credentials as environment variables",
 	Long:  "Outputs environment variables for the assumed identity, suitable for use by external tools such as Terraform or Helm.",
 
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Get output format
 		format, _ := cmd.Flags().GetString("format")

@@ -27,7 +27,6 @@ then ` + "`" + `atmos` + "`" + ` executes the command without requiring the ` + 
 
 See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html for more information.`,
 
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		err := e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)

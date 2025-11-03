@@ -17,7 +17,6 @@ var describeStacksCmd = &cobra.Command{
 	Use:                "stacks",
 	Short:              "Display configuration for Atmos stacks and their components",
 	Long:               "This command shows the configuration details for Atmos stacks and the components within those stacks.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE: getRunnableDescribeStacksCmd(getRunnableDescribeStacksCmdProps{
 		checkAtmosConfig,

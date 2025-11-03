@@ -18,12 +18,11 @@ Example usage:
 
 // helmfileApplyCmd represents the base command for all helmfile sub-commands
 var helmfileApplyCmd = &cobra.Command{
-	Use:                "apply",
-	Aliases:            []string{},
-	Short:              helmfileApplyShort,
-	Long:               helmfileApplyLong,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-	Args:               cobra.ArbitraryArgs,
+	Use:     "apply",
+	Aliases: []string{},
+	Short:   helmfileApplyShort,
+	Long:    helmfileApplyLong,
+	Args:    cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return helmfileRun(cmd, "apply", args)
 	},

@@ -15,7 +15,6 @@ var workflowCmd = &cobra.Command{
 	Short: "Run predefined tasks using workflows",
 	Long:  `Run predefined workflows as an alternative to traditional task runners. Workflows enable you to automate and manage infrastructure and operational tasks specified in configuration files.`,
 
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// If no arguments are provided, start the workflow UI

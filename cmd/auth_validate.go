@@ -19,7 +19,6 @@ var authValidateCmd = &cobra.Command{
 	Short: "Validate authentication configuration",
 	Long:  "Validate the authentication configuration in atmos.yaml for syntax and logical errors.",
 
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE:               executeAuthValidateCommand,
 }
 

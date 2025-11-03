@@ -1092,9 +1092,9 @@ atmos terraform plan vpc -s prod -var-file=prod.tfvars
 Instead of weakly-typed string-based flag access (like Cobra's `GetString("flag")`), we use **strongly-typed interpreters** (like Viper's schema-first approach). Each command type has its own interpreter struct with properly typed fields.
 
 **See also**:
-- `docs/architecture/flag-parser/strongly-typed-interpreters/global-flags-pattern.md` - Handling global/persistent flags via struct embedding
-- `docs/architecture/flag-parser/strongly-typed-interpreters/global-flags-examples.md` - Real examples with `--logs-level` and `--identity`
-- `docs/architecture/flag-parser/strongly-typed-interpreters/default-values-pattern.md` - Default value handling across all layers
+- `docs/prd/flag-parser/strongly-typed-interpreters/global-flags-pattern.md` - Handling global/persistent flags via struct embedding
+- `docs/prd/flag-parser/strongly-typed-interpreters/global-flags-examples.md` - Real examples with `--logs-level` and `--identity`
+- `docs/prd/flag-parser/strongly-typed-interpreters/default-values-pattern.md` - Default value handling across all layers
 
 ### Why Strongly Typed?
 
@@ -2589,7 +2589,7 @@ func NewTerraformCmd(
 - Atmos existing PRDs:
   - `docs/prd/command-registry-pattern.md` - Command registration system
   - `docs/prd/testing-strategy.md` - Testing approach and coverage
-  - `docs/architecture/flag-parser/strongly-typed-interpreters/` - Strongly-typed interpreter system (NEW)
+  - `docs/prd/flag-parser/strongly-typed-interpreters/` - Strongly-typed interpreter system (NEW)
     - `global-flags-pattern.md` - Global flags handling via embedding
     - `global-flags-examples.md` - Real-world examples with --logs-level and --identity
     - `default-values-pattern.md` - Default value handling across all layers

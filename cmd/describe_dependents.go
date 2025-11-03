@@ -18,7 +18,6 @@ var describeDependentsCmd = &cobra.Command{
 	Aliases:            []string{"dependants"},
 	Short:              "List Atmos components that depend on a given component",
 	Long:               "This command generates a list of Atmos components within stacks that depend on the specified Atmos component.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.ExactArgs(1),
 	ValidArgsFunction:  ComponentsArgCompletion,
 	RunE: getRunnableDescribeDependentsCmd(

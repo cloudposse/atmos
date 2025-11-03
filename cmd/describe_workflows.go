@@ -21,7 +21,6 @@ var describeWorkflowsCmd = &cobra.Command{
 	Use:                "workflows",
 	Short:              "List Atmos workflows and their associated files",
 	Long:               "List all Atmos workflows, showing their associated files and workflow names for easy reference.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE:               getRunnableDescribeWorkflowsCmd(checkAtmosConfig, exec.ProcessCommandLineArgs, cfg.InitCliConfig, exec.NewDescribeWorkflowsExec()),
 }

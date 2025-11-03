@@ -28,7 +28,6 @@ var authLoginCmd = &cobra.Command{
 	Short: "Authenticate using a configured identity",
 	Long:  "Authenticate to cloud providers using an identity defined in `atmos.yaml`.",
 
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 	RunE:               executeAuthLoginCommand,
 }

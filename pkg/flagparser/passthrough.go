@@ -50,6 +50,7 @@ const (
 //	// cfg.PassThroughArgs contains args to pass to terraform
 type PassThroughFlagParser struct {
 	registry            *FlagRegistry
+	viper               *viper.Viper      // Viper instance for precedence handling
 	viperPrefix         string
 	atmosFlagNames      []string          // Known Atmos flag names for extraction
 	shorthandToFull     map[string]string // Maps shorthand (e.g., "s") to full name (e.g., "stack")
@@ -175,6 +176,9 @@ func (p *PassThroughFlagParser) registerFlag(cmd *cobra.Command, flag Flag) {
 func (p *PassThroughFlagParser) BindToViper(v *viper.Viper) error {
 	defer perf.Track(nil, "flagparser.PassThroughFlagParser.BindToViper")()
 
+	// Store Viper instance for precedence handling in Parse()
+	p.viper = v
+
 	for _, flag := range p.registry.All() {
 		if err := p.bindFlag(v, flag); err != nil {
 			return err
@@ -196,11 +200,6 @@ func (p *PassThroughFlagParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Vi
 	defer perf.Track(nil, "flagparser.PassThroughFlagParser.BindFlagsToViper")()
 
 	for _, flag := range p.registry.All() {
-		// Skip NoOptDefVal flags - they're handled manually
-		if flag.GetNoOptDefVal() != "" {
-			continue
-		}
-
 		viperKey := p.getViperKey(flag.GetName())
 		cobraFlag := cmd.Flags().Lookup(flag.GetName())
 		if cobraFlag == nil {
@@ -220,8 +219,6 @@ func (p *PassThroughFlagParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Vi
 //
 //	Phase 1: Extract Atmos flags from mixed args
 //	Phase 2: Return pass-through args for external tool
-//
-// revive:disable-next-line:function-length Core parsing logic with many edge cases.
 func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*ParsedConfig, error) {
 	defer perf.Track(nil, "flagparser.PassThroughFlagParser.Parse")()
 
@@ -229,72 +226,109 @@ func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*Pars
 		AtmosFlags: make(map[string]interface{}),
 	}
 
-	// Check for explicit double-dash separator
-	beforeDash, afterDash := p.SplitAtDoubleDash(args)
+	// Step 1: Separate args into Atmos args and tool args using -- separator
+	atmosArgs, toolArgs := p.separateArgsByMode(args)
 
-	var atmosArgs, toolArgs []string
-
-	if afterDash != nil {
-		// Explicit mode: -- separator present
-		// Everything after -- goes to tool unchanged
-		atmosArgs = beforeDash
-		toolArgs = afterDash
-	} else {
-		// Implicit mode: no -- separator
-		// Extract Atmos flags, everything else goes to tool
-		atmosArgs = args
-		toolArgs = nil
-	}
-
-	// Extract Atmos flags from atmosArgs
-	// This handles both explicit mode (with --) and implicit mode (without --)
+	// Step 2: Extract Atmos flags from atmosArgs
 	atmosFlagsMap, remaining, err := p.ExtractAtmosFlags(atmosArgs)
 	if err != nil {
 		return nil, err
 	}
 
-	result.AtmosFlags = atmosFlagsMap
-
-	// In explicit mode, prepend remaining args to toolArgs
-	// In implicit mode, remaining args ARE the tool args
-	if afterDash != nil {
-		toolArgs = append(remaining, toolArgs...)
-	} else {
-		toolArgs = remaining
+	// Step 2.5: Apply precedence by reading final values from Viper
+	// Viper contains: CLI flags > ENV vars > config files > defaults
+	// This ensures precedence is applied correctly for ALL registered flags
+	if p.viper != nil {
+		for _, flag := range p.registry.All() {
+			flagName := flag.GetName()
+			viperKey := p.getViperKey(flagName)
+			if p.viper.IsSet(viperKey) {
+				// Use type-specific getters to ensure proper type conversion
+				// (ENV vars come in as strings and need conversion)
+				switch flag.(type) {
+				case *BoolFlag:
+					atmosFlagsMap[flagName] = p.viper.GetBool(viperKey)
+				case *IntFlag:
+					atmosFlagsMap[flagName] = p.viper.GetInt(viperKey)
+				case *StringFlag:
+					atmosFlagsMap[flagName] = p.viper.GetString(viperKey)
+				default:
+					// Fallback for unknown types
+					atmosFlagsMap[flagName] = p.viper.Get(viperKey)
+				}
+			}
+		}
 	}
 
-	// Extract positional arguments (subcommand, component) if enabled.
-	// For commands like auth exec/shell, skip positional extraction - all toolArgs go to PassThroughArgs.
+	result.AtmosFlags = atmosFlagsMap
+
+	// Step 3: Combine remaining args with tool args
+	toolArgs = p.combineRemainingArgs(remaining, toolArgs, args)
+
+	// Step 4: Extract positional args if enabled, or pass everything through
 	if !p.extractPositionals {
 		result.PassThroughArgs = toolArgs
+		result.PositionalArgs = []string{} // Initialize to empty slice, not nil
 		return result, nil
 	}
 
-	// Expected patterns:
-	//   terraform plan vpc  (2 positional args: subcommand, component)
-	//   packer vpc          (1 positional arg: component only, subcommand passed separately)
+	// Step 5: Extract positional arguments and populate result
+	p.extractAndPopulatePositionals(toolArgs, result)
+
+	return result, nil
+}
+
+// separateArgsByMode splits args into Atmos args and tool args based on -- separator.
+// Returns (atmosArgs, toolArgs).
+func (p *PassThroughFlagParser) separateArgsByMode(args []string) (atmosArgs, toolArgs []string) {
+	defer perf.Track(nil, "flagparser.PassThroughFlagParser.separateArgsByMode")()
+
+	beforeDash, afterDash := p.SplitAtDoubleDash(args)
+
+	if afterDash != nil {
+		// Explicit mode: -- separator present
+		// Everything after -- goes to tool unchanged
+		return beforeDash, afterDash
+	}
+
+	// Implicit mode: no -- separator
+	// All args need to be processed to extract Atmos flags
+	return args, nil
+}
+
+// combineRemainingArgs combines remaining args with tool args based on parsing mode.
+// In explicit mode (with --), prepend remaining to tool args.
+// In implicit mode (no --), remaining args ARE the tool args.
+func (p *PassThroughFlagParser) combineRemainingArgs(remaining, toolArgs, originalArgs []string) []string {
+	defer perf.Track(nil, "flagparser.PassThroughFlagParser.combineRemainingArgs")()
+
+	// Check if original args had a -- separator
+	_, afterDash := p.SplitAtDoubleDash(originalArgs)
+
+	if afterDash != nil {
+		// Explicit mode: prepend remaining to tool args
+		return append(remaining, toolArgs...)
+	}
+
+	// Implicit mode: remaining args ARE the tool args
+	return remaining
+}
+
+// extractAndPopulatePositionals extracts positional args and populates result fields.
+// This handles both new (PositionalArgs) and deprecated (SubCommand, ComponentName) fields.
+func (p *PassThroughFlagParser) extractAndPopulatePositionals(toolArgs []string, result *ParsedConfig) {
+	defer perf.Track(nil, "flagparser.PassThroughFlagParser.extractAndPopulatePositionals")()
+
 	positional, remainingTool, err := p.ExtractPositionalArgs(toolArgs, p.positionalArgsCount)
 	if err != nil {
 		// Not an error - some commands don't have positional args
 		result.PassThroughArgs = toolArgs
-		return result, nil
+		return
 	}
 
-	// For 1 positional arg, it's the component (packer/helmfile pattern).
-	// For 2+ positional args, first is subcommand, second is component (terraform pattern).
-	if p.positionalArgsCount == 1 && len(positional) > 0 {
-		result.ComponentName = positional[0]
-	} else {
-		if len(positional) > 0 {
-			result.SubCommand = positional[0]
-		}
-		if len(positional) > 1 {
-			result.ComponentName = positional[1]
-		}
-	}
-
+	// Store positional args
+	result.PositionalArgs = positional
 	result.PassThroughArgs = remainingTool
-	return result, nil
 }
 
 // SplitAtDoubleDash implements PassThroughHandler.

@@ -46,14 +46,7 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, parsedConfig *flagparser.ParsedConfig) error {
 	// Build args array from ParsedConfig for getConfigAndStacksInfo
 	// Format: [subcommand, component, ...pass-through-args]
-	args := []string{}
-	if parsedConfig.SubCommand != "" {
-		args = append(args, parsedConfig.SubCommand)
-	}
-	if parsedConfig.ComponentName != "" {
-		args = append(args, parsedConfig.ComponentName)
-	}
-	args = append(args, parsedConfig.PassThroughArgs...)
+	args := append(parsedConfig.PositionalArgs, parsedConfig.PassThroughArgs...)
 
 	info := getConfigAndStacksInfo(cfg.TerraformComponentType, cmd, args)
 
@@ -61,6 +54,18 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, parsedConfig *fl
 		err := actualCmd.Usage()
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
+	}
+
+	// Override info fields with values from parsedConfig.AtmosFlags to respect precedence (CLI > ENV > defaults).
+	// parsedConfig.AtmosFlags contains values resolved by Viper with proper precedence handling.
+	if val, ok := parsedConfig.AtmosFlags["stack"]; ok {
+		info.Stack = val.(string)
+	}
+	if val, ok := parsedConfig.AtmosFlags["identity"]; ok {
+		info.Identity = val.(string)
+	}
+	if val, ok := parsedConfig.AtmosFlags["dry-run"]; ok {
+		info.DryRun = val.(bool)
 	}
 
 	flags := cmd.Flags()
@@ -77,26 +82,16 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, parsedConfig *fl
 	components, err := flags.GetStringSlice("components")
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
-	dryRun, err := flags.GetBool("dry-run")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-
 	info.ProcessTemplates = processTemplates
 	info.ProcessFunctions = processYamlFunctions
 	info.Skip = skip
 	info.Components = components
-	info.DryRun = dryRun
 
 	// Handle --identity flag for interactive selection.
-	// ProcessCommandLineArgs already parsed the identity value correctly via processArgsAndFlags.
-	// We only need to handle the special case where --identity was used without a value (interactive selection).
-	// Note: We cannot use flags.GetString("identity") here because Cobra's NoOptDefVal behavior
-	// with positional args causes it to return "__SELECT__" even when a value was provided
-	// (e.g., "atmos terraform plan vpc --identity asd" treats "asd" as positional, not flag value).
+	// If identity is "__SELECT__", prompt for interactive selection.
 	if info.Identity == cfg.IdentityFlagSelectValue {
 		handleInteractiveIdentitySelection(&info)
 	}
-	// Otherwise, info.Identity already has the correct value from ProcessCommandLineArgs
-	// (either from --identity <value>, ATMOS_IDENTITY env var, or empty string).
 	// Check Terraform Single-Component and Multi-Component flags
 	err = checkTerraformFlags(&info)
 	errUtils.CheckErrorPrintAndExit(err, "", "")

@@ -42,7 +42,6 @@ Supports multiple output formats:
 - **mermaid**: Mermaid diagram syntax for rendering in compatible tools
 - **markdown**: Markdown document with embedded Mermaid diagram`,
 	Example:            authListUsageMarkdown,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  cobra.NoFileCompletions,
 	RunE:               executeAuthListCommand,
 }

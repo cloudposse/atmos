@@ -40,7 +40,6 @@ Note: This only removes local credentials. Your browser session with the
 identity provider (AWS SSO, Okta, etc.) may still be active. To completely
 end your session, visit your identity provider's website and sign out.`,
 
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  identityArgCompletion,
 	RunE:               executeAuthLogoutCommand,
 }

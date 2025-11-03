@@ -94,19 +94,11 @@ type ParsedConfig struct {
 	// These arguments are NOT parsed by Atmos - they're passed directly to the tool.
 	PassThroughArgs []string
 
-	// SubCommand is the first positional argument (e.g., "plan" in "terraform plan").
-	SubCommand string
-
-	// ComponentName is the component being operated on (e.g., "vpc" in "terraform plan vpc").
-	ComponentName string
-
-	// Stack is the stack name extracted from flags or positional args.
-	Stack string
-
-	// Identity is the identity to use for authentication.
-	// May be empty (use default), a specific identity name, or cfg.IdentityFlagSelectValue (interactive).
-	Identity string
-
-	// DryRun indicates whether this is a dry run (no actual execution).
-	DryRun bool
+	// PositionalArgs contains positional arguments extracted from the command line.
+	// The meaning of these depends on the command:
+	//   - For terraform: [subcommand, component] e.g., ["plan", "vpc"]
+	//   - For packer/helmfile: [component] e.g., ["vpc"]
+	//   - For auth exec: [] (no positional args, everything is pass-through)
+	// Callers should interpret these based on their command's semantics.
+	PositionalArgs []string
 }

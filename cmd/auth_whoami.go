@@ -32,7 +32,6 @@ var authWhoamiCmd = &cobra.Command{
 	Short: "Show current authentication status",
 	Long:  "Display information about the current effective authentication principal.",
 
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE:               executeAuthWhoamiCommand,
 }
 

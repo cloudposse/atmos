@@ -11,7 +11,6 @@ var terraformGenerateBackendsCmd = &cobra.Command{
 	Use:                "backends",
 	Short:              "Generate backend configurations for all Terraform components",
 	Long:               "This command generates the backend configuration files for all Terraform components in the Atmos environment.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration

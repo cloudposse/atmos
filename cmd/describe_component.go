@@ -14,7 +14,6 @@ var describeComponentCmd = &cobra.Command{
 	Use:                "component",
 	Short:              "Show configuration details for an Atmos component in a stack",
 	Long:               `Display the configuration details for a specific Atmos component within a designated Atmos stack, including its dependencies, settings, and overrides.`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration

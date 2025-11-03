@@ -12,7 +12,6 @@ var terraformGenerateVarfileCmd = &cobra.Command{
 	Use:                "varfile",
 	Short:              "Generate a varfile for a Terraform component",
 	Long:               "This command generates a `varfile` for a specified Atmos Terraform component.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)

@@ -14,7 +14,6 @@ You can use this command to interact with AWS EKS, including operations like con
 
 For a list of available AWS EKS commands, refer to the Atmos documentation:
 https://atmos.tools/cli/commands/aws/eks-update-kubeconfig`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 }
 

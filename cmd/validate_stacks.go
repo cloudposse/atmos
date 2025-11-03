@@ -13,7 +13,6 @@ var ValidateStacksCmd = &cobra.Command{
 	Short:              "Validate stack manifest configurations",
 	Long:               "This command validates the configuration of stack manifests in Atmos to ensure proper setup and compliance.",
 	Example:            "validate stacks",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration

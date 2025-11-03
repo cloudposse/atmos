@@ -24,20 +24,24 @@ var authExecParser *flagparser.PassThroughFlagParser
 
 func init() {
 	// Create parser with identity flag only (auth exec doesn't use stack/component flags).
+	// Configure identity flag with ENV var support for precedence (CLI > ENV > defaults).
 	authExecParser = flagparser.NewPassThroughFlagParser(
-		flagparser.WithStringFlag("identity", "i", "", "Specify the target identity to assume. Use without value to interactively select."),
+		flagparser.WithRegistry(func() *flagparser.FlagRegistry {
+			registry := flagparser.NewFlagRegistry()
+			registry.Register(&flagparser.StringFlag{
+				Name:        "identity",
+				Shorthand:   "i",
+				Default:     "",
+				Description: "Specify the target identity to assume. Use without value to interactively select.",
+				NoOptDefVal: cfg.IdentityFlagSelectValue,
+				EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
+			})
+			return registry
+		}()),
 	)
 
 	// Disable positional extraction - all args after flags are command args.
 	authExecParser.DisablePositionalExtraction()
-
-	// Set NoOptDefVal for identity flag to support --identity without value.
-	registry := authExecParser.GetRegistry()
-	if identityFlag := registry.Get("identity"); identityFlag != nil {
-		if sf, ok := identityFlag.(*flagparser.StringFlag); ok {
-			sf.NoOptDefVal = cfg.IdentityFlagSelectValue
-		}
-	}
 }
 
 // authExecCmd executes a command with authentication environment variables.
@@ -71,11 +75,12 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Get identity from parsed config.
-	var identityValue string
+	// Get identity from parsed config with precedence (CLI > ENV > defaults).
+	// parsedConfig.AtmosFlags contains values resolved by Viper with proper precedence handling.
+	var identityName string
 	if id, ok := parsedConfig.AtmosFlags["identity"]; ok {
 		if idStr, ok := id.(string); ok {
-			identityValue = idStr
+			identityName = idStr
 		}
 	}
 
@@ -97,20 +102,6 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 	authManager, err := createAuthManager(&atmosConfig.Auth)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
-	}
-
-	// Get identity from extracted flag or use default.
-	// identityValue will be:
-	// - "" if --identity was not provided
-	// - IdentityFlagSelectValue if --identity was provided without a value
-	// - the actual value if --identity=value or --identity value was provided
-	var identityName string
-	if identityValue != "" {
-		// Flag was explicitly provided on command line.
-		identityName = identityValue
-	} else {
-		// Flag not provided on command line - fall back to viper (config/env).
-		identityName = viper.GetString(IdentityFlagName)
 	}
 
 	// Check if user wants to interactively select identity.

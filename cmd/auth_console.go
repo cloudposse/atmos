@@ -54,7 +54,6 @@ credentials and opens it in your default browser. Supports AWS, Azure, GCP, and 
 that implement console access.`,
 	Example:            authConsoleUsageMarkdown,
 	RunE:               executeAuthConsoleCommand,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 
 func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {

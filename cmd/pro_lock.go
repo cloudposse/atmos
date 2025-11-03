@@ -11,7 +11,6 @@ var proLockCmd = &cobra.Command{
 	Use:                "lock",
 	Short:              "Lock a stack",
 	Long:               `This command calls the atmos pro API and locks a stack`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	ValidArgsFunction:  ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {

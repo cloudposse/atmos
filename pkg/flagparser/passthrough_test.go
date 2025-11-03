@@ -233,8 +233,7 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 		args                    []string
 		expectedAtmosFlags      map[string]interface{}
 		expectedPassThroughArgs []string
-		expectedSubCommand      string
-		expectedComponentName   string
+		expectedPositionalArgs  []string
 	}{
 		{
 			name: "explicit mode with separator",
@@ -243,8 +242,7 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 				"stack": "dev", // Shorthand normalized to full name
 			},
 			expectedPassThroughArgs: []string{"-var", "foo=bar", "-out=plan.tfplan"},
-			expectedSubCommand:      "plan",
-			expectedComponentName:   "vpc",
+			expectedPositionalArgs:  []string{"plan", "vpc"},
 		},
 		{
 			name: "implicit mode without separator",
@@ -253,8 +251,7 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 				"stack": "dev", // Shorthand normalized to full name
 			},
 			expectedPassThroughArgs: []string{"-var", "foo=bar"},
-			expectedSubCommand:      "plan",
-			expectedComponentName:   "vpc",
+			expectedPositionalArgs:  []string{"plan", "vpc"},
 		},
 		{
 			name: "with identity flag",
@@ -263,8 +260,7 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 				"identity": "admin",
 			},
 			expectedPassThroughArgs: []string{"-var", "foo=bar"},
-			expectedSubCommand:      "plan",
-			expectedComponentName:   "vpc",
+			expectedPositionalArgs:  []string{"plan", "vpc"},
 		},
 		{
 			name: "identity flag without value (interactive)",
@@ -273,8 +269,7 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 				"identity": "__SELECT__",
 			},
 			expectedPassThroughArgs: []string{"-var", "foo=bar"},
-			expectedSubCommand:      "plan",
-			expectedComponentName:   "vpc",
+			expectedPositionalArgs:  []string{"plan", "vpc"},
 		},
 		{
 			name: "multiple Atmos flags",
@@ -284,16 +279,14 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 				"dry-run": true,
 			},
 			expectedPassThroughArgs: []string{"-var", "foo=bar"},
-			expectedSubCommand:      "plan",
-			expectedComponentName:   "vpc",
+			expectedPositionalArgs:  []string{"plan", "vpc"},
 		},
 		{
 			name:                    "no Atmos flags",
 			args:                    []string{"plan", "vpc", "--", "-var", "foo=bar"},
 			expectedAtmosFlags:      map[string]interface{}{},
 			expectedPassThroughArgs: []string{"-var", "foo=bar"},
-			expectedSubCommand:      "plan",
-			expectedComponentName:   "vpc",
+			expectedPositionalArgs:  []string{"plan", "vpc"},
 		},
 		{
 			name: "complex real-world example",
@@ -317,8 +310,7 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 				"-var-file=common.tfvars",
 				"-out=plan.tfplan",
 			},
-			expectedSubCommand:    "plan",
-			expectedComponentName: "vpc",
+			expectedPositionalArgs: []string{"plan", "vpc"},
 		},
 	}
 
@@ -331,8 +323,7 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedAtmosFlags, cfg.AtmosFlags)
 			assert.Equal(t, tt.expectedPassThroughArgs, cfg.PassThroughArgs)
-			assert.Equal(t, tt.expectedSubCommand, cfg.SubCommand)
-			assert.Equal(t, tt.expectedComponentName, cfg.ComponentName)
+			assert.Equal(t, tt.expectedPositionalArgs, cfg.PositionalArgs)
 		})
 	}
 }
@@ -456,8 +447,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 		disablePositionalExtraction bool
 		expectedAtmosFlags          map[string]interface{}
 		expectedPassThroughArgs     []string
-		expectedSubCommand          string
-		expectedComponentName       string
+		expectedPositionalArgs      []string
 	}{
 		{
 			name:                        "with positional extraction enabled (default)",
@@ -465,8 +455,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 			disablePositionalExtraction: false,
 			expectedAtmosFlags:          map[string]interface{}{"identity": "test-user"},
 			expectedPassThroughArgs:     []string{}, // "echo" and "hello" are extracted as positionals
-			expectedSubCommand:          "echo",     // First positional
-			expectedComponentName:       "hello",    // Second positional
+			expectedPositionalArgs:      []string{"echo", "hello"},
 		},
 		{
 			name:                        "with positional extraction disabled (auth commands)",
@@ -474,8 +463,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 			disablePositionalExtraction: true,
 			expectedAtmosFlags:          map[string]interface{}{"identity": "test-user"},
 			expectedPassThroughArgs:     []string{"echo", "hello"}, // All args after -- are passed through
-			expectedSubCommand:          "",                        // Not extracted
-			expectedComponentName:       "",                        // Not extracted
+			expectedPositionalArgs:      []string{},                // Not extracted
 		},
 		{
 			name:                        "auth exec with multiple command args",
@@ -483,8 +471,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 			disablePositionalExtraction: true,
 			expectedAtmosFlags:          map[string]interface{}{"identity": "admin"},
 			expectedPassThroughArgs:     []string{"aws", "s3", "ls", "s3://bucket"},
-			expectedSubCommand:          "",
-			expectedComponentName:       "",
+			expectedPositionalArgs:      []string{},
 		},
 		{
 			name:                        "auth shell with shell args",
@@ -492,8 +479,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 			disablePositionalExtraction: true,
 			expectedAtmosFlags:          map[string]interface{}{"identity": "test-user"},
 			expectedPassThroughArgs:     []string{"-c", "echo $HOME"},
-			expectedSubCommand:          "",
-			expectedComponentName:       "",
+			expectedPositionalArgs:      []string{},
 		},
 		{
 			name:                        "no separator with disabled positional extraction",
@@ -501,8 +487,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 			disablePositionalExtraction: true,
 			expectedAtmosFlags:          map[string]interface{}{"identity": "test-user"},
 			expectedPassThroughArgs:     []string{"echo", "hello"}, // All non-flag args passed through
-			expectedSubCommand:          "",
-			expectedComponentName:       "",
+			expectedPositionalArgs:      []string{},
 		},
 		{
 			name:                        "identity flag without value (NoOptDefVal)",
@@ -510,8 +495,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 			disablePositionalExtraction: true,
 			expectedAtmosFlags:          map[string]interface{}{"identity": "__SELECT__"},
 			expectedPassThroughArgs:     []string{"echo", "test"},
-			expectedSubCommand:          "",
-			expectedComponentName:       "",
+			expectedPositionalArgs:      []string{},
 		},
 	}
 
@@ -538,8 +522,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 
 			assert.Equal(t, tt.expectedAtmosFlags, result.AtmosFlags, "AtmosFlags mismatch")
 			assert.Equal(t, tt.expectedPassThroughArgs, result.PassThroughArgs, "PassThroughArgs mismatch")
-			assert.Equal(t, tt.expectedSubCommand, result.SubCommand, "SubCommand mismatch")
-			assert.Equal(t, tt.expectedComponentName, result.ComponentName, "ComponentName mismatch")
+			assert.Equal(t, tt.expectedPositionalArgs, result.PositionalArgs, "PositionalArgs mismatch")
 		})
 	}
 }

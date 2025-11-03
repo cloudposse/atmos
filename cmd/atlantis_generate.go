@@ -9,7 +9,6 @@ var atlantisGenerateCmd = &cobra.Command{
 	Use:                "generate",
 	Short:              "Generate Atlantis configuration files",
 	Long:               "This command generates configuration files to automate and streamline Terraform workflows with Atlantis.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 }
 

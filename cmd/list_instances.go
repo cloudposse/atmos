@@ -13,7 +13,6 @@ var listInstancesCmd = &cobra.Command{
 	Use:                "instances",
 	Short:              "List all Atmos instances",
 	Long:               "This command lists all Atmos instances or is used to upload instances to the pro API.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration

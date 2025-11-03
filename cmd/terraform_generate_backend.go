@@ -12,7 +12,6 @@ var terraformGenerateBackendCmd = &cobra.Command{
 	Use:                "backend",
 	Short:              "Generate backend configuration for a Terraform component",
 	Long:               `This command generates the backend configuration for a Terraform component using the specified stack`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)

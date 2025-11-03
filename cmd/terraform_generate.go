@@ -17,7 +17,6 @@ This command supports the following subcommands:
 - 'varfile' to generate a variable file (varfile) for an Atmos component in a stack.
 - 'varfiles' to generate varfiles for all Atmos components in all stacks.`,
 	Args:               cobra.NoArgs,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 
 func init() {

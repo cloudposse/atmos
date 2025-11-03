@@ -19,7 +19,6 @@ var listStacksCmd = &cobra.Command{
 	Use:                "stacks",
 	Short:              "List all Atmos stacks or stacks for a specific component",
 	Long:               "This command lists all Atmos stacks, or filters the list to show only the stacks associated with a specified component.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration

@@ -86,6 +86,8 @@ linters:
           msg: Use `log.Debug()` for debug messages instead of `log.Warn()` with "DEBUG" in the message
         - pattern: log\.Error\(.*[Dd][Ee][Bb][Uu][Gg]
           msg: Use `log.Debug()` for debug messages instead of `log.Error()` with "DEBUG" in the message
+        - pattern: '(cmd|flags)\.Flags\(\)\.(GetString|GetBool|GetInt|GetStringSlice)\('
+          msg: Use `parsedConfig.AtmosFlags` for flags that support precedence (CLI > ENV > defaults). Direct `cmd.Flags().Get*()` bypasses ENV vars. See docs/prd/unified-flag-parsing.md
       exclude-godoc-examples: false
       analyze-types: true
     funlen:
@@ -246,6 +248,17 @@ linters:
           - err113
         path: ".*"
         source: 'errors\.Join\(.*errUtils\..*fmt\.Errorf'
+      # Allow cmd.Flags().Get*() for flags not yet in flagparser (process-templates, process-functions, skip, components, etc.)
+      # These flags need to be migrated to flagparser for precedence support
+      - linters:
+          - forbidigo
+        source: '(cmd|flags)\.Flags\(\)\.Get(String|Bool|Int|StringSlice)\("(process-templates|process-functions|skip|components|base-path|config|config-path|template|query|file|format|verbose|include-spacelift-admin-stacks|include-settings|upload|append-user-agent|init-pass-vars|ref|sha|repo-path|ssh-key|ssh-key-password|include-dependents|clone-target-ref|all|affected|from)"'
+      # Allow cmd.Flags().Get*() in internal/exec since it doesn't have access to parsedConfig
+      # TODO: Refactor internal/exec to accept parsedConfig or flag values as parameters
+      - linters:
+          - forbidigo
+        path: internal/exec/.*
+        source: '(cmd|flags)\.Flags\(\)\.(GetString|GetBool|GetInt|GetStringSlice)\('
     paths:
       - experiments/.*
       - third_party$

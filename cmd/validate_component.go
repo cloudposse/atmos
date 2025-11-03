@@ -13,7 +13,6 @@ var validateComponentCmd = &cobra.Command{
 	Use:                "component",
 	Short:              "Validate an Atmos component in a stack using JSON Schema or OPA policies",
 	Long:               "This command validates an Atmos component within a stack using JSON Schema or OPA policies.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
