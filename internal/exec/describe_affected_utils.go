@@ -49,6 +49,7 @@ func executeDescribeAffected(
 		processYamlFunctions,
 		false,
 		skip,
+		nil, // AuthManager passed from describe affected command layer
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -102,6 +103,7 @@ func executeDescribeAffected(
 		processYamlFunctions,
 		false,
 		skip,
+		nil, // AuthManager passed from describe affected command layer
 	)
 	if err != nil {
 		return nil, nil, nil, err

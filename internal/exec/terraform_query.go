@@ -34,6 +34,7 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 		info.ProcessFunctions,
 		false,
 		info.Skip,
+		nil, // AuthManager - not needed for terraform query
 	)
 	if err != nil {
 		return err
