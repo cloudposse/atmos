@@ -136,18 +136,10 @@ func (p *PassThroughFlagParser) SetPositionalArgsCount(count int) {
 func (p *PassThroughFlagParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.PassThroughFlagParser.RegisterFlags")()
 
-	// NOTE: We do NOT set DisableFlagParsing=true for PassThroughFlagParser.
-	// These commands (terraform/helmfile/packer) have subcommands that need to accept
-	// positional arguments (component names). With DisableFlagParsing=true, Cobra
-	// still validates args during dispatch and treats them as unknown subcommands.
-	//
-	// Instead, we let Cobra parse flags normally, and our Parse() method extracts
-	// the pass-through args (everything after --) manually.
-
-	// IMPORTANT: Allow arbitrary args so Cobra doesn't treat positional args as unknown subcommands.
-	// This is critical for commands like "atmos terraform plan component-name -s stack"
-	// where "component-name" should be a positional arg, not a subcommand.
-	cmd.Args = cobra.ArbitraryArgs
+	// IMPORTANT: Disable Cobra's flag parsing so our parser can handle it.
+	// This is critical for commands with subcommands that accept positional args.
+	// Without this, Cobra treats positional args (like component names) as unknown subcommands.
+	cmd.DisableFlagParsing = true
 
 	for _, flag := range p.registry.All() {
 		p.registerFlag(cmd, flag)

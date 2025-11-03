@@ -14,15 +14,17 @@ var packerParser *flags.PackerParser
 
 // packerCmd represents the base command for all Packer sub-commands.
 var packerCmd = &cobra.Command{
-	Use:     "packer",
-	Aliases: []string{"pk"},
-	Short:   "Manage packer-based machine images for multiple platforms",
-	Long:    `Run Packer commands for creating identical machine images for multiple platforms from a single source configuration.`,
-	// Allow arbitrary args so subcommands can accept positional arguments
-	Args: cobra.ArbitraryArgs,
+	Use:                "packer",
+	Aliases:            []string{"pk"},
+	Short:              "Manage packer-based machine images for multiple platforms",
+	Long:               `Run Packer commands for creating identical machine images for multiple platforms from a single source configuration.`,
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 }
 
 func init() {
+	// https://github.com/spf13/cobra/issues/739
+	packerCmd.DisableFlagParsing = true
+
 	// Create parser with Packer flags.
 	// Returns strongly-typed PackerOptions.
 	packerParser = flags.NewPackerParser()

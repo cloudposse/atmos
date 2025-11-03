@@ -298,8 +298,8 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 	commands := getTerraformCommands()
 
 	for _, cmd := range commands {
-		// NOTE: We no longer disable flag parsing.
-		// The flagparser handles Atmos flags while passing through unknown flags.
+		// Tell Cobra to ignore unknown flags/args so positional args (component names) pass through
+		cmd.FParseErrWhitelist.UnknownFlags = true
 
 		// Accept arbitrary positional arguments (component names, etc.)
 		// This prevents Cobra from treating component names as unknown subcommands

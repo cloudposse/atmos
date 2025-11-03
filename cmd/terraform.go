@@ -12,15 +12,18 @@ var terraformParser *flags.TerraformParser
 
 // terraformCmd represents the base command for all terraform sub-commands
 var terraformCmd = &cobra.Command{
-	Use:     "terraform",
-	Aliases: []string{"tf"},
-	Short:   "Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations",
-	Long:    `This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.`,
-	// Allow arbitrary args so subcommands can accept positional arguments
-	Args: cobra.ArbitraryArgs,
+	Use:                "terraform",
+	Aliases:            []string{"tf"},
+	Short:              "Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations",
+	Long:               `This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.`,
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 }
 
 func init() {
+	// https://github.com/spf13/cobra/issues/739
+	// DisableFlagParsing on parent command is critical for subcommands with positional args
+	terraformCmd.DisableFlagParsing = true
+
 	// Create parser with Terraform flags.
 	// Returns strongly-typed TerraformInterpreter instead of weak map-based ParsedConfig.
 	terraformParser = flags.NewTerraformParser()

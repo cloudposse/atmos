@@ -13,15 +13,17 @@ var helmfileParser *flags.HelmfileParser
 
 // helmfileCmd represents the base command for all helmfile sub-commands
 var helmfileCmd = &cobra.Command{
-	Use:     "helmfile",
-	Aliases: []string{"hf"},
-	Short:   "Manage Helmfile-based Kubernetes deployments",
-	Long:    `This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.`,
-	// Allow arbitrary args so subcommands can accept positional arguments
-	Args: cobra.ArbitraryArgs,
+	Use:                "helmfile",
+	Aliases:            []string{"hf"},
+	Short:              "Manage Helmfile-based Kubernetes deployments",
+	Long:               `This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.`,
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 }
 
 func init() {
+	// https://github.com/spf13/cobra/issues/739
+	helmfileCmd.DisableFlagParsing = true
+
 	// Create parser with Helmfile flags.
 	// Returns strongly-typed HelmfileInterpreter.
 	helmfileParser = flags.NewHelmfileParser()
