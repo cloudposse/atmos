@@ -1,8 +1,10 @@
 # PRD: Secret Pattern Library Integration Options
 
-**Status**: Proposed
+**Status**: Draft - Not Implementing
 **Created**: 2025-11-01
 **Owner**: Engineering Team
+
+> **⚠️ NOTE:** This document is a draft design exploration. Pattern library integration is **not** being implemented at this time. The document is kept for reference and future consideration.
 
 ## Executive Summary
 
