@@ -868,8 +868,15 @@ func executeCustomCommandSteps(
 					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
 			}
 
-			// Get the config for the component in the stack
-			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true, nil)
+			// Get the config for the component in the stack.
+			componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+				Component:            component,
+				Stack:                stack,
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+				Skip:                 nil,
+				AuthManager:          authManager,
+			})
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			data["ComponentConfig"] = componentConfig
 		}

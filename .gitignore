@@ -68,6 +68,10 @@ coverage/
 .gocoverdir/
 tests.test
 
+# Test binaries
+*.test
+**/*.test
+
 **/llms.txt
 **/llms-full.txt
 
@@ -75,9 +79,6 @@ tests.test
 FUTURE_IMPROVEMENTS.md
 PHASE_4_*.md
 TEST_QUALITY_*.md
-
-# Scratch directory for working notes (local tracking only)
-.scratch/
 
 # Lintroller and other custom tools
 /lintroller
@@ -92,10 +93,9 @@ tools/gomodcheck/.gomodcheck
 
 performance-optimization/
 
-# Merge conflict artifacts
+# Merge conflict artifacts and backup files
 *.orig
 *.rej
-
-# Backup files
 *.bak
-*~
+*.go.bak
+**/*.go.bak

@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // authLoginCmd logs in using a configured identity.
@@ -28,8 +29,8 @@ var authLoginCmd = &cobra.Command{
 	Short: "Authenticate using a configured identity",
 	Long:  "Authenticate to cloud providers using an identity defined in `atmos.yaml`.",
 
-	ValidArgsFunction:  ComponentsArgCompletion,
-	RunE:               executeAuthLoginCommand,
+	ValidArgsFunction: ComponentsArgCompletion,
+	RunE:              executeAuthLoginCommand,
 }
 
 func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
@@ -112,8 +113,7 @@ func formatDuration(d time.Duration) string {
 // displayAuthSuccess displays a styled success message with authentication details.
 func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 	// Display checkmark with success message.
-	checkMark := theme.Styles.Checkmark
-	fmt.Fprintf(os.Stderr, "\n%s Authentication successful!\n\n", checkMark)
+	u.PrintfMessageToTUI("\n%s Authentication successful!\n\n", theme.Styles.Checkmark)
 
 	// Build table rows.
 	var rows [][]string

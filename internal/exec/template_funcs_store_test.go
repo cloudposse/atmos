@@ -127,13 +127,14 @@ func TestComponentConfigWithStoreTemplateFunc(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	res, err := ExecuteDescribeComponent(
-		"component-1",
-		"nonprod",
-		true,
-		true,
-		nil,
-	)
+	res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            "component-1",
+		Stack:                "nonprod",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 
 	assert.NoError(t, err)
 

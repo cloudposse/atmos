@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -27,6 +28,7 @@ type DescribeDependentsExecProps struct {
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
+	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 }
 
 // DescribeDependentsArgs holds arguments for ExecuteDescribeDependents.
@@ -38,6 +40,7 @@ type DescribeDependentsArgs struct {
 	ProcessYamlFunctions bool
 	Skip                 []string
 	OnlyInStack          string
+	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -86,6 +89,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 			ProcessYamlFunctions: describeDependentsExecProps.ProcessYamlFunctions,
 			Skip:                 describeDependentsExecProps.Skip,
 			OnlyInStack:          "", // empty string means process all stacks for direct CLI usage
+			AuthManager:          describeDependentsExecProps.AuthManager,
 		},
 	)
 	if err != nil {
@@ -141,18 +145,20 @@ func ExecuteDescribeDependents(
 		args.ProcessYamlFunctions,
 		false,
 		args.Skip,
+		args.AuthManager, // AuthManager passed from describe dependents command layer
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	providedComponentSection, err := ExecuteDescribeComponent(
-		args.Component,
-		args.Stack,
-		args.ProcessTemplates,
-		args.ProcessYamlFunctions,
-		args.Skip,
-	)
+	providedComponentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            args.Component,
+		Stack:                args.Stack,
+		ProcessTemplates:     args.ProcessTemplates,
+		ProcessYamlFunctions: args.ProcessYamlFunctions,
+		Skip:                 args.Skip,
+		AuthManager:          args.AuthManager,
+	})
 	if err != nil {
 		return nil, err
 	}

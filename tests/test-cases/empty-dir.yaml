@@ -25,8 +25,7 @@ tests:
     expect:
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
-      stderr:
-        - "^$"
+      # stderr may be empty or contain GitHub API rate limit warnings
       exit_code: 0
 
   - name: atmos support

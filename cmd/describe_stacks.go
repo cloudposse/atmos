@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -84,8 +85,13 @@ func getRunnableDescribeStacksCmd(
 			Query:                opts.Query,
 		}
 
-		// Format validation is now handled by the parser at parse time.
-		// Default format is set in the parser as well.
+		// Get identity from parsed options (respects CLI → ENV → config → defaults precedence).
+		identityName := GetIdentityFromFlags(cmd, os.Args)
+		authManager, err := CreateAuthManagerFromIdentity(identityName, &atmosConfig.Auth)
+		if err != nil {
+			return err
+		}
+		describe.AuthManager = authManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig.
 

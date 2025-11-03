@@ -24,6 +24,7 @@ linters:
   enable:
     - bodyclose
     - cyclop
+    - depguard  # Controls allowed/forbidden package imports
     - dogsled
     - dupl
     - err113
@@ -51,6 +52,40 @@ linters:
   settings:
     cyclop:
       max-complexity: 15
+    depguard:
+      rules:
+        # Auth Architecture: Provider-Agnostic Core
+        # Core auth packages must remain provider-agnostic.
+        # Provider-specific code belongs in pkg/auth/providers/, pkg/auth/identities/, or pkg/auth/cloud/.
+        provider-agnostic-auth:
+          files:
+            - "$all"
+            - "!**/pkg/auth/providers/**"
+            - "!**/pkg/auth/identities/**"
+            - "!**/pkg/auth/cloud/**"
+            - "!**/pkg/auth/factory/**"
+            - "!**/pkg/auth/types/aws_credentials.go"
+            - "!**/pkg/auth/types/github_oidc_credentials.go"
+            - "$test"
+          deny:
+            # AWS: Identity and auth-related SDKs
+            - pkg: "github.com/aws/aws-sdk-go-v2"
+              desc: "AWS SDK imports forbidden in provider-agnostic auth code; use pkg/auth/providers/aws/, pkg/auth/identities/aws/, or pkg/auth/cloud/aws/ for AWS-specific implementations"
+            # Azure: Identity and auth SDKs (Entra ID, Azure AD)
+            - pkg: "github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+              desc: "Azure Identity SDK imports forbidden in provider-agnostic auth code; use pkg/auth/providers/azure/ or pkg/auth/identities/azure/ for Azure-specific implementations"
+            - pkg: "github.com/AzureAD"
+              desc: "Azure AD SDK imports forbidden in provider-agnostic auth code; use pkg/auth/providers/azure/ or pkg/auth/identities/azure/ for Azure-specific implementations"
+            # GCP: Identity and auth SDKs
+            - pkg: "cloud.google.com/go/iam"
+              desc: "GCP IAM SDK imports forbidden in provider-agnostic auth code; use pkg/auth/providers/gcp/ or pkg/auth/identities/gcp/ for GCP-specific implementations"
+            - pkg: "google.golang.org/api/iam"
+              desc: "GCP IAM API imports forbidden in provider-agnostic auth code; use pkg/auth/providers/gcp/ or pkg/auth/identities/gcp/ for GCP-specific implementations"
+            - pkg: "google.golang.org/api/iamcredentials"
+              desc: "GCP IAM Credentials API imports forbidden in provider-agnostic auth code; use pkg/auth/providers/gcp/ or pkg/auth/identities/gcp/ for GCP-specific implementations"
+            # GitHub: Identity SDKs
+            - pkg: "github.com/google/go-github"
+              desc: "GitHub SDK imports forbidden in provider-agnostic auth code; use pkg/auth/providers/github/ for GitHub-specific implementations"
     dogsled:
       max-blank-identifiers: 3
     dupl:

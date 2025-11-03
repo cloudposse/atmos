@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -60,6 +61,13 @@ func getRunnableDescribeDependentsCmd(
 
 		// Format validation is now handled by the parser at parse time.
 
+		// Get identity from flag and create AuthManager if provided.
+		identityName := GetIdentityFromFlags(cmd, os.Args)
+		authManager, err := CreateAuthManagerFromIdentity(identityName, &atmosConfig.Auth)
+		if err != nil {
+			return err
+		}
+
 		describe := &exec.DescribeDependentsExecProps{
 			Format:               opts.Format,
 			File:                 opts.File,
@@ -69,9 +77,10 @@ func getRunnableDescribeDependentsCmd(
 			ProcessYamlFunctions: opts.ProcessYamlFunctions,
 			Skip:                 opts.Skip,
 			Component:            opts.GetPositionalArgs()[0],
+			AuthManager:          authManager,
 		}
 
-		// Global --pager flag is now handled in cfg.InitCliConfig
+		// Global --pager flag is now handled in cfg.InitCliConfig.
 
 		err = newDescribeDependentsExec(&atmosConfig).Execute(describe)
 		return err

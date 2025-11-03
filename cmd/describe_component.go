@@ -2,12 +2,17 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // describeComponentParser is created once at package initialization using builder pattern.
@@ -50,6 +55,22 @@ var describeComponentCmd = &cobra.Command{
 		}
 		component := positionalArgs[0]
 
+		// Load atmos configuration to get auth config.
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+			ComponentFromArg: component,
+			Stack:            opts.Stack,
+		}, false)
+		if err != nil {
+			return errors.Join(errUtils.ErrFailedToInitConfig, err)
+		}
+
+		// Get identity from flag and create AuthManager if provided.
+		identityName := GetIdentityFromFlags(cmd, os.Args)
+		authManager, err := CreateAuthManagerFromIdentity(identityName, &atmosConfig.Auth)
+		if err != nil {
+			return err
+		}
+
 		// Execute command with strongly-typed parameters.
 		err = e.NewDescribeComponentExec().ExecuteDescribeComponentCmd(e.DescribeComponentParams{
 			Component:            component,
@@ -61,6 +82,7 @@ var describeComponentCmd = &cobra.Command{
 			Format:               opts.Format,
 			File:                 opts.File,
 			Provenance:           opts.Provenance,
+			AuthManager:          authManager,
 		})
 		return err
 	},
