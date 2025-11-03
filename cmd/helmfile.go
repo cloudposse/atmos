@@ -9,7 +9,7 @@ import (
 )
 
 // helmfileParser handles flag parsing for helmfile commands.
-var helmfileParser *flagparser.PassThroughFlagParser
+var helmfileParser *flagparser.HelmfileParser
 
 // helmfileCmd represents the base command for all helmfile sub-commands
 var helmfileCmd = &cobra.Command{
@@ -22,13 +22,8 @@ var helmfileCmd = &cobra.Command{
 
 func init() {
 	// Create parser with Helmfile flags.
-	// This replaces DisableFlagParsing and manual flag handling.
-	helmfileParser = flagparser.NewPassThroughFlagParser(
-		flagparser.WithHelmfileFlags(),
-	)
-
-	// Helmfile passes subcommand separately to helmfileRun, so only extract 1 positional arg (component).
-	helmfileParser.SetPositionalArgsCount(1)
+	// Returns strongly-typed HelmfileInterpreter.
+	helmfileParser = flagparser.NewHelmfileParser()
 
 	// Register flags with Cobra.
 	helmfileParser.RegisterFlags(helmfileCmd)
@@ -43,33 +38,26 @@ func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
 
 	// Parse args with flagparser
 	ctx := cmd.Context()
-	parsedConfig, err := helmfileParser.Parse(ctx, args)
+	interpreter, err := helmfileParser.Parse(ctx, args)
 	if err != nil {
 		return err
 	}
 
-	// Build args array from ParsedConfig for getConfigAndStacksInfo
+	// Build args array from interpreter for getConfigAndStacksInfo
 	// PositionalArgs contains [component] for helmfile commands
-	fullArgs := append([]string{commandName}, parsedConfig.PositionalArgs...)
-	fullArgs = append(fullArgs, parsedConfig.PassThroughArgs...)
+	fullArgs := append([]string{commandName}, interpreter.GetPositionalArgs()...)
+	fullArgs = append(fullArgs, interpreter.GetPassThroughArgs()...)
 
 	info := getConfigAndStacksInfo("helmfile", cmd, fullArgs)
 
-	// Override info fields with values from parsedConfig.AtmosFlags to respect precedence (CLI > ENV > defaults).
-	// parsedConfig.AtmosFlags contains values resolved by Viper with proper precedence handling.
-	if val, ok := parsedConfig.AtmosFlags["stack"]; ok {
-		info.Stack = val.(string)
-	}
-	if val, ok := parsedConfig.AtmosFlags["identity"]; ok {
-		info.Identity = val.(string)
-	}
-	if val, ok := parsedConfig.AtmosFlags["dry-run"]; ok {
-		info.DryRun = val.(bool)
-	}
+	// Use strongly-typed interpreter fields - no runtime assertions!
+	info.Stack = interpreter.Stack
+	info.Identity = interpreter.Identity.Value()
+	info.DryRun = interpreter.DryRun
 
 	// Handle --identity flag for interactive selection.
 	// If identity is "__SELECT__", prompt for interactive selection.
-	if info.Identity == IdentityFlagSelectValue {
+	if interpreter.Identity.IsInteractiveSelector() {
 		handleInteractiveIdentitySelection(&info)
 	}
 
