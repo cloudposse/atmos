@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"os"
 
@@ -9,9 +8,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/auth"
-	"github.com/cloudposse/atmos/pkg/auth/credentials"
-	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -75,47 +71,20 @@ var describeComponentCmd = &cobra.Command{
 
 		component := args[0]
 
-		// Get identity from flag.
+		// Load atmos configuration to get auth config.
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+			ComponentFromArg: component,
+			Stack:            stack,
+		}, false)
+		if err != nil {
+			return errors.Join(errUtils.ErrFailedToInitConfig, err)
+		}
+
+		// Get identity from flag and create AuthManager if provided.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
-
-		// Create AuthManager if identity is provided.
-		var authManager auth.AuthManager
-		if identityName != "" {
-			// Load atmos configuration to get auth config.
-			atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
-				ComponentFromArg: component,
-				Stack:            stack,
-			}, false)
-			if err != nil {
-				return errors.Join(errUtils.ErrFailedToInitConfig, err)
-			}
-
-			// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
-			authStackInfo := &schema.ConfigAndStacksInfo{
-				AuthContext: &schema.AuthContext{},
-			}
-
-			credStore := credentials.NewCredentialStore()
-			validator := validation.NewValidator()
-			authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
-			if err != nil {
-				return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
-			}
-
-			// Handle interactive selection.
-			forceSelect := identityName == IdentityFlagSelectValue
-			if identityName == "" || forceSelect {
-				identityName, err = authManager.GetDefaultIdentity(forceSelect)
-				if err != nil {
-					return err
-				}
-			}
-
-			// Authenticate.
-			_, err = authManager.Authenticate(context.Background(), identityName)
-			if err != nil {
-				return err
-			}
+		authManager, err := CreateAuthManagerFromIdentity(identityName, &atmosConfig.Auth)
+		if err != nil {
+			return err
 		}
 
 		err = e.NewDescribeComponentExec().ExecuteDescribeComponentCmd(e.DescribeComponentParams{

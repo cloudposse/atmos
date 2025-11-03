@@ -145,7 +145,7 @@ func ExecuteDescribeDependents(
 		args.ProcessYamlFunctions,
 		false,
 		args.Skip,
-		nil, // AuthManager passed from describe dependents command layer
+		args.AuthManager, // AuthManager passed from describe dependents command layer
 	)
 	if err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ func ExecuteDescribeDependents(
 		ProcessTemplates:     args.ProcessTemplates,
 		ProcessYamlFunctions: args.ProcessYamlFunctions,
 		Skip:                 args.Skip,
-		AuthManager:          nil,
+		AuthManager:          args.AuthManager,
 	})
 	if err != nil {
 		return nil, err

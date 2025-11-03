@@ -276,18 +276,17 @@ This ensures that `!terraform.state` and `!terraform.output` functions can acces
 
 Authentication adds minimal overhead:
 - **First run**: ~2-3 seconds for AWS SSO authentication (with browser)
-- **Subsequent runs**: <100ms (uses cached credentials)
+- **Subsequent runs**: `<100ms` (uses cached credentials)
 - **Credential refresh**: Automatic when credentials expire
 
 ## Related Documentation
 
-- [Authentication Overview](/cli/authentication)
+- [Authentication Overview](/cli/commands/auth/usage)
 - [`atmos describe stacks` command](/cli/commands/describe/stacks)
 - [`atmos describe component` command](/cli/commands/describe/component)
 - [`atmos describe affected` command](/cli/commands/describe/affected)
 - [`atmos describe dependents` command](/cli/commands/describe/dependents)
-- [YAML Template Functions](/core-concepts/stacks/templates)
-- [Terraform State Functions](/core-concepts/stacks/templates#terraform-functions)
+- [YAML Functions](/functions/yaml)
 
 ## Get Started
 

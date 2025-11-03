@@ -98,7 +98,7 @@ Use the `--query` flag (shorthand `-q`) to filter the output.
   <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe stacks --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
 
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
-  <dd>Authenticate with a specific identity before describing stacks.<br/>This is required when YAML template functions (e.g., `!terraform.state`, `!terraform.output`)<br/>need to access remote resources requiring authentication.<br/>Use without a value for interactive identity selection:<br/>`atmos describe stacks --identity` (interactive)<br/>`atmos describe stacks --identity my-aws-identity` (specific identity)<br/><br/>For more details, refer to [Authentication](/cli/authentication).</dd>
+  <dd>Authenticate with a specific identity before describing stacks.<br/>This is required when YAML template functions (e.g., `!terraform.state`, `!terraform.output`)<br/>need to access remote resources requiring authentication.<br/>Use without a value for interactive identity selection:<br/>`atmos describe stacks --identity` (interactive)<br/>`atmos describe stacks --identity my-aws-identity` (specific identity)<br/><br/>For more details, refer to [Authentication](/cli/commands/auth/usage).</dd>
 </dl>
 
 :::note Provenance Tracking

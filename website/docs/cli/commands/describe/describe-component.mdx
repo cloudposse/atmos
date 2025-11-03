@@ -134,7 +134,7 @@ atmos describe component vpc -s tenant1-ue2-dev -i my-aws-identity
   <dd>Disable/Enable the paging user experience.</dd>
 
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
-  <dd>Authenticate with a specific identity before describing the component.<br/>This is required when YAML template functions (e.g., `!terraform.state`, `!terraform.output`)<br/>need to access remote resources requiring authentication.<br/>Use without a value for interactive identity selection:<br/>`atmos describe component <c> -s <stack> --identity` (interactive)<br/>`atmos describe component <c> -s <stack> --identity my-aws-identity` (specific identity)<br/><br/>For more details, refer to [Authentication](/cli/authentication).</dd>
+  <dd>Authenticate with a specific identity before describing the component.<br/>This is required when YAML template functions (e.g., `!terraform.state`, `!terraform.output`)<br/>need to access remote resources requiring authentication.<br/>Use without a value for interactive identity selection:<br/>`atmos describe component <c> -s <stack> --identity` (interactive)<br/>`atmos describe component <c> -s <stack> --identity my-aws-identity` (specific identity)<br/><br/>For more details, refer to [Authentication](/cli/commands/auth/usage).</dd>
 </dl>
 
 ## Output
