@@ -25,7 +25,7 @@ import (
 //	    uploadPlanToAtmosPro()
 //	}
 //
-// See docs/prd/flag-parser/strongly-typed-interpreters/ for patterns.
+// See docs/prd/flag-parser/ for patterns.
 type TerraformInterpreter struct {
 	GlobalFlags // Embedded global flags (chdir, logs-level, identity, etc.)
 
