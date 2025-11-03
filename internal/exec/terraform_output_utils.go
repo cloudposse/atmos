@@ -19,6 +19,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -30,6 +31,7 @@ const (
 	inputEnvVar              = "TF_INPUT"
 	automationEnvVar         = "TF_IN_AUTOMATION"
 	logEnvVar                = "TF_LOG"
+	spinnerOverwriteFormat   = "\r%s %s\n"
 	logCoreEnvVar            = "TF_LOG_CORE"
 	logPathEnvVar            = "TF_LOG_PATH"
 	logProviderEnvVar        = "TF_LOG_PROVIDER"
@@ -563,7 +565,7 @@ func GetTerraformOutput(
 		AuthManager:          authMgr,
 	})
 	if err != nil {
-		u.PrintfMessageToTUI("\r✗ %s\n", message)
+		u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.XMark, message)
 		return nil, false, fmt.Errorf("failed to describe the component %s in the stack %s: %w", component, stack, err)
 	}
 
@@ -583,7 +585,7 @@ func GetTerraformOutput(
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections, authContext)
 		if err != nil {
-			u.PrintfMessageToTUI("\r✗ %s\n", message)
+			u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.XMark, message)
 			return nil, false, fmt.Errorf("failed to execute terraform output for the component %s in the stack %s: %w", component, stack, err)
 		}
 
@@ -593,11 +595,11 @@ func GetTerraformOutput(
 	}
 
 	if resultErr != nil {
-		u.PrintfMessageToTUI("\r✗ %s\n", message)
+		u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.XMark, message)
 		return nil, false, resultErr
 	}
 
-	u.PrintfMessageToTUI("\r✓ %s\n", message)
+	u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.Checkmark, message)
 	return value, exists, nil
 }
 
