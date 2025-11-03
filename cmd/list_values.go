@@ -164,7 +164,7 @@ var listVarsCmd = &cobra.Command{
 
 func init() {
 	// Register parser flags for listValuesCmd.
-	listValuesCmd.DisableFlagParsing = false
+	listValuesCmd.DisableFlagParsing = true // IMPORTANT: Manual parsing required for our unified parser
 	listValuesParser.RegisterFlags(listValuesCmd)
 	_ = listValuesParser.BindToViper(viper.GetViper())
 
@@ -177,7 +177,7 @@ func init() {
 	AddStackCompletion(listValuesCmd)
 
 	// Register parser flags for listVarsCmd.
-	listVarsCmd.DisableFlagParsing = false
+	listVarsCmd.DisableFlagParsing = true // IMPORTANT: Manual parsing required for our unified parser
 	listVarsParser.RegisterFlags(listVarsCmd)
 	_ = listVarsParser.BindToViper(viper.GetViper())
 

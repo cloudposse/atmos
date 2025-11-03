@@ -45,7 +45,7 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 }
 
 func init() {
-	helmfileGenerateVarfileCmd.DisableFlagParsing = false
+	helmfileGenerateVarfileCmd.DisableFlagParsing = true // IMPORTANT: Manual parsing required for our unified parser
 
 	// Register StandardOptions flags.
 	helmfileGenerateVarfileParser.RegisterFlags(helmfileGenerateVarfileCmd)

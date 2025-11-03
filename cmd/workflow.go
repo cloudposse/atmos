@@ -73,7 +73,10 @@ var workflowCmd = &cobra.Command{
 }
 
 func init() {
-	workflowCmd.DisableFlagParsing = false
+	// IMPORTANT: Disable Cobra flag parsing so we can manually parse flags with our parser.
+	// This allows proper positional argument extraction (workflow name) without Cobra
+	// treating it as an unknown subcommand.
+	workflowCmd.DisableFlagParsing = true
 
 	// Register flags to the command.
 	workflowParser.RegisterFlags(workflowCmd)

@@ -46,7 +46,7 @@ func init() {
 		WithComponent(false). // Optional component flag → .Component field
 		Build()
 
-	listStacksCmd.DisableFlagParsing = false
+	listStacksCmd.DisableFlagParsing = true // IMPORTANT: Manual parsing required for our unified parser
 	listStacksParser.RegisterFlags(listStacksCmd)
 	_ = listStacksParser.BindToViper(viper.GetViper())
 	listCmd.AddCommand(listStacksCmd)

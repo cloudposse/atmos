@@ -90,7 +90,10 @@ var describeComponentCmd = &cobra.Command{
 }
 
 func init() {
-	describeComponentCmd.DisableFlagParsing = false
+	// IMPORTANT: Disable Cobra flag parsing so we can manually parse flags with our parser.
+	// This allows proper positional argument extraction (component name) and ensures
+	// Viper precedence handling (CLI → ENV → config → defaults).
+	describeComponentCmd.DisableFlagParsing = true
 	AddStackCompletion(describeComponentCmd)
 	describeComponentParser.RegisterFlags(describeComponentCmd)
 	_ = describeComponentParser.BindToViper(viper.GetViper())
