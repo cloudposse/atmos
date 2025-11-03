@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -29,6 +30,7 @@ type DescribeStacksArgs struct {
 	Skip                 []string
 	Format               string
 	File                 string
+	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -51,6 +53,7 @@ type describeStacksExec struct {
 		processYamlFunctions bool,
 		includeEmptyStacks bool,
 		skip []string,
+		authManager auth.AuthManager,
 	) (map[string]any, error)
 }
 
@@ -80,6 +83,7 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 		args.ProcessYamlFunctions,
 		args.IncludeEmptyStacks,
 		args.Skip,
+		args.AuthManager,
 	)
 	if err != nil {
 		return err
@@ -120,6 +124,7 @@ func ExecuteDescribeStacks(
 	processYamlFunctions bool,
 	includeEmptyStacks bool,
 	skip []string,
+	authManager auth.AuthManager,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
 
@@ -272,6 +277,14 @@ func ExecuteDescribeStacks(
 								cfg.BackendSectionName:     backendSection,
 								cfg.BackendTypeSectionName: backendTypeSection,
 							},
+						}
+
+						// Populate AuthContext from AuthManager if provided (from --identity flag).
+						if authManager != nil {
+							managerStackInfo := authManager.GetStackInfo()
+							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+							}
 						}
 
 						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
@@ -508,6 +521,14 @@ func ExecuteDescribeStacks(
 							},
 						}
 
+						// Populate AuthContext from AuthManager if provided (from --identity flag).
+						if authManager != nil {
+							managerStackInfo := authManager.GetStackInfo()
+							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+							}
+						}
+
 						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
@@ -717,6 +738,14 @@ func ExecuteDescribeStacks(
 								cfg.BackendSectionName:     backendSection,
 								cfg.BackendTypeSectionName: backendTypeSection,
 							},
+						}
+
+						// Populate AuthContext from AuthManager if provided (from --identity flag).
+						if authManager != nil {
+							managerStackInfo := authManager.GetStackInfo()
+							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+							}
 						}
 
 						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {

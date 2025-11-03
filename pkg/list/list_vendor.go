@@ -313,7 +313,7 @@ func processComponent(atmosConfig *schema.AtmosConfiguration, componentName stri
 func findComponentManifests(atmosConfig *schema.AtmosConfiguration) ([]VendorInfo, error) {
 	var vendorInfos []VendorInfo
 
-	stacksMap, err := exec.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	stacksMap, err := exec.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error describing stacks: %w", err)
 	}

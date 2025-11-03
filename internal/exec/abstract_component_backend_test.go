@@ -20,7 +20,14 @@ func TestAbstractComponentBackendGeneration(t *testing.T) {
 	stack := "tenant1-ue2-dev"
 
 	// Describe the component to get its configuration.
-	componentSection, err := ExecuteDescribeComponent(component, stack, false, false, []string{})
+	componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
+		Skip:                 []string{},
+		AuthManager:          nil,
+	})
 	require.NoError(t, err, "ExecuteDescribeComponent should work for component inheriting from abstract component")
 
 	// Verify that the component section is not nil.
