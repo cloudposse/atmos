@@ -9,12 +9,11 @@ components:
   terraform:
     test-component:
       metadata:
-        component: test-component
+        component: mock
         type: real
       vars:
-        enabled: true
-        name: "test-component"
-        environment: "test"
+        stage: test
+        foo: "test-value"
       backend:
         s3:
           bucket: "test-bucket"
