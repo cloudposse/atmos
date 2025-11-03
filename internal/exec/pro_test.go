@@ -2,6 +2,7 @@ package exec
 
 import (
 	"testing"
+	"time"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/stretchr/testify/assert"
@@ -538,7 +539,20 @@ func TestExecuteProLock(t *testing.T) {
 			return req.Key == "test-owner/test-repo/test-stack/test-component" &&
 				req.TTL == 30 &&
 				req.LockMessage == "Test lock"
-		})).Return(dtos.LockStackResponse{}, nil)
+		})).Return(dtos.LockStackResponse{
+			Data: struct {
+				ID          string    `json:"id,omitempty"`
+				WorkspaceId string    `json:"workspaceId,omitempty"`
+				Key         string    `json:"key,omitempty"`
+				LockMessage string    `json:"lockMessage,omitempty"`
+				ExpiresAt   time.Time `json:"expiresAt,omitempty"`
+				CreatedAt   time.Time `json:"createdAt,omitempty"`
+				UpdatedAt   time.Time `json:"updatedAt,omitempty"`
+				DeletedAt   time.Time `json:"deletedAt,omitempty"`
+			}{
+				Key: "test-owner/test-repo/test-stack/test-component",
+			},
+		}, nil)
 
 		// Create test args
 		args := ProLockCmdArgs{

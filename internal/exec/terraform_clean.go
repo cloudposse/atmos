@@ -487,7 +487,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	total := objectCount + len(tfDataDirFolders)
 
 	if total == 0 {
-		u.PrintMessage("Nothing to delete")
+		u.PrintfMessageToTUI("\n%s Nothing to delete\n\n", theme.Styles.Checkmark)
 		return nil
 	}
 
