@@ -88,7 +88,6 @@ func getRunnableDescribeDependentsCmd(
 }
 
 func init() {
-
 	// Register StandardOptions flags (includes required stack flag via WithStack(true)).
 	describeDependentsParser.RegisterFlags(describeDependentsCmd)
 	_ = describeDependentsParser.BindToViper(viper.GetViper())

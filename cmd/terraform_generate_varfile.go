@@ -28,24 +28,24 @@ var terraformGenerateVarfileCmd = &cobra.Command{
 		checkAtmosConfig()
 
 		// Parse flags using StandardOptions.
-		_, err := terraformGenerateVarfileParser.Parse(context.Background(), args)
+		opts, err := terraformGenerateVarfileParser.Parse(context.Background(), args)
 		if err != nil {
 			return err
 		}
 
-		// Validate component argument.
-		if len(args) != 1 {
+		// Validate component argument (use positional args after flag parsing).
+		positionalArgs := opts.GetPositionalArgs()
+		if len(positionalArgs) != 1 {
 			return errUtils.ErrInvalidArgumentError
 		}
 
-		// Call original implementation with cmd (it needs cmd for other flags like process-templates).
-		err = e.ExecuteTerraformGenerateVarfileCmd(cmd, args)
+		// Call original implementation with positional args (it needs only the component).
+		err = e.ExecuteTerraformGenerateVarfileCmd(cmd, positionalArgs)
 		return err
 	},
 }
 
 func init() {
-
 	// Register StandardOptions flags.
 	terraformGenerateVarfileParser.RegisterFlags(terraformGenerateVarfileCmd)
 	_ = terraformGenerateVarfileParser.BindToViper(viper.GetViper())

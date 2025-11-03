@@ -58,6 +58,8 @@ var versionCmd = &cobra.Command{
 }
 
 // parseVersionOptions parses command flags into VersionOptions.
+//
+//nolint:unparam // args parameter kept for consistency with other parse functions
 func parseVersionOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*VersionOptions, error) {
 	return &VersionOptions{
 		GlobalFlags: flags.ParseGlobalFlags(cmd, v),

@@ -213,6 +213,7 @@ func getInt(m map[string]interface{}, key string) int {
 	return 0
 }
 
+//nolint:unparam // key parameter kept for consistency with other getter functions
 func getIdentitySelector(m map[string]interface{}, key string) IdentitySelector {
 	value := getString(m, key)
 	// Check if identity was explicitly provided by checking if the key exists.
@@ -220,6 +221,7 @@ func getIdentitySelector(m map[string]interface{}, key string) IdentitySelector 
 	return NewIdentitySelector(value, provided)
 }
 
+//nolint:unparam // key parameter kept for consistency with other getter functions
 func getPagerSelector(m map[string]interface{}, key string) PagerSelector {
 	value := getString(m, key)
 	// Check if pager was explicitly provided by checking if the key exists.

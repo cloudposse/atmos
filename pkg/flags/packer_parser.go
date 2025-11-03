@@ -45,6 +45,8 @@ func (p *PackerParser) BindToViper(v *viper.Viper) error {
 }
 
 // Parse processes command-line arguments and returns strongly-typed PackerOptions.
+//
+//nolint:dupl // Similar to HelmfileParser.Parse but returns different types
 func (p *PackerParser) Parse(ctx context.Context, args []string) (*PackerOptions, error) {
 	defer perf.Track(nil, "flagparser.PackerParser.Parse")()
 

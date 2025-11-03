@@ -22,8 +22,9 @@ var packerCmd = &cobra.Command{
 }
 
 func init() {
-	// NOTE: We do NOT set DisableFlagParsing on packer command.
-	// It needs to register persistent flags that are inherited by subcommands.
+	// https://github.com/spf13/cobra/issues/739
+	// DisableFlagParsing=true required for manual flag parsing
+	packerCmd.DisableFlagParsing = true
 
 	// Create parser with Packer flags.
 	// Returns strongly-typed PackerOptions.

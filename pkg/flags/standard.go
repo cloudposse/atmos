@@ -140,7 +140,7 @@ func (p *StandardFlagParser) registerFlag(cmd *cobra.Command, flag Flag) {
 // registerCompletions automatically registers shell completion functions
 // for flags that have valid values configured.
 func (p *StandardFlagParser) registerCompletions(cmd *cobra.Command) {
-	if p.validValues == nil || len(p.validValues) == 0 {
+	if len(p.validValues) == 0 {
 		return
 	}
 

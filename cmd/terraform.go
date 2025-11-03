@@ -20,16 +20,17 @@ var terraformCmd = &cobra.Command{
 }
 
 func init() {
-	// NOTE: We do NOT set DisableFlagParsing on the parent command.
-	// The parent needs to register persistent flags (like --identity, --stack)
-	// that are inherited by subcommands. Only subcommands set DisableFlagParsing.
+	// https://github.com/spf13/cobra/issues/739
+	// DisableFlagParsing=true prevents Cobra from parsing flags, but flags can still be registered.
+	// Our manual parsers extract flag values from os.Args directly.
+	terraformCmd.DisableFlagParsing = true
 
 	// Create parser with Terraform flags.
 	// Returns strongly-typed TerraformInterpreter instead of weak map-based ParsedConfig.
 	terraformParser = flags.NewTerraformParser()
 
 	// Register flags as PERSISTENT on parent command so they're inherited by subcommands.
-	// Subcommands also call RegisterFlags() which sets DisableFlagParsing on each subcommand.
+	// Even with DisableFlagParsing=true, flags can be registered for completion and help.
 	terraformParser.RegisterPersistentFlags(terraformCmd)
 	_ = terraformParser.BindToViper(viper.GetViper())
 

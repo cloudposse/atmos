@@ -42,6 +42,8 @@ func testExecuteVendorPullCmd(cmd *cobra.Command, args []string) error {
 }
 
 // testExecuteVendorPullCommand is a test helper for ExecuteVendorPullCommand.
+//
+//nolint:unparam // args parameter kept for Cobra RunE signature compatibility
 func testExecuteVendorPullCommand(cmd *cobra.Command, args []string) error {
 	cmdFlags := cmd.Flags()
 
