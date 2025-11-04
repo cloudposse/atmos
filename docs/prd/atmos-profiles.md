@@ -340,9 +340,13 @@ logs:
 
 **FR5.8**: `atmos profile show <profile>` MUST support `--files` flag to show file list only (no merged config)
 
-**FR5.9**: `atmos describe config` MUST show currently active profiles in output
+**FR5.9**: `atmos profile show <profile>` MUST support `--provenance` flag to show where each configuration value originated
 
-**FR5.10**: `atmos describe config` with active profiles MUST show:
+**FR5.10**: `atmos describe config` MUST support `--provenance` flag to show where configuration values originated (including active profiles)
+
+**FR5.11**: `atmos describe config` MUST show currently active profiles in output
+
+**FR5.12**: `atmos describe config` with active profiles MUST show:
 ```yaml
 # Active profiles: developer, debug
 active_profiles:
@@ -354,7 +358,7 @@ active_profiles:
       - ~/.config/atmos/profiles/debug
 ```
 
-**FR5.11**: Debug logging (`--logs-level trace`) MUST show profile loading details:
+**FR5.13**: Debug logging (`--logs-level trace`) MUST show profile loading details:
 - Which profiles are being loaded
 - From which locations
 - File merge order
@@ -420,15 +424,64 @@ type ProfilesConfig struct {
 
 **TR4.5**: Tests MUST verify backward compatibility (no profiles specified)
 
-#### TR5: Documentation
+**TR4.6**: Tests MUST verify XDG profile location discovery
 
-**TR5.1**: Documentation MUST include profile configuration examples for common scenarios (CI, developer, debug)
+**TR4.7**: Tests MUST cover profile commands (`atmos profile list`, `atmos profile show`)
 
-**TR5.2**: Documentation MUST explain precedence rules with visual diagrams
+**TR4.8**: Tests MUST verify provenance tracking for profile configurations
 
-**TR5.3**: Migration guide MUST be provided for users converting environment-specific configurations to profiles
+#### TR5: Provenance Support
 
-**TR5.4**: Blog post MUST be included announcing this minor feature (per CLAUDE.md requirement)
+**TR5.1**: Profile loading MUST enable provenance tracking using existing `pkg/merge` infrastructure
+
+**TR5.2**: `atmos profile show --provenance` MUST use `p.RenderInlineProvenance()` for inline annotations
+
+**TR5.3**: `atmos describe config --provenance` MUST use `p.RenderInlineProvenance()` for inline annotations
+
+**TR5.4**: Provenance tracking for profiles MUST use the existing `MergeContext` pattern from stack/component merging
+
+**TR5.5**: Profile merge operations MUST call `mergeContext.RecordProvenance()` for each configuration value
+
+**TR5.6**: Profile source paths MUST be recorded with format: `profiles/<profile-name>/<filename>:<line>`
+
+**TR5.7**: Provenance rendering MUST distinguish between:
+- Base configuration: `atmos.yaml:<line>`
+- `.atmos.d/` files: `.atmos.d/<filename>:<line>`
+- Profile files: `profiles/<profile-name>/<filename>:<line>`
+- XDG profile files: `profiles/<profile-name>/<filename>:<line> (XDG)`
+
+**TR5.8**: When multiple profiles override the same value, provenance MUST show the winning profile with `(override)` annotation
+
+**TR5.9**: `atmos describe config --provenance` MUST set `atmosConfig.TrackProvenance = true` before loading configuration
+
+**TR5.10**: Profile loading in `pkg/config/load.go` MUST accept optional `mergeContext *m.MergeContext` parameter
+
+**TR5.11**: Provenance implementation MUST reuse existing functions:
+- `pkg/merge.NewMergeContext()` - Create merge context
+- `pkg/merge.(*MergeContext).RecordProvenance()` - Record value source
+- `pkg/provenance.RenderInlineProvenance()` - Render inline annotations
+- `pkg/utils.GetHighlightedYAML()` - Syntax highlighting with provenance
+
+**TR5.12**: `cmd/describe_config.go` MUST add `--provenance` flag similar to `cmd/describe_component.go`:
+```go
+describeConfigCmd.PersistentFlags().Bool("provenance", false, "Enable provenance tracking to show where configuration values originated")
+```
+
+**TR5.13**: `internal/exec/describe_config.go` MUST accept `Provenance bool` parameter in execution params
+
+**TR5.14**: When provenance is enabled and configuration has merge context, MUST call `renderProvenance()` similar to describe component implementation
+
+#### TR6: Documentation
+
+**TR6.1**: Documentation MUST include profile configuration examples for common scenarios (CI, developer, debug)
+
+**TR6.2**: Documentation MUST explain precedence rules with visual diagrams
+
+**TR6.3**: Migration guide MUST be provided for users converting environment-specific configurations to profiles
+
+**TR6.4**: Documentation MUST include provenance examples showing how to debug profile configuration sources
+
+**TR6.5**: Blog post MUST be included announcing this minor feature (per CLAUDE.md requirement)
 
 ## Design
 
@@ -656,6 +709,43 @@ Output:
 }
 ```
 
+Show with provenance tracking:
+```bash
+atmos profile show developer --provenance
+```
+
+Output:
+```
+Profile: developer
+
+Locations
+  • /infrastructure/atmos/.atmos/profiles/developer (2 files)
+  • ~/.config/atmos/profiles/developer (1 file)
+
+Files (in merge order)
+  1. /infrastructure/atmos/.atmos/profiles/developer/auth.yaml
+  2. /infrastructure/atmos/.atmos/profiles/developer/logging.yaml
+  3. ~/.config/atmos/profiles/developer/overrides.yaml
+
+Merged Configuration (with provenance)
+
+auth:
+  identities:
+    developer-sandbox:
+      kind: aws/permission-set  # .atmos/profiles/developer/auth.yaml:4
+      default: true              # .atmos/profiles/developer/auth.yaml:5
+      via:
+        provider: aws-sso-dev    # .atmos/profiles/developer/auth.yaml:7
+      principal:
+        account_id: "999888777666"     # .atmos/profiles/developer/auth.yaml:9
+        permission_set: DeveloperAccess # .atmos/profiles/developer/auth.yaml:10
+logs:
+  level: Warning               # profiles/developer/overrides.yaml:2 (XDG)
+  file: /dev/stderr            # .atmos/profiles/developer/logging.yaml:3
+```
+
+Note: Provenance annotations show the source file and line number where each value was defined. If a value was overridden, the most recent source is shown.
+
 #### CI Profile Example
 
 ```yaml
@@ -786,6 +876,70 @@ ATMOS_PROFILE=developer,debug atmos terraform plan vpc -s dev
 # CPU profile saved to ./atmos-profile.prof
 ```
 
+#### Describe Config with Provenance
+
+Show where configuration values originated (including active profiles):
+
+```bash
+atmos describe config --profile developer --provenance
+```
+
+Output:
+```
+Active Profiles: developer
+
+Configuration (with provenance)
+
+auth:
+  identities:
+    developer-sandbox:
+      kind: aws/permission-set     # profiles/developer/auth.yaml:4
+      default: true                 # profiles/developer/auth.yaml:5
+      via:
+        provider: aws-sso-dev       # profiles/developer/auth.yaml:7
+      principal:
+        account_id: "999888777666"  # profiles/developer/auth.yaml:9
+  providers:
+    aws-sso-dev:
+      kind: aws/sso                 # profiles/developer/auth.yaml:12
+      region: us-east-2             # profiles/developer/auth.yaml:13
+      start_url: https://dev.awsapps.com/start  # profiles/developer/auth.yaml:14
+base_path: ./infrastructure         # atmos.yaml:1
+logs:
+  level: Warning                    # profiles/developer/logging.yaml:2
+  file: /dev/stderr                 # profiles/developer/logging.yaml:3
+components:
+  terraform:
+    base_path: components/terraform # atmos.yaml:8
+    auto_generate_backend_file: true # profiles/developer/terraform.yaml:3
+settings:
+  terminal:
+    color: true                     # atmos.yaml:15
+```
+
+Note: Values from active profiles show `profiles/<name>/<file>` as the source. Values from base `atmos.yaml` show `atmos.yaml` as the source. This helps users understand which configurations are coming from profiles vs base config.
+
+With multiple profiles:
+```bash
+atmos describe config --profile developer,debug --provenance
+```
+
+Output shows precedence (rightmost profile wins):
+```
+Active Profiles: developer, debug (left-to-right precedence)
+
+Configuration (with provenance)
+
+logs:
+  level: Trace                      # profiles/debug/logging.yaml:2 (override)
+  file: ./atmos-debug.log           # profiles/debug/logging.yaml:3 (override)
+profiler:
+  enabled: true                     # profiles/debug/profiler.yaml:2
+settings:
+  terminal:
+    pager: false                    # profiles/debug/terminal.yaml:4 (override)
+```
+
 **Profile composition behavior:**
 - When using `--profile developer,debug`:
   1. First loads `developer` profile (all files lexicographically)
@@ -850,7 +1004,7 @@ atmos terraform apply vpc -s prod --profile platform-admin
 - Unit tests for profile discovery and precedence
 - Integration tests with sample profiles
 
-#### Phase 2: Profile Management Commands (Week 3)
+#### Phase 2: Profile Management Commands & Provenance (Week 3)
 
 **Tasks:**
 1. Create command registry provider in `cmd/profile/` directory:
@@ -865,37 +1019,47 @@ atmos terraform apply vpc -s prod --profile platform-admin
    - `cmd/profile/show.go` - Show detailed profile information
    - Support `--format json|yaml` flag
    - Support `--files` flag (show file list only)
+   - Support `--provenance` flag (show configuration value origins)
    - **Reuse existing formatting utilities**:
      - Use `u.GetHighlightedYAML()` for colorized YAML output
      - Use `u.GetHighlightedJSON()` for colorized JSON output
+     - Use `p.RenderInlineProvenance()` for provenance annotations
      - Same formatting as `atmos describe config` (consistent UX)
    - Respect terminal color settings (honors `--color`, `--no-color`, `NO_COLOR`)
    - Support pager integration when enabled
    - Show all locations where profile is found
    - Display file merge order
-4. Implement profile discovery helper in `internal/exec/`:
+4. Add provenance support to `atmos describe config`:
+   - Add `--provenance` flag to `cmd/describe_config.go`
+   - Update `internal/exec/describe_config.go` to accept `Provenance bool` param
+   - Enable provenance tracking by setting `atmosConfig.TrackProvenance = true`
+   - Pass `MergeContext` through configuration loading when provenance enabled
+   - Render provenance using `p.RenderInlineProvenance()` (reuse describe component pattern)
+5. Implement profile discovery helper in `internal/exec/`:
    - `internal/exec/profile.go` - Profile discovery and introspection logic
    - `DiscoverAllProfiles(atmosConfig) ([]ProfileInfo, error)`
    - `GetProfileDetails(atmosConfig, profileName) (*ProfileDetails, error)`
    - `MergeProfileConfiguration(profileName) (map[string]any, error)`
-5. Update `atmos describe config`:
+   - `MergeProfileConfigurationWithContext(profileName, mergeContext) (map[string]any, error)` - For provenance tracking
+6. Update `atmos describe config`:
    - Add `active_profiles` section to output
    - Show profile names and locations
-6. Add comprehensive debug logging:
+7. Add comprehensive debug logging:
    - Log profile discovery process
    - Log file merge order
    - Log configuration precedence
-7. Enhance error messages:
+8. Enhance error messages:
    - Profile not found with available profiles list
    - Profile syntax errors with file path
    - Profile conflicts with clear explanation
 
 **Deliverables:**
-- `atmos profile` command with `list` and `show` subcommands
-- Profile introspection API in `internal/exec/`
+- `atmos profile` command with `list` and `show` subcommands (including `--provenance` flag)
+- `atmos describe config --provenance` command enhancement
+- Profile introspection API in `internal/exec/` with provenance support
 - Updated `describe config` with profile information
 - Enhanced debugging and error messages
-- Unit tests for profile commands
+- Unit tests for profile commands and provenance tracking
 - CLI integration tests
 
 #### Phase 3: Documentation and Examples (Week 4)
@@ -907,13 +1071,15 @@ atmos terraform apply vpc -s prod --profile platform-admin
    - Debug scenarios (trace logging, profiling)
 2. Document precedence rules with diagrams
 3. Create migration guide for environment-specific configurations
-4. Write blog post announcing profiles feature
-5. Update JSON schemas for profile validation
+4. Document provenance usage for debugging profile configurations
+5. Write blog post announcing profiles feature
+6. Update JSON schemas for profile validation
 
 **Deliverables:**
 - Comprehensive documentation in `website/docs/`
 - Blog post in `website/blog/`
 - Example profile configurations in `examples/profiles/`
+- Provenance usage documentation with examples
 
 ### Error Handling
 
