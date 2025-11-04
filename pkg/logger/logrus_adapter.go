@@ -1,11 +1,9 @@
-package aws
+package logger
 
 import (
 	"io"
 
 	"github.com/sirupsen/logrus"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // logrusAdapter adapts logrus output to Atmos's charmbracelet/log logger.
@@ -31,7 +29,7 @@ func (a *logrusAdapter) Write(p []byte) (n int, err error) {
 
 	// Log at debug level since these are internal library messages.
 	// We don't want to parse logrus's structured format - just pass through the message.
-	log.Debug(message)
+	Debug(message)
 
 	return len(p), nil
 }

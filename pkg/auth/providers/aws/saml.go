@@ -132,7 +132,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 	// Configure logrus to forward to Atmos logger instead of stdout.
 	// saml2aws uses the global logrus logger which outputs messages like "INFO[0037] opening browser".
 	// We forward these to Atmos's charmbracelet/log for consistent formatting.
-	ConfigureLogrusForAtmos()
+	log.ConfigureLogrusForAtmos()
 
 	// Create config and client + login details.
 	samlConfig := p.createSAMLConfig()
