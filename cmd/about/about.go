@@ -5,7 +5,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/markdown"
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // aboutCmd represents the about command.
@@ -15,8 +15,7 @@ var aboutCmd = &cobra.Command{
 	Long:  `Display information about Atmos, its features, and benefits.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		utils.PrintfMarkdown("%s", markdown.AboutMarkdown)
-		return nil
+		return ui.Markdown(markdown.AboutMarkdown)
 	},
 }
 
