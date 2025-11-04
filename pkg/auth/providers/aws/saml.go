@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	aws "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/versent/saml2aws/v2"
 	"github.com/versent/saml2aws/v2/pkg/cfg"
@@ -128,6 +130,11 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 
 	// Set up browser automation if needed.
 	p.setupBrowserAutomation()
+
+	// Suppress saml2aws's logrus output to avoid mixing log formats with Atmos logger.
+	// saml2aws uses the global logrus logger which outputs messages like "INFO[0037] opening browser".
+	// We use Atmos's charmbracelet/log for all user-facing messages instead.
+	logrus.SetOutput(io.Discard)
 
 	// Create config and client + login details.
 	samlConfig := p.createSAMLConfig()
