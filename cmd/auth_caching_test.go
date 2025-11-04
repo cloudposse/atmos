@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -139,6 +141,17 @@ func TestAuth_NoBrowserPromptForCachedCredentials(t *testing.T) {
 	for i, args := range workflowCommands {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			// Don't create new TestKit - reuse parent's environment to keep memory keyring state.
+			// However, we must reset Viper and flags to prevent pollution between commands.
+			viper.Reset()
+
+			// Reset all flag Changed states to prevent pollution.
+			RootCmd.Flags().VisitAll(func(f *pflag.Flag) {
+				f.Changed = false
+			})
+			RootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+				f.Changed = false
+			})
+
 			RootCmd.SetArgs(args)
 
 			start := time.Now()

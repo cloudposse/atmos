@@ -36,8 +36,12 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Get positional args after flag parsing.
+	// ProcessCommandLineArgs calls cmd.ParseFlags, so cmd.Flags().Args() now contains positional args.
+	positionalArgs := cmd.Flags().Args()
+
 	// If the `workflow` argument is not passed, start the workflow UI
-	if len(args) != 1 {
+	if len(positionalArgs) != 1 {
 		workflowFile, workflowName, fromStep, err = ExecuteWorkflowUI(atmosConfig)
 		if err != nil {
 			return err
@@ -48,7 +52,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if workflowName == "" {
-		workflowName = args[0]
+		workflowName = positionalArgs[0]
 	}
 
 	flags := cmd.Flags()

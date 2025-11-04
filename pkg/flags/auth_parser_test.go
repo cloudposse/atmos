@@ -155,7 +155,7 @@ func TestAuthParser_Parse(t *testing.T) {
 			// Create parser and command.
 			parser := NewAuthOptionsBuilder().
 				WithVerbose().
-				WithOutput("").
+				WithOutput([]string{"table", "json"}, "").
 				WithDestination().
 				WithDuration(""). // Empty default so tests can verify zero values
 				WithIssuer("").
@@ -206,7 +206,7 @@ func TestAuthBuilder_Methods(t *testing.T) {
 	})
 
 	t.Run("WithOutput adds output flag", func(t *testing.T) {
-		builder := NewAuthOptionsBuilder().WithOutput("table")
+		builder := NewAuthOptionsBuilder().WithOutput([]string{"table", "json"}, "table")
 		assert.NotNil(t, builder)
 	})
 
@@ -238,7 +238,7 @@ func TestAuthBuilder_Methods(t *testing.T) {
 	t.Run("Build creates parser", func(t *testing.T) {
 		parser := NewAuthOptionsBuilder().
 			WithVerbose().
-			WithOutput("table").
+			WithOutput([]string{"table", "json"}, "table").
 			Build()
 		assert.NotNil(t, parser)
 		assert.NotNil(t, parser.parser)
@@ -248,7 +248,7 @@ func TestAuthBuilder_Methods(t *testing.T) {
 func TestAuthParser_RegisterFlagsAndBindToViper(t *testing.T) {
 	parser := NewAuthOptionsBuilder().
 		WithVerbose().
-		WithOutput("table").
+		WithOutput([]string{"table", "json"}, "table").
 		Build()
 
 	cmd := &cobra.Command{Use: "test"}

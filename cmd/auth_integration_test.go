@@ -247,7 +247,7 @@ func TestAuthEnvFormatCompletion(t *testing.T) {
 
 // TestAuthWhoamiOutputCompletion tests the output flag completion for auth whoami.
 func TestAuthWhoamiOutputCompletion(t *testing.T) {
-	t.Run("output flag provides json completion", func(t *testing.T) {
+	t.Run("output flag provides table and json completion", func(t *testing.T) {
 		// Get the completion function for the output flag.
 		completionFunc, exists := authWhoamiCmd.GetFlagCompletionFunc("output")
 		require.True(t, exists, "Output flag should have completion function registered")
@@ -255,8 +255,8 @@ func TestAuthWhoamiOutputCompletion(t *testing.T) {
 		// Call the completion function.
 		completions, directive := completionFunc(authWhoamiCmd, []string{}, "")
 
-		// Verify json format is present.
-		assert.Equal(t, []string{"json"}, completions)
+		// Verify both table and json formats are present.
+		assert.Equal(t, []string{"table", "json"}, completions)
 		assert.Equal(t, 4, int(directive)) // ShellCompDirectiveNoFileComp
 	})
 }

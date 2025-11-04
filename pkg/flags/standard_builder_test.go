@@ -136,7 +136,7 @@ func TestStandardOptionsBuilder_WithFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			builder := NewStandardOptionsBuilder().WithFormat(tt.defaultValue)
+			builder := NewStandardOptionsBuilder().WithFormat([]string{"yaml", "json", "table"}, tt.defaultValue)
 			parser := builder.Build()
 
 			cmd := &cobra.Command{Use: "test"}

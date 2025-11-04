@@ -36,8 +36,11 @@ var workflowCmd = &cobra.Command{
 			return err
 		}
 
+		// Get positional args after flag parsing.
+		positionalArgs := opts.GetPositionalArgs()
+
 		// If no arguments are provided, start the workflow UI
-		if len(args) == 0 {
+		if len(positionalArgs) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
 			if err != nil {
 				return err

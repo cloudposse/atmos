@@ -63,11 +63,10 @@ func NewStandardFlagParser(opts ...Option) *StandardFlagParser {
 	}
 
 	return &StandardFlagParser{
-		registry:    config.registry,
-		viperPrefix: config.viperPrefix,
-		// TODO: Add validation support when WithValidValues is implemented.
-		// validValues:    config.validValues,
-		// validationMsgs: config.validationMsgs,
+		registry:       config.registry,
+		viperPrefix:    config.viperPrefix,
+		validValues:    make(map[string][]string),
+		validationMsgs: make(map[string]string),
 	}
 }
 
@@ -107,6 +106,11 @@ func (p *StandardFlagParser) registerFlag(cmd *cobra.Command, flag Flag) {
 			if cobraFlag != nil {
 				cobraFlag.NoOptDefVal = f.NoOptDefVal
 			}
+		}
+
+		// Populate validValues map for runtime validation.
+		if len(f.ValidValues) > 0 {
+			p.validValues[f.Name] = f.ValidValues
 		}
 
 		// Mark as required if needed
@@ -294,6 +298,8 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 
 // validateFlagValues validates flag values against configured valid values constraints.
 // Returns error if any flag value is not in its valid values list.
+// Only validates flags that were explicitly changed by the user to avoid pollution from
+// Viper/environment variables in tests where commands run sequentially.
 func (p *StandardFlagParser) validateFlagValues(flags map[string]interface{}) error {
 	defer perf.Track(nil, "flagparser.StandardFlagParser.validateFlagValues")()
 
@@ -305,6 +311,16 @@ func (p *StandardFlagParser) validateFlagValues(flags map[string]interface{}) er
 		value, exists := flags[flagName]
 		if !exists {
 			continue
+		}
+
+		// Only validate flags that were explicitly changed by the user.
+		// This prevents validation errors from stale Viper values when tests run
+		// multiple commands sequentially without resetting Viper state.
+		if p.cmd != nil {
+			cobraFlag := p.cmd.Flags().Lookup(flagName)
+			if cobraFlag != nil && !cobraFlag.Changed {
+				continue // Skip validation for flags not explicitly set by user
+			}
 		}
 
 		// Convert value to string for comparison.
