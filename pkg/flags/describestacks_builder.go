@@ -96,7 +96,7 @@ func (b *DescribeStacksOptionsBuilder) WithComponentTypes() *DescribeStacksOptio
 }
 
 // WithSections adds the --sections flag.
-func (b *DescribeStacksOptionsBuilder) WithSections() *DescribeStacksOptionsBuilder{
+func (b *DescribeStacksOptionsBuilder) WithSections() *DescribeStacksOptionsBuilder {
 	defer perf.Track(nil, "flags.DescribeStacksOptionsBuilder.WithSections")()
 
 	b.options = append(b.options, func(cfg *parserConfig) {
