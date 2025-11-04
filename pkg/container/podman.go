@@ -241,36 +241,18 @@ func parseLabelsMap(labels map[string]interface{}) map[string]string {
 }
 
 // Exec executes a command in a running container.
-//
-//nolint:revive // argument-limit: io.Writer parameters required for IO/UI framework integration
-func (p *PodmanRuntime) Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions, stdout, stderr io.Writer) error {
+func (p *PodmanRuntime) Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Exec")()
 
-	// Default to iolib.Data/UI if nil.
-	if stdout == nil {
-		stdout = iolib.Data
-	}
-	if stderr == nil {
-		stderr = iolib.UI
-	}
-
-	return execWithRuntime(ctx, podmanCmd, containerID, cmd, opts, stdout, stderr)
+	return execWithRuntime(ctx, podmanCmd, containerID, cmd, opts)
 }
 
 // Attach attaches to a running container with an interactive shell.
-func (p *PodmanRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions, stdout, stderr io.Writer) error {
+func (p *PodmanRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Attach")()
 
-	// Default to iolib.Data/UI if nil.
-	if stdout == nil {
-		stdout = iolib.Data
-	}
-	if stderr == nil {
-		stderr = iolib.UI
-	}
-
 	cmd, execOpts := buildAttachCommand(opts)
-	return p.Exec(ctx, containerID, cmd, execOpts, stdout, stderr)
+	return p.Exec(ctx, containerID, cmd, execOpts)
 }
 
 // Pull pulls a container image.
@@ -288,7 +270,7 @@ func (p *PodmanRuntime) Pull(ctx context.Context, image string) error {
 
 // Logs shows logs from a container.
 //
-//nolint:revive // argument-limit: io.Writer parameters required for IO/UI framework integration
+//nolint:revive // argument-limit: Logs keeps separate IO parameters for simplicity
 func (p *PodmanRuntime) Logs(ctx context.Context, containerID string, follow bool, tail string, stdout, stderr io.Writer) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Logs")()
 

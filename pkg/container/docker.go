@@ -197,36 +197,18 @@ func parseLabels(labelsStr string) map[string]string {
 }
 
 // Exec executes a command in a running container.
-//
-//nolint:revive // argument-limit: io.Writer parameters required for IO/UI framework integration
-func (d *DockerRuntime) Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions, stdout, stderr io.Writer) error {
+func (d *DockerRuntime) Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions) error {
 	defer perf.Track(nil, "container.DockerRuntime.Exec")()
 
-	// Default to iolib.Data/UI if nil.
-	if stdout == nil {
-		stdout = iolib.Data
-	}
-	if stderr == nil {
-		stderr = iolib.UI
-	}
-
-	return execWithRuntime(ctx, dockerCmd, containerID, cmd, opts, stdout, stderr)
+	return execWithRuntime(ctx, dockerCmd, containerID, cmd, opts)
 }
 
 // Attach attaches to a running container with an interactive shell.
-func (d *DockerRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions, stdout, stderr io.Writer) error {
+func (d *DockerRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions) error {
 	defer perf.Track(nil, "container.DockerRuntime.Attach")()
 
-	// Default to iolib.Data/UI if nil.
-	if stdout == nil {
-		stdout = iolib.Data
-	}
-	if stderr == nil {
-		stderr = iolib.UI
-	}
-
 	cmd, execOpts := buildAttachCommand(opts)
-	return d.Exec(ctx, containerID, cmd, execOpts, stdout, stderr)
+	return d.Exec(ctx, containerID, cmd, execOpts)
 }
 
 // Pull pulls a container image.
@@ -244,7 +226,7 @@ func (d *DockerRuntime) Pull(ctx context.Context, image string) error {
 
 // Logs shows logs from a container.
 //
-//nolint:revive // argument-limit: io.Writer parameters required for IO/UI framework integration
+//nolint:revive // argument-limit: Logs keeps separate IO parameters for simplicity
 func (d *DockerRuntime) Logs(ctx context.Context, containerID string, follow bool, tail string, stdout, stderr io.Writer) error {
 	defer perf.Track(nil, "container.DockerRuntime.Logs")()
 

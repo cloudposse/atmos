@@ -24,9 +24,9 @@ type Runtime interface {
 	Inspect(ctx context.Context, containerID string) (*Info, error)
 	List(ctx context.Context, filters map[string]string) ([]Info, error)
 
-	// Execution - methods that produce user-facing output accept io.Writer
-	Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions, stdout, stderr io.Writer) error
-	Attach(ctx context.Context, containerID string, opts *AttachOptions, stdout, stderr io.Writer) error
+	// Execution - IO streams configured via options structs
+	Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions) error
+	Attach(ctx context.Context, containerID string, opts *AttachOptions) error
 
 	// Image operations
 	Pull(ctx context.Context, image string) error
@@ -101,6 +101,11 @@ type ExecOptions struct {
 	AttachStdout bool
 	AttachStderr bool
 	Tty          bool
+
+	// IO streams for input/output. If nil, defaults to iolib.Data/UI.
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // AttachOptions represents options for attaching to containers.
@@ -108,6 +113,11 @@ type AttachOptions struct {
 	Shell     string
 	ShellArgs []string
 	User      string
+
+	// IO streams for input/output. If nil, defaults to os.Stdin and iolib.Data/UI.
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 // RuntimeInfo represents container runtime information.

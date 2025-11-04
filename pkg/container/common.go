@@ -9,6 +9,7 @@ import (
 	"os/exec"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
@@ -217,8 +218,14 @@ func buildAttachCommand(opts *AttachOptions) ([]string, *ExecOptions) {
 		AttachStderr: true,
 	}
 
-	if opts != nil && opts.User != "" {
-		execOpts.User = opts.User
+	if opts != nil {
+		if opts.User != "" {
+			execOpts.User = opts.User
+		}
+		// Copy IO streams from AttachOptions to ExecOptions.
+		execOpts.Stdin = opts.Stdin
+		execOpts.Stdout = opts.Stdout
+		execOpts.Stderr = opts.Stderr
 	}
 
 	return cmd, execOpts
@@ -226,38 +233,64 @@ func buildAttachCommand(opts *AttachOptions) ([]string, *ExecOptions) {
 
 // execWithRuntime executes a command in a container using the specified runtime.
 // This function is shared between Docker and Podman runtimes to avoid duplication.
-//
-//nolint:revive // argument-limit: io.Writer parameters required for IO/UI framework integration
-func execWithRuntime(ctx context.Context, runtimeName string, containerID string, cmd []string, opts *ExecOptions, stdout, stderr io.Writer) error {
+func execWithRuntime(ctx context.Context, runtimeName string, containerID string, cmd []string, opts *ExecOptions) error {
 	args := buildExecArgs(containerID, cmd, opts)
-
 	execCmd := exec.CommandContext(ctx, runtimeName, args...)
 
-	// For interactive mode (when Tty and AttachStdin are both true), connect to terminal.
-	if opts != nil && opts.Tty && opts.AttachStdin {
-		execCmd.Stdin = os.Stdin
-		execCmd.Stdout = os.Stdout
-		execCmd.Stderr = os.Stderr
+	// Setup IO streams with defaults.
+	stdin, stdout, stderr := getIOStreams(opts)
+	attachIOStreams(execCmd, opts, stdin, stdout, stderr)
 
-		if err := execCmd.Run(); err != nil {
-			// Propagate exit code to caller so CLI can report failure.
-			var exitErr *exec.ExitError
-			if errors.As(err, &exitErr) {
-				log.Debug("Interactive session exited", "code", exitErr.ExitCode())
-				return fmt.Errorf("%w: %s exec exited with code %d: %w", errUtils.ErrContainerRuntimeOperation, runtimeName, exitErr.ExitCode(), err)
-			}
-			return fmt.Errorf("%w: %s exec failed: %w", errUtils.ErrContainerRuntimeOperation, runtimeName, err)
+	return runCommand(execCmd, runtimeName)
+}
+
+// getIOStreams extracts IO streams from opts with fallback defaults.
+func getIOStreams(opts *ExecOptions) (io.Reader, io.Writer, io.Writer) {
+	var stdin io.Reader = os.Stdin
+	stdout := iolib.Data
+	stderr := iolib.UI
+
+	if opts != nil {
+		if opts.Stdin != nil {
+			stdin = opts.Stdin
 		}
+		if opts.Stdout != nil {
+			stdout = opts.Stdout
+		}
+		if opts.Stderr != nil {
+			stderr = opts.Stderr
+		}
+	}
+	return stdin, stdout, stderr
+}
+
+// attachIOStreams connects IO streams to command based on opts flags.
+func attachIOStreams(cmd *exec.Cmd, opts *ExecOptions, stdin io.Reader, stdout, stderr io.Writer) {
+	if opts == nil {
+		return
+	}
+	if opts.AttachStdin {
+		cmd.Stdin = stdin
+	}
+	if opts.AttachStdout {
+		cmd.Stdout = stdout
+	}
+	if opts.AttachStderr {
+		cmd.Stderr = stderr
+	}
+}
+
+// runCommand executes the command and handles error propagation.
+func runCommand(cmd *exec.Cmd, runtimeName string) error {
+	err := cmd.Run()
+	if err == nil {
 		return nil
 	}
 
-	// Non-interactive mode - use provided io.Writers.
-	execCmd.Stdout = stdout
-	execCmd.Stderr = stderr
-
-	if err := execCmd.Run(); err != nil {
-		return fmt.Errorf("%w: %s exec failed: %w", errUtils.ErrContainerRuntimeOperation, runtimeName, err)
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		log.Debug("Command exited", "code", exitErr.ExitCode())
+		return fmt.Errorf("%w: %s exec exited with code %d: %w", errUtils.ErrContainerRuntimeOperation, runtimeName, exitErr.ExitCode(), err)
 	}
-
-	return nil
+	return fmt.Errorf("%w: %s exec failed: %w", errUtils.ErrContainerRuntimeOperation, runtimeName, err)
 }

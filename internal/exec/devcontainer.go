@@ -308,8 +308,8 @@ func attachToContainer(ctx context.Context, runtime container.Runtime, container
 	shellArgs := getShellArgs(config.UserEnvProbe)
 	attachOpts := &container.AttachOptions{ShellArgs: shellArgs}
 
-	// Pass nil for stdout/stderr to use default iolib.Data/UI channels.
-	return runtime.Attach(ctx, containerInfo.ID, attachOpts, nil, nil)
+	// IO streams are nil in opts, will default to iolib.Data/UI in runtime.
+	return runtime.Attach(ctx, containerInfo.ID, attachOpts)
 }
 
 func getShellArgs(userEnvProbe string) []string {

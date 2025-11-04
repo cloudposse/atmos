@@ -752,7 +752,7 @@ func TestPodmanRuntime_Exec_Integration(t *testing.T) {
 	}
 
 	// Note: Exec output goes to os.Stdout/Stderr, we mainly verify it doesn't error.
-	err = runtime.Exec(ctx, containerID, []string{"echo", "test"}, execOpts, nil, nil)
+	err = runtime.Exec(ctx, containerID, []string{"echo", "test"}, execOpts)
 	require.NoError(t, err, "Exec should succeed")
 }
 
