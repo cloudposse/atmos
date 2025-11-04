@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"io"
 	"os/exec"
 	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -196,18 +197,36 @@ func parseLabels(labelsStr string) map[string]string {
 }
 
 // Exec executes a command in a running container.
-func (d *DockerRuntime) Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions) error {
+//
+//nolint:revive // argument-limit: io.Writer parameters required for IO/UI framework integration
+func (d *DockerRuntime) Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions, stdout, stderr io.Writer) error {
 	defer perf.Track(nil, "container.DockerRuntime.Exec")()
 
-	return execWithRuntime(ctx, dockerCmd, containerID, cmd, opts)
+	// Default to iolib.Data/UI if nil.
+	if stdout == nil {
+		stdout = iolib.Data
+	}
+	if stderr == nil {
+		stderr = iolib.UI
+	}
+
+	return execWithRuntime(ctx, dockerCmd, containerID, cmd, opts, stdout, stderr)
 }
 
 // Attach attaches to a running container with an interactive shell.
-func (d *DockerRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions) error {
+func (d *DockerRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions, stdout, stderr io.Writer) error {
 	defer perf.Track(nil, "container.DockerRuntime.Attach")()
 
+	// Default to iolib.Data/UI if nil.
+	if stdout == nil {
+		stdout = iolib.Data
+	}
+	if stderr == nil {
+		stderr = iolib.UI
+	}
+
 	cmd, execOpts := buildAttachCommand(opts)
-	return d.Exec(ctx, containerID, cmd, execOpts)
+	return d.Exec(ctx, containerID, cmd, execOpts, stdout, stderr)
 }
 
 // Pull pulls a container image.
@@ -224,14 +243,24 @@ func (d *DockerRuntime) Pull(ctx context.Context, image string) error {
 }
 
 // Logs shows logs from a container.
-func (d *DockerRuntime) Logs(ctx context.Context, containerID string, follow bool, tail string) error {
+//
+//nolint:revive // argument-limit: io.Writer parameters required for IO/UI framework integration
+func (d *DockerRuntime) Logs(ctx context.Context, containerID string, follow bool, tail string, stdout, stderr io.Writer) error {
 	defer perf.Track(nil, "container.DockerRuntime.Logs")()
+
+	// Default to iolib.Data/UI if nil.
+	if stdout == nil {
+		stdout = iolib.Data
+	}
+	if stderr == nil {
+		stderr = iolib.UI
+	}
 
 	args := buildLogsArgs(containerID, follow, tail)
 
 	cmd := exec.CommandContext(ctx, dockerCmd, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	return cmd.Run()
 }

@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"io"
 	"os/exec"
 	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -240,18 +241,36 @@ func parseLabelsMap(labels map[string]interface{}) map[string]string {
 }
 
 // Exec executes a command in a running container.
-func (p *PodmanRuntime) Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions) error {
+//
+//nolint:revive // argument-limit: io.Writer parameters required for IO/UI framework integration
+func (p *PodmanRuntime) Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions, stdout, stderr io.Writer) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Exec")()
 
-	return execWithRuntime(ctx, podmanCmd, containerID, cmd, opts)
+	// Default to iolib.Data/UI if nil.
+	if stdout == nil {
+		stdout = iolib.Data
+	}
+	if stderr == nil {
+		stderr = iolib.UI
+	}
+
+	return execWithRuntime(ctx, podmanCmd, containerID, cmd, opts, stdout, stderr)
 }
 
 // Attach attaches to a running container with an interactive shell.
-func (p *PodmanRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions) error {
+func (p *PodmanRuntime) Attach(ctx context.Context, containerID string, opts *AttachOptions, stdout, stderr io.Writer) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Attach")()
 
+	// Default to iolib.Data/UI if nil.
+	if stdout == nil {
+		stdout = iolib.Data
+	}
+	if stderr == nil {
+		stderr = iolib.UI
+	}
+
 	cmd, execOpts := buildAttachCommand(opts)
-	return p.Exec(ctx, containerID, cmd, execOpts)
+	return p.Exec(ctx, containerID, cmd, execOpts, stdout, stderr)
 }
 
 // Pull pulls a container image.
@@ -268,14 +287,24 @@ func (p *PodmanRuntime) Pull(ctx context.Context, image string) error {
 }
 
 // Logs shows logs from a container.
-func (p *PodmanRuntime) Logs(ctx context.Context, containerID string, follow bool, tail string) error {
+//
+//nolint:revive // argument-limit: io.Writer parameters required for IO/UI framework integration
+func (p *PodmanRuntime) Logs(ctx context.Context, containerID string, follow bool, tail string, stdout, stderr io.Writer) error {
 	defer perf.Track(nil, "container.PodmanRuntime.Logs")()
+
+	// Default to iolib.Data/UI if nil.
+	if stdout == nil {
+		stdout = iolib.Data
+	}
+	if stderr == nil {
+		stderr = iolib.UI
+	}
 
 	args := buildLogsArgs(containerID, follow, tail)
 
 	cmd := exec.CommandContext(ctx, podmanCmd, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	return cmd.Run()
 }

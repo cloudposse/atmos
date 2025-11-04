@@ -4,6 +4,7 @@ package container
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -23,15 +24,15 @@ type Runtime interface {
 	Inspect(ctx context.Context, containerID string) (*Info, error)
 	List(ctx context.Context, filters map[string]string) ([]Info, error)
 
-	// Execution
-	Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions) error
-	Attach(ctx context.Context, containerID string, opts *AttachOptions) error
+	// Execution - methods that produce user-facing output accept io.Writer
+	Exec(ctx context.Context, containerID string, cmd []string, opts *ExecOptions, stdout, stderr io.Writer) error
+	Attach(ctx context.Context, containerID string, opts *AttachOptions, stdout, stderr io.Writer) error
 
 	// Image operations
 	Pull(ctx context.Context, image string) error
 
-	// Logs
-	Logs(ctx context.Context, containerID string, follow bool, tail string) error
+	// Logs - methods that produce user-facing output accept io.Writer
+	Logs(ctx context.Context, containerID string, follow bool, tail string, stdout, stderr io.Writer) error
 
 	// Info
 	Info(ctx context.Context) (*RuntimeInfo, error)

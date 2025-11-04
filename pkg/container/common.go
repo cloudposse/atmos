@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 
@@ -225,7 +226,9 @@ func buildAttachCommand(opts *AttachOptions) ([]string, *ExecOptions) {
 
 // execWithRuntime executes a command in a container using the specified runtime.
 // This function is shared between Docker and Podman runtimes to avoid duplication.
-func execWithRuntime(ctx context.Context, runtimeName string, containerID string, cmd []string, opts *ExecOptions) error {
+//
+//nolint:revive // argument-limit: io.Writer parameters required for IO/UI framework integration
+func execWithRuntime(ctx context.Context, runtimeName string, containerID string, cmd []string, opts *ExecOptions, stdout, stderr io.Writer) error {
 	args := buildExecArgs(containerID, cmd, opts)
 
 	execCmd := exec.CommandContext(ctx, runtimeName, args...)
@@ -248,10 +251,12 @@ func execWithRuntime(ctx context.Context, runtimeName string, containerID string
 		return nil
 	}
 
-	// Non-interactive mode.
-	output, err := execCmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%w: %s exec failed: %w: %s", errUtils.ErrContainerRuntimeOperation, runtimeName, err, string(output))
+	// Non-interactive mode - use provided io.Writers.
+	execCmd.Stdout = stdout
+	execCmd.Stderr = stderr
+
+	if err := execCmd.Run(); err != nil {
+		return fmt.Errorf("%w: %s exec failed: %w", errUtils.ErrContainerRuntimeOperation, runtimeName, err)
 	}
 
 	return nil

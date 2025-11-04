@@ -3,7 +3,6 @@ package exec
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,6 +11,8 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -32,13 +33,13 @@ func runWithSpinner(message string, operation func() error) error {
 
 	if !isTTY {
 		// No TTY - just run the operation and show simple output on one line.
-		fmt.Fprintf(os.Stderr, "%s... ", message)
+		_ = ui.Writef("%s... ", message)
 		err := operation()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "\n")
+			_ = ui.Writeln("")
 			return err
 		}
-		fmt.Fprintf(os.Stderr, "%s\n", theme.Styles.Checkmark.String())
+		_ = ui.Writeln(theme.Styles.Checkmark.String())
 		return nil
 	}
 
@@ -48,7 +49,7 @@ func runWithSpinner(message string, operation func() error) error {
 	// Use inline mode - output to stderr, no alternate screen.
 	p := tea.NewProgram(
 		model,
-		tea.WithOutput(os.Stderr),
+		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
 	)
 
@@ -83,7 +84,7 @@ func createAndStartNewContainer(params *containerParams) error {
 // startExistingContainer starts an existing container if it's not running.
 func startExistingContainer(ctx context.Context, runtime container.Runtime, containerInfo *container.Info, containerName string) error {
 	if isContainerRunning(containerInfo.Status) {
-		fmt.Fprintf(os.Stderr, "Container %s is already running\n", containerName)
+		_ = ui.Infof("Container %s is already running", containerName)
 		return nil
 	}
 

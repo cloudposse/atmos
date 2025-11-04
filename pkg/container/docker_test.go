@@ -460,7 +460,7 @@ func TestDockerRuntime_Logs_Integration(t *testing.T) {
 	// Note: We can't easily test Logs output since it goes to os.Stdout/Stderr.
 	// This test mainly verifies the method doesn't panic and completes.
 	// We test with tail to avoid hanging on follow.
-	err = runtime.Logs(ctx, containerID, false, "10")
+	err = runtime.Logs(ctx, containerID, false, "10", nil, nil)
 	require.NoError(t, err, "Logs should succeed")
 }
 
@@ -518,6 +518,6 @@ func TestDockerRuntime_Exec_Integration(t *testing.T) {
 	}
 
 	// Note: Exec output goes to os.Stdout/Stderr, we mainly verify it doesn't error.
-	err = runtime.Exec(ctx, containerID, []string{"echo", "test"}, execOpts)
+	err = runtime.Exec(ctx, containerID, []string{"echo", "test"}, execOpts, nil, nil)
 	require.NoError(t, err, "Exec should succeed")
 }

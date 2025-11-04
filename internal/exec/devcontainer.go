@@ -308,7 +308,8 @@ func attachToContainer(ctx context.Context, runtime container.Runtime, container
 	shellArgs := getShellArgs(config.UserEnvProbe)
 	attachOpts := &container.AttachOptions{ShellArgs: shellArgs}
 
-	return runtime.Attach(ctx, containerInfo.ID, attachOpts)
+	// Pass nil for stdout/stderr to use default iolib.Data/UI channels.
+	return runtime.Attach(ctx, containerInfo.ID, attachOpts, nil, nil)
 }
 
 func getShellArgs(userEnvProbe string) []string {
@@ -501,8 +502,8 @@ func ExecuteDevcontainerLogs(atmosConfig *schema.AtmosConfiguration, name, insta
 		return fmt.Errorf("%w: container %s not found", errUtils.ErrContainerNotFound, containerName)
 	}
 
-	// Show logs.
-	return runtime.Logs(ctx, containerName, follow, tail)
+	// Show logs using default iolib.Data/UI channels.
+	return runtime.Logs(ctx, containerName, follow, tail, nil, nil)
 }
 
 // ExecuteDevcontainerRebuild rebuilds a devcontainer from scratch.
