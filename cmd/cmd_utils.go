@@ -795,6 +795,8 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 }
 
 // listStacksForComponent returns stacks that contain the specified component.
+// It initializes the CLI configuration, describes all stacks, and filters them
+// to include only those defining the given component.
 func listStacksForComponent(component string) ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
@@ -803,7 +805,7 @@ func listStacksForComponent(component string) ([]string, error) {
 		return nil, fmt.Errorf("%w", err)
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
