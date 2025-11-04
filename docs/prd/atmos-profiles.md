@@ -264,41 +264,69 @@ ATMOS_PROFILE=developer,debug atmos describe stacks
 
 **FR5.1**: New command `atmos profile list` MUST list all available profiles across all locations
 
-**FR5.2**: `atmos profile list` output format:
+**FR5.2**: `atmos profile list` output format (using lipgloss table):
 ```
-Available profiles:
+Available Profiles
 
-Project Profiles (/infrastructure/atmos/.atmos/profiles):
-  • ci              CI/CD environment configuration
-  • developer       Developer workstation defaults
+┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃ Profile      ┃ Description                                 ┃ Location  ┃
+┡━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━┩
+│ ci           │ CI/CD environment configuration             │ Project   │
+│ developer    │ Developer workstation defaults              │ Project   │
+│ debug        │ Debug logging and profiling                 │ User      │
+│ personal-dev │ Personal development settings               │ User      │
+└──────────────┴─────────────────────────────────────────────┴───────────┘
 
-User Profiles (~/.config/atmos/profiles):
-  • debug           Debug logging and profiling
-  • personal-dev    Personal development settings
-
-To view profile details: atmos profile show <profile>
-To use a profile: atmos <command> --profile <profile>
+Tip: View profile details with 'atmos profile show <profile>'
+     Use a profile with 'atmos <command> --profile <profile>'
 ```
+
+**FR5.2.1**: Table styling MUST use lipgloss with:
+- Header row with bold styling
+- Border styles consistent with other Atmos tables
+- Location column showing profile source (Project, User, Custom)
+- Optional description extracted from profile metadata or first comment
 
 **FR5.3**: `atmos profile list` MUST support JSON and YAML output formats via `--format` flag
 
 **FR5.4**: New command `atmos profile show <profile>` MUST display merged configuration for a profile
 
-**FR5.5**: `atmos profile show <profile>` output format:
+**FR5.5**: `atmos profile show <profile>` output format (using lipgloss styling):
 ```
 Profile: developer
-Locations:
+
+Locations
   • /infrastructure/atmos/.atmos/profiles/developer (2 files)
   • ~/.config/atmos/profiles/developer (1 file)
 
-Files (in merge order):
+Files (in merge order)
   1. /infrastructure/atmos/.atmos/profiles/developer/auth.yaml
   2. /infrastructure/atmos/.atmos/profiles/developer/logging.yaml
   3. /infrastructure/atmos/.atmos/profiles/developer/overrides.yaml
 
-Merged Configuration:
-<Colorized YAML output using existing u.GetHighlightedYAML()>
+Merged Configuration
+
+auth:
+  identities:
+    developer-sandbox:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: aws-sso-dev
+      principal:
+        account_id: "999888777666"
+        permission_set: DeveloperAccess
+  providers:
+    aws-sso-dev:
+      kind: aws/sso
+      region: us-east-2
+      start_url: https://dev.awsapps.com/start
+logs:
+  level: Warning
+  file: /dev/stderr
 ```
+
+**Note**: The "Merged Configuration" section uses `u.GetHighlightedYAML()` for syntax highlighting (keys in blue, values in appropriate colors, proper indentation).
 
 **FR5.6**: `atmos profile show <profile>` MUST use the same pretty YAML formatting as `atmos describe config`
 - Use `u.GetHighlightedYAML()` for YAML format (colorized, syntax highlighted)
@@ -487,62 +515,145 @@ profiles:
 #### Listing Available Profiles
 
 ```bash
-# List all profiles
 atmos profile list
+```
 
-# Output:
-# Available profiles:
-#
-# Project Profiles (/infrastructure/atmos/.atmos/profiles):
-#   • ci              CI/CD environment configuration
-#   • developer       Developer workstation defaults
-#
-# User Profiles (~/.config/atmos/profiles):
-#   • debug           Debug logging and profiling
-#   • personal-dev    Personal development settings
-#
-# To view profile details: atmos profile show <profile>
-# To use a profile: atmos <command> --profile <profile>
+Output:
+```
+Available Profiles
 
-# List profiles in JSON format
+┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃ Profile      ┃ Description                                 ┃ Location  ┃
+┡━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━┩
+│ ci           │ CI/CD environment configuration             │ Project   │
+│ developer    │ Developer workstation defaults              │ Project   │
+│ debug        │ Debug logging and profiling                 │ User      │
+│ personal-dev │ Personal development settings               │ User      │
+└──────────────┴─────────────────────────────────────────────┴───────────┘
+
+Tip: View profile details with 'atmos profile show <profile>'
+     Use a profile with 'atmos <command> --profile <profile>'
+```
+
+JSON output format:
+```bash
 atmos profile list --format json
+```
+
+Output:
+```json
+{
+  "profiles": [
+    {
+      "name": "ci",
+      "description": "CI/CD environment configuration",
+      "location": "project",
+      "path": "/infrastructure/atmos/.atmos/profiles/ci",
+      "files": ["auth.yaml", "logging.yaml", "terminal.yaml"]
+    },
+    {
+      "name": "developer",
+      "description": "Developer workstation defaults",
+      "location": "project",
+      "path": "/infrastructure/atmos/.atmos/profiles/developer",
+      "files": ["auth.yaml", "logging.yaml"]
+    }
+  ]
+}
 ```
 
 #### Viewing Profile Details
 
 ```bash
-# Show detailed profile information
 atmos profile show developer
+```
 
-# Output:
-# Profile: developer
-# Locations:
-#   • /infrastructure/atmos/.atmos/profiles/developer (2 files)
-#   • ~/.config/atmos/profiles/developer (1 file)
-#
-# Files (in merge order):
-#   1. /infrastructure/atmos/.atmos/profiles/developer/auth.yaml
-#   2. /infrastructure/atmos/.atmos/profiles/developer/logging.yaml
-#   3. ~/.config/atmos/profiles/developer/overrides.yaml
-#
-# Merged Configuration:
-# <Colorized YAML output - same formatting as 'atmos describe config'>
-# auth:
-#   identities:
-#     developer-sandbox:
-#       kind: aws/permission-set
-#       default: true
-# logs:
-#   level: Warning
+Output:
+```
+Profile: developer
 
-# Show only the file list
+Locations
+  • /infrastructure/atmos/.atmos/profiles/developer (2 files)
+  • ~/.config/atmos/profiles/developer (1 file)
+
+Files (in merge order)
+  1. /infrastructure/atmos/.atmos/profiles/developer/auth.yaml
+  2. /infrastructure/atmos/.atmos/profiles/developer/logging.yaml
+  3. ~/.config/atmos/profiles/developer/overrides.yaml
+
+Merged Configuration
+
+auth:
+  identities:
+    developer-sandbox:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: aws-sso-dev
+      principal:
+        account_id: "999888777666"
+        permission_set: DeveloperAccess
+logs:
+  level: Warning
+  file: /dev/stderr
+```
+
+Note: The YAML configuration is syntax highlighted with colors (similar to `atmos describe config`).
+
+Show only file list:
+```bash
 atmos profile show developer --files
+```
 
-# Show in JSON format (colorized)
+Output:
+```
+Profile: developer
+
+Locations
+  • /infrastructure/atmos/.atmos/profiles/developer (2 files)
+  • ~/.config/atmos/profiles/developer (1 file)
+
+Files (in merge order)
+  1. /infrastructure/atmos/.atmos/profiles/developer/auth.yaml
+  2. /infrastructure/atmos/.atmos/profiles/developer/logging.yaml
+  3. ~/.config/atmos/profiles/developer/overrides.yaml
+```
+
+JSON format:
+```bash
 atmos profile show developer --format json
+```
 
-# Disable colors
-atmos profile show developer --no-color
+Output:
+```json
+{
+  "name": "developer",
+  "locations": [
+    {
+      "path": "/infrastructure/atmos/.atmos/profiles/developer",
+      "type": "project",
+      "files": ["auth.yaml", "logging.yaml"]
+    },
+    {
+      "path": "~/.config/atmos/profiles/developer",
+      "type": "user",
+      "files": ["overrides.yaml"]
+    }
+  ],
+  "merged_config": {
+    "auth": {
+      "identities": {
+        "developer-sandbox": {
+          "kind": "aws/permission-set",
+          "default": true
+        }
+      }
+    },
+    "logs": {
+      "level": "Warning"
+    }
+  }
+}
 ```
 
 #### CI Profile Example
