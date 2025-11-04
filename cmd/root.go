@@ -75,7 +75,17 @@ func parseChdirFromArgs() string {
 			return strings.TrimPrefix(arg, "--chdir=")
 		}
 
-		// Check for --chdir value format (next arg is the value).
+		// Check for -C=value format.
+		if strings.HasPrefix(arg, "-C=") {
+			return strings.TrimPrefix(arg, "-C=")
+		}
+
+		// Check for -C<value> format (concatenated, e.g., -C../foo).
+		if strings.HasPrefix(arg, "-C") && len(arg) > 2 {
+			return arg[2:]
+		}
+
+		// Check for --chdir value or -C value format (next arg is the value).
 		if arg == "--chdir" || arg == "-C" {
 			if i+1 < len(args) {
 				return args[i+1]
