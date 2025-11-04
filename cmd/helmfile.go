@@ -21,15 +21,12 @@ var helmfileCmd = &cobra.Command{
 }
 
 func init() {
-	// https://github.com/spf13/cobra/issues/739
-	// DisableFlagParsing=true required for manual flag parsing
-	helmfileCmd.DisableFlagParsing = true
-
 	// Create parser with Helmfile flags.
-	// Returns strongly-typed HelmfileInterpreter.
+	// Returns strongly-typed HelmfileOptions.
 	helmfileParser = flags.NewHelmfileParser()
 
 	// Register flags with Cobra.
+	// RegisterFlags automatically sets DisableFlagParsing=true for manual parsing.
 	helmfileParser.RegisterFlags(helmfileCmd)
 	_ = helmfileParser.BindToViper(viper.GetViper())
 

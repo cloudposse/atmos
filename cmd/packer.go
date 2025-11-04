@@ -22,15 +22,12 @@ var packerCmd = &cobra.Command{
 }
 
 func init() {
-	// https://github.com/spf13/cobra/issues/739
-	// DisableFlagParsing=true required for manual flag parsing
-	packerCmd.DisableFlagParsing = true
-
 	// Create parser with Packer flags.
 	// Returns strongly-typed PackerOptions.
 	packerParser = flags.NewPackerParser()
 
 	// Register flags as persistent (inherited by subcommands).
+	// RegisterPersistentFlags automatically sets DisableFlagParsing=true for manual parsing.
 	packerParser.RegisterPersistentFlags(packerCmd)
 	_ = packerParser.BindToViper(viper.GetViper())
 

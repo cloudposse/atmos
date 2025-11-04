@@ -50,7 +50,8 @@ const (
 //	// cfg.PassThroughArgs contains args to pass to terraform
 type PassThroughFlagParser struct {
 	registry            *FlagRegistry
-	viper               *viper.Viper // Viper instance for precedence handling
+	cmd                 *cobra.Command    // Cobra command for manual flag parsing
+	viper               *viper.Viper      // Viper instance for precedence handling
 	viperPrefix         string
 	atmosFlagNames      []string          // Known Atmos flag names for extraction
 	shorthandToFull     map[string]string // Maps shorthand (e.g., "s") to full name (e.g., "stack")
@@ -136,6 +137,9 @@ func (p *PassThroughFlagParser) SetPositionalArgsCount(count int) {
 func (p *PassThroughFlagParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.PassThroughFlagParser.RegisterFlags")()
 
+	// Store command reference for manual parsing in Parse().
+	p.cmd = cmd
+
 	// IMPORTANT: Disable Cobra's flag parsing so our parser can handle it.
 	// This is critical for commands with subcommands that accept positional args.
 	// Without this, Cobra treats positional args (like component names) as unknown subcommands.
@@ -180,6 +184,9 @@ func (p *PassThroughFlagParser) registerFlag(cmd *cobra.Command, flag Flag) {
 func (p *PassThroughFlagParser) RegisterPersistentFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.PassThroughFlagParser.RegisterPersistentFlags")()
 
+	// Store command reference for manual parsing in Parse().
+	p.cmd = cmd
+
 	for _, flag := range p.registry.All() {
 		p.registerPersistentFlag(cmd, flag)
 	}
@@ -222,9 +229,27 @@ func (p *PassThroughFlagParser) BindToViper(v *viper.Viper) error {
 	// Store Viper instance for precedence handling in Parse()
 	p.viper = v
 
+	// Bind environment variables to Viper
 	for _, flag := range p.registry.All() {
 		if err := p.bindFlag(v, flag); err != nil {
 			return err
+		}
+	}
+
+	// Also bind Cobra pflags to Viper if command was registered
+	if p.cmd != nil {
+		for _, flag := range p.registry.All() {
+			viperKey := p.getViperKey(flag.GetName())
+			// Check both local and persistent flags
+			cobraFlag := p.cmd.Flags().Lookup(flag.GetName())
+			if cobraFlag == nil {
+				cobraFlag = p.cmd.PersistentFlags().Lookup(flag.GetName())
+			}
+			if cobraFlag != nil {
+				if err := v.BindPFlag(viperKey, cobraFlag); err != nil {
+					return fmt.Errorf("failed to bind pflag %s to viper: %w", flag.GetName(), err)
+				}
+			}
 		}
 	}
 
@@ -271,6 +296,38 @@ func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*Pars
 
 	result := &ParsedConfig{
 		Flags: make(map[string]interface{}),
+	}
+
+	// Step 0: Manually parse args into Cobra FlagSet (required when DisableFlagParsing=true).
+	// This populates the Cobra flags which are bound to Viper via BindFlagsToViper/BindToViper.
+	// Without this, Viper won't have CLI flag values and precedence order breaks.
+	//
+	// For persistent flags registered on parent commands, we need to parse using PersistentFlags().
+	// Child commands inherit persistent flags, so parsing them makes values available.
+	if p.cmd != nil && len(args) > 0 {
+		// Try parsing persistent flags first (for parent->child flag inheritance)
+		if err := p.cmd.PersistentFlags().Parse(args); err != nil {
+			// Ignore parse errors - pass-through commands may have unknown flags for the external tool
+		}
+		// Also parse local flags in case some were registered directly on this command
+		if err := p.cmd.Flags().Parse(args); err != nil {
+			// Ignore parse errors - pass-through commands may have unknown flags for the external tool
+		}
+
+		// After parsing, bind the parsed pflags to Viper to ensure values are available
+		if p.viper != nil {
+			for _, flag := range p.registry.All() {
+				viperKey := p.getViperKey(flag.GetName())
+				cobraFlag := p.cmd.Flags().Lookup(flag.GetName())
+				if cobraFlag == nil {
+					cobraFlag = p.cmd.PersistentFlags().Lookup(flag.GetName())
+				}
+				if cobraFlag != nil && cobraFlag.Changed {
+					// Only set in Viper if the flag was actually provided on CLI
+					_ = p.viper.BindPFlag(viperKey, cobraFlag)
+				}
+			}
+		}
 	}
 
 	// Step 1: Separate args into Atmos args and tool args using -- separator

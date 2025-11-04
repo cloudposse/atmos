@@ -31,6 +31,10 @@ func (p *PackerParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.PackerParser.RegisterFlags")()
 
 	p.cmd = cmd
+	// https://github.com/spf13/cobra/issues/739
+	// DisableFlagParsing=true prevents Cobra from parsing flags, but flags can still be registered.
+	// Our manual parsers extract flag values from os.Args directly.
+	cmd.DisableFlagParsing = true
 	// Packer passes subcommand separately to packerRun, so only extract 1 positional arg (component).
 	p.parser.SetPositionalArgsCount(1)
 	p.parser.RegisterFlags(cmd)
@@ -93,6 +97,10 @@ func (p *PackerParser) RegisterPersistentFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.PackerParser.RegisterPersistentFlags")()
 
 	p.cmd = cmd
+	// https://github.com/spf13/cobra/issues/739
+	// DisableFlagParsing=true prevents Cobra from parsing flags, but flags can still be registered.
+	// Our manual parsers extract flag values from os.Args directly.
+	cmd.DisableFlagParsing = true
 	// Packer passes subcommand separately to packerRun, so only extract 1 positional arg (component).
 	p.parser.SetPositionalArgsCount(1)
 	p.parser.RegisterPersistentFlags(cmd)
