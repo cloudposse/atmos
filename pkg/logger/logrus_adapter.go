@@ -46,7 +46,24 @@ func ConfigureLogrusForAtmos() {
 		DisableQuote:     true, // Don't quote log messages.
 	})
 
-	// Set logrus level to Info to avoid excessive debug logs from saml2aws.
-	// Users can see detailed SAML flow via Atmos's own debug logs.
-	logrus.SetLevel(logrus.InfoLevel)
+	// Set logrus level to match Atmos's current log level.
+	logrus.SetLevel(atmosLevelToLogrus(GetLevel()))
+}
+
+// atmosLevelToLogrus converts Atmos log level to logrus log level.
+func atmosLevelToLogrus(level Level) logrus.Level {
+	switch level {
+	case TraceLevel, DebugLevel:
+		return logrus.DebugLevel
+	case InfoLevel:
+		return logrus.InfoLevel
+	case WarnLevel:
+		return logrus.WarnLevel
+	case ErrorLevel:
+		return logrus.ErrorLevel
+	case FatalLevel:
+		return logrus.FatalLevel
+	default:
+		return logrus.InfoLevel
+	}
 }
