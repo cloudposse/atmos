@@ -9,11 +9,13 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -305,6 +307,12 @@ func startContainerForAttach(ctx context.Context, runtime container.Runtime, con
 func attachToContainer(ctx context.Context, runtime container.Runtime, containerInfo *container.Info, config *devcontainer.Config, containerName string) error {
 	fmt.Fprintf(os.Stderr, "Attaching to container %s...\n", containerName)
 
+	// Warn about masking limitations in interactive TTY sessions.
+	maskingEnabled := viper.GetBool("mask")
+	if maskingEnabled {
+		log.Debug("Interactive TTY session - output masking is not available due to TTY limitations")
+	}
+
 	shellArgs := getShellArgs(config.UserEnvProbe)
 	attachOpts := &container.AttachOptions{ShellArgs: shellArgs}
 
@@ -312,11 +320,16 @@ func attachToContainer(ctx context.Context, runtime container.Runtime, container
 	return runtime.Attach(ctx, containerInfo.ID, attachOpts)
 }
 
-func execInContainer(ctx context.Context, runtime container.Runtime, containerID string, command []string) error {
-	// Execute command without TTY - output will flow through masked IO streams.
+func execInContainer(ctx context.Context, runtime container.Runtime, containerID string, interactive bool, command []string) error {
+	// Check if masking is enabled and warn about interactive mode limitations.
+	maskingEnabled := viper.GetBool("mask")
+	if interactive && maskingEnabled {
+		log.Debug("Interactive TTY mode enabled - output masking is not available due to TTY limitations")
+	}
+
 	execOpts := &container.ExecOptions{
-		Tty:          false, // Non-interactive mode - masking will work.
-		AttachStdin:  false,
+		Tty:          interactive, // TTY mode for interactive sessions.
+		AttachStdin:  interactive, // Attach stdin only in interactive mode.
 		AttachStdout: true,
 		AttachStderr: true,
 		// IO streams are nil, will default to iolib.Data/UI in runtime.
@@ -336,7 +349,7 @@ func getShellArgs(userEnvProbe string) []string {
 // TODO: Add --identity flag support. When implemented, ENV file paths from identity
 // must be resolved relative to container paths (e.g., /localhost or bind mount location),
 // not host paths, since the container runs in its own filesystem namespace.
-func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, name, instance string, command []string) error {
+func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, name, instance string, interactive bool, command []string) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerExec")()
 
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -365,7 +378,7 @@ func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, name, insta
 		return err
 	}
 
-	return execInContainer(ctx, runtime, containerInfo.ID, command)
+	return execInContainer(ctx, runtime, containerInfo.ID, interactive, command)
 }
 
 // ExecuteDevcontainerRemove removes a devcontainer.

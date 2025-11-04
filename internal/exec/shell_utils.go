@@ -337,6 +337,12 @@ func ExecAuthShellCommand(
 
 	log.Debug("Setting the ENV vars in the shell")
 
+	// Warn about masking limitations in interactive TTY sessions.
+	maskingEnabled := viper.GetBool("mask")
+	if maskingEnabled {
+		log.Debug("Interactive TTY session - output masking is not available due to TTY limitations")
+	}
+
 	// Print user-facing message about entering the shell.
 	printShellEnterMessage(identityName, providerName)
 

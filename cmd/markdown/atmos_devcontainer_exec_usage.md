@@ -1,4 +1,4 @@
-- Execute a command in a devcontainer
+- Execute a command in a devcontainer (non-interactive, output masked)
 
 ```
 $ atmos devcontainer exec geodesic -- ls -la
@@ -16,10 +16,17 @@ $ atmos devcontainer exec terraform --instance my-instance -- terraform version
 $ atmos devcontainer exec geodesic -- env | grep AWS
 ```
 
+- Use interactive mode for full TTY support (tab completion, colors)
+
+```
+$ atmos devcontainer exec geodesic --interactive -- bash
+$ atmos devcontainer exec geodesic -i -- vim ~/.bashrc
+```
+
 - Disable masking if needed
 
 ```
 $ atmos devcontainer exec geodesic --mask=false -- cat ~/.aws/config
 ```
 
-**Automatic Masking**: Output from `exec` commands is automatically masked based on patterns configured in `atmos.yaml`. This protects sensitive data like AWS keys, GitHub tokens, and other secrets from being displayed in plain text. Unlike interactive shells (`atmos devcontainer shell`), which cannot be masked due to TTY limitations, `exec` runs commands in non-interactive mode where masking works reliably.
+**Automatic Masking**: By default, `exec` runs in non-interactive mode where output is automatically masked based on patterns configured in `atmos.yaml`. This protects sensitive data like AWS keys, GitHub tokens, and other secrets. Use `--interactive` (or `-i`) for full TTY support with tab completion and colors, but note that masking is not available in interactive mode due to TTY limitations.
