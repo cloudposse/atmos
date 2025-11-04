@@ -20,7 +20,7 @@ Secret masking operates at the I/O layer, intercepting all output before it reac
 
 ### Enable Masking (Default)
 
-Masking is enabled by default with 120+ patterns from Gitleaks:
+Masking is enabled by default with 8 built-in patterns for common secrets:
 
 ```yaml
 # atmos.yaml
@@ -47,515 +47,235 @@ atmos terraform plan --mask=false
 settings:
   terminal:
     mask:
-      # Global masking control
-      enabled: true                         # Default: true
-      replacement: "***MASKED***"           # What to replace secrets with
-
-      # Pattern library configuration
-      patterns:
-        library: "gitleaks"                 # Options: "gitleaks", "builtin", "none"
-
-        # Category controls (when library="gitleaks")
-        categories:
-          aws: true
-          github: true
-          gitlab: true
-          slack: true
-          datadog: true
-          openai: true
-          anthropic: true
-          google: true
-          azure: true
-          generic: true
-
-        # Rule-level controls (advanced)
-        disabled_rules: []                  # Blacklist specific rule IDs
-        # OR
-        # enabled_rules: []                 # Whitelist specific rule IDs (mutually exclusive)
-
-        # Custom patterns (added to library patterns)
-        custom:
-          - id: "company-internal-key"
-            description: "Company Internal API Key"
-            regex: 'ACME_[A-Z0-9]{32}'
-
-      # Literal values to always mask
-      literals:
-        - "my-hardcoded-secret"
-
-      # Environment variables to auto-mask values
-      env_vars:
-        - AWS_SECRET_ACCESS_KEY
-        - GITHUB_TOKEN
-        - DATADOG_API_KEY
-        - ANTHROPIC_API_KEY
+      enabled: true                    # Enable/disable masking (default: true)
+      replacement: "***MASKED***"      # Custom replacement text (default: ***MASKED***)
 ```
 
-### Pattern Libraries
+### Configuration Options
 
-#### Gitleaks (Recommended)
+<dl>
+  <dt>`enabled`</dt>
+  <dd>
+    Enable or disable secret masking globally.
 
-Use the Gitleaks pattern library with 120+ patterns for comprehensive secret detection:
+    - **Type:** boolean
+    - **Default:** `true`
+    - **Example:** `enabled: false`
+  </dd>
 
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        library: "gitleaks"
-```
+  <dt>`replacement`</dt>
+  <dd>
+    Text to replace masked secrets with.
 
-**Supported Categories:**
-- `aws` - AWS access keys, session tokens, secret keys
-- `github` - GitHub personal access tokens, OAuth tokens
-- `gitlab` - GitLab personal access tokens, pipeline tokens
-- `slack` - Slack access tokens, webhook URLs
-- `datadog` - Datadog API keys, app keys
-- `openai` - OpenAI API keys
-- `anthropic` - Anthropic API keys
-- `google` - Google API keys, GCP service account keys
-- `azure` - Azure connection strings, storage keys
-- `generic` - Generic API keys, JWT tokens, private keys
+    - **Type:** string
+    - **Default:** `"***MASKED***"`
+    - **Example:** `replacement: "[REDACTED]"`
+  </dd>
+</dl>
 
-#### Builtin Patterns
+## Built-In Patterns
 
-Use only the minimal built-in patterns (8 patterns):
+Atmos includes 8 built-in patterns for common secret formats:
 
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        library: "builtin"
-```
+1. **GitHub Personal Access Tokens**
+   - Classic format: `ghp_[A-Za-z0-9]{36}`
+   - OAuth format: `gho_[A-Za-z0-9]{36}`
+   - New format: `github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}`
 
-Built-in patterns include:
-- GitHub PAT (classic and new formats)
-- GitHub OAuth tokens
-- GitLab PAT
-- OpenAI API keys
-- AWS Access Key ID
-- AWS Secret Access Key
-- Bearer tokens
+2. **GitLab Personal Access Tokens**
+   - Format: `glpat-[A-Za-z0-9\-_]{20}`
 
-#### No Pattern Library
+3. **OpenAI API Keys**
+   - Format: `sk-[A-Za-z0-9]{48}`
 
-Disable pattern-based detection (only mask env vars and literals):
+4. **AWS Access Key ID**
+   - Format: `AKIA[0-9A-Z]{16}`
 
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        library: "none"
-```
+5. **AWS Secret Access Key**
+   - Format: 40-character base64 string
 
-### Category-Level Control
+6. **Bearer Tokens**
+   - Format: `Bearer [A-Za-z0-9\-._~+/]+=*`
 
-Enable/disable specific secret categories to reduce false positives:
+### Auto-Masked Environment Variables
 
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        library: "gitleaks"
-        categories:
-          aws: true
-          github: true
-          gitlab: true
-          slack: true
-          datadog: true
-          openai: true
-          anthropic: true
-          google: true
-          azure: true
-          generic: false  # Disable generic patterns (reduce false positives)
-```
+The following environment variables are automatically detected and masked:
 
-### Rule-Level Control (Advanced)
-
-#### Blacklist Mode
-
-Disable specific rules by ID:
-
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        library: "gitleaks"
-        disabled_rules:
-          - "generic-api-key"  # Too many false positives
-          - "slack-webhook-url"  # We don't use Slack
-```
-
-#### Whitelist Mode
-
-Enable only specific rules (mutually exclusive with `disabled_rules`):
-
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        library: "gitleaks"
-        enabled_rules:
-          - "aws-access-key"
-          - "github-pat"
-          - "datadog-api-key"
-```
-
-### Custom Patterns
-
-Add custom regex patterns for organization-specific secrets:
-
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        library: "gitleaks"
-        custom:
-          - id: "company-api-key"
-            description: "Company Internal API Key"
-            regex: 'ACME_[A-Z0-9]{32}'
-          - id: "employee-id"
-            description: "Employee ID Format"
-            regex: 'EMP-\d{6}'
-```
-
-### Literal Value Masking
-
-Mask specific literal values:
-
-```yaml
-settings:
-  terminal:
-    mask:
-      literals:
-        - "my-hardcoded-secret"
-        - "test-api-key-12345"
-```
-
-### Environment Variable Masking
-
-Automatically mask values from specific environment variables:
-
-```yaml
-settings:
-  terminal:
-    mask:
-      env_vars:
-        - AWS_SECRET_ACCESS_KEY
-        - GITHUB_TOKEN
-        - DATADOG_API_KEY
-        - ANTHROPIC_API_KEY
-        - COMPANY_API_KEY
-```
-
-**Default environment variables** (always masked):
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_SESSION_TOKEN`
 - `GITHUB_TOKEN`
+- `GH_TOKEN`
 - `GITLAB_TOKEN`
+- `CI_JOB_TOKEN`
 - `DATADOG_API_KEY`
+- `DD_API_KEY`
 - `ANTHROPIC_API_KEY`
 
 ## CLI Flags
 
-### Global Masking Flag
+### `--mask`
 
-The `--mask` flag is available on all commands:
+Enable or disable masking for a single command:
 
 ```bash
-# Enable masking (default)
-atmos terraform plan --mask=true
-
 # Disable masking for debugging
 atmos terraform plan --mask=false
+
+# Explicitly enable masking (default)
+atmos terraform plan --mask=true
 ```
+
+## How It Works
+
+### Masking Flow
+
+1. **Initialization** - Atmos loads masking configuration on startup
+2. **Pattern Registration** - Built-in patterns and env var values are registered
+3. **Output Interception** - All output goes through the masking engine
+4. **Secret Detection** - Regex patterns and literal values are matched
+5. **Replacement** - Matched secrets are replaced with `***MASKED***`
+
+### Format-Aware Masking
+
+Secrets are detected in multiple formats:
+
+- **Plain text:** `sk-abc123def456`
+- **JSON:** `{"api_key": "sk-abc123def456"}`
+- **YAML:** `api_key: sk-abc123def456`
+- **URL-encoded:** `key=sk%2Dabc123def456`
+- **Base64:** `c2stYWJjMTIzZGVmNDU2`
+- **Hex:** `736b2d616263313233646566343536`
+
+### Performance
+
+Masking has minimal performance impact:
+
+- **Initialization:** &lt;50ms
+- **Per-operation:** &lt;3μs (no secrets), &lt;16μs (with secrets)
+- **Memory:** ~100KB for pattern storage
 
 ## Use Cases
 
-### Default Configuration (Recommended)
+### Production Deployments
 
-For most users, the default configuration provides comprehensive protection:
+Prevent secrets from appearing in CI/CD logs:
+
+```yaml
+# atmos.yaml
+settings:
+  terminal:
+    mask:
+      enabled: true
+```
+
+```bash
+# Run deployment - secrets automatically masked
+atmos terraform apply
+```
+
+### Local Development
+
+Disable masking for debugging:
+
+```bash
+# See full output for troubleshooting
+atmos terraform plan --mask=false
+```
+
+### Screenshot Generation
+
+Enable masking when generating documentation screenshots:
 
 ```yaml
 settings:
   terminal:
     mask:
       enabled: true
-      patterns:
-        library: "gitleaks"
 ```
-
-This enables:
-- 120+ patterns from Gitleaks
-- All secret categories (AWS, GitHub, GitLab, etc.)
-- Automatic env var masking
-- No configuration required
-
-### Reduce False Positives
-
-If generic patterns produce false positives, disable them:
-
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        library: "gitleaks"
-        categories:
-          generic: false
-```
-
-### Minimal Masking
-
-For environments where comprehensive masking causes issues:
-
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        library: "builtin"  # Only 8 patterns
-```
-
-Or use whitelist mode with specific rules:
-
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        library: "gitleaks"
-        enabled_rules:
-          - "aws-access-key"
-          - "github-pat"
-```
-
-### Organization-Specific Secrets
-
-Add custom patterns for internal secret formats:
-
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        library: "gitleaks"
-        custom:
-          - id: "corp-vpn-key"
-            description: "Corporate VPN Key"
-            regex: 'VPN-KEY-[A-F0-9]{40}'
-          - id: "internal-service-token"
-            description: "Internal Service Token"
-            regex: 'IST_[a-zA-Z0-9]{64}'
-```
-
-### Debugging Without Masking
-
-Temporarily disable masking to see actual values:
 
 ```bash
-# Disable for single command
-atmos terraform output --mask=false
-
-# Disable in config (not recommended)
-settings:
-  terminal:
-    mask:
-      enabled: false
+# Generate screenshots with masked secrets
+atmos terraform plan | screenshot-tool
 ```
-
-## How It Works
-
-### Automatic Detection
-
-Secrets are detected using:
-1. **Regex patterns** - Gitleaks library (120+ patterns) or builtin patterns (8 patterns)
-2. **Environment variables** - Values from specified env vars
-3. **Literal values** - Explicitly configured strings
-4. **Encoded variants** - URL-encoded, base64, hex representations
-
-### Masking Flow
-
-```
-User runs command
-       ↓
-Command generates output
-       ↓
-Output passes through I/O layer
-       ↓
-Masker scans for patterns
-       ↓
-Matches replaced with "***MASKED***"
-       ↓
-Masked output to terminal
-```
-
-### Format-Aware Masking
-
-Masking works across all output formats:
-
-**Plain Text:**
-```
-AWS_SECRET_ACCESS_KEY=abc123...xyz → AWS_SECRET_ACCESS_KEY=***MASKED***
-```
-
-**JSON:**
-```json
-{"apiKey": "sk-abc123..."} → {"apiKey": "***MASKED***"}
-```
-
-**YAML:**
-```yaml
-secret: ghp_abc123... → secret: ***MASKED***
-```
-
-### Performance
-
-- **Lazy compilation** - Patterns compiled on first use
-- **Cached regexes** - No recompilation overhead
-- **Minimal impact** - &lt;1ms per KB of output
-- **Startup cost** - &lt;50ms for pattern loading
 
 ## Security Considerations
 
-### What Is Masked
+### What Gets Masked
 
-✅ **Automatically masked:**
 - AWS credentials (access keys, secret keys, session tokens)
 - GitHub/GitLab tokens and PATs
-- API keys for 100+ services (via Gitleaks)
+- OpenAI API keys
+- Bearer tokens
 - Values from configured environment variables
-- Custom patterns matching your regex
-- Literal values from configuration
 
-### What Is NOT Masked
+### What Does NOT Get Masked
 
-❌ **Not automatically masked:**
-- Passwords not matching known patterns
-- Internal database credentials (add custom patterns)
-- Secrets in non-standard formats (add custom patterns)
-- Secrets only visible in binary output
-- Secrets in encrypted/compressed data
-
-### Limitations
-
-1. **Pattern-based detection** - Only detects secrets matching known patterns
-2. **No verification** - Does not verify if a matched value is actually valid
-3. **No network calls** - Does not contact APIs to validate secrets
-4. **Format-specific** - May miss secrets in unusual encodings
-
-### Best Practices
-
-1. **Use Gitleaks library** - Provides comprehensive pattern coverage
-2. **Add custom patterns** - For organization-specific secret formats
-3. **Test in non-prod first** - Verify masking doesn't break workflows
-4. **Review logs regularly** - Check for unmasked secrets
-5. **Never rely solely on masking** - Use proper secret management (vaults, KMS)
-
-## Troubleshooting
+- Non-secret configuration values
+- Resource names and identifiers
+- Public URLs and endpoints
+- Log messages and status text
 
 ### False Positives
 
-**Problem:** Legitimate values being masked
+If legitimate values are incorrectly masked:
 
-**Solution:** Disable the pattern category or specific rule:
+1. **Disable masking temporarily:**
+   ```bash
+   atmos terraform plan --mask=false
+   ```
 
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        categories:
-          generic: false  # Often causes false positives
-```
+2. **Report pattern issue:** Open an issue with the false positive pattern
 
-Or disable specific rules:
+### False Negatives
 
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        disabled_rules:
-          - "generic-api-key"
-```
+If secrets are NOT being masked:
 
-### Secrets Not Masked
+1. **Check pattern coverage:** Built-in patterns may not cover your secret format
+2. **Custom secret formats:** Consider contributing pattern to Atmos
 
-**Problem:** Secrets appearing in output
+## Troubleshooting
 
-**Solution 1:** Add custom pattern:
+### Secrets Not Being Masked
 
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        custom:
-          - id: "my-secret-format"
-            regex: 'YOUR-PATTERN-HERE'
-```
+**Problem:** Expected secrets appear in output.
 
-**Solution 2:** Add to literals:
+**Solutions:**
+1. Verify masking is enabled:
+   ```yaml
+   settings:
+     terminal:
+       mask:
+         enabled: true
+   ```
 
-```yaml
-settings:
-  terminal:
-    mask:
-      literals:
-        - "the-actual-secret-value"
-```
+2. Check if secret format matches built-in patterns
 
-**Solution 3:** Mask via environment variable:
+3. Check environment variables are set correctly
 
-```yaml
-settings:
-  terminal:
-    mask:
-      env_vars:
-        - MY_SECRET_ENV_VAR
-```
+### Legitimate Values Masked
+
+**Problem:** Non-secret values are being masked.
+
+**Solutions:**
+1. Temporarily disable masking for debugging:
+   ```bash
+   atmos terraform plan --mask=false
+   ```
+
+2. Report false positive pattern
 
 ### Performance Issues
 
-**Problem:** Commands slow with masking enabled
+**Problem:** Masking slows down output.
 
-**Solution:** Use builtin patterns or whitelist mode:
-
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        library: "builtin"  # Only 8 patterns, faster
-```
-
-Or enable only needed categories:
-
-```yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        categories:
-          aws: true
-          github: true
-          # Disable all others
-          generic: false
-          slack: false
-          datadog: false
-```
+**Solutions:**
+1. Check for extremely large output (&gt;10MB)
+2. Disable masking if performance is critical:
+   ```bash
+   atmos terraform plan --mask=false
+   ```
 
 ## See Also
 
-- [I/O and UI Output](../../io-and-ui-output.md) - Output patterns and usage
-- [Terminal Configuration](terminal.mdx) - Terminal settings
-- [PRD: I/O Handling Strategy](/docs/prd/io-handling-strategy.md) - Architecture details
-- [PRD: Gitleaks Integration](/docs/prd/gitleaks-integration-design.md) - Implementation plan
+- [Terminal Configuration](terminal.mdx) - Terminal settings and options
