@@ -26,13 +26,16 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
 	"github.com/cloudposse/atmos/pkg/utils"
 
@@ -189,6 +192,15 @@ var RootCmd = &cobra.Command{
 		if !isCompletionCommand(cmd) && err == nil {
 			telemetry.PrintTelemetryDisclosure()
 		}
+
+		// Initialize I/O context and global formatter after flag parsing.
+		// This ensures flags like --no-color, --redirect-stderr, --mask are respected.
+		ioCtx, ioErr := iolib.NewContext()
+		if ioErr != nil {
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize I/O context: %w", ioErr), "", "")
+		}
+		ui.InitFormatter(ioCtx)
+		data.InitWriter(ioCtx)
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -257,7 +269,8 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 	}
 
 	// If colors are disabled, clear the colors but keep the level strings.
-	if !atmosConfig.Settings.Terminal.IsColorEnabled() {
+	// Use stderr TTY detection since logs go to stderr.
+	if !atmosConfig.Settings.Terminal.IsColorEnabled(term.IsTTYSupportForStderr()) {
 		clearedStyles := &log.Styles{}
 		clearedStyles.Levels = make(map[log.Level]lipgloss.Style)
 		for k := range styles.Levels {
@@ -674,6 +687,9 @@ func init() {
 	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
+	RootCmd.PersistentFlags().Bool("force-color", false, "Force color output even when not a TTY (useful for screenshots)")
+	RootCmd.PersistentFlags().Bool("force-tty", false, "Force TTY mode with sane defaults when terminal detection fails (useful for screenshots)")
+	RootCmd.PersistentFlags().Bool("mask", true, "Enable automatic masking of sensitive data in output (use --mask=false to disable)")
 	RootCmd.PersistentFlags().String("pager", "", "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)")
 	// Set NoOptDefVal so --pager without value means "true".
 	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"
@@ -686,6 +702,19 @@ func init() {
 			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
 	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (includes P95 latency)")
 	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)")
+
+	// Bind terminal flags to environment variables.
+	if err := viper.BindEnv("force-tty", "ATMOS_FORCE_TTY"); err != nil {
+		log.Error("Failed to bind ATMOS_FORCE_TTY environment variable", "error", err)
+	}
+	// Bind both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to the same viper key (they are equivalent).
+	if err := viper.BindEnv("force-color", "ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"); err != nil {
+		log.Error("Failed to bind ATMOS_FORCE_COLOR/CLICOLOR_FORCE environment variables", "error", err)
+	}
+	// Bind mask flag to environment variable.
+	if err := viper.BindEnv("mask", "ATMOS_MASK"); err != nil {
+		log.Error("Failed to bind ATMOS_MASK environment variable", "error", err)
+	}
 
 	// Bind environment variables for GitHub authentication.
 	// ATMOS_GITHUB_TOKEN takes precedence over GITHUB_TOKEN.

@@ -151,6 +151,170 @@ func ProcessAll(ctx context.Context, items []Item) error {
 
 **Context should be first parameter** in functions that accept it.
 
+### I/O and UI Usage (MANDATORY)
+Atmos separates I/O (streams) from UI (formatting) for clarity and testability.
+
+**Two-layer architecture:**
+- **I/O Layer** (`pkg/io/`) - Stream access (stdout/stderr/stdin), terminal capabilities, masking
+- **UI Layer** (`pkg/ui/`) - Formatting (colors, styles, markdown rendering)
+
+**Terminal as Text UI:**
+The terminal window is effectively a text-based user interface (TextUI) for our CLI. Anything intended for user interaction—menus, prompts, animations, progress indicators—should be rendered to the terminal as UI output (stderr). Data intended for processing, piping, or machine consumption goes to the data channel (stdout).
+
+**Access pattern:**
+```go
+import (
+    iolib "github.com/cloudposse/atmos/pkg/io"
+    "github.com/cloudposse/atmos/pkg/ui"
+)
+
+// I/O context initialized in cmd/root.go PersistentPreRun
+// Available globally after flag parsing via data.Writer() and ui package functions
+```
+
+**Output functions (use these):**
+```go
+// Data channel (stdout) - for pipeable output
+data.Write("result")                // Plain text to stdout
+data.Writef("value: %s", val)       // Formatted text to stdout
+data.Writeln("result")              // Plain text with newline to stdout
+data.WriteJSON(structData)          // JSON to stdout
+data.WriteYAML(structData)          // YAML to stdout
+
+// UI channel (stderr) - for human messages
+ui.Write("Loading configuration...")            // Plain text (no icon, no color, stderr)
+ui.Writef("Processing %d items...", count)      // Formatted text (no icon, no color, stderr)
+ui.Writeln("Done")                              // Plain text with newline (no icon, no color, stderr)
+ui.Success("Deployment complete!")              // ✓ Deployment complete! (green, stderr)
+ui.Error("Configuration failed")                // ✗ Configuration failed (red, stderr)
+ui.Warning("Deprecated feature")                // ⚠ Deprecated feature (yellow, stderr)
+ui.Info("Processing components...")             // ℹ Processing components... (cyan, stderr)
+
+// Markdown rendering
+ui.Markdown("# Help\n\nUsage...")               // Rendered to stdout (data)
+ui.MarkdownMessage("**Error:** Invalid config") // Rendered to stderr (UI)
+```
+
+**Decision tree:**
+```
+What am I outputting?
+
+├─ Pipeable data (JSON, YAML, results)
+│  └─ Use data.Write(), data.Writef(), data.Writeln()
+│     data.WriteJSON(), data.WriteYAML()
+│
+├─ Plain UI messages (no icon, no color)
+│  └─ Use ui.Write(), ui.Writef(), ui.Writeln()
+│
+├─ Status messages (with icons and colors)
+│  └─ Use ui.Success(), ui.Error(), ui.Warning(), ui.Info()
+│
+└─ Formatted documentation
+   ├─ Help text, usage → ui.Markdown() (stdout)
+   └─ Error details → ui.MarkdownMessage() (stderr)
+```
+
+**Anti-patterns (DO NOT use):**
+```go
+// WRONG: Direct stream access
+fmt.Fprintf(os.Stdout, ...)  // Use data.Printf() instead
+fmt.Fprintf(os.Stderr, ...)  // Use ui.Success/Error/etc instead
+fmt.Println(...)             // Use data.Println() instead
+
+// WRONG: Will be blocked by linter
+io := iolib.NewContext()
+fmt.Fprintf(io.Data(), ...)  // Use data.Printf() instead
+```
+
+**Why this matters:**
+
+**Zero-Configuration Degradation:**
+Write code assuming a full-featured TTY - the system automatically handles everything:
+- ✅ **Color degradation** - TrueColor → 256 → 16 → None (respects NO_COLOR, CLICOLOR, terminal capability)
+- ✅ **Width adaptation** - Automatically wraps to terminal width or config max_width
+- ✅ **TTY detection** - Piped/redirected output becomes plain text automatically
+- ✅ **CI detection** - Detects CI environments and disables interactivity
+- ✅ **Markdown rendering** - Degrades gracefully from styled to plain text
+- ✅ **Icon support** - Shows icons in capable terminals, omits in others
+
+**Security & Reliability:**
+- ✅ **Automatic secret masking** - AWS keys, tokens, passwords masked before output
+- ✅ **Format-aware masking** - Handles JSON/YAML quoted variants
+- ✅ **No leakage** - Secrets never reach stdout/stderr/logs
+- ✅ **Pattern-based** - Detects common secret patterns automatically
+
+**Developer Experience:**
+- ✅ **No capability checking** - Never write `if tty { color() } else { plain() }`
+- ✅ **No manual masking** - Never write `redact(secret)` before output
+- ✅ **No stream selection** - Just use `data.*` (stdout) or `ui.*` (stderr)
+- ✅ **Testable** - Mock data.Writer() and ui functions for unit tests
+- ✅ **Enforced by linter** - Prevents direct fmt.Fprintf usage
+
+**User Experience:**
+- ✅ **Respects preferences** - Honors --no-color, --redirect-stderr, NO_COLOR env
+- ✅ **Pipeline friendly** - `atmos deploy | tee log.txt` works perfectly
+- ✅ **Accessibility** - Works in all terminal environments (screen readers, etc.)
+- ✅ **Consistent** - Same code path for all output, fewer bugs
+
+**Force Flags (for screenshot generation):**
+Use these flags to generate consistent output regardless of environment:
+- `--force-tty` / `ATMOS_FORCE_TTY=true` - Force TTY mode with sane defaults (width=120, height=40) when terminal detection fails
+- `--force-color` / `ATMOS_FORCE_COLOR=true` - Force TrueColor output even when not a TTY
+
+**Flag behavior:**
+- `--color` - Enables color **only if TTY** (respects terminal capabilities)
+- `--force-color` - Forces TrueColor **even for non-TTY** (for screenshots)
+- `--no-color` - Disables all color
+- `terminal.color` in atmos.yaml - Same as `--color` (respects TTY)
+
+**Example:**
+```bash
+# Generate screenshot with consistent output (using flags)
+atmos terraform plan --force-tty --force-color | screenshot.sh
+
+# Generate screenshot with consistent output (using env vars)
+ATMOS_FORCE_TTY=true ATMOS_FORCE_COLOR=true atmos terraform plan | screenshot.sh
+
+# Normal usage - automatically detects terminal
+atmos terraform plan
+
+# Piped output - automatically disables color
+atmos terraform output | jq .vpc_id
+```
+
+See `pkg/io/example_test.go` for comprehensive examples.
+
+### Secret Masking with Gitleaks
+
+Atmos uses Gitleaks pattern library (120+ patterns) for comprehensive secret detection:
+
+```yaml
+# atmos.yaml
+settings:
+  terminal:
+    mask:
+      patterns:
+        library: "gitleaks"  # Use Gitleaks patterns (default)
+        categories:
+          aws: true          # Enable AWS secret detection
+          github: true       # Enable GitHub token detection
+```
+
+Disable specific categories to reduce false positives:
+```yaml
+settings:
+  terminal:
+    mask:
+      patterns:
+        categories:
+          generic: false  # Disable generic patterns
+```
+
+Disable masking for debugging:
+```bash
+atmos terraform plan --mask=false
+```
+
 ### Package Organization (MANDATORY)
 - **Avoid utils package bloat** - Don't add new functions to `pkg/utils/`
 - **Create purpose-built packages** - New functionality gets its own package in `pkg/`
@@ -378,6 +542,11 @@ Follow template (what/why/references).
 - Include `<!--truncate-->` after intro paragraph
 - Tag `feature`/`enhancement`/`bugfix` (user-facing) or `contributors` (internal changes)
 - CI will fail without blog post
+
+**Blog post authorship:**
+- Author should always be the committer (the one who opened the PR)
+- Use GitHub username in authors list, not generic "atmos" or "cloudposse"
+- Add author to `website/blog/authors.yml` if not already present
 
 Use `no-release` label for docs-only changes.
 
