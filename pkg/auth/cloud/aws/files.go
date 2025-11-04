@@ -590,13 +590,13 @@ func (m *AWSFileManager) GetCachePath() string {
 		return m.getDefaultCachePath()
 	}
 
-	// Expand tilde if present.
-	if strings.HasPrefix(cacheDir, "~") {
-		homeDir, err := homedir.Dir()
-		if err == nil {
-			cacheDir = filepath.Join(homeDir, cacheDir[1:])
-		}
+	// Expand tilde if present using homedir.Expand for correct handling.
+	// This properly handles ~/foo, ~user/foo, and other tilde cases.
+	expandedDir, err := homedir.Expand(cacheDir)
+	if err == nil {
+		cacheDir = expandedDir
 	}
+	// If expansion fails, keep the original cacheDir value and continue.
 
 	// XDG is set, use $XDG_CACHE_HOME/aws/sso/cache.
 	return filepath.Join(cacheDir, awsCacheDirName, "sso", "cache")
