@@ -560,6 +560,93 @@ func (p *samlProvider) setupBrowserAutomation() {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
 		log.Debug("Browser driver auto-download enabled", logFieldDriver, p.getDriver())
 	}
+
+	// Set up XDG-compliant storage directory for browser state.
+	// saml2aws hardcodes ~/.aws/saml2aws/storageState.json, so we create this directory
+	// in an XDG-compliant location and symlink it.
+	if err := p.setupBrowserStorageDir(); err != nil {
+		log.Warn("Failed to setup browser storage directory", "error", err)
+	}
+}
+
+// setupBrowserStorageDir creates an XDG-compliant directory for SAML browser storage state.
+// Saml2aws hardcodes ~/.aws/saml2aws/storageState.json, so we create ~/.aws/saml2aws
+// as a symlink to ~/.cache/atmos/aws-saml/<provider-name> to respect XDG conventions.
+func (p *samlProvider) setupBrowserStorageDir() error {
+	const (
+		samlStorageSubdir   = "aws-saml"
+		samlStorageDirPerms = 0o700
+		awsDir              = ".aws"
+		saml2awsSubdir      = "saml2aws"
+	)
+
+	// Get XDG cache directory for SAML storage.
+	xdgCacheDir, err := xdg.GetXDGCacheDir(samlStorageSubdir, samlStorageDirPerms)
+	if err != nil {
+		return fmt.Errorf("failed to get XDG cache directory: %w", err)
+	}
+
+	// Create provider-specific subdirectory.
+	providerStorageDir := filepath.Join(xdgCacheDir, p.name)
+	if err := os.MkdirAll(providerStorageDir, samlStorageDirPerms); err != nil {
+		return fmt.Errorf("failed to create provider storage directory: %w", err)
+	}
+
+	// Get user home directory for ~/.aws symlink.
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	// Create ~/.aws directory if it doesn't exist.
+	awsDirPath := filepath.Join(homeDir, awsDir)
+	if err := os.MkdirAll(awsDirPath, samlStorageDirPerms); err != nil {
+		return fmt.Errorf("failed to create .aws directory: %w", err)
+	}
+
+	// Create ~/.aws/saml2aws as symlink to provider-specific XDG cache directory.
+	saml2awsPath := filepath.Join(awsDirPath, saml2awsSubdir)
+	return p.ensureStorageSymlink(saml2awsPath, providerStorageDir)
+}
+
+// ensureStorageSymlink ensures ~/.aws/saml2aws symlink points to the correct target.
+func (p *samlProvider) ensureStorageSymlink(symlinkPath, targetPath string) error {
+	// Check if symlink already exists and points to correct target.
+	if p.isCorrectSymlink(symlinkPath, targetPath) {
+		log.Debug("Browser storage symlink already exists", "path", symlinkPath, "target", targetPath)
+		return nil
+	}
+
+	// Remove existing path if it exists (wrong symlink, directory, or file).
+	if _, err := os.Lstat(symlinkPath); err == nil {
+		log.Debug("Removing existing .aws/saml2aws", "path", symlinkPath)
+		if err := os.RemoveAll(symlinkPath); err != nil {
+			return fmt.Errorf("failed to remove existing .aws/saml2aws: %w", err)
+		}
+	}
+
+	// Create symlink.
+	if err := os.Symlink(targetPath, symlinkPath); err != nil {
+		return fmt.Errorf("failed to create symlink: %w", err)
+	}
+
+	log.Debug("Created browser storage symlink", "path", symlinkPath, "target", targetPath)
+	return nil
+}
+
+// isCorrectSymlink checks if path is a symlink pointing to expectedTarget.
+func (p *samlProvider) isCorrectSymlink(symlinkPath, expectedTarget string) bool {
+	info, err := os.Lstat(symlinkPath)
+	if err != nil {
+		return false
+	}
+
+	if info.Mode()&os.ModeSymlink == 0 {
+		return false
+	}
+
+	target, err := os.Readlink(symlinkPath)
+	return err == nil && target == expectedTarget
 }
 
 // Logout removes provider-specific credential storage.
