@@ -294,19 +294,27 @@ Locations:
 Files (in merge order):
   1. /infrastructure/atmos/.atmos/profiles/developer/auth.yaml
   2. /infrastructure/atmos/.atmos/profiles/developer/logging.yaml
-  3. ~/.config/atmos/profiles/developer/overrides.yaml
+  3. /infrastructure/atmos/.atmos/profiles/developer/overrides.yaml
 
 Merged Configuration:
-<YAML output of merged profile configuration>
+<Colorized YAML output using existing u.GetHighlightedYAML()>
 ```
 
-**FR5.6**: `atmos profile show <profile>` MUST support `--format` flag for JSON/YAML output
+**FR5.6**: `atmos profile show <profile>` MUST use the same pretty YAML formatting as `atmos describe config`
+- Use `u.GetHighlightedYAML()` for YAML format (colorized, syntax highlighted)
+- Use `u.GetHighlightedJSON()` for JSON format (colorized, syntax highlighted)
+- Respects terminal color settings (`--color`, `--no-color`, `NO_COLOR` env var)
+- Supports pager integration when enabled (`settings.terminal.pager`)
 
-**FR5.7**: `atmos profile show <profile>` MUST support `--files` flag to show file list only (no merged config)
+**FR5.7**: `atmos profile show <profile>` MUST support `--format` flag for output format selection
+- `--format yaml` (default) - Colorized YAML output
+- `--format json` - Colorized JSON output
 
-**FR5.8**: `atmos describe config` MUST show currently active profiles in output
+**FR5.8**: `atmos profile show <profile>` MUST support `--files` flag to show file list only (no merged config)
 
-**FR5.9**: `atmos describe config` with active profiles MUST show:
+**FR5.9**: `atmos describe config` MUST show currently active profiles in output
+
+**FR5.10**: `atmos describe config` with active profiles MUST show:
 ```yaml
 # Active profiles: developer, debug
 active_profiles:
@@ -318,7 +326,7 @@ active_profiles:
       - ~/.config/atmos/profiles/debug
 ```
 
-**FR5.10**: Debug logging (`--logs-level trace`) MUST show profile loading details:
+**FR5.11**: Debug logging (`--logs-level trace`) MUST show profile loading details:
 - Which profiles are being loaded
 - From which locations
 - File merge order
@@ -518,6 +526,7 @@ atmos profile show developer
 #   3. ~/.config/atmos/profiles/developer/overrides.yaml
 #
 # Merged Configuration:
+# <Colorized YAML output - same formatting as 'atmos describe config'>
 # auth:
 #   identities:
 #     developer-sandbox:
@@ -529,8 +538,11 @@ atmos profile show developer
 # Show only the file list
 atmos profile show developer --files
 
-# Show in JSON format
+# Show in JSON format (colorized)
 atmos profile show developer --format json
+
+# Disable colors
+atmos profile show developer --no-color
 ```
 
 #### CI Profile Example
@@ -742,8 +754,14 @@ atmos terraform apply vpc -s prod --profile platform-admin
    - `cmd/profile/show.go` - Show detailed profile information
    - Support `--format json|yaml` flag
    - Support `--files` flag (show file list only)
-   - Display merged configuration
+   - **Reuse existing formatting utilities**:
+     - Use `u.GetHighlightedYAML()` for colorized YAML output
+     - Use `u.GetHighlightedJSON()` for colorized JSON output
+     - Same formatting as `atmos describe config` (consistent UX)
+   - Respect terminal color settings (honors `--color`, `--no-color`, `NO_COLOR`)
+   - Support pager integration when enabled
    - Show all locations where profile is found
+   - Display file merge order
 4. Implement profile discovery helper in `internal/exec/`:
    - `internal/exec/profile.go` - Profile discovery and introspection logic
    - `DiscoverAllProfiles(atmosConfig) ([]ProfileInfo, error)`
