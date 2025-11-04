@@ -26,6 +26,32 @@ make lint                    # golangci-lint on changed files
 
 **Templates and YAML functions**: Go templates + Gomplate with `atmos.Component()`, `!terraform.state`, `!terraform.output`, store integration.
 
+### Custom Commands (IMPORTANT)
+
+Atmos supports **custom commands** defined in `atmos.yaml`, similar to Git porcelain plugins. These are user-defined commands that extend Atmos CLI functionality.
+
+**Example:**
+```yaml
+commands:
+  - name: hello
+    description: This command says Hello world
+    steps:
+      - "echo Hello world!"
+```
+
+**Key Points:**
+- Custom commands are defined in `atmos.yaml` under the `commands:` key
+- They work like Git plugins - dynamically registered at runtime
+- Support positional arguments, flags, and trailing args after `--`
+- Can call any command (shell scripts, terraform, vendor, etc.)
+- Tests: `cmd/custom_command_*_test.go`
+- Docs: `website/docs/core-concepts/custom-commands/`
+
+**NOT the same as:**
+- `terraform` subcommands (e.g., `atmos terraform plan`) - these are built-in Go commands
+- `vendor` subcommands (e.g., `atmos vendor pull`) - these are built-in Go commands
+- Custom commands can CALL terraform/vendor, but they themselves are user-defined extensions
+
 ## Architectural Patterns (MANDATORY)
 
 ### Registry Pattern (MANDATORY)

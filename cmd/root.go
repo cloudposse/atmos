@@ -715,7 +715,14 @@ func initCobraConfig() {
 		if c.Use == "atmos" {
 			return b.UsageFunc(c)
 		}
-		showUsageAndExit(c, c.Flags().Args())
+		// When DisableFlagParsing=true, c.Flags().Args() returns empty.
+		// Fall back to os.Args to get the actual arguments passed to the command.
+		arguments := c.Flags().Args()
+		if len(arguments) == 0 && c.DisableFlagParsing {
+			// Extract args from os.Args based on command path depth
+			arguments = os.Args[len(strings.Split(c.CommandPath(), " ")):]
+		}
+		showUsageAndExit(c, arguments)
 		return nil
 	})
 	RootCmd.SetHelpFunc(func(command *cobra.Command, args []string) {
