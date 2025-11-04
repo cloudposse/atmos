@@ -2,6 +2,7 @@ package logger
 
 import (
 	"io"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -20,16 +21,26 @@ func newLogrusAdapter() *logrusAdapter {
 
 // Write implements io.Writer interface and forwards logrus output to Atmos logger.
 // Logrus outputs formatted log lines like "level=info msg=\"message text\" key=value".
+// This implementation preserves the original log level to ensure errors and warnings
+// are not silently dropped when Atmos runs at Info level (the default).
 func (a *logrusAdapter) Write(p []byte) (n int, err error) {
 	// Convert bytes to string and trim trailing newline that logrus adds.
-	message := string(p)
-	if len(message) > 0 && message[len(message)-1] == '\n' {
-		message = message[:len(message)-1]
-	}
+	message := strings.TrimSuffix(string(p), "\n")
+	lower := strings.ToLower(message)
 
-	// Log at debug level since these are internal library messages.
-	// We don't want to parse logrus's structured format - just pass through the message.
-	Debug(message)
+	// Parse and preserve the original log level from the formatted message.
+	// This ensures critical diagnostics (errors, warnings) are visible at default log levels.
+	switch {
+	case strings.Contains(lower, "level=fatal"), strings.Contains(lower, "level=panic"), strings.Contains(lower, "level=error"):
+		Error(message)
+	case strings.Contains(lower, "level=warn"):
+		Warn(message)
+	case strings.Contains(lower, "level=debug"), strings.Contains(lower, "level=trace"):
+		Debug(message)
+	default:
+		// Default to Info for unrecognized levels or info-level messages.
+		Info(message)
+	}
 
 	return len(p), nil
 }

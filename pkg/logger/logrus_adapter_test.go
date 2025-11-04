@@ -23,6 +23,61 @@ func TestLogrusAdapter_Write(t *testing.T) {
 	assert.Equal(t, len(messageWithNewline), n)
 }
 
+func TestLogrusAdapter_Write_PreservesLogLevel(t *testing.T) {
+	adapter := newLogrusAdapter()
+
+	tests := []struct {
+		name    string
+		message string
+	}{
+		{
+			name:    "error level message",
+			message: "level=error msg=\"authentication failed\" provider=browser\n",
+		},
+		{
+			name:    "fatal level message",
+			message: "level=fatal msg=\"critical error\" component=saml2aws\n",
+		},
+		{
+			name:    "panic level message",
+			message: "level=panic msg=\"panic occurred\"\n",
+		},
+		{
+			name:    "warn level message",
+			message: "level=warn msg=\"retrying connection\" attempts=3\n",
+		},
+		{
+			name:    "info level message",
+			message: "level=info msg=\"authentication successful\"\n",
+		},
+		{
+			name:    "debug level message",
+			message: "level=debug msg=\"processing request\" url=https://idp.example.com\n",
+		},
+		{
+			name:    "trace level message",
+			message: "level=trace msg=\"detailed trace information\"\n",
+		},
+		{
+			name:    "message without level defaults to info",
+			message: "msg=\"some message without level\"\n",
+		},
+		{
+			name:    "mixed case level",
+			message: "LEVEL=ERROR msg=\"error in mixed case\"\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test that Write successfully processes messages with different levels.
+			n, err := adapter.Write([]byte(tt.message))
+			assert.NoError(t, err)
+			assert.Equal(t, len(tt.message), n)
+		})
+	}
+}
+
 func TestConfigureLogrusForAtmos(t *testing.T) {
 	// Store original logrus configuration to restore after test.
 	originalFormatter := logrus.StandardLogger().Formatter
