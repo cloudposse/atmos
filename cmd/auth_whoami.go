@@ -298,5 +298,12 @@ func init() {
 	authWhoamiParser.RegisterFlags(authWhoamiCmd)
 	_ = authWhoamiParser.BindToViper(viper.GetViper())
 
+	// Register flag completion for output.
+	if err := authWhoamiCmd.RegisterFlagCompletionFunc("output", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"json"}, cobra.ShellCompDirectiveNoFileComp
+	}); err != nil {
+		log.Trace("Failed to register output flag completion", "error", err)
+	}
+
 	authCmd.AddCommand(authWhoamiCmd)
 }

@@ -17,6 +17,7 @@ func TestNewStandardOptionsBuilder(t *testing.T) {
 	assert.Equal(t, 0, len(builder.options))
 }
 
+//nolint:dupl // Table-driven tests for different flags have similar structure
 func TestStandardOptionsBuilder_WithStack(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -61,6 +62,7 @@ func TestStandardOptionsBuilder_WithStack(t *testing.T) {
 	}
 }
 
+//nolint:dupl // Table-driven tests for different flags have similar structure
 func TestStandardOptionsBuilder_WithComponent(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -184,6 +186,7 @@ func TestStandardOptionsBuilder_WithFile(t *testing.T) {
 	assert.Equal(t, "/tmp/output.yaml", interpreter.File)
 }
 
+//nolint:dupl // Table-driven tests for different bool flags have similar structure
 func TestStandardOptionsBuilder_WithProcessTemplates(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -239,6 +242,7 @@ func TestStandardOptionsBuilder_WithProcessTemplates(t *testing.T) {
 	}
 }
 
+//nolint:dupl // Table-driven tests for different bool flags have similar structure
 func TestStandardOptionsBuilder_WithProcessFunctions(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -347,6 +351,7 @@ func TestStandardOptionsBuilder_WithSkip(t *testing.T) {
 	}
 }
 
+//nolint:dupl // Table-driven tests for different bool flags have similar structure
 func TestStandardOptionsBuilder_WithDryRun(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -412,6 +417,7 @@ func TestStandardOptionsBuilder_WithQuery(t *testing.T) {
 	assert.Equal(t, ".components.vpc", interpreter.Query)
 }
 
+//nolint:dupl // Table-driven tests for different bool flags have similar structure
 func TestStandardOptionsBuilder_WithProvenance(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -7,6 +7,7 @@ import (
 
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -50,8 +51,8 @@ const (
 //	// cfg.PassThroughArgs contains args to pass to terraform
 type PassThroughFlagParser struct {
 	registry            *FlagRegistry
-	cmd                 *cobra.Command    // Cobra command for manual flag parsing
-	viper               *viper.Viper      // Viper instance for precedence handling
+	cmd                 *cobra.Command // Cobra command for manual flag parsing
+	viper               *viper.Viper   // Viper instance for precedence handling
 	viperPrefix         string
 	atmosFlagNames      []string          // Known Atmos flag names for extraction
 	shorthandToFull     map[string]string // Maps shorthand (e.g., "s") to full name (e.g., "stack")
@@ -150,34 +151,50 @@ func (p *PassThroughFlagParser) RegisterFlags(cmd *cobra.Command) {
 	}
 }
 
-// registerFlag registers a single flag with Cobra based on its type.
-func (p *PassThroughFlagParser) registerFlag(cmd *cobra.Command, flag Flag) {
+// flagSetInterface provides a common interface for *pflag.FlagSet methods used during flag registration.
+type flagSetInterface interface {
+	StringP(name, shorthand, value, usage string) *string
+	BoolP(name, shorthand string, value bool, usage string) *bool
+	IntP(name, shorthand string, value int, usage string) *int
+	Lookup(name string) *pflag.Flag
+}
+
+// markFlagRequiredFunc is a function type for marking flags as required.
+type markFlagRequiredFunc func(name string) error
+
+// registerFlagToFlagSet is a helper that registers a flag to any FlagSet (Flags() or PersistentFlags()).
+func registerFlagToFlagSet(flagSet flagSetInterface, markRequired markFlagRequiredFunc, flag Flag) {
 	switch f := flag.(type) {
 	case *StringFlag:
-		cmd.Flags().StringP(f.Name, f.Shorthand, f.Default, f.Description)
+		flagSet.StringP(f.Name, f.Shorthand, f.Default, f.Description)
 
-		// Set NoOptDefVal if specified (identity pattern)
+		// Set NoOptDefVal if specified (identity pattern).
 		if f.NoOptDefVal != "" {
-			cobraFlag := cmd.Flags().Lookup(f.Name)
+			cobraFlag := flagSet.Lookup(f.Name)
 			if cobraFlag != nil {
 				cobraFlag.NoOptDefVal = f.NoOptDefVal
 			}
 		}
 
 		if f.Required {
-			_ = cmd.MarkFlagRequired(f.Name)
+			_ = markRequired(f.Name)
 		}
 
 	case *BoolFlag:
-		cmd.Flags().BoolP(f.Name, f.Shorthand, f.Default, f.Description)
+		flagSet.BoolP(f.Name, f.Shorthand, f.Default, f.Description)
 
 	case *IntFlag:
-		cmd.Flags().IntP(f.Name, f.Shorthand, f.Default, f.Description)
+		flagSet.IntP(f.Name, f.Shorthand, f.Default, f.Description)
 
 		if f.Required {
-			_ = cmd.MarkFlagRequired(f.Name)
+			_ = markRequired(f.Name)
 		}
 	}
+}
+
+// registerFlag registers a single flag with Cobra based on its type.
+func (p *PassThroughFlagParser) registerFlag(cmd *cobra.Command, flag Flag) {
+	registerFlagToFlagSet(cmd.Flags(), cmd.MarkFlagRequired, flag)
 }
 
 // RegisterPersistentFlags registers flags as persistent flags (available to subcommands).
@@ -194,32 +211,7 @@ func (p *PassThroughFlagParser) RegisterPersistentFlags(cmd *cobra.Command) {
 
 // registerPersistentFlag registers a single flag as persistent with Cobra.
 func (p *PassThroughFlagParser) registerPersistentFlag(cmd *cobra.Command, flag Flag) {
-	switch f := flag.(type) {
-	case *StringFlag:
-		cmd.PersistentFlags().StringP(f.Name, f.Shorthand, f.Default, f.Description)
-
-		// Set NoOptDefVal if specified (identity pattern)
-		if f.NoOptDefVal != "" {
-			cobraFlag := cmd.PersistentFlags().Lookup(f.Name)
-			if cobraFlag != nil {
-				cobraFlag.NoOptDefVal = f.NoOptDefVal
-			}
-		}
-
-		if f.Required {
-			_ = cmd.MarkPersistentFlagRequired(f.Name)
-		}
-
-	case *BoolFlag:
-		cmd.PersistentFlags().BoolP(f.Name, f.Shorthand, f.Default, f.Description)
-
-	case *IntFlag:
-		cmd.PersistentFlags().IntP(f.Name, f.Shorthand, f.Default, f.Description)
-
-		if f.Required {
-			_ = cmd.MarkPersistentFlagRequired(f.Name)
-		}
-	}
+	registerFlagToFlagSet(cmd.PersistentFlags(), cmd.MarkPersistentFlagRequired, flag)
 }
 
 // BindToViper implements FlagParser.
@@ -305,14 +297,13 @@ func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*Pars
 	// For persistent flags registered on parent commands, we need to parse using PersistentFlags().
 	// Child commands inherit persistent flags, so parsing them makes values available.
 	if p.cmd != nil && len(args) > 0 {
-		// Try parsing persistent flags first (for parent->child flag inheritance)
-		if err := p.cmd.PersistentFlags().Parse(args); err != nil {
-			// Ignore parse errors - pass-through commands may have unknown flags for the external tool
-		}
-		// Also parse local flags in case some were registered directly on this command
-		if err := p.cmd.Flags().Parse(args); err != nil {
-			// Ignore parse errors - pass-through commands may have unknown flags for the external tool
-		}
+		// Try parsing persistent flags first (for parent->child flag inheritance).
+		// Ignore parse errors - pass-through commands may have unknown flags for the external tool.
+		_ = p.cmd.PersistentFlags().Parse(args)
+
+		// Also parse local flags in case some were registered directly on this command.
+		// Ignore parse errors - pass-through commands may have unknown flags for the external tool.
+		_ = p.cmd.Flags().Parse(args)
 
 		// After parsing, bind the parsed pflags to Viper to ensure values are available
 		if p.viper != nil {
