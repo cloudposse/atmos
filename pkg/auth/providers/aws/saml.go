@@ -216,6 +216,14 @@ func (p *samlProvider) createLoginDetails() *creds.LoginDetails {
 }
 
 // authenticateAndGetAssertion authenticates and gets the SAML assertion.
+//
+// IMPORTANT: This function calls saml2aws.SAMLClient.Authenticate() which may panic
+// due to a bug in saml2aws browser provider (v2.36.19):
+// - When browser timeout occurs, ExpectRequest() returns (nil, error)
+// - The code then calls nil.PostData() causing a nil pointer dereference
+// - Location: browser.go:191 in saml2aws
+// - Workaround: Ensure browser authentication completes before timeout (default 5 minutes)
+// - User should not close the browser window manually during authentication.
 func (p *samlProvider) authenticateAndGetAssertion(samlClient saml2aws.SAMLClient, loginDetails *creds.LoginDetails) (string, error) {
 	samlAssertion, err := samlClient.Authenticate(loginDetails)
 	if err != nil {
@@ -555,6 +563,19 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 
 // setupBrowserAutomation sets up browser automation for SAML authentication.
 func (p *samlProvider) setupBrowserAutomation() {
+	// Log browser configuration for diagnostics.
+	if p.config.BrowserType != "" {
+		log.Info("Custom browser type configured", "browser_type", p.config.BrowserType)
+	}
+	if p.config.BrowserExecutablePath != "" {
+		log.Info("Custom browser executable path configured", "browser_executable_path", p.config.BrowserExecutablePath)
+
+		// Validate that the executable path exists and is executable.
+		if err := p.validateBrowserExecutable(); err != nil {
+			log.Warn("Browser executable validation failed", "error", err, "path", p.config.BrowserExecutablePath)
+		}
+	}
+
 	// Set environment variables for browser automation.
 	if p.shouldDownloadBrowser() {
 		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
@@ -567,6 +588,45 @@ func (p *samlProvider) setupBrowserAutomation() {
 	if err := p.setupBrowserStorageDir(); err != nil {
 		log.Warn("Failed to setup browser storage directory", "error", err)
 	}
+}
+
+// validateBrowserExecutable checks if the configured browser executable exists and is executable.
+func (p *samlProvider) validateBrowserExecutable() error {
+	const (
+		// executablePermissionBits represents the execute permission bits (owner, group, other).
+		// Used to check if a file has any execute permissions set.
+		executablePermissionBits = 0o111
+	)
+
+	if p.config.BrowserExecutablePath == "" {
+		return nil
+	}
+
+	// Check if file exists.
+	info, err := os.Stat(p.config.BrowserExecutablePath)
+	if err != nil {
+		return fmt.Errorf("%w: browser executable not found: %w", errUtils.ErrInvalidBrowserExecutable, err)
+	}
+
+	// Check if it's a file (not directory).
+	if info.IsDir() {
+		return fmt.Errorf("%w: browser executable path is a directory, not a file", errUtils.ErrInvalidBrowserExecutable)
+	}
+
+	// Check if file is executable (Unix permissions check).
+	// On Windows, this check is less reliable but os.Stat still validates existence.
+	if info.Mode().Perm()&executablePermissionBits == 0 {
+		log.Warn("Browser executable may not have execute permissions",
+			"path", p.config.BrowserExecutablePath,
+			"permissions", info.Mode().Perm().String())
+	}
+
+	log.Debug("Browser executable validated successfully",
+		"path", p.config.BrowserExecutablePath,
+		"size", info.Size(),
+		"permissions", info.Mode().Perm().String())
+
+	return nil
 }
 
 // setupBrowserStorageDir creates an XDG-compliant directory for SAML browser storage state.

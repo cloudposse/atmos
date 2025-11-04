@@ -990,3 +990,83 @@ func TestSAMLProvider_Environment_AutoDownload(t *testing.T) {
 		})
 	}
 }
+
+func TestSAMLProvider_validateBrowserExecutable(t *testing.T) {
+	tests := []struct {
+		name          string
+		setup         func(t *testing.T) string // Returns path to test file.
+		expectError   bool
+		expectWarning bool
+	}{
+		{
+			name: "valid executable file",
+			setup: func(t *testing.T) string {
+				tmpDir := t.TempDir()
+				execPath := filepath.Join(tmpDir, "test-browser")
+				require.NoError(t, os.WriteFile(execPath, []byte("#!/bin/sh\necho test"), 0o755))
+				return execPath
+			},
+			expectError: false,
+		},
+		{
+			name: "file exists but not executable",
+			setup: func(t *testing.T) string {
+				tmpDir := t.TempDir()
+				execPath := filepath.Join(tmpDir, "test-browser")
+				require.NoError(t, os.WriteFile(execPath, []byte("test"), 0o644))
+				return execPath
+			},
+			expectError:   false,
+			expectWarning: true, // Should warn about missing execute permissions.
+		},
+		{
+			name: "file does not exist",
+			setup: func(t *testing.T) string {
+				return "/nonexistent/path/to/browser"
+			},
+			expectError: true,
+		},
+		{
+			name: "path is a directory",
+			setup: func(t *testing.T) string {
+				tmpDir := t.TempDir()
+				dirPath := filepath.Join(tmpDir, "browser-dir")
+				require.NoError(t, os.MkdirAll(dirPath, 0o755))
+				return dirPath
+			},
+			expectError: true,
+		},
+		{
+			name: "empty path",
+			setup: func(t *testing.T) string {
+				return ""
+			},
+			expectError: false, // Should return nil for empty path.
+		},
+	}
+
+	for _, tt := range tests {
+		tc := tt
+		t.Run(tc.name, func(t *testing.T) {
+			path := tc.setup(t)
+
+			p := &samlProvider{
+				name: "test",
+				config: &schema.Provider{
+					BrowserExecutablePath: path,
+				},
+			}
+
+			err := p.validateBrowserExecutable()
+
+			if tc.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			// Note: Testing for warning logs would require a log capture mechanism.
+			// The expectWarning flag documents expected behavior.
+		})
+	}
+}
