@@ -12,7 +12,12 @@ User reported that the `--chdir` flag works for some commands but fails for othe
 
 ## Test Coverage
 
-Created `/tests/cli_chdir_commands_test.go` with comprehensive test coverage:
+Created three comprehensive test files with extensive coverage:
+
+### Test Files
+- `/tests/cli_chdir_commands_test.go` - Terraform commands + control group
+- `/tests/cli_chdir_packer_test.go` - Packer commands (dedicated)
+- `/tests/cli_chdir_helmfile_test.go` - Helmfile commands (dedicated)
 
 ### 1. Terraform Commands (`TestChdirWithTerraformCommands`)
 Tests the following terraform commands with `--chdir` flag:
@@ -28,15 +33,35 @@ Tests `--chdir` with relative paths (e.g., `../../..`):
 - Both absolute and relative paths tested
 - Simulates Atlantis workflow where process starts in component directory
 
-### 3. Helmfile Commands (`TestChdirWithHelmfileCommands`)
-Tests helmfile commands with `--chdir` flag:
-- `helmfile generate`
-- `helmfile diff`
+### 3. Packer Commands (`cli_chdir_packer_test.go`)
+Comprehensive packer command testing:
+- `TestChdirWithPackerCommands` - Tests validate, init, inspect, output, version, build
+- `TestChdirWithPackerRelativePaths` - Tests relative path scenarios
+- `TestChdirWithPackerFromDifferentDirectory` - Tests from various starting directories
 
-### 4. Packer Commands (`TestChdirWithPackerCommands`)
-Tests packer commands with `--chdir` flag:
-- `packer validate`
-- `packer build`
+Commands tested:
+- `packer validate` - ❌ **BUG REPRODUCED** (if stack configured)
+- `packer init` - ❌ **BUG REPRODUCED** (if stack configured)
+- `packer inspect` - ❌ **BUG REPRODUCED** (if stack configured)
+- `packer output` - ❌ **BUG REPRODUCED** (if stack configured)
+- `packer version` - ✅ Works (no stack required)
+
+### 4. Helmfile Commands (`cli_chdir_helmfile_test.go`)
+Comprehensive helmfile command testing:
+- `TestChdirWithHelmfileCommands` - Tests generate, diff, template, lint, sync, apply, destroy
+- `TestChdirWithHelmfileRelativePaths` - Tests relative path scenarios
+- `TestChdirWithHelmfileFromDifferentDirectory` - Tests from various starting directories
+- `TestChdirWithHelmfileMultipleComponents` - Tests multiple components
+
+Commands tested:
+- `helmfile generate varfile` - ❌ **BUG REPRODUCED**
+- `helmfile template` - ❌ **BUG REPRODUCED**
+- `helmfile lint` - ❌ **BUG REPRODUCED**
+- `helmfile diff` - Skipped (requires k8s cluster)
+- `helmfile sync` - Skipped (requires k8s cluster)
+- `helmfile apply` - Skipped (requires k8s cluster)
+- `helmfile destroy` - Skipped (requires k8s cluster)
+- `helmfile version` - ✅ Works (no stack required)
 
 ### 5. Control Group (`TestChdirWithDescribeCommands`)
 Tests describe commands that **DO work** with `--chdir` (as expected):
@@ -99,11 +124,16 @@ Run tests with:
 # Run all chdir tests
 go test -v -run TestChdirWith ./tests
 
-# Run specific test
-go test -v -run TestChdirWithTerraformCommands ./tests
+# Run specific command type
+go test -v -run TestChdirWithTerraform ./tests
+go test -v -run TestChdirWithPacker ./tests
+go test -v -run TestChdirWithHelmfile ./tests
 
 # Run with coverage
 go test -v -run TestChdirWith ./tests -cover
+
+# Run all three in parallel
+go test -v -run "TestChdirWith(Terraform|Packer|Helmfile)" ./tests
 ```
 
 ## Next Steps for Fix
