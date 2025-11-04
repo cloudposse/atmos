@@ -23,7 +23,7 @@ type AtlantisProjectConfig struct {
 	Workspace                 string                        `yaml:"workspace" json:"workspace" mapstructure:"workspace"`
 	Workflow                  string                        `yaml:"workflow,omitempty" json:"workflow,omitempty" mapstructure:"workflow"`
 	Dir                       string                        `yaml:"dir" json:"dir" mapstructure:"dir"`
-	TerraformVersion          string                        `yaml:"terraform_version" json:"terraform_version" mapstructure:"terraform_version"`
+	TerraformVersion          string                        `yaml:"terraform_version,omitempty" json:"terraform_version" mapstructure:"terraform_version"`
 	DeleteSourceBranchOnMerge bool                          `yaml:"delete_source_branch_on_merge" json:"delete_source_branch_on_merge" mapstructure:"delete_source_branch_on_merge"`
 	Autoplan                  AtlantisProjectAutoplanConfig `yaml:"autoplan" json:"autoplan" mapstructure:"autoplan"`
 	ApplyRequirements         []string                      `yaml:"apply_requirements" json:"apply_requirements" mapstructure:"apply_requirements"`
