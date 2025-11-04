@@ -19,7 +19,14 @@ func TestComponentInheritanceWithoutMetadataComponent(t *testing.T) {
 	stack := "test"
 
 	// Describe the component.
-	componentSection, err := ExecuteDescribeComponent(component, stack, false, false, []string{})
+	componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
+		Skip:                 []string{},
+		AuthManager:          nil,
+	})
 	require.NoError(t, err, "ExecuteDescribeComponent should not fail for component with metadata.inherits but no metadata.component")
 
 	// Verify that the component section is not nil.
