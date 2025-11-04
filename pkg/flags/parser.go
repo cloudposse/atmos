@@ -116,12 +116,16 @@ type ParsedConfig struct {
 // GetIdentity returns the identity value from parsed flags with proper type safety.
 // Returns empty string if identity is not set.
 func (p *ParsedConfig) GetIdentity() string {
+	defer perf.Track(nil, "flags.ParsedConfig.GetIdentity")()
+
 	return getString(p.Flags, "identity")
 }
 
 // GetStack returns the stack value from parsed flags with proper type safety.
 // Returns empty string if stack is not set.
 func (p *ParsedConfig) GetStack() string {
+	defer perf.Track(nil, "flags.ParsedConfig.GetStack")()
+
 	return getString(p.Flags, "stack")
 }
 
