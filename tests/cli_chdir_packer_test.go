@@ -148,8 +148,8 @@ func TestChdirWithPackerCommands(t *testing.T) {
 					t.Logf("Command failed with error: %v", err)
 					t.Logf("Stdout: %s", stdout.String())
 					t.Logf("Stderr: %s", stderr.String())
-					t.Logf("KNOWN BUG: Command failed but should succeed with --chdir")
 				}
+				assert.NoError(t, err, "Command should succeed with --chdir")
 			}
 
 			// Run output checks if provided.
@@ -199,7 +199,6 @@ func TestChdirWithPackerRelativePaths(t *testing.T) {
 		if err != nil {
 			t.Logf("Stdout: %s", stdout.String())
 			t.Logf("Stderr: %s", stderr.String())
-			t.Logf("KNOWN BUG: packer validate fails with relative --chdir path")
 		}
 
 		output := stdout.String() + stderr.String()

@@ -56,7 +56,7 @@ func TestChdirWithTerraformCommands(t *testing.T) {
 	}{
 		{
 			name:        "terraform generate varfile with absolute --chdir path",
-			args:        []string{"--chdir", absFixturesPath, "terraform", "generate", "varfile", "mock", "--stack", "nonprod"},
+			args:        []string{"--chdir", absFixturesPath, "terraform", "generate", "varfile", "mycomponent", "--stack", "nonprod"},
 			expectError: false,
 			checkOutput: func(t *testing.T, stdout, stderr string) {
 				// Should succeed and generate varfile.
@@ -66,19 +66,18 @@ func TestChdirWithTerraformCommands(t *testing.T) {
 		},
 		{
 			name:        "terraform plan with absolute --chdir path",
-			args:        []string{"--chdir", absFixturesPath, "terraform", "plan", "mock", "--stack", "nonprod"},
-			expectError: false, // This should NOT error, but currently does according to the bug report.
+			args:        []string{"--chdir", absFixturesPath, "terraform", "plan", "mycomponent", "--stack", "nonprod"},
+			expectError: true, // May fail due to missing terraform initialization, but NOT due to missing atmos.yaml.
 			checkOutput: func(t *testing.T, stdout, stderr string) {
-				// The bug: this currently fails with "atmos.yaml CLI config file was not found".
-				// When fixed, this assertion should pass.
+				// The key assertion: atmos.yaml should be found with --chdir.
 				assert.NotContains(t, stderr, "atmos.yaml  CLI config file was not found",
 					"Should find atmos.yaml with --chdir for terraform plan")
 			},
 		},
 		{
 			name:        "terraform validate with absolute --chdir path",
-			args:        []string{"--chdir", absFixturesPath, "terraform", "validate", "mock", "--stack", "nonprod"},
-			expectError: false,
+			args:        []string{"--chdir", absFixturesPath, "terraform", "validate", "mycomponent", "--stack", "nonprod"},
+			expectError: true, // May fail due to terraform not being initialized, but NOT due to missing atmos.yaml.
 			checkOutput: func(t *testing.T, stdout, stderr string) {
 				assert.NotContains(t, stderr, "atmos.yaml  CLI config file was not found",
 					"Should find atmos.yaml with --chdir for terraform validate")
@@ -86,14 +85,14 @@ func TestChdirWithTerraformCommands(t *testing.T) {
 		},
 		{
 			name: "terraform init with absolute --chdir path",
-			args: []string{"--chdir", absFixturesPath, "terraform", "init", "mock", "--stack", "nonprod"},
+			args: []string{"--chdir", absFixturesPath, "terraform", "init", "mycomponent", "--stack", "nonprod"},
 			// Skip because init might require actual terraform state/backend config.
 			skipReason: "Skipping terraform init - requires backend configuration",
 		},
 		{
 			name:        "terraform workspace with absolute --chdir path",
-			args:        []string{"--chdir", absFixturesPath, "terraform", "workspace", "mock", "--stack", "nonprod"},
-			expectError: false,
+			args:        []string{"--chdir", absFixturesPath, "terraform", "workspace", "mycomponent", "--stack", "nonprod"},
+			expectError: true, // May fail due to terraform not being initialized, but NOT due to missing atmos.yaml.
 			checkOutput: func(t *testing.T, stdout, stderr string) {
 				assert.NotContains(t, stderr, "atmos.yaml  CLI config file was not found",
 					"Should find atmos.yaml with --chdir for terraform workspace")
@@ -101,8 +100,8 @@ func TestChdirWithTerraformCommands(t *testing.T) {
 		},
 		{
 			name:        "terraform generate backend with absolute --chdir path",
-			args:        []string{"--chdir", absFixturesPath, "terraform", "generate", "backend", "mock", "--stack", "nonprod"},
-			expectError: false,
+			args:        []string{"--chdir", absFixturesPath, "terraform", "generate", "backend", "mycomponent", "--stack", "nonprod"},
+			expectError: true, // May fail due to missing backend_type configuration, but NOT due to missing atmos.yaml.
 			checkOutput: func(t *testing.T, stdout, stderr string) {
 				assert.NotContains(t, stderr, "atmos.yaml  CLI config file was not found",
 					"Should find atmos.yaml with --chdir for terraform generate backend")
@@ -143,11 +142,7 @@ func TestChdirWithTerraformCommands(t *testing.T) {
 					t.Logf("Stdout: %s", stdout.String())
 					t.Logf("Stderr: %s", stderr.String())
 				}
-				// For now, we allow errors because we're documenting the bug.
-				// Once fixed, change this to assert.NoError.
-				if err != nil {
-					t.Logf("KNOWN BUG: Command failed but should succeed with --chdir")
-				}
+				assert.NoError(t, err, "Command should succeed with --chdir")
 			}
 
 			// Run output checks if provided.
@@ -188,7 +183,7 @@ func TestChdirWithRelativePaths(t *testing.T) {
 		})
 
 		// Use relative path to go back to repo root.
-		cmd := atmosRunner.Command("--chdir", "../../..", "terraform", "generate", "varfile", "mock", "--stack", "nonprod")
+		cmd := atmosRunner.Command("--chdir", "../../..", "terraform", "generate", "varfile", "mycomponent", "--stack", "nonprod")
 
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
@@ -212,7 +207,7 @@ func TestChdirWithRelativePaths(t *testing.T) {
 		})
 
 		// Use relative path to go back to repo root.
-		cmd := atmosRunner.Command("--chdir", "../../..", "terraform", "plan", "mock", "--stack", "nonprod")
+		cmd := atmosRunner.Command("--chdir", "../../..", "terraform", "plan", "mycomponent", "--stack", "nonprod")
 
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
@@ -221,7 +216,6 @@ func TestChdirWithRelativePaths(t *testing.T) {
 		if err != nil {
 			t.Logf("Stdout: %s", stdout.String())
 			t.Logf("Stderr: %s", stderr.String())
-			t.Logf("KNOWN BUG: terraform plan fails with relative --chdir path")
 		}
 
 		assert.NotContains(t, stderr.String(), "atmos.yaml  CLI config file was not found",

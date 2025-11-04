@@ -62,11 +62,43 @@ var profilerServer *profiler.Server
 // logFileHandle holds the opened log file for the lifetime of the program.
 var logFileHandle *os.File
 
+// parseChdirFromArgs manually parses --chdir or -C flag from os.Args.
+// This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
+// where Cobra doesn't parse flags before PersistentPreRun is called.
+func parseChdirFromArgs() string {
+	args := os.Args
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		// Check for --chdir=value format.
+		if strings.HasPrefix(arg, "--chdir=") {
+			return strings.TrimPrefix(arg, "--chdir=")
+		}
+
+		// Check for --chdir value format (next arg is the value).
+		if arg == "--chdir" || arg == "-C" {
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		}
+	}
+	return ""
+}
+
 // processChdirFlag processes the --chdir flag and ATMOS_CHDIR environment variable,
 // changing the working directory before any other operations.
 // Precedence: --chdir flag > ATMOS_CHDIR environment variable.
 func processChdirFlag(cmd *cobra.Command) error {
+	// Try to get chdir from parsed flags first (works when DisableFlagParsing=false).
 	chdir, _ := cmd.Flags().GetString("chdir")
+
+	// If flag parsing is disabled (terraform/helmfile/packer commands), manually parse os.Args.
+	// This is necessary because Cobra doesn't parse flags when DisableFlagParsing=true,
+	// but PersistentPreRun runs before the command's Run function where flags would be manually parsed.
+	if chdir == "" {
+		chdir = parseChdirFromArgs()
+	}
+
 	// If flag is not set, check environment variable.
 	// Note: chdir is not supported in atmos.yaml since it must be processed before atmos.yaml is loaded.
 	if chdir == "" {
