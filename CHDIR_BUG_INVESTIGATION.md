@@ -100,7 +100,14 @@ terraform plan with absolute --chdir path:
 
 Investigation revealed:
 
-1. **Flag Parsing Issue**: Terraform commands have `DisableFlagParsing = true` (line 18 in `cmd/terraform.go`), which means Cobra doesn't parse flags normally for terraform commands.
+1. **Flag Parsing Issue**: **Only three command types** have `DisableFlagParsing = true`:
+   - `terraform` (line 18 in `cmd/terraform.go`)
+   - `helmfile` (line 21 in `cmd/helmfile.go`)
+   - `packer` (line 21 in `cmd/packer.go`)
+
+   **All other commands** (describe, validate, workflow, atlantis, etc.) use `DisableFlagParsing = false` and work correctly with `--chdir`.
+
+   This strongly suggests the bug is related to how `--chdir` flag is processed when flag parsing is disabled.
 
 2. **Config Loading Order**:
    - `PersistentPreRun` in `cmd/root.go` calls `processChdirFlag()` to change directory
