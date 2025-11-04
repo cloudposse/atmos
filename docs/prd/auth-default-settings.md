@@ -1,25 +1,80 @@
-# Auth Default Settings Proposal
+# Auth Default Settings PRD
+
+## Overview
+
+This PRD introduces `auth.defaults` configuration for managing global authentication defaults, including a deterministic selected default identity. This solves the "multiple defaults" problem in non-interactive (CI) environments and provides clear semantics for identity selection.
+
+## Historical Context: Why `identity.default: true` Exists
+
+The `identity.default: true` field was originally designed to mark **provider-specific default identities**. The use case:
+
+> "You might have a default identity based on a given provider."
+
+**Example - Multiple Providers, Multiple Defaults:**
+```yaml
+auth:
+  providers:
+    aws-sso-dev:
+      kind: aws/sso
+      region: us-east-2
+    aws-sso-prod:
+      kind: aws/sso
+      region: us-east-1
+    github-oidc:
+      kind: github/oidc
+
+  identities:
+    dev-default:
+      via:
+        provider: aws-sso-dev
+      default: true  # Default for aws-sso-dev provider
+
+    prod-default:
+      via:
+        provider: aws-sso-prod
+      default: true  # Default for aws-sso-prod provider
+
+    ci-default:
+      via:
+        provider: github-oidc
+      default: true  # Default for github-oidc provider
+```
+
+**The Problem:**
+- **Interactive (TTY)**: User selects from 3 defaults (works as intended - provider-based favorites)
+- **Non-interactive (CI)**: Error - "multiple default identities" (breaks)
+
+**Current Behavior:**
+`identity.default: true` acts as **favorites/shortcuts**, not truly provider-scoped defaults.
 
 ## Problem Statement
 
-Currently, Atmos has two concepts of "default" for identities:
+### Current State
 
-1. **Identity-level `default: true`** - Marks identities as "favorites" (multiple allowed)
+Atmos has two concepts of "default" for identities:
+
+1. **Identity-level `default: true`** - Marks identities as "favorites" (multiple allowed, originally intended for provider-specific defaults)
 2. **No global selected default** - Must use `--identity` flag or `ATMOS_IDENTITY` env var to explicitly select
 
-**The Problem with Profiles:**
+### Gaps
 
-When a profile sets `default: true` on an identity, it's ambiguous:
+**Gap 1: No Deterministic Default Selection**
+- Multiple `identity.default: true` → Interactive selection or error
+- CI environments require deterministic behavior (no TTY)
+- No way to say "use THIS identity by default"
+
+**Gap 2: Ambiguous Semantics with Profiles**
+When a profile sets `default: true` on an identity:
 - Is this a profile-scoped selected default?
 - Or does it add to the global favorites list?
-- In CI (non-interactive), multiple defaults cause an error
+- Multiple profiles with defaults → Which one wins?
 
-**Additional Gap:**
-
+**Gap 3: No Global Auth Defaults**
 No mechanism exists for:
 - Setting a **single selected default identity** globally
-- Configuring other global auth defaults (session duration, console settings, etc.)
-- Overriding auth defaults per-profile without modifying identity definitions
+- Configuring global session duration defaults
+- Setting global console session defaults
+- Configuring global keyring defaults
 
 ## Proposed Solution
 
@@ -276,15 +331,119 @@ auth:
 - `short-lived` identity uses 1h session (identity-level override)
 - `long-lived` identity uses 8h session (from auth.defaults.session)
 
-### Profile + Identity Precedence Chain (Complete)
+## Disambiguation: Two Types of Defaults
+
+This proposal introduces **two distinct concepts** of defaults, each serving a different purpose:
+
+### 1. `auth.defaults.identity` - Global Selected Default (NEW)
+
+**Purpose:** Single, deterministic identity selection
+**Cardinality:** One (singular)
+**Use Case:** "Always use THIS identity by default"
+**Behavior:** Automatic selection (no user interaction)
+
+```yaml
+auth:
+  defaults:
+    identity: my-chosen-identity  # THE selected default (singular)
+```
+
+**Characteristics:**
+- **Deterministic** - Always returns the same identity
+- **Non-interactive safe** - Works in CI (no TTY needed)
+- **Override semantics** - Wins over `identity.default: true`
+- **Profile-friendly** - Each profile can set its own selected default
+
+### 2. `identity.default: true` - Identity-Level Favorites (EXISTING)
+
+**Purpose:** Mark identities as favorites/shortcuts (originally: provider-specific defaults)
+**Cardinality:** Many (multiple allowed)
+**Use Case:** "These are my frequently-used identities"
+**Behavior:** Interactive selection or error if multiple in non-interactive mode
+
+```yaml
+auth:
+  identities:
+    identity-a:
+      default: true  # Favorite #1
+    identity-b:
+      default: true  # Favorite #2
+    identity-c:
+      default: true  # Favorite #3
+```
+
+**Characteristics:**
+- **Non-deterministic** - Requires user choice when multiple exist
+- **Interactive required** - Prompts user in TTY, errors in CI
+- **Provider-oriented** - Originally designed for "default identity per provider"
+- **Multiple allowed** - Creates a shortlist of favorites
+
+### Relationship Between the Two
+
+**When BOTH exist:**
+```yaml
+auth:
+  defaults:
+    identity: identity-a  # Selected default (wins)
+
+  identities:
+    identity-a:
+      default: true  # Also a favorite
+    identity-b:
+      default: true  # Favorite
+```
+
+**Resolution:**
+1. `auth.defaults.identity` is checked first → Returns `identity-a` deterministically
+2. `identity.default: true` is only consulted if no `auth.defaults.identity` exists
+
+**Result:** `auth.defaults.identity` **overrides** `identity.default: true` for automatic selection.
+
+### Environment Variable Mapping
+
+**New Environment Variable: `ATMOS_DEFAULTS_IDENTITY`**
+
+Maps to `auth.defaults.identity` configuration:
+
+```bash
+# Option 1: Set via environment variable
+export ATMOS_DEFAULTS_IDENTITY=my-identity
+atmos terraform plan component -s stack
+
+# Option 2: Set via configuration
+# atmos.yaml
+auth:
+  defaults:
+    identity: my-identity
+```
+
+**Precedence with environment variables:**
+```
+1. --identity=explicit            (CLI flag - highest)
+2. ATMOS_IDENTITY                 (explicit identity selection)
+3. ATMOS_DEFAULTS_IDENTITY        (selected default via env var) ← NEW
+4. auth.defaults.identity         (selected default via config)
+5. identity.default: true         (favorites)
+6. Error: no default identity
+```
+
+**Note:** `ATMOS_DEFAULTS_IDENTITY` env var takes precedence over `auth.defaults.identity` config, following Viper's environment variable precedence pattern.
+
+**Use Cases:**
+- Override config's selected default temporarily: `ATMOS_DEFAULTS_IDENTITY=temp-identity atmos ...`
+- Set selected default in CI without config changes: `export ATMOS_DEFAULTS_IDENTITY=ci-identity`
+- Profile-specific selected defaults in environment: `ATMOS_PROFILE=ci ATMOS_DEFAULTS_IDENTITY=github-oidc`
+
+### Complete Precedence Chain
 
 ```
-Identity Resolution:
+Identity Resolution (with all mechanisms):
 1. --identity=explicit-name           (CLI flag with value)
-2. ATMOS_IDENTITY env var             (environment variable)
-3. auth.defaults.identity             (global selected default) ← NEW
-4. identity.default: true             (favorites - multiple allowed)
-5. Error: no default identity
+2. ATMOS_IDENTITY env var             (explicit identity selection)
+3. ATMOS_DEFAULTS_IDENTITY env var    (selected default via environment) ← NEW
+4. auth.defaults.identity             (selected default via config) ← NEW
+5. identity.default: true             (favorites - interactive or error)
+6. Error: no default identity
 
 Session Duration Resolution (per identity):
 1. identity.session.duration          (identity-specific override)
@@ -292,7 +451,7 @@ Session Duration Resolution (per identity):
 3. Provider default                   (provider-level default)
 
 Console Session Resolution (per identity):
-1. identity.console.session_duration  (identity-specific override - not yet supported)
+1. identity.console.session_duration  (identity-specific override)
 2. auth.defaults.console.session_duration (global default) ← NEW
 3. Provider console default           (provider-level default)
 ```
@@ -571,7 +730,38 @@ Only allow single `identity.default: true` in non-interactive mode.
    - **Recommendation:** No - it serves a different purpose (favorites list)
    - Keep both: selected default (single) + favorites (multiple)
 
-4. **Should providers support `defaults` too?**
-   - **Recommendation:** Not initially - YAGNI
-   - Provider defaults already exist at provider level
-   - Can add later if use case emerges
+4. **Should providers support `provider.default: true` or `provider.defaults` similar to identities?**
+   - **Background:** The original intent of `identity.default: true` was provider-specific defaults
+   - **Problem:** "You might have a default identity based on a given provider"
+   - **Current Workaround:** Use `identity.default: true` on identities per provider (creates favorites list)
+
+   **Future Consideration: Provider-Level Default Identity**
+   ```yaml
+   auth:
+     providers:
+       aws-sso-dev:
+         kind: aws/sso
+         defaults:
+           identity: dev-default  # Default identity for this provider
+       aws-sso-prod:
+         kind: aws/sso
+         defaults:
+           identity: prod-default  # Default identity for this provider
+   ```
+
+   **Recommendation:** Not in this PRD - defer to future enhancement
+
+   **Rationale:**
+   - Current proposal solves the immediate problem (CI + profiles)
+   - Provider-level defaults add significant complexity
+   - Unclear precedence: global vs provider-level vs identity-level
+   - Use case needs validation (when would you select by provider vs by identity?)
+   - Can be added later without breaking changes
+
+   **Alternative:** Document pattern using profiles
+   ```yaml
+   # profiles/use-dev-provider/auth.yaml
+   auth:
+     defaults:
+       identity: dev-default  # Effectively: default for aws-sso-dev
+   ```
