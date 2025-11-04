@@ -40,8 +40,9 @@ type StringFlag struct {
 	Default     string
 	Description string
 	Required    bool
-	NoOptDefVal string   // Value when flag used without argument (identity pattern)
-	EnvVars     []string // Environment variables to bind
+	NoOptDefVal string   // Value when flag used without argument (identity pattern).
+	EnvVars     []string // Environment variables to bind.
+	ValidValues []string // Valid values for this flag (enforced during validation).
 }
 
 // GetName implements Flag.
@@ -91,6 +92,14 @@ func (f *StringFlag) GetEnvVars() []string {
 	defer perf.Track(nil, "flagparser.StringFlag.GetEnvVars")()
 
 	return f.EnvVars
+}
+
+// GetValidValues returns the list of valid values for this flag.
+// Returns nil if no validation is needed.
+func (f *StringFlag) GetValidValues() []string {
+	defer perf.Track(nil, "flagparser.StringFlag.GetValidValues")()
+
+	return f.ValidValues
 }
 
 // BoolFlag represents a boolean-valued flag.

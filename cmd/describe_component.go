@@ -17,14 +17,14 @@ import (
 
 // describeComponentParser is created once at package initialization using builder pattern.
 var describeComponentParser = flags.NewStandardOptionsBuilder().
-	WithStack(true).            // Required stack flag.
-	WithFormat("yaml").         // Format flag with default.
-	WithFile().                 // File output flag.
-	WithProcessTemplates(true). // Process templates (default true).
-	WithProcessFunctions(true). // Process functions (default true).
-	WithSkip().                 // Skip flag.
-	WithQuery().                // Query flag.
-	WithProvenance().           // Provenance flag.
+	WithStack(true).                              // Required stack flag.
+	WithFormat([]string{"json", "yaml"}, "yaml"). // Format flag with valid values and default.
+	WithFile().                                   // File output flag.
+	WithProcessTemplates(true).                   // Process templates (default true).
+	WithProcessFunctions(true).                   // Process functions (default true).
+	WithSkip().                                   // Skip flag.
+	WithQuery().                                  // Query flag.
+	WithProvenance().                             // Provenance flag.
 	Build()
 
 // describeComponentCmd describes configuration for components.

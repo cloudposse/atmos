@@ -15,7 +15,7 @@ import (
 
 var describeDependentsParser = flags.NewStandardOptionsBuilder().
 	WithStack(true).
-	WithFormat("json", "json", "yaml").
+	WithFormat([]string{"json", "yaml"}, "json").
 	WithFile().
 	WithQuery().
 	WithProcessTemplates(true).

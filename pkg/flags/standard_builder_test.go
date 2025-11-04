@@ -465,7 +465,7 @@ func TestStandardOptionsBuilder_FluentChaining(t *testing.T) {
 	builder := NewStandardOptionsBuilder().
 		WithStack(true).
 		WithComponent(false).
-		WithFormat("yaml").
+		WithFormat([]string{"json", "yaml"}, "yaml").
 		WithFile().
 		WithProcessTemplates(true).
 		WithProcessFunctions(true).
@@ -483,7 +483,7 @@ func TestStandardOptionsBuilder_ComplexCommand(t *testing.T) {
 	// Test a realistic command with multiple flags (like describe component).
 	builder := NewStandardOptionsBuilder().
 		WithStack(true).
-		WithFormat("yaml").
+		WithFormat([]string{"json", "yaml"}, "yaml").
 		WithFile().
 		WithProcessTemplates(true).
 		WithProcessFunctions(true).
@@ -527,7 +527,7 @@ func TestStandardOptionsBuilder_EnvironmentVariables(t *testing.T) {
 	// Test that environment variables work with proper precedence.
 	builder := NewStandardOptionsBuilder().
 		WithStack(false).
-		WithFormat("yaml")
+		WithFormat([]string{"json", "yaml"}, "yaml")
 
 	parser := builder.Build()
 	cmd := &cobra.Command{Use: "test"}
@@ -565,7 +565,7 @@ func TestStandardOptionsBuilder_BindFlagsToViper(t *testing.T) {
 	// Test that BindFlagsToViper works correctly
 	builder := NewStandardOptionsBuilder().
 		WithStack(true).
-		WithFormat("yaml")
+		WithFormat([]string{"json", "yaml"}, "yaml")
 
 	parser := builder.Build()
 	cmd := &cobra.Command{Use: "test"}

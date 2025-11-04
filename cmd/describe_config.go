@@ -13,7 +13,7 @@ import (
 )
 
 var describeConfigParser = flags.NewStandardOptionsBuilder().
-	WithFormat("json").
+	WithFormat([]string{"json", "yaml"}, "json").
 	WithQuery().
 	Build()
 

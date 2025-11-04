@@ -70,32 +70,22 @@ func (b *StandardOptionsBuilder) WithComponent(required bool) *StandardOptionsBu
 	return b
 }
 
-// WithFormat adds the format flag with specified default value and optional valid values.
+// WithFormat adds the format output flag with explicit valid values and default.
 // Maps to StandardOptions.Format field.
 //
 // Parameters:
-//   - defaultValue: default format (e.g., "yaml", "json", "table")
-//   - validFormats: optional list of valid format values for help text (e.g., []string{"json", "yaml"})
+//   - validFormats: List of valid format values (e.g., []string{"json", "yaml", "table"})
+//   - defaultValue: Default format to use when flag not provided
 //
 // Example:
 //
-//	WithFormat("yaml", []string{"json", "yaml"})  // describe stacks
-//	WithFormat("table", []string{"table", "tree", "json", "yaml", "graphviz", "mermaid", "markdown"})  // auth list
-//	WithFormat("json")  // backward compatible - no validation list
-func (b *StandardOptionsBuilder) WithFormat(defaultValue string, validFormats ...string) *StandardOptionsBuilder {
-	description := "Output format"
-	if len(validFormats) > 0 {
-		description = fmt.Sprintf("Output format (valid: %s)", strings.Join(validFormats, ", "))
-	}
+//	WithFormat([]string{"json", "yaml"}, "yaml")           // describe stacks
+//	WithFormat([]string{"table", "tree", "json"}, "table") // auth list
+func (b *StandardOptionsBuilder) WithFormat(validFormats []string, defaultValue string) *StandardOptionsBuilder {
+	description := fmt.Sprintf("Output format (valid: %s)", strings.Join(validFormats, ", "))
 	b.options = append(b.options, WithStringFlag("format", "f", defaultValue, description))
 	b.options = append(b.options, WithEnvVars("format", "ATMOS_FORMAT"))
-
-	// Add validation for valid formats if provided.
-	// TODO: Implement WithValidValues for validation.
-	// if len(validFormats) > 0 {
-	// 	b.options = append(b.options, WithValidValues("format", validFormats))
-	// }
-
+	b.options = append(b.options, WithValidValues("format", validFormats...))
 	return b
 }
 
@@ -432,30 +422,20 @@ func (b *StandardOptionsBuilder) WithComponentTypes() *StandardOptionsBuilder {
 	return b
 }
 
-// WithOutput adds the output flag for output type selection with optional validation.
+// WithOutput adds the output flag with explicit valid values and default.
 // Maps to StandardOptions.Output field.
 //
 // Parameters:
-//   - defaultValue: default output type (e.g., "list", "map")
-//   - validOutputs: optional list of valid output values for validation (e.g., []string{"list", "map", "all"})
+//   - validOutputs: List of valid output values (e.g., []string{"list", "map", "all"})
+//   - defaultValue: Default output type to use when flag not provided
 //
 // Example:
 //
-//	WithOutput("list", []string{"list", "map", "all"})  // describe workflows
-//	WithOutput("table")  // backward compatible - no validation list
-func (b *StandardOptionsBuilder) WithOutput(defaultValue string, validOutputs ...string) *StandardOptionsBuilder {
-	description := "Output type"
-	if len(validOutputs) > 0 {
-		description = fmt.Sprintf("Output type (valid: %s)", strings.Join(validOutputs, ", "))
-	}
+//	WithOutput([]string{"list", "map", "all"}, "list")  // describe workflows
+func (b *StandardOptionsBuilder) WithOutput(validOutputs []string, defaultValue string) *StandardOptionsBuilder {
+	description := fmt.Sprintf("Output type (valid: %s)", strings.Join(validOutputs, ", "))
 	b.options = append(b.options, WithStringFlag("output", "o", defaultValue, description))
 	b.options = append(b.options, WithEnvVars("output", "ATMOS_OUTPUT"))
-
-	// Add validation for valid outputs if provided.
-	// TODO: Implement WithValidValues for validation.
-	// if len(validOutputs) > 0 {
-	// 	b.options = append(b.options, WithValidValues("output", validOutputs))
-	// }
-
+	b.options = append(b.options, WithValidValues("output", validOutputs...))
 	return b
 }

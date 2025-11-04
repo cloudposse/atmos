@@ -15,7 +15,7 @@ import (
 
 var listVendorParser = flags.NewStandardOptionsBuilder().
 	WithStack(false).
-	WithFormat("table", "table", "json", "yaml", "csv", "tsv").
+	WithFormat([]string{"table", "json", "yaml", "csv", "tsv"}, "table").
 	WithDelimiter(",").
 	Build()
 

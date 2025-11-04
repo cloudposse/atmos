@@ -31,7 +31,7 @@ const (
 )
 
 var authListParser = flags.NewStandardOptionsBuilder().
-	WithFormat("tree", []string{"table", "tree", "json", "yaml", "graphviz", "mermaid", "markdown", "dot", "md"}...).
+	WithFormat([]string{"table", "tree", "json", "yaml", "graphviz", "mermaid", "markdown", "dot", "md", "dotenv"}, "tree").
 	WithProviders().
 	WithIdentities().
 	Build()

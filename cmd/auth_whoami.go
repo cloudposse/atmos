@@ -27,8 +27,8 @@ const (
 	logKeyIdentity = "identity"
 )
 
-var authWhoamiParser = flags.NewStandardOptionsBuilder().
-	WithOutput("", "table", "json").
+var authWhoamiParser = flags.NewAuthOptionsBuilder().
+	WithOutput([]string{"table", "json"}, "table").
 	Build()
 
 // authWhoamiCmd shows current authentication status.

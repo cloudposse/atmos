@@ -16,7 +16,7 @@ import (
 
 var listWorkflowsParser = flags.NewStandardOptionsBuilder().
 	WithFile().
-	WithFormat("table", "table", "json", "csv").
+	WithFormat([]string{"table", "json", "csv"}, "table").
 	WithDelimiter("\t").
 	Build()
 

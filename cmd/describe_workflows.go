@@ -13,8 +13,8 @@ import (
 )
 
 var describeWorkflowsParser = flags.NewStandardOptionsBuilder().
-	WithFormat("yaml", "json", "yaml").
-	WithOutput("list", "list", "map", "all").
+	WithFormat([]string{"json", "yaml"}, "yaml").
+	WithOutput([]string{"list", "map", "all"}, "list").
 	WithQuery().
 	Build()
 

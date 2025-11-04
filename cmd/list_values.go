@@ -42,27 +42,27 @@ type ProcessingOptions struct {
 
 // listValuesParser is created once at package initialization using builder pattern.
 var listValuesParser = flags.NewStandardOptionsBuilder().
-	WithStack(false).           // Optional stack flag for filtering.
-	WithFormat("").             // Format flag (empty default, will use table).
-	WithQuery().                // Query flag for YQ expressions.
-	WithProcessTemplates(true). // Process templates (default true).
-	WithProcessFunctions(true). // Process functions (default true).
-	WithAbstract().             // Include abstract components flag.
-	WithVars().                 // Show only vars section flag.
-	WithMaxColumns(0).          // Maximum columns for table output.
-	WithDelimiter("").          // Delimiter for CSV/TSV output.
+	WithStack(false).                             // Optional stack flag for filtering.
+	WithFormat([]string{"json", "yaml"}, "yaml"). // Format flag with valid values and default.
+	WithQuery().                                  // Query flag for YQ expressions.
+	WithProcessTemplates(true).                   // Process templates (default true).
+	WithProcessFunctions(true).                   // Process functions (default true).
+	WithAbstract().                               // Include abstract components flag.
+	WithVars().                                   // Show only vars section flag.
+	WithMaxColumns(0).                            // Maximum columns for table output.
+	WithDelimiter("").                            // Delimiter for CSV/TSV output.
 	Build()
 
 // listVarsParser is created once at package initialization using builder pattern.
 var listVarsParser = flags.NewStandardOptionsBuilder().
-	WithStack(false).           // Optional stack flag for filtering.
-	WithFormat("").             // Format flag (empty default, will use table).
-	WithQuery().                // Query flag for YQ expressions (will be set to .vars).
-	WithProcessTemplates(true). // Process templates (default true).
-	WithProcessFunctions(true). // Process functions (default true).
-	WithAbstract().             // Include abstract components flag.
-	WithMaxColumns(0).          // Maximum columns for table output.
-	WithDelimiter("").          // Delimiter for CSV/TSV output.
+	WithStack(false).                             // Optional stack flag for filtering.
+	WithFormat([]string{"json", "yaml"}, "yaml"). // Format flag with valid values and default.
+	WithQuery().                                  // Query flag for YQ expressions (will be set to .vars).
+	WithProcessTemplates(true).                   // Process templates (default true).
+	WithProcessFunctions(true).                   // Process functions (default true).
+	WithAbstract().                               // Include abstract components flag.
+	WithMaxColumns(0).                            // Maximum columns for table output.
+	WithDelimiter("").                            // Delimiter for CSV/TSV output.
 	Build()
 
 // listValuesCmd lists component values across stacks.

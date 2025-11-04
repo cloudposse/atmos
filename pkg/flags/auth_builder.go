@@ -49,25 +49,21 @@ func (b *AuthOptionsBuilder) WithVerbose() *AuthOptionsBuilder {
 	return b
 }
 
-// WithOutput adds the output flag with specified default value.
+// WithOutput adds the output flag with explicit valid values and default.
 // Maps to AuthOptions.Output field.
 //
 // Parameters:
-//   - defaultValue: default output format (e.g., "table", "json", "yaml")
-//   - validOutputs: optional list of valid output values for validation
+//   - validOutputs: List of valid output values (e.g., []string{"table", "json", "yaml"})
+//   - defaultValue: Default output format to use when flag not provided
 //
 // Example:
 //
-//	WithOutput("table", "table", "json", "yaml")  // auth whoami
-//	WithOutput("json")  // backward compatible - no validation list
-func (b *AuthOptionsBuilder) WithOutput(defaultValue string, validOutputs ...string) *AuthOptionsBuilder {
-	description := "Output format"
-	if len(validOutputs) > 0 {
-		// TODO: Add validation when WithValidValues is implemented.
-		description = fmt.Sprintf("Output format (valid: %s)", strings.Join(validOutputs, ", "))
-	}
+//	WithOutput([]string{"table", "json"}, "table")  // auth whoami
+func (b *AuthOptionsBuilder) WithOutput(validOutputs []string, defaultValue string) *AuthOptionsBuilder {
+	description := fmt.Sprintf("Output format (valid: %s)", strings.Join(validOutputs, ", "))
 	b.options = append(b.options, WithStringFlag("output", "o", defaultValue, description))
 	b.options = append(b.options, WithEnvVars("output", "ATMOS_OUTPUT"))
+	b.options = append(b.options, WithValidValues("output", validOutputs...))
 	return b
 }
 

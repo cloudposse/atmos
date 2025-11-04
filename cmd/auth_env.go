@@ -23,7 +23,7 @@ import (
 var SupportedFormats = []string{"json", "bash", "dotenv"}
 
 var authEnvParser = flags.NewStandardOptionsBuilder().
-	WithFormat("bash").
+	WithFormat([]string{"json", "bash", "dotenv"}, "bash").
 	WithLogin().
 	Build()
 
