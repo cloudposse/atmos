@@ -26,7 +26,7 @@ type AtlantisProjectConfig struct {
 	TerraformVersion          string                        `yaml:"terraform_version,omitempty" json:"terraform_version,omitempty" mapstructure:"terraform_version,omitempty"`
 	DeleteSourceBranchOnMerge bool                          `yaml:"delete_source_branch_on_merge" json:"delete_source_branch_on_merge" mapstructure:"delete_source_branch_on_merge"`
 	Autoplan                  AtlantisProjectAutoplanConfig `yaml:"autoplan" json:"autoplan" mapstructure:"autoplan"`
-	ApplyRequirements         []string                      `yaml:"apply_requirements" json:"apply_requirements" mapstructure:"apply_requirements"`
+	ApplyRequirements         []string                      `yaml:"apply_requirements,omitempty" json:"apply_requirements,omitempty" mapstructure:"apply_requirements,omitempty"`
 }
 
 type AtlantisProjectAutoplanConfig struct {
