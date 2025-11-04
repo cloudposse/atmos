@@ -44,6 +44,8 @@ func NewAuthOptionsBuilder() *AuthOptionsBuilder {
 // WithVerbose adds the verbose flag.
 // Maps to AuthOptions.Verbose field.
 func (b *AuthOptionsBuilder) WithVerbose() *AuthOptionsBuilder {
+	defer perf.Track(nil, "flags.AuthOptionsBuilder.WithVerbose")()
+
 	b.options = append(b.options, WithBoolFlag("verbose", "v", false, "Enable verbose output"))
 	b.options = append(b.options, WithEnvVars("verbose", "ATMOS_VERBOSE"))
 	return b
@@ -60,6 +62,8 @@ func (b *AuthOptionsBuilder) WithVerbose() *AuthOptionsBuilder {
 //
 //	WithOutput([]string{"table", "json"}, "table")  // auth whoami
 func (b *AuthOptionsBuilder) WithOutput(validOutputs []string, defaultValue string) *AuthOptionsBuilder {
+	defer perf.Track(nil, "flags.AuthOptionsBuilder.WithOutput")()
+
 	description := fmt.Sprintf("Output format (valid: %s)", strings.Join(validOutputs, ", "))
 	b.options = append(b.options, WithStringFlag("output", "o", defaultValue, description))
 	b.options = append(b.options, WithEnvVars("output", "ATMOS_OUTPUT"))
@@ -70,6 +74,8 @@ func (b *AuthOptionsBuilder) WithOutput(validOutputs []string, defaultValue stri
 // WithDestination adds the destination flag for console navigation.
 // Maps to AuthOptions.Destination field.
 func (b *AuthOptionsBuilder) WithDestination() *AuthOptionsBuilder {
+	defer perf.Track(nil, "flags.AuthOptionsBuilder.WithDestination")()
+
 	b.options = append(b.options, WithStringFlag("destination", "", "", "Console page to navigate to (AWS service alias or URL)"))
 	b.options = append(b.options, WithEnvVars("destination", "ATMOS_CONSOLE_DESTINATION"))
 	return b
@@ -81,6 +87,8 @@ func (b *AuthOptionsBuilder) WithDestination() *AuthOptionsBuilder {
 // Parameters:
 //   - defaultValue: default duration as string (e.g., "1h", "2h30m")
 func (b *AuthOptionsBuilder) WithDuration(defaultValue string) *AuthOptionsBuilder {
+	defer perf.Track(nil, "flags.AuthOptionsBuilder.WithDuration")()
+
 	b.options = append(b.options, WithStringFlag("duration", "", defaultValue, "Console session duration (provider may have max limits)"))
 	b.options = append(b.options, WithEnvVars("duration", "ATMOS_CONSOLE_DURATION"))
 	return b
@@ -92,6 +100,8 @@ func (b *AuthOptionsBuilder) WithDuration(defaultValue string) *AuthOptionsBuild
 // Parameters:
 //   - defaultValue: default issuer (typically "atmos")
 func (b *AuthOptionsBuilder) WithIssuer(defaultValue string) *AuthOptionsBuilder {
+	defer perf.Track(nil, "flags.AuthOptionsBuilder.WithIssuer")()
+
 	b.options = append(b.options, WithStringFlag("issuer", "", defaultValue, "Issuer identifier for console session (AWS only)"))
 	b.options = append(b.options, WithEnvVars("issuer", "ATMOS_CONSOLE_ISSUER"))
 	return b
@@ -100,6 +110,8 @@ func (b *AuthOptionsBuilder) WithIssuer(defaultValue string) *AuthOptionsBuilder
 // WithPrintOnly adds the print-only flag.
 // Maps to AuthOptions.PrintOnly field.
 func (b *AuthOptionsBuilder) WithPrintOnly() *AuthOptionsBuilder {
+	defer perf.Track(nil, "flags.AuthOptionsBuilder.WithPrintOnly")()
+
 	b.options = append(b.options, WithBoolFlag("print-only", "", false, "Print console URL to stdout without opening browser"))
 	b.options = append(b.options, WithEnvVars("print-only", "ATMOS_CONSOLE_PRINT_ONLY"))
 	return b
@@ -108,6 +120,8 @@ func (b *AuthOptionsBuilder) WithPrintOnly() *AuthOptionsBuilder {
 // WithNoOpen adds the no-open flag.
 // Maps to AuthOptions.NoOpen field.
 func (b *AuthOptionsBuilder) WithNoOpen() *AuthOptionsBuilder {
+	defer perf.Track(nil, "flags.AuthOptionsBuilder.WithNoOpen")()
+
 	b.options = append(b.options, WithBoolFlag("no-open", "", false, "Generate URL but don't open browser automatically"))
 	b.options = append(b.options, WithEnvVars("no-open", "ATMOS_CONSOLE_NO_OPEN"))
 	return b
