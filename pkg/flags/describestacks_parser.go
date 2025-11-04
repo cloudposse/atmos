@@ -18,6 +18,8 @@ type DescribeStacksParser struct {
 
 // NewDescribeStacksParser creates a new parser for describe stacks command flags.
 func NewDescribeStacksParser() *DescribeStacksParser {
+	defer perf.Track(nil, "flags.NewDescribeStacksParser")()
+
 	return NewDescribeStacksOptionsBuilder().
 		WithStack().
 		WithFormat().
