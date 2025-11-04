@@ -335,12 +335,6 @@ func (p *samlProvider) getDriver() string {
 		return p.config.Driver
 	}
 
-	// Backward compatibility: check deprecated provider_type field.
-	if p.config.ProviderType != "" {
-		log.Warn("The 'provider_type' field is deprecated. Please use 'driver' instead", "current_value", p.config.ProviderType)
-		return p.config.ProviderType
-	}
-
 	// Check if Playwright drivers are available or can be auto-downloaded.
 	if p.hasPlaywrightDriversOrCanDownload() {
 		log.Debug("Playwright drivers available, using Browser provider for best compatibility")

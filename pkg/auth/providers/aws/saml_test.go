@@ -65,7 +65,7 @@ func TestSAMLProvider_GetProviderType(t *testing.T) {
 	t.Setenv("LOCALAPPDATA", testHomeDir) // Windows cache directory.
 
 	// Explicit driver config always wins.
-	p := &samlProvider{config: &schema.Provider{ProviderType: "Okta"}, url: "https://idp"}
+	p := &samlProvider{config: &schema.Provider{Driver: "Okta"}, url: "https://idp"}
 	assert.Equal(t, "Okta", p.getDriver())
 
 	// Without Playwright drivers, falls back to provider-specific types.
@@ -502,7 +502,7 @@ func TestSAMLProvider_createSAMLConfig_AllFields(t *testing.T) {
 		Region:                "eu-central-1",
 		Username:              "testuser",
 		Password:              "testpass",
-		ProviderType:          "Okta",
+		Driver:                "Okta",
 		DownloadBrowserDriver: true,
 		Session:               &schema.SessionConfig{Duration: "2h"},
 	})
