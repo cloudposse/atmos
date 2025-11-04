@@ -8,12 +8,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	aws "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/spf13/viper"
 	"github.com/versent/saml2aws/v2"
 	"github.com/versent/saml2aws/v2/pkg/cfg"
 	"github.com/versent/saml2aws/v2/pkg/creds"
@@ -433,6 +435,17 @@ func (p *samlProvider) playwrightDriversInstalled() bool {
 		)
 	} else {
 		log.Debug("Cannot determine home directory for driver detection", "error", err)
+	}
+
+	// On Windows, also check LOCALAPPDATA if it's set (for test environments or custom configs).
+	// playwright-go uses os.UserCacheDir() which returns LOCALAPPDATA directly on Windows.
+	if runtime.GOOS == "windows" {
+		v := viper.New()
+		if err := v.BindEnv("LOCALAPPDATA"); err == nil {
+			if localAppData := v.GetString("LOCALAPPDATA"); localAppData != "" {
+				playwrightPaths = append(playwrightPaths, filepath.Join(localAppData, playwrightCacheDir))
+			}
+		}
 	}
 
 	for _, path := range playwrightPaths {
