@@ -354,6 +354,7 @@ func executeCustomCommand(
 	// Create auth manager if identity is specified for this custom command.
 	// Check for --identity flag first (it overrides the config).
 	var authManager auth.AuthManager
+	var authStackInfo *schema.ConfigAndStacksInfo
 	identityFlag, _ := cmd.Flags().GetString("identity")
 	commandIdentity := strings.TrimSpace(identityFlag)
 	if commandIdentity == "" {
@@ -362,9 +363,15 @@ func executeCustomCommand(
 	}
 
 	if commandIdentity != "" {
+		// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
+		// This enables YAML template functions to access authenticated credentials.
+		authStackInfo = &schema.ConfigAndStacksInfo{
+			AuthContext: &schema.AuthContext{},
+		}
+
 		credStore := credentials.NewCredentialStore()
 		validator := validation.NewValidator()
-		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, nil)
+		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
 		}
@@ -441,7 +448,14 @@ func executeCustomCommand(
 			}
 
 			// Get the config for the component in the stack
-			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true, nil)
+			componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+				Component:            component,
+				Stack:                stack,
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+				Skip:                 nil,
+				AuthManager:          authManager,
+			})
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			data["ComponentConfig"] = componentConfig
 		}

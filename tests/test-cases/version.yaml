@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=schema.json
+# Tests for version command
+tests:
+  - name: "atmos version check with UI output"
+    enabled: false
+    snapshot: true
+    description: "Verify version check shows appropriate output (disabled - network-dependent, output varies by environment)"
+    workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - "version"
+      - "--check"
+    env:
+      # Disable version check to avoid network calls in tests
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      exit_code: 0
+      ignore:
+        # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
+        - "👽 Atmos .* on (darwin|linux)/(arm64|amd64)"

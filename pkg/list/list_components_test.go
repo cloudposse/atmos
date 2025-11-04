@@ -25,7 +25,7 @@ func TestListComponents(t *testing.T) {
 	require.NoError(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil,
-		nil, false, true, true, false, nil)
+		nil, false, true, true, false, nil, nil)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListComponents("", stacksMap)
@@ -54,7 +54,7 @@ func TestListComponentsWithStack(t *testing.T) {
 	require.NoError(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, testStack, nil, nil,
-		nil, false, true, true, false, nil)
+		nil, false, true, true, false, nil, nil)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListComponents(testStack, stacksMap)
@@ -291,7 +291,7 @@ func TestFilterAndListComponentsIntegration(t *testing.T) {
 	// Test with invalid stack name
 	t.Run("invalid stack name", func(t *testing.T) {
 		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil,
-			nil, false, false, false, false, nil)
+			nil, false, false, false, false, nil, nil)
 		require.NoError(t, err)
 
 		_, err = FilterAndListComponents("non-existent-stack", stacksMap)

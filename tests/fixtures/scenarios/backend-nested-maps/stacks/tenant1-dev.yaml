@@ -1,0 +1,30 @@
+vars:
+  tenant: tenant1
+  environment: ue2
+  stage: dev
+  account_id: "123456789012"
+  account_name: dev-account
+  control_plane_role: terraform-backend-role
+
+components:
+  terraform:
+    test-component:
+      vars:
+        enabled: true
+      backend_type: s3
+      backend:
+        s3:
+          acl: "bucket-owner-full-control"
+          encrypt: true
+          bucket: "{{ .vars.tenant }}-{{ .vars.stage }}-{{ .vars.environment }}-{{ .vars.account_name }}-terraform-states"
+          region: "us-east-1"
+          key: terraform.tfstate
+          use_lockfile: true
+          workspace_key_prefix: "terraform"
+          # Nested map - this should be preserved in HCL output
+          assume_role:
+            role_arn: "arn:aws:iam::{{ .vars.account_id }}:role/{{ .vars.control_plane_role }}"
+            session_name: "terraform-backend-session"
+            duration: "1h"
+          # Nested list
+          skip_metadata_api_check: true

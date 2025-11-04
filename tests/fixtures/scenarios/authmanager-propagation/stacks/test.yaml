@@ -1,0 +1,24 @@
+# Test stack for verifying AuthManager propagation.
+# This fixture tests that AuthContext from AuthManager is correctly
+# extracted and made available during component description.
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    test-component:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        foo: "test-value"
+      backend:
+        s3:
+          bucket: "test-bucket"
+          key: "terraform.tfstate"
+          region: "us-east-1"
+      settings:
+        spacelift:
+          workspace_enabled: false

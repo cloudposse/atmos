@@ -43,7 +43,7 @@ type AtmosFuncs struct {
 
 // Component returns component configuration for the given component and stack.
 func (f AtmosFuncs) Component(component string, stack string) (any, error) {
-	return componentFunc(f.atmosConfig, component, stack)
+	return componentFunc(f.atmosConfig, f.configAndStacksInfo, component, stack)
 }
 
 // GomplateDatasource returns data for a gomplate datasource alias.

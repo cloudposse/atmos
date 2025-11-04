@@ -1,12 +1,20 @@
 package cmd
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // GetIdentityFromFlags retrieves the identity value from command-line flags and environment variables.
@@ -98,4 +106,51 @@ func extractIdentityFromArgs(args []string) string {
 
 	// Flag not found in args.
 	return ""
+}
+
+// CreateAuthManagerFromIdentity creates and authenticates an AuthManager from an identity name.
+// Returns nil if identityName is empty (no authentication requested).
+// Returns error if identityName is provided but auth is not configured in atmos.yaml.
+// This helper reduces nested complexity in describe commands.
+func CreateAuthManagerFromIdentity(
+	identityName string,
+	authConfig *schema.AuthConfig,
+) (auth.AuthManager, error) {
+	if identityName == "" {
+		return nil, nil
+	}
+
+	// Check if auth is configured when --identity flag is provided.
+	if authConfig == nil || len(authConfig.Identities) == 0 {
+		return nil, fmt.Errorf("%w: the --identity flag requires authentication to be configured in atmos.yaml with at least one identity", errUtils.ErrAuthNotConfigured)
+	}
+
+	// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{},
+	}
+
+	credStore := credentials.NewCredentialStore()
+	validator := validation.NewValidator()
+	authManager, err := auth.NewAuthManager(authConfig, credStore, validator, authStackInfo)
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+	}
+
+	// Handle interactive selection.
+	forceSelect := identityName == IdentityFlagSelectValue
+	if forceSelect {
+		identityName, err = authManager.GetDefaultIdentity(forceSelect)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Authenticate.
+	_, err = authManager.Authenticate(context.Background(), identityName)
+	if err != nil {
+		return nil, err
+	}
+
+	return authManager, nil
 }
