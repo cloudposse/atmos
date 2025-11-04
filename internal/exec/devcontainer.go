@@ -312,6 +312,19 @@ func attachToContainer(ctx context.Context, runtime container.Runtime, container
 	return runtime.Attach(ctx, containerInfo.ID, attachOpts)
 }
 
+func execInContainer(ctx context.Context, runtime container.Runtime, containerID string, command []string) error {
+	// Execute command without TTY - output will flow through masked IO streams.
+	execOpts := &container.ExecOptions{
+		Tty:          false, // Non-interactive mode - masking will work.
+		AttachStdin:  false,
+		AttachStdout: true,
+		AttachStderr: true,
+		// IO streams are nil, will default to iolib.Data/UI in runtime.
+	}
+
+	return runtime.Exec(ctx, containerID, command, execOpts)
+}
+
 func getShellArgs(userEnvProbe string) []string {
 	if userEnvProbe == "loginShell" || userEnvProbe == "loginInteractiveShell" {
 		return []string{"-l"}
@@ -326,13 +339,33 @@ func getShellArgs(userEnvProbe string) []string {
 func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, name, instance string, command []string) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerExec")()
 
-	// TODO: Implement devcontainer exec.
+	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return err
+	}
+
+	_, settings, err := devcontainer.LoadConfig(&freshConfig, name)
+	if err != nil {
+		return err
+	}
+
+	runtime, err := devcontainer.DetectRuntime(settings.Runtime)
+	if err != nil {
+		return err
+	}
+
+	containerName, err := devcontainer.GenerateContainerName(name, instance)
+	if err != nil {
+		return err
+	}
+
 	ctx := context.Background()
-	_ = ctx
-	_ = name
-	_ = instance
-	_ = command
-	return fmt.Errorf("%w: devcontainer exec not yet implemented", errUtils.ErrNotImplemented)
+	containerInfo, err := findAndStartContainer(ctx, runtime, containerName)
+	if err != nil {
+		return err
+	}
+
+	return execInContainer(ctx, runtime, containerInfo.ID, command)
 }
 
 // ExecuteDevcontainerRemove removes a devcontainer.

@@ -59,8 +59,30 @@ atmos devcontainer exec terraform --instance project-a -- terraform init
 - Streams stdout and stderr to your terminal
 - Returns the exit code of the command
 - Container must be running (use `atmos devcontainer start` first)
+- **Automatic masking**: Output is automatically masked based on patterns configured in `atmos.yaml`
+
+## Output Masking
+
+Unlike interactive shells ([`atmos devcontainer shell`](/cli/commands/devcontainer/shell)), `exec` runs commands in non-interactive mode where output masking works reliably. Sensitive data like AWS keys, GitHub tokens, and other secrets are automatically redacted according to your mask configuration.
+
+**Example**: Running commands that display environment variables:
+
+```shell
+# Output is automatically masked
+atmos devcontainer exec geodesic -- env | grep AWS
+# AWS_ACCESS_KEY_ID=***MASKED***
+# AWS_SECRET_ACCESS_KEY=***MASKED***
+
+# Disable masking if needed
+atmos devcontainer exec geodesic --mask=false -- env | grep AWS
+```
+
+:::tip
+Use `exec` instead of `shell` when you need to capture command output with automatic masking. Interactive shells cannot mask output due to TTY limitations.
+:::
 
 ## See Also
 
 - [`atmos devcontainer attach`](/cli/commands/devcontainer/attach)
 - [`atmos devcontainer start`](/cli/commands/devcontainer/start)
+- [`atmos devcontainer shell`](/cli/commands/devcontainer/shell) - Interactive shell (masking not available)

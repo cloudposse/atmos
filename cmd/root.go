@@ -196,10 +196,11 @@ var RootCmd = &cobra.Command{
 
 		// Initialize I/O context and global formatter after flag parsing.
 		// This ensures flags like --no-color, --redirect-stderr, --mask are respected.
-		ioCtx, ioErr := iolib.NewContext()
-		if ioErr != nil {
+		// Initialize() sets the global iolib.Data and iolib.UI writers with masking enabled.
+		if ioErr := iolib.Initialize(); ioErr != nil {
 			errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize I/O context: %w", ioErr), "", "")
 		}
+		ioCtx := iolib.GetContext()
 		ui.InitFormatter(ioCtx)
 		data.InitWriter(ioCtx)
 	},
