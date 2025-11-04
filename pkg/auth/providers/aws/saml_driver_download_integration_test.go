@@ -50,7 +50,10 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 	case "linux":
 		cacheDir = filepath.Join(testHomeDir, ".cache", "ms-playwright")
 	case "windows":
-		cacheDir = filepath.Join(testHomeDir, "AppData", "Local", "ms-playwright")
+		// On Windows, since we set LOCALAPPDATA to testHomeDir, playwright-go will use
+		// testHomeDir directly (os.UserCacheDir() returns LOCALAPPDATA on Windows).
+		// Then it appends "ms-playwright", so the final path is testHomeDir/ms-playwright.
+		cacheDir = filepath.Join(testHomeDir, "ms-playwright")
 	default:
 		t.Skipf("Unsupported platform: %s", runtime.GOOS)
 	}
