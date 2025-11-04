@@ -4,6 +4,11 @@
 
 This document describes the requirements and implementation for Atmos profiles, which enable users to maintain multiple configuration presets that can be activated via CLI flags or environment variables. Profiles provide environment-specific, role-based, or context-specific configuration overrides without modifying the base `atmos.yaml` configuration.
 
+## Dependencies
+
+This PRD depends on:
+- **[Auth Default Settings PRD](./auth-default-settings.md)** - Provides `auth.defaults.identity` for deterministic default identity selection in profiles
+
 ## Problem Statement
 
 ### Current State
@@ -35,6 +40,7 @@ auth:
 4. **CI/CD integration** - GitHub Actions, GitLab CI, and other automation need specialized settings (e.g., OIDC authentication)
 5. **Configuration fragility** - Switching contexts requires manual file edits or complex environment variable management
 6. **Testing scenarios** - QA and testing environments need isolated configuration profiles
+7. **Identity selection in CI** - Multiple `identity.default: true` causes errors in non-interactive environments (see [Auth Default Settings PRD](./auth-default-settings.md))
 
 ### Use Cases
 
@@ -748,18 +754,25 @@ Note: Provenance annotations show the source file and line number where each val
 
 #### CI Profile Example
 
+**Note:** This example uses `auth.defaults.identity` from the [Auth Default Settings PRD](./auth-default-settings.md) to provide deterministic identity selection in non-interactive (CI) environments.
+
 ```yaml
 # profiles/ci/auth.yaml
 auth:
+  # Use auth.defaults.identity for deterministic selection in CI (no TTY needed)
+  defaults:
+    identity: github-oidc-identity  # Selected default (overrides identity.default: true)
+    session:
+      duration: "12h"                # Global session duration for this profile
+
   identities:
     github-oidc-identity:
       kind: aws/assume-role
-      default: true  # This identity becomes the default when ci profile is active
       via:
         provider: github-oidc-provider
       principal:
         assume_role: "arn:aws:iam::123456789012:role/GitHubActionsDeployRole"
-        role_session_name: "atmos-${GITHUB_RUN_ID}"
+        role_session_name: '{{ env "GITHUB_RUN_ID" }}'  # Gomplate syntax
 
   providers:
     github-oidc-provider:
@@ -793,32 +806,67 @@ atmos terraform apply component -s prod --profile ci --identity different-identi
 ATMOS_PROFILE=ci ATMOS_IDENTITY=different-identity atmos terraform apply component -s prod
 ```
 
-**How profiles interact with identity selection:**
-- Profile defines `github-oidc-identity` with `default: true`
-- Without `--identity` or `ATMOS_IDENTITY`: Uses `github-oidc-identity` from profile
+**How profiles interact with identity selection (with `auth.defaults`):**
+- Profile sets `auth.defaults.identity: github-oidc-identity` (selected default)
+- Without `--identity` or `ATMOS_IDENTITY`: Uses `github-oidc-identity` automatically
 - With `--identity different-identity`: Overrides profile default, uses `different-identity`
 - With `ATMOS_IDENTITY=different-identity`: Overrides profile default, uses `different-identity`
 
+**Precedence chain:**
+```
+1. --identity=explicit         (CLI flag with value)
+2. ATMOS_IDENTITY             (environment variable)
+3. auth.defaults.identity     (selected default from profile)
+4. identity.default: true     (favorites - interactive or error)
+5. Error: no default identity
+```
+
+**Why this works in CI:**
+- `auth.defaults.identity` provides deterministic selection (no TTY needed)
+- No `identity.default: true` means no "multiple defaults" errors
+- Profile encapsulates all CI-specific auth configuration
+
 #### Developer Profile Example
+
+**Note:** This example shows how profiles can use `auth.defaults.identity` to set a sensible default while still allowing multiple identities for quick switching.
 
 ```yaml
 # profiles/developer/auth.yaml
 auth:
+  # Selected default for developer profile
+  defaults:
+    identity: developer-sandbox  # Automatic when --profile developer
+    session:
+      duration: "8h"              # Shorter sessions for development
+
   identities:
     developer-sandbox:
       kind: aws/permission-set
-      default: true  # This becomes default when developer profile is active
+      default: true  # Also mark as favorite for --identity flag
       via:
         provider: aws-sso-dev
       principal:
         account_id: "999888777666"
         permission_set: DeveloperAccess
 
+    developer-prod:
+      kind: aws/permission-set
+      default: true  # Favorite for quick switching with --identity
+      via:
+        provider: aws-sso-prod
+      principal:
+        account_id: "123456789012"
+        permission_set: ReadOnlyAccess
+
   providers:
     aws-sso-dev:
       kind: aws/sso
       region: us-east-2
       start_url: https://dev.awsapps.com/start
+    aws-sso-prod:
+      kind: aws/sso
+      region: us-east-1
+      start_url: https://prod.awsapps.com/start
 
 # profiles/developer/logging.yaml
 logs:
@@ -836,9 +884,21 @@ Usage:
 # Developer's .zshrc or .bashrc
 export ATMOS_PROFILE=developer
 
-# Or per-command
+# Or per-command (uses developer-sandbox automatically)
 atmos terraform plan vpc -s dev --profile developer
+
+# Interactive identity selection from favorites (shows developer-sandbox and developer-prod)
+atmos terraform plan vpc -s dev --profile developer --identity
+
+# Explicit identity override
+atmos terraform plan vpc -s dev --profile developer --identity developer-prod
 ```
+
+**Benefits of combining `auth.defaults.identity` with `identity.default: true`:**
+- `auth.defaults.identity: developer-sandbox` - Automatic default (no prompts)
+- `identity.default: true` on both identities - Marks as favorites
+- `--identity` flag without value - Shows interactive selector with favorites
+- Best of both worlds: Sensible default + quick switching
 
 #### Debug Profile Example
 
@@ -1141,12 +1201,109 @@ Using value from last profile: debug (Trace)
 4. **Performance**: Profile loading adds <100ms overhead for typical profiles
 5. **Documentation**: Profile documentation page among top 10 most visited docs pages
 
-## Dependencies
+## Integration with Auth Default Settings
+
+**Dependency**: This feature depends on the [Auth Default Settings PRD](./auth-default-settings.md) which introduces `auth.defaults.identity` for deterministic identity selection.
+
+### Problem Solved
+
+**Without `auth.defaults.identity`:**
+```yaml
+# Base config with multiple favorites
+auth:
+  identities:
+    developer-sandbox:
+      default: true  # Favorite
+    developer-prod:
+      default: true  # Favorite
+
+# In TTY: Interactive selection (works)
+# In CI: Error - "multiple default identities" (breaks)
+```
+
+**With `auth.defaults.identity` in profiles:**
+```yaml
+# profiles/ci/auth.yaml
+auth:
+  defaults:
+    identity: github-oidc-identity  # Deterministic selection
+
+# In TTY: Uses github-oidc-identity (works)
+# In CI: Uses github-oidc-identity (works)
+```
+
+### How Profiles Use Auth Defaults
+
+**Pattern 1: CI Profile (Non-Interactive)**
+```yaml
+# profiles/ci/auth.yaml
+auth:
+  defaults:
+    identity: github-oidc-identity  # Required for CI
+    # No identity.default: true needed
+```
+
+**Pattern 2: Developer Profile (Interactive + Default)**
+```yaml
+# profiles/developer/auth.yaml
+auth:
+  defaults:
+    identity: developer-sandbox     # Automatic default
+  identities:
+    developer-sandbox:
+      default: true                  # Also mark as favorite
+    developer-prod:
+      default: true                  # Favorite for quick switching
+```
+
+**Pattern 3: Base Config (Favorites Only)**
+```yaml
+# atmos.yaml (no profile active)
+auth:
+  # No auth.defaults - use favorites pattern
+  identities:
+    identity-a:
+      default: true  # Favorite
+    identity-b:
+      default: true  # Favorite
+  # TTY: Interactive selection
+  # CI: Error (intentional - forces explicit --identity or profile usage)
+```
+
+### Precedence with Profiles
+
+When profiles are active, the full precedence chain is:
+
+```
+1. --identity=explicit            (CLI flag)
+2. ATMOS_IDENTITY                 (env var)
+3. auth.defaults.identity         (from active profile) ← Profiles use this
+4. identity.default: true         (favorites from base or profile)
+5. Error: no default identity
+```
+
+**Example with multiple profiles:**
+```bash
+# Both profiles set auth.defaults.identity
+atmos terraform plan --profile developer,ci
+# Result: Uses ci profile's auth.defaults.identity (rightmost wins)
+```
+
+### Key Benefits for Profiles
+
+1. **Deterministic CI behavior** - No "multiple defaults" errors
+2. **Profile encapsulation** - Auth config stays within profile
+3. **Base config flexibility** - Can use favorites without breaking CI
+4. **Clear override** - Profile's selected default overrides base favorites
+5. **Backward compatible** - Existing `identity.default: true` still works
+
+## Technical Dependencies
 
 - Existing configuration loading logic in `pkg/config/load.go`
 - Viper configuration merging behavior
 - Cobra CLI flag parsing in `cmd/root.go`
 - JSON schema validation in `pkg/datafetcher/schema/`
+- **[Auth Default Settings PRD](./auth-default-settings.md)** - `auth.defaults` schema and logic
 
 ## Risks and Mitigations
 
