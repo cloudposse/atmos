@@ -29,20 +29,24 @@ func TestWorkdirGitRootDetection(t *testing.T) {
 		}
 	}
 
-	// Get current working directory to restore later.
+	// Get absolute path to fixtures with atmos.yaml at root.
 	originalWd, err := os.Getwd()
 	require.NoError(t, err)
 
-	// Path to fixtures with git repo and atmos.yaml at root.
 	fixturesDir := filepath.Join(originalWd, "fixtures", "scenarios", "basic")
-	require.DirExists(t, fixturesDir, "fixtures directory should exist")
+	absFixturesDir, err := filepath.Abs(fixturesDir)
+	require.NoError(t, err)
+	require.DirExists(t, absFixturesDir, "fixtures directory should exist")
 
 	// Verify atmos.yaml exists at fixtures root.
-	atmosYamlPath := filepath.Join(fixturesDir, "atmos.yaml")
+	atmosYamlPath := filepath.Join(absFixturesDir, "atmos.yaml")
 	require.FileExists(t, atmosYamlPath, "atmos.yaml should exist at fixtures root")
 
+	// Set TEST_GIT_ROOT to simulate git root detection.
+	t.Setenv("TEST_GIT_ROOT", absFixturesDir)
+
 	// Path to a terraform component subdirectory (simulating user's scenario).
-	componentDir := filepath.Join(fixturesDir, "components", "terraform", "mock")
+	componentDir := filepath.Join(absFixturesDir, "components", "terraform", "mock")
 	require.DirExists(t, componentDir, "component directory should exist")
 
 	tests := []struct {
@@ -117,19 +121,13 @@ func TestWorkdirGitRootDetection(t *testing.T) {
 				return
 			}
 
-			// Change to the starting directory for this test.
-			err := os.Chdir(tt.startDir)
-			require.NoError(t, err)
-
-			// Ensure we restore working directory after test.
-			t.Cleanup(func() {
-				_ = os.Chdir(originalWd)
-			})
+			// Use t.Chdir() to change to the starting directory (automatic cleanup).
+			t.Chdir(tt.startDir)
 
 			// Log current directory for debugging.
 			currentDir, _ := os.Getwd()
 			t.Logf("Running from directory: %s", currentDir)
-			t.Logf("Git root (should be): %s", fixturesDir)
+			t.Logf("Git root (simulated via TEST_GIT_ROOT): %s", absFixturesDir)
 
 			// Run the command.
 			cmd := atmosRunner.Command(tt.command...)
@@ -177,36 +175,29 @@ func TestWorkdirGitRootDetectionWithChdir(t *testing.T) {
 		}
 	}
 
-	// Get current working directory to restore later.
+	// Get absolute path to fixtures with atmos.yaml at root.
 	originalWd, err := os.Getwd()
 	require.NoError(t, err)
 
-	// Path to fixtures with git repo and atmos.yaml at root.
 	fixturesDir := filepath.Join(originalWd, "fixtures", "scenarios", "basic")
-	require.DirExists(t, fixturesDir, "fixtures directory should exist")
+	absFixturesDir, err := filepath.Abs(fixturesDir)
+	require.NoError(t, err)
+	require.DirExists(t, absFixturesDir, "fixtures directory should exist")
 
 	// Verify atmos.yaml exists at fixtures root.
-	atmosYamlPath := filepath.Join(fixturesDir, "atmos.yaml")
+	atmosYamlPath := filepath.Join(absFixturesDir, "atmos.yaml")
 	require.FileExists(t, atmosYamlPath, "atmos.yaml should exist at fixtures root")
 
 	// Path to a terraform component subdirectory.
-	componentDir := filepath.Join(fixturesDir, "components", "terraform", "mock")
+	componentDir := filepath.Join(absFixturesDir, "components", "terraform", "mock")
 	require.DirExists(t, componentDir, "component directory should exist")
 
 	t.Run("terraform plan with --chdir workaround from component directory", func(t *testing.T) {
-		// Change to component directory.
-		err := os.Chdir(componentDir)
-		require.NoError(t, err)
-		t.Cleanup(func() {
-			_ = os.Chdir(originalWd)
-		})
-
-		// Get absolute path to fixtures (git root).
-		absFixturesPath, err := filepath.Abs(fixturesDir)
-		require.NoError(t, err)
+		// Use t.Chdir() to change to component directory (automatic cleanup).
+		t.Chdir(componentDir)
 
 		// Run with --chdir pointing to git root (the workaround).
-		cmd := atmosRunner.Command("--chdir", absFixturesPath, "terraform", "plan", "mycomponent", "--stack", "nonprod")
+		cmd := atmosRunner.Command("--chdir", absFixturesDir, "terraform", "plan", "mycomponent", "--stack", "nonprod")
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
