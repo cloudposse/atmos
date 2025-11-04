@@ -113,6 +113,7 @@ func WriteTerraformBackendConfigToFileAsHcl(
 	for _, name := range backendConfigSortedKeys {
 		v := backendConfig[name]
 
+		//nolint:nestif // Type switch complexity is unavoidable for HCL value handling
 		if v == nil {
 			backendBlockBody.SetAttributeValue(name, cty.NilVal)
 		} else if i, ok := v.(string); ok {
