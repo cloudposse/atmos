@@ -11,6 +11,7 @@ package container
 
 import (
 	context "context"
+	io "io"
 	reflect "reflect"
 	time "time"
 
@@ -144,17 +145,17 @@ func (mr *MockRuntimeMockRecorder) List(ctx, filters any) *gomock.Call {
 }
 
 // Logs mocks base method.
-func (m *MockRuntime) Logs(ctx context.Context, containerID string, follow bool, tail string) error {
+func (m *MockRuntime) Logs(ctx context.Context, containerID string, follow bool, tail string, stdout, stderr io.Writer) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Logs", ctx, containerID, follow, tail)
+	ret := m.ctrl.Call(m, "Logs", ctx, containerID, follow, tail, stdout, stderr)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Logs indicates an expected call of Logs.
-func (mr *MockRuntimeMockRecorder) Logs(ctx, containerID, follow, tail any) *gomock.Call {
+func (mr *MockRuntimeMockRecorder) Logs(ctx, containerID, follow, tail, stdout, stderr any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logs", reflect.TypeOf((*MockRuntime)(nil).Logs), ctx, containerID, follow, tail)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logs", reflect.TypeOf((*MockRuntime)(nil).Logs), ctx, containerID, follow, tail, stdout, stderr)
 }
 
 // Pull mocks base method.
