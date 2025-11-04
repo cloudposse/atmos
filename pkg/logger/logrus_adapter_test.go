@@ -31,40 +31,48 @@ func TestLogrusAdapter_Write_PreservesLogLevel(t *testing.T) {
 		message string
 	}{
 		{
-			name:    "error level message",
-			message: "level=error msg=\"authentication failed\" provider=browser\n",
+			name:    "error level message with structured fields",
+			message: `{"level":"error","msg":"authentication failed","provider":"browser"}` + "\n",
 		},
 		{
 			name:    "fatal level message",
-			message: "level=fatal msg=\"critical error\" component=saml2aws\n",
+			message: `{"level":"fatal","msg":"critical error","component":"saml2aws"}` + "\n",
 		},
 		{
 			name:    "panic level message",
-			message: "level=panic msg=\"panic occurred\"\n",
+			message: `{"level":"panic","msg":"panic occurred"}` + "\n",
 		},
 		{
-			name:    "warn level message",
-			message: "level=warn msg=\"retrying connection\" attempts=3\n",
+			name:    "warning level message with structured fields",
+			message: `{"level":"warning","msg":"retrying connection","attempts":3}` + "\n",
+		},
+		{
+			name:    "warn level message (alternate spelling)",
+			message: `{"level":"warn","msg":"warning message"}` + "\n",
 		},
 		{
 			name:    "info level message",
-			message: "level=info msg=\"authentication successful\"\n",
+			message: `{"level":"info","msg":"authentication successful"}` + "\n",
 		},
 		{
-			name:    "debug level message",
-			message: "level=debug msg=\"processing request\" url=https://idp.example.com\n",
+			name:    "debug level message with URL field",
+			message: `{"level":"debug","msg":"processing request","url":"https://idp.example.com"}` + "\n",
 		},
 		{
 			name:    "trace level message",
-			message: "level=trace msg=\"detailed trace information\"\n",
+			message: `{"level":"trace","msg":"detailed trace information"}` + "\n",
 		},
 		{
 			name:    "message without level defaults to info",
-			message: "msg=\"some message without level\"\n",
+			message: `{"msg":"some message without level"}` + "\n",
 		},
 		{
 			name:    "mixed case level",
-			message: "LEVEL=ERROR msg=\"error in mixed case\"\n",
+			message: `{"level":"ERROR","msg":"error in mixed case"}` + "\n",
+		},
+		{
+			name:    "non-JSON message fallback",
+			message: "plain text log message\n",
 		},
 	}
 
@@ -110,13 +118,11 @@ func TestConfigureLogrusForAtmos(t *testing.T) {
 			// Configure logrus.
 			ConfigureLogrusForAtmos()
 
-			// Verify formatter is TextFormatter with correct settings.
-			formatter, ok := logrus.StandardLogger().Formatter.(*logrus.TextFormatter)
-			assert.True(t, ok, "Formatter should be TextFormatter")
+			// Verify formatter is JSONFormatter with correct settings.
+			formatter, ok := logrus.StandardLogger().Formatter.(*logrus.JSONFormatter)
+			assert.True(t, ok, "Formatter should be JSONFormatter")
 			if formatter != nil {
 				assert.True(t, formatter.DisableTimestamp, "DisableTimestamp should be true")
-				assert.True(t, formatter.DisableColors, "DisableColors should be true")
-				assert.True(t, formatter.DisableQuote, "DisableQuote should be true")
 			}
 
 			// Verify level matches Atmos level.
