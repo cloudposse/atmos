@@ -72,33 +72,63 @@ Historical context from codebase investigation:
 
 ## Proposed Solution
 
-### Git-Aligned Discovery Behavior
+### Two Separate Environment Variables
 
-Add git repository root to the configuration search path, following Git's model for repository discovery.
+We need two distinct controls for configuration discovery:
 
-### Environment Variable: `ATMOS_DISCOVERY_ACROSS_FILESYSTEM`
+#### 1. `ATMOS_CONFIG_GIT_ROOT_DISCOVERY` - Git Root Discovery Control
 
-**Name rationale:** Matches Git's `GIT_DISCOVERY_ACROSS_FILESYSTEM` environment variable exactly, making the behavior intuitive for users familiar with Git.
+**Purpose:** Controls whether Atmos searches for `atmos.yaml` at the git repository root.
 
-**Git's variables for reference:**
-- `GIT_DISCOVERY_ACROSS_FILESYSTEM` - Boolean to enable crossing filesystem boundaries (default: false)
-- `GIT_CEILING_DIRECTORIES` - Colon-separated paths to stop searching (performance optimization)
+**Default:** `true` (ENABLED by default)
 
-**Atmos implementation:**
+**Rationale:** This matches user expectations - Git-like tools naturally find configuration at repository root. Users expect this behavior by default.
 
 ```bash
-# Default behavior (not set or false) - Current behavior maintained
-# Searches only: embedded → system → home → current dir → env → args
-ATMOS_DISCOVERY_ACROSS_FILESYSTEM=false
+# Default behavior (git root discovery ENABLED)
+cd /path/to/repo/components/terraform/vpc
+atmos terraform plan vpc --stack dev
+# Works! Finds atmos.yaml at /path/to/repo/
 
-# Enable git root discovery (opt-in)
-# Searches: embedded → system → home → current dir → git root → env → args
-ATMOS_DISCOVERY_ACROSS_FILESYSTEM=true
+# Disable git root discovery
+export ATMOS_CONFIG_GIT_ROOT_DISCOVERY=false
+atmos terraform plan vpc --stack dev
+# Fails - only looks in current directory
 ```
+
+#### 2. `ATMOS_DISCOVERY_ACROSS_FILESYSTEM` - Broad Search Control
+
+**Purpose:** Controls whether Atmos searches across multiple filesystem locations (system dir, home dir, etc.) or restricts search to current directory only.
+
+**Default:** `true` (ENABLED by default - searches all locations)
+
+**Rationale:** This is a performance/security control for environments where you want to restrict config discovery to the current working directory only.
+
+```bash
+# Default behavior (searches all locations)
+# embedded → system → home → current dir → git root → env → args
+atmos terraform plan
+
+# Restrict to current directory only
+export ATMOS_DISCOVERY_ACROSS_FILESYSTEM=false
+# Only searches: embedded → current dir → env → args
+# Skips: system dir, home dir, git root
+atmos terraform plan
+```
+
+### Git's Terminology for Reference
+
+Git uses these environment variables:
+- **`GIT_DISCOVERY_ACROSS_FILESYSTEM`** - Controls whether Git crosses filesystem boundaries during repository discovery (default: false)
+- **`GIT_CEILING_DIRECTORIES`** - Limits how far Git searches for `.git` directory (performance optimization)
+
+Our naming:
+- **`ATMOS_CONFIG_GIT_ROOT_DISCOVERY`** - Atmos-specific control for git root config lookup (default: true)
+- **`ATMOS_DISCOVERY_ACROSS_FILESYSTEM`** - Broader control, inspired by Git but different purpose (default: true)
 
 ### Updated Search Path Order
 
-With `ATMOS_DISCOVERY_ACROSS_FILESYSTEM=true`:
+**Default behavior** (both variables true or unset):
 
 1. **Embedded configuration** - Default configuration
 2. **System directory** - `/usr/local/etc/atmos` or `%LOCALAPPDATA%/atmos`
@@ -108,7 +138,21 @@ With `ATMOS_DISCOVERY_ACROSS_FILESYSTEM=true`:
 6. **Environment variables** - `ATMOS_*` overrides
 7. **Command-line arguments** - Final overrides
 
-**Why this order:** Git root comes *after* current directory so that local overrides (e.g., for testing) still work. This matches the principle of "most specific wins" in configuration precedence.
+**With `ATMOS_DISCOVERY_ACROSS_FILESYSTEM=false`** (restricted mode):
+
+1. **Embedded configuration** - Default configuration
+2. **Current working directory** - `./atmos.yaml` (only filesystem location searched)
+3. **Git repository root** - `<git-root>/atmos.yaml` (if `ATMOS_CONFIG_GIT_ROOT_DISCOVERY=true`)
+4. **Environment variables** - `ATMOS_*` overrides
+5. **Command-line arguments** - Final overrides
+
+Skips: system directory, home directory
+
+**With `ATMOS_CONFIG_GIT_ROOT_DISCOVERY=false`** (disable git root):
+
+Same as default behavior but **skips step 5** (git repository root search).
+
+**Why git root comes after current directory:** Local overrides (e.g., for testing) still work. This matches the principle of "most specific wins" in configuration precedence.
 
 ### Implementation Plan
 
@@ -118,12 +162,13 @@ Location: `pkg/config/load.go`
 
 ```go
 // readGitRootConfig attempts to find and load atmos.yaml from the git repository root.
-// Only runs if ATMOS_DISCOVERY_ACROSS_FILESYSTEM is set to "true" or "1".
+// Only runs if ATMOS_CONFIG_GIT_ROOT_DISCOVERY is not explicitly set to "false" or "0".
 func readGitRootConfig(v *viper.Viper) error {
-    // Check if discovery is enabled.
-    discoveryEnabled := os.Getenv("ATMOS_DISCOVERY_ACROSS_FILESYSTEM")
-    if discoveryEnabled != "true" && discoveryEnabled != "1" {
-        return nil // Skip git root discovery
+    // Check if git root discovery is disabled.
+    gitRootDiscovery := os.Getenv("ATMOS_CONFIG_GIT_ROOT_DISCOVERY")
+    if gitRootDiscovery == "false" || gitRootDiscovery == "0" {
+        log.Debug("Git root discovery disabled via ATMOS_CONFIG_GIT_ROOT_DISCOVERY")
+        return nil
     }
 
     // Use existing ProcessTagGitRoot() to find repository root.
@@ -147,31 +192,44 @@ func readGitRootConfig(v *viper.Viper) error {
 }
 ```
 
-#### 2. Update `InitCliConfig()` Call Chain
+#### 2. Update `InitCliConfig()` to Respect Both Variables
 
-Add `readGitRootConfig()` after `readWorkDirConfig()`:
+Modify config loading to respect `ATMOS_DISCOVERY_ACROSS_FILESYSTEM`:
 
 ```go
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
     // ... existing code ...
 
-    // Read configs from search paths in order.
+    // Check if broad discovery is restricted.
+    discoveryAcrossFS := os.Getenv("ATMOS_DISCOVERY_ACROSS_FILESYSTEM")
+    restrictedMode := discoveryAcrossFS == "false" || discoveryAcrossFS == "0"
+
+    // Always read embedded config.
     if err := readEmbeddedConfig(v); err != nil {
         return atmosConfig, err
     }
-    if err := readSystemDirConfig(v); err != nil {
-        return atmosConfig, err
+
+    // In restricted mode, skip system and home directories.
+    if !restrictedMode {
+        if err := readSystemDirConfig(v); err != nil {
+            return atmosConfig, err
+        }
+        if err := readHomeDirConfig(v); err != nil {
+            return atmosConfig, err
+        }
     }
-    if err := readHomeDirConfig(v); err != nil {
-        return atmosConfig, err
-    }
+
+    // Always read current working directory.
     if err := readWorkDirConfig(v); err != nil {
         return atmosConfig, err
     }
-    // NEW: Add git root discovery.
+
+    // NEW: Add git root discovery (controlled by separate variable).
     if err := readGitRootConfig(v); err != nil {
         return atmosConfig, err
     }
+
+    // Always read environment variables and CLI args.
     if err := readEnvVars(v); err != nil {
         return atmosConfig, err
     }
@@ -198,29 +256,61 @@ No changes needed here - testing infrastructure is already in place.
 
 #### 4. Update Tests
 
-Modify `tests/cli_workdir_git_root_test.go` to:
-
-1. Enable discovery: `t.Setenv("ATMOS_DISCOVERY_ACROSS_FILESYSTEM", "true")`
-2. Update assertions to expect **success** instead of failure
-3. Verify that `atmos.yaml` is found from subdirectories
+Modify `tests/cli_workdir_git_root_test.go` to test both variables:
 
 ```go
 func TestWorkdirGitRootDetection(t *testing.T) {
-    // ... setup code ...
-
-    // Enable git root discovery.
-    t.Setenv("ATMOS_DISCOVERY_ACROSS_FILESYSTEM", "true")
-    t.Setenv("TEST_GIT_ROOT", absFixturesDir)
-
-    t.Run("terraform plan from component directory", func(t *testing.T) {
+    // Test 1: Default behavior (git root discovery enabled by default).
+    t.Run("default behavior - git root discovery enabled", func(t *testing.T) {
+        t.Setenv("TEST_GIT_ROOT", absFixturesDir)
         t.Chdir(componentDir)
 
         cmd := atmosRunner.Command("terraform", "plan", "mycomponent", "--stack", "nonprod")
         stdout, stderr, err := cmd.Run()
 
-        // Should now SUCCEED - atmos.yaml found via git root.
+        // Should SUCCEED - atmos.yaml found via git root by default.
         assert.NotContains(t, stderr, "atmos.yaml CLI config file was not found")
-        assert.NoError(t, err) // Component-level errors are OK, config must be found.
+    })
+
+    // Test 2: Git root discovery explicitly disabled.
+    t.Run("with ATMOS_CONFIG_GIT_ROOT_DISCOVERY=false", func(t *testing.T) {
+        t.Setenv("ATMOS_CONFIG_GIT_ROOT_DISCOVERY", "false")
+        t.Setenv("TEST_GIT_ROOT", absFixturesDir)
+        t.Chdir(componentDir)
+
+        cmd := atmosRunner.Command("terraform", "plan", "mycomponent", "--stack", "nonprod")
+        stdout, stderr, err := cmd.Run()
+
+        // Should FAIL - git root discovery disabled.
+        assert.Contains(t, stderr, "atmos.yaml CLI config file was not found")
+    })
+
+    // Test 3: Restricted filesystem discovery mode.
+    t.Run("with ATMOS_DISCOVERY_ACROSS_FILESYSTEM=false", func(t *testing.T) {
+        t.Setenv("ATMOS_DISCOVERY_ACROSS_FILESYSTEM", "false")
+        t.Setenv("TEST_GIT_ROOT", absFixturesDir)
+        t.Chdir(componentDir)
+
+        cmd := atmosRunner.Command("terraform", "plan", "mycomponent", "--stack", "nonprod")
+        stdout, stderr, err := cmd.Run()
+
+        // Git root discovery still works (separate control).
+        // Only system/home dirs are skipped.
+        assert.NotContains(t, stderr, "atmos.yaml CLI config file was not found")
+    })
+
+    // Test 4: Both disabled.
+    t.Run("with both variables false", func(t *testing.T) {
+        t.Setenv("ATMOS_CONFIG_GIT_ROOT_DISCOVERY", "false")
+        t.Setenv("ATMOS_DISCOVERY_ACROSS_FILESYSTEM", "false")
+        t.Setenv("TEST_GIT_ROOT", absFixturesDir)
+        t.Chdir(componentDir)
+
+        cmd := atmosRunner.Command("terraform", "plan", "mycomponent", "--stack", "nonprod")
+        stdout, stderr, err := cmd.Run()
+
+        // Should FAIL - only current dir searched, no git root.
+        assert.Contains(t, stderr, "atmos.yaml CLI config file was not found")
     })
 }
 ```
@@ -232,19 +322,14 @@ Add to `website/docs/cli/configuration.mdx`:
 ```markdown
 ## Configuration Discovery
 
-Atmos searches for `atmos.yaml` in multiple locations...
+Atmos searches for `atmos.yaml` in multiple locations. Two environment variables control this behavior:
 
 ### Git Repository Root Discovery
 
-By default, Atmos only searches for `atmos.yaml` in the current working directory.
-To enable automatic discovery of configuration files at the git repository root
-(similar to how Git itself works), set:
+**Default:** Enabled
 
-```bash
-export ATMOS_DISCOVERY_ACROSS_FILESYSTEM=true
-```
-
-This allows you to run Atmos commands from any subdirectory within your repository:
+By default, Atmos automatically searches for `atmos.yaml` at the git repository root,
+allowing you to run commands from any subdirectory (similar to how Git itself works).
 
 ```bash
 # Repository structure
@@ -252,22 +337,79 @@ This allows you to run Atmos commands from any subdirectory within your reposito
 ├── atmos.yaml
 └── components/terraform/vpc/
 
-# Works from subdirectories when discovery is enabled
+# Works from subdirectories by default
 cd /path/to/repo/components/terraform/vpc
-ATMOS_DISCOVERY_ACROSS_FILESYSTEM=true atmos terraform plan vpc --stack dev
+atmos terraform plan vpc --stack dev  # Finds atmos.yaml at repo root
 ```
 
-**Note:** This variable name matches Git's `GIT_DISCOVERY_ACROSS_FILESYSTEM` for consistency.
+To **disable** git root discovery:
+
+```bash
+export ATMOS_CONFIG_GIT_ROOT_DISCOVERY=false
+```
+
+### Filesystem Discovery Control
+
+**Default:** Enabled
+
+By default, Atmos searches multiple locations for configuration:
+- Embedded configuration
+- System directory (`/usr/local/etc/atmos`)
+- Home directory (`~/.atmos/`)
+- Current working directory
+- Git repository root
+- Environment variables
+- Command-line arguments
+
+To **restrict** discovery to only current directory (and git root if enabled):
+
+```bash
+export ATMOS_DISCOVERY_ACROSS_FILESYSTEM=false
+```
+
+This skips system and home directory searches, useful for:
+- CI/CD environments with strict security requirements
+- Performance optimization when system/home configs aren't needed
+- Ensuring only project-local configuration is used
+
+### Combined Examples
+
+```bash
+# Default: Full discovery (recommended for development)
+atmos terraform plan
+
+# Restricted mode: Only current dir + git root
+export ATMOS_DISCOVERY_ACROSS_FILESYSTEM=false
+atmos terraform plan
+
+# Minimal mode: Only current dir (no git root, no system/home)
+export ATMOS_DISCOVERY_ACROSS_FILESYSTEM=false
+export ATMOS_CONFIG_GIT_ROOT_DISCOVERY=false
+atmos terraform plan
+
+# Disable only git root (keep system/home search)
+export ATMOS_CONFIG_GIT_ROOT_DISCOVERY=false
+atmos terraform plan
+```
 ```
 
 ### Backward Compatibility
 
-**No breaking changes:**
+**Breaking change (justified):**
 
-- Default behavior remains unchanged (discovery disabled)
-- Users must opt-in via environment variable
-- All existing configurations continue to work
-- `--chdir` flag still works and takes precedence (command-line args override all)
+- **Before:** Users running Atmos from subdirectories would get "atmos.yaml not found" error
+- **After:** Git root discovery is **enabled by default** - configs are found automatically
+
+**Why this is acceptable:**
+1. Matches user expectations (Git-like behavior)
+2. Reduces need for `--chdir` workarounds
+3. Can be disabled if needed: `ATMOS_CONFIG_GIT_ROOT_DISCOVERY=false`
+4. Improves developer experience significantly
+
+**Migration path:**
+- No migration needed for users with `atmos.yaml` in project root
+- Users who relied on "not found" behavior can set `ATMOS_CONFIG_GIT_ROOT_DISCOVERY=false`
+- `--chdir` flag still works and takes precedence
 
 ### Alternative Approaches Considered
 
@@ -275,28 +417,24 @@ ATMOS_DISCOVERY_ACROSS_FILESYSTEM=true atmos terraform plan vpc --stack dev
 
 **Rejected reason:** Circular dependency - can't use config file to control config file discovery.
 
-```yaml
-# This doesn't work - we need to find atmos.yaml to read this setting
-settings:
-  config:
-    auto_discover_git_root: true
-```
+#### ❌ Option 2: Make git root discovery opt-in (disabled by default)
 
-#### ❌ Option 2: Always enable git root discovery
+**Rejected reason:** Forces users to continue using `--chdir` workarounds. The whole point is to make Atmos work like Git out of the box.
 
-**Rejected reason:** Could break existing workflows that rely on current behavior. Opt-in is safer.
+#### ❌ Option 3: Use `ATMOS_DISCOVERY_ACROSS_FILESYSTEM` for both purposes
 
-#### ❌ Option 3: Use `ATMOS_DISABLE_GIT_ROOT_DISCOVERY`
+**Rejected reason:** Conflates two separate concerns:
+- Git root discovery (should be default behavior)
+- Broad filesystem search control (performance/security optimization)
 
-**Rejected reason:** Negative control (disable) is less intuitive than positive control (enable). Also doesn't match Git's terminology.
-
-#### ✅ Option 4: Use `ATMOS_DISCOVERY_ACROSS_FILESYSTEM` (SELECTED)
+#### ✅ Option 4: Two separate variables (SELECTED)
 
 **Selected reason:**
-- Matches Git's exact terminology
-- Positive control (enable) is more intuitive
-- Leaves door open for future `ATMOS_CEILING_DIRECTORIES` if needed
-- Users familiar with Git immediately understand it
+- **`ATMOS_CONFIG_GIT_ROOT_DISCOVERY`** - Affirmative control for git root (default: true)
+- **`ATMOS_DISCOVERY_ACROSS_FILESYSTEM`** - Broader discovery control (default: true)
+- Clear separation of concerns
+- Flexible control for different use cases
+- Default behavior matches user expectations
 
 ## Testing Strategy
 
@@ -308,28 +446,35 @@ Add tests to `pkg/config/load_test.go`:
 func TestReadGitRootConfig(t *testing.T) {
     tests := []struct {
         name                string
-        discoveryEnabled    string
+        gitRootDiscovery    string
         gitRootExists       bool
         configAtGitRoot     bool
         expectConfigLoaded  bool
     }{
         {
-            name:               "discovery disabled - skip git root",
-            discoveryEnabled:   "false",
-            gitRootExists:      true,
-            configAtGitRoot:    true,
-            expectConfigLoaded: false,
-        },
-        {
-            name:               "discovery enabled - load from git root",
-            discoveryEnabled:   "true",
+            name:               "default (enabled) - load from git root",
+            gitRootDiscovery:   "",  // Unset = enabled
             gitRootExists:      true,
             configAtGitRoot:    true,
             expectConfigLoaded: true,
         },
         {
-            name:               "discovery enabled - no git root",
-            discoveryEnabled:   "true",
+            name:               "explicitly enabled - load from git root",
+            gitRootDiscovery:   "true",
+            gitRootExists:      true,
+            configAtGitRoot:    true,
+            expectConfigLoaded: true,
+        },
+        {
+            name:               "disabled - skip git root",
+            gitRootDiscovery:   "false",
+            gitRootExists:      true,
+            configAtGitRoot:    true,
+            expectConfigLoaded: false,
+        },
+        {
+            name:               "enabled - no git root available",
+            gitRootDiscovery:   "true",
             gitRootExists:      false,
             configAtGitRoot:    false,
             expectConfigLoaded: false,
@@ -342,61 +487,86 @@ func TestReadGitRootConfig(t *testing.T) {
         })
     }
 }
+
+func TestDiscoveryAcrossFilesystem(t *testing.T) {
+    tests := []struct {
+        name                    string
+        discoveryAcrossFS       string
+        expectSystemSearch      bool
+        expectHomeSearch        bool
+        expectGitRootSearch     bool
+    }{
+        {
+            name:                "default (enabled) - search all",
+            discoveryAcrossFS:   "",
+            expectSystemSearch:  true,
+            expectHomeSearch:    true,
+            expectGitRootSearch: true,
+        },
+        {
+            name:                "disabled - skip system/home",
+            discoveryAcrossFS:   "false",
+            expectSystemSearch:  false,
+            expectHomeSearch:    false,
+            expectGitRootSearch: true, // Git root is separate control
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            // Test implementation
+        })
+    }
+}
 ```
 
 ### Integration Tests
 
-Modify existing `tests/cli_workdir_git_root_test.go`:
-
-```go
-func TestWorkdirGitRootDetection(t *testing.T) {
-    // Test with discovery enabled.
-    t.Run("with ATMOS_DISCOVERY_ACROSS_FILESYSTEM=true", func(t *testing.T) {
-        t.Setenv("ATMOS_DISCOVERY_ACROSS_FILESYSTEM", "true")
-        t.Setenv("TEST_GIT_ROOT", absFixturesDir)
-        // Test should PASS - config found.
-    })
-
-    // Test with discovery disabled (default).
-    t.Run("with ATMOS_DISCOVERY_ACROSS_FILESYSTEM=false", func(t *testing.T) {
-        t.Setenv("ATMOS_DISCOVERY_ACROSS_FILESYSTEM", "false")
-        t.Setenv("TEST_GIT_ROOT", absFixturesDir)
-        // Test should FAIL - config not found (current behavior).
-    })
-}
-```
+Comprehensive tests in `tests/cli_workdir_git_root_test.go` covering all combinations.
 
 ### Manual Testing
 
 ```bash
-# Setup
-cd ~/Dev/cloudposse/infra/infra-live
+# Test 1: Default behavior (should work from subdirectory)
+cd /path/to/repo/components/terraform/vpc
+atmos terraform plan vpc --stack dev
+# Expected: Success - finds atmos.yaml at repo root
 
-# Test 1: Default behavior (discovery disabled)
-cd components/terraform/vpc
+# Test 2: Disable git root discovery
+export ATMOS_CONFIG_GIT_ROOT_DISCOVERY=false
 atmos terraform plan vpc --stack dev
 # Expected: Error - atmos.yaml not found
 
-# Test 2: Enable discovery
-export ATMOS_DISCOVERY_ACROSS_FILESYSTEM=true
+# Test 3: Restricted filesystem mode
+unset ATMOS_CONFIG_GIT_ROOT_DISCOVERY
+export ATMOS_DISCOVERY_ACROSS_FILESYSTEM=false
 atmos terraform plan vpc --stack dev
-# Expected: Success - atmos.yaml found at git root
+# Expected: Success - still finds via git root (separate control)
 
-# Test 3: --chdir still works
+# Test 4: Both disabled (minimal mode)
+export ATMOS_CONFIG_GIT_ROOT_DISCOVERY=false
+export ATMOS_DISCOVERY_ACROSS_FILESYSTEM=false
+atmos terraform plan vpc --stack dev
+# Expected: Error - only current dir searched
+
+# Test 5: --chdir still works (highest precedence)
+unset ATMOS_CONFIG_GIT_ROOT_DISCOVERY
 unset ATMOS_DISCOVERY_ACROSS_FILESYSTEM
-atmos --chdir ~/Dev/cloudposse/infra/infra-live terraform plan vpc --stack dev
-# Expected: Success - explicit chdir overrides
+cd /path/to/somewhere/else
+atmos --chdir /path/to/repo terraform plan vpc --stack dev
+# Expected: Success - explicit chdir overrides everything
 ```
 
 ## Success Criteria
 
-1. ✅ Users can run Atmos from any subdirectory when `ATMOS_DISCOVERY_ACROSS_FILESYSTEM=true`
-2. ✅ Default behavior (discovery disabled) remains unchanged
-3. ✅ All existing tests pass
-4. ✅ New tests verify both enabled and disabled discovery
-5. ✅ `--chdir` flag continues to work and takes precedence
-6. ✅ Documentation updated with clear examples
-7. ✅ No breaking changes for existing users
+1. ✅ Git root discovery works by default without any configuration
+2. ✅ Users can run Atmos from any subdirectory (matches Git behavior)
+3. ✅ Can be disabled via `ATMOS_CONFIG_GIT_ROOT_DISCOVERY=false`
+4. ✅ `ATMOS_DISCOVERY_ACROSS_FILESYSTEM=false` restricts broad search
+5. ✅ All existing tests pass
+6. ✅ New tests verify both enabled and disabled modes
+7. ✅ `--chdir` flag continues to work and takes precedence
+8. ✅ Documentation updated with clear examples
 
 ## Future Enhancements
 
@@ -407,7 +577,6 @@ If users need to limit git root search (e.g., for performance with slow network 
 ```bash
 # Stop searching when reaching these directories
 export ATMOS_CEILING_DIRECTORIES="/mnt/slow-network:/mnt/tape-backup"
-export ATMOS_DISCOVERY_ACROSS_FILESYSTEM=true
 ```
 
 This would match Git's `GIT_CEILING_DIRECTORIES` exactly. Implementation would modify `readGitRootConfig()` to check ceiling directories before searching.
@@ -416,6 +585,7 @@ This would match Git's `GIT_CEILING_DIRECTORIES` exactly. Implementation would m
 - No user requests for this feature
 - Adds complexity without clear need
 - Can be added later without breaking changes
+- Git's implementation is for performance optimization with slow network drives
 
 ## References
 
@@ -429,13 +599,13 @@ This would match Git's `GIT_CEILING_DIRECTORIES` exactly. Implementation would m
 ## Implementation Checklist
 
 - [ ] Add `readGitRootConfig()` function to `pkg/config/load.go`
-- [ ] Update `InitCliConfig()` to call `readGitRootConfig()` after `readWorkDirConfig()`
-- [ ] Add unit tests to `pkg/config/load_test.go`
-- [ ] Update integration tests in `tests/cli_workdir_git_root_test.go`
+- [ ] Update `InitCliConfig()` to respect both `ATMOS_CONFIG_GIT_ROOT_DISCOVERY` and `ATMOS_DISCOVERY_ACROSS_FILESYSTEM`
+- [ ] Add unit tests to `pkg/config/load_test.go` for both variables
+- [ ] Update integration tests in `tests/cli_workdir_git_root_test.go` with all combinations
 - [ ] Update documentation in `website/docs/cli/configuration.mdx`
-- [ ] Add example to `website/docs/core-concepts/projects/configuration.mdx`
+- [ ] Add examples to `website/docs/core-concepts/projects/configuration.mdx`
 - [ ] Update schemas in `pkg/datafetcher/schema/` if needed
 - [ ] Run full test suite: `make testacc`
 - [ ] Verify no linting errors: `make lint`
-- [ ] Manual testing with real repository
-- [ ] Update CHANGELOG.md
+- [ ] Manual testing with real repository (all 5 test scenarios)
+- [ ] Update CHANGELOG.md with breaking change notice
