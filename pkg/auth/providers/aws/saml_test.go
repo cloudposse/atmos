@@ -702,6 +702,34 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 			playwrightInstalled: false,
 			expectedResult:      true,
 		},
+		{
+			name: "custom browser_type specified, skips auto-download",
+			config: &schema.Provider{
+				BrowserType: "msedge",
+			},
+			driverValue:         "Browser",
+			playwrightInstalled: false,
+			expectedResult:      false,
+		},
+		{
+			name: "custom browser_executable_path specified, skips auto-download",
+			config: &schema.Provider{
+				BrowserExecutablePath: "/usr/bin/google-chrome",
+			},
+			driverValue:         "Browser",
+			playwrightInstalled: false,
+			expectedResult:      false,
+		},
+		{
+			name: "both custom browser fields specified, skips auto-download",
+			config: &schema.Provider{
+				BrowserType:           "chrome",
+				BrowserExecutablePath: "/usr/bin/google-chrome",
+			},
+			driverValue:         "Browser",
+			playwrightInstalled: false,
+			expectedResult:      false,
+		},
 	}
 
 	for _, tt := range tests {

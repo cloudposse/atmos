@@ -522,7 +522,8 @@ func (p *samlProvider) hasValidPlaywrightDrivers(path string) bool {
 
 // shouldDownloadBrowser determines if browser drivers should be auto-downloaded.
 // It checks if the user explicitly configured download_browser_driver, otherwise
-// it intelligently enables auto-download for "Browser" driver if drivers aren't found.
+// it intelligently enables auto-download for "Browser" driver if drivers aren't found
+// and the user hasn't specified a custom browser.
 func (p *samlProvider) shouldDownloadBrowser() bool {
 	// If user explicitly set download_browser_driver, respect their choice.
 	if p.config.DownloadBrowserDriver {
@@ -538,13 +539,22 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 		return false
 	}
 
+	// If user specified a custom browser type or executable path, don't auto-download.
+	// They're using their own browser installation.
+	if p.config.BrowserType != "" || p.config.BrowserExecutablePath != "" {
+		log.Debug("Custom browser configured, skipping auto-download",
+			"browser_type", p.config.BrowserType,
+			"browser_executable_path", p.config.BrowserExecutablePath)
+		return false
+	}
+
 	// Check if Playwright drivers are already installed.
 	if p.playwrightDriversInstalled() {
 		log.Debug("Found valid Playwright drivers, auto-download disabled")
 		return false
 	}
 
-	// No valid drivers found, enable auto-download.
+	// No valid drivers found and no custom browser configured, enable auto-download.
 	log.Debug("No valid Playwright drivers found, enabling auto-download for Browser driver")
 	return true
 }
