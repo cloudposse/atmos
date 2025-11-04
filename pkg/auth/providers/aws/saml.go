@@ -184,18 +184,20 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 // createSAMLConfig creates the saml2aws configuration.
 func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
 	return &cfg.IDPAccount{
-		URL:                  p.url,
-		Username:             p.config.Username,
-		Provider:             p.getDriver(),
-		MFA:                  "Auto",
-		SkipVerify:           false,
-		Timeout:              samlTimeoutSeconds, // 30 second timeout.
-		AmazonWebservicesURN: "urn:amazon:webservices",
-		SessionDuration:      samlDefaultSessionSec, // 1 hour default.
-		Profile:              p.name,
-		Region:               p.region,
-		DownloadBrowser:      p.shouldDownloadBrowser(), // Intelligently enable based on driver availability.
-		Headless:             false,                     // Force non-headless for interactive auth.
+		URL:                   p.url,
+		Username:              p.config.Username,
+		Provider:              p.getDriver(),
+		MFA:                   "Auto",
+		SkipVerify:            false,
+		Timeout:               samlTimeoutSeconds, // 30 second timeout.
+		AmazonWebservicesURN:  "urn:amazon:webservices",
+		SessionDuration:       samlDefaultSessionSec, // 1 hour default.
+		Profile:               p.name,
+		Region:                p.region,
+		DownloadBrowser:       p.shouldDownloadBrowser(), // Intelligently enable based on driver availability.
+		BrowserType:           p.config.BrowserType,
+		BrowserExecutablePath: p.config.BrowserExecutablePath,
+		Headless:              false, // Force non-headless for interactive auth.
 	}
 }
 

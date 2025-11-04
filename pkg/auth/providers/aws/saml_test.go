@@ -523,6 +523,25 @@ func TestSAMLProvider_createSAMLConfig_AllFields(t *testing.T) {
 	assert.False(t, cfg.Headless)
 }
 
+func TestSAMLProvider_createSAMLConfig_BrowserConfiguration(t *testing.T) {
+	p, err := NewSAMLProvider("test-provider", &schema.Provider{
+		Kind:                  "aws/saml",
+		URL:                   "https://idp.example.com/saml",
+		Region:                "us-west-2",
+		Username:              "testuser",
+		Driver:                "Browser",
+		BrowserType:           "msedge",
+		BrowserExecutablePath: "/usr/bin/microsoft-edge",
+	})
+	require.NoError(t, err)
+	sp := p.(*samlProvider)
+
+	cfg := sp.createSAMLConfig()
+	assert.Equal(t, "msedge", cfg.BrowserType)
+	assert.Equal(t, "/usr/bin/microsoft-edge", cfg.BrowserExecutablePath)
+	assert.Equal(t, "Browser", cfg.Provider)
+}
+
 func TestSAMLProvider_createLoginDetails_WithPassword(t *testing.T) {
 	p, err := NewSAMLProvider("test-provider", &schema.Provider{
 		Kind:     "aws/saml",

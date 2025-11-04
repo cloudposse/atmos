@@ -298,6 +298,39 @@ The `driver` field controls how Atmos authenticates with your SAML identity prov
 
   **Note**: The Chromium browser binary does not need to be in your system PATH. Playwright manages the browser binary location automatically.
 
+  **Advanced: Custom Browser Configuration**
+
+  You can configure a custom browser type or executable path instead of using the automatically downloaded Chromium:
+
+  ```yaml
+  providers:
+    my-saml:
+      kind: aws/saml
+      driver: Browser
+      browser_type: msedge           # Use Microsoft Edge instead of Chromium
+      browser_executable_path: /usr/bin/microsoft-edge  # Path to Edge binary
+  ```
+
+  **Supported `browser_type` values:**
+  - `chromium` - Default Chromium browser (default if not specified)
+  - `firefox` - Mozilla Firefox browser
+  - `webkit` - WebKit browser engine
+  - `chrome` - Google Chrome (stable)
+  - `chrome-beta`, `chrome-dev`, `chrome-canary` - Chrome development channels
+  - `msedge` - Microsoft Edge (stable)
+  - `msedge-beta`, `msedge-dev`, `msedge-canary` - Edge development channels
+
+  **`browser_executable_path`** - Optional path to a browser executable. When specified with `browser_type`, allows using a system-installed browser instead of Playwright's managed version.
+
+  :::warning Custom Browser Support
+  Using custom browsers requires:
+  - The browser must be installed and at the specified path
+  - Browser version must be compatible with Playwright's automation protocol
+  - `download_browser_driver: true` should still be set to ensure Playwright drivers are available
+
+  **Most users should use the default Chromium** (with `download_browser_driver: true`) for best reliability.
+  :::
+
 - **`GoogleApps`**: Uses Google Apps SAML API (no browser automation needed)
 - **`Okta`**: Uses Okta SAML API (no browser automation needed)
 - **`ADFS`**: Uses Active Directory Federation Services API (no browser automation needed)
