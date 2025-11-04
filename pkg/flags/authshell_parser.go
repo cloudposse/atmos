@@ -51,7 +51,7 @@ func NewAuthShellParser() *AuthShellParser {
 	// Shell flag.
 	registry.Register(&StringFlag{
 		Name:        "shell",
-		Shorthand:   "",
+		Shorthand:   "s",
 		Default:     "",
 		Description: "Specify the shell to use (defaults to $SHELL, then bash, then sh)",
 		Required:    false,

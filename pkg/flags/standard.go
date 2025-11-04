@@ -239,6 +239,20 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 		}
 		// Extract positional args (non-flag args)
 		result.PositionalArgs = p.cmd.Flags().Args()
+
+		// After parsing, bind the parsed pflags to Viper to ensure values are available.
+		// This is necessary because BindToViper() is called before Parse(), so Viper
+		// needs to be re-bound after flags are manually parsed.
+		if p.viper != nil {
+			for _, flag := range p.registry.All() {
+				viperKey := p.getViperKey(flag.GetName())
+				cobraFlag := p.cmd.Flags().Lookup(flag.GetName())
+				if cobraFlag != nil && cobraFlag.Changed {
+					// Only bind if the flag was actually provided on CLI
+					_ = p.viper.BindPFlag(viperKey, cobraFlag)
+				}
+			}
+		}
 	} else {
 		// No command or no args - all args are positional
 		result.PositionalArgs = args
