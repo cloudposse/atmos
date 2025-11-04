@@ -6,450 +6,52 @@ tags: [bugfix, terraform, backend]
 date: 2025-01-04
 ---
 
-Atmos now properly handles nested maps in Terraform backend configurations when using HCL format. This fix resolves a critical issue where complex backend settings like `assume_role` were silently dropped, preventing users from leveraging advanced backend features like IAM role assumption, encryption settings, and other nested configurations.
+Atmos now properly handles nested maps in Terraform backend configurations when using HCL format. This fixes an issue where complex backend settings like `assume_role` were silently dropped.
 
 <!--truncate-->
 
 ## The Problem
 
-When generating Terraform backend configurations with `atmos terraform generate backends`, users discovered that nested maps were mysteriously disappearing from the HCL output. For example, when configuring an S3 backend with role assumption:
+When generating backend configurations with `atmos terraform generate backends --format hcl`, nested maps were missing from the output. For example:
 
 ```yaml
-# stacks/_defaults.yaml
 terraform:
-  backend_type: s3
   backend:
     s3:
       bucket: "my-terraform-states"
-      region: "us-east-1"
       assume_role:
         role_arn: "arn:aws:iam::123456789012:role/terraform"
         session_name: "terraform-backend"
-        duration: "1h"
 ```
 
-The generated `backend.tf` file was missing the critical `assume_role` configuration:
-
-```hcl
-# Generated backend.tf (BROKEN - before fix)
-terraform {
-  backend "s3" {
-    bucket = "my-terraform-states"
-    region = "us-east-1"
-    # ❌ assume_role is completely missing!
-  }
-}
-```
-
-This made it impossible to use cross-account role assumption, encrypted backends with KMS configurations, or any other advanced backend features that require nested configuration blocks.
-
-## The Impact
-
-This bug affected several common use cases:
-
-### 1. Cross-Account Terraform State Management
-
-Organizations managing infrastructure across multiple AWS accounts couldn't use IAM role assumption:
-
-```yaml
-backend:
-  s3:
-    assume_role:
-      role_arn: "arn:aws:iam::PROD_ACCOUNT:role/terraform"
-      external_id: "my-external-id"
-      session_name: "terraform-prod"
-```
-
-### 2. Encrypted State with Custom KMS Keys (GCS)
-
-Google Cloud users couldn't specify custom encryption keys:
-
-```yaml
-backend:
-  gcs:
-    encryption_key:
-      kms_encryption_key: "projects/my-project/locations/us/keyRings/my-ring/cryptoKeys/my-key"
-```
-
-### 3. Advanced Azure Backend Configurations
-
-Azure users couldn't configure client authentication details:
-
-```yaml
-backend:
-  azurerm:
-    client_id: "00000000-0000-0000-0000-000000000000"
-    subscription_id: "11111111-1111-1111-1111-111111111111"
-```
-
-### Why Only HCL Format?
-
-Interestingly, the bug only affected HCL format. The JSON and `backend-config` formats worked correctly:
-
-- ✅ **JSON format** (`--format json`) - Worked fine
-- ✅ **backend-config format** (`--format backend-config`) - Worked fine
-- ❌ **HCL format** (`--format hcl`) - **Broken** (now fixed!)
-
-This suggested the issue was specific to the HCL generation code path.
+The generated `backend.tf` was missing the `assume_role` configuration entirely.
 
 ## The Fix
 
-We've completely redesigned how Atmos converts Go types to HCL-compatible `cty.Value` types. The solution introduces a new recursive type converter that handles arbitrarily nested structures.
+We added a recursive type converter that handles nested maps, arrays, and all Go types when generating HCL output. The JSON and `backend-config` formats already worked correctly.
 
-### Before: Limited Type Support
+## Example
 
-The old code only handled primitive types:
-
-```go
-// OLD CODE - only handled primitives
-if v == nil {
-    backendBlockBody.SetAttributeValue(name, cty.NilVal)
-} else if i, ok := v.(string); ok {
-    backendBlockBody.SetAttributeValue(name, cty.StringVal(i))
-} else if i, ok := v.(bool); ok {
-    backendBlockBody.SetAttributeValue(name, cty.BoolVal(i))
-}
-// ❌ No handler for maps or slices!
-```
-
-### After: Full Recursive Type Support
-
-The new `GoToCty()` helper function recursively converts any Go type:
-
-```go
-// NEW CODE - handles all types recursively
-func GoToCty(value any) cty.Value {
-    switch v := value.(type) {
-    case map[string]any:
-        objMap := make(map[string]cty.Value, len(v))
-        for k, val := range v {
-            objMap[k] = GoToCty(val) // ✅ Recursive!
-        }
-        return cty.ObjectVal(objMap)
-    case []any:
-        tupleVals := make([]cty.Value, len(v))
-        for i, val := range v {
-            tupleVals[i] = GoToCty(val) // ✅ Recursive!
-        }
-        return cty.TupleVal(tupleVals)
-    // ... handles all primitive types too
-    }
-}
-```
-
-This elegant solution handles nested maps at any depth, arrays, and all combinations thereof.
-
-## What's Fixed
-
-### S3 Backend with Role Assumption
-
-Now works perfectly with all nested `assume_role` settings:
+Now all nested configurations are properly preserved:
 
 ```hcl
-# Generated backend.tf (FIXED!)
 terraform {
   backend "s3" {
     bucket = "my-terraform-states"
-    region = "us-east-1"
-
-    # ✅ assume_role block is now properly generated!
     assume_role = {
-      duration     = "1h"
       role_arn     = "arn:aws:iam::123456789012:role/terraform"
       session_name = "terraform-backend"
-      external_id  = "my-external-id"
     }
   }
 }
 ```
 
-### GCS Backend with Encryption
+## Usage
 
-Works with nested encryption key configurations:
-
-```hcl
-terraform {
-  backend "gcs" {
-    bucket = "my-terraform-states"
-    prefix = "terraform/state"
-
-    # ✅ Nested encryption configuration preserved!
-    encryption_key = {
-      kms_encryption_key = "projects/my-project/locations/us/keyRings/my-ring/cryptoKeys/my-key"
-    }
-  }
-}
-```
-
-### Multiple Nesting Levels
-
-Even deeply nested structures work:
-
-```yaml
-backend:
-  s3:
-    assume_role:
-      role_arn: "arn:aws:iam::123456:role/terraform"
-      tags:
-        Environment: "production"
-        Team: "platform"
-        ManagedBy: "terraform"
-```
-
-Generates:
-
-```hcl
-terraform {
-  backend "s3" {
-    assume_role = {
-      role_arn = "arn:aws:iam::123456:role/terraform"
-      tags = {
-        Environment = "production"
-        ManagedBy   = "terraform"
-        Team        = "platform"
-      }
-    }
-  }
-}
-```
-
-### Arrays in Backend Configurations
-
-Arrays are also properly handled:
-
-```yaml
-backend:
-  s3:
-    allowed_account_ids:
-      - "123456789012"
-      - "234567890123"
-```
-
-Generates:
-
-```hcl
-terraform {
-  backend "s3" {
-    allowed_account_ids = [
-      "123456789012",
-      "234567890123",
-    ]
-  }
-}
-```
-
-## How to Use
-
-Both backend generation commands now work correctly with nested maps:
-
-### Single Component Backend
-
-```bash
-# Generate backend.tf.json for a specific component
-atmos terraform generate backend vpc -s prod
-```
-
-This command always used JSON format, so it wasn't affected by the bug. However, it benefits from improved consistency.
-
-### Bulk Backend Generation
-
-```bash
-# Generate backend.tf for all components (HCL format - now fixed!)
-atmos terraform generate backends --format hcl
-
-# Generate backend.tf.json for all components
-atmos terraform generate backends --format json
-
-# Generate partial backend configs for use with -backend-config
-atmos terraform generate backends --format backend-config \
-  --file-template="backends/{component}.tfbackend"
-```
-
-All three formats now correctly preserve nested maps!
-
-## Real-World Example
-
-Here's a complete example showing how to configure cross-account Terraform state management with role assumption:
-
-```yaml
-# stacks/prod/_defaults.yaml
-terraform:
-  backend_type: s3
-  backend:
-    s3:
-      # Template variables are still supported!
-      bucket: "{{ .vars.tenant }}-{{ .vars.stage }}-terraform-states"
-      region: "us-east-1"
-      key: "terraform.tfstate"
-      encrypt: true
-
-      # Cross-account role assumption
-      assume_role:
-        role_arn: "arn:aws:iam::{{ .vars.prod_account_id }}:role/{{ .vars.terraform_role }}"
-        session_name: "terraform-{{ .vars.tenant }}-{{ .vars.stage }}"
-        duration: "1h"
-        external_id: "{{ .vars.external_id }}"
-
-      # DynamoDB state locking
-      dynamodb_table: "{{ .vars.tenant }}-terraform-locks"
-
-      # Additional security
-      workspace_key_prefix: "workspaces"
-      acl: "bucket-owner-full-control"
-```
-
-Generate the backend:
+Upgrade Atmos and regenerate your backend configurations:
 
 ```bash
 atmos terraform generate backends --format hcl
 ```
 
-Result in `components/terraform/vpc/backend.tf`:
-
-```hcl
-terraform {
-  backend "s3" {
-    acl                  = "bucket-owner-full-control"
-    assume_role = {
-      duration     = "1h"
-      external_id  = "my-secret-external-id"
-      role_arn     = "arn:aws:iam::123456789012:role/TerraformStateRole"
-      session_name = "terraform-mycompany-prod"
-    }
-    bucket               = "mycompany-prod-terraform-states"
-    dynamodb_table       = "mycompany-terraform-locks"
-    encrypt              = true
-    key                  = "terraform.tfstate"
-    region               = "us-east-1"
-    workspace_key_prefix = "workspaces"
-  }
-}
-```
-
-Perfect! All nested configurations are preserved, and you can safely use cross-account role assumption.
-
-## Technical Details
-
-For those interested in the implementation details:
-
-### Files Modified
-
-- `pkg/utils/cty_utils.go` - Added new `GoToCty()` recursive converter
-- `pkg/utils/hcl_utils.go` - Simplified `WriteTerraformBackendConfigToFileAsHcl()` to use the new converter
-- `internal/exec/terraform_generate_backends_test.go` - Added comprehensive test coverage
-
-### Test Coverage
-
-We've added extensive tests to prevent regression:
-
-- ✅ 13 new test cases specifically for nested maps
-- ✅ Tests for S3, GCS, and Azure backends with complex configurations
-- ✅ Tests for multiple nesting levels
-- ✅ Tests for arrays in backend configurations
-- ✅ Tests for all three output formats (HCL, JSON, backend-config)
-
-### Performance
-
-The recursive type converter is highly efficient:
-
-- Handles typical nesting depths (2-3 levels) with minimal overhead
-- No additional memory allocations beyond what's necessary
-- Performance tracking built-in via `defer perf.Track()`
-
-## Backward Compatibility
-
-✅ **Fully backward compatible**
-
-- No breaking changes to existing configurations
-- Configurations that worked before continue to work
-- Only adds previously missing functionality
-- All existing tests still pass
-
-## Upgrade Path
-
-This fix is included in the next release. To benefit from it:
-
-1. **Upgrade Atmos** to the latest version
-2. **Regenerate your backend configurations**:
-   ```bash
-   atmos terraform generate backends --format hcl
-   ```
-3. **Verify** that nested configurations are present in the generated files
-4. **Commit** the updated backend configurations to your repository
-
-If you're using Git, you'll see the previously missing nested blocks appear in your diff:
-
-```diff
- terraform {
-   backend "s3" {
-     bucket = "my-terraform-states"
-     region = "us-east-1"
-+    assume_role = {
-+      role_arn     = "arn:aws:iam::123456789012:role/terraform"
-+      session_name = "terraform-backend"
-+    }
-   }
- }
-```
-
-## What's Next
-
-This fix opens up several advanced use cases:
-
-### 1. Multi-Region State Replication
-
-Configure S3 backend with replication settings:
-
-```yaml
-backend:
-  s3:
-    bucket: "primary-terraform-states"
-    replication_configuration:
-      role: "arn:aws:iam::123456:role/replication"
-      rules:
-        - id: "ReplicateToBackup"
-          status: "Enabled"
-```
-
-### 2. Advanced Encryption
-
-Use customer-managed KMS keys with additional settings:
-
-```yaml
-backend:
-  s3:
-    kms_key_id: "arn:aws:kms:us-east-1:123456:key/12345678"
-    sse_customer_key: "base64-encoded-key"
-```
-
-### 3. Workspaces with Nested Configuration
-
-Complex workspace configurations:
-
-```yaml
-backend:
-  s3:
-    workspaces:
-      prefix: "env"
-      key_prefix: "terraform"
-```
-
-## Feedback
-
-We'd love to hear how this fix helps your infrastructure workflows! If you encounter any issues or have suggestions for improvements, please:
-
-- 🐛 [Report bugs](https://github.com/cloudposse/atmos/issues)
-- 💡 [Request features](https://github.com/cloudposse/atmos/discussions)
-- 💬 [Join our community](https://slack.cloudposse.com)
-
-## Summary
-
-Nested maps in Terraform backend configurations now work correctly across all output formats. This fix enables advanced backend features like:
-
-- ✅ IAM role assumption for cross-account state management
-- ✅ Custom encryption configurations
-- ✅ Complex authentication settings
-- ✅ Multi-level nested structures
-- ✅ Arrays and lists in backend configs
-
-Upgrade to the latest version of Atmos to start using these powerful backend configuration options today!
+All three formats (HCL, JSON, backend-config) now correctly handle nested structures.
