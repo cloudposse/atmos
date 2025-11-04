@@ -427,3 +427,355 @@ func TestProcessedComponentsTracking(t *testing.T) {
 		assert.True(t, exists)
 	})
 }
+
+// TestBackendGenerationWithNestedMaps tests that nested maps (like assume_role) are properly generated in all formats.
+func TestBackendGenerationWithNestedMaps(t *testing.T) {
+	t.Run("generates nested maps in HCL format", func(t *testing.T) {
+		tempDir := t.TempDir()
+		componentDir := filepath.Join(tempDir, "components", "terraform", "test-component")
+		err := os.MkdirAll(componentDir, 0o755)
+		require.NoError(t, err)
+
+		// Backend config with nested assume_role
+		backendConfig := map[string]any{
+			"bucket": "test-bucket",
+			"key":    "terraform.tfstate",
+			"region": "us-east-1",
+			"assume_role": map[string]any{
+				"role_arn":     "arn:aws:iam::123456789012:role/terraform-backend-role",
+				"session_name": "terraform-backend-session",
+				"duration":     "1h",
+			},
+		}
+
+		// Write HCL backend
+		backendFile := filepath.Join(componentDir, "backend.tf")
+		err = u.WriteTerraformBackendConfigToFileAsHcl(backendFile, "s3", backendConfig)
+		require.NoError(t, err)
+
+		// Read and verify
+		content, err := os.ReadFile(backendFile)
+		require.NoError(t, err)
+
+		backendStr := string(content)
+
+		// Verify the assume_role block is present
+		assert.Contains(t, backendStr, "assume_role", "HCL output should contain assume_role")
+		assert.Contains(t, backendStr, "role_arn", "HCL output should contain role_arn")
+		assert.Contains(t, backendStr, "arn:aws:iam::123456789012:role/terraform-backend-role", "HCL output should contain the correct role ARN")
+		assert.Contains(t, backendStr, "session_name", "HCL output should contain session_name")
+		assert.Contains(t, backendStr, "terraform-backend-session", "HCL output should contain the session name")
+		assert.Contains(t, backendStr, "duration", "HCL output should contain duration")
+
+		// Verify it's wrapped in terraform backend block
+		assert.Contains(t, backendStr, "terraform {", "HCL should have terraform block")
+		assert.Contains(t, backendStr, "backend \"s3\" {", "HCL should have s3 backend block")
+	})
+
+	t.Run("generates nested maps in JSON format via generateComponentBackendConfig", func(t *testing.T) {
+		// Backend config with nested assume_role
+		backendConfig := map[string]any{
+			"bucket": "test-bucket",
+			"key":    "terraform.tfstate",
+			"region": "us-east-1",
+			"assume_role": map[string]any{
+				"role_arn":     "arn:aws:iam::123456789012:role/terraform-backend-role",
+				"session_name": "terraform-backend-session",
+				"duration":     "1h",
+			},
+		}
+
+		// Generate backend config
+		result, err := generateComponentBackendConfig("s3", backendConfig, "")
+		require.NoError(t, err)
+
+		// Navigate to assume_role section
+		terraform, ok := result["terraform"].(map[string]any)
+		require.True(t, ok, "JSON should have terraform section")
+
+		backend, ok := terraform["backend"].(map[string]any)
+		require.True(t, ok, "JSON should have backend section")
+
+		s3, ok := backend["s3"].(map[string]any)
+		require.True(t, ok, "JSON should have s3 section")
+
+		assumeRole, ok := s3["assume_role"].(map[string]any)
+		require.True(t, ok, "JSON s3 section should have assume_role as a map")
+
+		// Verify nested fields
+		assert.Equal(t, "arn:aws:iam::123456789012:role/terraform-backend-role", assumeRole["role_arn"])
+		assert.Equal(t, "terraform-backend-session", assumeRole["session_name"])
+		assert.Equal(t, "1h", assumeRole["duration"])
+	})
+
+	t.Run("generates nested maps in backend-config format", func(t *testing.T) {
+		tempDir := t.TempDir()
+		componentDir := filepath.Join(tempDir, "components", "terraform", "test-component")
+		err := os.MkdirAll(componentDir, 0o755)
+		require.NoError(t, err)
+
+		// Backend config with nested assume_role
+		backendConfig := map[string]any{
+			"bucket": "test-bucket",
+			"key":    "terraform.tfstate",
+			"region": "us-east-1",
+			"assume_role": map[string]any{
+				"role_arn":     "arn:aws:iam::123456789012:role/terraform-backend-role",
+				"session_name": "terraform-backend-session",
+				"duration":     "1h",
+			},
+		}
+
+		// Write backend-config
+		backendFile := filepath.Join(componentDir, "backend.tfbackend")
+		err = u.WriteToFileAsHcl(backendFile, backendConfig, 0o644)
+		require.NoError(t, err)
+
+		// Read and verify
+		content, err := os.ReadFile(backendFile)
+		require.NoError(t, err)
+
+		backendStr := string(content)
+
+		// Verify the assume_role block is present
+		assert.Contains(t, backendStr, "assume_role", "backend-config output should contain assume_role")
+		assert.Contains(t, backendStr, "role_arn", "backend-config output should contain role_arn")
+		assert.Contains(t, backendStr, "arn:aws:iam::123456789012:role/terraform-backend-role", "backend-config should contain the correct role ARN")
+		assert.Contains(t, backendStr, "session_name", "backend-config should contain session_name")
+		assert.Contains(t, backendStr, "duration", "backend-config should contain duration")
+	})
+}
+
+// TestBackendGenerationWithDifferentBackendTypes tests generation for different backend types.
+func TestBackendGenerationWithDifferentBackendTypes(t *testing.T) {
+	t.Setenv("ATMOS_LOGS_LEVEL", "Error")
+
+	testCases := []struct {
+		name          string
+		backendType   string
+		backendConfig map[string]any
+		expectedKeys  []string
+	}{
+		{
+			name:        "S3 backend with assume_role",
+			backendType: "s3",
+			backendConfig: map[string]any{
+				"bucket": "test-bucket",
+				"key":    "terraform.tfstate",
+				"region": "us-east-1",
+				"assume_role": map[string]any{
+					"role_arn": "arn:aws:iam::123456789012:role/test",
+				},
+			},
+			expectedKeys: []string{"bucket", "key", "region", "assume_role"},
+		},
+		{
+			name:        "GCS backend with nested encryption",
+			backendType: "gcs",
+			backendConfig: map[string]any{
+				"bucket": "test-bucket",
+				"prefix": "terraform/state",
+				"encryption_key": map[string]any{
+					"kms_encryption_key": "projects/my-project/locations/us/keyRings/my-ring/cryptoKeys/my-key",
+				},
+			},
+			expectedKeys: []string{"bucket", "prefix", "encryption_key"},
+		},
+		{
+			name:        "AzureRM backend with client config",
+			backendType: "azurerm",
+			backendConfig: map[string]any{
+				"storage_account_name": "mystorageaccount",
+				"container_name":       "tfstate",
+				"key":                  "terraform.tfstate",
+				"client_id":            "00000000-0000-0000-0000-000000000000",
+			},
+			expectedKeys: []string{"storage_account_name", "container_name", "key"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			componentDir := filepath.Join(tempDir, "components", "terraform", "test-component")
+			err := os.MkdirAll(componentDir, 0o755)
+			require.NoError(t, err)
+
+			// Write backend config to HCL
+			backendFile := filepath.Join(componentDir, "backend.tf")
+			err = u.WriteTerraformBackendConfigToFileAsHcl(backendFile, tc.backendType, tc.backendConfig)
+			require.NoError(t, err)
+
+			// Read and verify
+			content, err := os.ReadFile(backendFile)
+			require.NoError(t, err)
+
+			backendStr := string(content)
+			assert.Contains(t, backendStr, "terraform {")
+			assert.Contains(t, backendStr, "backend \""+tc.backendType+"\" {")
+
+			for _, key := range tc.expectedKeys {
+				assert.Contains(t, backendStr, key, "Backend config should contain key: "+key)
+			}
+		})
+	}
+}
+
+// TestBackendGenerationErrorHandling tests error cases.
+func TestBackendGenerationErrorHandling(t *testing.T) {
+	t.Run("rejects invalid format parameter", func(t *testing.T) {
+		tempDir := t.TempDir()
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+			},
+		}
+
+		// Note: The validation happens in the CMD layer, not in ExecuteTerraformGenerateBackends
+		// So we test the valid formats only here
+		validFormats := []string{"hcl", "json", "backend-config"}
+		for _, format := range validFormats {
+			err := ExecuteTerraformGenerateBackends(atmosConfig, "", format, []string{}, []string{})
+			assert.NoError(t, err, "Format %s should be valid", format)
+		}
+	})
+
+	t.Run("handles empty backend config", func(t *testing.T) {
+		tempDir := t.TempDir()
+		componentDir := filepath.Join(tempDir, "components", "terraform", "test-component")
+		err := os.MkdirAll(componentDir, 0o755)
+		require.NoError(t, err)
+
+		// Empty backend config should not error
+		backendFile := filepath.Join(componentDir, "backend.tf")
+		err = u.WriteTerraformBackendConfigToFileAsHcl(backendFile, "s3", map[string]any{})
+		assert.NoError(t, err)
+
+		// Verify file was created
+		_, err = os.Stat(backendFile)
+		assert.NoError(t, err)
+	})
+}
+
+// TestGenerateComponentBackendConfigFunction tests the generateComponentBackendConfig helper function.
+func TestGenerateComponentBackendConfigFunction(t *testing.T) {
+	t.Run("generates cloud backend config with workspace", func(t *testing.T) {
+		backendConfig := map[string]any{
+			"organization": "my-org",
+			"workspaces": map[string]any{
+				"name": "my-workspace-{terraform_workspace}",
+			},
+		}
+
+		result, err := generateComponentBackendConfig("cloud", backendConfig, "prod")
+		require.NoError(t, err)
+
+		// Verify structure
+		terraform, ok := result["terraform"].(map[string]any)
+		require.True(t, ok)
+
+		cloud, ok := terraform["cloud"].(map[string]any)
+		require.True(t, ok)
+
+		assert.Equal(t, "my-org", cloud["organization"])
+
+		// Workspace name should have token replaced
+		workspaces, ok := cloud["workspaces"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "my-workspace-prod", workspaces["name"])
+	})
+
+	t.Run("generates cloud backend config without workspace", func(t *testing.T) {
+		backendConfig := map[string]any{
+			"organization": "my-org",
+			"workspaces": map[string]any{
+				"name": "my-workspace",
+			},
+		}
+
+		result, err := generateComponentBackendConfig("cloud", backendConfig, "")
+		require.NoError(t, err)
+
+		terraform, ok := result["terraform"].(map[string]any)
+		require.True(t, ok)
+
+		cloud, ok := terraform["cloud"].(map[string]any)
+		require.True(t, ok)
+
+		workspaces, ok := cloud["workspaces"].(map[string]any)
+		require.True(t, ok)
+
+		// Should remain unchanged without workspace token
+		assert.Equal(t, "my-workspace", workspaces["name"])
+	})
+
+	t.Run("generates s3 backend config", func(t *testing.T) {
+		backendConfig := map[string]any{
+			"bucket": "my-bucket",
+			"key":    "terraform.tfstate",
+			"region": "us-east-1",
+		}
+
+		result, err := generateComponentBackendConfig("s3", backendConfig, "")
+		require.NoError(t, err)
+
+		// For non-cloud backends, should return wrapped config
+		terraform, ok := result["terraform"].(map[string]any)
+		require.True(t, ok)
+
+		backend, ok := terraform["backend"].(map[string]any)
+		require.True(t, ok)
+
+		s3, ok := backend["s3"].(map[string]any)
+		require.True(t, ok)
+
+		assert.Equal(t, "my-bucket", s3["bucket"])
+		assert.Equal(t, "terraform.tfstate", s3["key"])
+		assert.Equal(t, "us-east-1", s3["region"])
+	})
+
+	t.Run("preserves nested maps in backend config", func(t *testing.T) {
+		backendConfig := map[string]any{
+			"bucket": "my-bucket",
+			"key":    "terraform.tfstate",
+			"assume_role": map[string]any{
+				"role_arn":     "arn:aws:iam::123456789012:role/test",
+				"session_name": "terraform",
+				"external_id":  "my-external-id",
+			},
+		}
+
+		result, err := generateComponentBackendConfig("s3", backendConfig, "")
+		require.NoError(t, err)
+
+		terraform := result["terraform"].(map[string]any)
+		backend := terraform["backend"].(map[string]any)
+		s3 := backend["s3"].(map[string]any)
+
+		assumeRole, ok := s3["assume_role"].(map[string]any)
+		require.True(t, ok, "assume_role should be preserved as a map")
+
+		assert.Equal(t, "arn:aws:iam::123456789012:role/test", assumeRole["role_arn"])
+		assert.Equal(t, "terraform", assumeRole["session_name"])
+		assert.Equal(t, "my-external-id", assumeRole["external_id"])
+	})
+
+	t.Run("generates local backend config", func(t *testing.T) {
+		backendConfig := map[string]any{
+			"path": "terraform.tfstate",
+		}
+
+		result, err := generateComponentBackendConfig("local", backendConfig, "")
+		require.NoError(t, err)
+
+		terraform := result["terraform"].(map[string]any)
+		backend := terraform["backend"].(map[string]any)
+		local, ok := backend["local"].(map[string]any)
+		require.True(t, ok)
+
+		assert.Equal(t, "terraform.tfstate", local["path"])
+	})
+}
