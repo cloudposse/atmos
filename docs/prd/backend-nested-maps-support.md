@@ -3,13 +3,43 @@
 **Status**: Implemented
 **Created**: 2025-01-04
 **Author**: Claude Code
-**Issue**: Backend generation drops complex maps in HCL format
 
-## Problem Statement
+## Requirements
+
+### Primary Requirement
+
+The `atmos terraform generate backends` command must support arbitrarily nested map structures in backend
+configurations across all output formats (HCL, JSON, and backend-config).
+
+### Functional Requirements
+
+1. **Nested Map Support**: Backend configurations must preserve complex nested structures such as:
+   - IAM role assumption configuration (`assume_role` with multiple nested fields)
+   - Encryption key configuration (nested `encryption_key` objects)
+   - Client authentication settings (nested authentication credentials)
+   - Tag maps within configuration blocks
+   - Arrays of configuration values
+
+2. **Format Consistency**: All three output formats (HCL, JSON, backend-config) must consistently handle nested maps:
+   - HCL format must generate valid Terraform backend configuration with nested blocks
+   - JSON format must preserve nested object structures
+   - backend-config format must flatten nested maps appropriately for Terraform CLI flags
+
+3. **Type Support**: The backend generator must handle all Go types recursively:
+   - Primitive types: string, bool, int, int64, uint64, float64
+   - Complex types: `map[string]any`, `[]any`
+   - Nested structures at arbitrary depth
+   - Nil values
+
+4. **Backward Compatibility**: Existing backend configurations must continue to work without modification.
+
+## Problem Context
+
+### Current Issue
 
 When using `atmos terraform generate backends` with HCL format, nested maps (such as `assume_role` in S3 backend
-configurations) were silently dropped from the generated output. This caused Terraform backend configurations to be
-incomplete and prevented users from using advanced backend features like IAM role assumption.
+configurations) are silently dropped from the generated output. This prevents users from using advanced backend features
+like IAM role assumption.
 
 ### User Impact
 
@@ -56,22 +86,22 @@ The function used a type switch to handle different value types:
 ```go
 // OLD CODE (BROKEN)
 for _, name := range backendConfigSortedKeys {
-v := backendConfig[name]
+	v := backendConfig[name]
 
-if v == nil {
-backendBlockBody.SetAttributeValue(name, cty.NilVal)
-} else if i, ok := v.(string); ok {
-backendBlockBody.SetAttributeValue(name, cty.StringVal(i))
-} else if i, ok := v.(bool); ok {
-backendBlockBody.SetAttributeValue(name, cty.BoolVal(i))
-} else if i, ok := v.(int64); ok {
-backendBlockBody.SetAttributeValue(name, cty.NumberIntVal(i))
-} else if i, ok := v.(uint64); ok {
-backendBlockBody.SetAttributeValue(name, cty.NumberUIntVal(i))
-} else if i, ok := v.(float64); ok {
-backendBlockBody.SetAttributeValue(name, cty.NumberFloatVal(i))
-}
-// No handler for map[string]any or []any!
+	if v == nil {
+		backendBlockBody.SetAttributeValue(name, cty.NilVal)
+	} else if i, ok := v.(string); ok {
+		backendBlockBody.SetAttributeValue(name, cty.StringVal(i))
+	} else if i, ok := v.(bool); ok {
+		backendBlockBody.SetAttributeValue(name, cty.BoolVal(i))
+	} else if i, ok := v.(int64); ok {
+		backendBlockBody.SetAttributeValue(name, cty.NumberIntVal(i))
+	} else if i, ok := v.(uint64); ok {
+		backendBlockBody.SetAttributeValue(name, cty.NumberUIntVal(i))
+	} else if i, ok := v.(float64); ok {
+		backendBlockBody.SetAttributeValue(name, cty.NumberFloatVal(i))
+	}
+	// No handler for map[string]any or []any!
 }
 ```
 
@@ -125,45 +155,45 @@ Created `GoToCty` in `pkg/utils/cty_utils.go`:
 //
 //nolint:revive // Cyclomatic complexity is justified for comprehensive type conversion.
 func GoToCty(value any) cty.Value {
-defer perf.Track(nil, "utils.GoToCty")()
+	defer perf.Track(nil, "utils.GoToCty")()
 
-if value == nil {
-return cty.NilVal
-}
+	if value == nil {
+		return cty.NilVal
+	}
 
-switch v := value.(type) {
-case string:
-return cty.StringVal(v)
-case bool:
-return cty.BoolVal(v)
-case int:
-return cty.NumberIntVal(int64(v))
-case int64:
-return cty.NumberIntVal(v)
-case uint64:
-return cty.NumberUIntVal(v)
-case float64:
-return cty.NumberFloatVal(v)
-case map[string]any:
-// Convert map to cty object (RECURSIVE)
-objMap := make(map[string]cty.Value, len(v))
-for k, val := range v {
-objMap[k] = GoToCty(val) // Recursive call
-}
-return cty.ObjectVal(objMap)
-case []any:
-// Convert slice to cty tuple (RECURSIVE)
-if len(v) == 0 {
-return cty.EmptyTupleVal
-}
-tupleVals := make([]cty.Value, len(v))
-for i, val := range v {
-tupleVals[i] = GoToCty(val) // Recursive call
-}
-return cty.TupleVal(tupleVals)
-default:
-return cty.NilVal
-}
+	switch v := value.(type) {
+	case string:
+		return cty.StringVal(v)
+	case bool:
+		return cty.BoolVal(v)
+	case int:
+		return cty.NumberIntVal(int64(v))
+	case int64:
+		return cty.NumberIntVal(v)
+	case uint64:
+		return cty.NumberUIntVal(v)
+	case float64:
+		return cty.NumberFloatVal(v)
+	case map[string]any:
+		// Convert map to cty object (RECURSIVE)
+		objMap := make(map[string]cty.Value, len(v))
+		for k, val := range v {
+			objMap[k] = GoToCty(val) // Recursive call
+		}
+		return cty.ObjectVal(objMap)
+	case []any:
+		// Convert slice to cty tuple (RECURSIVE)
+		if len(v) == 0 {
+			return cty.EmptyTupleVal
+		}
+		tupleVals := make([]cty.Value, len(v))
+		for i, val := range v {
+			tupleVals[i] = GoToCty(val) // Recursive call
+		}
+		return cty.TupleVal(tupleVals)
+	default:
+		return cty.NilVal
+	}
 }
 ```
 
@@ -174,18 +204,18 @@ Updated `WriteTerraformBackendConfigToFileAsHcl` in `pkg/utils/hcl_utils.go`:
 ```go
 // OLD CODE (40+ lines of type checking)
 for _, name := range backendConfigSortedKeys {
-v := backendConfig[name]
-if v == nil { ... }
-else if i, ok := v.(string); ok { ... }
-else if i, ok := v.(bool); ok { ... }
-// ... many more type checks
+	v := backendConfig[name]
+	if v == nil { ... }
+	else if i, ok := v.(string); ok { ... }
+	else if i, ok := v.(bool); ok { ... }
+	// ... many more type checks
 }
 
 // NEW CODE (3 lines!)
 for _, name := range backendConfigSortedKeys {
-v := backendConfig[name]
-ctyVal := GoToCty(v)
-backendBlockBody.SetAttributeValue(name, ctyVal)
+	v := backendConfig[name]
+	ctyVal := GoToCty(v)
+	backendBlockBody.SetAttributeValue(name, ctyVal)
 }
 ```
 
