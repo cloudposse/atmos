@@ -525,3 +525,33 @@ func (b *StandardOptionsBuilder) WithOutput(validOutputs []string, defaultValue 
 	b.options = append(b.options, WithValidValues("output", validOutputs...))
 	return b
 }
+
+// WithForceColor adds the force-color flag for forcing color output.
+// Maps to GlobalFlags.ForceColor field.
+func (b *StandardOptionsBuilder) WithForceColor() *StandardOptionsBuilder {
+	defer perf.Track(nil, "flags.StandardOptionsBuilder.WithForceColor")()
+
+	b.options = append(b.options, WithBoolFlag("force-color", "", false, "Force color output even when not a TTY (useful for screenshots)"))
+	b.options = append(b.options, WithEnvVars("force-color", "ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"))
+	return b
+}
+
+// WithForceTTY adds the force-tty flag for forcing TTY mode.
+// Maps to GlobalFlags.ForceTTY field.
+func (b *StandardOptionsBuilder) WithForceTTY() *StandardOptionsBuilder {
+	defer perf.Track(nil, "flags.StandardOptionsBuilder.WithForceTTY")()
+
+	b.options = append(b.options, WithBoolFlag("force-tty", "", false, "Force TTY mode with sane defaults when terminal detection fails (useful for screenshots)"))
+	b.options = append(b.options, WithEnvVars("force-tty", "ATMOS_FORCE_TTY"))
+	return b
+}
+
+// WithMask adds the mask flag for automatic masking of sensitive data.
+// Maps to GlobalFlags.Mask field.
+func (b *StandardOptionsBuilder) WithMask() *StandardOptionsBuilder {
+	defer perf.Track(nil, "flags.StandardOptionsBuilder.WithMask")()
+
+	b.options = append(b.options, WithBoolFlag("mask", "", true, "Enable automatic masking of sensitive data in output (use --mask=false to disable)"))
+	b.options = append(b.options, WithEnvVars("mask", "ATMOS_MASK"))
+	return b
+}
