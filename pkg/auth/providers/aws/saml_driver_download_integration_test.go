@@ -34,7 +34,13 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 	// Create isolated test environment.
 	testHomeDir := t.TempDir()
 	t.Setenv("HOME", testHomeDir)        // Linux/macOS.
-	t.Setenv("USERPROFILE", testHomeDir) // Windows.
+	t.Setenv("USERPROFILE", testHomeDir) // Windows (for home directory).
+
+	// Windows: playwright-go uses os.UserCacheDir() which checks LOCALAPPDATA.
+	// We need to set LOCALAPPDATA to our test directory for Windows.
+	if runtime.GOOS == "windows" {
+		t.Setenv("LOCALAPPDATA", testHomeDir)
+	}
 
 	// Determine platform-specific cache directory where Playwright stores browser drivers.
 	var cacheDir string
@@ -217,6 +223,11 @@ func TestPlaywrightDriverDownload_WithSAML2AWS(t *testing.T) {
 	testHomeDir := t.TempDir()
 	t.Setenv("HOME", testHomeDir)
 	t.Setenv("USERPROFILE", testHomeDir)
+
+	// Windows: playwright-go uses os.UserCacheDir() which checks LOCALAPPDATA.
+	if runtime.GOOS == "windows" {
+		t.Setenv("LOCALAPPDATA", testHomeDir)
+	}
 
 	// Create SAML provider.
 	provider, err := NewSAMLProvider("test-saml", &schema.Provider{

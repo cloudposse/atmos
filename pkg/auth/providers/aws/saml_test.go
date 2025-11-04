@@ -57,6 +57,13 @@ func TestSAMLProvider_RequestedSessionSeconds(t *testing.T) {
 }
 
 func TestSAMLProvider_GetProviderType(t *testing.T) {
+	// Isolate test environment to ensure no Playwright drivers are detected.
+	// This prevents integration tests from affecting unit test behavior.
+	testHomeDir := t.TempDir()
+	t.Setenv("HOME", testHomeDir)
+	t.Setenv("USERPROFILE", testHomeDir)
+	t.Setenv("LOCALAPPDATA", testHomeDir) // Windows cache directory.
+
 	// Explicit driver config always wins.
 	p := &samlProvider{config: &schema.Provider{ProviderType: "Okta"}, url: "https://idp"}
 	assert.Equal(t, "Okta", p.getDriver())
