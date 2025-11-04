@@ -33,6 +33,8 @@ func NewWorkflowOptionsBuilder() *WorkflowOptionsBuilder {
 // Parameters:
 //   - required: if true, flag is marked as required
 func (b *WorkflowOptionsBuilder) WithFile(required bool) *WorkflowOptionsBuilder {
+	defer perf.Track(nil, "flags.WorkflowOptionsBuilder.WithFile")()
+
 	if required {
 		b.options = append(b.options, WithRequiredStringFlag("file", "f", "Specify the workflow file to run"))
 	} else {
@@ -45,6 +47,8 @@ func (b *WorkflowOptionsBuilder) WithFile(required bool) *WorkflowOptionsBuilder
 // WithDryRun adds the dry-run flag.
 // Maps to WorkflowOptions.DryRun field (inherited from StandardOptions).
 func (b *WorkflowOptionsBuilder) WithDryRun() *WorkflowOptionsBuilder {
+	defer perf.Track(nil, "flags.WorkflowOptionsBuilder.WithDryRun")()
+
 	b.options = append(b.options, WithBoolFlag("dry-run", "", false, "Simulate the workflow without making any changes"))
 	b.options = append(b.options, WithEnvVars("dry-run", "ATMOS_WORKFLOW_DRY_RUN"))
 	return b
@@ -53,6 +57,8 @@ func (b *WorkflowOptionsBuilder) WithDryRun() *WorkflowOptionsBuilder {
 // WithFromStep adds the from-step flag for resuming workflows.
 // Maps to WorkflowOptions.FromStep field.
 func (b *WorkflowOptionsBuilder) WithFromStep() *WorkflowOptionsBuilder {
+	defer perf.Track(nil, "flags.WorkflowOptionsBuilder.WithFromStep")()
+
 	b.options = append(b.options, WithStringFlag("from-step", "", "", "Resume the workflow from the specified step"))
 	b.options = append(b.options, WithEnvVars("from-step", "ATMOS_WORKFLOW_FROM_STEP"))
 	return b
@@ -64,6 +70,8 @@ func (b *WorkflowOptionsBuilder) WithFromStep() *WorkflowOptionsBuilder {
 // Parameters:
 //   - required: if true, flag is marked as required
 func (b *WorkflowOptionsBuilder) WithStack(required bool) *WorkflowOptionsBuilder {
+	defer perf.Track(nil, "flags.WorkflowOptionsBuilder.WithStack")()
+
 	if required {
 		b.options = append(b.options, WithRequiredStringFlag("stack", "s", "Atmos stack"))
 	} else {
@@ -84,6 +92,8 @@ func (b *WorkflowOptionsBuilder) Build() *WorkflowParser {
 // WithIdentity adds the identity flag for authentication.
 // Maps to WorkflowOptions.Identity field (inherited from GlobalFlags).
 func (b *WorkflowOptionsBuilder) WithIdentity() *WorkflowOptionsBuilder {
+	defer perf.Track(nil, "flags.WorkflowOptionsBuilder.WithIdentity")()
+
 	b.options = append(b.options, WithIdentityFlag())
 	return b
 }
