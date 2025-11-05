@@ -518,3 +518,102 @@ func TestIdentityArgCompletionOnlyFirstArg(t *testing.T) {
 	assert.Empty(t, completions)
 	assert.Equal(t, 4, int(directive)) // cobra.ShellCompDirectiveNoFileComp
 }
+
+// TestListStacksForComponent tests the listStacksForComponent function.
+func TestListStacksForComponent(t *testing.T) {
+	tests := []struct {
+		name          string
+		component     string
+		setupDir      string
+		expectStacks  bool
+		expectError   bool
+		minStackCount int
+	}{
+		{
+			name:          "component exists in stacks",
+			component:     "myapp",
+			setupDir:      "../examples/demo-stacks",
+			expectStacks:  true,
+			expectError:   false,
+			minStackCount: 1,
+		},
+		{
+			name:          "component does not exist",
+			component:     "nonexistent-component",
+			setupDir:      "../examples/demo-stacks",
+			expectStacks:  false,
+			expectError:   false,
+			minStackCount: 0,
+		},
+		{
+			name:        "invalid directory with no config",
+			component:   "test",
+			setupDir:    "",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Change to test directory if specified (automatically reverted after test).
+			if tt.setupDir != "" {
+				t.Chdir(tt.setupDir)
+			} else {
+				// Use a temp directory with no atmos.yaml.
+				tmpDir := t.TempDir()
+				t.Chdir(tmpDir)
+			}
+
+			// Call the function.
+			stacks, err := listStacksForComponent(tt.component)
+
+			if tt.expectError {
+				assert.Error(t, err, "Should return error for invalid config")
+				return
+			}
+
+			assert.NoError(t, err, "Should not return error")
+
+			if tt.expectStacks {
+				assert.NotEmpty(t, stacks, "Should return at least one stack")
+				assert.GreaterOrEqual(t, len(stacks), tt.minStackCount, "Should have minimum number of stacks")
+			} else {
+				assert.Empty(t, stacks, "Should return empty list for non-existent component")
+			}
+		})
+	}
+}
+
+// TestListStacksForComponentErrorHandling tests error handling in listStacksForComponent.
+func TestListStacksForComponentErrorHandling(t *testing.T) {
+	// Create a temp directory with invalid atmos.yaml (automatically reverted after test).
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	// Create invalid YAML that will cause InitCliConfig to fail.
+	invalidYaml := `invalid: yaml: content:
+  - this is: [broken
+`
+	err := os.WriteFile("atmos.yaml", []byte(invalidYaml), 0o644)
+	require.NoError(t, err)
+
+	// Call the function - should handle error gracefully.
+	stacks, err := listStacksForComponent("test-component")
+
+	// Should return error.
+	assert.Error(t, err, "Should return error for invalid config")
+	assert.Nil(t, stacks, "Should return nil stacks on error")
+}
+
+// TestListStacksForComponentEmptyComponent tests with empty component name.
+func TestListStacksForComponentEmptyComponent(t *testing.T) {
+	// Change to a valid directory (automatically reverted after test).
+	t.Chdir("../examples/demo-stacks")
+
+	// Call with empty component name.
+	stacks, err := listStacksForComponent("")
+
+	// Should not error. Empty component filter returns all stacks.
+	assert.NoError(t, err, "Should not error with empty component")
+	assert.NotEmpty(t, stacks, "Empty component filter returns all stacks")
+}
