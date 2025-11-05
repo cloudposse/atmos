@@ -1,0 +1,6 @@
+.terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!autoscalinggroup.auto.tfvars
