@@ -1,229 +1,186 @@
 package config
 
 import (
-	"fmt"
 	"os"
-	"reflect"
-	"strings"
+	"path/filepath"
 	"testing"
 
-	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestPreprocessAtmosYamlFunc(t *testing.T) {
+func TestProcessYAMLFunctionString(t *testing.T) {
 	tests := []struct {
-		name     string
-		yamlStr  string                            // Static YAML or format string
-		setup    func(*testing.T) (string, func()) // Returns dynamic YAML and cleanup
-		expected map[string]interface{}
-		wantErr  bool
+		name        string
+		input       string
+		setupEnv    func()
+		cleanupEnv  func()
+		expectError bool
+		validate    func(t *testing.T, result string)
 	}{
 		{
-			name: "sequence of mappings with same key",
-			setup: func(t *testing.T) (string, func()) {
-				t.Setenv("TEST_SERVER_1_NAME", "a")
-				t.Setenv("TEST_SERVER_2_NAME", "b")
-				yamlContent := `
-servers:
-  - name: !env TEST_SERVER_1_NAME
-  - name: !env TEST_SERVER_2_NAME
-`
-				return yamlContent, func() {
-					os.Unsetenv("TEST_SERVER_1_NAME")
-					os.Unsetenv("TEST_SERVER_2_NAME")
-				}
+			name:  "literal string without YAML function",
+			input: "/path/to/directory",
+			validate: func(t *testing.T, result string) {
+				assert.Equal(t, "/path/to/directory", result)
 			},
-			expected: map[string]interface{}{
-				"servers[0].name": "a",
-				"servers[1].name": "b",
-			},
-			wantErr: false,
 		},
 		{
-			name: "process !env directive with empty value",
-			yamlStr: `
-key: !env TEST_EMPTY_VAR
-`,
-			setup: func(t *testing.T) (string, func()) {
-				t.Setenv("TEST_EMPTY_VAR", "")
-				return `
-key: !env TEST_EMPTY_VAR
-`, func() {}
+			name:  "empty string",
+			input: "",
+			validate: func(t *testing.T, result string) {
+				assert.Equal(t, "", result)
 			},
-			expected: map[string]interface{}{
-				"key": "",
-			},
-			wantErr: false,
 		},
 		{
-			name: "process !env directive",
-			yamlStr: `
-key: !env TEST_ENV_VAR
-`,
-			setup: func(t *testing.T) (string, func()) {
-				t.Setenv("TEST_ENV_VAR", "test_value")
-				return `
-key: !env TEST_ENV_VAR
-`, func() { os.Unsetenv("TEST_ENV_VAR") }
+			name:  "string with whitespace",
+			input: "  /path/to/directory  ",
+			validate: func(t *testing.T, result string) {
+				assert.Equal(t, "/path/to/directory", result)
 			},
-			expected: map[string]interface{}{
-				"key": "test_value",
-			},
-			wantErr: false,
 		},
 		{
-			name: "process !exec directive",
-			yamlStr: `
-key: !exec "echo hello"
-`,
-			expected: map[string]interface{}{
-				"key": "hello",
+			name:  "!repo-root function",
+			input: "!repo-root",
+			setupEnv: func() {
+				// Set TEST_GIT_ROOT for testing
+				wd, _ := os.Getwd()
+				t.Setenv("TEST_GIT_ROOT", wd)
 			},
-			wantErr: false,
+			cleanupEnv: func() {
+				os.Unsetenv("TEST_GIT_ROOT")
+			},
+			validate: func(t *testing.T, result string) {
+				// Should return an absolute path
+				assert.True(t, filepath.IsAbs(result), "Expected absolute path, got: %s", result)
+				// Should not contain the literal "!repo-root"
+				assert.NotContains(t, result, "!repo-root")
+			},
 		},
 		{
-			name: "process !exec directive with empty output",
-			yamlStr: `
-key: !exec "echo ''"
-`,
-			expected: map[string]interface{}{
-				"key": "",
+			name:  "!repo-root with trailing space",
+			input: "!repo-root ",
+			setupEnv: func() {
+				wd, _ := os.Getwd()
+				t.Setenv("TEST_GIT_ROOT", wd)
 			},
-			wantErr: false,
+			cleanupEnv: func() {
+				os.Unsetenv("TEST_GIT_ROOT")
+			},
+			validate: func(t *testing.T, result string) {
+				assert.True(t, filepath.IsAbs(result))
+				assert.NotContains(t, result, "!repo-root")
+			},
 		},
 		{
-			name:    "process !include directive",
-			yamlStr: `key: !include %s`, // Format string placeholder
-			setup: func(t *testing.T) (string, func()) {
-				tmpfile, err := os.CreateTemp("", "include-test-*.yaml")
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer tmpfile.Close()
-
-				content := []byte("included_key: included_value")
-				if _, err := tmpfile.Write(content); err != nil {
-					t.Fatal(err)
-				}
-
-				// Generate the dynamic YAML with the temp file path
-				dynamicYAML := fmt.Sprintf("key: !include %s", tmpfile.Name())
-				return dynamicYAML, func() { os.Remove(tmpfile.Name()) }
+			name:  "!env function with existing variable",
+			input: "!env TEST_VAR",
+			setupEnv: func() {
+				t.Setenv("TEST_VAR", "/custom/path")
 			},
-			expected: map[string]interface{}{
-				"key": map[string]interface{}{
-					"included_key": "included_value",
-				},
+			cleanupEnv: func() {
+				os.Unsetenv("TEST_VAR")
 			},
-			wantErr: false,
+			validate: func(t *testing.T, result string) {
+				assert.Equal(t, "/custom/path", result)
+			},
 		},
 		{
-			name:    "process !include directive with empty file",
-			yamlStr: `key: !include %s`, // Format string placeholder
-			setup: func(t *testing.T) (string, func()) {
-				tmpfile, err := os.CreateTemp("", "include-empty-*.yaml")
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer tmpfile.Close()
-
-				// Write empty content
-				if _, err := tmpfile.Write([]byte("")); err != nil {
-					t.Fatal(err)
-				}
-
-				// Generate the dynamic YAML with the temp file path
-				dynamicYAML := fmt.Sprintf("key: !include %s", tmpfile.Name())
-				return dynamicYAML, func() { os.Remove(tmpfile.Name()) }
+			name:  "!env function with non-existent variable",
+			input: "!env NONEXISTENT_VAR",
+			validate: func(t *testing.T, result string) {
+				// Should return empty string for non-existent env var
+				assert.Equal(t, "", result)
 			},
-			expected: map[string]interface{}{
-				// Empty file results in no key being set
-			},
-			wantErr: false,
 		},
 		{
-			name: "nested mappings and sequences",
-			yamlStr: `
-parent:
-  child: !env NESTED_ENV_VAR
-  list:
-    - !exec "echo first"
-    - !include %s
-`,
-			setup: func(t *testing.T) (string, func()) {
-				t.Setenv("NESTED_ENV_VAR", "nested_value")
-
-				tmpfile, err := os.CreateTemp("", "nested-include-*.yaml")
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer tmpfile.Close()
-
-				content := []byte("included: value")
-				if _, err := tmpfile.Write(content); err != nil {
-					t.Fatal(err)
-				}
-
-				// Generate dynamic YAML with the temp file path
-				dynamicYAML := fmt.Sprintf(`
-parent:
-  child: !env NESTED_ENV_VAR
-  list:
-    - !exec "echo first"
-    - !include %s
-`, tmpfile.Name())
-				return dynamicYAML, func() {
-					os.Unsetenv("NESTED_ENV_VAR")
-					os.Remove(tmpfile.Name())
-				}
+			name:  "!env function with whitespace",
+			input: "!env TEST_VAR  ",
+			setupEnv: func() {
+				t.Setenv("TEST_VAR", "/another/path")
 			},
-			expected: map[string]interface{}{
-				"parent.child":            "nested_value",
-				"parent.list[0]":          "first",
-				"parent.list[1].included": "value",
+			cleanupEnv: func() {
+				os.Unsetenv("TEST_VAR")
 			},
-			wantErr: false,
+			validate: func(t *testing.T, result string) {
+				assert.Equal(t, "/another/path", result)
+			},
+		},
+		{
+			name:  "literal string that looks like YAML function but isn't",
+			input: "repo-root",
+			validate: func(t *testing.T, result string) {
+				assert.Equal(t, "repo-root", result)
+			},
+		},
+		{
+			name:  "string starting with exclamation but not a known function",
+			input: "!unknown-function",
+			validate: func(t *testing.T, result string) {
+				// Should return as-is since it's not a recognized function
+				assert.Equal(t, "!unknown-function", result)
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Determine the YAML content to use
-			var yamlContent string
-
-			if tt.setup != nil {
-				// Use the dynamic YAML from setup
-				var cleanup func()
-				yamlContent, cleanup = tt.setup(t)
-				if cleanup != nil {
-					defer cleanup()
-				}
-			} else {
-				// Use the static YAML
-				yamlContent = tt.yamlStr
+			// Setup environment if needed
+			if tt.setupEnv != nil {
+				tt.setupEnv()
 			}
 
-			v := viper.New()
-			err := preprocessAtmosYamlFunc([]byte(yamlContent), v)
-
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("preprocessAtmosYamlFunc() error = %v, wantErr %v", err, tt.wantErr)
+			// Cleanup after test
+			if tt.cleanupEnv != nil {
+				defer tt.cleanupEnv()
 			}
 
-			// Verify expected values in Viper
-			for key, expectedValue := range tt.expected {
-				actualValue := v.Get(key)
-				// check type if string trim spaces
+			// Run the function
+			result, err := ProcessYAMLFunctionString(tt.input)
 
-				if str, ok := actualValue.(string); ok {
-					actualValue = strings.TrimSpace(str)
-				}
+			// Check error expectation
+			if tt.expectError {
+				require.Error(t, err)
+				return
+			}
 
-				if !reflect.DeepEqual(actualValue, expectedValue) {
-					t.Errorf("Key %s: expected %v (%T), got %v (%T)",
-						key, expectedValue, expectedValue, actualValue, actualValue)
-				}
+			require.NoError(t, err)
+
+			// Validate result
+			if tt.validate != nil {
+				tt.validate(t, result)
 			}
 		})
 	}
+}
+
+func TestProcessYAMLFunctionString_RepoRoot(t *testing.T) {
+	// Test specifically that !repo-root resolves correctly
+	t.Run("resolves to current working directory in test", func(t *testing.T) {
+		wd, err := os.Getwd()
+		require.NoError(t, err)
+
+		// Set TEST_GIT_ROOT to current directory
+		t.Setenv("TEST_GIT_ROOT", wd)
+		defer os.Unsetenv("TEST_GIT_ROOT")
+
+		result, err := ProcessYAMLFunctionString("!repo-root")
+		require.NoError(t, err)
+
+		// Should resolve to the TEST_GIT_ROOT value
+		assert.Equal(t, wd, result)
+	})
+}
+
+func TestProcessYAMLFunctionString_EnvVarChaining(t *testing.T) {
+	// Test that we can use !env to reference another path
+	t.Run("environment variable with path", func(t *testing.T) {
+		testPath := "/infrastructure/environments/prod"
+		t.Setenv("INFRA_BASE", testPath)
+		defer os.Unsetenv("INFRA_BASE")
+
+		result, err := ProcessYAMLFunctionString("!env INFRA_BASE")
+		require.NoError(t, err)
+		assert.Equal(t, testPath, result)
+	})
 }
