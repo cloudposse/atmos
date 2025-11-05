@@ -74,6 +74,15 @@ func (p *StandardParser) Parse(ctx context.Context, args []string) (*StandardOpt
 		return nil, err
 	}
 
+	// Determine component value.
+	// Priority: component flag > positional arg (if exactly 1 arg).
+	component := getString(parsedConfig.Flags, "component")
+	if component == "" && len(parsedConfig.PositionalArgs) == 1 {
+		// For validate component command: atmos validate component vpc
+		// positionalArgs[0] = component name
+		component = parsedConfig.PositionalArgs[0]
+	}
+
 	// Convert to strongly-typed options.
 	opts := StandardOptions{
 		GlobalFlags: GlobalFlags{
@@ -97,7 +106,7 @@ func (p *StandardParser) Parse(ctx context.Context, args []string) (*StandardOpt
 			Version:         getBool(parsedConfig.Flags, "version"),
 		},
 		Stack:                       getString(parsedConfig.Flags, "stack"),
-		Component:                   getString(parsedConfig.Flags, "component"),
+		Component:                   component,
 		Format:                      getString(parsedConfig.Flags, "format"),
 		File:                        getString(parsedConfig.Flags, "file"),
 		ProcessTemplates:            getBool(parsedConfig.Flags, "process-templates"),

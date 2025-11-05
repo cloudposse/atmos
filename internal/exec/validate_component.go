@@ -26,12 +26,12 @@ func ExecuteValidateComponentCmd(opts *flags.StandardOptions) (string, string, e
 		return "", "", err
 	}
 
-	positionalArgs := opts.GetPositionalArgs()
-	if len(positionalArgs) != 1 {
+	// Component name from opts.Component field (populated from positional arg by parser).
+	if opts.Component == "" {
 		return "", "", errUtils.ErrInvalidComponentArgument
 	}
 
-	componentName := positionalArgs[0]
+	componentName := opts.Component
 
 	// Initialize spinner.
 	message := fmt.Sprintf("Validating Atmos Component: %s", componentName)
