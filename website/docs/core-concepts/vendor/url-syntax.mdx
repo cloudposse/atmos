@@ -272,17 +272,31 @@ source: "oci://docker.io/library/nginx:alpine"
 Atmos uses the following precedence order for OCI registry authentication:
 
 1. **Docker credentials** (highest precedence) - Credentials from `docker login` stored in `~/.docker/config.json`
-2. **Environment variables** - `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` for GitHub Container Registry (ghcr.io)
+2. **Environment variables** - For GitHub Container Registry (ghcr.io):
+   - **Token:** `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`
+   - **Username:** `ATMOS_GITHUB_USERNAME`, `GITHUB_ACTOR`, or `GITHUB_USERNAME`
 3. **Anonymous** - Fallback for public images
 
 **Examples:**
-```bash
-# Authenticate with Docker for any registry
-docker login ghcr.io
 
-# Or use environment variable for GitHub Container Registry
+```bash
+# Method 1: Authenticate with Docker (works for any registry)
+docker login ghcr.io -u YOUR_USERNAME
+# Enter your token when prompted
+
+# Method 2: Use environment variables for GHCR
 export GITHUB_TOKEN=ghp_your_token
+export GITHUB_ACTOR=your_username  # Or ATMOS_GITHUB_USERNAME
+
+# Method 3: GitHub Actions (automatic)
+# GITHUB_TOKEN and GITHUB_ACTOR are automatically available
 ```
+
+**Important GHCR Requirements:**
+- GitHub Container Registry requires **both** a username and token for authentication
+- Username must be your actual GitHub username (not `x-access-token`)
+- Without a username, authentication will fail even if token is set
+- In GitHub Actions, `GITHUB_ACTOR` is automatically set to the workflow actor's username
 
 User Docker credentials always take precedence over environment variable tokens.
 :::

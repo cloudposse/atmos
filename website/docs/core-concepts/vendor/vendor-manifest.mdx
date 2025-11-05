@@ -582,6 +582,52 @@ To specify a repository in an OCI registry, use the `oci://<registry>/<repositor
 Artifacts from OCI repositories are downloaded as Docker image tarballs, then all the layers are processed, un-tarred and un-compressed,
 and the files are written into the directories specified by the `targets` attribute of each `source`.
 
+### OCI Authentication
+
+Atmos uses the following precedence order for OCI registry authentication:
+
+1. **Docker credentials** (highest precedence) - Credentials from `docker login` stored in `~/.docker/config.json`
+2. **Environment variables** - For GitHub Container Registry (ghcr.io):
+   - **Token:** `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`
+   - **Username:** `ATMOS_GITHUB_USERNAME`, `GITHUB_ACTOR`, or `GITHUB_USERNAME`
+3. **Anonymous** - Fallback for public images
+
+#### GitHub Container Registry (ghcr.io) Requirements
+
+Unlike Git repository authentication, **GitHub Container Registry requires both a username and a token**:
+
+- **Username** must be your actual GitHub username (not `x-access-token`)
+- **Token** should be a GitHub Personal Access Token (PAT) or `GITHUB_TOKEN`
+- Without a username, authentication will fail even if the token is set
+
+**Authentication methods:**
+
+```bash
+# Method 1: Use docker login (recommended for local development)
+docker login ghcr.io -u YOUR_USERNAME
+# Enter your GitHub token when prompted
+
+# Method 2: Use environment variables
+export GITHUB_TOKEN=ghp_your_token
+export GITHUB_ACTOR=your_username  # Or ATMOS_GITHUB_USERNAME
+
+# Method 3: Configure in atmos.yaml
+# settings:
+#   github_username: "your_username"
+```
+
+**GitHub Actions setup:**
+
+In GitHub Actions, both `GITHUB_TOKEN` and `GITHUB_ACTOR` are automatically available:
+
+```yaml
+- name: Vendor from GHCR
+  run: atmos vendor pull -c vpc
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    # GITHUB_ACTOR is automatically set by GitHub Actions
+```
+
 For example, to vendor the `vpc` component from the `public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc`
 [AWS public ECR registry](https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html), use the following `source`:
 
