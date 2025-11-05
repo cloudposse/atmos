@@ -41,6 +41,7 @@ type StandardFlagParser struct {
 	validValues    map[string][]string // Valid values for flags (flag name -> valid values)
 	validationMsgs map[string]string   // Custom validation error messages (flag name -> message)
 	parsedFlags    *pflag.FlagSet      // Combined FlagSet used in last Parse() call (for Changed checks)
+	positionalArgs *positionalArgsConfig // Positional argument configuration
 }
 
 // NewStandardFlagParser creates a new StandardFlagParser with the given options.
@@ -69,6 +70,28 @@ func NewStandardFlagParser(opts ...Option) *StandardFlagParser {
 		viperPrefix:    config.viperPrefix,
 		validValues:    make(map[string][]string),
 		validationMsgs: make(map[string]string),
+	}
+}
+
+// SetPositionalArgs configures positional argument extraction and validation.
+//
+// Parameters:
+//   - specs: Positional argument specifications with TargetField mapping
+//   - validator: Cobra Args validator function
+//   - usage: Usage string for Cobra Use field (e.g., "[component]")
+//
+// This method is called by StandardOptionsBuilder.Build() when WithPositionalArgs() was used.
+func (p *StandardFlagParser) SetPositionalArgs(
+	specs []*PositionalArgSpec,
+	validator cobra.PositionalArgs,
+	usage string,
+) {
+	defer perf.Track(nil, "flagparser.StandardFlagParser.SetPositionalArgs")()
+
+	p.positionalArgs = &positionalArgsConfig{
+		specs:     specs,
+		validator: validator,
+		usage:     usage,
 	}
 }
 

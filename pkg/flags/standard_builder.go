@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -28,7 +30,8 @@ import (
 //	fmt.Println(opts.Stack)   // Type-safe!
 //	fmt.Println(opts.Format)  // Type-safe!
 type StandardOptionsBuilder struct {
-	options []Option
+	options        []Option
+	positionalArgs *positionalArgsConfig
 }
 
 // NewStandardOptionsBuilder creates a new builder for StandardParser.
@@ -345,14 +348,25 @@ func (b *StandardOptionsBuilder) WithAll() *StandardOptionsBuilder {
 	return b
 }
 
-// Build creates the StandardParser with all configured flags.
+// Build creates the StandardParser with all configured flags and positional args.
 // Returns a parser ready for RegisterFlags() and Parse() operations.
 func (b *StandardOptionsBuilder) Build() *StandardParser {
 	defer perf.Track(nil, "flags.StandardOptionsBuilder.Build")()
 
 	defer perf.Track(nil, "flagparser.StandardOptionsBuilder.Build")()
 
-	return NewStandardParser(b.options...)
+	parser := NewStandardParser(b.options...)
+
+	// Configure positional args if provided
+	if b.positionalArgs != nil {
+		parser.SetPositionalArgs(
+			b.positionalArgs.specs,
+			b.positionalArgs.validator,
+			b.positionalArgs.usage,
+		)
+	}
+
+	return parser
 }
 
 // WithEverything adds the everything flag for vendoring all components.
@@ -553,5 +567,34 @@ func (b *StandardOptionsBuilder) WithMask() *StandardOptionsBuilder {
 
 	b.options = append(b.options, WithBoolFlag("mask", "", true, "Enable automatic masking of sensitive data in output (use --mask=false to disable)"))
 	b.options = append(b.options, WithEnvVars("mask", "ATMOS_MASK"))
+	return b
+}
+
+// WithPositionalArgs configures positional argument validation and extraction.
+//
+// Parameters:
+//   - specs: Positional argument specifications with TargetField mapping
+//   - validator: Cobra Args validator function
+//   - usage: Usage string (e.g., "[component]")
+//
+// Example:
+//
+//	builder := flags.NewStandardOptionsBuilder().
+//	    WithPositionalArgs(flags.NewListSettingsPositionalArgsBuilder().
+//	        WithComponent(false).  // Optional component arg
+//	        Build()).
+//	    Build()
+func (b *StandardOptionsBuilder) WithPositionalArgs(
+	specs []*PositionalArgSpec,
+	validator cobra.PositionalArgs,
+	usage string,
+) *StandardOptionsBuilder {
+	defer perf.Track(nil, "flags.StandardOptionsBuilder.WithPositionalArgs")()
+
+	b.positionalArgs = &positionalArgsConfig{
+		specs:     specs,
+		validator: validator,
+		usage:     usage,
+	}
 	return b
 }

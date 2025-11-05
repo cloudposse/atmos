@@ -1,6 +1,8 @@
 package flags
 
 import (
+	"github.com/spf13/cobra"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -283,4 +285,12 @@ func (f *StringSliceFlag) GetEnvVars() []string {
 	defer perf.Track(nil, "flagparser.StringSliceFlag.GetEnvVars")()
 
 	return f.EnvVars
+}
+
+// positionalArgsConfig stores positional argument configuration.
+// Used by both StandardOptionsBuilder and StandardFlagParser.
+type positionalArgsConfig struct {
+	specs     []*PositionalArgSpec
+	validator cobra.PositionalArgs
+	usage     string
 }

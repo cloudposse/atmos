@@ -38,6 +38,18 @@ func NewStandardParser(opts ...Option) *StandardParser {
 	}
 }
 
+// SetPositionalArgs configures positional argument extraction and validation.
+// Delegates to the underlying StandardFlagParser.
+func (p *StandardParser) SetPositionalArgs(
+	specs []*PositionalArgSpec,
+	validator cobra.PositionalArgs,
+	usage string,
+) {
+	defer perf.Track(nil, "flagparser.StandardParser.SetPositionalArgs")()
+
+	p.parser.SetPositionalArgs(specs, validator, usage)
+}
+
 // RegisterFlags adds flags to the Cobra command.
 func (p *StandardParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.StandardParser.RegisterFlags")()
