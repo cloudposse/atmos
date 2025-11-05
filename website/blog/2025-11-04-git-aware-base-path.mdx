@@ -1,20 +1,18 @@
 ---
 slug: git-aware-base-path
-title: "Git-Aware Base Path: Run Atmos from Anywhere in Your Repository"
+title: "Git-Aware Base Path Configuration"
 authors: [osterman]
-tags: [atmos, cli, git, developer-experience, feature]
+tags: [atmos, cli, git, configuration]
 date: 2025-11-04
 ---
 
-We're excited to announce a significant improvement to Atmos that makes it work more like `git`: you can now run Atmos commands from any subdirectory within your repository!
-
-Starting with Atmos 1.198.0, the default `base_path` is set to your git repository root, eliminating the need for `--chdir` workarounds when working from component directories.
+Atmos 1.198.0 changes the default `base_path` to resolve to your git repository root. This allows running Atmos commands from any subdirectory within your repository.
 
 <!--truncate-->
 
-## The Problem
+## What Changed
 
-Previously, if you navigated into a subdirectory of your infrastructure repository, Atmos couldn't find your configuration:
+Previously, Atmos looked for `atmos.yaml` starting from the current working directory. If you were in a subdirectory, it would fail to find the configuration file.
 
 ```bash
 # Repository structure
@@ -23,269 +21,80 @@ Previously, if you navigated into a subdirectory of your infrastructure reposito
 ├── components/
 │   └── terraform/
 │       └── vpc/
-│           └── main.tf
 └── stacks/
 
-# This used to fail ❌
+# This failed in versions prior to 1.198.0
 cd /infra-repo/components/terraform/vpc
 atmos terraform plan vpc --stack prod
 # Error: atmos.yaml CLI config file was not found
-
-# Required workaround with --chdir
-atmos --chdir /infra-repo terraform plan vpc --stack prod
 ```
 
-This was frustrating because:
-- You had to remember the repository root path
-- Scripts needed extra logic to find the repo root
-- It didn't match the behavior of tools like `git`, `npm`, or `cargo`
-- The `--chdir` flag felt like a workaround, not a solution
+Starting with 1.198.0, the default embedded configuration includes `base_path: "!repo-root"`, which resolves to your git repository root.
 
-## The Solution
-
-Starting with Atmos 1.198.0, the embedded configuration sets `base_path: "!repo-root"` by default. This makes Atmos automatically resolve all paths relative to your git repository root, just like Git itself does.
-
-### It Just Works™
+## Behavior
 
 ```bash
-# Now works from anywhere! ✅
+# Now works from any subdirectory
 cd /infra-repo/components/terraform/vpc
-atmos terraform plan vpc --stack prod  # Finds config at repo root
-
-cd /infra-repo/stacks/prod
-atmos terraform plan vpc --stack prod  # Still works!
-
-cd /infra-repo
-atmos terraform plan vpc --stack prod  # Works here too!
+atmos terraform plan vpc --stack prod
+# Finds atmos.yaml at /infra-repo/atmos.yaml
 ```
 
-## How It Works
+The `!repo-root` YAML function resolves to the output of `git rev-parse --show-toplevel`. If not in a git repository, it falls back to the current directory.
 
-The `!repo-root` YAML function automatically finds your git repository root by walking up the directory tree until it finds a `.git` directory. This happens transparently - you don't need to configure anything!
+## YAML Function Support
 
-### YAML Function Support
-
-We've also added YAML function support to the `--base-path` flag and `ATMOS_BASE_PATH` environment variable:
+The `--base-path` flag and `ATMOS_BASE_PATH` environment variable now support YAML functions:
 
 ```bash
-# CLI flag with YAML function
-atmos --base-path="!repo-root" terraform plan
+# Using CLI flag
+atmos --base-path='!repo-root' terraform plan vpc --stack prod
 
-# Environment variable with YAML function
-export ATMOS_BASE_PATH="!repo-root"
-atmos terraform plan
+# Using environment variable
+export ATMOS_BASE_PATH='!repo-root'
+atmos terraform plan vpc --stack prod
 
-# Environment variable indirection
-export INFRA_ROOT="/custom/path"
-export ATMOS_BASE_PATH="!env INFRA_ROOT"
-atmos terraform plan
+# Using !env function
+export INFRA_ROOT=/path/to/infra
+atmos --base-path='!env INFRA_ROOT' terraform plan vpc --stack prod
 ```
 
-Supported YAML functions:
-- **`!repo-root`** - Resolves to git repository root path
-- **`!env VAR_NAME`** - Resolves to environment variable value
+## Restoring Previous Behavior
 
-## Migration Guide
-
-### For Most Users: No Action Required
-
-If your `atmos.yaml` is at your repository root, everything will continue to work exactly as before. The change is transparent and backward-compatible.
-
-### Restoring Pre-1.198.0 Behavior
-
-If you prefer the old behavior (paths relative to current working directory), simply add this to your `atmos.yaml`:
+If you need the pre-1.198.0 behavior (current directory as base path), add this to your `atmos.yaml`:
 
 ```yaml
 base_path: "."
 ```
 
-This makes all paths resolve relative to the current working directory, exactly like Atmos 1.197.0 and earlier.
+This sets the base path to the current working directory, matching the behavior of Atmos versions prior to 1.198.0.
 
-### Custom Base Paths
+## Migration
 
-You can still use absolute paths or environment variables:
+Most users won't need to change anything. The new default works for repositories where:
+- `atmos.yaml` is at the repository root
+- You want to run commands from any subdirectory
 
-```yaml
-# Absolute path
-base_path: "/infrastructure"
-
-# Environment variable
-base_path: "${HOME}/my-infra"
-
-# Explicit git root (same as default now)
-base_path: "!repo-root"
-```
-
-## Real-World Benefits
-
-### 1. Simplified Development Workflow
-
-```bash
-# Work on a specific component
-cd components/terraform/vpc
-vim main.tf
-
-# Test it immediately without navigating back
-atmos terraform plan vpc --stack dev
-```
-
-### 2. Cleaner Scripts
-
-```bash
-#!/bin/bash
-# No more finding repo root!
-
-# Just run from wherever you are
-atmos terraform apply vpc --stack prod
-```
-
-### 3. Better CI/CD
-
-```yaml
-# GitHub Actions - no path gymnastics needed
-- name: Deploy infrastructure
-  run: |
-    cd infrastructure/components/terraform/vpc
-    atmos terraform apply vpc --stack prod
-```
-
-### 4. Multi-Component Workflows
-
-```bash
-# Deploy multiple components without cd-ing around
-cd components/terraform
-atmos terraform plan vpc --stack prod
-atmos terraform plan eks --stack prod
-atmos terraform plan rds --stack prod
-```
+If your setup relies on `atmos.yaml` being in the current directory (not the repo root), explicitly set `base_path: "."` in your configuration.
 
 ## Technical Details
 
-### Breaking Change Notice
+**Configuration precedence** (highest to lowest):
+1. `--base-path` CLI flag
+2. `ATMOS_BASE_PATH` environment variable
+3. `base_path` in `atmos.yaml`
+4. Embedded default: `base_path: "!repo-root"`
 
-**This is a breaking change** if you rely on paths resolving relative to your current working directory from subdirectories.
+**Git root detection:**
+- Uses `git rev-parse --show-toplevel`
+- Falls back to current directory if not in a git repository
+- Can be overridden with `TEST_GIT_ROOT` environment variable (for testing)
 
-**Before (1.197.0):**
-- `base_path` defaulted to empty string (current directory)
-- Running from subdirectories would fail to find `atmos.yaml`
+## Breaking Change
 
-**After (1.198.0):**
-- `base_path` defaults to `!repo-root` (git repository root)
-- Running from subdirectories automatically finds `atmos.yaml` at repo root
+This is a breaking change if:
+- Your `atmos.yaml` is not at your git repository root
+- You rely on the current directory as the base path
+- Your scripts assume Atmos must be run from a specific directory
 
-**Mitigation:**
-Add `base_path: "."` to your `atmos.yaml` to restore old behavior.
-
-### Fallback Behavior
-
-If you're not in a git repository (e.g., testing in `/tmp`), `!repo-root` gracefully falls back to the current working directory. No errors, just sensible defaults.
-
-### Configuration Precedence
-
-The standard precedence still applies (last wins):
-
-1. Embedded configuration (`!repo-root` by default)
-2. System directory config
-3. Home directory config
-4. Current directory config
-5. Git repository root config
-6. Environment variables (`ATMOS_BASE_PATH`)
-7. Command-line arguments (`--base-path`)
-
-## Examples
-
-### Example 1: Component Development
-
-```bash
-# Clone infrastructure repo
-git clone git@github.com:company/infrastructure.git
-cd infrastructure
-
-# Work on VPC component
-cd components/terraform/vpc
-
-# All these work from component directory:
-atmos terraform plan vpc --stack dev
-atmos terraform validate vpc --stack dev
-atmos describe component vpc --stack dev
-```
-
-### Example 2: Stack Management
-
-```bash
-# Navigate to stacks directory
-cd /infra/stacks/prod
-
-# Manage stacks from here
-atmos list stacks
-atmos describe stacks
-atmos terraform plan-all --stack prod
-```
-
-### Example 3: CI/CD Pipeline
-
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy Infrastructure
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy VPC
-        working-directory: components/terraform/vpc
-        run: |
-          # Works because Atmos finds atmos.yaml at repo root
-          atmos terraform apply vpc --stack prod
-```
-
-### Example 4: Monorepo with Multiple Infra Directories
-
-```bash
-# Repo structure:
-# /monorepo/
-# ├── atmos.yaml
-# ├── apps/
-# │   └── web/
-# └── infrastructure/
-#     └── terraform/
-#         └── aws/
-
-# Works from anywhere:
-cd /monorepo/apps/web
-atmos terraform plan vpc --stack prod  # Finds /monorepo/atmos.yaml
-
-cd /monorepo/infrastructure/terraform/aws
-atmos terraform plan vpc --stack prod  # Still finds /monorepo/atmos.yaml
-```
-
-## Try It Out
-
-Upgrade to Atmos 1.198.0 or later and experience the convenience:
-
-```bash
-# Using Homebrew
-brew upgrade atmos
-
-# Using Go
-go install github.com/cloudposse/atmos@latest
-
-# Check your version
-atmos version
-```
-
-## Feedback Welcome
-
-This change makes Atmos more intuitive and removes a common pain point. If you encounter any issues or have suggestions, please:
-
-- [Open an issue on GitHub](https://github.com/cloudposse/atmos/issues)
-- [Join our Slack community](https://slack.cloudposse.com)
-- [Read the documentation](https://atmos.tools/cli/configuration)
-
-We're committed to making Atmos the best tool for managing cloud infrastructure at scale!
+**Fix:** Add `base_path: "."` to your `atmos.yaml` to restore the previous behavior.
