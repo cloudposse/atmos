@@ -21,49 +21,49 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", testDir)
 
 	tests := []struct {
-		name          string
-		args          []string
-		skipOnWindows bool
-		expectedError string
+		name             string
+		args             []string
+		skipOnWindows    bool
+		expectedSentinel error
 	}{
 		{
-			name:          "identity flag without command",
-			args:          []string{"--identity=test-user"},
-			expectedError: "no command specified",
+			name:             "identity flag without command",
+			args:             []string{"--identity=test-user"},
+			expectedSentinel: errUtils.ErrNoCommandSpecified,
 		},
 		{
-			name:          "double dash without command",
-			args:          []string{"--"},
-			expectedError: "no command specified",
+			name:             "double dash without command",
+			args:             []string{"--"},
+			expectedSentinel: errUtils.ErrNoCommandSpecified,
 		},
 		{
-			name:          "identity flag with double dash but no command",
-			args:          []string{"--identity=test-user", "--"},
-			expectedError: "no command specified",
+			name:             "identity flag with double dash but no command",
+			args:             []string{"--identity=test-user", "--"},
+			expectedSentinel: errUtils.ErrNoCommandSpecified,
 		},
 		{
-			name:          "nonexistent identity",
-			args:          []string{"--identity=nonexistent", "--", "echo", "test"},
-			expectedError: "identity not found",
+			name:             "nonexistent identity",
+			args:             []string{"--identity=nonexistent", "--", "echo", "test"},
+			expectedSentinel: errUtils.ErrIdentityNotFound,
 		},
 		{
-			name:          "identity flag with no value before double dash",
-			args:          []string{"--identity", "--", "echo", "test"},
-			expectedError: "requires a TTY", // Interactive selection requires TTY.
+			name:             "identity flag with no value before double dash",
+			args:             []string{"--identity", "--", "echo", "test"},
+			expectedSentinel: errUtils.ErrIdentitySelectionRequiresTTY, // Interactive selection requires TTY.
 		},
 		{
 			name: "valid command with default identity",
 			args: []string{"echo", "test"},
 			// This will fail because the default identity (test-admin) uses AWS SSO which requires TTY for interactive flow.
 			// Without a TTY, we can't do interactive authentication.
-			expectedError: "requires a TTY",
+			expectedSentinel: errUtils.ErrIdentitySelectionRequiresTTY,
 		},
 		{
 			name:          "valid command with specific identity and double dash",
 			args:          []string{"--identity=test-user", "--", "echo", "hello"},
 			skipOnWindows: true, // echo behaves differently on Windows
 			// This will fail with auth errors since we don't have real AWS credentials.
-			expectedError: "authentication failed",
+			expectedSentinel: errUtils.ErrAuthenticationFailed,
 		},
 	}
 
@@ -87,11 +87,9 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 			// Call the core business logic directly, bypassing handleHelpRequest and checkAtmosConfig.
 			err := executeAuthExecCommandCore(tt.args)
 
-			if tt.expectedError != "" {
-				assert.Error(t, err)
-				if err != nil {
-					assert.Contains(t, err.Error(), tt.expectedError)
-				}
+			if tt.expectedSentinel != nil {
+				require.Error(t, err, "expected error but got nil")
+				assert.ErrorIs(t, err, tt.expectedSentinel, "error should wrap expected sentinel error")
 			} else {
 				assert.NoError(t, err)
 			}

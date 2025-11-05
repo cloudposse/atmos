@@ -55,10 +55,16 @@ var (
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 
-	// ErrAuthConsole is returned when auth console command operations fail.
+	// Authentication and TTY errors.
 	ErrAuthConsole          = errors.New("auth console operation failed")
 	ErrProviderNotSupported = errors.New("provider does not support this operation")
 	ErrUnknownServiceAlias  = errors.New("unknown service alias")
+	ErrTTYRequired          = errors.New("requires a TTY")
+
+	// Component and positional argument errors.
+	ErrComponentRequired     = errors.New("component is required")
+	ErrInvalidPositionalArgs = errors.New("invalid positional arguments")
+	ErrWorkflowNameRequired  = errors.New("workflow name is required")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
