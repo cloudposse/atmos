@@ -27,9 +27,8 @@ type PackerOptions struct {
 	GlobalFlags // Embedded global flags (chdir, logs-level, identity, etc.)
 
 	// Common flags (shared with Terraform, Helmfile).
-	Stack    string // --stack/-s: Target stack name.
-	Identity IdentitySelector
-	DryRun   bool // --dry-run: Perform dry run without making actual changes.
+	Stack  string // --stack/-s: Target stack name.
+	DryRun bool   // --dry-run: Perform dry run without making actual changes.
 
 	// Positional arguments (populated automatically by parser from TargetField mapping).
 	Component string // Component name from positional arg (e.g., "ami" in: atmos packer build ami)
@@ -76,9 +75,8 @@ func ParsePackerFlags(cmd *cobra.Command, v *viper.Viper, positionalArgs, passTh
 		GlobalFlags: ParseGlobalFlags(cmd, v),
 
 		// Common flags.
-		Stack:    v.GetString("stack"),
-		Identity: parseIdentityFlag(cmd, v),
-		DryRun:   v.GetBool("dry-run"),
+		Stack:  v.GetString("stack"),
+		DryRun: v.GetBool("dry-run"),
 
 		// Positional arguments.
 		Component: component,

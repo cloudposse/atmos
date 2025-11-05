@@ -83,7 +83,6 @@ func (p *HelmfileParser) Parse(ctx context.Context, args []string) (*HelmfileOpt
 			Version:         getBool(parsedConfig.Flags, "version"),
 		},
 		Stack:           getString(parsedConfig.Flags, "stack"),
-		Identity:        getIdentitySelector(parsedConfig.Flags, "identity"),
 		DryRun:          getBool(parsedConfig.Flags, "dry-run"),
 		positionalArgs:  parsedConfig.PositionalArgs,
 		passThroughArgs: parsedConfig.PassThroughArgs,

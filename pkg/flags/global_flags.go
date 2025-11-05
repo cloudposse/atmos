@@ -67,7 +67,7 @@ func NewGlobalFlags() GlobalFlags {
 	defer perf.Track(nil, "flagparser.NewGlobalFlags")()
 
 	return GlobalFlags{
-		LogsLevel:    "Info",
+		LogsLevel:    "Warning",
 		LogsFile:     "/dev/stderr",
 		NoColor:      false,
 		ForceColor:   false,
