@@ -143,18 +143,18 @@ func (p *StandardFlagParser) registerFlag(cmd *cobra.Command, flag Flag) {
 
 // RegisterPersistentFlags registers flags as persistent flags (available to subcommands).
 // This is used for global flags that should be inherited by all subcommands.
+// NOTE: Unlike RegisterFlags(), this does NOT set DisableFlagParsing=true because
+// persistent flags on the root command should work with Cobra's normal flag parsing.
+// Disabling flag parsing on the root would break all subcommands' positional arguments.
 func (p *StandardFlagParser) RegisterPersistentFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.StandardFlagParser.RegisterPersistentFlags")()
 
 	// Store command for manual flag parsing in Parse().
 	p.cmd = cmd
 
-	// IMPORTANT: Disable Cobra's flag parsing so our parser can handle it.
-	// This is critical for:
-	// - Proper positional argument extraction (component names, workflow names, etc.)
-	// - Viper precedence handling (CLI → ENV → config → defaults)
-	// - Short flag support (-s, -f, -i, etc.)
-	cmd.DisableFlagParsing = true
+	// DO NOT set cmd.DisableFlagParsing = true here!
+	// Persistent flags on root command must work with Cobra's normal parsing.
+	// Otherwise, all subcommands' positional args will be treated as unknown subcommands.
 
 	for _, flag := range p.registry.All() {
 		p.registerPersistentFlag(cmd, flag)

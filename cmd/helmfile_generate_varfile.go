@@ -46,7 +46,6 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 }
 
 func init() {
-
 	// Register StandardOptions flags.
 	helmfileGenerateVarfileParser.RegisterFlags(helmfileGenerateVarfileCmd)
 	if err := helmfileGenerateVarfileParser.BindToViper(viper.GetViper()); err != nil {

@@ -2,9 +2,44 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 )
+
+func newAwsEksUpdateKubeconfigParser() *flags.StandardParser {
+	// Build parser with AWS EKS-specific flags.
+	options := []flags.Option{
+		flags.WithStringFlag("profile", "", "", "Specify the AWS CLI profile to use for authentication"),
+		flags.WithEnvVars("profile", "AWS_PROFILE"),
+
+		flags.WithStringFlag("name", "", "", "Specify the name of the EKS cluster to update the kubeconfig for"),
+		flags.WithEnvVars("name", "ATMOS_EKS_CLUSTER_NAME"),
+
+		flags.WithStringFlag("region", "", "", "Specify the AWS region where the EKS cluster is located"),
+		flags.WithEnvVars("region", "AWS_REGION", "AWS_DEFAULT_REGION"),
+
+		flags.WithStringFlag("kubeconfig", "", "", "Specify the path to the kubeconfig file to be updated or created for accessing the EKS cluster."),
+		flags.WithEnvVars("kubeconfig", "KUBECONFIG"),
+
+		flags.WithStringFlag("role-arn", "", "", "Specify the ARN of the IAM role to assume for authenticating with the EKS cluster."),
+		flags.WithEnvVars("role-arn", "ATMOS_EKS_ROLE_ARN"),
+
+		flags.WithBoolFlag("dry-run", "", false, "Perform a dry run to simulate updating the kubeconfig without making any changes."),
+		flags.WithEnvVars("dry-run", "ATMOS_DRY_RUN"),
+
+		flags.WithBoolFlag("verbose", "", false, "Enable verbose logging to provide detailed output during the kubeconfig update process."),
+		flags.WithEnvVars("verbose", "ATMOS_VERBOSE"),
+
+		flags.WithStringFlag("alias", "", "", "Specify an alias to use for the cluster context name in the kubeconfig file."),
+		flags.WithEnvVars("alias", "ATMOS_EKS_ALIAS"),
+	}
+
+	return flags.NewStandardParser(options...)
+}
+
+var awsEksUpdateKubeconfigParser = newAwsEksUpdateKubeconfigParser()
 
 // awsEksCmdUpdateKubeconfigCmd executes 'aws eks update-kubeconfig' command.
 var awsEksCmdUpdateKubeconfigCmd = &cobra.Command{
@@ -27,7 +62,7 @@ then ` + "`" + `atmos` + "`" + ` executes the command without requiring the ` + 
 
 See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html for more information.`,
 
-	ValidArgsFunction:  ComponentsArgCompletion,
+	ValidArgsFunction: ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		err := e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)
 		return err
@@ -36,16 +71,11 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html.
 func init() {
-	awsEksCmdUpdateKubeconfigCmd.DisableFlagParsing = false
+	// Register flags using builder pattern.
+	awsEksUpdateKubeconfigParser.RegisterFlags(awsEksCmdUpdateKubeconfigCmd)
+	_ = awsEksUpdateKubeconfigParser.BindToViper(viper.GetViper())
+
 	AddStackCompletion(awsEksCmdUpdateKubeconfigCmd)
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("profile", "", "Specify the AWS CLI profile to use for authentication")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("name", "", "Specify the name of the EKS cluster to update the kubeconfig for")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("region", "", "Specify the AWS region where the EKS cluster is located")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("kubeconfig", "", "Specify the path to the kubeconfig file to be updated or created for accessing the EKS cluster.")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("role-arn", "", "Specify the ARN of the IAM role to assume for authenticating with the EKS cluster.")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().Bool("dry-run", false, "Perform a dry run to simulate updating the kubeconfig without making any changes.")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().Bool("verbose", false, "Enable verbose logging to provide detailed output during the kubeconfig update process.")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("alias", "", "Specify an alias to use for the cluster context name in the kubeconfig file.")
 
 	awsEksCmd.AddCommand(awsEksCmdUpdateKubeconfigCmd)
 }

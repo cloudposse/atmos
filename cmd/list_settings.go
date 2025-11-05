@@ -3,19 +3,26 @@ package cmd
 import (
 	"errors"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	utils "github.com/cloudposse/atmos/pkg/utils"
 )
+
+var listSettingsParser = flags.NewStandardOptionsBuilder().
+	WithProcessTemplates(true).
+	WithProcessFunctions(true).
+	Build()
 
 // listSettingsCmd lists settings across stacks.
 var listSettingsCmd = &cobra.Command{
@@ -45,8 +52,9 @@ var listSettingsCmd = &cobra.Command{
 func init() {
 	fl.AddCommonListFlags(listSettingsCmd)
 
-	listSettingsCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
-	listSettingsCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
+	// Register processing flags using builder pattern.
+	listSettingsParser.RegisterFlags(listSettingsCmd)
+	_ = listSettingsParser.BindToViper(viper.GetViper())
 
 	AddStackCompletion(listSettingsCmd)
 	listCmd.AddCommand(listSettingsCmd)

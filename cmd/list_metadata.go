@@ -3,19 +3,26 @@ package cmd
 import (
 	"errors"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	utils "github.com/cloudposse/atmos/pkg/utils"
 )
+
+var listMetadataParser = flags.NewStandardOptionsBuilder().
+	WithProcessTemplates(true).
+	WithProcessFunctions(true).
+	Build()
 
 // listMetadataCmd lists metadata across stacks.
 var listMetadataCmd = &cobra.Command{
@@ -44,9 +51,9 @@ var listMetadataCmd = &cobra.Command{
 func init() {
 	fl.AddCommonListFlags(listMetadataCmd)
 
-	// Add template and function processing flags
-	listMetadataCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
-	listMetadataCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
+	// Register processing flags using builder pattern.
+	listMetadataParser.RegisterFlags(listMetadataCmd)
+	_ = listMetadataParser.BindToViper(viper.GetViper())
 
 	AddStackCompletion(listMetadataCmd)
 

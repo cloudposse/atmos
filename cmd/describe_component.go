@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -28,11 +29,12 @@ var describeComponentParser = flags.NewStandardOptionsBuilder().
 
 // describeComponentCmd describes configuration for components.
 var describeComponentCmd = &cobra.Command{
-	Use:                "component",
-	Short:              "Show configuration details for an Atmos component in a stack",
-	Long:               `Display the configuration details for a specific Atmos component within a designated Atmos stack, including its dependencies, settings, and overrides.`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Args:               cobra.ExactArgs(1),
+	Use:   "component",
+	Short: "Show configuration details for an Atmos component in a stack",
+	Long:  `Display the configuration details for a specific Atmos component within a designated Atmos stack, including its dependencies, settings, and overrides.`,
+	// NOTE: With DisableFlagParsing=true (set by RegisterFlags), Args validator sees raw args including flags.
+	// We validate positional args after parsing in RunE instead.
+	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration.
 		checkAtmosConfig()
@@ -47,9 +49,10 @@ var describeComponentCmd = &cobra.Command{
 		}
 
 		// Extract component from positional arguments.
+		// Validate exactly 1 positional arg (component name).
 		positionalArgs := opts.GetPositionalArgs()
-		if len(positionalArgs) == 0 {
-			return cobra.ExactArgs(1)(cmd, args)
+		if len(positionalArgs) != 1 {
+			return fmt.Errorf("%w: invalid arguments. The command requires one argument `component`", errUtils.ErrInvalidArgumentError)
 		}
 		component := positionalArgs[0]
 
