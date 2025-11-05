@@ -97,8 +97,9 @@ func TestCustomGitDetector_EndToEnd_GitHubTokenFallback(t *testing.T) {
 			assert.Contains(t, finalURL, tt.expectedUsername+":", "Final URL should contain correct username")
 
 			// Verify token is in URL (one of the two tokens)
-			hasGithubToken := strings.Contains(finalURL, tt.githubToken)
-			hasAtmosToken := strings.Contains(finalURL, tt.atmosGithubToken)
+			// Gate the Contains checks on non-empty tokens to avoid false positives (empty string always matches)
+			hasGithubToken := tt.githubToken != "" && strings.Contains(finalURL, tt.githubToken)
+			hasAtmosToken := tt.atmosGithubToken != "" && strings.Contains(finalURL, tt.atmosGithubToken)
 			assert.True(t, hasGithubToken || hasAtmosToken,
 				"Final URL should contain either GITHUB_TOKEN or ATMOS_GITHUB_TOKEN")
 
