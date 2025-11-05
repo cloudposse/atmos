@@ -63,9 +63,11 @@ func (p *AuthParser) Parse(ctx context.Context, args []string) (*AuthOptions, er
 	// Check if duration flag was explicitly provided via CLI.
 	// Using flag.Changed is more reliable than checking for non-empty string,
 	// as it correctly handles --duration="" vs no flag at all.
+	// Use parsedFlags (the combined FlagSet from Parse) instead of p.cmd.Flags()
+	// to correctly detect changes when DisableFlagParsing is enabled.
 	durationProvided := false
-	if p.cmd != nil {
-		if flag := p.cmd.Flags().Lookup("duration"); flag != nil {
+	if p.parser.parsedFlags != nil {
+		if flag := p.parser.parsedFlags.Lookup("duration"); flag != nil {
 			durationProvided = flag.Changed
 		}
 	}

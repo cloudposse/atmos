@@ -40,6 +40,7 @@ type StandardFlagParser struct {
 	viperPrefix    string
 	validValues    map[string][]string // Valid values for flags (flag name -> valid values)
 	validationMsgs map[string]string   // Custom validation error messages (flag name -> message)
+	parsedFlags    *pflag.FlagSet      // Combined FlagSet used in last Parse() call (for Changed checks)
 }
 
 // NewStandardFlagParser creates a new StandardFlagParser with the given options.
@@ -331,6 +332,10 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 		PassThroughArgs: []string{},
 	}
 
+	// combinedFlags holds both local and inherited flags for validation.
+	// Declared outside if block so it's accessible for validation step.
+	var combinedFlags *pflag.FlagSet
+
 	// Step 1: Manually parse args into Cobra FlagSet (since DisableFlagParsing=true)
 	// This populates the pflags which are bound to Viper
 	// IMPORTANT: When DisableFlagParsing=true, we must manually parse BOTH local flags
@@ -338,7 +343,7 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 	if p.cmd != nil && len(args) > 0 {
 		// Create a combined FlagSet with both local flags and inherited persistent flags.
 		// This ensures persistent flags like --logs-level work correctly.
-		combinedFlags := pflag.NewFlagSet("combined", pflag.ContinueOnError)
+		combinedFlags = pflag.NewFlagSet("combined", pflag.ContinueOnError)
 
 		// Add inherited flags first (persistent flags from parent commands).
 		p.cmd.InheritedFlags().VisitAll(func(flag *pflag.Flag) {
@@ -352,6 +357,9 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 				combinedFlags.AddFlag(flag)
 			}
 		})
+
+		// Store combinedFlags so other code can check Changed status.
+		p.parsedFlags = combinedFlags
 
 		// Parse args with the combined FlagSet.
 		if err := combinedFlags.Parse(args); err != nil {
@@ -407,7 +415,8 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 	}
 
 	// Step 3: Validate flag values against valid values constraints.
-	if err := p.validateFlagValues(result.Flags); err != nil {
+	// Pass combinedFlags so validation can check Changed status correctly.
+	if err := p.validateFlagValues(result.Flags, combinedFlags); err != nil {
 		return nil, err
 	}
 
@@ -418,7 +427,8 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 // Returns error if any flag value is not in its valid values list.
 // Only validates flags that were explicitly changed by the user to avoid pollution from
 // Viper/environment variables in tests where commands run sequentially.
-func (p *StandardFlagParser) validateFlagValues(flags map[string]interface{}) error {
+// combinedFlags is the FlagSet used for parsing (includes both local and inherited flags).
+func (p *StandardFlagParser) validateFlagValues(flags map[string]interface{}, combinedFlags *pflag.FlagSet) error {
 	defer perf.Track(nil, "flagparser.StandardFlagParser.validateFlagValues")()
 
 	if p.validValues == nil {
@@ -434,8 +444,9 @@ func (p *StandardFlagParser) validateFlagValues(flags map[string]interface{}) er
 		// Only validate flags that were explicitly changed by the user.
 		// This prevents validation errors from stale Viper values when tests run
 		// multiple commands sequentially without resetting Viper state.
-		if p.cmd != nil {
-			cobraFlag := p.cmd.Flags().Lookup(flagName)
+		// Check combinedFlags (which includes inherited flags) instead of just p.cmd.Flags().
+		if combinedFlags != nil {
+			cobraFlag := combinedFlags.Lookup(flagName)
 			if cobraFlag != nil && !cobraFlag.Changed {
 				continue // Skip validation for flags not explicitly set by user
 			}

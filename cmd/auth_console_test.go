@@ -663,7 +663,8 @@ func TestResolveConsoleDuration(t *testing.T) {
 
 			// Create opts with duration value.
 			opts := &flags.AuthOptions{
-				Duration: tt.flagValue,
+				Duration:         tt.flagValue,
+				DurationProvided: tt.flagSet, // Use flagSet to set DurationProvided
 			}
 
 			// Create mock auth manager using gomock.
