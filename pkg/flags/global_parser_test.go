@@ -449,8 +449,7 @@ func TestParseGlobalFlags_Precedence(t *testing.T) {
 
 			got := ParseGlobalFlags(cmd, v)
 
-			switch tt.field {
-			case "LogsLevel":
+			if tt.field == "LogsLevel" {
 				assert.Equal(t, tt.expected, got.LogsLevel)
 			}
 		})
