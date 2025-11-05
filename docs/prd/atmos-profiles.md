@@ -390,15 +390,24 @@ active_profiles:
 
 **TR2.2**: Profile configurations MUST be validated using existing Atmos configuration schema
 
-**TR2.3**: New top-level `Profiles` configuration MUST be added to `AtmosConfiguration` in `pkg/schema/schema.go`:
+**TR2.3**: New top-level `Profiles` and `Metadata` configuration MUST be added to `AtmosConfiguration` in `pkg/schema/schema.go`:
 ```go
 type AtmosConfiguration struct {
     // ... existing fields ...
     Profiles ProfilesConfig `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
+    Metadata ConfigMetadata `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
 }
 
 type ProfilesConfig struct {
     BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+}
+
+type ConfigMetadata struct {
+    Name        string   `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+    Description string   `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
+    Version     string   `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
+    Tags        []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
+    Deprecated  bool     `yaml:"deprecated,omitempty" json:"deprecated,omitempty" mapstructure:"deprecated"`
 }
 ```
 
@@ -407,6 +416,90 @@ type ProfilesConfig struct {
 **TR2.5**: Configuration errors in profiles MUST include profile name and source location in error messages
 
 **TR2.6**: Profile imports MUST use the same validation and cycle detection as stack imports
+
+**TR2.7**: Metadata auto-population MUST occur after configuration loading:
+- Base config (`atmos.yaml`): Auto-populate `metadata.name` to `"default"` if not set
+- Profile configs: Auto-populate `metadata.name` to directory basename if not set
+- Example: `profiles/ci/` → `metadata.name = "ci"`
+
+**TR2.8**: Metadata merge behavior when profile has multiple files:
+- **First non-empty wins** for singular fields (`name`, `description`, `version`, `deprecated`)
+- **Union (append + deduplicate)** for array fields (`tags`)
+- Best practice: Define metadata in `_metadata.yaml` or first alphabetical file
+
+```go
+// Metadata merge logic
+func mergeConfigMetadata(existing *ConfigMetadata, incoming *ConfigMetadata) {
+    // First non-empty wins
+    if existing.Name == "" && incoming.Name != "" {
+        existing.Name = incoming.Name
+    }
+    if existing.Description == "" && incoming.Description != "" {
+        existing.Description = incoming.Description
+    }
+    if existing.Version == "" && incoming.Version != "" {
+        existing.Version = incoming.Version
+    }
+    if !existing.Deprecated && incoming.Deprecated {
+        existing.Deprecated = incoming.Deprecated
+    }
+
+    // Tags: Union (append and deduplicate)
+    if len(incoming.Tags) > 0 {
+        existing.Tags = appendUnique(existing.Tags, incoming.Tags)
+    }
+}
+```
+
+#### TR2a: Tag-Based Filtering
+
+**TR2a.1**: Profile tags MUST enable automatic filtering of resources when active
+
+**TR2a.2**: When profile with tags is active, commands MUST filter resources by matching tags:
+- `atmos describe stacks` - Show only stacks with matching tags
+- `atmos list components` - Show only components with matching tags
+- `atmos auth list identities` - Show only identities with matching tags
+
+**TR2a.3**: Tag matching logic:
+- If profile has tags `["developer", "local"]`
+- Filter matches resources with **any** of those tags (OR logic)
+- Example: Identity with `tags: ["developer"]` → Shown
+- Example: Identity with `tags: ["production"]` → Hidden
+
+**TR2a.4**: Tag filtering MUST be opt-in via flag or configuration:
+- Flag: `--filter-by-profile-tags` (enables automatic filtering)
+- Config: `profiles.filter_by_tags: true` (enables by default)
+- Default: Disabled (backward compatible - show all resources)
+
+**TR2a.5**: Tag filtering examples:
+
+```yaml
+# profiles/developer/_metadata.yaml
+metadata:
+  name: developer
+  tags: ["developer", "local"]
+
+# When --profile developer --filter-by-profile-tags active:
+# Only shows identities/stacks/components with tags: ["developer"] or ["local"]
+```
+
+```bash
+# List only developer identities when developer profile active
+atmos auth list identities --profile developer --filter-by-profile-tags
+
+# Output: Only shows identities tagged with "developer" or "local"
+```
+
+**TR2a.6**: Multiple profiles with tag filtering:
+- When multiple profiles active: `--profile developer,ci`
+- Tags are **unioned**: `["developer", "local", "ci", "github-actions"]`
+- Resources matching **any** tag are shown
+
+**TR2a.7**: Tag filtering MUST work with:
+- Identity listing: `atmos auth list identities`
+- Component listing: `atmos list components`
+- Stack listing: `atmos describe stacks`
+- Future: Any resource with `tags` field
 
 #### TR3: Performance
 
@@ -757,6 +850,17 @@ Note: Provenance annotations show the source file and line number where each val
 **Note:** This example uses `auth.defaults.identity` from the [Auth Default Settings PRD](./auth-default-settings.md) to provide deterministic identity selection in non-interactive (CI) environments.
 
 ```yaml
+# profiles/ci/_metadata.yaml (or in auth.yaml as first file)
+metadata:
+  name: ci
+  description: "GitHub Actions CI/CD environment for production deployments"
+  version: "2.1.0"
+  tags:
+    - ci
+    - github-actions
+    - production
+    - non-interactive
+
 # profiles/ci/auth.yaml
 auth:
   # Use auth.defaults.identity for deterministic selection in CI (no TTY needed)
@@ -831,6 +935,17 @@ ATMOS_PROFILE=ci ATMOS_IDENTITY=different-identity atmos terraform apply compone
 **Note:** This example shows how profiles can use `auth.defaults.identity` to set a sensible default while still allowing multiple identities for quick switching.
 
 ```yaml
+# profiles/developer/_metadata.yaml
+metadata:
+  name: developer
+  description: "Developer workstation configuration with AWS SSO"
+  version: "1.5.0"
+  tags:
+    - development
+    - local
+    - interactive
+    - aws-sso
+
 # profiles/developer/auth.yaml
 auth:
   # Selected default for developer profile
@@ -903,6 +1018,15 @@ atmos terraform plan vpc -s dev --profile developer --identity developer-prod
 #### Debug Profile Example
 
 ```yaml
+# profiles/debug/_metadata.yaml
+metadata:
+  name: debug
+  description: "Debug logging and CPU profiling for troubleshooting"
+  tags:
+    - debug
+    - troubleshooting
+    - verbose
+
 # profiles/debug/logging.yaml
 logs:
   level: Trace
@@ -1007,15 +1131,141 @@ settings:
   3. Later profiles override earlier ones for conflicting settings
   4. In this example: `debug/logging.yaml` overrides `developer/logging.yaml` for `logs.level`
 
+#### Tag-Based Resource Filtering
+
+**Use Case:** Automatically show only relevant resources when a profile is active.
+
+**Configuration:**
+
+```yaml
+# profiles/developer/_metadata.yaml
+metadata:
+  name: developer
+  tags:
+    - developer
+    - local
+    - development
+
+# atmos.yaml - Identity configuration with tags
+auth:
+  identities:
+    developer-sandbox:
+      kind: aws/permission-set
+      tags: ["developer", "sandbox"]  # Matches "developer" tag from profile
+      via:
+        provider: aws-sso-dev
+      principal:
+        account_id: "999888777666"
+        permission_set: DeveloperAccess
+
+    developer-prod:
+      kind: aws/permission-set
+      tags: ["developer", "production"]  # Matches "developer" tag from profile
+      via:
+        provider: aws-sso-prod
+      principal:
+        account_id: "123456789012"
+        permission_set: ReadOnlyAccess
+
+    platform-admin:
+      kind: aws/permission-set
+      tags: ["admin", "production"]  # Does NOT match profile tags
+      via:
+        provider: aws-sso-prod
+      principal:
+        account_id: "123456789012"
+        permission_set: AdministratorAccess
+
+    ci-github-oidc:
+      kind: aws/assume-role
+      tags: ["ci", "github-actions"]  # Does NOT match profile tags
+      via:
+        provider: github-oidc-provider
+```
+
+**Usage with Tag Filtering:**
+
+```bash
+# List identities with tag filtering enabled
+atmos auth list identities --profile developer --filter-by-profile-tags
+```
+
+**Output (filtered):**
+```
+Available Identities (filtered by profile tags: developer, local, development)
+
+┏━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Identity          ┃ Kind               ┃ Tags                   ┃
+┡━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ developer-sandbox │ aws/permission-set │ developer, sandbox     │
+│ developer-prod    │ aws/permission-set │ developer, production  │
+└───────────────────┴────────────────────┴────────────────────────┘
+
+Showing 2 of 4 total identities (filtered by tags)
+```
+
+**Without tag filtering:**
+
+```bash
+# Show all identities regardless of tags
+atmos auth list identities --profile developer
+```
+
+**Output (unfiltered):**
+```
+Available Identities
+
+┏━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Identity          ┃ Kind               ┃ Tags                   ┃
+┡━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ developer-sandbox │ aws/permission-set │ developer, sandbox     │
+│ developer-prod    │ aws/permission-set │ developer, production  │
+│ platform-admin    │ aws/permission-set │ admin, production      │
+│ ci-github-oidc    │ aws/assume-role    │ ci, github-actions     │
+└───────────────────┴────────────────────┴────────────────────────┘
+
+Showing 4 identities
+```
+
+**Benefits:**
+- **Reduces noise** - Only see relevant resources for your current context
+- **Improves UX** - Developer doesn't see CI/admin identities
+- **Clear intent** - Tags communicate which resources belong to which profiles
+- **Opt-in** - Tag filtering disabled by default (backward compatible)
+
+**Multiple Profiles with Tag Filtering:**
+
+```bash
+# Activate both developer and ci profiles
+atmos auth list identities --profile developer,ci --filter-by-profile-tags
+```
+
+**Result:**
+- Profile tags combined: `["developer", "local", "development", "ci", "github-actions"]`
+- Shows: `developer-sandbox`, `developer-prod`, `ci-github-oidc`
+- Hides: `platform-admin` (no matching tags)
+
 #### Platform Admin Profile Example
 
 ```yaml
+# profiles/platform-admin/_metadata.yaml
+metadata:
+  name: platform-admin
+  description: "Production platform administrator access"
+  tags:
+    - admin
+    - production
+    - privileged
+
 # profiles/platform-admin/auth.yaml
 auth:
+  defaults:
+    identity: platform-admin  # Selected default for this profile
+
   identities:
     platform-admin:
       kind: aws/permission-set
-      default: true  # This becomes default when platform-admin profile is active
+      tags: ["admin", "production"]  # Matches profile tags
       via:
         provider: aws-sso-prod
       principal:
@@ -1032,6 +1282,9 @@ auth:
 Usage:
 ```bash
 atmos terraform apply vpc -s prod --profile platform-admin
+
+# With tag filtering: Only shows admin-tagged identities
+atmos auth list identities --profile platform-admin --filter-by-profile-tags
 ```
 
 ### Implementation Plan
