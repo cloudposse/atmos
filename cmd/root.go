@@ -751,6 +751,20 @@ func initCobraConfig() {
 			// Extract args from os.Args based on command path depth
 			arguments = os.Args[len(strings.Split(c.CommandPath(), " ")):]
 		}
+
+		// IMPORTANT: Check if command has Args validator and args are valid.
+		// If args pass validation, they're positional args, not unknown subcommands.
+		// This prevents "Unknown command component1" errors for valid positional args.
+		if c.Args != nil && len(arguments) > 0 {
+			if err := c.Args(c, arguments); err == nil {
+				// Args are valid positional arguments - show usage without "Unknown command" error
+				showErrorExampleFromMarkdown(c, "")
+				errUtils.Exit(1)
+				return nil
+			}
+			// Args validation failed - fall through to show error with first arg as unknown command
+		}
+
 		showUsageAndExit(c, arguments)
 		return nil
 	})
