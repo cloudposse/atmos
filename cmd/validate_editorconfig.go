@@ -76,8 +76,13 @@ func initializeConfig(opts *flags.EditorConfigOptions) {
 
 	currentConfig = config.NewConfig(configFilePaths)
 
-	// Apply init flag.
-	if opts.Init || (!opts.Init && atmosConfig.Validate.EditorConfig.Init) {
+	// Apply init flag with proper CLI > config precedence.
+	// If CLI flag was provided, use its value. Otherwise, use config value.
+	initValue := opts.Init
+	if !opts.InitProvided {
+		initValue = atmosConfig.Validate.EditorConfig.Init
+	}
+	if initValue {
 		err := currentConfig.Save(version.Version)
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -96,9 +101,16 @@ func initializeConfig(opts *flags.EditorConfigOptions) {
 		currentConfig.Exclude = append(currentConfig.Exclude, atmosConfig.Validate.EditorConfig.Exclude...)
 	}
 
-	// Build cliConfig from opts and atmos.yaml precedence.
-	cliConfig.IgnoreDefaults = opts.IgnoreDefaults || atmosConfig.Validate.EditorConfig.IgnoreDefaults
-	cliConfig.DryRun = opts.DryRun || atmosConfig.Validate.EditorConfig.DryRun
+	// Build cliConfig from opts and atmos.yaml with proper precedence (CLI > config).
+	// For boolean flags, only use config value if flag was not explicitly provided.
+	cliConfig.IgnoreDefaults = opts.IgnoreDefaults
+	if !opts.IgnoreDefaultsProvided {
+		cliConfig.IgnoreDefaults = atmosConfig.Validate.EditorConfig.IgnoreDefaults
+	}
+	cliConfig.DryRun = opts.DryRun
+	if !opts.DryRunProvided {
+		cliConfig.DryRun = atmosConfig.Validate.EditorConfig.DryRun
+	}
 	cliConfig.Verbose = opts.LogsLevel == u.LogLevelTrace
 
 	// Handle format flag with validation.
@@ -120,13 +132,31 @@ func initializeConfig(opts *flags.EditorConfigOptions) {
 	// Apply NoColor from GlobalFlags.
 	cliConfig.NoColor = opts.NoColor || atmosConfig.Settings.Terminal.NoColor
 
-	// Apply disable flags.
-	cliConfig.Disable.TrimTrailingWhitespace = opts.DisableTrimTrailingWhitespace || atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace
-	cliConfig.Disable.EndOfLine = opts.DisableEndOfLine || atmosConfig.Validate.EditorConfig.DisableEndOfLine
-	cliConfig.Disable.InsertFinalNewline = opts.DisableInsertFinalNewline || atmosConfig.Validate.EditorConfig.DisableInsertFinalNewline
-	cliConfig.Disable.Indentation = opts.DisableIndentation || atmosConfig.Validate.EditorConfig.DisableIndentation
-	cliConfig.Disable.IndentSize = opts.DisableIndentSize || atmosConfig.Validate.EditorConfig.DisableIndentSize
-	cliConfig.Disable.MaxLineLength = opts.DisableMaxLineLength || atmosConfig.Validate.EditorConfig.DisableMaxLineLength
+	// Apply disable flags with proper precedence (CLI > config).
+	cliConfig.Disable.TrimTrailingWhitespace = opts.DisableTrimTrailingWhitespace
+	if !opts.DisableTrimTrailingWhitespaceProvided {
+		cliConfig.Disable.TrimTrailingWhitespace = atmosConfig.Validate.EditorConfig.DisableTrimTrailingWhitespace
+	}
+	cliConfig.Disable.EndOfLine = opts.DisableEndOfLine
+	if !opts.DisableEndOfLineProvided {
+		cliConfig.Disable.EndOfLine = atmosConfig.Validate.EditorConfig.DisableEndOfLine
+	}
+	cliConfig.Disable.InsertFinalNewline = opts.DisableInsertFinalNewline
+	if !opts.DisableInsertFinalNewlineProvided {
+		cliConfig.Disable.InsertFinalNewline = atmosConfig.Validate.EditorConfig.DisableInsertFinalNewline
+	}
+	cliConfig.Disable.Indentation = opts.DisableIndentation
+	if !opts.DisableIndentationProvided {
+		cliConfig.Disable.Indentation = atmosConfig.Validate.EditorConfig.DisableIndentation
+	}
+	cliConfig.Disable.IndentSize = opts.DisableIndentSize
+	if !opts.DisableIndentSizeProvided {
+		cliConfig.Disable.IndentSize = atmosConfig.Validate.EditorConfig.DisableIndentSize
+	}
+	cliConfig.Disable.MaxLineLength = opts.DisableMaxLineLength
+	if !opts.DisableMaxLineLengthProvided {
+		cliConfig.Disable.MaxLineLength = atmosConfig.Validate.EditorConfig.DisableMaxLineLength
+	}
 
 	currentConfig.Merge(cliConfig)
 }
