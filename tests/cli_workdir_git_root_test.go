@@ -59,57 +59,43 @@ func TestWorkdirGitRootDetection(t *testing.T) {
 		expectedError string // Expected error message when test is expected to fail
 	}{
 		{
-			name:     "describe stacks from component directory (control - should work)",
-			startDir: componentDir,
-			command:  []string{"describe", "stacks"},
-			// This currently FAILS but SHOULD work - atmos should find atmos.yaml at git root.
-			expectError:   true,
-			expectedError: "atmos.yaml CLI config file was not found",
+			name:        "describe stacks from component directory (control - should work)",
+			startDir:    componentDir,
+			command:     []string{"describe", "stacks"},
+			expectError: false,
 			checkOutput: func(t *testing.T, stdout, stderr string) {
-				// KNOWN BUG: This assertion documents the current broken behavior.
-				// When git root detection is implemented, this test should be updated to:
-				// assert.NotContains(t, stderr, "atmos.yaml CLI config file was not found")
-				assert.Contains(t, stderr, "atmos.yaml CLI config file was not found",
-					"BUG: atmos.yaml not found from component dir - git root detection not working")
+				assert.NotContains(t, stderr, "atmos.yaml CLI config file was not found",
+					"atmos should find atmos.yaml at git root from component directory")
 			},
 		},
 		{
-			name:     "terraform plan from component directory (user's exact scenario)",
-			startDir: componentDir,
-			command:  []string{"terraform", "plan", "mycomponent", "--stack", "nonprod"},
-			// This currently FAILS but SHOULD work - atmos should find atmos.yaml at git root.
-			expectError:   true,
-			expectedError: "atmos.yaml CLI config file was not found",
+			name:        "terraform plan from component directory (user's exact scenario)",
+			startDir:    componentDir,
+			command:     []string{"terraform", "plan", "mycomponent", "--stack", "nonprod"},
+			expectError: false,
 			checkOutput: func(t *testing.T, stdout, stderr string) {
-				// KNOWN BUG: This assertion documents the current broken behavior.
-				// When git root detection is implemented, this test should be updated to:
-				// assert.NotContains(t, stderr, "atmos.yaml CLI config file was not found")
-				assert.Contains(t, stderr, "atmos.yaml CLI config file was not found",
-					"BUG: atmos.yaml not found from component dir - git root detection not working")
+				assert.NotContains(t, stderr, "atmos.yaml CLI config file was not found",
+					"atmos should find atmos.yaml at git root from component directory")
 			},
 		},
 		{
-			name:     "terraform plan from nested component subdirectory",
-			startDir: componentDir,
-			command:  []string{"terraform", "plan", "mycomponent", "--stack", "nonprod"},
-			// This currently FAILS but SHOULD work.
-			expectError:   true,
-			expectedError: "atmos.yaml CLI config file was not found",
+			name:        "terraform plan from nested component subdirectory",
+			startDir:    componentDir,
+			command:     []string{"terraform", "plan", "mycomponent", "--stack", "nonprod"},
+			expectError: false,
 			checkOutput: func(t *testing.T, stdout, stderr string) {
-				assert.Contains(t, stderr, "atmos.yaml  CLI config file was not found",
-					"BUG: atmos.yaml not found from nested dir - git root detection not working")
+				assert.NotContains(t, stderr, "atmos.yaml CLI config file was not found",
+					"atmos should find atmos.yaml at git root from nested component subdirectory")
 			},
 		},
 		{
-			name:     "list stacks from stacks directory",
-			startDir: filepath.Join(fixturesDir, "stacks"),
-			command:  []string{"list", "stacks"},
-			// This currently FAILS but SHOULD work.
-			expectError:   true,
-			expectedError: "atmos.yaml CLI config file was not found",
+			name:        "list stacks from stacks directory",
+			startDir:    filepath.Join(fixturesDir, "stacks"),
+			command:     []string{"list", "stacks"},
+			expectError: false,
 			checkOutput: func(t *testing.T, stdout, stderr string) {
-				assert.Contains(t, stderr, "atmos.yaml  CLI config file was not found",
-					"BUG: atmos.yaml not found from stacks dir - git root detection not working")
+				assert.NotContains(t, stderr, "atmos.yaml CLI config file was not found",
+					"atmos should find atmos.yaml at git root from stacks directory")
 			},
 		},
 	}

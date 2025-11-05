@@ -14,7 +14,6 @@ func TestProcessYAMLFunctionString(t *testing.T) {
 		name        string
 		input       string
 		setupEnv    func()
-		cleanupEnv  func()
 		expectError bool
 		validate    func(t *testing.T, result string)
 	}{
@@ -47,9 +46,6 @@ func TestProcessYAMLFunctionString(t *testing.T) {
 				wd, _ := os.Getwd()
 				t.Setenv("TEST_GIT_ROOT", wd)
 			},
-			cleanupEnv: func() {
-				os.Unsetenv("TEST_GIT_ROOT")
-			},
 			validate: func(t *testing.T, result string) {
 				// Should return an absolute path
 				assert.True(t, filepath.IsAbs(result), "Expected absolute path, got: %s", result)
@@ -64,9 +60,6 @@ func TestProcessYAMLFunctionString(t *testing.T) {
 				wd, _ := os.Getwd()
 				t.Setenv("TEST_GIT_ROOT", wd)
 			},
-			cleanupEnv: func() {
-				os.Unsetenv("TEST_GIT_ROOT")
-			},
 			validate: func(t *testing.T, result string) {
 				assert.True(t, filepath.IsAbs(result))
 				assert.NotContains(t, result, "!repo-root")
@@ -77,9 +70,6 @@ func TestProcessYAMLFunctionString(t *testing.T) {
 			input: "!env TEST_VAR",
 			setupEnv: func() {
 				t.Setenv("TEST_VAR", "/custom/path")
-			},
-			cleanupEnv: func() {
-				os.Unsetenv("TEST_VAR")
 			},
 			validate: func(t *testing.T, result string) {
 				assert.Equal(t, "/custom/path", result)
@@ -98,9 +88,6 @@ func TestProcessYAMLFunctionString(t *testing.T) {
 			input: "!env TEST_VAR  ",
 			setupEnv: func() {
 				t.Setenv("TEST_VAR", "/another/path")
-			},
-			cleanupEnv: func() {
-				os.Unsetenv("TEST_VAR")
 			},
 			validate: func(t *testing.T, result string) {
 				assert.Equal(t, "/another/path", result)
@@ -131,10 +118,6 @@ func TestProcessYAMLFunctionString(t *testing.T) {
 			}
 
 			// Cleanup after test
-			if tt.cleanupEnv != nil {
-				defer tt.cleanupEnv()
-			}
-
 			// Run the function
 			result, err := ProcessYAMLFunctionString(tt.input)
 
@@ -162,7 +145,6 @@ func TestProcessYAMLFunctionString_RepoRoot(t *testing.T) {
 
 		// Set TEST_GIT_ROOT to current directory
 		t.Setenv("TEST_GIT_ROOT", wd)
-		defer os.Unsetenv("TEST_GIT_ROOT")
 
 		result, err := ProcessYAMLFunctionString("!repo-root")
 		require.NoError(t, err)
@@ -177,7 +159,6 @@ func TestProcessYAMLFunctionString_EnvVarChaining(t *testing.T) {
 	t.Run("environment variable with path", func(t *testing.T) {
 		testPath := "/infrastructure/environments/prod"
 		t.Setenv("INFRA_BASE", testPath)
-		defer os.Unsetenv("INFRA_BASE")
 
 		result, err := ProcessYAMLFunctionString("!env INFRA_BASE")
 		require.NoError(t, err)
