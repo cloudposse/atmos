@@ -25,7 +25,6 @@ var ErrNoLayers = errors.New("the OCI image does not have any layers")
 
 const (
 	targetArtifactType = "application/vnd.atmos.component.terraform.v1+tar+gzip" // Target artifact type for Atmos components
-	githubTokenEnv     = "GITHUB_TOKEN"
 )
 
 var defaultOCIFileSystem = filesystem.NewOSFileSystem()

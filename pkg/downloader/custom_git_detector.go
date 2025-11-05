@@ -21,6 +21,7 @@ type CustomGitDetector struct {
 	source      string
 }
 
+// NewCustomGitDetector creates a new CustomGitDetector with the provided configuration and source URL.
 func NewCustomGitDetector(atmosConfig *schema.AtmosConfiguration, source string) *CustomGitDetector {
 	return &CustomGitDetector{
 		atmosConfig: atmosConfig,
