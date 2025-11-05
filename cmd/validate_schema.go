@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -48,7 +49,9 @@ For every schema entry:
 This command helps ensure that configuration files follow a defined structure
 and are compliant with expected formats, reducing configuration drift and runtime errors.
 `,
-	Args: cobra.MaximumNArgs(1),
+	// NOTE: With DisableFlagParsing=true (set by RegisterFlags), Args validator sees raw args including flags.
+	// We validate positional args after parsing in RunE instead.
+	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration.
 		checkAtmosConfig()
@@ -59,9 +62,15 @@ and are compliant with expected formats, reducing configuration drift and runtim
 			return err
 		}
 
+		// Validate maximum 1 positional arg (optional key).
+		positionalArgs := opts.GetPositionalArgs()
+		if len(positionalArgs) > 1 {
+			return fmt.Errorf("invalid arguments. The command accepts at most one argument (key)")
+		}
+
 		key := ""
-		if len(opts.GetPositionalArgs()) > 0 {
-			key = opts.GetPositionalArgs()[0] // Use provided argument.
+		if len(positionalArgs) > 0 {
+			key = positionalArgs[0] // Use provided argument.
 		}
 
 		schema := opts.SchemasAtmosManifest

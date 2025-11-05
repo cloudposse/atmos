@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -35,11 +36,25 @@ var listSettingsCmd = &cobra.Command{
 		"atmos list settings --format json\n" +
 		"atmos list settings --stack '*-dev-*'\n" +
 		"atmos list settings --stack 'prod-*'",
-	Args: cobra.MaximumNArgs(1),
+	// NOTE: With DisableFlagParsing=true (set by RegisterFlags), Args validator sees raw args including flags.
+	// We validate positional args after parsing in RunE instead.
+	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		checkAtmosConfig()
 
-		output, err := listSettings(cmd, args)
+		// Parse flags using StandardOptions.
+		opts, err := listSettingsParser.Parse(cmd.Context(), args)
+		if err != nil {
+			return err
+		}
+
+		// Validate maximum 1 positional arg (optional component).
+		positionalArgs := opts.GetPositionalArgs()
+		if len(positionalArgs) > 1 {
+			return fmt.Errorf("invalid arguments. The command accepts at most one argument (component)")
+		}
+
+		output, err := listSettings(cmd, positionalArgs)
 		if err != nil {
 			return err
 		}

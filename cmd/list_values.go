@@ -42,27 +42,27 @@ type ProcessingOptions struct {
 
 // listValuesParser is created once at package initialization using builder pattern.
 var listValuesParser = flags.NewStandardOptionsBuilder().
-	WithStack(false).                                         // Optional stack flag for filtering.
+	WithStack(false).                                           // Optional stack flag for filtering.
 	WithFormat([]string{"json", "yaml", "csv", "tsv"}, "yaml"). // Format flag with valid values and default.
-	WithQuery().                                              // Query flag for YQ expressions.
-	WithProcessTemplates(true).                               // Process templates (default true).
-	WithProcessFunctions(true).                               // Process functions (default true).
-	WithAbstract().                                           // Include abstract components flag.
-	WithVars().                                               // Show only vars section flag.
-	WithMaxColumns(0).                                        // Maximum columns for table output.
-	WithDelimiter("").                                        // Delimiter for CSV/TSV output.
+	WithQuery().                                                // Query flag for YQ expressions.
+	WithProcessTemplates(true).                                 // Process templates (default true).
+	WithProcessFunctions(true).                                 // Process functions (default true).
+	WithAbstract().                                             // Include abstract components flag.
+	WithVars().                                                 // Show only vars section flag.
+	WithMaxColumns(0).                                          // Maximum columns for table output.
+	WithDelimiter("").                                          // Delimiter for CSV/TSV output.
 	Build()
 
 // listVarsParser is created once at package initialization using builder pattern.
 var listVarsParser = flags.NewStandardOptionsBuilder().
-	WithStack(false).                                         // Optional stack flag for filtering.
+	WithStack(false).                                           // Optional stack flag for filtering.
 	WithFormat([]string{"json", "yaml", "csv", "tsv"}, "yaml"). // Format flag with valid values and default.
-	WithQuery().                                              // Query flag for YQ expressions (will be set to .vars).
-	WithProcessTemplates(true).                               // Process templates (default true).
-	WithProcessFunctions(true).                               // Process functions (default true).
-	WithAbstract().                                           // Include abstract components flag.
-	WithMaxColumns(0).                                        // Maximum columns for table output.
-	WithDelimiter("").                                        // Delimiter for CSV/TSV output.
+	WithQuery().                                                // Query flag for YQ expressions (will be set to .vars).
+	WithProcessTemplates(true).                                 // Process templates (default true).
+	WithProcessFunctions(true).                                 // Process functions (default true).
+	WithAbstract().                                             // Include abstract components flag.
+	WithMaxColumns(0).                                          // Maximum columns for table output.
+	WithDelimiter("").                                          // Delimiter for CSV/TSV output.
 	Build()
 
 // listValuesCmd lists component values across stacks.
@@ -77,12 +77,10 @@ var listValuesCmd = &cobra.Command{
 		"atmos list values vpc --format json\n" +
 		"atmos list values vpc --format yaml\n" +
 		"atmos list values vpc --format csv",
-	Args: cobra.ExactArgs(1),
+	// NOTE: With DisableFlagParsing=true (set by RegisterFlags), Args validator sees raw args including flags.
+	// We validate positional args after parsing in RunE instead.
+	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) != 1 {
-			return ErrInvalidArguments
-		}
-
 		// Check Atmos configuration.
 		checkAtmosConfig()
 
@@ -95,7 +93,13 @@ var listValuesCmd = &cobra.Command{
 			return err
 		}
 
-		output, err := listValuesWithOptions(cmd, args, opts)
+		// Validate exactly 1 positional arg (component name).
+		positionalArgs := opts.GetPositionalArgs()
+		if len(positionalArgs) != 1 {
+			return ErrInvalidArguments
+		}
+
+		output, err := listValuesWithOptions(cmd, positionalArgs, opts)
 		if err != nil {
 			return err
 		}
@@ -116,7 +120,9 @@ var listVarsCmd = &cobra.Command{
 		"atmos list vars vpc --format json\n" +
 		"atmos list vars vpc --format yaml\n" +
 		"atmos list vars vpc --format csv",
-	Args: cobra.ExactArgs(1),
+	// NOTE: With DisableFlagParsing=true (set by RegisterFlags), Args validator sees raw args including flags.
+	// We validate positional args after parsing in RunE instead.
+	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration.
 		checkAtmosConfig()
@@ -135,10 +141,16 @@ var listVarsCmd = &cobra.Command{
 			return err
 		}
 
+		// Validate exactly 1 positional arg (component name).
+		positionalArgs := opts.GetPositionalArgs()
+		if len(positionalArgs) != 1 {
+			return ErrInvalidArguments
+		}
+
 		// Override query to .vars for vars command.
 		opts.Query = ".vars"
 
-		output, err := listValuesWithOptions(cmd, args, opts)
+		output, err := listValuesWithOptions(cmd, positionalArgs, opts)
 		if err != nil {
 			var componentVarsNotFoundErr *listerrors.ComponentVarsNotFoundError
 			if errors.As(err, &componentVarsNotFoundErr) {

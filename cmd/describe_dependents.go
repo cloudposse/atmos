@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -26,11 +27,13 @@ type describeDependentExecCreator func(atmosConfig *schema.AtmosConfiguration) e
 
 // describeDependentsCmd produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
 var describeDependentsCmd = &cobra.Command{
-	Use:               "dependents",
-	Aliases:           []string{"dependants"},
-	Short:             "List Atmos components that depend on a given component",
-	Long:              "This command generates a list of Atmos components within stacks that depend on the specified Atmos component.",
-	Args:              cobra.ExactArgs(1),
+	Use:     "dependents",
+	Aliases: []string{"dependants"},
+	Short:   "List Atmos components that depend on a given component",
+	Long:    "This command generates a list of Atmos components within stacks that depend on the specified Atmos component.",
+	// NOTE: With DisableFlagParsing=true (set by RegisterFlags), Args validator sees raw args including flags.
+	// We validate positional args after parsing in RunE instead.
+	Args:              cobra.ArbitraryArgs,
 	ValidArgsFunction: ComponentsArgCompletion,
 	RunE: getRunnableDescribeDependentsCmd(
 		checkAtmosConfig,
@@ -50,6 +53,12 @@ func getRunnableDescribeDependentsCmd(
 		opts, err := describeDependentsParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
+		}
+
+		// Validate exactly 1 positional arg (component name).
+		positionalArgs := opts.GetPositionalArgs()
+		if len(positionalArgs) != 1 {
+			return fmt.Errorf("invalid arguments. The command requires one argument: component")
 		}
 
 		info := schema.ConfigAndStacksInfo{}
