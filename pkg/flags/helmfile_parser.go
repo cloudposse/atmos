@@ -60,6 +60,12 @@ func (p *HelmfileParser) Parse(ctx context.Context, args []string) (*HelmfileOpt
 		return nil, err
 	}
 
+	// Extract component from positional args using helper.
+	// Helmfile commands: atmos helmfile <subcommand> <component>
+	// positionalArgs[0] = subcommand (sync, apply, diff, etc.)
+	// positionalArgs[1] = component name (nginx, redis, etc.)
+	component := extractComponent(parsedConfig.PositionalArgs, 1)
+
 	// Convert to strongly-typed interpreter.
 	opts := HelmfileOptions{
 		GlobalFlags: GlobalFlags{
@@ -84,6 +90,7 @@ func (p *HelmfileParser) Parse(ctx context.Context, args []string) (*HelmfileOpt
 		},
 		Stack:           getString(parsedConfig.Flags, "stack"),
 		DryRun:          getBool(parsedConfig.Flags, "dry-run"),
+		Component:       component,
 		positionalArgs:  parsedConfig.PositionalArgs,
 		passThroughArgs: parsedConfig.PassThroughArgs,
 	}
