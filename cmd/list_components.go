@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -30,7 +31,7 @@ var listComponentsCmd = &cobra.Command{
 		}
 
 		if len(output) == 0 {
-			u.PrintMessageInColor("No components found\n", theme.Colors.Info)
+			ui.Error("No components found")
 			return nil
 		}
 
