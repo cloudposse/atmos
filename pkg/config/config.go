@@ -171,6 +171,16 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 		return atmosConfig, err
 	}
 
+	// Process YAML functions in base_path after all sources are merged.
+	// This allows !repo-root and !env to work in config files, env vars, and CLI flags.
+	if atmosConfig.BasePath != "" {
+		processedBasePath, err := ProcessYAMLFunctionString(atmosConfig.BasePath)
+		if err != nil {
+			return atmosConfig, fmt.Errorf("failed to process base_path YAML functions: %w", err)
+		}
+		atmosConfig.BasePath = processedBasePath
+	}
+
 	// Process command-line args
 	err = processCommandLineArgs(&atmosConfig, configAndStacksInfo)
 	if err != nil {

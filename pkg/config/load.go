@@ -94,13 +94,6 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		return atmosConfig, err
 	}
 
-	// Process YAML functions in base_path from config file.
-	if atmosConfig.BasePath != "" {
-		if processedBasePath, err := ProcessYAMLFunctionString(atmosConfig.BasePath); err == nil {
-			atmosConfig.BasePath = processedBasePath
-		}
-	}
-
 	// Post-process to preserve case-sensitive identity names.
 	// Viper lowercases all map keys, but we need to preserve original case for identity names.
 	if err := preserveIdentityCase(v, &atmosConfig); err != nil {
