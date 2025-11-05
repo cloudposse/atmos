@@ -59,18 +59,20 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	d.normalizePath(parsedURL)
 
 	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
-	host := strings.ToLower(parsedURL.Host)
+	// Use Hostname() to extract just the hostname without port (e.g., "github.com:22" → "github.com").
+	rawHost := parsedURL.Host
+	host := strings.ToLower(parsedURL.Hostname())
 	if !isSupportedHost(host) {
-		log.Debug("Skipping token injection for an unsupported host", keyHost, parsedURL.Host)
+		log.Debug("Skipping token injection for an unsupported host", keyHost, rawHost)
 		return "", false, nil
 	}
 
 	// Check if token injection is enabled for this host and inject if appropriate.
 	if shouldInjectTokenForHost(host, &d.atmosConfig.Settings) {
-		log.Debug("Token injection enabled for host", keyHost, host)
+		log.Debug("Token injection enabled for host", keyHost, rawHost)
 		d.injectToken(parsedURL, host)
 	} else {
-		log.Debug("Token injection disabled for host", keyHost, host)
+		log.Debug("Token injection disabled for host", keyHost, rawHost)
 	}
 
 	// Note: URI normalization (including adding //.) is now handled by normalizeVendorURI

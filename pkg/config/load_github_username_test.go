@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -65,9 +66,14 @@ func TestGithubUsernameEnvVarPrecedence(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// t.Setenv automatically handles cleanup.
+			// Explicitly unset all github_username environment variables first.
+			// This ensures tests don't inherit values from CI environment.
+			// Must use os.Unsetenv() because t.Setenv("") doesn't actually unset the variable.
+			os.Unsetenv("ATMOS_GITHUB_USERNAME")
+			os.Unsetenv("GITHUB_ACTOR")
+			os.Unsetenv("GITHUB_USERNAME")
 
-			// Set test environment variables.
+			// Set test environment variables after clearing using t.Setenv for automatic cleanup.
 			if tt.atmosGithubUsername != "" {
 				t.Setenv("ATMOS_GITHUB_USERNAME", tt.atmosGithubUsername)
 			}
