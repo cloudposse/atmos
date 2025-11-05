@@ -288,6 +288,8 @@ settings:
       color: ${colors.primary}
       underline: true
   inject_github_token: true
+  inject_bitbucket_token: true
+  inject_gitlab_token: true
   pro:
     base_url: https://atmos-pro.com
     endpoint: api/v1
