@@ -153,18 +153,19 @@ func getGHCRAuth(atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, s
 		return nil, ""
 	}
 
-	// For GitHub Container Registry, use GitHub username if configured,
-	// otherwise use the token itself as username (GHCR accepts this).
+	// GHCR requires a username; use configured github_username.
 	username := githubUsername
 	if username == "" {
-		username = token
+		// No safe implicit fallback here; return nil to allow caller to choose anon/fail.
+		log.Debug("GHCR token found but no username provided; set settings.github_username or ATMOS_GITHUB_USERNAME/GITHUB_ACTOR.")
+		return nil, ""
 	}
 
 	authMethod := &authn.Basic{
 		Username: username,
 		Password: token,
 	}
-	authSource := fmt.Sprintf("environment variable (%s)", tokenSource)
+	authSource := fmt.Sprintf("environment variable (%s with username %s)", tokenSource, username)
 
 	return authMethod, authSource
 }
