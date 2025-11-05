@@ -51,7 +51,7 @@ func TestParsedConfig_ToTerraformOptions(t *testing.T) {
 			parsedConfig: ParsedConfig{
 				Flags: map[string]interface{}{
 					"stack":      "prod",
-					"logs-level": "Info",
+					"logs-level": "Warning",
 				},
 				PositionalArgs: []string{"apply", "rds"},
 			},
@@ -60,7 +60,7 @@ func TestParsedConfig_ToTerraformOptions(t *testing.T) {
 			wantUploadStatus: false,
 			wantSkipInit:     false,
 			wantFromPlan:     "",
-			wantLogsLevel:    "Info",
+			wantLogsLevel:    "Warning",
 			wantChdir:        "",
 			wantConfig:       nil,
 		},

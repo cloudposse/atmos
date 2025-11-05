@@ -21,14 +21,14 @@ func TestParseGlobalFlags(t *testing.T) {
 			name: "all defaults",
 			setup: func(cmd *cobra.Command, v *viper.Viper) {
 				// Set up defaults only.
-				v.SetDefault("logs-level", "Info")
+				v.SetDefault("logs-level", "Warning")
 				v.SetDefault("logs-file", "/dev/stderr")
 				v.SetDefault("profiler-port", 6060)
 				v.SetDefault("profiler-host", "localhost")
 				v.SetDefault("heatmap-mode", "bar")
 			},
 			expected: GlobalFlags{
-				LogsLevel:    "Info",
+				LogsLevel:    "Warning",
 				LogsFile:     "/dev/stderr",
 				NoColor:      false,
 				ProfilerPort: 6060,
@@ -405,8 +405,8 @@ func TestParseGlobalFlags_Precedence(t *testing.T) {
 		{
 			name: "CLI flag overrides everything",
 			setup: func(cmd *cobra.Command, v *viper.Viper) {
-				v.SetDefault("logs-level", "Info") // Default.
-				v.Set("logs-level", "Debug")       // CLI (highest priority).
+				v.SetDefault("logs-level", "Warning") // Default.
+				v.Set("logs-level", "Debug")          // CLI (highest priority).
 			},
 			expected: "Debug",
 			field:    "LogsLevel",
@@ -414,7 +414,7 @@ func TestParseGlobalFlags_Precedence(t *testing.T) {
 		{
 			name: "ENV overrides config and default",
 			setup: func(cmd *cobra.Command, v *viper.Viper) {
-				v.SetDefault("logs-level", "Info") // Default.
+				v.SetDefault("logs-level", "Warning") // Default.
 				// ENV set via v.Set (simulating env var binding).
 				v.Set("logs-level", "Trace")
 			},
@@ -424,8 +424,8 @@ func TestParseGlobalFlags_Precedence(t *testing.T) {
 		{
 			name: "config overrides default",
 			setup: func(cmd *cobra.Command, v *viper.Viper) {
-				v.SetDefault("logs-level", "Info") // Default.
-				v.Set("logs-level", "Warning")     // Config.
+				v.SetDefault("logs-level", "Warning") // Default.
+				v.Set("logs-level", "Warning")        // Config.
 			},
 			expected: "Warning",
 			field:    "LogsLevel",
@@ -433,9 +433,9 @@ func TestParseGlobalFlags_Precedence(t *testing.T) {
 		{
 			name: "default used when nothing else set",
 			setup: func(cmd *cobra.Command, v *viper.Viper) {
-				v.SetDefault("logs-level", "Info") // Default.
+				v.SetDefault("logs-level", "Warning") // Default.
 			},
-			expected: "Info",
+			expected: "Warning",
 			field:    "LogsLevel",
 		},
 	}

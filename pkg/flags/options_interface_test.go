@@ -189,7 +189,7 @@ func TestCommandOptionsInterface(t *testing.T) {
 		{
 			name: "BaseOptions",
 			interpreter: &BaseOptions{
-				GlobalFlags:     GlobalFlags{LogsLevel: "Info"},
+				GlobalFlags:     GlobalFlags{LogsLevel: "Warning"},
 				positionalArgs:  []string{"vpc"},
 				passThroughArgs: []string{"-out=plan.tfplan"},
 			},

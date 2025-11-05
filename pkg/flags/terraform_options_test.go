@@ -26,7 +26,7 @@ func TestParseTerraformFlags(t *testing.T) {
 		{
 			name: "all defaults",
 			viperValues: map[string]interface{}{
-				"logs-level": "Info",
+				"logs-level": "Warning",
 			},
 			positionalArgs:   []string{"plan", "vpc"},
 			passThroughArgs:  nil,
@@ -35,7 +35,7 @@ func TestParseTerraformFlags(t *testing.T) {
 			wantUploadStatus: false,
 			wantSkipInit:     false,
 			wantFromPlan:     "",
-			wantLogsLevel:    "Info",
+			wantLogsLevel:    "Warning",
 		},
 		{
 			name: "terraform plan with stack and upload-status",
@@ -75,7 +75,7 @@ func TestParseTerraformFlags(t *testing.T) {
 			viperValues: map[string]interface{}{
 				"stack":      "staging",
 				"dry-run":    true,
-				"logs-level": "Info",
+				"logs-level": "Warning",
 			},
 			positionalArgs:   []string{"plan", "rds"},
 			passThroughArgs:  []string{"-var-file", "staging.tfvars"},
@@ -84,7 +84,7 @@ func TestParseTerraformFlags(t *testing.T) {
 			wantUploadStatus: false,
 			wantSkipInit:     false,
 			wantFromPlan:     "",
-			wantLogsLevel:    "Info",
+			wantLogsLevel:    "Warning",
 		},
 	}
 
@@ -161,7 +161,7 @@ func TestTerraformOptions_IdentityFlag(t *testing.T) {
 			// Create test Viper instance.
 			v := viper.New()
 			v.Set("identity", tt.viperValue)
-			v.Set("logs-level", "Info")
+			v.Set("logs-level", "Warning")
 
 			// Create test command with identity flag.
 			cmd := &cobra.Command{}
@@ -329,7 +329,7 @@ func TestTerraformOptions_RealWorldScenarios(t *testing.T) {
 				"stack":      "prod",
 				"from-plan":  "vpc.tfplan",
 				"skip-init":  true,
-				"logs-level": "Info",
+				"logs-level": "Warning",
 			},
 			positionalArgs:  []string{"apply", "vpc"},
 			passThroughArgs: nil,
@@ -363,7 +363,7 @@ func TestTerraformOptions_RealWorldScenarios(t *testing.T) {
 			viperValues: map[string]interface{}{
 				"stack":      "dev",
 				"chdir":      "/tmp/atmos",
-				"logs-level": "Info",
+				"logs-level": "Warning",
 			},
 			positionalArgs:  []string{"plan", "vpc"},
 			passThroughArgs: []string{"-var", "foo=bar"},

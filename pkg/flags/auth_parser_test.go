@@ -24,7 +24,7 @@ func TestAuthParser_Parse(t *testing.T) {
 			args: []string{},
 			expected: &AuthOptions{
 				GlobalFlags: GlobalFlags{
-					LogsLevel: "Info",
+					LogsLevel: "Warning",
 					LogsFile:  "/dev/stderr",
 				},
 				Verbose:     false,
@@ -41,7 +41,7 @@ func TestAuthParser_Parse(t *testing.T) {
 			args: []string{"--verbose"},
 			expected: &AuthOptions{
 				GlobalFlags: GlobalFlags{
-					LogsLevel: "Info",
+					LogsLevel: "Warning",
 					LogsFile:  "/dev/stderr",
 				},
 				Verbose: true,
@@ -52,7 +52,7 @@ func TestAuthParser_Parse(t *testing.T) {
 			args: []string{"--output", "json"},
 			expected: &AuthOptions{
 				GlobalFlags: GlobalFlags{
-					LogsLevel: "Info",
+					LogsLevel: "Warning",
 					LogsFile:  "/dev/stderr",
 				},
 				Output: "json",
@@ -63,7 +63,7 @@ func TestAuthParser_Parse(t *testing.T) {
 			args: []string{"--destination", "ec2"},
 			expected: &AuthOptions{
 				GlobalFlags: GlobalFlags{
-					LogsLevel: "Info",
+					LogsLevel: "Warning",
 					LogsFile:  "/dev/stderr",
 				},
 				Destination: "ec2",
@@ -74,7 +74,7 @@ func TestAuthParser_Parse(t *testing.T) {
 			args: []string{"--duration", "2h"},
 			expected: &AuthOptions{
 				GlobalFlags: GlobalFlags{
-					LogsLevel: "Info",
+					LogsLevel: "Warning",
 					LogsFile:  "/dev/stderr",
 				},
 				Duration: 2 * time.Hour,
@@ -85,7 +85,7 @@ func TestAuthParser_Parse(t *testing.T) {
 			args: []string{"--issuer", "myissuer"},
 			expected: &AuthOptions{
 				GlobalFlags: GlobalFlags{
-					LogsLevel: "Info",
+					LogsLevel: "Warning",
 					LogsFile:  "/dev/stderr",
 				},
 				Issuer: "myissuer",
@@ -96,7 +96,7 @@ func TestAuthParser_Parse(t *testing.T) {
 			args: []string{"--print-only"},
 			expected: &AuthOptions{
 				GlobalFlags: GlobalFlags{
-					LogsLevel: "Info",
+					LogsLevel: "Warning",
 					LogsFile:  "/dev/stderr",
 				},
 				PrintOnly: true,
@@ -107,7 +107,7 @@ func TestAuthParser_Parse(t *testing.T) {
 			args: []string{"--no-open"},
 			expected: &AuthOptions{
 				GlobalFlags: GlobalFlags{
-					LogsLevel: "Info",
+					LogsLevel: "Warning",
 					LogsFile:  "/dev/stderr",
 				},
 				NoOpen: true,
@@ -118,7 +118,7 @@ func TestAuthParser_Parse(t *testing.T) {
 			args: []string{"--verbose", "--output", "table", "--destination", "s3", "--duration", "1h30m"},
 			expected: &AuthOptions{
 				GlobalFlags: GlobalFlags{
-					LogsLevel: "Info",
+					LogsLevel: "Warning",
 					LogsFile:  "/dev/stderr",
 				},
 				Verbose:     true,
@@ -133,7 +133,7 @@ func TestAuthParser_Parse(t *testing.T) {
 			envVars: map[string]string{"ATMOS_OUTPUT": "json"},
 			expected: &AuthOptions{
 				GlobalFlags: GlobalFlags{
-					LogsLevel: "Info",
+					LogsLevel: "Warning",
 					LogsFile:  "/dev/stderr",
 				},
 				Output: "json",

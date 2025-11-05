@@ -10,7 +10,7 @@ func TestNewGlobalFlags(t *testing.T) {
 	flags := NewGlobalFlags()
 
 	// Test default values.
-	assert.Equal(t, "Info", flags.LogsLevel, "LogsLevel default")
+	assert.Equal(t, "Warning", flags.LogsLevel, "LogsLevel default")
 	assert.Equal(t, "/dev/stderr", flags.LogsFile, "LogsFile default")
 	assert.False(t, flags.NoColor, "NoColor default")
 	assert.Equal(t, 6060, flags.ProfilerPort, "ProfilerPort default")
@@ -151,7 +151,7 @@ func TestGlobalFlags_CommonScenarios(t *testing.T) {
 		{
 			name: "default configuration",
 			flags: GlobalFlags{
-				LogsLevel:    "Info",
+				LogsLevel:    "Warning",
 				LogsFile:     "/dev/stderr",
 				ProfilerPort: 6060,
 				ProfilerHost: "localhost",

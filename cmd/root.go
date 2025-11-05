@@ -681,7 +681,7 @@ func init() {
 	RootCmd.PersistentFlags().Bool("version", false, "Display the Atmos CLI version")
 	RootCmd.PersistentFlags().Lookup("version").DefValue = ""
 
-	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
+	RootCmd.PersistentFlags().String("logs-level", "Warning", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
 	RootCmd.PersistentFlags().String("logs-file", "/dev/stderr", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
 	RootCmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
 	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
