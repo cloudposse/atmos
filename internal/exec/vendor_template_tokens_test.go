@@ -120,9 +120,8 @@ func TestVendorPull_TemplateTokenInjection(t *testing.T) {
 			processedURL, err := ProcessTmpl(&atmosConfig, "test-source", sourceConfig.Source, tmplData, false)
 			require.NoError(t, err, "Template processing should succeed for %s", tt.componentName)
 
-			t.Logf("Testing: %s", tt.description)
-			t.Logf("Original source: %s", sourceConfig.Source)
-			t.Logf("Processed URL: %s", processedURL)
+			t.Logf("Testing: %s - %s", tt.componentName, tt.description)
+			// Avoid logging full URLs that may embed credentials.
 
 			if tt.shouldContainToken {
 				// Verify token was injected via template.
