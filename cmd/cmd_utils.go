@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -353,6 +354,7 @@ func executeCustomCommand(
 	// Create auth manager if identity is specified for this custom command.
 	// Check for --identity flag first (it overrides the config).
 	var authManager auth.AuthManager
+	var authStackInfo *schema.ConfigAndStacksInfo
 	identityFlag, _ := cmd.Flags().GetString("identity")
 	commandIdentity := strings.TrimSpace(identityFlag)
 	if commandIdentity == "" {
@@ -361,9 +363,15 @@ func executeCustomCommand(
 	}
 
 	if commandIdentity != "" {
+		// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
+		// This enables YAML template functions to access authenticated credentials.
+		authStackInfo = &schema.ConfigAndStacksInfo{
+			AuthContext: &schema.AuthContext{},
+		}
+
 		credStore := credentials.NewCredentialStore()
 		validator := validation.NewValidator()
-		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, nil)
+		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
 		}
@@ -440,7 +448,14 @@ func executeCustomCommand(
 			}
 
 			// Get the config for the component in the stack
-			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true, nil)
+			componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+				Component:            component,
+				Stack:                stack,
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+				Skip:                 nil,
+				AuthManager:          authManager,
+			})
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			data["ComponentConfig"] = componentConfig
 		}
@@ -762,11 +777,41 @@ func showUsageExample(cmd *cobra.Command, details string) {
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// If a component was provided as the first argument, filter stacks by that component.
+	if len(args) > 0 && args[0] != "" {
+		output, err := listStacksForComponent(args[0])
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return output, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Otherwise, list all stacks.
 	output, err := listStacks(cmd)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return output, cobra.ShellCompDirectiveNoFileComp
+}
+
+// listStacksForComponent returns stacks that contain the specified component.
+// It initializes the CLI configuration, describes all stacks, and filters them
+// to include only those defining the given component.
+func listStacksForComponent(component string) ([]string, error) {
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
+
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
+
+	output, err := l.FilterAndListStacks(stacksMap, component)
+	return output, err
 }
 
 func AddStackCompletion(cmd *cobra.Command) {

@@ -8,3 +8,8 @@ components:
       vars:
         foo: "catalog value"
         bar: "catalog value"
+    vpc:
+      metadata:
+        component: vpc-component
+      vars:
+        cidr: "192.168.0.0/16"
