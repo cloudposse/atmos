@@ -23,6 +23,90 @@ Currently, Atmos commands that accept positional arguments (e.g., `atmos terrafo
 
 4. **No Type Safety**: Positional arguments are extracted via array indexing (`args[0]`), with no compile-time guarantees.
 
+## Requirements
+
+### Functional Requirements
+
+**FR1: Type-Safe Positional Argument Definition**
+- Commands MUST be able to declare expected positional arguments using a strongly-typed builder pattern
+- The system MUST prevent runtime errors from incorrect positional argument access
+- Positional argument names MUST be semantic and domain-specific (e.g., `component`, `workflow-name`)
+
+**FR2: Automatic Cobra Configuration**
+- The builder MUST automatically set `cmd.Args` validator based on positional argument specifications
+- The builder MUST automatically generate the correct `cmd.Use` suffix showing expected arguments
+- Developers MUST NOT manually configure `cmd.Args` or update `cmd.Use` strings
+
+**FR3: Support for Required and Optional Arguments**
+- The system MUST support required positional arguments (e.g., `<component>`)
+- The system MUST support optional positional arguments (e.g., `[component]`)
+- Required arguments MUST be validated at runtime before command execution
+
+**FR4: Domain-Specific Builders**
+- Terraform commands MUST use `TerraformPositionalArgsBuilder` with methods like `WithComponent(required bool)`
+- Helmfile commands MUST use `HelmfilePositionalArgsBuilder` with methods like `WithComponent(required bool)`
+- Workflow commands MUST use `WorkflowPositionalArgsBuilder` with methods like `WithWorkflowName(required bool)`
+- Each domain builder MUST provide semantic method names specific to that domain
+
+**FR5: Parser Compatibility**
+- The system MUST work with `PassThroughFlagParser` (used by terraform, helmfile, workflow commands)
+- The system MUST work with `StandardFlagParser` (used by validate, generate commands)
+- The positional args API MUST be identical regardless of underlying parser type
+
+**FR6: Type-Safe Extraction**
+- The system MUST provide strongly-typed extraction methods (e.g., `GetComponent()`)
+- Extraction MUST NOT require manual array indexing (no `args[0]`)
+- Invalid positional arguments MUST be detected before extraction
+
+**FR7: Fix UsageFunc Regression**
+- The custom `UsageFunc` MUST respect `cmd.Args` validators from builders
+- Positional arguments MUST NOT be treated as unknown subcommands
+- The error "Unknown command component1 for atmos terraform deploy" MUST be eliminated
+
+### Non-Functional Requirements
+
+**NFR1: Maintainability**
+- The implementation MUST follow the same patterns as the existing flag parser system
+- Code MUST be self-documenting through semantic method names
+- All builder methods MUST include comprehensive documentation
+
+**NFR2: Testability**
+- All builder methods MUST be independently unit testable
+- Generated validators MUST be testable in isolation
+- Usage string generation MUST be verifiable through tests
+- Test coverage MUST exceed 80%
+
+**NFR3: Performance**
+- Positional argument validation MUST occur before command execution (fail-fast)
+- The system MUST NOT introduce measurable performance overhead
+- Builder pattern MUST NOT require reflection or runtime code generation
+
+**NFR4: Backward Compatibility**
+- Existing command behavior MUST NOT change
+- Existing positional argument extraction patterns MUST continue to work during migration
+- Migration MUST be incremental (command-by-command)
+
+**NFR5: Consistency**
+- All terraform commands accepting components MUST use identical builder patterns
+- All helmfile commands accepting components MUST use identical builder patterns
+- All workflow commands accepting workflow names MUST use identical builder patterns
+
+### Constraints
+
+**C1: No New Positional Arguments**
+- This system only formalizes EXISTING positional arguments
+- No new positional arguments will be added as part of this work
+- Focus is on current usage: `<component>` and `<workflow-name>`
+
+**C2: Cobra Compatibility**
+- The system MUST work within Cobra's existing framework
+- No forking or patching of Cobra library
+- Must use standard Cobra `cmd.Args` validators
+
+**C3: DisableFlagParsing Requirement**
+- The system MUST work when `DisableFlagParsing=true` is set
+- This is required for manual flag parsing with Viper precedence
+
 ## Current State
 
 ### Commands Using Positional Arguments
