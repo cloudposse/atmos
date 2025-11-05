@@ -85,7 +85,7 @@ func ExecuteVendorPullCommand(opts *flags.StandardOptions) error {
 		return ExecuteStackVendorInternal(vendorFlags.Stack, vendorFlags.DryRun)
 	}
 
-	return handleVendorConfig(&atmosConfig, &vendorFlags, []string{})
+	return handleVendorConfig(&atmosConfig, &vendorFlags, opts.GetPositionalArgs())
 }
 
 func validateVendorFlags(flg *VendorFlags) error {

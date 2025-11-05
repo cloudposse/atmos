@@ -300,37 +300,38 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 	commands := getTerraformCommands()
 
 	for _, cmd := range commands {
+		cmd_ := cmd // Capture loop variable for closure
 		// Tell Cobra to ignore unknown flags/args so positional args (component names) pass through
-		cmd.FParseErrWhitelist.UnknownFlags = true
+		cmd_.FParseErrWhitelist.UnknownFlags = true
 
 		// Accept arbitrary positional arguments (component names, etc.)
 		// This prevents Cobra from treating component names as unknown subcommands
-		cmd.Args = cobra.ArbitraryArgs
+		cmd_.Args = cobra.ArbitraryArgs
 
 		// Register Atmos flags on each subcommand.
 		// This ensures flags like --stack, --identity, --dry-run work on all terraform subcommands.
-		terraformParser.RegisterFlags(cmd)
+		terraformParser.RegisterFlags(cmd_)
 
-		if setFlags, ok := commandMaps[cmd.Use]; ok {
-			setFlags(cmd)
+		if setFlags, ok := commandMaps[cmd_.Use]; ok {
+			setFlags(cmd_)
 		}
-		cmd.ValidArgsFunction = ComponentsArgCompletion
-		cmd.RunE = func(cmd_ *cobra.Command, args []string) error {
-			handleHelpRequest(cmd, args)
+		cmd_.ValidArgsFunction = ComponentsArgCompletion
+		cmd_.RunE = func(c *cobra.Command, args []string) error {
+			handleHelpRequest(c, args)
 			// Heatmap is now tracked via persistent flag, no need for manual check.
 
 			// Parse args with flags.
 			// Returns strongly-typed TerraformOptions instead of weak map-based ParsedConfig.
-			ctx := cmd_.Context()
+			ctx := c.Context()
 			opts, err := terraformParser.Parse(ctx, args)
 			if err != nil {
 				return err
 			}
 
 			// Pass interpreter to terraformRun for type-safe flag access.
-			return terraformRun(parentCmd, cmd_, opts)
+			return terraformRun(parentCmd, c, opts)
 		}
-		parentCmd.AddCommand(cmd)
+		parentCmd.AddCommand(cmd_)
 	}
 }
 

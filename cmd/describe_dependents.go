@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -48,13 +47,13 @@ func getRunnableDescribeDependentsCmd(
 		// Check Atmos configuration
 		checkAtmosConfig()
 
-		opts, err := describeDependentsParser.Parse(context.Background(), args)
+		opts, err := describeDependentsParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
 		}
 
 		info := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := initCliConfig(info, true)
+		atmosConfig, err := initCliConfig(info, false)
 		if err != nil {
 			return err
 		}

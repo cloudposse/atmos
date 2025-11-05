@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -36,7 +37,7 @@ var terraformGenerateVarfileCmd = &cobra.Command{
 		// Validate component argument (use positional args after flag parsing).
 		positionalArgs := opts.GetPositionalArgs()
 		if len(positionalArgs) != 1 {
-			return errUtils.ErrInvalidArgumentError
+			return fmt.Errorf("%w: invalid arguments. The command requires one argument 'component'", errUtils.ErrInvalidArgumentError)
 		}
 
 		// Call original implementation with positional args (it needs only the component).

@@ -237,11 +237,16 @@ func listValuesWithOptions(cmd *cobra.Command, args []string, opts *flags.Standa
 	}
 
 	// Set appropriate default delimiter based on format.
+	// Only apply default delimiters for formats that actually use them (CSV/TSV).
 	delimiter := opts.Delimiter
-	if f.Format(opts.Format) == f.FormatCSV && delimiter == "" {
-		delimiter = f.DefaultCSVDelimiter
-	} else if delimiter == "" {
-		delimiter = f.DefaultTSVDelimiter
+	format := f.Format(opts.Format)
+	if delimiter == "" {
+		if format == f.FormatCSV {
+			delimiter = f.DefaultCSVDelimiter
+		} else if format == f.FormatTSV {
+			delimiter = f.DefaultTSVDelimiter
+		}
+		// Leave delimiter empty for JSON/YAML and other non-delimited formats
 	}
 
 	// Prepare filter options.
