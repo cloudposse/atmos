@@ -58,7 +58,15 @@ Currently, Atmos commands that accept positional arguments (e.g., `atmos terrafo
 - Extraction MUST NOT require manual array indexing (no `args[0]`)
 - Invalid positional arguments MUST be detected before extraction
 
-**FR7: Fix UsageFunc Regression**
+**FR7: Strongly-Typed Value Objects**
+- Each positional argument MUST be represented by a strongly-typed value object (e.g., `ComponentName`, `WorkflowName`)
+- Value objects MUST encapsulate validation logic specific to that argument type
+- Value objects MUST prevent creation of invalid instances (e.g., empty component names)
+- The system MUST NOT return raw `string` values for domain concepts
+- Type safety MUST extend beyond argument count to argument semantics
+- Example: `GetComponent()` returns `ComponentName`, not `string`
+
+**FR8: Fix UsageFunc Regression**
 - The custom `UsageFunc` MUST respect `cmd.Args` validators from builders
 - Positional arguments MUST NOT be treated as unknown subcommands
 - The error "Unknown command component1 for atmos terraform deploy" MUST be eliminated
@@ -196,6 +204,72 @@ Apply the same **builder pattern philosophy** used for flags to positional argum
 
 ### Implementation
 
+#### 0. Strongly-Typed Value Objects
+
+```go
+// pkg/flags/positional_types.go
+
+// ComponentName represents a validated Atmos component name.
+// This is a value object that ensures component names are never empty or invalid.
+type ComponentName struct {
+    value string
+}
+
+// NewComponentName creates a ComponentName from a string, validating it.
+func NewComponentName(name string) (ComponentName, error) {
+    if name == "" {
+        return ComponentName{}, errors.New("component name cannot be empty")
+    }
+    // Additional validation: no spaces, valid characters, etc.
+    if strings.Contains(name, " ") {
+        return ComponentName{}, errors.New("component name cannot contain spaces")
+    }
+    return ComponentName{value: name}, nil
+}
+
+// String returns the component name as a string.
+func (c ComponentName) String() string {
+    return c.value
+}
+
+// WorkflowName represents a validated Atmos workflow name.
+type WorkflowName struct {
+    value string
+}
+
+// NewWorkflowName creates a WorkflowName from a string, validating it.
+func NewWorkflowName(name string) (WorkflowName, error) {
+    if name == "" {
+        return WorkflowName{}, errors.New("workflow name cannot be empty")
+    }
+    return WorkflowName{value: name}, nil
+}
+
+// String returns the workflow name as a string.
+func (w WorkflowName) String() string {
+    return w.value
+}
+
+// PlanFilePath represents a validated path to a Terraform plan file.
+type PlanFilePath struct {
+    value string
+}
+
+// NewPlanFilePath creates a PlanFilePath from a string, validating it.
+func NewPlanFilePath(path string) (PlanFilePath, error) {
+    if path == "" {
+        return PlanFilePath{}, errors.New("plan file path cannot be empty")
+    }
+    // Could add .plan extension validation, file existence checks, etc.
+    return PlanFilePath{value: path}, nil
+}
+
+// String returns the plan file path as a string.
+func (p PlanFilePath) String() string {
+    return p.value
+}
+```
+
 #### 1. Generic Low-Level Builder
 
 ```go
@@ -231,10 +305,12 @@ type PositionalArgsParser struct {
 }
 
 func (p *PositionalArgsParser) Parse(args []string) (map[string]string, error)
+
+// DEPRECATED: GetComponent returns raw string. Use typed version instead.
 func (p *PositionalArgsParser) GetComponent(args []string) (string, error)
 ```
 
-#### 2. Domain-Specific Terraform Builder
+#### 2. Domain-Specific Terraform Builder with Typed Parser
 
 ```go
 // pkg/flags/terraform_positional.go
@@ -260,10 +336,64 @@ func (b *TerraformPositionalArgsBuilder) WithOriginalPlan(required bool) *Terraf
 // WithNewPlan adds new-plan positional argument (for plan-diff).
 func (b *TerraformPositionalArgsBuilder) WithNewPlan(required bool) *TerraformPositionalArgsBuilder
 
-func (b *TerraformPositionalArgsBuilder) Build() (*PositionalArgsParser, cobra.PositionalArgs, string)
+// Build returns a TerraformPositionalArgsParser with strongly-typed extraction methods.
+func (b *TerraformPositionalArgsBuilder) Build() (*TerraformPositionalArgsParser, cobra.PositionalArgs, string)
+
+// TerraformPositionalArgsParser provides strongly-typed extraction for Terraform positional args.
+type TerraformPositionalArgsParser struct {
+    inner *PositionalArgsParser
+}
+
+// GetComponent extracts and validates the component positional argument.
+// Returns ComponentName value object, NOT raw string.
+func (p *TerraformPositionalArgsParser) GetComponent(args []string) (ComponentName, error) {
+    parsed, err := p.inner.Parse(args)
+    if err != nil {
+        return ComponentName{}, err
+    }
+
+    componentStr, exists := parsed["component"]
+    if !exists {
+        return ComponentName{}, errors.New("component not provided")
+    }
+
+    return NewComponentName(componentStr)
+}
+
+// GetOriginalPlan extracts the original-plan positional argument.
+// Returns PlanFilePath value object.
+func (p *TerraformPositionalArgsParser) GetOriginalPlan(args []string) (PlanFilePath, error) {
+    parsed, err := p.inner.Parse(args)
+    if err != nil {
+        return PlanFilePath{}, err
+    }
+
+    planStr, exists := parsed["original-plan"]
+    if !exists {
+        return PlanFilePath{}, errors.New("original-plan not provided")
+    }
+
+    return NewPlanFilePath(planStr)
+}
+
+// GetNewPlan extracts the optional new-plan positional argument.
+// Returns PlanFilePath value object, or empty if not provided.
+func (p *TerraformPositionalArgsParser) GetNewPlan(args []string) (PlanFilePath, error) {
+    parsed, err := p.inner.Parse(args)
+    if err != nil {
+        return PlanFilePath{}, err
+    }
+
+    planStr, exists := parsed["new-plan"]
+    if !exists {
+        return PlanFilePath{}, nil  // Optional, return empty
+    }
+
+    return NewPlanFilePath(planStr)
+}
 ```
 
-#### 3. Domain-Specific Workflow Builder
+#### 3. Domain-Specific Workflow Builder with Typed Parser
 
 ```go
 // pkg/flags/workflow_positional.go
@@ -277,7 +407,29 @@ func NewWorkflowPositionalArgsBuilder() *WorkflowPositionalArgsBuilder
 // WithWorkflowName adds the workflow-name positional argument.
 func (b *WorkflowPositionalArgsBuilder) WithWorkflowName(required bool) *WorkflowPositionalArgsBuilder
 
-func (b *WorkflowPositionalArgsBuilder) Build() (*PositionalArgsParser, cobra.PositionalArgs, string)
+// Build returns a WorkflowPositionalArgsParser with strongly-typed extraction methods.
+func (b *WorkflowPositionalArgsBuilder) Build() (*WorkflowPositionalArgsParser, cobra.PositionalArgs, string)
+
+// WorkflowPositionalArgsParser provides strongly-typed extraction for Workflow positional args.
+type WorkflowPositionalArgsParser struct {
+    inner *PositionalArgsParser
+}
+
+// GetWorkflowName extracts and validates the workflow-name positional argument.
+// Returns WorkflowName value object, NOT raw string.
+func (p *WorkflowPositionalArgsParser) GetWorkflowName(args []string) (WorkflowName, error) {
+    parsed, err := p.inner.Parse(args)
+    if err != nil {
+        return WorkflowName{}, err
+    }
+
+    nameStr, exists := parsed["workflow-name"]
+    if !exists {
+        return WorkflowName{}, errors.New("workflow-name not provided")
+    }
+
+    return NewWorkflowName(nameStr)
+}
 ```
 
 #### 4. Domain-Specific Helmfile Builder
@@ -317,8 +469,8 @@ commands := []*cobra.Command{
         RunE: func(cmd *cobra.Command, args []string) error {
             handleHelpRequest(cmd, args)
 
-            // Type-safe extraction
-            component, err := deployArgs.GetComponent(args)
+            // Type-safe extraction - returns ComponentName value object, NOT string
+            componentName, err := deployArgs.GetComponent(args)
             if err != nil {
                 return err  // Validation already done by Args validator
             }
@@ -330,8 +482,9 @@ commands := []*cobra.Command{
                 return err
             }
 
-            // Use component...
-            return terraformRun(parentCmd, cmd, opts)
+            // Use componentName.String() when you need the raw string
+            // But the type system prevents you from accidentally using an invalid component
+            return terraformRun(parentCmd, cmd, componentName, opts)
         },
     },
 }
@@ -351,12 +504,15 @@ var workflowCmd = &cobra.Command{
     Short: "Execute an Atmos workflow",
     Args:  workflowValidator,
     RunE: func(cmd *cobra.Command, args []string) error {
-        parsed, err := workflowArgs.Parse(args)
+        // Type-safe extraction - returns WorkflowName value object, NOT string
+        workflowName, err := workflowArgs.GetWorkflowName(args)
         if err != nil {
             return err
         }
-        workflowName := parsed["workflow-name"]
-        // ...
+
+        // workflowName is a WorkflowName type, ensuring it's validated
+        // Use workflowName.String() to get the raw string when needed
+        return executeWorkflow(cmd, workflowName)
     },
 }
 ```
