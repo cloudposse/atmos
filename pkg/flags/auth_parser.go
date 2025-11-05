@@ -59,6 +59,17 @@ func (p *AuthParser) Parse(ctx context.Context, args []string) (*AuthOptions, er
 
 	// Convert to strongly-typed options.
 	durationStr := getString(parsedConfig.Flags, "duration")
+
+	// Check if duration flag was explicitly provided via CLI.
+	// Using flag.Changed is more reliable than checking for non-empty string,
+	// as it correctly handles --duration="" vs no flag at all.
+	durationProvided := false
+	if p.cmd != nil {
+		if flag := p.cmd.Flags().Lookup("duration"); flag != nil {
+			durationProvided = flag.Changed
+		}
+	}
+
 	opts := AuthOptions{
 		GlobalFlags: GlobalFlags{
 			Chdir:           getString(parsedConfig.Flags, "chdir"),
@@ -84,7 +95,7 @@ func (p *AuthParser) Parse(ctx context.Context, args []string) (*AuthOptions, er
 		Output:           getString(parsedConfig.Flags, "output"),
 		Destination:      getString(parsedConfig.Flags, "destination"),
 		Duration:         parseDuration(durationStr),
-		DurationProvided: durationStr != "", // Flag was provided if non-empty
+		DurationProvided: durationProvided,
 		Issuer:           getString(parsedConfig.Flags, "issuer"),
 		PrintOnly:        getBool(parsedConfig.Flags, "print-only"),
 		NoOpen:           getBool(parsedConfig.Flags, "no-open"),
