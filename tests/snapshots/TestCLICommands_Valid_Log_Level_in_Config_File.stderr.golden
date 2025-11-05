@@ -1,8 +1,11 @@
 DEBU Set logs-level=trace logs-file=/dev/stderr
+TRCE Git root config search disabled via ATMOS_GIT_ROOT_ENABLED=false
 DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+TRCE Git root config search disabled via ATMOS_GIT_ROOT_ENABLED=false
 DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
+TRCE Git root config search disabled via ATMOS_GIT_ROOT_ENABLED=false
 DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 DEBU Telemetry event enqueued
