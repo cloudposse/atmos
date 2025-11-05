@@ -27,11 +27,9 @@ func TestPassThroughFlagParser_InheritedPersistentFlags(t *testing.T) {
 	parentCmd.PersistentFlags().String("logs-level", "", "Log level")
 	parentCmd.PersistentFlags().String("config-path", "", "Config path")
 
-	// Create child command with PassThroughFlagParser (simulates packer/terraform commands)
-	parser := NewPassThroughFlagParser(
-		WithStackFlag(),
-		WithIdentityFlag(),
-	)
+	// Create child command with PassThroughFlagParser (simulates packer/terraform commands).
+	// Use WithPackerFlags() to register all flags including inherited global flags.
+	parser := NewPassThroughFlagParser(WithPackerFlags())
 	parser.SetPositionalArgsCount(1) // Extract 1 positional arg (component)
 
 	childCmd := &cobra.Command{
@@ -84,10 +82,9 @@ func TestPassThroughFlagParser_MultipleInheritedFlags(t *testing.T) {
 	middleCmd.PersistentFlags().String("dry-run", "", "Dry run")
 	rootCmd.AddCommand(middleCmd)
 
-	// Leaf command with PassThroughFlagParser
-	parser := NewPassThroughFlagParser(
-		WithStackFlag(),
-	)
+	// Leaf command with PassThroughFlagParser.
+	// Use WithPackerFlags() to register all flags including inherited global flags.
+	parser := NewPassThroughFlagParser(WithPackerFlags())
 	parser.SetPositionalArgsCount(1) // Extract 1 positional arg (component)
 
 	leafCmd := &cobra.Command{
@@ -132,7 +129,7 @@ func TestPassThroughFlagParser_InheritedFlagPrecedence(t *testing.T) {
 	parentCmd := &cobra.Command{Use: "atmos"}
 	parentCmd.PersistentFlags().String("logs-level", "", "Log level")
 
-	parser := NewPassThroughFlagParser(WithStackFlag())
+	parser := NewPassThroughFlagParser(WithPackerFlags())
 	parser.SetPositionalArgsCount(1) // Extract 1 positional arg (component)
 	childCmd := &cobra.Command{Use: "packer", Args: cobra.ArbitraryArgs}
 	parser.RegisterPersistentFlags(childCmd)
@@ -161,7 +158,7 @@ func TestPassThroughFlagParser_ComponentExtraction(t *testing.T) {
 	parentCmd := &cobra.Command{Use: "atmos"}
 	parentCmd.PersistentFlags().String("logs-level", "", "Log level")
 
-	parser := NewPassThroughFlagParser(WithStackFlag())
+	parser := NewPassThroughFlagParser(WithPackerFlags())
 	parser.SetPositionalArgsCount(1) // Packer extracts 1 positional arg (component)
 
 	childCmd := &cobra.Command{Use: "packer", Args: cobra.ArbitraryArgs}
@@ -228,7 +225,7 @@ func TestPassThroughFlagParser_WithDoubleDashSeparator(t *testing.T) {
 	parentCmd := &cobra.Command{Use: "atmos"}
 	parentCmd.PersistentFlags().String("logs-level", "", "Log level")
 
-	parser := NewPassThroughFlagParser(WithStackFlag())
+	parser := NewPassThroughFlagParser(WithPackerFlags())
 	parser.SetPositionalArgsCount(1) // Extract 1 positional arg (component)
 
 	childCmd := &cobra.Command{Use: "packer", Args: cobra.ArbitraryArgs}
@@ -265,7 +262,7 @@ func TestPassThroughFlagParser_NoInheritedFlags(t *testing.T) {
 	ctx := context.Background()
 	v := viper.New()
 
-	parser := NewPassThroughFlagParser(WithStackFlag())
+	parser := NewPassThroughFlagParser(WithPackerFlags())
 	parser.SetPositionalArgsCount(1)
 
 	// Command with no parent (no inherited flags)

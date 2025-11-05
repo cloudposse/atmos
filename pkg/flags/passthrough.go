@@ -324,16 +324,16 @@ func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*Pars
 		// Ignore parse errors - pass-through commands may have unknown flags for the external tool.
 		_ = combinedFlags.Parse(args)
 
-		// After parsing, bind the parsed pflags to Viper to ensure values are available
+		// After parsing, bind the parsed pflags to Viper to ensure values are available.
+		// We bind ALL flags from combinedFlags, not just registry flags, because
+		// inherited persistent flags from parent commands may not be in our registry.
 		if p.viper != nil {
-			for _, flag := range p.registry.All() {
-				viperKey := p.getViperKey(flag.GetName())
-				cobraFlag := combinedFlags.Lookup(flag.GetName())
-				if cobraFlag != nil && cobraFlag.Changed {
-					// Only set in Viper if the flag was actually provided on CLI
-					_ = p.viper.BindPFlag(viperKey, cobraFlag)
+			combinedFlags.VisitAll(func(cobraFlag *pflag.Flag) {
+				if cobraFlag.Changed {
+					// Use flag name as viper key (persistent flags use same naming)
+					_ = p.viper.BindPFlag(cobraFlag.Name, cobraFlag)
 				}
-			}
+			})
 		}
 	}
 
