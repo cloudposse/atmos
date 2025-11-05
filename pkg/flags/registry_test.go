@@ -86,17 +86,18 @@ func TestFlagRegistry_All(t *testing.T) {
 func TestCommonFlags(t *testing.T) {
 	registry := CommonFlags()
 
-	// Should have 3 common flags: stack, identity, dry-run
-	assert.Equal(t, 3, registry.Count())
+	// Should have 18 flags: all GlobalFlags (16) + stack + dry-run
+	// Note: identity is in GlobalFlags, not duplicated
+	assert.Equal(t, 18, registry.Count(), "CommonFlags should include global flags + stack + dry-run")
 
-	// Check stack flag
+	// Check stack flag (added by CommonFlags)
 	stackFlag := registry.Get("stack")
 	require.NotNil(t, stackFlag)
 	assert.Equal(t, "stack", stackFlag.GetName())
 	assert.Equal(t, "s", stackFlag.GetShorthand())
 	assert.Equal(t, []string{"ATMOS_STACK"}, stackFlag.GetEnvVars())
 
-	// Check identity flag
+	// Check identity flag (from GlobalFlags)
 	identityFlag := registry.Get(cfg.IdentityFlagName)
 	require.NotNil(t, identityFlag)
 	assert.Equal(t, "identity", identityFlag.GetName())

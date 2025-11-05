@@ -124,7 +124,8 @@ func TestPassThroughFlagParser_InheritedFlagPrecedence(t *testing.T) {
 	v := viper.New()
 
 	// Set ENV var (lower precedence than CLI flag)
-	v.Set("logs-level", "Info")
+	t.Setenv("ATMOS_LOGS_LEVEL", "Info")
+	_ = v.BindEnv("logs-level", "ATMOS_LOGS_LEVEL")
 
 	parentCmd := &cobra.Command{Use: "atmos"}
 	parentCmd.PersistentFlags().String("logs-level", "", "Log level")
@@ -136,14 +137,14 @@ func TestPassThroughFlagParser_InheritedFlagPrecedence(t *testing.T) {
 	require.NoError(t, parser.BindToViper(v))
 	parentCmd.AddCommand(childCmd)
 
-	// CLI flag should override Viper value
+	// CLI flag should override ENV var
 	args := []string{"--logs-level=Debug", "--stack=prod", "component"}
 
 	result, err := parser.Parse(ctx, args)
 	require.NoError(t, err)
 
 	// CLI flag should take precedence over env/config
-	assert.Equal(t, "Debug", v.GetString("logs-level"), "CLI flag should override Viper value")
+	assert.Equal(t, "Debug", v.GetString("logs-level"), "CLI flag should override ENV var")
 	assert.Equal(t, "prod", result.Flags["stack"])
 }
 

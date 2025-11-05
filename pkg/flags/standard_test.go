@@ -17,7 +17,10 @@ func TestNewStandardFlagParser(t *testing.T) {
 
 	assert.NotNil(t, parser)
 	assert.NotNil(t, parser.registry)
-	assert.Equal(t, 3, parser.registry.Count())
+	// CommonFlags() now includes all GlobalFlagsRegistry() flags + stack + dry-run
+	// GlobalFlagsRegistry() has 16 flags + 2 additional (stack, dry-run) = 18 flags
+	// Note: identity is in GlobalFlags, so it's not duplicated
+	assert.Equal(t, 18, parser.registry.Count(), "CommonFlags should include global flags + stack + dry-run")
 }
 
 func TestStandardFlagParser_RegisterFlags(t *testing.T) {

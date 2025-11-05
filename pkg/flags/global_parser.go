@@ -192,7 +192,7 @@ func GlobalFlagsRegistry() *FlagRegistry {
 		Name:        "identity",
 		Shorthand:   "i",
 		Default:     "",
-		Description: "Identity to assume. Use without value to select interactively.",
+		Description: "Identity to use for authentication (use without value to select interactively)",
 		NoOptDefVal: cfg.IdentityFlagSelectValue,
 		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
 	})

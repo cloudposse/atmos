@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -77,9 +76,11 @@ func (r *FlagRegistry) Count() int {
 
 // CommonFlags returns a registry pre-populated with common Atmos flags.
 // This includes:
+//   - All global flags from GlobalFlagsRegistry() (logs-level, chdir, base-path, identity, etc.)
 //   - stack (-s): Stack name
-//   - identity (-i): Authentication identity (with NoOptDefVal for interactive selection)
 //   - dry-run: Dry run mode
+//
+// Note: identity is already in GlobalFlagsRegistry(), so it's not duplicated here.
 //
 // Usage:
 //
@@ -89,7 +90,11 @@ func (r *FlagRegistry) Count() int {
 func CommonFlags() *FlagRegistry {
 	defer perf.Track(nil, "flagparser.CommonFlags")()
 
+	// Start with all global flags (logs-level, chdir, base-path, identity, etc.)
 	registry := NewFlagRegistry()
+	for _, flag := range GlobalFlagsRegistry().All() {
+		registry.Register(flag)
+	}
 
 	// Stack flag
 	registry.Register(&StringFlag{
@@ -101,17 +106,6 @@ func CommonFlags() *FlagRegistry {
 		EnvVars:     []string{"ATMOS_STACK"},
 	})
 
-	// Identity flag with NoOptDefVal for interactive selection
-	registry.Register(&StringFlag{
-		Name:        cfg.IdentityFlagName,
-		Shorthand:   "i",
-		Default:     "",
-		Description: "Identity to use for authentication (use without value to select interactively)",
-		Required:    false,
-		NoOptDefVal: cfg.IdentityFlagSelectValue, // "__SELECT__"
-		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
-	})
-
 	// Dry run flag
 	registry.Register(&BoolFlag{
 		Name:        "dry-run",
@@ -120,6 +114,8 @@ func CommonFlags() *FlagRegistry {
 		Description: "Perform dry run without making actual changes",
 		EnvVars:     []string{"ATMOS_DRY_RUN"},
 	})
+
+	// Note: identity is already in GlobalFlagsRegistry(), so we don't register it again
 
 	return registry
 }
