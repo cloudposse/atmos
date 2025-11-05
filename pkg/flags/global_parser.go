@@ -36,6 +36,11 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) GlobalFlags {
 		LogsFile:  v.GetString("logs-file"),
 		NoColor:   v.GetBool("no-color"),
 
+		// Terminal and I/O configuration.
+		ForceColor: v.GetBool("force-color"),
+		ForceTTY:   v.GetBool("force-tty"),
+		Mask:       v.GetBool("mask"),
+
 		// Output configuration.
 		Pager: parsePagerFlag(cmd, v),
 
