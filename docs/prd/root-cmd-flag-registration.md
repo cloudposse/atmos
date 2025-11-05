@@ -151,6 +151,44 @@ func TestGlobalFlagPrecedence(t *testing.T) {
 }
 ```
 
+## Good News: Some Builder Methods Already Exist!
+
+The terminal I/O flags (`force-color`, `force-tty`, `mask`) already have builder methods in `pkg/flags/standard_builder.go`:
+
+```go
+// Already implemented!
+func (b *StandardOptionsBuilder) WithForceColor() *StandardOptionsBuilder {
+    b.options = append(b.options, WithBoolFlag("force-color", "", false, "..."))
+    b.options = append(b.options, WithEnvVars("force-color", "ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"))
+    return b
+}
+
+func (b *StandardOptionsBuilder) WithForceTTY() *StandardOptionsBuilder {
+    b.options = append(b.options, WithBoolFlag("force-tty", "", false, "..."))
+    b.options = append(b.options, WithEnvVars("force-tty", "ATMOS_FORCE_TTY"))
+    return b
+}
+
+func (b *StandardOptionsBuilder) WithMask() *StandardOptionsBuilder {
+    b.options = append(b.options, WithBoolFlag("mask", "", true, "..."))
+    b.options = append(b.options, WithEnvVars("mask", "ATMOS_MASK"))
+    return b
+}
+```
+
+**However, these are NOT being used in root.go!** Instead, root.go manually registers and binds them:
+
+```go
+// WRONG: Manual registration in root.go
+RootCmd.PersistentFlags().Bool("force-color", false, "...")
+viper.BindEnv("force-color", "ATMOS_FORCE_COLOR", "CLICOLOR_FORCE")
+
+// RIGHT: Should use builder (but root.go doesn't have a builder yet)
+builder.WithForceColor()  // Handles both registration AND env binding
+```
+
+This is a perfect example of why we need GlobalOptionsBuilder - we have the methods but can't use them because root.go doesn't use the builder pattern.
+
 ## Implementation Blockers
 
 ### 1. String Slice Flags Not Supported
