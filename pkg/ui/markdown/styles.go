@@ -21,7 +21,7 @@ func applyStyleSafely(style *ansi.StylePrimitive, color string) {
 
 // GetDefaultStyle returns the markdown style configuration from atmos.yaml settings
 // or falls back to built-in defaults if not configured.
-func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
+func GetDefaultStyle(atmosConfig *schema.AtmosConfiguration) ([]byte, error) {
 	// Get the built-in default style
 	defaultBytes, err := getBuiltinDefaultStyle()
 	if err != nil {

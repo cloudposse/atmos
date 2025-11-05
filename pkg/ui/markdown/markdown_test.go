@@ -66,7 +66,7 @@ func TestSplitMarkdownContent(t *testing.T) {
 
 // TestRenderAsciiWithoutWordWrap tests ASCII rendering without word wrap.
 func TestRenderAsciiWithoutWordWrap(t *testing.T) {
-	r, err := NewRenderer(schema.AtmosConfiguration{})
+	r, err := NewRenderer(&schema.AtmosConfiguration{})
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -102,7 +102,7 @@ func TestRenderAsciiWithoutWordWrap(t *testing.T) {
 
 // TestRenderAscii tests ASCII rendering with word wrap.
 func TestRenderAscii(t *testing.T) {
-	r, err := NewRenderer(schema.AtmosConfiguration{})
+	r, err := NewRenderer(&schema.AtmosConfiguration{})
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -133,7 +133,7 @@ func TestRenderAscii(t *testing.T) {
 
 // TestRenderWorkflow tests workflow rendering.
 func TestRenderWorkflow(t *testing.T) {
-	r, err := NewRenderer(schema.AtmosConfiguration{})
+	r, err := NewRenderer(&schema.AtmosConfiguration{})
 	require.NoError(t, err)
 
 	r.isTTYSupportForStdout = func() bool {
@@ -173,7 +173,7 @@ func TestRenderWorkflow(t *testing.T) {
 
 // TestRenderError tests error message rendering.
 func TestRenderError(t *testing.T) {
-	r, err := NewRenderer(schema.AtmosConfiguration{})
+	r, err := NewRenderer(&schema.AtmosConfiguration{})
 	require.NoError(t, err)
 
 	r.isTTYSupportForStderr = func() bool {
@@ -253,7 +253,7 @@ func TestRenderError(t *testing.T) {
 
 // TestRenderSuccess tests success message rendering.
 func TestRenderSuccess(t *testing.T) {
-	r, err := NewRenderer(schema.AtmosConfiguration{})
+	r, err := NewRenderer(&schema.AtmosConfiguration{})
 	require.NoError(t, err)
 
 	r.isTTYSupportForStdout = func() bool {
@@ -304,7 +304,7 @@ func TestRenderSuccess(t *testing.T) {
 
 // TestWithWidth tests the WithWidth option.
 func TestWithWidth(t *testing.T) {
-	r, err := NewRenderer(schema.AtmosConfiguration{})
+	r, err := NewRenderer(&schema.AtmosConfiguration{})
 	require.NoError(t, err)
 
 	// Initial width should be default
@@ -362,7 +362,7 @@ func TestNewTerminalMarkdownRenderer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			renderer, err := NewTerminalMarkdownRenderer(tt.atmosConfig)
+			renderer, err := NewTerminalMarkdownRenderer(&tt.atmosConfig)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -379,7 +379,7 @@ func TestNewTerminalMarkdownRenderer(t *testing.T) {
 func TestApplyStyleSafely(t *testing.T) {
 	// This is an indirect test since applyStyleSafely is called by GetDefaultStyle
 	// We verify it through GetDefaultStyle's behavior
-	r, err := NewRenderer(schema.AtmosConfiguration{
+	r, err := NewRenderer(&schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			Terminal: schema.Terminal{
 				Color: true,
@@ -391,7 +391,7 @@ func TestApplyStyleSafely(t *testing.T) {
 
 	// If applyStyleSafely works correctly, NewRenderer should not panic
 	// even with various color configurations
-	r2, err := NewRenderer(schema.AtmosConfiguration{
+	r2, err := NewRenderer(&schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			Terminal: schema.Terminal{
 				NoColor: true,
@@ -441,7 +441,7 @@ func TestGetDefaultStyle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			styleBytes, err := GetDefaultStyle(tt.atmosConfig)
+			styleBytes, err := GetDefaultStyle(&tt.atmosConfig)
 			assert.NoError(t, err)
 			assert.NotNil(t, styleBytes)
 			assert.Greater(t, len(styleBytes), 0, "Style bytes should not be empty")

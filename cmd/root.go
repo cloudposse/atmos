@@ -522,7 +522,7 @@ func Execute() error {
 	// Set atmosConfig for version command (needs access to config).
 	version.SetAtmosConfig(&atmosConfig)
 
-	utils.InitializeMarkdown(atmosConfig)
+	utils.InitializeMarkdown(&atmosConfig)
 	errUtils.InitializeMarkdown(atmosConfig)
 
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {

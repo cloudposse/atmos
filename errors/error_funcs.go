@@ -23,7 +23,7 @@ var render *markdown.Renderer
 // InitializeMarkdown initializes a new Markdown renderer.
 func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
 	var err error
-	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
+	render, err = markdown.NewTerminalMarkdownRenderer(&atmosConfig)
 	if err != nil {
 		log.Error("failed to initialize Markdown renderer", "error", err)
 	}

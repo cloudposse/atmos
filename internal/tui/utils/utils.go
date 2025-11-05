@@ -61,7 +61,7 @@ func RenderMarkdown(markdownText string, style string) (string, error) {
 	}
 
 	// Get the custom style from atmos config
-	customStyle, err := mdstyle.GetDefaultStyle(schema.AtmosConfiguration{})
+	customStyle, err := mdstyle.GetDefaultStyle(&schema.AtmosConfiguration{})
 	if err != nil {
 		return "", fmt.Errorf("failed to get markdown style: %w", err)
 	}

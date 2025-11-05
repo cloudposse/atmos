@@ -72,7 +72,7 @@ func calculateMaxFlagLength(flags *pflag.FlagSet) int {
 
 func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	nameIndent := nameIndentWidth
-	render, err := markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
+	render, err := markdown.NewTerminalMarkdownRenderer(&schema.AtmosConfiguration{})
 	if err != nil {
 		return
 	}

@@ -158,7 +158,7 @@ func TestCheckErrorAndPrint(t *testing.T) {
 	testLogger.SetLevel(log.TraceLevel)
 	log.SetDefault(testLogger)
 
-	render, _ = markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
+	render, _ = markdown.NewTerminalMarkdownRenderer(&schema.AtmosConfiguration{})
 	title := "Test Error"
 	err := errors.New("this is a test error")
 	suggestion := "Try checking your configuration."
@@ -221,7 +221,7 @@ func TestCheckErrorAndPrint(t *testing.T) {
 
 	// Test with empty title (defaults to "Error")
 	t.Run("empty title", func(t *testing.T) {
-		render, _ = markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
+		render, _ = markdown.NewTerminalMarkdownRenderer(&schema.AtmosConfiguration{})
 
 		r, w, pipeErr := os.Pipe()
 		assert.NoError(t, pipeErr, "failed to create pipe")
