@@ -27,18 +27,6 @@ type EditorConfigOptions struct {
 	DisableIndentation            bool // Disable indentation check (--disable-indentation)
 	DisableIndentSize             bool // Disable indent size check (--disable-indent-size)
 	DisableMaxLineLength          bool // Disable max line length check (--disable-max-line-length)
-
-	// Tracking which flags were explicitly provided via CLI.
-	// These enable proper precedence: CLI > config > default.
-	InitProvided                          bool
-	IgnoreDefaultsProvided                bool
-	DryRunProvided                        bool
-	DisableTrimTrailingWhitespaceProvided bool
-	DisableEndOfLineProvided              bool
-	DisableInsertFinalNewlineProvided     bool
-	DisableIndentationProvided            bool
-	DisableIndentSizeProvided             bool
-	DisableMaxLineLengthProvided          bool
 }
 
 // Value returns the resolved editorconfig options for use in command execution.

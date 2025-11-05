@@ -53,17 +53,6 @@ func (p *EditorConfigParser) Parse(ctx context.Context, args []string) (*EditorC
 		return nil, err
 	}
 
-	// Helper to check if a flag was explicitly provided via CLI.
-	flagChanged := func(name string) bool {
-		if p.cmd == nil {
-			return false
-		}
-		if flag := p.cmd.Flags().Lookup(name); flag != nil {
-			return flag.Changed
-		}
-		return false
-	}
-
 	// Convert to strongly-typed options.
 	opts := EditorConfigOptions{
 		GlobalFlags: GlobalFlags{
@@ -98,17 +87,6 @@ func (p *EditorConfigParser) Parse(ctx context.Context, args []string) (*EditorC
 		DisableIndentation:            getBool(parsedConfig.Flags, "disable-indentation"),
 		DisableIndentSize:             getBool(parsedConfig.Flags, "disable-indent-size"),
 		DisableMaxLineLength:          getBool(parsedConfig.Flags, "disable-max-line-length"),
-
-		// Track which flags were explicitly provided via CLI for proper precedence.
-		InitProvided:                          flagChanged("init"),
-		IgnoreDefaultsProvided:                flagChanged("ignore-defaults"),
-		DryRunProvided:                        flagChanged("dry-run"),
-		DisableTrimTrailingWhitespaceProvided: flagChanged("disable-trim-trailing-whitespace"),
-		DisableEndOfLineProvided:              flagChanged("disable-end-of-line"),
-		DisableInsertFinalNewlineProvided:     flagChanged("disable-insert-final-newline"),
-		DisableIndentationProvided:            flagChanged("disable-indentation"),
-		DisableIndentSizeProvided:             flagChanged("disable-indent-size"),
-		DisableMaxLineLengthProvided:          flagChanged("disable-max-line-length"),
 	}
 
 	return &opts, nil
