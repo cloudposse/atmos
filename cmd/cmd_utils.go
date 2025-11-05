@@ -26,6 +26,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -553,11 +554,41 @@ func showUsageExample(cmd *cobra.Command, details string) {
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// If a component was provided as the first argument, filter stacks by that component.
+	if len(args) > 0 && args[0] != "" {
+		output, err := listStacksForComponent(args[0])
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return output, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Otherwise, list all stacks.
 	output, err := listStacks(cmd, args)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return output, cobra.ShellCompDirectiveNoFileComp
+}
+
+// listStacksForComponent returns stacks that contain the specified component.
+// It initializes the CLI configuration, describes all stacks, and filters them
+// to include only those defining the given component.
+func listStacksForComponent(component string) ([]string, error) {
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
+
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
+
+	output, err := l.FilterAndListStacks(stacksMap, component)
+	return output, err
 }
 
 func AddStackCompletion(cmd *cobra.Command) {
