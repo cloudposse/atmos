@@ -132,11 +132,11 @@ func pullImage(atmosConfig *schema.AtmosConfiguration, ref name.Reference) (*rem
 
 // getGHCRAuth returns authentication credentials for GitHub Container Registry (ghcr.io).
 // It tries ATMOS_GITHUB_TOKEN first, then falls back to GITHUB_TOKEN.
-// For the username, it uses github_username if configured, otherwise uses the token itself (GHCR accepts this).
+// Requires github_username to be configured for authentication.
 func getGHCRAuth(atmosConfig *schema.AtmosConfiguration) (authn.Authenticator, string) {
-	atmosToken := atmosConfig.Settings.AtmosGithubToken
-	githubToken := atmosConfig.Settings.GithubToken
-	githubUsername := atmosConfig.Settings.GithubUsername
+	atmosToken := strings.TrimSpace(atmosConfig.Settings.AtmosGithubToken)
+	githubToken := strings.TrimSpace(atmosConfig.Settings.GithubToken)
+	githubUsername := strings.TrimSpace(atmosConfig.Settings.GithubUsername)
 
 	var token string
 	var tokenSource string
