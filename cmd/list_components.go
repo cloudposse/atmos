@@ -29,6 +29,11 @@ var listComponentsCmd = &cobra.Command{
 			return err
 		}
 
+		if len(output) == 0 {
+			u.PrintMessageInColor("No components found.\n", theme.Colors.Info)
+			return nil
+		}
+
 		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
 		return nil
 	},
