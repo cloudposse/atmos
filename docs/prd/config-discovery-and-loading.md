@@ -93,6 +93,119 @@ base_path: "/path/to/infrastructure"
 base_path: "${HOME}/my-infra"
 ```
 
+
+### YAML Function Support in CLI Flags and Environment Variables
+
+In addition to setting `base_path: "!repo-root"` in the embedded config, we also enable YAML function support in CLI flags and environment variables for maximum flexibility.
+
+#### Supported Methods
+
+Users can now use YAML functions in three ways:
+
+1. **In `atmos.yaml` files** (already supported):
+   ```yaml
+   base_path: "!repo-root"
+   ```
+
+2. **Via `--base-path` CLI flag** (newly added):
+   ```bash
+   atmos --base-path="!repo-root" terraform plan
+   ```
+
+3. **Via `ATMOS_BASE_PATH` environment variable** (newly added):
+   ```bash
+   export ATMOS_BASE_PATH="!repo-root"
+   atmos terraform plan
+   ```
+
+#### Implementation
+
+**Added `ProcessYAMLFunctionString()` function** (`pkg/config/process_yaml.go`):
+- Processes strings containing YAML function syntax
+- Supports `!repo-root` and `!env` functions
+- Returns original string if no function detected
+- Used by CLI flag and environment variable processing
+
+**Updated CLI flag processing** (`pkg/config/config.go`):
+```go
+if configAndStacksInfo.AtmosBasePath != "" {
+    // Process YAML functions in base path (e.g., !repo-root, !env VAR).
+    processedBasePath, err := ProcessYAMLFunctionString(configAndStacksInfo.AtmosBasePath)
+    if err != nil {
+        return atmosConfig, fmt.Errorf("failed to process base path '%s': %w", configAndStacksInfo.AtmosBasePath, err)
+    }
+    atmosConfig.BasePath = processedBasePath
+}
+```
+
+**Updated environment variable processing** (`pkg/config/utils.go`):
+```go
+basePath := os.Getenv("ATMOS_BASE_PATH")
+if len(basePath) > 0 {
+    log.Debug(foundEnvVarMessage, "ATMOS_BASE_PATH", basePath)
+    // Process YAML functions in base path (e.g., !repo-root, !env VAR).
+    processedBasePath, err := ProcessYAMLFunctionString(basePath)
+    if err != nil {
+        return fmt.Errorf("failed to process ATMOS_BASE_PATH '%s': %w", basePath, err)
+    }
+    atmosConfig.BasePath = processedBasePath
+}
+```
+
+#### Use Cases
+
+**1. Temporary override without changing config:**
+```bash
+# Override base_path for a single command
+atmos --base-path="!repo-root" terraform plan
+
+# Useful for testing or one-off operations
+atmos --base-path="/tmp/test-infra" terraform plan
+```
+
+**2. Environment-specific configuration:**
+```bash
+# Development environment
+export ATMOS_BASE_PATH="!repo-root"
+
+# CI/CD environment with custom path
+export ATMOS_BASE_PATH="/workspace/infrastructure"
+
+# Using environment variable indirection
+export INFRA_ROOT="/custom/path"
+export ATMOS_BASE_PATH="!env INFRA_ROOT"
+```
+
+**3. Scripting and automation:**
+```bash
+#!/bin/bash
+# Script that works regardless of execution directory
+ATMOS_BASE_PATH="!repo-root" atmos terraform plan prod-vpc --stack prod
+```
+
+#### Supported YAML Functions
+
+Both CLI flag and environment variable support these YAML functions:
+
+- **`!repo-root`** - Resolves to git repository root path
+  ```bash
+  atmos --base-path="!repo-root" terraform plan
+  ```
+
+- **`!env VAR_NAME`** - Resolves to environment variable value
+  ```bash
+  export MY_INFRA_PATH="/path/to/infra"
+  atmos --base-path="!env MY_INFRA_PATH" terraform plan
+  ```
+
+#### Benefits
+
+✅ **Consistency** - Same YAML functions work in config files, CLI flags, and env vars
+✅ **Flexibility** - Override config without modifying files
+✅ **Scripting** - Easy to use in CI/CD pipelines and scripts
+✅ **No breaking changes** - Literal strings still work as before
+✅ **Composability** - Can chain functions (e.g., `!env` referencing path)
+
 ### Implementation
 
 #### 1. Update Embedded Configuration
@@ -388,14 +501,19 @@ This would be a separate feature for security/performance optimization in restri
 - Issue #1746: Unified flag parsing overhaul
 - PR #970325e1e: Added `--chdir` flag as workaround (October 2025)
 
+
 ## Implementation Checklist
 
-- [ ] Add `base_path: "!repo-root"` to `pkg/config/atmos.yaml`
+- [x] Add `ProcessYAMLFunctionString()` to `pkg/config/process_yaml.go`
+- [x] Update `pkg/config/config.go` to process CLI flag through YAML functions
+- [x] Update `pkg/config/utils.go` to process env var through YAML functions
+- [x] Add `base_path: "!repo-root"` to `pkg/config/atmos.yaml`
 - [ ] Update integration tests in `tests/cli_workdir_git_root_test.go`
+- [ ] Add tests for YAML functions in CLI flags and env vars
 - [ ] Update documentation in `website/docs/cli/configuration.mdx`
 - [ ] Add examples to `website/docs/core-concepts/projects/configuration.mdx`
 - [ ] Run full test suite: `make testacc`
 - [ ] Verify no linting errors: `make lint`
-- [ ] Manual testing with real repository (all 4 test scenarios)
+- [ ] Manual testing with real repository (all test scenarios)
 - [ ] Update CHANGELOG.md with breaking change notice
 - [ ] Verify existing `--chdir` tests still pass
