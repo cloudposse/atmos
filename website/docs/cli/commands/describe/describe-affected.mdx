@@ -84,6 +84,10 @@ Our [affected stacks](/integrations/github-actions/affected-stacks) GitHub Actio
 atmos describe affected [options]
 ```
 
+:::info YAML Functions and Authentication
+By default, `atmos describe affected` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during stack processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
+:::
+
 :::tip
 Run `atmos describe affected --help` to see all the available options
 :::
@@ -115,6 +119,10 @@ atmos describe affected --skip=terraform.output
 atmos describe affected --skip=terraform.output --skip=include
 atmos describe affected --skip=include,eval
 atmos describe affected --exclude-locked
+# Authenticate before describing (when YAML functions require credentials)
+atmos describe affected --identity my-aws-identity
+atmos describe affected --identity # Interactive selection
+atmos describe affected -i my-aws-identity --ref refs/heads/main
 ```
 
 # Example Output
@@ -332,6 +340,20 @@ Affected components and stacks:
         Atmos will perform an HTTP POST request to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,
         where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,
         and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable
+    </dd>
+
+    <dt>`--identity` / `-i` <em>(optional)</em></dt>
+    <dd>
+        Authenticate with a specific identity before describing affected components.
+        This is required when YAML template functions (e.g., `!terraform.state`, `!terraform.output`)
+        need to access remote resources requiring authentication.
+        Use without a value for interactive identity selection:
+
+        `atmos describe affected --identity` (interactive)
+
+        `atmos describe affected --identity my-aws-identity` (specific identity)
+
+        For more details, refer to [Authentication](/cli/commands/auth/usage).
     </dd>
 </dl>
 
