@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -91,6 +92,13 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	err := v.Unmarshal(&atmosConfig)
 	if err != nil {
 		return atmosConfig, err
+	}
+
+	// Process YAML functions in base_path from config file.
+	if atmosConfig.BasePath != "" {
+		if processedBasePath, err := ProcessYAMLFunctionString(atmosConfig.BasePath); err == nil {
+			atmosConfig.BasePath = processedBasePath
+		}
 	}
 
 	// Post-process to preserve case-sensitive identity names.
@@ -187,6 +195,10 @@ func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStac
 		return err
 	}
 
+	if err := readGitRootConfig(v); err != nil {
+		return err
+	}
+
 	if err := readEnvAmosConfigPath(v); err != nil {
 		return err
 	}
@@ -258,6 +270,27 @@ func readWorkDirConfig(v *viper.Viper) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// readGitRootConfig loads config from git repository root directory.
+func readGitRootConfig(v *viper.Viper) error {
+	gitRoot, err := u.ProcessTagGitRoot("!repo-root")
+	if err != nil || gitRoot == "" {
+		// Not in a git repository or error getting git root, skip silently
+		//nolint:nilerr // Intentionally return nil when not in git repo
+		return nil
+	}
+
+	mergeErr := mergeConfig(v, gitRoot, CliConfigFileName, true)
+	if mergeErr != nil {
+		var notFoundErr viper.ConfigFileNotFoundError
+		if errors.As(mergeErr, &notFoundErr) {
+			return nil
+		}
+		return mergeErr
+	}
+
 	return nil
 }
 
