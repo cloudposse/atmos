@@ -693,10 +693,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Reload XDG to pick up the new environment
 	xdg.Reload()
 
-	// Clear github_username environment variables for consistent snapshots in describe config tests.
+	// Clear github_username environment variables for consistent snapshots.
 	// These are automatically bound to settings.github_username but cause
-	// environment-dependent output. Only clear for tests that snapshot config output.
-	if strings.Contains(tc.Name, "describe_config") || strings.Contains(tc.Name, "indentation") {
+	// environment-dependent output. Skip clearing only for vendor tests that need GitHub auth.
+	if !strings.Contains(tc.Name, "vendor") {
 		t.Setenv("ATMOS_GITHUB_USERNAME", "")
 		t.Setenv("GITHUB_ACTOR", "")
 		t.Setenv("GITHUB_USERNAME", "")
