@@ -60,6 +60,15 @@ func (p *PackerParser) Parse(ctx context.Context, args []string) (*PackerOptions
 		return nil, err
 	}
 
+	// Extract component from positional args.
+	// Packer commands: atmos packer <subcommand> <component>
+	// positionalArgs[0] = component name (ami, docker, etc.)
+	// Packer passes subcommand separately to packerRun, so positionalArgs contains only component.
+	component := ""
+	if len(parsedConfig.PositionalArgs) >= 1 {
+		component = parsedConfig.PositionalArgs[0]
+	}
+
 	// Convert to strongly-typed interpreter.
 	opts := PackerOptions{
 		GlobalFlags: GlobalFlags{
@@ -84,6 +93,7 @@ func (p *PackerParser) Parse(ctx context.Context, args []string) (*PackerOptions
 		},
 		Stack:           getString(parsedConfig.Flags, "stack"),
 		DryRun:          getBool(parsedConfig.Flags, "dry-run"),
+		Component:       component,
 		positionalArgs:  parsedConfig.PositionalArgs,
 		passThroughArgs: parsedConfig.PassThroughArgs,
 	}

@@ -54,8 +54,9 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 		{
 			name: "valid command with default identity",
 			args: []string{"echo", "test"},
-			// This will fail with auth errors since we don't have real AWS SSO configured.
-			expectedError: "authentication failed",
+			// This will fail because the default identity (test-admin) uses AWS SSO which requires TTY for interactive flow.
+			// Without a TTY, we can't do interactive authentication.
+			expectedError: "requires a TTY",
 		},
 		{
 			name:          "valid command with specific identity and double dash",

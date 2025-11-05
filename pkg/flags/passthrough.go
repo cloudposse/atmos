@@ -294,25 +294,41 @@ func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*Pars
 	// This populates the Cobra flags which are bound to Viper via BindFlagsToViper/BindToViper.
 	// Without this, Viper won't have CLI flag values and precedence order breaks.
 	//
-	// For persistent flags registered on parent commands, we need to parse using PersistentFlags().
-	// Child commands inherit persistent flags, so parsing them makes values available.
+	// Create a combined FlagSet with inherited persistent flags + local flags.
+	// This is necessary because when DisableFlagParsing=true, Cobra doesn't automatically
+	// handle inherited flags from parent commands.
 	if p.cmd != nil && len(args) > 0 {
-		// Try parsing persistent flags first (for parent->child flag inheritance).
-		// Ignore parse errors - pass-through commands may have unknown flags for the external tool.
-		_ = p.cmd.PersistentFlags().Parse(args)
+		// Create combined FlagSet for parsing
+		combinedFlags := pflag.NewFlagSet("combined", pflag.ContinueOnError)
 
-		// Also parse local flags in case some were registered directly on this command.
+		// Add inherited flags first (persistent flags from parent commands like RootCmd)
+		p.cmd.InheritedFlags().VisitAll(func(flag *pflag.Flag) {
+			combinedFlags.AddFlag(flag)
+		})
+
+		// Add local persistent flags (flags defined on this command)
+		p.cmd.PersistentFlags().VisitAll(func(flag *pflag.Flag) {
+			if combinedFlags.Lookup(flag.Name) == nil {
+				combinedFlags.AddFlag(flag)
+			}
+		})
+
+		// Add local flags (flags specific to this subcommand)
+		p.cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+			if combinedFlags.Lookup(flag.Name) == nil {
+				combinedFlags.AddFlag(flag)
+			}
+		})
+
+		// Parse with combined FlagSet
 		// Ignore parse errors - pass-through commands may have unknown flags for the external tool.
-		_ = p.cmd.Flags().Parse(args)
+		_ = combinedFlags.Parse(args)
 
 		// After parsing, bind the parsed pflags to Viper to ensure values are available
 		if p.viper != nil {
 			for _, flag := range p.registry.All() {
 				viperKey := p.getViperKey(flag.GetName())
-				cobraFlag := p.cmd.Flags().Lookup(flag.GetName())
-				if cobraFlag == nil {
-					cobraFlag = p.cmd.PersistentFlags().Lookup(flag.GetName())
-				}
+				cobraFlag := combinedFlags.Lookup(flag.GetName())
 				if cobraFlag != nil && cobraFlag.Changed {
 					// Only set in Viper if the flag was actually provided on CLI
 					_ = p.viper.BindPFlag(viperKey, cobraFlag)
