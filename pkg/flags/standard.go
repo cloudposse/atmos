@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -332,12 +333,30 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 
 	// Step 1: Manually parse args into Cobra FlagSet (since DisableFlagParsing=true)
 	// This populates the pflags which are bound to Viper
+	// IMPORTANT: When DisableFlagParsing=true, we must manually parse BOTH local flags
+	// AND inherited persistent flags from parent commands (like --logs-level from RootCmd).
 	if p.cmd != nil && len(args) > 0 {
-		if err := p.cmd.Flags().Parse(args); err != nil {
+		// Create a combined FlagSet with both local flags and inherited persistent flags.
+		// This ensures persistent flags like --logs-level work correctly.
+		combinedFlags := pflag.NewFlagSet("combined", pflag.ContinueOnError)
+
+		// Add inherited flags first (persistent flags from parent commands).
+		p.cmd.InheritedFlags().VisitAll(func(flag *pflag.Flag) {
+			combinedFlags.AddFlag(flag)
+		})
+
+		// Add local flags (flags specific to this command).
+		p.cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+			combinedFlags.AddFlag(flag)
+		})
+
+		// Parse args with the combined FlagSet.
+		if err := combinedFlags.Parse(args); err != nil {
 			return nil, fmt.Errorf("failed to parse flags: %w", err)
 		}
-		// Extract positional args (non-flag args)
-		result.PositionalArgs = p.cmd.Flags().Args()
+
+		// Extract positional args (non-flag args).
+		result.PositionalArgs = combinedFlags.Args()
 
 		// After parsing, bind the parsed pflags to Viper to ensure values are available.
 		// This is necessary because BindToViper() is called before Parse(), so Viper
@@ -345,7 +364,8 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 		if p.viper != nil {
 			for _, flag := range p.registry.All() {
 				viperKey := p.getViperKey(flag.GetName())
-				cobraFlag := p.cmd.Flags().Lookup(flag.GetName())
+				// Check both local and inherited flags.
+				cobraFlag := combinedFlags.Lookup(flag.GetName())
 				if cobraFlag != nil && cobraFlag.Changed {
 					// Only bind if the flag was actually provided on CLI
 					_ = p.viper.BindPFlag(viperKey, cobraFlag)
