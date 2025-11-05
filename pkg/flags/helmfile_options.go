@@ -19,6 +19,9 @@ import (
 //	    return errors.New("stack is required")
 //	}
 //
+//	// Type-safe access to positional args (populated automatically by parser):
+//	fmt.Printf("Applying component: %s\n", opts.Component)
+//
 // See docs/prd/flag-handling/ for patterns.
 type HelmfileOptions struct {
 	GlobalFlags // Embedded global flags (chdir, logs-level, identity, etc.)
@@ -28,7 +31,10 @@ type HelmfileOptions struct {
 	Identity IdentitySelector
 	DryRun   bool // --dry-run: Perform dry run without making actual changes.
 
-	// Positional and pass-through arguments.
+	// Positional arguments (populated automatically by parser from TargetField mapping).
+	Component string // Component name from positional arg (e.g., "nginx" in: atmos helmfile apply nginx)
+
+	// Internal: Positional and pass-through arguments (use GetPositionalArgs/GetPassThroughArgs).
 	positionalArgs  []string // e.g., ["sync", "vpc"] in: atmos helmfile sync vpc
 	passThroughArgs []string // e.g., ["--args", "foo"] in: atmos helmfile sync -- --args foo
 }
@@ -38,15 +44,33 @@ type HelmfileOptions struct {
 // This function:
 //  1. Parses global flags (chdir, logs-level, identity, pager, profiler, etc.)
 //  2. Parses common flags (stack, dry-run)
-//  3. Stores positional and pass-through arguments
+//  3. Extracts and populates positional arguments (component name)
+//  4. Stores positional and pass-through arguments
 //
 // Arguments:
 //   - cmd: The Cobra command being executed (used to check if flags were provided).
 //   - v: Viper instance with bound flags (precedence: CLI > ENV > config > default).
 //   - positionalArgs: Positional arguments after command name.
 //   - passThroughArgs: Arguments after -- separator to pass to helmfile.
+//
+// Example:
+//
+//	atmos helmfile apply nginx -s dev --identity=prod -- --args foo
+//	                     ^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^    ^^^^^^^^^^
+//	                       |            |                       |
+//	                  positional   common flags          pass-through
+//	                  (Component)                             args
 func ParseHelmfileFlags(cmd *cobra.Command, v *viper.Viper, positionalArgs, passThroughArgs []string) HelmfileOptions {
 	defer perf.Track(nil, "flagparser.ParseHelmfileFlags")()
+
+	// Extract component from positional args
+	// Helmfile commands: atmos helmfile <subcommand> <component>
+	// positionalArgs[0] = subcommand (apply, sync, diff, etc.)
+	// positionalArgs[1] = component name (nginx, redis, etc.)
+	component := ""
+	if len(positionalArgs) >= 2 {
+		component = positionalArgs[1]
+	}
 
 	return HelmfileOptions{
 		GlobalFlags: ParseGlobalFlags(cmd, v),
@@ -56,7 +80,10 @@ func ParseHelmfileFlags(cmd *cobra.Command, v *viper.Viper, positionalArgs, pass
 		Identity: parseIdentityFlag(cmd, v),
 		DryRun:   v.GetBool("dry-run"),
 
-		// Arguments.
+		// Positional arguments.
+		Component: component,
+
+		// Internal arguments.
 		positionalArgs:  positionalArgs,
 		passThroughArgs: passThroughArgs,
 	}
