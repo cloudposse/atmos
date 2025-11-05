@@ -6,10 +6,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
-// TestKit wraps testing.TB and provides automatic RootCmd state cleanup.
-// It follows Go 1.15+ testing.TB interface pattern for composable test helpers.
+// TestKit is an alias for testhelpers.TestKit to maintain backward compatibility.
+type TestKit = testhelpers.TestKit
+
+// NewTestKit creates a TestKit for RootCmd. This is a convenience wrapper that
+// automatically passes RootCmd to testhelpers.NewTestKit for cmd package tests.
 //
 // Usage:
 //
@@ -18,50 +23,9 @@ import (
 //	    // RootCmd state automatically cleaned up after test
 //	    // ... test code ...
 //	}
-type TestKit struct {
-	testing.TB
-}
-
-// NewTestKit creates a TestKit that wraps testing.TB and automatically registers
-// RootCmd state cleanup. This follows the testing.TB interface pattern introduced
-// in Go 1.15+ for composable test helpers.
-//
-// The TestKit automatically:
-// - Snapshots RootCmd state when created
-// - Registers cleanup to restore state when test completes
-// - Works with subtests and table-driven tests
-// - Prevents test pollution from global RootCmd state
-//
-// Example:
-//
-//	func TestCommand(t *testing.T) {
-//	    t := NewTestKit(t)
-//	    // Your test code - RootCmd cleanup is automatic
-//	    t.Setenv("FOO", "bar") // All testing.TB methods work
-//	}
-//
-// Table-driven tests:
-//
-//	func TestTableDriven(t *testing.T) {
-//	    t := NewTestKit(t) // Parent gets cleanup
-//	    tests := []struct{...}{...}
-//	    for _, tt := range tests {
-//	        t.Run(tt.name, func(t *testing.T) {
-//	            t := NewTestKit(t) // Each subtest gets cleanup
-//	            // Test code...
-//	        })
-//	    }
-//	}
 func NewTestKit(tb testing.TB) *TestKit {
 	tb.Helper()
-
-	// Snapshot RootCmd state and register cleanup.
-	snapshot := snapshotRootCmdState()
-	tb.Cleanup(func() {
-		restoreRootCmdState(snapshot)
-	})
-
-	return &TestKit{TB: tb}
+	return testhelpers.NewTestKit(tb, RootCmd)
 }
 
 func TestTestKit_AutomaticCleanup(t *testing.T) {

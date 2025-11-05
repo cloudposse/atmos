@@ -9,7 +9,7 @@ import (
 
 func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 	// Use TestKit to isolate RootCmd state.
-	_ = testhelpers.NewTestKit(t)
+	_ = testhelpers.NewTestKit(t, cmd.RootCmd)
 
 	t.Chdir("./fixtures/scenarios/atmos-include-yaml-function")
 
