@@ -46,6 +46,15 @@ func (p *StandardParser) RegisterFlags(cmd *cobra.Command) {
 	p.parser.RegisterFlags(cmd)
 }
 
+// RegisterPersistentFlags adds flags as persistent flags (inherited by subcommands).
+// This is used for global flags that should be available to all subcommands.
+func (p *StandardParser) RegisterPersistentFlags(cmd *cobra.Command) {
+	defer perf.Track(nil, "flagparser.StandardParser.RegisterPersistentFlags")()
+
+	p.cmd = cmd
+	p.parser.RegisterPersistentFlags(cmd)
+}
+
 // BindToViper binds flags to Viper for precedence handling.
 func (p *StandardParser) BindToViper(v *viper.Viper) error {
 	defer perf.Track(nil, "flagparser.StandardParser.BindToViper")()

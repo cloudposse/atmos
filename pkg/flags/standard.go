@@ -141,6 +141,76 @@ func (p *StandardFlagParser) registerFlag(cmd *cobra.Command, flag Flag) {
 	}
 }
 
+// RegisterPersistentFlags registers flags as persistent flags (available to subcommands).
+// This is used for global flags that should be inherited by all subcommands.
+func (p *StandardFlagParser) RegisterPersistentFlags(cmd *cobra.Command) {
+	defer perf.Track(nil, "flagparser.StandardFlagParser.RegisterPersistentFlags")()
+
+	// Store command for manual flag parsing in Parse().
+	p.cmd = cmd
+
+	// IMPORTANT: Disable Cobra's flag parsing so our parser can handle it.
+	// This is critical for:
+	// - Proper positional argument extraction (component names, workflow names, etc.)
+	// - Viper precedence handling (CLI → ENV → config → defaults)
+	// - Short flag support (-s, -f, -i, etc.)
+	cmd.DisableFlagParsing = true
+
+	for _, flag := range p.registry.All() {
+		p.registerPersistentFlag(cmd, flag)
+	}
+
+	// Register shell completions for flags with valid values.
+	p.registerPersistentCompletions(cmd)
+}
+
+// registerPersistentFlag registers a single flag as a persistent flag with Cobra.
+func (p *StandardFlagParser) registerPersistentFlag(cmd *cobra.Command, flag Flag) {
+	switch f := flag.(type) {
+	case *StringFlag:
+		cmd.PersistentFlags().StringP(f.Name, f.Shorthand, f.Default, f.Description)
+
+		// Set NoOptDefVal if specified (identity pattern).
+		if f.NoOptDefVal != "" {
+			cobraFlag := cmd.PersistentFlags().Lookup(f.Name)
+			if cobraFlag != nil {
+				cobraFlag.NoOptDefVal = f.NoOptDefVal
+			}
+		}
+
+		// Populate validValues map for runtime validation.
+		if len(f.ValidValues) > 0 {
+			p.validValues[f.Name] = f.ValidValues
+		}
+
+		// Mark as required if needed.
+		if f.Required {
+			_ = cmd.MarkPersistentFlagRequired(f.Name)
+		}
+
+	case *BoolFlag:
+		cmd.PersistentFlags().BoolP(f.Name, f.Shorthand, f.Default, f.Description)
+
+	case *IntFlag:
+		cmd.PersistentFlags().IntP(f.Name, f.Shorthand, f.Default, f.Description)
+
+		if f.Required {
+			_ = cmd.MarkPersistentFlagRequired(f.Name)
+		}
+
+	case *StringSliceFlag:
+		cmd.PersistentFlags().StringSliceP(f.Name, f.Shorthand, f.Default, f.Description)
+
+		if f.Required {
+			_ = cmd.MarkPersistentFlagRequired(f.Name)
+		}
+
+	default:
+		// Unknown flag type - skip.
+		// In production, this could log a warning.
+	}
+}
+
 // registerCompletions automatically registers shell completion functions
 // for flags that have valid values configured.
 func (p *StandardFlagParser) registerCompletions(cmd *cobra.Command) {
@@ -151,6 +221,27 @@ func (p *StandardFlagParser) registerCompletions(cmd *cobra.Command) {
 	for flagName, validValues := range p.validValues {
 		// Only register if the flag actually exists.
 		if cmd.Flags().Lookup(flagName) == nil {
+			continue
+		}
+
+		// Create a closure to capture the validValues for this specific flag.
+		values := validValues
+		_ = cmd.RegisterFlagCompletionFunc(flagName, func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			return values, cobra.ShellCompDirectiveNoFileComp
+		})
+	}
+}
+
+// registerPersistentCompletions automatically registers shell completion functions
+// for persistent flags that have valid values configured.
+func (p *StandardFlagParser) registerPersistentCompletions(cmd *cobra.Command) {
+	if len(p.validValues) == 0 {
+		return
+	}
+
+	for flagName, validValues := range p.validValues {
+		// Only register if the flag actually exists.
+		if cmd.PersistentFlags().Lookup(flagName) == nil {
 			continue
 		}
 
@@ -182,7 +273,11 @@ func (p *StandardFlagParser) BindToViper(v *viper.Viper) error {
 	if p.cmd != nil {
 		for _, flag := range p.registry.All() {
 			viperKey := p.getViperKey(flag.GetName())
+			// Check both local and persistent flags (needed for global flags on RootCmd).
 			cobraFlag := p.cmd.Flags().Lookup(flag.GetName())
+			if cobraFlag == nil {
+				cobraFlag = p.cmd.PersistentFlags().Lookup(flag.GetName())
+			}
 			if cobraFlag != nil {
 				if err := v.BindPFlag(viperKey, cobraFlag); err != nil {
 					return fmt.Errorf("failed to bind pflag %s to viper: %w", flag.GetName(), err)

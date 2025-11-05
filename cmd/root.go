@@ -676,14 +676,15 @@ func init() {
 	// Add the template function for wrapped flag usages.
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
-	// Register all global flags using builder pattern.
+	// Register all global flags as persistent flags using builder pattern.
+	// Global flags are registered as persistent so they're inherited by all subcommands.
 	// This provides:
 	//   - Single source of truth for defaults (NewGlobalFlags())
 	//   - Automatic environment variable binding
 	//   - Consistent with other command builders
 	//   - Testable flag precedence
 	globalParser := flags.NewGlobalOptionsBuilder().Build()
-	globalParser.RegisterFlags(RootCmd)
+	globalParser.RegisterPersistentFlags(RootCmd)
 	if err := globalParser.BindToViper(viper.GetViper()); err != nil {
 		log.Error("Failed to bind global flags to viper", "error", err)
 	}

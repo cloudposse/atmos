@@ -14,40 +14,39 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 		assert.NotNil(t, parser)
 	})
 
-	t.Run("registers all global flags on command", func(t *testing.T) {
+	t.Run("registers all global flags on command as persistent flags", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser := NewGlobalOptionsBuilder().Build()
-		parser.RegisterFlags(cmd)
+		parser.RegisterPersistentFlags(cmd)
 
-		// Verify key flags are registered.
-		// Note: Flags are registered as regular flags, not persistent flags.
-		assert.NotNil(t, cmd.Flags().Lookup("logs-level"))
-		assert.NotNil(t, cmd.Flags().Lookup("logs-file"))
-		assert.NotNil(t, cmd.Flags().Lookup("chdir"))
-		assert.NotNil(t, cmd.Flags().Lookup("config"))
-		assert.NotNil(t, cmd.Flags().Lookup("config-path"))
-		assert.NotNil(t, cmd.Flags().Lookup("force-color"))
-		assert.NotNil(t, cmd.Flags().Lookup("force-tty"))
-		assert.NotNil(t, cmd.Flags().Lookup("mask"))
-		assert.NotNil(t, cmd.Flags().Lookup("pager"))
-		assert.NotNil(t, cmd.Flags().Lookup("identity"))
+		// Verify key flags are registered as persistent flags (inherited by subcommands).
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("logs-level"))
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("logs-file"))
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("chdir"))
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("config"))
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("config-path"))
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("force-color"))
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("force-tty"))
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("mask"))
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("pager"))
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("identity"))
 	})
 
 	t.Run("uses defaults from NewGlobalFlags", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser := NewGlobalOptionsBuilder().Build()
-		parser.RegisterFlags(cmd)
+		parser.RegisterPersistentFlags(cmd)
 
 		defaults := NewGlobalFlags()
 
 		// Verify defaults match NewGlobalFlags().
-		logsLevel := cmd.Flags().Lookup("logs-level")
+		logsLevel := cmd.PersistentFlags().Lookup("logs-level")
 		assert.Equal(t, defaults.LogsLevel, logsLevel.DefValue)
 
-		logsFile := cmd.Flags().Lookup("logs-file")
+		logsFile := cmd.PersistentFlags().Lookup("logs-file")
 		assert.Equal(t, defaults.LogsFile, logsFile.DefValue)
 
-		mask := cmd.Flags().Lookup("mask")
+		mask := cmd.PersistentFlags().Lookup("mask")
 		assert.Equal(t, "true", mask.DefValue) // defaults.Mask is true
 	})
 
@@ -55,7 +54,7 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		v := viper.New()
 		parser := NewGlobalOptionsBuilder().Build()
-		parser.RegisterFlags(cmd)
+		parser.RegisterPersistentFlags(cmd)
 
 		err := parser.BindToViper(v)
 		assert.NoError(t, err)
@@ -64,9 +63,9 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 	t.Run("handles chdir shorthand flag", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser := NewGlobalOptionsBuilder().Build()
-		parser.RegisterFlags(cmd)
+		parser.RegisterPersistentFlags(cmd)
 
-		chdir := cmd.Flags().Lookup("chdir")
+		chdir := cmd.PersistentFlags().Lookup("chdir")
 		assert.NotNil(t, chdir)
 		assert.Equal(t, "C", chdir.Shorthand)
 	})
@@ -74,9 +73,9 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 	t.Run("handles NoOptDefVal for pager", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser := NewGlobalOptionsBuilder().Build()
-		parser.RegisterFlags(cmd)
+		parser.RegisterPersistentFlags(cmd)
 
-		pager := cmd.Flags().Lookup("pager")
+		pager := cmd.PersistentFlags().Lookup("pager")
 		assert.NotNil(t, pager)
 		assert.Equal(t, "true", pager.NoOptDefVal)
 	})
@@ -84,9 +83,9 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 	t.Run("handles NoOptDefVal for identity", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser := NewGlobalOptionsBuilder().Build()
-		parser.RegisterFlags(cmd)
+		parser.RegisterPersistentFlags(cmd)
 
-		identity := cmd.Flags().Lookup("identity")
+		identity := cmd.PersistentFlags().Lookup("identity")
 		assert.NotNil(t, identity)
 		assert.Equal(t, "__SELECT__", identity.NoOptDefVal)
 	})
