@@ -15,6 +15,9 @@ import (
 var terraformGenerateVarfileParser = flags.NewStandardOptionsBuilder().
 	WithStack(true). // Required.
 	WithFile().
+	WithProcessTemplates(true).
+	WithProcessFunctions(true).
+	WithSkip().
 	Build()
 
 // terraformGenerateVarfileCmd generates varfile for a terraform component.

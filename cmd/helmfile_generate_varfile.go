@@ -36,7 +36,7 @@ var helmfileGenerateVarfileCmd = &cobra.Command{
 
 		// Validate component argument.
 		if len(args) != 1 {
-			return errUtils.ErrInvalidArgumentError
+			return fmt.Errorf("%w: command requires one argument `component`", errUtils.ErrInvalidArgumentError)
 		}
 
 		// Call original implementation with cmd (it needs cmd for other flags like process-templates).

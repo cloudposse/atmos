@@ -29,33 +29,11 @@ var workflowCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 
-		// Parse command-line arguments and get strongly-typed options.
-		opts, err := workflowParser.Parse(cmd.Context(), args)
-		if err != nil {
-			return err
-		}
-
-		// Get positional args after flag parsing.
-		positionalArgs := opts.GetPositionalArgs()
-
-		// If no arguments are provided, start the workflow UI
-		if len(positionalArgs) == 0 {
-			err := e.ExecuteWorkflowCmd(cmd, args)
-			if err != nil {
-				return err
-			}
-		}
-
-		// If no file is provided, show the usage information
-		if opts.File == "" {
-			err := cmd.Usage()
-			if err != nil {
-				return err
-			}
-		}
-
-		// Execute the workflow command
-		err = e.ExecuteWorkflowCmd(cmd, args)
+		// Execute the workflow command.
+		// NOTE: Parser is registered and bound to Viper for precedence,
+		// but ExecuteWorkflowCmd still parses flags internally.
+		// Will migrate to use workflowParser.Parse() once ExecuteWorkflowCmd is refactored.
+		err := e.ExecuteWorkflowCmd(cmd, args)
 		if err != nil {
 			// Check if it's a known error that's already printed in ExecuteWorkflowCmd.
 			// If it is, we don't need to print it again, but we do need to exit with a non-zero exit code.
