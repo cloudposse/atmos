@@ -9,7 +9,7 @@ logs:
   file: "/dev/stderr"
   # Supported log levels: Trace, Debug, Info, Warning, Off
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
-  level: Info
+  level: Warning
 
 settings:
   telemetry:
