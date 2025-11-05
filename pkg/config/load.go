@@ -184,11 +184,20 @@ func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStac
 		return err
 	}
 
+	// Track if workdir had a config before git root search.
+	workdirConfigFound := v.ConfigFileUsed() != ""
+
 	if err := readWorkDirConfig(v); err != nil {
 		return err
 	}
 
-	if err := readGitRootConfig(v); err != nil {
+	// Check if workdir found a new config file.
+	if !workdirConfigFound && v.ConfigFileUsed() != "" {
+		workdirConfigFound = true
+	}
+
+	// Git root is a fallback - only search if workdir has no config AND env var is true.
+	if err := readGitRootConfig(v, workdirConfigFound); err != nil {
 		return err
 	}
 
@@ -266,14 +275,33 @@ func readWorkDirConfig(v *viper.Viper) error {
 	return nil
 }
 
-// readGitRootConfig loads config from git repository root directory.
-func readGitRootConfig(v *viper.Viper) error {
+// readGitRootConfig loads config from git repository root directory as a fallback.
+// It only searches git root if:
+//  1. ATMOS_GIT_ROOT_ENABLED is not set to "false"
+//  2. No config was found in the current working directory
+func readGitRootConfig(v *viper.Viper, workdirConfigFound bool) error {
+	// Check if git root search is enabled (default: true).
+	//nolint:forbidigo // ATMOS_GIT_ROOT_ENABLED is specifically for config discovery control
+	gitRootEnabled := os.Getenv("ATMOS_GIT_ROOT_ENABLED")
+	if gitRootEnabled == "false" {
+		log.Trace("Git root config search disabled via ATMOS_GIT_ROOT_ENABLED=false")
+		return nil
+	}
+
+	// Git root is a fallback - only search if workdir has no config.
+	if workdirConfigFound {
+		log.Trace("Config found in working directory, skipping git root search")
+		return nil
+	}
+
 	gitRoot, err := u.ProcessTagGitRoot("!repo-root")
 	if err != nil || gitRoot == "" {
 		// Not in a git repository or error getting git root, skip silently
 		//nolint:nilerr // Intentionally return nil when not in git repo
 		return nil
 	}
+
+	log.Trace("Searching for config in git root", "path", gitRoot)
 
 	mergeErr := mergeConfig(v, gitRoot, CliConfigFileName, true)
 	if mergeErr != nil {
@@ -283,6 +311,8 @@ func readGitRootConfig(v *viper.Viper) error {
 		}
 		return mergeErr
 	}
+
+	log.Debug("Loaded config from git root", "path", gitRoot)
 
 	return nil
 }

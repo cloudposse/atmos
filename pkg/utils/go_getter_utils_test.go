@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -60,6 +61,9 @@ func TestValidateURI_ErrorPaths(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	// Disable git root config search in tests to avoid finding repo config instead of fixture configs.
+	//nolint:lintroller // TestMain doesn't have *testing.T, manual cleanup via os.Unsetenv if needed
+	os.Setenv("ATMOS_GIT_ROOT_ENABLED", "false")
 	code := m.Run()
 	getter.Detectors = originalDetectors
 	errUtils.Exit(code)

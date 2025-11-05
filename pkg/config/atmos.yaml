@@ -1,7 +1,3 @@
-# Default base path - all component and stack paths are relative to this
-# Users can override this in their own atmos.yaml
-base_path: "!repo-root"
-
 logs:
   # Can also be set using 'ATMOS_LOGS_FILE' ENV var, or '--logs-file' command-line argument
   # File or standard file descriptor to write logs to

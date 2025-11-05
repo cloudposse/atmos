@@ -1,0 +1,116 @@
+---
+slug: git-aware-config-discovery
+title: "Git-Aware Configuration Discovery"
+authors: [osterman]
+tags: [atmos, cli, git, configuration]
+date: 2025-11-04
+---
+
+Atmos 1.198.0 adds git-aware configuration discovery. Atmos now searches your git repository root for `atmos.yaml` when not found in the current directory, allowing you to run commands from any subdirectory.
+
+<!--truncate-->
+
+## What Changed
+
+Previously, Atmos only looked for `atmos.yaml` in the current working directory (and system/home directories). If you were in a subdirectory without a config file, it would fail.
+
+```bash
+# Repository structure
+/infra-repo/
+├── atmos.yaml
+├── components/
+│   └── terraform/
+│       └── vpc/
+└── stacks/
+
+# This failed in versions prior to 1.198.0
+cd /infra-repo/components/terraform/vpc
+atmos terraform plan vpc --stack prod
+# Error: atmos.yaml CLI config file was not found
+```
+
+Starting with 1.198.0, Atmos searches the git repository root as a fallback when no config is found in the current directory.
+
+## Behavior
+
+```bash
+# Now works from any subdirectory
+cd /infra-repo/components/terraform/vpc
+atmos terraform plan vpc --stack prod
+# Finds atmos.yaml at /infra-repo/atmos.yaml (from git root)
+```
+
+Git root detection uses `git rev-parse --show-toplevel`. If not in a git repository, Atmos behaves as before (only searching current/home/system directories).
+
+## How Git Root Search Works
+
+**Configuration file search order:**
+1. System directory (`/usr/local/etc/atmos/`)
+2. Home directory (`~/.atmos/`)
+3. Current working directory (`./atmos.yaml`)
+4. **Git repository root** (new in 1.198.0) - only if no config found in current directory
+5. `ATMOS_CLI_CONFIG_PATH` environment variable
+6. `--config-dir` CLI flag
+
+Git root search is a **fallback**, not an override. If your current directory has `atmos.yaml`, Atmos uses it. Git root is only searched when the current directory doesn't have a config file.
+
+## Disabling Git Root Search
+
+Set the `ATMOS_GIT_ROOT_ENABLED` environment variable to disable git root search:
+
+```bash
+# Disable git root search
+export ATMOS_GIT_ROOT_ENABLED=false
+atmos terraform plan vpc --stack prod
+# Only searches current/home/system directories (pre-1.198.0 behavior)
+```
+
+This is useful for:
+- Testing with fixture configs in subdirectories
+- Enforcing strict "must have config in current directory" policies
+- Debugging configuration discovery issues
+
+## Migration
+
+Most users won't need to change anything. The new behavior is backward compatible:
+
+**Works automatically if:**
+- `atmos.yaml` is at your git repository root
+- You currently run Atmos from the directory containing `atmos.yaml`
+- You want to run commands from any subdirectory (new capability)
+
+**Requires no changes if:**
+- Your current directory has `atmos.yaml` (git root won't be searched)
+- You're not in a git repository (git root won't be searched)
+- You use `--config-dir` or `ATMOS_CLI_CONFIG_PATH` (highest precedence)
+
+**Might need `ATMOS_GIT_ROOT_ENABLED=false` if:**
+- You have multiple `atmos.yaml` files in your repository (monorepo with separate configs)
+- Tests or scripts depend on "config not found" errors for subdirectories without configs
+
+## Technical Details
+
+**Configuration discovery order:**
+1. System directory (`/usr/local/etc/atmos/`)
+2. Home directory (`~/.atmos/`)
+3. Current working directory
+4. **Git repository root** (fallback, only if no config found above)
+5. `ATMOS_CLI_CONFIG_PATH` environment variable
+6. `--config-dir` CLI flag
+
+**Git root detection:**
+- Uses `git rev-parse --show-toplevel` via go-git library
+- Returns empty/error if not in a git repository (safely ignored)
+- Can be overridden with `TEST_GIT_ROOT` environment variable (for testing)
+- Controlled by `ATMOS_GIT_ROOT_ENABLED` environment variable (default: `true`)
+
+## Non-Breaking Change
+
+This is **not a breaking change** for most users because:
+
+- Git root is only searched as a **fallback** (doesn't override existing behavior)
+- If your current directory has `atmos.yaml`, it's used (no change)
+- If you're not in a git repository, behavior is identical to pre-1.198.0
+- Existing configs and scripts continue to work unchanged
+
+**Edge case:** If you rely on "config not found" errors in subdirectories, set `ATMOS_GIT_ROOT_ENABLED=false` to restore pre-1.198.0 behavior.

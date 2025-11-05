@@ -12,6 +12,9 @@ import (
 )
 
 func TestLoadConfig_ProcessesYAMLFunctionsInBasePath(t *testing.T) {
+	// Enable git root search for this test (disabled by TestMain by default)
+	t.Setenv("ATMOS_GIT_ROOT_ENABLED", "true")
+
 	// Create a temporary directory for test fixtures
 	tempDir := t.TempDir()
 
@@ -73,6 +76,12 @@ stacks:
 `
 		require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
 
+		// Change to git root directory so workdir config is found
+		originalDir, err := os.Getwd()
+		require.NoError(t, err)
+		defer func() { _ = os.Chdir(originalDir) }()
+		require.NoError(t, os.Chdir(gitRoot))
+
 		// Load config
 		configInfo := schema.ConfigAndStacksInfo{}
 		config, err := InitCliConfig(configInfo, false)
@@ -98,6 +107,12 @@ stacks:
   base_path: "stacks"
 `
 		require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
+
+		// Change to git root directory so workdir config is found
+		originalDir, err := os.Getwd()
+		require.NoError(t, err)
+		defer func() { _ = os.Chdir(originalDir) }()
+		require.NoError(t, os.Chdir(gitRoot))
 
 		// Load config
 		configInfo := schema.ConfigAndStacksInfo{}
@@ -132,6 +147,9 @@ stacks:
 }
 
 func TestLoadConfig_YAMLFunctionPrecedence(t *testing.T) {
+	// Enable git root search for this test (disabled by TestMain by default)
+	t.Setenv("ATMOS_GIT_ROOT_ENABLED", "true")
+
 	tempDir := t.TempDir()
 	gitRoot := filepath.Join(tempDir, "repo")
 	require.NoError(t, os.MkdirAll(gitRoot, 0o755))

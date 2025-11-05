@@ -63,35 +63,61 @@ Historical context from codebase investigation:
 3. **Simply never set** - The embedded config never used `base_path: "!repo-root"`
 4. **Workaround added** - `--chdir` flag was added (PR #970325e1e, October 2025) instead of fixing the default
 
-## Proposed Solution
+## Implemented Solution
 
-### Set Default Base Path to Git Root
+### Git Root Config Search with Environment Variable Control
 
-**The Fix:** Add `base_path: "!repo-root"` to the embedded `pkg/config/atmos.yaml`.
+**The Fix:** Add git repository root to config file search path as a fallback, controlled by `ATMOS_GIT_ROOT_ENABLED` environment variable (default: `true`).
 
-This makes the git repository root the default base path, matching user expectations and Git-like tool behavior.
+This allows Atmos to find `atmos.yaml` at the repository root when running from subdirectories, matching Git-like tool behavior.
 
 ### How It Works
 
-1. **Embedded config sets default**: `base_path: "!repo-root"`
-2. **YAML function processes tag**: `preprocessAtmosYamlFunc()` resolves `!repo-root` to git root path
-3. **All paths relative to git root**: Components, stacks, etc. are now relative to repository root
-4. **Works from any subdirectory**: Users can run Atmos commands from anywhere in the repository
+**Config file search order:**
+1. System config (`/usr/local/etc/atmos/`)
+2. Home config (`~/.atmos/`)
+3. Current working directory (`./atmos.yaml`)
+4. **Git root** (only if `ATMOS_GIT_ROOT_ENABLED=true` AND no config found in workdir)
+5. `ATMOS_CLI_CONFIG_PATH` environment variable
+6. `--config-dir` CLI flag
 
-### User Override
+**Key behavior:**
+- Git root is a **fallback**, not an override
+- Only searched if no config exists in current directory
+- Can be disabled by setting `ATMOS_GIT_ROOT_ENABLED=false`
+- Default is `true` (enabled) for git-like behavior
 
-Users who want different behavior can override in their own `atmos.yaml`:
+### Usage Examples
 
-```yaml
-# Use current directory instead of git root
-base_path: "."
+```bash
+# Default behavior (enabled) - searches git root as fallback
+cd /repo/components/terraform/vpc
+atmos terraform plan vpc --stack prod
+# Finds: /repo/atmos.yaml (from git root)
 
-# Or use a specific absolute path
-base_path: "/path/to/infrastructure"
+# Disable git root search
+export ATMOS_GIT_ROOT_ENABLED=false
+cd /repo/components/terraform/vpc
+atmos terraform plan vpc --stack prod
+# Error: atmos.yaml not found (only looks in current dir)
 
-# Or use environment variable
-base_path: "${HOME}/my-infra"
+# Tests disable it to avoid finding repo root config
+ATMOS_GIT_ROOT_ENABLED=false go test ./...
 ```
+
+### Why This Approach
+
+**Advantages:**
+- ✅ Git-like behavior by default
+- ✅ Can be disabled for tests (one env var in TestMain)
+- ✅ Doesn't break existing configs
+- ✅ No chicken-and-egg problem (env var controls search, not config)
+- ✅ Explicit control for edge cases
+- ✅ Git root as fallback prevents overriding test fixture configs
+
+**Test Impact:**
+- Add `os.Setenv("ATMOS_GIT_ROOT_ENABLED", "false")` to 5 TestMain functions
+- No changes to individual tests needed
 
 
 ### YAML Function Support in CLI Flags and Environment Variables
@@ -382,14 +408,31 @@ base_path: "."
 - Real problem is that `base_path` is empty, not that config isn't found
 - After finding config, paths resolve incorrectly from subdirectories
 
-#### ✅ Option 4: Set `base_path: "!repo-root"` in Embedded Config (SELECTED)
+#### ❌ Option 4: Set `base_path: "!repo-root"` in Embedded Config
+
+**Considered:** Add `base_path: "!repo-root"` to embedded `pkg/config/atmos.yaml`.
+
+**Rejected reason:**
+- Creates chicken-and-egg problem for config discovery
+- Setting `base_path` in config can't control how we find the config itself
+- Breaks tests - repo root config overrides test fixture configs
+- Tests run in subdirectories with fixture-specific configs
+- Monorepo-style test structure requires subdirectory config isolation
+
+#### ✅ Option 5: Environment Variable `ATMOS_GIT_ROOT_ENABLED` (SELECTED)
 
 **Selected reason:**
-- **Simplest solution** - One line change in embedded config
-- **Uses existing infrastructure** - YAML function processing already exists
-- **Matches original intent** - This is what should have been done from the start
-- **Easily overridable** - Users can change `base_path` in their own config
-- **No new code** - No environment variables, no discovery logic changes
+- **Git root as fallback, not override** - Only searched if workdir has no config
+- **Testable** - Disable with one line in TestMain functions
+- **No chicken-and-egg** - Env var controls search, not config
+- **Default enabled** - Git-like behavior by default (`ATMOS_GIT_ROOT_ENABLED=true`)
+- **Test isolation** - Tests set `ATMOS_GIT_ROOT_ENABLED=false` to avoid repo config
+
+**Implementation:**
+- Add `readGitRootConfig(v, workdirConfigFound)` to config loading
+- Check `ATMOS_GIT_ROOT_ENABLED` env var (default: true)
+- Only search git root if workdir has no config AND env var is true
+- Tests disable via `os.Setenv("ATMOS_GIT_ROOT_ENABLED", "false")` in TestMain
 
 ## Testing Strategy
 
