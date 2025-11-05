@@ -2,6 +2,7 @@ package exec
 
 import (
 	"testing"
+	"time"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/stretchr/testify/assert"
@@ -518,5 +519,184 @@ func TestUnlockStackRequest(t *testing.T) {
 		}
 
 		assert.Equal(t, "owner/repo/stack/component", dto.Key)
+	})
+}
+
+// TestExecuteProLock tests the executeProLock function with mocked dependencies.
+func TestExecuteProLock(t *testing.T) {
+	t.Run("successfully locks stack and shows checkmark", func(t *testing.T) {
+		// Create mocks
+		mockAPI := new(MockProAPIClient)
+		mockGit := new(MockGitRepo)
+
+		// Setup mock expectations
+		mockGit.On("GetLocalRepoInfo").Return(&atmosgit.RepoInfo{
+			RepoOwner: "test-owner",
+			RepoName:  "test-repo",
+		}, nil)
+
+		mockAPI.On("LockStack", mock.MatchedBy(func(req *dtos.LockStackRequest) bool {
+			return req.Key == "test-owner/test-repo/test-stack/test-component" &&
+				req.TTL == 30 &&
+				req.LockMessage == "Test lock"
+		})).Return(dtos.LockStackResponse{
+			Data: struct {
+				ID          string    `json:"id,omitempty"`
+				WorkspaceId string    `json:"workspaceId,omitempty"`
+				Key         string    `json:"key,omitempty"`
+				LockMessage string    `json:"lockMessage,omitempty"`
+				ExpiresAt   time.Time `json:"expiresAt,omitempty"`
+				CreatedAt   time.Time `json:"createdAt,omitempty"`
+				UpdatedAt   time.Time `json:"updatedAt,omitempty"`
+				DeletedAt   time.Time `json:"deletedAt,omitempty"`
+			}{
+				Key: "test-owner/test-repo/test-stack/test-component",
+			},
+		}, nil)
+
+		// Create test args
+		args := ProLockCmdArgs{
+			ProLockUnlockCmdArgs: ProLockUnlockCmdArgs{
+				Component: "test-component",
+				Stack:     "test-stack",
+			},
+			LockTTL:     30,
+			LockMessage: "Test lock",
+		}
+
+		// Execute
+		err := executeProLock(&args, mockAPI, mockGit)
+
+		// Verify
+		assert.NoError(t, err)
+		mockAPI.AssertExpectations(t)
+		mockGit.AssertExpectations(t)
+	})
+
+	t.Run("returns error when git repo info fails", func(t *testing.T) {
+		mockAPI := new(MockProAPIClient)
+		mockGit := new(MockGitRepo)
+
+		mockGit.On("GetLocalRepoInfo").Return(nil, assert.AnError)
+
+		args := ProLockCmdArgs{
+			ProLockUnlockCmdArgs: ProLockUnlockCmdArgs{
+				Component: "test-component",
+				Stack:     "test-stack",
+			},
+			LockTTL:     30,
+			LockMessage: "Test lock",
+		}
+
+		err := executeProLock(&args, mockAPI, mockGit)
+
+		assert.Error(t, err)
+		mockGit.AssertExpectations(t)
+	})
+
+	t.Run("returns error when API lock fails", func(t *testing.T) {
+		mockAPI := new(MockProAPIClient)
+		mockGit := new(MockGitRepo)
+
+		mockGit.On("GetLocalRepoInfo").Return(&atmosgit.RepoInfo{
+			RepoOwner: "test-owner",
+			RepoName:  "test-repo",
+		}, nil)
+
+		mockAPI.On("LockStack", mock.Anything).Return(dtos.LockStackResponse{}, assert.AnError)
+
+		args := ProLockCmdArgs{
+			ProLockUnlockCmdArgs: ProLockUnlockCmdArgs{
+				Component: "test-component",
+				Stack:     "test-stack",
+			},
+			LockTTL:     30,
+			LockMessage: "Test lock",
+		}
+
+		err := executeProLock(&args, mockAPI, mockGit)
+
+		assert.Error(t, err)
+		mockAPI.AssertExpectations(t)
+		mockGit.AssertExpectations(t)
+	})
+}
+
+// TestExecuteProUnlock tests the executeProUnlock function with mocked dependencies.
+func TestExecuteProUnlock(t *testing.T) {
+	t.Run("successfully unlocks stack and shows checkmark", func(t *testing.T) {
+		// Create mocks
+		mockAPI := new(MockProAPIClient)
+		mockGit := new(MockGitRepo)
+
+		// Setup mock expectations
+		mockGit.On("GetLocalRepoInfo").Return(&atmosgit.RepoInfo{
+			RepoOwner: "test-owner",
+			RepoName:  "test-repo",
+		}, nil)
+
+		mockAPI.On("UnlockStack", mock.MatchedBy(func(req *dtos.UnlockStackRequest) bool {
+			return req.Key == "test-owner/test-repo/test-stack/test-component"
+		})).Return(dtos.UnlockStackResponse{}, nil)
+
+		// Create test args
+		args := ProUnlockCmdArgs{
+			ProLockUnlockCmdArgs: ProLockUnlockCmdArgs{
+				Component: "test-component",
+				Stack:     "test-stack",
+			},
+		}
+
+		// Execute
+		err := executeProUnlock(&args, mockAPI, mockGit)
+
+		// Verify
+		assert.NoError(t, err)
+		mockAPI.AssertExpectations(t)
+		mockGit.AssertExpectations(t)
+	})
+
+	t.Run("returns error when git repo info fails", func(t *testing.T) {
+		mockAPI := new(MockProAPIClient)
+		mockGit := new(MockGitRepo)
+
+		mockGit.On("GetLocalRepoInfo").Return(nil, assert.AnError)
+
+		args := ProUnlockCmdArgs{
+			ProLockUnlockCmdArgs: ProLockUnlockCmdArgs{
+				Component: "test-component",
+				Stack:     "test-stack",
+			},
+		}
+
+		err := executeProUnlock(&args, mockAPI, mockGit)
+
+		assert.Error(t, err)
+		mockGit.AssertExpectations(t)
+	})
+
+	t.Run("returns error when API unlock fails", func(t *testing.T) {
+		mockAPI := new(MockProAPIClient)
+		mockGit := new(MockGitRepo)
+
+		mockGit.On("GetLocalRepoInfo").Return(&atmosgit.RepoInfo{
+			RepoOwner: "test-owner",
+			RepoName:  "test-repo",
+		}, nil)
+
+		mockAPI.On("UnlockStack", mock.Anything).Return(dtos.UnlockStackResponse{}, assert.AnError)
+
+		args := ProUnlockCmdArgs{
+			ProLockUnlockCmdArgs: ProLockUnlockCmdArgs{
+				Component: "test-component",
+				Stack:     "test-stack",
+			},
+		}
+
+		err := executeProUnlock(&args, mockAPI, mockGit)
+
+		assert.Error(t, err)
+		mockAPI.AssertExpectations(t)
+		mockGit.AssertExpectations(t)
 	})
 }

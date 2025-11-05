@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -48,10 +49,15 @@ var authEnvCmd = &cobra.Command{
 			return fmt.Errorf("failed to create auth manager: %w", err)
 		}
 
-		// Get identity from flag or use default
-		identityName, _ := cmd.Flags().GetString("identity")
-		if identityName == "" {
-			defaultIdentity, err := authManager.GetDefaultIdentity()
+		// Get identity from flag or use default.
+		// Use GetIdentityFromFlags which handles Cobra's NoOptDefVal quirk correctly.
+		identityName := GetIdentityFromFlags(cmd, os.Args)
+
+		// Check if user wants to interactively select identity.
+		forceSelect := identityName == IdentityFlagSelectValue
+
+		if identityName == "" || forceSelect {
+			defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 			if err != nil {
 				return fmt.Errorf("no default identity configured and no identity specified: %w", err)
 			}
@@ -64,11 +70,11 @@ var authEnvCmd = &cobra.Command{
 			// Try to use cached credentials first (passive check, no prompts).
 			// Only authenticate if cached credentials are not available or expired.
 			ctx := cmd.Context()
-			whoami, err := authManager.GetCachedCredentials(ctx, identityName)
+			_, err := authManager.GetCachedCredentials(ctx, identityName)
 			if err != nil {
 				log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
 				// No valid cached credentials - perform full authentication.
-				whoami, err = authManager.Authenticate(ctx, identityName)
+				_, err = authManager.Authenticate(ctx, identityName)
 				if err != nil {
 					// Check for user cancellation - return clean error without wrapping.
 					if errors.Is(err, errUtils.ErrUserAborted) {
@@ -78,9 +84,12 @@ var authEnvCmd = &cobra.Command{
 					return fmt.Errorf("%w: %w", errUtils.ErrAuthenticationFailed, err)
 				}
 			}
-			envVars = whoami.Environment
-			if envVars == nil {
-				envVars = make(map[string]string)
+
+			// Get environment variables using file-based credentials.
+			// This ensures we use valid credential files rather than potentially expired keyring credentials.
+			envVars, err = authManager.GetEnvironmentVariables(identityName)
+			if err != nil {
+				return fmt.Errorf("failed to get environment variables: %w", err)
 			}
 		} else {
 			// Get environment variables WITHOUT authentication/validation.
@@ -160,9 +169,8 @@ func init() {
 		log.Trace("Failed to register format flag completion", "error", err)
 	}
 
-	if err := viper.BindPFlag("identity", authCmd.PersistentFlags().Lookup("identity")); err != nil {
-		log.Trace("Failed to bind identity flag", "error", err)
-	}
-	viper.MustBindEnv("identity", "ATMOS_IDENTITY")
+	// DO NOT bind identity flag to Viper - it breaks flag precedence.
+	// Identity flag binding is handled in cmd/auth.go via BindEnv only.
+
 	authCmd.AddCommand(authEnvCmd)
 }

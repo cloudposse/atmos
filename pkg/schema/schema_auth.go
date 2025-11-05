@@ -6,6 +6,9 @@ type AuthConfig struct {
 	Keyring    KeyringConfig       `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
 	Providers  map[string]Provider `yaml:"providers" json:"providers" mapstructure:"providers"`
 	Identities map[string]Identity `yaml:"identities" json:"identities" mapstructure:"identities"`
+	// IdentityCaseMap maps lowercase identity names to their original case.
+	// This is populated during config loading to work around Viper's case-insensitive behavior.
+	IdentityCaseMap map[string]string `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // KeyringConfig defines keyring backend configuration for credential storage.
@@ -50,6 +53,7 @@ type Identity struct {
 	Credentials map[string]interface{} `yaml:"credentials,omitempty" json:"credentials,omitempty" mapstructure:"credentials"`
 	Alias       string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
 	Env         []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+	Session     *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
 }
 
 // IdentityVia defines how an identity connects to a provider or other identity.

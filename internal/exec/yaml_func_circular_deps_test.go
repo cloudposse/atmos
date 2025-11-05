@@ -76,7 +76,14 @@ func TestCircularDependencyDetection(t *testing.T) {
 
 			// Note: GetTerraformState will be called during YAML function processing
 			// and should detect the cycle.
-			_, err = ExecuteDescribeComponent(tt.component, tt.stack, false, true, nil)
+			_, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+				Component:            tt.component,
+				Stack:                tt.stack,
+				ProcessTemplates:     false,
+				ProcessYamlFunctions: true,
+				Skip:                 nil,
+				AuthManager:          nil,
+			})
 
 			if tt.expectError {
 				assert.Error(t, err, tt.description)
@@ -107,7 +114,14 @@ func TestCircularDependencyErrorMessage(t *testing.T) {
 	ClearResolutionContext()
 	defer ClearResolutionContext()
 
-	_, err = ExecuteDescribeComponent("vpc", "core", false, true, nil)
+	_, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            "vpc",
+		Stack:                "core",
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	if err != nil {
 		// Verify error message contains helpful information.
 		errMsg := err.Error()

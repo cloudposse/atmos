@@ -1,67 +1,11 @@
- Authentication Configuration 
-├──cplive-saml (aws/saml)
-│  ├──Region: us-east-2
-│  ├──URL: https://accounts.google.com/o/saml2/initsso?idpid=C01yjz1jl&spid=1081421647897&forceauthn=false
-│  └──Identities
-│     └──core-identity/managers (aws/assume-role)
-│        └──Principal
-│           └──assume_role: arn:aws:iam::555042905974:role/cplive-core-gbl-identity-managers
-├──cplive-sso (aws/iam-identity-center)
-│  ├──Region: us-east-2
-│  ├──Start URL: https://cplive.awsapps.com/start/
-│  └──Identities
-│     └──core-identity/managers-team-access (aws/permission-set)
-│        ├──Principal
-│        │  ├──account
-│        │  │  └──name: core-identity
-│        │  └──name: IdentityManagersTeamAccess
-│        ├──core-analytics/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::372792920107:role/cplive-core-gbl-analytics-admin
-│        ├──core-artifacts/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::463440035974:role/cplive-core-gbl-artifacts-admin
-│        ├──core-audit/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::969090876065:role/cplive-core-gbl-audit-admin
-│        ├──core-auto/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::252494810635:role/cplive-core-gbl-auto-admin
-│        ├──core-corp/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::092446917473:role/cplive-core-gbl-corp-admin
-│        ├──core-dns/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::970377366817:role/cplive-core-gbl-dns-admin
-│        ├──core-identity/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::555042905974:role/cplive-core-gbl-identity-admin
-│        ├──core-marketplace/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::978188692326:role/cplive-core-gbl-marketplace-admin
-│        ├──core-network/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::167168760541:role/cplive-core-gbl-network-admin
-│        ├──core-public/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::847349463865:role/cplive-core-gbl-public-admin
-│        ├──core-root/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::828744362454:role/cplive-core-gbl-root-admin
-│        ├──core-security/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::940613624647:role/cplive-core-gbl-security-admin
-│        ├──plat-dev/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::068007702576:role/cplive-plat-gbl-dev-admin
-│        ├──plat-prod/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::557075604627:role/cplive-plat-gbl-prod-admin
-│        ├──plat-sandbox/admin (aws/assume-role)
-│        │  └──Principal
-│        │     └──assume_role: arn:aws:iam::539916835077:role/cplive-plat-gbl-sandbox-admin
-│        └──plat-staging/admin (aws/assume-role)
-│           └──Principal
-│              └──assume_role: arn:aws:iam::675539733138:role/cplive-plat-gbl-staging-admin
-└──Standalone Identities
-   └──cplive/superuser (aws/user)
+ Authentication Configuration
+└──mock-provider (mock-aws)
+   └──Identities
+      ├──● mock-identity (mock-aws) [DEFAULT] 650139h2m
+      │  └──Principal
+      │     └──account
+      │        └──id: 123456789012
+      └──● mock-identity-2 (mock-aws) 650139h2m
+         └──Principal
+            └──account
+               └──id: 987654321098

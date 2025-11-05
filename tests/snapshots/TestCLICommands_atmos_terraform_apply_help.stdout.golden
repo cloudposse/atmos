@@ -63,6 +63,13 @@ Global Flags:
         --dry-run                     Simulate the command without making any
                                       changes (default false)
 
+        --force-color                 Force color output even when not a TTY
+                                      (useful for screenshots) (default false)
+
+        --force-tty                   Force TTY mode with sane defaults when
+                                      terminal detection fails (useful for
+                                      screenshots) (default false)
+
         --heatmap                     Show performance heatmap visualization
                                       after command execution (includes P95
                                       latency) (default false)
@@ -72,7 +79,8 @@ Global Flags:
                                       TUI) (default bar)
 
     -i, --identity string             Specify the identity to authenticate to
-                                      before running Terraform commands
+                                      before running Terraform commands. Use
+                                      without value to interactively select.
 
         --include-dependents          For each affected component, detect the
                                       dependent components and process them in
@@ -96,6 +104,10 @@ Global Flags:
                                       Trace, Debug, Info, Warning, Off. If the
                                       log level is set to Off, Atmos will not
                                       log any messages (default Info)
+
+        --mask                        Enable automatic masking of sensitive data
+                                      in output (use --mask=false to disable)
+                                      (default true)
 
         --no-color                    Disable color output (default false)
 

@@ -285,7 +285,10 @@
         "wrap": false
       },
       "color": true,
-      "no_color": false
+      "no_color": false,
+      "mask": {
+        "enabled": false
+      }
     },
     "docs": {
       "max_width": 0,

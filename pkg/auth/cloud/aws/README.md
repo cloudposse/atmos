@@ -2,6 +2,27 @@
 
 This package provides AWS-specific functionality for the Atmos authentication system.
 
+## Session Duration Configuration
+
+Session duration can be configured for both providers (SSO, SAML) and identities (IAM users):
+
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      session:
+        duration: "8h"
+
+  identities:
+    emergency-admin:
+      kind: aws/user
+      session:
+        duration: "12h"  # Formats: integers (seconds), Go durations ("1h"), or days ("1d")
+```
+
+**AWS IAM user limits**: 15m-12h (no MFA) or 15m-36h (with MFA). Default: 12h
+
 ## Custom Endpoint Resolver
 
 The AWS cloud package supports custom endpoint resolvers, which is useful for testing with LocalStack or other AWS-compatible services.

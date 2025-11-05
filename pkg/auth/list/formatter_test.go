@@ -90,7 +90,7 @@ func TestCreateIdentitiesTable(t *testing.T) {
 			Via:     &schema.IdentityVia{Provider: "aws-sso"},
 		},
 	}
-	table, err := createIdentitiesTable(identities)
+	table, err := createIdentitiesTable(nil, identities)
 
 	require.NoError(t, err)
 	assert.NotNil(t, table)
@@ -103,7 +103,7 @@ func TestCreateIdentitiesTable_AWSUser(t *testing.T) {
 			Via:  nil,
 		},
 	}
-	table, err := createIdentitiesTable(identities)
+	table, err := createIdentitiesTable(nil, identities)
 
 	require.NoError(t, err)
 	assert.NotNil(t, table)
@@ -173,7 +173,7 @@ func TestBuildIdentitiesTree(t *testing.T) {
 		},
 	}
 
-	tree := buildIdentitiesTree(identities)
+	tree := buildIdentitiesTree(nil, identities)
 
 	assert.Contains(t, tree, "admin")
 	assert.Contains(t, tree, "dev")
@@ -192,7 +192,7 @@ func TestBuildIdentitiesTree_Standalone(t *testing.T) {
 		},
 	}
 
-	tree := buildIdentitiesTree(identities)
+	tree := buildIdentitiesTree(nil, identities)
 
 	assert.Contains(t, tree, "ci")
 	assert.Contains(t, tree, "aws/user")
@@ -476,13 +476,14 @@ func TestBuildIdentityTableRow_WithViaProvider(t *testing.T) {
 		Via:     &schema.IdentityVia{Provider: "aws-sso"},
 	}
 
-	row := buildIdentityTableRow(&identity, "admin")
+	row := buildIdentityTableRow(nil, &identity, "admin")
 
-	assert.Equal(t, "admin", row[0])
-	assert.Equal(t, "aws/permission-set", row[1])
-	assert.Equal(t, "aws-sso", row[2])
-	assert.Equal(t, "-", row[3])
-	assert.Equal(t, "✓", row[4])
+	assert.Equal(t, " ", row[0])                  // Status indicator (space when authManager is nil).
+	assert.Equal(t, "admin", row[1])              // Name.
+	assert.Equal(t, "aws/permission-set", row[2]) // Kind.
+	assert.Equal(t, "aws-sso", row[3])            // Via Provider.
+	assert.Equal(t, "-", row[4])                  // Via Identity.
+	assert.Equal(t, "✓", row[5])                  // Default.
 }
 
 func TestBuildIdentityTableRow_WithViaIdentity(t *testing.T) {
@@ -491,11 +492,12 @@ func TestBuildIdentityTableRow_WithViaIdentity(t *testing.T) {
 		Via:  &schema.IdentityVia{Identity: "admin"},
 	}
 
-	row := buildIdentityTableRow(&identity, "dev")
+	row := buildIdentityTableRow(nil, &identity, "dev")
 
-	assert.Equal(t, "dev", row[0])
-	assert.Equal(t, "-", row[2])
-	assert.Equal(t, "admin", row[3])
+	assert.Equal(t, " ", row[0])     // Status indicator.
+	assert.Equal(t, "dev", row[1])   // Name.
+	assert.Equal(t, "-", row[3])     // Via Provider.
+	assert.Equal(t, "admin", row[4]) // Via Identity.
 }
 
 func TestBuildIdentityTableRow_AWSUser(t *testing.T) {
@@ -503,12 +505,13 @@ func TestBuildIdentityTableRow_AWSUser(t *testing.T) {
 		Kind: "aws/user",
 	}
 
-	row := buildIdentityTableRow(&identity, "ci")
+	row := buildIdentityTableRow(nil, &identity, "ci")
 
-	assert.Equal(t, "ci", row[0])
-	assert.Equal(t, "aws/user", row[1])
-	assert.Equal(t, "aws-user", row[2])
-	assert.Equal(t, "-", row[3])
+	assert.Equal(t, " ", row[0])        // Status indicator.
+	assert.Equal(t, "ci", row[1])       // Name.
+	assert.Equal(t, "aws/user", row[2]) // Kind.
+	assert.Equal(t, "aws-user", row[3]) // Via Provider.
+	assert.Equal(t, "-", row[4])        // Via Identity.
 }
 
 func TestBuildIdentityTableRow_WithAlias(t *testing.T) {
@@ -518,10 +521,11 @@ func TestBuildIdentityTableRow_WithAlias(t *testing.T) {
 		Via:   &schema.IdentityVia{Provider: "aws-sso"},
 	}
 
-	row := buildIdentityTableRow(&identity, "dev")
+	row := buildIdentityTableRow(nil, &identity, "dev")
 
-	assert.Equal(t, "dev", row[0])
-	assert.Equal(t, "developer", row[5])
+	assert.Equal(t, " ", row[0])         // Status indicator.
+	assert.Equal(t, "dev", row[1])       // Name.
+	assert.Equal(t, "developer", row[6]) // Alias.
 }
 
 func TestBuildIdentityTableRow_NoAlias(t *testing.T) {
@@ -530,9 +534,10 @@ func TestBuildIdentityTableRow_NoAlias(t *testing.T) {
 		Via:  &schema.IdentityVia{Provider: "aws-sso"},
 	}
 
-	row := buildIdentityTableRow(&identity, "admin")
+	row := buildIdentityTableRow(nil, &identity, "admin")
 
-	assert.Equal(t, "-", row[5])
+	assert.Equal(t, " ", row[0]) // Status indicator.
+	assert.Equal(t, "-", row[6]) // Alias.
 }
 
 func TestBuildIdentitiesTree_WithCredentials(t *testing.T) {
@@ -548,7 +553,7 @@ func TestBuildIdentitiesTree_WithCredentials(t *testing.T) {
 		},
 	}
 
-	tree := buildIdentitiesTree(identities)
+	tree := buildIdentitiesTree(nil, identities)
 
 	assert.Contains(t, tree, "admin")
 	assert.Contains(t, tree, "Credentials: [redacted]")
@@ -660,7 +665,7 @@ func TestBuildIdentityNodeForProvider_IdentityCycle(t *testing.T) {
 		defer close(done)
 		adminIdentity := identities["admin"]
 		visited := make(map[string]struct{})
-		node := buildIdentityNodeForProvider(&adminIdentity, "admin", identities, visited)
+		node := buildIdentityNodeForProvider(nil, &adminIdentity, "admin", identities, visited)
 		output := node.String()
 
 		// Should contain cycle detection message.
@@ -708,7 +713,7 @@ func TestBuildIdentityNodeForProvider_SharedNode(t *testing.T) {
 	// Build tree starting from base.
 	baseIdentity := identities["base"]
 	visited := make(map[string]struct{})
-	node := buildIdentityNodeForProvider(&baseIdentity, "base", identities, visited)
+	node := buildIdentityNodeForProvider(nil, &baseIdentity, "base", identities, visited)
 	output := node.String()
 
 	// Should NOT contain "cycle detected".
