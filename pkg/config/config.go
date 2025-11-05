@@ -27,10 +27,16 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 	if err != nil {
 		return atmosConfig, err
 	}
-	// Process the base path specified in the Terraform provider (which calls into the atmos code)
-	// This overrides all other atmos base path configs (`atmos.yaml`, ENV var `ATMOS_BASE_PATH`)
+
+	// Process the base path specified in the Terraform provider (which calls into the atmos code).
+	// This overrides all other atmos base path configs (`atmos.yaml`, ENV var `ATMOS_BASE_PATH`).
 	if configAndStacksInfo.AtmosBasePath != "" {
-		atmosConfig.BasePath = configAndStacksInfo.AtmosBasePath
+		// Process YAML functions in base path (e.g., !repo-root, !env VAR).
+		processedBasePath, err := ProcessYAMLFunctionString(configAndStacksInfo.AtmosBasePath)
+		if err != nil {
+			return atmosConfig, fmt.Errorf("failed to process base path '%s': %w", configAndStacksInfo.AtmosBasePath, err)
+		}
+		atmosConfig.BasePath = processedBasePath
 	}
 
 	// After unmarshalling, ensure AppendUserAgent is set if still empty

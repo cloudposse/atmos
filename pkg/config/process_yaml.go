@@ -205,3 +205,37 @@ func handleGitRoot(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	node.Tag = "" // Avoid re-processing .
 	return nil
 }
+
+// ProcessYAMLFunctionString processes a string that may contain YAML function syntax
+// (e.g., "!repo-root", "!env VAR_NAME") and returns the resolved value.
+// This is used to support YAML functions in CLI flags and environment variables.
+//
+// Supported functions:
+// - !repo-root - Returns the git repository root path.
+// - !env VAR - Returns the value of environment variable VAR.
+//
+// If the string does not start with a supported function prefix, it returns the original string unchanged.
+func ProcessYAMLFunctionString(input string) (string, error) {
+	input = strings.TrimSpace(input)
+
+	// Check for !repo-root function.
+	if strings.HasPrefix(input, u.AtmosYamlFuncGitRoot) {
+		result, err := u.ProcessTagGitRoot(input)
+		if err != nil {
+			return "", fmt.Errorf("failed to process %s: %w", u.AtmosYamlFuncGitRoot, err)
+		}
+		return strings.TrimSpace(result), nil
+	}
+
+	// Check for !env function.
+	if strings.HasPrefix(input, u.AtmosYamlFuncEnv) {
+		result, err := u.ProcessTagEnv(input)
+		if err != nil {
+			return "", fmt.Errorf("failed to process %s: %w", u.AtmosYamlFuncEnv, err)
+		}
+		return strings.TrimSpace(result), nil
+	}
+
+	// No YAML function detected, return original value.
+	return input, nil
+}

@@ -185,7 +185,12 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 	basePath := os.Getenv("ATMOS_BASE_PATH")
 	if len(basePath) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_BASE_PATH", basePath)
-		atmosConfig.BasePath = basePath
+		// Process YAML functions in base path (e.g., !repo-root, !env VAR).
+		processedBasePath, err := ProcessYAMLFunctionString(basePath)
+		if err != nil {
+			return fmt.Errorf("failed to process ATMOS_BASE_PATH '%s': %w", basePath, err)
+		}
+		atmosConfig.BasePath = processedBasePath
 	}
 
 	vendorBasePath := os.Getenv("ATMOS_VENDOR_BASE_PATH")
