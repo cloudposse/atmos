@@ -17,6 +17,7 @@ type StandardOptions struct {
 	// Common command flags.
 	Stack     string // Stack to operate on (--stack, -s)
 	Component string // Component to operate on (--component, -c)
+	Key       string // Configuration key to filter (positional arg for list components)
 
 	// Output formatting flags.
 	Format string // Output format (--format, -f): yaml, json, etc.

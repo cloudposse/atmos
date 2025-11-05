@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -21,18 +20,20 @@ var describeDependentsParser = flags.NewStandardOptionsBuilder().
 	WithProcessTemplates(true).
 	WithProcessFunctions(true).
 	WithSkip().
+	WithPositionalArgs(flags.NewDescribeDependentsPositionalArgsBuilder().
+		WithComponent(true). // Required component argument.
+		Build()).
 	Build()
 
 type describeDependentExecCreator func(atmosConfig *schema.AtmosConfiguration) exec.DescribeDependentsExec
 
 // describeDependentsCmd produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component
 var describeDependentsCmd = &cobra.Command{
-	Use:     "dependents",
+	Use:     "dependents <component>",
 	Aliases: []string{"dependants"},
 	Short:   "List Atmos components that depend on a given component",
 	Long:    "This command generates a list of Atmos components within stacks that depend on the specified Atmos component.",
-	// NOTE: With DisableFlagParsing=true (set by RegisterFlags), Args validator sees raw args including flags.
-	// We validate positional args after parsing in RunE instead.
+	// Positional args are validated by the StandardParser using the builder pattern.
 	Args:              cobra.ArbitraryArgs,
 	ValidArgsFunction: ComponentsArgCompletion,
 	RunE: getRunnableDescribeDependentsCmd(
@@ -50,15 +51,11 @@ func getRunnableDescribeDependentsCmd(
 		// Check Atmos configuration
 		checkAtmosConfig()
 
+		// Parse flags and positional args using builder pattern.
+		// Component is extracted by builder pattern into opts.Component field.
 		opts, err := describeDependentsParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
-		}
-
-		// Validate exactly 1 positional arg (component name).
-		positionalArgs := opts.GetPositionalArgs()
-		if len(positionalArgs) != 1 {
-			return fmt.Errorf("invalid arguments. The command requires one argument: component")
 		}
 
 		info := schema.ConfigAndStacksInfo{}
@@ -66,8 +63,6 @@ func getRunnableDescribeDependentsCmd(
 		if err != nil {
 			return err
 		}
-
-		// Format validation is now handled by the parser at parse time.
 
 		// Get identity from flag and create AuthManager if provided.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
@@ -84,7 +79,7 @@ func getRunnableDescribeDependentsCmd(
 			ProcessTemplates:     opts.ProcessTemplates,
 			ProcessYamlFunctions: opts.ProcessYamlFunctions,
 			Skip:                 opts.Skip,
-			Component:            opts.GetPositionalArgs()[0],
+			Component:            opts.Component,
 			AuthManager:          authManager,
 		}
 

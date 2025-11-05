@@ -121,6 +121,20 @@ func (p *StandardParser) Parse(ctx context.Context, args []string) (*StandardOpt
 		}
 	}
 
+	// Determine schema type value from positional args if configured.
+	schemaType := getString(parsedConfig.Flags, "schema-type")
+	if schemaType == "" {
+		if val, ok := positionalValues["SchemaType"]; ok {
+			schemaType = val
+		}
+	}
+
+	// Determine key value from positional args if configured.
+	key := ""
+	if val, ok := positionalValues["Key"]; ok {
+		key = val
+	}
+
 	// Convert to strongly-typed options.
 	opts := StandardOptions{
 		GlobalFlags: GlobalFlags{
@@ -160,7 +174,8 @@ func (p *StandardParser) Parse(ctx context.Context, args []string) (*StandardOpt
 		Type:                        getString(parsedConfig.Flags, "type"),
 		Tags:                        getString(parsedConfig.Flags, "tags"),
 		SchemaPath:                  getString(parsedConfig.Flags, "schema-path"),
-		SchemaType:                  getString(parsedConfig.Flags, "schema-type"),
+		SchemaType:                  schemaType,
+		Key:                         key,
 		ModulePaths:                 getStringSlice(parsedConfig.Flags, "module-paths"),
 		Timeout:                     getInt(parsedConfig.Flags, "timeout"),
 		SchemasAtmosManifest:        getString(parsedConfig.Flags, "schemas-atmos-manifest"),

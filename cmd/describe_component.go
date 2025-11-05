@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -25,15 +24,17 @@ var describeComponentParser = flags.NewStandardOptionsBuilder().
 	WithSkip().                                   // Skip flag.
 	WithQuery().                                  // Query flag.
 	WithProvenance().                             // Provenance flag.
+	WithPositionalArgs(flags.NewDescribeComponentPositionalArgsBuilder().
+		WithComponent(true). // Required component argument.
+		Build()).
 	Build()
 
 // describeComponentCmd describes configuration for components.
 var describeComponentCmd = &cobra.Command{
-	Use:   "component",
+	Use:   "component <component>",
 	Short: "Show configuration details for an Atmos component in a stack",
 	Long:  `Display the configuration details for a specific Atmos component within a designated Atmos stack, including its dependencies, settings, and overrides.`,
-	// NOTE: With DisableFlagParsing=true (set by RegisterFlags), Args validator sees raw args including flags.
-	// We validate positional args after parsing in RunE instead.
+	// Positional args are validated by the StandardParser using the builder pattern.
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration.
@@ -43,18 +44,13 @@ var describeComponentCmd = &cobra.Command{
 		_ = describeComponentParser.BindFlagsToViper(cmd, v)
 
 		// Parse command-line arguments and get strongly-typed options.
+		// Component is extracted by builder pattern into opts.Component field.
 		opts, err := describeComponentParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
 		}
 
-		// Extract component from positional arguments.
-		// Validate exactly 1 positional arg (component name).
-		positionalArgs := opts.GetPositionalArgs()
-		if len(positionalArgs) != 1 {
-			return fmt.Errorf("%w: invalid arguments. The command requires one argument `component`", errUtils.ErrInvalidArgumentError)
-		}
-		component := positionalArgs[0]
+		component := opts.Component
 
 		// Load atmos configuration to get auth config.
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{

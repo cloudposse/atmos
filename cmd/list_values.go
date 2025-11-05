@@ -51,6 +51,9 @@ var listValuesParser = flags.NewStandardOptionsBuilder().
 	WithVars().                                                 // Show only vars section flag.
 	WithMaxColumns(0).                                          // Maximum columns for table output.
 	WithDelimiter("").                                          // Delimiter for CSV/TSV output.
+	WithPositionalArgs(flags.NewListKeysPositionalArgsBuilder().
+		WithComponent(true). // Required component argument.
+		Build()).
 	Build()
 
 // listVarsParser is created once at package initialization using builder pattern.
@@ -63,11 +66,14 @@ var listVarsParser = flags.NewStandardOptionsBuilder().
 	WithAbstract().                                             // Include abstract components flag.
 	WithMaxColumns(0).                                          // Maximum columns for table output.
 	WithDelimiter("").                                          // Delimiter for CSV/TSV output.
+	WithPositionalArgs(flags.NewListKeysPositionalArgsBuilder().
+		WithComponent(true). // Required component argument.
+		Build()).
 	Build()
 
 // listValuesCmd lists component values across stacks.
 var listValuesCmd = &cobra.Command{
-	Use:   "values [component]",
+	Use:   "values <component>",
 	Short: "List component values across stacks",
 	Long:  "List values for a component across all stacks where it is used",
 	Example: "atmos list values vpc\n" +
@@ -77,8 +83,7 @@ var listValuesCmd = &cobra.Command{
 		"atmos list values vpc --format json\n" +
 		"atmos list values vpc --format yaml\n" +
 		"atmos list values vpc --format csv",
-	// NOTE: With DisableFlagParsing=true (set by RegisterFlags), Args validator sees raw args including flags.
-	// We validate positional args after parsing in RunE instead.
+	// Positional args are validated by the StandardParser using the builder pattern.
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration.
@@ -88,18 +93,13 @@ var listValuesCmd = &cobra.Command{
 		_ = listValuesParser.BindFlagsToViper(cmd, v)
 
 		// Parse command-line arguments and get strongly-typed options.
+		// Component is extracted by builder pattern into opts.Component field.
 		opts, err := listValuesParser.Parse(context.Background(), args)
 		if err != nil {
 			return err
 		}
 
-		// Validate exactly 1 positional arg (component name).
-		positionalArgs := opts.GetPositionalArgs()
-		if len(positionalArgs) != 1 {
-			return ErrInvalidArguments
-		}
-
-		output, err := listValuesWithOptions(cmd, positionalArgs, opts)
+		output, err := listValuesWithOptions(cmd, opts)
 		if err != nil {
 			return err
 		}
@@ -111,7 +111,7 @@ var listValuesCmd = &cobra.Command{
 
 // listVarsCmd is an alias for 'list values --query .vars'.
 var listVarsCmd = &cobra.Command{
-	Use:   "vars [component]",
+	Use:   "vars <component>",
 	Short: "List component vars across stacks (alias for `list values --query .vars`)",
 	Long:  "List vars for a component across all stacks where it is used",
 	Example: "atmos list vars vpc\n" +
@@ -120,8 +120,7 @@ var listVarsCmd = &cobra.Command{
 		"atmos list vars vpc --format json\n" +
 		"atmos list vars vpc --format yaml\n" +
 		"atmos list vars vpc --format csv",
-	// NOTE: With DisableFlagParsing=true (set by RegisterFlags), Args validator sees raw args including flags.
-	// We validate positional args after parsing in RunE instead.
+	// Positional args are validated by the StandardParser using the builder pattern.
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration.
@@ -136,21 +135,16 @@ var listVarsCmd = &cobra.Command{
 		}
 
 		// Parse command-line arguments and get strongly-typed options.
+		// Component is extracted by builder pattern into opts.Component field.
 		opts, err := listVarsParser.Parse(context.Background(), args)
 		if err != nil {
 			return err
 		}
 
-		// Validate exactly 1 positional arg (component name).
-		positionalArgs := opts.GetPositionalArgs()
-		if len(positionalArgs) != 1 {
-			return ErrInvalidArguments
-		}
-
 		// Override query to .vars for vars command.
 		opts.Query = ".vars"
 
-		output, err := listValuesWithOptions(cmd, positionalArgs, opts)
+		output, err := listValuesWithOptions(cmd, opts)
 		if err != nil {
 			var componentVarsNotFoundErr *listerrors.ComponentVarsNotFoundError
 			if errors.As(err, &componentVarsNotFoundErr) {
@@ -235,12 +229,9 @@ func initAtmosAndDescribeStacksForList(componentName string, processingFlags *fl
 }
 
 // listValuesWithOptions lists component values using parsed options.
-func listValuesWithOptions(cmd *cobra.Command, args []string, opts *flags.StandardOptions) (string, error) {
-	// Ensure we have a component name.
-	if len(args) == 0 {
-		return "", ErrComponentNameRequired
-	}
-	componentName := args[0]
+func listValuesWithOptions(cmd *cobra.Command, opts *flags.StandardOptions) (string, error) {
+	// Component is extracted by builder pattern into opts.Component field.
+	componentName := opts.Component
 
 	// Use flags from parsed options (no direct Cobra access).
 	// Vars flag takes precedence over query.
@@ -253,12 +244,14 @@ func listValuesWithOptions(cmd *cobra.Command, args []string, opts *flags.Standa
 	delimiter := opts.Delimiter
 	format := f.Format(opts.Format)
 	if delimiter == "" {
-		if format == f.FormatCSV {
+		switch format {
+		case f.FormatCSV:
 			delimiter = f.DefaultCSVDelimiter
-		} else if format == f.FormatTSV {
+		case f.FormatTSV:
 			delimiter = f.DefaultTSVDelimiter
+		default:
+			// Leave delimiter empty for JSON/YAML and other non-delimited formats
 		}
-		// Leave delimiter empty for JSON/YAML and other non-delimited formats
 	}
 
 	// Prepare filter options.

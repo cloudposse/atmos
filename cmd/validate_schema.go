@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -16,6 +15,9 @@ import (
 
 var validateSchemaParser = flags.NewStandardOptionsBuilder().
 	WithSchemasAtmosManifest("").
+	WithPositionalArgs(flags.NewValidateSchemaPositionalArgsBuilder().
+		WithSchemaType(false). // Optional schemaType argument.
+		Build()).
 	Build()
 
 // ValidateSchemaCmd represents the 'atmos validate schema' command.
@@ -31,7 +33,7 @@ var validateSchemaParser = flags.NewStandardOptionsBuilder().
 // This command ensures that configuration files conform to expected structures and helps
 // catch errors early in the development or deployment process.
 var ValidateSchemaCmd = &cobra.Command{
-	Use:   "schema",
+	Use:   "schema [schemaType]",
 	Short: "Validate YAML files against JSON schemas defined in atmos.yaml",
 	Long: `The validate schema command reads the ` + "`" + `schemas` + "`" + ` section of the atmos.yaml file
 and validates matching YAML files against their corresponding JSON schemas.
@@ -49,30 +51,20 @@ For every schema entry:
 This command helps ensure that configuration files follow a defined structure
 and are compliant with expected formats, reducing configuration drift and runtime errors.
 `,
-	// NOTE: With DisableFlagParsing=true (set by RegisterFlags), Args validator sees raw args including flags.
-	// We validate positional args after parsing in RunE instead.
+	// Positional args are validated by the StandardParser using the builder pattern.
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration.
 		checkAtmosConfig()
 
-		// Parse flags using StandardOptions.
+		// Parse flags and positional args using builder pattern.
+		// SchemaType is extracted by builder pattern into opts.SchemaType field.
 		opts, err := validateSchemaParser.Parse(context.Background(), args)
 		if err != nil {
 			return err
 		}
 
-		// Validate maximum 1 positional arg (optional key).
-		positionalArgs := opts.GetPositionalArgs()
-		if len(positionalArgs) > 1 {
-			return fmt.Errorf("invalid arguments. The command accepts at most one argument (key)")
-		}
-
-		key := ""
-		if len(positionalArgs) > 0 {
-			key = positionalArgs[0] // Use provided argument.
-		}
-
+		key := opts.SchemaType
 		schema := opts.SchemasAtmosManifest
 
 		if key == "" && schema != "" {
