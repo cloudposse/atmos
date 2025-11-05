@@ -24,6 +24,9 @@ import (
 //	    uploadPlanToAtmosPro()
 //	}
 //
+//	// Type-safe access to positional args (populated automatically by parser):
+//	fmt.Printf("Deploying component: %s\n", opts.Component)
+//
 // See docs/prd/flag-handling/ for patterns.
 type TerraformOptions struct {
 	GlobalFlags // Embedded global flags (chdir, logs-level, identity, etc.)
@@ -33,12 +36,15 @@ type TerraformOptions struct {
 	Identity IdentitySelector
 	DryRun   bool // --dry-run: Perform dry run without making actual changes.
 
+	// Positional arguments (populated automatically by parser from TargetField mapping).
+	Component string // Component name from positional arg (e.g., "vpc" in: atmos terraform plan vpc)
+
 	// Terraform-specific flags.
 	UploadStatus bool   // --upload-status: Upload plan status to Atmos Pro.
 	SkipInit     bool   // --skip-init: Skip terraform init before running command.
 	FromPlan     string // --from-plan: Apply from previously generated plan file.
 
-	// Positional and pass-through arguments.
+	// Internal: Positional and pass-through arguments (use GetPositionalArgs/GetPassThroughArgs).
 	positionalArgs  []string // e.g., ["plan", "vpc"] in: atmos terraform plan vpc
 	passThroughArgs []string // e.g., ["-var", "foo=bar"] in: atmos terraform plan -- -var foo=bar
 }
@@ -49,7 +55,8 @@ type TerraformOptions struct {
 //  1. Parses global flags (chdir, logs-level, identity, pager, profiler, etc.)
 //  2. Parses common flags (stack, dry-run)
 //  3. Parses Terraform-specific flags (upload-status, skip-init, from-plan)
-//  4. Stores positional and pass-through arguments
+//  4. Extracts and populates positional arguments (component name)
+//  5. Stores positional and pass-through arguments
 //
 // Arguments:
 //   - cmd: The Cobra command being executed (used to check if flags were provided).
@@ -63,9 +70,18 @@ type TerraformOptions struct {
 //	                    ^^^   ^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^    ^^^^^^^^^^^^
 //	                     |      |              |                               |
 //	                positional common+    terraform-specific            pass-through
-//	                           global flags     flags                        args
+//	                (Component) global flags     flags                        args
 func ParseTerraformFlags(cmd *cobra.Command, v *viper.Viper, positionalArgs, passThroughArgs []string) TerraformOptions {
 	defer perf.Track(nil, "flagparser.ParseTerraformFlags")()
+
+	// Extract component from positional args
+	// Terraform commands: atmos terraform <subcommand> <component>
+	// positionalArgs[0] = subcommand (plan, apply, deploy, etc.)
+	// positionalArgs[1] = component name (vpc, rds, etc.)
+	component := ""
+	if len(positionalArgs) >= 2 {
+		component = positionalArgs[1]
+	}
 
 	return TerraformOptions{
 		GlobalFlags: ParseGlobalFlags(cmd, v),
@@ -75,12 +91,15 @@ func ParseTerraformFlags(cmd *cobra.Command, v *viper.Viper, positionalArgs, pas
 		Identity: parseIdentityFlag(cmd, v),
 		DryRun:   v.GetBool("dry-run"),
 
+		// Positional arguments.
+		Component: component,
+
 		// Terraform-specific flags.
 		UploadStatus: v.GetBool("upload-status"),
 		SkipInit:     v.GetBool("skip-init"),
 		FromPlan:     v.GetString("from-plan"),
 
-		// Arguments.
+		// Internal arguments.
 		positionalArgs:  positionalArgs,
 		passThroughArgs: passThroughArgs,
 	}

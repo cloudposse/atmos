@@ -61,7 +61,7 @@ func (p *WorkflowParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Viper) er
 // Parse processes command-line arguments and returns strongly-typed WorkflowOptions.
 //
 // Handles precedence (CLI > ENV > config > defaults) via Viper.
-// Extracts positional arguments (e.g., workflow name).
+// Extracts positional arguments (e.g., workflow name) and populates WorkflowName field.
 func (p *WorkflowParser) Parse(ctx context.Context, args []string) (*WorkflowOptions, error) {
 	defer perf.Track(nil, "flags.WorkflowParser.Parse")()
 
@@ -69,6 +69,14 @@ func (p *WorkflowParser) Parse(ctx context.Context, args []string) (*WorkflowOpt
 	parsedConfig, err := p.parser.Parse(ctx, args)
 	if err != nil {
 		return nil, err
+	}
+
+	// Extract workflow name from positional args
+	// Workflow command: atmos workflow <workflow-name>
+	// positionalArgs[0] = workflow name (e.g., "deploy", "test")
+	workflowName := ""
+	if len(parsedConfig.PositionalArgs) >= 1 {
+		workflowName = parsedConfig.PositionalArgs[0]
 	}
 
 	// Convert to strongly-typed options.
@@ -106,7 +114,8 @@ func (p *WorkflowParser) Parse(ctx context.Context, args []string) (*WorkflowOpt
 			Provenance:           getBool(parsedConfig.Flags, "provenance"),
 			positionalArgs:       parsedConfig.PositionalArgs,
 		},
-		FromStep: getString(parsedConfig.Flags, "from-step"),
+		WorkflowName: workflowName,
+		FromStep:     getString(parsedConfig.Flags, "from-step"),
 	}
 
 	return &options, nil
