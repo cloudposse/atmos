@@ -693,6 +693,13 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Reload XDG to pick up the new environment
 	xdg.Reload()
 
+	// Clear github_username environment variables for consistent snapshots.
+	// These are automatically bound to settings.github_username but cause
+	// environment-dependent output in describe config tests.
+	t.Setenv("ATMOS_GITHUB_USERNAME", "")
+	t.Setenv("GITHUB_ACTOR", "")
+	t.Setenv("GITHUB_USERNAME", "")
+
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
 		// Copying over the `.gitconfig` was not enough to fix the issue
