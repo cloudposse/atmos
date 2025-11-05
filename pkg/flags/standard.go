@@ -346,8 +346,11 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 		})
 
 		// Add local flags (flags specific to this command).
+		// Skip flags that already exist (deduplication) to avoid "flag redefined" panics.
 		p.cmd.Flags().VisitAll(func(flag *pflag.Flag) {
-			combinedFlags.AddFlag(flag)
+			if combinedFlags.Lookup(flag.Name) == nil {
+				combinedFlags.AddFlag(flag)
+			}
 		})
 
 		// Parse args with the combined FlagSet.
