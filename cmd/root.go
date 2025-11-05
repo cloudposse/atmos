@@ -28,6 +28,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
+	"github.com/cloudposse/atmos/pkg/flags"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -675,45 +676,21 @@ func init() {
 	// Add the template function for wrapped flag usages.
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
-	RootCmd.PersistentFlags().StringP("chdir", "C", "", "Change working directory before processing (run as if Atmos started in this directory)")
-	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
-		"Errors can be redirected to any file or any standard file descriptor (including `/dev/null`)")
-	RootCmd.PersistentFlags().Bool("version", false, "Display the Atmos CLI version")
-	RootCmd.PersistentFlags().Lookup("version").DefValue = ""
-
-	RootCmd.PersistentFlags().String("logs-level", "Warning", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
-	RootCmd.PersistentFlags().String("logs-file", "/dev/stderr", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
-	RootCmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
-	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
-	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
-	RootCmd.PersistentFlags().Bool("force-color", false, "Force color output even when not a TTY (useful for screenshots)")
-	RootCmd.PersistentFlags().Bool("force-tty", false, "Force TTY mode with sane defaults when terminal detection fails (useful for screenshots)")
-	RootCmd.PersistentFlags().Bool("mask", true, "Enable automatic masking of sensitive data in output (use --mask=false to disable)")
-	RootCmd.PersistentFlags().String("pager", "", "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)")
-	// Set NoOptDefVal so --pager without value means "true".
-	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"
-	RootCmd.PersistentFlags().Bool("profiler-enabled", false, "Enable pprof profiling server")
-	RootCmd.PersistentFlags().Int("profiler-port", profiler.DefaultProfilerPort, "Port for pprof profiling server")
-	RootCmd.PersistentFlags().String("profiler-host", "localhost", "Host for pprof profiling server")
-	RootCmd.PersistentFlags().String("profile-file", "", "Write profiling data to file instead of starting server")
-	RootCmd.PersistentFlags().String("profile-type", "cpu",
-		"Type of profile to collect when using --profile-file. "+
-			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
-	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (includes P95 latency)")
-	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)")
-
-	// Bind terminal flags to environment variables.
-	if err := viper.BindEnv("force-tty", "ATMOS_FORCE_TTY"); err != nil {
-		log.Error("Failed to bind ATMOS_FORCE_TTY environment variable", "error", err)
+	// Register all global flags using builder pattern.
+	// This provides:
+	//   - Single source of truth for defaults (NewGlobalFlags())
+	//   - Automatic environment variable binding
+	//   - Consistent with other command builders
+	//   - Testable flag precedence
+	globalParser := flags.NewGlobalOptionsBuilder().Build()
+	globalParser.RegisterFlags(RootCmd)
+	if err := globalParser.BindToViper(viper.GetViper()); err != nil {
+		log.Error("Failed to bind global flags to viper", "error", err)
 	}
-	// Bind both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to the same viper key (they are equivalent).
-	if err := viper.BindEnv("force-color", "ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"); err != nil {
-		log.Error("Failed to bind ATMOS_FORCE_COLOR/CLICOLOR_FORCE environment variables", "error", err)
-	}
-	// Bind mask flag to environment variable.
-	if err := viper.BindEnv("mask", "ATMOS_MASK"); err != nil {
-		log.Error("Failed to bind ATMOS_MASK environment variable", "error", err)
+
+	// Special handling for version flag: clear DefValue for cleaner --help output.
+	if versionFlag := RootCmd.PersistentFlags().Lookup("version"); versionFlag != nil {
+		versionFlag.DefValue = ""
 	}
 
 	// Bind environment variables for GitHub authentication.
