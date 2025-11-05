@@ -392,6 +392,13 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 		// Extract positional args (non-flag args).
 		result.PositionalArgs = combinedFlags.Args()
 
+		// Validate positional args if configured.
+		if p.positionalArgs != nil && p.positionalArgs.validator != nil {
+			if err := p.positionalArgs.validator(p.cmd, result.PositionalArgs); err != nil {
+				return nil, err
+			}
+		}
+
 		// After parsing, bind the parsed pflags to Viper to ensure values are available.
 		// This is necessary because BindToViper() is called before Parse(), so Viper
 		// needs to be re-bound after flags are manually parsed.

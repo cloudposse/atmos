@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -23,6 +22,9 @@ import (
 var listSettingsParser = flags.NewStandardOptionsBuilder().
 	WithProcessTemplates(true).
 	WithProcessFunctions(true).
+	WithPositionalArgs(flags.NewListSettingsPositionalArgsBuilder().
+		WithComponent(false). // Optional component argument
+		Build()).
 	Build()
 
 // listSettingsCmd lists settings across stacks.
@@ -42,19 +44,14 @@ var listSettingsCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		checkAtmosConfig()
 
-		// Parse flags using StandardOptions.
+		// Parse flags and positional args using builder pattern.
 		opts, err := listSettingsParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
 		}
 
-		// Validate maximum 1 positional arg (optional component).
-		positionalArgs := opts.GetPositionalArgs()
-		if len(positionalArgs) > 1 {
-			return fmt.Errorf("invalid arguments. The command accepts at most one argument (component)")
-		}
-
-		output, err := listSettings(cmd, positionalArgs)
+		// Component is extracted by builder into opts.Component field.
+		output, err := listSettings(cmd, opts)
 		if err != nil {
 			return err
 		}
@@ -106,7 +103,7 @@ type SettingsParams struct {
 }
 
 // initSettingsParams initializes and returns the parameters needed for listing settings.
-func initSettingsParams(cmd *cobra.Command, args []string) (*SettingsParams, error) {
+func initSettingsParams(cmd *cobra.Command, opts *flags.StandardOptions) (*SettingsParams, error) {
 	commonFlags, err := fl.GetCommonListFlags(cmd)
 	if err != nil {
 		return nil, &listerrors.CommonFlagsError{Cause: err}
@@ -118,10 +115,8 @@ func initSettingsParams(cmd *cobra.Command, args []string) (*SettingsParams, err
 		commonFlags.Delimiter = f.DefaultCSVDelimiter
 	}
 
-	componentFilter := ""
-	if len(args) > 0 {
-		componentFilter = args[0]
-	}
+	// Component is extracted from positional args by builder pattern.
+	componentFilter := opts.Component
 
 	return &SettingsParams{
 		CommonFlags:     commonFlags,
@@ -155,9 +150,9 @@ func getStacksMapForSettings(processingFlags *fl.ProcessingFlags, componentFilte
 	return stacksMap, nil
 }
 
-func listSettings(cmd *cobra.Command, args []string) (string, error) {
+func listSettings(cmd *cobra.Command, opts *flags.StandardOptions) (string, error) {
 	// Initialize parameters
-	params, err := initSettingsParams(cmd, args)
+	params, err := initSettingsParams(cmd, opts)
 	if err != nil {
 		return "", err
 	}

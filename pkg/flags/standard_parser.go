@@ -95,13 +95,30 @@ func (p *StandardParser) Parse(ctx context.Context, args []string) (*StandardOpt
 		return nil, err
 	}
 
+	// Extract positional args into struct fields using TargetField mapping.
+	// This is configured via WithPositionalArgs() on the builder.
+	positionalValues := make(map[string]string)
+	if p.parser.positionalArgs != nil {
+		specs := p.parser.positionalArgs.specs
+		for i, spec := range specs {
+			if i < len(parsedConfig.PositionalArgs) {
+				// Map positional arg value to its target field
+				positionalValues[spec.TargetField] = parsedConfig.PositionalArgs[i]
+			}
+		}
+	}
+
 	// Determine component value.
-	// Priority: component flag > positional arg (if exactly 1 arg).
+	// Priority: component flag > positional arg extraction > hardcoded fallback.
 	component := getString(parsedConfig.Flags, "component")
-	if component == "" && len(parsedConfig.PositionalArgs) == 1 {
-		// For validate component command: atmos validate component vpc
-		// positionalArgs[0] = component name
-		component = parsedConfig.PositionalArgs[0]
+	if component == "" {
+		// Try positional arg from builder config first
+		if val, ok := positionalValues["Component"]; ok {
+			component = val
+		} else if len(parsedConfig.PositionalArgs) == 1 {
+			// Fallback for commands not using builder pattern yet
+			component = parsedConfig.PositionalArgs[0]
+		}
 	}
 
 	// Convert to strongly-typed options.
