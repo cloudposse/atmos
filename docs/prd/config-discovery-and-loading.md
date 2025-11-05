@@ -508,8 +508,10 @@ This would be a separate feature for security/performance optimization in restri
 - [x] Update `pkg/config/config.go` to process CLI flag through YAML functions
 - [x] Update `pkg/config/utils.go` to process env var through YAML functions
 - [x] Add `base_path: "!repo-root"` to `pkg/config/atmos.yaml`
-- [ ] Update integration tests in `tests/cli_workdir_git_root_test.go`
-- [ ] Add tests for YAML functions in CLI flags and env vars
+- [x] Update integration tests in `tests/cli_workdir_git_root_test.go`
+- [x] Add tests for YAML functions in CLI flags and env vars
+- [x] Add blog post announcing feature with migration guide
+- [x] Test backward compatibility with `base_path: "."`
 - [ ] Update documentation in `website/docs/cli/configuration.mdx`
 - [ ] Add examples to `website/docs/core-concepts/projects/configuration.mdx`
 - [ ] Run full test suite: `make testacc`
