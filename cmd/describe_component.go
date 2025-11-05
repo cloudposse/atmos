@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"os"
 
@@ -42,7 +41,7 @@ var describeComponentCmd = &cobra.Command{
 		_ = describeComponentParser.BindFlagsToViper(cmd, v)
 
 		// Parse command-line arguments and get strongly-typed options.
-		opts, err := describeComponentParser.Parse(context.Background(), args)
+		opts, err := describeComponentParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
 		}

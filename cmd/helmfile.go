@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -28,7 +30,9 @@ func init() {
 	// Register flags with Cobra.
 	// RegisterFlags automatically sets DisableFlagParsing=true for manual parsing.
 	helmfileParser.RegisterFlags(helmfileCmd)
-	_ = helmfileParser.BindToViper(viper.GetViper())
+	if err := helmfileParser.BindToViper(viper.GetViper()); err != nil {
+		panic(fmt.Errorf("failed to bind helmfile flags to viper: %w", err))
+	}
 
 	AddStackCompletion(helmfileCmd)
 	RootCmd.AddCommand(helmfileCmd)

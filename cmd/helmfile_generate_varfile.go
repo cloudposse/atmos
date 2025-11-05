@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -48,7 +49,9 @@ func init() {
 
 	// Register StandardOptions flags.
 	helmfileGenerateVarfileParser.RegisterFlags(helmfileGenerateVarfileCmd)
-	_ = helmfileGenerateVarfileParser.BindToViper(viper.GetViper())
+	if err := helmfileGenerateVarfileParser.BindToViper(viper.GetViper()); err != nil {
+		panic(fmt.Errorf("failed to bind helmfile generate varfile flags to viper: %w", err))
+	}
 
 	// Add stack completion.
 	AddStackCompletion(helmfileGenerateVarfileCmd)

@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"context"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -24,7 +22,7 @@ var describeConfigCmd = &cobra.Command{
 	Long:  "This command displays the final, deep-merged CLI configuration after combining all relevant configuration files.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		opts, err := describeConfigParser.Parse(context.Background(), args)
+		opts, err := describeConfigParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
 		}

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 
 	"github.com/spf13/cobra"
@@ -31,7 +30,7 @@ var workflowCmd = &cobra.Command{
 		handleHelpRequest(cmd, args)
 
 		// Parse command-line arguments and get strongly-typed options.
-		opts, err := workflowParser.Parse(context.Background(), args)
+		opts, err := workflowParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
 		}

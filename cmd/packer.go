@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -29,7 +31,9 @@ func init() {
 	// Register flags as persistent (inherited by subcommands).
 	// RegisterPersistentFlags automatically sets DisableFlagParsing=true for manual parsing.
 	packerParser.RegisterPersistentFlags(packerCmd)
-	_ = packerParser.BindToViper(viper.GetViper())
+	if err := packerParser.BindToViper(viper.GetViper()); err != nil {
+		panic(fmt.Errorf("failed to bind packer flags to viper: %w", err))
+	}
 
 	// Packer-specific flags
 	packerCmd.PersistentFlags().StringP("template", "t", "", "Packer template for building machine images")

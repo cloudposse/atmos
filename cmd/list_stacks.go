@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -56,7 +55,7 @@ func listStacks(cmd *cobra.Command, args []string) ([]string, error) {
 	_ = listStacksParser.BindFlagsToViper(cmd, v)
 
 	// Parse command-line arguments and get strongly-typed options
-	opts, err := listStacksParser.Parse(context.Background(), args)
+	opts, err := listStacksParser.Parse(cmd.Context(), args)
 	if err != nil {
 		return nil, err
 	}
