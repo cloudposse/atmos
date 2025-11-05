@@ -58,6 +58,7 @@ func packerRun(cmd *cobra.Command, commandName string, args []string) error {
 
 	// Use strongly-typed interpreter fields - no runtime assertions!
 	info.Stack = opts.Stack
+	info.ComponentFromArg = opts.Component
 	info.Identity = opts.Identity.Value()
 	info.DryRun = opts.DryRun
 

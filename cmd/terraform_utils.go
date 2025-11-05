@@ -59,6 +59,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, opts *flags.Terr
 	// Use strongly-typed interpreter fields instead of weak map access.
 	// Type-safe: No runtime assertions needed!
 	info.Stack = opts.Stack
+	info.ComponentFromArg = opts.Component
 	info.Identity = opts.Identity.Value()
 	info.DryRun = opts.DryRun
 
