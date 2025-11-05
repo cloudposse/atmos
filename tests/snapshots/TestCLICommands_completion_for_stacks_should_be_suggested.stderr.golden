@@ -1,3 +1,1 @@
-DEBU Set logs-level=debug logs-file=/dev/stderr
 Completion ended with directive: ShellCompDirectiveNoFileComp
-DEBU Telemetry is disabled, skipping capture

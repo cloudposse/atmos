@@ -5,4 +5,4 @@ DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixture
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
 DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/priority-log-check
 DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Telemetry is disabled, skipping capture
+DEBU Telemetry event enqueued

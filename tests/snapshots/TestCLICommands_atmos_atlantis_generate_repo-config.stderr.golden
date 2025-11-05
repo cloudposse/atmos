@@ -1,14 +1,20 @@
-DEBU Set logs-level=debug logs-file=/dev/stderr
-DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
-DEBU Telemetry is disabled, skipping capture
 
-# Error                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-atlantis project template is not specified for the component 'account-settings'. It needs to be defined in one of these places: 'settings.atlantis.project_template_name' stack config section, 'settings.atlantis.project_template' stack config section, or passed on the command line using the '--project-template' flag to select a project template from the collection of templates defined in the 'integrations.atlantis.project_templates' section in 'atmos.yaml'                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+**Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 
 
+## Missing Configuration
+
+The atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks, but the directory does not exist.
+
+
+## Getting Started
+
+To configure and start using Atmos, refer to the following documents:
+
+**Atmos CLI Configuration:** https://atmos.tools/cli/configuration
+
+**Atmos Components:** https://atmos.tools/core-concepts/components
+
+**Atmos Stacks:** https://atmos.tools/core-concepts/stacks
+
+**Quick Start:** https://atmos.tools/quick-start
