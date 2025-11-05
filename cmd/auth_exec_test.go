@@ -49,13 +49,14 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 		{
 			name:             "identity flag with no value before double dash",
 			args:             []string{"--identity", "--", "echo", "test"},
-			expectedSentinel: errUtils.ErrIdentitySelectionRequiresTTY, // Interactive selection requires TTY.
+			expectedSentinel: errUtils.ErrIdentitySelectionRequiresTTY, // Wraps ErrTTYRequired.
 		},
 		{
 			name: "valid command with default identity",
 			args: []string{"echo", "test"},
 			// This will fail because the default identity (test-admin) uses AWS SSO which requires TTY for interactive flow.
 			// Without a TTY, we can't do interactive authentication.
+			// ErrIdentitySelectionRequiresTTY wraps ErrTTYRequired, so we can check for either.
 			expectedSentinel: errUtils.ErrIdentitySelectionRequiresTTY,
 		},
 		{
