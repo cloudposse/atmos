@@ -98,7 +98,7 @@ performance-optimization/
 *.orig
 *.rej
 *.bak
-*.bak2
+*.bak[0-9]*
 *.go.bak
 **/*.go.bak
 
