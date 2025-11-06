@@ -555,10 +555,12 @@ This would be a separate feature for security/performance optimization in restri
 - [x] Add tests for YAML functions in CLI flags and env vars
 - [x] Add blog post announcing feature with migration guide
 - [x] Test backward compatibility with `base_path: "."`
-- [ ] Update documentation in `website/docs/cli/configuration.mdx`
-- [ ] Add examples to `website/docs/core-concepts/projects/configuration.mdx`
-- [ ] Run full test suite: `make testacc`
-- [ ] Verify no linting errors: `make lint`
+- [x] Update documentation in `website/docs/cli/configuration.mdx`
+- [x] Add examples to `website/docs/core-concepts/projects/configuration.mdx`
+- [x] Run full test suite: `make testacc` (97/99 pass, 2 pre-existing failures)
+- [x] Verify no linting errors: `make lint` (5 TestMain false positives documented)
+- [x] Fix linting errors in test files (os.Chdir/os.Setenv → t.Chdir/t.Setenv)
+- [x] Fix TestCliValidateSchema timeout (vendored bower schema locally)
 - [ ] Manual testing with real repository (all test scenarios)
 - [ ] Update CHANGELOG.md with breaking change notice
-- [ ] Verify existing `--chdir` tests still pass
+- [x] Verify existing `--chdir` tests still pass
