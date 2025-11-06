@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/providers/mock"
+	"github.com/cloudposse/atmos/pkg/flags"
 )
 
 // setupMockAuthDir configures the TestKit with the mock auth scenario and file keyring.
@@ -144,13 +144,14 @@ func TestAuth_NoBrowserPromptForCachedCredentials(t *testing.T) {
 			// However, we must reset Viper and flags to prevent pollution between commands.
 			viper.Reset()
 
-			// Reset all flag Changed states to prevent pollution.
-			RootCmd.Flags().VisitAll(func(f *pflag.Flag) {
-				f.Changed = false
-			})
-			RootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
-				f.Changed = false
-			})
+			// Reset all flags to prevent pollution between commands.
+			// Use flags.ResetCommandFlags which resets both flag values and Changed state.
+			flags.ResetCommandFlags(RootCmd)
+
+			// Also reset subcommand flags (this prevents --format pollution from auth env to auth list).
+			for _, subcmd := range RootCmd.Commands() {
+				flags.ResetCommandFlags(subcmd)
+			}
 
 			RootCmd.SetArgs(args)
 

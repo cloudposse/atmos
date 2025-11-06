@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -98,6 +99,8 @@ func (p *StandardFlagParser) SetPositionalArgs(
 // ParsedFlags returns the combined FlagSet used in the last Parse() call.
 // This is useful for checking if flags were Changed when DisableFlagParsing is enabled.
 func (p *StandardFlagParser) ParsedFlags() *pflag.FlagSet {
+	defer perf.Track(nil, "flags.StandardFlagParser.ParsedFlags")()
+
 	return p.parsedFlags
 }
 
@@ -143,6 +146,8 @@ func (p *StandardFlagParser) RegisterFlags(cmd *cobra.Command) {
 //
 // Returns the arguments slice that should be used for Args validation.
 func GetActualArgs(cmd *cobra.Command, osArgs []string) []string {
+	defer perf.Track(nil, "flags.GetActualArgs")()
+
 	arguments := cmd.Flags().Args()
 	if len(arguments) == 0 && cmd.DisableFlagParsing {
 		// Extract args from os.Args based on command path depth.
@@ -165,6 +170,8 @@ func GetActualArgs(cmd *cobra.Command, osArgs []string) []string {
 //
 // This logic is extracted here to be testable and avoid duplication in UsageFunc handlers.
 func ValidateArgsOrNil(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "flags.ValidateArgsOrNil")()
+
 	if cmd.Args == nil {
 		return nil // No validator means all args are valid
 	}
@@ -551,7 +558,7 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 // Returns error if any flag value is not in its valid values list.
 // Only validates flags that were explicitly changed by the user to avoid pollution from
 // Viper/environment variables in tests where commands run sequentially.
-// combinedFlags is the FlagSet used for parsing (includes both local and inherited flags).
+// CombinedFlags is the FlagSet used for parsing (includes both local and inherited flags).
 func (p *StandardFlagParser) validateFlagValues(flags map[string]interface{}, combinedFlags *pflag.FlagSet) error {
 	defer perf.Track(nil, "flagparser.StandardFlagParser.validateFlagValues")()
 
@@ -599,11 +606,11 @@ func (p *StandardFlagParser) validateFlagValues(flags map[string]interface{}, co
 		if !valid {
 			// Check for custom error message.
 			if msg, hasMsg := p.validationMsgs[flagName]; hasMsg {
-				return fmt.Errorf("%s", msg)
+				return fmt.Errorf("%w: %s", errUtils.ErrInvalidFlagValue, msg)
 			}
 			// Default error message.
-			return fmt.Errorf("invalid value %q for flag --%s (valid values: %s)",
-				strValue, flagName, strings.Join(validValues, ", "))
+			return fmt.Errorf("%w: invalid value %q for flag --%s (valid values: %s)",
+				errUtils.ErrInvalidFlagValue, strValue, flagName, strings.Join(validValues, ", "))
 		}
 	}
 
@@ -658,4 +665,24 @@ func (p *StandardFlagParser) GetIdentityFromCmd(cmd *cobra.Command, v *viper.Vip
 	// Flag not changed - fall back to Viper (env var or config)
 	viperKey := p.getViperKey(flagName)
 	return v.GetString(viperKey), nil
+}
+
+// Reset clears any internal parser state to prevent pollution between test runs.
+// This resets the command's flag state and the parsedFlags FlagSet.
+func (p *StandardFlagParser) Reset() {
+	defer perf.Track(nil, "flagparser.StandardFlagParser.Reset")()
+
+	// Reset the command's flags if command is set.
+	ResetCommandFlags(p.cmd)
+
+	// Reset parsedFlags FlagSet if it was created.
+	// This is specific to StandardFlagParser which maintains its own FlagSet.
+	if p.parsedFlags != nil {
+		p.parsedFlags.VisitAll(func(flag *pflag.Flag) {
+			// Reset to default value.
+			_ = flag.Value.Set(flag.DefValue)
+			// Clear Changed state.
+			flag.Changed = false
+		})
+	}
 }

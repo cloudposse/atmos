@@ -18,20 +18,23 @@ import (
 //   - Enables Cobra validation (no DisableFlagParsing).
 //   - Separates Atmos flags from pass-through flags.
 //   - Handles double-dash separator (--) for explicit pass-through.
+//   - Preprocesses NoOptDefVal flags to support space-separated syntax.
 type AtmosFlagParser struct {
 	cmd        *cobra.Command
 	viper      *viper.Viper
 	translator *CompatibilityAliasTranslator
+	registry   *FlagRegistry
 }
 
 // NewAtmosFlagParser creates a new unified parser.
-func NewAtmosFlagParser(cmd *cobra.Command, v *viper.Viper, translator *CompatibilityAliasTranslator) *AtmosFlagParser {
+func NewAtmosFlagParser(cmd *cobra.Command, v *viper.Viper, translator *CompatibilityAliasTranslator, registry *FlagRegistry) *AtmosFlagParser {
 	defer perf.Track(nil, "flagparser.NewAtmosFlagParser")()
 
 	return &AtmosFlagParser{
 		cmd:        cmd,
 		viper:      v,
 		translator: translator,
+		registry:   registry,
 	}
 }
 
@@ -68,6 +71,38 @@ func (p *AtmosFlagParser) Parse(args []string) (*ParsedConfig, error) {
 
 	// Step 2: Split args at -- separator.
 	argsBeforeSep, argsAfterSep := splitAtSeparator(args)
+
+	// Step 2.5: Detect if Cobra has already parsed flags and stripped the -- separator.
+	// If there's no -- separator in args AND Cobra has already parsed flags (detected by
+	// checking if any flags are marked Changed), then ALL args should be treated as
+	// separated args (the command to execute).
+	// This handles the case where: user runs "atmos auth exec --identity=prod -- sh -c echo"
+	// -> Cobra parses --identity=prod and strips -- -> RunE receives ["sh", "-c", "echo"]
+	// -> We need to treat these as separated args, not as flags to parse.
+	if len(argsAfterSep) == 0 && len(argsBeforeSep) > 0 {
+		// No -- separator found, check if Cobra already parsed flags
+		cobraAlreadyParsed := false
+		p.cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			if f.Changed {
+				cobraAlreadyParsed = true
+			}
+		})
+
+		if cobraAlreadyParsed {
+			// Cobra already parsed flags and removed --, so all remaining args are separated args
+			argsAfterSep = argsBeforeSep
+			argsBeforeSep = []string{}
+		}
+	}
+
+	// Step 2.6: Preprocess NoOptDefVal flags (identity, pager).
+	// Rewrite --flag value → --flag=value for flags with NoOptDefVal.
+	// This maintains backward compatibility while working within Cobra's documented
+	// limitation that NoOptDefVal requires equals syntax (pflag #134, #321, cobra #1962).
+	// Only applies to args before the -- separator (Atmos flags, not pass-through).
+	if p.registry != nil && len(argsBeforeSep) > 0 {
+		argsBeforeSep = p.registry.PreprocessNoOptDefValArgs(argsBeforeSep)
+	}
 
 	// Step 3: Normalize Cobra shorthand flags with = syntax (e.g., -i=value → --identity=value).
 	// This fixes a Cobra quirk where -i= returns literal "=" instead of empty string.
@@ -174,6 +209,15 @@ func (p *AtmosFlagParser) resolveNoOptDefValForEmptyFlags() {
 			p.viper.Set(flag.Name, marker)
 		}
 	})
+}
+
+// Reset clears any internal parser state to prevent pollution between test runs.
+// This resets the command's flag state to prevent flag values from one test
+// polluting subsequent tests when using a global parser instance.
+func (p *AtmosFlagParser) Reset() {
+	defer perf.Track(nil, "flagparser.FlagParser.Reset")()
+
+	ResetCommandFlags(p.cmd)
 }
 
 // GetArgsForTool builds the complete argument array for executing a subprocess tool.

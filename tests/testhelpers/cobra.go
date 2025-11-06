@@ -78,6 +78,7 @@ type FlagSnapshot struct {
 
 // SnapshotCobraState captures the current state of a cobra.Command including all flag values.
 // This is a generic helper that works with any cobra.Command, not just RootCmd.
+// It recursively snapshots all subcommands to prevent flag pollution between tests.
 func SnapshotCobraState(cmd *cobra.Command) *CobraStateSnapshot {
 	snapshot := &CobraStateSnapshot{
 		args:   make([]string, len(cmd.Flags().Args())),
@@ -103,6 +104,15 @@ func SnapshotCobraState(cmd *cobra.Command) *CobraStateSnapshot {
 
 	snapshotFlags(cmd.Flags())
 	snapshotFlags(cmd.PersistentFlags())
+
+	// Recursively snapshot all subcommands to prevent flag pollution.
+	// This is critical because subcommands may have their own flags that can leak between tests.
+	// For example, `auth env --format=dotenv` sets a flag on authEnvCmd that could pollute
+	// subsequent tests that run `auth list` which has different valid format values.
+	for _, subcmd := range cmd.Commands() {
+		snapshotFlags(subcmd.Flags())
+		snapshotFlags(subcmd.PersistentFlags())
+	}
 
 	return snapshot
 }
@@ -136,6 +146,7 @@ func restoreStringSliceFlag(f *pflag.Flag, snap FlagSnapshot) {
 
 // RestoreCobraState restores a cobra.Command to a previously captured state.
 // This is a generic helper that works with any cobra.Command, not just RootCmd.
+// It recursively restores all subcommands to prevent flag pollution between tests.
 func RestoreCobraState(cmd *cobra.Command, snapshot *CobraStateSnapshot) {
 	// Restore command args.
 	cmd.SetArgs(snapshot.args)
@@ -163,6 +174,13 @@ func RestoreCobraState(cmd *cobra.Command, snapshot *CobraStateSnapshot) {
 	restoreFlags(cmd.Flags())
 	restoreFlags(cmd.PersistentFlags())
 
+	// Recursively restore all subcommands to prevent flag pollution.
+	// This matches the recursive snapshot in SnapshotCobraState.
+	for _, subcmd := range cmd.Commands() {
+		restoreFlags(subcmd.Flags())
+		restoreFlags(subcmd.PersistentFlags())
+	}
+
 	// Restore Viper state to prevent test pollution.
 	// Problem: Viper is a global singleton. When a test sets format=dotenv,
 	// it persists and pollutes subsequent tests expecting the default.
@@ -187,4 +205,10 @@ func RestoreCobraState(cmd *cobra.Command, snapshot *CobraStateSnapshot) {
 
 	resetViperToDefault(cmd.Flags())
 	resetViperToDefault(cmd.PersistentFlags())
+
+	// Also reset Viper for subcommands.
+	for _, subcmd := range cmd.Commands() {
+		resetViperToDefault(subcmd.Flags())
+		resetViperToDefault(subcmd.PersistentFlags())
+	}
 }

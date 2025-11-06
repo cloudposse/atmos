@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -70,6 +71,10 @@ func TestAuthExecCmd_FlagParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Reset Viper and parser state to prevent pollution between subtests.
+			defer viper.Reset()
+			defer authExecParser.Reset()
+
 			if tt.skipOnWindows && runtime.GOOS == "windows" {
 				t.Skipf("Skipping test on Windows: echo command behaves differently")
 			}

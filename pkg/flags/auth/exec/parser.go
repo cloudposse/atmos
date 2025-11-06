@@ -79,8 +79,9 @@ func (p *AuthExecParser) Parse(ctx context.Context, args []string) (*AuthExecOpt
 	// All args after the identity flag are passed through to the command.
 	translator := flags.NewCompatibilityAliasTranslator(map[string]flags.CompatibilityAlias{})
 
-	// Create AtmosFlagParser with translator.
-	flagParser := flags.NewAtmosFlagParser(p.cmd, p.viper, translator)
+	// Create AtmosFlagParser with translator and registry.
+	// The registry enables NoOptDefVal preprocessing for the identity flag.
+	flagParser := flags.NewAtmosFlagParser(p.cmd, p.viper, translator, p.flagRegistry)
 
 	// Parse args using AtmosFlagParser.
 	parsedConfig, err := flagParser.Parse(args)
@@ -104,4 +105,12 @@ func (p *AuthExecParser) Parse(ctx context.Context, args []string) (*AuthExecOpt
 	}
 
 	return opts, nil
+}
+
+// Reset clears any internal parser state to prevent pollution between test runs.
+// This resets the command's flag state.
+func (p *AuthExecParser) Reset() {
+	defer perf.Track(nil, "flagparser.AuthExecParser.Reset")()
+
+	flags.ResetCommandFlags(p.cmd)
 }

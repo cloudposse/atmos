@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags/global"
@@ -52,6 +53,11 @@ type FlagParser interface {
 	//   - Pass-through arguments (for terraform/helmfile/etc)
 	//   - Component and stack information
 	Parse(ctx context.Context, args []string) (*ParsedConfig, error)
+
+	// Reset clears any internal parser state to prevent pollution between test runs.
+	// This should be called between tests when reusing a global parser instance.
+	// For production code, parsers are typically created once and don't need resetting.
+	Reset()
 }
 
 // PassThroughHandler handles the separation of Atmos-specific flags from tool flags.
@@ -87,7 +93,7 @@ type PassThroughHandler interface {
 
 // ParsedConfig contains the results of parsing command-line arguments.
 //
-// DEPRECATED: The map-based Flags field is deprecated. Use the strongly-typed
+// Deprecated: The map-based Flags field is deprecated. Use the strongly-typed
 // options methods instead: ToTerraformOptions(), ToHelmfileOptions(), etc.
 //
 // This type exists for backward compatibility during migration. Eventually, Parse()
@@ -96,7 +102,7 @@ type ParsedConfig struct {
 	// Flags contains parsed Atmos-specific flags (--stack, --identity, etc.).
 	// Keys are flag names, values are the parsed values.
 	//
-	// DEPRECATED: Use ToTerraformOptions() for type-safe access instead.
+	// Deprecated: Use ToTerraformOptions() for type-safe access instead.
 	// This map will be removed in a future version.
 	Flags map[string]interface{}
 
@@ -141,6 +147,8 @@ func (p *ParsedConfig) GetStack() string {
 
 // GetString extracts a string value from the parsed flags map.
 func GetString(m map[string]interface{}, key string) string {
+	defer perf.Track(nil, "flags.GetString")()
+
 	if v, ok := m[key]; ok {
 		if s, ok := v.(string); ok {
 			return s
@@ -151,6 +159,8 @@ func GetString(m map[string]interface{}, key string) string {
 
 // GetStringSlice extracts a string slice value from the parsed flags map.
 func GetStringSlice(m map[string]interface{}, key string) []string {
+	defer perf.Track(nil, "flags.GetStringSlice")()
+
 	if v, ok := m[key]; ok {
 		if slice, ok := v.([]string); ok {
 			return slice
@@ -161,6 +171,8 @@ func GetStringSlice(m map[string]interface{}, key string) []string {
 
 // GetBool extracts a boolean value from the parsed flags map.
 func GetBool(m map[string]interface{}, key string) bool {
+	defer perf.Track(nil, "flags.GetBool")()
+
 	if v, ok := m[key]; ok {
 		if b, ok := v.(bool); ok {
 			return b
@@ -171,6 +183,8 @@ func GetBool(m map[string]interface{}, key string) bool {
 
 // GetInt extracts an integer value from the parsed flags map.
 func GetInt(m map[string]interface{}, key string) int {
+	defer perf.Track(nil, "flags.GetInt")()
+
 	if v, ok := m[key]; ok {
 		if i, ok := v.(int); ok {
 			return i
@@ -183,6 +197,8 @@ func GetInt(m map[string]interface{}, key string) int {
 //
 //nolint:unparam // key parameter kept for consistency with other getter functions
 func GetIdentitySelector(m map[string]interface{}, key string) global.IdentitySelector {
+	defer perf.Track(nil, "flags.GetIdentitySelector")()
+
 	value := GetString(m, key)
 	// Check if identity was explicitly provided by checking if the key exists.
 	_, provided := m[key]
@@ -193,8 +209,40 @@ func GetIdentitySelector(m map[string]interface{}, key string) global.IdentitySe
 //
 //nolint:unparam // key parameter kept for consistency with other getter functions
 func GetPagerSelector(m map[string]interface{}, key string) global.PagerSelector {
+	defer perf.Track(nil, "flags.GetPagerSelector")()
+
 	value := GetString(m, key)
 	// Check if pager was explicitly provided by checking if the key exists.
 	_, provided := m[key]
 	return global.NewPagerSelector(value, provided)
+}
+
+// ResetCommandFlags resets all flags on a cobra.Command to their default values.
+// This is a shared helper used by all FlagParser implementations to prevent
+// flag pollution between test runs.
+//
+// It resets:
+//   - Local flags (cmd.Flags())
+//   - Persistent flags (cmd.PersistentFlags())
+//
+// For each flag, it:
+//  1. Sets the value back to DefValue
+//  2. Clears the Changed state
+func ResetCommandFlags(cmd *cobra.Command) {
+	if cmd == nil {
+		return
+	}
+
+	resetFlagSet := func(flagSet *pflag.FlagSet) {
+		flagSet.VisitAll(func(flag *pflag.Flag) {
+			// Reset to default value.
+			_ = flag.Value.Set(flag.DefValue)
+			// Clear Changed state.
+			flag.Changed = false
+		})
+	}
+
+	// Reset both local and persistent flags.
+	resetFlagSet(cmd.Flags())
+	resetFlagSet(cmd.PersistentFlags())
 }
