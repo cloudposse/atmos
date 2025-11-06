@@ -43,7 +43,8 @@ func TestProcessYAMLFunctionString(t *testing.T) {
 			input: "!repo-root",
 			setupEnv: func() {
 				// Set TEST_GIT_ROOT for testing
-				wd, _ := os.Getwd()
+				wd, err := os.Getwd()
+				require.NoError(t, err)
 				t.Setenv("TEST_GIT_ROOT", wd)
 			},
 			validate: func(t *testing.T, result string) {
@@ -57,7 +58,8 @@ func TestProcessYAMLFunctionString(t *testing.T) {
 			name:  "!repo-root with trailing space",
 			input: "!repo-root ",
 			setupEnv: func() {
-				wd, _ := os.Getwd()
+				wd, err := os.Getwd()
+				require.NoError(t, err)
 				t.Setenv("TEST_GIT_ROOT", wd)
 			},
 			validate: func(t *testing.T, result string) {

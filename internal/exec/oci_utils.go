@@ -95,6 +95,7 @@ func pullImage(ref name.Reference) (*remote.Descriptor, error) {
 	// Get registry from parsed reference
 	registry := ref.Context().Registry.Name()
 	if strings.EqualFold(registry, "ghcr.io") {
+		//nolint:forbidigo // GITHUB_TOKEN is a standard GitHub environment variable, not an Atmos config variable
 		githubToken := os.Getenv(githubTokenEnv)
 		if githubToken != "" {
 			opts = append(opts, remote.WithAuth(&authn.Basic{
