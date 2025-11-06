@@ -311,7 +311,20 @@ func (r *FlagRegistry) RegisterPersistentFlags(cmd *cobra.Command) {
 func (r *FlagRegistry) PreprocessNoOptDefValArgs(args []string) []string {
 	defer perf.Track(nil, "flagparser.FlagRegistry.PreprocessNoOptDefValArgs")()
 
-	// Build a set of flag names (long and short) that have NoOptDefVal.
+	noOptDefValFlags := r.buildNoOptDefValFlagsSet()
+
+	// If no flags have NoOptDefVal, return args unchanged.
+	if len(noOptDefValFlags) == 0 {
+		return args
+	}
+
+	return r.preprocessArgs(args, noOptDefValFlags)
+}
+
+// buildNoOptDefValFlagsSet builds a set of flag names (long and short) that have NoOptDefVal.
+func (r *FlagRegistry) buildNoOptDefValFlagsSet() map[string]bool {
+	defer perf.Track(nil, "flagparser.FlagRegistry.buildNoOptDefValFlagsSet")()
+
 	noOptDefValFlags := make(map[string]bool)
 	for _, flag := range r.flags {
 		if flag.GetNoOptDefVal() != "" {
@@ -321,52 +334,64 @@ func (r *FlagRegistry) PreprocessNoOptDefValArgs(args []string) []string {
 			}
 		}
 	}
+	return noOptDefValFlags
+}
 
-	// If no flags have NoOptDefVal, return args unchanged.
-	if len(noOptDefValFlags) == 0 {
-		return args
-	}
+// preprocessArgs preprocesses args to rewrite space-separated syntax to equals syntax for NoOptDefVal flags.
+func (r *FlagRegistry) preprocessArgs(args []string, noOptDefValFlags map[string]bool) []string {
+	defer perf.Track(nil, "flagparser.FlagRegistry.preprocessArgs")()
 
-	// Preprocess args to rewrite space-separated syntax to equals syntax.
 	result := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
-		// Check if this arg is a flag (starts with - or --).
+		// Skip non-flag arguments.
 		if !isFlagArg(arg) {
 			result = append(result, arg)
 			continue
 		}
 
-		// Check if flag already has equals syntax (--flag=value or -f=value).
-		if hasSeparatedValue(arg) {
-			result = append(result, arg)
-			continue
-		}
-
-		// Extract flag name from --flag or -f.
-		flagName := extractFlagName(arg)
-
-		// Check if this flag has NoOptDefVal.
-		if !noOptDefValFlags[flagName] {
-			result = append(result, arg)
-			continue
-		}
-
-		// Check if there's a next arg and it's not another flag.
-		if i+1 < len(args) && !isFlagArg(args[i+1]) {
-			// Combine current flag with next arg using equals syntax.
-			combined := arg + "=" + args[i+1]
-			result = append(result, combined)
+		// Process flag argument.
+		processed, skip := r.processFlagArg(arg, args, i, noOptDefValFlags)
+		result = append(result, processed)
+		if skip {
 			i++ // Skip the next arg (already consumed).
-		} else {
-			// No value follows, or next arg is another flag.
-			// Keep flag as-is (will use NoOptDefVal).
-			result = append(result, arg)
 		}
 	}
 
 	return result
+}
+
+// processFlagArg processes a single flag argument and returns the processed arg and whether to skip next arg.
+func (r *FlagRegistry) processFlagArg(arg string, args []string, i int, noOptDefValFlags map[string]bool) (string, bool) {
+	defer perf.Track(nil, "flagparser.FlagRegistry.processFlagArg")()
+
+	// Keep arg unchanged if it already has equals syntax.
+	if hasSeparatedValue(arg) {
+		return arg, false
+	}
+
+	// Extract flag name and check if it has NoOptDefVal.
+	flagName := extractFlagName(arg)
+	if !noOptDefValFlags[flagName] {
+		return arg, false
+	}
+
+	// Check if there's a value following the flag.
+	if !r.hasValueFollowing(args, i) {
+		return arg, false
+	}
+
+	// Combine flag with following value using equals syntax.
+	combined := arg + "=" + args[i+1]
+	return combined, true
+}
+
+// hasValueFollowing checks if there's a value following the flag at position i.
+func (r *FlagRegistry) hasValueFollowing(args []string, i int) bool {
+	defer perf.Track(nil, "flagparser.FlagRegistry.hasValueFollowing")()
+
+	return i+1 < len(args) && !isFlagArg(args[i+1])
 }
 
 // isFlagArg returns true if the arg looks like a flag (starts with - or --).

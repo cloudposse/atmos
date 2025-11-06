@@ -689,48 +689,64 @@ func Contains(slice []string, target string) bool {
 // createCustomCommandParser creates a FlagRegistry with dynamically registered flags
 // from the custom command configuration.
 func createCustomCommandParser(commandConfig *schema.Command) *flags.FlagRegistry {
-	// Start with common flags (stack, identity, dry-run)
+	// Start with common flags (stack, identity, dry-run).
 	registry := flags.CommonFlags()
 
 	// Dynamically register flags from command config.
-	// Skip flags that are already registered (e.g., by CommonFlags).
 	for _, flag := range commandConfig.Flags {
-		// Skip if flag already exists (avoid duplicate registration).
-		if registry.Has(flag.Name) {
-			continue
-		}
-
-		description := flag.Usage
-		if description == "" {
-			description = flag.Description
-		}
-
-		switch flag.Type {
-		case "bool":
-			// Parse default value for bool flags
-			defaultVal := false
-			if flag.Default != "" {
-				if parsed, err := strconv.ParseBool(flag.Default); err == nil {
-					defaultVal = parsed
-				}
-			}
-			registry.RegisterBoolFlag(flag.Name, flag.Shorthand, defaultVal, description)
-		case "int":
-			// Parse default value for int flags
-			defaultVal := 0
-			if flag.Default != "" {
-				if parsed, err := strconv.Atoi(flag.Default); err == nil {
-					defaultVal = parsed
-				}
-			}
-			registry.RegisterIntFlag(flag.Name, flag.Shorthand, defaultVal, description, flag.Required)
-		default: // string or empty type (default to string)
-			// Use default value directly for string flags
-			registry.RegisterStringFlag(flag.Name, flag.Shorthand, flag.Default, description, flag.Required)
-		}
+		registerCustomFlag(registry, flag)
 	}
 
 	return registry
+}
+
+// registerCustomFlag registers a single custom command flag in the registry.
+func registerCustomFlag(registry *flags.FlagRegistry, flag schema.CommandFlag) {
+	// Skip if flag already exists (avoid duplicate registration).
+	if registry.Has(flag.Name) {
+		return
+	}
+
+	description := getFlagDescription(flag)
+
+	switch flag.Type {
+	case "bool":
+		registerBoolFlag(registry, flag, description)
+	case "int":
+		registerIntFlag(registry, flag, description)
+	default: // string or empty type (default to string)
+		registry.RegisterStringFlag(flag.Name, flag.Shorthand, flag.Default, description, flag.Required)
+	}
+}
+
+// getFlagDescription returns the flag description, preferring Usage over Description.
+func getFlagDescription(flag schema.CommandFlag) string {
+	if flag.Usage != "" {
+		return flag.Usage
+	}
+	return flag.Description
+}
+
+// registerBoolFlag registers a boolean flag with parsed default value.
+func registerBoolFlag(registry *flags.FlagRegistry, flag schema.CommandFlag, description string) {
+	defaultVal := false
+	if flag.Default != "" {
+		if parsed, err := strconv.ParseBool(flag.Default); err == nil {
+			defaultVal = parsed
+		}
+	}
+	registry.RegisterBoolFlag(flag.Name, flag.Shorthand, defaultVal, description)
+}
+
+// registerIntFlag registers an integer flag with parsed default value.
+func registerIntFlag(registry *flags.FlagRegistry, flag schema.CommandFlag, description string) {
+	defaultVal := 0
+	if flag.Default != "" {
+		if parsed, err := strconv.Atoi(flag.Default); err == nil {
+			defaultVal = parsed
+		}
+	}
+	registry.RegisterIntFlag(flag.Name, flag.Shorthand, defaultVal, description, flag.Required)
 }
 
 // executeCustomCommandWithParser executes a custom command using the unified flag parser.
