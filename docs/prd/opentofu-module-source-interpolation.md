@@ -2,17 +2,19 @@
 
 **Status:** ✅ Implemented
 **Created:** 2025-11-05
-**Updated:** 2025-11-05
+**Updated:** 2025-11-06
 **Related Issue:** [#1753](https://github.com/cloudposse/atmos/issues/1753)
-**Related PRs:** [#1163](https://github.com/cloudposse/atmos/pull/1163), [#1639](https://github.com/cloudposse/atmos/pull/1639)
+**Related PRs:
+** [#1163](https://github.com/cloudposse/atmos/pull/1163), [#1639](https://github.com/cloudposse/atmos/pull/1639)
 
 ## Problem Statement
 
-Users cannot use OpenTofu 1.8+'s variable interpolation in module source feature with Atmos. When attempting to use
-variable references in module source blocks like `source = "${var.context.build.module_path}"`, Atmos fails during the
-configuration parsing phase with the error:
+Users should be able to use OpenTofu's 1.8 variable interpolation and module source features in Atmos. For example, it
+should be possible to reference module variables in module source blocks (e.g.
+`source = "${var.context.build.module_path}"`, and Atmos should handle this configuration
+parsing phase without an error.
 
-```
+```text
 failed to load terraform module Variables not allowed: Variables may not be used here.
 ```
 
@@ -60,11 +62,11 @@ Atmos performs Terraform/OpenTofu configuration validation during the `ProcessSt
 // internal/exec/utils.go:630
 terraformConfiguration, diags := tfconfig.LoadModule(componentPath)
 if !diags.HasErrors() {
-componentInfo["terraform_config"] = terraformConfiguration
+	componentInfo["terraform_config"] = terraformConfiguration
 } else {
-diagErr := diags.Err()
-// ... error handling
-return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+	diagErr := diags.Err()
+	// ... error handling
+	return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
 }
 ```
 
@@ -81,7 +83,7 @@ return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule,
 PR #1163's `init.pass_vars: true` setting controls whether varfiles are passed to the `terraform init` / `tofu init`
 command. However, the validation error occurs **before** Atmos reaches the command execution phase:
 
-```
+```text
 Pipeline Flow:
 1. LoadStacks → Parse YAML configs
 2. ProcessStacks → Validate Terraform files ❌ FAILS HERE
@@ -200,11 +202,11 @@ The `ProcessStacks()` function already has lenient error handling for certain ca
 // internal/exec/utils.go:636-651
 isNotExist := errors.Is(diagErr, os.ErrNotExist) || errors.Is(diagErr, fs.ErrNotExist)
 isNotExistString := strings.Contains(errMsg, "does not exist") ||
-strings.Contains(errMsg, "Failed to read directory")
+	strings.Contains(errMsg, "Failed to read directory")
 
 if !isNotExist && !isNotExistString {
-// For other errors (syntax errors, permission issues, etc.), return error
-return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+	// For other errors (syntax errors, permission issues, etc.), return error
+	return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
 }
 ```
 
@@ -220,19 +222,21 @@ We implemented an enhanced version of Option 2 (Auto-detection) with zero-config
 **Key Features:**
 
 1. **Automatic OpenTofu Detection** - Two-tier detection strategy:
-   - **Fast Path:** Check if executable basename contains "tofu" (e.g., `/usr/bin/tofu`, `/opt/homebrew/bin/tofu`)
-   - **Slow Path:** Execute `<command> version` and check output for "OpenTofu"
-   - **Caching:** Results cached by command path to avoid repeated subprocess calls
+
+- **Fast Path:** Check if executable basename contains "tofu" (e.g., `/usr/bin/tofu`, `/opt/homebrew/bin/tofu`)
+- **Slow Path:** Execute `<command> version` and check output for "OpenTofu"
+- **Caching:** Results cached by command path to avoid repeated subprocess calls
 
 2. **Pattern-Based Feature Detection** - Skip validation for known OpenTofu-specific errors:
-   - "Variables not allowed" - Module source interpolation (OpenTofu 1.8+)
-   - Extensible pattern list for future OpenTofu features
+
+- "Variables not allowed" - Module source interpolation (OpenTofu 1.8+)
+- Extensible pattern list for future OpenTofu features
 
 3. **Zero Configuration Required** - Just works when `command: "tofu"` is configured
 
 **Implementation Files:**
 
-```
+```text
 internal/exec/terraform_detection.go          # Auto-detection logic
 internal/exec/terraform_detection_test.go     # 67+ test cases
 internal/exec/opentofu_module_source_interpolation_test.go  # Integration tests
@@ -245,45 +249,45 @@ internal/exec/utils.go                        # ProcessStacks() integration
 // internal/exec/terraform_detection.go
 
 func IsOpenTofu(atmosConfig *schema.AtmosConfiguration) bool {
-    command := atmosConfig.Components.Terraform.Command
-    if command == "" {
-        command = "terraform"
-    }
+	command := atmosConfig.Components.Terraform.Command
+	if command == "" {
+		command = "terraform"
+	}
 
-    // Check cache first
-    if cached, exists := detectionCache[command]; exists {
-        return cached
-    }
+	// Check cache first
+	if cached, exists := detectionCache[command]; exists {
+		return cached
+	}
 
-    // Fast path: Check basename for "tofu"
-    baseName := filepath.Base(command)
-    if strings.Contains(strings.ToLower(baseName), "tofu") {
-        cacheDetectionResult(command, true)
-        return true
-    }
+	// Fast path: Check basename for "tofu"
+	baseName := filepath.Base(command)
+	if strings.Contains(strings.ToLower(baseName), "tofu") {
+		cacheDetectionResult(command, true)
+		return true
+	}
 
-    // Slow path: Execute version command
-    isTofu := detectByVersionCommand(atmosConfig, command)
-    cacheDetectionResult(command, isTofu)
-    return isTofu
+	// Slow path: Execute version command
+	isTofu := detectByVersionCommand(atmosConfig, command)
+	cacheDetectionResult(command, isTofu)
+	return isTofu
 }
 
 func isKnownOpenTofuFeature(err error) bool {
-    if err == nil {
-        return false
-    }
+	if err == nil {
+		return false
+	}
 
-    errMsg := err.Error()
-    openTofuPatterns := []string{
-        "Variables not allowed", // Module source interpolation (OpenTofu 1.8+)
-    }
+	errMsg := err.Error()
+	openTofuPatterns := []string{
+		"Variables not allowed", // Module source interpolation (OpenTofu 1.8+)
+	}
 
-    for _, pattern := range openTofuPatterns {
-        if strings.Contains(errMsg, pattern) {
-            return true
-        }
-    }
-    return false
+	for _, pattern := range openTofuPatterns {
+		if strings.Contains(errMsg, pattern) {
+			return true
+		}
+	}
+	return false
 }
 ```
 
@@ -293,16 +297,16 @@ func isKnownOpenTofuFeature(err error) bool {
 // internal/exec/utils.go:650-661
 
 if !isNotExist && !isNotExistString {
-    // Check if this is an OpenTofu-specific feature
-    if !IsOpenTofu(atmosConfig) || !isKnownOpenTofuFeature(diagErr) {
-        // For other errors (syntax errors, permission issues, etc.), return error
-        return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
-    }
+	// Check if this is an OpenTofu-specific feature
+	if !IsOpenTofu(atmosConfig) || !isKnownOpenTofuFeature(diagErr) {
+		// For other errors (syntax errors, permission issues, etc.), return error
+		return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+	}
 
-    // Skip validation for known OpenTofu-specific features
-    log.Debug("Skipping terraform-config-inspect validation for OpenTofu-specific feature: " + errMsg)
-    componentInfo["terraform_config"] = nil
-    componentInfo["validation_skipped_opentofu"] = true
+	// Skip validation for known OpenTofu-specific features
+	log.Debug("Skipping terraform-config-inspect validation for OpenTofu-specific feature: " + errMsg)
+	componentInfo["terraform_config"] = nil
+	componentInfo["validation_skipped_opentofu"] = true
 }
 ```
 
@@ -331,6 +335,7 @@ components:
 ```
 
 **Supported command patterns:**
+
 - `tofu` - Simple executable name
 - `/usr/bin/tofu` - Absolute path
 - `/opt/homebrew/bin/tofu` - Homebrew installation
@@ -338,6 +343,7 @@ components:
 - `/path/to/custom/tofu` - Custom installation
 
 The detection works with any command path that either:
+
 1. Contains "tofu" in the basename (case-insensitive), OR
 2. Returns "OpenTofu" when executing `<command> version`
 
@@ -377,6 +383,7 @@ func BenchmarkIsKnownOpenTofuFeature(b *testing.B)
 ```
 
 **Test Coverage:**
+
 - Fast path (basename) detection
 - Slow path (version command) detection
 - Cache hit/miss scenarios
@@ -391,20 +398,20 @@ func BenchmarkIsKnownOpenTofuFeature(b *testing.B)
 
 ```go
 func TestOpenTofuModuleSourceInterpolation(t *testing.T) {
-    t.Run("describe component with module source interpolation", func(t *testing.T) {
-        // Verifies ExecuteDescribeComponent works with OpenTofu-specific syntax
-        componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{...})
-        require.NoError(t, err)
-        // Validates nested variable structure is preserved
-    })
+	t.Run("describe component with module source interpolation", func(t *testing.T) {
+		// Verifies ExecuteDescribeComponent works with OpenTofu-specific syntax
+		componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{...})
+		require.NoError(t, err)
+		// Validates nested variable structure is preserved
+	})
 
-    t.Run("varfile generation with nested variables", func(t *testing.T) {
-        // Confirms nested context.build.* variables are in varfile
-    })
+	t.Run("varfile generation with nested variables", func(t *testing.T) {
+		// Confirms nested context.build.* variables are in varfile
+	})
 
-    t.Run("component info validation skipped for opentofu", func(t *testing.T) {
-        // Verifies validation_skipped_opentofu flag is set
-    })
+	t.Run("component info validation skipped for opentofu", func(t *testing.T) {
+		// Verifies validation_skipped_opentofu flag is set
+	})
 }
 ```
 
@@ -413,6 +420,7 @@ func TestOpenTofuModuleSourceInterpolation(t *testing.T) {
 **Location:** `tests/fixtures/scenarios/opentofu-module-source-interpolation/`
 
 **Structure:**
+
 ```
 opentofu-module-source-interpolation/
 ├── README.md                                    # Problem/solution documentation
@@ -426,6 +434,7 @@ opentofu-module-source-interpolation/
 ### Test Results ✅
 
 **All tests passing:**
+
 - ✅ 67+ unit tests for detection logic
 - ✅ 3 integration tests for module source interpolation
 - ✅ Fixture works with actual atmos binary
@@ -454,6 +463,7 @@ opentofu-module-source-interpolation/
 **Updated:** `website/docs/core-concepts/projects/configuration/opentofu.mdx`
 
 Added comprehensive section on "OpenTofu 1.8+ Module Source Interpolation" including:
+
 - ✅ Automatic support explanation (zero-configuration)
 - ✅ Complete example with Terraform code and stack configuration
 - ✅ How auto-detection works (fast path, slow path, caching)
@@ -521,24 +531,29 @@ Users simply need to upgrade to the version with auto-detection support. No conf
 ## Implementation Decisions
 
 1. **Auto-detection vs Configuration?**
-   - ✅ **Decision:** Auto-detection - zero configuration required
-   - **Rationale:** Better UX, works automatically, no breaking changes
+
+- ✅ **Decision:** Auto-detection - zero configuration required
+- **Rationale:** Better UX, works automatically, no breaking changes
 
 2. **Fast path vs Slow path?**
-   - ✅ **Decision:** Two-tier approach with caching
-   - **Rationale:** Fast path (basename check) handles 99% of cases, slow path (version command) handles edge cases
+
+- ✅ **Decision:** Two-tier approach with caching
+- **Rationale:** Fast path (basename check) handles 99% of cases, slow path (version command) handles edge cases
 
 3. **Pattern matching vs Lenient mode?**
-   - ✅ **Decision:** Pattern matching for known OpenTofu features
-   - **Rationale:** More targeted, still catches real syntax errors
+
+- ✅ **Decision:** Pattern matching for known OpenTofu features
+- **Rationale:** More targeted, still catches real syntax errors
 
 4. **Logging validation skips?**
-   - ✅ **Decision:** Debug level logging only
-   - **Rationale:** Avoids noise for normal operations, visible when troubleshooting
+
+- ✅ **Decision:** Debug level logging only
+- **Rationale:** Avoids noise for normal operations, visible when troubleshooting
 
 5. **What other OpenTofu features might be incompatible?**
-   - **Current:** Module source interpolation ("Variables not allowed")
-   - **Future:** Pattern list is extensible for new OpenTofu features
+
+- **Current:** Module source interpolation ("Variables not allowed")
+- **Future:** Pattern list is extensible for new OpenTofu features
 
 ## Related Issues and PRs
 
