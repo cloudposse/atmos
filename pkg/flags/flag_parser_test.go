@@ -12,8 +12,8 @@ import (
 // TestFlagParser_TerraformScenarios tests the unified parser with realistic Terraform command scenarios.
 func TestFlagParser_TerraformScenarios(t *testing.T) {
 	tests := []struct {
-		name                string
-		args                []string
+		name                 string
+		args                 []string
 		compatibilityAliases map[string]CompatibilityAlias
 		expectedFlags        map[string]interface{}
 		expectedPositional   []string
@@ -98,7 +98,7 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 				"auto-approve": true,
 			},
 			expectedPositional:  []string{"apply", "vpc"},
-			expectedPassThrough:  []string{},
+			expectedPassThrough: []string{},
 		},
 
 		// ====================================================================
@@ -112,7 +112,7 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 			},
 			expectedFlags:       map[string]interface{}{},
 			expectedPositional:  []string{"plan", "vpc"},
-			expectedPassThrough:  []string{"-var-file", "common.tfvars"},
+			expectedPassThrough: []string{"-var-file", "common.tfvars"},
 		},
 		{
 			name: "terraform target flag (pass-through)",
@@ -122,7 +122,7 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 			},
 			expectedFlags:       map[string]interface{}{},
 			expectedPositional:  []string{"plan", "vpc"},
-			expectedPassThrough:  []string{"-target", "aws_instance.app"},
+			expectedPassThrough: []string{"-target", "aws_instance.app"},
 		},
 		{
 			name: "terraform replace flag (pass-through)",
@@ -130,9 +130,9 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 			compatibilityAliases: map[string]CompatibilityAlias{
 				"-replace": {Behavior: AppendToSeparated, Target: ""},
 			},
-			expectedFlags:      map[string]interface{}{},
+			expectedFlags:       map[string]interface{}{},
 			expectedPositional:  []string{"apply", "vpc"},
-			expectedPassThrough:  []string{"-replace", "aws_instance.app"},
+			expectedPassThrough: []string{"-replace", "aws_instance.app"},
 		},
 
 		// ====================================================================
@@ -158,8 +158,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 				"stack": "dev",
 				"var":   []string{"region=us-east-1", "env=prod"},
 			},
-			expectedPositional: []string{"plan", "vpc"},
-			expectedPassThrough:  []string{"-var-file", "common.tfvars", "-target", "aws_instance.app"},
+			expectedPositional:  []string{"plan", "vpc"},
+			expectedPassThrough: []string{"-var-file", "common.tfvars", "-target", "aws_instance.app"},
 		},
 		{
 			name: "terraform apply with auto-approve and pass-through flags",
@@ -183,7 +183,7 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 				"auto-approve": true,
 			},
 			expectedPositional:  []string{"apply", "vpc"},
-			expectedPassThrough:  []string{"-var-file", "prod.tfvars", "-target", "aws_instance.app", "-replace", "aws_instance.db"},
+			expectedPassThrough: []string{"-var-file", "prod.tfvars", "-target", "aws_instance.app", "-replace", "aws_instance.db"},
 		},
 
 		// ====================================================================
@@ -219,8 +219,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 				"stack": "dev",
 				"var":   []string{"region=us-east-1"},
 			},
-			expectedPositional: []string{"plan", "vpc"},
-			expectedPassThrough:  []string{"-var-file", "common.tfvars"},
+			expectedPositional:  []string{"plan", "vpc"},
+			expectedPassThrough: []string{"-var-file", "common.tfvars"},
 		},
 
 		// ====================================================================
@@ -243,8 +243,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 			expectedFlags: map[string]interface{}{
 				"stack": "dev",
 			},
-			expectedPositional: []string{"plan", "vpc"},
-			expectedPassThrough:  []string{"-var-file", "common.tfvars", "-target", "aws_instance.app"},
+			expectedPositional:  []string{"plan", "vpc"},
+			expectedPassThrough: []string{"-var-file", "common.tfvars", "-target", "aws_instance.app"},
 		},
 		{
 			name: "double-dash separator with modern flags before",
@@ -262,8 +262,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 				"stack": "dev",
 				"var":   []string{"region=us-east-1"},
 			},
-			expectedPositional: []string{"plan", "vpc"},
-			expectedPassThrough:  []string{"-var-file", "common.tfvars"},
+			expectedPositional:  []string{"plan", "vpc"},
+			expectedPassThrough: []string{"-var-file", "common.tfvars"},
 		},
 
 		// ====================================================================
@@ -281,6 +281,15 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "unknown shorthand triggers cobra error",
 			args: []string{"plan", "vpc", "-z", "value"},
+			compatibilityAliases: map[string]CompatibilityAlias{
+				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
+			},
+			expectError:   true,
+			errorContains: "unknown shorthand flag",
+		},
+		{
+			name: "single-dash multi-character flag triggers cobra error",
+			args: []string{"plan", "vpc", "-foobar", "value"},
 			compatibilityAliases: map[string]CompatibilityAlias{
 				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
 			},
@@ -418,8 +427,8 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 		description        string
 	}{
 		{
-			name: "identity flag with equals value",
-			args: []string{"plan", "vpc", "--identity=prod"},
+			name:               "identity flag with equals value",
+			args:               []string{"plan", "vpc", "--identity=prod"},
 			compatibilityAlias: map[string]CompatibilityAlias{
 				// NOTE: -i is NOT a compatibility alias - it's a Cobra native shorthand.
 				// Don't add it here or ValidateNoConflicts will panic.
@@ -429,8 +438,8 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 			description:        "Explicit value should be used",
 		},
 		{
-			name: "identity flag with equals empty",
-			args: []string{"plan", "vpc", "--identity="},
+			name:               "identity flag with equals empty",
+			args:               []string{"plan", "vpc", "--identity="},
 			compatibilityAlias: map[string]CompatibilityAlias{
 				// NOTE: -i is NOT a compatibility alias - it's a Cobra native shorthand.
 			},
@@ -439,8 +448,8 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 			description:        "Empty value should trigger interactive selection",
 		},
 		{
-			name: "identity shorthand with equals value",
-			args: []string{"plan", "vpc", "-i=prod"},
+			name:               "identity shorthand with equals value",
+			args:               []string{"plan", "vpc", "-i=prod"},
 			compatibilityAlias: map[string]CompatibilityAlias{
 				// NOTE: -i is NOT a compatibility alias - it's a Cobra native shorthand.
 				// Cobra handles -i → --identity automatically.
@@ -450,8 +459,8 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 			description:        "Cobra shorthand with equals value should work",
 		},
 		{
-			name: "identity shorthand with equals empty",
-			args: []string{"plan", "vpc", "-i="},
+			name:               "identity shorthand with equals empty",
+			args:               []string{"plan", "vpc", "-i="},
 			compatibilityAlias: map[string]CompatibilityAlias{
 				// NOTE: -i is NOT a compatibility alias - it's a Cobra native shorthand.
 			},

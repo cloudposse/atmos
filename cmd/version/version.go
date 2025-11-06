@@ -7,6 +7,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -20,7 +21,7 @@ var (
 
 // VersionOptions contains parsed flags for the version command.
 type VersionOptions struct {
-	flags.GlobalFlags
+	global.Flags
 	Check  bool
 	Format string
 }
@@ -62,9 +63,9 @@ var versionCmd = &cobra.Command{
 //nolint:unparam // args parameter kept for consistency with other parse functions
 func parseVersionOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*VersionOptions, error) {
 	return &VersionOptions{
-		GlobalFlags: flags.ParseGlobalFlags(cmd, v),
-		Check:       v.GetBool("check"),
-		Format:      v.GetString("format"),
+		Flags:  flags.ParseGlobalFlags(cmd, v),
+		Check:  v.GetBool("check"),
+		Format: v.GetString("format"),
 	}, nil
 }
 

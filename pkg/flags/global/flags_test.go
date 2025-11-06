@@ -204,3 +204,200 @@ func TestFlags_CommonScenarios(t *testing.T) {
 		})
 	}
 }
+
+// TestIdentitySelector_IsInteractiveSelector tests the interactive selector detection.
+func TestIdentitySelector_IsInteractiveSelector(t *testing.T) {
+	tests := []struct {
+		name     string
+		selector IdentitySelector
+		expected bool
+	}{
+		{
+			name:     "empty value - not interactive",
+			selector: NewIdentitySelector("", false),
+			expected: false,
+		},
+		{
+			name:     "normal value - not interactive",
+			selector: NewIdentitySelector("prod-admin", true),
+			expected: false,
+		},
+		{
+			name:     "__SELECT__ value - interactive",
+			selector: NewIdentitySelector("__SELECT__", true),
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.selector.IsInteractiveSelector()
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+// TestIdentitySelector_IsEmpty tests empty check.
+func TestIdentitySelector_IsEmpty(t *testing.T) {
+	tests := []struct {
+		name     string
+		selector IdentitySelector
+		expected bool
+	}{
+		{
+			name:     "empty value",
+			selector: NewIdentitySelector("", false),
+			expected: true,
+		},
+		{
+			name:     "non-empty value",
+			selector: NewIdentitySelector("prod-admin", true),
+			expected: false,
+		},
+		{
+			name:     "interactive selector value",
+			selector: NewIdentitySelector("__SELECT__", true),
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.selector.IsEmpty()
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+// TestPagerSelector_Value tests value retrieval.
+func TestPagerSelector_Value(t *testing.T) {
+	tests := []struct {
+		name     string
+		selector PagerSelector
+		expected string
+	}{
+		{
+			name:     "empty value",
+			selector: NewPagerSelector("", false),
+			expected: "",
+		},
+		{
+			name:     "less pager",
+			selector: NewPagerSelector("less", true),
+			expected: "less",
+		},
+		{
+			name:     "more pager",
+			selector: NewPagerSelector("more", true),
+			expected: "more",
+		},
+		{
+			name:     "true value",
+			selector: NewPagerSelector("true", true),
+			expected: "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.selector.Value()
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+// TestPagerSelector_IsEnabled tests pager enabled check with different values.
+func TestPagerSelector_IsEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		selector PagerSelector
+		expected bool
+	}{
+		{
+			name:     "not provided - disabled",
+			selector: NewPagerSelector("", false),
+			expected: false,
+		},
+		{
+			name:     "provided with empty value - enabled",
+			selector: NewPagerSelector("", true),
+			expected: true,
+		},
+		{
+			name:     "provided with false - disabled",
+			selector: NewPagerSelector("false", true),
+			expected: false,
+		},
+		{
+			name:     "provided with true - enabled",
+			selector: NewPagerSelector("true", true),
+			expected: true,
+		},
+		{
+			name:     "provided with pager name - enabled",
+			selector: NewPagerSelector("less", true),
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.selector.IsEnabled()
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+// TestPagerSelector_Pager tests pager name retrieval with different scenarios.
+func TestPagerSelector_Pager(t *testing.T) {
+	tests := []struct {
+		name        string
+		selector    PagerSelector
+		expected    string
+		description string
+	}{
+		{
+			name:        "not provided - empty (use config default)",
+			selector:    NewPagerSelector("", false),
+			expected:    "",
+			description: "Returns empty to signal 'use config/env default'",
+		},
+		{
+			name:        "provided with empty value - empty (use default pager)",
+			selector:    NewPagerSelector("", true),
+			expected:    "",
+			description: "Returns empty to signal 'use default pager'",
+		},
+		{
+			name:        "provided with true - empty (use default pager)",
+			selector:    NewPagerSelector("true", true),
+			expected:    "",
+			description: "Returns empty to signal 'use default pager'",
+		},
+		{
+			name:        "provided with false - empty (disabled)",
+			selector:    NewPagerSelector("false", true),
+			expected:    "",
+			description: "Returns empty because pager is disabled",
+		},
+		{
+			name:        "provided with custom pager",
+			selector:    NewPagerSelector("more", true),
+			expected:    "more",
+			description: "Returns specific pager name",
+		},
+		{
+			name:        "provided with bat pager",
+			selector:    NewPagerSelector("bat", true),
+			expected:    "bat",
+			description: "Returns specific pager name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.selector.Pager()
+			assert.Equal(t, tt.expected, got, tt.description)
+		})
+	}
+}
