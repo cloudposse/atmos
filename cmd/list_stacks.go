@@ -32,7 +32,7 @@ var listStacksCmd = &cobra.Command{
 		}
 
 		if len(output) == 0 {
-			ui.Error("No stacks found")
+			ui.Info("No stacks found")
 			return nil
 		}
 
