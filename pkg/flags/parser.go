@@ -93,17 +93,16 @@ type PassThroughHandler interface {
 
 // ParsedConfig contains the results of parsing command-line arguments.
 //
-// Deprecated: The map-based Flags field is deprecated. Use the strongly-typed
-// options methods instead: ToTerraformOptions(), ToHelmfileOptions(), etc.
-//
-// This type exists for backward compatibility during migration. Eventually, Parse()
-// methods will return options directly.
+// This is an intermediate type returned by StandardFlagParser.Parse().
+// Command-specific parsers (AuthParser, TerraformParser, etc.) convert this
+// to strongly-typed options (AuthOptions, TerraformOptions, etc.).
 type ParsedConfig struct {
 	// Flags contains parsed Atmos-specific flags (--stack, --identity, etc.).
 	// Keys are flag names, values are the parsed values.
 	//
-	// Deprecated: Use ToTerraformOptions() for type-safe access instead.
-	// This map will be removed in a future version.
+	// This is internal storage used by parsers. Access individual flags through
+	// helper methods like GetIdentity(), GetStack(), or by using the Get* helper
+	// functions (GetString, GetBool, etc.) from this package.
 	Flags map[string]interface{}
 
 	// PositionalArgs contains positional arguments extracted from the command line.
