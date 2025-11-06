@@ -189,6 +189,73 @@ Well-known paths are how Atmos knows how to find all your stack configurations, 
 Everything in the `atmos.yaml` file can be overridden by environment variables. This is useful for CI/CD pipelines where you might want to control the behavior of Atmos without changing the `atmos.yaml` file.
 :::
 
+### Using YAML Functions for Dynamic Paths
+
+Atmos supports [YAML functions](/functions/yaml) like `!repo-root` and `!env` to dynamically configure paths. This makes your configuration more portable across different environments.
+
+**Example: Using `!repo-root` for absolute paths**
+```yaml
+# atmos.yaml
+base_path: "!repo-root"
+
+components:
+  terraform:
+    base_path: "!repo-root/components/terraform"
+
+stacks:
+  base_path: "!repo-root/stacks"
+```
+
+With this configuration, paths are always relative to your Git repository root, regardless of where you run Atmos commands from.
+
+**Example: Using `!env` for environment-specific paths**
+```yaml
+# atmos.yaml
+base_path: "!env PROJECT_ROOT"
+
+components:
+  terraform:
+    base_path: "!env TERRAFORM_COMPONENTS_PATH"
+```
+
+```bash
+# Set environment variables
+export PROJECT_ROOT="/path/to/infrastructure"
+export TERRAFORM_COMPONENTS_PATH="/path/to/infrastructure/components/terraform"
+
+# Run Atmos commands
+atmos terraform plan vpc -s dev
+```
+
+**Example: Combining YAML functions with CLI flags**
+```bash
+# Override base_path dynamically using !repo-root
+atmos terraform plan vpc -s dev --base-path="!repo-root"
+
+# Override using !env function
+export INFRA_PATH="/custom/path"
+atmos terraform plan vpc -s dev --base-path="!env INFRA_PATH"
+```
+
+:::tip Use Case: Multi-Repository Setup
+YAML functions are particularly useful when your infrastructure is spread across multiple repositories:
+
+```yaml
+# atmos.yaml in repository A
+base_path: "!repo-root"
+vendor:
+  base_path: "!env SHARED_MODULES_PATH"
+```
+
+```bash
+# Point to shared modules in another repository
+export SHARED_MODULES_PATH="/path/to/repository-b/modules"
+atmos terraform plan vpc -s dev
+```
+
+This eliminates hardcoded paths and makes configurations portable across teams and environments.
+:::
+
 ## Custom Commands
 
 <dl>
@@ -231,12 +298,40 @@ Atmos searches for the `atmos.yaml` file in several locations, stopping at the f
 - Current working directory
 - Home dir (`~/.atmos/atmos.yaml`)
 - System dir (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+- **Git repository root** (when `ATMOS_GIT_ROOT_ENABLED=true`, which is the default)
+
+The Git root search is a fallback mechanism that enables you to run Atmos commands from anywhere within your repository. For example, you can run `atmos terraform plan vpc -s dev` from inside `components/terraform/vpc/` and Atmos will still find your `atmos.yaml` at the repository root.
+
+:::tip Developer Workflow
+The Git root fallback is particularly useful during development when working directly in component directories. It eliminates the need to constantly navigate back to the root directory to run Atmos commands.
+
+**Example:** You're editing a Terraform component and want to test your changes:
+```bash
+# Navigate to the component directory
+cd components/terraform/vpc
+
+# Run Atmos commands directly - Atmos finds atmos.yaml in the repo root
+atmos terraform plan vpc -s dev
+atmos terraform apply vpc -s dev
+```
+:::
+
+:::warning CI/CD Environments
+In CI/CD pipelines, you may want to disable Git root search to ensure explicit configuration:
+```bash
+export ATMOS_GIT_ROOT_ENABLED=false
+```
+This makes your deployment pipelines more predictable by requiring the `atmos.yaml` to be in one of the standard locations.
+:::
 
 Initial Atmos configuration can be controlled by these environment variables:
 
 <dl>
   <dt>`ATMOS_CLI_CONFIG_PATH`</dt>
   <dd>Directory that contains the `atmos.yaml` (just the folder without the file name). It's not possible to change the filename at this time.</dd>
+
+  <dt>`ATMOS_GIT_ROOT_ENABLED`</dt>
+  <dd>Enable or disable Git root configuration search (default: `true`). When enabled, Atmos will search for `atmos.yaml` in the Git repository root as a final fallback. Set to `false` in CI/CD for stricter configuration requirements.</dd>
 
   <dt>`ATMOS_BASE_PATH`</dt>
   <dd>Base path to the `components/` and `stacks/` folders.</dd>

@@ -47,6 +47,55 @@ The CLI config is loaded from the following locations (from lowest to highest pr
 
 Each configuration file discovered is deep-merged with the preceding configurations.
 
+### Git-Aware Configuration Discovery
+
+Atmos can search for configuration files up to the Git repository root when no `atmos.yaml` is found in the current working directory. This enables running Atmos commands from anywhere within your repository without needing to navigate to the configuration directory.
+
+This behavior is controlled by the `ATMOS_GIT_ROOT_ENABLED` environment variable:
+
+<dl>
+  <dt>`ATMOS_GIT_ROOT_ENABLED=true` (default)</dt>
+  <dd>
+    If no configuration is found in the standard locations (system, home, current directory, or `ATMOS_CLI_CONFIG_PATH`), Atmos will search for `atmos.yaml` in the Git repository root as a final fallback.
+
+    **Example:** Running `atmos terraform plan vpc -s dev` from `components/terraform/vpc/` will find `atmos.yaml` in the repository root.
+  </dd>
+
+  <dt>`ATMOS_GIT_ROOT_ENABLED=false`</dt>
+  <dd>
+    Disables Git root search. Atmos will only search the standard locations and fail if no configuration is found. This is useful in CI/CD environments or when you want stricter configuration requirements.
+
+    **Example:** In GitHub Actions, you might set this to ensure configurations are always explicit.
+  </dd>
+</dl>
+
+**Configuration search order with Git root enabled:**
+1. System directory
+2. Home directory
+3. Current directory
+4. `ATMOS_CLI_CONFIG_PATH` environment variable
+5. **Git repository root** (fallback when enabled)
+
+:::tip Use Case: Developer Workflow
+This feature is particularly useful when working with component directories. You can run Atmos commands directly from `components/terraform/vpc/` without needing to `cd` back to the repository root.
+
+```bash
+# Works from anywhere in the repository
+cd components/terraform/vpc
+atmos terraform plan vpc -s dev
+```
+:::
+
+:::warning CI/CD Best Practice
+In automated environments, consider disabling Git root search to ensure explicit configuration paths:
+
+```bash
+export ATMOS_GIT_ROOT_ENABLED=false
+```
+
+This prevents unexpected configuration discovery and makes deployment pipelines more predictable.
+:::
+
 :::tip Pro-Tip
 Atmos supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file
 names/paths (double-star/globstar `**` is supported as well)
@@ -151,7 +200,7 @@ What follows are all the sections of the `atmos.yaml` configuration file.
 
 ## YAML Functions
 
-Atmos extends standard YAML with several custom functions that can be used in atmos configuration `atmos.yaml` file. These functions provide powerful tools for dynamic configuration:
+Atmos extends standard YAML with several custom functions that can be used in the `atmos.yaml` configuration file, **CLI flags**, and **environment variables**. These functions provide powerful tools for dynamic configuration:
 
 <dl>
   <dt>`!env`</dt>
@@ -178,6 +227,57 @@ Atmos extends standard YAML with several custom functions that can be used in at
     See the [`!repo-root` documentation](/functions/yaml/repo-root) for more details.
   </dd>
 </dl>
+
+### Using YAML Functions in CLI Flags and Environment Variables
+
+YAML functions can be used not only in `atmos.yaml` but also in **CLI command-line flags** and **environment variables**, enabling dynamic configuration at runtime.
+
+**Example: Using `!repo-root` in CLI flags**
+```bash
+# Set base_path dynamically to the repository root
+atmos terraform plan vpc -s dev --base-path="!repo-root"
+
+# Combine with subdirectories
+atmos terraform plan vpc -s dev --base-path="!repo-root/infrastructure"
+```
+
+**Example: Using `!env` in CLI flags**
+```bash
+# Reference environment variables in paths
+atmos terraform plan vpc -s dev --base-path="!env INFRASTRUCTURE_PATH"
+
+# Use environment variables for stack selection
+export ENVIRONMENT=production
+atmos terraform plan vpc -s "!env ENVIRONMENT"
+```
+
+**Example: Using YAML functions in environment variables**
+```bash
+# Set ATMOS_BASE_PATH using !repo-root
+export ATMOS_BASE_PATH="!repo-root"
+atmos terraform plan vpc -s dev
+
+# Set ATMOS_BASE_PATH using !env
+export PROJECT_ROOT="/path/to/project"
+export ATMOS_BASE_PATH="!env PROJECT_ROOT"
+atmos terraform plan vpc -s dev
+```
+
+:::tip Pro-Tip
+YAML functions in CLI flags and environment variables are particularly useful in:
+- **CI/CD pipelines** where paths need to be determined dynamically
+- **Multi-repository setups** where the infrastructure path varies
+- **Developer environments** where local paths differ from production
+
+This eliminates the need for hardcoded paths and makes configurations more portable across different environments.
+:::
+
+:::warning Important Notes
+- YAML functions are processed when the configuration is loaded
+- The `!repo-root` function requires a Git repository; it will fail outside of one unless a default is provided
+- The `!env` function returns an empty string for undefined variables (unless a default is specified)
+:::
+
 ## Imports
 
 Additionally, Atmos supports `imports` of other CLI configurations. Use imports to break large Atmos CLI configurations into smaller ones, such as organized by top-level section. File imports are relative to the base path (if `import`  section is set in the config). All imports are processed at the time the configuration is loaded, and then deep-merged in order, so that the last file in the list supersedes settings in the preceding imports. For an example, see [`scenarios/demo-atmos-cli-imports`](https://github.com/cloudposse/atmos/tree/main/tests/fixtures/scenarios/atmos-cli-imports).
@@ -894,6 +994,7 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | Variable                                              | YAML Path                                       | Description                                                                                                                                                                                                                                                         |
 |:------------------------------------------------------|:------------------------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | ATMOS_CLI_CONFIG_PATH                                 | N/A                                             | Where to find `atmos.yaml`. Path to a folder where `atmos.yaml` CLI config file is located (e.g. `/config`)                                                                                                                                                         |
+| ATMOS_GIT_ROOT_ENABLED                                | N/A                                             | Enable or disable Git root configuration search. When `true` (default), Atmos searches for `atmos.yaml` in the Git repository root as a fallback. Set to `false` in CI/CD for explicit configuration requirements                                                  |
 | ATMOS_BASE_PATH                                       | base_path                                       | Base path to `components` and `stacks` folders                                                                                                                                                                                                                      |
 | ATMOS_VENDOR_BASE_PATH                                | vendor.base_path                                | Path to vendor configuration file or directory containing vendor files. If a directory is specified, all .yaml files in the directory will be processed in lexicographical order. Supports both absolute and relative paths.                                        |
 | ATMOS_COMPONENTS_TERRAFORM_COMMAND                    | components.terraform.command                    | The executable to be called by `atmos` when running Terraform commands                                                                                                                                                                                              |
