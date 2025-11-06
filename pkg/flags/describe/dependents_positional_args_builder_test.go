@@ -1,5 +1,5 @@
 //nolint:dupl // Similar test structure to other builder tests, but testing different domain-specific builder
-package flags
+package describe
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestDescribeDependentsPositionalArgsBuilder_WithComponent_Required(t *testing.T) {
-	builder := NewDescribeDependentsPositionalArgsBuilder()
+	builder := NewDependentsPositionalArgsBuilder()
 	builder.WithComponent(true)
 
 	specs, validator, usage := builder.Build()
@@ -35,7 +35,7 @@ func TestDescribeDependentsPositionalArgsBuilder_WithComponent_Required(t *testi
 }
 
 func TestDescribeDependentsPositionalArgsBuilder_WithComponent_Optional(t *testing.T) {
-	builder := NewDescribeDependentsPositionalArgsBuilder()
+	builder := NewDependentsPositionalArgsBuilder()
 	builder.WithComponent(false)
 
 	specs, validator, usage := builder.Build()
@@ -62,7 +62,7 @@ func TestDescribeDependentsPositionalArgsBuilder_WithComponent_Optional(t *testi
 
 func TestDescribeDependentsPositionalArgsBuilder_FluentInterface(t *testing.T) {
 	// Test that methods return builder for chaining.
-	builder := NewDescribeDependentsPositionalArgsBuilder()
+	builder := NewDependentsPositionalArgsBuilder()
 	result := builder.WithComponent(true)
 
 	assert.Equal(t, builder, result, "WithComponent should return builder for chaining")
@@ -70,7 +70,7 @@ func TestDescribeDependentsPositionalArgsBuilder_FluentInterface(t *testing.T) {
 
 func TestDescribeDependentsPositionalArgsBuilder_RealWorldUsage(t *testing.T) {
 	// Simulate real usage in describe dependents command.
-	_, describeValidator, describeUsage := NewDescribeDependentsPositionalArgsBuilder().
+	_, describeValidator, describeUsage := NewDependentsPositionalArgsBuilder().
 		WithComponent(true).
 		Build()
 
@@ -87,7 +87,7 @@ func TestDescribeDependentsPositionalArgsBuilder_RealWorldUsage(t *testing.T) {
 
 func TestDescribeDependentsPositionalArgsBuilder_IntegrationWithCobra(t *testing.T) {
 	// Test integration with actual Cobra command.
-	_, validator, usage := NewDescribeDependentsPositionalArgsBuilder().
+	_, validator, usage := NewDependentsPositionalArgsBuilder().
 		WithComponent(true).
 		Build()
 

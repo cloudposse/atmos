@@ -1,12 +1,13 @@
-package flags
+package describe
 
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// DescribeDependentsPositionalArgsBuilder provides domain-specific builder for describe dependents command positional arguments.
+// DependentsPositionalArgsBuilder provides domain-specific builder for describe dependents command positional arguments.
 //
 // Features:
 //   - Semantic method names (WithComponent vs generic AddArg)
@@ -16,23 +17,23 @@ import (
 //
 // Usage:
 //
-//	specs, validator, usage := flags.NewDescribeDependentsPositionalArgsBuilder().
+//	specs, validator, usage := describe.NewDependentsPositionalArgsBuilder().
 //	    WithComponent(true).  // Component is required
 //	    Build()
 //
 //	parser := flags.NewStandardOptionsBuilder().
 //	    WithPositionalArgs(specs, validator, usage).
 //	    Build()
-type DescribeDependentsPositionalArgsBuilder struct {
-	builder *PositionalArgsBuilder
+type DependentsPositionalArgsBuilder struct {
+	builder *flags.PositionalArgsBuilder
 }
 
-// NewDescribeDependentsPositionalArgsBuilder creates a new DescribeDependentsPositionalArgsBuilder.
-func NewDescribeDependentsPositionalArgsBuilder() *DescribeDependentsPositionalArgsBuilder {
-	defer perf.Track(nil, "flags.NewDescribeDependentsPositionalArgsBuilder")()
+// NewDependentsPositionalArgsBuilder creates a new DependentsPositionalArgsBuilder.
+func NewDependentsPositionalArgsBuilder() *DependentsPositionalArgsBuilder {
+	defer perf.Track(nil, "flags.NewDependentsPositionalArgsBuilder")()
 
-	return &DescribeDependentsPositionalArgsBuilder{
-		builder: NewPositionalArgsBuilder(),
+	return &DependentsPositionalArgsBuilder{
+		builder: flags.NewPositionalArgsBuilder(),
 	}
 }
 
@@ -45,10 +46,10 @@ func NewDescribeDependentsPositionalArgsBuilder() *DescribeDependentsPositionalA
 // Example:
 //
 //	builder.WithComponent(true) // <component> - required
-func (b *DescribeDependentsPositionalArgsBuilder) WithComponent(required bool) *DescribeDependentsPositionalArgsBuilder {
-	defer perf.Track(nil, "flags.DescribeDependentsPositionalArgsBuilder.WithComponent")()
+func (b *DependentsPositionalArgsBuilder) WithComponent(required bool) *DependentsPositionalArgsBuilder {
+	defer perf.Track(nil, "flags.DependentsPositionalArgsBuilder.WithComponent")()
 
-	b.builder.AddArg(&PositionalArgSpec{
+	b.builder.AddArg(&flags.PositionalArgSpec{
 		Name:        "component",
 		Description: "Component name to find dependents for",
 		Required:    required,
@@ -64,8 +65,8 @@ func (b *DescribeDependentsPositionalArgsBuilder) WithComponent(required bool) *
 //   - specs: Array of positional argument specifications with TargetField mapping
 //   - validator: Cobra Args validator function
 //   - usage: Usage string for Cobra Use field (e.g., "<component>")
-func (b *DescribeDependentsPositionalArgsBuilder) Build() ([]*PositionalArgSpec, cobra.PositionalArgs, string) {
-	defer perf.Track(nil, "flags.DescribeDependentsPositionalArgsBuilder.Build")()
+func (b *DependentsPositionalArgsBuilder) Build() ([]*flags.PositionalArgSpec, cobra.PositionalArgs, string) {
+	defer perf.Track(nil, "flags.DependentsPositionalArgsBuilder.Build")()
 
 	return b.builder.Build()
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/describe"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -20,7 +21,7 @@ var describeDependentsParser = flags.NewStandardOptionsBuilder().
 	WithProcessTemplates(true).
 	WithProcessFunctions(true).
 	WithSkip().
-	WithPositionalArgs(flags.NewDescribeDependentsPositionalArgsBuilder().
+	WithPositionalArgs(describe.NewDependentsPositionalArgsBuilder().
 		WithComponent(true). // Required component argument.
 		Build()).
 	Build()

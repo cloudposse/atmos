@@ -75,6 +75,30 @@ func WithIntFlag(name, shorthand string, defaultValue int, description string) O
 	}
 }
 
+// WithStringSliceFlag adds a string slice flag to the parser configuration.
+//
+// Parameters:
+//   - name: Long flag name (without --)
+//   - shorthand: Short flag name (single character, without -)
+//   - defaultValue: Default value if flag not provided
+//   - description: Help text
+//
+// Usage:
+//
+//	WithStringSliceFlag("components", "", []string{}, "Filter by components")
+func WithStringSliceFlag(name, shorthand string, defaultValue []string, description string) Option {
+	defer perf.Track(nil, "flagparser.WithStringSliceFlag")()
+
+	return func(cfg *parserConfig) {
+		cfg.registry.Register(&StringSliceFlag{
+			Name:        name,
+			Shorthand:   shorthand,
+			Default:     defaultValue,
+			Description: description,
+		})
+	}
+}
+
 // WithRequiredStringFlag adds a required string flag.
 func WithRequiredStringFlag(name, shorthand, description string) Option {
 	defer perf.Track(nil, "flagparser.WithRequiredStringFlag")()

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/describe"
 	"github.com/cloudposse/atmos/pkg/flags/list"
 	"github.com/cloudposse/atmos/pkg/flags/validate"
 )
@@ -35,7 +36,7 @@ func TestStandardOptionsBuilder_WithPositionalArgs_Build(t *testing.T) {
 
 func TestStandardOptionsBuilder_WithPositionalArgs_RequiredComponent(t *testing.T) {
 	// Test required component positional arg through builder.
-	specs, validator, usage := flags.NewDescribeComponentPositionalArgsBuilder().
+	specs, validator, usage := describe.NewComponentPositionalArgsBuilder().
 		WithComponent(true).
 		Build()
 
@@ -114,7 +115,7 @@ func TestStandardOptionsBuilder_WithoutPositionalArgs(t *testing.T) {
 func TestStandardOptionsBuilder_Build_ExercisesSetPositionalArgs(t *testing.T) {
 	// This test specifically exercises the SetPositionalArgs() code path
 	// that was showing 0% coverage.
-	specs, validator, usage := flags.NewDescribeDependentsPositionalArgsBuilder().
+	specs, validator, usage := describe.NewDependentsPositionalArgsBuilder().
 		WithComponent(true).
 		Build()
 
@@ -133,7 +134,7 @@ func TestStandardOptionsBuilder_Build_ExercisesSetPositionalArgs(t *testing.T) {
 
 func TestStandardOptionsBuilder_WithPositionalArgs_ValidationErrors(t *testing.T) {
 	// Test that validation errors from positional args are properly returned.
-	specs, validator, usage := flags.NewDescribeComponentPositionalArgsBuilder().
+	specs, validator, usage := describe.NewComponentPositionalArgsBuilder().
 		WithComponent(true).
 		Build()
 
@@ -173,7 +174,7 @@ func TestStandardOptionsBuilder_WithPositionalArgs_AllBuilders(t *testing.T) {
 		{
 			name: "DescribeComponent",
 			specs: func() []*flags.PositionalArgSpec {
-				s, _, _ := flags.NewDescribeComponentPositionalArgsBuilder().WithComponent(true).Build()
+				s, _, _ := describe.NewComponentPositionalArgsBuilder().WithComponent(true).Build()
 				return s
 			}(),
 			validator: func(t *testing.T, opts *flags.StandardOptions) {
@@ -184,7 +185,7 @@ func TestStandardOptionsBuilder_WithPositionalArgs_AllBuilders(t *testing.T) {
 		{
 			name: "DescribeDependents",
 			specs: func() []*flags.PositionalArgSpec {
-				s, _, _ := flags.NewDescribeDependentsPositionalArgsBuilder().WithComponent(true).Build()
+				s, _, _ := describe.NewDependentsPositionalArgsBuilder().WithComponent(true).Build()
 				return s
 			}(),
 			validator: func(t *testing.T, opts *flags.StandardOptions) {

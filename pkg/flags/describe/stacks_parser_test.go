@@ -1,4 +1,4 @@
-package flags
+package describe
 
 import (
 	"context"
@@ -14,13 +14,13 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 	tests := []struct {
 		name     string
 		args     []string
-		expected *DescribeStacksOptions
+		expected *StacksOptions
 		wantErr  bool
 	}{
 		{
 			name: "default values",
 			args: []string{},
-			expected: &DescribeStacksOptions{
+			expected: &StacksOptions{
 				Stack:              "",
 				Format:             "yaml",
 				File:               "",
@@ -37,7 +37,7 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 		{
 			name: "with stack flag",
 			args: []string{"--stack", "prod"},
-			expected: &DescribeStacksOptions{
+			expected: &StacksOptions{
 				Stack:            "prod",
 				Format:           "yaml",
 				ProcessTemplates: true,
@@ -47,7 +47,7 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 		{
 			name: "with format flag",
 			args: []string{"--format", "json"},
-			expected: &DescribeStacksOptions{
+			expected: &StacksOptions{
 				Format:           "json",
 				ProcessTemplates: true,
 				ProcessFunctions: true,
@@ -56,7 +56,7 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 		{
 			name: "with file flag",
 			args: []string{"--file", "output.yaml"},
-			expected: &DescribeStacksOptions{
+			expected: &StacksOptions{
 				Format:           "yaml",
 				File:             "output.yaml",
 				ProcessTemplates: true,
@@ -66,7 +66,7 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 		{
 			name: "with process-templates false",
 			args: []string{"--process-templates=false"},
-			expected: &DescribeStacksOptions{
+			expected: &StacksOptions{
 				Format:           "yaml",
 				ProcessTemplates: false,
 				ProcessFunctions: true,
@@ -75,7 +75,7 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 		{
 			name: "with process-functions false",
 			args: []string{"--process-functions=false"},
-			expected: &DescribeStacksOptions{
+			expected: &StacksOptions{
 				Format:           "yaml",
 				ProcessTemplates: true,
 				ProcessFunctions: false,
@@ -84,7 +84,7 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 		{
 			name: "with components filter",
 			args: []string{"--components", "vpc,rds"},
-			expected: &DescribeStacksOptions{
+			expected: &StacksOptions{
 				Format:           "yaml",
 				ProcessTemplates: true,
 				ProcessFunctions: true,
@@ -94,7 +94,7 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 		{
 			name: "with component-types filter",
 			args: []string{"--component-types", "terraform,helmfile"},
-			expected: &DescribeStacksOptions{
+			expected: &StacksOptions{
 				Format:           "yaml",
 				ProcessTemplates: true,
 				ProcessFunctions: true,
@@ -104,7 +104,7 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 		{
 			name: "with sections filter",
 			args: []string{"--sections", "vars,backend"},
-			expected: &DescribeStacksOptions{
+			expected: &StacksOptions{
 				Format:           "yaml",
 				ProcessTemplates: true,
 				ProcessFunctions: true,
@@ -114,7 +114,7 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 		{
 			name: "with include-empty-stacks",
 			args: []string{"--include-empty-stacks"},
-			expected: &DescribeStacksOptions{
+			expected: &StacksOptions{
 				Format:             "yaml",
 				ProcessTemplates:   true,
 				ProcessFunctions:   true,
@@ -124,7 +124,7 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 		{
 			name: "with skip functions",
 			args: []string{"--skip", "terraform.output,store.get"},
-			expected: &DescribeStacksOptions{
+			expected: &StacksOptions{
 				Format:           "yaml",
 				ProcessTemplates: true,
 				ProcessFunctions: true,
@@ -134,7 +134,7 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 		{
 			name: "with query",
 			args: []string{"--query", ".components.vpc"},
-			expected: &DescribeStacksOptions{
+			expected: &StacksOptions{
 				Format:           "yaml",
 				ProcessTemplates: true,
 				ProcessFunctions: true,
@@ -150,7 +150,7 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 				"--components", "vpc",
 				"--include-empty-stacks",
 			},
-			expected: &DescribeStacksOptions{
+			expected: &StacksOptions{
 				Stack:              "dev",
 				Format:             "json",
 				ProcessTemplates:   true,
@@ -168,7 +168,7 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 			v := viper.New()
 
 			// Create parser and command.
-			parser := NewDescribeStacksParser()
+			parser := NewStacksParser()
 
 			cmd := &cobra.Command{Use: "test"}
 			parser.RegisterFlags(cmd)
@@ -216,68 +216,68 @@ func TestDescribeStacksParser_Parse(t *testing.T) {
 
 func TestDescribeStacksBuilder_Methods(t *testing.T) {
 	t.Run("NewDescribeStacksOptionsBuilder creates empty builder", func(t *testing.T) {
-		builder := NewDescribeStacksOptionsBuilder()
+		builder := NewStacksBuilder()
 		assert.NotNil(t, builder)
 		assert.NotNil(t, builder.options)
 	})
 
 	t.Run("WithStack adds stack flag", func(t *testing.T) {
-		builder := NewDescribeStacksOptionsBuilder().WithStack()
+		builder := NewStacksBuilder().WithStack()
 		assert.NotNil(t, builder)
 	})
 
 	t.Run("WithFormat adds format flag", func(t *testing.T) {
-		builder := NewDescribeStacksOptionsBuilder().WithFormat()
+		builder := NewStacksBuilder().WithFormat()
 		assert.NotNil(t, builder)
 	})
 
 	t.Run("WithFile adds file flag", func(t *testing.T) {
-		builder := NewDescribeStacksOptionsBuilder().WithFile()
+		builder := NewStacksBuilder().WithFile()
 		assert.NotNil(t, builder)
 	})
 
 	t.Run("WithProcessTemplates adds process-templates flag", func(t *testing.T) {
-		builder := NewDescribeStacksOptionsBuilder().WithProcessTemplates()
+		builder := NewStacksBuilder().WithProcessTemplates()
 		assert.NotNil(t, builder)
 	})
 
 	t.Run("WithProcessFunctions adds process-functions flag", func(t *testing.T) {
-		builder := NewDescribeStacksOptionsBuilder().WithProcessFunctions()
+		builder := NewStacksBuilder().WithProcessFunctions()
 		assert.NotNil(t, builder)
 	})
 
 	t.Run("WithComponents adds components flag", func(t *testing.T) {
-		builder := NewDescribeStacksOptionsBuilder().WithComponents()
+		builder := NewStacksBuilder().WithComponents()
 		assert.NotNil(t, builder)
 	})
 
 	t.Run("WithComponentTypes adds component-types flag", func(t *testing.T) {
-		builder := NewDescribeStacksOptionsBuilder().WithComponentTypes()
+		builder := NewStacksBuilder().WithComponentTypes()
 		assert.NotNil(t, builder)
 	})
 
 	t.Run("WithSections adds sections flag", func(t *testing.T) {
-		builder := NewDescribeStacksOptionsBuilder().WithSections()
+		builder := NewStacksBuilder().WithSections()
 		assert.NotNil(t, builder)
 	})
 
 	t.Run("WithIncludeEmptyStacks adds include-empty-stacks flag", func(t *testing.T) {
-		builder := NewDescribeStacksOptionsBuilder().WithIncludeEmptyStacks()
+		builder := NewStacksBuilder().WithIncludeEmptyStacks()
 		assert.NotNil(t, builder)
 	})
 
 	t.Run("WithSkip adds skip flag", func(t *testing.T) {
-		builder := NewDescribeStacksOptionsBuilder().WithSkip()
+		builder := NewStacksBuilder().WithSkip()
 		assert.NotNil(t, builder)
 	})
 
 	t.Run("WithQuery adds query flag", func(t *testing.T) {
-		builder := NewDescribeStacksOptionsBuilder().WithQuery()
+		builder := NewStacksBuilder().WithQuery()
 		assert.NotNil(t, builder)
 	})
 
 	t.Run("Build creates parser", func(t *testing.T) {
-		parser := NewDescribeStacksOptionsBuilder().
+		parser := NewStacksBuilder().
 			WithStack().
 			WithFormat().
 			WithSections().
@@ -288,7 +288,7 @@ func TestDescribeStacksBuilder_Methods(t *testing.T) {
 }
 
 func TestDescribeStacksParser_RegisterFlagsAndBindToViper(t *testing.T) {
-	parser := NewDescribeStacksParser()
+	parser := NewStacksParser()
 
 	cmd := &cobra.Command{Use: "test"}
 	parser.RegisterFlags(cmd)

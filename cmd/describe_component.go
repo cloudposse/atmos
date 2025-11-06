@@ -11,6 +11,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/describe"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -24,7 +25,7 @@ var describeComponentParser = flags.NewStandardOptionsBuilder().
 	WithSkip().                                   // Skip flag.
 	WithQuery().                                  // Query flag.
 	WithProvenance().                             // Provenance flag.
-	WithPositionalArgs(flags.NewDescribeComponentPositionalArgsBuilder().
+	WithPositionalArgs(describe.NewComponentPositionalArgsBuilder().
 		WithComponent(true). // Required component argument.
 		Build()).
 	Build()

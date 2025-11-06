@@ -200,11 +200,9 @@ func TestOptions_Embedding(t *testing.T) {
 	// Verify flags.CommandOptions interface implementation.
 	var _ flags.CommandOptions = &interpreter
 
-	// Verify global.Flags embedding.
-	globalFlags := interpreter.Getglobal.Flags()
-	assert.NotNil(t, globalFlags, "Getglobal.Flags should not return nil")
-	assert.Equal(t, "Debug", globalFlags.LogsLevel, "global.Flags.LogsLevel mismatch")
-	assert.Equal(t, "/tmp/atmos", globalFlags.Chdir, "global.Flags.Chdir mismatch")
+	// Verify GlobalFlags embedding - fields are directly accessible.
+	assert.Equal(t, "Debug", interpreter.LogsLevel, "GlobalFlags.LogsLevel mismatch")
+	assert.Equal(t, "/tmp/atmos", interpreter.Chdir, "GlobalFlags.Chdir mismatch")
 
 	// Verify Terraform-specific fields are accessible.
 	assert.Equal(t, "dev", interpreter.Stack, "Stack mismatch")
@@ -221,7 +219,7 @@ func TestOptions_ZeroValues(t *testing.T) {
 
 	// Should not panic.
 	assert.NotPanics(t, func() {
-		_ = interpreter.Getglobal.Flags()
+		_ = interpreter.LogsLevel  // From embedded GlobalFlags
 		_ = interpreter.GetPositionalArgs()
 		_ = interpreter.GetSeparatedArgs()
 		_ = interpreter.Stack

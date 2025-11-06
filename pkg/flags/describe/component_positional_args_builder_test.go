@@ -1,5 +1,5 @@
 //nolint:dupl // Similar test structure to other builder tests, but testing different domain-specific builder
-package flags
+package describe
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestDescribeComponentPositionalArgsBuilder_WithComponent_Required(t *testing.T) {
-	builder := NewDescribeComponentPositionalArgsBuilder()
+	builder := NewComponentPositionalArgsBuilder()
 	builder.WithComponent(true)
 
 	specs, validator, usage := builder.Build()
@@ -35,7 +35,7 @@ func TestDescribeComponentPositionalArgsBuilder_WithComponent_Required(t *testin
 }
 
 func TestDescribeComponentPositionalArgsBuilder_WithComponent_Optional(t *testing.T) {
-	builder := NewDescribeComponentPositionalArgsBuilder()
+	builder := NewComponentPositionalArgsBuilder()
 	builder.WithComponent(false)
 
 	specs, validator, usage := builder.Build()
@@ -62,7 +62,7 @@ func TestDescribeComponentPositionalArgsBuilder_WithComponent_Optional(t *testin
 
 func TestDescribeComponentPositionalArgsBuilder_FluentInterface(t *testing.T) {
 	// Test that methods return builder for chaining.
-	builder := NewDescribeComponentPositionalArgsBuilder()
+	builder := NewComponentPositionalArgsBuilder()
 	result := builder.WithComponent(true)
 
 	assert.Equal(t, builder, result, "WithComponent should return builder for chaining")
@@ -70,7 +70,7 @@ func TestDescribeComponentPositionalArgsBuilder_FluentInterface(t *testing.T) {
 
 func TestDescribeComponentPositionalArgsBuilder_RealWorldUsage(t *testing.T) {
 	// Simulate real usage in describe component command.
-	_, describeValidator, describeUsage := NewDescribeComponentPositionalArgsBuilder().
+	_, describeValidator, describeUsage := NewComponentPositionalArgsBuilder().
 		WithComponent(true).
 		Build()
 
@@ -87,7 +87,7 @@ func TestDescribeComponentPositionalArgsBuilder_RealWorldUsage(t *testing.T) {
 
 func TestDescribeComponentPositionalArgsBuilder_IntegrationWithCobra(t *testing.T) {
 	// Test integration with actual Cobra command.
-	_, validator, usage := NewDescribeComponentPositionalArgsBuilder().
+	_, validator, usage := NewComponentPositionalArgsBuilder().
 		WithComponent(true).
 		Build()
 

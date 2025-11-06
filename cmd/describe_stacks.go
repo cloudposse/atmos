@@ -9,11 +9,11 @@ import (
 
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/describe"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var describeStacksParser = flags.NewDescribeStacksParser()
+var describeStacksParser = describe.NewStacksParser()
 
 // describeStacksCmd describes configuration for stacks and components in the stacks.
 var describeStacksCmd = &cobra.Command{
@@ -49,7 +49,7 @@ func getRunnableDescribeStacksCmd(
 		// Check Atmos configuration.
 		g.checkAtmosConfig()
 
-		// Parse flags using DescribeStacksOptions.
+		// Parse flags using StacksOptions.
 		opts, err := describeStacksParser.Parse(context.Background(), args)
 		if err != nil {
 			return err
@@ -102,7 +102,7 @@ func getRunnableDescribeStacksCmd(
 
 func init() {
 
-	// Register DescribeStacksOptions flags.
+	// Register StacksOptions flags.
 	describeStacksParser.RegisterFlags(describeStacksCmd)
 	_ = describeStacksParser.BindToViper(viper.GetViper())
 
