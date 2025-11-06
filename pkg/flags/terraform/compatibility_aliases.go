@@ -5,6 +5,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	// NoColorFlag is the Terraform flag to disable color output.
+	noColorFlag = "-no-color"
+)
+
 // RefreshCompatibilityAliases returns compatibility aliases for terraform refresh.
 func RefreshCompatibilityAliases() map[string]flags.CompatibilityAlias {
 	defer perf.Track(nil, "terraform.RefreshCompatibilityAliases")()
@@ -40,7 +45,7 @@ func ShowCompatibilityAliases() map[string]flags.CompatibilityAlias {
 
 	return map[string]flags.CompatibilityAlias{
 		"-json":     {Behavior: flags.AppendToSeparated, Target: ""},
-		"-no-color": {Behavior: flags.AppendToSeparated, Target: ""},
+		noColorFlag: {Behavior: flags.AppendToSeparated, Target: ""},
 	}
 }
 
@@ -91,7 +96,7 @@ func TaintCompatibilityAliases() map[string]flags.CompatibilityAlias {
 		"-lock-timeout": {Behavior: flags.AppendToSeparated, Target: ""},
 		"-state":        {Behavior: flags.AppendToSeparated, Target: ""},
 		"-state-out":    {Behavior: flags.AppendToSeparated, Target: ""},
-		"-no-color":     {Behavior: flags.AppendToSeparated, Target: ""},
+		noColorFlag:     {Behavior: flags.AppendToSeparated, Target: ""},
 	}
 }
 
@@ -108,7 +113,7 @@ func ForceUnlockCompatibilityAliases() map[string]flags.CompatibilityAlias {
 
 	return map[string]flags.CompatibilityAlias{
 		"-force":    {Behavior: flags.AppendToSeparated, Target: ""},
-		"-no-color": {Behavior: flags.AppendToSeparated, Target: ""},
+		noColorFlag: {Behavior: flags.AppendToSeparated, Target: ""},
 	}
 }
 
@@ -120,7 +125,7 @@ func ConsoleCompatibilityAliases() map[string]flags.CompatibilityAlias {
 		"-state":    {Behavior: flags.AppendToSeparated, Target: ""},
 		"-var":      {Behavior: flags.AppendToSeparated, Target: ""},
 		"-var-file": {Behavior: flags.AppendToSeparated, Target: ""},
-		"-no-color": {Behavior: flags.AppendToSeparated, Target: ""},
+		noColorFlag: {Behavior: flags.AppendToSeparated, Target: ""},
 	}
 }
 
@@ -130,7 +135,7 @@ func ProvidersCompatibilityAliases() map[string]flags.CompatibilityAlias {
 
 	return map[string]flags.CompatibilityAlias{
 		"-json":     {Behavior: flags.AppendToSeparated, Target: ""},
-		"-no-color": {Behavior: flags.AppendToSeparated, Target: ""},
+		noColorFlag: {Behavior: flags.AppendToSeparated, Target: ""},
 	}
 }
 
@@ -140,7 +145,7 @@ func GetCompatibilityAliases() map[string]flags.CompatibilityAlias {
 
 	return map[string]flags.CompatibilityAlias{
 		"-update":   {Behavior: flags.AppendToSeparated, Target: ""},
-		"-no-color": {Behavior: flags.AppendToSeparated, Target: ""},
+		noColorFlag: {Behavior: flags.AppendToSeparated, Target: ""},
 	}
 }
 
@@ -151,7 +156,7 @@ func TestCompatibilityAliases() map[string]flags.CompatibilityAlias {
 	return map[string]flags.CompatibilityAlias{
 		"-filter":   {Behavior: flags.AppendToSeparated, Target: ""},
 		"-json":     {Behavior: flags.AppendToSeparated, Target: ""},
-		"-no-color": {Behavior: flags.AppendToSeparated, Target: ""},
+		noColorFlag: {Behavior: flags.AppendToSeparated, Target: ""},
 		"-var":      {Behavior: flags.AppendToSeparated, Target: ""},
 		"-var-file": {Behavior: flags.AppendToSeparated, Target: ""},
 		"-verbose":  {Behavior: flags.AppendToSeparated, Target: ""},

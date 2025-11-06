@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	// identityFlagName is the flag name for the identity selector.
+	// IdentityFlagName is the flag name for the identity selector.
 	identityFlagName = "identity"
 
-	// pagerFlagName is the flag name for the pager selector.
+	// PagerFlagName is the flag name for the pager selector.
 	pagerFlagName = "pager"
 )
 

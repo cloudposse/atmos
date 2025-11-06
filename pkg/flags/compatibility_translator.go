@@ -25,7 +25,7 @@ const (
 )
 
 const (
-	// flagPrefix is the single dash prefix for flags.
+	// FlagPrefix is the single dash prefix for flags.
 	flagPrefix = "-"
 )
 
