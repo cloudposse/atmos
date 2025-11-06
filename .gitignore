@@ -98,6 +98,7 @@ performance-optimization/
 *.orig
 *.rej
 *.bak
+*.bak2
 *.go.bak
 **/*.go.bak
 
