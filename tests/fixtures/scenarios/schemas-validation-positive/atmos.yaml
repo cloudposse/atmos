@@ -4,7 +4,9 @@ schemas:
     matches:
       - config.yaml
   schemaFromInternet:
-    schema: https://json.schemastore.org/bower.json
+    # Using local copy to avoid external dependency on schemastore.org
+    # Original: https://json.schemastore.org/bower.json
+    schema: ./bower-schema.json
     matches:
       - bower.yaml
   schemaFromInline:
