@@ -283,7 +283,7 @@ func TestDescribeStacksBuilder_Methods(t *testing.T) {
 			WithSections().
 			Build()
 		assert.NotNil(t, parser)
-		assert.NotNil(t, parser.parser)
+		assert.NotNil(t, parser.Parser)
 	})
 }
 

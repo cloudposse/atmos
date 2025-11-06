@@ -3,6 +3,7 @@ package list
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -24,7 +25,7 @@ import (
 //	    WithPositionalArgs(specs, validator, usage).
 //	    Build()
 type ListComponentsPositionalArgsBuilder struct {
-	builder *PositionalArgsBuilder
+	builder *flags.PositionalArgsBuilder
 }
 
 // NewListComponentsPositionalArgsBuilder creates a new ListComponentsPositionalArgsBuilder.
@@ -32,7 +33,7 @@ func NewListComponentsPositionalArgsBuilder() *ListComponentsPositionalArgsBuild
 	defer perf.Track(nil, "flags.NewListComponentsPositionalArgsBuilder")()
 
 	return &ListComponentsPositionalArgsBuilder{
-		builder: NewPositionalArgsBuilder(),
+		builder: flags.NewPositionalArgsBuilder(),
 	}
 }
 
@@ -48,7 +49,7 @@ func NewListComponentsPositionalArgsBuilder() *ListComponentsPositionalArgsBuild
 func (b *ListComponentsPositionalArgsBuilder) WithKey(required bool) *ListComponentsPositionalArgsBuilder {
 	defer perf.Track(nil, "flags.ListComponentsPositionalArgsBuilder.WithKey")()
 
-	b.builder.AddArg(&PositionalArgSpec{
+	b.builder.AddArg(&flags.PositionalArgSpec{
 		Name:        "key",
 		Description: "Configuration key to filter components",
 		Required:    required,
@@ -64,7 +65,7 @@ func (b *ListComponentsPositionalArgsBuilder) WithKey(required bool) *ListCompon
 //   - specs: Array of positional argument specifications with TargetField mapping
 //   - validator: Cobra Args validator function
 //   - usage: Usage string for Cobra Use field (e.g., "[key]")
-func (b *ListComponentsPositionalArgsBuilder) Build() ([]*PositionalArgSpec, cobra.PositionalArgs, string) {
+func (b *ListComponentsPositionalArgsBuilder) Build() ([]*flags.PositionalArgSpec, cobra.PositionalArgs, string) {
 	defer perf.Track(nil, "flags.ListComponentsPositionalArgsBuilder.Build")()
 
 	return b.builder.Build()

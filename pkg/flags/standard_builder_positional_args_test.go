@@ -1,4 +1,4 @@
-package flags
+package flags_test
 
 import (
 	"context"
@@ -6,15 +6,19 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/list"
+	"github.com/cloudposse/atmos/pkg/flags/validate"
 )
 
 func TestStandardOptionsBuilder_WithPositionalArgs_Build(t *testing.T) {
 	// Test that WithPositionalArgs properly configures the builder and Build() applies it.
-	specs, validator, usage := NewListSettingsPositionalArgsBuilder().
+	specs, validator, usage := list.NewListSettingsPositionalArgsBuilder().
 		WithComponent(false).
 		Build()
 
-	parser := NewStandardOptionsBuilder().
+	parser := flags.NewStandardOptionsBuilder().
 		WithProcessTemplates(true).
 		WithPositionalArgs(specs, validator, usage).
 		Build()
@@ -31,11 +35,11 @@ func TestStandardOptionsBuilder_WithPositionalArgs_Build(t *testing.T) {
 
 func TestStandardOptionsBuilder_WithPositionalArgs_RequiredComponent(t *testing.T) {
 	// Test required component positional arg through builder.
-	specs, validator, usage := NewDescribeComponentPositionalArgsBuilder().
+	specs, validator, usage := flags.NewDescribeComponentPositionalArgsBuilder().
 		WithComponent(true).
 		Build()
 
-	parser := NewStandardOptionsBuilder().
+	parser := flags.NewStandardOptionsBuilder().
 		WithPositionalArgs(specs, validator, usage).
 		Build()
 
@@ -51,12 +55,12 @@ func TestStandardOptionsBuilder_WithPositionalArgs_RequiredComponent(t *testing.
 
 func TestStandardOptionsBuilder_WithPositionalArgs_OptionalSchemaType(t *testing.T) {
 	// Test optional schemaType positional arg through builder.
-	specs, validator, usage := NewValidateSchemaPositionalArgsBuilder().
+	specs, validator, usage := validate.NewValidateSchemaPositionalArgsBuilder().
 		WithSchemaType(false).
 		Build()
 
-	parser := NewStandardOptionsBuilder().
-		
+	parser := flags.NewStandardOptionsBuilder().
+
 		WithPositionalArgs(specs, validator, usage).
 		Build()
 
@@ -73,12 +77,12 @@ func TestStandardOptionsBuilder_WithPositionalArgs_OptionalSchemaType(t *testing
 
 func TestStandardOptionsBuilder_WithPositionalArgs_Key(t *testing.T) {
 	// Test key positional arg through builder.
-	specs, validator, usage := NewListComponentsPositionalArgsBuilder().
+	specs, validator, usage := list.NewListComponentsPositionalArgsBuilder().
 		WithKey(true).
 		Build()
 
-	parser := NewStandardOptionsBuilder().
-		
+	parser := flags.NewStandardOptionsBuilder().
+
 		WithPositionalArgs(specs, validator, usage).
 		Build()
 
@@ -94,8 +98,8 @@ func TestStandardOptionsBuilder_WithPositionalArgs_Key(t *testing.T) {
 
 func TestStandardOptionsBuilder_WithoutPositionalArgs(t *testing.T) {
 	// Test that Build() works without WithPositionalArgs.
-	parser := NewStandardOptionsBuilder().
-		
+	parser := flags.NewStandardOptionsBuilder().
+
 		WithProcessTemplates(true).
 		Build()
 
@@ -110,12 +114,12 @@ func TestStandardOptionsBuilder_WithoutPositionalArgs(t *testing.T) {
 func TestStandardOptionsBuilder_Build_ExercisesSetPositionalArgs(t *testing.T) {
 	// This test specifically exercises the SetPositionalArgs() code path
 	// that was showing 0% coverage.
-	specs, validator, usage := NewDescribeDependentsPositionalArgsBuilder().
+	specs, validator, usage := flags.NewDescribeDependentsPositionalArgsBuilder().
 		WithComponent(true).
 		Build()
 
-	builder := NewStandardOptionsBuilder().
-		
+	builder := flags.NewStandardOptionsBuilder().
+
 		WithPositionalArgs(specs, validator, usage)
 
 	// Build() should call SetPositionalArgs() internally.
@@ -129,12 +133,12 @@ func TestStandardOptionsBuilder_Build_ExercisesSetPositionalArgs(t *testing.T) {
 
 func TestStandardOptionsBuilder_WithPositionalArgs_ValidationErrors(t *testing.T) {
 	// Test that validation errors from positional args are properly returned.
-	specs, validator, usage := NewDescribeComponentPositionalArgsBuilder().
+	specs, validator, usage := flags.NewDescribeComponentPositionalArgsBuilder().
 		WithComponent(true).
 		Build()
 
-	parser := NewStandardOptionsBuilder().
-		
+	parser := flags.NewStandardOptionsBuilder().
+
 		WithPositionalArgs(specs, validator, usage).
 		Build()
 
@@ -150,73 +154,73 @@ func TestStandardOptionsBuilder_WithPositionalArgs_ValidationErrors(t *testing.T
 func TestStandardOptionsBuilder_WithPositionalArgs_AllBuilders(t *testing.T) {
 	// Test all 6 positional args builders through the Build() path.
 	tests := []struct {
-		name     string
-		specs    []*PositionalArgSpec
-		validator func(*testing.T, *StandardOptions)
-		args     []string
+		name      string
+		specs     []*flags.PositionalArgSpec
+		validator func(*testing.T, *flags.StandardOptions)
+		args      []string
 	}{
 		{
 			name: "ListSettings",
-			specs: func() []*PositionalArgSpec {
-				s, _, _ := NewListSettingsPositionalArgsBuilder().WithComponent(false).Build()
+			specs: func() []*flags.PositionalArgSpec {
+				s, _, _ := list.NewListSettingsPositionalArgsBuilder().WithComponent(false).Build()
 				return s
 			}(),
-			validator: func(t *testing.T, opts *StandardOptions) {
+			validator: func(t *testing.T, opts *flags.StandardOptions) {
 				assert.Equal(t, "vpc", opts.Component)
 			},
 			args: []string{"vpc"},
 		},
 		{
 			name: "DescribeComponent",
-			specs: func() []*PositionalArgSpec {
-				s, _, _ := NewDescribeComponentPositionalArgsBuilder().WithComponent(true).Build()
+			specs: func() []*flags.PositionalArgSpec {
+				s, _, _ := flags.NewDescribeComponentPositionalArgsBuilder().WithComponent(true).Build()
 				return s
 			}(),
-			validator: func(t *testing.T, opts *StandardOptions) {
+			validator: func(t *testing.T, opts *flags.StandardOptions) {
 				assert.Equal(t, "vpc", opts.Component)
 			},
 			args: []string{"vpc"},
 		},
 		{
 			name: "DescribeDependents",
-			specs: func() []*PositionalArgSpec {
-				s, _, _ := NewDescribeDependentsPositionalArgsBuilder().WithComponent(true).Build()
+			specs: func() []*flags.PositionalArgSpec {
+				s, _, _ := flags.NewDescribeDependentsPositionalArgsBuilder().WithComponent(true).Build()
 				return s
 			}(),
-			validator: func(t *testing.T, opts *StandardOptions) {
+			validator: func(t *testing.T, opts *flags.StandardOptions) {
 				assert.Equal(t, "vpc", opts.Component)
 			},
 			args: []string{"vpc"},
 		},
 		{
 			name: "ValidateSchema",
-			specs: func() []*PositionalArgSpec {
-				s, _, _ := NewValidateSchemaPositionalArgsBuilder().WithSchemaType(false).Build()
+			specs: func() []*flags.PositionalArgSpec {
+				s, _, _ := validate.NewValidateSchemaPositionalArgsBuilder().WithSchemaType(false).Build()
 				return s
 			}(),
-			validator: func(t *testing.T, opts *StandardOptions) {
+			validator: func(t *testing.T, opts *flags.StandardOptions) {
 				assert.Equal(t, "jsonschema", opts.SchemaType)
 			},
 			args: []string{"jsonschema"},
 		},
 		{
 			name: "ListKeys",
-			specs: func() []*PositionalArgSpec {
-				s, _, _ := NewListKeysPositionalArgsBuilder().WithComponent(true).Build()
+			specs: func() []*flags.PositionalArgSpec {
+				s, _, _ := list.NewListKeysPositionalArgsBuilder().WithComponent(true).Build()
 				return s
 			}(),
-			validator: func(t *testing.T, opts *StandardOptions) {
+			validator: func(t *testing.T, opts *flags.StandardOptions) {
 				assert.Equal(t, "vpc", opts.Component)
 			},
 			args: []string{"vpc"},
 		},
 		{
 			name: "ListComponents",
-			specs: func() []*PositionalArgSpec {
-				s, _, _ := NewListComponentsPositionalArgsBuilder().WithKey(true).Build()
+			specs: func() []*flags.PositionalArgSpec {
+				s, _, _ := list.NewListComponentsPositionalArgsBuilder().WithKey(true).Build()
 				return s
 			}(),
-			validator: func(t *testing.T, opts *StandardOptions) {
+			validator: func(t *testing.T, opts *flags.StandardOptions) {
 				assert.Equal(t, "region", opts.Key)
 			},
 			args: []string{"region"},
@@ -226,15 +230,15 @@ func TestStandardOptionsBuilder_WithPositionalArgs_AllBuilders(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Build validator from specs.
-			builder := NewPositionalArgsBuilder()
+			builder := flags.NewPositionalArgsBuilder()
 			for _, spec := range tt.specs {
 				builder.AddArg(spec)
 			}
 			_, validator, usage := builder.Build()
 
 			// Create parser through builder (exercises SetPositionalArgs).
-			parser := NewStandardOptionsBuilder().
-				
+			parser := flags.NewStandardOptionsBuilder().
+
 				WithPositionalArgs(tt.specs, validator, usage).
 				Build()
 

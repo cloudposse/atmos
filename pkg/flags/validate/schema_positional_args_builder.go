@@ -3,6 +3,7 @@ package validate
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -24,7 +25,7 @@ import (
 //	    WithPositionalArgs(specs, validator, usage).
 //	    Build()
 type ValidateSchemaPositionalArgsBuilder struct {
-	builder *PositionalArgsBuilder
+	builder *flags.PositionalArgsBuilder
 }
 
 // NewValidateSchemaPositionalArgsBuilder creates a new ValidateSchemaPositionalArgsBuilder.
@@ -32,7 +33,7 @@ func NewValidateSchemaPositionalArgsBuilder() *ValidateSchemaPositionalArgsBuild
 	defer perf.Track(nil, "flags.NewValidateSchemaPositionalArgsBuilder")()
 
 	return &ValidateSchemaPositionalArgsBuilder{
-		builder: NewPositionalArgsBuilder(),
+		builder: flags.NewPositionalArgsBuilder(),
 	}
 }
 
@@ -48,7 +49,7 @@ func NewValidateSchemaPositionalArgsBuilder() *ValidateSchemaPositionalArgsBuild
 func (b *ValidateSchemaPositionalArgsBuilder) WithSchemaType(required bool) *ValidateSchemaPositionalArgsBuilder {
 	defer perf.Track(nil, "flags.ValidateSchemaPositionalArgsBuilder.WithSchemaType")()
 
-	b.builder.AddArg(&PositionalArgSpec{
+	b.builder.AddArg(&flags.PositionalArgSpec{
 		Name:        "schema-type",
 		Description: "Schema type to validate (jsonschema or opa)",
 		Required:    required,
@@ -64,7 +65,7 @@ func (b *ValidateSchemaPositionalArgsBuilder) WithSchemaType(required bool) *Val
 //   - specs: Array of positional argument specifications with TargetField mapping
 //   - validator: Cobra Args validator function
 //   - usage: Usage string for Cobra Use field (e.g., "<schema-type>")
-func (b *ValidateSchemaPositionalArgsBuilder) Build() ([]*PositionalArgSpec, cobra.PositionalArgs, string) {
+func (b *ValidateSchemaPositionalArgsBuilder) Build() ([]*flags.PositionalArgSpec, cobra.PositionalArgs, string) {
 	defer perf.Track(nil, "flags.ValidateSchemaPositionalArgsBuilder.Build")()
 
 	return b.builder.Build()

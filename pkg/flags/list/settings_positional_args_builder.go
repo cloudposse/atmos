@@ -3,6 +3,7 @@ package list
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -24,7 +25,7 @@ import (
 //	    WithPositionalArgs(specs, validator, usage).
 //	    Build()
 type ListSettingsPositionalArgsBuilder struct {
-	builder *PositionalArgsBuilder
+	builder *flags.PositionalArgsBuilder
 }
 
 // NewListSettingsPositionalArgsBuilder creates a new ListSettingsPositionalArgsBuilder.
@@ -32,7 +33,7 @@ func NewListSettingsPositionalArgsBuilder() *ListSettingsPositionalArgsBuilder {
 	defer perf.Track(nil, "flags.NewListSettingsPositionalArgsBuilder")()
 
 	return &ListSettingsPositionalArgsBuilder{
-		builder: NewPositionalArgsBuilder(),
+		builder: flags.NewPositionalArgsBuilder(),
 	}
 }
 
@@ -48,7 +49,7 @@ func NewListSettingsPositionalArgsBuilder() *ListSettingsPositionalArgsBuilder {
 func (b *ListSettingsPositionalArgsBuilder) WithComponent(required bool) *ListSettingsPositionalArgsBuilder {
 	defer perf.Track(nil, "flags.ListSettingsPositionalArgsBuilder.WithComponent")()
 
-	b.builder.AddArg(&PositionalArgSpec{
+	b.builder.AddArg(&flags.PositionalArgSpec{
 		Name:        "component",
 		Description: "Component name to filter settings",
 		Required:    required,
@@ -64,7 +65,7 @@ func (b *ListSettingsPositionalArgsBuilder) WithComponent(required bool) *ListSe
 //   - specs: Array of positional argument specifications with TargetField mapping
 //   - validator: Cobra Args validator function
 //   - usage: Usage string for Cobra Use field (e.g., "[component]")
-func (b *ListSettingsPositionalArgsBuilder) Build() ([]*PositionalArgSpec, cobra.PositionalArgs, string) {
+func (b *ListSettingsPositionalArgsBuilder) Build() ([]*flags.PositionalArgSpec, cobra.PositionalArgs, string) {
 	defer perf.Track(nil, "flags.ListSettingsPositionalArgsBuilder.Build")()
 
 	return b.builder.Build()
