@@ -393,20 +393,27 @@ func sanitizeOutput(output string) (string, error) {
 	debugTimestampRegex := regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
 	result = debugTimestampRegex.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
 
-	// 11. Normalize "Last Updated" timestamps in auth whoami output.
+	// 11. Normalize external absolute paths to avoid environment-specific paths in snapshots.
+	// Replace common absolute path prefixes with generic placeholders.
+	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
+	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
+	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
+	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
+
+	// 12. Normalize "Last Updated" timestamps in auth whoami output.
 	// These appear as "Last Updated  2025-10-28 13:10:27 CDT" in table output.
 	// Replace with a fixed timestamp to avoid snapshot mismatches.
 	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
 	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
 
-	// 12. Normalize credential expiration durations in auth list output.
+	// 13. Normalize credential expiration durations in auth list output.
 	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
 	// The duration changes every minute, so normalize to "1h 0m" like other duration normalizations.
 	// Matches patterns like "650202h14m", "650194h", "1h30m", "45m", etc. at the end of identity lines.
 	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h(?:\d+m)?\b`)
 	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
 
-	// 13. Normalize credential_store values in error messages.
+	// 14. Normalize credential_store values in error messages.
 	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
 	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
 	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
@@ -556,6 +563,11 @@ func TestMain(m *testing.M) {
 	// Parse flags first to get -v status
 	flag.Parse()
 
+	// CRITICAL: Unset ATMOS_CHDIR to prevent tests from accessing non-test directories.
+	// This prevents tests from inadvertently reading real infrastructure configs (e.g., infra-live).
+	// Tests should only use their fixture directories, not the user's working environment.
+	os.Unsetenv("ATMOS_CHDIR")
+
 	// Configure logger verbosity based on test flags
 	switch {
 	case os.Getenv("ATMOS_TEST_DEBUG") != "":
@@ -685,6 +697,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	t.Setenv("XDG_CACHE_HOME", xdgCacheHome)
 	// Reload XDG to pick up the new environment
 	xdg.Reload()
+
+	// Clear github_username environment variables for consistent snapshots.
+	// These are automatically bound to settings.github_username but cause
+	// environment-dependent output. Skip clearing only for vendor tests that need GitHub auth.
+	if !strings.Contains(tc.Name, "vendor") {
+		t.Setenv("ATMOS_GITHUB_USERNAME", "")
+		t.Setenv("GITHUB_ACTOR", "")
+		t.Setenv("GITHUB_USERNAME", "")
+	}
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
