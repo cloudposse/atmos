@@ -101,3 +101,6 @@ performance-optimization/
 *.bak
 *.go.bak
 **/*.go.bak
+
+# Scratch/temporary analysis files
+.scratch/
