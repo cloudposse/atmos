@@ -193,8 +193,6 @@ func GetInt(m map[string]interface{}, key string) int {
 }
 
 // GetIdentitySelector extracts an IdentitySelector value from the parsed flags map.
-//
-//nolint:unparam // key parameter kept for consistency with other getter functions
 func GetIdentitySelector(m map[string]interface{}, key string) global.IdentitySelector {
 	defer perf.Track(nil, "flags.GetIdentitySelector")()
 
@@ -205,8 +203,6 @@ func GetIdentitySelector(m map[string]interface{}, key string) global.IdentitySe
 }
 
 // GetPagerSelector extracts a PagerSelector value from the parsed flags map.
-//
-//nolint:unparam // key parameter kept for consistency with other getter functions
 func GetPagerSelector(m map[string]interface{}, key string) global.PagerSelector {
 	defer perf.Track(nil, "flags.GetPagerSelector")()
 

@@ -1,4 +1,3 @@
-//nolint:dupl // Similar test structure to terraform builder tests, but testing different domain-specific builder
 package workflow
 
 import (

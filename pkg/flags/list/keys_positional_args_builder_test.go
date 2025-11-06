@@ -1,4 +1,3 @@
-//nolint:dupl // Similar test structure to other builder tests, but testing different domain-specific builder
 package list
 
 import (
