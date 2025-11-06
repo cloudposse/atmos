@@ -1633,9 +1633,11 @@ func RegisterPlugin(plugin *Plugin) {
 
 ## Future Migration Path: Command-Specific Packages
 
-### Phase 1: Intermediate Organization (pkg/flags/{command}/)
+### Phase 1.5: Intermediate Organization (pkg/flags/{command}/) ✅ COMPLETE
 
-As an intermediate step before full command provider migration, command-specific flags/options/builders will be organized into subpackages:
+**Status**: ✅ COMPLETE as of 2025-11-05
+
+Command-specific flags/options/builders have been organized into subpackages:
 
 ```
 pkg/flags/
@@ -1643,32 +1645,81 @@ pkg/flags/
 ├── registry.go                    # FlagRegistry
 ├── standard.go                    # StandardParser
 ├── options.go                     # GlobalFlags
-├── terraform/                     # Terraform-specific
-│   ├── common_flags.go           # CommonFlags()
-│   ├── plan_flags.go             # PlanFlags(), PlanCompatibilityAliases()
-│   ├── plan_options.go           # PlanOptions
-│   ├── apply_flags.go            # ApplyFlags(), ApplyCompatibilityAliases()
-│   ├── apply_options.go          # ApplyOptions
-│   ├── parser.go                 # TerraformParser
+├── compatibility_translator.go    # Compatibility alias translation
+├── flag_parser.go                 # AtmosFlagParser with normalization
+│
+├── terraform/                     # Terraform-specific ✅
+│   ├── common.go                 # commonCompatibilityFlags()
+│   ├── compatibility.go          # Compatibility helper functions
+│   ├── plan.go                   # PlanFlags(), PlanCompatibilityAliases(), PlanPositionalArgs()
+│   ├── apply.go                  # ApplyFlags(), ApplyCompatibilityAliases(), ApplyPositionalArgs()
+│   ├── init.go                   # InitFlags(), InitCompatibilityAliases(), InitPositionalArgs()
+│   ├── output.go                 # OutputFlags(), OutputCompatibilityAliases(), OutputPositionalArgs()
+│   ├── destroy.go                # DestroyFlags(), DestroyCompatibilityAliases(), DestroyPositionalArgs()
+│   ├── validate.go               # ValidateFlags(), ValidateCompatibilityAliases(), ValidatePositionalArgs()
+│   ├── remaining_commands.go     # Other terraform subcommands
+│   ├── options.go                # Options struct (renamed from TerraformOptions)
+│   ├── parser.go                 # Parser (renamed from TerraformParser)
+│   └── positional_args_builder.go # PositionalArgsBuilder
+│
+├── helmfile/                      # Helmfile-specific ✅
+│   ├── sync.go                   # SyncFlags(), SyncPositionalArgs()
+│   ├── apply.go                  # ApplyFlags(), ApplyPositionalArgs()
+│   ├── diff.go                   # DiffFlags(), DiffPositionalArgs()
+│   ├── destroy.go                # DestroyFlags(), DestroyPositionalArgs()
+│   ├── options.go                # Options (renamed from HelmfileOptions)
+│   ├── parser.go                 # Parser (renamed from HelmfileParser)
 │   └── positional_args_builder.go
-├── packer/                        # Packer-specific
-│   ├── build_flags.go
-│   ├── build_options.go
-│   └── ...
-├── helmfile/                      # Helmfile-specific
-│   ├── sync_flags.go
-│   ├── sync_options.go
-│   └── ...
-├── workflow/                      # Workflow-specific
-├── describe/                      # Describe-specific
-└── validate/                      # Validate-specific
+│
+├── packer/                        # Packer-specific ✅
+│   ├── build.go                  # BuildFlags(), BuildPositionalArgs()
+│   ├── validate.go               # ValidateFlags(), ValidatePositionalArgs()
+│   ├── init.go                   # InitFlags(), InitPositionalArgs()
+│   ├── options.go                # Options (renamed from PackerOptions)
+│   ├── parser.go                 # Parser (renamed from PackerParser)
+│   └── positional_args_builder.go
+│
+├── workflow/                      # Workflow-specific ✅
+│   ├── builder.go
+│   ├── options.go
+│   ├── parser.go
+│   └── positional_args_builder.go
+│
+├── auth/                          # Auth-specific ✅
+│   ├── builder.go
+│   ├── options.go                # AuthOptions (NOT renamed - kept as AuthOptions)
+│   └── parser.go
+│
+├── authexec/                      # Auth exec ✅
+│   ├── options.go
+│   └── parser.go
+│
+├── authshell/                     # Auth shell ✅
+│   ├── options.go
+│   └── parser.go
+│
+└── editorconfig/                  # Editor config ✅
+    ├── builder.go
+    ├── options.go
+    └── parser.go
 ```
 
-**Benefits:**
-- Clear ownership: All terraform-related flags/options in one place
-- No circular dependencies: Subpackages import parent pkg/flags for infrastructure
-- Easier to navigate: `pkg/flags/terraform/` contains everything for terraform
-- Incremental migration: Can be done per-command without touching command execution logic
+**Completed work:**
+- ✅ All tool-specific packages created (terraform, helmfile, packer, workflow, auth, authexec, authshell, editorconfig)
+- ✅ Per-command files created with flag registries, compatibility aliases, and positional args builders
+- ✅ Type renaming: `TerraformParser` → `Parser`, `HelmfileOptions` → `Options` within packages
+- ✅ Shared infrastructure kept at root level (GlobalFlags, compatibility_translator, flag_parser)
+- ✅ All imports updated across codebase
+- ✅ All tests passing (terraform, helmfile, packer, workflow, auth)
+- ✅ Separation of concerns: Cobra native shorthand normalization moved to flag_parser.go
+
+**Benefits achieved:**
+- ✅ Clear ownership: All terraform-related flags/options in one place
+- ✅ No circular dependencies: Subpackages import parent pkg/flags for shared types
+- ✅ Easier to navigate: `pkg/flags/terraform/` contains everything for terraform
+- ✅ Incremental migration: Done without touching command execution logic
+- ✅ Per-command flag registration: Each command file provides flags, compatibility aliases, and positional args
+- ✅ Mirror structure ready: Package organization matches planned cmd/ structure
 
 ### Phase 2: Final Location (cmd/{command}/)
 
