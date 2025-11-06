@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -28,6 +29,11 @@ var listStacksCmd = &cobra.Command{
 		output, err := listStacks(cmd)
 		if err != nil {
 			return err
+		}
+
+		if len(output) == 0 {
+			ui.Info("No stacks found")
+			return nil
 		}
 
 		u.PrintMessageInColor(strings.Join(output, "\n")+"\n", theme.Colors.Success)
