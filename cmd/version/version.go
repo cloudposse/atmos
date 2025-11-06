@@ -103,3 +103,21 @@ func (v *VersionCommandProvider) GetName() string {
 func (v *VersionCommandProvider) GetGroup() string {
 	return "Other Commands"
 }
+
+// GetFlagsBuilder returns the flags builder for this command.
+// Version command uses StandardParser for its flags.
+func (v *VersionCommandProvider) GetFlagsBuilder() flags.Builder {
+	return versionParser
+}
+
+// GetPositionalArgsBuilder returns the positional args builder for this command.
+// Version command has no positional arguments.
+func (v *VersionCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+// GetCompatibilityAliases returns compatibility aliases for this command.
+// Version command has no compatibility aliases (uses native Cobra flags only).
+func (v *VersionCommandProvider) GetCompatibilityAliases() map[string]flags.CompatibilityAlias {
+	return nil
+}

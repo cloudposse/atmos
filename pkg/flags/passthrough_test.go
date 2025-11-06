@@ -10,6 +10,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// createTestParser creates a PassThroughFlagParser with common flags + identity flag for testing.
+// WithCommonFlags() now includes GlobalFlags which has identity, so no need to add it separately.
+func createTestParser() *PassThroughFlagParser {
+	parser := NewPassThroughFlagParser(
+		WithCommonFlags(),
+	)
+
+	// Set NoOptDefVal for identity flag to support --identity without value.
+	// Identity is included in GlobalFlags which is part of WithCommonFlags().
+	identityFlag := parser.GetRegistry().Get("identity")
+	if identityFlag != nil {
+		if strFlag, ok := identityFlag.(*StringFlag); ok {
+			strFlag.NoOptDefVal = "__SELECT__"
+		}
+	}
+
+	return parser
+}
+
 func TestPassThroughFlagParser_SplitAtDoubleDash(t *testing.T) {
 	parser := NewPassThroughFlagParser()
 
@@ -158,7 +177,7 @@ func TestPassThroughFlagParser_ExtractAtmosFlags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			parser := NewPassThroughFlagParser(WithCommonFlags())
+			parser := createTestParser()
 
 			flags, args, err := parser.ExtractAtmosFlags(tt.args)
 
@@ -232,7 +251,7 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 		name                    string
 		args                    []string
 		expectedFlags           map[string]interface{}
-		expectedPassThroughArgs []string
+		expectedSeparatedArgs []string
 		expectedPositionalArgs  []string
 	}{
 		{
@@ -241,7 +260,7 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 			expectedFlags: map[string]interface{}{
 				"stack": "dev", // Shorthand normalized to full name
 			},
-			expectedPassThroughArgs: []string{"-var", "foo=bar", "-out=plan.tfplan"},
+			expectedSeparatedArgs: []string{"-var", "foo=bar", "-out=plan.tfplan"},
 			expectedPositionalArgs:  []string{"plan", "vpc"},
 		},
 		{
@@ -250,7 +269,7 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 			expectedFlags: map[string]interface{}{
 				"stack": "dev", // Shorthand normalized to full name
 			},
-			expectedPassThroughArgs: []string{"-var", "foo=bar"},
+			expectedSeparatedArgs: []string{"-var", "foo=bar"},
 			expectedPositionalArgs:  []string{"plan", "vpc"},
 		},
 		{
@@ -259,7 +278,7 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 			expectedFlags: map[string]interface{}{
 				"identity": "admin",
 			},
-			expectedPassThroughArgs: []string{"-var", "foo=bar"},
+			expectedSeparatedArgs: []string{"-var", "foo=bar"},
 			expectedPositionalArgs:  []string{"plan", "vpc"},
 		},
 		{
@@ -268,7 +287,7 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 			expectedFlags: map[string]interface{}{
 				"identity": "__SELECT__",
 			},
-			expectedPassThroughArgs: []string{"-var", "foo=bar"},
+			expectedSeparatedArgs: []string{"-var", "foo=bar"},
 			expectedPositionalArgs:  []string{"plan", "vpc"},
 		},
 		{
@@ -278,14 +297,14 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 				"stack":   "dev",
 				"dry-run": true,
 			},
-			expectedPassThroughArgs: []string{"-var", "foo=bar"},
+			expectedSeparatedArgs: []string{"-var", "foo=bar"},
 			expectedPositionalArgs:  []string{"plan", "vpc"},
 		},
 		{
 			name:                    "no Atmos flags",
 			args:                    []string{"plan", "vpc", "--", "-var", "foo=bar"},
 			expectedFlags:           map[string]interface{}{},
-			expectedPassThroughArgs: []string{"-var", "foo=bar"},
+			expectedSeparatedArgs: []string{"-var", "foo=bar"},
 			expectedPositionalArgs:  []string{"plan", "vpc"},
 		},
 		{
@@ -305,7 +324,7 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 				"identity": "admin",
 				"dry-run":  true,
 			},
-			expectedPassThroughArgs: []string{
+			expectedSeparatedArgs: []string{
 				"-var", "region=us-east-1",
 				"-var-file=common.tfvars",
 				"-out=plan.tfplan",
@@ -316,13 +335,13 @@ func TestPassThroughFlagParser_Parse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			parser := NewPassThroughFlagParser(WithCommonFlags())
+			parser := createTestParser()
 
 			cfg, err := parser.Parse(context.Background(), tt.args)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedFlags, cfg.Flags)
-			assert.Equal(t, tt.expectedPassThroughArgs, cfg.PassThroughArgs)
+			assert.Equal(t, tt.expectedSeparatedArgs, cfg.SeparatedArgs)
 			assert.Equal(t, tt.expectedPositionalArgs, cfg.PositionalArgs)
 		})
 	}
@@ -333,55 +352,55 @@ func TestPassThroughFlagParser_Parse_EdgeCases(t *testing.T) {
 		name                    string
 		args                    []string
 		expectedFlags           map[string]interface{}
-		expectedPassThroughArgs []string
+		expectedSeparatedArgs []string
 		description             string
 	}{
 		{
 			name:                    "duplicate flag (long and short form)",
 			args:                    []string{"plan", "vpc", "-s", "dev", "--stack", "prod", "--", "-var", "foo=bar"},
 			expectedFlags:           map[string]interface{}{"stack": "prod"},
-			expectedPassThroughArgs: []string{"-var", "foo=bar"},
+			expectedSeparatedArgs: []string{"-var", "foo=bar"},
 			description:             "When both -s and --stack provided, last value wins",
 		},
 		{
 			name:                    "flag value with equals sign",
 			args:                    []string{"plan", "vpc", "--stack=prod/us-east-1", "--", "-var", "foo=bar"},
 			expectedFlags:           map[string]interface{}{"stack": "prod/us-east-1"},
-			expectedPassThroughArgs: []string{"-var", "foo=bar"},
+			expectedSeparatedArgs: []string{"-var", "foo=bar"},
 			description:             "Stack names with special characters should be preserved",
 		},
 		{
 			name:                    "flag value with dashes",
 			args:                    []string{"plan", "vpc", "--stack=my-stack-name", "--", "-var", "foo=bar"},
 			expectedFlags:           map[string]interface{}{"stack": "my-stack-name"},
-			expectedPassThroughArgs: []string{"-var", "foo=bar"},
+			expectedSeparatedArgs: []string{"-var", "foo=bar"},
 			description:             "Stack names with dashes should be preserved",
 		},
 		{
 			name:                    "empty pass-through args",
 			args:                    []string{"plan", "vpc", "--stack", "dev", "--"},
 			expectedFlags:           map[string]interface{}{"stack": "dev"},
-			expectedPassThroughArgs: []string{},
+			expectedSeparatedArgs: []string{},
 			description:             "Empty pass-through args should work",
 		},
 		{
 			name:                    "all flags before separator",
 			args:                    []string{"--stack", "dev", "--dry-run", "--", "plan", "vpc"},
 			expectedFlags:           map[string]interface{}{"stack": "dev", "dry-run": true},
-			expectedPassThroughArgs: []string{},
+			expectedSeparatedArgs: []string{},
 			description:             "Atmos flags before separator, positional args after",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			parser := NewPassThroughFlagParser(WithCommonFlags())
+			parser := createTestParser()
 
 			cfg, err := parser.Parse(context.Background(), tt.args)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedFlags, cfg.Flags, tt.description)
-			assert.Equal(t, tt.expectedPassThroughArgs, cfg.PassThroughArgs, tt.description)
+			assert.Equal(t, tt.expectedSeparatedArgs, cfg.SeparatedArgs, tt.description)
 		})
 	}
 }
@@ -392,15 +411,17 @@ func TestPassThroughFlagParser_RegisterFlags(t *testing.T) {
 
 	parser.RegisterFlags(cmd)
 
-	// Verify flags were registered
+	// Verify flags were registered (only local flags, not inherited global flags)
 	assert.NotNil(t, cmd.Flags().Lookup("stack"))
-	assert.NotNil(t, cmd.Flags().Lookup("identity"))
 	assert.NotNil(t, cmd.Flags().Lookup("dry-run"))
 	assert.NotNil(t, cmd.Flags().Lookup("upload-status"))
+
+	// Identity flag should NOT be in local flags - it's inherited from RootCmd
+	assert.Nil(t, cmd.Flags().Lookup("identity"), "identity should be inherited from RootCmd, not local")
 }
 
 func TestPassThroughFlagParser_BindToViper(t *testing.T) {
-	parser := NewPassThroughFlagParser(WithCommonFlags())
+	parser := createTestParser()
 	v := viper.New()
 
 	err := parser.BindToViper(v)
@@ -409,7 +430,7 @@ func TestPassThroughFlagParser_BindToViper(t *testing.T) {
 }
 
 func TestPassThroughFlagParser_BindFlagsToViper(t *testing.T) {
-	parser := NewPassThroughFlagParser(WithCommonFlags())
+	parser := createTestParser()
 	cmd := &cobra.Command{Use: "terraform"}
 	v := viper.New()
 
@@ -446,7 +467,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 		args                        []string
 		disablePositionalExtraction bool
 		expectedFlags               map[string]interface{}
-		expectedPassThroughArgs     []string
+		expectedSeparatedArgs     []string
 		expectedPositionalArgs      []string
 	}{
 		{
@@ -454,7 +475,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 			args:                        []string{"--identity=test-user", "--", "echo", "hello"},
 			disablePositionalExtraction: false,
 			expectedFlags:               map[string]interface{}{"identity": "test-user"},
-			expectedPassThroughArgs:     []string{}, // "echo" and "hello" are extracted as positionals
+			expectedSeparatedArgs:     []string{}, // "echo" and "hello" are extracted as positionals
 			expectedPositionalArgs:      []string{"echo", "hello"},
 		},
 		{
@@ -462,7 +483,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 			args:                        []string{"--identity=test-user", "--", "echo", "hello"},
 			disablePositionalExtraction: true,
 			expectedFlags:               map[string]interface{}{"identity": "test-user"},
-			expectedPassThroughArgs:     []string{"echo", "hello"}, // All args after -- are passed through
+			expectedSeparatedArgs:     []string{"echo", "hello"}, // All args after -- are passed through
 			expectedPositionalArgs:      []string{},                // Not extracted
 		},
 		{
@@ -470,7 +491,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 			args:                        []string{"--identity=admin", "--", "aws", "s3", "ls", "s3://bucket"},
 			disablePositionalExtraction: true,
 			expectedFlags:               map[string]interface{}{"identity": "admin"},
-			expectedPassThroughArgs:     []string{"aws", "s3", "ls", "s3://bucket"},
+			expectedSeparatedArgs:     []string{"aws", "s3", "ls", "s3://bucket"},
 			expectedPositionalArgs:      []string{},
 		},
 		{
@@ -478,7 +499,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 			args:                        []string{"--identity=test-user", "--", "-c", "echo $HOME"},
 			disablePositionalExtraction: true,
 			expectedFlags:               map[string]interface{}{"identity": "test-user"},
-			expectedPassThroughArgs:     []string{"-c", "echo $HOME"},
+			expectedSeparatedArgs:     []string{"-c", "echo $HOME"},
 			expectedPositionalArgs:      []string{},
 		},
 		{
@@ -486,7 +507,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 			args:                        []string{"--identity=test-user", "echo", "hello"},
 			disablePositionalExtraction: true,
 			expectedFlags:               map[string]interface{}{"identity": "test-user"},
-			expectedPassThroughArgs:     []string{"echo", "hello"}, // All non-flag args passed through
+			expectedSeparatedArgs:     []string{"echo", "hello"}, // All non-flag args passed through
 			expectedPositionalArgs:      []string{},
 		},
 		{
@@ -494,7 +515,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 			args:                        []string{"--identity", "--", "echo", "test"},
 			disablePositionalExtraction: true,
 			expectedFlags:               map[string]interface{}{"identity": "__SELECT__"},
-			expectedPassThroughArgs:     []string{"echo", "test"},
+			expectedSeparatedArgs:     []string{"echo", "test"},
 			expectedPositionalArgs:      []string{},
 		},
 	}
@@ -521,7 +542,7 @@ func TestPassThroughFlagParser_DisablePositionalExtraction(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.expectedFlags, result.Flags, "AtmosFlags mismatch")
-			assert.Equal(t, tt.expectedPassThroughArgs, result.PassThroughArgs, "PassThroughArgs mismatch")
+			assert.Equal(t, tt.expectedSeparatedArgs, result.SeparatedArgs, "SeparatedArgs mismatch")
 			assert.Equal(t, tt.expectedPositionalArgs, result.PositionalArgs, "PositionalArgs mismatch")
 		})
 	}
@@ -534,7 +555,7 @@ func TestPassThroughFlagParser_EdgeCases(t *testing.T) {
 		name                        string
 		args                        []string
 		expectedIdentity            interface{}
-		expectedPassThroughArgs     []string
+		expectedSeparatedArgs     []string
 		expectedPositionalArgs      []string
 		disablePositionalExtraction bool
 	}{
@@ -542,7 +563,7 @@ func TestPassThroughFlagParser_EdgeCases(t *testing.T) {
 			name:                        "short flag -i with space-separated value and --",
 			args:                        []string{"-i", "test-user", "--", "aws", "s3", "ls"},
 			expectedIdentity:            "test-user",
-			expectedPassThroughArgs:     []string{"aws", "s3", "ls"},
+			expectedSeparatedArgs:     []string{"aws", "s3", "ls"},
 			expectedPositionalArgs:      []string{},
 			disablePositionalExtraction: true,
 		},
@@ -550,15 +571,15 @@ func TestPassThroughFlagParser_EdgeCases(t *testing.T) {
 			name:                        "short flag -i without value before --",
 			args:                        []string{"-i", "--", "aws", "s3", "ls"},
 			expectedIdentity:            "__SELECT__", // NoOptDefVal triggers
-			expectedPassThroughArgs:     []string{"aws", "s3", "ls"},
+			expectedSeparatedArgs:     []string{"aws", "s3", "ls"},
 			expectedPositionalArgs:      []string{},
 			disablePositionalExtraction: true,
 		},
 		{
 			name:                        "identity equals empty string",
 			args:                        []string{"--identity=", "--", "echo", "hello"},
-			expectedIdentity:            "", // Empty string is treated as explicit empty value, not NoOptDefVal
-			expectedPassThroughArgs:     []string{"echo", "hello"},
+			expectedIdentity:            "__SELECT__", // Empty value triggers NoOptDefVal (interactive selection)
+			expectedSeparatedArgs:     []string{"echo", "hello"},
 			expectedPositionalArgs:      []string{},
 			disablePositionalExtraction: true,
 		},
@@ -566,7 +587,7 @@ func TestPassThroughFlagParser_EdgeCases(t *testing.T) {
 			name:                        "no double dash with identity equals value",
 			args:                        []string{"--identity=test-user", "terraform", "plan"},
 			expectedIdentity:            "test-user",
-			expectedPassThroughArgs:     []string{"terraform", "plan"},
+			expectedSeparatedArgs:     []string{"terraform", "plan"},
 			expectedPositionalArgs:      []string{},
 			disablePositionalExtraction: true,
 		},
@@ -574,7 +595,7 @@ func TestPassThroughFlagParser_EdgeCases(t *testing.T) {
 			name:                        "identity flag at end without value",
 			args:                        []string{"echo", "hello", "--identity"},
 			expectedIdentity:            "__SELECT__",
-			expectedPassThroughArgs:     []string{"echo", "hello"},
+			expectedSeparatedArgs:     []string{"echo", "hello"},
 			expectedPositionalArgs:      []string{},
 			disablePositionalExtraction: true,
 		},
@@ -582,7 +603,7 @@ func TestPassThroughFlagParser_EdgeCases(t *testing.T) {
 			name:                        "only identity flag without command",
 			args:                        []string{"--identity"},
 			expectedIdentity:            "__SELECT__",
-			expectedPassThroughArgs:     []string{}, // Parser returns empty slice, not nil
+			expectedSeparatedArgs:     []string{}, // Parser returns empty slice, not nil
 			expectedPositionalArgs:      []string{},
 			disablePositionalExtraction: true,
 		},
@@ -590,7 +611,7 @@ func TestPassThroughFlagParser_EdgeCases(t *testing.T) {
 			name:                        "short flag -i with equals syntax",
 			args:                        []string{"-i=test-user", "--", "aws", "s3", "ls"},
 			expectedIdentity:            "test-user",
-			expectedPassThroughArgs:     []string{"aws", "s3", "ls"},
+			expectedSeparatedArgs:     []string{"aws", "s3", "ls"},
 			expectedPositionalArgs:      []string{},
 			disablePositionalExtraction: true,
 		},
@@ -618,8 +639,172 @@ func TestPassThroughFlagParser_EdgeCases(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.expectedIdentity, result.Flags["identity"], "identity flag mismatch")
-			assert.Equal(t, tt.expectedPassThroughArgs, result.PassThroughArgs, "PassThroughArgs mismatch")
+			assert.Equal(t, tt.expectedSeparatedArgs, result.SeparatedArgs, "SeparatedArgs mismatch")
 			assert.Equal(t, tt.expectedPositionalArgs, result.PositionalArgs, "PositionalArgs mismatch")
+		})
+	}
+}
+
+// TestPassThroughFlagParser_ResolveNoOptDefValForEmptyValue tests the helper function
+// that resolves NoOptDefVal for flags with empty values.
+func TestPassThroughFlagParser_ResolveNoOptDefValForEmptyValue(t *testing.T) {
+	tests := []struct {
+		name           string
+		flagName       string
+		flagShorthand  string
+		value          string
+		noOptDefVal    string
+		expectedResult interface{}
+		description    string
+	}{
+		{
+			name:           "empty value with NoOptDefVal",
+			flagName:       "identity",
+			flagShorthand:  "i",
+			value:          "",
+			noOptDefVal:    "__SELECT__",
+			expectedResult: "__SELECT__",
+			description:    "Empty value should return NoOptDefVal",
+		},
+		{
+			name:           "empty value with NoOptDefVal (shorthand)",
+			flagName:       "identity",
+			flagShorthand:  "i",
+			value:          "",
+			noOptDefVal:    "__SELECT__",
+			expectedResult: "__SELECT__",
+			description:    "Shorthand with empty value should return NoOptDefVal",
+		},
+		{
+			name:           "non-empty value with NoOptDefVal",
+			flagName:       "identity",
+			flagShorthand:  "i",
+			value:          "prod",
+			noOptDefVal:    "__SELECT__",
+			expectedResult: "prod",
+			description:    "Non-empty value should be returned as-is",
+		},
+		{
+			name:           "empty value without NoOptDefVal",
+			flagName:       "stack",
+			flagShorthand:  "s",
+			value:          "",
+			noOptDefVal:    "",
+			expectedResult: "",
+			description:    "Empty value without NoOptDefVal should remain empty",
+		},
+		{
+			name:           "pager flag empty value",
+			flagName:       "pager",
+			flagShorthand:  "",
+			value:          "",
+			noOptDefVal:    "true",
+			expectedResult: "true",
+			description:    "Pager flag with empty value should use NoOptDefVal",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create parser with empty registry.
+			parser := NewPassThroughFlagParser()
+
+			// Register flag with NoOptDefVal.
+			registry := parser.GetRegistry()
+			flag := &StringFlag{
+				Name:        tt.flagName,
+				Shorthand:   tt.flagShorthand,
+				NoOptDefVal: tt.noOptDefVal,
+			}
+			registry.Register(flag)
+
+			// Manually populate shorthandToFull map since we registered flag after parser creation.
+			// In normal usage, this is done automatically in NewPassThroughFlagParser constructor.
+			if tt.flagShorthand != "" {
+				parser.shorthandToFull[tt.flagShorthand] = tt.flagName
+			}
+
+			// Test with full name.
+			result := parser.resolveNoOptDefValForEmptyValue(tt.flagName, tt.value)
+			assert.Equal(t, tt.expectedResult, result, tt.description)
+
+			// Test with shorthand if it exists.
+			if tt.flagShorthand != "" {
+				result = parser.resolveNoOptDefValForEmptyValue(tt.flagShorthand, tt.value)
+				assert.Equal(t, tt.expectedResult, result, tt.description+" (shorthand)")
+			}
+		})
+	}
+}
+
+// TestPassThroughFlagParser_EmptyValueHandling tests the parser's ability to handle
+// --flag= (empty value after equals sign) for NoOptDefVal flags.
+// This is an integration test that verifies the complete parsing flow.
+func TestPassThroughFlagParser_EmptyValueHandling(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          []string
+		expectedValue string
+		description   string
+	}{
+		{
+			name:          "--identity= (empty value should use NoOptDefVal)",
+			args:          []string{"plan", "vpc", "--identity="},
+			expectedValue: "__SELECT__",
+			description:   "Empty value after = should trigger interactive selection (use NoOptDefVal)",
+		},
+		{
+			name:          "-i= (shorthand empty value should use NoOptDefVal)",
+			args:          []string{"plan", "vpc", "-i="},
+			expectedValue: "__SELECT__",
+			description:   "Shorthand empty value should also trigger interactive selection",
+		},
+		{
+			name:          "--identity (alone should use NoOptDefVal)",
+			args:          []string{"plan", "vpc", "--identity"},
+			expectedValue: "__SELECT__",
+			description:   "Flag without value should use NoOptDefVal (existing behavior)",
+		},
+		{
+			name:          "--identity=prod (explicit value)",
+			args:          []string{"plan", "vpc", "--identity=prod"},
+			expectedValue: "prod",
+			description:   "Explicit value should be used as-is",
+		},
+		{
+			name:          "no identity flag",
+			args:          []string{"plan", "vpc"},
+			expectedValue: "",
+			description:   "No identity flag means no value",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewPassThroughFlagParser(WithCommonFlags())
+
+			// Set NoOptDefVal for identity flag
+			registry := parser.GetRegistry()
+			identityFlag := registry.Get("identity")
+			require.NotNil(t, identityFlag, "identity flag should exist in registry")
+
+			if sf, ok := identityFlag.(*StringFlag); ok {
+				sf.NoOptDefVal = "__SELECT__"
+			}
+
+			// Parse args
+			result, err := parser.Parse(context.Background(), tt.args)
+			require.NoError(t, err)
+
+			// Check identity value
+			actualValue, exists := result.Flags["identity"]
+			if tt.expectedValue == "" {
+				// No identity flag provided
+				assert.False(t, exists, "identity flag should not exist when not provided")
+			} else {
+				require.True(t, exists, "identity flag should exist in result")
+				assert.Equal(t, tt.expectedValue, actualValue, tt.description)
+			}
 		})
 	}
 }

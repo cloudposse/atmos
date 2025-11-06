@@ -766,7 +766,7 @@ func executeCustomCommandWithParser(
 	}
 
 	// Get pass-through args (everything after flags or --)
-	passThroughArgs := opts.PassThroughArgs
+	passThroughArgs := opts.SeparatedArgs
 
 	// Extract trailing args (args after --)
 	trailingArgs, err := getQuotedTrailingArgs(passThroughArgs)

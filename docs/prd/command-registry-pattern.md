@@ -1631,8 +1631,78 @@ func RegisterPlugin(plugin *Plugin) {
 - [Docker CLI Command Registry](https://github.com/docker/cli/tree/master/cli/command)
 - [kubectl Plugin System](https://kubernetes.io/docs/tasks/extend-kubectl/kubectl-plugins/)
 
+## Future Migration Path: Command-Specific Packages
+
+### Phase 1: Intermediate Organization (pkg/flags/{command}/)
+
+As an intermediate step before full command provider migration, command-specific flags/options/builders will be organized into subpackages:
+
+```
+pkg/flags/
+├── builder.go                     # Builder interface
+├── registry.go                    # FlagRegistry
+├── standard.go                    # StandardParser
+├── options.go                     # GlobalFlags
+├── terraform/                     # Terraform-specific
+│   ├── common_flags.go           # CommonFlags()
+│   ├── plan_flags.go             # PlanFlags(), PlanCompatibilityAliases()
+│   ├── plan_options.go           # PlanOptions
+│   ├── apply_flags.go            # ApplyFlags(), ApplyCompatibilityAliases()
+│   ├── apply_options.go          # ApplyOptions
+│   ├── parser.go                 # TerraformParser
+│   └── positional_args_builder.go
+├── packer/                        # Packer-specific
+│   ├── build_flags.go
+│   ├── build_options.go
+│   └── ...
+├── helmfile/                      # Helmfile-specific
+│   ├── sync_flags.go
+│   ├── sync_options.go
+│   └── ...
+├── workflow/                      # Workflow-specific
+├── describe/                      # Describe-specific
+└── validate/                      # Validate-specific
+```
+
+**Benefits:**
+- Clear ownership: All terraform-related flags/options in one place
+- No circular dependencies: Subpackages import parent pkg/flags for infrastructure
+- Easier to navigate: `pkg/flags/terraform/` contains everything for terraform
+- Incremental migration: Can be done per-command without touching command execution logic
+
+### Phase 2: Final Location (cmd/{command}/)
+
+When commands are fully migrated to command providers, flags/options move to their final location:
+
+```
+cmd/terraform/
+├── terraform.go                   # TerraformCommandProvider
+├── plan.go                        # Plan subcommand
+├── plan_flags.go                  # From pkg/flags/terraform/plan_flags.go
+├── plan_options.go                # From pkg/flags/terraform/plan_options.go
+├── apply.go                       # Apply subcommand
+├── apply_flags.go                 # From pkg/flags/terraform/apply_flags.go
+├── apply_options.go               # From pkg/flags/terraform/apply_options.go
+├── common_flags.go                # From pkg/flags/terraform/common_flags.go
+└── positional_args_builder.go    # From pkg/flags/terraform/positional_args_builder.go
+```
+
+**Migration Steps:**
+1. **Phase 1** (This PR scope): Refine CommandProvider interface with GetFlagsBuilder(), GetPositionalArgsBuilder(), GetCompatibilityAliases()
+2. **Phase 1.5** (Future PR): Move command-specific files from `pkg/flags/` to `pkg/flags/{command}/`
+3. **Phase 2** (Future PR): Migrate command implementations from `cmd/{command}.go` to `cmd/{command}/{command}.go` with CommandProvider
+4. **Phase 2.5** (Future PR): Move flags/options from `pkg/flags/{command}/` to `cmd/{command}/`
+5. **Phase 3** (Future PR): All commands use command registry pattern, flags co-located with commands
+
+**Why this approach:**
+- **Incremental:** Each phase is independently useful and testable
+- **Low risk:** Changes are isolated, no big-bang refactor
+- **Clear path:** Each step moves us closer to final architecture
+- **Reversible:** Can stop at any phase if needed
+
 ## Changelog
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2025-10-15 | Initial PRD with custom command integration |
+| 1.1 | 2025-11-05 | Added future migration path for command-specific packages |

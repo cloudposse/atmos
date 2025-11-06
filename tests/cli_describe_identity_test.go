@@ -99,6 +99,13 @@ func TestDescribeCommandsWithoutAuthWork(t *testing.T) {
 		cmd.Stderr = &stderr
 		err := cmd.Run()
 
+		// Debug output.
+		if err != nil {
+			t.Logf("Command failed with error: %v", err)
+			t.Logf("Stdout: %s", stdout.String())
+			t.Logf("Stderr: %s", stderr.String())
+		}
+
 		// Should succeed when no identity flag is provided.
 		assert.NoError(t, err, "describe stacks without identity flag should succeed")
 	})

@@ -17,7 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/auth"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -36,7 +36,7 @@ const (
 //go:embed markdown/atmos_auth_console_usage.md
 var authConsoleUsageMarkdown string
 
-var authConsoleParser = flags.NewAuthOptionsBuilder().
+var authConsoleParser = auth.NewAuthOptionsBuilder().
 	WithDestination().
 	WithDuration("1h").
 	WithIssuer("atmos").
@@ -148,7 +148,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 }
 
 // handleBrowserOpen handles opening the console URL in the browser or displaying it.
-func handleBrowserOpen(opts *flags.AuthOptions, consoleURL string) {
+func handleBrowserOpen(opts *auth.AuthOptions, consoleURL string) {
 	if !opts.NoOpen && !telemetry.IsCI() {
 		fmt.Fprintf(os.Stderr, "\n")
 		if err := u.OpenUrl(consoleURL); err != nil {
@@ -269,7 +269,7 @@ func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
 
 // resolveConsoleDuration resolves console session duration from flag or provider config.
 // Flag takes precedence over provider configuration.
-func resolveConsoleDuration(opts *flags.AuthOptions, authManager types.AuthManager, providerName string) (time.Duration, error) {
+func resolveConsoleDuration(opts *auth.AuthOptions, authManager types.AuthManager, providerName string) (time.Duration, error) {
 	defer perf.Track(nil, "cmd.resolveConsoleDuration")()
 
 	// If duration was explicitly provided via flag, use it (even if zero).

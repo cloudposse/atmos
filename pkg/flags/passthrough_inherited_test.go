@@ -254,7 +254,7 @@ func TestPassThroughFlagParser_WithDoubleDashSeparator(t *testing.T) {
 	assert.Equal(t, "Debug", v.GetString("logs-level"))
 
 	// Verify pass-through args
-	assert.Equal(t, []string{"-var", "foo=bar"}, result.PassThroughArgs)
+	assert.Equal(t, []string{"-var", "foo=bar"}, result.SeparatedArgs)
 }
 
 // TestPassThroughFlagParser_NoInheritedFlags tests that the parser still works

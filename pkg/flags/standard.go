@@ -95,9 +95,16 @@ func (p *StandardFlagParser) SetPositionalArgs(
 	}
 }
 
+// ParsedFlags returns the combined FlagSet used in the last Parse() call.
+// This is useful for checking if flags were Changed when DisableFlagParsing is enabled.
+func (p *StandardFlagParser) ParsedFlags() *pflag.FlagSet {
+	return p.parsedFlags
+}
+
 // RegisterFlags implements FlagParser.
-// Automatically sets DisableFlagParsing=true to ensure our parser handles flag parsing
-// instead of Cobra, which allows proper positional arg extraction and Viper precedence.
+// Automatically sets DisableFlagParsing=true and Args=cobra.ArbitraryArgs to ensure
+// our parser handles flag parsing instead of Cobra, which allows proper positional
+// arg extraction and Viper precedence.
 func (p *StandardFlagParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.StandardFlagParser.RegisterFlags")()
 
@@ -111,12 +118,57 @@ func (p *StandardFlagParser) RegisterFlags(cmd *cobra.Command) {
 	// - Short flag support (-s, -f, -i, etc.)
 	cmd.DisableFlagParsing = true
 
+	// IMPORTANT: Set Args validator to ArbitraryArgs.
+	// When DisableFlagParsing=true, Cobra's Args validator runs BEFORE our Parse() method,
+	// and it sees raw arguments including flags (e.g., ["-f", "yaml"]).
+	// Using ArbitraryArgs allows all arguments through, then our Parse() method extracts
+	// flags and validates remaining positional args.
+	// This eliminates "Unknown command -f" errors and other Args validation boilerplate.
+	cmd.Args = cobra.ArbitraryArgs
+
 	for _, flag := range p.registry.All() {
 		p.registerFlag(cmd, flag)
 	}
 
 	// Auto-register completion functions for flags with valid values.
 	p.registerCompletions(cmd)
+}
+
+// GetActualArgs extracts the actual arguments when DisableFlagParsing=true.
+// When DisableFlagParsing=true, cmd.Flags().Args() returns empty because Cobra
+// doesn't parse flags. This function falls back to os.Args to get the raw arguments.
+//
+// This logic is extracted here to be testable and reusable, rather than duplicated
+// in UsageFunc handlers.
+//
+// Returns the arguments slice that should be used for Args validation.
+func GetActualArgs(cmd *cobra.Command, osArgs []string) []string {
+	arguments := cmd.Flags().Args()
+	if len(arguments) == 0 && cmd.DisableFlagParsing {
+		// Extract args from os.Args based on command path depth.
+		// For example, "atmos describe component comp1" has path depth 3,
+		// so we take osArgs[3:] to get ["comp1"].
+		commandDepth := len(strings.Split(cmd.CommandPath(), " "))
+		if commandDepth < len(osArgs) {
+			arguments = osArgs[commandDepth:]
+		}
+	}
+	return arguments
+}
+
+// ValidateArgsOrNil checks if the command's Args validator accepts the given arguments.
+// Returns nil if validation passes, or the validation error if it fails.
+//
+// This is used to distinguish between:
+//   - Valid positional arguments (return nil, show usage without "Unknown command" error)
+//   - Invalid arguments/unknown subcommands (return error, show "Unknown command" error)
+//
+// This logic is extracted here to be testable and avoid duplication in UsageFunc handlers.
+func ValidateArgsOrNil(cmd *cobra.Command, args []string) error {
+	if cmd.Args == nil {
+		return nil // No validator means all args are valid
+	}
+	return cmd.Args(cmd, args)
 }
 
 // registerFlag registers a single flag with Cobra based on its type.
@@ -286,28 +338,13 @@ func (p *StandardFlagParser) BindToViper(v *viper.Viper) error {
 	// Store Viper instance for precedence handling in Parse()
 	p.viper = v
 
-	// Bind environment variables for each flag
+	// Bind environment variables for each flag.
+	// Do NOT bind pflags here - they should only be bound AFTER parsing in Parse().
+	// Binding pflags before parsing causes the unparsed default values (often "")
+	// to override SetDefault() values, breaking default handling.
 	for _, flag := range p.registry.All() {
 		if err := p.bindFlag(v, flag); err != nil {
 			return err
-		}
-	}
-
-	// Also bind Cobra pflags to Viper if command is available
-	// This enables CLI flag values to be read by Viper with proper precedence
-	if p.cmd != nil {
-		for _, flag := range p.registry.All() {
-			viperKey := p.getViperKey(flag.GetName())
-			// Check both local and persistent flags (needed for global flags on RootCmd).
-			cobraFlag := p.cmd.Flags().Lookup(flag.GetName())
-			if cobraFlag == nil {
-				cobraFlag = p.cmd.PersistentFlags().Lookup(flag.GetName())
-			}
-			if cobraFlag != nil {
-				if err := v.BindPFlag(viperKey, cobraFlag); err != nil {
-					return fmt.Errorf("failed to bind pflag %s to viper: %w", flag.GetName(), err)
-				}
-			}
 		}
 	}
 
@@ -322,6 +359,8 @@ func (p *StandardFlagParser) bindFlag(v *viper.Viper, flag Flag) error {
 
 // BindFlagsToViper is called after RegisterFlags to bind Cobra flags to Viper.
 // This must be called separately because we need access to the Cobra command.
+// Sets defaults and binds both pflags and environment variables to ensure all
+// precedence levels work correctly (CLI flags > ENV vars > defaults).
 //
 // Usage:
 //
@@ -330,8 +369,19 @@ func (p *StandardFlagParser) bindFlag(v *viper.Viper, flag Flag) error {
 func (p *StandardFlagParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Viper) error {
 	defer perf.Track(nil, "flagparser.StandardFlagParser.BindFlagsToViper")()
 
+	// Update the parser's viper instance so Parse() uses the correct viper.
+	// This is critical when commands use viper.New() instead of viper.GetViper().
+	p.viper = v
+
 	for _, flag := range p.registry.All() {
 		viperKey := p.getViperKey(flag.GetName())
+
+		// Set default value first (needed when using viper.New() instead of global viper).
+		if err := bindFlagToViper(v, viperKey, flag); err != nil {
+			return err
+		}
+
+		// Then bind the Cobra pflag to Viper for CLI precedence.
 		cobraFlag := cmd.Flags().Lookup(flag.GetName())
 		if cobraFlag == nil {
 			continue
@@ -352,7 +402,7 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 	result := &ParsedConfig{
 		Flags:           make(map[string]interface{}),
 		PositionalArgs:  []string{},
-		PassThroughArgs: []string{},
+		SeparatedArgs: []string{},
 	}
 
 	// combinedFlags holds both local and inherited flags for validation.
@@ -389,14 +439,29 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 			return nil, fmt.Errorf("failed to parse flags: %w", err)
 		}
 
-		// Extract positional args (non-flag args).
-		result.PositionalArgs = combinedFlags.Args()
+		// Extract all non-flag args (includes both positional args and pass-through args after --).
+		// pflag automatically handles -- separator: everything after -- is in Args().
+		allArgs := combinedFlags.Args()
 
-		// Validate positional args if configured.
-		if p.positionalArgs != nil && p.positionalArgs.validator != nil {
-			if err := p.positionalArgs.validator(p.cmd, result.PositionalArgs); err != nil {
-				return nil, err
+		// Split into positional args and pass-through args based on configured spec count.
+		// For commands that need to pass args to external tools (terraform, helmfile, packer):
+		//   - First N args are positional (e.g., ["plan", "vpc"])
+		//   - Remaining args are pass-through (e.g., ["-var", "foo=bar"])
+		// For regular commands, all args are positional.
+		if p.positionalArgs != nil && len(p.positionalArgs.specs) > 0 {
+			expectedPositionalCount := len(p.positionalArgs.specs)
+			if len(allArgs) >= expectedPositionalCount {
+				result.PositionalArgs = allArgs[:expectedPositionalCount]
+				result.SeparatedArgs = allArgs[expectedPositionalCount:]
+			} else {
+				// Fewer args than expected - all are positional, none are pass-through
+				result.PositionalArgs = allArgs
+				result.SeparatedArgs = []string{}
 			}
+		} else {
+			// No positional args configured - all args are positional
+			result.PositionalArgs = allArgs
+			result.SeparatedArgs = []string{}
 		}
 
 		// After parsing, bind the parsed pflags to Viper to ensure values are available.
@@ -414,8 +479,16 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 			}
 		}
 	} else {
-		// No command or no args - all args are positional
+		// No command or no args - all args are positional, no pass-through
 		result.PositionalArgs = args
+		result.SeparatedArgs = []string{}
+	}
+
+	// Validate positional args if configured (after positional args are extracted).
+	if p.positionalArgs != nil && p.positionalArgs.validator != nil {
+		if err := p.positionalArgs.validator(p.cmd, result.PositionalArgs); err != nil {
+			return nil, err
+		}
 	}
 
 	// Step 2: Populate Flags map from Viper with precedence applied
@@ -428,13 +501,29 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 			// Use type-specific getters to ensure proper type conversion
 			// (ENV vars come in as strings and need conversion)
 			// GetX methods return the default if key is not explicitly set
-			switch flag.(type) {
+			switch f := flag.(type) {
 			case *BoolFlag:
 				result.Flags[flagName] = p.viper.GetBool(viperKey)
 			case *IntFlag:
 				result.Flags[flagName] = p.viper.GetInt(viperKey)
 			case *StringFlag:
-				result.Flags[flagName] = p.viper.GetString(viperKey)
+				value := p.viper.GetString(viperKey)
+				// If Viper returns empty string and flag wasn't explicitly changed, use the flag's default.
+				// This handles the case where BindPFlag was called before parsing, causing empty
+				// pflag values to override SetDefault().
+				// If combinedFlags is nil (no args were provided), also use default for empty values.
+				if value == "" {
+					if combinedFlags == nil {
+						// No args were provided, use default
+						value = f.Default
+					} else {
+						cobraFlag := combinedFlags.Lookup(flagName)
+						if cobraFlag != nil && !cobraFlag.Changed {
+							value = f.Default
+						}
+					}
+				}
+				result.Flags[flagName] = value
 			case *StringSliceFlag:
 				result.Flags[flagName] = p.viper.GetStringSlice(viperKey)
 			default:
@@ -446,8 +535,13 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 
 	// Step 3: Validate flag values against valid values constraints.
 	// Pass combinedFlags so validation can check Changed status correctly.
-	if err := p.validateFlagValues(result.Flags, combinedFlags); err != nil {
-		return nil, err
+	// Only validate when combinedFlags is available (i.e., when flags were actually parsed).
+	// If combinedFlags is nil (no parsing occurred), skip validation to avoid false positives
+	// from Viper/config values that weren't explicitly set by the user.
+	if combinedFlags != nil {
+		if err := p.validateFlagValues(result.Flags, combinedFlags); err != nil {
+			return nil, err
+		}
 	}
 
 	return result, nil

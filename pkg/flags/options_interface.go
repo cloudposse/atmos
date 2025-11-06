@@ -22,8 +22,8 @@ type CommandOptions interface {
 	// GetPositionalArgs returns positional arguments (e.g., component name, subcommand).
 	GetPositionalArgs() []string
 
-	// GetPassThroughArgs returns arguments to pass to underlying tools (Terraform, Helmfile, etc.).
-	GetPassThroughArgs() []string
+	// GetSeparatedArgs returns arguments to pass to underlying tools (Terraform, Helmfile, etc.).
+	GetSeparatedArgs() []string
 }
 
 // BaseOptions provides common implementation for CommandOptions interface.
@@ -52,9 +52,9 @@ func (b *BaseOptions) GetPositionalArgs() []string {
 	return b.positionalArgs
 }
 
-// GetPassThroughArgs implements CommandOptions.
-func (b *BaseOptions) GetPassThroughArgs() []string {
-	defer perf.Track(nil, "flagparser.BaseOptions.GetPassThroughArgs")()
+// GetSeparatedArgs implements CommandOptions.
+func (b *BaseOptions) GetSeparatedArgs() []string {
+	defer perf.Track(nil, "flagparser.BaseOptions.GetSeparatedArgs")()
 
 	return b.passThroughArgs
 }

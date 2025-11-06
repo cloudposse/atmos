@@ -99,18 +99,19 @@ type ParsedConfig struct {
 	// This map will be removed in a future version.
 	Flags map[string]interface{}
 
-	// PassThroughArgs contains arguments to pass to external tools.
-	// Only populated for pass-through commands (terraform, helmfile, packer).
-	// These arguments are NOT parsed by Atmos - they're passed directly to the tool.
-	PassThroughArgs []string
-
 	// PositionalArgs contains positional arguments extracted from the command line.
 	// The meaning of these depends on the command:
-	//   - For terraform: [subcommand, component] e.g., ["plan", "vpc"]
+	//   - For terraform: [component] e.g., ["vpc"]
 	//   - For packer/helmfile: [component] e.g., ["vpc"]
-	//   - For auth exec: [] (no positional args, everything is pass-through)
 	// Callers should interpret these based on their command's semantics.
 	PositionalArgs []string
+
+	// SeparatedArgs contains arguments after the -- separator for external tools.
+	// These arguments come after -- and are passed to external tools unchanged.
+	// Example: atmos terraform plan vpc -s dev -- -var foo=bar
+	//   PositionalArgs: ["vpc"]
+	//   SeparatedArgs: ["-var", "foo=bar"]
+	SeparatedArgs []string
 }
 
 // GetIdentity returns the identity value from parsed flags with proper type safety.
@@ -118,7 +119,7 @@ type ParsedConfig struct {
 func (p *ParsedConfig) GetIdentity() string {
 	defer perf.Track(nil, "flags.ParsedConfig.GetIdentity")()
 
-	return getString(p.Flags, "identity")
+	return GetString(p.Flags, "identity")
 }
 
 // GetStack returns the stack value from parsed flags with proper type safety.
@@ -126,62 +127,19 @@ func (p *ParsedConfig) GetIdentity() string {
 func (p *ParsedConfig) GetStack() string {
 	defer perf.Track(nil, "flags.ParsedConfig.GetStack")()
 
-	return getString(p.Flags, "stack")
+	return GetString(p.Flags, "stack")
 }
 
-// ToTerraformOptions converts ParsedConfig to strongly-typed TerraformOptions.
+// NOTE: ToTerraformOptions() was removed to avoid circular dependency between
+// pkg/flags and pkg/flags/terraform.
 //
-// This provides compile-time type safety instead of runtime map access:
-//
-//	// ❌ Weak typing (runtime errors possible)
-//	stack := parsedConfig.Flags["stack"].(string)
-//
-//	// ✅ Strong typing (compile-time safety)
-//	opts := parsedConfig.ToTerraformOptions()
-//	stack := opts.Stack
-//
-// Migration path:
-//  1. Add this method to enable gradual migration
-//  2. Update commands to use options instead of Flags map
-//  3. Eventually replace Parse() to return options directly
-func (p *ParsedConfig) ToTerraformOptions() TerraformOptions {
-	defer perf.Track(nil, "flagparser.ParsedConfig.ToTerraformOptions")()
-
-	return TerraformOptions{
-		GlobalFlags: GlobalFlags{
-			Chdir:           getString(p.Flags, "chdir"),
-			BasePath:        getString(p.Flags, "base-path"),
-			Config:          getStringSlice(p.Flags, "config"),
-			ConfigPath:      getStringSlice(p.Flags, "config-path"),
-			LogsLevel:       getString(p.Flags, "logs-level"),
-			LogsFile:        getString(p.Flags, "logs-file"),
-			NoColor:         getBool(p.Flags, "no-color"),
-			Pager:           getPagerSelector(p.Flags, "pager"),
-			Identity:        getIdentitySelector(p.Flags, "identity"),
-			ProfilerEnabled: getBool(p.Flags, "profiler-enabled"),
-			ProfilerPort:    getInt(p.Flags, "profiler-port"),
-			ProfilerHost:    getString(p.Flags, "profiler-host"),
-			ProfileFile:     getString(p.Flags, "profile-file"),
-			ProfileType:     getString(p.Flags, "profile-type"),
-			Heatmap:         getBool(p.Flags, "heatmap"),
-			HeatmapMode:     getString(p.Flags, "heatmap-mode"),
-			RedirectStderr:  getString(p.Flags, "redirect-stderr"),
-			Version:         getBool(p.Flags, "version"),
-		},
-		Stack:           getString(p.Flags, "stack"),
-		Identity:        getIdentitySelector(p.Flags, "identity"),
-		DryRun:          getBool(p.Flags, "dry-run"),
-		UploadStatus:    getBool(p.Flags, "upload-status"),
-		SkipInit:        getBool(p.Flags, "skip-init"),
-		FromPlan:        getString(p.Flags, "from-plan"),
-		positionalArgs:  p.PositionalArgs,
-		passThroughArgs: p.PassThroughArgs,
-	}
-}
+// To convert ParsedConfig to terraform.Options, use terraform.ParseFlags() or
+// construct terraform.Options directly from the ParsedConfig.Flags map.
 
 // Helper functions for safe map access with type conversion.
 
-func getString(m map[string]interface{}, key string) string {
+// GetString extracts a string value from the parsed flags map.
+func GetString(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {
 		if s, ok := v.(string); ok {
 			return s
@@ -190,7 +148,8 @@ func getString(m map[string]interface{}, key string) string {
 	return ""
 }
 
-func getStringSlice(m map[string]interface{}, key string) []string {
+// GetStringSlice extracts a string slice value from the parsed flags map.
+func GetStringSlice(m map[string]interface{}, key string) []string {
 	if v, ok := m[key]; ok {
 		if slice, ok := v.([]string); ok {
 			return slice
@@ -199,7 +158,8 @@ func getStringSlice(m map[string]interface{}, key string) []string {
 	return nil
 }
 
-func getBool(m map[string]interface{}, key string) bool {
+// GetBool extracts a boolean value from the parsed flags map.
+func GetBool(m map[string]interface{}, key string) bool {
 	if v, ok := m[key]; ok {
 		if b, ok := v.(bool); ok {
 			return b
@@ -208,7 +168,8 @@ func getBool(m map[string]interface{}, key string) bool {
 	return false
 }
 
-func getInt(m map[string]interface{}, key string) int {
+// GetInt extracts an integer value from the parsed flags map.
+func GetInt(m map[string]interface{}, key string) int {
 	if v, ok := m[key]; ok {
 		if i, ok := v.(int); ok {
 			return i
@@ -218,16 +179,18 @@ func getInt(m map[string]interface{}, key string) int {
 }
 
 //nolint:unparam // key parameter kept for consistency with other getter functions
-func getIdentitySelector(m map[string]interface{}, key string) IdentitySelector {
-	value := getString(m, key)
+// GetIdentitySelector extracts an IdentitySelector value from the parsed flags map.
+func GetIdentitySelector(m map[string]interface{}, key string) IdentitySelector {
+	value := GetString(m, key)
 	// Check if identity was explicitly provided by checking if the key exists.
 	_, provided := m[key]
 	return NewIdentitySelector(value, provided)
 }
 
 //nolint:unparam // key parameter kept for consistency with other getter functions
-func getPagerSelector(m map[string]interface{}, key string) PagerSelector {
-	value := getString(m, key)
+// GetPagerSelector extracts a PagerSelector value from the parsed flags map.
+func GetPagerSelector(m map[string]interface{}, key string) PagerSelector {
+	value := GetString(m, key)
 	// Check if pager was explicitly provided by checking if the key exists.
 	_, provided := m[key]
 	return NewPagerSelector(value, provided)

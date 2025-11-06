@@ -13,6 +13,10 @@ import (
 func bindFlagToViper(v *viper.Viper, viperKey string, flag Flag) error {
 	defer perf.Track(nil, "flagparser.bindFlagToViper")()
 
+	// Set default value in Viper so it's returned when flag is not explicitly set.
+	// This ensures defaults work correctly for CLI flags, ENV vars, and config files.
+	v.SetDefault(viperKey, flag.GetDefault())
+
 	// Special handling for flags with NoOptDefVal (identity pattern)
 	if flag.GetNoOptDefVal() != "" {
 		envVars := flag.GetEnvVars()

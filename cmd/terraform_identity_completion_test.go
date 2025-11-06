@@ -22,8 +22,9 @@ func TestTerraformIdentityFlagCompletion(t *testing.T) {
 
 	require.NotNil(t, tfCmd, "terraform command should exist")
 
-	// Check that identity flag exists.
-	identityFlag := tfCmd.PersistentFlags().Lookup("identity")
+	// Check that identity flag exists (inherited from RootCmd persistent flags).
+	// Use Flag() instead of PersistentFlags() because inherited flags won't show up in PersistentFlags().
+	identityFlag := tfCmd.Flag("identity")
 	require.NotNil(t, identityFlag, "identity flag should be defined on terraform command")
 
 	// Check that completion function is registered.

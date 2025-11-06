@@ -35,8 +35,6 @@ func TestDescribeWorkflows(t *testing.T) {
 		describeWorkflowsMock,
 	)
 
-	describeWorkflowsCmd.Flags().StringP("pager", "p", "", "Specify a pager to use for output (e.g., `less`, `more`)")
-
 	err := run(describeWorkflowsCmd, []string{})
 
 	// Verify command executed without errors. The mock expectations verify

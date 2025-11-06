@@ -17,7 +17,7 @@ import (
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
-	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/auth"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -27,7 +27,7 @@ const (
 	logKeyIdentity = "identity"
 )
 
-var authWhoamiParser = flags.NewAuthOptionsBuilder().
+var authWhoamiParser = auth.NewAuthOptionsBuilder().
 	WithOutput([]string{"table", "json"}, "table").
 	Build()
 

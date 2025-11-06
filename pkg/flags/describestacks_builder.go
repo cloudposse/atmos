@@ -150,6 +150,6 @@ func (b *DescribeStacksOptionsBuilder) Build() *DescribeStacksParser {
 	defer perf.Track(nil, "flags.DescribeStacksOptionsBuilder.Build")()
 
 	return &DescribeStacksParser{
-		parser: NewStandardFlagParser(b.options...),
+		Parser: NewStandardFlagParser(b.options...),
 	}
 }

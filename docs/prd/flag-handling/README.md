@@ -1,92 +1,77 @@
-# Strongly-Typed Interpreters
+# Flag Handling Documentation
 
-This directory contains documentation for the strongly-typed command interpreter system in Atmos.
+**⚠️ NOTICE: This directory contains historical design documents that have been consolidated.**
+
+**For the current, authoritative specification, see: [`../unified-flag-parsing-refactoring.md`](../unified-flag-parsing-refactoring.md)**
 
 ## Overview
 
-The strongly-typed interpreter pattern provides type-safe access to command flags, replacing weakly-typed map-based access with strongly-typed structs.
+This directory contains design documents for various aspects of Atmos's flag parsing system. These documents represent the evolution of thinking that led to the final unified approach.
 
-## Documents
+**Current Status**: All these documents have been consolidated into a single comprehensive PRD: [`unified-flag-parsing-refactoring.md`](../unified-flag-parsing-refactoring.md)
+
+## Historical Documents
+
+The following documents provide detailed context on specific aspects of the design but should be read in conjunction with the master PRD:
+
+### [unified-flag-parsing.md](unified-flag-parsing.md)
+**Status**: Superseded by `unified-flag-parsing-refactoring.md`
+
+Original comprehensive design for unified flag parsing. The concepts here have been integrated into the master PRD with additional details on compatibility aliases and migration strategy.
 
 ### [global-flags-pattern.md](global-flags-pattern.md)
-**Architecture and Design Pattern**
+**Status**: Integrated into master PRD (Section: "Strongly-Typed Options Structs")
 
-Details the core architecture using Go struct embedding to provide DRY (Don't Repeat Yourself) global flags handling. Shows how all 13+ persistent flags (logs-level, no-color, identity, pager, profiler-*, heatmap-*, etc.) are defined once and embedded in all command interpreters.
-
-**Key Topics:**
-- GlobalFlags struct design
-- IdentitySelector and PagerSelector types
-- CommandInterpreter interface
-- Struct embedding pattern
-- Benefits and alternatives
+Documents the GlobalFlags embedding pattern that eliminates duplication of 13+ global flags across commands.
 
 ### [global-flags-examples.md](global-flags-examples.md)
-**Real-World Examples**
+**Status**: Integrated into master PRD (Section: "Strongly-Typed Options Structs")
 
-Demonstrates the pattern with concrete examples using two real flags:
-- `--logs-level` (simple global flag)
-- `--identity` (complex flag with NoOptDefVal semantics)
-
-**Key Topics:**
-- Before/after code comparisons
-- Manual precedence vs. automatic
-- IdentitySelector usage scenarios
-- Testing examples
-- Code reduction metrics
+Real-world examples of GlobalFlags usage with `--logs-level` and `--identity` flags.
 
 ### [default-values-pattern.md](default-values-pattern.md)
-**Default Value System**
+**Status**: Integrated into master PRD (Section: "Strongly-Typed Options Structs")
 
-Explains the four-layer default value system and how defaults flow through:
-1. Cobra flag registration
-2. FlagRegistry storage
-3. Viper precedence resolution
-4. GlobalFlags struct
+Four-layer default value system and precedence order.
 
-**Key Topics:**
-- Default value types (empty string, non-empty, bool, int, special types)
-- Precedence order: CLI > ENV > config > default > zero value
-- GlobalFlagsRegistry() with pre-configured defaults
-- Testing default values
+### [strongly-typed-builder-pattern.md](strongly-typed-builder-pattern.md)
+**Status**: Integrated into master PRD (Section: "Strongly-Typed Options Structs")
 
-## Usage
+Builder pattern for strongly-typed options structs (TerraformOptions, etc.).
 
-See the main PRD at [`docs/prd/unified-flag-parsing.md`](../unified-flag-parsing.md) for the complete specification and implementation plan.
+### [type-safe-positional-arguments.md](type-safe-positional-arguments.md)
+**Status**: Integrated into master PRD (Section: "Positional Args Builders")
 
-## Quick Example
+Type-safe extraction of positional arguments with builders.
 
-```go
-// Define strongly-typed interpreter
-type TerraformInterpreter struct {
-    GlobalFlags  // Embedded - provides all 13+ global flags
+### [command-registry-colocation.md](command-registry-colocation.md), [flagparser-integration.md](flagparser-integration.md)
+**Status**: Reference documents for implementation details
 
-    // Command-specific flags
-    Stack   string
-    DryRun  bool
-}
+## Quick Reference
 
-// Use with type safety
-interpreter, _ := parser.Parse(ctx, args)
+For the complete, up-to-date specification covering:
+- Compatibility alias translation
+- Unified parser implementation
+- Strongly-typed options structs
+- Global flags embedding
+- NoOptDefVal pattern
+- Breaking changes & migration
+- Blog post guidance
+- Implementation status
 
-// ✅ Strongly typed access
-log.SetLevel(interpreter.LogsLevel)    // From GlobalFlags
-if interpreter.NoColor {                // From GlobalFlags
-    color.Disable()
-}
-
-info.Stack = interpreter.Stack          // From TerraformInterpreter
-info.DryRun = interpreter.DryRun        // From TerraformInterpreter
-
-// ✅ Clear identity handling
-if interpreter.Identity.IsInteractiveSelector() {
-    selectIdentityInteractively()
-} else if !interpreter.Identity.IsEmpty() {
-    useIdentity(interpreter.Identity.Value())
-}
-```
+**→ See [`../unified-flag-parsing-refactoring.md`](../unified-flag-parsing-refactoring.md)**
 
 ## Implementation Status
 
-- ✅ Infrastructure complete (100% test coverage)
-- ✅ Documentation complete
-- 🚧 Adoption in progress (Terraform, Helmfile, Packer, etc.)
+See the master PRD for current implementation status. As of this writing:
+
+- ✅ Phase 1: Core Infrastructure (COMPLETE)
+  - CompatibilityAliasTranslator (51 tests)
+  - UnifiedParser (25 tests)
+  - TerraformOptions struct
+
+- 🚧 Phase 2: Terraform Integration (IN PROGRESS)
+
+- 📋 Phase 3: Packer & Helmfile (PLANNED)
+
+- 🧹 Phase 4: Cleanup (PLANNED)

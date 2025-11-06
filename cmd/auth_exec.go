@@ -13,13 +13,13 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/authexec"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // authExecParser handles flag parsing for auth exec command.
-var authExecParser = flags.NewAuthExecParser()
+var authExecParser = authexec.NewAuthExecParser()
 
 // authExecCmd executes a command with authentication environment variables.
 var authExecCmd = &cobra.Command{
@@ -50,7 +50,7 @@ func executeAuthExecCommandCore(args []string) error {
 	}
 
 	// Get the command to execute (positional + pass-through args).
-	commandArgs := append(opts.GetPositionalArgs(), opts.GetPassThroughArgs()...)
+	commandArgs := append(opts.GetPositionalArgs(), opts.GetSeparatedArgs()...)
 
 	// Validate command args before attempting authentication.
 	if len(commandArgs) == 0 {

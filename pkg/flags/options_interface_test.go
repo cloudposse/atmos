@@ -24,7 +24,7 @@ func TestNewBaseOptions(t *testing.T) {
 	assert.Equal(t, positionalArgs, interpreter.GetPositionalArgs())
 
 	// Test pass-through args.
-	assert.Equal(t, passThroughArgs, interpreter.GetPassThroughArgs())
+	assert.Equal(t, passThroughArgs, interpreter.GetSeparatedArgs())
 
 	// Test GetGlobalFlags.
 	globals := interpreter.GetGlobalFlags()
@@ -69,7 +69,7 @@ func TestBaseOptions_GetPositionalArgs(t *testing.T) {
 	}
 }
 
-func TestBaseOptions_GetPassThroughArgs(t *testing.T) {
+func TestBaseOptions_GetSeparatedArgs(t *testing.T) {
 	tests := []struct {
 		name            string
 		passThroughArgs []string
@@ -95,7 +95,7 @@ func TestBaseOptions_GetPassThroughArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			interpreter := NewBaseOptions(GlobalFlags{}, nil, tt.passThroughArgs)
-			got := interpreter.GetPassThroughArgs()
+			got := interpreter.GetSeparatedArgs()
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -128,7 +128,7 @@ func TestBaseOptions_Interface(t *testing.T) {
 	// Test interface methods.
 	assert.NotNil(t, interpreter.GetGlobalFlags())
 	assert.Equal(t, []string{"vpc"}, interpreter.GetPositionalArgs())
-	assert.Equal(t, []string{"-out=plan.tfplan"}, interpreter.GetPassThroughArgs())
+	assert.Equal(t, []string{"-out=plan.tfplan"}, interpreter.GetSeparatedArgs())
 }
 
 func TestBaseOptions_Embedding(t *testing.T) {
@@ -154,7 +154,7 @@ func TestBaseOptions_Embedding(t *testing.T) {
 
 	// Test embedded methods.
 	assert.Equal(t, []string{"plan", "vpc"}, interpreter.GetPositionalArgs())
-	assert.Equal(t, []string{"-out=plan.tfplan"}, interpreter.GetPassThroughArgs())
+	assert.Equal(t, []string{"-out=plan.tfplan"}, interpreter.GetSeparatedArgs())
 
 	// Test own fields.
 	assert.Equal(t, "prod", interpreter.Stack)
@@ -175,7 +175,7 @@ func TestBaseOptions_EmptyState(t *testing.T) {
 	positional := interpreter.GetPositionalArgs()
 	assert.Nil(t, positional)
 
-	passThrough := interpreter.GetPassThroughArgs()
+	passThrough := interpreter.GetSeparatedArgs()
 	assert.Nil(t, passThrough)
 }
 
@@ -218,7 +218,7 @@ func TestCommandOptionsInterface(t *testing.T) {
 			assert.NotPanics(t, func() {
 				tt.interpreter.GetGlobalFlags()
 				tt.interpreter.GetPositionalArgs()
-				tt.interpreter.GetPassThroughArgs()
+				tt.interpreter.GetSeparatedArgs()
 			})
 		})
 	}

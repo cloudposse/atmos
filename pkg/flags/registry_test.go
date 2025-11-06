@@ -86,9 +86,9 @@ func TestFlagRegistry_All(t *testing.T) {
 func TestCommonFlags(t *testing.T) {
 	registry := CommonFlags()
 
-	// Should have 18 flags: all GlobalFlags (16) + stack + dry-run
-	// Note: identity is in GlobalFlags, not duplicated
-	assert.Equal(t, 18, registry.Count(), "CommonFlags should include global flags + stack + dry-run")
+	// Should have 2 flags: stack + dry-run
+	// Global flags are inherited from RootCmd, not included in CommonFlags
+	assert.Equal(t, 2, registry.Count(), "CommonFlags should only include stack + dry-run")
 
 	// Check stack flag (added by CommonFlags)
 	stackFlag := registry.Get("stack")
@@ -97,31 +97,30 @@ func TestCommonFlags(t *testing.T) {
 	assert.Equal(t, "s", stackFlag.GetShorthand())
 	assert.Equal(t, []string{"ATMOS_STACK"}, stackFlag.GetEnvVars())
 
-	// Check identity flag (from GlobalFlags)
-	identityFlag := registry.Get(cfg.IdentityFlagName)
-	require.NotNil(t, identityFlag)
-	assert.Equal(t, "identity", identityFlag.GetName())
-	assert.Equal(t, "i", identityFlag.GetShorthand())
-	assert.Equal(t, cfg.IdentityFlagSelectValue, identityFlag.GetNoOptDefVal())
-	assert.Equal(t, []string{"ATMOS_IDENTITY", "IDENTITY"}, identityFlag.GetEnvVars())
-
 	// Check dry-run flag
 	dryRunFlag := registry.Get("dry-run")
 	require.NotNil(t, dryRunFlag)
 	assert.Equal(t, "dry-run", dryRunFlag.GetName())
 	assert.Equal(t, []string{"ATMOS_DRY_RUN"}, dryRunFlag.GetEnvVars())
+
+	// Verify identity flag is NOT in CommonFlags (it's inherited from RootCmd)
+	identityFlag := registry.Get(cfg.IdentityFlagName)
+	assert.Nil(t, identityFlag, "identity should be inherited from RootCmd, not in CommonFlags")
 }
 
 func TestTerraformFlags(t *testing.T) {
 	registry := TerraformFlags()
 
-	// Should have common flags + Terraform-specific flags
-	assert.GreaterOrEqual(t, registry.Count(), 3)
+	// Should have common flags (stack, dry-run) + Terraform-specific flags
+	// Identity and other global flags are inherited from RootCmd, not in registry
+	assert.GreaterOrEqual(t, registry.Count(), 5)
 
 	// Should include common flags
 	assert.True(t, registry.Has("stack"))
-	assert.True(t, registry.Has("identity"))
 	assert.True(t, registry.Has("dry-run"))
+
+	// Should NOT include global flags (they're inherited from RootCmd)
+	assert.False(t, registry.Has("identity"), "identity should be inherited from RootCmd")
 
 	// Should include Terraform-specific flags
 	assert.True(t, registry.Has("upload-status"))
@@ -139,21 +138,27 @@ func TestTerraformFlags(t *testing.T) {
 func TestHelmfileFlags(t *testing.T) {
 	registry := HelmfileFlags()
 
-	// Should have common flags at minimum
-	assert.GreaterOrEqual(t, registry.Count(), 3)
+	// Should have common flags (stack, dry-run)
+	// Global flags are inherited from RootCmd, not in registry
+	assert.Equal(t, 2, registry.Count())
 	assert.True(t, registry.Has("stack"))
-	assert.True(t, registry.Has("identity"))
 	assert.True(t, registry.Has("dry-run"))
+
+	// Should NOT include global flags
+	assert.False(t, registry.Has("identity"), "identity should be inherited from RootCmd")
 }
 
 func TestPackerFlags(t *testing.T) {
 	registry := PackerFlags()
 
-	// Should have common flags at minimum
-	assert.GreaterOrEqual(t, registry.Count(), 3)
+	// Should have common flags (stack, dry-run)
+	// Global flags are inherited from RootCmd, not in registry
+	assert.Equal(t, 2, registry.Count())
 	assert.True(t, registry.Has("stack"))
-	assert.True(t, registry.Has("identity"))
 	assert.True(t, registry.Has("dry-run"))
+
+	// Should NOT include global flags
+	assert.False(t, registry.Has("identity"), "identity should be inherited from RootCmd")
 }
 
 func TestFlagRegistry_Validate(t *testing.T) {

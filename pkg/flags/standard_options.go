@@ -101,10 +101,16 @@ func (s *StandardOptions) GetPositionalArgs() []string {
 	return s.positionalArgs
 }
 
-// GetPassThroughArgs returns pass-through arguments.
+// GetSeparatedArgs returns pass-through arguments.
 // For standard commands: always empty (no pass-through).
-func (s *StandardOptions) GetPassThroughArgs() []string {
-	defer perf.Track(nil, "flagparser.StandardOptions.GetPassThroughArgs")()
+func (s *StandardOptions) GetSeparatedArgs() []string {
+	defer perf.Track(nil, "flagparser.StandardOptions.GetSeparatedArgs")()
 
 	return []string{}
+}
+
+// SetPositionalArgs sets the positional arguments.
+// This is exported for use by subpackage parsers that need to set positional args.
+func (s *StandardOptions) SetPositionalArgs(args []string) {
+	s.positionalArgs = args
 }

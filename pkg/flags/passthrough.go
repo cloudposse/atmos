@@ -48,7 +48,7 @@ const (
 //	// In command execution:
 //	cfg, err := parser.Parse(ctx, args)
 //	// cfg.Flags contains Atmos flags
-//	// cfg.PassThroughArgs contains args to pass to terraform
+//	// cfg.SeparatedArgs contains args to pass to terraform
 type PassThroughFlagParser struct {
 	registry            *FlagRegistry
 	cmd                 *cobra.Command // Cobra command for manual flag parsing
@@ -297,6 +297,9 @@ func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*Pars
 	// Create a combined FlagSet with inherited persistent flags + local flags.
 	// This is necessary because when DisableFlagParsing=true, Cobra doesn't automatically
 	// handle inherited flags from parent commands.
+	var remaining []string
+	atmosFlagsMap := make(map[string]interface{})
+
 	if p.cmd != nil && len(args) > 0 {
 		// Create combined FlagSet for parsing
 		combinedFlags := pflag.NewFlagSet("combined", pflag.ContinueOnError)
@@ -324,6 +327,9 @@ func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*Pars
 		// Ignore parse errors - pass-through commands may have unknown flags for the external tool.
 		_ = combinedFlags.Parse(args)
 
+		// Get remaining args after flag parsing (these are positional args and pass-through args)
+		remaining = combinedFlags.Args()
+
 		// After parsing, bind the parsed pflags to Viper to ensure values are available.
 		// We bind ALL flags from combinedFlags, not just registry flags, because
 		// inherited persistent flags from parent commands may not be in our registry.
@@ -335,15 +341,23 @@ func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*Pars
 				}
 			})
 		}
-	}
+	} else {
+		// Fallback: no command context, use manual extraction
+		// Step 1: Separate args into Atmos args and tool args using -- separator
+		atmosArgs, toolArgs := p.separateArgsByMode(args)
 
-	// Step 1: Separate args into Atmos args and tool args using -- separator
-	atmosArgs, toolArgs := p.separateArgsByMode(args)
+		// Step 2: Extract Atmos flags from atmosArgs
+		var err error
+		atmosFlagsMap, remaining, err = p.ExtractAtmosFlags(atmosArgs)
+		if err != nil {
+			return nil, err
+		}
 
-	// Step 2: Extract Atmos flags from atmosArgs
-	atmosFlagsMap, remaining, err := p.ExtractAtmosFlags(atmosArgs)
-	if err != nil {
-		return nil, err
+		// Prepend toolArgs to remaining if we had a -- separator
+		_, afterDash := p.SplitAtDoubleDash(args)
+		if afterDash != nil {
+			remaining = append(remaining, toolArgs...)
+		}
 	}
 
 	// Step 2.5: Apply precedence by reading final values from Viper
@@ -373,18 +387,15 @@ func (p *PassThroughFlagParser) Parse(ctx context.Context, args []string) (*Pars
 
 	result.Flags = atmosFlagsMap
 
-	// Step 3: Combine remaining args with tool args
-	toolArgs = p.combineRemainingArgs(remaining, toolArgs, args)
-
-	// Step 4: Extract positional args if enabled, or pass everything through
+	// Step 3: Extract positional args if enabled, or pass everything through
 	if !p.extractPositionals {
-		result.PassThroughArgs = toolArgs
+		result.SeparatedArgs = remaining
 		result.PositionalArgs = []string{} // Initialize to empty slice, not nil
 		return result, nil
 	}
 
-	// Step 5: Extract positional arguments and populate result
-	p.extractAndPopulatePositionals(toolArgs, result)
+	// Step 4: Extract positional arguments and populate result
+	p.extractAndPopulatePositionals(remaining, result)
 
 	return result, nil
 }
@@ -433,13 +444,13 @@ func (p *PassThroughFlagParser) extractAndPopulatePositionals(toolArgs []string,
 	positional, remainingTool, err := p.ExtractPositionalArgs(toolArgs, p.positionalArgsCount)
 	if err != nil {
 		// Not an error - some commands don't have positional args
-		result.PassThroughArgs = toolArgs
+		result.SeparatedArgs = toolArgs
 		return
 	}
 
 	// Store positional args
 	result.PositionalArgs = positional
-	result.PassThroughArgs = remainingTool
+	result.SeparatedArgs = remainingTool
 }
 
 // SplitAtDoubleDash implements PassThroughHandler.
@@ -508,17 +519,46 @@ func (p *PassThroughFlagParser) ExtractAtmosFlags(args []string) (atmosFlags map
 //   - consumed: Number of additional args consumed (0 for --flag=value, 1 for --flag value)
 //   - isAtmosFlag: Whether this is an Atmos flag
 //
+// resolveNoOptDefValForEmptyValue checks if a flag with an empty value should use its NoOptDefVal.
+// This handles the pattern where --flag= (with empty value) should behave like --flag (no value).
+//
+// Example: --identity= should trigger interactive selection (use NoOptDefVal "__SELECT__")
+// instead of being treated as an empty string.
+//
+// Returns the NoOptDefVal if the flag has one and value is empty, otherwise returns the original value.
+func (p *PassThroughFlagParser) resolveNoOptDefValForEmptyValue(name, value string) interface{} {
+	// Normalize shorthand to full name for registry lookup.
+	lookupName := name
+	if fullName, isShorthand := p.shorthandToFull[name]; isShorthand {
+		lookupName = fullName
+	}
+
+	// Get the flag definition from registry.
+	flag := p.registry.Get(lookupName)
+	if flag == nil {
+		return value
+	}
+
+	// If flag has NoOptDefVal and value is empty, use NoOptDefVal.
+	// This makes --flag= behave like --flag (no value provided).
+	if noOptDefVal := flag.GetNoOptDefVal(); noOptDefVal != "" && value == "" {
+		return noOptDefVal
+	}
+
+	return value
+}
+
 // revive:disable-next-line:function-length,cyclomatic,function-result-limit Complex parsing logic with multiple flag forms.
 func (p *PassThroughFlagParser) parseFlag(args []string, index int) (flagName string, flagValue interface{}, consumed int, isAtmosFlag bool) {
 	arg := args[index]
 
-	// Handle --flag=value form
+	// Handle --flag=value form (including --flag= with empty value).
 	if strings.Contains(arg, "=") {
 		parts := strings.SplitN(arg, "=", 2)
 		prefix := parts[0]
-		value := parts[1]
+		value := parts[1] // Can be empty string for --flag=
 
-		// Strip dashes
+		// Strip dashes.
 		name := strings.TrimPrefix(prefix, "--")
 		name = strings.TrimPrefix(name, "-")
 
@@ -526,7 +566,10 @@ func (p *PassThroughFlagParser) parseFlag(args []string, index int) (flagName st
 			return "", nil, 0, false
 		}
 
-		return name, value, 0, true
+		// Resolve NoOptDefVal for empty value (e.g., --identity= → "__SELECT__").
+		resolvedValue := p.resolveNoOptDefValForEmptyValue(name, value)
+
+		return name, resolvedValue, 0, true
 	}
 
 	// Handle --flag value or --flag (NoOptDefVal) form

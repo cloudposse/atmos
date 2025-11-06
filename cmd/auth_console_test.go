@@ -14,7 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/auth"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -172,7 +172,7 @@ func TestHandleBrowserOpen(t *testing.T) {
 			t.Setenv("CI", "true")
 
 			// Create opts with noOpen flag.
-			opts := &flags.AuthOptions{
+			opts := &auth.AuthOptions{
 				NoOpen: tt.noOpen,
 			}
 
@@ -662,7 +662,7 @@ func TestResolveConsoleDuration(t *testing.T) {
 			_ = NewTestKit(t)
 
 			// Create opts with duration value.
-			opts := &flags.AuthOptions{
+			opts := &auth.AuthOptions{
 				Duration:         tt.flagValue,
 				DurationProvided: tt.flagSet, // Use flagSet to set DurationProvided
 			}

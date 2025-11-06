@@ -7,12 +7,12 @@ import (
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/packer"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // packerParser handles flag parsing for packer commands.
-var packerParser *flags.PackerParser
+var packerParser *packer.Parser
 
 // packerCmd represents the base command for all Packer sub-commands.
 var packerCmd = &cobra.Command{
@@ -26,7 +26,7 @@ var packerCmd = &cobra.Command{
 func init() {
 	// Create parser with Packer flags.
 	// Returns strongly-typed PackerOptions.
-	packerParser = flags.NewPackerParser()
+	packerParser = packer.NewParser()
 
 	// Register flags as persistent (inherited by subcommands).
 	// RegisterPersistentFlags automatically sets DisableFlagParsing=true for manual parsing.
@@ -56,7 +56,7 @@ func packerRun(cmd *cobra.Command, commandName string, args []string) error {
 	// Build args array from interpreter for getConfigAndStacksInfo
 	// PositionalArgs contains [component] for packer commands
 	fullArgs := append([]string{commandName}, opts.GetPositionalArgs()...)
-	fullArgs = append(fullArgs, opts.GetPassThroughArgs()...)
+	fullArgs = append(fullArgs, opts.GetSeparatedArgs()...)
 
 	info := getConfigAndStacksInfo("packer", cmd, fullArgs)
 

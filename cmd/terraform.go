@@ -4,11 +4,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/terraform"
 )
 
 // terraformParser handles flag parsing for terraform commands.
-var terraformParser *flags.TerraformParser
+var terraformParser *terraform.Parser
 
 // terraformCmd represents the base command for all terraform sub-commands
 var terraformCmd = &cobra.Command{
@@ -21,15 +21,18 @@ var terraformCmd = &cobra.Command{
 
 func init() {
 	// Create parser with Terraform flags.
-	// Returns strongly-typed TerraformOptions instead of weak map-based ParsedConfig.
-	terraformParser = flags.NewTerraformParser()
+	// Returns strongly-typed Options instead of weak map-based ParsedConfig.
+	terraformParser = terraform.NewParser()
 
 	// Register flags as PERSISTENT on parent command so they're inherited by subcommands.
 	// RegisterPersistentFlags automatically sets DisableFlagParsing=true for manual parsing.
 	terraformParser.RegisterPersistentFlags(terraformCmd)
 	_ = terraformParser.BindToViper(viper.GetViper())
 
-	AddStackCompletion(terraformCmd)
 	attachTerraformCommands(terraformCmd)
 	RootCmd.AddCommand(terraformCmd)
+
+	// Add completions AFTER adding to RootCmd so inherited flags are available.
+	AddStackCompletion(terraformCmd)
+	AddIdentityCompletion(terraformCmd)
 }

@@ -8,11 +8,11 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/workflow"
 )
 
 // workflowParser is created once at package initialization using builder pattern.
-var workflowParser = flags.NewWorkflowOptionsBuilder().
+var workflowParser = workflow.NewWorkflowOptionsBuilder().
 	WithFile(false).  // Optional file flag → .File field
 	WithDryRun().     // Dry-run flag → .DryRun field
 	WithFromStep().   // From-step flag → .FromStep field

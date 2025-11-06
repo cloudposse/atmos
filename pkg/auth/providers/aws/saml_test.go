@@ -61,6 +61,17 @@ func TestSAMLProvider_GetProviderType(t *testing.T) {
 	p := &samlProvider{config: &schema.Provider{ProviderType: "Okta"}, url: "https://idp"}
 	assert.Equal(t, "Okta", p.getDriver())
 
+	// Test fallback behavior without Playwright drivers.
+	// Set HOME to a temp directory so playwrightDriversInstalled() returns false.
+	originalHome := os.Getenv("HOME")
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	defer func() {
+		if originalHome != "" {
+			os.Setenv("HOME", originalHome)
+		}
+	}()
+
 	// Without Playwright drivers, falls back to provider-specific types.
 	p = &samlProvider{config: &schema.Provider{}, url: "https://accounts.google.com/saml"}
 	assert.Equal(t, "GoogleApps", p.getDriver()) // Falls back when no drivers.

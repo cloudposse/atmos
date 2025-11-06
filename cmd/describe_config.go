@@ -20,7 +20,6 @@ var describeConfigCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Display the final merged CLI configuration",
 	Long:  "This command displays the final, deep-merged CLI configuration after combining all relevant configuration files.",
-	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		opts, err := describeConfigParser.Parse(cmd.Context(), args)
 		if err != nil {

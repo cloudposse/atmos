@@ -102,7 +102,7 @@ func WithIdentityFlag() Option {
 	defer perf.Track(nil, "flagparser.WithIdentityFlag")()
 
 	return func(cfg *parserConfig) {
-		flag := CommonFlags().Get("identity")
+		flag := GlobalFlagsRegistry().Get("identity")
 		if flag != nil {
 			cfg.registry.Register(flag)
 		}
@@ -138,13 +138,23 @@ func WithCommonFlags() Option {
 	defer perf.Track(nil, "flagparser.WithCommonFlags")()
 
 	return func(cfg *parserConfig) {
-		for _, flag := range CommonFlags().All() {
+		// CommonFlags now includes GlobalFlags + common flags (stack, dry-run).
+		// First add global flags.
+		for _, flag := range GlobalFlagsRegistry().All() {
 			cfg.registry.Register(flag)
+		}
+		// Then add common flags (stack, dry-run).
+		for _, flag := range CommonFlags().All() {
+			// Skip if already registered (e.g., identity flag from GlobalFlags).
+			if !cfg.registry.Has(flag.GetName()) {
+				cfg.registry.Register(flag)
+			}
 		}
 	}
 }
 
 // WithTerraformFlags adds all Terraform-specific flags.
+// Global flags (identity, chdir, etc.) are inherited from RootCmd persistent flags, not registered here.
 func WithTerraformFlags() Option {
 	defer perf.Track(nil, "flagparser.WithTerraformFlags")()
 

@@ -7,11 +7,11 @@ import (
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/helmfile"
 )
 
 // helmfileParser handles flag parsing for helmfile commands.
-var helmfileParser *flags.HelmfileParser
+var helmfileParser *helmfile.Parser
 
 // helmfileCmd represents the base command for all helmfile sub-commands
 var helmfileCmd = &cobra.Command{
@@ -25,7 +25,7 @@ var helmfileCmd = &cobra.Command{
 func init() {
 	// Create parser with Helmfile flags.
 	// Returns strongly-typed HelmfileOptions.
-	helmfileParser = flags.NewHelmfileParser()
+	helmfileParser = helmfile.NewParser()
 
 	// Register flags with Cobra.
 	// RegisterFlags automatically sets DisableFlagParsing=true for manual parsing.
@@ -51,7 +51,7 @@ func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
 	// Build args array from interpreter for getConfigAndStacksInfo
 	// PositionalArgs contains [component] for helmfile commands
 	fullArgs := append([]string{commandName}, opts.GetPositionalArgs()...)
-	fullArgs = append(fullArgs, opts.GetPassThroughArgs()...)
+	fullArgs = append(fullArgs, opts.GetSeparatedArgs()...)
 
 	info := getConfigAndStacksInfo("helmfile", cmd, fullArgs)
 

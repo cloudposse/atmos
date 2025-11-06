@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/editorconfig"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -26,7 +26,7 @@ var (
 	currentConfig          *config.Config
 	cliConfig              config.Config
 	configFilePaths        []string
-	editorConfigParser     *flags.EditorConfigParser
+	editorConfigParser     *editorconfig.EditorConfigParser
 )
 
 var editorConfigCmd *cobra.Command = &cobra.Command{
@@ -53,8 +53,8 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 
 // initializeConfig sets up the editorconfig-checker configuration using parsed options.
 // Viper precedence (CLI > ENV > config > defaults) is already handled by the parser.
-func initializeConfig(opts *flags.EditorConfigOptions) {
-	// Use atmos.yaml config paths if not explicitly provided via flags.
+func initializeConfig(opts *editorconfig.EditorConfigOptions) {
+	// Use atmos.yaml config paths if not explicitly provided via editorconfig.
 	if len(atmosConfig.Validate.EditorConfig.ConfigFilePaths) > 0 {
 		configFilePaths = atmosConfig.Validate.EditorConfig.ConfigFilePaths
 	} else {
@@ -162,7 +162,7 @@ func init() {
 	// TODO: Boolean flag builder methods don't accept default values yet, so atmosConfig
 	// boolean values (Init, IgnoreDefaults, DryRun, Disable*) fall back to false.
 	// Full integration requires updating builder methods or injecting atmosConfig into Viper.
-	editorConfigParser = flags.NewEditorConfigOptionsBuilder().
+	editorConfigParser = editorconfig.NewEditorConfigOptionsBuilder().
 		WithExclude().
 		WithInit().
 		WithIgnoreDefaults().

@@ -14,7 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/authshell"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -24,7 +24,7 @@ import (
 var authShellUsageMarkdown string
 
 // authShellParser handles flag parsing for auth shell command.
-var authShellParser = flags.NewAuthShellParser()
+var authShellParser = authshell.NewAuthShellParser()
 
 // authShellCmd launches an interactive shell with authentication environment variables.
 var authShellCmd = &cobra.Command{
@@ -61,7 +61,7 @@ func executeAuthShellCommandCore(args []string) error {
 	}
 
 	// Get shell arguments (positional + pass-through args).
-	shellArgs := append(opts.GetPositionalArgs(), opts.GetPassThroughArgs()...)
+	shellArgs := append(opts.GetPositionalArgs(), opts.GetSeparatedArgs()...)
 
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests).
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)

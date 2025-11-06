@@ -3,6 +3,9 @@ package flags
 import (
 	"fmt"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -90,11 +93,11 @@ func (r *FlagRegistry) Count() int {
 func CommonFlags() *FlagRegistry {
 	defer perf.Track(nil, "flagparser.CommonFlags")()
 
-	// Start with all global flags (logs-level, chdir, base-path, identity, etc.)
+	// CommonFlags contains flags that are common across terraform/helmfile/packer commands
+	// but are NOT global (not inherited from RootCmd).
+	// Global flags (chdir, logs-level, base-path, etc.) are registered on RootCmd
+	// as persistent flags and automatically inherited by all subcommands.
 	registry := NewFlagRegistry()
-	for _, flag := range GlobalFlagsRegistry().All() {
-		registry.Register(flag)
-	}
 
 	// Stack flag
 	registry.Register(&StringFlag{
@@ -114,8 +117,6 @@ func CommonFlags() *FlagRegistry {
 		Description: "Perform dry run without making actual changes",
 		EnvVars:     []string{"ATMOS_DRY_RUN"},
 	})
-
-	// Note: identity is already in GlobalFlagsRegistry(), so we don't register it again
 
 	return registry
 }
@@ -244,4 +245,74 @@ func (r *FlagRegistry) RegisterIntFlag(name, shorthand string, defaultValue int,
 		Description: description,
 		Required:    required,
 	})
+}
+
+// RegisterFlags registers all flags in this registry with a Cobra command.
+// This is part of the Builder interface.
+//
+// Each flag type is registered with its appropriate Cobra method:
+//   - StringFlag → cmd.Flags().StringP()
+//   - BoolFlag → cmd.Flags().BoolP()
+//   - IntFlag → cmd.Flags().IntP()
+//   - StringSliceFlag → cmd.Flags().StringSlice()
+func (r *FlagRegistry) RegisterFlags(cmd *cobra.Command) {
+	defer perf.Track(nil, "flagparser.FlagRegistry.RegisterFlags")()
+
+	for _, flag := range r.flags {
+		switch f := flag.(type) {
+		case *StringFlag:
+			cmd.Flags().StringP(f.Name, f.Shorthand, f.Default, f.Description)
+		case *BoolFlag:
+			cmd.Flags().BoolP(f.Name, f.Shorthand, f.Default, f.Description)
+		case *IntFlag:
+			cmd.Flags().IntP(f.Name, f.Shorthand, f.Default, f.Description)
+		case *StringSliceFlag:
+			cmd.Flags().StringSlice(f.Name, f.Default, f.Description)
+		}
+	}
+}
+
+// RegisterPersistentFlags registers all flags as persistent flags on the command.
+// Persistent flags are inherited by subcommands.
+func (r *FlagRegistry) RegisterPersistentFlags(cmd *cobra.Command) {
+	defer perf.Track(nil, "flagparser.FlagRegistry.RegisterPersistentFlags")()
+
+	for _, flag := range r.flags {
+		switch f := flag.(type) {
+		case *StringFlag:
+			cmd.PersistentFlags().StringP(f.Name, f.Shorthand, f.Default, f.Description)
+		case *BoolFlag:
+			cmd.PersistentFlags().BoolP(f.Name, f.Shorthand, f.Default, f.Description)
+		case *IntFlag:
+			cmd.PersistentFlags().IntP(f.Name, f.Shorthand, f.Default, f.Description)
+		case *StringSliceFlag:
+			cmd.PersistentFlags().StringSlice(f.Name, f.Default, f.Description)
+		}
+	}
+}
+
+// BindToViper binds all flags in this registry to a Viper instance.
+// This is part of the Builder interface.
+//
+// Binding enables flag precedence: CLI > ENV > config > default.
+// Each flag is bound to its environment variables if specified.
+func (r *FlagRegistry) BindToViper(v *viper.Viper) error {
+	defer perf.Track(nil, "flagparser.FlagRegistry.BindToViper")()
+
+	for _, flag := range r.flags {
+		// Bind environment variables if specified
+		envVars := flag.GetEnvVars()
+		if len(envVars) > 0 {
+			// Create variadic args: (key, env_var1, env_var2, ...)
+			args := make([]string, 0, len(envVars)+1)
+			args = append(args, flag.GetName())
+			args = append(args, envVars...)
+
+			if err := v.BindEnv(args...); err != nil {
+				return fmt.Errorf("failed to bind env vars for flag %s: %w", flag.GetName(), err)
+			}
+		}
+	}
+
+	return nil
 }

@@ -722,19 +722,14 @@ func initCobraConfig() {
 		if c.Use == "atmos" {
 			return b.UsageFunc(c)
 		}
-		// When DisableFlagParsing=true, c.Flags().Args() returns empty.
-		// Fall back to os.Args to get the actual arguments passed to the command.
-		arguments := c.Flags().Args()
-		if len(arguments) == 0 && c.DisableFlagParsing {
-			// Extract args from os.Args based on command path depth
-			arguments = os.Args[len(strings.Split(c.CommandPath(), " ")):]
-		}
+		// Get actual arguments (handles DisableFlagParsing=true case).
+		arguments := flags.GetActualArgs(c, os.Args)
 
 		// IMPORTANT: Check if command has Args validator and args are valid.
 		// If args pass validation, they're positional args, not unknown subcommands.
 		// This prevents "Unknown command component1" errors for valid positional args.
-		if c.Args != nil && len(arguments) > 0 {
-			if err := c.Args(c, arguments); err == nil {
+		if len(arguments) > 0 {
+			if err := flags.ValidateArgsOrNil(c, arguments); err == nil {
 				// Args are valid positional arguments - show usage without "Unknown command" error
 				showErrorExampleFromMarkdown(c, "")
 				errUtils.Exit(1)
@@ -753,10 +748,8 @@ func initCobraConfig() {
 		}
 
 		if !(Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")) {
-			arguments := os.Args[len(strings.Split(command.CommandPath(), " ")):]
-			if len(command.Flags().Args()) > 0 {
-				arguments = command.Flags().Args()
-			}
+			// Get actual arguments (handles DisableFlagParsing=true case).
+			arguments := flags.GetActualArgs(command, os.Args)
 			showUsageAndExit(command, arguments)
 		}
 		// Print a styled Atmos logo to the terminal.

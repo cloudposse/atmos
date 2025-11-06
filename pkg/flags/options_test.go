@@ -81,9 +81,12 @@ func TestWithTerraformFlags(t *testing.T) {
 	opt := WithTerraformFlags()
 	opt(cfg)
 
-	// Should include common flags + terraform-specific flags
-	assert.True(t, cfg.registry.Count() >= 4) // stack, identity, dry-run, + terraform flags
+	// Should have 5 flags: stack, dry-run, upload-status, skip-init, from-plan
+	// Global flags (identity, etc.) are inherited from RootCmd, not in registry
+	assert.True(t, cfg.registry.Count() >= 5)
 	assert.NotNil(t, cfg.registry.Get("upload-status"))
+	assert.NotNil(t, cfg.registry.Get("stack"))
+	assert.Nil(t, cfg.registry.Get("identity"), "identity should be inherited from RootCmd")
 }
 
 func TestWithHelmfileFlags(t *testing.T) {
@@ -92,9 +95,12 @@ func TestWithHelmfileFlags(t *testing.T) {
 	opt := WithHelmfileFlags()
 	opt(cfg)
 
-	// Should include common flags
-	assert.True(t, cfg.registry.Count() >= 3)
+	// Should have 2 flags: stack, dry-run
+	// Global flags are inherited from RootCmd, not in registry
+	assert.Equal(t, 2, cfg.registry.Count())
 	assert.NotNil(t, cfg.registry.Get("stack"))
+	assert.NotNil(t, cfg.registry.Get("dry-run"))
+	assert.Nil(t, cfg.registry.Get("identity"), "identity should be inherited from RootCmd")
 }
 
 func TestWithPackerFlags(t *testing.T) {
@@ -103,9 +109,12 @@ func TestWithPackerFlags(t *testing.T) {
 	opt := WithPackerFlags()
 	opt(cfg)
 
-	// Should include common flags
-	assert.True(t, cfg.registry.Count() >= 3)
+	// Should have 2 flags: stack, dry-run
+	// Global flags are inherited from RootCmd, not in registry
+	assert.Equal(t, 2, cfg.registry.Count())
 	assert.NotNil(t, cfg.registry.Get("stack"))
+	assert.NotNil(t, cfg.registry.Get("dry-run"))
+	assert.Nil(t, cfg.registry.Get("identity"), "identity should be inherited from RootCmd")
 }
 
 func TestWithEnvVars(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/markdown"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -41,4 +42,22 @@ func (a *AboutCommandProvider) GetName() string {
 // GetGroup returns the command group for help organization.
 func (a *AboutCommandProvider) GetGroup() string {
 	return "Other Commands"
+}
+
+// GetFlagsBuilder returns the flags builder for this command.
+// About command has no flags.
+func (a *AboutCommandProvider) GetFlagsBuilder() flags.Builder {
+	return nil
+}
+
+// GetPositionalArgsBuilder returns the positional args builder for this command.
+// About command has no positional arguments.
+func (a *AboutCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+// GetCompatibilityAliases returns compatibility aliases for this command.
+// About command has no compatibility aliases.
+func (a *AboutCommandProvider) GetCompatibilityAliases() map[string]flags.CompatibilityAlias {
+	return nil
 }

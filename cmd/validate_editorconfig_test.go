@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/editorconfig"
 )
 
 // TestInitConfig is an integration test that exercises initializeConfig with side effects.
@@ -19,19 +19,19 @@ import (
 func TestInitConfig(t *testing.T) {
 	tests := []struct {
 		name    string
-		opts    *flags.EditorConfigOptions
+		opts    *editorconfig.EditorConfigOptions
 		wantErr bool
 	}{
 		{
 			name: "basic initialization with defaults",
-			opts: &flags.EditorConfigOptions{
+			opts: &editorconfig.EditorConfigOptions{
 				Format: "default",
 			},
 			wantErr: false,
 		},
 		{
 			name: "initialization with exclude pattern",
-			opts: &flags.EditorConfigOptions{
+			opts: &editorconfig.EditorConfigOptions{
 				Exclude: "*.test",
 				Format:  "default",
 			},
@@ -39,7 +39,7 @@ func TestInitConfig(t *testing.T) {
 		},
 		{
 			name: "initialization with multiple disable flags",
-			opts: &flags.EditorConfigOptions{
+			opts: &editorconfig.EditorConfigOptions{
 				DisableTrimTrailingWhitespace: true,
 				DisableEndOfLine:              true,
 				Format:                        "gcc",
