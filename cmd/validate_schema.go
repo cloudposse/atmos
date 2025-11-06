@@ -10,12 +10,13 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/validate"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 var validateSchemaParser = flags.NewStandardOptionsBuilder().
 	WithSchemasAtmosManifest("").
-	WithPositionalArgs(flags.NewValidateSchemaPositionalArgsBuilder().
+	WithPositionalArgs(validate.NewValidateSchemaPositionalArgsBuilder().
 		WithSchemaType(false). // Optional schemaType argument.
 		Build()).
 	Build()

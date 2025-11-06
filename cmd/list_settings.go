@@ -9,6 +9,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/list"
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
@@ -22,7 +23,7 @@ import (
 var listSettingsParser = flags.NewStandardOptionsBuilder().
 	WithProcessTemplates(true).
 	WithProcessFunctions(true).
-	WithPositionalArgs(flags.NewListSettingsPositionalArgsBuilder().
+	WithPositionalArgs(list.NewListSettingsPositionalArgsBuilder().
 		WithComponent(false). // Optional component argument
 		Build()).
 	Build()

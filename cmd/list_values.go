@@ -13,6 +13,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/list"
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	fl "github.com/cloudposse/atmos/pkg/list/flags"
@@ -51,7 +52,7 @@ var listValuesParser = flags.NewStandardOptionsBuilder().
 	WithVars().                                                 // Show only vars section flag.
 	WithMaxColumns(0).                                          // Maximum columns for table output.
 	WithDelimiter("").                                          // Delimiter for CSV/TSV output.
-	WithPositionalArgs(flags.NewListKeysPositionalArgsBuilder().
+	WithPositionalArgs(list.NewListKeysPositionalArgsBuilder().
 		WithComponent(true). // Required component argument.
 		Build()).
 	Build()
@@ -66,7 +67,7 @@ var listVarsParser = flags.NewStandardOptionsBuilder().
 	WithAbstract().                                             // Include abstract components flag.
 	WithMaxColumns(0).                                          // Maximum columns for table output.
 	WithDelimiter("").                                          // Delimiter for CSV/TSV output.
-	WithPositionalArgs(flags.NewListKeysPositionalArgsBuilder().
+	WithPositionalArgs(list.NewListKeysPositionalArgsBuilder().
 		WithComponent(true). // Required component argument.
 		Build()).
 	Build()
