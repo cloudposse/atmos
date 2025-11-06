@@ -1,0 +1,21 @@
+base_path: "./"
+
+components:
+  terraform:
+    command: "tofu"
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+    init:
+      pass_vars: true
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info
