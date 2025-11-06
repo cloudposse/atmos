@@ -4,6 +4,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	// DefaultProfilerPort is the default port for the Go pprof profiler.
+	DefaultProfilerPort = 6060
+)
+
 // Flags contains all persistent flags available to every command.
 // These flags are inherited from RootCmd.PersistentFlags() and should be embedded
 // in all command interpreters using Go struct embedding.
@@ -73,7 +78,7 @@ func NewFlags() Flags {
 		ForceColor:   false,
 		ForceTTY:     false,
 		Mask:         true, // Enabled by default for security.
-		ProfilerPort: 6060,
+		ProfilerPort: DefaultProfilerPort,
 		ProfilerHost: "localhost",
 		ProfileType:  "cpu",
 		Heatmap:      false,

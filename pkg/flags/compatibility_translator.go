@@ -24,6 +24,11 @@ const (
 	AppendToSeparated
 )
 
+const (
+	// flagPrefix is the single dash prefix for flags.
+	flagPrefix = "-"
+)
+
 // CompatibilityAlias defines how a single compatibility alias should be handled.
 type CompatibilityAlias struct {
 	Behavior CompatibilityBehavior
@@ -60,7 +65,7 @@ func (t *CompatibilityAliasTranslator) ValidateTargets(cmd *cobra.Command) error
 		}
 
 		// Remove leading dashes from target to get flag name.
-		targetFlagName := strings.TrimLeft(config.Target, "-")
+		targetFlagName := strings.TrimLeft(config.Target, flagPrefix)
 
 		// Check if flag exists in command.
 		flag := cmd.Flags().Lookup(targetFlagName)
@@ -81,12 +86,12 @@ func (t *CompatibilityAliasTranslator) ValidateNoConflicts(cmd *cobra.Command) e
 
 	for alias := range t.aliasMap {
 		// Only check single-dash flags (potential shorthands).
-		if !strings.HasPrefix(alias, "-") || strings.HasPrefix(alias, "--") {
+		if !strings.HasPrefix(alias, flagPrefix) || strings.HasPrefix(alias, "--") {
 			continue
 		}
 
 		// Extract shorthand (e.g., "-s" → "s").
-		shorthand := strings.TrimPrefix(alias, "-")
+		shorthand := strings.TrimPrefix(alias, flagPrefix)
 
 		// Check if this shorthand is already registered as a Cobra flag shorthand.
 		cmd.Flags().VisitAll(func(flag *pflag.Flag) {
@@ -114,7 +119,7 @@ func (t *CompatibilityAliasTranslator) ValidateTargetsInArgs(cmd *cobra.Command,
 	usedAliases := make(map[string]bool)
 	for _, arg := range args {
 		// Skip non-flags.
-		if !strings.HasPrefix(arg, "-") {
+		if !strings.HasPrefix(arg, flagPrefix) {
 			continue
 		}
 
@@ -146,7 +151,7 @@ func (t *CompatibilityAliasTranslator) ValidateTargetsInArgs(cmd *cobra.Command,
 		}
 
 		// Remove leading dashes from target to get flag name.
-		targetFlagName := strings.TrimLeft(config.Target, "-")
+		targetFlagName := strings.TrimLeft(config.Target, flagPrefix)
 
 		// Check if flag exists in command.
 		flag := cmd.Flags().Lookup(targetFlagName)
@@ -172,7 +177,7 @@ func (t *CompatibilityAliasTranslator) Translate(args []string) (atmosArgs []str
 		arg := args[i]
 
 		// Not a flag - it's a positional arg
-		if !strings.HasPrefix(arg, "-") {
+		if !strings.HasPrefix(arg, flagPrefix) {
 			atmosArgs = append(atmosArgs, arg)
 			continue
 		}
@@ -250,7 +255,7 @@ func (t *CompatibilityAliasTranslator) translateSingleDashFlag(args []string, in
 			translated := []string{alias.Target}
 
 			// Check if next arg is the value (not another flag)
-			if index+1 < len(args) && !strings.HasPrefix(args[index+1], "-") {
+			if index+1 < len(args) && !strings.HasPrefix(args[index+1], flagPrefix) {
 				translated = append(translated, args[index+1])
 				consumed = 1 // Consume the value arg
 			}
@@ -265,7 +270,7 @@ func (t *CompatibilityAliasTranslator) translateSingleDashFlag(args []string, in
 			moved := []string{arg}
 
 			// Check if next arg is the value (not another flag)
-			if index+1 < len(args) && !strings.HasPrefix(args[index+1], "-") {
+			if index+1 < len(args) && !strings.HasPrefix(args[index+1], flagPrefix) {
 				moved = append(moved, args[index+1])
 				consumed = 1 // Consume the value arg
 			}
@@ -283,7 +288,7 @@ func (t *CompatibilityAliasTranslator) translateSingleDashFlag(args []string, in
 
 	// If there's a next arg that doesn't look like a flag, include it
 	// Cobra will handle whether it's a value or a positional arg
-	if index+1 < len(args) && !strings.HasPrefix(args[index+1], "-") {
+	if index+1 < len(args) && !strings.HasPrefix(args[index+1], flagPrefix) {
 		result = append(result, args[index+1])
 		consumed = 1
 	}

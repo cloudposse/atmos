@@ -15,7 +15,7 @@ func TestNewBaseOptions(t *testing.T) {
 	positionalArgs := []string{"plan", "vpc"}
 	passThroughArgs := []string{"-out=plan.tfplan"}
 
-	interpreter := NewBaseOptions(globalFlags, positionalArgs, passThroughArgs)
+	interpreter := NewBaseOptions(&globalFlags, positionalArgs, passThroughArgs)
 
 	// Test global flags.
 	assert.Equal(t, "Debug", interpreter.LogsLevel)
@@ -63,7 +63,7 @@ func TestBaseOptions_GetPositionalArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			interpreter := NewBaseOptions(global.Flags{}, tt.positionalArgs, nil)
+			interpreter := NewBaseOptions(&global.Flags{}, tt.positionalArgs, nil)
 			got := interpreter.GetPositionalArgs()
 			assert.Equal(t, tt.want, got)
 		})
@@ -95,7 +95,7 @@ func TestBaseOptions_GetSeparatedArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			interpreter := NewBaseOptions(global.Flags{}, nil, tt.passThroughArgs)
+			interpreter := NewBaseOptions(&global.Flags{}, nil, tt.passThroughArgs)
 			got := interpreter.GetSeparatedArgs()
 			assert.Equal(t, tt.want, got)
 		})
@@ -110,7 +110,7 @@ func TestBaseOptions_GetGlobalFlags(t *testing.T) {
 		ProfilerPort: 9090,
 	}
 
-	interpreter := NewBaseOptions(globalFlags, nil, nil)
+	interpreter := NewBaseOptions(&globalFlags, nil, nil)
 	got := interpreter.GetGlobalFlags()
 
 	assert.NotNil(t, got)
@@ -124,7 +124,7 @@ func TestBaseOptions_Interface(t *testing.T) {
 	// Test that BaseOptions implements CommandOptions interface.
 	var _ CommandOptions = &BaseOptions{}
 
-	interpreter := NewBaseOptions(global.Flags{}, []string{"vpc"}, []string{"-out=plan.tfplan"})
+	interpreter := NewBaseOptions(&global.Flags{}, []string{"vpc"}, []string{"-out=plan.tfplan"})
 
 	// Test interface methods.
 	assert.NotNil(t, interpreter.GetGlobalFlags())
@@ -142,7 +142,7 @@ func TestBaseOptions_Embedding(t *testing.T) {
 
 	interpreter := TerraformOptions{
 		BaseOptions: NewBaseOptions(
-			global.Flags{LogsLevel: "Debug"},
+			&global.Flags{LogsLevel: "Debug"},
 			[]string{"plan", "vpc"},
 			[]string{"-out=plan.tfplan"},
 		),
@@ -202,7 +202,7 @@ func TestCommandOptionsInterface(t *testing.T) {
 				BaseOptions
 			}{
 				BaseOptions: NewBaseOptions(
-					global.Flags{LogsLevel: "Debug"},
+					&global.Flags{LogsLevel: "Debug"},
 					[]string{"plan"},
 					nil,
 				),

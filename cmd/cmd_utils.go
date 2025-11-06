@@ -694,14 +694,14 @@ func createCustomCommandParser(commandConfig *schema.Command) *flags.FlagRegistr
 
 	// Dynamically register flags from command config.
 	for _, flag := range commandConfig.Flags {
-		registerCustomFlag(registry, flag)
+		registerCustomFlag(registry, &flag)
 	}
 
 	return registry
 }
 
 // registerCustomFlag registers a single custom command flag in the registry.
-func registerCustomFlag(registry *flags.FlagRegistry, flag schema.CommandFlag) {
+func registerCustomFlag(registry *flags.FlagRegistry, flag *schema.CommandFlag) {
 	// Skip if flag already exists (avoid duplicate registration).
 	if registry.Has(flag.Name) {
 		return
@@ -720,7 +720,7 @@ func registerCustomFlag(registry *flags.FlagRegistry, flag schema.CommandFlag) {
 }
 
 // getFlagDescription returns the flag description, preferring Usage over Description.
-func getFlagDescription(flag schema.CommandFlag) string {
+func getFlagDescription(flag *schema.CommandFlag) string {
 	if flag.Usage != "" {
 		return flag.Usage
 	}
@@ -728,7 +728,7 @@ func getFlagDescription(flag schema.CommandFlag) string {
 }
 
 // registerBoolFlag registers a boolean flag with parsed default value.
-func registerBoolFlag(registry *flags.FlagRegistry, flag schema.CommandFlag, description string) {
+func registerBoolFlag(registry *flags.FlagRegistry, flag *schema.CommandFlag, description string) {
 	defaultVal := false
 	if flag.Default != "" {
 		if parsed, err := strconv.ParseBool(flag.Default); err == nil {
@@ -739,7 +739,7 @@ func registerBoolFlag(registry *flags.FlagRegistry, flag schema.CommandFlag, des
 }
 
 // registerIntFlag registers an integer flag with parsed default value.
-func registerIntFlag(registry *flags.FlagRegistry, flag schema.CommandFlag, description string) {
+func registerIntFlag(registry *flags.FlagRegistry, flag *schema.CommandFlag, description string) {
 	defaultVal := 0
 	if flag.Default != "" {
 		if parsed, err := strconv.Atoi(flag.Default); err == nil {

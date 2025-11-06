@@ -36,11 +36,11 @@ type BaseOptions struct {
 }
 
 // NewBaseOptions creates a new BaseOptions with the given arguments.
-func NewBaseOptions(globalFlags global.Flags, positionalArgs, passThroughArgs []string) BaseOptions {
+func NewBaseOptions(globalFlags *global.Flags, positionalArgs, passThroughArgs []string) BaseOptions {
 	defer perf.Track(nil, "flagparser.NewBaseOptions")()
 
 	return BaseOptions{
-		Flags:           globalFlags,
+		Flags:           *globalFlags,
 		positionalArgs:  positionalArgs,
 		passThroughArgs: passThroughArgs,
 	}

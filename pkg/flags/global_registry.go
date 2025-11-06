@@ -9,6 +9,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	// identityFlagName is the flag name for the identity selector.
+	identityFlagName = "identity"
+
+	// pagerFlagName is the flag name for the pager selector.
+	pagerFlagName = "pager"
+)
+
 // ParseGlobalFlags extracts all global flags from Viper with proper precedence.
 // This should be called by parsers to populate the Flags struct in interpreters.
 //
@@ -73,21 +81,21 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelector {
 	defer perf.Track(nil, "flagparser.parseIdentityFlag")()
 
-	flag := cmd.Flags().Lookup("identity")
+	flag := cmd.Flags().Lookup(identityFlagName)
 	if flag == nil {
 		// Identity flag not registered on this command.
 		return global.NewIdentitySelector("", false)
 	}
 
 	// Check if flag was explicitly set on command line.
-	if cmd.Flags().Changed("identity") {
-		value := v.GetString("identity")
+	if cmd.Flags().Changed(identityFlagName) {
+		value := v.GetString(identityFlagName)
 		return global.NewIdentitySelector(value, true)
 	}
 
 	// Fall back to env/config via Viper.
-	if v.IsSet("identity") {
-		value := v.GetString("identity")
+	if v.IsSet(identityFlagName) {
+		value := v.GetString(identityFlagName)
 		return global.NewIdentitySelector(value, true)
 	}
 
@@ -102,21 +110,21 @@ func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelect
 func parsePagerFlag(cmd *cobra.Command, v *viper.Viper) global.PagerSelector {
 	defer perf.Track(nil, "flagparser.parsePagerFlag")()
 
-	flag := cmd.Flags().Lookup("pager")
+	flag := cmd.Flags().Lookup(pagerFlagName)
 	if flag == nil {
 		// Pager flag not registered on this command.
 		return global.NewPagerSelector("", false)
 	}
 
 	// Check if flag was explicitly set on command line.
-	if cmd.Flags().Changed("pager") {
-		value := v.GetString("pager")
+	if cmd.Flags().Changed(pagerFlagName) {
+		value := v.GetString(pagerFlagName)
 		return global.NewPagerSelector(value, true)
 	}
 
 	// Fall back to env/config via Viper.
-	if v.IsSet("pager") {
-		value := v.GetString("pager")
+	if v.IsSet(pagerFlagName) {
+		value := v.GetString(pagerFlagName)
 		return global.NewPagerSelector(value, true)
 	}
 
@@ -190,7 +198,7 @@ func GlobalFlagsRegistry() *FlagRegistry {
 
 	// Identity flag (special NoOptDefVal handling).
 	registry.Register(&StringFlag{
-		Name:        "identity",
+		Name:        identityFlagName,
 		Shorthand:   "i",
 		Default:     "",
 		Description: "Identity to use for authentication (use without value to select interactively)",
@@ -200,7 +208,7 @@ func GlobalFlagsRegistry() *FlagRegistry {
 
 	// Pager flag (special NoOptDefVal handling).
 	registry.Register(&StringFlag{
-		Name:        "pager",
+		Name:        pagerFlagName,
 		Shorthand:   "",
 		Default:     "",
 		Description: "Enable pager for output",
