@@ -1,5 +1,28 @@
 # PRD: Unified Flag Parsing System for Atmos
 
+**⚠️ STATUS: PARTIALLY OBSOLETE (2025-11-06)**
+
+This document contains historical design that has been partially superseded:
+
+**WHAT CHANGED (Migration Complete 2025-11-06)**:
+- ❌ **PassThroughFlagParser DELETED** - No longer exists
+- ✅ **AtmosFlagParser** - New parser for terraform with compatibility aliases (-s → --stack, -i → --identity)
+- ✅ **StandardParser** - Used for helmfile, packer, workflow, and all other commands
+- ✅ **CompatibilityAliasTranslator** - Handles terraform legacy flag compatibility
+
+**WHAT'S STILL ACCURATE**:
+- Overall architecture and design philosophy
+- Strongly-typed interpreter pattern
+- GlobalFlags embedding pattern
+- NoOptDefVal pattern for identity
+- Precedence order (flags > env > config > defaults)
+
+**FOR CURRENT IMPLEMENTATION**:
+- See `../unified-flag-parsing-refactoring.md` for up-to-date architecture
+- Below content kept for historical context and design rationale
+
+---
+
 ## Problem Statement
 
 Atmos currently has inconsistent flag parsing implementations across different commands:
@@ -515,14 +538,16 @@ atmos terraform plan -s prod -var 'stack=prod'
 9. **Must handle optional boolean values** (`--upload-status` vs `--upload-status=false`)
 10. **Must support all three types concurrently** in any order (with implicit mode)
 
-## Goals
+## Goals (Historical - ✅ ACHIEVED)
 
-1. **Single flag parsing pass**: All flags processed through one unified system
-2. **Consistent precedence**: Flags > ENV vars > config files > defaults enforced automatically
-3. **Interface-driven**: Enable mocking and unit testing (target 80-90% coverage)
-4. **Preserve Cobra/Viper**: Augment, don't replace - maintain backward compatibility
-5. **Double dash support**: Clean separation of Atmos flags from tool-specific flags
-6. **Global flags**: Work consistently across all commands including pass-through
+1. ✅ **Single flag parsing pass**: All flags processed through one unified system
+2. ✅ **Consistent precedence**: Flags > ENV vars > config files > defaults enforced automatically
+3. ✅ **Interface-driven**: Enable mocking and unit testing (target 80-90% coverage)
+4. ✅ **Preserve Cobra/Viper**: Augment, don't replace - maintain backward compatibility
+5. ✅ **Double dash support**: Clean separation of Atmos flags from tool-specific flags
+6. ✅ **Global flags**: Work consistently across all commands including pass-through
+
+**Implementation Note (2025-11-06)**: All goals achieved with `AtmosFlagParser` (terraform) + `StandardParser` (other commands) architecture. `PassThroughFlagParser` was deleted.
 
 ## Non-Goals
 
@@ -969,19 +994,19 @@ All configuration reads go through Viper, which maintains precedence automatical
 CLI flags > Environment variables > Config files > Defaults
 ```
 
-### 2. Two-Phase Parsing for Wrapper Commands
+### 2. Two-Phase Parsing for Wrapper Commands (Historical - Design Evolved)
 
-For Terraform/Helmfile/Packer, use a **two-phase approach**:
+**Original Design**: For Terraform/Helmfile/Packer, use a **two-phase approach** with PassThroughFlagParser.
 
-**Phase 1: Extract Atmos Flags** (before `--` or from known Atmos flags)
-- Use custom parser that understands Atmos-specific flags
-- Extract and validate Atmos flags (`--stack`, `--dry-run`, `--identity`, etc.)
-- Leave everything else untouched for the underlying tool
+**ACTUAL IMPLEMENTATION (2025-11-06)**:
+- **Terraform**: Uses `AtmosFlagParser` with `CompatibilityAliasTranslator` to handle legacy flags (-s, -i, etc.)
+- **Helmfile/Packer**: Use `StandardParser` (no compatibility layer needed)
+- **PassThroughFlagParser**: Deleted entirely
 
-**Phase 2: Pass-Through to Tool**
-- Pass remaining args directly to Terraform/Helmfile/Packer
-- No parsing or modification
-- Preserve all flag syntax, ordering, quoting
+**Key Change**: Instead of a generic "pass-through" parser, we have:
+1. `CompatibilityAliasTranslator` - Handles terraform-specific legacy flags
+2. `AtmosFlagParser` - Parses both modern (--stack) and legacy (-s) flags
+3. `StandardParser` - Standard parsing for commands that don't need compatibility
 
 **Example**:
 ```bash
@@ -1000,7 +1025,9 @@ atmosFlags: {
 terraformArgs: ["plan", "-var-file=prod.tfvars", "-out=plan.tfplan"]
 ```
 
-### 3. Interface-Driven Architecture
+### 3. Interface-Driven Architecture (Historical - Evolved Design)
+
+**Original interfaces** (for context):
 
 ```go
 // FlagParser handles flag parsing for a command
@@ -1014,40 +1041,18 @@ type FlagParser interface {
     // BindToViper binds flags to Viper keys
     BindToViper(v *viper.Viper) error
 }
-
-// ConfigLoader loads configuration with proper precedence
-type ConfigLoader interface {
-    // Load reads config from all sources with precedence
-    Load(ctx context.Context, opts ...LoadOption) (*Config, error)
-
-    // Reload refreshes configuration
-    Reload(ctx context.Context) error
-}
-
-// PassThroughHandler separates Atmos flags from tool flags
-type PassThroughHandler interface {
-    // SplitAtDoubleDash separates args at -- separator
-    SplitAtDoubleDash(args []string) (beforeDash, afterDash []string)
-
-    // ExtractAtmosFlags pulls out known Atmos flags from args
-    // Returns: atmosFlags, remainingArgs, error
-    ExtractAtmosFlags(args []string) (map[string]interface{}, []string, error)
-
-    // ExtractPositionalArgs identifies positional arguments
-    // (component name, subcommand, etc.) from arg list
-    ExtractPositionalArgs(args []string, expectedCount int) ([]string, []string, error)
-}
-
-// OptionalBoolFlag handles flags that can be:
-// --flag (defaults to true), --flag=true, --flag=false
-type OptionalBoolFlag interface {
-    // Parse returns the boolean value and whether flag was present
-    Parse(args []string, flagName string) (value bool, present bool, error)
-
-    // Remove removes all instances of the flag from args
-    Remove(args []string, flagName string) []string
-}
 ```
+
+**ACTUAL IMPLEMENTATION (2025-11-06)**:
+- `FlagParser` interface - Still used
+- `StandardParser` - Implements FlagParser for standard commands
+- `AtmosFlagParser` - Implements FlagParser for terraform with compatibility aliases
+- `CompatibilityAliasTranslator` - Translates -s → --stack, -i → --identity, etc.
+
+**DELETED (2025-11-06)**:
+- ❌ `PassThroughHandler` interface - No longer exists
+- ❌ `PassThroughFlagParser` - Deleted entirely
+- ❌ `OptionalBoolFlag` interface - Functionality integrated into parsers
 
 ### 4. Middleware Pattern
 
@@ -1757,30 +1762,47 @@ func (p *ParsedConfig) PopulateDeprecatedMap() {
 
 ## Architecture
 
-### Package Structure
+### Package Structure (Historical - Actual is Different)
 
+**ORIGINAL DESIGN**:
 ```
 pkg/flagparser/
 ├── parser.go           // FlagParser interface
 ├── standard.go         // Standard flag parser implementation
-├── passthrough.go      // PassThroughHandler interface and impl
+├── passthrough.go      // PassThroughHandler interface and impl  ❌ DELETED
 ├── precedence.go       // Precedence enforcement logic
 ├── registry.go         // Flag registry for reuse
 ├── testing.go          // Test helpers
 └── parser_test.go      // Comprehensive tests
+```
+
+**ACTUAL IMPLEMENTATION (2025-11-06)**:
+```
+pkg/flags/
+├── parser.go                       // FlagParser interface
+├── standard.go                     // StandardParser implementation
+├── terraform/
+│   ├── parser.go                   // AtmosFlagParser (terraform-specific)
+│   └── options.go                  // TerraformOptions struct
+├── compatibility_translator.go     // CompatibilityAliasTranslator (-s → --stack)
+├── registry.go                     // Flag registry
+├── builder.go                      // Flag builder pattern
+└── *_test.go                       // Comprehensive tests
 
 pkg/config/
 ├── loader.go           // ConfigLoader interface
 ├── viper_loader.go     // Viper-based implementation
-├── precedence.go       // Precedence order enforcement
 └── loader_test.go
 
-cmd/internal/middleware/
-├── config.go           // Config loading middleware
-├── auth.go             // Authentication middleware
-├── validation.go       // Flag validation middleware
-└── middleware_test.go
+cmd/internal/
+├── command.go          // Command registry pattern
+└── *_test.go
 ```
+
+**Key Changes**:
+- ❌ `pkg/flagparser/` → ✅ `pkg/flags/` (different path)
+- ❌ `passthrough.go` → ✅ `compatibility_translator.go` + `terraform/parser.go`
+- ❌ No middleware pattern - using standard Cobra RunE flow
 
 ### Core Components
 
@@ -1841,9 +1863,11 @@ func (p *StandardFlagParser) BindToViper(v *viper.Viper) error {
 }
 ```
 
-#### 2. PassThroughFlagParser
+#### 2. PassThroughFlagParser (Historical - DELETED 2025-11-06)
 
-Specialized parser for Terraform/Helmfile/Packer that handles the complex flag scenarios:
+**⚠️ This implementation was deleted. See `AtmosFlagParser` + `CompatibilityAliasTranslator` for actual implementation.**
+
+**Original design** for Terraform/Helmfile/Packer that handles the complex flag scenarios:
 
 ```go
 // PassThroughFlagParser handles commands that pass flags to underlying tools

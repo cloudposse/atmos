@@ -1,17 +1,27 @@
 # FlagParser Integration Plan - Full Integration (Option B)
 
-## Objective
+**⚠️ STATUS: OBSOLETE (2025-11-06)**
+
+This document describes a historical design that has been superseded. The actual implementation:
+- Uses `StandardParser` (not `StandardFlagParser`) for standard commands
+- Uses `AtmosFlagParser` (not `PassThroughFlagParser`) for terraform with compatibility aliases
+- `PassThroughFlagParser` was completely deleted on 2025-11-06
+- See `../unified-flag-parsing-refactoring.md` for current architecture
+
+## Historical Objective
 Replace all manual flag parsing in Atmos with the unified `pkg/flagparser` system. Remove `DisableFlagParsing = true` and let Cobra + our parsers handle everything properly.
 
-## Success Criteria
+## Success Criteria (Historical)
 ✅ Remove `DisableFlagParsing = true` from all commands
 ✅ Remove manual arg parsing code (`ExtractSeparatedArgs`, `processArgsAndFlags`, etc.)
-✅ All commands use FlagParser (StandardFlagParser or PassThroughFlagParser)
+✅ All commands use FlagParser (**ACTUAL: StandardParser or AtmosFlagParser, NOT PassThroughFlagParser**)
 ✅ Flag precedence works correctly: flags > env vars > config files
 ✅ Identity flag NoOptDefVal works correctly
 ✅ Double dash separator (`--`) works correctly
 ✅ All existing tests pass
 ✅ No behavioral changes from user perspective
+
+**Migration Complete**: All these criteria have been met with the modern architecture (AtmosFlagParser + StandardParser).
 
 ## Phase 2A: Terraform Command Integration
 
@@ -230,19 +240,20 @@ After integration, these become obsolete:
 4. Code review
 5. Merge to main
 
-## Phase 2B: Other Pass-Through Commands
+## Phase 2B: Other Pass-Through Commands (Historical - NOW COMPLETE)
 
-After terraform works, apply same pattern to:
-- Helmfile commands (`cmd/helmfile*.go`)
-- Packer commands (`cmd/packer*.go`)
-- Workflow commands (if they pass through)
+**ACTUAL IMPLEMENTATION (2025-11-06)**:
+- ✅ Helmfile commands use `StandardParser` (NOT PassThroughFlagParser)
+- ✅ Packer commands use `StandardParser` (NOT PassThroughFlagParser)
+- ✅ Workflow commands use `StandardParser`
+- ✅ PassThroughFlagParser was deleted entirely
 
-## Phase 2C: Standard Commands
+## Phase 2C: Standard Commands (Historical - NOW COMPLETE)
 
-Commands that don't pass through to external tools:
-- Already working: `version`, `describe`, `list`, etc.
-- Could be enhanced with StandardFlagParser for consistency
-- Lower priority since they already work correctly
+**ACTUAL IMPLEMENTATION (2025-11-06)**:
+- ✅ All standard commands use `StandardParser`
+- ✅ `version`, `describe`, `list`, etc. all migrated
+- ✅ Consistent pattern across all commands
 
 ## Risk Mitigation
 

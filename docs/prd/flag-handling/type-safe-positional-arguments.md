@@ -49,9 +49,11 @@ Currently, Atmos commands that accept positional arguments (e.g., `atmos terrafo
 - Each domain builder MUST provide semantic method names specific to that domain
 
 **FR5: Parser Compatibility**
-- The system MUST work with `PassThroughFlagParser` (used by terraform, helmfile, workflow commands)
-- The system MUST work with `StandardFlagParser` (used by validate, generate commands)
+- The system MUST work with `AtmosFlagParser` (used by terraform commands with compatibility aliases)
+- The system MUST work with `StandardParser` (used by helmfile, packer, workflow, validate, generate commands)
 - The positional args API MUST be identical regardless of underlying parser type
+
+**Note**: `PassThroughFlagParser` was deleted on 2025-11-06. Terraform now uses `AtmosFlagParser` with compatibility translator.
 
 **FR6: Struct-Based Storage (Consistent with Flag Parser)**
 - Positional arguments MUST be stored as fields in Options structs (e.g., `TerraformOptions.Component`)
@@ -117,7 +119,7 @@ Currently, Atmos commands that accept positional arguments (e.g., `atmos terrafo
 
 ### Commands Using Positional Arguments
 
-**Terraform commands** (use PassThroughFlagParser):
+**Terraform commands** (use AtmosFlagParser with compatibility aliases):
 - `terraform plan <component>`
 - `terraform apply <component>`
 - `terraform deploy <component>`
@@ -126,22 +128,24 @@ Currently, Atmos commands that accept positional arguments (e.g., `atmos terrafo
 - `terraform shell <component>`
 - All other native terraform commands that operate on components
 
-**Helmfile commands** (use PassThroughFlagParser):
+**Helmfile commands** (use StandardParser):
 - `helmfile apply <component>`
 - `helmfile destroy <component>`
 - `helmfile diff <component>`
 - `helmfile sync <component>`
 
-**Workflow commands** (use PassThroughFlagParser):
+**Workflow commands** (use StandardParser):
 - `workflow <workflow-name>`
 
-**Validate commands** (use StandardFlagParser):
+**Validate commands** (use StandardParser):
 - `validate component <component>`
 
-**Generate commands** (use StandardFlagParser):
+**Generate commands** (use StandardParser):
 - `terraform generate varfile <component>`
 - `terraform generate backend <component>`
 - `terraform generate planfile <component>`
+
+**Migration Complete (2025-11-06)**: PassThroughFlagParser deleted. All commands now use either `AtmosFlagParser` (terraform) or `StandardParser` (everything else).
 
 ### Example of Current Error-Prone Pattern
 
@@ -457,22 +461,25 @@ var helmfileApplyCmd = &cobra.Command{
 }
 ```
 
-### Integration with PassThroughFlagParser and StandardFlagParser
+### Integration with AtmosFlagParser and StandardParser
 
 **Key Requirement**: The positional args system must work with BOTH parser types:
 
-1. **PassThroughFlagParser** (terraform, helmfile, workflow commands)
-   - Uses `DisableFlagParsing=true`
-   - Positional args extracted from raw `args []string` after manual flag parsing
+1. **AtmosFlagParser** (terraform commands only)
+   - Handles compatibility aliases (-s → --stack, -i → --identity)
+   - Uses `CompatibilityAliasTranslator` before parsing
+   - Positional args extracted from processed `args []string`
 
-2. **StandardFlagParser** (validate, describe, generate commands)
-   - Uses `DisableFlagParsing=true` (for Viper precedence)
+2. **StandardParser** (helmfile, packer, workflow, validate, describe, generate commands)
+   - Standard flag parsing without compatibility layer
    - Positional args extracted similarly
 
-**Solution**: Both parsers already provide `GetPositionalArgs()` method that returns positional arguments AFTER flag parsing. The PositionalArgsParser.Parse() method accepts this cleaned args slice.
+**Solution**: Both parsers provide `GetPositionalArgs()` method that returns positional arguments AFTER flag parsing. The PositionalArgsParser.Parse() method accepts this cleaned args slice.
+
+**Note**: `PassThroughFlagParser` was deleted on 2025-11-06.
 
 ```go
-// Works with both PassThroughFlagParser and StandardFlagParser
+// Works with both AtmosFlagParser and StandardParser
 
 // In RunE:
 ctx := cmd.Context()
@@ -555,9 +562,11 @@ RootCmd.SetUsageFunc(func(c *cobra.Command) error {
    - No more inconsistent `Use` strings or validators
 
 6. **Works with Both Parser Types**
-   - Integrates seamlessly with `PassThroughFlagParser`
-   - Integrates seamlessly with `StandardFlagParser`
+   - Integrates seamlessly with `AtmosFlagParser` (terraform with compatibility aliases)
+   - Integrates seamlessly with `StandardParser` (all other commands)
    - Same API regardless of underlying parser
+
+**Migration Note**: `PassThroughFlagParser` was deleted on 2025-11-06.
 
 ## Testing Strategy
 
@@ -686,9 +695,12 @@ expected:
 ## Related Work
 
 - **Flag Parser System**: `pkg/flags/standard_builder.go`, `pkg/flags/terraform_builder.go`
-- **PassThroughFlagParser**: `pkg/flags/passthrough.go`
-- **StandardFlagParser**: `pkg/flags/standard.go`
+- **AtmosFlagParser**: `pkg/flags/terraform/parser.go` (terraform with compatibility aliases)
+- **StandardParser**: `pkg/flags/standard.go` (all other commands)
+- **CompatibilityAliasTranslator**: `pkg/flags/compatibility_translator.go` (handles -s → --stack)
 - **Command Registry Pattern**: `docs/prd/command-registry-pattern.md`
+
+**Note**: `PassThroughFlagParser` deleted on 2025-11-06.
 
 ## References
 

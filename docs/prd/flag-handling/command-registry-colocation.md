@@ -59,9 +59,12 @@ pkg/flags/
 ├── types.go                  # Flag, StringFlag, BoolFlag, IntFlag
 ├── registry.go               # FlagRegistry
 ├── parser.go                 # FlagParser interface
-├── passthrough.go            # PassThroughFlagParser
-└── standard.go               # StandardFlagParser
+├── standard.go               # StandardParser (for standard commands)
+├── terraform/parser.go       # AtmosFlagParser (Terraform-specific with compatibility aliases)
+└── compatibility_translator.go  # CompatibilityAliasTranslator (handles -s → --stack)
 ```
+
+**Note**: `PassThroughFlagParser` was deleted on 2025-11-06. Terraform now uses `AtmosFlagParser` with `CompatibilityAliasTranslator`.
 
 ### Shared Types (Used by Multiple Commands)
 ```go
@@ -99,10 +102,10 @@ type TerraformOptions struct {
 
 ### Optional: Command-Specific Parsers
 ```go
-// cmd/terraform/parser.go (optional - can reuse flags.NewPassThroughParser)
+// cmd/terraform/parser.go (optional - can reuse flags.NewAtmosFlagParser)
 package terraform
 
-var terraformParser = flags.NewPassThroughParser(
+var terraformParser = flags.NewAtmosFlagParser(
     flags.WithTerraformFlags(),
 )
 ```
@@ -163,9 +166,9 @@ func parseComponentOptions(cmd *cobra.Command, args []string) (*ComponentOptions
 }
 ```
 
-### Pattern 2: Complex Commands (Pass-Through)
+### Pattern 2: Complex Commands (Terraform with Compatibility Aliases)
 
-For commands that pass args to external tools (terraform, helmfile):
+For commands that pass args to external tools (terraform, helmfile) and need compatibility aliases:
 
 ```go
 // cmd/terraform/options.go
@@ -185,7 +188,8 @@ type TerraformOptions struct {
 }
 
 // cmd/terraform/parser.go
-var terraformParser = flags.NewPassThroughParser(
+// NOTE: Terraform uses AtmosFlagParser (NOT PassThroughFlagParser, which was deleted 2025-11-06)
+var terraformParser = flags.NewAtmosFlagParser(
     flags.WithStack(),
     flags.WithDryRun(),
     flags.WithBoolFlag("upload-status", "", false, "Upload plan to Atmos Pro"),
@@ -275,7 +279,8 @@ cmd/version/
 - ✅ `IdentitySelector`, `PagerSelector` - shared types
 - ✅ `FlagRegistry`, `FlagParser` - core infrastructure
 - ✅ `StandardOptionsBuilder` - reusable builder
-- ✅ `PassThroughFlagParser` - reusable parser
+- ✅ `StandardParser` - reusable parser for standard commands
+- ✅ `CompatibilityAliasTranslator` - reusable translator for terraform compatibility
 
 ## Success Criteria
 
