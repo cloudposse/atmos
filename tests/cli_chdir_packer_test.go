@@ -27,15 +27,8 @@ func TestChdirWithPackerCommands(t *testing.T) {
 
 	RequirePacker(t)
 
-	// Save original working directory.
-	originalWd, err := os.Getwd()
-	require.NoError(t, err, "Failed to get current working directory")
-	t.Cleanup(func() {
-		_ = os.Chdir(originalWd)
-	})
-
 	// Get absolute path to the packer fixtures directory.
-	fixturesDir := filepath.Join(originalWd, "fixtures", "scenarios", "packer")
+	fixturesDir := filepath.Join(startingDir, "fixtures", "scenarios", "packer")
 	absFixturesPath, err := filepath.Abs(fixturesDir)
 	require.NoError(t, err, "Failed to get absolute path to fixtures")
 
@@ -122,12 +115,12 @@ func TestChdirWithPackerCommands(t *testing.T) {
 			}
 
 			// Change to component directory to simulate CI/CD behavior.
-			err := os.Chdir(componentDir)
+			t.Chdir(componentDir)
 			require.NoError(t, err, "Should be able to change to component directory")
 
 			// Restore directory after test.
 			t.Cleanup(func() {
-				_ = os.Chdir(originalWd)
+				t.Chdir(startingDir)
 			})
 
 			// Run the command with --chdir pointing back to the repo root.
@@ -171,22 +164,22 @@ func TestChdirWithPackerRelativePaths(t *testing.T) {
 
 	RequirePacker(t)
 
-	originalWd, err := os.Getwd()
+	startingDir, err := os.Getwd()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Chdir(originalWd)
+		t.Chdir(startingDir)
 	})
 
-	fixturesDir := filepath.Join(originalWd, "fixtures", "scenarios", "packer")
+	fixturesDir := filepath.Join(startingDir, "fixtures", "scenarios", "packer")
 	componentDir := filepath.Join(fixturesDir, "components", "packer", "aws", "bastion")
 	require.DirExists(t, componentDir)
 
 	t.Run("packer validate with relative --chdir path", func(t *testing.T) {
 		// Change to component directory.
-		err := os.Chdir(componentDir)
+		t.Chdir(componentDir)
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			_ = os.Chdir(originalWd)
+			t.Chdir(startingDir)
 		})
 
 		// Use relative path to go back to repo root (../../../../ from components/packer/aws/bastion).
@@ -208,10 +201,10 @@ func TestChdirWithPackerRelativePaths(t *testing.T) {
 
 	t.Run("packer init with relative --chdir path", func(t *testing.T) {
 		// Change to component directory.
-		err := os.Chdir(componentDir)
+		t.Chdir(componentDir)
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			_ = os.Chdir(originalWd)
+			t.Chdir(startingDir)
 		})
 
 		// Use relative path to go back to repo root.
@@ -244,13 +237,13 @@ func TestChdirWithPackerFromDifferentDirectory(t *testing.T) {
 
 	RequirePacker(t)
 
-	originalWd, err := os.Getwd()
+	startingDir, err := os.Getwd()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Chdir(originalWd)
+		t.Chdir(startingDir)
 	})
 
-	fixturesDir := filepath.Join(originalWd, "fixtures", "scenarios", "packer")
+	fixturesDir := filepath.Join(startingDir, "fixtures", "scenarios", "packer")
 	absFixturesPath, err := filepath.Abs(fixturesDir)
 	require.NoError(t, err)
 
@@ -279,10 +272,10 @@ func TestChdirWithPackerFromDifferentDirectory(t *testing.T) {
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			// Change to the scenario's start directory.
-			err := os.Chdir(scenario.startDir)
+			t.Chdir(scenario.startDir)
 			require.NoError(t, err, "Should be able to change to start directory")
 			t.Cleanup(func() {
-				_ = os.Chdir(originalWd)
+				t.Chdir(startingDir)
 			})
 
 			// Run packer validate with --chdir.

@@ -41,10 +41,7 @@ stacks:
 		// Change to a subdirectory
 		subDir := filepath.Join(gitRoot, "components", "terraform")
 		require.NoError(t, os.MkdirAll(subDir, 0o755))
-		originalDir, err := os.Getwd()
-		require.NoError(t, err)
-		defer func() { _ = os.Chdir(originalDir) }()
-		require.NoError(t, os.Chdir(subDir))
+		t.Chdir(subDir)
 
 		// Load config
 		configInfo := schema.ConfigAndStacksInfo{}
@@ -77,10 +74,7 @@ stacks:
 		require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
 
 		// Change to git root directory so workdir config is found
-		originalDir, err := os.Getwd()
-		require.NoError(t, err)
-		defer func() { _ = os.Chdir(originalDir) }()
-		require.NoError(t, os.Chdir(gitRoot))
+		t.Chdir(gitRoot)
 
 		// Load config
 		configInfo := schema.ConfigAndStacksInfo{}
@@ -109,10 +103,7 @@ stacks:
 		require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
 
 		// Change to git root directory so workdir config is found
-		originalDir, err := os.Getwd()
-		require.NoError(t, err)
-		defer func() { _ = os.Chdir(originalDir) }()
-		require.NoError(t, os.Chdir(gitRoot))
+		t.Chdir(gitRoot)
 
 		// Load config
 		configInfo := schema.ConfigAndStacksInfo{}
@@ -130,10 +121,7 @@ stacks:
 		require.NoError(t, os.MkdirAll(noCfgDir, 0o755))
 		t.Setenv("TEST_GIT_ROOT", noCfgDir)
 
-		originalDir, err := os.Getwd()
-		require.NoError(t, err)
-		defer func() { _ = os.Chdir(originalDir) }()
-		require.NoError(t, os.Chdir(noCfgDir))
+		t.Chdir(noCfgDir)
 
 		// Load config (will use embedded config)
 		configInfo := schema.ConfigAndStacksInfo{}

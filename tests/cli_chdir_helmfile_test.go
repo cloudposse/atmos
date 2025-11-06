@@ -27,15 +27,8 @@ func TestChdirWithHelmfileCommands(t *testing.T) {
 
 	RequireHelmfile(t)
 
-	// Save original working directory.
-	originalWd, err := os.Getwd()
-	require.NoError(t, err, "Failed to get current working directory")
-	t.Cleanup(func() {
-		_ = os.Chdir(originalWd)
-	})
-
 	// Get absolute path to the complete fixtures directory (has helmfile components).
-	fixturesDir := filepath.Join(originalWd, "fixtures", "scenarios", "complete")
+	fixturesDir := filepath.Join(startingDir, "fixtures", "scenarios", "complete")
 	absFixturesPath, err := filepath.Abs(fixturesDir)
 	require.NoError(t, err, "Failed to get absolute path to fixtures")
 
@@ -131,12 +124,12 @@ func TestChdirWithHelmfileCommands(t *testing.T) {
 			}
 
 			// Change to component directory to simulate CI/CD behavior.
-			err := os.Chdir(componentDir)
+			t.Chdir(componentDir)
 			require.NoError(t, err, "Should be able to change to component directory")
 
 			// Restore directory after test.
 			t.Cleanup(func() {
-				_ = os.Chdir(originalWd)
+				t.Chdir(startingDir)
 			})
 
 			// Run the command with --chdir pointing back to the repo root.
@@ -180,22 +173,22 @@ func TestChdirWithHelmfileRelativePaths(t *testing.T) {
 
 	RequireHelmfile(t)
 
-	originalWd, err := os.Getwd()
+	startingDir, err := os.Getwd()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Chdir(originalWd)
+		t.Chdir(startingDir)
 	})
 
-	fixturesDir := filepath.Join(originalWd, "fixtures", "scenarios", "complete")
+	fixturesDir := filepath.Join(startingDir, "fixtures", "scenarios", "complete")
 	componentDir := filepath.Join(fixturesDir, "components", "helmfile", "echo-server")
 	require.DirExists(t, componentDir)
 
 	t.Run("helmfile generate with relative --chdir path", func(t *testing.T) {
 		// Change to component directory.
-		err := os.Chdir(componentDir)
+		t.Chdir(componentDir)
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			_ = os.Chdir(originalWd)
+			t.Chdir(startingDir)
 		})
 
 		// Use relative path to go back to repo root (../../.. from components/helmfile/echo-server).
@@ -217,10 +210,10 @@ func TestChdirWithHelmfileRelativePaths(t *testing.T) {
 
 	t.Run("helmfile template with relative --chdir path", func(t *testing.T) {
 		// Change to component directory.
-		err := os.Chdir(componentDir)
+		t.Chdir(componentDir)
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			_ = os.Chdir(originalWd)
+			t.Chdir(startingDir)
 		})
 
 		// Use relative path to go back to repo root.
@@ -253,13 +246,13 @@ func TestChdirWithHelmfileFromDifferentDirectory(t *testing.T) {
 
 	RequireHelmfile(t)
 
-	originalWd, err := os.Getwd()
+	startingDir, err := os.Getwd()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Chdir(originalWd)
+		t.Chdir(startingDir)
 	})
 
-	fixturesDir := filepath.Join(originalWd, "fixtures", "scenarios", "complete")
+	fixturesDir := filepath.Join(startingDir, "fixtures", "scenarios", "complete")
 	absFixturesPath, err := filepath.Abs(fixturesDir)
 	require.NoError(t, err)
 
@@ -293,10 +286,10 @@ func TestChdirWithHelmfileFromDifferentDirectory(t *testing.T) {
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			// Change to the scenario's start directory.
-			err := os.Chdir(scenario.startDir)
+			t.Chdir(scenario.startDir)
 			require.NoError(t, err, "Should be able to change to start directory")
 			t.Cleanup(func() {
-				_ = os.Chdir(originalWd)
+				t.Chdir(startingDir)
 			})
 
 			// Run helmfile generate varfile with --chdir.
@@ -326,13 +319,13 @@ func TestChdirWithHelmfileMultipleComponents(t *testing.T) {
 
 	RequireHelmfile(t)
 
-	originalWd, err := os.Getwd()
+	startingDir, err := os.Getwd()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Chdir(originalWd)
+		t.Chdir(startingDir)
 	})
 
-	fixturesDir := filepath.Join(originalWd, "fixtures", "scenarios", "complete")
+	fixturesDir := filepath.Join(startingDir, "fixtures", "scenarios", "complete")
 	absFixturesPath, err := filepath.Abs(fixturesDir)
 	require.NoError(t, err)
 
@@ -340,10 +333,10 @@ func TestChdirWithHelmfileMultipleComponents(t *testing.T) {
 	componentDir := filepath.Join(absFixturesPath, "components", "helmfile")
 	require.DirExists(t, componentDir)
 
-	err = os.Chdir(componentDir)
+	t.Chdir(componentDir)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Chdir(originalWd)
+		t.Chdir(startingDir)
 	})
 
 	components := []struct {

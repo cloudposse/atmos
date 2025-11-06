@@ -27,15 +27,8 @@ func TestChdirWithTerraformCommands(t *testing.T) {
 
 	RequireTerraform(t)
 
-	// Save original working directory.
-	originalWd, err := os.Getwd()
-	require.NoError(t, err, "Failed to get current working directory")
-	t.Cleanup(func() {
-		_ = os.Chdir(originalWd)
-	})
-
 	// Get absolute path to the fixtures directory.
-	fixturesDir := filepath.Join(originalWd, "fixtures", "scenarios", "basic")
+	fixturesDir := filepath.Join(startingDir, "fixtures", "scenarios", "basic")
 	absFixturesPath, err := filepath.Abs(fixturesDir)
 	require.NoError(t, err, "Failed to get absolute path to fixtures")
 
@@ -118,12 +111,12 @@ func TestChdirWithTerraformCommands(t *testing.T) {
 			// Change to component directory to simulate Atlantis behavior.
 			// This is the scenario described in the bug report:
 			// "The reason I'm trying to change dir is because Atlantis starts its process in the root directory of terraform"
-			err := os.Chdir(componentDir)
+			t.Chdir(componentDir)
 			require.NoError(t, err, "Should be able to change to component directory")
 
 			// Restore directory after test.
 			t.Cleanup(func() {
-				_ = os.Chdir(originalWd)
+				t.Chdir(startingDir)
 			})
 
 			// Run the command with --chdir pointing back to the repo root.
@@ -164,22 +157,22 @@ func TestChdirWithRelativePaths(t *testing.T) {
 
 	RequireTerraform(t)
 
-	originalWd, err := os.Getwd()
+	startingDir, err := os.Getwd()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Chdir(originalWd)
+		t.Chdir(startingDir)
 	})
 
-	fixturesDir := filepath.Join(originalWd, "fixtures", "scenarios", "basic")
+	fixturesDir := filepath.Join(startingDir, "fixtures", "scenarios", "basic")
 	componentDir := filepath.Join(fixturesDir, "components", "terraform", "mock")
 	require.DirExists(t, componentDir)
 
 	t.Run("terraform generate varfile with relative --chdir path", func(t *testing.T) {
 		// Change to component directory.
-		err := os.Chdir(componentDir)
+		t.Chdir(componentDir)
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			_ = os.Chdir(originalWd)
+			t.Chdir(startingDir)
 		})
 
 		// Use relative path to go back to repo root.
@@ -200,10 +193,10 @@ func TestChdirWithRelativePaths(t *testing.T) {
 
 	t.Run("terraform plan with relative --chdir path", func(t *testing.T) {
 		// Change to component directory.
-		err := os.Chdir(componentDir)
+		t.Chdir(componentDir)
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			_ = os.Chdir(originalWd)
+			t.Chdir(startingDir)
 		})
 
 		// Use relative path to go back to repo root.
@@ -233,13 +226,13 @@ func TestChdirWithDescribeCommands(t *testing.T) {
 		}
 	}
 
-	originalWd, err := os.Getwd()
+	startingDir, err := os.Getwd()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Chdir(originalWd)
+		t.Chdir(startingDir)
 	})
 
-	fixturesDir := filepath.Join(originalWd, "fixtures", "scenarios", "basic")
+	fixturesDir := filepath.Join(startingDir, "fixtures", "scenarios", "basic")
 	absFixturesPath, err := filepath.Abs(fixturesDir)
 	require.NoError(t, err)
 
@@ -248,10 +241,10 @@ func TestChdirWithDescribeCommands(t *testing.T) {
 
 	t.Run("describe config with absolute --chdir path", func(t *testing.T) {
 		// Change to component directory.
-		err := os.Chdir(componentDir)
+		t.Chdir(componentDir)
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			_ = os.Chdir(originalWd)
+			t.Chdir(startingDir)
 		})
 
 		cmd := atmosRunner.Command("--chdir", absFixturesPath, "describe", "config")
@@ -268,10 +261,10 @@ func TestChdirWithDescribeCommands(t *testing.T) {
 
 	t.Run("describe stacks with absolute --chdir path", func(t *testing.T) {
 		// Change to component directory.
-		err := os.Chdir(componentDir)
+		t.Chdir(componentDir)
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			_ = os.Chdir(originalWd)
+			t.Chdir(startingDir)
 		})
 
 		cmd := atmosRunner.Command("--chdir", absFixturesPath, "describe", "stacks")
