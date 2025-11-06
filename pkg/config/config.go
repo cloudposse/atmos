@@ -200,6 +200,20 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 // This function sets TerraformDirAbsolutePath, HelmfileDirAbsolutePath, PackerDirAbsolutePath,
 // StacksBaseAbsolutePath, IncludeStackAbsolutePaths, and ExcludeStackAbsolutePaths.
 func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
+	// Resolve BasePath relative to the config file location if it's a relative path.
+	// This ensures that paths in atmos.yaml work correctly even when running from subdirectories.
+	basePathToResolve := atmosConfig.BasePath
+	if !filepath.IsAbs(basePathToResolve) && atmosConfig.CliConfigPath != "" {
+		basePathToResolve = filepath.Join(atmosConfig.CliConfigPath, atmosConfig.BasePath)
+	}
+
+	// Convert base path to absolute path.
+	basePathAbs, err := filepath.Abs(basePathToResolve)
+	if err != nil {
+		return err
+	}
+	atmosConfig.BasePath = basePathAbs
+
 	// Convert stacks base path to an absolute path
 	stacksBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)

@@ -42,7 +42,8 @@ func TestWorkdirGitRootDetection(t *testing.T) {
 	atmosYamlPath := filepath.Join(absFixturesDir, "atmos.yaml")
 	require.FileExists(t, atmosYamlPath, "atmos.yaml should exist at fixtures root")
 
-	// Set TEST_GIT_ROOT to simulate git root detection.
+	// Enable git root detection and set TEST_GIT_ROOT to simulate git root.
+	t.Setenv("ATMOS_GIT_ROOT_ENABLED", "true")
 	t.Setenv("TEST_GIT_ROOT", absFixturesDir)
 
 	// Path to a terraform component subdirectory (simulating user's scenario).
