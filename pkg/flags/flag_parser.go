@@ -238,20 +238,6 @@ func (pc *ParsedConfig) GetArgsForTool() []string {
 	return args
 }
 
-// splitFlagAndValue splits a flag string into name and value parts.
-// Handles both "-flag value" and "-flag=value" forms.
-//
-// Examples:
-//   - "-var" → ("-var", "", false)
-//   - "-var=foo" → ("-var", "foo", true)
-//   - "-var=foo=bar" → ("-var", "foo=bar", true)
-func splitFlagAndValue(arg string) (flagName string, value string, hasEquals bool) {
-	if idx := strings.Index(arg, "="); idx > 0 {
-		return arg[:idx], arg[idx+1:], true
-	}
-	return arg, "", false
-}
-
 // normalizeShorthandWithEquals normalizes shorthand flags with = syntax to longhand format.
 // This fixes a Cobra quirk where -i=value works but -i= returns literal "=" instead of empty string.
 //

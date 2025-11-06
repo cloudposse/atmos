@@ -178,15 +178,18 @@ func ValidateArgsOrNil(cmd *cobra.Command, args []string) error {
 	return cmd.Args(cmd, args)
 }
 
-// registerFlag registers a single flag with Cobra based on its type.
-func (p *StandardFlagParser) registerFlag(cmd *cobra.Command, flag Flag) {
+// registerFlagToSet is a helper that registers a single flag to a pflag.FlagSet.
+// This eliminates duplication between registerFlag and registerPersistentFlag.
+// The markRequired function allows callers to specify how to mark required flags
+// (MarkFlagRequired for regular flags, MarkPersistentFlagRequired for persistent flags).
+func (p *StandardFlagParser) registerFlagToSet(flagSet *pflag.FlagSet, flag Flag, markRequired func(string) error) {
 	switch f := flag.(type) {
 	case *StringFlag:
-		cmd.Flags().StringP(f.Name, f.Shorthand, f.Default, f.Description)
+		flagSet.StringP(f.Name, f.Shorthand, f.Default, f.Description)
 
-		// Set NoOptDefVal if specified (identity pattern)
+		// Set NoOptDefVal if specified (identity pattern).
 		if f.NoOptDefVal != "" {
-			cobraFlag := cmd.Flags().Lookup(f.Name)
+			cobraFlag := flagSet.Lookup(f.Name)
 			if cobraFlag != nil {
 				cobraFlag.NoOptDefVal = f.NoOptDefVal
 			}
@@ -197,32 +200,37 @@ func (p *StandardFlagParser) registerFlag(cmd *cobra.Command, flag Flag) {
 			p.validValues[f.Name] = f.ValidValues
 		}
 
-		// Mark as required if needed
+		// Mark as required if needed.
 		if f.Required {
-			_ = cmd.MarkFlagRequired(f.Name)
+			_ = markRequired(f.Name)
 		}
 
 	case *BoolFlag:
-		cmd.Flags().BoolP(f.Name, f.Shorthand, f.Default, f.Description)
+		flagSet.BoolP(f.Name, f.Shorthand, f.Default, f.Description)
 
 	case *IntFlag:
-		cmd.Flags().IntP(f.Name, f.Shorthand, f.Default, f.Description)
+		flagSet.IntP(f.Name, f.Shorthand, f.Default, f.Description)
 
 		if f.Required {
-			_ = cmd.MarkFlagRequired(f.Name)
+			_ = markRequired(f.Name)
 		}
 
 	case *StringSliceFlag:
-		cmd.Flags().StringSliceP(f.Name, f.Shorthand, f.Default, f.Description)
+		flagSet.StringSliceP(f.Name, f.Shorthand, f.Default, f.Description)
 
 		if f.Required {
-			_ = cmd.MarkFlagRequired(f.Name)
+			_ = markRequired(f.Name)
 		}
 
 	default:
-		// Unknown flag type - skip
-		// In production, this could log a warning
+		// Unknown flag type - skip.
+		// In production, this could log a warning.
 	}
+}
+
+// registerFlag registers a single flag with Cobra based on its type.
+func (p *StandardFlagParser) registerFlag(cmd *cobra.Command, flag Flag) {
+	p.registerFlagToSet(cmd.Flags(), flag, cmd.MarkFlagRequired)
 }
 
 // RegisterPersistentFlags registers flags as persistent flags (available to subcommands).
@@ -250,49 +258,7 @@ func (p *StandardFlagParser) RegisterPersistentFlags(cmd *cobra.Command) {
 
 // registerPersistentFlag registers a single flag as a persistent flag with Cobra.
 func (p *StandardFlagParser) registerPersistentFlag(cmd *cobra.Command, flag Flag) {
-	switch f := flag.(type) {
-	case *StringFlag:
-		cmd.PersistentFlags().StringP(f.Name, f.Shorthand, f.Default, f.Description)
-
-		// Set NoOptDefVal if specified (identity pattern).
-		if f.NoOptDefVal != "" {
-			cobraFlag := cmd.PersistentFlags().Lookup(f.Name)
-			if cobraFlag != nil {
-				cobraFlag.NoOptDefVal = f.NoOptDefVal
-			}
-		}
-
-		// Populate validValues map for runtime validation.
-		if len(f.ValidValues) > 0 {
-			p.validValues[f.Name] = f.ValidValues
-		}
-
-		// Mark as required if needed.
-		if f.Required {
-			_ = cmd.MarkPersistentFlagRequired(f.Name)
-		}
-
-	case *BoolFlag:
-		cmd.PersistentFlags().BoolP(f.Name, f.Shorthand, f.Default, f.Description)
-
-	case *IntFlag:
-		cmd.PersistentFlags().IntP(f.Name, f.Shorthand, f.Default, f.Description)
-
-		if f.Required {
-			_ = cmd.MarkPersistentFlagRequired(f.Name)
-		}
-
-	case *StringSliceFlag:
-		cmd.PersistentFlags().StringSliceP(f.Name, f.Shorthand, f.Default, f.Description)
-
-		if f.Required {
-			_ = cmd.MarkPersistentFlagRequired(f.Name)
-		}
-
-	default:
-		// Unknown flag type - skip.
-		// In production, this could log a warning.
-	}
+	p.registerFlagToSet(cmd.PersistentFlags(), flag, cmd.MarkPersistentFlagRequired)
 }
 
 // registerCompletions automatically registers shell completion functions

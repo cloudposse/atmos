@@ -229,6 +229,8 @@ func GetPagerSelector(m map[string]interface{}, key string) global.PagerSelector
 //  1. Sets the value back to DefValue
 //  2. Clears the Changed state
 func ResetCommandFlags(cmd *cobra.Command) {
+	defer perf.Track(nil, "flags.ResetCommandFlags")()
+
 	if cmd == nil {
 		return
 	}

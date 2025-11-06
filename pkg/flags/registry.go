@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -259,22 +260,28 @@ func (r *FlagRegistry) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.FlagRegistry.RegisterFlags")()
 
 	for _, flag := range r.flags {
-		switch f := flag.(type) {
-		case *StringFlag:
-			cmd.Flags().StringP(f.Name, f.Shorthand, f.Default, f.Description)
-			// Apply NoOptDefVal if set (for --flag syntax without value).
-			if f.NoOptDefVal != "" {
-				if err := cmd.Flags().SetAnnotation(f.Name, cobra.BashCompOneRequiredFlag, []string{"false"}); err == nil {
-					cmd.Flags().Lookup(f.Name).NoOptDefVal = f.NoOptDefVal
-				}
+		r.registerFlagToSet(cmd.Flags(), flag)
+	}
+}
+
+// registerFlagToSet is a helper that registers a single flag to a pflag.FlagSet.
+// This eliminates duplication between RegisterFlags and RegisterPersistentFlags.
+func (r *FlagRegistry) registerFlagToSet(flagSet *pflag.FlagSet, flag Flag) {
+	switch f := flag.(type) {
+	case *StringFlag:
+		flagSet.StringP(f.Name, f.Shorthand, f.Default, f.Description)
+		// Apply NoOptDefVal if set (for --flag syntax without value).
+		if f.NoOptDefVal != "" {
+			if err := flagSet.SetAnnotation(f.Name, cobra.BashCompOneRequiredFlag, []string{"false"}); err == nil {
+				flagSet.Lookup(f.Name).NoOptDefVal = f.NoOptDefVal
 			}
-		case *BoolFlag:
-			cmd.Flags().BoolP(f.Name, f.Shorthand, f.Default, f.Description)
-		case *IntFlag:
-			cmd.Flags().IntP(f.Name, f.Shorthand, f.Default, f.Description)
-		case *StringSliceFlag:
-			cmd.Flags().StringSlice(f.Name, f.Default, f.Description)
 		}
+	case *BoolFlag:
+		flagSet.BoolP(f.Name, f.Shorthand, f.Default, f.Description)
+	case *IntFlag:
+		flagSet.IntP(f.Name, f.Shorthand, f.Default, f.Description)
+	case *StringSliceFlag:
+		flagSet.StringSlice(f.Name, f.Default, f.Description)
 	}
 }
 
@@ -284,22 +291,7 @@ func (r *FlagRegistry) RegisterPersistentFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.FlagRegistry.RegisterPersistentFlags")()
 
 	for _, flag := range r.flags {
-		switch f := flag.(type) {
-		case *StringFlag:
-			cmd.PersistentFlags().StringP(f.Name, f.Shorthand, f.Default, f.Description)
-			// Apply NoOptDefVal if set (for --flag syntax without value).
-			if f.NoOptDefVal != "" {
-				if err := cmd.PersistentFlags().SetAnnotation(f.Name, cobra.BashCompOneRequiredFlag, []string{"false"}); err == nil {
-					cmd.PersistentFlags().Lookup(f.Name).NoOptDefVal = f.NoOptDefVal
-				}
-			}
-		case *BoolFlag:
-			cmd.PersistentFlags().BoolP(f.Name, f.Shorthand, f.Default, f.Description)
-		case *IntFlag:
-			cmd.PersistentFlags().IntP(f.Name, f.Shorthand, f.Default, f.Description)
-		case *StringSliceFlag:
-			cmd.PersistentFlags().StringSlice(f.Name, f.Default, f.Description)
-		}
+		r.registerFlagToSet(cmd.PersistentFlags(), flag)
 	}
 }
 
