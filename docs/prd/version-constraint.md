@@ -27,6 +27,9 @@ This configuration enables checking for newer versions of Atmos available on Git
 3. **Team consistency** - No way to ensure all team members use compatible Atmos versions
 4. **Feature gating** - Cannot specify version ranges for configurations using version-specific features
 5. **Migration clarity** - No clear signal when upgrading is required vs. recommended
+6. **Multi-environment version drift** - Different environments (CI, local, containers) often run mismatched Atmos versions, leading to inconsistent behavior
+7. **Silent feature unavailability** - Newer features may not exist in older versions, causing confusing errors without clear version context
+8. **Experimentation friction** - No way to warn users about unsupported versions while still allowing experimentation with newer releases
 
 ## Proposed Solution
 
@@ -174,7 +177,42 @@ version:
       Questions? Contact #infrastructure-support
 ```
 
-### Example 7: Combined with Version Checking
+### Example 7: Multi-Environment Consistency
+```yaml
+# Ensure all environments (CI, local, containers) use compatible versions
+version:
+  constraint:
+    require: ">=2.5.0, <3.0.0"
+    enforcement: "fatal"
+    message: |
+      Version mismatch detected across environments.
+
+      This configuration requires Atmos 2.x to ensure consistent behavior
+      across CI pipelines, local development, and container deployments.
+
+      Check your environment:
+      - CI: Update .github/workflows or .gitlab-ci.yml
+      - Local: brew upgrade atmos
+      - Docker: Update Dockerfile base image
+```
+
+### Example 8: Experimentation Mode (Warn on Unsupported)
+```yaml
+# Allow experimentation with newer versions but warn if not officially supported
+version:
+  constraint:
+    require: ">=2.5.0, <2.8.0"
+    enforcement: "warn"
+    message: |
+      You are using Atmos 2.8.0+ which is newer than our tested version range.
+
+      This configuration is validated against Atmos 2.5.0-2.7.x.
+      Newer versions may work but are not officially supported.
+
+      Proceed at your own risk. Report issues to #infrastructure.
+```
+
+### Example 9: Combined with Version Checking
 ```yaml
 version:
   # Check for new Atmos releases periodically
@@ -496,6 +534,131 @@ ATMOS_VERSION_ENFORCEMENT=silent atmos terraform plan
 
 1. **`website/docs/cli/configuration.mdx`** - Add version constraint documentation
 2. **`website/docs/cli/versioning.mdx`** - Update with constraint examples
+
+### Phase 3: Constraint-Aware Version Listing (Optional Enhancement)
+
+Add constraint-aware filtering to `atmos version list` command to help users find compatible versions.
+
+**Problem:** When users run `atmos version list`, they see all available versions including those that don't satisfy their configuration's constraints. This can be confusing when trying to upgrade to a compatible version.
+
+**Solution:** Add optional `--constraint-aware` flag to `atmos version list` that filters results based on `version.constraint.require` from `atmos.yaml`.
+
+**Implementation:**
+
+1. **`cmd/version/list.go`** - Add new flag and filtering logic
+   ```go
+   var (
+       listConstraintAware bool  // NEW flag
+       // ... existing flags
+   )
+
+   func init() {
+       // ... existing flags
+       listCmd.Flags().BoolVar(&listConstraintAware, "constraint-aware", false,
+           "Filter releases based on version.constraint.require from atmos.yaml")
+   }
+   ```
+
+2. **Filtering logic in `listCmd.RunE`:**
+   ```go
+   // If constraint-aware flag is set, load atmos.yaml and filter releases
+   if listConstraintAware {
+       atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+       if err != nil {
+           return fmt.Errorf("failed to load atmos.yaml for constraint filtering: %w", err)
+       }
+
+       if atmosConfig.Version.Constraint.Require != "" {
+           constraint, err := goversion.NewConstraint(atmosConfig.Version.Constraint.Require)
+           if err != nil {
+               return fmt.Errorf("invalid constraint in atmos.yaml: %w", err)
+           }
+
+           // Filter releases that satisfy constraint
+           filtered := []*github.RepositoryRelease{}
+           for _, release := range releases {
+               ver, err := goversion.NewVersion(strings.TrimPrefix(*release.TagName, "v"))
+               if err != nil {
+                   continue // Skip releases with invalid version format
+               }
+               if constraint.Check(ver) {
+                   filtered = append(filtered, release)
+               }
+           }
+           releases = filtered
+
+           // Show constraint info in output
+           ui.Info(fmt.Sprintf("Showing releases matching constraint: %s",
+               atmosConfig.Version.Constraint.Require))
+       }
+   }
+   ```
+
+**Usage Examples:**
+
+```bash
+# Show all releases (default behavior, unchanged)
+atmos version list
+
+# Show only releases that satisfy constraint from atmos.yaml
+atmos version list --constraint-aware
+
+# Example: If atmos.yaml has ">=2.5.0, <3.0.0", only show 2.5.x - 2.9.x releases
+atmos version list --constraint-aware --limit 20
+```
+
+**Output Example:**
+
+```bash
+$ atmos version list --constraint-aware
+
+ℹ Showing releases matching constraint: >=2.5.0, <3.0.0
+
+VERSION   PUBLISHED            TYPE      NOTES
+2.9.0     2025-01-15          stable    Latest stable
+2.8.5     2025-01-10          stable    Bug fixes
+2.8.0     2024-12-20          stable    New features
+2.7.3     2024-12-15          stable    Security patch
+2.6.0     2024-11-30          stable
+2.5.0     2024-11-15          stable
+
+# Versions 3.0.0+ are hidden because they don't satisfy <3.0.0
+# Versions <2.5.0 are hidden because they don't satisfy >=2.5.0
+```
+
+**Design Considerations:**
+
+**Option 1: Flag-based (RECOMMENDED)**
+- Pro: Explicit opt-in, doesn't change default behavior
+- Pro: Users who want all versions can still get them
+- Pro: Works well with other flags (--include-prereleases, etc.)
+- Con: Requires users to know about the flag
+
+**Option 2: Always filter by default**
+- Pro: Automatically helpful
+- Con: Breaking change - users expect to see all versions
+- Con: May hide newer versions users want to know about
+- Con: Confusing if constraint is set to "warn" enforcement
+
+**Option 3: Auto-enable when constraint enforcement is "fatal"**
+- Pro: Smart default based on enforcement level
+- Con: Implicit behavior may be surprising
+- Con: Still need flag to override
+
+**Recommendation:** Use **Option 1** (flag-based) for Phase 3. It's explicit, backward-compatible, and gives users control.
+
+**Future Enhancement:** Add warning when `atmos version list` shows versions outside the constraint:
+```bash
+$ atmos version list
+
+VERSION   PUBLISHED            TYPE      NOTES
+3.0.0     2025-02-01          stable    Latest (⚠ outside constraint)
+2.9.0     2025-01-15          stable
+...
+
+⚠ Some versions shown are outside your configuration's constraint: >=2.5.0, <3.0.0
+  Use --constraint-aware to filter results
+```
 
 ## Error Messages
 
