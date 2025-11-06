@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -178,20 +179,22 @@ func GetInt(m map[string]interface{}, key string) int {
 	return 0
 }
 
-//nolint:unparam // key parameter kept for consistency with other getter functions
 // GetIdentitySelector extracts an IdentitySelector value from the parsed flags map.
-func GetIdentitySelector(m map[string]interface{}, key string) IdentitySelector {
+//
+//nolint:unparam // key parameter kept for consistency with other getter functions
+func GetIdentitySelector(m map[string]interface{}, key string) global.IdentitySelector {
 	value := GetString(m, key)
 	// Check if identity was explicitly provided by checking if the key exists.
 	_, provided := m[key]
-	return NewIdentitySelector(value, provided)
+	return global.NewIdentitySelector(value, provided)
 }
 
-//nolint:unparam // key parameter kept for consistency with other getter functions
 // GetPagerSelector extracts a PagerSelector value from the parsed flags map.
-func GetPagerSelector(m map[string]interface{}, key string) PagerSelector {
+//
+//nolint:unparam // key parameter kept for consistency with other getter functions
+func GetPagerSelector(m map[string]interface{}, key string) global.PagerSelector {
 	value := GetString(m, key)
 	// Check if pager was explicitly provided by checking if the key exists.
 	_, provided := m[key]
-	return NewPagerSelector(value, provided)
+	return global.NewPagerSelector(value, provided)
 }

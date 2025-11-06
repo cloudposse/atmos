@@ -3,17 +3,17 @@ package auth
 import (
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/flags"
 )
 
 // AuthOptions provides strongly-typed access to auth command flags.
 // Used for auth commands (auth console, auth exec, auth shell, auth validate, auth whoami, etc.).
 //
-// Embeds flags.GlobalFlags for global Atmos flags (identity, chdir, config, logs, etc.).
+// Embeds global.Flags for global Atmos flags (identity, chdir, config, logs, etc.).
 // Provides auth-specific command fields (Verbose, Output, Console flags, etc.).
 type AuthOptions struct {
-	flags.GlobalFlags // Embedded global flags (identity, chdir, config, logs, pager, profiling, etc.)
+	global.Flags // Embedded global flags (identity, chdir, config, logs, pager, profiling, etc.)
 
 	// Common auth command flags.
 	Verbose bool   // Enable verbose output (--verbose, -v)

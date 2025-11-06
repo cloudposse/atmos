@@ -1,8 +1,8 @@
 package editorconfig
 
 import (
-	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // EditorConfigOptionsBuilder provides a type-safe, fluent interface for building EditorConfigParser

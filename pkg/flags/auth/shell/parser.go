@@ -1,4 +1,4 @@
-package authshell
+package shell
 
 import (
 	"context"
@@ -7,8 +7,9 @@ import (
 	"github.com/spf13/viper"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // AuthShellParser handles flag parsing for auth shell command.
@@ -103,15 +104,15 @@ func (p *AuthShellParser) Parse(ctx context.Context, args []string) (*AuthShellO
 
 	// Build strongly-typed options.
 	opts := &AuthShellOptions{
-		GlobalFlags: flags.GlobalFlags{
+		Flags: global.Flags{
 			LogsLevel: flags.GetString(parsedConfig.Flags, "logs-level"),
 			LogsFile:  flags.GetString(parsedConfig.Flags, "logs-file"),
 			NoColor:   flags.GetBool(parsedConfig.Flags, "no-color"),
 		},
-		Identity:        flags.NewIdentitySelector(identityValue, true),
-		Shell:           shellValue,
-		PositionalArgs:  parsedConfig.PositionalArgs,
-		SeparatedArgs: parsedConfig.SeparatedArgs,
+		Identity:       flags.NewIdentitySelector(identityValue, true),
+		Shell:          shellValue,
+		PositionalArgs: parsedConfig.PositionalArgs,
+		SeparatedArgs:  parsedConfig.SeparatedArgs,
 	}
 
 	return opts, nil

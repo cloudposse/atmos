@@ -1,6 +1,7 @@
 package flags
 
 import (
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -24,8 +25,8 @@ type GlobalOptionsBuilder struct {
 func NewGlobalOptionsBuilder() *GlobalOptionsBuilder {
 	defer perf.Track(nil, "flags.NewGlobalOptionsBuilder")()
 
-	// Get defaults from NewGlobalFlags() to avoid duplication.
-	defaults := NewGlobalFlags()
+	// Get defaults from global.NewFlags() to avoid duplication.
+	defaults := global.NewFlags()
 
 	// Start with a standard builder.
 	builder := &GlobalOptionsBuilder{

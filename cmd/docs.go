@@ -21,12 +21,12 @@ const atmosDocsURL = "https://atmos.tools"
 
 // docsCmd opens the Atmos docs and can display component documentation
 var docsCmd = &cobra.Command{
-	Use:                "docs",
-	Short:              "Open Atmos documentation or display component-specific docs",
-	Long:               `This command opens the Atmos docs or displays the documentation for a specified Atmos component.`,
-	Example:            "atmos docs vpc",
-	Args:               cobra.MaximumNArgs(1),
-	ValidArgsFunction:  ComponentsArgCompletion,
+	Use:               "docs",
+	Short:             "Open Atmos documentation or display component-specific docs",
+	Long:              `This command opens the Atmos docs or displays the documentation for a specified Atmos component.`,
+	Example:           "atmos docs vpc",
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 1 {
 			info := schema.ConfigAndStacksInfo{

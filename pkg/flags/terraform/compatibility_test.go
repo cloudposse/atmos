@@ -12,11 +12,11 @@ import (
 // returns the correct set of compatibility aliases.
 func TestCompatibilityAliases_PerCommand(t *testing.T) {
 	tests := []struct {
-		name              string
-		subcommand        string
-		expectedFlags     []string // Flags that MUST be present
-		unexpectedFlags   []string // Flags that MUST NOT be present
-		minFlagCount      int      // Minimum number of flags expected
+		name            string
+		subcommand      string
+		expectedFlags   []string // Flags that MUST be present
+		unexpectedFlags []string // Flags that MUST NOT be present
+		minFlagCount    int      // Minimum number of flags expected
 	}{
 		{
 			name:       "plan - supports planning flags",
@@ -163,13 +163,13 @@ func TestCompatibilityAliases_NoCobraShorthands(t *testing.T) {
 // available across commands that should support them.
 func TestCompatibilityAliases_CommonFlags(t *testing.T) {
 	tests := []struct {
-		name              string
-		subcommands       []string
+		name                string
+		subcommands         []string
 		expectedCommonFlags []string
 	}{
 		{
-			name: "var flags in planning commands",
-			subcommands: []string{"plan", "apply", "destroy", "import", "console", "test"},
+			name:                "var flags in planning commands",
+			subcommands:         []string{"plan", "apply", "destroy", "import", "console", "test"},
 			expectedCommonFlags: []string{"-var", "-var-file"},
 		},
 		{
@@ -181,8 +181,8 @@ func TestCompatibilityAliases_CommonFlags(t *testing.T) {
 			expectedCommonFlags: []string{"-no-color"},
 		},
 		{
-			name: "lock flags in stateful commands",
-			subcommands: []string{"plan", "apply", "destroy", "import", "state", "taint"},
+			name:                "lock flags in stateful commands",
+			subcommands:         []string{"plan", "apply", "destroy", "import", "state", "taint"},
 			expectedCommonFlags: []string{"-lock", "-lock-timeout"},
 		},
 	}
@@ -265,39 +265,39 @@ func TestCompatibilityAliases_RealWorldScenarios(t *testing.T) {
 		shouldBeAllowed bool
 	}{
 		{
-			name:       "plan with vars and out",
-			subcommand: "plan",
-			flags:      []string{"-var", "-var-file", "-out"},
+			name:            "plan with vars and out",
+			subcommand:      "plan",
+			flags:           []string{"-var", "-var-file", "-out"},
 			shouldBeAllowed: true,
 		},
 		{
-			name:       "init with out flag - should fail",
-			subcommand: "init",
-			flags:      []string{"-out"},
+			name:            "init with out flag - should fail",
+			subcommand:      "init",
+			flags:           []string{"-out"},
 			shouldBeAllowed: false,
 		},
 		{
-			name:       "output with var flag - should fail",
-			subcommand: "output",
-			flags:      []string{"-var"},
+			name:            "output with var flag - should fail",
+			subcommand:      "output",
+			flags:           []string{"-var"},
 			shouldBeAllowed: false,
 		},
 		{
-			name:       "apply with auto-approve",
-			subcommand: "apply",
-			flags:      []string{"-auto-approve"},
+			name:            "apply with auto-approve",
+			subcommand:      "apply",
+			flags:           []string{"-auto-approve"},
 			shouldBeAllowed: true,
 		},
 		{
-			name:       "validate with var flag - should fail",
-			subcommand: "validate",
-			flags:      []string{"-var"},
+			name:            "validate with var flag - should fail",
+			subcommand:      "validate",
+			flags:           []string{"-var"},
 			shouldBeAllowed: false,
 		},
 		{
-			name:       "import with var and state",
-			subcommand: "import",
-			flags:      []string{"-var", "-var-file", "-state"},
+			name:            "import with var and state",
+			subcommand:      "import",
+			flags:           []string{"-var", "-var-file", "-state"},
 			shouldBeAllowed: true,
 		},
 	}
@@ -377,4 +377,3 @@ func TestCompatibilityAliases_OpenTofuFlags(t *testing.T) {
 		})
 	}
 }
-

@@ -1,4 +1,4 @@
-package authshell
+package shell
 
 import (
 	"context"
@@ -14,50 +14,50 @@ import (
 // TestAuthShellParserIntegration tests the migrated parser with AtmosFlagParser.
 func TestAuthShellParserIntegration(t *testing.T) {
 	tests := []struct {
-		name            string
-		args            []string
+		name             string
+		args             []string
 		expectedIdentity string
-		expectedShell   string
-		expectedPosArgs []string
-		expectedSepArgs []string
+		expectedShell    string
+		expectedPosArgs  []string
+		expectedSepArgs  []string
 	}{
 		{
-			name:            "with identity and shell flags",
-			args:            []string{"-i", "prod", "-s", "bash"},
+			name:             "with identity and shell flags",
+			args:             []string{"-i", "prod", "-s", "bash"},
 			expectedIdentity: "prod",
-			expectedShell:   "bash",
+			expectedShell:    "bash",
 			expectedPosArgs:  []string{},
 			expectedSepArgs:  []string{},
 		},
 		{
-			name:            "identity only",
-			args:            []string{"--identity=staging"},
+			name:             "identity only",
+			args:             []string{"--identity=staging"},
 			expectedIdentity: "staging",
-			expectedShell:   "",
+			expectedShell:    "",
 			expectedPosArgs:  []string{},
 			expectedSepArgs:  []string{},
 		},
 		{
-			name:            "shell only",
-			args:            []string{"--shell=zsh"},
+			name:             "shell only",
+			args:             []string{"--shell=zsh"},
 			expectedIdentity: "",
-			expectedShell:   "zsh",
+			expectedShell:    "zsh",
 			expectedPosArgs:  []string{},
 			expectedSepArgs:  []string{},
 		},
 		{
-			name:            "no flags",
-			args:            []string{},
+			name:             "no flags",
+			args:             []string{},
 			expectedIdentity: "",
-			expectedShell:   "",
+			expectedShell:    "",
 			expectedPosArgs:  []string{},
 			expectedSepArgs:  []string{},
 		},
 		{
-			name:            "with args after separator",
-			args:            []string{"-i", "prod", "--", "-c", "echo hello"},
+			name:             "with args after separator",
+			args:             []string{"-i", "prod", "--", "-c", "echo hello"},
 			expectedIdentity: "prod",
-			expectedShell:   "",
+			expectedShell:    "",
 			expectedPosArgs:  []string{},
 			expectedSepArgs:  []string{"-c", "echo hello"},
 		},

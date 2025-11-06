@@ -6,10 +6,10 @@ import (
 
 // awsCmd executes 'aws' CLI commands.
 var awsCmd = &cobra.Command{
-	Use:                "aws",
-	Short:              "Run AWS-specific commands for interacting with cloud resources",
-	Long:               `This command allows interaction with AWS resources through various CLI commands.`,
-	Args:               cobra.NoArgs,
+	Use:   "aws",
+	Short: "Run AWS-specific commands for interacting with cloud resources",
+	Long:  `This command allows interaction with AWS resources through various CLI commands.`,
+	Args:  cobra.NoArgs,
 }
 
 func init() {

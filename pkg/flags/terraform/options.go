@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -30,7 +31,7 @@ import (
 //
 // See docs/prd/flag-handling/ for patterns.
 type Options struct {
-	flags.GlobalFlags // Embedded global flags (chdir, logs-level, identity, etc.)
+	global.Flags // Embedded global flags (chdir, logs-level, identity, etc.)
 
 	// Common flags (shared with Helmfile, Packer).
 	Stack  string // --stack/-s: Target stack name.
@@ -45,8 +46,8 @@ type Options struct {
 	FromPlan     string // --from-plan: Apply from previously generated plan file.
 
 	// Internal: Positional and pass-through arguments (use GetPositionalArgs/GetSeparatedArgs).
-	positionalArgs  []string // e.g., ["plan", "vpc"] in: atmos terraform plan vpc
-	separatedArgs []string // e.g., ["-var", "foo=bar"] in: atmos terraform plan -- -var foo=bar
+	positionalArgs []string // e.g., ["plan", "vpc"] in: atmos terraform plan vpc
+	separatedArgs  []string // e.g., ["-var", "foo=bar"] in: atmos terraform plan -- -var foo=bar
 }
 
 // ParseFlags parses Terraform command flags from Cobra command and Viper.
@@ -84,7 +85,7 @@ func ParseFlags(cmd *cobra.Command, v *viper.Viper, positionalArgs, separatedArg
 	}
 
 	return Options{
-		GlobalFlags: flags.ParseGlobalFlags(cmd, v),
+		Flags: flags.ParseGlobalFlags(cmd, v),
 
 		// Common flags.
 		Stack:  v.GetString("stack"),
@@ -99,8 +100,8 @@ func ParseFlags(cmd *cobra.Command, v *viper.Viper, positionalArgs, separatedArg
 		FromPlan:     v.GetString("from-plan"),
 
 		// Internal arguments.
-		positionalArgs:  positionalArgs,
-		separatedArgs: separatedArgs,
+		positionalArgs: positionalArgs,
+		separatedArgs:  separatedArgs,
 	}
 }
 
@@ -121,7 +122,7 @@ func (t *Options) GetSeparatedArgs() []string {
 // FlagsRegistry returns a registry with all Terraform command flags.
 //
 // Includes:
-//   - Global flags (from flags.GlobalFlagsRegistry)
+//   - Global flags (from global.FlagsRegistry)
 //   - Common flags: stack, identity, dry-run
 //   - Terraform-specific flags: upload-status, skip-init, from-plan
 //
@@ -136,7 +137,7 @@ func FlagsRegistry() *flags.FlagRegistry {
 	registry := flags.GlobalFlagsRegistry()
 
 	// Add all common + terraform-specific flags from flags.TerraformFlags().
-	// Skip flags that already exist in flags.GlobalFlagsRegistry (e.g., identity flag).
+	// Skip flags that already exist in global.FlagsRegistry (e.g., identity flag).
 	for _, flag := range flags.TerraformFlags().All() {
 		if !registry.Has(flag.GetName()) {
 			registry.Register(flag)

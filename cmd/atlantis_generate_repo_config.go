@@ -8,9 +8,9 @@ import (
 
 // atlantisGenerateRepoConfigCmd generates repository configuration for Atlantis.
 var atlantisGenerateRepoConfigCmd = &cobra.Command{
-	Use:                "repo-config",
-	Short:              "Generate repository configuration for Atlantis",
-	Long:               "Generate the repository configuration file required for Atlantis to manage Terraform repositories.",
+	Use:   "repo-config",
+	Short: "Generate repository configuration for Atlantis",
+	Long:  "Generate the repository configuration file required for Atlantis to manage Terraform repositories.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		if len(args) > 0 {

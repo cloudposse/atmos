@@ -61,7 +61,6 @@ func TestStandardOptionsBuilder_WithPositionalArgs_OptionalSchemaType(t *testing
 		Build()
 
 	parser := flags.NewStandardOptionsBuilder().
-
 		WithPositionalArgs(specs, validator, usage).
 		Build()
 
@@ -83,7 +82,6 @@ func TestStandardOptionsBuilder_WithPositionalArgs_Key(t *testing.T) {
 		Build()
 
 	parser := flags.NewStandardOptionsBuilder().
-
 		WithPositionalArgs(specs, validator, usage).
 		Build()
 
@@ -100,7 +98,6 @@ func TestStandardOptionsBuilder_WithPositionalArgs_Key(t *testing.T) {
 func TestStandardOptionsBuilder_WithoutPositionalArgs(t *testing.T) {
 	// Test that Build() works without WithPositionalArgs.
 	parser := flags.NewStandardOptionsBuilder().
-
 		WithProcessTemplates(true).
 		Build()
 
@@ -120,7 +117,6 @@ func TestStandardOptionsBuilder_Build_ExercisesSetPositionalArgs(t *testing.T) {
 		Build()
 
 	builder := flags.NewStandardOptionsBuilder().
-
 		WithPositionalArgs(specs, validator, usage)
 
 	// Build() should call SetPositionalArgs() internally.
@@ -139,7 +135,6 @@ func TestStandardOptionsBuilder_WithPositionalArgs_ValidationErrors(t *testing.T
 		Build()
 
 	parser := flags.NewStandardOptionsBuilder().
-
 		WithPositionalArgs(specs, validator, usage).
 		Build()
 
@@ -239,7 +234,6 @@ func TestStandardOptionsBuilder_WithPositionalArgs_AllBuilders(t *testing.T) {
 
 			// Create parser through builder (exercises SetPositionalArgs).
 			parser := flags.NewStandardOptionsBuilder().
-
 				WithPositionalArgs(tt.specs, validator, usage).
 				Build()
 

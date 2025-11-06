@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -83,7 +84,7 @@ func (p *WorkflowParser) Parse(ctx context.Context, args []string) (*WorkflowOpt
 	// Convert to strongly-typed options.
 	options := WorkflowOptions{
 		StandardOptions: flags.StandardOptions{
-			GlobalFlags: flags.GlobalFlags{
+			Flags: global.Flags{
 				Chdir:           flags.GetString(parsedConfig.Flags, "chdir"),
 				BasePath:        flags.GetString(parsedConfig.Flags, "base-path"),
 				Config:          flags.GetStringSlice(parsedConfig.Flags, "config"),

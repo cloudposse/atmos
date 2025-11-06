@@ -8,11 +8,11 @@ import (
 
 // proUnlockCmd executes 'pro unlock' CLI command
 var proUnlockCmd = &cobra.Command{
-	Use:                "unlock",
-	Short:              "Unlock a stack",
-	Long:               `This command calls the atmos pro API and unlocks a stack`,
-	Args:               cobra.NoArgs,
-	ValidArgsFunction:  ComponentsArgCompletion,
+	Use:               "unlock",
+	Short:             "Unlock a stack",
+	Long:              `This command calls the atmos pro API and unlocks a stack`,
+	Args:              cobra.NoArgs,
+	ValidArgsFunction: ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()

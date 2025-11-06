@@ -16,10 +16,10 @@ const (
 
 // authCmd groups authentication-related subcommands.
 var authCmd = &cobra.Command{
-	Use:                "auth",
-	Short:              "Authenticate with cloud providers and identity services.",
-	Long:               "Obtain, refresh, and configure credentials from external identity providers such as AWS SSO, Vault, or OIDC. Provides the necessary authentication context for tools like Terraform and Helm to interact with cloud infrastructure.",
-	ValidArgsFunction:  ComponentsArgCompletion,
+	Use:               "auth",
+	Short:             "Authenticate with cloud providers and identity services.",
+	Long:              "Obtain, refresh, and configure credentials from external identity providers such as AWS SSO, Vault, or OIDC. Provides the necessary authentication context for tools like Terraform and Helm to interact with cloud infrastructure.",
+	ValidArgsFunction: ComponentsArgCompletion,
 }
 
 func init() {

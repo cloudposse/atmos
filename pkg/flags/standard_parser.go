@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -137,7 +138,7 @@ func (p *StandardParser) Parse(ctx context.Context, args []string) (*StandardOpt
 
 	// Convert to strongly-typed options.
 	opts := StandardOptions{
-		GlobalFlags: GlobalFlags{
+		Flags: global.Flags{
 			Chdir:           GetString(parsedConfig.Flags, "chdir"),
 			BasePath:        GetString(parsedConfig.Flags, "base-path"),
 			Config:          GetStringSlice(parsedConfig.Flags, "config"),

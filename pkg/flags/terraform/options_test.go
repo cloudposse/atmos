@@ -219,7 +219,7 @@ func TestOptions_ZeroValues(t *testing.T) {
 
 	// Should not panic.
 	assert.NotPanics(t, func() {
-		_ = interpreter.LogsLevel  // From embedded GlobalFlags
+		_ = interpreter.LogsLevel // From embedded GlobalFlags
 		_ = interpreter.GetPositionalArgs()
 		_ = interpreter.GetSeparatedArgs()
 		_ = interpreter.Stack

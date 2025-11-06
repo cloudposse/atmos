@@ -9,10 +9,10 @@ import (
 
 // terraformGenerateBackendCmd generates backend config for a terraform component
 var terraformGenerateBackendCmd = &cobra.Command{
-	Use:                "backend",
-	Short:              "Generate backend configuration for a Terraform component",
-	Long:               `This command generates the backend configuration for a Terraform component using the specified stack`,
-	ValidArgsFunction:  ComponentsArgCompletion,
+	Use:               "backend",
+	Short:             "Generate backend configuration for a Terraform component",
+	Long:              `This command generates the backend configuration for a Terraform component using the specified stack`,
+	ValidArgsFunction: ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration

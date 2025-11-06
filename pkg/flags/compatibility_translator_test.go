@@ -210,7 +210,7 @@ func TestCompatibilityAliasTranslator_MixedScenarios(t *testing.T) {
 			},
 		},
 		{
-			name:  "realistic terraform plan command",
+			name: "realistic terraform plan command",
 			input: []string{
 				"plan", "vpc",
 				"-s", "dev",
@@ -661,20 +661,19 @@ func buildTestCompatibilityTranslator() *CompatibilityAliasTranslator {
 	// NOTE: -s and -i are NOT compatibility aliases - they are Cobra native shorthands.
 	return NewCompatibilityAliasTranslator(map[string]CompatibilityAlias{
 		// Pass-through terraform flags.
-		"-var":            {Behavior: AppendToSeparated, Target: ""},
-		"-var-file":       {Behavior: AppendToSeparated, Target: ""},
-		"-out":            {Behavior: AppendToSeparated, Target: ""},
-		"-auto-approve":   {Behavior: AppendToSeparated, Target: ""},
-		"-target":         {Behavior: AppendToSeparated, Target: ""},
-		"-replace":        {Behavior: AppendToSeparated, Target: ""},
-		"-destroy":        {Behavior: AppendToSeparated, Target: ""},
-		"-refresh-only":   {Behavior: AppendToSeparated, Target: ""},
-		"-lock":           {Behavior: AppendToSeparated, Target: ""},
-		"-lock-timeout":   {Behavior: AppendToSeparated, Target: ""},
-		"-parallelism":    {Behavior: AppendToSeparated, Target: ""},
+		"-var":          {Behavior: AppendToSeparated, Target: ""},
+		"-var-file":     {Behavior: AppendToSeparated, Target: ""},
+		"-out":          {Behavior: AppendToSeparated, Target: ""},
+		"-auto-approve": {Behavior: AppendToSeparated, Target: ""},
+		"-target":       {Behavior: AppendToSeparated, Target: ""},
+		"-replace":      {Behavior: AppendToSeparated, Target: ""},
+		"-destroy":      {Behavior: AppendToSeparated, Target: ""},
+		"-refresh-only": {Behavior: AppendToSeparated, Target: ""},
+		"-lock":         {Behavior: AppendToSeparated, Target: ""},
+		"-lock-timeout": {Behavior: AppendToSeparated, Target: ""},
+		"-parallelism":  {Behavior: AppendToSeparated, Target: ""},
 	})
 }
-
 
 // TestCompatibilityAliasTranslator_ShorthandNormalization tests that shorthand flags
 // with = syntax are normalized to longhand format BEFORE Cobra sees them.
@@ -769,4 +768,3 @@ func TestCompatibilityAliasTranslator_ShorthandNormalization(t *testing.T) {
 		})
 	}
 }
-

@@ -1,17 +1,17 @@
 package editorconfig
 
 import (
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/flags"
 )
 
 // EditorConfigOptions provides strongly-typed access to validate editorconfig command flags.
 // Used for the validate editorconfig command which wraps the editorconfig-checker library.
 //
-// Embeds flags.GlobalFlags for global Atmos flags (chdir, config, logs, etc.).
+// Embeds global.Flags for global Atmos flags (chdir, config, logs, etc.).
 // Provides editorconfig-specific command fields (Exclude, Init, Format, Disable flags, etc.).
 type EditorConfigOptions struct {
-	flags.GlobalFlags // Embedded global flags (chdir, config, logs, etc.)
+	global.Flags // Embedded global flags (chdir, config, logs, etc.)
 
 	// Common editorconfig flags.
 	Exclude        string // Regex to exclude files from checking (--exclude)

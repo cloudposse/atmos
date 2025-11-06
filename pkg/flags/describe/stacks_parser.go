@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -62,7 +63,7 @@ func (p *StacksParser) Parse(ctx context.Context, args []string) (*StacksOptions
 	}
 
 	return &StacksOptions{
-		GlobalFlags: flags.GlobalFlags{
+		Flags: global.Flags{
 			Chdir:           flags.GetString(parsedConfig.Flags, "chdir"),
 			BasePath:        flags.GetString(parsedConfig.Flags, "base-path"),
 			Config:          flags.GetStringSlice(parsedConfig.Flags, "config"),

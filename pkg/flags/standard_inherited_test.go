@@ -15,14 +15,14 @@ import (
 // This is a critical test for the fix in commit b03bfa210.
 func TestStandardFlagParser_InheritedPersistentFlags(t *testing.T) {
 	tests := []struct {
-		name              string
-		parentFlags       []string // Persistent flags on parent
-		childFlags        []string // Local flags on child
-		args              []string // Command line args
-		expectedPersist   map[string]string
-		expectedLocal     map[string]string
+		name               string
+		parentFlags        []string // Persistent flags on parent
+		childFlags         []string // Local flags on child
+		args               []string // Command line args
+		expectedPersist    map[string]string
+		expectedLocal      map[string]string
 		expectedPositional []string
-		expectError       bool
+		expectError        bool
 	}{
 		{
 			name:        "persistent flag from parent is recognized",

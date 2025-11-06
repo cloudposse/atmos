@@ -1,15 +1,15 @@
-package authexec
+package exec
 
 import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/flags"
 )
 
 // AuthExecOptions contains parsed flag values for auth exec command.
 // This command passes through arguments to child processes.
 type AuthExecOptions struct {
-	flags.GlobalFlags
+	global.Flags
 
 	// Identity is the authentication identity to use.
 	Identity IdentityFlag
@@ -38,7 +38,7 @@ func (o *AuthExecOptions) GetSeparatedArgs() []string {
 // AuthShellOptions contains parsed flag values for auth shell command.
 // This command launches an interactive shell with authentication.
 type AuthShellOptions struct {
-	flags.GlobalFlags
+	global.Flags
 
 	// Identity is the authentication identity to use.
 	Identity IdentityFlag

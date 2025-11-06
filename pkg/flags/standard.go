@@ -38,9 +38,9 @@ type StandardFlagParser struct {
 	cmd            *cobra.Command // Command for manual flag parsing
 	viper          *viper.Viper   // Viper instance for precedence handling
 	viperPrefix    string
-	validValues    map[string][]string // Valid values for flags (flag name -> valid values)
-	validationMsgs map[string]string   // Custom validation error messages (flag name -> message)
-	parsedFlags    *pflag.FlagSet      // Combined FlagSet used in last Parse() call (for Changed checks)
+	validValues    map[string][]string   // Valid values for flags (flag name -> valid values)
+	validationMsgs map[string]string     // Custom validation error messages (flag name -> message)
+	parsedFlags    *pflag.FlagSet        // Combined FlagSet used in last Parse() call (for Changed checks)
 	positionalArgs *positionalArgsConfig // Positional argument configuration
 }
 
@@ -400,9 +400,9 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 	defer perf.Track(nil, "flagparser.StandardFlagParser.Parse")()
 
 	result := &ParsedConfig{
-		Flags:           make(map[string]interface{}),
-		PositionalArgs:  []string{},
-		SeparatedArgs: []string{},
+		Flags:          make(map[string]interface{}),
+		PositionalArgs: []string{},
+		SeparatedArgs:  []string{},
 	}
 
 	// combinedFlags holds both local and inherited flags for validation.

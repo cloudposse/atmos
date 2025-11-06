@@ -1,12 +1,10 @@
 package describe
 
-import (
-	"github.com/cloudposse/atmos/pkg/flags"
-)
+import "github.com/cloudposse/atmos/pkg/flags/global"
 
 // StacksOptions contains parsed flags for the describe stacks command.
 type StacksOptions struct {
-	flags.GlobalFlags
+	global.Flags
 	Stack              string
 	Format             string
 	File               string

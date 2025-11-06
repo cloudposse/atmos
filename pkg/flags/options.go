@@ -162,14 +162,14 @@ func WithCommonFlags() Option {
 	defer perf.Track(nil, "flagparser.WithCommonFlags")()
 
 	return func(cfg *parserConfig) {
-		// CommonFlags now includes GlobalFlags + common flags (stack, dry-run).
+		// CommonFlags now includes global.Flags + common flags (stack, dry-run).
 		// First add global flags.
 		for _, flag := range GlobalFlagsRegistry().All() {
 			cfg.registry.Register(flag)
 		}
 		// Then add common flags (stack, dry-run).
 		for _, flag := range CommonFlags().All() {
-			// Skip if already registered (e.g., identity flag from GlobalFlags).
+			// Skip if already registered (e.g., identity flag from global.Flags).
 			if !cfg.registry.Has(flag.GetName()) {
 				cfg.registry.Register(flag)
 			}

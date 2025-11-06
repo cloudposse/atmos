@@ -1,15 +1,15 @@
-package global
+package flags
 
 import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// Parse extracts all global flags from Viper with proper precedence.
+// ParseGlobalFlags extracts all global flags from Viper with proper precedence.
 // This should be called by parsers to populate the Flags struct in interpreters.
 //
 // Precedence order (handled automatically by Viper):
@@ -22,10 +22,10 @@ import (
 // Special handling:
 //   - identity and pager flags use NoOptDefVal pattern (require cmd.Flags().Changed check)
 //   - All other flags use standard Viper resolution
-func Parse(cmd *cobra.Command, v *viper.Viper) Flags {
-	defer perf.Track(nil, "global.Parse")()
+func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
+	defer perf.Track(nil, "flags.ParseGlobalFlags")()
 
-	return Flags{
+	return global.Flags{
 		// Working directory and path configuration.
 		Chdir:      v.GetString("chdir"),
 		BasePath:   v.GetString("base-path"),
@@ -70,28 +70,28 @@ func Parse(cmd *cobra.Command, v *viper.Viper) Flags {
 //  1. Not provided → IdentitySelector{provided: false}
 //  2. --identity (alone) → IdentitySelector{value: "__SELECT__", provided: true}
 //  3. --identity=value → IdentitySelector{value: "value", provided: true}
-func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) IdentitySelector {
+func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelector {
 	defer perf.Track(nil, "flagparser.parseIdentityFlag")()
 
 	flag := cmd.Flags().Lookup("identity")
 	if flag == nil {
 		// Identity flag not registered on this command.
-		return NewIdentitySelector("", false)
+		return global.NewIdentitySelector("", false)
 	}
 
 	// Check if flag was explicitly set on command line.
 	if cmd.Flags().Changed("identity") {
 		value := v.GetString("identity")
-		return NewIdentitySelector(value, true)
+		return global.NewIdentitySelector(value, true)
 	}
 
 	// Fall back to env/config via Viper.
 	if v.IsSet("identity") {
 		value := v.GetString("identity")
-		return NewIdentitySelector(value, true)
+		return global.NewIdentitySelector(value, true)
 	}
 
-	return NewIdentitySelector("", false)
+	return global.NewIdentitySelector("", false)
 }
 
 // parsePagerFlag handles the pager flag's NoOptDefVal pattern.
@@ -99,39 +99,39 @@ func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) IdentitySelector {
 //  1. Not provided → PagerSelector{provided: false}
 //  2. --pager (alone) → PagerSelector{value: "true", provided: true}
 //  3. --pager=value → PagerSelector{value: "value", provided: true}
-func parsePagerFlag(cmd *cobra.Command, v *viper.Viper) PagerSelector {
+func parsePagerFlag(cmd *cobra.Command, v *viper.Viper) global.PagerSelector {
 	defer perf.Track(nil, "flagparser.parsePagerFlag")()
 
 	flag := cmd.Flags().Lookup("pager")
 	if flag == nil {
 		// Pager flag not registered on this command.
-		return NewPagerSelector("", false)
+		return global.NewPagerSelector("", false)
 	}
 
 	// Check if flag was explicitly set on command line.
 	if cmd.Flags().Changed("pager") {
 		value := v.GetString("pager")
-		return NewPagerSelector(value, true)
+		return global.NewPagerSelector(value, true)
 	}
 
 	// Fall back to env/config via Viper.
 	if v.IsSet("pager") {
 		value := v.GetString("pager")
-		return NewPagerSelector(value, true)
+		return global.NewPagerSelector(value, true)
 	}
 
-	return NewPagerSelector("", false)
+	return global.NewPagerSelector("", false)
 }
 
-// Registry returns a FlagRegistry with all global flags pre-configured.
+// GlobalFlagsRegistry returns a FlagRegistry with all global flags pre-configured.
 // This can be used to register global flags on commands that don't inherit from RootCmd.
-func Registry() *flags.FlagRegistry {
-	defer perf.Track(nil, "global.Registry")()
+func GlobalFlagsRegistry() *FlagRegistry {
+	defer perf.Track(nil, "global.FlagsRegistry")()
 
-	registry := flags.NewFlagRegistry()
+	registry := NewFlagRegistry()
 
 	// Working directory flags.
-	registry.Register(&flags.StringFlag{
+	registry.Register(&StringFlag{
 		Name:        "chdir",
 		Shorthand:   "C",
 		Default:     "",
@@ -139,7 +139,7 @@ func Registry() *flags.FlagRegistry {
 		EnvVars:     []string{"ATMOS_CHDIR"},
 	})
 
-	registry.Register(&flags.StringFlag{
+	registry.Register(&StringFlag{
 		Name:        "base-path",
 		Shorthand:   "",
 		Default:     "",
@@ -147,7 +147,7 @@ func Registry() *flags.FlagRegistry {
 		EnvVars:     []string{"ATMOS_BASE_PATH"},
 	})
 
-	registry.Register(&flags.StringSliceFlag{
+	registry.Register(&StringSliceFlag{
 		Name:        "config",
 		Shorthand:   "",
 		Default:     []string{},
@@ -155,7 +155,7 @@ func Registry() *flags.FlagRegistry {
 		EnvVars:     []string{"ATMOS_CONFIG"},
 	})
 
-	registry.Register(&flags.StringSliceFlag{
+	registry.Register(&StringSliceFlag{
 		Name:        "config-path",
 		Shorthand:   "",
 		Default:     []string{},
@@ -164,7 +164,7 @@ func Registry() *flags.FlagRegistry {
 	})
 
 	// Logging flags.
-	registry.Register(&flags.StringFlag{
+	registry.Register(&StringFlag{
 		Name:        "logs-level",
 		Shorthand:   "",
 		Default:     "Info",
@@ -172,7 +172,7 @@ func Registry() *flags.FlagRegistry {
 		EnvVars:     []string{"ATMOS_LOGS_LEVEL"},
 	})
 
-	registry.Register(&flags.StringFlag{
+	registry.Register(&StringFlag{
 		Name:        "logs-file",
 		Shorthand:   "",
 		Default:     "/dev/stderr",
@@ -180,7 +180,7 @@ func Registry() *flags.FlagRegistry {
 		EnvVars:     []string{"ATMOS_LOGS_FILE"},
 	})
 
-	registry.Register(&flags.BoolFlag{
+	registry.Register(&BoolFlag{
 		Name:        "no-color",
 		Shorthand:   "",
 		Default:     false,
@@ -189,7 +189,7 @@ func Registry() *flags.FlagRegistry {
 	})
 
 	// Identity flag (special NoOptDefVal handling).
-	registry.Register(&flags.StringFlag{
+	registry.Register(&StringFlag{
 		Name:        "identity",
 		Shorthand:   "i",
 		Default:     "",
@@ -199,7 +199,7 @@ func Registry() *flags.FlagRegistry {
 	})
 
 	// Pager flag (special NoOptDefVal handling).
-	registry.Register(&flags.StringFlag{
+	registry.Register(&StringFlag{
 		Name:        "pager",
 		Shorthand:   "",
 		Default:     "",
@@ -209,7 +209,7 @@ func Registry() *flags.FlagRegistry {
 	})
 
 	// Profiling flags.
-	registry.Register(&flags.BoolFlag{
+	registry.Register(&BoolFlag{
 		Name:        "profiler-enabled",
 		Shorthand:   "",
 		Default:     false,
@@ -217,7 +217,7 @@ func Registry() *flags.FlagRegistry {
 		EnvVars:     []string{"ATMOS_PROFILER_ENABLED"},
 	})
 
-	registry.Register(&flags.IntFlag{
+	registry.Register(&IntFlag{
 		Name:        "profiler-port",
 		Shorthand:   "",
 		Default:     6060,
@@ -225,7 +225,7 @@ func Registry() *flags.FlagRegistry {
 		EnvVars:     []string{"ATMOS_PROFILER_PORT"},
 	})
 
-	registry.Register(&flags.StringFlag{
+	registry.Register(&StringFlag{
 		Name:        "profiler-host",
 		Shorthand:   "",
 		Default:     "localhost",
@@ -233,7 +233,7 @@ func Registry() *flags.FlagRegistry {
 		EnvVars:     []string{"ATMOS_PROFILER_HOST"},
 	})
 
-	registry.Register(&flags.StringFlag{
+	registry.Register(&StringFlag{
 		Name:        "profile-file",
 		Shorthand:   "",
 		Default:     "",
@@ -241,7 +241,7 @@ func Registry() *flags.FlagRegistry {
 		EnvVars:     []string{"ATMOS_PROFILE_FILE"},
 	})
 
-	registry.Register(&flags.StringFlag{
+	registry.Register(&StringFlag{
 		Name:        "profile-type",
 		Shorthand:   "",
 		Default:     "cpu",
@@ -250,7 +250,7 @@ func Registry() *flags.FlagRegistry {
 	})
 
 	// Performance flags.
-	registry.Register(&flags.BoolFlag{
+	registry.Register(&BoolFlag{
 		Name:        "heatmap",
 		Shorthand:   "",
 		Default:     false,
@@ -258,7 +258,7 @@ func Registry() *flags.FlagRegistry {
 		EnvVars:     []string{"ATMOS_HEATMAP"},
 	})
 
-	registry.Register(&flags.StringFlag{
+	registry.Register(&StringFlag{
 		Name:        "heatmap-mode",
 		Shorthand:   "",
 		Default:     "bar",

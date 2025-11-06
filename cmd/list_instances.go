@@ -10,10 +10,10 @@ import (
 
 // listInstancesCmd lists atmos instances.
 var listInstancesCmd = &cobra.Command{
-	Use:                "instances",
-	Short:              "List all Atmos instances",
-	Long:               "This command lists all Atmos instances or is used to upload instances to the pro API.",
-	Args:               cobra.NoArgs,
+	Use:   "instances",
+	Short: "List all Atmos instances",
+	Long:  "This command lists all Atmos instances or is used to upload instances to the pro API.",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()

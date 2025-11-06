@@ -157,7 +157,6 @@ func (t *CompatibilityAliasTranslator) ValidateTargetsInArgs(cmd *cobra.Command,
 	return nil
 }
 
-
 // Translate processes args and separates them into Atmos args and separated args.
 // Returns:
 //   - atmosArgs: Arguments for Cobra to parse (Atmos flags + positional args)
@@ -214,8 +213,8 @@ func (t *CompatibilityAliasTranslator) translateSingleDashFlag(args []string, in
 
 	// Check for -flag=value form (compatibility aliases).
 	if idx := strings.Index(arg, "="); idx > 0 {
-		flagPart := arg[:idx]   // "-var"
-		valuePart := arg[idx:]  // "=foo=bar"
+		flagPart := arg[:idx]  // "-var"
+		valuePart := arg[idx:] // "=foo=bar"
 
 		if alias, ok := t.aliasMap[flagPart]; ok {
 			switch alias.Behavior {

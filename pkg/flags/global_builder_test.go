@@ -3,6 +3,7 @@ package flags
 import (
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -32,14 +33,14 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 		assert.NotNil(t, cmd.PersistentFlags().Lookup("identity"))
 	})
 
-	t.Run("uses defaults from NewGlobalFlags", func(t *testing.T) {
+	t.Run("uses defaults from global.NewFlags", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser := NewGlobalOptionsBuilder().Build()
 		parser.RegisterPersistentFlags(cmd)
 
-		defaults := NewGlobalFlags()
+		defaults := global.NewFlags()
 
-		// Verify defaults match NewGlobalFlags().
+		// Verify defaults match global.NewFlags().
 		logsLevel := cmd.PersistentFlags().Lookup("logs-level")
 		assert.Equal(t, defaults.LogsLevel, logsLevel.DefValue)
 
@@ -113,7 +114,7 @@ func TestGlobalOptionsBuilder_FlagPrecedence(t *testing.T) {
 		parser.RegisterFlags(cmd)
 		_ = parser.BindToViper(v)
 
-		defaults := NewGlobalFlags()
+		defaults := global.NewFlags()
 		flags := ParseGlobalFlags(cmd, v)
 		assert.Equal(t, defaults.LogsLevel, flags.LogsLevel)
 	})

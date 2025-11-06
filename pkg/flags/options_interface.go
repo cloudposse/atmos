@@ -1,6 +1,7 @@
 package flags
 
 import (
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -17,7 +18,7 @@ import (
 //	stack := interpreter.Stack  // compile-time type safety
 type CommandOptions interface {
 	// GetGlobalFlags returns the global flags available to all commands.
-	GetGlobalFlags() *GlobalFlags
+	GetGlobalFlags() *global.Flags
 
 	// GetPositionalArgs returns positional arguments (e.g., component name, subcommand).
 	GetPositionalArgs() []string
@@ -27,19 +28,19 @@ type CommandOptions interface {
 }
 
 // BaseOptions provides common implementation for CommandOptions interface.
-// Command-specific interpreters should embed this (or just embed GlobalFlags directly).
+// Command-specific interpreters should embed this (or just embed global.Flags directly).
 type BaseOptions struct {
-	GlobalFlags     // Embedded global flags.
+	global.Flags    // Embedded global flags.
 	positionalArgs  []string
 	passThroughArgs []string
 }
 
 // NewBaseOptions creates a new BaseOptions with the given arguments.
-func NewBaseOptions(globalFlags GlobalFlags, positionalArgs, passThroughArgs []string) BaseOptions {
+func NewBaseOptions(globalFlags global.Flags, positionalArgs, passThroughArgs []string) BaseOptions {
 	defer perf.Track(nil, "flagparser.NewBaseOptions")()
 
 	return BaseOptions{
-		GlobalFlags:     globalFlags,
+		Flags:           globalFlags,
 		positionalArgs:  positionalArgs,
 		passThroughArgs: passThroughArgs,
 	}

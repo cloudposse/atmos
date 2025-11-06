@@ -1,12 +1,13 @@
-package authshell
+package shell
 
 import (
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 )
 
 // AuthShellOptions contains parsed command-line options for auth shell command.
 type AuthShellOptions struct {
-	flags.GlobalFlags
+	global.Flags
 	Identity       flags.IdentitySelector
 	Shell          string
 	PositionalArgs []string

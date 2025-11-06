@@ -1,18 +1,19 @@
 package flags
 
 import (
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // StandardOptions provides strongly-typed access to standard Atmos command flags.
 // Used for commands that don't pass through arguments to external tools (describe, list, validate, vendor, etc.).
 //
-// Embeds GlobalFlags for global Atmos flags (identity, chdir, config, logs, etc.).
+// Embeds global.Flags for global Atmos flags (identity, chdir, config, logs, etc.).
 // Provides common command fields (Stack, Component, Format, File, etc.).
 //
 // Commands with additional flags should embed StandardOptions and add their own fields.
 type StandardOptions struct {
-	GlobalFlags // Embedded global flags (identity, chdir, config, logs, pager, profiling, etc.)
+	global.Flags // Embedded global flags (identity, chdir, config, logs, pager, profiling, etc.)
 
 	// Common command flags.
 	Stack     string // Stack to operate on (--stack, -s)
@@ -85,12 +86,12 @@ type StandardOptions struct {
 	positionalArgs []string
 }
 
-// GetGlobalFlags returns a pointer to the embedded GlobalFlags.
+// GetGlobalFlags returns a pointer to the embedded global.Flags.
 // Implements CommandOptions interface.
-func (s *StandardOptions) GetGlobalFlags() *GlobalFlags {
+func (s *StandardOptions) GetGlobalFlags() *global.Flags {
 	defer perf.Track(nil, "flagparser.StandardOptions.GetGlobalFlags")()
 
-	return &s.GlobalFlags
+	return &s.Flags
 }
 
 // GetPositionalArgs returns positional arguments extracted by the parser.

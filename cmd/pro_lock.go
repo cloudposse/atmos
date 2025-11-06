@@ -8,11 +8,11 @@ import (
 
 // proLockCmd executes 'pro lock' CLI command
 var proLockCmd = &cobra.Command{
-	Use:                "lock",
-	Short:              "Lock a stack",
-	Long:               `This command calls the atmos pro API and locks a stack`,
-	Args:               cobra.NoArgs,
-	ValidArgsFunction:  ComponentsArgCompletion,
+	Use:               "lock",
+	Short:             "Lock a stack",
+	Long:              `This command calls the atmos pro API and locks a stack`,
+	Args:              cobra.NoArgs,
+	ValidArgsFunction: ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()

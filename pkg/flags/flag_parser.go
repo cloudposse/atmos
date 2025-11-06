@@ -122,9 +122,9 @@ func (p *AtmosFlagParser) Parse(args []string) (*ParsedConfig, error) {
 	}
 
 	return &ParsedConfig{
-		Flags:           flagsMap,
-		SeparatedArgs: separatedArgs,
-		PositionalArgs:  positionalArgs,
+		Flags:          flagsMap,
+		SeparatedArgs:  separatedArgs,
+		PositionalArgs: positionalArgs,
 	}, nil
 }
 

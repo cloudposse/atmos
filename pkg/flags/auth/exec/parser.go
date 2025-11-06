@@ -1,4 +1,4 @@
-package authexec
+package exec
 
 import (
 	"context"
@@ -7,8 +7,9 @@ import (
 	"github.com/spf13/viper"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // AuthExecParser handles flag parsing for auth exec and auth shell commands.
@@ -92,14 +93,14 @@ func (p *AuthExecParser) Parse(ctx context.Context, args []string) (*AuthExecOpt
 
 	// Build strongly-typed options.
 	opts := &AuthExecOptions{
-		GlobalFlags: flags.GlobalFlags{
+		Flags: global.Flags{
 			LogsLevel: flags.GetString(parsedConfig.Flags, "logs-level"),
 			LogsFile:  flags.GetString(parsedConfig.Flags, "logs-file"),
 			NoColor:   flags.GetBool(parsedConfig.Flags, "no-color"),
 		},
-		Identity: NewIdentityFlag(identityValue),
-		PositionalArgs:  parsedConfig.PositionalArgs,
-		SeparatedArgs: parsedConfig.SeparatedArgs,
+		Identity:       NewIdentityFlag(identityValue),
+		PositionalArgs: parsedConfig.PositionalArgs,
+		SeparatedArgs:  parsedConfig.SeparatedArgs,
 	}
 
 	return opts, nil

@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -25,7 +26,7 @@ import (
 //
 // See docs/prd/flag-handling/ for patterns.
 type Options struct {
-	flags.GlobalFlags // Embedded global flags (chdir, logs-level, identity, etc.)
+	global.Flags // Embedded global flags (chdir, logs-level, identity, etc.)
 
 	// Common flags (shared with Terraform, Packer).
 	Stack  string // --stack/-s: Target stack name.
@@ -73,7 +74,7 @@ func ParseFlags(cmd *cobra.Command, v *viper.Viper, positionalArgs, passThroughA
 	}
 
 	return Options{
-		GlobalFlags: flags.ParseGlobalFlags(cmd, v),
+		Flags: flags.ParseGlobalFlags(cmd, v),
 
 		// Common flags.
 		Stack:  v.GetString("stack"),

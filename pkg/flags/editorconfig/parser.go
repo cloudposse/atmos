@@ -6,8 +6,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // EditorConfigParser handles flag parsing for validate editorconfig command.
@@ -56,7 +57,7 @@ func (p *EditorConfigParser) Parse(ctx context.Context, args []string) (*EditorC
 
 	// Convert to strongly-typed options.
 	opts := EditorConfigOptions{
-		GlobalFlags: flags.GlobalFlags{
+		Flags: global.Flags{
 			Chdir:           flags.GetString(parsedConfig.Flags, "chdir"),
 			BasePath:        flags.GetString(parsedConfig.Flags, "base-path"),
 			Config:          flags.GetStringSlice(parsedConfig.Flags, "config"),

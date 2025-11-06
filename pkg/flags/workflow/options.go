@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -26,7 +27,7 @@ type WorkflowOptions struct {
 
 // GetGlobalFlags returns a pointer to the embedded GlobalFlags.
 // Implements CommandOptions interface.
-func (w *WorkflowOptions) GetGlobalFlags() *flags.GlobalFlags {
+func (w *WorkflowOptions) GetGlobalFlags() *global.Flags {
 	defer perf.Track(nil, "flags.WorkflowOptions.GetGlobalFlags")()
 
 	return w.StandardOptions.GetGlobalFlags()
