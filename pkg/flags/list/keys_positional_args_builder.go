@@ -1,4 +1,4 @@
-package flags
+package list
 
 import (
 	"github.com/spf13/cobra"
@@ -6,7 +6,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// ListSettingsPositionalArgsBuilder provides domain-specific builder for list settings command positional arguments.
+// ListKeysPositionalArgsBuilder provides domain-specific builder for list keys command positional arguments.
 //
 // Features:
 //   - Semantic method names (WithComponent vs generic AddArg)
@@ -16,22 +16,22 @@ import (
 //
 // Usage:
 //
-//	specs, validator, usage := flags.NewListSettingsPositionalArgsBuilder().
+//	specs, validator, usage := flags.NewListKeysPositionalArgsBuilder().
 //	    WithComponent(false).  // Component is optional
 //	    Build()
 //
 //	parser := flags.NewStandardOptionsBuilder().
 //	    WithPositionalArgs(specs, validator, usage).
 //	    Build()
-type ListSettingsPositionalArgsBuilder struct {
+type ListKeysPositionalArgsBuilder struct {
 	builder *PositionalArgsBuilder
 }
 
-// NewListSettingsPositionalArgsBuilder creates a new ListSettingsPositionalArgsBuilder.
-func NewListSettingsPositionalArgsBuilder() *ListSettingsPositionalArgsBuilder {
-	defer perf.Track(nil, "flags.NewListSettingsPositionalArgsBuilder")()
+// NewListKeysPositionalArgsBuilder creates a new ListKeysPositionalArgsBuilder.
+func NewListKeysPositionalArgsBuilder() *ListKeysPositionalArgsBuilder {
+	defer perf.Track(nil, "flags.NewListKeysPositionalArgsBuilder")()
 
-	return &ListSettingsPositionalArgsBuilder{
+	return &ListKeysPositionalArgsBuilder{
 		builder: NewPositionalArgsBuilder(),
 	}
 }
@@ -45,12 +45,12 @@ func NewListSettingsPositionalArgsBuilder() *ListSettingsPositionalArgsBuilder {
 // Example:
 //
 //	builder.WithComponent(false) // [component] - optional
-func (b *ListSettingsPositionalArgsBuilder) WithComponent(required bool) *ListSettingsPositionalArgsBuilder {
-	defer perf.Track(nil, "flags.ListSettingsPositionalArgsBuilder.WithComponent")()
+func (b *ListKeysPositionalArgsBuilder) WithComponent(required bool) *ListKeysPositionalArgsBuilder {
+	defer perf.Track(nil, "flags.ListKeysPositionalArgsBuilder.WithComponent")()
 
 	b.builder.AddArg(&PositionalArgSpec{
 		Name:        "component",
-		Description: "Component name to filter settings",
+		Description: "Component name to filter keys",
 		Required:    required,
 		TargetField: "Component", // Maps to StandardOptions.Component field
 	})
@@ -64,8 +64,8 @@ func (b *ListSettingsPositionalArgsBuilder) WithComponent(required bool) *ListSe
 //   - specs: Array of positional argument specifications with TargetField mapping
 //   - validator: Cobra Args validator function
 //   - usage: Usage string for Cobra Use field (e.g., "[component]")
-func (b *ListSettingsPositionalArgsBuilder) Build() ([]*PositionalArgSpec, cobra.PositionalArgs, string) {
-	defer perf.Track(nil, "flags.ListSettingsPositionalArgsBuilder.Build")()
+func (b *ListKeysPositionalArgsBuilder) Build() ([]*PositionalArgSpec, cobra.PositionalArgs, string) {
+	defer perf.Track(nil, "flags.ListKeysPositionalArgsBuilder.Build")()
 
 	return b.builder.Build()
 }

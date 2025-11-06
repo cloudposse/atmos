@@ -1,5 +1,5 @@
 //nolint:dupl // Similar test structure to other builder tests, but testing different domain-specific builder
-package flags
+package list
 
 import (
 	"testing"
@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestListKeysPositionalArgsBuilder_WithComponent_Required(t *testing.T) {
-	builder := NewListKeysPositionalArgsBuilder()
+func TestListSettingsPositionalArgsBuilder_WithComponent_Required(t *testing.T) {
+	builder := NewListSettingsPositionalArgsBuilder()
 	builder.WithComponent(true)
 
 	specs, validator, usage := builder.Build()
@@ -18,7 +18,7 @@ func TestListKeysPositionalArgsBuilder_WithComponent_Required(t *testing.T) {
 	assert.Equal(t, "component", specs[0].Name)
 	assert.Equal(t, "Component", specs[0].TargetField)
 	assert.True(t, specs[0].Required)
-	assert.Equal(t, "Component name to filter keys", specs[0].Description)
+	assert.Equal(t, "Component name to filter settings", specs[0].Description)
 
 	// Check usage string.
 	assert.Equal(t, "<component>", usage)
@@ -34,8 +34,8 @@ func TestListKeysPositionalArgsBuilder_WithComponent_Required(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestListKeysPositionalArgsBuilder_WithComponent_Optional(t *testing.T) {
-	builder := NewListKeysPositionalArgsBuilder()
+func TestListSettingsPositionalArgsBuilder_WithComponent_Optional(t *testing.T) {
+	builder := NewListSettingsPositionalArgsBuilder()
 	builder.WithComponent(false)
 
 	specs, validator, usage := builder.Build()
@@ -60,45 +60,51 @@ func TestListKeysPositionalArgsBuilder_WithComponent_Optional(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestListKeysPositionalArgsBuilder_FluentInterface(t *testing.T) {
+func TestListSettingsPositionalArgsBuilder_FluentInterface(t *testing.T) {
 	// Test that methods return builder for chaining.
-	builder := NewListKeysPositionalArgsBuilder()
+	builder := NewListSettingsPositionalArgsBuilder()
 	result := builder.WithComponent(true)
 
 	assert.Equal(t, builder, result, "WithComponent should return builder for chaining")
 }
 
-func TestListKeysPositionalArgsBuilder_RealWorldUsage(t *testing.T) {
-	// Simulate real usage in list values/vars command.
-	_, listValidator, listUsage := NewListKeysPositionalArgsBuilder().
-		WithComponent(true).
+func TestListSettingsPositionalArgsBuilder_RealWorldUsage(t *testing.T) {
+	// Simulate real usage in list settings command.
+	_, listAllValidator, listAllUsage := NewListSettingsPositionalArgsBuilder().
+		WithComponent(false).
 		Build()
 
-	// Check usage matches expected pattern for list values command.
-	assert.Equal(t, "<component>", listUsage)
+	// Check usage matches expected pattern for list all settings.
+	assert.Equal(t, "[component]", listAllUsage)
 
-	// Test validator with real list values scenarios.
-	err := listValidator(nil, []string{"vpc"})
-	assert.NoError(t, err, "should accept: atmos list values vpc")
+	// Test validator with real list settings scenarios.
+	err := listAllValidator(nil, []string{})
+	assert.NoError(t, err, "should accept: atmos list settings")
 
-	err = listValidator(nil, []string{})
-	assert.Error(t, err, "should reject: atmos list values (missing component)")
+	err = listAllValidator(nil, []string{"vpc"})
+	assert.NoError(t, err, "should accept: atmos list settings vpc")
+
+	err = listAllValidator(nil, []string{"vpc", "ecs"})
+	assert.Error(t, err, "should reject: atmos list settings vpc ecs (too many args)")
 }
 
-func TestListKeysPositionalArgsBuilder_IntegrationWithCobra(t *testing.T) {
+func TestListSettingsPositionalArgsBuilder_IntegrationWithCobra(t *testing.T) {
 	// Test integration with actual Cobra command.
-	_, validator, usage := NewListKeysPositionalArgsBuilder().
-		WithComponent(true).
+	_, validator, usage := NewListSettingsPositionalArgsBuilder().
+		WithComponent(false).
 		Build()
 
 	// Simulate command setup.
-	cmdUse := "values " + usage
-	assert.Equal(t, "values <component>", cmdUse)
+	cmdUse := "settings " + usage
+	assert.Equal(t, "settings [component]", cmdUse)
 
 	// Validate args work correctly.
-	err := validator(nil, []string{"vpc"})
+	err := validator(nil, []string{})
 	assert.NoError(t, err)
 
-	err = validator(nil, []string{})
+	err = validator(nil, []string{"vpc"})
+	assert.NoError(t, err)
+
+	err = validator(nil, []string{"vpc", "extra"})
 	assert.Error(t, err)
 }
