@@ -133,25 +133,3 @@ func TestOpenTofuModuleSourceInterpolation(t *testing.T) {
 		assert.Contains(t, componentPath, "test-component", "Component path should point to test-component directory")
 	})
 }
-
-// TestOpenTofuDetection tests the auto-detection of OpenTofu vs Terraform executables.
-func TestOpenTofuDetection(t *testing.T) {
-	// Note: These tests will be implemented alongside the IsOpenTofu() function.
-	// They will test:
-	// 1. Detection by executable basename (tofu vs terraform)
-	// 2. Detection by version command output
-	// 3. Caching of detection results
-	// 4. Handling of custom paths
-
-	t.Run("detect tofu by basename", func(t *testing.T) {
-		t.Skip("Implement alongside IsOpenTofu() function")
-	})
-
-	t.Run("detect tofu by version command", func(t *testing.T) {
-		t.Skip("Implement alongside IsOpenTofu() function")
-	})
-
-	t.Run("cache detection results", func(t *testing.T) {
-		t.Skip("Implement alongside IsOpenTofu() function")
-	})
-}
