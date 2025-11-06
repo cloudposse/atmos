@@ -654,8 +654,15 @@ func ProcessStacks(
 
 				if !isNotExist && !isNotExistString {
 					// Check if this is an OpenTofu-specific feature that terraform-config-inspect doesn't support.
+					// Respect component-level command overrides for OpenTofu detection.
+					// Clone the config and apply the component override if present.
+					effectiveConfig := *atmosConfig
+					if configAndStacksInfo.Command != "" {
+						effectiveConfig.Components.Terraform.Command = configAndStacksInfo.Command
+					}
+
 					// For known OpenTofu features, skip validation. Otherwise, return the error.
-					if !IsOpenTofu(atmosConfig) || !isKnownOpenTofuFeature(diagErr) {
+					if !IsOpenTofu(&effectiveConfig) || !isKnownOpenTofuFeature(diagErr) {
 						// For other errors (syntax errors, permission issues, etc.), return error.
 						return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
 					}
