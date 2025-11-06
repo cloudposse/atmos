@@ -120,7 +120,7 @@ func (p *WorkflowParser) Parse(ctx context.Context, args []string) (*WorkflowOpt
 	}
 
 	// Set positional args on the embedded StandardOptions.
-	options.StandardOptions.SetPositionalArgs(parsedConfig.PositionalArgs)
+	options.SetPositionalArgs(parsedConfig.PositionalArgs)
 
 	return &options, nil
 }

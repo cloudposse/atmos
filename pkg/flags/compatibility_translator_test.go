@@ -18,6 +18,22 @@ type translationResult struct {
 	separatedArgs []string
 }
 
+// assertPanic is a test helper that asserts a panic occurred with an optional expected message.
+func assertPanic(t *testing.T, expectedMsg string) {
+	t.Helper()
+	r := recover()
+	if r == nil {
+		t.Errorf("Expected panic but got none")
+		return
+	}
+	if expectedMsg != "" {
+		panicStr := fmt.Sprintf("%v", r)
+		if !strings.Contains(panicStr, expectedMsg) {
+			t.Errorf("Panic message %q does not contain expected %q", panicStr, expectedMsg)
+		}
+	}
+}
+
 // NOTE: Tests for -s and -i removed because these are Cobra native shorthands, NOT compatibility aliases.
 // Cobra handles -s → --stack automatically when you register flags with StringP("stack", "s", ...).
 // The compatibility translator should ONLY handle terraform-specific pass-through flags.
@@ -546,19 +562,7 @@ func TestCompatibilityAliasTranslator_ValidateNoConflicts(t *testing.T) {
 			translator := NewCompatibilityAliasTranslator(tt.aliases)
 
 			if tt.expectPanic {
-				defer func() {
-					r := recover()
-					if r == nil {
-						t.Errorf("Expected panic but got none")
-						return
-					}
-					if tt.panicMsg != "" {
-						panicStr := fmt.Sprintf("%v", r)
-						if !strings.Contains(panicStr, tt.panicMsg) {
-							t.Errorf("Panic message %q does not contain expected %q", panicStr, tt.panicMsg)
-						}
-					}
-				}()
+				defer assertPanic(t, tt.panicMsg)
 			}
 
 			err := translator.ValidateNoConflicts(cmd)
