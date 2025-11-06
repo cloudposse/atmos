@@ -84,16 +84,16 @@ func TestAuthShellCmd_CommandStructure(t *testing.T) {
 	// Test that the real authShellCmd has the expected structure.
 	assert.Equal(t, "shell", authShellCmd.Use)
 
-	// Verify identity flag exists (registered via PassThroughFlagParser).
+	// Verify identity flag exists (registered via FlagRegistry).
 	identityFlag := authShellCmd.Flag("identity")
-	require.NotNil(t, identityFlag, "identity flag should be registered via PassThroughFlagParser")
+	require.NotNil(t, identityFlag, "identity flag should be registered via FlagRegistry")
 	assert.Equal(t, "i", identityFlag.Shorthand)
 	assert.Equal(t, "", identityFlag.DefValue)
 	assert.Equal(t, IdentityFlagSelectValue, identityFlag.NoOptDefVal, "NoOptDefVal should be __SELECT__")
 
-	// Verify shell flag exists (registered via PassThroughFlagParser).
+	// Verify shell flag exists (registered via FlagRegistry).
 	shellFlag := authShellCmd.Flags().Lookup("shell")
-	require.NotNil(t, shellFlag, "shell flag should be registered via PassThroughFlagParser")
+	require.NotNil(t, shellFlag, "shell flag should be registered via FlagRegistry")
 	assert.Equal(t, "s", shellFlag.Shorthand)
 	assert.Equal(t, "", shellFlag.DefValue)
 }

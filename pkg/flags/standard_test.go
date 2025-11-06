@@ -75,7 +75,7 @@ func TestStandardFlagParser_Parse(t *testing.T) {
 	cfg, err := parser.Parse(ctx, []string{})
 
 	// Parse() is a placeholder for interface compliance
-	// StandardFlagParser doesn't populate ParsedConfig like PassThroughFlagParser does
+	// StandardFlagParser doesn't populate ParsedConfig like FlagRegistry does
 	require.NoError(t, err)
 	assert.NotNil(t, cfg)
 	assert.NotNil(t, cfg.Flags)

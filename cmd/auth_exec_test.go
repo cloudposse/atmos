@@ -102,9 +102,9 @@ func TestAuthExecCmd_CommandStructure(t *testing.T) {
 	// Test that the real authExecCmd has the expected structure.
 	assert.Equal(t, "exec", authExecCmd.Use)
 
-	// Verify identity flag exists (registered via PassThroughFlagParser).
+	// Verify identity flag exists (registered via FlagRegistry).
 	identityFlag := authExecCmd.Flag("identity")
-	require.NotNil(t, identityFlag, "identity flag should be registered via PassThroughFlagParser")
+	require.NotNil(t, identityFlag, "identity flag should be registered via FlagRegistry")
 	assert.Equal(t, "i", identityFlag.Shorthand)
 	assert.Equal(t, "", identityFlag.DefValue)
 	assert.Equal(t, IdentityFlagSelectValue, identityFlag.NoOptDefVal, "NoOptDefVal should be __SELECT__")
