@@ -13,9 +13,9 @@ import (
 // Parser handles flag parsing for Packer commands.
 // Returns strongly-typed Options.
 type Parser struct {
-	parser *flags.PassThroughFlagParser
-	cmd    *cobra.Command
-	viper  *viper.Viper
+	flagRegistry *flags.FlagRegistry
+	cmd          *cobra.Command
+	viper        *viper.Viper
 }
 
 // NewParser creates a parser for Packer commands.
@@ -23,7 +23,7 @@ func NewParser() *Parser {
 	defer perf.Track(nil, "flagparser.NewPackerParser")()
 
 	return &Parser{
-		parser: flags.NewPassThroughFlagParser(flags.WithPackerFlags()),
+		flagRegistry: flags.PackerFlags(),
 	}
 }
 
@@ -32,13 +32,7 @@ func (p *Parser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.PackerParser.RegisterFlags")()
 
 	p.cmd = cmd
-	// https://github.com/spf13/cobra/issues/739
-	// DisableFlagParsing=true prevents Cobra from parsing flags, but flags can still be registered.
-	// Our manual parsers extract flag values from os.Args directly.
-	cmd.DisableFlagParsing = true
-	// Packer passes subcommand separately to packerRun, so only extract 1 positional arg (component).
-	p.parser.SetPositionalArgsCount(1)
-	p.parser.RegisterFlags(cmd)
+	p.flagRegistry.RegisterFlags(cmd)
 }
 
 // BindToViper binds flags to Viper for precedence handling.
@@ -46,7 +40,7 @@ func (p *Parser) BindToViper(v *viper.Viper) error {
 	defer perf.Track(nil, "flagparser.PackerParser.BindToViper")()
 
 	p.viper = v
-	return p.parser.BindToViper(v)
+	return p.flagRegistry.BindToViper(v)
 }
 
 // Parse processes command-line arguments and returns strongly-typed Options.
@@ -55,8 +49,15 @@ func (p *Parser) BindToViper(v *viper.Viper) error {
 func (p *Parser) Parse(ctx context.Context, args []string) (*Options, error) {
 	defer perf.Track(nil, "flagparser.PackerParser.Parse")()
 
-	// Use underlying parser to extract Atmos flags and separate pass-through args.
-	parsedConfig, err := p.parser.Parse(ctx, args)
+	// Create an empty compatibility translator (packer doesn't need compatibility aliases).
+	// All args after the component are passed through to packer.
+	translator := flags.NewCompatibilityAliasTranslator(map[string]flags.CompatibilityAlias{})
+
+	// Create AtmosFlagParser with translator.
+	flagParser := flags.NewAtmosFlagParser(p.cmd, p.viper, translator)
+
+	// Parse args using AtmosFlagParser.
+	parsedConfig, err := flagParser.Parse(args)
 	if err != nil {
 		return nil, err
 	}
@@ -72,18 +73,5 @@ func (p *Parser) RegisterPersistentFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.PackerParser.RegisterPersistentFlags")()
 
 	p.cmd = cmd
-	// https://github.com/spf13/cobra/issues/739
-	// DisableFlagParsing=true prevents Cobra from parsing flags, but flags can still be registered.
-	// Our manual parsers extract flag values from os.Args directly.
-	cmd.DisableFlagParsing = true
-	// Packer passes subcommand separately to packerRun, so only extract 1 positional arg (component).
-	p.parser.SetPositionalArgsCount(1)
-	p.parser.RegisterPersistentFlags(cmd)
-}
-
-// BindFlagsToViper binds Cobra flags to Viper for CLI flag precedence.
-func (p *Parser) BindFlagsToViper(cmd *cobra.Command, v *viper.Viper) error {
-	defer perf.Track(nil, "flagparser.PackerParser.BindFlagsToViper")()
-
-	return p.parser.BindFlagsToViper(cmd, v)
+	p.flagRegistry.RegisterPersistentFlags(cmd)
 }

@@ -14,9 +14,9 @@ import (
 // AuthExecParser handles flag parsing for auth exec and auth shell commands.
 // Returns strongly-typed AuthExecOptions with identity flag and pass-through args.
 type AuthExecParser struct {
-	parser *flags.PassThroughFlagParser
-	cmd    *cobra.Command
-	viper  *viper.Viper
+	flagRegistry *flags.FlagRegistry
+	cmd          *cobra.Command
+	viper        *viper.Viper
 }
 
 // NewAuthExecParser creates a parser for auth exec/shell commands.
@@ -50,7 +50,7 @@ func NewAuthExecParser() *AuthExecParser {
 	})
 
 	return &AuthExecParser{
-		parser: flags.NewPassThroughFlagParserFromRegistry(registry),
+		flagRegistry: registry,
 	}
 }
 
@@ -59,7 +59,7 @@ func (p *AuthExecParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.AuthExecParser.RegisterFlags")()
 
 	p.cmd = cmd
-	p.parser.RegisterFlags(cmd)
+	p.flagRegistry.RegisterFlags(cmd)
 }
 
 // BindToViper binds flags to Viper for precedence handling.
@@ -67,15 +67,22 @@ func (p *AuthExecParser) BindToViper(v *viper.Viper) error {
 	defer perf.Track(nil, "flagparser.AuthExecParser.BindToViper")()
 
 	p.viper = v
-	return p.parser.BindToViper(v)
+	return p.flagRegistry.BindToViper(v)
 }
 
 // Parse parses command-line arguments and returns strongly-typed AuthExecOptions.
 func (p *AuthExecParser) Parse(ctx context.Context, args []string) (*AuthExecOptions, error) {
 	defer perf.Track(nil, "flagparser.AuthExecParser.Parse")()
 
-	// Parse with the underlying flags.PassThroughFlagParser.
-	parsedConfig, err := p.parser.Parse(ctx, args)
+	// Create an empty compatibility translator (auth exec doesn't need compatibility aliases).
+	// All args after the identity flag are passed through to the command.
+	translator := flags.NewCompatibilityAliasTranslator(map[string]flags.CompatibilityAlias{})
+
+	// Create AtmosFlagParser with translator.
+	flagParser := flags.NewAtmosFlagParser(p.cmd, p.viper, translator)
+
+	// Parse args using AtmosFlagParser.
+	parsedConfig, err := flagParser.Parse(args)
 	if err != nil {
 		return nil, err
 	}

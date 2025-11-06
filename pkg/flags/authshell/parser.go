@@ -14,9 +14,9 @@ import (
 // AuthShellParser handles flag parsing for auth shell command.
 // Returns strongly-typed AuthShellOptions with identity, shell, and pass-through args.
 type AuthShellParser struct {
-	parser *flags.PassThroughFlagParser
-	cmd    *cobra.Command
-	viper  *viper.Viper
+	flagRegistry *flags.FlagRegistry
+	cmd          *cobra.Command
+	viper        *viper.Viper
 }
 
 // NewAuthShellParser creates a parser for auth shell command.
@@ -60,7 +60,7 @@ func NewAuthShellParser() *AuthShellParser {
 	})
 
 	return &AuthShellParser{
-		parser: flags.NewPassThroughFlagParserFromRegistry(registry),
+		flagRegistry: registry,
 	}
 }
 
@@ -69,7 +69,7 @@ func (p *AuthShellParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.AuthShellParser.RegisterFlags")()
 
 	p.cmd = cmd
-	p.parser.RegisterFlags(cmd)
+	p.flagRegistry.RegisterFlags(cmd)
 }
 
 // BindToViper binds flags to Viper for precedence handling.
@@ -77,15 +77,22 @@ func (p *AuthShellParser) BindToViper(v *viper.Viper) error {
 	defer perf.Track(nil, "flagparser.AuthShellParser.BindToViper")()
 
 	p.viper = v
-	return p.parser.BindToViper(v)
+	return p.flagRegistry.BindToViper(v)
 }
 
 // Parse parses command-line arguments and returns strongly-typed AuthShellOptions.
 func (p *AuthShellParser) Parse(ctx context.Context, args []string) (*AuthShellOptions, error) {
 	defer perf.Track(nil, "flagparser.AuthShellParser.Parse")()
 
-	// Parse with the underlying flags.PassThroughFlagParser.
-	parsedConfig, err := p.parser.Parse(ctx, args)
+	// Create an empty compatibility translator (auth shell doesn't need compatibility aliases).
+	// All args after the flags are passed through to the shell.
+	translator := flags.NewCompatibilityAliasTranslator(map[string]flags.CompatibilityAlias{})
+
+	// Create AtmosFlagParser with translator.
+	flagParser := flags.NewAtmosFlagParser(p.cmd, p.viper, translator)
+
+	// Parse args using AtmosFlagParser.
+	parsedConfig, err := flagParser.Parse(args)
 	if err != nil {
 		return nil, err
 	}
