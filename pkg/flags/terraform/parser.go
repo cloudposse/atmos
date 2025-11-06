@@ -96,9 +96,10 @@ func (p *Parser) Parse(ctx context.Context, args []string) (*Options, error) {
 	// Uses per-command compatibility aliases based on subcommand.
 	translator := flags.NewCompatibilityAliasTranslator(CompatibilityAliases(subcommand))
 
-	// Create AtmosFlagParser with translator.
+	// Create AtmosFlagParser with translator and registry.
 	// This combines compatibility alias translation with standard Cobra flag parsing.
-	flagParser := flags.NewAtmosFlagParser(p.cmd, p.viper, translator)
+	// The registry enables NoOptDefVal preprocessing for identity and pager flags.
+	flagParser := flags.NewAtmosFlagParser(p.cmd, p.viper, translator, p.flagRegistry)
 
 	// Parse args using AtmosFlagParser.
 	parsedConfig, err := flagParser.Parse(args)

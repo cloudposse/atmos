@@ -7,6 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // translationResult holds the result of compatibility alias translation.
@@ -468,9 +471,12 @@ func TestCompatibilityAliasTranslator_ValidateTargets(t *testing.T) {
 			err := translator.ValidateTargets(cmd)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
+				// All validation errors should wrap ErrCompatibilityAliasMissingTarget
+				assert.ErrorIs(t, err, errUtils.ErrCompatibilityAliasMissingTarget)
+				// Also check the error message contains helpful context
 				if tt.errorMsg != "" {
-					assert.Equal(t, tt.errorMsg, err.Error())
+					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
 			} else {
 				assert.NoError(t, err)
@@ -643,9 +649,12 @@ func TestCompatibilityAliasTranslator_ValidateTargetsInArgs(t *testing.T) {
 			err := translator.ValidateTargetsInArgs(cmd, tt.args)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
+				// All validation errors should wrap ErrCompatibilityAliasMissingTarget
+				assert.ErrorIs(t, err, errUtils.ErrCompatibilityAliasMissingTarget)
+				// Also check the error message contains helpful context
 				if tt.errorMsg != "" {
-					assert.Equal(t, tt.errorMsg, err.Error())
+					assert.Contains(t, err.Error(), tt.errorMsg)
 				}
 			} else {
 				assert.NoError(t, err)

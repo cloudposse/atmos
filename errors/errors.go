@@ -126,6 +126,10 @@ var (
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
+	// Flag validation errors.
+	ErrCompatibilityAliasMissingTarget = errors.New("compatibility alias references non-existent flag")
+	ErrInvalidFlagValue                = errors.New("invalid value for flag")
+
 	// File and URL handling errors.
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")

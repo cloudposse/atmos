@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // ApplyCompatibilityAliases returns compatibility aliases for the terraform/opentofu apply command.
@@ -16,6 +17,8 @@ import (
 //   - -show-sensitive: Show sensitive values without redaction
 //   - -deprecation: Control deprecation warnings
 func ApplyCompatibilityAliases() map[string]flags.CompatibilityAlias {
+	defer perf.Track(nil, "terraform.ApplyCompatibilityAliases")()
+
 	return mergeMaps(commonCompatibilityFlags(), map[string]flags.CompatibilityAlias{
 		"-auto-approve":         {Behavior: flags.AppendToSeparated, Target: ""},
 		"-compact-warnings":     {Behavior: flags.AppendToSeparated, Target: ""},
@@ -37,6 +40,8 @@ func ApplyCompatibilityAliases() map[string]flags.CompatibilityAlias {
 // ApplyFlags returns the flag registry for the terraform apply command.
 // Apply uses the standard terraform flags plus any apply-specific flags.
 func ApplyFlags() *flags.FlagRegistry {
+	defer perf.Track(nil, "terraform.ApplyFlags")()
+
 	registry := flags.TerraformFlags()
 	// Apply command uses all standard terraform flags.
 	// No additional apply-specific flags beyond what's in TerraformFlags().
@@ -44,8 +49,10 @@ func ApplyFlags() *flags.FlagRegistry {
 }
 
 // ApplyPositionalArgs builds the positional args validator for terraform apply.
-// Terraform apply requires: apply <component>
+// Terraform apply requires: apply <component>.
 func ApplyPositionalArgs() *PositionalArgsBuilder {
+	defer perf.Track(nil, "terraform.ApplyPositionalArgs")()
+
 	return NewPositionalArgsBuilder().
 		WithComponent(true)
 }

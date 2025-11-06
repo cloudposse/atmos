@@ -262,6 +262,12 @@ func (r *FlagRegistry) RegisterFlags(cmd *cobra.Command) {
 		switch f := flag.(type) {
 		case *StringFlag:
 			cmd.Flags().StringP(f.Name, f.Shorthand, f.Default, f.Description)
+			// Apply NoOptDefVal if set (for --flag syntax without value).
+			if f.NoOptDefVal != "" {
+				if err := cmd.Flags().SetAnnotation(f.Name, cobra.BashCompOneRequiredFlag, []string{"false"}); err == nil {
+					cmd.Flags().Lookup(f.Name).NoOptDefVal = f.NoOptDefVal
+				}
+			}
 		case *BoolFlag:
 			cmd.Flags().BoolP(f.Name, f.Shorthand, f.Default, f.Description)
 		case *IntFlag:
@@ -281,6 +287,12 @@ func (r *FlagRegistry) RegisterPersistentFlags(cmd *cobra.Command) {
 		switch f := flag.(type) {
 		case *StringFlag:
 			cmd.PersistentFlags().StringP(f.Name, f.Shorthand, f.Default, f.Description)
+			// Apply NoOptDefVal if set (for --flag syntax without value).
+			if f.NoOptDefVal != "" {
+				if err := cmd.PersistentFlags().SetAnnotation(f.Name, cobra.BashCompOneRequiredFlag, []string{"false"}); err == nil {
+					cmd.PersistentFlags().Lookup(f.Name).NoOptDefVal = f.NoOptDefVal
+				}
+			}
 		case *BoolFlag:
 			cmd.PersistentFlags().BoolP(f.Name, f.Shorthand, f.Default, f.Description)
 		case *IntFlag:
@@ -289,6 +301,111 @@ func (r *FlagRegistry) RegisterPersistentFlags(cmd *cobra.Command) {
 			cmd.PersistentFlags().StringSlice(f.Name, f.Default, f.Description)
 		}
 	}
+}
+
+// PreprocessNoOptDefValArgs rewrites space-separated flag syntax to equals syntax
+// for flags that have NoOptDefVal set.
+//
+// This maintains backward compatibility with user expectations while working within
+// Cobra's documented behavior that NoOptDefVal requires equals syntax (pflag #134, #321, cobra #1962).
+//
+// Example:
+//
+//	Input:  ["--identity", "prod", "plan"]
+//	Output: ["--identity=prod", "plan"]
+//
+// Only processes flags registered in this registry with non-empty NoOptDefVal.
+// This includes both long form (--identity) and shorthand (-i).
+func (r *FlagRegistry) PreprocessNoOptDefValArgs(args []string) []string {
+	defer perf.Track(nil, "flagparser.FlagRegistry.PreprocessNoOptDefValArgs")()
+
+	// Build a set of flag names (long and short) that have NoOptDefVal.
+	noOptDefValFlags := make(map[string]bool)
+	for _, flag := range r.flags {
+		if flag.GetNoOptDefVal() != "" {
+			noOptDefValFlags[flag.GetName()] = true
+			if shorthand := flag.GetShorthand(); shorthand != "" {
+				noOptDefValFlags[shorthand] = true
+			}
+		}
+	}
+
+	// If no flags have NoOptDefVal, return args unchanged.
+	if len(noOptDefValFlags) == 0 {
+		return args
+	}
+
+	// Preprocess args to rewrite space-separated syntax to equals syntax.
+	result := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		// Check if this arg is a flag (starts with - or --).
+		if !isFlagArg(arg) {
+			result = append(result, arg)
+			continue
+		}
+
+		// Check if flag already has equals syntax (--flag=value or -f=value).
+		if hasSeparatedValue(arg) {
+			result = append(result, arg)
+			continue
+		}
+
+		// Extract flag name from --flag or -f.
+		flagName := extractFlagName(arg)
+
+		// Check if this flag has NoOptDefVal.
+		if !noOptDefValFlags[flagName] {
+			result = append(result, arg)
+			continue
+		}
+
+		// Check if there's a next arg and it's not another flag.
+		if i+1 < len(args) && !isFlagArg(args[i+1]) {
+			// Combine current flag with next arg using equals syntax.
+			combined := arg + "=" + args[i+1]
+			result = append(result, combined)
+			i++ // Skip the next arg (already consumed).
+		} else {
+			// No value follows, or next arg is another flag.
+			// Keep flag as-is (will use NoOptDefVal).
+			result = append(result, arg)
+		}
+	}
+
+	return result
+}
+
+// isFlagArg returns true if the arg looks like a flag (starts with - or --).
+func isFlagArg(arg string) bool {
+	return len(arg) > 0 && arg[0] == '-'
+}
+
+// hasSeparatedValue returns true if the flag already has equals syntax (--flag=value or -f=value).
+func hasSeparatedValue(arg string) bool {
+	// Find first = after the leading dashes.
+	for i := 0; i < len(arg); i++ {
+		if arg[i] == '=' {
+			return true
+		}
+		// Stop searching if we hit the end of the flag name.
+		if i > 0 && arg[i] != '-' && arg[i-1] == '-' {
+			break
+		}
+	}
+	return false
+}
+
+// extractFlagName extracts the flag name from --flag or -f.
+// Examples: --identity → identity, -i → i, --stack → stack.
+func extractFlagName(arg string) string {
+	// Strip leading dashes.
+	name := arg
+	for len(name) > 0 && name[0] == '-' {
+		name = name[1:]
+	}
+	return name
 }
 
 // BindToViper binds all flags in this registry to a Viper instance.

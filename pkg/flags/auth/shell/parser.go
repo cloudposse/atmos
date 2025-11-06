@@ -89,8 +89,9 @@ func (p *AuthShellParser) Parse(ctx context.Context, args []string) (*AuthShellO
 	// All args after the flags are passed through to the shell.
 	translator := flags.NewCompatibilityAliasTranslator(map[string]flags.CompatibilityAlias{})
 
-	// Create AtmosFlagParser with translator.
-	flagParser := flags.NewAtmosFlagParser(p.cmd, p.viper, translator)
+	// Create AtmosFlagParser with translator and registry.
+	// The registry enables NoOptDefVal preprocessing for the identity flag.
+	flagParser := flags.NewAtmosFlagParser(p.cmd, p.viper, translator, p.flagRegistry)
 
 	// Parse args using AtmosFlagParser.
 	parsedConfig, err := flagParser.Parse(args)

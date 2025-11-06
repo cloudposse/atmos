@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // PlanCompatibilityAliases returns compatibility aliases for the terraform/opentofu plan command.
@@ -18,6 +19,8 @@ import (
 //   - -show-sensitive: Show sensitive values without redaction
 //   - -deprecation: Control deprecation warnings
 func PlanCompatibilityAliases() map[string]flags.CompatibilityAlias {
+	defer perf.Track(nil, "terraform.PlanCompatibilityAliases")()
+
 	return mergeMaps(commonCompatibilityFlags(), map[string]flags.CompatibilityAlias{
 		// Terraform flags
 		"-out":                 {Behavior: flags.AppendToSeparated, Target: ""},
@@ -48,6 +51,8 @@ func PlanCompatibilityAliases() map[string]flags.CompatibilityAlias {
 // PlanFlags returns the flag registry for the terraform plan command.
 // Plan uses the standard terraform flags plus any plan-specific flags.
 func PlanFlags() *flags.FlagRegistry {
+	defer perf.Track(nil, "terraform.PlanFlags")()
+
 	registry := flags.TerraformFlags()
 	// Plan command uses all standard terraform flags.
 	// No additional plan-specific flags beyond what's in TerraformFlags().
@@ -55,8 +60,10 @@ func PlanFlags() *flags.FlagRegistry {
 }
 
 // PlanPositionalArgs builds the positional args validator for terraform plan.
-// Terraform plan requires: plan <component>
+// Terraform plan requires: plan <component>.
 func PlanPositionalArgs() *PositionalArgsBuilder {
+	defer perf.Track(nil, "terraform.PlanPositionalArgs")()
+
 	return NewPositionalArgsBuilder().
 		WithComponent(true)
 }

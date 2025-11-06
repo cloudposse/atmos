@@ -296,6 +296,15 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 			expectError:   true,
 			errorContains: "unknown shorthand flag",
 		},
+		{
+			name: "single-dash multi-character flag with equals triggers cobra error",
+			args: []string{"plan", "vpc", "-foobar=value"},
+			compatibilityAliases: map[string]CompatibilityAlias{
+				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
+			},
+			expectError:   true,
+			errorContains: "unknown shorthand flag",
+		},
 
 		// ====================================================================
 		// Category 8: Edge Cases
@@ -339,6 +348,16 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 			expectedPassThrough: []string{},
 		},
 		{
+			name: "pass-through flag with equals sign",
+			args: []string{"plan", "vpc", "-var-file=common.tfvars"},
+			compatibilityAliases: map[string]CompatibilityAlias{
+				"-var-file": {Behavior: AppendToSeparated, Target: ""},
+			},
+			expectedFlags:       map[string]interface{}{},
+			expectedPositional:  []string{"plan", "vpc"},
+			expectedPassThrough: []string{"-var-file=common.tfvars"},
+		},
+		{
 			name: "empty args array",
 			args: []string{},
 			compatibilityAliases: map[string]CompatibilityAlias{
@@ -380,9 +399,12 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 			// Create viper instance.
 			v := viper.New()
 
+			// Create empty registry for tests (no NoOptDefVal preprocessing needed in these tests).
+			registry := NewFlagRegistry()
+
 			// Create unified parser with compatibility aliases.
 			translator := NewCompatibilityAliasTranslator(tt.compatibilityAliases)
-			parser := NewAtmosFlagParser(cmd, v, translator)
+			parser := NewAtmosFlagParser(cmd, v, translator, registry)
 
 			// Parse the args.
 			result, err := parser.Parse(tt.args)
@@ -485,9 +507,12 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 			// Create viper instance.
 			v := viper.New()
 
+			// Create empty registry for tests (no NoOptDefVal preprocessing needed in these tests).
+			registry := NewFlagRegistry()
+
 			// Create parser with compatibility aliases.
 			translator := NewCompatibilityAliasTranslator(tt.compatibilityAlias)
-			parser := NewAtmosFlagParser(cmd, v, translator)
+			parser := NewAtmosFlagParser(cmd, v, translator, registry)
 
 			// Parse the args.
 			result, err := parser.Parse(tt.args)

@@ -53,8 +53,9 @@ func (p *Parser) Parse(ctx context.Context, args []string) (*Options, error) {
 	// All args after the component are passed through to helmfile.
 	translator := flags.NewCompatibilityAliasTranslator(map[string]flags.CompatibilityAlias{})
 
-	// Create AtmosFlagParser with translator.
-	flagParser := flags.NewAtmosFlagParser(p.cmd, p.viper, translator)
+	// Create AtmosFlagParser with translator and registry.
+	// The registry enables NoOptDefVal preprocessing for identity and pager flags.
+	flagParser := flags.NewAtmosFlagParser(p.cmd, p.viper, translator, p.flagRegistry)
 
 	// Parse args using AtmosFlagParser.
 	parsedConfig, err := flagParser.Parse(args)

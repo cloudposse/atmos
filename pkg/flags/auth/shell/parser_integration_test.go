@@ -2,7 +2,6 @@ package shell
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -66,9 +65,7 @@ func TestAuthShellParserIntegration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clear SHELL env var to avoid picking up host shell
-			oldShell := os.Getenv("SHELL")
-			os.Setenv("SHELL", "")
-			defer os.Setenv("SHELL", oldShell)
+			t.Setenv("SHELL", "")
 
 			// Setup
 			cmd := &cobra.Command{Use: "shell"}

@@ -113,5 +113,7 @@ func (s *StandardOptions) GetSeparatedArgs() []string {
 // SetPositionalArgs sets the positional arguments.
 // This is exported for use by subpackage parsers that need to set positional args.
 func (s *StandardOptions) SetPositionalArgs(args []string) {
+	defer perf.Track(nil, "flags.StandardOptions.SetPositionalArgs")()
+
 	s.positionalArgs = args
 }

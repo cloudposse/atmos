@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // TestStandardFlagParser_InheritedPersistentFlags tests that persistent flags
@@ -277,8 +279,11 @@ func TestStandardFlagParser_CombinedFlagSet_ErrorHandling(t *testing.T) {
 	result, err := parser.Parse(ctx, []string{"--format=invalid"})
 
 	// Should return validation error.
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, result)
+	// Validation errors should wrap ErrInvalidFlagValue.
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+	// Also check the error message contains helpful context.
 	assert.Contains(t, err.Error(), "invalid value")
 }
 

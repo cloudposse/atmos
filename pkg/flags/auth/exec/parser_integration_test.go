@@ -20,8 +20,8 @@ func TestAuthExecParserIntegration(t *testing.T) {
 		expectedSepArgs  []string
 	}{
 		{
-			name:             "with identity flag",
-			args:             []string{"-i", "prod", "--", "aws", "s3", "ls"},
+			name:             "with identity flag (equals syntax required with NoOptDefVal)",
+			args:             []string{"-i=prod", "--", "aws", "s3", "ls"},
 			expectedIdentity: "prod",
 			expectedPosArgs:  []string{},
 			expectedSepArgs:  []string{"aws", "s3", "ls"},
@@ -45,6 +45,20 @@ func TestAuthExecParserIntegration(t *testing.T) {
 			args:             []string{"aws", "s3", "ls"},
 			expectedIdentity: "",
 			expectedPosArgs:  []string{"aws", "s3", "ls"},
+			expectedSepArgs:  []string{},
+		},
+		{
+			name:             "with identity flag using space syntax (preprocessor converts to equals)",
+			args:             []string{"-i", "prod", "--", "aws", "s3", "ls"},
+			expectedIdentity: "prod",
+			expectedPosArgs:  []string{},
+			expectedSepArgs:  []string{"aws", "s3", "ls"},
+		},
+		{
+			name:             "with identity flag using space syntax without separator",
+			args:             []string{"--identity", "staging", "terraform", "plan"},
+			expectedIdentity: "staging",
+			expectedPosArgs:  []string{"terraform", "plan"},
 			expectedSepArgs:  []string{},
 		},
 	}

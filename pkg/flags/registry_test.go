@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
@@ -163,11 +164,11 @@ func TestPackerFlags(t *testing.T) {
 
 func TestFlagRegistry_Validate(t *testing.T) {
 	tests := []struct {
-		name        string
-		flags       []Flag
-		values      map[string]interface{}
-		expectError bool
-		errorMsg    string
+		name             string
+		flags            []Flag
+		values           map[string]interface{}
+		expectError      bool
+		expectedSentinel error
 	}{
 		{
 			name: "all required flags present",
@@ -186,9 +187,9 @@ func TestFlagRegistry_Validate(t *testing.T) {
 			flags: []Flag{
 				&StringFlag{Name: "required", Required: true},
 			},
-			values:      map[string]interface{}{},
-			expectError: true,
-			errorMsg:    "required flag not provided: --required",
+			values:           map[string]interface{}{},
+			expectError:      true,
+			expectedSentinel: errUtils.ErrRequiredFlagNotProvided,
 		},
 		{
 			name: "empty required string flag",
@@ -198,8 +199,8 @@ func TestFlagRegistry_Validate(t *testing.T) {
 			values: map[string]interface{}{
 				"required": "",
 			},
-			expectError: true,
-			errorMsg:    "required flag cannot be empty: --required",
+			expectError:      true,
+			expectedSentinel: errUtils.ErrRequiredFlagEmpty,
 		},
 		{
 			name: "optional flags can be missing",
@@ -229,9 +230,9 @@ func TestFlagRegistry_Validate(t *testing.T) {
 			err := registry.Validate(tt.values)
 
 			if tt.expectError {
-				assert.Error(t, err)
-				if tt.errorMsg != "" {
-					assert.Contains(t, err.Error(), tt.errorMsg)
+				require.Error(t, err)
+				if tt.expectedSentinel != nil {
+					assert.ErrorIs(t, err, tt.expectedSentinel)
 				}
 			} else {
 				assert.NoError(t, err)

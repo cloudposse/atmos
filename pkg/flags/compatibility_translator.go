@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -15,11 +16,11 @@ type CompatibilityBehavior int
 
 const (
 	// MapToAtmosFlag converts the legacy flag to a modern Atmos flag.
-	// Example: -s → --stack, -var → --var
+	// Example: -s → --stack, -var → --var.
 	MapToAtmosFlag CompatibilityBehavior = iota
 
 	// AppendToSeparated appends the flag and its value to separated args.
-	// Example: -var-file → append to separated args for pass-through to terraform
+	// Example: -var-file → append to separated args for pass-through to terraform.
 	AppendToSeparated
 )
 
@@ -64,7 +65,7 @@ func (t *CompatibilityAliasTranslator) ValidateTargets(cmd *cobra.Command) error
 		// Check if flag exists in command.
 		flag := cmd.Flags().Lookup(targetFlagName)
 		if flag == nil {
-			return fmt.Errorf("compatibility alias %q references non-existent flag %q", alias, config.Target)
+			return fmt.Errorf("%w: compatibility alias %q references non-existent flag %q", errUtils.ErrCompatibilityAliasMissingTarget, alias, config.Target)
 		}
 	}
 
@@ -150,7 +151,7 @@ func (t *CompatibilityAliasTranslator) ValidateTargetsInArgs(cmd *cobra.Command,
 		// Check if flag exists in command.
 		flag := cmd.Flags().Lookup(targetFlagName)
 		if flag == nil {
-			return fmt.Errorf("compatibility alias %q references non-existent flag %q", alias, config.Target)
+			return fmt.Errorf("%w: compatibility alias %q references non-existent flag %q", errUtils.ErrCompatibilityAliasMissingTarget, alias, config.Target)
 		}
 	}
 

@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // DestroyCompatibilityAliases returns compatibility aliases for the terraform destroy command.
@@ -9,6 +10,8 @@ import (
 // Terraform destroy is an alias for `terraform apply -destroy`.
 // Accepts all apply flags plus planning flags when not using saved plan.
 func DestroyCompatibilityAliases() map[string]flags.CompatibilityAlias {
+	defer perf.Track(nil, "terraform.DestroyCompatibilityAliases")()
+
 	return mergeMaps(commonCompatibilityFlags(), map[string]flags.CompatibilityAlias{
 		"-auto-approve":     {Behavior: flags.AppendToSeparated, Target: ""},
 		"-compact-warnings": {Behavior: flags.AppendToSeparated, Target: ""},
@@ -24,6 +27,8 @@ func DestroyCompatibilityAliases() map[string]flags.CompatibilityAlias {
 // DestroyFlags returns the flag registry for the terraform destroy command.
 // Destroy uses the standard terraform flags.
 func DestroyFlags() *flags.FlagRegistry {
+	defer perf.Track(nil, "terraform.DestroyFlags")()
+
 	registry := flags.TerraformFlags()
 	// Destroy command uses all standard terraform flags.
 	// No additional destroy-specific flags beyond what's in TerraformFlags().
@@ -31,8 +36,10 @@ func DestroyFlags() *flags.FlagRegistry {
 }
 
 // DestroyPositionalArgs builds the positional args validator for terraform destroy.
-// Terraform destroy requires: destroy <component>
+// Terraform destroy requires: destroy <component>.
 func DestroyPositionalArgs() *PositionalArgsBuilder {
+	defer perf.Track(nil, "terraform.DestroyPositionalArgs")()
+
 	return NewPositionalArgsBuilder().
 		WithComponent(true)
 }

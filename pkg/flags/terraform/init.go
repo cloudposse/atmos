@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // InitCompatibilityAliases returns compatibility aliases for the terraform init command.
@@ -10,6 +11,8 @@ import (
 // -from-module, -get, -reconfigure, -migrate-state, -force-copy, -backend, -backend-config,
 // -plugin-dir, -lockfile.
 func InitCompatibilityAliases() map[string]flags.CompatibilityAlias {
+	defer perf.Track(nil, "terraform.InitCompatibilityAliases")()
+
 	return map[string]flags.CompatibilityAlias{
 		"-input":          {Behavior: flags.AppendToSeparated, Target: ""},
 		"-lock":           {Behavior: flags.AppendToSeparated, Target: ""},
@@ -32,6 +35,8 @@ func InitCompatibilityAliases() map[string]flags.CompatibilityAlias {
 // InitFlags returns the flag registry for the terraform init command.
 // Init uses the standard terraform flags.
 func InitFlags() *flags.FlagRegistry {
+	defer perf.Track(nil, "terraform.InitFlags")()
+
 	registry := flags.TerraformFlags()
 	// Init command uses all standard terraform flags.
 	// No additional init-specific flags beyond what's in TerraformFlags().
@@ -39,8 +44,10 @@ func InitFlags() *flags.FlagRegistry {
 }
 
 // InitPositionalArgs builds the positional args validator for terraform init.
-// Terraform init requires: init <component>
+// Terraform init requires: init <component>.
 func InitPositionalArgs() *PositionalArgsBuilder {
+	defer perf.Track(nil, "terraform.InitPositionalArgs")()
+
 	return NewPositionalArgsBuilder().
 		WithComponent(true)
 }

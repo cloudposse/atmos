@@ -61,5 +61,7 @@ func CompatibilityAliases(subcommand string) map[string]flags.CompatibilityAlias
 // RegisterCompatibilityAliases registers a compatibility alias provider for a terraform subcommand.
 // This allows external packages to register custom subcommands.
 func RegisterCompatibilityAliases(subcommand string, provider CompatibilityAliasProvider) {
+	defer perf.Track(nil, "terraform.RegisterCompatibilityAliases")()
+
 	compatibilityAliasRegistry[subcommand] = provider
 }
