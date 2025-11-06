@@ -91,7 +91,7 @@ func (b *WorkflowOptionsBuilder) Build() *WorkflowParser {
 }
 
 // WithIdentity adds the identity flag for authentication.
-// Maps to WorkflowOptions.Identity field (inherited from GlobalFlags).
+// Maps to WorkflowOptions.Identity field (inherited from global.Flags).
 func (b *WorkflowOptionsBuilder) WithIdentity() *WorkflowOptionsBuilder {
 	defer perf.Track(nil, "flags.WorkflowOptionsBuilder.WithIdentity")()
 

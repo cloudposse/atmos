@@ -112,7 +112,7 @@ func TestParseFlags(t *testing.T) {
 			assert.Equal(t, tt.wantSkipInit, interpreter.SkipInit, "SkipInit mismatch")
 			assert.Equal(t, tt.wantFromPlan, interpreter.FromPlan, "FromPlan mismatch")
 
-			// Verify global flags (from embedded GlobalFlags).
+			// Verify global flags (from embedded global.Flags).
 			assert.Equal(t, tt.wantLogsLevel, interpreter.LogsLevel, "LogsLevel mismatch")
 
 			// Verify arguments.
@@ -186,7 +186,7 @@ func TestOptions_IdentityFlag(t *testing.T) {
 }
 
 func TestOptions_Embedding(t *testing.T) {
-	// Test that Options properly embeds GlobalFlags and implements flags.CommandOptions.
+	// Test that Options properly embeds global.Flags and implements flags.CommandOptions.
 	v := viper.New()
 	v.Set("stack", "dev")
 	v.Set("logs-level", "Debug")
@@ -200,11 +200,11 @@ func TestOptions_Embedding(t *testing.T) {
 	// Verify flags.CommandOptions interface implementation.
 	var _ flags.CommandOptions = &interpreter
 
-	// Verify GlobalFlags embedding.
-	globalFlags := interpreter.GetGlobalFlags()
-	assert.NotNil(t, globalFlags, "GetGlobalFlags should not return nil")
-	assert.Equal(t, "Debug", globalFlags.LogsLevel, "GlobalFlags.LogsLevel mismatch")
-	assert.Equal(t, "/tmp/atmos", globalFlags.Chdir, "GlobalFlags.Chdir mismatch")
+	// Verify global.Flags embedding.
+	globalFlags := interpreter.Getglobal.Flags()
+	assert.NotNil(t, globalFlags, "Getglobal.Flags should not return nil")
+	assert.Equal(t, "Debug", globalFlags.LogsLevel, "global.Flags.LogsLevel mismatch")
+	assert.Equal(t, "/tmp/atmos", globalFlags.Chdir, "global.Flags.Chdir mismatch")
 
 	// Verify Terraform-specific fields are accessible.
 	assert.Equal(t, "dev", interpreter.Stack, "Stack mismatch")
@@ -221,7 +221,7 @@ func TestOptions_ZeroValues(t *testing.T) {
 
 	// Should not panic.
 	assert.NotPanics(t, func() {
-		_ = interpreter.GetGlobalFlags()
+		_ = interpreter.Getglobal.Flags()
 		_ = interpreter.GetPositionalArgs()
 		_ = interpreter.GetSeparatedArgs()
 		_ = interpreter.Stack
