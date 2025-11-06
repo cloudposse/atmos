@@ -1,4 +1,4 @@
-package flags
+package validate
 
 import (
 	"github.com/spf13/cobra"
