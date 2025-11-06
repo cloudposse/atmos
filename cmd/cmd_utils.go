@@ -93,8 +93,8 @@ func processCustomCommands(
 		if _, exist := existingTopLevelCommands[commandConfig.Name]; exist && topLevel {
 			command = existingTopLevelCommands[commandConfig.Name]
 		} else {
-			// Create flag parser for this custom command with dynamic flag registration
-			parser := createCustomCommandParser(commandConfig)
+			// Create flag registry for this custom command with dynamic flag registration
+			registry := createCustomCommandParser(commandConfig)
 
 			customCommand := &cobra.Command{
 				Use:   commandConfig.Name,
@@ -105,12 +105,12 @@ func processCustomCommands(
 					preCustomCommand(cmd, args, parentCommand, commandConfig)
 				},
 				Run: func(cmd *cobra.Command, args []string) {
-					executeCustomCommandWithParser(&atmosConfig, cmd, args, parentCommand, commandConfig, parser)
+					executeCustomCommandWithParser(&atmosConfig, cmd, args, parentCommand, commandConfig, registry)
 				},
 			}
 
-			// Register flags with the parser
-			parser.RegisterFlags(customCommand)
+			// Register flags with the registry
+			registry.RegisterFlags(customCommand)
 
 			// Add --identity flag completion
 			AddIdentityCompletion(customCommand)
@@ -686,9 +686,9 @@ func Contains(slice []string, target string) bool {
 	return false
 }
 
-// createCustomCommandParser creates a PassThroughFlagParser with dynamically registered flags
+// createCustomCommandParser creates a FlagRegistry with dynamically registered flags
 // from the custom command configuration.
-func createCustomCommandParser(commandConfig *schema.Command) *flags.PassThroughFlagParser {
+func createCustomCommandParser(commandConfig *schema.Command) *flags.FlagRegistry {
 	// Start with common flags (stack, identity, dry-run)
 	registry := flags.CommonFlags()
 
@@ -730,13 +730,7 @@ func createCustomCommandParser(commandConfig *schema.Command) *flags.PassThrough
 		}
 	}
 
-	// Create parser with the registry
-	parser := flags.NewPassThroughFlagParserFromRegistry(registry)
-
-	// Disable positional extraction since custom commands handle args differently
-	parser.DisablePositionalExtraction()
-
-	return parser
+	return registry
 }
 
 // executeCustomCommandWithParser executes a custom command using the unified flag parser.
@@ -749,9 +743,12 @@ func executeCustomCommandWithParser(
 	args []string,
 	parentCommand *cobra.Command,
 	commandConfig *schema.Command,
-	parser *flags.PassThroughFlagParser,
+	registry *flags.FlagRegistry,
 ) {
 	var err error
+
+	// Build StandardParser from registry
+	parser := flags.NewStandardParser(flags.WithRegistry(registry))
 
 	// Parse arguments using the unified parser
 	ctx := cmd.Context()
@@ -766,7 +763,7 @@ func executeCustomCommandWithParser(
 	}
 
 	// Get pass-through args (everything after flags or --)
-	passThroughArgs := opts.SeparatedArgs
+	passThroughArgs := opts.GetSeparatedArgs()
 
 	// Extract trailing args (args after --)
 	trailingArgs, err := getQuotedTrailingArgs(passThroughArgs)
@@ -792,7 +789,7 @@ func executeCustomCommandWithParser(
 	var authManager auth.AuthManager
 
 	// Get identity from opts using type-safe helper (respects CLI flags, ENV vars, config file)
-	identityValue := opts.GetIdentity()
+	identityValue := opts.Identity.Value()
 	if identityValue == "" {
 		// Fall back to identity from command config
 		identityValue = strings.TrimSpace(commandConfig.Identity)
