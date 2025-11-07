@@ -24,6 +24,7 @@ import (
 // Returns:
 //   - identity value if explicitly provided
 //   - cfg.IdentityFlagSelectValue if --identity was used without a value (interactive selection)
+//   - cfg.IdentityFlagDisabledValue if --identity=false (authentication disabled)
 //   - value from ATMOS_IDENTITY env var if flag not provided
 //   - empty string if no identity specified anywhere
 //
@@ -32,6 +33,8 @@ import (
 //	identity := GetIdentityFromFlags(cmd, os.Args)
 //	if identity == cfg.IdentityFlagSelectValue {
 //	    // Show interactive selector
+//	} else if identity == cfg.IdentityFlagDisabledValue {
+//	    // Skip authentication
 //	} else if identity != "" {
 //	    // Use explicit identity
 //	}
@@ -44,20 +47,38 @@ func GetIdentityFromFlags(cmd *cobra.Command, osArgs []string) string {
 		// Only trust this value if it's not the NoOptDefVal issue.
 		// If we got "__SELECT__" but there might be a real value in os.Args, check os.Args.
 		if value != cfg.IdentityFlagSelectValue {
-			return value
+			return normalizeIdentityValue(value)
 		}
 		// Got __SELECT__ - check if os.Args has an actual value.
 		identity := extractIdentityFromArgs(osArgs)
 		if identity != "" && identity != cfg.IdentityFlagSelectValue {
 			// Found actual value in os.Args - use that instead.
-			return identity
+			return normalizeIdentityValue(identity)
 		}
 		// No value in os.Args either - return __SELECT__.
 		return value
 	}
 
 	// Flag not changed - fall back to environment variable.
-	return viper.GetString(IdentityFlagName)
+	envValue := viper.GetString(IdentityFlagName)
+	return normalizeIdentityValue(envValue)
+}
+
+// normalizeIdentityValue converts boolean false representations to the disabled sentinel value.
+// Recognizes: false, False, FALSE, 0, no, No, NO, off, Off, OFF.
+// All other values are returned unchanged.
+func normalizeIdentityValue(value string) string {
+	if value == "" {
+		return ""
+	}
+
+	// Check if value represents boolean false.
+	switch strings.ToLower(value) {
+	case "false", "0", "no", "off":
+		return cfg.IdentityFlagDisabledValue
+	default:
+		return value
+	}
 }
 
 // extractIdentityFromArgs manually parses os.Args to find --identity flag and its value.
