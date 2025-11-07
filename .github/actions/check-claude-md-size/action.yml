@@ -184,14 +184,15 @@ runs:
         >
         > ${DESCRIPTION}
         >
-        ${FILE_LIST}        >
-        > **Action needed:** Please ${ACTION_VERB}. Consider:
-        > - Removing verbose explanations
-        > - Consolidating redundant examples
-        > - Keeping only essential requirements
-        > - Moving detailed guides to separate docs in \`docs/\` or \`docs/prd/\`
-        >
-        > All MANDATORY requirements must be preserved."
+        ${FILE_LIST}
+        **Action needed:** Please ${ACTION_VERB}. Consider:
+
+        - Removing verbose explanations
+        - Consolidating redundant examples
+        - Keeping only essential requirements
+        - Moving detailed guides to separate docs in \`docs/\` or \`docs/prd/\`
+
+        All MANDATORY requirements must be preserved."
 
         if [ -n "$EXISTING_COMMENT" ]; then
           echo "Updating existing comment ID: $EXISTING_COMMENT..."
