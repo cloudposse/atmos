@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -110,12 +110,12 @@ func displayThemes(themes []*theme.Theme, activeTheme string, showingRecommended
 	if !term.IsTTYSupportForStdout() {
 		// Fall back to simple text output for non-TTY
 		output := formatSimpleOutput(themes, activeTheme, showingRecommendedOnly)
-		fmt.Fprint(os.Stderr, output)
+		ui.Write(output)
 		return nil
 	}
 
 	output := formatThemesTable(themes, activeTheme, showingRecommendedOnly)
-	fmt.Fprint(os.Stderr, output)
+	ui.Write(output)
 	return nil
 }
 

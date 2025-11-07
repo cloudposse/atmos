@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -72,7 +72,7 @@ func executeThemeShow(cmd *cobra.Command, args []string) error {
 
 	// Display theme information
 	output := formatThemeDetails(selectedTheme, &scheme, styles)
-	fmt.Fprint(os.Stderr, output)
+	ui.Write(output)
 
 	return nil
 }
