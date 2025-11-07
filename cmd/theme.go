@@ -16,10 +16,7 @@ atmos theme list
 atmos theme list --recommended
 
 # Show details and preview a specific theme
-atmos theme show dracula
-
-# Set the active theme (updates configuration)
-atmos theme set dracula`,
+atmos theme show dracula`,
 }
 
 func init() {

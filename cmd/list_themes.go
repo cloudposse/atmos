@@ -26,9 +26,9 @@ var listThemesCmd = &cobra.Command{
 }
 
 const (
-	maxSourceLength  = 50
-	sourceElipsisLen = 47
-	lineWidth        = 80
+	maxSourceLength   = 50
+	sourceEllipsisLen = 47
+	lineWidth         = 80
 )
 
 var listAllThemes bool
@@ -80,7 +80,7 @@ func filterRecommendedThemes(themes []*theme.Theme, activeTheme string) []*theme
 	for _, t := range themes {
 		if theme.IsRecommended(t.Name) {
 			recommended = append(recommended, t)
-			if t.Name == activeTheme {
+			if strings.EqualFold(t.Name, activeTheme) {
 				hasActiveTheme = true
 			}
 		}
@@ -89,7 +89,7 @@ func filterRecommendedThemes(themes []*theme.Theme, activeTheme string) []*theme
 	// If the active theme is not in the recommended list, add it
 	if activeTheme != "" && !hasActiveTheme {
 		for _, t := range themes {
-			if t.Name == activeTheme {
+			if strings.EqualFold(t.Name, activeTheme) {
 				recommended = append(recommended, t)
 				break
 			}
@@ -142,7 +142,7 @@ func formatThemesTable(themes []*theme.Theme, activeTheme string, showingRecomme
 		// Source
 		source := getThemeSource(t)
 		if len(source) > maxSourceLength {
-			source = source[:sourceElipsisLen] + "..."
+			source = source[:sourceEllipsisLen] + "..."
 		}
 
 		row := []string{

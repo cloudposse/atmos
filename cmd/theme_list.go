@@ -79,7 +79,7 @@ func filterRecommended(themes []*theme.Theme, activeTheme string) []*theme.Theme
 	for _, t := range themes {
 		if theme.IsRecommended(t.Name) {
 			recommended = append(recommended, t)
-			if t.Name == activeTheme {
+			if strings.EqualFold(t.Name, activeTheme) {
 				hasActiveTheme = true
 			}
 		}
@@ -88,7 +88,7 @@ func filterRecommended(themes []*theme.Theme, activeTheme string) []*theme.Theme
 	// If the active theme is not in the recommended list, add it
 	if activeTheme != "" && !hasActiveTheme {
 		for _, t := range themes {
-			if t.Name == activeTheme {
+			if strings.EqualFold(t.Name, activeTheme) {
 				recommended = append(recommended, t)
 				break
 			}

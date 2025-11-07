@@ -261,6 +261,9 @@ var CurrentStyles *StyleSet
 // currentThemeName tracks the currently loaded theme to avoid reloading.
 var currentThemeName string
 
+// lastColorScheme caches the last-used color scheme to avoid redundant unmarshalling in color getters.
+var lastColorScheme *ColorScheme
+
 // GetCurrentStyles returns the current active styles based on the configured theme.
 // It loads the theme from configuration or environment variable.
 func GetCurrentStyles() *StyleSet {
@@ -286,13 +289,15 @@ func GetCurrentStyles() *StyleSet {
 
 	CurrentStyles = GetStyles(scheme)
 	currentThemeName = themeName
+	lastColorScheme = scheme // Cache the color scheme for color getters
 	return CurrentStyles
 }
 
 // InitializeStyles initializes the styles with a specific color scheme.
+// Note: Does not clear currentThemeName to retain manually-passed scheme.
 func InitializeStyles(scheme *ColorScheme) {
 	CurrentStyles = GetStyles(scheme)
-	currentThemeName = "" // Clear the theme name to force reload on next GetCurrentStyles
+	lastColorScheme = scheme // Cache the color scheme for color getters
 }
 
 // InitializeStylesFromTheme initializes the styles from a theme name.
@@ -303,6 +308,7 @@ func InitializeStylesFromTheme(themeName string) error {
 	}
 	CurrentStyles = GetStyles(scheme)
 	currentThemeName = themeName
+	lastColorScheme = scheme // Cache the color scheme for color getters
 	return nil
 }
 
@@ -392,6 +398,12 @@ func GetTraceStyle() lipgloss.Style {
 
 // GetPrimaryColor returns the primary color from the current theme.
 func GetPrimaryColor() string {
+	// Use cached color scheme if available
+	if lastColorScheme != nil {
+		return lastColorScheme.Primary
+	}
+
+	// Fall back to loading from theme
 	scheme, err := GetColorSchemeForTheme(getActiveThemeName())
 	if err != nil || scheme == nil {
 		return "#00A3E0" // Default blue
@@ -401,6 +413,12 @@ func GetPrimaryColor() string {
 
 // GetSuccessColor returns the success color from the current theme.
 func GetSuccessColor() string {
+	// Use cached color scheme if available
+	if lastColorScheme != nil {
+		return lastColorScheme.Success
+	}
+
+	// Fall back to loading from theme
 	scheme, err := GetColorSchemeForTheme(getActiveThemeName())
 	if err != nil || scheme == nil {
 		return "#00FF00" // Default green
@@ -410,6 +428,12 @@ func GetSuccessColor() string {
 
 // GetErrorColor returns the error color from the current theme.
 func GetErrorColor() string {
+	// Use cached color scheme if available
+	if lastColorScheme != nil {
+		return lastColorScheme.Error
+	}
+
+	// Fall back to loading from theme
 	scheme, err := GetColorSchemeForTheme(getActiveThemeName())
 	if err != nil || scheme == nil {
 		return "#FF0000" // Default red
@@ -419,6 +443,12 @@ func GetErrorColor() string {
 
 // GetBorderColor returns the border color from the current theme.
 func GetBorderColor() string {
+	// Use cached color scheme if available
+	if lastColorScheme != nil {
+		return lastColorScheme.Border
+	}
+
+	// Fall back to loading from theme
 	scheme, err := GetColorSchemeForTheme(getActiveThemeName())
 	if err != nil || scheme == nil {
 		return "#5F5FD7" // Default border color
