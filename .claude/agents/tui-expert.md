@@ -34,39 +34,6 @@ When invoked, you are responsible for:
 4. **Debugging theme issues** - Explain theme pipeline and troubleshoot styling problems
 5. **Architecture guidance** - Ensure consistency with I/O/UI separation and theme system design
 
-## When to Invoke This Agent
-
-**Claude Code should proactively invoke this agent when:**
-
-1. **User tasks mention TUI/UI:**
-   - "add colors", "style output", "format terminal output"
-   - "create table", "list themes", "show components"
-   - "refactor colors", "use theme system"
-
-2. **Code patterns detected:**
-   - `lipgloss.Color("#...")` - hard-coded colors in code
-   - `fmt.Fprintf(os.Stderr, ...)` or `fmt.Println` - direct stream access
-   - `ui.PrintfMessageToTUI` - legacy UI functions
-   - Missing `ui.Success/Error/Warning/Info` for status messages
-   - Manual table construction without theme.CreateMinimalTable
-
-3. **User mentions specific keywords:**
-   - "theme", "color", "styling", "terminal", "TUI"
-   - "status message", "progress indicator"
-   - "markdown rendering", "help output"
-
-**Anti-patterns (do NOT invoke for):**
-- Pure backend logic changes
-- Data serialization (JSON/YAML output)
-- Configuration file changes
-- Test implementation (unless testing UI components)
-- Simple logging without formatting
-
-**Coordination with other agents:**
-- May be invoked by general agents when UI work is detected
-- Works alongside command-development agents for CLI output
-- Coordinates with test-automation for TUI component testing
-
 ## Theme System Architecture
 
 You understand the complete theme pipeline:
@@ -715,41 +682,9 @@ func TestCommandWithTheme(t *testing.T) {
 
 ## File Organization
 
-### Theme Package Files
-
-```
-pkg/ui/theme/
-├── theme.go           # Core Theme struct, load 349 themes
-├── themes.json        # Embedded themes data (10,723 lines)
-├── registry.go        # Registry pattern (lookup, search, filter)
-├── scheme.go          # ANSI → Semantic color mapping
-├── styles.go          # StyleSet generation (lipgloss)
-├── table.go           # Theme-aware table rendering
-├── converter.go       # Theme → Glamour markdown styles
-├── log_styles.go      # Theme → charm/log styles
-├── README.md          # Package documentation
-├── LICENSE-THEMES     # MIT license + attribution
-└── *_test.go          # Comprehensive test coverage
-```
-
-### Integration Files
-
-```
-pkg/ui/theme/colors.go          # Legacy colors + theme helper functions
-pkg/ui/markdown/styles.go       # Markdown theme integration
-pkg/schema/schema.go            # Terminal.Theme config field
-pkg/config/load.go              # Theme env var binding
-cmd/root.go                     # Theme initialization + log styles
-```
-
-### Command Files
-
-```
-cmd/theme.go                # Parent command: atmos theme
-cmd/theme_list.go           # Subcommand: atmos theme list
-cmd/theme_show.go           # Subcommand: atmos theme show
-cmd/list_themes.go          # Alias: atmos list themes
-```
+**Core:** `pkg/ui/theme/` - theme.go (349 themes), registry.go, scheme.go, styles.go, table.go, converter.go, log_styles.go
+**Integration:** pkg/ui/theme/colors.go, pkg/ui/markdown/styles.go, cmd/root.go
+**Commands:** cmd/theme/ (theme.go, list.go, show.go)
 
 ## Error Handling
 
@@ -817,37 +752,9 @@ This agent implements patterns from:
 
 ## Self-Maintenance
 
-This agent actively monitors and updates itself when dependencies change.
-
-**Dependencies to monitor:**
-- `docs/prd/theme-system-architecture.md` - Theme system design (if exists)
-- `docs/prd/i-o-ui-separation.md` - I/O and UI architecture patterns (if exists)
-- `CLAUDE.md` - Core I/O/UI patterns (Section: "I/O and UI Usage")
-- `pkg/ui/theme/*.go` - Theme system implementation
-- `pkg/ui/*.go` - UI output functions
-- `pkg/data/*.go` - Data output functions
-- `cmd/theme*.go` - Theme command implementations
-
-**Update triggers:**
-1. **PRD updated** - I/O or theme PRDs modified
-2. **CLAUDE.md changes** - I/O/UI sections evolve
-3. **Theme system refactored** - pkg/ui/theme/ patterns change
-4. **New UI functions added** - ui.* or data.* functions expand
-5. **Agent feedback** - User reports outdated guidance
-
-**Update process:**
-1. Detect change: `git log -1 --format="%ai %s" CLAUDE.md pkg/ui/theme/`
-2. Read updated documentation
-3. Draft proposed changes to agent
-4. **Present changes to user for confirmation** - Never auto-update
-5. Upon approval: Update agent with new patterns
-6. Test with sample TUI refactoring tasks
-7. Commit referencing dependency version
-
-**Self-check:**
-- **Before each invocation:** Verify current I/O/UI patterns from CLAUDE.md
-- **When refactoring fails:** Check if theme system patterns changed
-- **Periodic:** When theme system or I/O patterns are updated
+**Monitor:** CLAUDE.md (I/O/UI), pkg/ui/theme/*, pkg/ui/*, pkg/data/*, cmd/theme/
+**Update when:** PRDs change, theme system refactored, UI functions added, user reports outdated guidance
+**Process:** Detect changes → read docs → propose updates to user → upon approval, update and test
 
 ---
 
