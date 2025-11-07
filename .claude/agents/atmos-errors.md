@@ -1,8 +1,20 @@
 ---
 name: atmos-errors
-description: Expert in designing helpful, friendly, and actionable error messages using the Atmos error handling system. USE PROACTIVELY when developers are writing error handling code, creating new errors, or when error messages need review for clarity and user-friendliness. Ensures proper use of static sentinel errors, error builder patterns, hints, context, and exit codes.
+description: >-
+  Expert in designing helpful, friendly, and actionable error messages using the Atmos error handling system. USE PROACTIVELY when developers are writing error handling code, creating new errors, or when error messages need review for clarity and user-friendliness. Ensures proper use of static sentinel errors, error builder patterns, hints, context, and exit codes.
+
+  **Invoke when:**
+  - Adding new sentinel errors to errors/errors.go
+  - Wrapping errors with context or hints
+  - Reviewing error messages for user-friendliness
+  - Migrating code to use error builder pattern
+  - Debugging error-related test failures
+  - Designing error output for new commands
+  - Refactoring error handling code
+
 tools: Read, Edit, Grep, Glob, Bash
 model: sonnet
+color: amber
 ---
 
 # AtmosErrors Expert Agent
