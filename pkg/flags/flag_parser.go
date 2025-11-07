@@ -41,10 +41,10 @@ func NewAtmosFlagParser(cmd *cobra.Command, v *viper.Viper, translator *Compatib
 //
 // Process:
 //  1. Set command on translator (enables shorthand normalization)
-//  2. Validate no conflicts between compatibility flages and Cobra native shorthands
+//  2. Validate no conflicts between compatibility flags and Cobra native shorthands
 //  3. Split args at -- separator (if present)
 //  4. Validate compatibility flag targets for aliases used in args
-//  5. Translate compatibility flages + normalize Cobra shorthands in pre-separator args
+//  5. Translate compatibility flags + normalize Cobra shorthands in pre-separator args
 //  6. Let Cobra parse the normalized Atmos args
 //  7. Bind parsed flags to Viper
 //  8. Collect separated args (post-separator + translated pass-through flags)
@@ -59,10 +59,10 @@ func NewAtmosFlagParser(cmd *cobra.Command, v *viper.Viper, translator *Compatib
 //	Step 6: Cobra parses ["plan", "vpc", "-s", "dev", "--identity=prod"] (Cobra handles -s → --stack natively)
 //	Result: Flags{stack="dev", identity="prod"}, Positional=["plan", "vpc"], SeparatedArgs=["-var", "x=1", "-var-file", "prod.tfvars"]
 func (p *AtmosFlagParser) Parse(args []string) (*ParsedConfig, error) {
-	defer perf.Track(nil, "flagparser.FlagParser.Parse")()
+	defer perf.Track(nil, "flags.AtmosFlagParser.Parse")()
 
 	// Step 1: Validate no conflicts with Cobra native shorthands.
-	// This catches configuration errors like adding -s to compatibility flages
+	// This catches configuration errors like adding -s to compatibility flags
 	// when it's already registered as a Cobra shorthand via StringP("stack", "s", ...).
 	if err := p.translator.ValidateNoConflicts(p.cmd); err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func (p *AtmosFlagParser) Parse(args []string) (*ParsedConfig, error) {
 		return nil, err
 	}
 
-	// Step 5: Translate compatibility flages in normalized args.
+	// Step 5: Translate compatibility flags in normalized args.
 	// This handles terraform-specific flags like -var, -var-file, etc.
 	atmosArgs, translatedSeparated := p.translator.Translate(normalizedArgs)
 

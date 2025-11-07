@@ -1,5 +1,9 @@
 # PRD: Global Flags Pattern for Strongly-Typed Interpreters
 
+**Status**: Implemented
+
+**Note**: This document uses "Interpreter" terminology throughout. The actual implementation uses "Options" (e.g., `TerraformOptions`, `StandardOptions`) instead of `TerraformInterpreter`. The pattern and architecture described here remain accurate - just substitute "Options" for "Interpreter" when reading code examples.
+
 ## Problem Statement
 
 Atmos has **13+ global flags** defined on `RootCmd.PersistentFlags()` that should be available to all commands:
@@ -48,35 +52,44 @@ Use **struct embedding** (composition) to provide global flags to all interprete
 ```go
 // pkg/flagparser/global_flags.go
 
-// GlobalFlags contains all persistent flags available to every command.
-// These flags are defined on RootCmd.PersistentFlags() and inherited by all subcommands.
-type GlobalFlags struct {
-    // Working directory and path configuration
+// Flags contains all persistent flags available to every command.
+// These flags are inherited from RootCmd.PersistentFlags() and should be embedded
+// in all command interpreters using Go struct embedding.
+type Flags struct {
+    // Working directory and path configuration.
     Chdir      string
     BasePath   string
-    Config     []string // Config file paths
-    ConfigPath []string // Config directory paths
+    Config     []string // Config file paths.
+    ConfigPath []string // Config directory paths.
 
-    // Logging configuration
+    // Logging configuration.
     LogsLevel string
     LogsFile  string
     NoColor   bool
 
-    // Output configuration
-    Pager     PagerSelector // Special type for pager (like IdentitySelector)
+    // Terminal and I/O configuration.
+    ForceColor bool // Force color output even when not a TTY (--force-color).
+    ForceTTY   bool // Force TTY mode with sane defaults (--force-tty).
+    Mask       bool // Enable automatic masking of sensitive data (--mask).
 
-    // Profiling configuration
+    // Output configuration.
+    Pager PagerSelector
+
+    // Authentication.
+    Identity IdentitySelector
+
+    // Profiling configuration.
     ProfilerEnabled bool
     ProfilerPort    int
     ProfilerHost    string
     ProfileFile     string
     ProfileType     string
 
-    // Performance visualization
+    // Performance visualization.
     Heatmap     bool
     HeatmapMode string
 
-    // System configuration
+    // System configuration.
     RedirectStderr string
     Version        bool
 }

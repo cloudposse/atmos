@@ -411,7 +411,7 @@ func (p *StandardFlagParser) parseFlags(args []string, result *ParsedConfig) (*p
 	}
 
 	// Extract positional and separated args.
-	p.extractArgs(combinedFlags.Args(), result)
+	p.extractArgs(combinedFlags, result)
 
 	// Bind changed flags to Viper.
 	p.bindChangedFlagsToViper(combinedFlags)
@@ -440,24 +440,25 @@ func (p *StandardFlagParser) createCombinedFlagSet() *pflag.FlagSet {
 	return combinedFlags
 }
 
-// extractArgs splits allArgs into positional args and separated args based on positional spec count.
-func (p *StandardFlagParser) extractArgs(allArgs []string, result *ParsedConfig) {
+// extractArgs splits args into positional args and separated args.
+// Uses ArgsLenAtDash() to determine if "--" separator was present:
+// - If "--" present: args before it are positional, args after are separated.
+// - If no "--": all args are positional, separated is empty (let validation catch surplus args).
+func (p *StandardFlagParser) extractArgs(flags *pflag.FlagSet, result *ParsedConfig) {
 	defer perf.Track(nil, "flagparser.StandardFlagParser.extractArgs")()
 
-	// If no positional args configured, all args are positional.
-	if p.positionalArgs == nil || len(p.positionalArgs.specs) == 0 {
-		result.PositionalArgs = allArgs
-		result.SeparatedArgs = []string{}
-		return
-	}
+	allArgs := flags.Args()
+	dashIndex := flags.ArgsLenAtDash()
 
-	// Split based on expected positional count.
-	expectedPositionalCount := len(p.positionalArgs.specs)
-	if len(allArgs) >= expectedPositionalCount {
-		result.PositionalArgs = allArgs[:expectedPositionalCount]
-		result.SeparatedArgs = allArgs[expectedPositionalCount:]
+	// Check if "--" separator was present in args.
+	if dashIndex >= 0 {
+		// "--" was present: split at that point.
+		// Args before "--" are positional, args after "--" are separated (pass-through).
+		result.PositionalArgs = allArgs[:dashIndex]
+		result.SeparatedArgs = allArgs[dashIndex:]
 	} else {
-		// Fewer args than expected - all are positional, none are pass-through.
+		// No "--" separator: all args are positional, none are pass-through.
+		// Let positional args validator catch any surplus args.
 		result.PositionalArgs = allArgs
 		result.SeparatedArgs = []string{}
 	}
