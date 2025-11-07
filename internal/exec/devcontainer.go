@@ -343,7 +343,14 @@ func ExecuteDevcontainerAttach(atmosConfig *schema.AtmosConfiguration, name, ins
 		return err
 	}
 
-	return attachToContainer(ctx, runtime, containerInfo, config, containerName, usePTY)
+	return attachToContainer(&attachParams{
+		ctx:           ctx,
+		runtime:       runtime,
+		containerInfo: containerInfo,
+		config:        config,
+		containerName: containerName,
+		usePTY:        usePTY,
+	})
 }
 
 func findAndStartContainer(ctx context.Context, runtime container.Runtime, containerName string) (*container.Info, error) {
@@ -380,20 +387,30 @@ func startContainerForAttach(ctx context.Context, runtime container.Runtime, con
 		})
 }
 
-func attachToContainer(ctx context.Context, runtime container.Runtime, containerInfo *container.Info, config *devcontainer.Config, containerName string, usePTY bool) error {
-	log.Debug("Attaching to container", "container", containerName)
+// attachParams holds parameters for attaching to a container.
+type attachParams struct {
+	ctx           context.Context
+	runtime       container.Runtime
+	containerInfo *container.Info
+	config        *devcontainer.Config
+	containerName string
+	usePTY        bool
+}
+
+func attachToContainer(params *attachParams) error {
+	log.Debug("Attaching to container", "container", params.containerName)
 
 	maskingEnabled := viper.GetBool("mask")
 
 	// PTY mode: Use experimental PTY with masking.
-	if usePTY {
+	if params.usePTY {
 		if !pty.IsSupported() {
 			return fmt.Errorf("%w: only macOS and Linux are supported", errUtils.ErrPTYNotSupported)
 		}
 
 		log.Debug("Using experimental PTY mode with masking support")
-		shellArgs := getShellArgs(config.UserEnvProbe)
-		return attachToContainerWithPTY(ctx, runtime, containerInfo.ID, shellArgs, maskingEnabled)
+		shellArgs := getShellArgs(params.config.UserEnvProbe)
+		return attachToContainerWithPTY(params.ctx, params.runtime, params.containerInfo.ID, shellArgs, maskingEnabled)
 	}
 
 	// Regular mode: Warn about masking limitations in interactive TTY sessions.
@@ -401,40 +418,50 @@ func attachToContainer(ctx context.Context, runtime container.Runtime, container
 		log.Debug("Interactive TTY session - output masking is not available due to TTY limitations")
 	}
 
-	shellArgs := getShellArgs(config.UserEnvProbe)
+	shellArgs := getShellArgs(params.config.UserEnvProbe)
 	attachOpts := &container.AttachOptions{ShellArgs: shellArgs}
 
 	// IO streams are nil in opts, will default to iolib.Data/UI in runtime.
-	return runtime.Attach(ctx, containerInfo.ID, attachOpts)
+	return params.runtime.Attach(params.ctx, params.containerInfo.ID, attachOpts)
 }
 
-func execInContainer(ctx context.Context, runtime container.Runtime, containerID string, interactive, usePTY bool, command []string) error {
+// execParams holds parameters for executing commands in a container.
+type execParams struct {
+	ctx         context.Context
+	runtime     container.Runtime
+	containerID string
+	interactive bool
+	usePTY      bool
+	command     []string
+}
+
+func execInContainer(params *execParams) error {
 	maskingEnabled := viper.GetBool("mask")
 
 	// PTY mode: Use experimental PTY with masking.
-	if usePTY {
+	if params.usePTY {
 		if !pty.IsSupported() {
 			return fmt.Errorf("%w: only macOS and Linux are supported", errUtils.ErrPTYNotSupported)
 		}
 
 		log.Debug("Using experimental PTY mode with masking support")
-		return execInContainerWithPTY(ctx, runtime, containerID, command, maskingEnabled)
+		return execInContainerWithPTY(params.ctx, params.runtime, params.containerID, params.command, maskingEnabled)
 	}
 
 	// Regular mode (existing behavior).
-	if interactive && maskingEnabled {
+	if params.interactive && maskingEnabled {
 		log.Debug("Interactive TTY mode enabled - output masking is not available due to TTY limitations")
 	}
 
 	execOpts := &container.ExecOptions{
-		Tty:          interactive, // TTY mode for interactive sessions.
-		AttachStdin:  interactive, // Attach stdin only in interactive mode.
+		Tty:          params.interactive, // TTY mode for interactive sessions.
+		AttachStdin:  params.interactive, // Attach stdin only in interactive mode.
 		AttachStdout: true,
 		AttachStderr: true,
 		// IO streams are nil, will default to iolib.Data/UI in runtime.
 	}
 
-	return runtime.Exec(ctx, containerID, command, execOpts)
+	return params.runtime.Exec(params.ctx, params.containerID, params.command, execOpts)
 }
 
 // attachToContainerWithPTY attaches to a container using PTY mode with masking support.
@@ -541,7 +568,14 @@ func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, name, insta
 		return err
 	}
 
-	return execInContainer(ctx, runtime, containerInfo.ID, interactive, usePTY, command)
+	return execInContainer(&execParams{
+		ctx:         ctx,
+		runtime:     runtime,
+		containerID: containerInfo.ID,
+		interactive: interactive,
+		usePTY:      usePTY,
+		command:     command,
+	})
 }
 
 // ExecuteDevcontainerRemove removes a devcontainer.
@@ -849,7 +883,6 @@ func rebuildContainer(p *rebuildParams) error {
 func GenerateNewDevcontainerInstance(atmosConfig *schema.AtmosConfiguration, name, baseInstance string) (string, error) {
 	defer perf.Track(atmosConfig, "exec.GenerateNewDevcontainerInstance")()
 
-	// Reload config to ensure we have the latest with all fields populated.
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return "", err
@@ -860,26 +893,27 @@ func GenerateNewDevcontainerInstance(atmosConfig *schema.AtmosConfiguration, nam
 		return "", err
 	}
 
-	// Initialize container runtime.
 	runtime, err := devcontainer.DetectRuntime(settings.Runtime)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to initialize container runtime: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 
 	ctx := context.Background()
-
-	// Use default instance if baseInstance is empty.
 	if baseInstance == "" {
 		baseInstance = devcontainer.DefaultInstance
 	}
 
-	// List all containers (no filters for simplicity - we'll filter in code using ParseContainerName).
 	containers, err := runtime.List(ctx, nil)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to list containers: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 
-	// Find all instances for this devcontainer name and extract numbers.
+	maxNumber := findMaxInstanceNumber(containers, name, baseInstance)
+	return fmt.Sprintf("%s-%d", baseInstance, maxNumber+1), nil
+}
+
+// findMaxInstanceNumber finds the highest instance number for a given devcontainer name and base instance.
+func findMaxInstanceNumber(containers []container.Info, name, baseInstance string) int {
 	maxNumber := 0
 	basePattern := fmt.Sprintf("%s-", baseInstance)
 
@@ -889,7 +923,6 @@ func GenerateNewDevcontainerInstance(atmosConfig *schema.AtmosConfiguration, nam
 			continue
 		}
 
-		// Check if this instance follows the pattern: {baseInstance}-{number}
 		if strings.HasPrefix(parsedInstance, basePattern) {
 			numberStr := strings.TrimPrefix(parsedInstance, basePattern)
 			var number int
@@ -901,7 +934,5 @@ func GenerateNewDevcontainerInstance(atmosConfig *schema.AtmosConfiguration, nam
 		}
 	}
 
-	// Generate next instance name.
-	newInstance := fmt.Sprintf("%s-%d", baseInstance, maxNumber+1)
-	return newInstance, nil
+	return maxNumber
 }

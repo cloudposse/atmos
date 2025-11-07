@@ -73,7 +73,30 @@ func ExecWithPTY(ctx context.Context, cmd *exec.Cmd, opts *Options) error {
 		return fmt.Errorf("%w: %s", errUtils.ErrPTYNotSupported, runtime.GOOS)
 	}
 
-	// Apply default options.
+	// Apply defaults and start PTY.
+	opts = applyDefaults(opts)
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to start PTY: %w", err)
+	}
+	defer func() { _ = ptmx.Close() }()
+
+	// Setup terminal environment.
+	cleanup, err := setupTerminal(ptmx)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	// Create output writer with optional masking.
+	outputWriter := createOutputWriter(opts)
+
+	// Run command with bidirectional IO.
+	return runWithIO(ctx, cmd, ptmx, opts.Stdin, outputWriter)
+}
+
+// applyDefaults applies default values to Options if not set.
+func applyDefaults(opts *Options) *Options {
 	if opts == nil {
 		opts = &Options{}
 	}
@@ -86,81 +109,94 @@ func ExecWithPTY(ctx context.Context, cmd *exec.Cmd, opts *Options) error {
 	if opts.Stderr == nil {
 		opts.Stderr = os.Stderr
 	}
+	return opts
+}
 
-	// Start the command with a PTY.
-	ptmx, err := pty.Start(cmd)
-	if err != nil {
-		return fmt.Errorf("failed to start PTY: %w", err)
-	}
-	defer func() { _ = ptmx.Close() }()
-
+// setupTerminal configures terminal resize handling and raw mode.
+// Returns a cleanup function that must be called when done.
+func setupTerminal(ptmx *os.File) (func(), error) {
 	// Handle terminal resize signals.
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGWINCH)
 	go func() {
 		for range ch {
-			if err := pty.InheritSize(os.Stdin, ptmx); err != nil {
-				// Log error but don't fail - resize errors are non-fatal.
-				continue
-			}
+			_ = pty.InheritSize(os.Stdin, ptmx)
 		}
 	}()
 	ch <- syscall.SIGWINCH // Initial resize.
-	defer func() { signal.Stop(ch); close(ch) }()
 
-	// Set terminal to raw mode for proper PTY interaction (only if stdin is a TTY).
+	// Set terminal to raw mode (only if stdin is a TTY).
 	var oldState *term.State
+	var err error
 	if term.IsTerminal(int(os.Stdin.Fd())) {
 		oldState, err = term.MakeRaw(int(os.Stdin.Fd()))
 		if err != nil {
-			return fmt.Errorf("failed to set terminal to raw mode: %w", err)
+			signal.Stop(ch)
+			close(ch)
+			return nil, fmt.Errorf("failed to set terminal to raw mode: %w", err)
 		}
-		defer func() {
-			if oldState != nil {
-				_ = term.Restore(int(os.Stdin.Fd()), oldState)
-			}
-		}()
 	}
 
-	// Create output writer with optional masking.
-	outputWriter := opts.Stdout
+	// Return cleanup function.
+	cleanup := func() {
+		signal.Stop(ch)
+		close(ch)
+		if oldState != nil {
+			_ = term.Restore(int(os.Stdin.Fd()), oldState)
+		}
+	}
+
+	return cleanup, nil
+}
+
+// createOutputWriter creates an output writer with optional masking.
+func createOutputWriter(opts *Options) io.Writer {
 	if opts.EnableMasking && opts.Masker != nil && opts.Masker.Enabled() {
-		outputWriter = &maskedWriter{
+		return &maskedWriter{
 			underlying: opts.Stdout,
 			masker:     opts.Masker,
 		}
 	}
+	return opts.Stdout
+}
 
-	// Set up bidirectional IO between terminal and PTY.
+// runWithIO sets up bidirectional IO and waits for command completion.
+func runWithIO(ctx context.Context, cmd *exec.Cmd, ptmx *os.File, stdin io.Reader, stdout io.Writer) error {
 	var wg sync.WaitGroup
 	errChan := make(chan error, 2)
 
 	// Copy input from user terminal to PTY.
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		_, err := io.Copy(ptmx, opts.Stdin)
-		// Ignore EIO errors - these occur normally when PTY slave closes.
-		// This happens when the shell exits (e.g., user types 'exit' or 'logout').
-		// See: https://github.com/creack/pty/issues/21
-		if err != nil && !isPtyEIO(err) {
-			errChan <- fmt.Errorf("input copy failed: %w", err)
-		}
-	}()
+	go copyInput(&wg, errChan, ptmx, stdin)
 
-	// Copy output from PTY to terminal (with optional masking).
+	// Copy output from PTY to terminal.
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		_, err := io.Copy(outputWriter, ptmx)
-		// Ignore EIO errors - these occur normally when PTY slave closes.
-		// See: https://github.com/creack/pty/issues/21
-		if err != nil && !isPtyEIO(err) {
-			errChan <- fmt.Errorf("output copy failed: %w", err)
-		}
-	}()
+	go copyOutput(&wg, errChan, stdout, ptmx)
 
-	// Wait for command to complete or context cancellation.
+	// Wait for completion or cancellation.
+	return waitForCompletion(ctx, cmd, &wg, errChan)
+}
+
+// copyInput copies data from stdin to PTY, ignoring expected EIO errors.
+func copyInput(wg *sync.WaitGroup, errChan chan error, dst io.Writer, src io.Reader) {
+	defer wg.Done()
+	_, err := io.Copy(dst, src)
+	if err != nil && !isPtyEIO(err) {
+		errChan <- fmt.Errorf("input copy failed: %w", err)
+	}
+}
+
+// copyOutput copies data from PTY to stdout, ignoring expected EIO errors.
+func copyOutput(wg *sync.WaitGroup, errChan chan error, dst io.Writer, src io.Reader) {
+	defer wg.Done()
+	_, err := io.Copy(dst, src)
+	if err != nil && !isPtyEIO(err) {
+		errChan <- fmt.Errorf("output copy failed: %w", err)
+	}
+}
+
+// waitForCompletion waits for command completion or context cancellation.
+func waitForCompletion(ctx context.Context, cmd *exec.Cmd, wg *sync.WaitGroup, errChan chan error) error {
 	cmdDone := make(chan error, 1)
 	go func() {
 		cmdDone <- cmd.Wait()
@@ -168,24 +204,20 @@ func ExecWithPTY(ctx context.Context, cmd *exec.Cmd, opts *Options) error {
 
 	select {
 	case <-ctx.Done():
-		// Context cancelled - kill the process.
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
 		wg.Wait()
 		return ctx.Err()
 	case err := <-cmdDone:
-		// Command completed - wait for IO to finish.
 		wg.Wait()
 		close(errChan)
-
-		// Check for IO errors.
+		// Return first IO error if any, otherwise return command error.
 		for ioErr := range errChan {
 			if ioErr != nil {
 				return ioErr
 			}
 		}
-
 		return err
 	}
 }
