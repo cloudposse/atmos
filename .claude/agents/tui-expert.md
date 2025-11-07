@@ -287,6 +287,98 @@ renderer, _ := glamour.NewTermRenderer(
 )
 ```
 
+## UI Package Integration (MANDATORY)
+
+Atmos separates I/O (streams) from UI (formatting) with two channels:
+- **Data channel (stdout)** - For pipeable output (JSON, YAML, results)
+- **UI channel (stderr)** - For human messages (status, errors, info)
+
+### Output Functions (Always Use These)
+
+**NEVER use `fmt.Print`, `fmt.Fprint(os.Stderr)`, or direct stream access.**
+
+```go
+import "github.com/cloudposse/atmos/pkg/ui"
+
+// Data channel (stdout) - for pipeable output
+ui.Data().Write("result")                    // Plain text to stdout
+ui.Data().Writef("value: %s", val)           // Formatted text to stdout
+ui.Data().Writeln("result")                  // Plain text with newline to stdout
+ui.Data().WriteJSON(structData)              // JSON to stdout
+ui.Data().WriteYAML(structData)              // YAML to stdout
+
+// UI channel (stderr) - for human messages
+ui.Write("Loading configuration...")          // Plain text (no icon, no color, stderr)
+ui.Writef("Processing %d items...", count)    // Formatted text (no icon, no color, stderr)
+ui.Writeln("Done")                            // Plain text with newline (no icon, no color, stderr)
+ui.Success("Deployment complete!")            // ✓ Deployment complete! (green, stderr)
+ui.Error("Configuration failed")              // ✗ Configuration failed (red, stderr)
+ui.Warning("Deprecated feature")              // ⚠ Deprecated feature (yellow, stderr)
+ui.Info("Processing components...")           // ℹ Processing components... (cyan, stderr)
+
+// Markdown rendering (theme-aware)
+ui.Markdown("# Help\n\nUsage...")             // Rendered to stdout (data)
+ui.MarkdownMessage("**Error:** Invalid")      // Rendered to stderr (UI)
+```
+
+### Decision Tree for Output
+
+```
+What am I outputting?
+
+├─ Pipeable data (JSON, YAML, results)
+│  └─ Use ui.Data().Write(), ui.Data().WriteJSON(), ui.Data().WriteYAML()
+│
+├─ Plain UI messages (no icon, no color)
+│  └─ Use ui.Write(), ui.Writef(), ui.Writeln()
+│
+├─ Status messages (with icons and colors)
+│  └─ Use ui.Success(), ui.Error(), ui.Warning(), ui.Info()
+│
+└─ Formatted documentation
+   ├─ Help text, usage → ui.Markdown() (stdout)
+   └─ Error details → ui.MarkdownMessage() (stderr)
+```
+
+### Anti-Patterns (DO NOT USE)
+
+```go
+// ❌ WRONG: Direct stream access
+fmt.Fprint(os.Stdout, ...)  // Use ui.Data().Write() instead
+fmt.Fprint(os.Stderr, ...)  // Use ui.Success/Error/etc instead
+fmt.Println(...)            // Use ui.Data().Writeln() instead
+
+// ❌ WRONG: Using lipgloss styles for status messages
+styles := theme.GetCurrentStyles()
+fmt.Println(styles.Success.Render("Done"))  // Use ui.Success("Done") instead
+
+// ✅ CORRECT: Using UI package
+ui.Success("Done")  // Automatically uses theme styles + icon
+```
+
+### Theme Show Command Example
+
+When building preview/demo output (like theme show), you can use lipgloss styles
+directly to demonstrate theme appearance. But for actual status messages, use UI functions:
+
+```go
+// Demo output (shows what theme looks like)
+styles := theme.GetCurrentStyles()
+demoOutput := fmt.Sprintf(
+    "Success: %s\nError: %s\nWarning: %s",
+    styles.Success.Render("✓ Success message"),
+    styles.Error.Render("✗ Error message"),
+    styles.Warning.Render("⚠ Warning message"),
+)
+ui.Write(demoOutput)  // Output the demo
+
+// Actual status messages (use UI functions)
+ui.Success("Theme loaded successfully!")
+ui.Error("Failed to load theme")
+ui.Warning("Theme not found, using default")
+ui.Info("Loading theme configuration...")
+```
+
 ## Recommended Themes
 
 14 curated themes that work well with Atmos:

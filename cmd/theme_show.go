@@ -51,6 +51,11 @@ func init() {
 }
 
 // executeThemeShow displays detailed information about a specific theme.
+//
+// Note: This command is a preview/demo that shows what theme styles look like.
+// It intentionally uses lipgloss styles directly (via formatThemeDetails) to
+// demonstrate the theme's appearance, rather than using ui.Success/Error/etc.
+// The ui.Write() call correctly outputs the preview to the UI channel (stderr).
 func executeThemeShow(cmd *cobra.Command, args []string) error {
 	themeName := args[0]
 
@@ -70,7 +75,7 @@ func executeThemeShow(cmd *cobra.Command, args []string) error {
 	scheme := theme.GenerateColorScheme(selectedTheme)
 	styles := theme.GetStyles(&scheme)
 
-	// Display theme information
+	// Display theme information (preview output)
 	output := formatThemeDetails(selectedTheme, &scheme, styles)
 	ui.Write(output)
 
