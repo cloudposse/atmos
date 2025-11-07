@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,13 +50,15 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		return atmosConfig, err
 	}
 
+	// Set log config BEFORE processing stacks so pre-hooks (including auth) see the correct log level.
+	setLogConfig(&atmosConfig)
+
 	if processStacks {
 		err = processStackConfigs(&atmosConfig, &configAndStacksInfo, atmosConfig.IncludeStackAbsolutePaths, atmosConfig.ExcludeStackAbsolutePaths)
 		if err != nil {
 			return atmosConfig, err
 		}
 	}
-	setLogConfig(&atmosConfig)
 
 	atmosConfig.Initialized = true
 	return atmosConfig, nil
@@ -109,6 +112,23 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 			// NO_PAGER is set and no explicit --pager flag was provided, disable the pager
 			atmosConfig.Settings.Terminal.Pager = "false"
 		}
+	}
+
+	// Configure global logger with the log level from flags/env/config.
+	// This ensures auth pre-hooks (executed during processStackConfigs) respect the log level.
+	switch atmosConfig.Logs.Level {
+	case "Trace":
+		log.SetLevel(log.TraceLevel)
+	case "Debug":
+		log.SetLevel(log.DebugLevel)
+	case "Info":
+		log.SetLevel(log.InfoLevel)
+	case "Warning":
+		log.SetLevel(log.WarnLevel)
+	case "Off":
+		log.SetLevel(math.MaxInt32)
+	default:
+		log.SetLevel(log.WarnLevel)
 	}
 }
 

@@ -239,8 +239,10 @@ var RootCmd = &cobra.Command{
 	},
 }
 
-// setupLogger configures the global logger based on the provided Atmos configuration.
-func setupLogger(atmosConfig *schema.AtmosConfiguration) {
+// SetupLogger configures the global logger based on the provided Atmos configuration.
+//
+//nolint:revive,cyclop,funlen // Function complexity is acceptable for logger configuration.
+func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 	switch atmosConfig.Logs.Level {
 	case "Trace":
 		log.SetLevel(log.TraceLevel)
@@ -534,7 +536,7 @@ func Execute() error {
 	}
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
-	setupLogger(&atmosConfig)
+	SetupLogger(&atmosConfig)
 
 	var err error
 	// If CLI configuration was found, process its custom commands and command aliases.
