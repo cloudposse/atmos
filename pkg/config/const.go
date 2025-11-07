@@ -122,6 +122,7 @@ const (
 	StackStr     = "stack"
 
 	// Auth flags.
+	IdentityFlagName        = "identity" // Flag name without prefix.
 	IdentityFlag            = "--identity"
 	IdentityFlagSelectValue = "__SELECT__" // Special value when --identity is used without argument.
 
