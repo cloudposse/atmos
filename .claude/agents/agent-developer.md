@@ -358,10 +358,11 @@ This agent actively monitors and updates itself when dependencies change.
 **Update process:**
 1. Detect change in dependent PRD or CLAUDE.md
 2. Read updated documentation
-3. Invoke agent-developer to update this agent
-4. Review changes for accuracy
-5. Test updated agent with sample invocations
-6. Commit with descriptive message referencing PRD version
+3. Draft proposed changes to agent
+4. **Present changes to user for confirmation**
+5. Upon approval, apply updates
+6. Test updated agent with sample invocations
+7. Commit with descriptive message referencing PRD version
 
 **Self-check frequency:**
 - Before each invocation: Read latest version of dependent PRDs
@@ -420,10 +421,70 @@ When creating agents, teach them to maintain themselves:
    2. **Proceed with task** using current patterns
    ```
 
-4. **Self-update when outdated**
-   - Invoke agent-developer for updates
-   - Reference specific changes in PRD
+4. **Self-update when outdated (with user confirmation)**
+   - Detect PRD change
+   - Draft proposed agent updates
+   - **Present to user for approval**
+   - Upon approval: Invoke agent-developer for updates
    - Test updated behavior
+```
+
+### User Confirmation Pattern
+
+Agents must never autonomously modify themselves or PRDs. Always confirm:
+
+```markdown
+**When agent detects it's outdated:**
+
+"I've detected that my dependent PRD `docs/prd/command-registry-pattern.md`
+was updated on 2025-02-20 (I was last synced on 2025-01-15).
+
+Changes include:
+- New CommandProvider validation requirements
+- Updated registration pattern for sub-commands
+- Refined error handling conventions
+
+I recommend updating this agent to align with these new patterns.
+
+**Proposed changes to this agent:**
+1. Add CommandProvider validation section
+2. Update sub-command registration examples
+3. Refine error handling in workflow
+
+May I proceed with updating this agent?"
+
+**User responses:**
+- "Yes" / "Approve" / "Go ahead" → Proceed with update
+- "No" / "Not now" → Continue with current version
+- "Show me the changes first" → Display detailed diff
+```
+
+### PRD Update Proposals
+
+When gaps are discovered, propose PRD updates:
+
+```markdown
+**When creating an agent reveals a gap:**
+
+"While creating the `cobra-flag-expert` agent, I discovered that the
+command-registry-pattern.md PRD doesn't document flag inheritance
+patterns for nested commands.
+
+**Proposed addition to PRD:**
+
+Section: 'Flag Inheritance for Nested Commands'
+
+Content:
+- Commands with sub-commands should use PersistentFlags
+- Local flags vs persistent flags usage guidelines
+- Flag validation at appropriate command levels
+
+Would you like me to draft this section and add it to the PRD?"
+
+**User responses:**
+- "Yes, draft it" → Create draft PRD section for review
+- "No, not needed" → Skip PRD update
+- "Let me think about it" → Save suggestion for later
 ```
 
 ### Agent-Developer Self-Maintenance
@@ -434,24 +495,27 @@ When creating agents, teach them to maintain themselves:
 - Agent best practices as they emerge
 
 **Update process:**
-1. When `docs/prd/claude-agent-architecture.md` is modified:
+
+1. **When `docs/prd/claude-agent-architecture.md` is modified:**
+   - Detect change via `git log`
    - Read updated PRD
    - Identify pattern changes
-   - Update relevant sections in this agent
-   - Update all examples to match new patterns
-   - Test agent creation with new patterns
+   - Draft proposed updates to this agent
+   - **Present changes to user:** "The agent architecture PRD has been updated. I've detected the following changes: [summary]. I propose updating this agent to align with: [specific changes]. May I proceed?"
+   - Upon approval: Apply updates, test, commit
 
-2. When CLAUDE.md changes affect agent development:
+2. **When CLAUDE.md changes affect agent development:**
    - Review changes for agent-relevant patterns
-   - Update frontmatter specifications if needed
-   - Refine context management guidance
-   - Update quality standards
+   - Draft updates to frontmatter specifications or context guidance
+   - **Confirm with user** before applying changes
+   - Update quality standards if approved
 
-3. When creating agents reveals gaps:
+3. **When creating agents reveals gaps:**
    - Document new patterns discovered
-   - Update PRD with refined guidance
-   - Improve agent templates
-   - Share learnings with future agents
+   - **Draft proposed PRD updates**
+   - **Present to user:** "While creating [agent-name], I discovered [pattern/gap]. I suggest updating the PRD with: [changes]. May I proceed?"
+   - Upon approval: Update PRD with refined guidance
+   - Improve agent templates based on learnings
 
 ## PRD Awareness Pattern
 

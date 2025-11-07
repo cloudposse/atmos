@@ -361,10 +361,11 @@ This agent actively monitors and updates itself when dependencies change.
 **Update process:**
 1. Detect change: `git log -1 --format="%ai %s" docs/prd/{prd}.md`
 2. Read updated documentation
-3. Invoke agent-developer for updates
-4. Review changes for accuracy
-5. Test with sample invocations
-6. Commit referencing PRD version
+3. Draft proposed changes to agent
+4. **Present changes to user for confirmation**
+5. Upon approval: Invoke agent-developer for updates
+6. Test with sample invocations
+7. Commit referencing PRD version
 
 **Self-check:**
 - **Before each invocation:** Read latest PRD version
@@ -392,13 +393,50 @@ Agents should verify PRD currency at invocation:
    - Agent notes: "Last sync: 2025-01-15"
    - PRD shows: "2025-02-20" → Update needed!
 
-3. **Update self if outdated**
-   - Invoke agent-developer
-   - Sync with new patterns
-   - Update version tracker
+3. **If outdated, request approval to update**
+   - Present summary of PRD changes to user
+   - Explain proposed agent updates
+   - **Await user confirmation**
+   - If approved: Invoke agent-developer to update
+   - If declined: Proceed with current version
 
-4. **Proceed with task** using current patterns
+4. **Proceed with task** using current (or updated) patterns
 ```
+
+### User Confirmation Requirement (MANDATORY)
+
+Agents must **never autonomously modify themselves or PRDs**. Always obtain user approval:
+
+**When agent detects outdated patterns:**
+```
+Agent: "I've detected that my dependent PRD was updated on [date].
+       Changes include: [summary].
+
+       I recommend updating this agent to align with new patterns.
+
+       Proposed changes:
+       1. [Change 1]
+       2. [Change 2]
+
+       May I proceed with updating this agent?"
+
+User: "Yes" / "No" / "Show me details first"
+```
+
+**When agent discovers PRD gaps:**
+```
+Agent: "While working on [task], I discovered that [PRD] doesn't
+       document [pattern/gap].
+
+       I suggest adding:
+       [Proposed content]
+
+       Would you like me to draft this update for the PRD?"
+
+User: "Yes, draft it" / "No" / "Let me think about it"
+```
+
+**Never proceed with updates without explicit user approval.**
 
 ### Agent-Developer Self-Maintenance
 
@@ -409,15 +447,18 @@ The agent-developer agent itself must:
    git log -1 --format="%ai %s" docs/prd/claude-agent-architecture.md
    ```
 
-2. **Update when PRD changes**
+2. **Update when PRD changes (with user approval)**
+   - Detect PRD modification
    - Read updated architecture patterns
-   - Refine agent creation process
-   - Update templates and examples
-   - Improve quality standards
+   - Draft proposed changes to agent-developer
+   - **Request user approval:** "The agent architecture PRD has been updated. Proposed changes: [summary]. May I update the agent-developer?"
+   - Upon approval: Apply updates, test, commit
 
-3. **Propagate updates to existing agents**
+3. **Propagate updates to existing agents (with user approval)**
    - When architecture PRD changes, review all agents
-   - Update agents that don't match new patterns
+   - Identify agents not matching new patterns
+   - **Propose batch update:** "The architecture PRD has changed. [N] agents need updates. May I proceed?"
+   - Upon approval: Update agents, test, commit
    - Document migration path for pattern changes
 
 ## PRD Awareness Pattern

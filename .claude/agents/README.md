@@ -129,8 +129,12 @@ Each agent:
 1. **Lists dependencies** - Specific PRDs, CLAUDE.md sections, implementation files
 2. **Checks currency** - Verifies PRD versions before each invocation
 3. **Detects changes** - Uses `git log` to check modification dates
-4. **Triggers updates** - Invokes agent-developer when dependencies change
-5. **Tests behavior** - Validates updated agent with sample tasks
+4. **Proposes updates** - Presents changes to user when dependencies change
+5. **Awaits approval** - **Never modifies itself without user confirmation**
+6. **Applies updates** - Upon approval, invokes agent-developer
+7. **Tests behavior** - Validates updated agent with sample tasks
+
+**Important:** Agents never autonomously modify themselves or PRDs. User approval required.
 
 ### Update Triggers
 
