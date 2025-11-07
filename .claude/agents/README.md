@@ -121,13 +121,33 @@ orchestrator-agent
 
 ## Maintenance
 
-Agents are self-aware and should update their own instructions when:
-- New PRDs are published in their domain
-- CLAUDE.md patterns evolve
-- Technology stack changes
-- Invocation patterns need refinement
+Agents actively monitor their dependencies and self-update when those dependencies change.
 
-The agent-developer agent is responsible for maintaining agent quality and consistency across the collection.
+### Self-Updating Mechanism
+
+Each agent:
+1. **Lists dependencies** - Specific PRDs, CLAUDE.md sections, implementation files
+2. **Checks currency** - Verifies PRD versions before each invocation
+3. **Detects changes** - Uses `git log` to check modification dates
+4. **Triggers updates** - Invokes agent-developer when dependencies change
+5. **Tests behavior** - Validates updated agent with sample tasks
+
+### Update Triggers
+
+Agents update themselves when:
+- **PRD modified** - Dependent PRD file updated (detected via `git log`)
+- **CLAUDE.md changes** - Core patterns evolve
+- **Patterns mature** - Implementation patterns stabilize
+- **Invocation unclear** - Agent not triggered appropriately
+- **Context bloat** - Agent exceeds size targets
+
+### Agent-Developer Responsibility
+
+The agent-developer agent:
+- Monitors `docs/prd/claude-agent-architecture.md` for changes
+- Updates itself when architecture patterns evolve
+- Updates all agents when fundamental patterns change
+- Maintains quality and consistency across agent collection
 
 ## References
 

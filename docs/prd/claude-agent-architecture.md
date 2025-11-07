@@ -330,31 +330,95 @@ feature-development-orchestrator
 
 ## Self-Updating Pattern
 
-Agents must be self-aware and maintain themselves:
+Agents must actively monitor dependencies and update themselves when those dependencies change.
+
+### Dependency Tracking
+
+Every agent must track:
+1. **PRD dependencies** - Specific PRD files with version/date
+2. **CLAUDE.md sections** - Which patterns it implements
+3. **Implementation files** - Key files it references
+
+### Self-Maintenance Section (Required)
 
 ```markdown
 ## Self-Maintenance
 
-This agent updates its instructions as requirements evolve.
+This agent actively monitors and updates itself when dependencies change.
 
-**Monitor for changes:**
-1. New PRDs in `docs/prd/` affecting this domain
-2. Updates to `CLAUDE.md` patterns
-3. Technology stack changes
-4. User feedback on effectiveness
+**Dependencies to monitor:**
+- `docs/prd/{specific-prd}.md` - [Description] (v1.0, YYYY-MM-DD)
+- `CLAUDE.md` - Core development patterns
+- Related files: `pkg/{package}/`, `internal/exec/{implementation}.go`
+
+**Update triggers:**
+1. **PRD updated** - Dependent PRD modified (check with `git log`)
+2. **CLAUDE.md changes** - Core patterns evolve
+3. **Implementation patterns mature** - Codebase patterns stabilize
+4. **Invocation unclear** - Agent not triggered appropriately
+5. **Context bloat** - Agent exceeds 20 KB
 
 **Update process:**
-1. Invoke agent-developer agent
-2. Provide current agent file and change requirements
-3. Review and test updated agent
-4. Commit changes with descriptive message
+1. Detect change: `git log -1 --format="%ai %s" docs/prd/{prd}.md`
+2. Read updated documentation
+3. Invoke agent-developer for updates
+4. Review changes for accuracy
+5. Test with sample invocations
+6. Commit referencing PRD version
 
-**When to update:**
-- Immediately when relevant PRD is published
-- When invocation triggers are unclear
-- When agent is too verbose (context optimization)
-- When coordination patterns change
+**Self-check:**
+- **Before each invocation:** Read latest PRD version
+- **When task fails:** Check if patterns changed
+- **Periodic:** Monthly or after major features
 ```
+
+### PRD Currency Checking
+
+Agents should verify PRD currency at invocation:
+
+```markdown
+## Workflow
+
+1. **Verify PRD currency** (first step, every invocation)
+   ```bash
+   # Check when PRD was last updated
+   git log -1 --format="%ai %s" docs/prd/command-registry-pattern.md
+
+   # Read current version
+   cat docs/prd/command-registry-pattern.md
+   ```
+
+2. **Compare with known version**
+   - Agent notes: "Last sync: 2025-01-15"
+   - PRD shows: "2025-02-20" → Update needed!
+
+3. **Update self if outdated**
+   - Invoke agent-developer
+   - Sync with new patterns
+   - Update version tracker
+
+4. **Proceed with task** using current patterns
+```
+
+### Agent-Developer Self-Maintenance
+
+The agent-developer agent itself must:
+
+1. **Monitor its own PRD**
+   ```bash
+   git log -1 --format="%ai %s" docs/prd/claude-agent-architecture.md
+   ```
+
+2. **Update when PRD changes**
+   - Read updated architecture patterns
+   - Refine agent creation process
+   - Update templates and examples
+   - Improve quality standards
+
+3. **Propagate updates to existing agents**
+   - When architecture PRD changes, review all agents
+   - Update agents that don't match new patterns
+   - Document migration path for pattern changes
 
 ## PRD Awareness Pattern
 

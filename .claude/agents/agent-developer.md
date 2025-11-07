@@ -332,38 +332,126 @@ What to avoid in this domain.
 
 ## Self-Updating Agent Pattern
 
-Agents should be aware they can and should update themselves:
+Agents should actively monitor their dependencies and update themselves when those dependencies change.
+
+### Self-Maintenance Instructions for Agents
+
+Every agent should include this self-maintenance section:
 
 ```markdown
 ## Self-Maintenance
 
-As requirements evolve, update this agent's instructions:
+This agent actively monitors and updates itself when dependencies change.
 
-1. **Monitor PRD changes** - Watch `docs/prd/` for new patterns
-2. **Update expertise sections** - Reflect current best practices
-3. **Refine invocation triggers** - Improve description field
-4. **Optimize context usage** - Remove outdated or redundant content
+**Dependencies to monitor:**
+- `docs/prd/{relevant-prd}.md` - Architecture patterns for this domain
+- `CLAUDE.md` - Core development patterns
+- Related implementation files in `pkg/` or `internal/exec/`
 
-**When to update:**
-- New PRD published affecting this domain
-- CLAUDE.md patterns change
-- Technology stack updates
-- User feedback on agent effectiveness
+**Update triggers:**
+1. **PRD updated** - When dependent PRDs are modified
+2. **CLAUDE.md changes** - When core patterns evolve
+3. **Implementation patterns mature** - When codebase patterns stabilize
+4. **Invocation unclear** - When agent isn't triggered appropriately
+5. **Context bloat** - When agent exceeds size targets (20+ KB)
+
+**Update process:**
+1. Detect change in dependent PRD or CLAUDE.md
+2. Read updated documentation
+3. Invoke agent-developer to update this agent
+4. Review changes for accuracy
+5. Test updated agent with sample invocations
+6. Commit with descriptive message referencing PRD version
+
+**Self-check frequency:**
+- Before each invocation: Read latest version of dependent PRDs
+- When task fails: Check if patterns have changed
+- Periodic review: Monthly or when major features added
+```
+
+### PRD Version Awareness
+
+Agents should track which PRD versions they implement:
+
+```markdown
+## Relevant PRDs
+
+This agent implements patterns from:
+
+- `docs/prd/command-registry-pattern.md` - Command extensibility (v1.0, 2025-01-15)
+- `docs/prd/testing-strategy.md` - Testing requirements (v2.1, 2025-02-20)
+
+**Before implementing:**
+1. Check PRD modification date: `git log -1 --format="%ai" docs/prd/{prd-name}.md`
+2. Compare with version noted above
+3. If newer, read full PRD before proceeding
+4. Update this agent if patterns have changed
 ```
 
 ### Informing Other Agents
 
-Agents should guide newly created agents to maintain themselves:
+When creating agents, teach them to maintain themselves:
 
 ```markdown
-## Agent Coordination
+## Creating Self-Maintaining Agents
 
-**For agents you create:**
-- Include self-maintenance section
-- Reference relevant PRDs in their domain
-- Encourage them to update as requirements change
-- Teach them to check for new documentation before executing tasks
+**Every agent you create must:**
+
+1. **List dependencies explicitly**
+   - Specific PRD files it implements
+   - Sections of CLAUDE.md it follows
+   - Implementation files it references
+
+2. **Include update triggers**
+   - When to check for changes
+   - How to detect outdated patterns
+   - Process for self-updating
+
+3. **Check dependencies at invocation**
+   ```markdown
+   ## Workflow
+
+   1. **Check PRD currency** (do this first, every time)
+      ```bash
+      git log -1 --format="%ai %s" docs/prd/relevant-prd.md
+      cat docs/prd/relevant-prd.md
+      ```
+
+   2. **Proceed with task** using current patterns
+   ```
+
+4. **Self-update when outdated**
+   - Invoke agent-developer for updates
+   - Reference specific changes in PRD
+   - Test updated behavior
 ```
+
+### Agent-Developer Self-Maintenance
+
+**This agent (agent-developer) monitors:**
+- `docs/prd/claude-agent-architecture.md` - Agent architecture patterns (current version)
+- `CLAUDE.md` - Core development patterns
+- Agent best practices as they emerge
+
+**Update process:**
+1. When `docs/prd/claude-agent-architecture.md` is modified:
+   - Read updated PRD
+   - Identify pattern changes
+   - Update relevant sections in this agent
+   - Update all examples to match new patterns
+   - Test agent creation with new patterns
+
+2. When CLAUDE.md changes affect agent development:
+   - Review changes for agent-relevant patterns
+   - Update frontmatter specifications if needed
+   - Refine context management guidance
+   - Update quality standards
+
+3. When creating agents reveals gaps:
+   - Document new patterns discovered
+   - Update PRD with refined guidance
+   - Improve agent templates
+   - Share learnings with future agents
 
 ## PRD Awareness Pattern
 
@@ -418,11 +506,11 @@ When creating a new agent:
 
 2. **Research existing patterns**
    ```bash
-   # Find similar agents
-   find .conductor/*/. claude/agents/ -name "*.md"
-
    # Find relevant PRDs
    find docs/prd/ -name "*keyword*"
+
+   # Check PRD currency
+   git log -1 --format="%ai %s" docs/prd/relevant-prd.md
 
    # Search for domain patterns in codebase
    grep -r "pattern" pkg/ internal/
@@ -442,10 +530,11 @@ When creating a new agent:
    - Quality checks
    - Self-maintenance instructions
 
-5. **Add PRD awareness**
-   - List relevant PRDs
-   - Include PRD checking in workflow
-   - Reference documentation patterns
+5. **Add PRD awareness and self-maintenance**
+   - List relevant PRDs with version/date
+   - Include PRD checking in workflow (first step)
+   - Add self-maintenance section with update triggers
+   - Document how agent detects PRD updates (git log)
 
 6. **Optimize for context**
    - Remove redundancy
