@@ -11,19 +11,14 @@ jobs:
   agent-size-check:
     name: Check agent file sizes
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        agent:
-          - file: .claude/agents/agent-developer.md
-            max-size: 25000
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Check ${{ matrix.agent.file }} size
+      - name: Check all agent files in .claude/agents/
         uses: ./.github/actions/check-claude-md-size
         with:
-          file-path: ${{ matrix.agent.file }}
-          max-size: ${{ matrix.agent.max-size }}
+          file-path: .claude/agents
+          max-size: 25000
+          exclude-pattern: README.md
           github-token: ${{ github.token }}
