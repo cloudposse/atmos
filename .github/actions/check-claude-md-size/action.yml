@@ -43,8 +43,8 @@ runs:
 
         # Determine base ref for comparison
         if [ -z "$BASE_REF" ]; then
-          if [ -n "${{ github.event.pull_request.base.ref }}" ]; then
-            BASE_REF="origin/${{ github.event.pull_request.base.ref }}"
+          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+            BASE_REF="${{ github.event.pull_request.base.sha }}"
           else
             BASE_REF="origin/main"
           fi
@@ -53,8 +53,14 @@ runs:
         echo "Comparing against base: $BASE_REF"
         echo "File patterns: $FILE_PATTERNS"
 
+        # Fetch base ref if needed (for PR context)
+        if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+          echo "Fetching base ref..."
+          git fetch --depth=1 origin "${{ github.event.pull_request.base.ref }}" || true
+        fi
+
         # Get list of modified files matching patterns
-        CHANGED_FILES=$(git diff --name-only --diff-filter=ACM "$BASE_REF"...HEAD)
+        CHANGED_FILES=$(git diff --name-only --diff-filter=ACM "$BASE_REF"...HEAD || git diff --name-only --diff-filter=ACM "$BASE_REF" HEAD)
 
         if [ -z "$CHANGED_FILES" ]; then
           echo "✅ No files modified in this PR"
