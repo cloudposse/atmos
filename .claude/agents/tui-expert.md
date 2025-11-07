@@ -287,6 +287,112 @@ renderer, _ := glamour.NewTermRenderer(
 )
 ```
 
+## Logging vs UI Output (MANDATORY)
+
+Atmos has THREE distinct output channels, each with a specific purpose:
+
+### The Three Output Channels
+
+1. **Data Channel (stdout)** - Pipeable output via `pkg/data`
+   - JSON, YAML, results
+   - Help text, documentation (formatted with markdown)
+   - User controls with `--format`, `--output` flags
+   - Example: `atmos describe component vpc -s dev | jq .vars`
+
+2. **UI Channel (stderr)** - Human messages via `pkg/ui`
+   - Status messages, progress indicators, interactive prompts
+   - Error messages, warnings, success confirmations
+   - Developer-friendly, actionable, context-aware
+   - Example: `ui.Success("Deployment complete!")` → `✓ Deployment complete!`
+
+3. **Log Channel (side channel)** - Technical details via `pkg/logger`
+   - Structured logging with key-value pairs
+   - Configurable verbosity (trace/debug/info/warn/error)
+   - Technical details, debugging information
+   - User controls with `--log-level` or `ATMOS_LOG_LEVEL`
+   - Example: `log.Debug("component_loaded", "name", "vpc", "path", "/stacks/dev.yaml")`
+
+### Key Principles
+
+**UI Output (stderr) - Developer-Friendly**
+- Shows what's happening NOW in THIS session
+- Actionable, high-level, human-readable
+- Always visible (cannot be disabled)
+- Examples:
+  ```go
+  ui.Success("Component deployed successfully!")
+  ui.Warning("Stack configuration is deprecated")
+  ui.Info("Processing 10 components...")
+  ```
+
+**Log Output (side channel) - Technical Details**
+- Structured, filterable, machine-parseable
+- Contains technical details for debugging
+- User-controlled verbosity (default: warn)
+- Can emit BOTH UI and logs for the same event:
+  ```go
+  // Show user-friendly message
+  ui.Info("Loading component vpc")
+
+  // Also log technical details (only visible if log.debug enabled)
+  log.Debug("component_loaded",
+      "name", "vpc",
+      "path", "/stacks/dev.yaml",
+      "size_bytes", 1024,
+      "parse_duration_ms", 45,
+  )
+  ```
+
+**Default Log Level: warn**
+- At default log level, only warnings/errors affecting current session should appear
+- NOT progress/status (use UI for that)
+- NOT debug info (use log.debug for that)
+- Examples of appropriate warnings:
+  ```go
+  log.Warn("deprecated_config_key", "key", "backend.workspace", "use", "backend.workspace_key_prefix")
+  log.Error("failed_to_load_component", "component", "vpc", "error", err)
+  ```
+
+**When to Use What**
+
+```
+Decision Tree:
+
+├─ Is this pipeable data or results?
+│  └─ Use data.Write(), data.WriteJSON(), data.Markdown()
+│
+├─ Is this a user-facing message about current operation?
+│  └─ Use ui.Success(), ui.Error(), ui.Warning(), ui.Info()
+│
+└─ Is this technical detail for debugging?
+   └─ Use log.Debug(), log.Trace() (plus ui message if user needs feedback)
+```
+
+**Examples of Combined Output**
+
+```go
+// Good: UI message + structured log
+ui.Info("Deploying component vpc to dev stack")
+log.Debug("terraform_plan_started",
+    "component", "vpc",
+    "stack", "dev",
+    "working_dir", "/tmp/atmos-123",
+)
+
+// Good: Data output + log
+data.WriteJSON(componentConfig)
+log.Trace("component_config_serialized",
+    "component", component,
+    "size_bytes", len(jsonBytes),
+)
+
+// Bad: Using log for UI
+log.Info("Deployment complete!")  // ❌ User won't see this at default log level
+
+// Bad: Using UI for technical details
+ui.Info("Component loaded from /stacks/dev.yaml with 45ms parse time")  // ❌ Too technical
+```
+
 ## UI Package Integration (MANDATORY)
 
 Atmos separates I/O (streams) from UI (formatting) with two channels:
@@ -309,6 +415,8 @@ data.Writef("value: %s", val)       // Formatted text to stdout
 data.Writeln("result")              // Plain text with newline to stdout
 data.WriteJSON(structData)          // JSON to stdout
 data.WriteYAML(structData)          // YAML to stdout
+data.Markdown("# Help\n\nUsage...")             // Formatted help/docs → stdout (pipeable)
+data.Markdownf("# %s\n\nUsage...", cmdName)     // Formatted help/docs → stdout (pipeable)
 
 // UI channel (stderr) - for human messages
 ui.Write("Loading configuration...")            // Plain text (no icon, no color, stderr)
@@ -322,10 +430,7 @@ ui.Warning("Deprecated feature")                // ⚠ Deprecated feature (yello
 ui.Warningf("Feature %s deprecated", name)      // ⚠ Feature X deprecated (yellow, stderr)
 ui.Info("Processing components...")             // ℹ Processing components... (cyan, stderr)
 ui.Infof("Processing %d components...", count)  // ℹ Processing 10 components... (cyan, stderr)
-
-// Markdown rendering (theme-aware)
-ui.Markdown("# Help\n\nUsage...")             // Help/docs → stdout (pipeable data)
-ui.MarkdownMessage("**Error:** Invalid")      // UI messages → stderr (UI)
+ui.MarkdownMessage("**Error:** Invalid config") // Formatted UI message → stderr (UI)
 ```
 
 ### Decision Tree for Output
@@ -336,7 +441,7 @@ What am I outputting?
 ├─ Pipeable data (JSON, YAML, results, help/docs)
 │  ├─ Plain data → Use data.Write(), data.Writef(), data.Writeln()
 │  │                   data.WriteJSON(), data.WriteYAML()
-│  └─ Formatted help/docs → Use ui.Markdown() (stdout - pipeable)
+│  └─ Formatted help/docs → Use data.Markdown(), data.Markdownf()
 │
 ├─ Plain UI messages (no icon, no color)
 │  └─ Use ui.Write(), ui.Writef(), ui.Writeln()

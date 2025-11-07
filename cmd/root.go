@@ -201,6 +201,7 @@ var RootCmd = &cobra.Command{
 		}
 		ui.InitFormatter(ioCtx)
 		data.InitWriter(ioCtx)
+		data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.

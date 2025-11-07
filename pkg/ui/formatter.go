@@ -61,7 +61,9 @@ func getFormatter() (*formatter, error) {
 // Package-level functions that delegate to the global formatter.
 
 // Markdown writes rendered markdown to stdout (data channel).
-// Use this for help text, documentation, and other pipeable content.
+// Deprecated: Use data.Markdown() instead for consistency with data channel contract.
+// This function delegates to data.Markdown() for backward compatibility.
+// TODO: Update all callers to use data.Markdown() directly and remove this function.
 func Markdown(content string) error {
 	formatterMu.RLock()
 	defer formatterMu.RUnlock()
@@ -81,6 +83,7 @@ func Markdown(content string) error {
 }
 
 // Markdownf writes formatted markdown to stdout (data channel).
+// Deprecated: Use data.Markdownf() instead for consistency with data channel contract.
 func Markdownf(format string, a ...interface{}) error {
 	content := fmt.Sprintf(format, a...)
 	return Markdown(content)

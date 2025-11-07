@@ -110,13 +110,11 @@ func displayThemes(themes []*theme.Theme, activeTheme string, showingRecommended
 	if !term.IsTTYSupportForStdout() {
 		// Fall back to simple text output for non-TTY
 		output := formatSimpleOutput(themes, activeTheme, showingRecommendedOnly)
-		ui.Write(output)
-		return nil
+		return ui.Write(output)
 	}
 
 	output := formatThemesTable(themes, activeTheme, showingRecommendedOnly)
-	ui.Write(output)
-	return nil
+	return ui.Write(output)
 }
 
 // formatThemesTable formats themes into a styled Charmbracelet table.

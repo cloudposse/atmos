@@ -109,13 +109,11 @@ func displayThemeList(themes []*theme.Theme, activeTheme string, showingRecommen
 	if !term.IsTTYSupportForStdout() {
 		// Fall back to simple text output for non-TTY
 		output := formatSimpleThemeList(themes, activeTheme, showingRecommendedOnly, showStars)
-		ui.Write(output)
-		return nil
+		return ui.Write(output)
 	}
 
 	output := formatThemeTable(themes, activeTheme, showingRecommendedOnly, showStars)
-	ui.Write(output)
-	return nil
+	return ui.Write(output)
 }
 
 // buildThemeRows converts themes to table rows for display.

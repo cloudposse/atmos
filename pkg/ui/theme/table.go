@@ -41,6 +41,8 @@ func DefaultTableConfig() TableConfig {
 }
 
 // CreateTable creates a styled table based on the configuration.
+//
+//revive:disable:function-length
 func CreateTable(config *TableConfig, headers []string, rows [][]string) string {
 	t := table.New()
 

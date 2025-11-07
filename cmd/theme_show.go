@@ -77,9 +77,7 @@ func executeThemeShow(cmd *cobra.Command, args []string) error {
 
 	// Display theme information (preview output)
 	output := formatThemeDetails(selectedTheme, &scheme, styles)
-	ui.Write(output)
-
-	return nil
+	return ui.Write(output)
 }
 
 // formatThemeHeader creates the header section with theme name and badges.
