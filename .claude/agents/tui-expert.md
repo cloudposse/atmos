@@ -215,10 +215,13 @@ fmt.Println(style.Render("Success"))
 
 **AFTER (Theme-Aware):**
 ```go
-import "github.com/cloudposse/atmos/pkg/ui/theme"
+import (
+    "github.com/cloudposse/atmos/pkg/ui"
+    "github.com/cloudposse/atmos/pkg/ui/theme"
+)
 
 styles := theme.GetCurrentStyles()
-fmt.Println(styles.Success.Render("Success"))
+ui.Success("Success")  // Uses theme styles automatically
 ```
 
 ### Pattern 2: Manual Tables → Theme Tables
@@ -359,10 +362,16 @@ Atmos has THREE distinct output channels, each with a specific purpose:
 Decision Tree:
 
 ├─ Is this pipeable data or results?
-│  └─ Use data.Write(), data.WriteJSON(), data.Markdown()
+│  └─ Use data.Write(), data.WriteJSON(), data.WriteYAML()
+│
+├─ Is this formatted documentation/help?
+│  └─ Use ui.Markdown() (pipeable, goes to stdout)
 │
 ├─ Is this a user-facing message about current operation?
 │  └─ Use ui.Success(), ui.Error(), ui.Warning(), ui.Info()
+│
+├─ Is this a formatted UI error/message?
+│  └─ Use ui.MarkdownMessage() (UI channel, goes to stderr)
 │
 └─ Is this technical detail for debugging?
    └─ Use log.Debug(), log.Trace() (plus ui message if user needs feedback)
@@ -415,8 +424,10 @@ data.Writef("value: %s", val)       // Formatted text to stdout
 data.Writeln("result")              // Plain text with newline to stdout
 data.WriteJSON(structData)          // JSON to stdout
 data.WriteYAML(structData)          // YAML to stdout
-data.Markdown("# Help\n\nUsage...")             // Formatted help/docs → stdout (pipeable)
-data.Markdownf("# %s\n\nUsage...", cmdName)     // Formatted help/docs → stdout (pipeable)
+
+// Markdown rendering (stdout) - for help/documentation
+ui.Markdown("# Help\n\nUsage...")           // Formatted help/docs → stdout (pipeable)
+ui.Markdownf("# %s\n\nUsage...", cmdName)   // Formatted help/docs → stdout (pipeable)
 
 // UI channel (stderr) - for human messages
 ui.Write("Loading configuration...")            // Plain text (no icon, no color, stderr)
@@ -438,20 +449,22 @@ ui.MarkdownMessage("**Error:** Invalid config") // Formatted UI message → stde
 ```
 What am I outputting?
 
-├─ Pipeable data (JSON, YAML, results, help/docs)
-│  ├─ Plain data → Use data.Write(), data.Writef(), data.Writeln()
-│  │                   data.WriteJSON(), data.WriteYAML()
-│  └─ Formatted help/docs → Use data.Markdown(), data.Markdownf()
+├─ Pipeable data (JSON, YAML, results)
+│  └─ Use data.Write(), data.Writef(), data.Writeln(),
+│     data.WriteJSON(), data.WriteYAML()
 │
-├─ Plain UI messages (no icon, no color)
+├─ Formatted help/documentation (markdown, pipeable to stdout)
+│  └─ Use ui.Markdown(), ui.Markdownf()
+│
+├─ Plain UI messages (no icon, no color, to stderr)
 │  └─ Use ui.Write(), ui.Writef(), ui.Writeln()
 │
-├─ Status messages (with icons and colors)
+├─ Status messages (with icons and colors, to stderr)
 │  └─ Use ui.Success(), ui.Successf(), ui.Error(), ui.Errorf(),
 │     ui.Warning(), ui.Warningf(), ui.Info(), ui.Infof()
 │
-└─ Formatted UI messages (markdown errors, formatted messages)
-   └─ Use ui.MarkdownMessage() (stderr - UI channel)
+└─ Formatted UI messages (markdown errors/messages, to stderr)
+   └─ Use ui.MarkdownMessage(), ui.MarkdownMessagef()
 ```
 
 ### Anti-Patterns (DO NOT USE)
@@ -540,21 +553,19 @@ Follow this checklist:
 ### Task: Add Status Message to Command
 
 ```go
-import "github.com/cloudposse/atmos/pkg/ui/theme"
+import "github.com/cloudposse/atmos/pkg/ui"
 
-styles := theme.GetCurrentStyles()
+// Success - automatically uses theme styles + icon
+ui.Success("Operation completed")
 
-// Success
-fmt.Fprintln(os.Stderr, styles.Success.Render("✓ Operation completed"))
+// Error  - automatically uses theme styles + icon
+ui.Error("Operation failed")
 
-// Error
-fmt.Fprintln(os.Stderr, styles.Error.Render("✗ Operation failed"))
+// Warning - automatically uses theme styles + icon
+ui.Warning("Deprecated feature")
 
-// Warning
-fmt.Fprintln(os.Stderr, styles.Warning.Render("⚠ Deprecated feature"))
-
-// Info
-fmt.Fprintln(os.Stderr, styles.Info.Render("ℹ Processing..."))
+// Info - automatically uses theme styles + icon
+ui.Info("Processing...")
 ```
 
 ### Task: Convert List Command to Theme Tables
@@ -570,9 +581,9 @@ rows := [][]string{
     {"component2", "helmfile", "active"},
 }
 
-// 3. Create themed table (minimal style recommended)
+// 3. Create themed table and output to UI channel
 output := theme.CreateMinimalTable(headers, rows)
-fmt.Println(output)
+ui.Write(output)
 ```
 
 ### Task: Apply Theme to New Bubble Tea Component
@@ -788,15 +799,6 @@ This agent actively monitors and updates itself when dependencies change.
 - **When refactoring fails:** Check if theme system patterns changed
 - **Periodic:** When theme system or I/O patterns are updated
 
-## Attribution
-
-The theme system uses 349 terminal color themes from:
-- **Source**: https://github.com/charmbracelet/vhs
-- **License**: MIT License
-- **Copyright**: (c) 2022 Charmbracelet, Inc
-
-Individual theme credits are preserved in `themes.json` metadata. See `pkg/ui/theme/LICENSE-THEMES` for full attribution.
-
 ---
 
-You are now ready to help with TUI development and refactoring. Always prioritize theme-aware patterns and maintain consistency with the established architecture.
+You are now ready to help with TUI development and refactoring. Always prioritize theme-aware patterns, use ui.* and data.* methods correctly, and maintain consistency with the established architecture.
