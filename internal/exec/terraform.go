@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,8 +10,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
-	"github.com/cloudposse/atmos/pkg/auth/credentials"
-	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -31,51 +28,6 @@ const (
 	detailedExitCodeFlag      = "-detailed-exitcode"
 	logFieldComponent         = "component"
 )
-
-// createAndAuthenticateManager creates and authenticates an AuthManager from an identity name.
-// Returns nil AuthManager if identityName is empty (no authentication requested).
-// Returns error if identityName is provided but auth is not configured in atmos.yaml.
-func createAndAuthenticateManager(identityName string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
-	if identityName == "" {
-		return nil, nil
-	}
-
-	// Check if auth is configured when --identity flag is provided.
-	if len(atmosConfig.Auth.Identities) == 0 {
-		return nil, fmt.Errorf("%w: the --identity flag requires authentication to be configured in atmos.yaml with at least one identity", errUtils.ErrAuthNotConfigured)
-	}
-
-	// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
-	authStackInfo := &schema.ConfigAndStacksInfo{
-		AuthContext: &schema.AuthContext{},
-	}
-
-	credStore := credentials.NewCredentialStore()
-	validator := validation.NewValidator()
-	authManager, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
-	if err != nil {
-		return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
-	}
-
-	// Handle interactive selection if identity is "__SELECT__".
-	forceSelect := identityName == cfg.IdentityFlagSelectValue
-	if forceSelect {
-		identityName, err = authManager.GetDefaultIdentity(forceSelect)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Authenticate to populate AuthContext with credentials.
-	// This is critical for YAML functions like !terraform.state and !terraform.output
-	// to access AWS resources with the proper credentials.
-	_, err = authManager.Authenticate(context.Background(), identityName)
-	if err != nil {
-		return nil, err
-	}
-
-	return authManager, nil
-}
 
 // ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
@@ -117,7 +69,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Create and authenticate AuthManager from --identity flag if specified.
 	// This enables YAML template functions like !terraform.state to use authenticated credentials.
-	authManager, err := createAndAuthenticateManager(info.Identity, &atmosConfig)
+	authManager, err := auth.CreateAndAuthenticateManager(info.Identity, &atmosConfig.Auth, cfg.IdentityFlagSelectValue)
 	if err != nil {
 		return err
 	}
