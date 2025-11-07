@@ -20,9 +20,9 @@ As Atmos core functionality grows, we scale development through **specialized ag
 
 ### Agent-Per-Subsystem Pattern
 
-Each major area of Atmos gets a dedicated expert agent:
+Each major area of Atmos gets a dedicated expert agent.
 
-**Planned Agents (create in separate PRs as needed):**
+**Example agents (for illustration purposes):**
 - `command-registry-expert` - Command registry patterns and CommandProvider interface
 - `component-registry-expert` - Component discovery and management
 - `cobra-flag-expert` - Flag parsing and Cobra integration patterns
@@ -31,6 +31,8 @@ Each major area of Atmos gets a dedicated expert agent:
 - `auth-system-expert` - Authentication and credential management
 - `store-registry-expert` - Multi-provider store implementations
 - `viper-config-expert` - Configuration management patterns
+
+**Note:** Specific agents will be created in separate PRs as subsystems mature.
 
 ### When to Create New Agents
 
@@ -129,7 +131,6 @@ The agent-developer agent is responsible for maintaining agent quality and consi
 
 ## References
 
-- **Agent examples:** `.conductor/kabul/.claude/agents/` - Comprehensive agent collection
 - **Core patterns:** `CLAUDE.md` - Development guidelines
 - **Architecture docs:** `docs/prd/` - Product requirement documents
 - **Agent PRD:** `docs/prd/claude-agent-architecture.md` - Agent system design

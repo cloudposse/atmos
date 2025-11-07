@@ -22,8 +22,9 @@ This PRD defines the architecture, conventions, and best practices for Claude ag
 
 **Scale development through specialized domain expertise.**
 
-As Atmos core functionality expands, we create **small, purposeful agents that are experts in key areas of Atmos**. Each specialized subsystem gets a dedicated agent:
+As Atmos core functionality expands, we create **small, purposeful agents that are experts in key areas of Atmos**. Each specialized subsystem gets a dedicated agent.
 
+**Example agents (for illustration purposes):**
 - `command-registry-expert` - Command registry patterns
 - `component-registry-expert` - Component discovery
 - `cobra-flag-expert` - Flag parsing with Cobra
@@ -526,11 +527,6 @@ Before finalizing any agent:
 5. **Developer satisfaction** - Positive feedback on agent assistance
 
 ## References
-
-### Agent Examples
-- `.conductor/kabul/.claude/agents/` - Comprehensive 18-agent collection
-- `.conductor/vatican/.claude/agents/tui-expert.md` - Focused specialist
-- `.conductor/lyon/.claude/agents/flag-parser.md` - Domain expert
 
 ### Documentation
 - `CLAUDE.md` - Core development patterns

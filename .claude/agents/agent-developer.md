@@ -35,7 +35,9 @@ As Atmos core functionality expands, we scale development through **small, purpo
 
 ### Agent-Per-Domain Pattern
 
-Each specialized area of Atmos core should have a dedicated agent:
+Each specialized area of Atmos core should have a dedicated agent.
+
+**Example agents (for illustration purposes):**
 
 **Registry Systems:**
 - `command-registry-expert` - Command registry patterns and extensibility
@@ -59,6 +61,8 @@ Each specialized area of Atmos core should have a dedicated agent:
 - `terraform-integration-expert` - Terraform provider patterns
 - `helmfile-integration-expert` - Helmfile integration
 - `aws-integration-expert` - AWS SDK patterns and credential resolution
+
+**Note:** Specific agents will be created in separate PRs as subsystems mature and patterns are established.
 
 ### When to Create a New Agent
 
@@ -759,13 +763,10 @@ User request: "Create an agent for the command registry system"
 
 ## References
 
-**Agent examples:**
-- `.conductor/kabul/.claude/agents/` - Comprehensive agent collection
-- `.conductor/vatican/.claude/agents/tui-expert.md` - Specialist example
-
 **Documentation:**
 - `CLAUDE.md` - Core development patterns
 - `docs/prd/` - Product requirement documents
+- `docs/prd/claude-agent-architecture.md` - Agent architecture PRD
 - `.claude/agents/README.md` - Agent collection overview
 
 ---
