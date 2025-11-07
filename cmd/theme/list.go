@@ -1,6 +1,8 @@
 package theme
 
 import (
+	_ "embed"
+
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -8,20 +10,19 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+//go:embed markdown/atmos_theme_list_usage.md
+var themeListUsage string
+
 var themeListRecommendedOnly bool
 
 // themeListCmd lists available terminal themes.
 var themeListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List available terminal themes",
-	Long:  "Display available terminal themes that can be used for markdown rendering. By default shows all themes.",
-	Example: `# List all themes
-atmos theme list
-
-# Show only recommended themes
-atmos theme list --recommended`,
-	Args: cobra.NoArgs,
-	RunE: executeThemeList,
+	Use:     "list",
+	Short:   "List available terminal themes",
+	Long:    "Display available terminal themes that can be used for markdown rendering. By default shows all themes.",
+	Example: themeListUsage,
+	Args:    cobra.NoArgs,
+	RunE:    executeThemeList,
 }
 
 func init() {

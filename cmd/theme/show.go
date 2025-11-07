@@ -1,6 +1,8 @@
 package theme
 
 import (
+	_ "embed"
+
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -8,18 +10,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+//go:embed markdown/atmos_theme_show_usage.md
+var themeShowUsage string
+
 // themeShowCmd shows details and preview of a specific theme.
 var themeShowCmd = &cobra.Command{
-	Use:   "show [theme-name]",
-	Short: "Show details and preview of a specific theme",
-	Long:  "Display color palette and sample UI elements for a specific terminal theme.",
-	Example: `# Show details for the Dracula theme
-atmos theme show Dracula
-
-# Show details for the Material theme
-atmos theme show Material`,
-	Args: cobra.ExactArgs(1),
-	RunE: executeThemeShow,
+	Use:     "show [theme-name]",
+	Short:   "Show details and preview of a specific theme",
+	Long:    "Display color palette and sample UI elements for a specific terminal theme.",
+	Example: themeShowUsage,
+	Args:    cobra.ExactArgs(1),
+	RunE:    executeThemeShow,
 }
 
 func init() {
