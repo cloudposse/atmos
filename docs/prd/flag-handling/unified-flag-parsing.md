@@ -8,7 +8,7 @@ This document contains historical design that has been partially superseded:
 - ❌ **PassThroughFlagParser DELETED** - No longer exists
 - ✅ **AtmosFlagParser** - New parser for terraform with compatibility flages (-s → --stack, -i → --identity)
 - ✅ **StandardParser** - Used for helmfile, packer, workflow, and all other commands
-- ✅ **CompatibilityAliasTranslator** - Handles terraform legacy flag compatibility
+- ✅ **CompatibilityFlagsTranslator** - Handles terraform legacy flag compatibility
 
 **WHAT'S STILL ACCURATE**:
 - Overall architecture and design philosophy
@@ -999,12 +999,12 @@ CLI flags > Environment variables > Config files > Defaults
 **Original Design**: For Terraform/Helmfile/Packer, use a **two-phase approach** with PassThroughFlagParser.
 
 **ACTUAL IMPLEMENTATION (2025-11-06)**:
-- **Terraform**: Uses `AtmosFlagParser` with `CompatibilityAliasTranslator` to handle legacy flags (-s, -i, etc.)
+- **Terraform**: Uses `AtmosFlagParser` with `CompatibilityFlagsTranslator` to handle legacy flags (-s, -i, etc.)
 - **Helmfile/Packer**: Use `StandardParser` (no compatibility layer needed)
 - **PassThroughFlagParser**: Deleted entirely
 
 **Key Change**: Instead of a generic "pass-through" parser, we have:
-1. `CompatibilityAliasTranslator` - Handles terraform-specific legacy flags
+1. `CompatibilityFlagsTranslator` - Handles terraform-specific legacy flags
 2. `AtmosFlagParser` - Parses both modern (--stack) and legacy (-s) flags
 3. `StandardParser` - Standard parsing for commands that don't need compatibility
 
@@ -1047,7 +1047,7 @@ type FlagParser interface {
 - `FlagParser` interface - Still used
 - `StandardParser` - Implements FlagParser for standard commands
 - `AtmosFlagParser` - Implements FlagParser for terraform with compatibility flages
-- `CompatibilityAliasTranslator` - Translates -s → --stack, -i → --identity, etc.
+- `CompatibilityFlagsTranslator` - Translates -s → --stack, -i → --identity, etc.
 
 **DELETED (2025-11-06)**:
 - ❌ `PassThroughHandler` interface - No longer exists
@@ -1784,7 +1784,7 @@ pkg/flags/
 ├── terraform/
 │   ├── parser.go                   // AtmosFlagParser (terraform-specific)
 │   └── options.go                  // TerraformOptions struct
-├── compatibility_translator.go     // CompatibilityAliasTranslator (-s → --stack)
+├── compatibility_flags.go     // CompatibilityFlagsTranslator (-s → --stack)
 ├── registry.go                     // Flag registry
 ├── builder.go                      // Flag builder pattern
 └── *_test.go                       // Comprehensive tests
@@ -1801,7 +1801,7 @@ cmd/internal/
 
 **Key Changes**:
 - ❌ `pkg/flagparser/` → ✅ `pkg/flags/` (different path)
-- ❌ `passthrough.go` → ✅ `compatibility_translator.go` + `terraform/parser.go`
+- ❌ `passthrough.go` → ✅ `compatibility_flags.go` + `terraform/parser.go`
 - ❌ No middleware pattern - using standard Cobra RunE flow
 
 ### Core Components
@@ -1865,7 +1865,7 @@ func (p *StandardFlagParser) BindToViper(v *viper.Viper) error {
 
 #### 2. PassThroughFlagParser (Historical - DELETED 2025-11-06)
 
-**⚠️ This implementation was deleted. See `AtmosFlagParser` + `CompatibilityAliasTranslator` for actual implementation.**
+**⚠️ This implementation was deleted. See `AtmosFlagParser` + `CompatibilityFlagsTranslator` for actual implementation.**
 
 **Original design** for Terraform/Helmfile/Packer that handles the complex flag scenarios:
 

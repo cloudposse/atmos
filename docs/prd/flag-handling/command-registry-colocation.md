@@ -61,10 +61,10 @@ pkg/flags/
 ├── parser.go                 # FlagParser interface
 ├── standard.go               # StandardParser (for standard commands)
 ├── terraform/parser.go       # AtmosFlagParser (Terraform-specific with compatibility flages)
-└── compatibility_translator.go  # CompatibilityAliasTranslator (handles -s → --stack)
+└── compatibility_flags.go  # CompatibilityFlagsTranslator (handles -s → --stack)
 ```
 
-**Note**: `PassThroughFlagParser` was deleted on 2025-11-06. Terraform now uses `AtmosFlagParser` with `CompatibilityAliasTranslator`.
+**Note**: `PassThroughFlagParser` was deleted on 2025-11-06. Terraform now uses `AtmosFlagParser` with `CompatibilityFlagsTranslator`.
 
 ### Shared Types (Used by Multiple Commands)
 ```go
@@ -280,7 +280,7 @@ cmd/version/
 - ✅ `FlagRegistry`, `FlagParser` - core infrastructure
 - ✅ `StandardOptionsBuilder` - reusable builder
 - ✅ `StandardParser` - reusable parser for standard commands
-- ✅ `CompatibilityAliasTranslator` - reusable translator for terraform compatibility
+- ✅ `CompatibilityFlagsTranslator` - reusable translator for terraform compatibility
 
 ## Success Criteria
 

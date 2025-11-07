@@ -467,7 +467,7 @@ var helmfileApplyCmd = &cobra.Command{
 
 1. **AtmosFlagParser** (terraform commands only)
    - Handles compatibility flages (-s → --stack, -i → --identity)
-   - Uses `CompatibilityAliasTranslator` before parsing
+   - Uses `CompatibilityFlagsTranslator` before parsing
    - Positional args extracted from processed `args []string`
 
 2. **StandardParser** (helmfile, packer, workflow, validate, describe, generate commands)
@@ -697,7 +697,7 @@ expected:
 - **Flag Parser System**: `pkg/flags/standard_builder.go`, `pkg/flags/terraform_builder.go`
 - **AtmosFlagParser**: `pkg/flags/terraform/parser.go` (terraform with compatibility flages)
 - **StandardParser**: `pkg/flags/standard.go` (all other commands)
-- **CompatibilityAliasTranslator**: `pkg/flags/compatibility_translator.go` (handles -s → --stack)
+- **CompatibilityFlagsTranslator**: `pkg/flags/compatibility_flags.go` (handles -s → --stack)
 - **Command Registry Pattern**: `docs/prd/command-registry-pattern.md`
 
 **Note**: `PassThroughFlagParser` deleted on 2025-11-06.

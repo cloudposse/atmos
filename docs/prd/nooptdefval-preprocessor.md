@@ -93,7 +93,7 @@ AtmosFlagParser needs access to the registry:
 type AtmosFlagParser struct {
     cmd        *cobra.Command
     viper      *viper.Viper
-    translator *CompatibilityAliasTranslator
+    translator *CompatibilityFlagsTranslator
     registry   *FlagRegistry  // NEW: for preprocessing
 }
 ```

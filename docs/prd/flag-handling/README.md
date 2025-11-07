@@ -66,7 +66,7 @@ For the complete, up-to-date specification covering:
 See the master PRD for current implementation status. As of this writing:
 
 - ✅ Phase 1: Core Infrastructure (COMPLETE)
-  - CompatibilityAliasTranslator (51 tests)
+  - CompatibilityFlagsTranslator (51 tests)
   - UnifiedParser (25 tests)
   - TerraformOptions struct
 
