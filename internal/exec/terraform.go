@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -30,6 +31,51 @@ const (
 	detailedExitCodeFlag      = "-detailed-exitcode"
 	logFieldComponent         = "component"
 )
+
+// createAndAuthenticateManager creates and authenticates an AuthManager from an identity name.
+// Returns nil AuthManager if identityName is empty (no authentication requested).
+// Returns error if identityName is provided but auth is not configured in atmos.yaml.
+func createAndAuthenticateManager(identityName string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	if identityName == "" {
+		return nil, nil
+	}
+
+	// Check if auth is configured when --identity flag is provided.
+	if len(atmosConfig.Auth.Identities) == 0 {
+		return nil, fmt.Errorf("%w: the --identity flag requires authentication to be configured in atmos.yaml with at least one identity", errUtils.ErrAuthNotConfigured)
+	}
+
+	// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{},
+	}
+
+	credStore := credentials.NewCredentialStore()
+	validator := validation.NewValidator()
+	authManager, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+	}
+
+	// Handle interactive selection if identity is "__SELECT__".
+	forceSelect := identityName == cfg.IdentityFlagSelectValue
+	if forceSelect {
+		identityName, err = authManager.GetDefaultIdentity(forceSelect)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Authenticate to populate AuthContext with credentials.
+	// This is critical for YAML functions like !terraform.state and !terraform.output
+	// to access AWS resources with the proper credentials.
+	_, err = authManager.Authenticate(context.Background(), identityName)
+	if err != nil {
+		return nil, err
+	}
+
+	return authManager, nil
+}
 
 // ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
@@ -69,26 +115,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Skip stack processing when cleaning with the `--force` flag to allow cleaning without requiring stack configuration.
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
-	// Create AuthManager from --identity flag if specified.
+	// Create and authenticate AuthManager from --identity flag if specified.
 	// This enables YAML template functions like !terraform.state to use authenticated credentials.
-	var authManager auth.AuthManager
-	if info.Identity != "" {
-		// Check if auth is configured when --identity flag is provided.
-		if len(atmosConfig.Auth.Identities) == 0 {
-			return fmt.Errorf("%w: the --identity flag requires authentication to be configured in atmos.yaml with at least one identity", errUtils.ErrAuthNotConfigured)
-		}
-
-		// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
-		authStackInfo := &schema.ConfigAndStacksInfo{
-			AuthContext: &schema.AuthContext{},
-		}
-
-		credStore := credentials.NewCredentialStore()
-		validator := validation.NewValidator()
-		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
-		if err != nil {
-			return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
-		}
+	authManager, err := createAndAuthenticateManager(info.Identity, &atmosConfig)
+	if err != nil {
+		return err
 	}
 
 	if shouldProcessStacks {
