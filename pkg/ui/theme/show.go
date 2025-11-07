@@ -315,6 +315,7 @@ func formatThemeDetails(t *Theme, scheme *ColorScheme, styles *StyleSet) string 
 
 	// Footer with activation instructions.
 	output.WriteString(formatUsageInstructions(t, styles))
+	output.WriteString(lineBreak)
 
 	return output.String()
 }
