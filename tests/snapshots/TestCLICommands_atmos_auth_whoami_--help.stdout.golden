@@ -1,6 +1,6 @@
 
 
-Display information about the current effective authentication principal.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+Display information about the current effective authentication principal.
 
 Usage:
 
@@ -91,9 +91,13 @@ Global Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
+    -v, --verbose                    Enable verbose error output with full
+                                     context, stack traces, and detailed
+                                     information (default false)
+
         --version                    Display the Atmos CLI version
 
 
-Use atmos auth whoami --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+Use atmos auth whoami --help for more information about a command.
 
 

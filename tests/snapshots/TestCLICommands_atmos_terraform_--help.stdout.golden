@@ -1,6 +1,6 @@
 
 
-This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.
 
 Usage:
 
@@ -142,7 +142,7 @@ Flags:
                                       password-encrypted PEM block: atmos
                                       terraform  --affected
                                       --ssh-key <path_to_ssh_key>
-                                      --ssh-key-password 
+                                      --ssh-key-password
 
     -s, --stack string                The stack flag specifies the environment
                                       or configuration set for deployment in
@@ -227,16 +227,20 @@ Global Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
+    -v, --verbose                    Enable verbose error output with full
+                                     context, stack traces, and detailed
+                                     information (default false)
+
         --version                    Display the Atmos CLI version
 
 
 Examples:
 
-– Execute a terraform subcommand                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-  $ atmos terraform [subcommand] <component-name> -s <stack-name>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+– Execute a terraform subcommand
+
+  $ atmos terraform [subcommand] <component-name> -s <stack-name>
 
 
-Use atmos terraform [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
+Use atmos terraform [subcommand] --help for more information about a command.
 
 

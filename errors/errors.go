@@ -43,14 +43,14 @@ var (
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
-	ErrMissingStackNameTemplateAndPattern    = errors.New("stack naming configuration is missing")
+	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
 	ErrCommandNil                            = errors.New("command cannot be nil")
 	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
-	ErrInvalidLimit                          = errors.New("invalid limit value")
-	ErrInvalidOffset                         = errors.New("invalid offset value")
-	ErrInvalidSinceDate                      = errors.New("invalid date format")
+	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
+	ErrInvalidOffset                         = errors.New("offset must be >= 0")
+	ErrInvalidSinceDate                      = errors.New("invalid date format for --since")
 	ErrUnsupportedOutputFormat               = errors.New("unsupported output format")
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
@@ -64,9 +64,9 @@ var (
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
 
-	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("incompatible flags")
-	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("incompatible arguments")
-	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("incompatible flags")
+	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
+	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the component argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
+	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrDescribeComponent                = errors.New("failed to describe component")
@@ -94,7 +94,7 @@ var (
 	ErrBackendConfigRequired  = errors.New("backend configuration is required")
 
 	// Git-related errors.
-	ErrGitNotAvailable      = errors.New("git is not available")
+	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")
 	ErrInvalidGitPort       = errors.New("invalid port number")
 	ErrSSHKeyUsage          = errors.New("error using SSH key")
 	ErrGitCommandExited     = errors.New("git command exited with non-zero status")

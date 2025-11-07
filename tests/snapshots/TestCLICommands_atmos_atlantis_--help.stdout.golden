@@ -1,6 +1,6 @@
 
 
-Generate and manage Atlantis configurations that use Atmos under the hood to run Terraform workflows, bringing the power of Atmos to Atlantis for streamlined infrastructure automation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+Generate and manage Atlantis configurations that use Atmos under the hood to run Terraform workflows, bringing the power of Atmos to Atlantis for streamlined infrastructure automation.
 
 Usage:
 
@@ -94,9 +94,13 @@ Global Flags:
                                      standard file descriptor (including
                                      /dev/null)
 
+    -v, --verbose                    Enable verbose error output with full
+                                     context, stack traces, and detailed
+                                     information (default false)
+
         --version                    Display the Atmos CLI version
 
 
-Use atmos atlantis [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+Use atmos atlantis [subcommand] --help for more information about a command.
 
 
