@@ -15,10 +15,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Check all agent files in .claude/agents/
+      - name: Check modified agent files
         uses: ./.github/actions/check-claude-md-size
         with:
-          file-path: .claude/agents
+          file-patterns: '.claude/agents/*.md'
           max-size: 25000
-          exclude-pattern: README.md
           github-token: ${{ github.token }}

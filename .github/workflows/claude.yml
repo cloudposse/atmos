@@ -15,9 +15,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Check CLAUDE.md size
+      - name: Check modified CLAUDE.md size
         uses: ./.github/actions/check-claude-md-size
         with:
-          file-path: CLAUDE.md
+          file-patterns: 'CLAUDE.md'
           max-size: 40000
           github-token: ${{ github.token }}

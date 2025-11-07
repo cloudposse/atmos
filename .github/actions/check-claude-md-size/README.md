@@ -1,68 +1,80 @@
 # Check Markdown File Size Action
 
-GitHub Action to validate that markdown files do not exceed size limits. Supports both single file and directory modes for automatic checking of all markdown files.
+GitHub Action to validate that PR-modified markdown files do not exceed size limits. Uses glob patterns for flexible file matching and only checks files actually modified in the pull request for efficiency.
 
 ## Features
 
-- **Single File Mode**: Check one markdown file against a size limit
-- **Directory Mode**: Automatically check all `.md` files in a directory
+- **PR-Modified Files Only**: Only checks files changed in the pull request using `git diff`
+- **Glob Pattern Matching**: Flexible file matching with wildcards (e.g., `*.md`, `.claude/agents/*.md`)
 - **Smart PR Comments**: Posts/updates comments with actionable guidance
-- **Exclude Patterns**: Skip specific files like `README.md`
 - **CI Integration**: Fails check if any file exceeds the limit
+- **Efficient**: No unnecessary checks of unmodified files
 
 ## Usage
 
-### Single File Mode
+### Check Specific File
 
-Check a specific markdown file:
+Check a single markdown file (only if modified in PR):
 
 ```yaml
 - uses: ./.github/actions/check-claude-md-size
   with:
-    file-path: CLAUDE.md
+    file-patterns: 'CLAUDE.md'
     max-size: 40000
     github-token: ${{ github.token }}
 ```
 
-### Directory Mode (Recommended)
+### Check Multiple Files with Glob Patterns
 
-Automatically check all `.md` files in a directory:
+Check all markdown files matching a pattern (only those modified in PR):
 
 ```yaml
 - uses: ./.github/actions/check-claude-md-size
   with:
-    file-path: .claude/agents
+    file-patterns: '.claude/agents/*.md'
     max-size: 25000
-    exclude-pattern: README.md
     github-token: ${{ github.token }}
 ```
 
-The action automatically detects if `file-path` is a file or directory and adjusts behavior accordingly.
+### Check Multiple Patterns
+
+Space-separated patterns to match different file locations:
+
+```yaml
+- uses: ./.github/actions/check-claude-md-size
+  with:
+    file-patterns: 'CLAUDE.md .claude/agents/*.md docs/prd/*.md'
+    max-size: 40000
+    github-token: ${{ github.token }}
+```
+
+The action uses `git diff` to identify modified files in the PR, then filters them against the provided patterns.
 
 ## Inputs
 
 | Name | Description | Required | Default |
 |------|-------------|----------|---------|
-| `file-path` | Path to markdown file or directory | No | `CLAUDE.md` |
+| `file-patterns` | Space-separated glob patterns for files to check (e.g., `"CLAUDE.md .claude/agents/*.md"`) | No | `CLAUDE.md` |
 | `max-size` | Maximum file size in bytes | No | `40000` |
-| `exclude-pattern` | Pattern to exclude files (directory mode) | No | `README.md` |
+| `base-ref` | Base ref to compare against (default: PR base or origin/main) | No | _(auto-detected)_ |
 | `github-token` | GitHub token for posting PR comments | Yes | - |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| `size` | Current file size in bytes (single file mode only) |
+| `size` | Current file size in bytes (single file pattern mode only) |
 | `exceeds-limit` | Whether any file exceeds the size limit (`true`/`false`) |
-| `usage-percent` | Percentage of size limit used (single file mode only) |
+| `usage-percent` | Percentage of size limit used (single file pattern mode only) |
 | `all-files-ok` | Whether all files pass size check (`true`/`false`) |
 
-## Modes
+## How It Works
 
-The action automatically detects the mode based on `file-path`:
-
-- **Single File Mode**: When `file-path` is a file, checks that one file
-- **Directory Mode**: When `file-path` is a directory, finds all `.md` files (excluding pattern) and checks each
+1. **Detects PR context**: Automatically identifies the base branch to compare against
+2. **Finds modified files**: Uses `git diff --name-only --diff-filter=ACM` to get added/changed/modified files
+3. **Pattern matching**: Filters modified files against provided glob patterns using bash pattern matching
+4. **Size checking**: Validates each matched file against the size limit
+5. **Reports results**: Posts/updates PR comment if any files exceed the limit
 
 ## Examples
 
@@ -74,6 +86,8 @@ on:
   pull_request:
     paths:
       - 'CLAUDE.md'
+      - '.github/workflows/claude.yml'
+      - '.github/actions/check-claude-md-size/**'
 
 jobs:
   size-check:
@@ -82,7 +96,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/check-claude-md-size
         with:
-          file-path: CLAUDE.md
+          file-patterns: 'CLAUDE.md'
           max-size: 40000
           github-token: ${{ github.token }}
 ```
@@ -95,6 +109,8 @@ on:
   pull_request:
     paths:
       - '.claude/agents/**'
+      - '.github/workflows/agents.yml'
+      - '.github/actions/check-claude-md-size/**'
 
 jobs:
   agent-size-check:
@@ -103,27 +119,33 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/check-claude-md-size
         with:
-          file-path: .claude/agents
+          file-patterns: '.claude/agents/*.md'
           max-size: 25000
-          exclude-pattern: README.md
           github-token: ${{ github.token }}
 ```
 
 ## Behavior
 
-### When Files Pass
+### When No Files Modified
 
-- ✅ Prints size summary for each file
+- ✅ Prints "No files modified in this PR"
+- ✅ Workflow passes
+- ℹ️ No PR comment posted
+
+### When Modified Files Pass
+
+- ✅ Prints size summary for each modified file
 - ✅ Updates any existing warning comment to success
 - ✅ Workflow passes
 
 **Console Output:**
 ```
+Comparing against base: origin/main
+File patterns: .claude/agents/*.md
 ✅ agent-developer.md: 23514 bytes (94% of limit)
-✅ cobra-flag-expert.md: 15000 bytes (60% of limit)
 ```
 
-### When Files Exceed Limit
+### When Modified Files Exceed Limit
 
 - ❌ Lists oversized files with details
 - ❌ Posts PR comment with specific guidance
@@ -132,9 +154,9 @@ jobs:
 **PR Comment Example:**
 ```markdown
 > [!WARNING]
-> #### Files Too Large
+> #### Modified Files Too Large
 >
-> The following files exceed the **25000 byte** size limit:
+> The following modified files exceed the **25000 byte** size limit:
 >
 > - `agent-developer.md`: **27000 bytes** (over by 2000 bytes, ~8%)
 >

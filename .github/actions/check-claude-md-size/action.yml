@@ -1,18 +1,18 @@
 name: Check Markdown File Size
-description: Validates that markdown files do not exceed size limits (supports single file or directory)
+description: Validates that modified markdown files in PR do not exceed size limits
 inputs:
-  file-path:
-    description: 'Path to markdown file or directory containing markdown files'
+  file-patterns:
+    description: 'Space-separated glob patterns for files to check (e.g., "CLAUDE.md .claude/agents/*.md")'
     required: false
     default: 'CLAUDE.md'
   max-size:
     description: 'Maximum file size in bytes'
     required: false
     default: '40000'
-  exclude-pattern:
-    description: 'Pattern to exclude files (e.g., "README.md")'
+  base-ref:
+    description: 'Base ref to compare against (default: PR base or origin/main)'
     required: false
-    default: 'README.md'
+    default: ''
   github-token:
     description: 'GitHub token for posting comments'
     required: true
@@ -37,47 +37,62 @@ runs:
       id: check
       shell: bash
       run: |
-        FILE_PATH="${{ inputs.file-path }}"
+        FILE_PATTERNS="${{ inputs.file-patterns }}"
         MAX_SIZE="${{ inputs.max-size }}"
-        EXCLUDE_PATTERN="${{ inputs.exclude-pattern }}"
+        BASE_REF="${{ inputs.base-ref }}"
 
-        if [ ! -e "$FILE_PATH" ]; then
-          echo "✅ $FILE_PATH does not exist - skipping check"
+        # Determine base ref for comparison
+        if [ -z "$BASE_REF" ]; then
+          if [ -n "${{ github.event.pull_request.base.ref }}" ]; then
+            BASE_REF="origin/${{ github.event.pull_request.base.ref }}"
+          else
+            BASE_REF="origin/main"
+          fi
+        fi
+
+        echo "Comparing against base: $BASE_REF"
+        echo "File patterns: $FILE_PATTERNS"
+
+        # Get list of modified files matching patterns
+        CHANGED_FILES=$(git diff --name-only --diff-filter=ACM "$BASE_REF"...HEAD)
+
+        if [ -z "$CHANGED_FILES" ]; then
+          echo "✅ No files modified in this PR"
           echo "exists=false" >> $GITHUB_OUTPUT
           echo "all_files_ok=true" >> $GITHUB_OUTPUT
           exit 0
         fi
 
-        # Determine if path is a file or directory
-        if [ -f "$FILE_PATH" ]; then
-          # Single file mode
-          FILES="$FILE_PATH"
-          MODE="single"
-        elif [ -d "$FILE_PATH" ]; then
-          # Directory mode - find all .md files except excluded pattern
-          FILES=$(find "$FILE_PATH" -name "*.md" -type f ! -name "$EXCLUDE_PATTERN")
-          MODE="directory"
+        # Filter changed files by patterns
+        MATCHED_FILES=""
+        for PATTERN in $FILE_PATTERNS; do
+          for CHANGED_FILE in $CHANGED_FILES; do
+            # Use bash pattern matching
+            if [[ "$CHANGED_FILE" == $PATTERN ]]; then
+              if [ -f "$CHANGED_FILE" ]; then
+                MATCHED_FILES="${MATCHED_FILES}${CHANGED_FILE}"$'\n'
+              fi
+            fi
+          done
+        done
 
-          if [ -z "$FILES" ]; then
-            echo "✅ No markdown files found in $FILE_PATH - skipping check"
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "all_files_ok=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-        else
-          echo "❌ $FILE_PATH is neither a file nor a directory"
-          exit 1
+        # Remove trailing newline and duplicates
+        MATCHED_FILES=$(echo "$MATCHED_FILES" | sort -u | grep -v '^$' || true)
+
+        if [ -z "$MATCHED_FILES" ]; then
+          echo "✅ No files matching patterns modified in this PR"
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "all_files_ok=true" >> $GITHUB_OUTPUT
+          exit 0
         fi
 
         echo "exists=true" >> $GITHUB_OUTPUT
         echo "max_size=$MAX_SIZE" >> $GITHUB_OUTPUT
-        echo "mode=$MODE" >> $GITHUB_OUTPUT
 
         # Check file sizes
         ALL_OK=true
         OVERSIZED_FILES=""
         TOTAL_FILES=0
-        TOTAL_SIZE=0
 
         while IFS= read -r FILE; do
           [ -z "$FILE" ] && continue
@@ -86,7 +101,6 @@ runs:
           USAGE_PERCENT=$((SIZE * 100 / MAX_SIZE))
           FILENAME=$(basename "$FILE")
           TOTAL_FILES=$((TOTAL_FILES + 1))
-          TOTAL_SIZE=$((TOTAL_SIZE + SIZE))
 
           if [ "$SIZE" -gt "$MAX_SIZE" ]; then
             EXCESS=$((SIZE - MAX_SIZE))
@@ -97,13 +111,7 @@ runs:
           else
             echo "✅ $FILENAME: $SIZE bytes (${USAGE_PERCENT}% of limit)"
           fi
-        done <<< "$FILES"
-
-        # Set outputs
-        if [ "$MODE" = "single" ]; then
-          echo "size=$TOTAL_SIZE" >> $GITHUB_OUTPUT
-          echo "usage_percent=$((TOTAL_SIZE * 100 / MAX_SIZE))" >> $GITHUB_OUTPUT
-        fi
+        done <<< "$MATCHED_FILES"
 
         echo "all_files_ok=$ALL_OK" >> $GITHUB_OUTPUT
         echo "total_files=$TOTAL_FILES" >> $GITHUB_OUTPUT
@@ -134,8 +142,8 @@ runs:
 
         EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .id' | head -1)
 
-        MODE="${{ steps.check.outputs.mode }}"
         OVERSIZED="${{ steps.check.outputs.oversized_files }}"
+        TOTAL_FILES="${{ steps.check.outputs.total_files }}"
 
         # Build list of oversized files
         FILE_LIST=""
@@ -150,12 +158,12 @@ runs:
         "
         done
 
-        if [ "$MODE" = "single" ]; then
-          TITLE="File Too Large"
-          DESCRIPTION="The file is **${SIZE} bytes** but must not exceed **${MAX_SIZE} bytes**."
+        if [ "$TOTAL_FILES" -eq 1 ]; then
+          TITLE="Modified File Too Large"
+          DESCRIPTION="The modified file exceeds the **${MAX_SIZE} byte** size limit:"
         else
-          TITLE="Files Too Large"
-          DESCRIPTION="The following files exceed the **${MAX_SIZE} byte** size limit:"
+          TITLE="Modified Files Too Large"
+          DESCRIPTION="The following modified files exceed the **${MAX_SIZE} byte** size limit:"
         fi
 
         COMMENT_BODY="<!-- claude-md-size-check -->
@@ -208,31 +216,18 @@ runs:
 
         EXISTING_COMMENT_BODY=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .body' | head -1)
 
-        MODE="${{ steps.check.outputs.mode }}"
         TOTAL_FILES="${{ steps.check.outputs.total_files }}"
 
-        if [ "$MODE" = "single" ]; then
-          SUCCESS_COMMENT_BODY="<!-- claude-md-size-check -->
+        SUCCESS_COMMENT_BODY="<!-- claude-md-size-check -->
         > [!NOTE]
-        > #### File Size OK ✅
-        >
-        > **Size:** ${SIZE} bytes
-        > **Limit:** ${MAX_SIZE} bytes
-        > **Usage:** ${USAGE_PERCENT}%
-        >
-        > Thank you for keeping the file optimized!"
-        else
-          SUCCESS_COMMENT_BODY="<!-- claude-md-size-check -->
-        > [!NOTE]
-        > #### All Files Size OK ✅
+        > #### Modified Files Size OK ✅
         >
         > **Files checked:** ${TOTAL_FILES}
         > **Limit:** ${MAX_SIZE} bytes per file
         >
-        > Thank you for keeping all files optimized!"
-        fi
+        > All modified files are within size limits. Thank you!"
 
-        if echo "$EXISTING_COMMENT_BODY" | grep -q "CLAUDE.md Size OK ✅"; then
+        if echo "$EXISTING_COMMENT_BODY" | grep -q "Size OK ✅"; then
           echo "ℹ️ Comment already shows success - no update needed"
         else
           echo "Updating existing comment with success message..."
@@ -252,10 +247,9 @@ runs:
         EXCESS=$((SIZE - MAX_SIZE))
         EXCESS_PERCENT=$((EXCESS * 100 / MAX_SIZE))
 
-        MODE="${{ steps.check.outputs.mode }}"
         OVERSIZED="${{ steps.check.outputs.oversized_files }}"
 
-        echo "❌ ERROR: One or more files exceed the size limit"
+        echo "❌ ERROR: One or more modified files exceed the size limit"
         echo ""
         echo "Maximum size: $MAX_SIZE bytes"
         echo ""
