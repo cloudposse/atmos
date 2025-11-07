@@ -1,6 +1,7 @@
 package theme
 
 import (
+	"math"
 	"strconv"
 
 	"github.com/charmbracelet/lipgloss"
@@ -50,7 +51,7 @@ func getContrastTextColor(bgColor string) string {
 		if v <= srgbThreshold {
 			return v / srgbGammaDivisor
 		}
-		return ((v + srgbGammaOffset) / srgbGammaDenominator) * ((v + srgbGammaOffset) / srgbGammaDenominator) * srgbGammaExponent
+		return math.Pow((v+srgbGammaOffset)/srgbGammaDenominator, srgbGammaExponent)
 	}
 
 	rLinear := toLinear(r)

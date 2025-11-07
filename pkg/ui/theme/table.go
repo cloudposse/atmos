@@ -78,8 +78,11 @@ func applyTableBorders(t *table.Table, config *TableConfig) *table.Table {
 
 // applyBorderedStyle applies full borders to the table.
 func applyBorderedStyle(t *table.Table, config *TableConfig) *table.Table {
-	return t.Border(config.BorderStyle).
-		BorderStyle(config.Styles.TableBorder)
+	t = t.Border(config.BorderStyle)
+	if config.Styles != nil {
+		t = t.BorderStyle(config.Styles.TableBorder)
+	}
+	return t
 }
 
 // applyMinimalStyle applies minimal borders (header separator only).
@@ -106,8 +109,7 @@ func applyPlainStyle(t *table.Table) *table.Table {
 
 // applyFullBorders applies full borders to override style settings.
 func applyFullBorders(t *table.Table, config *TableConfig) *table.Table {
-	return t.Border(config.BorderStyle).
-		BorderStyle(config.Styles.TableBorder).
+	t = t.Border(config.BorderStyle).
 		BorderTop(true).
 		BorderBottom(true).
 		BorderLeft(true).
@@ -115,6 +117,10 @@ func applyFullBorders(t *table.Table, config *TableConfig) *table.Table {
 		BorderColumn(true).
 		BorderRow(true).
 		BorderHeader(true)
+	if config.Styles != nil {
+		t = t.BorderStyle(config.Styles.TableBorder)
+	}
+	return t
 }
 
 // applyTableStyle applies the style function to the table.
