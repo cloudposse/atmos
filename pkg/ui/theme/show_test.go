@@ -233,12 +233,12 @@ func TestGenerateLogDemo(t *testing.T) {
 		t.Error("GenerateLogDemo() returned empty output")
 	}
 
-	// Verify log levels are present.
+	// Verify log levels are present (4-character format for alignment).
 	expectedLevels := []string{
 		"DEBU",
 		"INFO",
 		"WARN",
-		"EROR", // Charmbracelet log uses "EROR" not "ERRO".
+		"ERRO",
 	}
 
 	for _, level := range expectedLevels {

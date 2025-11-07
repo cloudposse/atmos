@@ -9,8 +9,8 @@ import (
 func createLogLevelStyles(scheme *ColorScheme) map[log.Level]lipgloss.Style {
 	levels := make(map[log.Level]lipgloss.Style)
 
-	// Bold white text on colored backgrounds for better readability
-	// Using 4-letter log level format as expected by snapshots
+	// Bold white text on colored backgrounds for better readability.
+	// Using 4-character log level format for consistent alignment.
 	levels[log.DebugLevel] = lipgloss.NewStyle().
 		SetString("DEBU").
 		Background(lipgloss.Color(scheme.LogDebug)).
@@ -33,15 +33,15 @@ func createLogLevelStyles(scheme *ColorScheme) map[log.Level]lipgloss.Style {
 		Padding(0, 1)
 
 	levels[log.ErrorLevel] = lipgloss.NewStyle().
-		SetString("EROR").
+		SetString("ERRO").
 		Background(lipgloss.Color(scheme.LogError)).
 		Foreground(lipgloss.Color("#FFFFFF")).
 		Bold(true).
 		Padding(0, 1)
 
 	levels[log.FatalLevel] = lipgloss.NewStyle().
-		SetString("FATL").
-		Background(lipgloss.Color(scheme.LogError)). // Use error color for fatal
+		SetString("FATA").
+		Background(lipgloss.Color(scheme.LogError)). // Use error color for fatal.
 		Foreground(lipgloss.Color("#FFFFFF")).
 		Bold(true).
 		Padding(0, 1)
@@ -100,13 +100,13 @@ func GetLogStylesNoColor() *log.Styles {
 		Levels: make(map[log.Level]lipgloss.Style),
 	}
 
-	// Set log level strings without colors for no-color mode
-	// Using 4-letter log level format as expected by snapshots
+	// Set log level strings without colors for no-color mode.
+	// Using 4-character log level format for consistent alignment.
 	styles.Levels[log.DebugLevel] = lipgloss.NewStyle().SetString("DEBU")
 	styles.Levels[log.InfoLevel] = lipgloss.NewStyle().SetString("INFO")
 	styles.Levels[log.WarnLevel] = lipgloss.NewStyle().SetString("WARN")
-	styles.Levels[log.ErrorLevel] = lipgloss.NewStyle().SetString("EROR")
-	styles.Levels[log.FatalLevel] = lipgloss.NewStyle().SetString("FATL")
+	styles.Levels[log.ErrorLevel] = lipgloss.NewStyle().SetString("ERRO")
+	styles.Levels[log.FatalLevel] = lipgloss.NewStyle().SetString("FATA")
 
 	// Clear other style elements
 	styles.Timestamp = lipgloss.NewStyle()
