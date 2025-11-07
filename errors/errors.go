@@ -501,5 +501,5 @@ type ExitCodeError struct {
 }
 
 func (e ExitCodeError) Error() string {
-	return fmt.Sprintf("command exited with code %d", e.Code)
+	return fmt.Sprintf("subcommand exited with code %d", e.Code)
 }
