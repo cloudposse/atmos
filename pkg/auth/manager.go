@@ -910,6 +910,17 @@ func (m *manager) getChainStepName(index int) string {
 	return "unknown"
 }
 
+// isSessionToken checks if credentials are temporary session tokens.
+// Session tokens are identified by the presence of a SessionToken field.
+// These should not be cached in keyring as they overwrite long-lived credentials.
+func isSessionToken(creds types.ICredentials) bool {
+	if awsCreds, ok := creds.(*types.AWSCredentials); ok {
+		return awsCreds.SessionToken != ""
+	}
+	// Add other credential types as needed.
+	return false
+}
+
 // authenticateIdentityChain performs sequential authentication through an identity chain.
 func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int, initialCreds types.ICredentials) (types.ICredentials, error) {
 	log.Debug("Authenticating identity chain", "chainLength", len(m.chain), "startIndex", startIndex, "chain", m.chain)
@@ -936,11 +947,19 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 
 		currentCreds = nextCreds
 
-		// Cache credentials for this level.
-		if err := m.credentialStore.Store(identityStep, currentCreds); err != nil {
-			log.Debug("Failed to cache credentials", "identityStep", identityStep, "error", err)
+		// Cache credentials for this level, but skip session tokens.
+		// Session tokens are already persisted to provider-specific storage (e.g., AWS files)
+		// and can be loaded via identity.LoadCredentials().
+		// Caching session tokens in keyring would overwrite long-lived credentials
+		// that are needed for subsequent authentication attempts.
+		if isSessionToken(currentCreds) {
+			log.Debug("Skipping keyring cache for session tokens", "identityStep", identityStep)
 		} else {
-			log.Debug("Cached credentials", "identityStep", identityStep)
+			if err := m.credentialStore.Store(identityStep, currentCreds); err != nil {
+				log.Debug("Failed to cache credentials", "identityStep", identityStep, "error", err)
+			} else {
+				log.Debug("Cached credentials", "identityStep", identityStep)
+			}
 		}
 
 		log.Debug("Chained identity", "from", m.getChainStepName(i-1), "to", identityStep)

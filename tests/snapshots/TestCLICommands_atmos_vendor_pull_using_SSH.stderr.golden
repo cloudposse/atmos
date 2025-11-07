@@ -14,10 +14,10 @@ DEBU Downloading and installing package package=terraform-null-label-cred
 DEBU Entering dry-run flow for generic (non component/mixin) vendoring  package=terraform-null-label-cred
 DEBU Custom detection required for URI uri="git::git@github.com:cloudposse/terraform-null-label.git//.?ref=0.25.0"
 DEBU CustomGitDetector.Detect called
-DEBU Rewriting SCP-style SSH URL old_url="" new_url="ssh://xxx@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0"
-DEBU Reading config param InjectGithubToken=true
-DEBU Injected token env=ATMOS_GITHUB_TOKEN url="ssh://xxx:xxx@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0"
-DEBU Final transformation url="git::ssh://xxx:xxx@github.com/cloudposse/terraform-null-label.git//.?depth=1&ref=0.25.0"
+DEBU Rewriting SCP-style SSH URL old_url="" new_url="ssh://***@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0"
+DEBU Token injection enabled for host host=github.com
+DEBU Skipping token injection: URL already has user credentials url="ssh://***@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0"
+DEBU Final transformation url="git::ssh://***@github.com/cloudposse/terraform-null-label.git//.?depth=1&ref=0.25.0"
 INFO ✓ package=terraform-null-label-cred version=(0.25.0)
 DEBU Downloading and installing package package=terraform-null-label-basic
 DEBU Entering dry-run flow for generic (non component/mixin) vendoring  package=terraform-null-label-basic

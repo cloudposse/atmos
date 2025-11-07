@@ -259,6 +259,23 @@ func TestFilterAndListComponents(t *testing.T) {
 		assert.ElementsMatch(t, []string{"vpc", "eks", "rds", "s3", "test", "elasticache"}, components)
 	})
 
+	// Test no components found
+	t.Run("no components", func(t *testing.T) {
+		emptyStacks := map[string]any{
+			"stack1": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{},
+					"helmfile":  map[string]any{},
+					"packer":    map[string]any{},
+				},
+			},
+		}
+
+		components, err := FilterAndListComponents("", emptyStacks)
+		require.NoError(t, err)
+		assert.Empty(t, components)
+	})
+
 	// Test error cases
 	t.Run("non-existent stack", func(t *testing.T) {
 		_, err := FilterAndListComponents("non-existent-stack", stacksMap)

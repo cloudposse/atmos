@@ -48,3 +48,19 @@ func TestListStacksWithComponent(t *testing.T) {
 	assert.Contains(t, dependentsYaml, "tenant1-uw1-test-1")
 	assert.Contains(t, dependentsYaml, "tenant1-uw2-test-1")
 }
+
+func TestFilterAndListStacks_NoMatchingComponent(t *testing.T) {
+	stacksMap := map[string]any{
+		"stack1": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"existing": map[string]any{},
+				},
+			},
+		},
+	}
+
+	output, err := FilterAndListStacks(stacksMap, "missing")
+	assert.NoError(t, err)
+	assert.Nil(t, output)
+}
