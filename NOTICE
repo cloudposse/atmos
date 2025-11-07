@@ -934,7 +934,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/Azure/azure-sdk-for-go/sdk/azcore
     License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/azcore/v1.19.1/sdk/azcore/LICENSE.txt
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/azcore/v1.20.0/sdk/azcore/LICENSE.txt
 
   - github.com/Azure/azure-sdk-for-go/sdk/azidentity
     License: MIT
