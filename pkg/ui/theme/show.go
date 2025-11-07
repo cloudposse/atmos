@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
+	"github.com/muesli/termenv"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -228,6 +229,9 @@ func GenerateLogDemo(scheme *ColorScheme) string {
 	// Create a new logger instance with our theme styles.
 	demoLogger := log.New(&buf)
 	demoLogger.SetStyles(logStyles)
+
+	// Force color output even though we're writing to a buffer (for theme preview).
+	demoLogger.SetColorProfile(termenv.TrueColor)
 
 	// Configure logger to show the level prefix.
 	demoLogger.SetReportTimestamp(false)
