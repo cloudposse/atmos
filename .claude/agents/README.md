@@ -1,172 +1,36 @@
 # Claude Agents
 
-This directory contains specialized Claude agents for the Atmos project development workflow.
+Specialized Claude agents for Atmos development. Each agent is an expert in a specific domain, helping scale development through focused expertise.
 
 ## Available Agents
 
 ### agent-developer
-**File:** `agent-developer.md`
-**Purpose:** Meta-agent for creating, updating, and maintaining other Claude agents
-**Invoke when:**
-- Creating a new specialized agent
-- Updating existing agent instructions
-- Fixing agent frontmatter or structure
-- Optimizing agents for context efficiency
-- Designing multi-agent coordination patterns
+Expert in creating and maintaining Claude agents with correct frontmatter, context efficiency, and PRD awareness.
 
-## Strategic Vision: Scaling Atmos Development
+**Use when:** Creating new agents, updating existing agents, or optimizing agent instructions.
 
-As Atmos core functionality grows, we scale development through **specialized agents for each key subsystem**.
+## Strategic Approach
 
-### Agent-Per-Subsystem Pattern
+As Atmos grows, we create focused agents for each major subsystem. This scales development velocity through specialized domain expertise.
 
-Each major area of Atmos gets a dedicated expert agent.
+**Example future agents:**
+- `command-registry-expert` - Command registry patterns
+- `cobra-flag-expert` - Flag parsing and Cobra integration
+- `stack-processor-expert` - Stack inheritance pipeline
+- `auth-system-expert` - Authentication patterns
 
-**Example agents (for illustration purposes):**
-- `command-registry-expert` - Command registry patterns and CommandProvider interface
-- `component-registry-expert` - Component discovery and management
-- `cobra-flag-expert` - Flag parsing and Cobra integration patterns
-- `stack-processor-expert` - Stack inheritance and processing pipeline
-- `template-engine-expert` - Go templates, Gomplate, YAML functions
-- `auth-system-expert` - Authentication and credential management
-- `store-registry-expert` - Multi-provider store implementations
-- `viper-config-expert` - Configuration management patterns
-
-**Note:** Specific agents will be created in separate PRs as subsystems mature.
-
-### When to Create New Agents
-
-Create a specialized agent when:
-- ✅ New core subsystem emerges (registry, integration, major feature)
-- ✅ Subsystem reaches complexity (3+ files, distinct patterns, mature PRD)
-- ✅ Repeated implementation questions about same domain
-- ❌ One-off utility or helper function
-- ❌ Experimental code without established patterns
-
-**Philosophy:** Small, focused agents that coordinate through workflows scale better than monolithic agents.
+New agents are created in separate PRs as subsystems mature and patterns are established.
 
 ## Usage
 
-### Automatic Invocation
-Agents are automatically invoked by Claude Code when task descriptions match the agent's invocation triggers defined in the `description` frontmatter field.
-
-### Explicit Invocation
-- **Direct reference:** `@agent-name` in conversation
-- **Task tool:** Use Task tool with appropriate subagent_type
-
-### Example
-```
-User: "Create an agent for security auditing"
-Claude: "I'll use the agent-developer agent to create a security-auditor agent..."
-```
-
-## Agent Architecture
-
-All agents follow these principles:
-
-1. **YAML Frontmatter** - Structured metadata (name, description, tools, model, color)
-2. **Focused Expertise** - Single domain, 8-20 KB typical size
-3. **PRD-Aware** - Reference and follow relevant PRDs from `docs/prd/`
-4. **Self-Updating** - Agents update themselves as requirements evolve
-5. **Coordination-Ready** - Can invoke other agents via Task tool
-6. **Context-Efficient** - Reference documentation instead of duplicating
-
-## Frontmatter Format
-
-```yaml
----
-name: agent-name
-description: >-
-  Brief description of when to use this agent.
-
-  **Invoke when:**
-  - Specific scenario 1
-  - Specific scenario 2
-
-tools: Read, Write, Edit, Grep, Glob, Bash, Task, TodoWrite
-model: sonnet
-color: cyan
----
-```
-
-## Best Practices
-
-### Creating New Agents
-
-1. Research domain and existing patterns
-2. Check for relevant PRDs in `docs/prd/`
-3. Use agent-developer agent for creation
-4. Follow context efficiency guidelines
-5. Include self-maintenance instructions
-6. Test invocation triggers
-
-### Updating Existing Agents
-
-1. Use agent-developer agent for updates
-2. Preserve helpful existing content
-3. Align with current PRDs
-4. Optimize for context usage
-5. Update invocation triggers if needed
-
-### Agent Coordination
-
-For complex workflows, agents can coordinate:
-
-```
-orchestrator-agent
-  ├─> specialist-agent-1 (domain expertise)
-  ├─> specialist-agent-2 (implementation)
-  └─> code-reviewer (validation)
-```
-
-## Maintenance
-
-Agents actively monitor their dependencies and self-update when those dependencies change.
-
-### Self-Updating Mechanism
-
-Each agent:
-1. **Lists dependencies** - Specific PRDs, CLAUDE.md sections, implementation files
-2. **Checks currency** - Verifies PRD versions before each invocation
-3. **Detects changes** - Uses `git log` to check modification dates
-4. **Proposes updates** - Presents changes to user when dependencies change
-5. **Awaits approval** - **Never modifies itself without user confirmation**
-6. **Applies updates** - Upon approval, invokes agent-developer
-7. **Tests behavior** - Validates updated agent with sample tasks
-
-**Important:** Agents never autonomously modify themselves or PRDs. User approval required.
-
-### Update Triggers
-
-Agents update themselves when:
-- **PRD modified** - Dependent PRD file updated (detected via `git log`)
-- **CLAUDE.md changes** - Core patterns evolve
-- **Patterns mature** - Implementation patterns stabilize
-- **Invocation unclear** - Agent not triggered appropriately
-- **Context bloat** - Agent exceeds size targets
-
-### Agent-Developer Responsibility
-
-The agent-developer agent:
-- Monitors `docs/prd/claude-agent-architecture.md` for changes
-- Updates itself when architecture patterns evolve
-- Updates all agents when fundamental patterns change
-- Maintains quality and consistency across agent collection
-
-## References
-
-- **Core patterns:** `CLAUDE.md` - Development guidelines
-- **Architecture docs:** `docs/prd/` - Product requirement documents
-- **Agent PRD:** `docs/prd/claude-agent-architecture.md` - Agent system design
+Agents are automatically invoked based on task descriptions, or explicitly via `@agent-name`.
 
 ## Quality Standards
 
-All agents must:
-- Use correct YAML frontmatter format
-- Have kebab-case names
-- Include specific invocation triggers
-- Reference PRDs instead of duplicating
-- Be context-efficient (8-20 KB)
-- Include self-maintenance guidance
-- Use actionable, imperative language
-- Provide clear workflows/processes
+All agents:
+- Follow patterns in `docs/prd/claude-agent-architecture.md`
+- Stay under 25KB for context efficiency
+- Reference PRDs instead of duplicating content
+- Self-update when dependencies change (with user approval)
+
+See `docs/prd/claude-agent-architecture.md` for complete architecture and guidelines.
