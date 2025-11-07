@@ -93,11 +93,11 @@ func TestListThemes(t *testing.T) {
 func TestFilterRecommendedWithActive(t *testing.T) {
 	// Create test themes.
 	allThemes := []*Theme{
-		{Name: "dracula"},        // Recommended.
-		{Name: "monokai"},        // Recommended.
-		{Name: "solarized-dark"}, // Recommended.
-		{Name: "custom-theme"},   // Not recommended.
-		{Name: "another-custom"}, // Not recommended.
+		{Name: "Dracula"},          // Recommended.
+		{Name: "Catppuccin Mocha"}, // Recommended.
+		{Name: "Catppuccin Latte"}, // Recommended.
+		{Name: "custom-theme"},     // Not recommended.
+		{Name: "another-custom"},   // Not recommended.
 	}
 
 	tests := []struct {
@@ -114,7 +114,7 @@ func TestFilterRecommendedWithActive(t *testing.T) {
 		},
 		{
 			name:        "active is recommended",
-			activeTheme: "dracula",
+			activeTheme: "Dracula",
 			wantCount:   3, // Only recommended.
 			wantActive:  true,
 		},
@@ -311,7 +311,7 @@ func TestBuildFooterMessage(t *testing.T) {
 			showStars:           true,
 			activeTheme:         "dracula",
 			wantPlural:          true,
-			wantRecommendedNote: false,
+			wantRecommendedNote: true, // Star note includes "recommended" text.
 			wantStarNote:        true,
 			wantActiveTheme:     true,
 		},

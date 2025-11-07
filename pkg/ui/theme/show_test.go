@@ -13,18 +13,13 @@ func TestShowTheme(t *testing.T) {
 		errContains string
 	}{
 		{
-			name:      "valid theme - dracula",
-			themeName: "dracula",
+			name:      "valid theme - Dracula",
+			themeName: "Dracula",
 			wantErr:   false,
 		},
 		{
-			name:      "valid theme - solarized-dark",
-			themeName: "solarized-dark",
-			wantErr:   false,
-		},
-		{
-			name:      "valid theme - monokai",
-			themeName: "monokai",
+			name:      "valid theme - Material",
+			themeName: "Material",
 			wantErr:   false,
 		},
 		{
@@ -243,7 +238,7 @@ func TestGenerateLogDemo(t *testing.T) {
 		"DEBU",
 		"INFO",
 		"WARN",
-		"ERRO",
+		"EROR", // Charmbracelet log uses "EROR" not "ERRO".
 	}
 
 	for _, level := range expectedLevels {
