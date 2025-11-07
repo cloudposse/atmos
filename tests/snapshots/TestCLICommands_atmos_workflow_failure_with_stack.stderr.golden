@@ -14,7 +14,11 @@ Could not find the component idontexist in the stack prod. Check that all the co
 
 # Workflow Error
 
-workflow step execution failed
+**Error:** workflow step execution failed
+
+## Hints
+
+💡
 
 ## Explanation
 

@@ -677,7 +677,6 @@ Use `no-release` label for docs-only changes.
 Check status: `gh pr checks {pr} --repo cloudposse/atmos`
 Reply to threads: Use `gh api graphql` with `addPullRequestReviewThreadReply`
 
-<<<<<<< HEAD
    func (m *MyCommandProvider) GetGroup() string {
        return "Other Commands" // See docs/developing-atmos-commands.md
    }

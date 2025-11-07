@@ -164,10 +164,15 @@ var RootCmd = &cobra.Command{
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Set verbose flag for error formatting before any command execution or fatal exits.
 		if cmd.Flags().Changed(verboseFlagName) {
+			// CLI flag explicitly set - use it.
 			verbose, flagErr := cmd.Flags().GetBool(verboseFlagName)
 			if flagErr != nil {
 				errUtils.CheckErrorPrintAndExit(flagErr, "", "")
 			}
+			errUtils.SetVerboseFlag(verbose)
+		} else {
+			// CLI flag not set - check environment variable via Viper.
+			verbose := viper.GetBool(verboseFlagName)
 			errUtils.SetVerboseFlag(verbose)
 		}
 

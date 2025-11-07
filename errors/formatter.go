@@ -40,6 +40,9 @@ type FormatterConfig struct {
 
 	// MaxLineLength is the maximum length before wrapping (default: 80).
 	MaxLineLength int
+
+	// Title is an optional custom title for the error message.
+	Title string
 }
 
 // DefaultFormatterConfig returns default formatting configuration.
@@ -124,8 +127,11 @@ func buildMarkdownSections(err error, config FormatterConfig) string {
 	var md strings.Builder
 
 	// Section 1: Error header + message.
-	// Extract custom title or use default.
-	title := extractCustomTitle(err)
+	// Prefer config.Title, then extract custom title, or use default.
+	title := config.Title
+	if title == "" {
+		title = extractCustomTitle(err)
+	}
 	if title == "" {
 		title = "Error"
 	}

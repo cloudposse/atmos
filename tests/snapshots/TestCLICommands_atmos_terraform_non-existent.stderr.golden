@@ -1,7 +1,7 @@
 
 # Incorrect Usage
 
-Unknown command non-existent for atmos terraform
+**Error:** Unknown command non-existent for atmos terraform
 
 Valid subcommands are:
 
@@ -45,6 +45,8 @@ Valid subcommands are:
 
   $ atmos terraform [subcommand] <component-name> -s <stack-name>
 
-For more information, refer to the docs https://atmos.tools/cli/commands/terraform/usage
+## Hints
+
+💡 https://atmos.tools/cli/commands/terraform/usage
 
 

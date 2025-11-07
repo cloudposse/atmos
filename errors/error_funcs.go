@@ -33,7 +33,7 @@ var verboseFlag = false
 // verboseFlagSet tracks whether the verbose flag was explicitly set via CLI.
 var verboseFlagSet = false
 
-// SetVerboseFlag sets the verbose flag value.
+// SetVerboseFlag sets the package-level verboseFlag to the given value and marks verboseFlagSet true.
 func SetVerboseFlag(verbose bool) {
 	verboseFlag = verbose
 	verboseFlagSet = true
@@ -58,7 +58,9 @@ func InitializeMarkdown(config *schema.AtmosConfiguration) {
 	}
 }
 
-// GetMarkdownRenderer returns the global markdown renderer.
+// GetMarkdownRenderer returns the package-level markdown renderer and may return nil
+// if the renderer has not been initialized via InitializeMarkdown or has been cleared.
+// This function is not safe for concurrent access during initialization.
 func GetMarkdownRenderer() *markdown.Renderer {
 	return render
 }
@@ -87,19 +89,31 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 		CaptureError(err)
 	}
 
-	// Use new error formatter if config is available AND no legacy title/suggestion provided.
-	// This ensures backward compatibility with existing code that passes title/suggestion.
-	if atmosConfig != nil && title == "" && suggestion == "" {
-		printFormattedError(err)
+	// Use new error formatter if config is available.
+	// Pass title and suggestion to ensure backward compatibility.
+	if atmosConfig != nil {
+		printFormattedError(err, title, suggestion)
 		return
 	}
 
-	// Use markdown renderer for legacy error rendering (with title/suggestion).
+	// Config not available - use markdown renderer fallback.
 	printMarkdownError(err, title, suggestion)
 }
 
 // printFormattedError prints an error using the new formatter.
-func printFormattedError(err error) {
+// If title or suggestion are provided, they are incorporated into the formatted output.
+func printFormattedError(err error, title string, suggestion string) {
+	// If legacy title or suggestion are provided, incorporate them into the error.
+	if title != "" || suggestion != "" {
+		// Wrap error with legacy parameters using error builder.
+		builder := Build(err)
+		if suggestion != "" {
+			builder = builder.WithHint(suggestion)
+		}
+		// Note: title is handled by the formatter's title parameter, not as a hint.
+		err = builder.Err()
+	}
+
 	// Bind ATMOS_VERBOSE environment variable.
 	_ = viper.BindEnv(EnvVerbose, EnvVerbose)
 
@@ -124,6 +138,7 @@ func printFormattedError(err error) {
 		Verbose:       verbose,
 		Color:         colorMode,
 		MaxLineLength: DefaultMaxLineLength,
+		Title:         title, // Use provided title if any.
 	}
 	formatted := Format(err, config)
 	_, printErr := os.Stderr.WriteString(formatted + "\n")

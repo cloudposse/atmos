@@ -5,6 +5,6 @@
 
 ## Explanation
 
-XTrace. Valid options are: [Trace Debug Info Warning Error Off]
+the log level 'XTrace' is not recognized. Valid options are: [Trace Debug Info Warning Error Off]
 
 
