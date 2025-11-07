@@ -127,6 +127,11 @@ func applyTableStyle(t *table.Table, config *TableConfig) *table.Table {
 	return t.StyleFunc(func(row, col int) lipgloss.Style {
 		style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
 
+		// Guard against nil config.Styles
+		if config == nil || config.Styles == nil {
+			return style
+		}
+
 		if row == -1 { // Header row
 			return style.Inherit(config.Styles.TableHeader)
 		}

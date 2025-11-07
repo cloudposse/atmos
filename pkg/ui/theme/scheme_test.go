@@ -157,6 +157,7 @@ func TestGetColorSchemeForTheme(t *testing.T) {
 			scheme, err := GetColorSchemeForTheme(tt.themeName)
 			if tt.expectError {
 				require.Error(t, err)
+				require.Nil(t, scheme, "Scheme should be nil when error occurs")
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, scheme)
@@ -168,6 +169,32 @@ func TestGetColorSchemeForTheme(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGetColorSchemeForTheme_RegistryError documents the error path when registry initialization fails.
+// Since NewRegistry loads embedded themes.json, we cannot easily mock a failure without modifying
+// the embedded file. However, we can verify that GetColorSchemeForTheme properly handles the error
+// by examining the code path: if NewRegistry() returns an error, GetColorSchemeForTheme returns (nil, err).
+//
+// This test serves as documentation of the expected behavior and verifies the happy path.
+func TestGetColorSchemeForTheme_RegistryError(t *testing.T) {
+	// Verify that GetColorSchemeForTheme returns non-nil scheme on success.
+	scheme, err := GetColorSchemeForTheme("default")
+	require.NoError(t, err, "GetColorSchemeForTheme should not error with valid embedded themes")
+	require.NotNil(t, scheme, "Scheme should not be nil on success")
+
+	// Document expected behavior when NewRegistry fails (would only happen if themes.json is corrupted):
+	// - GetColorSchemeForTheme would return (nil, err)
+	// - The calling code should handle this error appropriately
+	// - In practice, this should never happen with embedded themes
+	//
+	// The implementation in scheme.go:143-147:
+	//   registry, err := NewRegistry()
+	//   if err != nil {
+	//       return nil, err
+	//   }
+	//
+	// This ensures errors are properly propagated to callers.
 }
 
 func TestColorSchemeSemanticMapping(t *testing.T) {

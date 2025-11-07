@@ -130,7 +130,7 @@ func buildThemeRows(themes []*theme.Theme, activeTheme string, showStars bool) [
 func formatThemeRow(t *theme.Theme, activeTheme string, showStars bool) []string {
 	// Active indicator
 	activeIndicator := "  "
-	if t.Name == activeTheme {
+	if strings.EqualFold(t.Name, activeTheme) {
 		activeIndicator = "> "
 	}
 
@@ -211,7 +211,7 @@ func formatSimpleThemeList(themes []*theme.Theme, activeTheme string, showingRec
 	// Theme rows
 	for _, t := range themes {
 		activeIndicator := "  "
-		if t.Name == activeTheme {
+		if strings.EqualFold(t.Name, activeTheme) {
 			activeIndicator = "> "
 		}
 
