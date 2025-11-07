@@ -1,11 +1,10 @@
 package errors
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 
+	"github.com/spf13/viper"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
@@ -14,19 +13,54 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
+const (
+	// EnvVerbose is the environment variable name for verbose error output.
+	EnvVerbose = "ATMOS_VERBOSE"
+)
+
 // OsExit is a variable for testing, so we can mock os.Exit.
 var OsExit = os.Exit
 
 // render is the global Markdown renderer instance initialized via InitializeMarkdown.
 var render *markdown.Renderer
 
+// atmosConfig is the global Atmos configuration for error handling.
+var atmosConfig *schema.AtmosConfiguration
+
+// verboseFlag holds the value of the --verbose flag.
+var verboseFlag = false
+
+// verboseFlagSet tracks whether the verbose flag was explicitly set via CLI.
+var verboseFlagSet = false
+
+// SetVerboseFlag sets the verbose flag value.
+func SetVerboseFlag(verbose bool) {
+	verboseFlag = verbose
+	verboseFlagSet = true
+}
+
 // InitializeMarkdown initializes a new Markdown renderer.
-func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
+func InitializeMarkdown(config *schema.AtmosConfiguration) {
 	var err error
-	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
+	render, err = markdown.NewTerminalMarkdownRenderer(*config)
 	if err != nil {
 		log.Error("failed to initialize Markdown renderer", "error", err)
 	}
+
+	// Store config for error formatting.
+	atmosConfig = config
+
+	// Initialize Sentry if configured.
+	if config.Errors.Sentry.Enabled {
+		if err := InitializeSentry(&config.Errors.Sentry); err != nil {
+			log.Warn("failed to initialize Sentry", "error", err)
+		}
+	}
+}
+
+// GetMarkdownRenderer returns the global markdown renderer.
+func GetMarkdownRenderer() *markdown.Renderer {
+	return render
 }
 
 // printPlainError writes a plain-text error to stderr without Markdown formatting.
@@ -48,6 +82,58 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 		return
 	}
 
+	// Capture error to Sentry if configured.
+	if atmosConfig != nil && atmosConfig.Errors.Sentry.Enabled {
+		CaptureError(err)
+	}
+
+	// Use new error formatter if config is available.
+	if atmosConfig != nil {
+		printFormattedError(err)
+		return
+	}
+
+	// Fallback to old markdown renderer.
+	printMarkdownError(err, title, suggestion)
+}
+
+// printFormattedError prints an error using the new formatter.
+func printFormattedError(err error) {
+	// Bind ATMOS_VERBOSE environment variable.
+	_ = viper.BindEnv(EnvVerbose, EnvVerbose)
+
+	// Check for --verbose flag (CLI flag > env var > config).
+	verbose := atmosConfig.Errors.Format.Verbose
+
+	// Apply precedence: config < env < CLI.
+	if viper.IsSet(EnvVerbose) {
+		verbose = viper.GetBool(EnvVerbose)
+	}
+	if verboseFlagSet {
+		verbose = verboseFlag
+	}
+
+	// Determine color mode.
+	colorMode := atmosConfig.Errors.Format.Color
+	if colorMode == "" {
+		colorMode = "auto"
+	}
+
+	config := FormatterConfig{
+		Verbose:       verbose,
+		Color:         colorMode,
+		MaxLineLength: DefaultMaxLineLength,
+	}
+	formatted := Format(err, config)
+	_, printErr := os.Stderr.WriteString(formatted + "\n")
+	if printErr != nil {
+		log.Error(printErr)
+		log.Error(err)
+	}
+}
+
+// printMarkdownError prints an error using the markdown renderer.
+func printMarkdownError(err error, title string, suggestion string) {
 	// If markdown renderer is not initialized, fall back to plain error output.
 	if render == nil {
 		printPlainError(title, err, suggestion)
@@ -79,22 +165,18 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 
 	CheckErrorAndPrint(err, title, suggestion)
 
-	// Check for ExitCodeError (from ShellRunner preserving interp.ExitStatus)
-	var exitCodeErr ExitCodeError
-	if errors.As(err, &exitCodeErr) {
-		Exit(exitCodeErr.Code)
+	// Close Sentry before exiting.
+	if atmosConfig != nil && atmosConfig.Errors.Sentry.Enabled {
+		CloseSentry()
 	}
 
-	// Find the executed command's exit code from the error
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
-		Exit(exitError.ExitCode())
-	}
+	// Get exit code from error (supports custom codes and exec.ExitError).
+	exitCode := GetExitCode(err)
 
 	// TODO: Refactor so that we only call `os.Exit` in `main()` or `init()` functions.
 	// Exiting here makes it difficult to test.
 	// revive:disable-next-line:deep-exit
-	Exit(1)
+	Exit(exitCode)
 }
 
 // Exit exits the program with the specified exit code.

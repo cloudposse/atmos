@@ -51,6 +51,8 @@ const (
 	logFileMode = 0o644
 	// DefaultTopFunctionsMax is the default number of top functions to display in performance summary.
 	defaultTopFunctionsMax = 50
+	// VerboseFlagName is the name of the verbose flag.
+	verboseFlagName = "verbose"
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -119,6 +121,15 @@ var RootCmd = &cobra.Command{
 	Long:               `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
 	FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Set verbose flag for error formatting before any command execution or fatal exits.
+		if cmd.Flags().Changed(verboseFlagName) {
+			verbose, flagErr := cmd.Flags().GetBool(verboseFlagName)
+			if flagErr != nil {
+				errUtils.CheckErrorPrintAndExit(flagErr, "", "")
+			}
+			errUtils.SetVerboseFlag(verbose)
+		}
+
 		// Determine if the command is a help command or if the help flag is set.
 		isHelpCommand := cmd.Name() == "help"
 		helpFlag := cmd.Flags().Changed("help")
@@ -522,8 +533,8 @@ func Execute() error {
 	// Set atmosConfig for version command (needs access to config).
 	version.SetAtmosConfig(&atmosConfig)
 
-	utils.InitializeMarkdown(atmosConfig)
-	errUtils.InitializeMarkdown(atmosConfig)
+	utils.InitializeMarkdown(&atmosConfig)
+	errUtils.InitializeMarkdown(&atmosConfig)
 
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
@@ -690,6 +701,7 @@ func init() {
 	RootCmd.PersistentFlags().Bool("force-color", false, "Force color output even when not a TTY (useful for screenshots)")
 	RootCmd.PersistentFlags().Bool("force-tty", false, "Force TTY mode with sane defaults when terminal detection fails (useful for screenshots)")
 	RootCmd.PersistentFlags().Bool("mask", true, "Enable automatic masking of sensitive data in output (use --mask=false to disable)")
+	RootCmd.PersistentFlags().BoolP(verboseFlagName, "v", false, "Enable verbose error output with full context, stack traces, and detailed information")
 	RootCmd.PersistentFlags().String("pager", "", "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)")
 	// Set NoOptDefVal so --pager without value means "true".
 	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"
@@ -714,6 +726,10 @@ func init() {
 	// Bind mask flag to environment variable.
 	if err := viper.BindEnv("mask", "ATMOS_MASK"); err != nil {
 		log.Error("Failed to bind ATMOS_MASK environment variable", "error", err)
+	}
+	// Bind verbose flag to environment variable.
+	if err := viper.BindEnv(verboseFlagName, "ATMOS_VERBOSE"); err != nil {
+		log.Error("Failed to bind ATMOS_VERBOSE environment variable", "error", err)
 	}
 
 	// Bind environment variables for GitHub authentication.
