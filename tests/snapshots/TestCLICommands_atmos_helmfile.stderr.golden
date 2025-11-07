@@ -1,7 +1,7 @@
 
-# Error
+# Incorrect Usage
 
-**Error:** The command atmos helmfile requires a subcommand
+The command atmos helmfile requires a subcommand
 
 Valid subcommands are:
 
@@ -11,5 +11,7 @@ Valid subcommands are:
 • generate
 • sync
 • version
+
+Run atmos helmfile --help for usage
 
 

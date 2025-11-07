@@ -1,8 +1,16 @@
 
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 
-# Error
+# Workflow Error
 
-**Error:** invalid from-step flag
+invalid from-step flag
+
+## Explanation
+
+The --from-step flag was set to dne, but this step does not exist in workflow pass.
+
+### Available steps:
+
+• step1
 
 
