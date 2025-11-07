@@ -30,7 +30,7 @@ The root cause was twofold:
 
 ### FR-001: Identity Flag Behavior Matrix
 
-The `--identity` flag has three distinct modes of operation:
+The `--identity` flag has four distinct modes of operation:
 
 #### Mode 1: Flag Not Provided (Default Identity)
 
@@ -107,19 +107,59 @@ atmos terraform plan component --stack mystack -i prod-admin
 - ✅ Explicit identity takes precedence over `ATMOS_IDENTITY` env var
 - ✅ Explicit identity takes precedence over default identity
 
+#### Mode 4: Flag With Disable Value (NEW)
+
+**User Command:**
+```bash
+atmos terraform plan component --stack mystack --identity=false
+# OR
+atmos terraform plan component --stack mystack --identity=0
+# OR via environment variable
+export ATMOS_IDENTITY=false
+atmos terraform plan component --stack mystack
+```
+
+**Behavior:**
+1. `flags.Changed("identity")` returns `true` (if via flag)
+2. `normalizeIdentityValue()` converts `"false"` → `"__DISABLED__"` sentinel
+3. `info.Identity = "__DISABLED__"`
+4. Later, `auth.TerraformPreHook()` checks `isAuthenticationDisabled(stackInfo.Identity)`
+5. If disabled: Returns early, skipping all authentication
+6. AWS SDK uses default credential resolution (env vars, `~/.aws/credentials`, IMDS, OIDC)
+
+**Key Point:** Explicit disable overrides all identity configurations, skipping Atmos authentication entirely.
+
+**Accepted Boolean False Representations:**
+- `false`, `False`, `FALSE` (case-insensitive)
+- `0` (zero string)
+- `no`, `No`, `NO` (case-insensitive)
+- `off`, `Off`, `OFF` (case-insensitive)
+
+**Acceptance Criteria:**
+- ✅ `--identity=false` → Skip authentication, use AWS SDK defaults
+- ✅ `ATMOS_IDENTITY=false` → Skip authentication
+- ✅ Works with identities configured in `atmos.yaml`
+- ✅ Works when no identities configured
+- ✅ Disable flag takes precedence over default identity
+- ✅ Disable flag takes precedence over `ATMOS_IDENTITY` env var (if both set)
+
 ### FR-002: Precedence Order
 
 Identity resolution follows this precedence (highest to lowest):
 
-1. **Explicit `--identity` flag with value** (e.g., `--identity=prod-admin`)
-2. **Interactive selection** (when `--identity` flag used without value in TTY)
-3. **`ATMOS_IDENTITY` environment variable**
-4. **Default identity from configuration** (atmos.yaml or component config)
-5. **Error if none of above** ("no default identity found")
+1. **Explicit `--identity=false` flag** (disables authentication)
+2. **Explicit `--identity` flag with value** (e.g., `--identity=prod-admin`)
+3. **Interactive selection** (when `--identity` flag used without value in TTY)
+4. **`ATMOS_IDENTITY=false` environment variable** (disables authentication)
+5. **`ATMOS_IDENTITY` environment variable** (with identity name)
+6. **Default identity from configuration** (atmos.yaml or component config)
+7. **Error if none of above** ("no default identity found")
 
 **Acceptance Criteria:**
+- ✅ Flag with `false` disables authentication (highest priority)
 - ✅ Flag with value overrides all other sources
-- ✅ Environment variable overrides default from config
+- ✅ Environment variable with `false` disables authentication
+- ✅ Environment variable with name overrides default from config
 - ✅ Default identity used only when no other source specified
 - ✅ Clear error when no identity source available
 

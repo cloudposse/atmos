@@ -70,6 +70,9 @@ atmos describe component vpc -s tenant1-ue2-dev --identity my-aws-identity
 
 atmos describe component vpc -s tenant1-ue2-dev --identity # Interactive selection
 
+# Disable authentication (use AWS SDK defaults)
+atmos describe component vpc -s tenant1-ue2-dev --identity=false
+
 atmos describe component vpc -s tenant1-ue2-dev -i my-aws-identity
 ```
 
