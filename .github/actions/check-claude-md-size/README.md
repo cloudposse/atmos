@@ -48,7 +48,7 @@ Space-separated patterns to match different file locations:
     github-token: ${{ github.token }}
 ```
 
-The action uses `git diff` to identify modified files in the PR, then filters them against the provided patterns.
+The action uses GitHub CLI (`gh pr view`) to get the list of modified files in the PR, then filters them against the provided patterns.
 
 ## Inputs
 
@@ -56,7 +56,6 @@ The action uses `git diff` to identify modified files in the PR, then filters th
 |------|-------------|----------|---------|
 | `file-patterns` | Space-separated glob patterns for files to check (e.g., `"CLAUDE.md .claude/agents/*.md"`) | No | `CLAUDE.md` |
 | `max-size` | Maximum file size in bytes | No | `40000` |
-| `base-ref` | Base ref to compare against (default: PR base or origin/main) | No | _(auto-detected)_ |
 | `github-token` | GitHub token for posting PR comments | Yes | - |
 
 ## Outputs
@@ -70,11 +69,10 @@ The action uses `git diff` to identify modified files in the PR, then filters th
 
 ## How It Works
 
-1. **Detects PR context**: Automatically identifies the base branch to compare against
-2. **Finds modified files**: Uses `git diff --name-only --diff-filter=ACM` to get added/changed/modified files
-3. **Pattern matching**: Filters modified files against provided glob patterns using bash pattern matching
-4. **Size checking**: Validates each matched file against the size limit
-5. **Reports results**: Posts/updates PR comment if any files exceed the limit
+1. **Fetches PR files**: Uses `gh pr view --json files` to get all files modified in the PR
+2. **Pattern matching**: Filters modified files against provided glob patterns using bash pattern matching
+3. **Size checking**: Validates each matched file against the size limit
+4. **Reports results**: Posts/updates PR comment if any files exceed the limit
 
 ## Examples
 
@@ -140,8 +138,8 @@ jobs:
 
 **Console Output:**
 ```
-Comparing against base: origin/main
 File patterns: .claude/agents/*.md
+Fetching changed files for PR #1761...
 ✅ agent-developer.md: 23514 bytes (94% of limit)
 ```
 

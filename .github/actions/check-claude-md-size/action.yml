@@ -9,10 +9,6 @@ inputs:
     description: 'Maximum file size in bytes'
     required: false
     default: '40000'
-  base-ref:
-    description: 'Base ref to compare against (default: PR base or origin/main)'
-    required: false
-    default: ''
   github-token:
     description: 'GitHub token for posting comments'
     required: true
@@ -36,31 +32,25 @@ runs:
     - name: Check file size
       id: check
       shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
         FILE_PATTERNS="${{ inputs.file-patterns }}"
         MAX_SIZE="${{ inputs.max-size }}"
-        BASE_REF="${{ inputs.base-ref }}"
 
-        # Determine base ref for comparison
-        if [ -z "$BASE_REF" ]; then
-          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
-            BASE_REF="${{ github.event.pull_request.base.sha }}"
-          else
-            BASE_REF="origin/main"
-          fi
-        fi
-
-        echo "Comparing against base: $BASE_REF"
         echo "File patterns: $FILE_PATTERNS"
 
-        # Fetch base ref if needed (for PR context)
-        if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
-          echo "Fetching base ref..."
-          git fetch --depth=1 origin "${{ github.event.pull_request.base.ref }}" || true
+        # Get list of changed files in PR using GitHub CLI
+        if [ -n "${{ github.event.pull_request.number }}" ]; then
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          echo "Fetching changed files for PR #${PR_NUMBER}..."
+          CHANGED_FILES=$(gh pr view "$PR_NUMBER" --json files --jq '.files[].path')
+        else
+          echo "⚠️ Not a pull request context - cannot determine changed files"
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "all_files_ok=true" >> $GITHUB_OUTPUT
+          exit 0
         fi
-
-        # Get list of modified files matching patterns
-        CHANGED_FILES=$(git diff --name-only --diff-filter=ACM "$BASE_REF"...HEAD || git diff --name-only --diff-filter=ACM "$BASE_REF" HEAD)
 
         if [ -z "$CHANGED_FILES" ]; then
           echo "✅ No files modified in this PR"
