@@ -6,11 +6,14 @@
 
 ## Executive Summary
 
-Fixed critical authentication bug where YAML template functions (`!terraform.state`, `!terraform.output`) failed to access AWS credentials when using the `--identity` flag with terraform commands. The issue was caused by:
+Fixed critical authentication bug where YAML template functions (`!terraform.state`, `!terraform.output`) failed to
+access AWS credentials when using the `--identity` flag with terraform commands. The issue was caused by:
 
-1. **Missing authentication pipeline** - Terraform commands didn't create or authenticate AuthManager from `--identity` flag
+1. **Missing authentication pipeline** - Terraform commands didn't create or authenticate AuthManager from `--identity`
+   flag
 2. **AuthManager not threaded** - ProcessStacks/ProcessComponentConfig functions didn't accept AuthManager parameter
-3. **Critical bug discovered during implementation** - Initial fix created AuthManager but forgot to call `Authenticate()`, leaving AuthContext empty
+3. **Critical bug discovered during implementation** - Initial fix created AuthManager but forgot to call
+   `Authenticate()`, leaving AuthContext empty
 
 **Solution Implemented:**
 
@@ -20,7 +23,8 @@ Fixed critical authentication bug where YAML template functions (`!terraform.sta
 - Refactored existing helpers to use shared implementation
 - Conducted comprehensive audit to verify no other authentication bugs
 
-**Result:** All terraform commands now properly authenticate when using `--identity` flag, enabling YAML template functions to access AWS resources with proper credentials. Verified with real-world testing in infra-live repository.
+**Result:** All terraform commands now properly authenticate when using `--identity` flag, enabling YAML template
+functions to access AWS resources with proper credentials. Verified with real-world testing in infra-live repository.
 
 ## Problem Statement
 
@@ -316,7 +320,8 @@ func TestTerraformPlanWithIdentityAndYAMLFunctions(t *testing.T) {
 **Core Implementation:**
 
 - ✅ `internal/exec/terraform.go` - Use shared helper to create and authenticate AuthManager (-48 lines)
-- ✅ `internal/exec/utils.go` - Add AuthManager parameter to ProcessStacks and ProcessComponentConfig, populate AuthContext
+- ✅ `internal/exec/utils.go` - Add AuthManager parameter to ProcessStacks and ProcessComponentConfig, populate
+  AuthContext
 - ✅ `cmd/identity_flag.go` - Refactor to delegate to shared helper (-38 lines)
 
 **ProcessStacks Callers (Updated to pass nil authManager):**
@@ -331,6 +336,7 @@ func TestTerraformPlanWithIdentityAndYAMLFunctions(t *testing.T) {
 - ✅ `internal/exec/describe_component.go`
 
 **Summary:**
+
 - **Total Files Modified:** 11
 - **Net Lines Changed:** -16 (code reduction while adding functionality)
 - **New Shared Helper:** 1 file (+74 lines)
@@ -348,50 +354,51 @@ All changes maintain backward compatibility:
 
 All success criteria have been achieved:
 
-1. ✅ **COMPLETE** - `atmos terraform plan <component> -s <stack> --identity <identity>` works with `!terraform.state` functions
-   - Verified in infra-live with real AWS multi-account setup
+1. ✅ **COMPLETE** - `atmos terraform plan <component> -s <stack> --identity <identity>` works with `!terraform.state`
+   functions
+  - Verified in infra-live with real AWS multi-account setup
 
 2. ✅ **COMPLETE** - `!terraform.state` and `!terraform.output` use authenticated credentials from `--identity`
-   - AuthContext properly populated and threaded through YAML function evaluation
-   - Both functions successfully access S3 state using authenticated credentials
+  - AuthContext properly populated and threaded through YAML function evaluation
+  - Both functions successfully access S3 state using authenticated credentials
 
 3. ✅ **COMPLETE** - No AWS IMDS timeout errors when using `--identity` flag
-   - Fixed by ensuring `authManager.Authenticate()` is called
-   - AWS SDK uses profile-based credentials instead of IMDS
+  - Fixed by ensuring `authManager.Authenticate()` is called
+  - AWS SDK uses profile-based credentials instead of IMDS
 
 4. ✅ **COMPLETE** - Multi-account role assumption works correctly
-   - Tested with `core-identity/managers-team-access` identity
-   - Successfully assumed role and accessed S3 state across accounts
+  - Tested with `core-identity/managers-team-access` identity
+  - Successfully assumed role and accessed S3 state across accounts
 
 5. ✅ **COMPLETE** - All existing terraform commands continue to work without regression
-   - Updated all ProcessStacks callers to pass `nil` authManager
-   - Backward compatibility maintained for commands without `--identity`
+  - Updated all ProcessStacks callers to pass `nil` authManager
+  - Backward compatibility maintained for commands without `--identity`
 
 6. ✅ **COMPLETE** - Unit and integration tests pass
-   - `go build` compiles successfully
-   - `go vet` passes on all modified packages
-   - Auth package tests pass
+  - `go build` compiles successfully
+  - `go vet` passes on all modified packages
+  - Auth package tests pass
 
 7. ✅ **COMPLETE** - Manual testing in `infra-live` repository confirms fix
-   - Real-world testing with production-like AWS setup
-   - Confirmed authentication flow works end-to-end
-   - No IMDS timeout errors observed
+  - Real-world testing with production-like AWS setup
+  - Confirmed authentication flow works end-to-end
+  - No IMDS timeout errors observed
 
 **Additional Achievements:**
 
 8. ✅ **COMPLETE** - Code refactoring eliminates duplication
-   - Created shared `auth.CreateAndAuthenticateManager()` helper
-   - Removed duplicate authentication logic from `cmd/` and `internal/exec/`
-   - Net reduction of 16 lines while adding functionality
+  - Created shared `auth.CreateAndAuthenticateManager()` helper
+  - Removed duplicate authentication logic from `cmd/` and `internal/exec/`
+  - Net reduction of 16 lines while adding functionality
 
 9. ✅ **COMPLETE** - Comprehensive audit completed
-   - Verified no other instances of "create but not authenticate" bug
-   - All authentication code paths reviewed and confirmed correct
+  - Verified no other instances of "create but not authenticate" bug
+  - All authentication code paths reviewed and confirmed correct
 
 10. ✅ **COMPLETE** - Architectural improvements
-    - Avoided reverse dependency (`internal/exec/` depending on `cmd/`)
-    - Centralized authentication logic in `pkg/auth/`
-    - Better testability with interface-based design
+  - Avoided reverse dependency (`internal/exec/` depending on `cmd/`)
+  - Centralized authentication logic in `pkg/auth/`
+  - Better testability with interface-based design
 
 ## References
 
@@ -406,7 +413,8 @@ All success criteria have been achieved:
 
 ### Actual Implementation (Completed)
 
-The implementation followed a slightly different approach than originally planned, with cleaner architecture and better code reuse.
+The implementation followed a slightly different approach than originally planned, with cleaner architecture and better
+code reuse.
 
 #### Step 1: Created Shared Authentication Helper
 
@@ -416,53 +424,54 @@ Created a shared helper function to eliminate code duplication:
 
 ```go
 func CreateAndAuthenticateManager(
-	identityName string,
-	authConfig *schema.AuthConfig,
-	selectValue string,
+identityName string,
+authConfig *schema.AuthConfig,
+selectValue string,
 ) (AuthManager, error) {
-	if identityName == "" {
-		return nil, nil
-	}
+if identityName == "" {
+return nil, nil
+}
 
-	// Check if auth is configured when identity is provided.
-	if authConfig == nil || len(authConfig.Identities) == 0 {
-		return nil, fmt.Errorf("%w: authentication requires at least one identity configured in atmos.yaml", errUtils.ErrAuthNotConfigured)
-	}
+// Check if auth is configured when identity is provided.
+if authConfig == nil || len(authConfig.Identities) == 0 {
+return nil, fmt.Errorf("%w: authentication requires at least one identity configured in atmos.yaml", errUtils.ErrAuthNotConfigured)
+}
 
-	// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
-	authStackInfo := &schema.ConfigAndStacksInfo{
-		AuthContext: &schema.AuthContext{},
-	}
+// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
+authStackInfo := &schema.ConfigAndStacksInfo{
+AuthContext: &schema.AuthContext{},
+}
 
-	credStore := credentials.NewCredentialStore()
-	validator := validation.NewValidator()
-	authManager, err := NewAuthManager(authConfig, credStore, validator, authStackInfo)
-	if err != nil {
-		return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
-	}
+credStore := credentials.NewCredentialStore()
+validator := validation.NewValidator()
+authManager, err := NewAuthManager(authConfig, credStore, validator, authStackInfo)
+if err != nil {
+return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+}
 
-	// Handle interactive selection if identity matches the select value.
-	forceSelect := identityName == selectValue
-	if forceSelect {
-		identityName, err = authManager.GetDefaultIdentity(forceSelect)
-		if err != nil {
-			return nil, err
-		}
-	}
+// Handle interactive selection if identity matches the select value.
+forceSelect := identityName == selectValue
+if forceSelect {
+identityName, err = authManager.GetDefaultIdentity(forceSelect)
+if err != nil {
+return nil, err
+}
+}
 
-	// CRITICAL: Authenticate to populate AuthContext with credentials.
-	// This is critical for YAML functions like !terraform.state and !terraform.output
-	// to access cloud resources with the proper credentials.
-	_, err = authManager.Authenticate(context.Background(), identityName)
-	if err != nil {
-		return nil, err
-	}
+// CRITICAL: Authenticate to populate AuthContext with credentials.
+// This is critical for YAML functions like !terraform.state and !terraform.output
+// to access cloud resources with the proper credentials.
+_, err = authManager.Authenticate(context.Background(), identityName)
+if err != nil {
+return nil, err
+}
 
-	return authManager, nil
+return authManager, nil
 }
 ```
 
 **Why This Approach:**
+
 - Eliminates duplicate code between `cmd/identity_flag.go` and `internal/exec/terraform.go`
 - Avoids architectural violation (`internal/exec/` depending on `cmd/`)
 - Provides single source of truth for authentication logic
@@ -474,13 +483,13 @@ func CreateAndAuthenticateManager(
 
 ```go
 func ProcessStacks(
-	atmosConfig *schema.AtmosConfiguration,
-	configAndStacksInfo schema.ConfigAndStacksInfo,
-	checkStack bool,
-	processTemplates bool,
-	processYamlFunctions bool,
-	skip []string,
-	authManager auth.AuthManager,  // Added parameter
+atmosConfig *schema.AtmosConfiguration,
+configAndStacksInfo schema.ConfigAndStacksInfo,
+checkStack bool,
+processTemplates bool,
+processYamlFunctions bool,
+skip []string,
+authManager auth.AuthManager, // Added parameter
 ) (schema.ConfigAndStacksInfo, error)
 ```
 
@@ -488,16 +497,17 @@ func ProcessStacks(
 
 ```go
 func ProcessComponentConfig(
-	configAndStacksInfo *schema.ConfigAndStacksInfo,
-	stack string,
-	stacksMap map[string]any,
-	componentType string,
-	component string,
-	authManager auth.AuthManager,  // Added parameter
+configAndStacksInfo *schema.ConfigAndStacksInfo,
+stack string,
+stacksMap map[string]any,
+componentType string,
+component string,
+authManager auth.AuthManager, // Added parameter
 ) error
 ```
 
-**Key Design Decision:** Used `auth.AuthManager` interface (not pointer to struct) for better testability and flexibility.
+**Key Design Decision:** Used `auth.AuthManager` interface (not pointer to struct) for better testability and
+flexibility.
 
 #### Step 3: Threaded AuthManager Through Execution Pipeline
 
@@ -505,25 +515,25 @@ func ProcessComponentConfig(
 
 ```go
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
-	defer perf.Track(nil, "exec.ExecuteTerraform")()
+defer perf.Track(nil, "exec.ExecuteTerraform")()
 
-	// ... initialization code ...
+// ... initialization code ...
 
-	// Create and authenticate AuthManager from --identity flag if specified.
-	// This enables YAML template functions like !terraform.state to use authenticated credentials.
-	authManager, err := auth.CreateAndAuthenticateManager(info.Identity, &atmosConfig.Auth, cfg.IdentityFlagSelectValue)
-	if err != nil {
-		return err
-	}
+// Create and authenticate AuthManager from --identity flag if specified.
+// This enables YAML template functions like !terraform.state to use authenticated credentials.
+authManager, err := auth.CreateAndAuthenticateManager(info.Identity, &atmosConfig.Auth, cfg.IdentityFlagSelectValue)
+if err != nil {
+return err
+}
 
-	if shouldProcessStacks {
-		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
-		if err != nil {
-			return err
-		}
-	}
+if shouldProcessStacks {
+info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
+if err != nil {
+return err
+}
+}
 
-	// ... rest of function ...
+// ... rest of function ...
 }
 ```
 
@@ -534,10 +544,10 @@ Added AuthContext population from AuthManager:
 ```go
 // Populate AuthContext from AuthManager if provided (from --identity flag).
 if authManager != nil {
-	managerStackInfo := authManager.GetStackInfo()
-	if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
-		configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
-	}
+managerStackInfo := authManager.GetStackInfo()
+if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+}
 }
 ```
 
@@ -548,6 +558,7 @@ This ensures YAML template functions evaluated during component processing have 
 Updated all callers to pass `nil` authManager (for commands that don't use `--identity`):
 
 **Files Modified:**
+
 - `internal/exec/aws_eks_update_kubeconfig.go`
 - `internal/exec/helmfile.go`
 - `internal/exec/helmfile_generate_varfile.go`
@@ -575,14 +586,15 @@ Refactored to delegate to shared helper, eliminating 45 lines of duplicate code:
 
 ```go
 func CreateAuthManagerFromIdentity(
-	identityName string,
-	authConfig *schema.AuthConfig,
+identityName string,
+authConfig *schema.AuthConfig,
 ) (auth.AuthManager, error) {
-	return auth.CreateAndAuthenticateManager(identityName, authConfig, IdentityFlagSelectValue)
+return auth.CreateAndAuthenticateManager(identityName, authConfig, IdentityFlagSelectValue)
 }
 ```
 
 **Benefits:**
+
 - Reduced codebase by ~90 lines
 - Eliminated code duplication
 - Consistent authentication behavior across all commands
@@ -592,16 +604,19 @@ func CreateAuthManagerFromIdentity(
 
 During testing in `infra-live`, discovered a **critical bug** in the initial implementation:
 
-**Bug:** AuthManager was created but **never authenticated**. Without calling `Authenticate()`, the AuthContext remained empty, causing IMDS timeout errors.
+**Bug:** AuthManager was created but **never authenticated**. Without calling `Authenticate()`, the AuthContext remained
+empty, causing IMDS timeout errors.
 
 **Error Message:**
+
 ```
 failed to read Terraform state for component vpc in stack core-ue2-auto
 failed to get object from S3: operation error S3: GetObject, exceeded maximum number of attempts, 3
 no EC2 IMDS role found, operation error ec2imds: GetMetadata, dial tcp 169.254.169.254:80: i/o timeout
 ```
 
-**Root Cause:** Missing authentication call. The code created AuthManager but didn't call `authManager.Authenticate()` to populate AuthContext with credentials.
+**Root Cause:** Missing authentication call. The code created AuthManager but didn't call `authManager.Authenticate()`
+to populate AuthContext with credentials.
 
 **Fix:** Added authentication call in the shared helper function:
 
@@ -609,7 +624,7 @@ no EC2 IMDS role found, operation error ec2imds: GetMetadata, dial tcp 169.254.1
 // Authenticate to populate AuthContext with credentials.
 _, err = authManager.Authenticate(context.Background(), identityName)
 if err != nil {
-	return nil, err
+return nil, err
 }
 ```
 
@@ -620,7 +635,7 @@ INFO Authenticating with identity identity=core-identity/managers-team-access
 INFO Successfully authenticated identity=core-identity/managers-team-access
 DEBUG Adding auth-based environment variables
       profile=cloudposse-core-gbl-identity-managers-team-access
-      credentials_file=/Users/andriyknysh/.atmos/aws/credentials
+      credentials_file=/Users/me/.atmos/aws/credentials
 ```
 
 ### Comprehensive Audit
@@ -630,19 +645,19 @@ Audited the entire codebase to ensure no other instances of the "create but not 
 **Locations Where AuthManager is Created:**
 
 1. ✅ **`internal/exec/terraform.go:71`** - FIXED (our implementation)
-   - Uses `auth.CreateAndAuthenticateManager()` which authenticates properly
+  - Uses `auth.CreateAndAuthenticateManager()` which authenticates properly
 
 2. ✅ **`cmd/identity_flag.go:143`** - CORRECT
-   - Delegates to `auth.CreateAndAuthenticateManager()`
-   - Properly authenticates
+  - Delegates to `auth.CreateAndAuthenticateManager()`
+  - Properly authenticates
 
 3. ✅ **`internal/exec/workflow_utils.go:138`** - CORRECT
-   - Creates AuthManager at line 138
-   - Authenticates at line 177: `authManager.Authenticate(context.Background(), stepIdentity)`
+  - Creates AuthManager at line 138
+  - Authenticates at line 177: `authManager.Authenticate(context.Background(), stepIdentity)`
 
 4. ✅ **`cmd/cmd_utils.go:374`** - CORRECT
-   - Creates AuthManager at line 374
-   - Authenticates at line 387: `authManager.Authenticate(context.Background(), identityArg)`
+  - Creates AuthManager at line 374
+  - Authenticates at line 387: `authManager.Authenticate(context.Background(), identityArg)`
 
 **Conclusion:** No other instances of the bug found. The issue was isolated to terraform command execution.
 
@@ -659,13 +674,15 @@ Audited the entire codebase to ensure no other instances of the "create but not 
 Tested with real-world multi-account AWS setup:
 
 ```bash
-cd /Users/andriyknysh/Documents/Projects/CloudPosse/Programs/Projects/CloudPosse/infra-live
+cd /Users/me/Projects/infra-live
 atmos terraform plan runs-on/cloudposse -s core-ue2-auto --identity core-identity/managers-team-access
 ```
 
-**Result:** ✅ Success - YAML template functions (`!terraform.state`, `!terraform.output`) successfully accessed S3 using authenticated credentials.
+**Result:** ✅ Success - YAML template functions (`!terraform.state`, `!terraform.output`) successfully accessed S3 using
+authenticated credentials.
 
 **Authentication Flow Observed:**
+
 1. AuthManager created from `--identity` flag
 2. Interactive authentication (if needed) or cached credentials used
 3. AuthContext populated with AWS credentials
@@ -690,5 +707,3 @@ atmos terraform plan runs-on/cloudposse -s core-ue2-auto --identity core-identit
 - **Phase 5 (Audit):** ✅ Complete - Verified no other instances of the bug
 - **Phase 6 (Testing):** ✅ Complete - Manual testing in infra-live confirmed fix
 - **Phase 7 (Verification):** ✅ Complete - Build, tests, and code quality checks pass
-
-**Total Actual Time:** ~6 hours (including bug discovery, audit, and refactoring)
