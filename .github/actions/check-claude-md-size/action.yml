@@ -138,6 +138,12 @@ runs:
 
         EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .id' | head -1)
 
+        if [ -n "$EXISTING_COMMENT" ]; then
+          echo "Found existing comment with ID: $EXISTING_COMMENT"
+        else
+          echo "No existing comment found"
+        fi
+
         OVERSIZED="${{ steps.check.outputs.oversized_files }}"
         TOTAL_FILES="${{ steps.check.outputs.total_files }}"
 
@@ -179,9 +185,12 @@ runs:
         > All MANDATORY requirements must be preserved."
 
         if [ -n "$EXISTING_COMMENT" ]; then
-          echo "Updating existing comment..."
+          echo "Updating existing comment ID: $EXISTING_COMMENT..."
           gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
-            -f body="$COMMENT_BODY"
+            -f body="$COMMENT_BODY" || {
+            echo "⚠️ Failed to update comment (it may have been deleted), creating new comment..."
+            gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
+          }
         else
           echo "Creating new comment..."
           gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
