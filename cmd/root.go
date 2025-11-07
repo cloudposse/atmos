@@ -37,6 +37,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 
 	// Import built-in command packages for side-effect registration.
@@ -257,36 +258,31 @@ func setupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetLevel(log.WarnLevel)
 	}
 
-	// Always set up styles to ensure trace level shows as "TRCE".
-	styles := log.DefaultStyles()
+	// Get theme-aware log styles.
+	var styles *log.Styles
+	if atmosConfig.Settings.Terminal.IsColorEnabled(term.IsTTYSupportForStderr()) {
+		// Get color scheme for the configured theme.
+		scheme, err := theme.GetColorSchemeForTheme(atmosConfig.Settings.Terminal.Theme)
+		if err == nil && scheme != nil {
+			// Use themed styles.
+			styles = theme.GetLogStyles(scheme)
+		} else {
+			// Fallback to default styles if theme loading fails.
+			styles = log.DefaultStyles()
+		}
+	} else {
+		// Use no-color styles.
+		styles = theme.GetLogStylesNoColor()
+	}
 
-	// Set trace level to show "TRCE" instead of being blank/DEBU.
+	// Add TRCE level for trace logging (using same style as DEBU).
 	if debugStyle, ok := styles.Levels[log.DebugLevel]; ok {
-		// Copy debug style but set the string to "TRCE"
 		styles.Levels[log.TraceLevel] = debugStyle.SetString("TRCE")
 	} else {
-		// Fallback if debug style doesn't exist.
 		styles.Levels[log.TraceLevel] = lipgloss.NewStyle().SetString("TRCE")
 	}
 
-	// If colors are disabled, clear the colors but keep the level strings.
-	// Use stderr TTY detection since logs go to stderr.
-	if !atmosConfig.Settings.Terminal.IsColorEnabled(term.IsTTYSupportForStderr()) {
-		clearedStyles := &log.Styles{}
-		clearedStyles.Levels = make(map[log.Level]lipgloss.Style)
-		for k := range styles.Levels {
-			if k == log.TraceLevel {
-				// Keep TRCE string but remove color
-				clearedStyles.Levels[k] = lipgloss.NewStyle().SetString("TRCE")
-			} else {
-				// For other levels, keep their default strings but remove color
-				clearedStyles.Levels[k] = styles.Levels[k].UnsetForeground().Bold(false)
-			}
-		}
-		log.SetStyles(clearedStyles)
-	} else {
-		log.SetStyles(styles)
-	}
+	log.SetStyles(styles)
 	// Only set output if a log file is configured.
 	if atmosConfig.Logs.File != "" {
 		var output io.Writer
