@@ -92,7 +92,7 @@ func createAndStartNewContainer(params *containerParams) error {
 	}
 
 	// Display container information.
-	displayContainerInfo(params.config, params.containerName)
+	displayContainerInfo(params.config)
 
 	return nil
 }
@@ -252,7 +252,7 @@ func buildImageIfNeeded(ctx context.Context, runtime container.Runtime, config *
 }
 
 // displayContainerInfo displays key information about the container in a user-friendly format.
-func displayContainerInfo(config *devcontainer.Config, containerName string) {
+func displayContainerInfo(config *devcontainer.Config) {
 	var info []string
 
 	// Show image.
@@ -261,35 +261,53 @@ func displayContainerInfo(config *devcontainer.Config, containerName string) {
 	}
 
 	// Show workspace mount.
-	if config.WorkspaceFolder != "" {
-		cwd, _ := os.Getwd()
-		if cwd != "" {
-			info = append(info, fmt.Sprintf("Workspace: %s → %s", cwd, config.WorkspaceFolder))
-		} else {
-			info = append(info, fmt.Sprintf("Workspace folder: %s", config.WorkspaceFolder))
-		}
+	if workspaceInfo := formatWorkspaceInfo(config.WorkspaceFolder); workspaceInfo != "" {
+		info = append(info, workspaceInfo)
 	}
 
 	// Show forwarded ports.
-	if len(config.ForwardPorts) > 0 {
-		var ports []string
-		for _, port := range config.ForwardPorts {
-			switch v := port.(type) {
-			case int:
-				ports = append(ports, fmt.Sprintf("%d", v))
-			case float64:
-				ports = append(ports, fmt.Sprintf("%d", int(v)))
-			case string:
-				ports = append(ports, v)
-			}
-		}
-		if len(ports) > 0 {
-			info = append(info, fmt.Sprintf("Ports: %s", strings.Join(ports, ", ")))
-		}
+	if portsInfo := formatPortsInfo(config.ForwardPorts); portsInfo != "" {
+		info = append(info, portsInfo)
 	}
 
 	// Display info if we have any.
 	if len(info) > 0 {
 		_ = ui.Infof("\n%s\n", strings.Join(info, "\n"))
 	}
+}
+
+// formatWorkspaceInfo formats the workspace folder information.
+func formatWorkspaceInfo(workspaceFolder string) string {
+	if workspaceFolder == "" {
+		return ""
+	}
+	cwd, _ := os.Getwd()
+	if cwd != "" {
+		return fmt.Sprintf("Workspace: %s → %s", cwd, workspaceFolder)
+	}
+	return fmt.Sprintf("Workspace folder: %s", workspaceFolder)
+}
+
+// formatPortsInfo formats the forwarded ports information.
+func formatPortsInfo(forwardPorts []interface{}) string {
+	if len(forwardPorts) == 0 {
+		return ""
+	}
+
+	var ports []string
+	for _, port := range forwardPorts {
+		switch v := port.(type) {
+		case int:
+			ports = append(ports, fmt.Sprintf("%d", v))
+		case float64:
+			ports = append(ports, fmt.Sprintf("%d", int(v)))
+		case string:
+			ports = append(ports, v)
+		}
+	}
+
+	if len(ports) > 0 {
+		return fmt.Sprintf("Ports: %s", strings.Join(ports, ", "))
+	}
+	return ""
 }

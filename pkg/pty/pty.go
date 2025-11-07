@@ -265,9 +265,9 @@ func (m *maskedWriter) Write(p []byte) (n int, err error) {
 	masked := m.masker.Mask(original)
 
 	// Write masked data to underlying writer.
-	written, err := m.underlying.Write([]byte(masked))
+	_, err = m.underlying.Write([]byte(masked))
 	if err != nil {
-		return written, err
+		return 0, err
 	}
 
 	// Return original byte count (not masked length) to maintain io.Writer contract.

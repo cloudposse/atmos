@@ -117,8 +117,84 @@ func (d *DockerRuntime) Remove(ctx context.Context, containerID string, force bo
 func (d *DockerRuntime) Inspect(ctx context.Context, containerID string) (*Info, error) {
 	defer perf.Track(nil, "container.DockerRuntime.Inspect")()
 
-	// TODO: Implement actual inspection using docker inspect with JSON output.
-	return nil, errUtils.ErrNotImplemented
+	data, err := d.runDockerInspect(ctx, containerID)
+	if err != nil {
+		return nil, err
+	}
+
+	info := d.parseInspectData(data)
+	return info, nil
+}
+
+// runDockerInspect executes docker inspect and returns parsed JSON.
+func (d *DockerRuntime) runDockerInspect(ctx context.Context, containerID string) (map[string]interface{}, error) {
+	cmd := exec.CommandContext(ctx, dockerCmd, "inspect", "--format", "{{json .}}", containerID)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%w: docker inspect failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(output, &data); err != nil {
+		return nil, fmt.Errorf("%w: failed to parse docker inspect output: %w", errUtils.ErrContainerRuntimeOperation, err)
+	}
+
+	return data, nil
+}
+
+// parseInspectData converts docker inspect JSON into Info struct.
+func (d *DockerRuntime) parseInspectData(data map[string]interface{}) *Info {
+	info := &Info{
+		ID:    getString(data, "Id"),
+		Name:  strings.TrimPrefix(getString(data, "Name"), "/"),
+		Image: getString(data, "Image"),
+	}
+
+	// Use .State.Status when available (machine-readable), fall back to .Status (human-readable).
+	info.Status = getStatusFromInspect(data)
+
+	// Parse created timestamp.
+	if created := getString(data, "Created"); created != "" {
+		if ts, err := time.Parse(time.RFC3339Nano, created); err == nil {
+			info.Created = ts
+		}
+	}
+
+	// Parse labels.
+	info.Labels = getLabelsFromInspect(data)
+
+	return info
+}
+
+// getStatusFromInspect extracts status from inspect data, preferring .State.Status.
+func getStatusFromInspect(data map[string]interface{}) string {
+	if state, ok := data["State"].(map[string]interface{}); ok {
+		if status := getString(state, "Status"); status != "" {
+			return status
+		}
+	}
+	return getString(data, "Status")
+}
+
+// getLabelsFromInspect extracts labels from inspect data.
+func getLabelsFromInspect(data map[string]interface{}) map[string]string {
+	config, ok := data["Config"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	labels, ok := config["Labels"].(map[string]interface{})
+	if !ok || len(labels) == 0 {
+		return nil
+	}
+
+	result := make(map[string]string, len(labels))
+	for k, v := range labels {
+		if s, ok := v.(string); ok {
+			result[k] = s
+		}
+	}
+	return result
 }
 
 // List lists containers matching the given filters.
@@ -154,11 +230,17 @@ func (d *DockerRuntime) List(ctx context.Context, filters map[string]string) ([]
 			continue
 		}
 
+		// Use .State when available (machine-readable), fall back to .Status (human-readable).
+		status := getString(containerJSON, "State")
+		if status == "" {
+			status = getString(containerJSON, "Status")
+		}
+
 		info := Info{
 			ID:     getString(containerJSON, "ID"),
 			Name:   strings.TrimPrefix(getString(containerJSON, "Names"), "/"),
 			Image:  getString(containerJSON, "Image"),
-			Status: getString(containerJSON, "Status"),
+			Status: status,
 		}
 
 		// Parse labels if present.

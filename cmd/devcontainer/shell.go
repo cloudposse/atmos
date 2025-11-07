@@ -15,6 +15,7 @@ var (
 	shellNew      bool // Create a new instance.
 	shellReplace  bool // Replace existing instance.
 	shellRm       bool // Remove container after exit.
+	shellNoPull   bool // Skip image pull when rebuilding.
 )
 
 var shellCmd = &cobra.Command{
@@ -61,7 +62,7 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 
 		// Handle --replace: destroy and recreate the instance.
 		if shellReplace {
-			if err := e.ExecuteDevcontainerRebuild(atmosConfigPtr, name, shellInstance, shellIdentity, false); err != nil {
+			if err := e.ExecuteDevcontainerRebuild(atmosConfigPtr, name, shellInstance, shellIdentity, shellNoPull); err != nil {
 				return err
 			}
 			// Attach to the newly created container.
@@ -120,6 +121,7 @@ func init() {
 	shellCmd.Flags().BoolVar(&shellNew, "new", false, "Create a new instance with auto-generated name")
 	shellCmd.Flags().BoolVar(&shellReplace, "replace", false, "Destroy and recreate the current instance")
 	shellCmd.Flags().BoolVar(&shellRm, "rm", false, "Automatically remove the container when the shell exits")
+	shellCmd.Flags().BoolVar(&shellNoPull, "no-pull", false, "Skip pulling the image when using --replace (use cached image)")
 
 	// Mark flags as mutually exclusive.
 	shellCmd.MarkFlagsMutuallyExclusive("new", "replace")

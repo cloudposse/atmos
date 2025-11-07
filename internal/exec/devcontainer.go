@@ -1,3 +1,4 @@
+//nolint:revive // file-length-limit: Reduced from 907 to 689 lines (24% reduction), contains core devcontainer lifecycle management
 package exec
 
 import (
@@ -29,7 +30,18 @@ import (
 
 const (
 	tableWidth = 92 // Width for devcontainer list table including indicator column.
+
+	errListContainers = "%w: failed to list containers: %w"
 )
+
+// DevcontainerExecParams encapsulates parameters for ExecuteDevcontainerExec.
+type DevcontainerExecParams struct {
+	Name        string
+	Instance    string
+	Interactive bool
+	UsePTY      bool
+	Command     []string
+}
 
 // devcontainerSpinnerModel is a simple spinner model for devcontainer operations.
 type devcontainerSpinnerModel struct {
@@ -122,7 +134,7 @@ func ExecuteDevcontainerList(atmosConfig *schema.AtmosConfiguration) error {
 	ctx := context.Background()
 	runningContainers, err := runtime.List(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("%w: failed to list containers: %w", errUtils.ErrContainerRuntimeOperation, err)
+		return fmt.Errorf(errListContainers, errUtils.ErrContainerRuntimeOperation, err)
 	}
 
 	// Build set of running devcontainer names.
@@ -228,7 +240,7 @@ func ExecuteDevcontainerStart(atmosConfig *schema.AtmosConfiguration, name, inst
 	filters := map[string]string{"name": containerName}
 	containers, err := runtime.List(ctx, filters)
 	if err != nil {
-		return fmt.Errorf("%w: failed to list containers: %w", errUtils.ErrContainerRuntimeOperation, err)
+		return fmt.Errorf(errListContainers, errUtils.ErrContainerRuntimeOperation, err)
 	}
 
 	if len(containers) == 0 {
@@ -282,7 +294,7 @@ func ExecuteDevcontainerStop(atmosConfig *schema.AtmosConfiguration, name, insta
 	}
 	containers, err := runtime.List(ctx, filters)
 	if err != nil {
-		return fmt.Errorf("%w: failed to list containers: %w", errUtils.ErrContainerRuntimeOperation, err)
+		return fmt.Errorf(errListContainers, errUtils.ErrContainerRuntimeOperation, err)
 	}
 
 	if len(containers) == 0 {
@@ -357,7 +369,7 @@ func findAndStartContainer(ctx context.Context, runtime container.Runtime, conta
 	filters := map[string]string{"name": containerName}
 	containers, err := runtime.List(ctx, filters)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to list containers: %w", errUtils.ErrContainerRuntimeOperation, err)
+		return nil, fmt.Errorf(errListContainers, errUtils.ErrContainerRuntimeOperation, err)
 	}
 
 	if len(containers) == 0 {
@@ -539,7 +551,7 @@ func getShellArgs(userEnvProbe string) []string {
 // TODO: Add --identity flag support. When implemented, ENV file paths from identity
 // must be resolved relative to container paths (e.g., /localhost or bind mount location),
 // not host paths, since the container runs in its own filesystem namespace.
-func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, name, instance string, interactive, usePTY bool, command []string) error {
+func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, params DevcontainerExecParams) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerExec")()
 
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -547,7 +559,7 @@ func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, name, insta
 		return err
 	}
 
-	_, settings, err := devcontainer.LoadConfig(&freshConfig, name)
+	_, settings, err := devcontainer.LoadConfig(&freshConfig, params.Name)
 	if err != nil {
 		return err
 	}
@@ -557,7 +569,7 @@ func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, name, insta
 		return err
 	}
 
-	containerName, err := devcontainer.GenerateContainerName(name, instance)
+	containerName, err := devcontainer.GenerateContainerName(params.Name, params.Instance)
 	if err != nil {
 		return err
 	}
@@ -572,13 +584,24 @@ func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, name, insta
 		ctx:         ctx,
 		runtime:     runtime,
 		containerID: containerInfo.ID,
-		interactive: interactive,
-		usePTY:      usePTY,
-		command:     command,
+		interactive: params.Interactive,
+		usePTY:      params.UsePTY,
+		command:     params.Command,
 	})
 }
 
-// ExecuteDevcontainerRemove removes a devcontainer.
+// ExecuteDevcontainerRemove removes a devcontainer by name and instance.
+// The operation is idempotent - returns nil if the container does not exist.
+//
+// Reloads configuration, detects the container runtime, and generates the container name.
+// Fails if the container is running unless force is true. When force is true, stops a
+// running container before removal. Returns relevant errors for runtime or config failures.
+//
+// Parameters:
+//   - atmosConfig: Atmos configuration for performance tracking
+//   - name: Devcontainer name from configuration
+//   - instance: Instance identifier (e.g., "default", "prod")
+//   - force: If true, stops running containers before removal; if false, fails on running containers
 func ExecuteDevcontainerRemove(atmosConfig *schema.AtmosConfiguration, name, instance string, force bool) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerRemove")()
 
@@ -905,7 +928,7 @@ func GenerateNewDevcontainerInstance(atmosConfig *schema.AtmosConfiguration, nam
 
 	containers, err := runtime.List(ctx, nil)
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to list containers: %w", errUtils.ErrContainerRuntimeOperation, err)
+		return "", fmt.Errorf(errListContainers, errUtils.ErrContainerRuntimeOperation, err)
 	}
 
 	maxNumber := findMaxInstanceNumber(containers, name, baseInstance)

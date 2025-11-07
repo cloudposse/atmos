@@ -34,7 +34,13 @@ from the command to execute.`,
 
 		name := args[0]
 		command := args[1:]
-		return e.ExecuteDevcontainerExec(atmosConfigPtr, name, execInstance, execInteractive, execUsePTY, command)
+		return e.ExecuteDevcontainerExec(atmosConfigPtr, e.DevcontainerExecParams{
+			Name:        name,
+			Instance:    execInstance,
+			Interactive: execInteractive,
+			UsePTY:      execUsePTY,
+			Command:     command,
+		})
 	},
 }
 
