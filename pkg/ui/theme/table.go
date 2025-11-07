@@ -41,71 +41,97 @@ func DefaultTableConfig() TableConfig {
 }
 
 // CreateTable creates a styled table based on the configuration.
-//
-//revive:disable:function-length
 func CreateTable(config *TableConfig, headers []string, rows [][]string) string {
 	t := table.New()
 
-	// Apply table style based on configuration
-	switch config.Style {
-	case TableStyleBordered:
-		// Full borders
-		t = t.Border(config.BorderStyle).
-			BorderStyle(config.Styles.TableBorder)
+	// Apply border configuration
+	t = applyTableBorders(t, config)
 
-	case TableStyleMinimal:
-		// No borders except header separator (if ShowHeader is true)
-		t = t.BorderTop(false).
-			BorderBottom(false).
-			BorderLeft(false).
-			BorderRight(false).
-			BorderColumn(false).
-			BorderRow(false).
-			BorderHeader(config.ShowHeader) // Honor ShowHeader setting
-
-	case TableStylePlain:
-		// No borders at all
-		t = t.BorderTop(false).
-			BorderBottom(false).
-			BorderLeft(false).
-			BorderRight(false).
-			BorderColumn(false).
-			BorderRow(false).
-			BorderHeader(false)
-	}
-
-	// Override with ShowBorders if explicitly set
-	if config.ShowBorders && config.Style != TableStyleBordered {
-		t = t.Border(config.BorderStyle).
-			BorderStyle(config.Styles.TableBorder).
-			BorderTop(true).
-			BorderBottom(true).
-			BorderLeft(true).
-			BorderRight(true).
-			BorderColumn(true).
-			BorderRow(true).
-			BorderHeader(true)
-	}
-
-	// Apply style function
-	if config.StyleFunc != nil {
-		t = t.StyleFunc(config.StyleFunc)
-	} else {
-		// Use default style function based on theme
-		t = t.StyleFunc(func(row, col int) lipgloss.Style {
-			style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-
-			if row == -1 { // Header row
-				return style.Inherit(config.Styles.TableHeader)
-			}
-			return style.Inherit(config.Styles.TableRow)
-		})
-	}
+	// Apply styling
+	t = applyTableStyle(t, config)
 
 	// Set headers and rows
 	t = t.Headers(headers...).Rows(rows...)
 
 	return t.String()
+}
+
+// applyTableBorders applies border configuration to the table.
+func applyTableBorders(t *table.Table, config *TableConfig) *table.Table {
+	// Apply table style based on configuration
+	switch config.Style {
+	case TableStyleBordered:
+		t = applyBorderedStyle(t, config)
+	case TableStyleMinimal:
+		t = applyMinimalStyle(t, config)
+	case TableStylePlain:
+		t = applyPlainStyle(t)
+	}
+
+	// Override with ShowBorders if explicitly set
+	if config.ShowBorders && config.Style != TableStyleBordered {
+		t = applyFullBorders(t, config)
+	}
+
+	return t
+}
+
+// applyBorderedStyle applies full borders to the table.
+func applyBorderedStyle(t *table.Table, config *TableConfig) *table.Table {
+	return t.Border(config.BorderStyle).
+		BorderStyle(config.Styles.TableBorder)
+}
+
+// applyMinimalStyle applies minimal borders (header separator only).
+func applyMinimalStyle(t *table.Table, config *TableConfig) *table.Table {
+	return t.BorderTop(false).
+		BorderBottom(false).
+		BorderLeft(false).
+		BorderRight(false).
+		BorderColumn(false).
+		BorderRow(false).
+		BorderHeader(config.ShowHeader) // Honor ShowHeader setting
+}
+
+// applyPlainStyle removes all borders from the table.
+func applyPlainStyle(t *table.Table) *table.Table {
+	return t.BorderTop(false).
+		BorderBottom(false).
+		BorderLeft(false).
+		BorderRight(false).
+		BorderColumn(false).
+		BorderRow(false).
+		BorderHeader(false)
+}
+
+// applyFullBorders applies full borders to override style settings.
+func applyFullBorders(t *table.Table, config *TableConfig) *table.Table {
+	return t.Border(config.BorderStyle).
+		BorderStyle(config.Styles.TableBorder).
+		BorderTop(true).
+		BorderBottom(true).
+		BorderLeft(true).
+		BorderRight(true).
+		BorderColumn(true).
+		BorderRow(true).
+		BorderHeader(true)
+}
+
+// applyTableStyle applies the style function to the table.
+func applyTableStyle(t *table.Table, config *TableConfig) *table.Table {
+	if config.StyleFunc != nil {
+		return t.StyleFunc(config.StyleFunc)
+	}
+
+	// Use default style function based on theme
+	return t.StyleFunc(func(row, col int) lipgloss.Style {
+		style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+
+		if row == -1 { // Header row
+			return style.Inherit(config.Styles.TableHeader)
+		}
+		return style.Inherit(config.Styles.TableRow)
+	})
 }
 
 // isActiveRow checks if the row represents an active theme.
