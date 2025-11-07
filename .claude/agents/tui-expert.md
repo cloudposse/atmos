@@ -129,11 +129,11 @@ styles := theme.GetCurrentStyles()
 ### Apply Styles to Text
 
 ```go
-// Status messages
-styles.Success.Render("✓ Success")
-styles.Error.Render("✗ Error")
-styles.Warning.Render("⚠ Warning")
-styles.Info.Render("ℹ Info")
+// Status messages (for demo/preview output only - use ui.Success/Error/etc for actual status)
+styles.Success.Render("This is a success message")
+styles.Error.Render("This is an error message")
+styles.Warning.Render("Warning, something happened")
+styles.Info.Render("Info you should know about")
 
 // Headers and labels
 styles.Title.Render("Main Title")
@@ -493,9 +493,9 @@ directly to demonstrate theme appearance. But for actual status messages, use UI
 styles := theme.GetCurrentStyles()
 demoOutput := fmt.Sprintf(
     "Success: %s\nError: %s\nWarning: %s",
-    styles.Success.Render("✓ Success message"),
-    styles.Error.Render("✗ Error message"),
-    styles.Warning.Render("⚠ Warning message"),
+    styles.Success.Render("This is a success message"),
+    styles.Error.Render("This is an error message"),
+    styles.Warning.Render("Warning, something happened"),
 )
 ui.Write(demoOutput)  // Output the demo
 
