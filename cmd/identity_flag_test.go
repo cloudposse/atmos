@@ -14,6 +14,45 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+func TestNormalizeIdentityValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		// Boolean false representations - should return __DISABLED__.
+		{name: "lowercase false", input: "false", expected: cfg.IdentityFlagDisabledValue},
+		{name: "capitalized False", input: "False", expected: cfg.IdentityFlagDisabledValue},
+		{name: "uppercase FALSE", input: "FALSE", expected: cfg.IdentityFlagDisabledValue},
+		{name: "mixed case FaLsE", input: "FaLsE", expected: cfg.IdentityFlagDisabledValue},
+		{name: "zero string", input: "0", expected: cfg.IdentityFlagDisabledValue},
+		{name: "lowercase no", input: "no", expected: cfg.IdentityFlagDisabledValue},
+		{name: "capitalized No", input: "No", expected: cfg.IdentityFlagDisabledValue},
+		{name: "uppercase NO", input: "NO", expected: cfg.IdentityFlagDisabledValue},
+		{name: "lowercase off", input: "off", expected: cfg.IdentityFlagDisabledValue},
+		{name: "capitalized Off", input: "Off", expected: cfg.IdentityFlagDisabledValue},
+		{name: "uppercase OFF", input: "OFF", expected: cfg.IdentityFlagDisabledValue},
+
+		// Non-boolean values - should return unchanged.
+		{name: "empty string", input: "", expected: ""},
+		{name: "identity name", input: "aws-sso", expected: "aws-sso"},
+		{name: "select sentinel", input: cfg.IdentityFlagSelectValue, expected: cfg.IdentityFlagSelectValue},
+		{name: "number 1", input: "1", expected: "1"},
+		{name: "yes", input: "yes", expected: "yes"},
+		{name: "true", input: "true", expected: "true"},
+		{name: "on", input: "on", expected: "on"},
+		{name: "false with suffix", input: "false-identity", expected: "false-identity"},
+		{name: "prefix false", input: "myfalse", expected: "myfalse"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := normalizeIdentityValue(tc.input)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
 func TestExtractIdentityFromArgs(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -126,6 +165,51 @@ func TestGetIdentityFromFlags(t *testing.T) {
 			name:     "no identity specified",
 			osArgs:   []string{"atmos", "auth", "login"},
 			expected: "",
+		},
+		// Disabled identity tests.
+		{
+			name:     "disabled via flag lowercase false",
+			osArgs:   []string{"atmos", "auth", "login", "--identity", "false"},
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "disabled via flag uppercase FALSE",
+			osArgs:   []string{"atmos", "auth", "login", "--identity", "FALSE"},
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "disabled via flag equals false",
+			osArgs:   []string{"atmos", "auth", "login", "--identity=false"},
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "disabled via flag number 0",
+			osArgs:   []string{"atmos", "auth", "login", "--identity", "0"},
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "disabled via flag no",
+			osArgs:   []string{"atmos", "auth", "login", "--identity", "no"},
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "disabled via flag off",
+			osArgs:   []string{"atmos", "auth", "login", "--identity", "off"},
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "disabled via environment variable",
+			osArgs:   []string{"atmos", "auth", "login"},
+			envVar:   "ATMOS_IDENTITY",
+			envValue: "false",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "flag disabled overrides env identity",
+			osArgs:   []string{"atmos", "auth", "login", "--identity", "false"},
+			envVar:   "ATMOS_IDENTITY",
+			envValue: "some-identity",
+			expected: cfg.IdentityFlagDisabledValue,
 		},
 	}
 
