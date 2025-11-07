@@ -1,13 +1,14 @@
-package cmd
+package theme
 
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
+
+var themeListRecommendedOnly bool
 
 // themeListCmd lists available terminal themes.
 var themeListCmd = &cobra.Command{
@@ -23,8 +24,6 @@ atmos theme list --recommended`,
 	RunE: executeThemeList,
 }
 
-var themeListRecommendedOnly bool
-
 func init() {
 	themeListCmd.Flags().BoolVar(&themeListRecommendedOnly, "recommended", false, "Show only recommended themes")
 	themeCmd.AddCommand(themeListCmd)
@@ -32,12 +31,12 @@ func init() {
 
 // executeThemeList runs the theme list command.
 func executeThemeList(cmd *cobra.Command, args []string) error {
+	defer perf.Track(atmosConfigPtr, "theme.list.RunE")()
+
 	// Get the current active theme from configuration.
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
 	activeTheme := ""
-	if err == nil {
-		activeTheme = atmosConfig.Settings.Terminal.Theme
+	if atmosConfigPtr != nil {
+		activeTheme = atmosConfigPtr.Settings.Terminal.Theme
 	}
 
 	result := theme.ListThemes(theme.ListThemesOptions{
