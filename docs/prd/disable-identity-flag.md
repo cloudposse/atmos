@@ -8,7 +8,7 @@ Users need a way to explicitly disable Atmos identity authentication in specific
 2. **Provided without value** (`"__SELECT__"`) - Show interactive identity selector
 3. **Provided with identity name** (`"aws-sso"`) - Use that specific identity
 
-There is **no fourth state** that means "skip authentication entirely and use AWS SDK defaults." This gap forces users to modify configuration files or use complex workarounds.
+There is **no fourth state** that means "skip authentication entirely and use cloud provider SDK defaults." This gap forces users to modify configuration files or use complex workarounds.
 
 ### Use Case
 
@@ -61,12 +61,8 @@ atmos terraform plan my-component --stack=dev
 When `--identity=false` or `ATMOS_IDENTITY=false` is set:
 
 1. **Skip all identity authentication** - Do not attempt to load or use any configured identities
-2. **Revert to AWS SDK defaults** - Use standard AWS credential resolution:
-   - Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc.)
-   - Shared credentials file (`~/.aws/credentials`)
-   - IAM role from EC2 instance metadata (IMDS)
-   - Web identity token from environment (for OIDC/GitHub Actions)
-3. **Apply to all AWS operations** - Affects Terraform, component operations, and any AWS SDK calls
+2. **Revert to cloud provider SDK defaults** - Use standard credential resolution (e.g., for AWS: environment variables, shared credentials file, instance metadata, web identity tokens)
+3. **Apply to all operations** - Affects Terraform, component operations, and any cloud provider SDK calls
 4. **Override configuration** - Takes precedence over `atmos.yaml` auth settings
 
 ### Precedence
@@ -78,7 +74,7 @@ The identity resolution order should be:
 3. `ATMOS_IDENTITY=false` environment variable (disables identity)
 4. `ATMOS_IDENTITY=<name>` environment variable (specific identity)
 5. Default identity from `atmos.yaml` configuration
-6. No identity (AWS SDK defaults) if no configuration exists
+6. No identity (cloud provider SDK defaults) if no configuration exists
 
 ## Current Implementation Analysis
 
@@ -319,7 +315,7 @@ When identity is disabled, Atmos uses standard AWS SDK credential resolution ord
 
 3. **Should we warn users when identity is disabled?**
    - Current proposal: No warning, as this is intentional behavior
-   - Could add debug-level logging: `Identity authentication disabled, using AWS SDK defaults`
+   - Could add debug-level logging: `Identity authentication disabled, using cloud provider SDK defaults`
 
 ## Timeline
 

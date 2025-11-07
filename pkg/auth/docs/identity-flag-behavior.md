@@ -125,7 +125,7 @@ atmos terraform plan component --stack mystack
 3. `info.Identity = "__DISABLED__"`
 4. Later, `auth.TerraformPreHook()` checks `isAuthenticationDisabled(stackInfo.Identity)`
 5. If disabled: Returns early, skipping all authentication
-6. AWS SDK uses default credential resolution (env vars, `~/.aws/credentials`, IMDS, OIDC)
+6. Cloud provider SDK uses default credential resolution (e.g., for AWS: env vars, shared credentials, IMDS, OIDC)
 
 **Key Point:** Explicit disable overrides all identity configurations, skipping Atmos authentication entirely.
 
@@ -136,7 +136,7 @@ atmos terraform plan component --stack mystack
 - `off`, `Off`, `OFF` (case-insensitive)
 
 **Acceptance Criteria:**
-- ✅ `--identity=false` → Skip authentication, use AWS SDK defaults
+- ✅ `--identity=false` → Skip authentication, use cloud provider SDK defaults
 - ✅ `ATMOS_IDENTITY=false` → Skip authentication
 - ✅ Works with identities configured in `atmos.yaml`
 - ✅ Works when no identities configured
