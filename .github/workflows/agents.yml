@@ -5,19 +5,25 @@ on:
     paths:
       - '.claude/agents/**'
       - '.github/workflows/agents.yml'
-      - '.github/actions/check-agent-size/**'
+      - '.github/actions/check-claude-md-size/**'
 
 jobs:
   agent-size-check:
-    name: Check agent sizes
+    name: Check agent file sizes
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        agent:
+          - file: .claude/agents/agent-developer.md
+            max-size: 25000
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Check agent sizes
-        uses: ./.github/actions/check-agent-size
+      - name: Check ${{ matrix.agent.file }} size
+        uses: ./.github/actions/check-claude-md-size
         with:
-          agent-path: .claude/agents
-          max-size: 25000
+          file-path: ${{ matrix.agent.file }}
+          max-size: ${{ matrix.agent.max-size }}
           github-token: ${{ github.token }}
