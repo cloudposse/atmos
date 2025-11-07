@@ -266,12 +266,14 @@ func (f *formatter) ColorProfile() terminal.ColorProfile {
 //   - style: The lipgloss style to apply (determines color)
 //   - text: The message text
 //
-// Returns formatted string: "{icon} {text}" with color applied (or plain if no color support).
+// Returns formatted string: "{colored icon} {text}" where only the icon is colored.
 func (f *formatter) StatusMessage(icon string, style *lipgloss.Style, text string) string {
 	if !f.SupportsColor() {
 		return fmt.Sprintf("%s %s", icon, text)
 	}
-	return style.Render(fmt.Sprintf("%s %s", icon, text))
+	// Style only the icon, not the entire message.
+	styledIcon := style.Render(icon)
+	return fmt.Sprintf("%s %s", styledIcon, text)
 }
 
 // Semantic formatting - delegates to StatusMessage with appropriate icons and styles.

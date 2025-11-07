@@ -11,6 +11,7 @@ import (
 var (
 	execInstance    string
 	execInteractive bool
+	execUsePTY      bool // Experimental PTY mode flag.
 )
 
 var execCmd = &cobra.Command{
@@ -22,6 +23,8 @@ By default, runs in non-interactive mode where output is automatically masked.
 Use --interactive for full TTY support (tab completion, colors, etc.) but note
 that output masking will not be available in interactive mode.
 
+Experimental: Use --pty for PTY mode with masking support (not available on Windows).
+
 The container must already be running. Use '--' to separate devcontainer arguments
 from the command to execute.`,
 	Example: markdown.DevcontainerExecUsageMarkdown,
@@ -31,12 +34,13 @@ from the command to execute.`,
 
 		name := args[0]
 		command := args[1:]
-		return e.ExecuteDevcontainerExec(atmosConfigPtr, name, execInstance, execInteractive, command)
+		return e.ExecuteDevcontainerExec(atmosConfigPtr, name, execInstance, execInteractive, execUsePTY, command)
 	},
 }
 
 func init() {
 	execCmd.Flags().StringVar(&execInstance, "instance", "default", "Instance name for this devcontainer")
 	execCmd.Flags().BoolVarP(&execInteractive, "interactive", "i", false, "Enable interactive TTY mode (disables output masking)")
+	execCmd.Flags().BoolVar(&execUsePTY, "pty", false, "Experimental: Use PTY mode with masking support (not available on Windows)")
 	devcontainerCmd.AddCommand(execCmd)
 }

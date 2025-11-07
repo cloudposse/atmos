@@ -36,7 +36,7 @@ Use --identity to launch the container with Atmos-managed credentials.`,
 
 		// If --attach flag is set, attach to the container after starting
 		if startAttach {
-			return e.ExecuteDevcontainerAttach(atmosConfigPtr, name, startInstance)
+			return e.ExecuteDevcontainerAttach(atmosConfigPtr, name, startInstance, false)
 		}
 
 		return nil

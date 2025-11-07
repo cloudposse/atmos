@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -15,6 +14,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/uuid"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
@@ -95,7 +95,7 @@ func pullImage(ref name.Reference) (*remote.Descriptor, error) {
 	// Get registry from parsed reference
 	registry := ref.Context().Registry.Name()
 	if strings.EqualFold(registry, "ghcr.io") {
-		githubToken := os.Getenv(githubTokenEnv)
+		githubToken := viper.GetString("ATMOS_GITHUB_TOKEN")
 		if githubToken != "" {
 			opts = append(opts, remote.WithAuth(&authn.Basic{
 				Username: "oauth2",

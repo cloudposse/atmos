@@ -1,6 +1,13 @@
 {
-  "name": "Geodesic",
-  "image": "cloudposse/geodesic:latest",
+  "name": "Geodesic with Atmos",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".",
+    "args": {
+      "GEODESIC_VERSION": "latest",
+      "ATMOS_VERSION": "latest"
+    }
+  },
   "workspaceFolder": "/workspace",
   "workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspace",
 
@@ -24,7 +31,7 @@
   "remoteUser": "root",
 
   "runArgs": [
-    "--hostname=geodesic"
+    "--hostname=geodesic-atmos"
   ],
 
   "userEnvProbe": "loginInteractiveShell"

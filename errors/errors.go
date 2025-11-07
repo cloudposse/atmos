@@ -438,11 +438,13 @@ var (
 	ErrContainerNotFound         = errors.New("container not found")
 	ErrContainerAlreadyExists    = errors.New("container already exists")
 	ErrContainerNotRunning       = errors.New("container is not running")
+	ErrContainerRunning          = errors.New("container is running")
 	ErrInvalidDevcontainerConfig = errors.New("invalid devcontainer configuration")
 	ErrRuntimeNotAvailable       = errors.New("container runtime not available")
 	ErrDevcontainerNameEmpty     = errors.New("devcontainer name cannot be empty")
 	ErrDevcontainerNameInvalid   = errors.New("devcontainer name contains invalid characters")
 	ErrDevcontainerNameTooLong   = errors.New("devcontainer name is too long")
+	ErrPTYNotSupported           = errors.New("PTY not supported on this platform")
 
 	// Logout errors.
 	ErrLogoutFailed         = errors.New("logout failed")

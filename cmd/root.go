@@ -714,6 +714,10 @@ func init() {
 	if err := viper.BindEnv("force-color", "ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"); err != nil {
 		log.Error("Failed to bind ATMOS_FORCE_COLOR/CLICOLOR_FORCE environment variables", "error", err)
 	}
+	// Bind mask flag to Viper so viper.GetBool("mask") reads the flag value.
+	if err := viper.BindPFlag("mask", RootCmd.PersistentFlags().Lookup("mask")); err != nil {
+		log.Error("Failed to bind mask flag to Viper", "error", err)
+	}
 	// Bind mask flag to environment variable.
 	if err := viper.BindEnv("mask", "ATMOS_MASK"); err != nil {
 		log.Error("Failed to bind ATMOS_MASK environment variable", "error", err)

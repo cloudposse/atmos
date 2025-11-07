@@ -37,7 +37,7 @@ need to start fresh.`,
 
 		// If --attach flag is set, attach to the container after rebuilding.
 		if rebuildAttach {
-			return e.ExecuteDevcontainerAttach(atmosConfigPtr, name, rebuildInstance)
+			return e.ExecuteDevcontainerAttach(atmosConfigPtr, name, rebuildInstance, false)
 		}
 
 		return nil

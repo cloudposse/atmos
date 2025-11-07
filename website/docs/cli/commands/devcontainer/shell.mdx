@@ -32,9 +32,26 @@ atmos devcontainer shell <name> [flags]
 <dl>
   <dt>`--instance string`</dt>
   <dd>Instance name for this devcontainer (default: `default`). Use this to run multiple instances of the same devcontainer configuration.</dd>
+
+  <dt>`--identity string` or `-i`</dt>
+  <dd>Authenticate with specified identity. Inside the container, cloud provider SDKs automatically use the authenticated identity.</dd>
+
+  <dt>`--new`</dt>
+  <dd>Always create a new instance with auto-generated numbered name based on the `--instance` value (e.g., `default-1`, `default-2`, or `alice-1` with `--instance alice`). Use this when you want a fresh container that doesn't reuse existing instances.</dd>
+
+  <dt>`--replace`</dt>
+  <dd>Destroy and recreate the instance specified by `--instance` flag. This rebuilds the container from scratch, pulling the latest image and recreating with current configuration.</dd>
+
+  <dt>`--rm`</dt>
+  <dd>Automatically remove the container when you exit the shell. Similar to Docker's `docker run --rm` behavior. Useful for temporary or one-off containers.</dd>
+
+  <dt>`--pty`</dt>
+  <dd>Experimental: Use PTY mode with masking support (not available on Windows). Enables masking of sensitive values in terminal output.</dd>
 </dl>
 
 ## Examples
+
+### Basic Usage
 
 ```shell
 # Launch shell in the geodesic devcontainer
@@ -46,6 +63,43 @@ atmos devcontainer shell terraform --instance alice
 # Launch shell with custom runtime (via environment variable)
 export ATMOS_CONTAINER_RUNTIME=podman
 atmos devcontainer shell geodesic
+```
+
+### Instance Management
+
+```shell
+# Create a new auto-numbered instance (default-1, default-2, etc.)
+atmos devcontainer shell geodesic --new
+
+# Create a new auto-numbered instance with custom base name
+atmos devcontainer shell geodesic --instance alice --new
+# Creates: alice-1, alice-2, etc.
+
+# Rebuild existing instance from scratch
+atmos devcontainer shell terraform --replace
+
+# Rebuild a specific named instance
+atmos devcontainer shell terraform --instance prod --replace
+```
+
+### Temporary Containers
+
+```shell
+# Launch shell and auto-remove container on exit (like 'docker run --rm')
+atmos devcontainer shell geodesic --rm
+
+# Combine --new with --rm for completely ephemeral containers
+atmos devcontainer shell geodesic --new --rm
+```
+
+### Authenticated Containers
+
+```shell
+# Launch shell with Atmos-managed identity
+atmos devcontainer shell geodesic --identity prod-admin
+
+# Launch new instance with identity that auto-removes on exit
+atmos devcontainer shell terraform --identity dev-user --new --rm
 ```
 
 ## Behavior

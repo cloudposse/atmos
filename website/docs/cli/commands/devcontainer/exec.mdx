@@ -38,6 +38,9 @@ atmos devcontainer exec <name> -- <command> [args...]
 
   <dt>`--interactive, -i`</dt>
   <dd>Enable interactive TTY mode for full terminal support (tab completion, colors, etc.). **Note**: Output masking is not available in interactive mode due to TTY limitations.</dd>
+
+  <dt>`--pty`</dt>
+  <dd>**Experimental**: Use PTY mode with masking support. Provides both TTY features AND output masking. **Platform**: macOS and Linux only (not available on Windows).</dd>
 </dl>
 
 ## Examples
@@ -70,30 +73,49 @@ atmos devcontainer exec terraform --instance project-a -- terraform init
 
 ## Output Masking
 
-By default, `exec` runs in **non-interactive mode** where output masking works reliably. Sensitive data like AWS keys, GitHub tokens, and other secrets are automatically redacted according to your mask configuration.
+Atmos provides three execution modes with different tradeoffs between TTY features and output masking:
 
-When you use the `--interactive` (or `-i`) flag, the command runs in TTY mode for full terminal features (tab completion, colors, cursor control), but output masking is not available due to TTY data flowing at the kernel level.
+### 1. Non-Interactive Mode (Default)
 
-**Example**: Running commands that display environment variables:
+Output masking works reliably. Sensitive data like AWS keys, GitHub tokens, and other secrets are automatically redacted according to your mask configuration.
 
 ```shell
-# Non-interactive mode - output is automatically masked
 atmos devcontainer exec geodesic -- env | grep AWS
 # AWS_ACCESS_KEY_ID=***MASKED***
 # AWS_SECRET_ACCESS_KEY=***MASKED***
-
-# Interactive mode - full TTY support, but no masking
-atmos devcontainer exec geodesic --interactive -- bash
-# Inside bash: echo $AWS_SECRET_ACCESS_KEY shows actual value
-
-# Disable masking in non-interactive mode if needed
-atmos devcontainer exec geodesic --mask=false -- env | grep AWS
 ```
 
-:::tip
-- Use **non-interactive mode** (default) when you need automatic masking of sensitive data
-- Use **interactive mode** (`-i`) when you need full TTY features like tab completion or interactive editors
-- For interactive shells, use [`atmos devcontainer shell`](/cli/commands/devcontainer/shell) instead
+**Use when**: You need automatic masking of sensitive data in command output.
+
+### 2. Interactive Mode (`--interactive`)
+
+Full TTY support (tab completion, colors, cursor control), but output masking is not available due to TTY data flowing at the kernel level.
+
+```shell
+atmos devcontainer exec geodesic --interactive -- bash
+# Inside bash: echo $AWS_SECRET_ACCESS_KEY shows actual value
+```
+
+**Use when**: You need full TTY features like tab completion or interactive editors.
+
+### 3. PTY Mode (`--pty`) **EXPERIMENTAL**
+
+Provides **both** TTY features AND output masking using a PTY (pseudo-terminal) proxy layer.
+
+```shell
+atmos devcontainer exec geodesic --pty -- bash
+# Full TTY + automatic masking of sensitive data
+```
+
+**Platform support**: macOS and Linux only (not available on Windows)
+
+**Use when**: You need both TTY features AND masking protection (experimental feature, feedback welcome).
+
+:::tip Mode Selection Guide
+- **Non-interactive** (default): Masking works, no TTY features
+- **Interactive** (`--interactive`): Full TTY, no masking
+- **PTY** (`--pty`): Both TTY + masking (experimental, Unix only)
+- For interactive shells, consider [`atmos devcontainer shell`](/cli/commands/devcontainer/shell) instead
 :::
 
 ## See Also

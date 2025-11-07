@@ -3,35 +3,41 @@ package exec
 import (
 	"context"
 	"fmt"
-	"os"
+	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/pty"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
-	configSeparatorWidth = 90
+	tableWidth = 92 // Width for devcontainer list table including indicator column.
 )
 
 // devcontainerSpinnerModel is a simple spinner model for devcontainer operations.
 type devcontainerSpinnerModel struct {
-	spinner spinner.Model
-	message string
-	done    bool
-	err     error
+	spinner      spinner.Model
+	progressMsg  string // Message shown during operation (e.g., "Starting container").
+	completedMsg string // Message shown when done (e.g., "Started container").
+	done         bool
+	err          error
 }
 
 type devcontainerOpCompleteMsg struct {
@@ -68,22 +74,25 @@ func (m devcontainerSpinnerModel) View() string {
 		if m.err != nil {
 			return ""
 		}
-		return fmt.Sprintf("\r%s %s\n", theme.Styles.Checkmark.String(), m.message)
+		// Show completed message with checkmark.
+		return fmt.Sprintf("\r%s %s\n", theme.Styles.Checkmark.String(), m.completedMsg)
 	}
-	return fmt.Sprintf("\r%s %s", m.spinner.View(), m.message)
+	// Show progress message with spinner.
+	return fmt.Sprintf("\r%s %s", m.spinner.View(), m.progressMsg)
 }
 
-func newDevcontainerSpinner(message string) devcontainerSpinnerModel {
+func newDevcontainerSpinner(progressMsg, completedMsg string) devcontainerSpinnerModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = theme.Styles.Link
 	return devcontainerSpinnerModel{
-		spinner: s,
-		message: message,
+		spinner:      s,
+		progressMsg:  progressMsg,
+		completedMsg: completedMsg,
 	}
 }
 
-// ExecuteDevcontainerList lists all available devcontainers.
+// ExecuteDevcontainerList lists all available devcontainers with running status.
 func ExecuteDevcontainerList(atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerList")()
 
@@ -100,28 +109,88 @@ func ExecuteDevcontainerList(atmosConfig *schema.AtmosConfiguration) error {
 	}
 
 	if len(configs) == 0 {
-		fmt.Println("No devcontainers configured")
+		_ = ui.Infof("No devcontainers configured")
 		return nil
 	}
 
-	// Print header.
-	fmt.Printf("%-20s %-40s %-30s\n", "NAME", "IMAGE", "PORTS")
-	fmt.Println(strings.Repeat("-", configSeparatorWidth))
+	// Get runtime and list running containers.
+	runtime, err := devcontainer.DetectRuntime("")
+	if err != nil {
+		return fmt.Errorf("%w: failed to initialize container runtime: %w", errUtils.ErrContainerRuntimeOperation, err)
+	}
 
-	// Print each devcontainer.
-	for name, config := range configs {
+	ctx := context.Background()
+	runningContainers, err := runtime.List(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("%w: failed to list containers: %w", errUtils.ErrContainerRuntimeOperation, err)
+	}
+
+	// Build set of running devcontainer names.
+	runningNames := make(map[string]bool)
+	for _, c := range runningContainers {
+		if devcontainer.IsAtmosDevcontainer(c.Name) {
+			if name, _ := devcontainer.ParseContainerName(c.Name); name != "" {
+				if c.Status == "running" {
+					runningNames[name] = true
+				}
+			}
+		}
+	}
+
+	// Render the table using lipgloss.
+	renderDevcontainerListTable(configs, runningNames)
+	return nil
+}
+
+// renderDevcontainerListTable renders devcontainer list as a formatted table.
+func renderDevcontainerListTable(configs map[string]*devcontainer.Config, runningNames map[string]bool) {
+	// Sort names for consistent output.
+	var names []string
+	for name := range configs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	// Build table rows.
+	var rows []string
+	for _, name := range names {
+		config := configs[name]
+
+		// Determine status indicator.
+		indicator := " "
+		if runningNames[name] {
+			indicator = theme.Styles.NewVersion.Render("●") // Green dot for running.
+		}
+
+		// Get image name.
 		image := config.Image
 		if image == "" && config.Build != nil {
 			image = fmt.Sprintf("(build: %s)", config.Build.Dockerfile)
 		}
 
+		// Get ports.
 		ports, _ := devcontainer.ParsePorts(config.ForwardPorts, config.PortsAttributes)
 		portsStr := devcontainer.FormatPortBindings(ports)
 
-		fmt.Printf("%-20s %-40s %-30s\n", name, image, portsStr)
+		// Format row.
+		row := fmt.Sprintf("%s %-20s %-40s %-30s", indicator, name, image, portsStr)
+		rows = append(rows, row)
 	}
 
-	return nil
+	// Print header with bold styling.
+	headerStyle := lipgloss.NewStyle().Bold(true)
+	fmt.Printf("%s %-20s %-40s %-30s\n", " ",
+		headerStyle.Render("NAME"),
+		headerStyle.Render("IMAGE"),
+		headerStyle.Render("PORTS"))
+
+	// Print separator.
+	fmt.Println(strings.Repeat("─", tableWidth))
+
+	// Print rows.
+	for _, row := range rows {
+		fmt.Println(row)
+	}
 }
 
 // ExecuteDevcontainerStart starts a devcontainer with optional identity.
@@ -224,25 +293,28 @@ func ExecuteDevcontainerStop(atmosConfig *schema.AtmosConfiguration, name, insta
 
 	// Check if already stopped.
 	if !strings.Contains(strings.ToLower(container.Status), "running") {
-		fmt.Fprintf(os.Stderr, "Container %s is already stopped\n", containerName)
+		_ = ui.Infof("Container %s is already stopped", containerName)
 		return nil
 	}
 
 	// Stop the container with spinner.
-	return runWithSpinner(fmt.Sprintf("Stopping container %s", containerName), func() error {
-		stopTimeout := time.Duration(timeout) * time.Second
-		if err := runtime.Stop(ctx, container.ID, stopTimeout); err != nil {
-			return fmt.Errorf("%w: failed to stop container: %w", errUtils.ErrContainerRuntimeOperation, err)
-		}
-		return nil
-	})
+	return runWithSpinner(
+		fmt.Sprintf("Stopping container %s", containerName),
+		fmt.Sprintf("Stopped container %s", containerName),
+		func() error {
+			stopTimeout := time.Duration(timeout) * time.Second
+			if err := runtime.Stop(ctx, container.ID, stopTimeout); err != nil {
+				return fmt.Errorf("%w: failed to stop container: %w", errUtils.ErrContainerRuntimeOperation, err)
+			}
+			return nil
+		})
 }
 
 // ExecuteDevcontainerAttach attaches to a running devcontainer.
 // TODO: Add --identity flag support. When implemented, ENV file paths from identity
 // must be resolved relative to container paths (e.g., /localhost or bind mount location),
 // not host paths, since the container runs in its own filesystem namespace.
-func ExecuteDevcontainerAttach(atmosConfig *schema.AtmosConfiguration, name, instance string) error {
+func ExecuteDevcontainerAttach(atmosConfig *schema.AtmosConfiguration, name, instance string, usePTY bool) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerAttach")()
 
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -271,7 +343,7 @@ func ExecuteDevcontainerAttach(atmosConfig *schema.AtmosConfiguration, name, ins
 		return err
 	}
 
-	return attachToContainer(ctx, runtime, containerInfo, config, containerName)
+	return attachToContainer(ctx, runtime, containerInfo, config, containerName, usePTY)
 }
 
 func findAndStartContainer(ctx context.Context, runtime container.Runtime, containerName string) (*container.Info, error) {
@@ -297,18 +369,34 @@ func findAndStartContainer(ctx context.Context, runtime container.Runtime, conta
 }
 
 func startContainerForAttach(ctx context.Context, runtime container.Runtime, containerInfo *container.Info, containerName string) error {
-	fmt.Fprintf(os.Stderr, "Starting container %s...\n", containerName)
-	if err := runtime.Start(ctx, containerInfo.ID); err != nil {
-		return fmt.Errorf("%w: failed to start container: %w", errUtils.ErrContainerRuntimeOperation, err)
-	}
-	return nil
+	return runWithSpinner(
+		fmt.Sprintf("Starting container %s", containerName),
+		fmt.Sprintf("Started container %s", containerName),
+		func() error {
+			if err := runtime.Start(ctx, containerInfo.ID); err != nil {
+				return fmt.Errorf("%w: failed to start container: %w", errUtils.ErrContainerRuntimeOperation, err)
+			}
+			return nil
+		})
 }
 
-func attachToContainer(ctx context.Context, runtime container.Runtime, containerInfo *container.Info, config *devcontainer.Config, containerName string) error {
-	fmt.Fprintf(os.Stderr, "Attaching to container %s...\n", containerName)
+func attachToContainer(ctx context.Context, runtime container.Runtime, containerInfo *container.Info, config *devcontainer.Config, containerName string, usePTY bool) error {
+	log.Debug("Attaching to container", "container", containerName)
 
-	// Warn about masking limitations in interactive TTY sessions.
 	maskingEnabled := viper.GetBool("mask")
+
+	// PTY mode: Use experimental PTY with masking.
+	if usePTY {
+		if !pty.IsSupported() {
+			return fmt.Errorf("%w: only macOS and Linux are supported", errUtils.ErrPTYNotSupported)
+		}
+
+		log.Debug("Using experimental PTY mode with masking support")
+		shellArgs := getShellArgs(config.UserEnvProbe)
+		return attachToContainerWithPTY(ctx, runtime, containerInfo.ID, shellArgs, maskingEnabled)
+	}
+
+	// Regular mode: Warn about masking limitations in interactive TTY sessions.
 	if maskingEnabled {
 		log.Debug("Interactive TTY session - output masking is not available due to TTY limitations")
 	}
@@ -320,9 +408,20 @@ func attachToContainer(ctx context.Context, runtime container.Runtime, container
 	return runtime.Attach(ctx, containerInfo.ID, attachOpts)
 }
 
-func execInContainer(ctx context.Context, runtime container.Runtime, containerID string, interactive bool, command []string) error {
-	// Check if masking is enabled and warn about interactive mode limitations.
+func execInContainer(ctx context.Context, runtime container.Runtime, containerID string, interactive, usePTY bool, command []string) error {
 	maskingEnabled := viper.GetBool("mask")
+
+	// PTY mode: Use experimental PTY with masking.
+	if usePTY {
+		if !pty.IsSupported() {
+			return fmt.Errorf("%w: only macOS and Linux are supported", errUtils.ErrPTYNotSupported)
+		}
+
+		log.Debug("Using experimental PTY mode with masking support")
+		return execInContainerWithPTY(ctx, runtime, containerID, command, maskingEnabled)
+	}
+
+	// Regular mode (existing behavior).
 	if interactive && maskingEnabled {
 		log.Debug("Interactive TTY mode enabled - output masking is not available due to TTY limitations")
 	}
@@ -338,6 +437,70 @@ func execInContainer(ctx context.Context, runtime container.Runtime, containerID
 	return runtime.Exec(ctx, containerID, command, execOpts)
 }
 
+// attachToContainerWithPTY attaches to a container using PTY mode with masking support.
+// This is an experimental feature that provides TTY functionality while preserving
+// output masking capabilities.
+func attachToContainerWithPTY(ctx context.Context, runtime container.Runtime, containerID string, shellArgs []string, maskingEnabled bool) error {
+	// Get the IO context for masking.
+	ioCtx := iolib.GetContext()
+
+	// Determine the runtime binary (docker or podman).
+	runtimeInfo, err := runtime.Info(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get runtime info: %w", err)
+	}
+
+	runtimeBinary := runtimeInfo.Type
+
+	// Build the runtime attach command with shell.
+	// Example: docker exec -it <containerID> /bin/bash -l
+	args := []string{"exec", "-it", containerID, "/bin/bash"}
+	args = append(args, shellArgs...)
+
+	cmd := exec.Command(runtimeBinary, args...)
+
+	// Configure PTY options with masking.
+	ptyOpts := &pty.Options{
+		Masker:        ioCtx.Masker(),
+		EnableMasking: maskingEnabled,
+	}
+
+	// Execute with PTY.
+	return pty.ExecWithPTY(ctx, cmd, ptyOpts)
+}
+
+// execInContainerWithPTY executes a command using PTY mode with masking support.
+// This is an experimental feature that provides TTY functionality while preserving
+// output masking capabilities.
+func execInContainerWithPTY(ctx context.Context, runtime container.Runtime, containerID string, command []string, maskingEnabled bool) error {
+	// Get the IO context for masking.
+	ioCtx := iolib.GetContext()
+
+	// Determine the runtime binary (docker or podman).
+	runtimeInfo, err := runtime.Info(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get runtime info: %w", err)
+	}
+
+	runtimeBinary := runtimeInfo.Type
+
+	// Build the runtime exec command.
+	// Example: docker exec -it <containerID> <command...>
+	args := []string{"exec", "-it", containerID}
+	args = append(args, command...)
+
+	cmd := exec.Command(runtimeBinary, args...)
+
+	// Configure PTY options with masking.
+	ptyOpts := &pty.Options{
+		Masker:        ioCtx.Masker(),
+		EnableMasking: maskingEnabled,
+	}
+
+	// Execute with PTY.
+	return pty.ExecWithPTY(ctx, cmd, ptyOpts)
+}
+
 func getShellArgs(userEnvProbe string) []string {
 	if userEnvProbe == "loginShell" || userEnvProbe == "loginInteractiveShell" {
 		return []string{"-l"}
@@ -349,7 +512,7 @@ func getShellArgs(userEnvProbe string) []string {
 // TODO: Add --identity flag support. When implemented, ENV file paths from identity
 // must be resolved relative to container paths (e.g., /localhost or bind mount location),
 // not host paths, since the container runs in its own filesystem namespace.
-func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, name, instance string, interactive bool, command []string) error {
+func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, name, instance string, interactive, usePTY bool, command []string) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerExec")()
 
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -378,20 +541,59 @@ func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, name, insta
 		return err
 	}
 
-	return execInContainer(ctx, runtime, containerInfo.ID, interactive, command)
+	return execInContainer(ctx, runtime, containerInfo.ID, interactive, usePTY, command)
 }
 
 // ExecuteDevcontainerRemove removes a devcontainer.
 func ExecuteDevcontainerRemove(atmosConfig *schema.AtmosConfiguration, name, instance string, force bool) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerRemove")()
 
-	// TODO: Implement devcontainer remove.
+	// Reload config to ensure we have the latest with all fields populated.
+	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return err
+	}
+
+	_, settings, err := devcontainer.LoadConfig(&freshConfig, name)
+	if err != nil {
+		return err
+	}
+
+	// Initialize container runtime.
+	runtime, err := devcontainer.DetectRuntime(settings.Runtime)
+	if err != nil {
+		return fmt.Errorf("%w: failed to initialize container runtime: %w", errUtils.ErrContainerRuntimeOperation, err)
+	}
+
 	ctx := context.Background()
-	_ = ctx
-	_ = name
-	_ = instance
-	_ = force
-	return fmt.Errorf("%w: devcontainer remove not yet implemented", errUtils.ErrNotImplemented)
+
+	// Generate container name.
+	containerName, err := devcontainer.GenerateContainerName(name, instance)
+	if err != nil {
+		return err
+	}
+
+	// Check if container exists.
+	containerInfo, err := runtime.Inspect(ctx, containerName)
+	if err != nil {
+		// Container doesn't exist - nothing to remove, consider this success.
+		return nil
+	}
+
+	// Stop container if running and force=false.
+	if isContainerRunning(containerInfo.Status) && !force {
+		return fmt.Errorf("%w: %s, use --force to remove", errUtils.ErrContainerRunning, containerName)
+	}
+
+	// Stop if running.
+	if isContainerRunning(containerInfo.Status) {
+		if err := stopContainerIfRunning(ctx, runtime, containerInfo); err != nil {
+			return err
+		}
+	}
+
+	// Remove the container.
+	return removeContainer(ctx, runtime, containerInfo, containerName)
 }
 
 // ExecuteDevcontainerConfig shows the configuration for a devcontainer.
@@ -638,4 +840,68 @@ func rebuildContainer(p *rebuildParams) error {
 
 	u.PrintfMessageToTUI("\n%s Container %s rebuilt successfully\n", theme.Styles.Checkmark.String(), p.containerName)
 	return nil
+}
+
+// GenerateNewDevcontainerInstance generates a new unique instance name by finding
+// existing containers for the given devcontainer name and incrementing the highest number.
+// Pattern: {baseInstance}-1, {baseInstance}-2, etc.
+// Returns the new instance name (e.g., "default-1", "default-2").
+func GenerateNewDevcontainerInstance(atmosConfig *schema.AtmosConfiguration, name, baseInstance string) (string, error) {
+	defer perf.Track(atmosConfig, "exec.GenerateNewDevcontainerInstance")()
+
+	// Reload config to ensure we have the latest with all fields populated.
+	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	if err != nil {
+		return "", err
+	}
+
+	_, settings, err := devcontainer.LoadConfig(&freshConfig, name)
+	if err != nil {
+		return "", err
+	}
+
+	// Initialize container runtime.
+	runtime, err := devcontainer.DetectRuntime(settings.Runtime)
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to initialize container runtime: %w", errUtils.ErrContainerRuntimeOperation, err)
+	}
+
+	ctx := context.Background()
+
+	// Use default instance if baseInstance is empty.
+	if baseInstance == "" {
+		baseInstance = devcontainer.DefaultInstance
+	}
+
+	// List all containers (no filters for simplicity - we'll filter in code using ParseContainerName).
+	containers, err := runtime.List(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to list containers: %w", errUtils.ErrContainerRuntimeOperation, err)
+	}
+
+	// Find all instances for this devcontainer name and extract numbers.
+	maxNumber := 0
+	basePattern := fmt.Sprintf("%s-", baseInstance)
+
+	for _, c := range containers {
+		parsedName, parsedInstance := devcontainer.ParseContainerName(c.Name)
+		if parsedName != name {
+			continue
+		}
+
+		// Check if this instance follows the pattern: {baseInstance}-{number}
+		if strings.HasPrefix(parsedInstance, basePattern) {
+			numberStr := strings.TrimPrefix(parsedInstance, basePattern)
+			var number int
+			if _, err := fmt.Sscanf(numberStr, "%d", &number); err == nil {
+				if number > maxNumber {
+					maxNumber = number
+				}
+			}
+		}
+	}
+
+	// Generate next instance name.
+	newInstance := fmt.Sprintf("%s-%d", baseInstance, maxNumber+1)
+	return newInstance, nil
 }

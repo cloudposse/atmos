@@ -302,24 +302,38 @@ func LoadAllConfigs(atmosConfig *schema.AtmosConfiguration) (map[string]*Config,
 }
 
 // filterUnsupportedFields logs debug messages for unsupported devcontainer fields.
+// Note: Viper lowercases all keys, so we use lowercase field names for comparison.
 func filterUnsupportedFields(data map[string]any, name string) {
 	defer perf.Track(nil, "devcontainer.filterUnsupportedFields")()
 
+	// All field names in lowercase because Viper lowercases keys.
 	supportedFields := map[string]bool{
-		"name":            true,
-		"image":           true,
-		"build":           true,
-		"workspaceFolder": true,
-		"workspaceMount":  true,
+		// Core fields.
+		"name":  true,
+		"image": true,
+		"build": true,
+		// Workspace configuration.
+		"workspacefolder": true,
+		"workspacemount":  true,
 		"mounts":          true,
-		"forwardPorts":    true,
-		"portsAttributes": true,
-		"containerEnv":    true,
-		"runArgs":         true,
-		"remoteUser":      true,
+		// Port configuration.
+		"forwardports":    true,
+		"portsattributes": true,
+		// Environment and user.
+		"containerenv": true,
+		"remoteuser":   true,
+		// Runtime configuration.
+		"runargs":         true,
+		"overridecommand": true,
+		"init":            true,
+		"privileged":      true,
+		"capadd":          true,
+		"securityopt":     true,
+		"userenvprobe":    true,
 	}
 
 	// Log unsupported fields at debug level.
+	// Keys from data map are already lowercase due to Viper.
 	for key := range data {
 		if !supportedFields[key] {
 			log.Debug("Ignoring unsupported devcontainer field",

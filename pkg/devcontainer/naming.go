@@ -64,7 +64,15 @@ func GenerateContainerName(name, instance string) (string, error) {
 		return "", fmt.Errorf("%w: invalid instance name: %w", errUtils.ErrInvalidDevcontainerConfig, err)
 	}
 
-	return fmt.Sprintf("%s-%s-%s", ContainerPrefix, name, instance), nil
+	containerName := fmt.Sprintf("%s-%s-%s", ContainerPrefix, name, instance)
+
+	// Validate total container name length (Docker/Podman limit is 253, but 63 for DNS compatibility).
+	if len(containerName) > maxNameLength {
+		return "", fmt.Errorf("%w: container name '%s' exceeds %d characters (name: %d chars, instance: %d chars, prefix: %d chars)",
+			errUtils.ErrDevcontainerNameTooLong, containerName, maxNameLength, len(name), len(instance), len(ContainerPrefix)+2)
+	}
+
+	return containerName, nil
 }
 
 // ParseContainerName parses a container name into devcontainer name and instance.

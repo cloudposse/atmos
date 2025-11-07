@@ -23,10 +23,22 @@ $ atmos devcontainer exec geodesic --interactive -- bash
 $ atmos devcontainer exec geodesic -i -- vim ~/.bashrc
 ```
 
+- **EXPERIMENTAL**: Use PTY mode for TTY + masking (best of both worlds)
+
+```
+$ atmos devcontainer exec geodesic --pty -- bash
+$ atmos devcontainer exec geodesic --pty -- env | grep AWS
+```
+
 - Disable masking if needed
 
 ```
 $ atmos devcontainer exec geodesic --mask=false -- cat ~/.aws/config
 ```
 
-**Automatic Masking**: By default, `exec` runs in non-interactive mode where output is automatically masked based on patterns configured in `atmos.yaml`. This protects sensitive data like AWS keys, GitHub tokens, and other secrets. Use `--interactive` (or `-i`) for full TTY support with tab completion and colors, but note that masking is not available in interactive mode due to TTY limitations.
+**Automatic Masking**: By default, `exec` runs in non-interactive mode where output is automatically masked based on patterns configured in `atmos.yaml`. This protects sensitive data like AWS keys, GitHub tokens, and other secrets.
+
+Three modes available:
+- **Non-interactive** (default): Masking works, but no TTY features
+- **Interactive** (`--interactive`): Full TTY support, but masking unavailable (TTY data bypasses Go streams)
+- **PTY mode** (`--pty`): Experimental - provides both TTY features AND masking (macOS/Linux only)
