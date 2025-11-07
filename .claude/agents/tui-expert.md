@@ -324,8 +324,8 @@ ui.Info("Processing components...")             // ℹ Processing components... 
 ui.Infof("Processing %d components...", count)  // ℹ Processing 10 components... (cyan, stderr)
 
 // Markdown rendering (theme-aware)
-ui.Markdown("# Help\n\nUsage...")             // Rendered to stdout (data)
-ui.MarkdownMessage("**Error:** Invalid")      // Rendered to stderr (UI)
+ui.Markdown("# Help\n\nUsage...")             // Help/docs → stdout (pipeable data)
+ui.MarkdownMessage("**Error:** Invalid")      // UI messages → stderr (UI)
 ```
 
 ### Decision Tree for Output
@@ -333,9 +333,10 @@ ui.MarkdownMessage("**Error:** Invalid")      // Rendered to stderr (UI)
 ```
 What am I outputting?
 
-├─ Pipeable data (JSON, YAML, results)
-│  └─ Use data.Write(), data.Writef(), data.Writeln()
-│     data.WriteJSON(), data.WriteYAML()
+├─ Pipeable data (JSON, YAML, results, help/docs)
+│  ├─ Plain data → Use data.Write(), data.Writef(), data.Writeln()
+│  │                   data.WriteJSON(), data.WriteYAML()
+│  └─ Formatted help/docs → Use ui.Markdown() (stdout - pipeable)
 │
 ├─ Plain UI messages (no icon, no color)
 │  └─ Use ui.Write(), ui.Writef(), ui.Writeln()
@@ -344,9 +345,8 @@ What am I outputting?
 │  └─ Use ui.Success(), ui.Successf(), ui.Error(), ui.Errorf(),
 │     ui.Warning(), ui.Warningf(), ui.Info(), ui.Infof()
 │
-└─ Formatted documentation
-   ├─ Help text, usage → ui.Markdown() (stdout)
-   └─ Error details → ui.MarkdownMessage() (stderr)
+└─ Formatted UI messages (markdown errors, formatted messages)
+   └─ Use ui.MarkdownMessage() (stderr - UI channel)
 ```
 
 ### Anti-Patterns (DO NOT USE)
