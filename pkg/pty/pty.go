@@ -4,18 +4,14 @@ package pty
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"os/signal"
 	"runtime"
 	"sync"
-	"syscall"
 
 	"github.com/creack/pty"
-	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -112,43 +108,6 @@ func applyDefaults(opts *Options) *Options {
 	return opts
 }
 
-// setupTerminal configures terminal resize handling and raw mode.
-// Returns a cleanup function that must be called when done.
-func setupTerminal(ptmx *os.File) (func(), error) {
-	// Handle terminal resize signals.
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGWINCH)
-	go func() {
-		for range ch {
-			_ = pty.InheritSize(os.Stdin, ptmx)
-		}
-	}()
-	ch <- syscall.SIGWINCH // Initial resize.
-
-	// Set terminal to raw mode (only if stdin is a TTY).
-	var oldState *term.State
-	var err error
-	if term.IsTerminal(int(os.Stdin.Fd())) {
-		oldState, err = term.MakeRaw(int(os.Stdin.Fd()))
-		if err != nil {
-			signal.Stop(ch)
-			close(ch)
-			return nil, fmt.Errorf("failed to set terminal to raw mode: %w", err)
-		}
-	}
-
-	// Return cleanup function.
-	cleanup := func() {
-		signal.Stop(ch)
-		close(ch)
-		if oldState != nil {
-			_ = term.Restore(int(os.Stdin.Fd()), oldState)
-		}
-	}
-
-	return cleanup, nil
-}
-
 // createOutputWriter creates an output writer with optional masking.
 func createOutputWriter(opts *Options) io.Writer {
 	if opts.EnableMasking && opts.Masker != nil && opts.Masker.Enabled() {
@@ -234,20 +193,6 @@ func IsSupported() bool {
 	defer perf.Track(nil, "pty.IsSupported")()
 
 	return runtime.GOOS == "darwin" || runtime.GOOS == "linux"
-}
-
-// isPtyEIO checks if an error is the expected EIO error from reading a closed PTY.
-//
-// The Linux kernel returns EIO when attempting to read from a master pseudo-terminal
-// which no longer has an open slave. This is normal behavior and not an error condition.
-//
-// See: https://github.com/creack/pty/issues/21
-func isPtyEIO(err error) bool {
-	var pathErr *os.PathError
-	if errors.As(err, &pathErr) {
-		return errors.Is(pathErr.Err, syscall.EIO)
-	}
-	return false
 }
 
 // maskedWriter wraps an io.Writer to apply masking to all written data.
