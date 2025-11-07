@@ -56,7 +56,7 @@ As Atmos core functionality expands, we create **small, purposeful agents that a
 ### Directory Structure
 
 ```
-.conductor/<branch-name>/.claude/agents/
+.claude/agents/
 ├── README.md                    # Agent collection overview
 ├── agent-developer.md           # Meta-agent for creating agents
 ├── cli-developer.md             # CLI/TUI specialist
@@ -93,18 +93,18 @@ color: cyan
 
 ### Required Fields
 
-| Field | Type | Description | Example |
-|-------|------|-------------|---------|
-| `name` | string | Kebab-case agent identifier | `test-automation-expert` |
-| `description` | string | Multi-line invocation criteria | See template below |
-| `tools` | array/string | Available tools or "inherit" | `Read, Write, Edit, Bash` |
+| Field         | Type         | Description                    | Example                   |
+|---------------|--------------|--------------------------------|---------------------------|
+| `name`        | string       | Kebab-case agent identifier    | `test-automation-expert`  |
+| `description` | string       | Multi-line invocation criteria | See template below        |
+| `tools`       | array/string | Available tools or "inherit"   | `Read, Write, Edit, Bash` |
 
 ### Optional Fields
 
-| Field | Type | Description | Example |
-|-------|------|-------------|---------|
-| `model` | string | Model override | `sonnet`, `haiku`, `inherit` |
-| `color` | string | Visual identifier | `cyan`, `purple`, `green` |
+| Field   | Type   | Description       | Example                      |
+|---------|--------|-------------------|------------------------------|
+| `model` | string | Model override    | `sonnet`, `haiku`, `inherit` |
+| `color` | string | Visual identifier | `cyan`, `purple`, `green`    |
 
 ### Description Format
 
@@ -235,11 +235,11 @@ How and when to update this agent.
 
 ### File Size Guidelines
 
-| Agent Type | Target Size | Max Size |
-|------------|-------------|----------|
-| Focused specialist | 8-15 KB | 20 KB |
-| Comprehensive specialist | 15-25 KB | 40 KB |
-| Meta-agent | 15-30 KB | 50 KB |
+| Agent Type               | Target Size | Max Size |
+|--------------------------|-------------|----------|
+| Focused specialist       | 8-15 KB     | 20 KB    |
+| Comprehensive specialist | 15-25 KB    | 40 KB    |
+| Meta-agent               | 15-30 KB    | 50 KB    |
 
 ### Context Efficiency Patterns
 
@@ -503,7 +503,7 @@ This agent implements patterns from:
    ```
 
 2. **Research domain**
-   - Find similar agents: `find .conductor/*/.claude/agents/`
+   - Find similar agents: `find .claude/agents/`
    - Find relevant PRDs: `find docs/prd/ -name "*{keyword}*"`
    - Search codebase patterns: `grep -r "{pattern}" pkg/`
 
