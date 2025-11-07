@@ -87,13 +87,14 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 		CaptureError(err)
 	}
 
-	// Use new error formatter if config is available.
-	if atmosConfig != nil {
+	// Use new error formatter if config is available AND no legacy title/suggestion provided.
+	// This ensures backward compatibility with existing code that passes title/suggestion.
+	if atmosConfig != nil && title == "" && suggestion == "" {
 		printFormattedError(err)
 		return
 	}
 
-	// Fallback to old markdown renderer.
+	// Use markdown renderer for legacy error rendering (with title/suggestion).
 	printMarkdownError(err, title, suggestion)
 }
 

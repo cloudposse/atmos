@@ -12,8 +12,18 @@ Could not find the component idontexist in the stack prod. Check that all the co
 
 
 
-# Error
+# Workflow Error
 
-**Error:** workflow step execution failed
+workflow step execution failed
+
+## Explanation
+
+The following command failed to execute:
+
+ atmos terraform plan idontexist -s prod
+
+To resume the workflow from this step, run:
+
+ atmos workflow fail-with-stack -f test --from-step step1 -s prod
 
 

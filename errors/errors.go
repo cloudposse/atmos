@@ -345,7 +345,7 @@ var (
 	ErrInvalidRegoPolicy             = errors.New("invalid Rego policy")
 	ErrInvalidOPAPolicy              = errors.New("invalid OPA policy")
 	ErrTerraformEnvCliVarJSON        = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
-	ErrWorkflowBasePathNotConfigured = errors.New("workflow base path is not configured")
+	ErrWorkflowBasePathNotConfigured = errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
 	ErrWorkflowDirectoryDoesNotExist = errors.New("workflow directory does not exist")
 	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
 	ErrValidation                    = errors.New("validation failed")
