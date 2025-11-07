@@ -215,79 +215,130 @@ type translatedArgs struct {
 // This method only handles compatibility aliases for terraform-specific flags like -var, -var-file, etc.
 func (t *CompatibilityAliasTranslator) translateSingleDashFlag(args []string, index int) (translatedArgs, int) {
 	arg := args[index]
-	consumed := 0 // Number of additional args consumed (for -flag value form)
 
 	// Check for -flag=value form (compatibility aliases).
 	if idx := strings.Index(arg, "="); idx > 0 {
-		flagPart := arg[:idx]  // "-var"
-		valuePart := arg[idx:] // "=foo=bar"
+		return t.translateFlagWithEquals(arg, idx)
+	}
 
-		if alias, ok := t.aliasMap[flagPart]; ok {
-			switch alias.Behavior {
-			case MapToAtmosFlag:
-				// Convert: -var=foo=bar → --var=foo=bar
-				return translatedArgs{
-					atmosArgs:     []string{alias.Target + valuePart},
-					separatedArgs: []string{},
-				}, consumed
+	// Check for -flag form (value might be next arg).
+	return t.translateFlagWithoutEquals(args, index, arg)
+}
 
-			case AppendToSeparated:
-				// Append to separated: -var-file=prod.tfvars → separated args
-				return translatedArgs{
-					atmosArgs:     []string{},
-					separatedArgs: []string{arg}, // Keep original format
-				}, consumed
-			}
-		}
+// translateFlagWithEquals handles -flag=value syntax for compatibility aliases.
+func (t *CompatibilityAliasTranslator) translateFlagWithEquals(arg string, equalsIndex int) (translatedArgs, int) {
+	defer perf.Track(nil, "flags.CompatibilityAliasTranslator.translateFlagWithEquals")()
 
-		// Unknown flag with = - pass to Atmos (Cobra will validate)
+	flagPart := arg[:equalsIndex]  // "-var"
+	valuePart := arg[equalsIndex:] // "=foo=bar"
+
+	if alias, ok := t.aliasMap[flagPart]; ok {
+		return t.applyAliasBehaviorWithEquals(alias, arg, valuePart)
+	}
+
+	// Unknown flag with = - pass to Atmos (Cobra will validate).
+	return translatedArgs{
+		atmosArgs:     []string{arg},
+		separatedArgs: []string{},
+	}, 0
+}
+
+// applyAliasBehaviorWithEquals applies the alias behavior for -flag=value syntax.
+func (t *CompatibilityAliasTranslator) applyAliasBehaviorWithEquals(alias CompatibilityAlias, arg string, valuePart string) (translatedArgs, int) {
+	defer perf.Track(nil, "flags.CompatibilityAliasTranslator.applyAliasBehaviorWithEquals")()
+
+	switch alias.Behavior {
+	case MapToAtmosFlag:
+		// Convert: -var=foo=bar → --var=foo=bar
+		return translatedArgs{
+			atmosArgs:     []string{alias.Target + valuePart},
+			separatedArgs: []string{},
+		}, 0
+
+	case AppendToSeparated:
+		// Append to separated: -var-file=prod.tfvars → separated args
+		return translatedArgs{
+			atmosArgs:     []string{},
+			separatedArgs: []string{arg}, // Keep original format
+		}, 0
+
+	default:
+		// Unknown behavior - pass to Atmos.
 		return translatedArgs{
 			atmosArgs:     []string{arg},
 			separatedArgs: []string{},
-		}, consumed
+		}, 0
 	}
+}
 
-	// Check for -flag form (value might be next arg)
+// translateFlagWithoutEquals handles -flag syntax where value might be in next arg.
+func (t *CompatibilityAliasTranslator) translateFlagWithoutEquals(args []string, index int, arg string) (translatedArgs, int) {
+	defer perf.Track(nil, "flags.CompatibilityAliasTranslator.translateFlagWithoutEquals")()
+
 	if alias, ok := t.aliasMap[arg]; ok {
-		switch alias.Behavior {
-		case MapToAtmosFlag:
-			// Convert: -s dev → --stack dev
-			translated := []string{alias.Target}
-
-			// Check if next arg is the value (not another flag)
-			if index+1 < len(args) && !strings.HasPrefix(args[index+1], flagPrefix) {
-				translated = append(translated, args[index+1])
-				consumed = 1 // Consume the value arg
-			}
-
-			return translatedArgs{
-				atmosArgs:     translated,
-				separatedArgs: []string{},
-			}, consumed
-
-		case AppendToSeparated:
-			// Append to separated: -var-file prod.tfvars → separated args
-			moved := []string{arg}
-
-			// Check if next arg is the value (not another flag)
-			if index+1 < len(args) && !strings.HasPrefix(args[index+1], flagPrefix) {
-				moved = append(moved, args[index+1])
-				consumed = 1 // Consume the value arg
-			}
-
-			return translatedArgs{
-				atmosArgs:     []string{},
-				separatedArgs: moved,
-			}, consumed
-		}
+		return t.applyAliasBehaviorWithoutEquals(alias, args, index, arg)
 	}
 
-	// Unknown single-dash flag - pass to Atmos (Cobra will error if truly unknown)
-	// This handles valid Atmos shorthands that aren't in the alias map
-	result := []string{arg}
+	// Unknown single-dash flag - pass to Atmos (Cobra will error if truly unknown).
+	// This handles valid Atmos shorthands that aren't in the alias map.
+	return t.handleUnknownSingleDashFlag(args, index, arg)
+}
 
-	// If there's a next arg that doesn't look like a flag, include it
-	// Cobra will handle whether it's a value or a positional arg
+// applyAliasBehaviorWithoutEquals applies the alias behavior for -flag syntax.
+func (t *CompatibilityAliasTranslator) applyAliasBehaviorWithoutEquals(alias CompatibilityAlias, args []string, index int, arg string) (translatedArgs, int) {
+	defer perf.Track(nil, "flags.CompatibilityAliasTranslator.applyAliasBehaviorWithoutEquals")()
+
+	switch alias.Behavior {
+	case MapToAtmosFlag:
+		// Convert: -s dev → --stack dev
+		translated, consumed := t.extractFlagWithValue(args, index, alias.Target)
+		return translatedArgs{
+			atmosArgs:     translated,
+			separatedArgs: []string{},
+		}, consumed
+
+	case AppendToSeparated:
+		// Append to separated: -var-file prod.tfvars → separated args
+		moved, consumed := t.extractFlagWithValue(args, index, arg)
+		return translatedArgs{
+			atmosArgs:     []string{},
+			separatedArgs: moved,
+		}, consumed
+
+	default:
+		// Unknown behavior - pass to Atmos.
+		return translatedArgs{
+			atmosArgs:     []string{arg},
+			separatedArgs: []string{},
+		}, 0
+	}
+}
+
+// extractFlagWithValue extracts a flag and its value (if present in next arg).
+func (t *CompatibilityAliasTranslator) extractFlagWithValue(args []string, index int, flag string) ([]string, int) {
+	defer perf.Track(nil, "flags.CompatibilityAliasTranslator.extractFlagWithValue")()
+
+	result := []string{flag}
+	consumed := 0
+
+	// Check if next arg is the value (not another flag).
+	if index+1 < len(args) && !strings.HasPrefix(args[index+1], flagPrefix) {
+		result = append(result, args[index+1])
+		consumed = 1 // Consume the value arg
+	}
+
+	return result, consumed
+}
+
+// handleUnknownSingleDashFlag handles unknown single-dash flags (pass to Atmos).
+func (t *CompatibilityAliasTranslator) handleUnknownSingleDashFlag(args []string, index int, arg string) (translatedArgs, int) {
+	defer perf.Track(nil, "flags.CompatibilityAliasTranslator.handleUnknownSingleDashFlag")()
+
+	result := []string{arg}
+	consumed := 0
+
+	// If there's a next arg that doesn't look like a flag, include it.
+	// Cobra will handle whether it's a value or a positional arg.
 	if index+1 < len(args) && !strings.HasPrefix(args[index+1], flagPrefix) {
 		result = append(result, args[index+1])
 		consumed = 1

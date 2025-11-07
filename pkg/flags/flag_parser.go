@@ -72,28 +72,8 @@ func (p *AtmosFlagParser) Parse(args []string) (*ParsedConfig, error) {
 	// Step 2: Split args at -- separator.
 	argsBeforeSep, argsAfterSep := splitAtSeparator(args)
 
-	// Step 2.5: Detect if Cobra has already parsed flags and stripped the -- separator.
-	// If there's no -- separator in args AND Cobra has already parsed flags (detected by
-	// checking if any flags are marked Changed), then ALL args should be treated as
-	// separated args (the command to execute).
-	// This handles the case where: user runs "atmos auth exec --identity=prod -- sh -c echo"
-	// -> Cobra parses --identity=prod and strips -- -> RunE receives ["sh", "-c", "echo"]
-	// -> We need to treat these as separated args, not as flags to parse.
-	if len(argsAfterSep) == 0 && len(argsBeforeSep) > 0 {
-		// No -- separator found, check if Cobra already parsed flags
-		cobraAlreadyParsed := false
-		p.cmd.Flags().VisitAll(func(f *pflag.Flag) {
-			if f.Changed {
-				cobraAlreadyParsed = true
-			}
-		})
-
-		if cobraAlreadyParsed {
-			// Cobra already parsed flags and removed --, so all remaining args are separated args
-			argsAfterSep = argsBeforeSep
-			argsBeforeSep = []string{}
-		}
-	}
+	// Step 2.5: Detect if Cobra has already parsed flags and adjust separation.
+	argsBeforeSep, argsAfterSep = p.adjustForCobraParsing(argsBeforeSep, argsAfterSep)
 
 	// Step 2.6: Preprocess NoOptDefVal flags (identity, pager).
 	// Rewrite --flag value → --flag=value for flags with NoOptDefVal.
@@ -105,16 +85,7 @@ func (p *AtmosFlagParser) Parse(args []string) (*ParsedConfig, error) {
 	}
 
 	// Step 3: Normalize Cobra shorthand flags with = syntax (e.g., -i=value → --identity=value).
-	// This fixes a Cobra quirk where -i= returns literal "=" instead of empty string.
-	// This happens BEFORE compatibility alias translation because it's about native Cobra flags.
-	normalizedArgs := make([]string, len(argsBeforeSep))
-	for i, arg := range argsBeforeSep {
-		if normalized, wasNormalized := normalizeShorthandWithEquals(p.cmd, arg); wasNormalized {
-			normalizedArgs[i] = normalized
-		} else {
-			normalizedArgs[i] = arg
-		}
-	}
+	normalizedArgs := p.normalizeShorthandFlags(argsBeforeSep)
 
 	// Step 4: Validate compatibility alias targets that are actually used in args.
 	if err := p.translator.ValidateTargetsInArgs(p.cmd, normalizedArgs); err != nil {
@@ -125,24 +96,13 @@ func (p *AtmosFlagParser) Parse(args []string) (*ParsedConfig, error) {
 	// This handles terraform-specific flags like -var, -var-file, etc.
 	atmosArgs, translatedSeparated := p.translator.Translate(normalizedArgs)
 
-	// Step 6: Let Cobra parse the normalized Atmos args.
-	// We need to temporarily set the args on the command for Cobra to parse them.
-	p.cmd.SetArgs(atmosArgs)
-
-	// Execute Cobra parsing (this populates cmd.Flags()).
-	if err := p.cmd.ParseFlags(atmosArgs); err != nil {
-		return nil, err
-	}
-
-	// Step 6: Bind parsed flags to Viper.
-	if err := p.viper.BindPFlags(p.cmd.Flags()); err != nil {
+	// Step 6: Parse and bind flags to Viper.
+	if err := p.parseAndBindFlags(atmosArgs); err != nil {
 		return nil, err
 	}
 
 	// Step 7: Collect separated args (translated pass-through + args after --).
-	separatedArgs := make([]string, 0, len(translatedSeparated)+len(argsAfterSep))
-	separatedArgs = append(separatedArgs, translatedSeparated...)
-	separatedArgs = append(separatedArgs, argsAfterSep...)
+	separatedArgs := p.collectSeparatedArgs(translatedSeparated, argsAfterSep)
 
 	// Step 8: Extract positional args (non-flag args parsed by Cobra).
 	positionalArgs := p.cmd.Flags().Args()
@@ -150,11 +110,8 @@ func (p *AtmosFlagParser) Parse(args []string) (*ParsedConfig, error) {
 	// Step 9: Handle NoOptDefVal resolution for empty flag values.
 	p.resolveNoOptDefValForEmptyFlags()
 
-	// Step 10: Build flags map from Viper (for backward compatibility with existing ParsedConfig structure).
-	flagsMap := make(map[string]interface{})
-	for key := range p.viper.AllSettings() {
-		flagsMap[key] = p.viper.Get(key)
-	}
+	// Step 10: Build flags map from Viper.
+	flagsMap := p.buildFlagsMap()
 
 	return &ParsedConfig{
 		Flags:          flagsMap,
@@ -284,4 +241,101 @@ func normalizeShorthandWithEquals(cmd *cobra.Command, arg string) (normalized st
 	// Normalize to longhand format: -i=value → --identity=value.
 	normalized = "--" + longhand + valuePart
 	return normalized, true
+}
+
+// adjustForCobraParsing detects if Cobra has already parsed flags and adjusts arg separation.
+// If there's no -- separator in args AND Cobra has already parsed flags (detected by
+// checking if any flags are marked Changed), then ALL args should be treated as
+// separated args (the command to execute).
+// This handles the case where: user runs "atmos auth exec --identity=prod -- sh -c echo"
+// -> Cobra parses --identity=prod and strips -- -> RunE receives ["sh", "-c", "echo"]
+// -> We need to treat these as separated args, not as flags to parse.
+func (p *AtmosFlagParser) adjustForCobraParsing(argsBeforeSep, argsAfterSep []string) ([]string, []string) {
+	defer perf.Track(nil, "flagparser.FlagParser.adjustForCobraParsing")()
+
+	if len(argsAfterSep) == 0 && len(argsBeforeSep) > 0 {
+		// No -- separator found, check if Cobra already parsed flags.
+		if p.hasCobraAlreadyParsedFlags() {
+			// Cobra already parsed flags and removed --, so all remaining args are separated args.
+			return []string{}, argsBeforeSep
+		}
+	}
+
+	return argsBeforeSep, argsAfterSep
+}
+
+// hasCobraAlreadyParsedFlags checks if any flags have been marked as Changed by Cobra.
+func (p *AtmosFlagParser) hasCobraAlreadyParsedFlags() bool {
+	defer perf.Track(nil, "flagparser.FlagParser.hasCobraAlreadyParsedFlags")()
+
+	cobraAlreadyParsed := false
+	p.cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if f.Changed {
+			cobraAlreadyParsed = true
+		}
+	})
+
+	return cobraAlreadyParsed
+}
+
+// normalizeShorthandFlags normalizes Cobra shorthand flags with = syntax.
+// This fixes a Cobra quirk where -i= returns literal "=" instead of empty string.
+// This happens BEFORE compatibility alias translation because it's about native Cobra flags.
+func (p *AtmosFlagParser) normalizeShorthandFlags(argsBeforeSep []string) []string {
+	defer perf.Track(nil, "flagparser.FlagParser.normalizeShorthandFlags")()
+
+	normalizedArgs := make([]string, len(argsBeforeSep))
+	for i, arg := range argsBeforeSep {
+		if normalized, wasNormalized := normalizeShorthandWithEquals(p.cmd, arg); wasNormalized {
+			normalizedArgs[i] = normalized
+		} else {
+			normalizedArgs[i] = arg
+		}
+	}
+
+	return normalizedArgs
+}
+
+// parseAndBindFlags parses Cobra flags and binds them to Viper.
+func (p *AtmosFlagParser) parseAndBindFlags(atmosArgs []string) error {
+	defer perf.Track(nil, "flagparser.FlagParser.parseAndBindFlags")()
+
+	// Let Cobra parse the normalized Atmos args.
+	// We need to temporarily set the args on the command for Cobra to parse them.
+	p.cmd.SetArgs(atmosArgs)
+
+	// Execute Cobra parsing (this populates cmd.Flags()).
+	if err := p.cmd.ParseFlags(atmosArgs); err != nil {
+		return err
+	}
+
+	// Bind parsed flags to Viper.
+	if err := p.viper.BindPFlags(p.cmd.Flags()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// collectSeparatedArgs combines translated pass-through args and args after --.
+func (p *AtmosFlagParser) collectSeparatedArgs(translatedSeparated, argsAfterSep []string) []string {
+	defer perf.Track(nil, "flagparser.FlagParser.collectSeparatedArgs")()
+
+	separatedArgs := make([]string, 0, len(translatedSeparated)+len(argsAfterSep))
+	separatedArgs = append(separatedArgs, translatedSeparated...)
+	separatedArgs = append(separatedArgs, argsAfterSep...)
+
+	return separatedArgs
+}
+
+// buildFlagsMap builds a flags map from Viper for backward compatibility.
+func (p *AtmosFlagParser) buildFlagsMap() map[string]interface{} {
+	defer perf.Track(nil, "flagparser.FlagParser.buildFlagsMap")()
+
+	flagsMap := make(map[string]interface{})
+	for key := range p.viper.AllSettings() {
+		flagsMap[key] = p.viper.Get(key)
+	}
+
+	return flagsMap
 }

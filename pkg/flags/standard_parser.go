@@ -96,48 +96,87 @@ func (p *StandardParser) Parse(ctx context.Context, args []string) (*StandardOpt
 		return nil, err
 	}
 
-	// Extract positional args into struct fields using TargetField mapping.
-	// This is configured via WithPositionalArgs() on the builder.
+	// Extract and resolve positional arg values.
+	positionalValues := p.extractPositionalValues(parsedConfig.PositionalArgs)
+	component := p.resolveComponentValue(parsedConfig.Flags, positionalValues, parsedConfig.PositionalArgs)
+	schemaType := p.resolveSchemaTypeValue(parsedConfig.Flags, positionalValues)
+	key := p.resolveKeyValue(positionalValues)
+
+	// Convert to strongly-typed options.
+	opts := p.buildStandardOptions(parsedConfig, component, schemaType, key)
+
+	return &opts, nil
+}
+
+// extractPositionalValues extracts positional args into a map using TargetField mapping.
+// This is configured via WithPositionalArgs() on the builder.
+func (p *StandardParser) extractPositionalValues(positionalArgs []string) map[string]string {
+	defer perf.Track(nil, "flagparser.StandardParser.extractPositionalValues")()
+
 	positionalValues := make(map[string]string)
 	if p.parser.positionalArgs != nil {
 		specs := p.parser.positionalArgs.specs
 		for i, spec := range specs {
-			if i < len(parsedConfig.PositionalArgs) {
-				// Map positional arg value to its target field
-				positionalValues[spec.TargetField] = parsedConfig.PositionalArgs[i]
+			if i < len(positionalArgs) {
+				// Map positional arg value to its target field.
+				positionalValues[spec.TargetField] = positionalArgs[i]
 			}
 		}
 	}
+	return positionalValues
+}
 
-	// Determine component value.
-	// Priority: component flag > positional arg extraction > hardcoded fallback.
-	component := GetString(parsedConfig.Flags, "component")
+// resolveComponentValue determines the component value using the following priority:
+// 1. Component flag value.
+// 2. Positional arg from builder config.
+// 3. Hardcoded fallback for commands not using builder pattern.
+func (p *StandardParser) resolveComponentValue(flags map[string]interface{}, positionalValues map[string]string, positionalArgs []string) string {
+	defer perf.Track(nil, "flagparser.StandardParser.resolveComponentValue")()
+
+	component := GetString(flags, "component")
 	if component == "" {
-		// Try positional arg from builder config first
+		// Try positional arg from builder config first.
 		if val, ok := positionalValues["Component"]; ok {
 			component = val
-		} else if len(parsedConfig.PositionalArgs) == 1 {
-			// Fallback for commands not using builder pattern yet
-			component = parsedConfig.PositionalArgs[0]
+		} else if len(positionalArgs) == 1 {
+			// Fallback for commands not using builder pattern yet.
+			component = positionalArgs[0]
 		}
 	}
+	return component
+}
 
-	// Determine schema type value from positional args if configured.
-	schemaType := GetString(parsedConfig.Flags, "schema-type")
+// resolveSchemaTypeValue determines the schema type value from positional args if configured.
+func (p *StandardParser) resolveSchemaTypeValue(flags map[string]interface{}, positionalValues map[string]string) string {
+	defer perf.Track(nil, "flagparser.StandardParser.resolveSchemaTypeValue")()
+
+	schemaType := GetString(flags, "schema-type")
 	if schemaType == "" {
 		if val, ok := positionalValues["SchemaType"]; ok {
 			schemaType = val
 		}
 	}
+	return schemaType
+}
 
-	// Determine key value from positional args if configured.
+// resolveKeyValue determines the key value from positional args if configured.
+func (p *StandardParser) resolveKeyValue(positionalValues map[string]string) string {
+	defer perf.Track(nil, "flagparser.StandardParser.resolveKeyValue")()
+
 	key := ""
 	if val, ok := positionalValues["Key"]; ok {
 		key = val
 	}
+	return key
+}
 
-	// Convert to strongly-typed options.
-	opts := StandardOptions{
+// buildStandardOptions builds a StandardOptions struct from parsed config and resolved values.
+//
+//nolint:revive,funlen // Function length exceeded due to large struct initialization (68 lines). Splitting would reduce readability.
+func (p *StandardParser) buildStandardOptions(parsedConfig *ParsedConfig, component, schemaType, key string) StandardOptions {
+	defer perf.Track(nil, "flagparser.StandardParser.buildStandardOptions")()
+
+	return StandardOptions{
 		Flags: global.Flags{
 			Chdir:           GetString(parsedConfig.Flags, "chdir"),
 			BasePath:        GetString(parsedConfig.Flags, "base-path"),
@@ -203,6 +242,4 @@ func (p *StandardParser) Parse(ctx context.Context, args []string) (*StandardOpt
 		Output:                      GetString(parsedConfig.Flags, "output"),
 		positionalArgs:              parsedConfig.PositionalArgs,
 	}
-
-	return &opts, nil
 }

@@ -138,7 +138,20 @@ func GlobalFlagsRegistry() *FlagRegistry {
 
 	registry := NewFlagRegistry()
 
-	// Working directory flags.
+	// Register all flag categories.
+	registerWorkingDirectoryFlags(registry)
+	registerLoggingFlags(registry)
+	registerAuthenticationFlags(registry)
+	registerProfilingFlags(registry)
+	registerPerformanceFlags(registry)
+
+	return registry
+}
+
+// registerWorkingDirectoryFlags registers working directory and path flags.
+func registerWorkingDirectoryFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "global.registerWorkingDirectoryFlags")()
+
 	registry.Register(&StringFlag{
 		Name:        "chdir",
 		Shorthand:   "C",
@@ -170,8 +183,12 @@ func GlobalFlagsRegistry() *FlagRegistry {
 		Description: "Paths to configuration directories (comma-separated or repeated flag)",
 		EnvVars:     []string{"ATMOS_CONFIG_PATH"},
 	})
+}
 
-	// Logging flags.
+// registerLoggingFlags registers logging configuration flags.
+func registerLoggingFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "global.registerLoggingFlags")()
+
 	registry.Register(&StringFlag{
 		Name:        "logs-level",
 		Shorthand:   "",
@@ -195,6 +212,11 @@ func GlobalFlagsRegistry() *FlagRegistry {
 		Description: "Disable color output",
 		EnvVars:     []string{"ATMOS_NO_COLOR", "NO_COLOR"},
 	})
+}
+
+// registerAuthenticationFlags registers authentication and output flags.
+func registerAuthenticationFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "global.registerAuthenticationFlags")()
 
 	// Identity flag (special NoOptDefVal handling).
 	registry.Register(&StringFlag{
@@ -215,8 +237,12 @@ func GlobalFlagsRegistry() *FlagRegistry {
 		NoOptDefVal: "true",
 		EnvVars:     []string{"ATMOS_PAGER"},
 	})
+}
 
-	// Profiling flags.
+// registerProfilingFlags registers profiling configuration flags.
+func registerProfilingFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "global.registerProfilingFlags")()
+
 	registry.Register(&BoolFlag{
 		Name:        "profiler-enabled",
 		Shorthand:   "",
@@ -256,8 +282,12 @@ func GlobalFlagsRegistry() *FlagRegistry {
 		Description: "Type of profile to collect (cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace)",
 		EnvVars:     []string{"ATMOS_PROFILE_TYPE"},
 	})
+}
 
-	// Performance flags.
+// registerPerformanceFlags registers performance visualization flags.
+func registerPerformanceFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "global.registerPerformanceFlags")()
+
 	registry.Register(&BoolFlag{
 		Name:        "heatmap",
 		Shorthand:   "",
@@ -273,6 +303,4 @@ func GlobalFlagsRegistry() *FlagRegistry {
 		Description: "Heatmap visualization mode (bar, sparkline, table)",
 		EnvVars:     []string{"ATMOS_HEATMAP_MODE"},
 	})
-
-	return registry
 }
