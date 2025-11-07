@@ -298,23 +298,30 @@ Atmos separates I/O (streams) from UI (formatting) with two channels:
 **NEVER use `fmt.Print`, `fmt.Fprint(os.Stderr)`, or direct stream access.**
 
 ```go
-import "github.com/cloudposse/atmos/pkg/ui"
+import (
+    "github.com/cloudposse/atmos/pkg/data"
+    "github.com/cloudposse/atmos/pkg/ui"
+)
 
 // Data channel (stdout) - for pipeable output
-ui.Data().Write("result")                    // Plain text to stdout
-ui.Data().Writef("value: %s", val)           // Formatted text to stdout
-ui.Data().Writeln("result")                  // Plain text with newline to stdout
-ui.Data().WriteJSON(structData)              // JSON to stdout
-ui.Data().WriteYAML(structData)              // YAML to stdout
+data.Write("result")                // Plain text to stdout
+data.Writef("value: %s", val)       // Formatted text to stdout
+data.Writeln("result")              // Plain text with newline to stdout
+data.WriteJSON(structData)          // JSON to stdout
+data.WriteYAML(structData)          // YAML to stdout
 
 // UI channel (stderr) - for human messages
-ui.Write("Loading configuration...")          // Plain text (no icon, no color, stderr)
-ui.Writef("Processing %d items...", count)    // Formatted text (no icon, no color, stderr)
-ui.Writeln("Done")                            // Plain text with newline (no icon, no color, stderr)
-ui.Success("Deployment complete!")            // ✓ Deployment complete! (green, stderr)
-ui.Error("Configuration failed")              // ✗ Configuration failed (red, stderr)
-ui.Warning("Deprecated feature")              // ⚠ Deprecated feature (yellow, stderr)
-ui.Info("Processing components...")           // ℹ Processing components... (cyan, stderr)
+ui.Write("Loading configuration...")            // Plain text (no icon, no color, stderr)
+ui.Writef("Processing %d items...", count)      // Formatted text (no icon, no color, stderr)
+ui.Writeln("Done")                              // Plain text with newline (no icon, no color, stderr)
+ui.Success("Deployment complete!")              // ✓ Deployment complete! (green, stderr)
+ui.Successf("Deployed %d components!", count)   // ✓ Deployed 5 components! (green, stderr)
+ui.Error("Configuration failed")                // ✗ Configuration failed (red, stderr)
+ui.Errorf("Failed to load %s", file)            // ✗ Failed to load config.yaml (red, stderr)
+ui.Warning("Deprecated feature")                // ⚠ Deprecated feature (yellow, stderr)
+ui.Warningf("Feature %s deprecated", name)      // ⚠ Feature X deprecated (yellow, stderr)
+ui.Info("Processing components...")             // ℹ Processing components... (cyan, stderr)
+ui.Infof("Processing %d components...", count)  // ℹ Processing 10 components... (cyan, stderr)
 
 // Markdown rendering (theme-aware)
 ui.Markdown("# Help\n\nUsage...")             // Rendered to stdout (data)
@@ -327,13 +334,15 @@ ui.MarkdownMessage("**Error:** Invalid")      // Rendered to stderr (UI)
 What am I outputting?
 
 ├─ Pipeable data (JSON, YAML, results)
-│  └─ Use ui.Data().Write(), ui.Data().WriteJSON(), ui.Data().WriteYAML()
+│  └─ Use data.Write(), data.Writef(), data.Writeln()
+│     data.WriteJSON(), data.WriteYAML()
 │
 ├─ Plain UI messages (no icon, no color)
 │  └─ Use ui.Write(), ui.Writef(), ui.Writeln()
 │
 ├─ Status messages (with icons and colors)
-│  └─ Use ui.Success(), ui.Error(), ui.Warning(), ui.Info()
+│  └─ Use ui.Success(), ui.Successf(), ui.Error(), ui.Errorf(),
+│     ui.Warning(), ui.Warningf(), ui.Info(), ui.Infof()
 │
 └─ Formatted documentation
    ├─ Help text, usage → ui.Markdown() (stdout)
@@ -344,9 +353,9 @@ What am I outputting?
 
 ```go
 // ❌ WRONG: Direct stream access
-fmt.Fprint(os.Stdout, ...)  // Use ui.Data().Write() instead
+fmt.Fprint(os.Stdout, ...)  // Use data.Write() instead
 fmt.Fprint(os.Stderr, ...)  // Use ui.Success/Error/etc instead
-fmt.Println(...)            // Use ui.Data().Writeln() instead
+fmt.Println(...)            // Use data.Writeln() instead
 
 // ❌ WRONG: Using lipgloss styles for status messages
 styles := theme.GetCurrentStyles()
