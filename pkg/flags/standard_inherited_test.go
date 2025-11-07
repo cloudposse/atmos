@@ -208,7 +208,7 @@ func TestStandardFlagParser_DisableFlagParsing_WithoutInheritedFlags(t *testing.
 	}
 
 	parser.RegisterFlags(cmd)
-	assert.True(t, cmd.DisableFlagParsing, "DisableFlagParsing should be true")
+	assert.False(t, cmd.DisableFlagParsing, "DisableFlagParsing should be false (Cobra validates flags)")
 
 	v := viper.New()
 	err := parser.BindToViper(v)

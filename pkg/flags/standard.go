@@ -104,30 +104,32 @@ func (p *StandardFlagParser) ParsedFlags() *pflag.FlagSet {
 	return p.parsedFlags
 }
 
-// RegisterFlags implements FlagParser.
-// Automatically sets DisableFlagParsing=true and Args=cobra.ArbitraryArgs to ensure
-// our parser handles flag parsing instead of Cobra, which allows proper positional
-// arg extraction and Viper precedence.
+// RegisterFlags registers flags with Cobra for normal flag validation.
+// Does NOT set DisableFlagParsing, allowing Cobra to validate flags and reject unknown ones.
+//
+// For commands that need to pass unknown flags to external tools (terraform, helmfile, packer),
+// those commands should set DisableFlagParsing=true manually in their command definition.
+// This is a temporary measure until the compatibility flags system is fully integrated.
 func (p *StandardFlagParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.StandardFlagParser.RegisterFlags")()
 
-	// Store command for manual flag parsing in Parse()
+	// Store command for flag binding and Parse() method
 	p.cmd = cmd
 
-	// IMPORTANT: Disable Cobra's flag parsing so our parser can handle it.
-	// This is critical for:
-	// - Proper positional argument extraction (component names, workflow names, etc.)
-	// - Viper precedence handling (CLI → ENV → config → defaults)
-	// - Short flag support (-s, -f, -i, etc.)
-	cmd.DisableFlagParsing = true
-
-	// IMPORTANT: Set Args validator to ArbitraryArgs.
-	// When DisableFlagParsing=true, Cobra's Args validator runs BEFORE our Parse() method,
-	// and it sees raw arguments including flags (e.g., ["-f", "yaml"]).
-	// Using ArbitraryArgs allows all arguments through, then our Parse() method extracts
-	// flags and validates remaining positional args.
-	// This eliminates "Unknown command -f" errors and other Args validation boilerplate.
-	cmd.Args = cobra.ArbitraryArgs
+	// DO NOT set DisableFlagParsing here.
+	// Let Cobra handle flag parsing and validation normally for most commands.
+	// Commands that need pass-through (terraform, helmfile, packer) set it manually.
+	//
+	// Why not set it here:
+	// - Compatibility flags (the proper solution) preprocess args BEFORE Cobra sees them
+	// - Moved pass-through flags are in separatedArgs, not given to Cobra
+	// - Cobra only sees Atmos flags and can validate them normally
+	// - Unknown flags are properly rejected by Cobra
+	//
+	// Legacy behavior (still used by terraform/helmfile/packer):
+	// - Commands manually set DisableFlagParsing=true in their definition
+	// - This bypasses Cobra validation entirely (less ideal)
+	// - Will be replaced by compatibility flags in future PR
 
 	for _, flag := range p.registry.All() {
 		p.registerFlag(cmd, flag)

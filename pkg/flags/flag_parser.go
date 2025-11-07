@@ -10,24 +10,23 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// FlagParser is a parser that combines compatibility alias translation with standard Cobra flag parsing.
-// It replaces both StandardParser and PassThroughFlagParser with a unified approach.
+// AtmosFlagParser is a unified parser that combines compatibility flag translation with standard Cobra flag parsing.
 //
 // Key features:
-//   - Translates legacy flag syntax to Cobra-compatible format via CompatibilityAliasTranslator.
+//   - Translates legacy flag syntax to Cobra-compatible format via CompatibilityFlagTranslator.
 //   - Enables Cobra validation (no DisableFlagParsing).
-//   - Separates Atmos flags from pass-through flags.
-//   - Handles double-dash separator (--) for explicit pass-through.
+//   - Separates Atmos flags from separated args (for external tools).
+//   - Handles double-dash separator (--) for explicit separation.
 //   - Preprocesses NoOptDefVal flags to support space-separated syntax.
 type AtmosFlagParser struct {
 	cmd        *cobra.Command
 	viper      *viper.Viper
-	translator *CompatibilityAliasTranslator
+	translator *CompatibilityFlagTranslator
 	registry   *FlagRegistry
 }
 
 // NewAtmosFlagParser creates a new unified parser.
-func NewAtmosFlagParser(cmd *cobra.Command, v *viper.Viper, translator *CompatibilityAliasTranslator, registry *FlagRegistry) *AtmosFlagParser {
+func NewAtmosFlagParser(cmd *cobra.Command, v *viper.Viper, translator *CompatibilityFlagTranslator, registry *FlagRegistry) *AtmosFlagParser {
 	defer perf.Track(nil, "flagparser.NewAtmosFlagParser")()
 
 	return &AtmosFlagParser{
@@ -42,10 +41,10 @@ func NewAtmosFlagParser(cmd *cobra.Command, v *viper.Viper, translator *Compatib
 //
 // Process:
 //  1. Set command on translator (enables shorthand normalization)
-//  2. Validate no conflicts between compatibility aliases and Cobra native shorthands
+//  2. Validate no conflicts between compatibility flages and Cobra native shorthands
 //  3. Split args at -- separator (if present)
-//  4. Validate compatibility alias targets for aliases used in args
-//  5. Translate compatibility aliases + normalize Cobra shorthands in pre-separator args
+//  4. Validate compatibility flag targets for aliases used in args
+//  5. Translate compatibility flages + normalize Cobra shorthands in pre-separator args
 //  6. Let Cobra parse the normalized Atmos args
 //  7. Bind parsed flags to Viper
 //  8. Collect separated args (post-separator + translated pass-through flags)
@@ -63,7 +62,7 @@ func (p *AtmosFlagParser) Parse(args []string) (*ParsedConfig, error) {
 	defer perf.Track(nil, "flagparser.FlagParser.Parse")()
 
 	// Step 1: Validate no conflicts with Cobra native shorthands.
-	// This catches configuration errors like adding -s to compatibility aliases
+	// This catches configuration errors like adding -s to compatibility flages
 	// when it's already registered as a Cobra shorthand via StringP("stack", "s", ...).
 	if err := p.translator.ValidateNoConflicts(p.cmd); err != nil {
 		return nil, err
@@ -87,12 +86,12 @@ func (p *AtmosFlagParser) Parse(args []string) (*ParsedConfig, error) {
 	// Step 3: Normalize Cobra shorthand flags with = syntax (e.g., -i=value → --identity=value).
 	normalizedArgs := p.normalizeShorthandFlags(argsBeforeSep)
 
-	// Step 4: Validate compatibility alias targets that are actually used in args.
+	// Step 4: Validate compatibility flag targets that are actually used in args.
 	if err := p.translator.ValidateTargetsInArgs(p.cmd, normalizedArgs); err != nil {
 		return nil, err
 	}
 
-	// Step 5: Translate compatibility aliases in normalized args.
+	// Step 5: Translate compatibility flages in normalized args.
 	// This handles terraform-specific flags like -var, -var-file, etc.
 	atmosArgs, translatedSeparated := p.translator.Translate(normalizedArgs)
 
@@ -280,7 +279,7 @@ func (p *AtmosFlagParser) hasCobraAlreadyParsedFlags() bool {
 
 // normalizeShorthandFlags normalizes Cobra shorthand flags with = syntax.
 // This fixes a Cobra quirk where -i= returns literal "=" instead of empty string.
-// This happens BEFORE compatibility alias translation because it's about native Cobra flags.
+// This happens BEFORE compatibility flag translation because it's about native Cobra flags.
 func (p *AtmosFlagParser) normalizeShorthandFlags(argsBeforeSep []string) []string {
 	defer perf.Track(nil, "flagparser.FlagParser.normalizeShorthandFlags")()
 

@@ -34,7 +34,7 @@ type CommandProvider interface {
     GetGroup() string
     GetFlagsBuilder() flags.Builder
     GetPositionalArgsBuilder() *flags.PositionalArgsBuilder
-    GetCompatibilityAliases() map[string]flags.CompatibilityAlias
+    GetCompatibilityFlags() map[string]flags.CompatibilityFlag
 }
 ```
 
@@ -45,6 +45,117 @@ type CommandProvider interface {
 - "Cloud Integration" - aws, atlantis
 - "Pro Features" - auth, pro
 - "Other Commands" - about, completion, version, support
+
+## Compatibility Flags & Separated Args
+
+### What Are Compatibility Flags?
+
+Compatibility flags provide backward compatibility for legacy single-dash flag syntax. They are **preprocessed before Cobra sees the arguments**, translating legacy syntax to modern syntax or moving flags to separated args.
+
+**Example:** `atmos terraform plan -s dev -var foo=bar -var-file prod.tfvars`
+
+The compatibility flag system translates this BEFORE Cobra:
+- `-s dev` → `--stack dev` (mapped to Atmos flag)
+- `-var foo=bar` → Moved to separated args (pass-through to Terraform)
+- `-var-file prod.tfvars` → Moved to separated args (pass-through to Terraform)
+
+Result: Cobra receives `["--stack", "dev"]` and separated args get `["-var", "foo=bar", "-var-file", "prod.tfvars"]`
+
+### Two Types of Compatibility Flags
+
+```go
+type CompatibilityFlag struct {
+    Behavior FlagBehavior  // MapToAtmosFlag or AppendToSeparated
+    Target   string        // For MapToAtmosFlag: the target flag name (e.g., "--stack")
+}
+
+// MapToAtmosFlag: Translate to Atmos flag (e.g., -s → --stack)
+// AppendToSeparated: Move to separated args for external tool (e.g., -var → terraform)
+```
+
+### When to Use Compatibility Flags
+
+**Use compatibility flags when:**
+1. Supporting legacy single-dash syntax (e.g., `-s` for `--stack`)
+2. Supporting pass-through flags for external tools (e.g., Terraform's `-var`, `-var-file`)
+3. Command needs to accept flags that would conflict with Cobra's validation
+
+**Most commands don't need compatibility flags** - they're primarily for:
+- `terraform`, `helmfile`, `packer` commands (pass-through to external tools)
+- Commands with established legacy shorthand syntax
+
+### Separated Args: Command-Specific Behavior
+
+**Important:** Separated args are stored in BaseOptions but it's **up to each command** whether they use them.
+
+```go
+type BaseOptions struct {
+    positionalArgs []string  // Positional args after flags
+    separatedArgs  []string  // Flags moved by compatibility system
+    globalFlags    *global.Flags
+}
+
+// Commands decide what to do with separated args
+opts.GetSeparatedArgs()  // Returns []string
+
+// Example: terraform command passes them to terraform binary
+// Example: version command ignores them (doesn't need external tool)
+```
+
+**Key points:**
+- Separated args are populated by compatibility flag preprocessing
+- They're stored in BaseOptions for all commands
+- **Commands are responsible for using them** (or ignoring them)
+- Typically used by terraform/helmfile/packer to pass flags to external binaries
+
+### Example: Command Without Compatibility Flags
+
+Most commands don't need them:
+
+```go
+func (v *VersionCommandProvider) GetCompatibilityFlags() map[string]flags.CompatibilityFlag {
+    return nil  // No compatibility flags needed
+}
+```
+
+### Example: Command With Compatibility Flags
+
+Terraform command supports legacy syntax:
+
+```go
+func (t *TerraformCommandProvider) GetCompatibilityFlags() map[string]flags.CompatibilityFlag {
+    return map[string]flags.CompatibilityFlag{
+        "-s": {
+            Behavior: flags.MapToAtmosFlag,
+            Target:   "--stack",  // Translate -s to --stack
+        },
+        "-var": {
+            Behavior: flags.AppendToSeparated,  // Pass through to terraform
+        },
+        "-var-file": {
+            Behavior: flags.AppendToSeparated,  // Pass through to terraform
+        },
+    }
+}
+```
+
+Then in RunE:
+
+```go
+RunE: func(cmd *cobra.Command, args []string) error {
+    // Parse Atmos flags normally
+    opts := &TerraformOptions{
+        Flags: flags.ParseGlobalFlags(cmd, v),
+        Stack: v.GetString("stack"),
+    }
+
+    // Get separated args for terraform
+    terraformArgs := opts.GetSeparatedArgs()  // ["-var", "foo=bar", "-var-file", "prod.tfvars"]
+
+    // Pass to terraform binary
+    return executeTerraform(opts.Stack, terraformArgs)
+}
+```
 
 ## Reference Implementations
 
@@ -81,7 +192,7 @@ func (a *AboutCommandProvider) GetName() string { return "about" }
 func (a *AboutCommandProvider) GetGroup() string { return "Other Commands" }
 func (a *AboutCommandProvider) GetFlagsBuilder() flags.Builder { return nil }
 func (a *AboutCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder { return nil }
-func (a *AboutCommandProvider) GetCompatibilityAliases() map[string]flags.CompatibilityAlias { return nil }
+func (a *AboutCommandProvider) GetCompatibilityFlags() map[string]flags.CompatibilityFlag { return nil }
 ```
 
 ### Pattern 2: Command with Flags
@@ -147,7 +258,7 @@ func (v *VersionCommandProvider) GetName() string { return "version" }
 func (v *VersionCommandProvider) GetGroup() string { return "Other Commands" }
 func (v *VersionCommandProvider) GetFlagsBuilder() flags.Builder { return versionParser }
 func (v *VersionCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder { return nil }
-func (v *VersionCommandProvider) GetCompatibilityAliases() map[string]flags.CompatibilityAlias { return nil }
+func (v *VersionCommandProvider) GetCompatibilityFlags() map[string]flags.CompatibilityFlag { return nil }
 ```
 
 ## StandardParser API

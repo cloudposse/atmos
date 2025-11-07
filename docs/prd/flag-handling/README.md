@@ -17,7 +17,7 @@ The following documents provide detailed context on specific aspects of the desi
 ### [unified-flag-parsing.md](unified-flag-parsing.md)
 **Status**: Superseded by `unified-flag-parsing-refactoring.md`
 
-Original comprehensive design for unified flag parsing. The concepts here have been integrated into the master PRD with additional details on compatibility aliases and migration strategy.
+Original comprehensive design for unified flag parsing. The concepts here have been integrated into the master PRD with additional details on compatibility flages and migration strategy.
 
 ### [global-flags-pattern.md](global-flags-pattern.md)
 **Status**: Integrated into master PRD (Section: "Strongly-Typed Options Structs")

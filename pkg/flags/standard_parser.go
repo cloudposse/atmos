@@ -52,6 +52,8 @@ func (p *StandardParser) SetPositionalArgs(
 }
 
 // RegisterFlags adds flags to the Cobra command.
+// Does NOT set DisableFlagParsing - allows Cobra to validate flags normally.
+// Commands that need pass-through set DisableFlagParsing=true manually.
 func (p *StandardParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flagparser.StandardParser.RegisterFlags")()
 

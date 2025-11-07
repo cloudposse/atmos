@@ -49,7 +49,7 @@ func NewGlobalOptionsBuilder() *GlobalOptionsBuilder {
 func (b *GlobalOptionsBuilder) registerWorkingDirectoryFlags(defaults *global.Flags) {
 	defer perf.Track(nil, "flags.GlobalOptionsBuilder.registerWorkingDirectoryFlags")()
 
-	b.options = append(b.options, WithStringFlag("chdir", "C", defaults.Chdir, "Change working directory before executing the command"))
+	b.options = append(b.options, WithStringFlag("chdir", "C", defaults.Chdir, "Change working directory before executing the command (run as if Atmos started in this directory)"))
 	b.options = append(b.options, WithEnvVars("chdir", "ATMOS_CHDIR"))
 
 	b.options = append(b.options, WithStringFlag("base-path", "", defaults.BasePath, "Base path for Atmos project"))

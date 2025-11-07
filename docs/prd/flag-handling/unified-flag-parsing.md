@@ -6,7 +6,7 @@ This document contains historical design that has been partially superseded:
 
 **WHAT CHANGED (Migration Complete 2025-11-06)**:
 - ❌ **PassThroughFlagParser DELETED** - No longer exists
-- ✅ **AtmosFlagParser** - New parser for terraform with compatibility aliases (-s → --stack, -i → --identity)
+- ✅ **AtmosFlagParser** - New parser for terraform with compatibility flages (-s → --stack, -i → --identity)
 - ✅ **StandardParser** - Used for helmfile, packer, workflow, and all other commands
 - ✅ **CompatibilityAliasTranslator** - Handles terraform legacy flag compatibility
 
@@ -1046,7 +1046,7 @@ type FlagParser interface {
 **ACTUAL IMPLEMENTATION (2025-11-06)**:
 - `FlagParser` interface - Still used
 - `StandardParser` - Implements FlagParser for standard commands
-- `AtmosFlagParser` - Implements FlagParser for terraform with compatibility aliases
+- `AtmosFlagParser` - Implements FlagParser for terraform with compatibility flages
 - `CompatibilityAliasTranslator` - Translates -s → --stack, -i → --identity, etc.
 
 **DELETED (2025-11-06)**:

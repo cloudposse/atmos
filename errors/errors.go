@@ -127,8 +127,8 @@ var (
 	ErrInvalidFlag = errors.New("invalid flag")
 
 	// Flag validation errors.
-	ErrCompatibilityAliasMissingTarget = errors.New("compatibility alias references non-existent flag")
-	ErrInvalidFlagValue                = errors.New("invalid value for flag")
+	ErrCompatibilityFlagMissingTarget = errors.New("compatibility flag references non-existent flag")
+	ErrInvalidFlagValue               = errors.New("invalid value for flag")
 
 	// File and URL handling errors.
 	ErrInvalidPagerCommand = errors.New("invalid pager command")

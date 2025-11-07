@@ -60,37 +60,6 @@ type FlagParser interface {
 	Reset()
 }
 
-// PassThroughHandler handles the separation of Atmos-specific flags from tool flags.
-// This is used by commands that pass arguments to external tools (terraform, helmfile, packer).
-//
-// Two parsing modes:
-//   - Explicit mode: With -- separator (recommended)
-//   - Implicit mode: Without -- separator (backward compatibility)
-type PassThroughHandler interface {
-	// SplitAtDoubleDash separates arguments at the -- marker.
-	// Returns (beforeDash, afterDash).
-	// If no -- found, afterDash is nil.
-	SplitAtDoubleDash(args []string) (beforeDash, afterDash []string)
-
-	// ExtractAtmosFlags pulls known Atmos flags from a mixed argument list.
-	// Returns:
-	//   - atmosFlags: Map of flag name -> value for Atmos-specific flags
-	//   - remainingArgs: Arguments that weren't Atmos flags (tool flags + positional args)
-	//   - error: If flag parsing fails
-	//
-	// This is used in implicit mode (no -- separator) to extract Atmos flags
-	// while preserving tool flags exactly as provided.
-	ExtractAtmosFlags(args []string) (atmosFlags map[string]interface{}, remainingArgs []string, err error)
-
-	// ExtractPositionalArgs identifies positional arguments from an argument list.
-	// expectedCount is the number of positional args expected (e.g., 2 for "terraform plan vpc").
-	// Returns:
-	//   - positional: The positional arguments found
-	//   - remaining: Arguments after positional args (flags)
-	//   - error: If not enough positional args found
-	ExtractPositionalArgs(args []string, expectedCount int) (positional, remaining []string, err error)
-}
-
 // ParsedConfig contains the results of parsing command-line arguments.
 //
 // This is an intermediate type returned by StandardFlagParser.Parse().

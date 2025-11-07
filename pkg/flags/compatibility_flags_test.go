@@ -12,7 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-// translationResult holds the result of compatibility alias translation.
+// translationResult holds the result of compatibility flag translation.
 type translationResult struct {
 	atmosArgs     []string
 	separatedArgs []string
@@ -34,11 +34,11 @@ func assertPanic(t *testing.T, expectedMsg string) {
 	}
 }
 
-// NOTE: Tests for -s and -i removed because these are Cobra native shorthands, NOT compatibility aliases.
+// NOTE: Tests for -s and -i removed because these are Cobra native shorthands, NOT compatibility flages.
 // Cobra handles -s → --stack automatically when you register flags with StringP("stack", "s", ...).
 // The compatibility translator should ONLY handle terraform-specific pass-through flags.
 
-func TestCompatibilityAliasTranslator_TerraformPassThroughCommonFlags(t *testing.T) {
+func TestCompatibilityFlagTranslator_TerraformPassThroughCommonFlags(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []string
@@ -105,7 +105,7 @@ func TestCompatibilityAliasTranslator_TerraformPassThroughCommonFlags(t *testing
 	}
 }
 
-func TestCompatibilityAliasTranslator_TerraformPassThroughFlags(t *testing.T) {
+func TestCompatibilityFlagTranslator_TerraformPassThroughFlags(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []string
@@ -204,7 +204,7 @@ func TestCompatibilityAliasTranslator_TerraformPassThroughFlags(t *testing.T) {
 	}
 }
 
-func TestCompatibilityAliasTranslator_MixedScenarios(t *testing.T) {
+func TestCompatibilityFlagTranslator_MixedScenarios(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []string
@@ -273,7 +273,7 @@ func TestCompatibilityAliasTranslator_MixedScenarios(t *testing.T) {
 	}
 }
 
-func TestCompatibilityAliasTranslator_ModernSyntax(t *testing.T) {
+func TestCompatibilityFlagTranslator_ModernSyntax(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []string
@@ -316,7 +316,7 @@ func TestCompatibilityAliasTranslator_ModernSyntax(t *testing.T) {
 	}
 }
 
-func TestCompatibilityAliasTranslator_PositionalArgs(t *testing.T) {
+func TestCompatibilityFlagTranslator_PositionalArgs(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []string
@@ -352,7 +352,7 @@ func TestCompatibilityAliasTranslator_PositionalArgs(t *testing.T) {
 	}
 }
 
-func TestCompatibilityAliasTranslator_EdgeCases(t *testing.T) {
+func TestCompatibilityFlagTranslator_EdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []string
@@ -411,17 +411,17 @@ func TestCompatibilityAliasTranslator_EdgeCases(t *testing.T) {
 	}
 }
 
-func TestCompatibilityAliasTranslator_ValidateTargets(t *testing.T) {
+func TestCompatibilityFlagTranslator_ValidateTargets(t *testing.T) {
 	tests := []struct {
 		name        string
-		aliases     map[string]CompatibilityAlias
+		aliases     map[string]CompatibilityFlag
 		setupFlags  func(*cobra.Command)
 		expectError bool
 		errorMsg    string
 	}{
 		{
 			name: "valid targets - all exist",
-			aliases: map[string]CompatibilityAlias{
+			aliases: map[string]CompatibilityFlag{
 				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
 				"-i": {Behavior: MapToAtmosFlag, Target: "--identity"},
 			},
@@ -433,7 +433,7 @@ func TestCompatibilityAliasTranslator_ValidateTargets(t *testing.T) {
 		},
 		{
 			name: "invalid target - flag does not exist",
-			aliases: map[string]CompatibilityAlias{
+			aliases: map[string]CompatibilityFlag{
 				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
 				"-x": {Behavior: MapToAtmosFlag, Target: "--nonexistent"},
 			},
@@ -441,11 +441,11 @@ func TestCompatibilityAliasTranslator_ValidateTargets(t *testing.T) {
 				cmd.Flags().String("stack", "", "stack name")
 			},
 			expectError: true,
-			errorMsg:    `compatibility alias "-x" references non-existent flag "--nonexistent"`,
+			errorMsg:    `compatibility flag "-x" references non-existent flag "--nonexistent"`,
 		},
 		{
 			name: "AppendToSeparated aliases - no validation needed",
-			aliases: map[string]CompatibilityAlias{
+			aliases: map[string]CompatibilityFlag{
 				"-var":      {Behavior: AppendToSeparated, Target: ""},
 				"-var-file": {Behavior: AppendToSeparated, Target: ""},
 			},
@@ -456,7 +456,7 @@ func TestCompatibilityAliasTranslator_ValidateTargets(t *testing.T) {
 		},
 		{
 			name: "mixed - valid MapToAtmosFlag and AppendToSeparated",
-			aliases: map[string]CompatibilityAlias{
+			aliases: map[string]CompatibilityFlag{
 				"-s":        {Behavior: MapToAtmosFlag, Target: "--stack"},
 				"-var":      {Behavior: AppendToSeparated, Target: ""},
 				"-var-file": {Behavior: AppendToSeparated, Target: ""},
@@ -468,7 +468,7 @@ func TestCompatibilityAliasTranslator_ValidateTargets(t *testing.T) {
 		},
 		{
 			name: "empty target - no validation needed",
-			aliases: map[string]CompatibilityAlias{
+			aliases: map[string]CompatibilityFlag{
 				"-s": {Behavior: MapToAtmosFlag, Target: ""},
 			},
 			setupFlags: func(cmd *cobra.Command) {
@@ -483,13 +483,13 @@ func TestCompatibilityAliasTranslator_ValidateTargets(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
 			tt.setupFlags(cmd)
 
-			translator := NewCompatibilityAliasTranslator(tt.aliases)
+			translator := NewCompatibilityFlagTranslator(tt.aliases)
 			err := translator.ValidateTargets(cmd)
 
 			if tt.expectError {
 				require.Error(t, err)
-				// All validation errors should wrap ErrCompatibilityAliasMissingTarget
-				assert.ErrorIs(t, err, errUtils.ErrCompatibilityAliasMissingTarget)
+				// All validation errors should wrap ErrCompatibilityFlagMissingTarget
+				assert.ErrorIs(t, err, errUtils.ErrCompatibilityFlagMissingTarget)
 				// Also check the error message contains helpful context
 				if tt.errorMsg != "" {
 					assert.Contains(t, err.Error(), tt.errorMsg)
@@ -501,17 +501,17 @@ func TestCompatibilityAliasTranslator_ValidateTargets(t *testing.T) {
 	}
 }
 
-func TestCompatibilityAliasTranslator_ValidateNoConflicts(t *testing.T) {
+func TestCompatibilityFlagTranslator_ValidateNoConflicts(t *testing.T) {
 	tests := []struct {
 		name        string
-		aliases     map[string]CompatibilityAlias
+		aliases     map[string]CompatibilityFlag
 		setupFlags  func(*cobra.Command)
 		expectPanic bool
 		panicMsg    string
 	}{
 		{
 			name: "no conflicts - terraform pass-through flags only",
-			aliases: map[string]CompatibilityAlias{
+			aliases: map[string]CompatibilityFlag{
 				"-var":      {Behavior: AppendToSeparated, Target: ""},
 				"-var-file": {Behavior: AppendToSeparated, Target: ""},
 			},
@@ -521,30 +521,30 @@ func TestCompatibilityAliasTranslator_ValidateNoConflicts(t *testing.T) {
 			expectPanic: false,
 		},
 		{
-			name: "conflict - compatibility alias -s conflicts with Cobra shorthand",
-			aliases: map[string]CompatibilityAlias{
+			name: "conflict - compatibility flag -s conflicts with Cobra shorthand",
+			aliases: map[string]CompatibilityFlag{
 				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
 			},
 			setupFlags: func(cmd *cobra.Command) {
 				cmd.Flags().StringP("stack", "s", "", "stack name")
 			},
 			expectPanic: true,
-			panicMsg:    `compatibility alias "-s" conflicts with Cobra native shorthand for flag "stack"`,
+			panicMsg:    `compatibility flag "-s" conflicts with Cobra native shorthand for flag "stack"`,
 		},
 		{
-			name: "conflict - compatibility alias -i conflicts with Cobra shorthand",
-			aliases: map[string]CompatibilityAlias{
+			name: "conflict - compatibility flag -i conflicts with Cobra shorthand",
+			aliases: map[string]CompatibilityFlag{
 				"-i": {Behavior: MapToAtmosFlag, Target: "--identity"},
 			},
 			setupFlags: func(cmd *cobra.Command) {
 				cmd.Flags().StringP("identity", "i", "", "identity name")
 			},
 			expectPanic: true,
-			panicMsg:    `compatibility alias "-i" conflicts with Cobra native shorthand for flag "identity"`,
+			panicMsg:    `compatibility flag "-i" conflicts with Cobra native shorthand for flag "identity"`,
 		},
 		{
 			name: "no conflict - different shorthand",
-			aliases: map[string]CompatibilityAlias{
+			aliases: map[string]CompatibilityFlag{
 				"-x": {Behavior: MapToAtmosFlag, Target: "--xtra"},
 			},
 			setupFlags: func(cmd *cobra.Command) {
@@ -559,7 +559,7 @@ func TestCompatibilityAliasTranslator_ValidateNoConflicts(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
 			tt.setupFlags(cmd)
 
-			translator := NewCompatibilityAliasTranslator(tt.aliases)
+			translator := NewCompatibilityFlagTranslator(tt.aliases)
 
 			if tt.expectPanic {
 				defer assertPanic(t, tt.panicMsg)
@@ -573,10 +573,10 @@ func TestCompatibilityAliasTranslator_ValidateNoConflicts(t *testing.T) {
 	}
 }
 
-func TestCompatibilityAliasTranslator_ValidateTargetsInArgs(t *testing.T) {
+func TestCompatibilityFlagTranslator_ValidateTargetsInArgs(t *testing.T) {
 	tests := []struct {
 		name        string
-		aliases     map[string]CompatibilityAlias
+		aliases     map[string]CompatibilityFlag
 		args        []string
 		setupFlags  func(*cobra.Command)
 		expectError bool
@@ -584,7 +584,7 @@ func TestCompatibilityAliasTranslator_ValidateTargetsInArgs(t *testing.T) {
 	}{
 		{
 			name: "validates only used aliases - valid",
-			aliases: map[string]CompatibilityAlias{
+			aliases: map[string]CompatibilityFlag{
 				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
 				"-i": {Behavior: MapToAtmosFlag, Target: "--identity"},
 			},
@@ -597,7 +597,7 @@ func TestCompatibilityAliasTranslator_ValidateTargetsInArgs(t *testing.T) {
 		},
 		{
 			name: "validates only used aliases - invalid",
-			aliases: map[string]CompatibilityAlias{
+			aliases: map[string]CompatibilityFlag{
 				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
 				"-i": {Behavior: MapToAtmosFlag, Target: "--identity"},
 			},
@@ -607,11 +607,11 @@ func TestCompatibilityAliasTranslator_ValidateTargetsInArgs(t *testing.T) {
 				// identity flag NOT registered.
 			},
 			expectError: true,
-			errorMsg:    `compatibility alias "-i" references non-existent flag "--identity"`,
+			errorMsg:    `compatibility flag "-i" references non-existent flag "--identity"`,
 		},
 		{
 			name: "handles equals syntax",
-			aliases: map[string]CompatibilityAlias{
+			aliases: map[string]CompatibilityFlag{
 				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
 			},
 			args: []string{"-s=dev"},
@@ -622,7 +622,7 @@ func TestCompatibilityAliasTranslator_ValidateTargetsInArgs(t *testing.T) {
 		},
 		{
 			name: "ignores AppendToSeparated aliases",
-			aliases: map[string]CompatibilityAlias{
+			aliases: map[string]CompatibilityFlag{
 				"-var": {Behavior: AppendToSeparated, Target: ""},
 			},
 			args: []string{"-var", "foo=bar"},
@@ -633,7 +633,7 @@ func TestCompatibilityAliasTranslator_ValidateTargetsInArgs(t *testing.T) {
 		},
 		{
 			name: "ignores unknown aliases",
-			aliases: map[string]CompatibilityAlias{
+			aliases: map[string]CompatibilityFlag{
 				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
 			},
 			args: []string{"-x", "value"}, // -x not in aliases map.
@@ -649,13 +649,13 @@ func TestCompatibilityAliasTranslator_ValidateTargetsInArgs(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
 			tt.setupFlags(cmd)
 
-			translator := NewCompatibilityAliasTranslator(tt.aliases)
+			translator := NewCompatibilityFlagTranslator(tt.aliases)
 			err := translator.ValidateTargetsInArgs(cmd, tt.args)
 
 			if tt.expectError {
 				require.Error(t, err)
-				// All validation errors should wrap ErrCompatibilityAliasMissingTarget
-				assert.ErrorIs(t, err, errUtils.ErrCompatibilityAliasMissingTarget)
+				// All validation errors should wrap ErrCompatibilityFlagMissingTarget
+				assert.ErrorIs(t, err, errUtils.ErrCompatibilityFlagMissingTarget)
 				// Also check the error message contains helpful context
 				if tt.errorMsg != "" {
 					assert.Contains(t, err.Error(), tt.errorMsg)
@@ -668,11 +668,11 @@ func TestCompatibilityAliasTranslator_ValidateTargetsInArgs(t *testing.T) {
 }
 
 // buildTestCompatibilityTranslator creates a translator with test configuration.
-func buildTestCompatibilityTranslator() *CompatibilityAliasTranslator {
-	// Use actual terraform compatibility aliases to ensure tests stay in sync.
+func buildTestCompatibilityTranslator() *CompatibilityFlagTranslator {
+	// Use actual terraform compatibility flages to ensure tests stay in sync.
 	// Import is: "github.com/cloudposse/atmos/pkg/flags/terraform"
-	// NOTE: -s and -i are NOT compatibility aliases - they are Cobra native shorthands.
-	return NewCompatibilityAliasTranslator(map[string]CompatibilityAlias{
+	// NOTE: -s and -i are NOT compatibility flages - they are Cobra native shorthands.
+	return NewCompatibilityFlagTranslator(map[string]CompatibilityFlag{
 		// Pass-through terraform flags.
 		"-var":          {Behavior: AppendToSeparated, Target: ""},
 		"-var-file":     {Behavior: AppendToSeparated, Target: ""},
@@ -688,10 +688,10 @@ func buildTestCompatibilityTranslator() *CompatibilityAliasTranslator {
 	})
 }
 
-// TestCompatibilityAliasTranslator_ShorthandNormalization tests that shorthand flags
+// TestCompatibilityFlagTranslator_ShorthandNormalization tests that shorthand flags
 // with = syntax are normalized to longhand format BEFORE Cobra sees them.
 // This ensures -i=value behaves the same as --identity=value.
-func TestCompatibilityAliasTranslator_ShorthandNormalization(t *testing.T) {
+func TestCompatibilityFlagTranslator_ShorthandNormalization(t *testing.T) {
 	tests := []struct {
 		name              string
 		args              []string
@@ -728,11 +728,11 @@ func TestCompatibilityAliasTranslator_ShorthandNormalization(t *testing.T) {
 			description:       "stack shorthand with = and empty value normalizes to longhand",
 		},
 		{
-			name:              "mixed: -i=prod with -var (compatibility alias)",
+			name:              "mixed: -i=prod with -var (compatibility flag)",
 			args:              []string{"plan", "vpc", "-i=prod", "-var", "region=us-east-1"},
 			expectedAtmosArgs: []string{"plan", "vpc", "--identity=prod"},
 			expectedSeparated: []string{"-var", "region=us-east-1"},
-			description:       "shorthand normalization + compatibility alias translation",
+			description:       "shorthand normalization + compatibility flag translation",
 		},
 		{
 			name:              "unknown shorthand with = passes through unchanged",
@@ -757,8 +757,8 @@ func TestCompatibilityAliasTranslator_ShorthandNormalization(t *testing.T) {
 			cmd.Flags().StringP("identity", "i", "", "identity")
 			cmd.Flags().StringP("stack", "s", "", "stack")
 
-			// Create translator with compatibility aliases.
-			translator := NewCompatibilityAliasTranslator(map[string]CompatibilityAlias{
+			// Create translator with compatibility flages.
+			translator := NewCompatibilityFlagTranslator(map[string]CompatibilityFlag{
 				"-var": {Behavior: AppendToSeparated, Target: ""},
 			})
 
@@ -772,7 +772,7 @@ func TestCompatibilityAliasTranslator_ShorthandNormalization(t *testing.T) {
 				}
 			}
 
-			// STEP 2: Translate compatibility aliases.
+			// STEP 2: Translate compatibility flages.
 			atmosArgs, separatedArgs := translator.Translate(normalizedArgs)
 
 			// Verify results.

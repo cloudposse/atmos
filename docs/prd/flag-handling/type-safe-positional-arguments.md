@@ -49,7 +49,7 @@ Currently, Atmos commands that accept positional arguments (e.g., `atmos terrafo
 - Each domain builder MUST provide semantic method names specific to that domain
 
 **FR5: Parser Compatibility**
-- The system MUST work with `AtmosFlagParser` (used by terraform commands with compatibility aliases)
+- The system MUST work with `AtmosFlagParser` (used by terraform commands with compatibility flages)
 - The system MUST work with `StandardParser` (used by helmfile, packer, workflow, validate, generate commands)
 - The positional args API MUST be identical regardless of underlying parser type
 
@@ -119,7 +119,7 @@ Currently, Atmos commands that accept positional arguments (e.g., `atmos terrafo
 
 ### Commands Using Positional Arguments
 
-**Terraform commands** (use AtmosFlagParser with compatibility aliases):
+**Terraform commands** (use AtmosFlagParser with compatibility flages):
 - `terraform plan <component>`
 - `terraform apply <component>`
 - `terraform deploy <component>`
@@ -466,7 +466,7 @@ var helmfileApplyCmd = &cobra.Command{
 **Key Requirement**: The positional args system must work with BOTH parser types:
 
 1. **AtmosFlagParser** (terraform commands only)
-   - Handles compatibility aliases (-s → --stack, -i → --identity)
+   - Handles compatibility flages (-s → --stack, -i → --identity)
    - Uses `CompatibilityAliasTranslator` before parsing
    - Positional args extracted from processed `args []string`
 
@@ -562,7 +562,7 @@ RootCmd.SetUsageFunc(func(c *cobra.Command) error {
    - No more inconsistent `Use` strings or validators
 
 6. **Works with Both Parser Types**
-   - Integrates seamlessly with `AtmosFlagParser` (terraform with compatibility aliases)
+   - Integrates seamlessly with `AtmosFlagParser` (terraform with compatibility flages)
    - Integrates seamlessly with `StandardParser` (all other commands)
    - Same API regardless of underlying parser
 
@@ -695,7 +695,7 @@ expected:
 ## Related Work
 
 - **Flag Parser System**: `pkg/flags/standard_builder.go`, `pkg/flags/terraform_builder.go`
-- **AtmosFlagParser**: `pkg/flags/terraform/parser.go` (terraform with compatibility aliases)
+- **AtmosFlagParser**: `pkg/flags/terraform/parser.go` (terraform with compatibility flages)
 - **StandardParser**: `pkg/flags/standard.go` (all other commands)
 - **CompatibilityAliasTranslator**: `pkg/flags/compatibility_translator.go` (handles -s → --stack)
 - **Command Registry Pattern**: `docs/prd/command-registry-pattern.md`

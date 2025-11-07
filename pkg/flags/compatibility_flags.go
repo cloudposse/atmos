@@ -11,7 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// CompatibilityBehavior defines how a compatibility alias should be handled.
+// CompatibilityBehavior defines how a compatibility flag should be handled.
 type CompatibilityBehavior int
 
 const (
@@ -29,37 +29,37 @@ const (
 	flagPrefix = "-"
 )
 
-// CompatibilityAlias defines how a single compatibility alias should be handled.
-type CompatibilityAlias struct {
+// CompatibilityFlag defines how a single compatibility flag should be handled.
+type CompatibilityFlag struct {
 	Behavior CompatibilityBehavior
 	Target   string // Target flag name (for MapToAtmosFlag) or empty (for AppendToSeparated)
 }
 
-// CompatibilityAliasTranslator translates legacy flag syntax to modern Cobra-compatible format.
+// CompatibilityFlagTranslator translates legacy flag syntax to modern Cobra-compatible format.
 // It separates args into two categories:
 //   - atmosArgs: Args that should be parsed by Cobra (Atmos flags)
 //   - separatedArgs: Args that should be passed through to subprocess (terraform, etc.)
-type CompatibilityAliasTranslator struct {
-	aliasMap map[string]CompatibilityAlias
+type CompatibilityFlagTranslator struct {
+	flagMap map[string]CompatibilityFlag
 }
 
-// NewCompatibilityAliasTranslator creates a new translator with the given alias map.
-func NewCompatibilityAliasTranslator(aliasMap map[string]CompatibilityAlias) *CompatibilityAliasTranslator {
-	defer perf.Track(nil, "flagparser.NewCompatibilityAliasTranslator")()
+// NewCompatibilityFlagTranslator creates a new translator with the given flag map.
+func NewCompatibilityFlagTranslator(flagMap map[string]CompatibilityFlag) *CompatibilityFlagTranslator {
+	defer perf.Track(nil, "flagparser.NewCompatibilityFlagTranslator")()
 
-	return &CompatibilityAliasTranslator{
-		aliasMap: aliasMap,
+	return &CompatibilityFlagTranslator{
+		flagMap: flagMap,
 	}
 }
 
-// ValidateTargets validates that all compatibility aliases with MapToAtmosFlag behavior
+// ValidateTargets validates that all compatibility flags with MapToAtmosFlag behavior
 // reference flags that are actually registered on the command.
 // This should be called after flags are registered but before parsing.
-func (t *CompatibilityAliasTranslator) ValidateTargets(cmd *cobra.Command) error {
-	defer perf.Track(nil, "flagparser.CompatibilityAliasTranslator.ValidateTargets")()
+func (t *CompatibilityFlagTranslator) ValidateTargets(cmd *cobra.Command) error {
+	defer perf.Track(nil, "flagparser.CompatibilityFlagTranslator.ValidateTargets")()
 
-	for alias, config := range t.aliasMap {
-		// Only validate MapToAtmosFlag aliases (those with Target set).
+	for compatFlag, config := range t.flagMap {
+		// Only validate MapToAtmosFlag flags (those with Target set).
 		if config.Behavior != MapToAtmosFlag || config.Target == "" {
 			continue
 		}
@@ -70,37 +70,37 @@ func (t *CompatibilityAliasTranslator) ValidateTargets(cmd *cobra.Command) error
 		// Check if flag exists in command.
 		flag := cmd.Flags().Lookup(targetFlagName)
 		if flag == nil {
-			return fmt.Errorf("%w: compatibility alias %q references non-existent flag %q", errUtils.ErrCompatibilityAliasMissingTarget, alias, config.Target)
+			return fmt.Errorf("%w: compatibility flag %q references non-existent flag %q", errUtils.ErrCompatibilityFlagMissingTarget, compatFlag, config.Target)
 		}
 	}
 
 	return nil
 }
 
-// ValidateNoConflicts validates that compatibility aliases don't conflict with Cobra native shorthands.
-// This detects configuration errors where someone adds -s or -i to compatibility aliases
+// ValidateNoConflicts validates that compatibility flags don't conflict with Cobra native shorthands.
+// This detects configuration errors where someone adds -s or -i to compatibility flags
 // when they're already registered as Cobra shorthands via StringP("stack", "s", ...).
 // This should be called after flags are registered.
-func (t *CompatibilityAliasTranslator) ValidateNoConflicts(cmd *cobra.Command) error {
-	defer perf.Track(nil, "flagparser.CompatibilityAliasTranslator.ValidateNoConflicts")()
+func (t *CompatibilityFlagTranslator) ValidateNoConflicts(cmd *cobra.Command) error {
+	defer perf.Track(nil, "flagparser.CompatibilityFlagTranslator.ValidateNoConflicts")()
 
-	for alias := range t.aliasMap {
+	for compatFlag := range t.flagMap {
 		// Only check single-dash flags (potential shorthands).
-		if !strings.HasPrefix(alias, flagPrefix) || strings.HasPrefix(alias, "--") {
+		if !strings.HasPrefix(compatFlag, flagPrefix) || strings.HasPrefix(compatFlag, "--") {
 			continue
 		}
 
 		// Extract shorthand (e.g., "-s" → "s").
-		shorthand := strings.TrimPrefix(alias, flagPrefix)
+		shorthand := strings.TrimPrefix(compatFlag, flagPrefix)
 
 		// Check if this shorthand is already registered as a Cobra flag shorthand.
 		cmd.Flags().VisitAll(func(flag *pflag.Flag) {
 			if flag.Shorthand == shorthand {
-				// This is an error - the compatibility alias conflicts with a Cobra native shorthand.
+				// This is an error - the compatibility flag conflicts with a Cobra native shorthand.
 				panic(fmt.Sprintf(
-					"compatibility alias %q conflicts with Cobra native shorthand for flag %q. "+
-						"Remove %q from compatibility aliases - Cobra handles it automatically via StringP(%q, %q, ...)",
-					alias, flag.Name, alias, flag.Name, shorthand,
+					"compatibility flag %q conflicts with Cobra native shorthand for flag %q. "+
+						"Remove %q from compatibility flags - Cobra handles it automatically via StringP(%q, %q, ...)",
+					compatFlag, flag.Name, compatFlag, flag.Name, shorthand,
 				))
 			}
 		})
@@ -109,14 +109,14 @@ func (t *CompatibilityAliasTranslator) ValidateNoConflicts(cmd *cobra.Command) e
 	return nil
 }
 
-// ValidateTargetsInArgs validates that compatibility aliases used in the given args
+// ValidateTargetsInArgs validates that compatibility flags used in the given args
 // reference flags that are actually registered on the command.
-// This only validates aliases that appear in the args, not all registered aliases.
-func (t *CompatibilityAliasTranslator) ValidateTargetsInArgs(cmd *cobra.Command, args []string) error {
-	defer perf.Track(nil, "flagparser.CompatibilityAliasTranslator.ValidateTargetsInArgs")()
+// This only validates compatibility flags that appear in the args, not all registered flags.
+func (t *CompatibilityFlagTranslator) ValidateTargetsInArgs(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "flagparser.CompatibilityFlagTranslator.ValidateTargetsInArgs")()
 
-	// Extract aliases used in args.
-	usedAliases := make(map[string]bool)
+	// Extract compatibility flags used in args.
+	usedFlags := make(map[string]bool)
 	for _, arg := range args {
 		// Skip non-flags.
 		if !strings.HasPrefix(arg, flagPrefix) {
@@ -134,18 +134,18 @@ func (t *CompatibilityAliasTranslator) ValidateTargetsInArgs(cmd *cobra.Command,
 			flagName = arg[:idx]
 		}
 
-		usedAliases[flagName] = true
+		usedFlags[flagName] = true
 	}
 
-	// Validate only the used aliases.
-	for alias := range usedAliases {
-		config, ok := t.aliasMap[alias]
+	// Validate only the used compatibility flags.
+	for compatFlag := range usedFlags {
+		config, ok := t.flagMap[compatFlag]
 		if !ok {
-			// Unknown alias - not our concern, Cobra will handle it.
+			// Unknown flag - not our concern, Cobra will handle it.
 			continue
 		}
 
-		// Only validate MapToAtmosFlag aliases (those with Target set).
+		// Only validate MapToAtmosFlag flags (those with Target set).
 		if config.Behavior != MapToAtmosFlag || config.Target == "" {
 			continue
 		}
@@ -156,7 +156,7 @@ func (t *CompatibilityAliasTranslator) ValidateTargetsInArgs(cmd *cobra.Command,
 		// Check if flag exists in command.
 		flag := cmd.Flags().Lookup(targetFlagName)
 		if flag == nil {
-			return fmt.Errorf("%w: compatibility alias %q references non-existent flag %q", errUtils.ErrCompatibilityAliasMissingTarget, alias, config.Target)
+			return fmt.Errorf("%w: compatibility flag %q references non-existent flag %q", errUtils.ErrCompatibilityFlagMissingTarget, compatFlag, config.Target)
 		}
 	}
 
@@ -167,8 +167,8 @@ func (t *CompatibilityAliasTranslator) ValidateTargetsInArgs(cmd *cobra.Command,
 // Returns:
 //   - atmosArgs: Arguments for Cobra to parse (Atmos flags + positional args)
 //   - separatedArgs: Arguments to pass through to subprocess
-func (t *CompatibilityAliasTranslator) Translate(args []string) (atmosArgs []string, separatedArgs []string) {
-	defer perf.Track(nil, "flagparser.CompatibilityAliasTranslator.Translate")()
+func (t *CompatibilityFlagTranslator) Translate(args []string) (atmosArgs []string, separatedArgs []string) {
+	defer perf.Track(nil, "flagparser.CompatibilityFlagTranslator.Translate")()
 
 	atmosArgs = make([]string, 0, len(args))
 	separatedArgs = make([]string, 0)
@@ -188,7 +188,7 @@ func (t *CompatibilityAliasTranslator) Translate(args []string) (atmosArgs []str
 			continue
 		}
 
-		// Single-dash flag - check for compatibility alias
+		// Single-dash flag - check for compatibility flag
 		translated, consumed := t.translateSingleDashFlag(args, i)
 
 		// Add translated args to appropriate destination
@@ -208,15 +208,15 @@ type translatedArgs struct {
 	separatedArgs []string
 }
 
-// translateSingleDashFlag translates a single-dash flag based on compatibility alias rules.
+// translateSingleDashFlag translates a single-dash flag based on compatibility flag rules.
 // Returns the translated args and the number of additional args consumed.
 //
 // NOTE: Cobra shorthand normalization (-i=value → --identity=value) happens BEFORE this method is called.
-// This method only handles compatibility aliases for terraform-specific flags like -var, -var-file, etc.
-func (t *CompatibilityAliasTranslator) translateSingleDashFlag(args []string, index int) (translatedArgs, int) {
+// This method only handles compatibility flags for terraform-specific flags like -var, -var-file, etc.
+func (t *CompatibilityFlagTranslator) translateSingleDashFlag(args []string, index int) (translatedArgs, int) {
 	arg := args[index]
 
-	// Check for -flag=value form (compatibility aliases).
+	// Check for -flag=value form (compatibility flags).
 	if idx := strings.Index(arg, "="); idx > 0 {
 		return t.translateFlagWithEquals(arg, idx)
 	}
@@ -225,15 +225,15 @@ func (t *CompatibilityAliasTranslator) translateSingleDashFlag(args []string, in
 	return t.translateFlagWithoutEquals(args, index, arg)
 }
 
-// translateFlagWithEquals handles -flag=value syntax for compatibility aliases.
-func (t *CompatibilityAliasTranslator) translateFlagWithEquals(arg string, equalsIndex int) (translatedArgs, int) {
-	defer perf.Track(nil, "flags.CompatibilityAliasTranslator.translateFlagWithEquals")()
+// translateFlagWithEquals handles -flag=value syntax for compatibility flags.
+func (t *CompatibilityFlagTranslator) translateFlagWithEquals(arg string, equalsIndex int) (translatedArgs, int) {
+	defer perf.Track(nil, "flags.CompatibilityFlagTranslator.translateFlagWithEquals")()
 
 	flagPart := arg[:equalsIndex]  // "-var"
 	valuePart := arg[equalsIndex:] // "=foo=bar"
 
-	if alias, ok := t.aliasMap[flagPart]; ok {
-		return t.applyAliasBehaviorWithEquals(alias, arg, valuePart)
+	if compatFlag, ok := t.flagMap[flagPart]; ok {
+		return t.applyFlagBehaviorWithEquals(compatFlag, arg, valuePart)
 	}
 
 	// Unknown flag with = - pass to Atmos (Cobra will validate).
@@ -243,15 +243,15 @@ func (t *CompatibilityAliasTranslator) translateFlagWithEquals(arg string, equal
 	}, 0
 }
 
-// applyAliasBehaviorWithEquals applies the alias behavior for -flag=value syntax.
-func (t *CompatibilityAliasTranslator) applyAliasBehaviorWithEquals(alias CompatibilityAlias, arg string, valuePart string) (translatedArgs, int) {
-	defer perf.Track(nil, "flags.CompatibilityAliasTranslator.applyAliasBehaviorWithEquals")()
+// applyFlagBehaviorWithEquals applies the flag behavior for -flag=value syntax.
+func (t *CompatibilityFlagTranslator) applyFlagBehaviorWithEquals(compatFlag CompatibilityFlag, arg string, valuePart string) (translatedArgs, int) {
+	defer perf.Track(nil, "flags.CompatibilityFlagTranslator.applyFlagBehaviorWithEquals")()
 
-	switch alias.Behavior {
+	switch compatFlag.Behavior {
 	case MapToAtmosFlag:
 		// Convert: -var=foo=bar → --var=foo=bar
 		return translatedArgs{
-			atmosArgs:     []string{alias.Target + valuePart},
+			atmosArgs:     []string{compatFlag.Target + valuePart},
 			separatedArgs: []string{},
 		}, 0
 
@@ -272,26 +272,26 @@ func (t *CompatibilityAliasTranslator) applyAliasBehaviorWithEquals(alias Compat
 }
 
 // translateFlagWithoutEquals handles -flag syntax where value might be in next arg.
-func (t *CompatibilityAliasTranslator) translateFlagWithoutEquals(args []string, index int, arg string) (translatedArgs, int) {
-	defer perf.Track(nil, "flags.CompatibilityAliasTranslator.translateFlagWithoutEquals")()
+func (t *CompatibilityFlagTranslator) translateFlagWithoutEquals(args []string, index int, arg string) (translatedArgs, int) {
+	defer perf.Track(nil, "flags.CompatibilityFlagTranslator.translateFlagWithoutEquals")()
 
-	if alias, ok := t.aliasMap[arg]; ok {
-		return t.applyAliasBehaviorWithoutEquals(alias, args, index, arg)
+	if compatFlag, ok := t.flagMap[arg]; ok {
+		return t.applyFlagBehaviorWithoutEquals(compatFlag, args, index, arg)
 	}
 
 	// Unknown single-dash flag - pass to Atmos (Cobra will error if truly unknown).
-	// This handles valid Atmos shorthands that aren't in the alias map.
+	// This handles valid Atmos shorthands that aren't in the flag map.
 	return t.handleUnknownSingleDashFlag(args, index, arg)
 }
 
-// applyAliasBehaviorWithoutEquals applies the alias behavior for -flag syntax.
-func (t *CompatibilityAliasTranslator) applyAliasBehaviorWithoutEquals(alias CompatibilityAlias, args []string, index int, arg string) (translatedArgs, int) {
-	defer perf.Track(nil, "flags.CompatibilityAliasTranslator.applyAliasBehaviorWithoutEquals")()
+// applyFlagBehaviorWithoutEquals applies the flag behavior for -flag syntax.
+func (t *CompatibilityFlagTranslator) applyFlagBehaviorWithoutEquals(compatFlag CompatibilityFlag, args []string, index int, arg string) (translatedArgs, int) {
+	defer perf.Track(nil, "flags.CompatibilityFlagTranslator.applyFlagBehaviorWithoutEquals")()
 
-	switch alias.Behavior {
+	switch compatFlag.Behavior {
 	case MapToAtmosFlag:
 		// Convert: -s dev → --stack dev
-		translated, consumed := t.extractFlagWithValue(args, index, alias.Target)
+		translated, consumed := t.extractFlagWithValue(args, index, compatFlag.Target)
 		return translatedArgs{
 			atmosArgs:     translated,
 			separatedArgs: []string{},
@@ -315,8 +315,8 @@ func (t *CompatibilityAliasTranslator) applyAliasBehaviorWithoutEquals(alias Com
 }
 
 // extractFlagWithValue extracts a flag and its value (if present in next arg).
-func (t *CompatibilityAliasTranslator) extractFlagWithValue(args []string, index int, flag string) ([]string, int) {
-	defer perf.Track(nil, "flags.CompatibilityAliasTranslator.extractFlagWithValue")()
+func (t *CompatibilityFlagTranslator) extractFlagWithValue(args []string, index int, flag string) ([]string, int) {
+	defer perf.Track(nil, "flags.CompatibilityFlagTranslator.extractFlagWithValue")()
 
 	result := []string{flag}
 	consumed := 0
@@ -331,8 +331,8 @@ func (t *CompatibilityAliasTranslator) extractFlagWithValue(args []string, index
 }
 
 // handleUnknownSingleDashFlag handles unknown single-dash flags (pass to Atmos).
-func (t *CompatibilityAliasTranslator) handleUnknownSingleDashFlag(args []string, index int, arg string) (translatedArgs, int) {
-	defer perf.Track(nil, "flags.CompatibilityAliasTranslator.handleUnknownSingleDashFlag")()
+func (t *CompatibilityFlagTranslator) handleUnknownSingleDashFlag(args []string, index int, arg string) (translatedArgs, int) {
+	defer perf.Track(nil, "flags.CompatibilityFlagTranslator.handleUnknownSingleDashFlag")()
 
 	result := []string{arg}
 	consumed := 0

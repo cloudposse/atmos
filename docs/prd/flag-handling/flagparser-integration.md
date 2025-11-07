@@ -4,7 +4,7 @@
 
 This document describes a historical design that has been superseded. The actual implementation:
 - Uses `StandardParser` (not `StandardFlagParser`) for standard commands
-- Uses `AtmosFlagParser` (not `PassThroughFlagParser`) for terraform with compatibility aliases
+- Uses `AtmosFlagParser` (not `PassThroughFlagParser`) for terraform with compatibility flages
 - `PassThroughFlagParser` was completely deleted on 2025-11-06
 - See `../unified-flag-parsing-refactoring.md` for current architecture
 

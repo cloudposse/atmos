@@ -78,8 +78,12 @@ func init() {
 		flags.WithEnvVars("format", "ATMOS_VERSION_FORMAT"),
 	)
 
-	// Register flags with command.
+	// Register flags using the standard RegisterFlags method.
+	// RegisterFlags() does NOT set DisableFlagParsing, allowing Cobra to
+	// validate flags normally and reject unknown flags like --non-existent.
 	versionParser.RegisterFlags(versionCmd)
+
+	// Bind flags to Viper for environment variable support.
 	_ = versionParser.BindToViper(viper.GetViper())
 
 	// Register this command with the registry.
@@ -117,8 +121,8 @@ func (v *VersionCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArg
 	return nil
 }
 
-// GetCompatibilityAliases returns compatibility aliases for this command.
-// Version command has no compatibility aliases (uses native Cobra flags only).
-func (v *VersionCommandProvider) GetCompatibilityAliases() map[string]flags.CompatibilityAlias {
+// GetCompatibilityFlags returns compatibility flags for this command.
+// Version command has no compatibility flags (uses native Cobra flags only).
+func (v *VersionCommandProvider) GetCompatibilityFlags() map[string]flags.CompatibilityFlag {
 	return nil
 }
