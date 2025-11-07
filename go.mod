@@ -7,7 +7,7 @@ require (
 	cloud.google.com/go/storage v1.57.1
 	dario.cat/mergo v1.0.2
 	github.com/99designs/keyring v1.2.2
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.19.1
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.20.0
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.0
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets v1.4.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.3
