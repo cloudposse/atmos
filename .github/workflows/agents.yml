@@ -1,0 +1,23 @@
+name: Agent Quality Checks
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.claude/agents/**'
+      - '.github/workflows/agents.yml'
+      - '.github/actions/check-agent-size/**'
+
+jobs:
+  agent-size-check:
+    name: Check agent sizes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check agent sizes
+        uses: ./.github/actions/check-agent-size
+        with:
+          agent-path: .claude/agents
+          max-size: 25000
+          github-token: ${{ github.token }}

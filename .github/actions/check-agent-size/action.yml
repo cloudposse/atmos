@@ -1,0 +1,202 @@
+name: Check Agent Size
+description: Validates that agent files do not exceed size limits
+inputs:
+  agent-path:
+    description: 'Path to agent file or directory containing agents'
+    required: false
+    default: '.claude/agents'
+  max-size:
+    description: 'Maximum file size in bytes (25000 = 25KB)'
+    required: false
+    default: '25000'
+  github-token:
+    description: 'GitHub token for posting comments'
+    required: true
+outputs:
+  all-agents-ok:
+    description: 'Whether all agents pass size check (true/false)'
+    value: ${{ steps.check.outputs.all_agents_ok }}
+  oversized-agents:
+    description: 'List of agents that exceed the size limit'
+    value: ${{ steps.check.outputs.oversized_agents }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check agent sizes
+      id: check
+      shell: bash
+      run: |
+        AGENT_PATH="${{ inputs.agent-path }}"
+        MAX_SIZE="${{ inputs.max-size }}"
+
+        if [ ! -e "$AGENT_PATH" ]; then
+          echo "✅ Agent path does not exist - skipping check"
+          echo "all_agents_ok=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Find all agent markdown files
+        if [ -d "$AGENT_PATH" ]; then
+          AGENT_FILES=$(find "$AGENT_PATH" -name "*.md" -not -name "README.md" -type f)
+        else
+          AGENT_FILES="$AGENT_PATH"
+        fi
+
+        if [ -z "$AGENT_FILES" ]; then
+          echo "✅ No agent files found - skipping check"
+          echo "all_agents_ok=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        echo "Checking agent sizes..."
+        echo ""
+
+        OVERSIZED=""
+        ALL_OK=true
+
+        while IFS= read -r FILE; do
+          [ -z "$FILE" ] && continue
+
+          SIZE=$(wc -c < "$FILE" | tr -d ' ')
+          USAGE_PERCENT=$((SIZE * 100 / MAX_SIZE))
+          FILENAME=$(basename "$FILE")
+
+          if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+            EXCESS=$((SIZE - MAX_SIZE))
+            EXCESS_PERCENT=$((EXCESS * 100 / MAX_SIZE))
+            echo "❌ $FILENAME: $SIZE bytes (over by $EXCESS bytes, ${EXCESS_PERCENT}%)"
+            OVERSIZED="${OVERSIZED}${FILE}:${SIZE},"
+            ALL_OK=false
+          else
+            echo "✅ $FILENAME: $SIZE bytes (${USAGE_PERCENT}% of limit)"
+          fi
+        done <<< "$AGENT_FILES"
+
+        echo ""
+        echo "all_agents_ok=$ALL_OK" >> $GITHUB_OUTPUT
+        echo "oversized_agents=$OVERSIZED" >> $GITHUB_OUTPUT
+        echo "max_size=$MAX_SIZE" >> $GITHUB_OUTPUT
+
+    - name: Post PR comment if agents too large
+      if: steps.check.outputs.all_agents_ok == 'false'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        if [ -z "${{ github.event.pull_request.number }}" ]; then
+          echo "ℹ️ Not a pull request - skipping comment"
+          exit 0
+        fi
+
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+        MAX_SIZE="${{ steps.check.outputs.max_size }}"
+        OVERSIZED="${{ steps.check.outputs.oversized_agents }}"
+
+        # Parse oversized agents
+        AGENT_LIST=""
+        IFS=',' read -ra AGENTS <<< "$OVERSIZED"
+        for AGENT in "${AGENTS[@]}"; do
+          [ -z "$AGENT" ] && continue
+          FILE=$(echo "$AGENT" | cut -d: -f1)
+          SIZE=$(echo "$AGENT" | cut -d: -f2)
+          EXCESS=$((SIZE - MAX_SIZE))
+          EXCESS_PERCENT=$((EXCESS * 100 / MAX_SIZE))
+          FILENAME=$(basename "$FILE")
+          AGENT_LIST="${AGENT_LIST}- \`${FILENAME}\`: **${SIZE} bytes** (over by ${EXCESS} bytes, ~${EXCESS_PERCENT}%)
+        "
+        done
+
+        EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- agent-size-check -->")) | .id' | head -1)
+
+        COMMENT_BODY="<!-- agent-size-check -->
+        > [!WARNING]
+        > #### Agent Files Too Large
+        >
+        > The following agent files exceed the **${MAX_SIZE} byte** (25KB) size limit:
+        >
+        ${AGENT_LIST}
+        >
+        > **Action needed:** Please compress the oversized agent files. Consider:
+        > - Removing verbose explanations
+        > - Consolidating redundant examples
+        > - Referencing PRDs instead of duplicating content
+        > - Moving detailed guides to \`docs/prd/\`
+        >
+        > **Target sizes:**
+        > - Focused specialists: 8-15 KB
+        > - Comprehensive specialists: 15-25 KB
+        > - Meta-agents: up to 25 KB"
+
+        if [ -n "$EXISTING_COMMENT" ]; then
+          echo "Updating existing comment..."
+          gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
+            -f body="$COMMENT_BODY"
+        else
+          echo "Creating new comment..."
+          gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
+        fi
+
+    - name: Update comment with success if all agents OK
+      if: steps.check.outputs.all_agents_ok == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        if [ -z "${{ github.event.pull_request.number }}" ]; then
+          echo "ℹ️ Not a pull request - skipping comment"
+          exit 0
+        fi
+
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+        EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- agent-size-check -->")) | .id' | head -1)
+
+        if [ -z "$EXISTING_COMMENT" ]; then
+          echo "ℹ️ No existing comment to update"
+          exit 0
+        fi
+
+        SUCCESS_COMMENT_BODY="<!-- agent-size-check -->
+        > [!NOTE]
+        > #### Agent Sizes OK ✅
+        >
+        > All agent files are within the 25KB size limit.
+        >
+        > Thank you for keeping agents optimized!"
+
+        echo "Updating existing comment with success message..."
+        gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
+          -f body="$SUCCESS_COMMENT_BODY" || {
+          echo "⚠️ Failed to update comment (it may have been deleted)"
+        }
+
+    - name: Fail if any agents too large
+      if: steps.check.outputs.all_agents_ok == 'false'
+      shell: bash
+      run: |
+        MAX_SIZE="${{ steps.check.outputs.max_size }}"
+        OVERSIZED="${{ steps.check.outputs.oversized_agents }}"
+
+        echo "❌ ERROR: One or more agent files exceed the size limit"
+        echo ""
+        echo "Maximum size: $MAX_SIZE bytes (25KB)"
+        echo ""
+        echo "Oversized agents:"
+
+        IFS=',' read -ra AGENTS <<< "$OVERSIZED"
+        for AGENT in "${AGENTS[@]}"; do
+          [ -z "$AGENT" ] && continue
+          FILE=$(echo "$AGENT" | cut -d: -f1)
+          SIZE=$(echo "$AGENT" | cut -d: -f2)
+          EXCESS=$((SIZE - MAX_SIZE))
+          FILENAME=$(basename "$FILE")
+          echo "  - $FILENAME: $SIZE bytes (over by $EXCESS bytes)"
+        done
+
+        echo ""
+        echo "Please compress the agent files by:"
+        echo "  - Removing verbose explanations"
+        echo "  - Consolidating redundant examples"
+        echo "  - Referencing PRDs instead of duplicating"
+        echo "  - Moving detailed guides to docs/prd/"
+        exit 1

@@ -38,31 +38,14 @@ As Atmos core functionality expands, we scale development through **small, purpo
 Each specialized area of Atmos core should have a dedicated agent.
 
 **Example agents (for illustration purposes):**
-
-**Registry Systems:**
 - `command-registry-expert` - Command registry patterns and extensibility
-- `component-registry-expert` - Component discovery and management
-- `store-registry-expert` - Multi-provider store implementations
-
-**CLI Framework:**
-- `cobra-flag-expert` - Cobra integration and flag parsing patterns
-- `cli-developer` - General CLI/TUI implementation
-- `viper-config-expert` - Configuration management with Viper
-
-**Core Subsystems:**
+- `cobra-flag-expert` - Cobra integration and flag parsing
 - `stack-processor-expert` - Stack inheritance and processing pipeline
 - `template-engine-expert` - Go templates, Gomplate, YAML functions
 - `auth-system-expert` - Authentication and credential management
-- `workflow-expert` - Workflow orchestration patterns
-- `vendor-expert` - Component vendoring system
-- `validation-expert` - Policy validation (OPA, JSON Schema)
+- `store-registry-expert` - Multi-provider store implementations
 
-**Infrastructure:**
-- `terraform-integration-expert` - Terraform provider patterns
-- `helmfile-integration-expert` - Helmfile integration
-- `aws-integration-expert` - AWS SDK patterns and credential resolution
-
-**Note:** Specific agents will be created in separate PRs as subsystems mature and patterns are established.
+**Note:** Specific agents will be created in separate PRs as subsystems mature.
 
 ### When to Create a New Agent
 
@@ -431,60 +414,28 @@ When creating agents, teach them to maintain themselves:
 
 ### User Confirmation Pattern
 
-Agents must never autonomously modify themselves or PRDs. Always confirm:
+Agents must never autonomously modify themselves or PRDs. Always confirm with user:
 
 ```markdown
-**When agent detects it's outdated:**
+**When agent detects outdated PRD:**
+"I've detected that my dependent PRD was updated on [date] (I was last synced on [old-date]).
 
-"I've detected that my dependent PRD `docs/prd/command-registry-pattern.md`
-was updated on 2025-02-20 (I was last synced on 2025-01-15).
+Changes include: [summary]
 
-Changes include:
-- New CommandProvider validation requirements
-- Updated registration pattern for sub-commands
-- Refined error handling conventions
-
-I recommend updating this agent to align with these new patterns.
-
-**Proposed changes to this agent:**
-1. Add CommandProvider validation section
-2. Update sub-command registration examples
-3. Refine error handling in workflow
+Proposed changes to this agent:
+1. [Change 1]
+2. [Change 2]
 
 May I proceed with updating this agent?"
 
-**User responses:**
-- "Yes" / "Approve" / "Go ahead" → Proceed with update
-- "No" / "Not now" → Continue with current version
-- "Show me the changes first" → Display detailed diff
-```
+**When creating agent reveals PRD gap:**
+"While creating [agent-name], I discovered that [PRD] doesn't document [pattern].
 
-### PRD Update Proposals
+Proposed addition: [brief description]
 
-When gaps are discovered, propose PRD updates:
+Would you like me to draft this update for the PRD?"
 
-```markdown
-**When creating an agent reveals a gap:**
-
-"While creating the `cobra-flag-expert` agent, I discovered that the
-command-registry-pattern.md PRD doesn't document flag inheritance
-patterns for nested commands.
-
-**Proposed addition to PRD:**
-
-Section: 'Flag Inheritance for Nested Commands'
-
-Content:
-- Commands with sub-commands should use PersistentFlags
-- Local flags vs persistent flags usage guidelines
-- Flag validation at appropriate command levels
-
-Would you like me to draft this section and add it to the PRD?"
-
-**User responses:**
-- "Yes, draft it" → Create draft PRD section for review
-- "No, not needed" → Skip PRD update
-- "Let me think about it" → Save suggestion for later
+**User responses:** "Yes" / "No" / "Show details"
 ```
 
 ### Agent-Developer Self-Maintenance
@@ -633,7 +584,7 @@ Update agents when:
 
 ## Common Agent Patterns
 
-### Specialist Agent Template
+### Agent Template
 
 ```markdown
 ---
@@ -659,60 +610,16 @@ color: cyan
 [Specific knowledge and patterns]
 
 ## Workflow
-1. Analysis
-2. Implementation
-3. Validation
-
-## Quality Checks
-- [ ] Checklist item 1
-- [ ] Checklist item 2
+1. Check PRD currency (first step)
+2. Analysis
+3. Implementation
+4. Validation
 
 ## Relevant PRDs
-- `docs/prd/relevant-doc.md`
+- `docs/prd/relevant-doc.md` - [Description] (vX.Y, YYYY-MM-DD)
 
 ## Self-Maintenance
-Monitor and update this agent as requirements evolve.
-```
-
-### Coordinator Agent Template
-
-```markdown
----
-name: workflow-orchestrator
-description: >-
-  Use this agent to coordinate [complex workflow]. Orchestrates multiple specialist agents.
-
-  **Invoke when:**
-  - [Multi-step workflow trigger]
-
-tools: Read, Write, Edit, Grep, Glob, Bash, Task, TodoWrite
-model: sonnet
-color: purple
----
-
-# Workflow Orchestrator - Brief Tagline
-
-## Core Responsibilities
-[Coordination and orchestration tasks]
-
-## Orchestration Pattern
-
-1. **Phase 1: [Name]**
-   - Do X
-   - Invoke specialist-agent-1 if needed
-
-2. **Phase 2: [Name]**
-   - Do Y
-   - Invoke specialist-agent-2 if needed
-
-3. **Phase 3: [Name]**
-   - Do Z
-   - Invoke code-reviewer for validation
-
-## Agent Coordination Map
-- specialist-agent-1: [When to invoke]
-- specialist-agent-2: [When to invoke]
-- code-reviewer: [When to invoke]
+Monitor dependencies. Update when PRDs change (with user approval).
 ```
 
 ## Quality Standards
