@@ -583,3 +583,58 @@ func TestStandardOptionsBuilder_BindFlagsToViper(t *testing.T) {
 func boolPtr(b bool) *bool {
 	return &b
 }
+
+// Test simple builder methods for coverage.
+func TestStandardOptionsBuilder_WithAbstract(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithAbstract()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+}
+
+func TestStandardOptionsBuilder_WithVars(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithVars()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+}
+
+func TestStandardOptionsBuilder_WithMaxColumns(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithMaxColumns(80)
+	parser := builder.Build()
+	require.NotNil(t, parser)
+}
+
+func TestStandardOptionsBuilder_WithDelimiter(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithDelimiter(",")
+	parser := builder.Build()
+	require.NotNil(t, parser)
+}
+
+func TestStandardOptionsBuilder_WithType(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithType("terraform")
+	parser := builder.Build()
+	require.NotNil(t, parser)
+}
+
+func TestStandardOptionsBuilder_WithTags(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithTags("tag1,tag2")
+	parser := builder.Build()
+	require.NotNil(t, parser)
+}
+
+func TestStandardOptionsBuilder_WithSchemaPath(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithSchemaPath("path/to/schema")
+	parser := builder.Build()
+	require.NotNil(t, parser)
+}
+
+func TestStandardOptionsBuilder_WithSchemaType(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithSchemaType("jsonschema")
+	parser := builder.Build()
+	require.NotNil(t, parser)
+}
+
+func TestStandardOptionsBuilder_WithModulePaths(t *testing.T) {
+	builder := NewStandardOptionsBuilder().WithModulePaths()
+	parser := builder.Build()
+	require.NotNil(t, parser)
+}

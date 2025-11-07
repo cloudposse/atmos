@@ -71,12 +71,6 @@ func processCustomCommands(
 	var command *cobra.Command
 	existingTopLevelCommands := make(map[string]*cobra.Command)
 
-	// Build commands and their hierarchy from the alias map
-	for alias, fullCmd := range atmosConfig.CommandAliases {
-		parts := strings.Fields(fullCmd)
-		addCommandWithAlias(RootCmd, alias, parts)
-	}
-
 	if topLevel {
 		existingTopLevelCommands = getTopLevelCommands()
 	}
@@ -127,35 +121,6 @@ func processCustomCommands(
 	}
 
 	return nil
-}
-
-// addCommandWithAlias adds a command hierarchy based on the full command.
-func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string) {
-	if len(parts) == 0 {
-		return
-	}
-
-	// Check if a command with the current part already exists
-	var cmd *cobra.Command
-	for _, c := range parentCmd.Commands() {
-		if c.Use == parts[0] {
-			cmd = c
-			break
-		}
-	}
-
-	// If the command doesn't exist, create it
-	if cmd == nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias), "", "")
-	}
-
-	// If there are more parts, recurse for the next level
-	if len(parts) > 1 {
-		addCommandWithAlias(cmd, alias, parts[1:])
-	} else if !Contains(cmd.Aliases, alias) {
-		// This is the last part of the command, add the alias
-		cmd.Aliases = append(cmd.Aliases, alias)
-	}
 }
 
 // processCommandAliases processes the command aliases.

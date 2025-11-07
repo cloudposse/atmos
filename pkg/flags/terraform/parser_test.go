@@ -272,3 +272,17 @@ func TestParser_FlagSyntaxVariations(t *testing.T) {
 		})
 	}
 }
+
+// TestParser_RegisterPersistentFlags tests that RegisterPersistentFlags correctly registers flags as persistent.
+func TestParser_RegisterPersistentFlags(t *testing.T) {
+	parser := NewParser()
+	cmd := &cobra.Command{Use: "terraform"}
+
+	parser.RegisterPersistentFlags(cmd)
+
+	assert.NotNil(t, parser.cmd, "Parser should have cmd reference after RegisterPersistentFlags")
+	assert.True(t, cmd.DisableFlagParsing, "DisableFlagParsing should be enabled")
+
+	// Verify persistent flags were registered
+	assert.NotNil(t, cmd.PersistentFlags().Lookup("stack"), "stack flag should be registered as persistent")
+}
