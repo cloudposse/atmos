@@ -443,6 +443,27 @@ var (
 	ErrIdentityNotInConfig  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption  = errors.New("invalid logout option")
+
+	// Vendor update/diff errors.
+	ErrComponentNotFound          = errors.New("component not found in vendor config")
+	ErrComponentFlagRequired      = errors.New("--component flag is required")
+	ErrVendorConfigNotFound       = errors.New("vendor config file not found")
+	ErrGitDiffFailed              = errors.New("failed to execute git diff")
+	ErrInvalidGitRef              = errors.New("invalid git reference")
+	ErrNoUpdatesAvailable         = errors.New("no updates available")
+	ErrUnsupportedVendorSource    = errors.New("unsupported vendor source type")
+	ErrGitLsRemoteFailed          = errors.New("failed to execute git ls-remote")
+	ErrInvalidVersionSpec         = errors.New("invalid version specification")
+	ErrVersionNotFound            = errors.New("specified version not found in repository")
+	ErrYAMLUpdateFailed           = errors.New("failed to update YAML file")
+	ErrYAMLPreservationFailed     = errors.New("failed to preserve YAML structure")
+	ErrMultipleComponentMatches   = errors.New("multiple components match the specified name")
+	ErrGitRefNotFound             = errors.New("git reference not found in remote repository")
+	ErrInvalidSemanticVersion     = errors.New("invalid semantic version")
+	ErrNoTagsFound                = errors.New("no tags found in repository")
+	ErrNoVersionsAvailable        = errors.New("no versions available")
+	ErrNoVersionsMatchConstraints = errors.New("no versions match the specified constraints")
+	ErrInvalidSemverConstraint    = errors.New("invalid semantic version constraint")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
