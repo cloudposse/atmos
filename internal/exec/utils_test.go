@@ -163,7 +163,7 @@ func TestGenerateComponentProviderOverrides(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateComponentProviderOverrides(tt.providerOverrides)
+			result := generateComponentProviderOverrides(tt.providerOverrides, nil)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
