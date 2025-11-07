@@ -389,12 +389,13 @@ type componentTypeProcessParams struct {
 	processTemplates     bool
 	processYamlFunctions bool
 	skip                 []string
+	authManager          auth.AuthManager
 }
 
 // tryProcessWithComponentType attempts to process stacks with a specific component type.
 func tryProcessWithComponentType(params *componentTypeProcessParams) (schema.ConfigAndStacksInfo, error) {
 	params.configAndStacksInfo.ComponentType = params.componentType
-	result, err := ProcessStacks(params.atmosConfig, params.configAndStacksInfo, true, params.processTemplates, params.processYamlFunctions, params.skip)
+	result, err := ProcessStacks(params.atmosConfig, params.configAndStacksInfo, true, params.processTemplates, params.processYamlFunctions, params.skip, params.authManager)
 	result.ComponentSection[cfg.ComponentTypeSectionName] = params.componentType
 	return result, err
 }

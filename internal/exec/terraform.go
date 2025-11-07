@@ -10,6 +10,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -67,8 +69,30 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Skip stack processing when cleaning with the `--force` flag to allow cleaning without requiring stack configuration.
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
+	// Create AuthManager from --identity flag if specified.
+	// This enables YAML template functions like !terraform.state to use authenticated credentials.
+	var authManager auth.AuthManager
+	if info.Identity != "" {
+		// Check if auth is configured when --identity flag is provided.
+		if len(atmosConfig.Auth.Identities) == 0 {
+			return fmt.Errorf("%w: the --identity flag requires authentication to be configured in atmos.yaml with at least one identity", errUtils.ErrAuthNotConfigured)
+		}
+
+		// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
+		authStackInfo := &schema.ConfigAndStacksInfo{
+			AuthContext: &schema.AuthContext{},
+		}
+
+		credStore := credentials.NewCredentialStore()
+		validator := validation.NewValidator()
+		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
+		if err != nil {
+			return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+		}
+	}
+
 	if shouldProcessStacks {
-		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip)
+		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
 		if err != nil {
 			return err
 		}
