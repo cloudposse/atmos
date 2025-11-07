@@ -14,6 +14,35 @@ This directory contains specialized Claude agents for the Atmos project developm
 - Optimizing agents for context efficiency
 - Designing multi-agent coordination patterns
 
+## Strategic Vision: Scaling Atmos Development
+
+As Atmos core functionality grows, we scale development through **specialized agents for each key subsystem**.
+
+### Agent-Per-Subsystem Pattern
+
+Each major area of Atmos gets a dedicated expert agent:
+
+**Planned Agents (create in separate PRs as needed):**
+- `command-registry-expert` - Command registry patterns and CommandProvider interface
+- `component-registry-expert` - Component discovery and management
+- `cobra-flag-expert` - Flag parsing and Cobra integration patterns
+- `stack-processor-expert` - Stack inheritance and processing pipeline
+- `template-engine-expert` - Go templates, Gomplate, YAML functions
+- `auth-system-expert` - Authentication and credential management
+- `store-registry-expert` - Multi-provider store implementations
+- `viper-config-expert` - Configuration management patterns
+
+### When to Create New Agents
+
+Create a specialized agent when:
+- ✅ New core subsystem emerges (registry, integration, major feature)
+- ✅ Subsystem reaches complexity (3+ files, distinct patterns, mature PRD)
+- ✅ Repeated implementation questions about same domain
+- ❌ One-off utility or helper function
+- ❌ Experimental code without established patterns
+
+**Philosophy:** Small, focused agents that coordinate through workflows scale better than monolithic agents.
+
 ## Usage
 
 ### Automatic Invocation

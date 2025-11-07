@@ -16,6 +16,33 @@ This PRD defines the architecture, conventions, and best practices for Claude ag
 3. **Optimize context usage** - Efficient, focused agents that reference documentation
 4. **Support self-maintenance** - Agents update themselves as requirements evolve
 5. **Ensure PRD awareness** - Agents follow documented architectural patterns
+6. **Scale Atmos development** - Create specialized agents as core functionality grows
+
+## Strategic Vision
+
+**Scale development through specialized domain expertise.**
+
+As Atmos core functionality expands, we create **small, purposeful agents that are experts in key areas of Atmos**. Each specialized subsystem gets a dedicated agent:
+
+- `command-registry-expert` - Command registry patterns
+- `component-registry-expert` - Component discovery
+- `cobra-flag-expert` - Flag parsing with Cobra
+- `stack-processor-expert` - Stack inheritance pipeline
+- `template-engine-expert` - Go templates and YAML functions
+- `auth-system-expert` - Authentication patterns
+- `store-registry-expert` - Multi-provider stores
+
+**When to create an agent:**
+1. New core subsystem emerges (registry, integration, major feature)
+2. Subsystem reaches complexity (3+ files, distinct patterns)
+3. PRD exists with established patterns
+4. Repeated questions about the same domain
+
+**Benefits:**
+- Consistent pattern application across codebase
+- Knowledge retention as expertise is captured
+- Faster onboarding with guided development
+- Development velocity scales with agent support
 
 ## Non-Goals
 
