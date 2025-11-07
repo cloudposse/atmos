@@ -742,7 +742,7 @@ func ProcessStacks(
 }
 
 // generateComponentBackendConfig generates backend config for components.
-func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string) (map[string]any, error) {
+func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string, authContext *schema.AuthContext) (map[string]any, error) {
 	// Generate backend config file for Terraform Cloud.
 	// https://developer.hashicorp.com/terraform/cli/cloud/settings
 	if backendType == "cloud" {
@@ -785,7 +785,7 @@ func generateComponentBackendConfig(backendType string, backendConfig map[string
 }
 
 // generateComponentProviderOverrides generates provider overrides for components.
-func generateComponentProviderOverrides(providerOverrides map[string]any) map[string]any {
+func generateComponentProviderOverrides(providerOverrides map[string]any, authContext *schema.AuthContext) map[string]any {
 	return map[string]any{
 		"provider": providerOverrides,
 	}
