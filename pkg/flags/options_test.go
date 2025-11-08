@@ -81,9 +81,9 @@ func TestWithTerraformFlags(t *testing.T) {
 	opt := WithTerraformFlags()
 	opt(cfg)
 
-	// Should have 5 flags: stack, dry-run, upload-status, skip-init, from-plan
+	// Should have exactly 5 flags: stack, dry-run, upload-status, skip-init, from-plan
 	// Global flags (identity, etc.) are inherited from RootCmd, not in registry
-	assert.True(t, cfg.registry.Count() >= 5)
+	assert.Equal(t, 5, cfg.registry.Count())
 	assert.NotNil(t, cfg.registry.Get("upload-status"))
 	assert.NotNil(t, cfg.registry.Get("stack"))
 	assert.Nil(t, cfg.registry.Get("identity"), "identity should be inherited from RootCmd")
