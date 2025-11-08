@@ -281,7 +281,6 @@ func TestFormatThemeRow(t *testing.T) {
 	}
 }
 
-
 func TestGetThemeTypeString(t *testing.T) {
 	tests := []struct {
 		name  string
