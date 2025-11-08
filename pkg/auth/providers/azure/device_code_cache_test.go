@@ -18,12 +18,12 @@ import (
 
 // mockCacheStorage is a mock implementation of CacheStorage for testing.
 type mockCacheStorage struct {
-	files         map[string][]byte
-	readFileError error
+	files          map[string][]byte
+	readFileError  error
 	writeFileError error
-	removeError   error
-	mkdirAllError error
-	xdgCacheDir   string
+	removeError    error
+	mkdirAllError  error
+	xdgCacheDir    string
 }
 
 func newMockCacheStorage() *mockCacheStorage {
@@ -129,12 +129,12 @@ func TestDeviceCodeProvider_loadCachedToken(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	tests := []struct {
-		name              string
-		setupCache        func(*mockCacheStorage, string)
-		providerTenantID  string
-		expectedToken     string
+		name               string
+		setupCache         func(*mockCacheStorage, string)
+		providerTenantID   string
+		expectedToken      string
 		expectedGraphToken string
-		shouldReturnToken bool
+		shouldReturnToken  bool
 	}{
 		{
 			name: "cache miss - file doesn't exist",
@@ -247,15 +247,15 @@ func TestDeviceCodeProvider_saveCachedToken(t *testing.T) {
 	now := time.Now().UTC()
 
 	tests := []struct {
-		name               string
-		accessToken        string
-		tokenType          string
-		expiresAt          time.Time
-		graphToken         string
-		graphExpiresAt     time.Time
-		subscriptionID     string
-		location           string
-		expectFileWritten  bool
+		name              string
+		accessToken       string
+		tokenType         string
+		expiresAt         time.Time
+		graphToken        string
+		graphExpiresAt    time.Time
+		subscriptionID    string
+		location          string
+		expectFileWritten bool
 	}{
 		{
 			name:              "successfully saves token",

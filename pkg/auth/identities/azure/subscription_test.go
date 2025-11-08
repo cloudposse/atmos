@@ -16,11 +16,11 @@ import (
 
 func TestNewSubscriptionIdentity(t *testing.T) {
 	tests := []struct {
-		name        string
+		name         string
 		identityName string
-		config      *schema.Identity
-		expectError bool
-		errorType   error
+		config       *schema.Identity
+		expectError  bool
+		errorType    error
 	}{
 		{
 			name:         "valid subscription identity",
@@ -469,10 +469,10 @@ func TestSubscriptionIdentity_Environment(t *testing.T) {
 
 func TestSubscriptionIdentity_PrepareEnvironment(t *testing.T) {
 	tests := []struct {
-		name      string
-		identity  *subscriptionIdentity
-		inputEnv  map[string]string
-		expected  map[string]string
+		name     string
+		identity *subscriptionIdentity
+		inputEnv map[string]string
+		expected map[string]string
 	}{
 		{
 			name: "adds identity vars to existing env",

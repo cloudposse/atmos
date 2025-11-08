@@ -15,11 +15,11 @@ import (
 
 func TestNewDeviceCodeProvider(t *testing.T) {
 	tests := []struct {
-		name        string
-		providerName string
-		config      *schema.Provider
-		expectError bool
-		errorType   error
+		name          string
+		providerName  string
+		config        *schema.Provider
+		expectError   bool
+		errorType     error
 		checkProvider func(*testing.T, *deviceCodeProvider)
 	}{
 		{
