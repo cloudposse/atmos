@@ -1,0 +1,121 @@
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.themeCard {
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 8px;
+  padding: 1rem;
+  background: var(--ifm-background-surface-color);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.themeCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.themeHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.themeName {
+  margin: 0;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.recommended {
+  color: #f59e0b;
+  font-size: 1.2rem;
+}
+
+.themeMeta {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badge.dark {
+  background: #1f2937;
+  color: #f3f4f6;
+}
+
+.badge.light {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.colorPalette {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+}
+
+.colorSwatch {
+  aspect-ratio: 1;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  transition: transform 0.2s ease;
+}
+
+.colorSwatch:hover {
+  transform: scale(1.1);
+}
+
+.themeFooter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.themeCommand {
+  background: var(--ifm-code-background);
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.credits {
+  font-size: 0.75rem;
+  color: var(--ifm-color-emphasis-600);
+}
+
+.credits a {
+  color: var(--ifm-link-color);
+  text-decoration: none;
+}
+
+.credits a:hover {
+  text-decoration: underline;
+}
+
+.loading,
+.error {
+  padding: 2rem;
+  text-align: center;
+  color: var(--ifm-color-emphasis-600);
+}
+
+.error {
+  color: var(--ifm-color-danger);
+}
