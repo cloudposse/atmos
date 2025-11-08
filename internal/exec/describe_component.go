@@ -412,6 +412,7 @@ func detectComponentType(
 		processTemplates:     params.ProcessTemplates,
 		processYamlFunctions: params.ProcessYamlFunctions,
 		skip:                 params.Skip,
+		authManager:          params.AuthManager,
 	}
 
 	// Try Terraform
