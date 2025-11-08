@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -126,7 +125,10 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	case "Warning":
 		log.SetLevel(log.WarnLevel)
 	case "Off":
-		log.SetLevel(math.MaxInt32)
+		// Disable logging by setting level above FatalLevel.
+		// charmbracelet/log only recognizes defined Level constants, so we use FatalLevel + 1
+		// instead of math.MaxInt32 which would not work correctly.
+		log.SetLevel(log.FatalLevel + 1)
 	default:
 		log.SetLevel(log.WarnLevel)
 	}
