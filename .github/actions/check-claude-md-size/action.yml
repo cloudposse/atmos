@@ -1,12 +1,12 @@
-name: Check CLAUDE.md Size
-description: Validates that CLAUDE.md does not exceed the 40k character limit
+name: Check Markdown File Size
+description: Validates that modified markdown files in PR do not exceed size limits
 inputs:
-  file-path:
-    description: 'Path to CLAUDE.md file'
+  file-patterns:
+    description: 'Space-separated glob patterns for files to check (e.g., "CLAUDE.md .claude/agents/*.md")'
     required: false
     default: 'CLAUDE.md'
   max-size:
-    description: 'Maximum file size in characters'
+    description: 'Maximum file size in bytes'
     required: false
     default: '40000'
   github-token:
@@ -14,14 +14,17 @@ inputs:
     required: true
 outputs:
   size:
-    description: 'Current file size in characters'
+    description: 'Current file size in bytes (for single file mode)'
     value: ${{ steps.check.outputs.size }}
   exceeds-limit:
-    description: 'Whether the file exceeds the size limit (true/false)'
+    description: 'Whether any file exceeds the size limit (true/false)'
     value: ${{ steps.check.outputs.exceeds_limit }}
   usage-percent:
-    description: 'Percentage of limit used'
+    description: 'Percentage of limit used (for single file mode)'
     value: ${{ steps.check.outputs.usage_percent }}
+  all-files-ok:
+    description: 'Whether all files pass size check (true/false)'
+    value: ${{ steps.check.outputs.all_files_ok }}
 
 runs:
   using: composite
@@ -29,30 +32,91 @@ runs:
     - name: Check file size
       id: check
       shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
       run: |
-        FILE="${{ inputs.file-path }}"
+        FILE_PATTERNS="${{ inputs.file-patterns }}"
         MAX_SIZE="${{ inputs.max-size }}"
 
-        if [ ! -f "$FILE" ]; then
-          echo "✅ $FILE does not exist - skipping check"
+        echo "File patterns: $FILE_PATTERNS"
+
+        # Get list of changed files in PR using GitHub CLI
+        if [ -n "${{ github.event.pull_request.number }}" ]; then
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          echo "Fetching changed files for PR #${PR_NUMBER}..."
+          CHANGED_FILES=$(gh pr view "$PR_NUMBER" --json files --jq '.files[].path')
+        else
+          echo "⚠️ Not a pull request context - cannot determine changed files"
           echo "exists=false" >> $GITHUB_OUTPUT
+          echo "all_files_ok=true" >> $GITHUB_OUTPUT
           exit 0
         fi
 
-        SIZE=$(wc -c < "$FILE" | tr -d ' ')
-        USAGE_PERCENT=$((SIZE * 100 / MAX_SIZE))
+        if [ -z "$CHANGED_FILES" ]; then
+          echo "✅ No files modified in this PR"
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "all_files_ok=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Filter changed files by patterns
+        MATCHED_FILES=""
+        for PATTERN in $FILE_PATTERNS; do
+          for CHANGED_FILE in $CHANGED_FILES; do
+            # Use bash pattern matching
+            if [[ "$CHANGED_FILE" == $PATTERN ]]; then
+              if [ -f "$CHANGED_FILE" ]; then
+                MATCHED_FILES="${MATCHED_FILES}${CHANGED_FILE}"$'\n'
+              fi
+            fi
+          done
+        done
+
+        # Remove trailing newline and duplicates
+        MATCHED_FILES=$(echo "$MATCHED_FILES" | sort -u | grep -v '^$' || true)
+
+        if [ -z "$MATCHED_FILES" ]; then
+          echo "✅ No files matching patterns modified in this PR"
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "all_files_ok=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
 
         echo "exists=true" >> $GITHUB_OUTPUT
-        echo "size=$SIZE" >> $GITHUB_OUTPUT
         echo "max_size=$MAX_SIZE" >> $GITHUB_OUTPUT
-        echo "usage_percent=$USAGE_PERCENT" >> $GITHUB_OUTPUT
 
-        if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+        # Check file sizes
+        ALL_OK=true
+        OVERSIZED_FILES=""
+        TOTAL_FILES=0
+
+        while IFS= read -r FILE; do
+          [ -z "$FILE" ] && continue
+
+          SIZE=$(wc -c < "$FILE" | tr -d ' ')
+          USAGE_PERCENT=$((SIZE * 100 / MAX_SIZE))
+          FILENAME=$(basename "$FILE")
+          TOTAL_FILES=$((TOTAL_FILES + 1))
+
+          if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+            EXCESS=$((SIZE - MAX_SIZE))
+            EXCESS_PERCENT=$((EXCESS * 100 / MAX_SIZE))
+            echo "❌ $FILENAME: $SIZE bytes (over by $EXCESS bytes, ${EXCESS_PERCENT}%)"
+            OVERSIZED_FILES="${OVERSIZED_FILES}${FILE}:${SIZE},"
+            ALL_OK=false
+          else
+            echo "✅ $FILENAME: $SIZE bytes (${USAGE_PERCENT}% of limit)"
+          fi
+        done <<< "$MATCHED_FILES"
+
+        echo "all_files_ok=$ALL_OK" >> $GITHUB_OUTPUT
+        echo "total_files=$TOTAL_FILES" >> $GITHUB_OUTPUT
+        echo "oversized_files=$OVERSIZED_FILES" >> $GITHUB_OUTPUT
+
+        if [ "$ALL_OK" = "false" ]; then
           echo "exceeds_limit=true" >> $GITHUB_OUTPUT
-          echo "❌ $FILE is too large: $SIZE characters (limit: $MAX_SIZE)"
         else
           echo "exceeds_limit=false" >> $GITHUB_OUTPUT
-          echo "✅ $FILE size OK: $SIZE characters (limit: $MAX_SIZE, ${USAGE_PERCENT}%)"
         fi
 
     - name: Post PR comment if file too large
@@ -74,21 +138,43 @@ runs:
 
         EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .id' | head -1)
 
+        OVERSIZED="${{ steps.check.outputs.oversized_files }}"
+        TOTAL_FILES="${{ steps.check.outputs.total_files }}"
+
+        # Build list of oversized files
+        FILE_LIST=""
+        IFS=',' read -ra FILES_ARRAY <<< "$OVERSIZED"
+        for FILE_ENTRY in "${FILES_ARRAY[@]}"; do
+          [ -z "$FILE_ENTRY" ] && continue
+          FILE_NAME=$(echo "$FILE_ENTRY" | cut -d: -f1 | xargs basename)
+          FILE_SIZE=$(echo "$FILE_ENTRY" | cut -d: -f2)
+          FILE_EXCESS=$((FILE_SIZE - MAX_SIZE))
+          FILE_EXCESS_PERCENT=$((FILE_EXCESS * 100 / MAX_SIZE))
+          FILE_LIST="${FILE_LIST}- \`${FILE_NAME}\`: **${FILE_SIZE} bytes** (over by ${FILE_EXCESS} bytes, ~${FILE_EXCESS_PERCENT}%)
+        "
+        done
+
+        if [ "$TOTAL_FILES" -eq 1 ]; then
+          TITLE="Modified File Too Large"
+          DESCRIPTION="The modified file exceeds the **${MAX_SIZE} byte** size limit:"
+        else
+          TITLE="Modified Files Too Large"
+          DESCRIPTION="The following modified files exceed the **${MAX_SIZE} byte** size limit:"
+        fi
+
         COMMENT_BODY="<!-- claude-md-size-check -->
         > [!WARNING]
-        > #### CLAUDE.md File Too Large
+        > #### ${TITLE}
         >
-        > The CLAUDE.md file is **${SIZE} characters** but must not exceed **${MAX_SIZE} characters** (40k limit).
+        > ${DESCRIPTION}
         >
-        > **Size:** ${SIZE} chars
-        > **Limit:** ${MAX_SIZE} chars
-        > **Over by:** ${EXCESS} chars (~${EXCESS_PERCENT}%)
+        ${FILE_LIST}
         >
-        > **Action needed:** Please compress the CLAUDE.md file to reduce its size. Consider:
+        > **Action needed:** Please compress the oversized files. Consider:
         > - Removing verbose explanations
         > - Consolidating redundant examples
         > - Keeping only essential requirements
-        > - Moving detailed guides to separate docs in \`docs/\`
+        > - Moving detailed guides to separate docs in \`docs/\` or \`docs/prd/\`
         >
         > All MANDATORY requirements must be preserved."
 
@@ -126,17 +212,18 @@ runs:
 
         EXISTING_COMMENT_BODY=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .body' | head -1)
 
+        TOTAL_FILES="${{ steps.check.outputs.total_files }}"
+
         SUCCESS_COMMENT_BODY="<!-- claude-md-size-check -->
         > [!NOTE]
-        > #### CLAUDE.md Size OK ✅
+        > #### Modified Files Size OK ✅
         >
-        > **Size:** ${SIZE} chars
-        > **Limit:** ${MAX_SIZE} chars
-        > **Usage:** ${USAGE_PERCENT}%
+        > **Files checked:** ${TOTAL_FILES}
+        > **Limit:** ${MAX_SIZE} bytes per file
         >
-        > Thank you for keeping the file optimized!"
+        > All modified files are within size limits. Thank you!"
 
-        if echo "$EXISTING_COMMENT_BODY" | grep -q "CLAUDE.md Size OK ✅"; then
+        if echo "$EXISTING_COMMENT_BODY" | grep -q "Size OK ✅"; then
           echo "ℹ️ Comment already shows success - no update needed"
         else
           echo "Updating existing comment with success message..."
@@ -156,17 +243,29 @@ runs:
         EXCESS=$((SIZE - MAX_SIZE))
         EXCESS_PERCENT=$((EXCESS * 100 / MAX_SIZE))
 
-        echo "❌ ERROR: CLAUDE.md is too large"
+        OVERSIZED="${{ steps.check.outputs.oversized_files }}"
+
+        echo "❌ ERROR: One or more modified files exceed the size limit"
         echo ""
-        echo "Current size: $SIZE characters"
-        echo "Maximum size: $MAX_SIZE characters (40k limit)"
-        echo "Over by: $EXCESS characters (~${EXCESS_PERCENT}%)"
+        echo "Maximum size: $MAX_SIZE bytes"
         echo ""
-        echo "Please compress the file by:"
+        echo "Oversized files:"
+
+        IFS=',' read -ra FILES_ARRAY <<< "$OVERSIZED"
+        for FILE_ENTRY in "${FILES_ARRAY[@]}"; do
+          [ -z "$FILE_ENTRY" ] && continue
+          FILE_NAME=$(echo "$FILE_ENTRY" | cut -d: -f1 | xargs basename)
+          FILE_SIZE=$(echo "$FILE_ENTRY" | cut -d: -f2)
+          FILE_EXCESS=$((FILE_SIZE - MAX_SIZE))
+          echo "  - $FILE_NAME: $FILE_SIZE bytes (over by $FILE_EXCESS bytes)"
+        done
+
+        echo ""
+        echo "Please compress the files by:"
         echo "  - Removing verbose explanations"
         echo "  - Consolidating redundant examples"
         echo "  - Keeping only essential requirements"
-        echo "  - Moving detailed guides to docs/"
+        echo "  - Moving detailed guides to docs/ or docs/prd/"
         echo ""
         echo "All MANDATORY requirements must be preserved."
         exit 1
