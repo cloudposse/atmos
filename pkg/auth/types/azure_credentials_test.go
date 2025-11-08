@@ -117,12 +117,13 @@ func TestAzureCredentials_MultipleTokens(t *testing.T) {
 	now := time.Now().UTC()
 	c := &AzureCredentials{
 		AccessToken:        "access-token-here",
-		TokenType:          "Bearer",
-		Expiration:         now.Add(1 * time.Hour).Format(time.RFC3339),
 		GraphAPIToken:      "graph-token-here",
 		GraphAPIExpiration: now.Add(1 * time.Hour).Format(time.RFC3339),
 		KeyVaultToken:      "keyvault-token-here",
 		KeyVaultExpiration: now.Add(1 * time.Hour).Format(time.RFC3339),
+		Expiration:         now.Add(1 * time.Hour).Format(time.RFC3339),
+		TenantID:           "tenant-123",
+		SubscriptionID:     "sub-456",
 	}
 
 	// Verify all tokens are present.
@@ -132,6 +133,9 @@ func TestAzureCredentials_MultipleTokens(t *testing.T) {
 	assert.NotEmpty(t, c.Expiration, "Expiration should be set")
 	assert.NotEmpty(t, c.GraphAPIExpiration, "GraphAPIExpiration should be set")
 	assert.NotEmpty(t, c.KeyVaultExpiration, "KeyVaultExpiration should be set")
+
+	// Test that they're not expired.
+	assert.False(t, c.IsExpired(), "Credentials should not be expired")
 }
 
 func TestAzureCredentials_EmptyOptionalFields(t *testing.T) {
@@ -139,7 +143,6 @@ func TestAzureCredentials_EmptyOptionalFields(t *testing.T) {
 	now := time.Now().UTC()
 	c := &AzureCredentials{
 		AccessToken:    "access-token-here",
-		TokenType:      "Bearer",
 		Expiration:     now.Add(1 * time.Hour).Format(time.RFC3339),
 		TenantID:       "12345678-1234-1234-1234-123456789012",
 		SubscriptionID: "87654321-4321-4321-4321-210987654321",
@@ -150,6 +153,7 @@ func TestAzureCredentials_EmptyOptionalFields(t *testing.T) {
 	assert.NotEmpty(t, c.AccessToken, "AccessToken should be set")
 	assert.NotEmpty(t, c.TenantID, "TenantID should be set")
 	assert.NotEmpty(t, c.SubscriptionID, "SubscriptionID should be set")
+	assert.False(t, c.IsExpired(), "Credentials should not be expired")
 
 	// Verify optional fields are empty.
 	assert.Empty(t, c.GraphAPIToken, "GraphAPIToken should be empty")
