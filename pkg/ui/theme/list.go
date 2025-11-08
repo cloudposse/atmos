@@ -127,13 +127,12 @@ func formatThemeRow(t *Theme, activeTheme string, showStars bool) []string {
 	defer perf.Track(nil, "theme.formatThemeRow")()
 
 	// Status indicator column: active (green "●") or recommended ("★") or empty.
-	statusIndicator := "  "
+	statusIndicator := ""
 	if strings.EqualFold(t.Name, activeTheme) {
 		// Green dot for active theme (same as version list).
-		greenDot := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("●")
-		statusIndicator = greenDot + " "
+		statusIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("●")
 	} else if showStars && IsRecommended(t.Name) {
-		statusIndicator = "★ "
+		statusIndicator = "★"
 	}
 
 	// Theme name (no star suffix needed anymore).
@@ -220,11 +219,11 @@ func formatSimpleThemeList(themes []*Theme, activeTheme string, showingRecommend
 	// Theme rows.
 	for _, t := range themes {
 		// Status indicator: active ("●") or recommended ("★") or empty.
-		statusIndicator := "  "
+		statusIndicator := " "
 		if strings.EqualFold(t.Name, activeTheme) {
-			statusIndicator = "● "
+			statusIndicator = "●"
 		} else if showStars && IsRecommended(t.Name) {
-			statusIndicator = "★ "
+			statusIndicator = "★"
 		}
 
 		themeType := getThemeTypeString(t)
@@ -233,7 +232,7 @@ func formatSimpleThemeList(themes []*Theme, activeTheme string, showingRecommend
 		// For non-TTY, just show "8 colors" as a placeholder.
 		palette := "8 colors"
 
-		output += fmt.Sprintf("%-2s %-30s %-8s %-10s %s\n", statusIndicator, t.Name, themeType, palette, source)
+		output += fmt.Sprintf("%1s %-30s %-8s %-10s %s\n", statusIndicator, t.Name, themeType, palette, source)
 	}
 
 	// Footer message.
