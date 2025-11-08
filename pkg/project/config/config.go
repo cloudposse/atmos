@@ -290,8 +290,7 @@ func PromptForScaffoldConfig(scaffoldConfig *ScaffoldConfig, userValues map[stri
 
 	err := huhForm.Run()
 	if err != nil {
-		fmt.Println("Uh oh:", err)
-		return fmt.Errorf("user aborted the configuration")
+		return fmt.Errorf("user aborted the configuration: %w", err)
 	}
 
 	// Copy form values back to userValues map using the value getters

@@ -16,8 +16,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
-	"github.com/cloudposse/atmos/pkg/generator/ui"
+	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/project/config"
+	"github.com/cloudposse/atmos/pkg/terminal"
+	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -93,7 +96,7 @@ If no target directory is specified, you will be prompted for one.`,
 		}
 
 		return executeScaffoldGenerate(
-			cmd.Context(),
+			cmd,
 			template,
 			target,
 			force,
@@ -113,7 +116,7 @@ This command shows templates from the 'scaffold.templates' section
 of your atmos.yaml configuration file.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return executeScaffoldList(cmd.Context())
+		return executeScaffoldList(cmd)
 	},
 }
 
@@ -204,7 +207,7 @@ func parseSetFlag(flag string) (string, string) {
 // executeScaffoldGenerate generates code from a scaffold template.
 // This logic was moved from internal/exec/scaffold.go to keep command logic in cmd/.
 func executeScaffoldGenerate(
-	ctx context.Context,
+	cmd *cobra.Command,
 	templateName string,
 	targetDir string,
 	force bool,
@@ -221,7 +224,17 @@ func executeScaffoldGenerate(
 	}
 
 	// Create the UI instance
-	scaffoldUI := ui.NewInitUI()
+	// Create I/O context for this command
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		return fmt.Errorf("failed to create I/O context: %w", err)
+	}
+
+	// Create terminal writer for I/O
+	termWriter := iolib.NewTerminalWriter(ioCtx)
+	term := terminal.New(terminal.WithIO(termWriter))
+
+	scaffoldUI := generatorUI.NewInitUI(ioCtx, term)
 
 	// For now, try to find scaffold templates in the same embedded templates
 	// This is a simplified implementation - the original experiment supported
@@ -270,7 +283,7 @@ func executeScaffoldGenerate(
 
 // executeScaffoldList lists all available scaffold templates configured in atmos.yaml.
 // This logic was moved from internal/exec/scaffold.go to keep command logic in cmd/.
-func executeScaffoldList(ctx context.Context) error {
+func executeScaffoldList(cmd *cobra.Command) error {
 	// Read scaffold section from atmos.yaml
 	scaffoldSection, err := config.ReadAtmosScaffoldSection(".")
 	if err != nil {
@@ -280,8 +293,12 @@ func executeScaffoldList(ctx context.Context) error {
 	// Get the templates section
 	templatesData, ok := scaffoldSection["templates"]
 	if !ok {
-		fmt.Println("No scaffold templates configured in atmos.yaml.")
-		fmt.Println("Add a 'scaffold.templates' section to your atmos.yaml to configure available templates.")
+		if err := atmosui.Info("No scaffold templates configured in atmos.yaml."); err != nil {
+			return err
+		}
+		if err := atmosui.Info("Add a 'scaffold.templates' section to your atmos.yaml to configure available templates."); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -292,13 +309,27 @@ func executeScaffoldList(ctx context.Context) error {
 
 	// Check if there are any templates
 	if len(templatesMap) == 0 {
-		fmt.Println("No scaffold templates configured in atmos.yaml.")
-		fmt.Println("Add templates to the 'scaffold.templates' section to get started.")
+		if err := atmosui.Info("No scaffold templates configured in atmos.yaml."); err != nil {
+			return err
+		}
+		if err := atmosui.Info("Add templates to the 'scaffold.templates' section to get started."); err != nil {
+			return err
+		}
 		return nil
 	}
 
 	// Use the UI package to display the table
-	uiInstance := ui.NewInitUI()
+	// Create I/O context for this command
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		return fmt.Errorf("failed to create I/O context: %w", err)
+	}
+
+	// Create terminal writer for I/O
+	termWriter := iolib.NewTerminalWriter(ioCtx)
+	term := terminal.New(terminal.WithIO(termWriter))
+
+	uiInstance := generatorUI.NewInitUI(ioCtx, term)
 	uiInstance.DisplayScaffoldTemplateTable(templatesMap)
 
 	return nil
