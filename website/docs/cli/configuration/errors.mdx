@@ -1,0 +1,400 @@
+---
+title: Error Handling & Monitoring
+sidebar_position: 8
+sidebar_label: Error Handling
+id: errors
+description: Configure error formatting and Sentry integration to monitor Atmos failures across your organization
+---
+
+import File from '@site/src/components/File'
+
+# Error Handling & Monitoring
+
+Configure how Atmos formats and reports errors, including Sentry integration for monitoring command failures across your organization.
+
+## Why Monitor Atmos Errors?
+
+When running Atmos across an organization—especially in CI/CD pipelines—staying on top of failures can be a significant challenge. Atmos provides built-in error monitoring capabilities to help you:
+
+- **Track infrastructure deployment failures** across multiple teams and environments
+- **Identify patterns in configuration errors** before they affect production
+- **Debug CI/CD pipeline issues** with detailed stack traces and context
+- **Monitor the health** of your infrastructure automation at scale
+- **Receive alerts** when critical Atmos operations fail
+
+## Configuration
+
+The `errors` section in `atmos.yaml` controls error formatting and Sentry integration:
+
+<File title="atmos.yaml">
+```yaml
+errors:
+  # Error formatting configuration
+  format:
+    # Show detailed stack traces and context (default: false)
+    # Can also be set via ATMOS_VERBOSE environment variable
+    verbose: false
+
+  # Sentry error reporting integration
+  sentry:
+    # Enable/disable Sentry error reporting (default: false)
+    enabled: true
+
+    # Sentry DSN (Data Source Name) - get this from your Sentry project settings
+    dsn: "https://examplePublicKey@o0.ingest.sentry.io/0"
+
+    # Environment name for error grouping (e.g., "production", "staging", "ci")
+    environment: "production"
+
+    # Release version for tracking errors by deployment
+    release: "1.0.0"
+
+    # Sample rate: 1.0 = 100% of errors sent, 0.5 = 50% (default: 1.0)
+    sample_rate: 1.0
+
+    # Enable debug mode for troubleshooting Sentry integration (default: false)
+    debug: false
+
+    # Include surrounding code context in stack traces (default: true)
+    capture_stack_context: true
+
+    # Custom tags for filtering and grouping errors in Sentry
+    tags:
+      team: "platform"
+      service: "atmos"
+      datacenter: "us-east-1"
+```
+</File>
+
+## Error Formatting
+
+### Verbose Mode
+
+Control the level of detail in error messages with the `errors.format.verbose` setting:
+
+**Compact Mode** (`verbose: false` - default):
+- Clean, user-friendly error messages
+- Actionable hints and suggestions
+- Essential context only
+- Perfect for end-users and CI logs
+
+**Verbose Mode** (`verbose: true`):
+- Full stack traces with file/line information
+- Complete error chain showing how the error propagated
+- Detailed context tables with all metadata
+- Useful for debugging complex issues
+
+You can also enable verbose mode temporarily:
+
+```bash
+# Enable verbose errors for a single command
+ATMOS_VERBOSE=true atmos terraform plan
+
+# Or set it globally in your shell
+export ATMOS_VERBOSE=true
+```
+
+### Error Message Structure
+
+Atmos formats errors as structured markdown with the following sections:
+
+1. **Error** - Clear description of what went wrong
+2. **Explanation** - Detailed context about why it failed
+3. **Example** - Code snippets showing the correct approach
+4. **Hints** - Actionable suggestions to fix the problem
+5. **Context** - Key-value pairs (component, stack, region, etc.)
+6. **Stack Trace** - Full error chain (verbose mode only)
+
+Example error output:
+
+```text
+# Error
+
+component 'vpc' not found in stack 'prod/us-east-1'
+
+## Hints
+
+💡 Use 'atmos list components --stack prod/us-east-1' to see available components
+💡 Check if the component is defined in your stack manifests
+💡 Verify the stack name is correct: prod/us-east-1
+
+## Context
+
+| Key       | Value           |
+|-----------|-----------------|
+| component | vpc             |
+| stack     | prod/us-east-1  |
+```
+
+## Sentry Integration
+
+### What Gets Sent to Sentry?
+
+Atmos only sends **command failures** to Sentry—errors that prevent a command from completing successfully and cause Atmos to exit with a non-zero exit code.
+
+**Errors sent to Sentry:**
+- ✅ Command failures (invalid arguments, missing configuration)
+- ✅ Component not found errors that block deployments
+- ✅ Stack validation errors preventing infrastructure changes
+- ✅ Workflow execution failures
+- ✅ Authentication/authorization errors
+- ✅ File system errors (missing `atmos.yaml`, unreadable stack files)
+
+**Errors NOT sent to Sentry:**
+- ❌ Debug/trace log messages
+- ❌ Warnings (e.g., deprecated configuration options)
+- ❌ Non-fatal errors that Atmos recovers from
+- ❌ Successful commands (exit code 0)
+
+**Information included with each error:**
+
+1. **Error message and type** - What went wrong
+2. **Hints** → Sentry breadcrumbs to help debug the issue
+3. **Context** → Tags like component name, stack name, region (PII-safe)
+4. **Exit code** → Command exit code for automation
+5. **Stack traces** → Full error chain with file/line information for debugging
+6. **Environment** → From `errors.sentry.environment` config
+7. **Custom tags** → From `errors.sentry.tags` config
+
+This ensures Sentry focuses on actionable failures that affect users, without overwhelming it with internal logging or successful operations.
+
+### Setting Up Sentry
+
+1. **Create a Sentry project** at [sentry.io](https://sentry.io)
+
+2. **Get your DSN** from Project Settings → Client Keys (DSN)
+
+3. **Configure Atmos** with your Sentry DSN:
+
+<File title="atmos.yaml">
+```yaml
+errors:
+  sentry:
+    enabled: true
+    dsn: "https://your-public-key@o0.ingest.sentry.io/your-project-id"
+    environment: "production"
+    tags:
+      team: "platform"
+```
+</File>
+
+4. **Test the integration** by triggering an error:
+
+```bash
+# This will fail and send an error to Sentry
+atmos terraform plan invalid-component -s nonexistent-stack
+```
+
+5. **Verify in Sentry** that the error appears in your project's Issues dashboard
+
+### Environment-Specific Configuration
+
+Configure different Sentry settings per environment:
+
+<File title="atmos.yaml">
+```yaml
+errors:
+  sentry:
+    enabled: true
+    dsn: "https://your-public-key@o0.ingest.sentry.io/project-id"
+
+    # Use environment variable for dynamic environment name
+    # Set ATMOS_ENVIRONMENT in your CI/CD pipeline
+    environment: "${ATMOS_ENVIRONMENT}"
+
+    # Set release from CI/CD pipeline
+    # Example: "v1.2.3" or "commit-abc123"
+    release: "${CI_COMMIT_TAG}"
+
+    # Reduce noise in development
+    sample_rate: 0.1  # Only 10% of errors in dev
+```
+</File>
+
+Then in your CI/CD pipeline:
+
+```yaml
+# GitHub Actions example
+- name: Deploy infrastructure
+  env:
+    ATMOS_ENVIRONMENT: production
+    CI_COMMIT_TAG: ${{ github.ref_name }}
+  run: |
+    atmos terraform apply vpc -s prod/us-east-1
+```
+
+### Privacy & Security
+
+**PII-Safe Context:**
+
+Atmos uses structured context (via `.WithContext()`) that is designed to be PII-safe:
+
+- ✅ Component names, stack names, regions
+- ✅ File paths (relative, not absolute)
+- ✅ Exit codes
+- ✅ Error types
+
+**What is NOT sent:**
+
+- ❌ Environment variable values (unless explicitly added)
+- ❌ Secrets or credentials
+- ❌ User input data
+- ❌ File contents
+
+**Sensitive DSN Handling:**
+
+Store your Sentry DSN securely:
+
+```bash
+# Don't commit DSN to version control
+# Use environment variables instead
+export ATMOS_SENTRY_DSN="https://your-public-key@sentry.io/project-id"
+```
+
+<File title="atmos.yaml">
+```yaml
+errors:
+  sentry:
+    enabled: true
+    dsn: "${ATMOS_SENTRY_DSN}"
+    environment: "production"
+```
+</File>
+
+## Use Cases
+
+### Monitoring CI/CD Pipelines
+
+Track infrastructure deployment failures across all your CI pipelines:
+
+<File title="atmos.yaml">
+```yaml
+errors:
+  sentry:
+    enabled: true
+    dsn: "${SENTRY_DSN}"
+    environment: "ci"
+    tags:
+      pipeline: "${CI_PIPELINE_ID}"
+      branch: "${CI_COMMIT_BRANCH}"
+      team: "platform"
+```
+</File>
+
+This allows you to:
+- Filter errors by pipeline, branch, or team in Sentry
+- Track error rates over time
+- Set up alerts for critical failures
+- Identify patterns (e.g., "VPC component fails in prod but not staging")
+
+### Multi-Team Organizations
+
+Different teams can share the same Sentry project with custom tags:
+
+<File title="atmos.yaml">
+```yaml
+errors:
+  sentry:
+    enabled: true
+    dsn: "${SENTRY_DSN}"
+    environment: "${ENVIRONMENT}"
+    tags:
+      team: "${TEAM_NAME}"        # "platform", "security", "data"
+      service: "atmos"
+      region: "${AWS_REGION}"
+```
+</File>
+
+Then set team-specific environment variables:
+
+```bash
+export TEAM_NAME="platform"
+atmos terraform apply vpc -s prod/us-east-1
+```
+
+### Development vs. Production
+
+Reduce noise in development while maintaining full monitoring in production:
+
+<File title="atmos.yaml">
+```yaml
+errors:
+  format:
+    # More detail in development
+    verbose: ${DEVELOPMENT:-false}
+
+  sentry:
+    # Only enable in production/staging
+    enabled: ${SENTRY_ENABLED:-false}
+    dsn: "${SENTRY_DSN}"
+    environment: "${ENVIRONMENT:-development}"
+
+    # Sample aggressively in dev, fully in prod
+    sample_rate: ${SENTRY_SAMPLE_RATE:-0.1}
+```
+</File>
+
+```bash
+# Development (local machine)
+export DEVELOPMENT=true
+export SENTRY_ENABLED=false
+
+# Production (CI/CD)
+export SENTRY_ENABLED=true
+export SENTRY_SAMPLE_RATE=1.0
+export ENVIRONMENT=production
+```
+
+## Troubleshooting
+
+### Errors Not Appearing in Sentry
+
+1. **Check DSN is correct**:
+   ```bash
+   # Test DSN connectivity
+   curl -X POST "${SENTRY_DSN}" -H "Content-Type: application/json" -d '{}'
+   ```
+
+2. **Enable debug mode**:
+   <File title="atmos.yaml">
+   ```yaml
+   errors:
+     sentry:
+       debug: true
+   ```
+   </File>
+
+3. **Verify Sentry is enabled**:
+   ```bash
+   # Check if SENTRY_ENABLED is set
+   echo $SENTRY_ENABLED
+
+   # Trigger a test error
+   atmos terraform plan nonexistent -s invalid
+   ```
+
+4. **Check sample rate**: If `sample_rate < 1.0`, some errors may be dropped
+
+### Too Many Errors in Sentry
+
+1. **Adjust sample rate** for noisy environments:
+   ```yaml
+   errors:
+     sentry:
+       sample_rate: 0.1  # Only 10% of errors
+   ```
+
+2. **Filter by environment**: Use `environment` tags to separate CI from production
+
+3. **Use Sentry's ignore rules**: Configure in Sentry UI to filter out known issues
+
+## Related Documentation
+
+- [Terminal Configuration](/cli/configuration/terminal) - Control color output and terminal behavior
+- [Common Errors](/troubleshoot/errors) - Solutions to common Atmos errors
+- [CLI Configuration](/cli/configuration) - Complete `atmos.yaml` reference
+
+## See Also
+
+- [Sentry Documentation](https://docs.sentry.io/) - Official Sentry docs
+- [Error Handling Best Practices](/core-concepts/stacks/validation) - Stack validation to catch errors early
