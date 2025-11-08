@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, MotionConfig } from 'framer-motion';
 import Layout from '@theme/Layout';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Link from '@docusaurus/Link';
@@ -15,12 +15,19 @@ function Home() {
   const {siteConfig = {}} = context;
 
   return (
-    <div className="landing-page">
-      <Layout title={`Hello from ${siteConfig.title}`} description="Atmos: Sanity for the Modern Platform Engineer - An IaC Framework that unifies your toolchain">
-        <header className="hero hero--full-height">
-          <div className="intro">
-            <p className="hero__eyebrow">Infrastructure as Code Framework</p>
-            <h1>One Tool to Orchestrate <span className="typing-container"><TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'and more...']} /></span></h1>
+    <MotionConfig reducedMotion="user">
+      <div className="landing-page">
+        <Layout title={`Hello from ${siteConfig.title}`} description="Atmos: Sanity for the Modern Platform Engineer - An IaC Framework that unifies your toolchain">
+          <header className="hero hero--full-height">
+            <div className="intro">
+              <p className="hero__eyebrow">Infrastructure as Code Framework</p>
+              <h1>
+                One Tool to Orchestrate{' '}
+                <span className="typing-container" aria-hidden="true">
+                  <TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'and more...']} />
+                </span>
+                <span className="visually-hidden">Terraform, OpenTofu, Packer, Helmfile, and more</span>
+              </h1>
             <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>
             <div className="hero__cta">
               <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
@@ -138,6 +145,7 @@ function Home() {
         </footer>
       </Layout>
     </div>
+    </MotionConfig>
   );
 }
 

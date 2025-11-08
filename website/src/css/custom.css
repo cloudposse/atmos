@@ -6,6 +6,19 @@
 
 /* No custom width constraints - let Docusaurus handle responsive layout */
 
+/* Accessibility: Visually hidden but available to screen readers */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 .navbar__title {
     font-size: 2em;
     backdrop-filter: blur(6px) saturate(180%);
@@ -95,11 +108,6 @@ div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
 ::selection {
     background-color: yellow;
     color: black;
-}
-
-html[data-theme='dark'] ::selection {
-    color: #67ffded2;
-    background-color: #00fff61d;
 }
 
 html[data-theme='dark'] body {
@@ -630,8 +638,7 @@ article header {
 /* Hide "Tags:" text label completely - multiple approaches */
 .blog-list-page .tags_src-theme-BlogTagsListPage-styles-module::before,
 .blog-post-page .blog-tags-post-page::before,
-.theme-blog-post-item footer > span:first-child,
-.theme-blog-post-item footer span:contains("Tags:") {
+.theme-blog-post-item footer > span:first-child {
     display: none !important;
     visibility: hidden !important;
     font-size: 0 !important;

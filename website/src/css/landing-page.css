@@ -226,10 +226,6 @@ html[data-theme="light"] .hero--full-height::before {
   opacity: 1;
 }
 
-.hero-demo-intro.visible {
-  opacity: 1;
-}
-
 .hero-demo-intro h2 {
   font-size: 2.5em;
   margin-bottom: 0.75rem;

@@ -5,23 +5,24 @@ export default function ScrollFadeIn({ children, className = '' }) {
   const elementRef = useRef(null);
 
   useEffect(() => {
-    const handleScroll = () => {
-      // Fade in when user scrolls more than 50px
-      if (window.scrollY > 50) {
-        setIsVisible(true);
-      } else {
-        setIsVisible(false);
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsVisible(entry.isIntersecting);
+      },
+      {
+        threshold: 0.1,
+        rootMargin: '0px',
       }
-    };
+    );
 
-    // Check on mount
-    handleScroll();
-
-    // Listen for scroll events
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    if (elementRef.current) {
+      observer.observe(elementRef.current);
+    }
 
     return () => {
-      window.removeEventListener('scroll', handleScroll);
+      if (observer) {
+        observer.disconnect();
+      }
     };
   }, []);
 
