@@ -49,9 +49,9 @@ tests:
       exit_code: 0
 
   - name: atmos version --check
-    enabled: true
+    enabled: false
     snapshot: false
-    description: "Verify atmos version --check command functions correctly."
+    description: "Verify atmos version --check command functions correctly (disabled - requires network, fails with GitHub API rate limits)"
     workdir: "../examples/demo-stacks"
     env:
       ATMOS_LOGS_LEVEL: "Warning"

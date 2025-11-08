@@ -70,13 +70,14 @@ func TestYamlFuncTerraformState(t *testing.T) {
 	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 nonprod baz", "", nil)
 	assert.Equal(t, "component-1-c", d)
 
-	res, err := ExecuteDescribeComponent(
-		"component-2",
-		stack,
-		true,
-		true,
-		nil,
-	)
+	res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            "component-2",
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	assert.NoError(t, err)
 
 	y, err := u.ConvertToYAML(res)
@@ -110,13 +111,14 @@ func TestYamlFuncTerraformState(t *testing.T) {
 	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod baz", "", nil)
 	assert.Equal(t, "component-1-c", d)
 
-	res, err = ExecuteDescribeComponent(
-		"component-3",
-		stack,
-		true,
-		true,
-		nil,
-	)
+	res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            "component-3",
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	assert.NoError(t, err)
 
 	y, err = u.ConvertToYAML(res)

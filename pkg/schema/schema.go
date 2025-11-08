@@ -236,6 +236,17 @@ type Terminal struct {
 	Color              bool               `yaml:"color" json:"color" mapstructure:"color"`
 	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"` // Deprecated in config, use Color instead
 	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
+	Title              bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
+	Alerts             bool               `yaml:"alerts,omitempty" json:"alerts,omitempty" mapstructure:"alerts"`
+	Mask               MaskSettings       `yaml:"mask,omitempty" json:"mask,omitempty" mapstructure:"mask"`
+}
+
+// MaskSettings contains configuration for sensitive data masking.
+type MaskSettings struct {
+	Enabled     bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Replacement string   `yaml:"replacement,omitempty" json:"replacement,omitempty" mapstructure:"replacement"` // Custom replacement string (default: ***MASKED***)
+	Patterns    []string `yaml:"patterns,omitempty" json:"patterns,omitempty" mapstructure:"patterns"`          // Custom regex patterns to mask
+	Literals    []string `yaml:"literals,omitempty" json:"literals,omitempty" mapstructure:"literals"`          // Custom literal values to mask
 }
 
 // IsPagerEnabled reports whether a pager should be used based on Terminal.Pager.
@@ -253,13 +264,18 @@ func (t *Terminal) IsPagerEnabled() bool {
 }
 
 // IsColorEnabled determines if color output should be enabled.
-func (t *Terminal) IsColorEnabled() bool {
-	// Check deprecated NoColor field for backward compatibility
+// The isTTY parameter provides the default when Color is not explicitly set.
+func (t *Terminal) IsColorEnabled(isTTY bool) bool {
+	// NoColor takes precedence - force disable.
 	if t.NoColor {
 		return false
 	}
-	// Use Color setting (defaults to true if not explicitly set)
-	return t.Color
+	// If Color is explicitly set to true, force enable.
+	if t.Color {
+		return true
+	}
+	// Otherwise, fall back to TTY detection.
+	return isTTY
 }
 
 type SyntaxHighlighting struct {
@@ -280,6 +296,7 @@ type AtmosSettings struct {
 	InjectGithubToken    bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
 	GithubToken          string           `yaml:"github_token,omitempty" mapstructure:"github_token"`
 	AtmosGithubToken     string           `yaml:"atmos_github_token,omitempty" mapstructure:"atmos_github_token"`
+	GithubUsername       string           `yaml:"github_username,omitempty" mapstructure:"github_username"`
 	InjectBitbucketToken bool             `yaml:"inject_bitbucket_token,omitempty" mapstructure:"inject_bitbucket_token"`
 	BitbucketToken       string           `yaml:"bitbucket_token,omitempty" mapstructure:"bitbucket_token"`
 	AtmosBitbucketToken  string           `yaml:"atmos_bitbucket_token,omitempty" mapstructure:"atmos_bitbucket_token"`

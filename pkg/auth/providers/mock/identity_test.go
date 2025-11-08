@@ -178,13 +178,14 @@ func TestIdentity_Environment(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, env)
 
-		// Verify mock identity environment variable.
+		// Verify generic mock identity environment variables.
 		assert.Equal(t, "test-identity", env["MOCK_IDENTITY"])
+		assert.Equal(t, "test-identity", env["ATMOS_IDENTITY"])
 
-		// Verify AWS-like environment variables for testing.
-		assert.Equal(t, "/tmp/mock-credentials", env["AWS_SHARED_CREDENTIALS_FILE"])
-		assert.Equal(t, "/tmp/mock-config", env["AWS_CONFIG_FILE"])
-		assert.Equal(t, "test-identity", env["AWS_PROFILE"])
+		// Verify no AWS-specific environment variables in generic mock.
+		assert.NotContains(t, env, "AWS_SHARED_CREDENTIALS_FILE")
+		assert.NotContains(t, env, "AWS_CONFIG_FILE")
+		assert.NotContains(t, env, "AWS_PROFILE")
 	})
 }
 

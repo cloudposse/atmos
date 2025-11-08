@@ -142,14 +142,21 @@ func ExecuteWorkflow(
 	// Create auth manager if any step has an identity or if command-line identity is specified.
 	// We check once upfront to avoid repeated initialization.
 	var authManager auth.AuthManager
+	var authStackInfo *schema.ConfigAndStacksInfo
 	needsAuth := commandLineIdentity != "" || lo.SomeBy(steps, func(step schema.WorkflowStep) bool {
 		return strings.TrimSpace(step.Identity) != ""
 	})
 	if needsAuth {
+		// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
+		// This enables YAML template functions to access authenticated credentials.
+		authStackInfo = &schema.ConfigAndStacksInfo{
+			AuthContext: &schema.AuthContext{},
+		}
+
 		credStore := credentials.NewCredentialStore()
 		validator := validation.NewValidator()
 		var err error
-		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, nil)
+		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
 		if err != nil {
 			return fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
 		}

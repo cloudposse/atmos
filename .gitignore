@@ -68,6 +68,10 @@ coverage/
 .gocoverdir/
 tests.test
 
+# Test binaries
+*.test
+**/*.test
+
 **/llms.txt
 **/llms-full.txt
 
@@ -96,6 +100,12 @@ node_modules
 toolchain/.tools/
 toolchain/.tool-versions
 
-# Merge conflict artifacts
+# Merge conflict artifacts and backup files
 *.orig
 *.rej
+*.bak
+*.go.bak
+**/*.go.bak
+
+# Scratch/temporary analysis files
+.scratch/

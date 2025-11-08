@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -330,7 +331,16 @@ func executeCustomCommand(
 	commandConfig *schema.Command,
 ) {
 	var err error
-	args, trailingArgs := extractTrailingArgs(args, os.Args)
+
+	// Extract arguments after "--" separator using safe shell quoting.
+	separated := ExtractSeparatedArgs(cmd, args, os.Args)
+	args = separated.BeforeSeparator
+	trailingArgs, err := separated.GetAfterSeparatorAsQuotedString()
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: failed to quote trailing arguments: %w",
+			errUtils.ErrFailedToProcessArgs, err), "", "")
+	}
+
 	if commandConfig.Verbose {
 		atmosConfig.Logs.Level = u.LogLevelTrace
 	}
@@ -365,6 +375,7 @@ func executeCustomCommand(
 	// Create auth manager if identity is specified for this custom command.
 	// Check for --identity flag first (it overrides the config).
 	var authManager auth.AuthManager
+	var authStackInfo *schema.ConfigAndStacksInfo
 	identityFlag, _ := cmd.Flags().GetString("identity")
 	commandIdentity := strings.TrimSpace(identityFlag)
 	if commandIdentity == "" {
@@ -373,9 +384,15 @@ func executeCustomCommand(
 	}
 
 	if commandIdentity != "" {
+		// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
+		// This enables YAML template functions to access authenticated credentials.
+		authStackInfo = &schema.ConfigAndStacksInfo{
+			AuthContext: &schema.AuthContext{},
+		}
+
 		credStore := credentials.NewCredentialStore()
 		validator := validation.NewValidator()
-		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, nil)
+		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
 		}
@@ -452,7 +469,14 @@ func executeCustomCommand(
 			}
 
 			// Get the config for the component in the stack
-			componentConfig, err := e.ExecuteDescribeComponent(component, stack, true, true, nil)
+			componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+				Component:            component,
+				Stack:                stack,
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+				Skip:                 nil,
+				AuthManager:          authManager,
+			})
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			data["ComponentConfig"] = componentConfig
 		}
@@ -520,35 +544,6 @@ func executeCustomCommand(
 		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, env, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
-}
-
-// Extracts native arguments (everything after "--") signifying the end of Atmos-specific arguments.
-// Because of the flag hint for double dash, args is already consumed by Cobra.
-// So we need to perform manual parsing of os.Args to extract the "trailing args" after the "--" end of args marker.
-func extractTrailingArgs(args []string, osArgs []string) ([]string, string) {
-	doubleDashIndex := lo.IndexOf(osArgs, "--")
-	mainArgs := args
-	trailingArgs := ""
-	if doubleDashIndex > 0 {
-		mainArgs = lo.Slice(osArgs, 0, doubleDashIndex)
-		trailingArgs = strings.Join(lo.Slice(osArgs, doubleDashIndex+1, len(osArgs)), " ")
-		result := []string{}
-		lookup := make(map[string]bool)
-
-		// Populate a lookup map for quick existence check
-		for _, val := range mainArgs {
-			lookup[val] = true
-		}
-
-		// Iterate over leftArr and collect matching elements in order
-		for _, val := range args {
-			if lookup[val] {
-				result = append(result, val)
-			}
-		}
-		mainArgs = result
-	}
-	return mainArgs, trailingArgs
 }
 
 // cloneCommand clones a custom command config into a new struct.
@@ -803,11 +798,41 @@ func showUsageExample(cmd *cobra.Command, details string) {
 }
 
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// If a component was provided as the first argument, filter stacks by that component.
+	if len(args) > 0 && args[0] != "" {
+		output, err := listStacksForComponent(args[0])
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return output, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Otherwise, list all stacks.
 	output, err := listStacks(cmd)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return output, cobra.ShellCompDirectiveNoFileComp
+}
+
+// listStacksForComponent returns stacks that contain the specified component.
+// It initializes the CLI configuration, describes all stacks, and filters them
+// to include only those defining the given component.
+func listStacksForComponent(component string) ([]string, error) {
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
+
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
+
+	output, err := l.FilterAndListStacks(stacksMap, component)
+	return output, err
 }
 
 func AddStackCompletion(cmd *cobra.Command) {

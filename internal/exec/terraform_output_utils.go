@@ -12,11 +12,14 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
+	"github.com/cloudposse/atmos/pkg/auth"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
+	auth_types "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -28,6 +31,7 @@ const (
 	inputEnvVar              = "TF_INPUT"
 	automationEnvVar         = "TF_IN_AUTOMATION"
 	logEnvVar                = "TF_LOG"
+	spinnerOverwriteFormat   = "\r%s %s\n"
 	logCoreEnvVar            = "TF_LOG_CORE"
 	logPathEnvVar            = "TF_LOG_PATH"
 	logProviderEnvVar        = "TF_LOG_PROVIDER"
@@ -59,6 +63,140 @@ var prohibitedEnvVars = []string{
 var prohibitedEnvVarPrefixes = []string{
 	varEnvVarPrefix,
 	cliArgEnvVarPrefix,
+}
+
+// authContextWrapper is a minimal AuthManager implementation that only provides
+// GetStackInfo() for passing AuthContext to ExecuteDescribeComponent.
+// Other methods panic if called since this wrapper is only for propagating existing auth context.
+type authContextWrapper struct {
+	stackInfo *schema.ConfigAndStacksInfo
+}
+
+func (a *authContextWrapper) GetStackInfo() *schema.ConfigAndStacksInfo {
+	defer perf.Track(nil, "exec.authContextWrapper.GetStackInfo")()
+
+	return a.stackInfo
+}
+
+// Stub methods to satisfy AuthManager interface (not used by ExecuteDescribeComponent).
+func (a *authContextWrapper) GetCachedCredentials(ctx context.Context, identityName string) (*auth_types.WhoamiInfo, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.GetCachedCredentials")()
+
+	panic("authContextWrapper.GetCachedCredentials should not be called")
+}
+
+func (a *authContextWrapper) Authenticate(ctx context.Context, identityName string) (*auth_types.WhoamiInfo, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.Authenticate")()
+
+	panic("authContextWrapper.Authenticate should not be called")
+}
+
+func (a *authContextWrapper) Whoami(ctx context.Context, identityName string) (*auth_types.WhoamiInfo, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.Whoami")()
+
+	panic("authContextWrapper.Whoami should not be called")
+}
+
+func (a *authContextWrapper) Validate() error {
+	defer perf.Track(nil, "exec.authContextWrapper.Validate")()
+
+	panic("authContextWrapper.Validate should not be called")
+}
+
+func (a *authContextWrapper) GetDefaultIdentity(forceSelect bool) (string, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.GetDefaultIdentity")()
+
+	panic("authContextWrapper.GetDefaultIdentity should not be called")
+}
+
+func (a *authContextWrapper) ListProviders() []string {
+	defer perf.Track(nil, "exec.authContextWrapper.ListProviders")()
+
+	panic("authContextWrapper.ListProviders should not be called")
+}
+
+func (a *authContextWrapper) Logout(ctx context.Context, identityName string) error {
+	defer perf.Track(nil, "exec.authContextWrapper.Logout")()
+
+	panic("authContextWrapper.Logout should not be called")
+}
+
+func (a *authContextWrapper) GetChain() []string {
+	defer perf.Track(nil, "exec.authContextWrapper.GetChain")()
+
+	panic("authContextWrapper.GetChain should not be called")
+}
+
+func (a *authContextWrapper) ListIdentities() []string {
+	defer perf.Track(nil, "exec.authContextWrapper.ListIdentities")()
+
+	panic("authContextWrapper.ListIdentities should not be called")
+}
+
+func (a *authContextWrapper) GetProviderForIdentity(identityName string) string {
+	defer perf.Track(nil, "exec.authContextWrapper.GetProviderForIdentity")()
+
+	panic("authContextWrapper.GetProviderForIdentity should not be called")
+}
+
+func (a *authContextWrapper) GetFilesDisplayPath(providerName string) string {
+	defer perf.Track(nil, "exec.authContextWrapper.GetFilesDisplayPath")()
+
+	panic("authContextWrapper.GetFilesDisplayPath should not be called")
+}
+
+func (a *authContextWrapper) GetProviderKindForIdentity(identityName string) (string, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.GetProviderKindForIdentity")()
+
+	panic("authContextWrapper.GetProviderKindForIdentity should not be called")
+}
+
+func (a *authContextWrapper) GetIdentities() map[string]schema.Identity {
+	defer perf.Track(nil, "exec.authContextWrapper.GetIdentities")()
+
+	panic("authContextWrapper.GetIdentities should not be called")
+}
+
+func (a *authContextWrapper) GetProviders() map[string]schema.Provider {
+	defer perf.Track(nil, "exec.authContextWrapper.GetProviders")()
+
+	panic("authContextWrapper.GetProviders should not be called")
+}
+
+func (a *authContextWrapper) LogoutProvider(ctx context.Context, providerName string) error {
+	defer perf.Track(nil, "exec.authContextWrapper.LogoutProvider")()
+
+	panic("authContextWrapper.LogoutProvider should not be called")
+}
+
+func (a *authContextWrapper) LogoutAll(ctx context.Context) error {
+	defer perf.Track(nil, "exec.authContextWrapper.LogoutAll")()
+
+	panic("authContextWrapper.LogoutAll should not be called")
+}
+
+func (a *authContextWrapper) GetEnvironmentVariables(identityName string) (map[string]string, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.GetEnvironmentVariables")()
+
+	panic("authContextWrapper.GetEnvironmentVariables should not be called")
+}
+
+func (a *authContextWrapper) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.PrepareShellEnvironment")()
+
+	panic("authContextWrapper.PrepareShellEnvironment should not be called")
+}
+
+// newAuthContextWrapper creates an AuthManager wrapper that returns the given AuthContext.
+func newAuthContextWrapper(authContext *schema.AuthContext) *authContextWrapper {
+	if authContext == nil {
+		return nil
+	}
+	return &authContextWrapper{
+		stackInfo: &schema.ConfigAndStacksInfo{
+			AuthContext: authContext,
+		},
+	}
 }
 
 func execTerraformOutput(
@@ -411,9 +549,23 @@ func GetTerraformOutput(
 		defer StopSpinner(p, spinnerDone)
 	}
 
-	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
+	// Create an AuthManager wrapper from authContext to pass credentials to ExecuteDescribeComponent.
+	// This enables YAML functions within the component config to access remote resources.
+	var authMgr auth.AuthManager
+	if authContext != nil {
+		authMgr = newAuthContextWrapper(authContext)
+	}
+
+	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          authMgr,
+	})
 	if err != nil {
-		u.PrintfMessageToTUI("\r✗ %s\n", message)
+		u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.XMark, message)
 		return nil, false, fmt.Errorf("failed to describe the component %s in the stack %s: %w", component, stack, err)
 	}
 
@@ -433,7 +585,7 @@ func GetTerraformOutput(
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections, authContext)
 		if err != nil {
-			u.PrintfMessageToTUI("\r✗ %s\n", message)
+			u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.XMark, message)
 			return nil, false, fmt.Errorf("failed to execute terraform output for the component %s in the stack %s: %w", component, stack, err)
 		}
 
@@ -443,11 +595,11 @@ func GetTerraformOutput(
 	}
 
 	if resultErr != nil {
-		u.PrintfMessageToTUI("\r✗ %s\n", message)
+		u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.XMark, message)
 		return nil, false, resultErr
 	}
 
-	u.PrintfMessageToTUI("\r✓ %s\n", message)
+	u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.Checkmark, message)
 	return value, exists, nil
 }
 

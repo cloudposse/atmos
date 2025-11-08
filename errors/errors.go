@@ -28,6 +28,8 @@ var (
 	ErrValidPackage                          = errors.New("no valid installer package provided for")
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
 	ErrTUIRun                                = errors.New("failed to run TUI")
+	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
+	ErrIOContextNotInitialized               = errors.New("global I/O context is nil after initialization")
 	ErrNoFilesFound                          = errors.New("no files found in directory")
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
 	ErrSourceDirNotExist                     = errors.New("source directory does not exist")
@@ -102,7 +104,13 @@ var (
 	ErrFailedToGetLocalRepo = errors.New("failed to get local repository")
 	ErrFailedToGetRepoInfo  = errors.New("failed to get repository info")
 	ErrLocalRepoFetch       = errors.New("local repo unavailable")
-	ErrHeadLookup           = errors.New("HEAD not found")
+
+	// I/O and output errors.
+	ErrBuildIOConfig  = errors.New("failed to build I/O config")
+	ErrUnknownStream  = errors.New("unknown I/O stream")
+	ErrWriteToStream  = errors.New("failed to write to stream")
+	ErrMaskingContent = errors.New("failed to mask content")
+	ErrHeadLookup     = errors.New("HEAD not found")
 
 	// Slice utility errors.
 	ErrNilInput         = errors.New("input must not be nil")
@@ -376,6 +384,7 @@ var (
 	ErrProfilerCreateFile      = errors.New("profiler: failed to create profile file")
 
 	// Auth package errors.
+	ErrAuthNotConfigured            = errors.New("authentication not configured in atmos.yaml")
 	ErrInvalidAuthConfig            = errors.New("invalid auth config")
 	ErrInvalidIdentityKind          = errors.New("invalid identity kind")
 	ErrInvalidIdentityConfig        = errors.New("invalid identity config")
@@ -407,6 +416,8 @@ var (
 	ErrNoDefaultIdentity             = errors.New("no default identity configured for authentication")
 	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
 	ErrNoIdentitiesAvailable         = errors.New("no identities available")
+	ErrIdentitySelectionRequiresTTY  = errors.New("interactive identity selection requires a TTY")
+	ErrAuthenticationChainNotBuilt   = errors.New("authentication chain not built")
 	ErrInvalidStackConfig            = errors.New("invalid stack config")
 	ErrNoCommandSpecified            = errors.New("no command specified")
 	ErrCommandNotFound               = errors.New("command not found")

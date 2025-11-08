@@ -22,6 +22,11 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	// TerraformConfigKey is the key used in componentInfo maps to store terraform configuration.
+	terraformConfigKey = "terraform_config"
+)
+
 // ProcessComponentConfig processes component config sections.
 func ProcessComponentConfig(
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
@@ -630,26 +635,47 @@ func ProcessStacks(
 		componentInfo[cfg.ComponentPathSectionName] = componentPath
 		terraformConfiguration, diags := tfconfig.LoadModule(componentPath)
 		if !diags.HasErrors() {
-			componentInfo["terraform_config"] = terraformConfiguration
+			componentInfo[terraformConfigKey] = terraformConfiguration
 		} else {
 			diagErr := diags.Err()
 
-			// Try structured error detection first (most robust).
-			isNotExist := errors.Is(diagErr, os.ErrNotExist) || errors.Is(diagErr, fs.ErrNotExist)
+			// Handle edge case where Err() returns nil despite HasErrors() being true.
+			if diagErr == nil {
+				componentInfo[terraformConfigKey] = nil
+			} else {
+				// Try structured error detection first (most robust).
+				isNotExist := errors.Is(diagErr, os.ErrNotExist) || errors.Is(diagErr, fs.ErrNotExist)
 
-			// Fallback to error message inspection for cases where tfconfig doesn't wrap errors properly.
-			// This handles missing subdirectory modules (e.g., ./modules/security-group referenced in main.tf
-			// but the directory doesn't exist). Such missing paths are valid in stack processing—components
-			// or their modules may be deleted or not yet created when tracking changes over time.
-			errMsg := diagErr.Error()
-			isNotExistString := strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "Failed to read directory")
+				// Fallback to error message inspection for cases where tfconfig doesn't wrap errors properly.
+				// This handles missing subdirectory modules (e.g., ./modules/security-group referenced in main.tf
+				// but the directory doesn't exist). Such missing paths are valid in stack processing—components
+				// or their modules may be deleted or not yet created when tracking changes over time.
+				errMsg := diagErr.Error()
+				isNotExistString := strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "Failed to read directory")
 
-			if !isNotExist && !isNotExistString {
-				// For other errors (syntax errors, permission issues, etc.), return error.
-				return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+				if !isNotExist && !isNotExistString {
+					// Check if this is an OpenTofu-specific feature that terraform-config-inspect doesn't support.
+					// Respect component-level command overrides for OpenTofu detection.
+					// Clone the config and apply the component override if present.
+					effectiveConfig := *atmosConfig
+					if configAndStacksInfo.Command != "" {
+						effectiveConfig.Components.Terraform.Command = configAndStacksInfo.Command
+					}
+
+					// For known OpenTofu features, skip validation. Otherwise, return the error.
+					if !IsOpenTofu(&effectiveConfig) || !isKnownOpenTofuFeature(diagErr) {
+						// For other errors (syntax errors, permission issues, etc.), return error.
+						return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+					}
+
+					// Skip validation for known OpenTofu-specific features.
+					log.Debug("Skipping terraform-config-inspect validation for OpenTofu-specific feature: " + errMsg)
+					componentInfo[terraformConfigKey] = nil
+					componentInfo["validation_skipped_opentofu"] = true
+				} else {
+					componentInfo[terraformConfigKey] = nil
+				}
 			}
-
-			componentInfo["terraform_config"] = nil
 		}
 	case cfg.HelmfileComponentType:
 		componentInfo[cfg.ComponentPathSectionName] = constructHelmfileComponentWorkingDir(atmosConfig, &configAndStacksInfo)

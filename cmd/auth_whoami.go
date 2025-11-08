@@ -134,15 +134,8 @@ func loadAuthManager() (authTypes.AuthManager, error) {
 
 func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthManager) (string, error) {
 	// Get identity from flag or use default.
-	// Check if flag was explicitly set by user to ensure command-line precedence.
-	var identityName string
-	if cmd.Flags().Changed(IdentityFlagName) {
-		// Flag was explicitly provided on command line (either with or without value).
-		identityName, _ = cmd.Flags().GetString(IdentityFlagName)
-	} else {
-		// Flag not provided on command line - fall back to viper (config/env).
-		identityName = viper.GetString(IdentityFlagName)
-	}
+	// Use GetIdentityFromFlags which handles Cobra's NoOptDefVal quirk correctly.
+	identityName := GetIdentityFromFlags(cmd, os.Args)
 
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue

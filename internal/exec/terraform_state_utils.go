@@ -60,7 +60,14 @@ func GetTerraformState(
 		}
 	}
 
-	componentSections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
+	componentSections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	if err != nil {
 		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		return nil, er
