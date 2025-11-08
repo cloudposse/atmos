@@ -668,7 +668,12 @@ func (ui *InitUI) renderMarkdown(markdownContent string) error {
 	}
 
 	// Display the rendered markdown
-	fmt.Println("\n" + rendered)
+	if err := atmosui.Writeln(""); err != nil {
+		return err
+	}
+	if err := atmosui.Writeln(rendered); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -967,13 +972,19 @@ func (ui *InitUI) PromptForTemplate(templateType string, templates interface{}) 
 	}
 
 	// Display selected template details
-	fmt.Println()
+	if err := atmosui.Writeln(""); err != nil {
+		log.Trace("Failed to write blank line", "error", err)
+	}
 	descStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240")).
 		Padding(0, 1)
 
-	fmt.Println(descStyle.Render(fmt.Sprintf("Selected template: %s", selectedTemplate)))
-	fmt.Println()
+	if err := atmosui.Writeln(descStyle.Render(fmt.Sprintf("Selected template: %s", selectedTemplate))); err != nil {
+		log.Trace("Failed to write template selection", "error", err)
+	}
+	if err := atmosui.Writeln(""); err != nil {
+		log.Trace("Failed to write blank line", "error", err)
+	}
 
 	return selectedTemplate, nil
 }
