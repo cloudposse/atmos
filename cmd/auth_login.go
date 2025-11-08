@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -21,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // authLoginCmd logs in using a configured identity.
@@ -51,18 +51,8 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get identity from flag or use default.
-	// IMPORTANT: When BindPFlag is used, Viper can override flag values. To ensure
-	// command-line flags take precedence, we check if the flag was explicitly set.
-	// If Changed() returns true, the user provided the flag on the command line.
-	var identityName string
-	if cmd.Flags().Changed(IdentityFlagName) {
-		// Flag was explicitly provided on command line (either with or without value).
-		// GetString() will return the command-line value or NoOptDefVal (__SELECT__).
-		identityName, _ = cmd.Flags().GetString(IdentityFlagName)
-	} else {
-		// Flag not provided on command line - fall back to viper (config/env/defaults).
-		identityName = viper.GetString(IdentityFlagName)
-	}
+	// Use centralized function that handles Cobra's NoOptDefVal quirk correctly.
+	identityName := GetIdentityFromFlags(cmd, os.Args)
 
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue
@@ -124,8 +114,7 @@ func formatDuration(d time.Duration) string {
 // displayAuthSuccess displays a styled success message with authentication details.
 func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 	// Display checkmark with success message.
-	checkMark := theme.Styles.Checkmark
-	fmt.Fprintf(os.Stderr, "\n%s Authentication successful!\n\n", checkMark)
+	u.PrintfMessageToTUI("\n%s Authentication successful!\n\n", theme.Styles.Checkmark)
 
 	// Build table rows.
 	var rows [][]string

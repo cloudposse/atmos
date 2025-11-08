@@ -5,7 +5,6 @@ atmos:
   url: https://github.com/cloudposse/atmos
   image_url: https://github.com/cloudposse/atmos/raw/main/docs/img/atmos-logo-128.svg
 
-# Add team members - replace with actual GitHub usernames
 osterman:
   name: Erik Osterman
   title: Founder @ Cloud Posse

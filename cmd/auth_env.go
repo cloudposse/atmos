@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -49,15 +50,8 @@ var authEnvCmd = &cobra.Command{
 		}
 
 		// Get identity from flag or use default.
-		// Check if flag was explicitly set by user to ensure command-line precedence.
-		var identityName string
-		if cmd.Flags().Changed(IdentityFlagName) {
-			// Flag was explicitly provided on command line (either with or without value).
-			identityName, _ = cmd.Flags().GetString(IdentityFlagName)
-		} else {
-			// Flag not provided on command line - fall back to viper (config/env).
-			identityName = viper.GetString(IdentityFlagName)
-		}
+		// Use GetIdentityFromFlags which handles Cobra's NoOptDefVal quirk correctly.
+		identityName := GetIdentityFromFlags(cmd, os.Args)
 
 		// Check if user wants to interactively select identity.
 		forceSelect := identityName == IdentityFlagSelectValue
@@ -76,11 +70,11 @@ var authEnvCmd = &cobra.Command{
 			// Try to use cached credentials first (passive check, no prompts).
 			// Only authenticate if cached credentials are not available or expired.
 			ctx := cmd.Context()
-			whoami, err := authManager.GetCachedCredentials(ctx, identityName)
+			_, err := authManager.GetCachedCredentials(ctx, identityName)
 			if err != nil {
 				log.Debug("No valid cached credentials found, authenticating", "identity", identityName, "error", err)
 				// No valid cached credentials - perform full authentication.
-				whoami, err = authManager.Authenticate(ctx, identityName)
+				_, err = authManager.Authenticate(ctx, identityName)
 				if err != nil {
 					// Check for user cancellation - return clean error without wrapping.
 					if errors.Is(err, errUtils.ErrUserAborted) {
@@ -90,9 +84,12 @@ var authEnvCmd = &cobra.Command{
 					return fmt.Errorf("%w: %w", errUtils.ErrAuthenticationFailed, err)
 				}
 			}
-			envVars = whoami.Environment
-			if envVars == nil {
-				envVars = make(map[string]string)
+
+			// Get environment variables using file-based credentials.
+			// This ensures we use valid credential files rather than potentially expired keyring credentials.
+			envVars, err = authManager.GetEnvironmentVariables(identityName)
+			if err != nil {
+				return fmt.Errorf("failed to get environment variables: %w", err)
 			}
 		} else {
 			// Get environment variables WITHOUT authentication/validation.

@@ -25,7 +25,7 @@ func TestListComponents(t *testing.T) {
 	require.NoError(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil,
-		nil, false, true, true, false, nil)
+		nil, false, true, true, false, nil, nil)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListComponents("", stacksMap)
@@ -54,7 +54,7 @@ func TestListComponentsWithStack(t *testing.T) {
 	require.NoError(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, testStack, nil, nil,
-		nil, false, true, true, false, nil)
+		nil, false, true, true, false, nil, nil)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListComponents(testStack, stacksMap)
@@ -259,6 +259,23 @@ func TestFilterAndListComponents(t *testing.T) {
 		assert.ElementsMatch(t, []string{"vpc", "eks", "rds", "s3", "test", "elasticache"}, components)
 	})
 
+	// Test no components found
+	t.Run("no components", func(t *testing.T) {
+		emptyStacks := map[string]any{
+			"stack1": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{},
+					"helmfile":  map[string]any{},
+					"packer":    map[string]any{},
+				},
+			},
+		}
+
+		components, err := FilterAndListComponents("", emptyStacks)
+		require.NoError(t, err)
+		assert.Empty(t, components)
+	})
+
 	// Test error cases
 	t.Run("non-existent stack", func(t *testing.T) {
 		_, err := FilterAndListComponents("non-existent-stack", stacksMap)
@@ -291,7 +308,7 @@ func TestFilterAndListComponentsIntegration(t *testing.T) {
 	// Test with invalid stack name
 	t.Run("invalid stack name", func(t *testing.T) {
 		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil,
-			nil, false, false, false, false, nil)
+			nil, false, false, false, false, nil, nil)
 		require.NoError(t, err)
 
 		_, err = FilterAndListComponents("non-existent-stack", stacksMap)

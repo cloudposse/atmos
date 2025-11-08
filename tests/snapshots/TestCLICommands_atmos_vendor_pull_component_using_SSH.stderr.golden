@@ -4,14 +4,15 @@ DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixture
 
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/vendoring-dry-run
+DEBU ProcessCommandLineArgs input componentType=terraform args=[]
 DEBU Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/vendoring-dry-run
 DEBU Vendor config file not found file=vendor
 DEBU No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
 DEBU CustomGitDetector.Detect called
-DEBU Rewriting SCP-style SSH URL old_url="" new_url="ssh://xxx@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
-DEBU Reading config param InjectGithubToken=true
-DEBU Injected token env=ATMOS_GITHUB_TOKEN url="ssh://xxx:xxx@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
-DEBU Final transformation url="git::ssh://xxx:xxx@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?depth=1&ref=main"
+DEBU Rewriting SCP-style SSH URL old_url="" new_url="ssh://***@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
+DEBU Token injection enabled for host host=github.com
+DEBU Skipping token injection: URL already has user credentials url="ssh://***@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?ref=main"
+DEBU Final transformation url="git::ssh://***@github.com/cloudposse/atmos.git//examples/demo-library/ipinfo?depth=1&ref=main"
 INFO ✓ package=ipinfo version=(main)
 INFO Done! Dry run completed. No components vendored
 INFO Vendored components success=1

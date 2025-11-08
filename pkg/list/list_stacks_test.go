@@ -18,7 +18,7 @@ func TestListStacks(t *testing.T) {
 	assert.Nil(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil,
-		nil, false, true, true, false, nil)
+		nil, false, true, true, false, nil, nil)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListStacks(stacksMap, "")
@@ -34,7 +34,7 @@ func TestListStacksWithComponent(t *testing.T) {
 	assert.Nil(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil,
-		nil, false, true, true, false, nil)
+		nil, false, true, true, false, nil, nil)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListStacks(stacksMap, "eks-blue/cluster")
@@ -47,4 +47,20 @@ func TestListStacksWithComponent(t *testing.T) {
 	// Verify that only stacks with the specified component are included
 	assert.Contains(t, dependentsYaml, "tenant1-uw1-test-1")
 	assert.Contains(t, dependentsYaml, "tenant1-uw2-test-1")
+}
+
+func TestFilterAndListStacks_NoMatchingComponent(t *testing.T) {
+	stacksMap := map[string]any{
+		"stack1": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"existing": map[string]any{},
+				},
+			},
+		},
+	}
+
+	output, err := FilterAndListStacks(stacksMap, "missing")
+	assert.NoError(t, err)
+	assert.Nil(t, output)
 }
