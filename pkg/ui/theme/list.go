@@ -162,28 +162,37 @@ func formatThemeRow(t *Theme, activeTheme string, showStars bool) []string {
 }
 
 // buildFooterMessage creates the footer text for the theme list.
-func buildFooterMessage(themeCount int, showingRecommendedOnly bool, showStars bool, activeTheme string) string {
+func buildFooterMessage(themeCount int, showingRecommendedOnly bool, showStars bool, activeTheme string, styles *StyleSet) string {
 	defer perf.Track(nil, "theme.buildFooterMessage")()
 
-	footer := fmt.Sprintf("\n%d theme", themeCount)
+	var parts []string
+
+	// Theme count with info style
+	countMsg := fmt.Sprintf("%d theme", themeCount)
 	if themeCount != 1 {
-		footer += "s"
+		countMsg += "s"
 	}
 
 	if showingRecommendedOnly {
-		footer += " (recommended). Use without --recommended to see all themes."
+		countMsg += " (recommended). Use without --recommended to see all themes."
 	} else {
-		footer += " available."
+		countMsg += " available."
 		if showStars {
-			footer += " ★ indicates recommended themes."
+			countMsg += " ★ indicates recommended themes."
 		}
 	}
 
+	infoStyled := styles.Info.Render(countMsg)
+	parts = append(parts, infoStyled)
+
+	// Active theme with success style
 	if activeTheme != "" {
-		footer += fmt.Sprintf("\nActive theme: %s", activeTheme)
+		activeMsg := fmt.Sprintf("Active theme: %s", activeTheme)
+		successStyled := styles.Success.Render(activeMsg)
+		parts = append(parts, successStyled)
 	}
 
-	return footer
+	return "\n" + strings.Join(parts, "\n")
 }
 
 // formatThemeTable formats themes into a styled Charmbracelet table.
@@ -199,8 +208,8 @@ func formatThemeTable(themes []*Theme, activeTheme string, showingRecommendedOnl
 
 	// Footer message.
 	styles := GetCurrentStyles()
-	footer := buildFooterMessage(len(themes), showingRecommendedOnly, showStars, activeTheme)
-	output += styles.Footer.Render(footer) + "\n"
+	footer := buildFooterMessage(len(themes), showingRecommendedOnly, showStars, activeTheme, styles)
+	output += footer + "\n"
 
 	return output
 }
