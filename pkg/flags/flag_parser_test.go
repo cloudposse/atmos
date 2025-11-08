@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 // TestFlagParser_TerraformScenarios tests the unified parser with realistic Terraform command scenarios.
@@ -14,7 +16,7 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 	tests := []struct {
 		name                 string
 		args                 []string
-		compatibilityAliases map[string]CompatibilityFlag
+		compatibilityAliases map[string]compat.CompatibilityFlag
 		expectedFlags        map[string]interface{}
 		expectedPositional   []string
 		expectedPassThrough  []string
@@ -27,8 +29,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "atmos shorthand stack flag",
 			args: []string{"plan", "vpc", "-s", "dev"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-s": {Behavior: compat.MapToAtmosFlag, Target: "--stack"},
 			},
 			expectedFlags: map[string]interface{}{
 				"stack": "dev",
@@ -39,8 +41,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "atmos shorthand identity flag",
 			args: []string{"plan", "vpc", "-i", "prod"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-i": {Behavior: MapToAtmosFlag, Target: "--identity"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-i": {Behavior: compat.MapToAtmosFlag, Target: "--identity"},
 			},
 			expectedFlags: map[string]interface{}{
 				"identity": "prod",
@@ -55,8 +57,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "terraform var flag (atmos-managed)",
 			args: []string{"plan", "vpc", "-var", "region=us-east-1"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-var": {Behavior: MapToAtmosFlag, Target: "--var"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-var": {Behavior: compat.MapToAtmosFlag, Target: "--var"},
 			},
 			expectedFlags: map[string]interface{}{
 				"var": []string{"region=us-east-1"},
@@ -67,8 +69,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "multiple terraform var flags",
 			args: []string{"plan", "vpc", "-var", "region=us-east-1", "-var", "env=prod"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-var": {Behavior: MapToAtmosFlag, Target: "--var"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-var": {Behavior: compat.MapToAtmosFlag, Target: "--var"},
 			},
 			expectedFlags: map[string]interface{}{
 				"var": []string{"region=us-east-1", "env=prod"},
@@ -79,8 +81,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "terraform out flag (atmos-managed)",
 			args: []string{"plan", "vpc", "-out", "tfplan"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-out": {Behavior: MapToAtmosFlag, Target: "--out"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-out": {Behavior: compat.MapToAtmosFlag, Target: "--out"},
 			},
 			expectedFlags: map[string]interface{}{
 				"out": "tfplan",
@@ -91,8 +93,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "terraform auto-approve flag (atmos-managed)",
 			args: []string{"apply", "vpc", "-auto-approve"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-auto-approve": {Behavior: MapToAtmosFlag, Target: "--auto-approve"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-auto-approve": {Behavior: compat.MapToAtmosFlag, Target: "--auto-approve"},
 			},
 			expectedFlags: map[string]interface{}{
 				"auto-approve": true,
@@ -107,8 +109,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "terraform var-file flag (pass-through)",
 			args: []string{"plan", "vpc", "-var-file", "common.tfvars"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-var-file": {Behavior: AppendToSeparated, Target: ""},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-var-file": {Behavior: compat.AppendToSeparated, Target: ""},
 			},
 			expectedFlags:       map[string]interface{}{},
 			expectedPositional:  []string{"plan", "vpc"},
@@ -117,8 +119,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "terraform target flag (pass-through)",
 			args: []string{"plan", "vpc", "-target", "aws_instance.app"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-target": {Behavior: AppendToSeparated, Target: ""},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-target": {Behavior: compat.AppendToSeparated, Target: ""},
 			},
 			expectedFlags:       map[string]interface{}{},
 			expectedPositional:  []string{"plan", "vpc"},
@@ -127,8 +129,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "terraform replace flag (pass-through)",
 			args: []string{"apply", "vpc", "-replace", "aws_instance.app"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-replace": {Behavior: AppendToSeparated, Target: ""},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-replace": {Behavior: compat.AppendToSeparated, Target: ""},
 			},
 			expectedFlags:       map[string]interface{}{},
 			expectedPositional:  []string{"apply", "vpc"},
@@ -148,11 +150,11 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 				"-var-file", "common.tfvars",
 				"-target", "aws_instance.app",
 			},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-s":        {Behavior: MapToAtmosFlag, Target: "--stack"},
-				"-var":      {Behavior: MapToAtmosFlag, Target: "--var"},
-				"-var-file": {Behavior: AppendToSeparated, Target: ""},
-				"-target":   {Behavior: AppendToSeparated, Target: ""},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-s":        {Behavior: compat.MapToAtmosFlag, Target: "--stack"},
+				"-var":      {Behavior: compat.MapToAtmosFlag, Target: "--var"},
+				"-var-file": {Behavior: compat.AppendToSeparated, Target: ""},
+				"-target":   {Behavior: compat.AppendToSeparated, Target: ""},
 			},
 			expectedFlags: map[string]interface{}{
 				"stack": "dev",
@@ -171,12 +173,12 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 				"-target", "aws_instance.app",
 				"-replace", "aws_instance.db",
 			},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-s":            {Behavior: MapToAtmosFlag, Target: "--stack"},
-				"-auto-approve": {Behavior: MapToAtmosFlag, Target: "--auto-approve"},
-				"-var-file":     {Behavior: AppendToSeparated, Target: ""},
-				"-target":       {Behavior: AppendToSeparated, Target: ""},
-				"-replace":      {Behavior: AppendToSeparated, Target: ""},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-s":            {Behavior: compat.MapToAtmosFlag, Target: "--stack"},
+				"-auto-approve": {Behavior: compat.MapToAtmosFlag, Target: "--auto-approve"},
+				"-var-file":     {Behavior: compat.AppendToSeparated, Target: ""},
+				"-target":       {Behavior: compat.AppendToSeparated, Target: ""},
+				"-replace":      {Behavior: compat.AppendToSeparated, Target: ""},
 			},
 			expectedFlags: map[string]interface{}{
 				"stack":        "prod",
@@ -192,9 +194,9 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "modern double-dash syntax (no translation needed)",
 			args: []string{"plan", "vpc", "--stack", "dev", "--var", "region=us-east-1"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-s":   {Behavior: MapToAtmosFlag, Target: "--stack"},
-				"-var": {Behavior: MapToAtmosFlag, Target: "--var"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-s":   {Behavior: compat.MapToAtmosFlag, Target: "--stack"},
+				"-var": {Behavior: compat.MapToAtmosFlag, Target: "--var"},
 			},
 			expectedFlags: map[string]interface{}{
 				"stack": "dev",
@@ -211,9 +213,9 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 				"-var", "region=us-east-1",
 				"-var-file", "common.tfvars",
 			},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-var":      {Behavior: MapToAtmosFlag, Target: "--var"},
-				"-var-file": {Behavior: AppendToSeparated, Target: ""},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-var":      {Behavior: compat.MapToAtmosFlag, Target: "--var"},
+				"-var-file": {Behavior: compat.AppendToSeparated, Target: ""},
 			},
 			expectedFlags: map[string]interface{}{
 				"stack": "dev",
@@ -235,10 +237,10 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 				"-var-file", "common.tfvars",
 				"-target", "aws_instance.app",
 			},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-s":        {Behavior: MapToAtmosFlag, Target: "--stack"},
-				"-var-file": {Behavior: AppendToSeparated, Target: ""},
-				"-target":   {Behavior: AppendToSeparated, Target: ""},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-s":        {Behavior: compat.MapToAtmosFlag, Target: "--stack"},
+				"-var-file": {Behavior: compat.AppendToSeparated, Target: ""},
+				"-target":   {Behavior: compat.AppendToSeparated, Target: ""},
 			},
 			expectedFlags: map[string]interface{}{
 				"stack": "dev",
@@ -255,8 +257,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 				"--",
 				"-var-file", "common.tfvars",
 			},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-var-file": {Behavior: AppendToSeparated, Target: ""},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-var-file": {Behavior: compat.AppendToSeparated, Target: ""},
 			},
 			expectedFlags: map[string]interface{}{
 				"stack": "dev",
@@ -272,8 +274,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "unknown flag triggers cobra error",
 			args: []string{"plan", "vpc", "--unknown-flag", "value"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-s": {Behavior: compat.MapToAtmosFlag, Target: "--stack"},
 			},
 			expectError:   true,
 			errorContains: "unknown flag",
@@ -281,8 +283,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "unknown shorthand triggers cobra error",
 			args: []string{"plan", "vpc", "-z", "value"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-s": {Behavior: compat.MapToAtmosFlag, Target: "--stack"},
 			},
 			expectError:   true,
 			errorContains: "unknown shorthand flag",
@@ -290,8 +292,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "single-dash multi-character flag triggers cobra error",
 			args: []string{"plan", "vpc", "-foobar", "value"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-s": {Behavior: compat.MapToAtmosFlag, Target: "--stack"},
 			},
 			expectError:   true,
 			errorContains: "unknown shorthand flag",
@@ -299,8 +301,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "single-dash multi-character flag with equals triggers cobra error",
 			args: []string{"plan", "vpc", "-foobar=value"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-s": {Behavior: compat.MapToAtmosFlag, Target: "--stack"},
 			},
 			expectError:   true,
 			errorContains: "unknown shorthand flag",
@@ -312,8 +314,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "flag value with equals sign",
 			args: []string{"plan", "vpc", "-var", "key=value=with=equals"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-var": {Behavior: MapToAtmosFlag, Target: "--var"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-var": {Behavior: compat.MapToAtmosFlag, Target: "--var"},
 			},
 			expectedFlags: map[string]interface{}{
 				"var": []string{"key=value=with=equals"},
@@ -324,8 +326,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "flag value with special characters",
 			args: []string{"plan", "vpc", "-var", "key=value_with_underscores"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-var": {Behavior: MapToAtmosFlag, Target: "--var"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-var": {Behavior: compat.MapToAtmosFlag, Target: "--var"},
 			},
 			expectedFlags: map[string]interface{}{
 				"var": []string{"key=value_with_underscores"},
@@ -336,9 +338,9 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "equals form for compatibility flag",
 			args: []string{"plan", "vpc", "-s=dev", "-var=region=us-east-1"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-s":   {Behavior: MapToAtmosFlag, Target: "--stack"},
-				"-var": {Behavior: MapToAtmosFlag, Target: "--var"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-s":   {Behavior: compat.MapToAtmosFlag, Target: "--stack"},
+				"-var": {Behavior: compat.MapToAtmosFlag, Target: "--var"},
 			},
 			expectedFlags: map[string]interface{}{
 				"stack": "dev",
@@ -350,8 +352,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "pass-through flag with equals sign",
 			args: []string{"plan", "vpc", "-var-file=common.tfvars"},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-var-file": {Behavior: AppendToSeparated, Target: ""},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-var-file": {Behavior: compat.AppendToSeparated, Target: ""},
 			},
 			expectedFlags:       map[string]interface{}{},
 			expectedPositional:  []string{"plan", "vpc"},
@@ -360,8 +362,8 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 		{
 			name: "empty args array",
 			args: []string{},
-			compatibilityAliases: map[string]CompatibilityFlag{
-				"-s": {Behavior: MapToAtmosFlag, Target: "--stack"},
+			compatibilityAliases: map[string]compat.CompatibilityFlag{
+				"-s": {Behavior: compat.MapToAtmosFlag, Target: "--stack"},
 			},
 			expectedFlags:       map[string]interface{}{},
 			expectedPositional:  []string{},
@@ -403,7 +405,7 @@ func TestFlagParser_TerraformScenarios(t *testing.T) {
 			registry := NewFlagRegistry()
 
 			// Create unified parser with compatibility flags.
-			translator := NewCompatibilityFlagTranslator(tt.compatibilityAliases)
+			translator := compat.NewCompatibilityFlagTranslator(tt.compatibilityAliases)
 			parser := NewAtmosFlagParser(cmd, v, translator, registry)
 
 			// Parse the args.
@@ -443,7 +445,7 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 	tests := []struct {
 		name               string
 		args               []string
-		compatibilityAlias map[string]CompatibilityFlag
+		compatibilityAlias map[string]compat.CompatibilityFlag
 		expectedValue      string
 		expectedPositional []string
 		description        string
@@ -451,7 +453,7 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 		{
 			name:               "identity flag with equals value",
 			args:               []string{"plan", "vpc", "--identity=prod"},
-			compatibilityAlias: map[string]CompatibilityFlag{
+			compatibilityAlias: map[string]compat.CompatibilityFlag{
 				// NOTE: -i is NOT a compatibility flag - it's a Cobra native shorthand.
 				// Don't add it here or ValidateNoConflicts will panic.
 			},
@@ -462,7 +464,7 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 		{
 			name:               "identity flag with equals empty",
 			args:               []string{"plan", "vpc", "--identity="},
-			compatibilityAlias: map[string]CompatibilityFlag{
+			compatibilityAlias: map[string]compat.CompatibilityFlag{
 				// NOTE: -i is NOT a compatibility flag - it's a Cobra native shorthand.
 			},
 			expectedValue:      "__SELECT__",
@@ -472,7 +474,7 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 		{
 			name:               "identity shorthand with equals value",
 			args:               []string{"plan", "vpc", "-i=prod"},
-			compatibilityAlias: map[string]CompatibilityFlag{
+			compatibilityAlias: map[string]compat.CompatibilityFlag{
 				// NOTE: -i is NOT a compatibility flag - it's a Cobra native shorthand.
 				// Cobra handles -i → --identity automatically.
 			},
@@ -483,7 +485,7 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 		{
 			name:               "identity shorthand with equals empty",
 			args:               []string{"plan", "vpc", "-i="},
-			compatibilityAlias: map[string]CompatibilityFlag{
+			compatibilityAlias: map[string]compat.CompatibilityFlag{
 				// NOTE: -i is NOT a compatibility flag - it's a Cobra native shorthand.
 			},
 			expectedValue:      "__SELECT__",
@@ -511,7 +513,7 @@ func TestFlagParser_NoOptDefVal(t *testing.T) {
 			registry := NewFlagRegistry()
 
 			// Create parser with compatibility flags.
-			translator := NewCompatibilityFlagTranslator(tt.compatibilityAlias)
+			translator := compat.NewCompatibilityFlagTranslator(tt.compatibilityAlias)
 			parser := NewAtmosFlagParser(cmd, v, translator, registry)
 
 			// Parse the args.

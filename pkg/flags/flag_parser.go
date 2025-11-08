@@ -7,13 +7,14 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // AtmosFlagParser is a unified parser that combines compatibility flag translation with standard Cobra flag parsing.
 //
 // Key features:
-//   - Translates legacy flag syntax to Cobra-compatible format via CompatibilityFlagTranslator.
+//   - Translates legacy flag syntax to Cobra-compatible format via compat.CompatibilityFlagTranslator.
 //   - Enables Cobra validation (no DisableFlagParsing).
 //   - Separates Atmos flags from separated args (for external tools).
 //   - Handles double-dash separator (--) for explicit separation.
@@ -21,12 +22,12 @@ import (
 type AtmosFlagParser struct {
 	cmd        *cobra.Command
 	viper      *viper.Viper
-	translator *CompatibilityFlagTranslator
+	translator *compat.CompatibilityFlagTranslator
 	registry   *FlagRegistry
 }
 
 // NewAtmosFlagParser creates a new unified parser.
-func NewAtmosFlagParser(cmd *cobra.Command, v *viper.Viper, translator *CompatibilityFlagTranslator, registry *FlagRegistry) *AtmosFlagParser {
+func NewAtmosFlagParser(cmd *cobra.Command, v *viper.Viper, translator *compat.CompatibilityFlagTranslator, registry *FlagRegistry) *AtmosFlagParser {
 	defer perf.Track(nil, "flagparser.NewAtmosFlagParser")()
 
 	return &AtmosFlagParser{
@@ -194,7 +195,7 @@ func (pc *ParsedConfig) GetArgsForTool() []string {
 	return args
 }
 
-// normalizeShorthandWithEquals normalizes shorthand flags with = syntax to longhand format.
+// NormalizeShorthandWithEquals normalizes shorthand flags with = syntax to longhand format.
 // This fixes a Cobra quirk where -i=value works but -i= returns literal "=" instead of empty string.
 //
 // Examples:
@@ -207,7 +208,7 @@ func (pc *ParsedConfig) GetArgsForTool() []string {
 // Returns:
 //   - normalized: The normalized flag (e.g., "--identity=value")
 //   - wasNormalized: True if normalization occurred, false otherwise
-func normalizeShorthandWithEquals(cmd *cobra.Command, arg string) (normalized string, wasNormalized bool) {
+func NormalizeShorthandWithEquals(cmd *cobra.Command, arg string) (normalized string, wasNormalized bool) {
 	// Only process single-dash flags with = syntax.
 	if !strings.HasPrefix(arg, "-") || strings.HasPrefix(arg, "--") {
 		return arg, false
@@ -285,7 +286,7 @@ func (p *AtmosFlagParser) normalizeShorthandFlags(argsBeforeSep []string) []stri
 
 	normalizedArgs := make([]string, len(argsBeforeSep))
 	for i, arg := range argsBeforeSep {
-		if normalized, wasNormalized := normalizeShorthandWithEquals(p.cmd, arg); wasNormalized {
+		if normalized, wasNormalized := NormalizeShorthandWithEquals(p.cmd, arg); wasNormalized {
 			normalizedArgs[i] = normalized
 		} else {
 			normalizedArgs[i] = arg

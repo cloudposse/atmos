@@ -6,6 +6,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -58,6 +59,6 @@ func (a *AboutCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsB
 
 // GetCompatibilityFlags returns compatibility flags for this command.
 // About command has no compatibility flags.
-func (a *AboutCommandProvider) GetCompatibilityFlags() map[string]flags.CompatibilityFlag {
+func (a *AboutCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
 	return nil
 }

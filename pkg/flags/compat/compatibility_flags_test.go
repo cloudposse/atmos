@@ -1,4 +1,4 @@
-package flags
+package compat
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -16,6 +17,43 @@ import (
 type translationResult struct {
 	atmosArgs     []string
 	separatedArgs []string
+}
+
+// normalizeShorthandWithEquals is a test helper that normalizes shorthand flags with = syntax to longhand format.
+// This is a copy of normalizeShorthandWithEquals to avoid import cycles.
+func normalizeShorthandWithEquals(cmd *cobra.Command, arg string) (normalized string, wasNormalized bool) {
+	// Only process single-dash flags with = syntax.
+	if !strings.HasPrefix(arg, "-") || strings.HasPrefix(arg, "--") {
+		return arg, false
+	}
+
+	// Check if arg has = syntax.
+	idx := strings.Index(arg, "=")
+	if idx <= 0 {
+		return arg, false
+	}
+
+	// Extract shorthand (e.g., "-i=" → "i").
+	shorthand := arg[1:idx]
+	valuePart := arg[idx:] // "=value" or just "="
+
+	// Look up the longhand flag name for this shorthand.
+	var longhand string
+	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		if flag.Shorthand == shorthand {
+			longhand = flag.Name
+		}
+	})
+
+	// If no longhand found, this is not a registered Cobra shorthand.
+	// Return original arg unchanged.
+	if longhand == "" {
+		return arg, false
+	}
+
+	// Normalize to longhand format: -i=value → --identity=value.
+	normalized = "--" + longhand + valuePart
+	return normalized, true
 }
 
 // assertPanic is a test helper that asserts a panic occurred with an optional expected message.

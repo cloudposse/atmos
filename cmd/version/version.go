@@ -7,6 +7,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -123,6 +124,6 @@ func (v *VersionCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArg
 
 // GetCompatibilityFlags returns compatibility flags for this command.
 // Version command has no compatibility flags (uses native Cobra flags only).
-func (v *VersionCommandProvider) GetCompatibilityFlags() map[string]flags.CompatibilityFlag {
+func (v *VersionCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
 	return nil
 }
