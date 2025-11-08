@@ -157,7 +157,7 @@ func isRecommendedTheme(rowData []string) bool {
 
 // getActiveColumnStyle returns the style for the active indicator column.
 func getActiveColumnStyle(isActive bool, isRecommended bool, styles *StyleSet) lipgloss.Style {
-	baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
+	baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1).Align(lipgloss.Right)
 	if styles == nil {
 		return baseStyle
 	}
