@@ -15,7 +15,7 @@ Flags need default values that work consistently across all layers:
 ### Flag Type System (Already Implemented)
 
 ```go
-// pkg/flagparser/types.go
+// pkg/flags/types.go
 
 type Flag interface {
     GetName() string
@@ -119,7 +119,7 @@ func init() {
 Defaults stored in flag definitions:
 
 ```go
-// pkg/flagparser/registry.go
+// pkg/flags/registry.go
 
 func CommonFlags() *FlagRegistry {
     registry := NewFlagRegistry()
@@ -173,7 +173,7 @@ viper.BindPFlag("logs-level", cmd.Flags().Lookup("logs-level"))
 Defaults flow through to strongly-typed fields:
 
 ```go
-// pkg/flagparser/global_flags.go
+// pkg/flags/global_flags.go
 
 type GlobalFlags struct {
     // String defaults
@@ -200,7 +200,7 @@ type GlobalFlags struct {
 ### Registration with Defaults
 
 ```go
-// pkg/flagparser/global_registry.go (NEW)
+// pkg/flags/global_registry.go (NEW)
 
 // GlobalFlagsRegistry returns a registry with all global flags pre-configured.
 func GlobalFlagsRegistry() *FlagRegistry {
@@ -317,7 +317,7 @@ func GlobalFlagsRegistry() *FlagRegistry {
 ### Parser Applies Defaults via Viper
 
 ```go
-// pkg/flagparser/parser.go
+// pkg/flags/parser.go
 
 // parseGlobalFlags extracts global flags with defaults applied.
 func (p *baseParser) parseGlobalFlags(cmd *cobra.Command) GlobalFlags {
@@ -518,7 +518,7 @@ interpreter.LogsLevel == ""  // ❌ Go zero value (empty string)
 ### Unit Tests
 
 ```go
-// pkg/flagparser/global_flags_test.go
+// pkg/flags/global_flags_test.go
 
 func TestGlobalFlagsDefaults(t *testing.T) {
     tests := []struct {
@@ -615,7 +615,7 @@ func TestDefaultValuesInCommands(t *testing.T) {
 Commands can also have their own defaults:
 
 ```go
-// pkg/flagparser/terraform_registry.go
+// pkg/flags/terraform_registry.go
 
 func TerraformFlagsRegistry() *FlagRegistry {
     registry := CommonFlags()  // Includes stack, identity, dry-run

@@ -4,12 +4,12 @@
 
 This document describes a historical design that has been superseded. The actual implementation:
 - Uses `StandardParser` (not `StandardFlagParser`) for standard commands
-- Uses `AtmosFlagParser` (not `PassThroughFlagParser`) for terraform with compatibility flages
+- Uses `AtmosFlagParser` (not `PassThroughFlagParser`) for terraform with compatibility flags
 - `PassThroughFlagParser` was completely deleted on 2025-11-06
 - See `../unified-flag-parsing-refactoring.md` for current architecture
 
 ## Historical Objective
-Replace all manual flag parsing in Atmos with the unified `pkg/flagparser` system. Remove `DisableFlagParsing = true` and let Cobra + our parsers handle everything properly.
+Replace all manual flag parsing in Atmos with the unified `pkg/flags` system. Remove `DisableFlagParsing = true` and let Cobra + our parsers handle everything properly.
 
 ## Success Criteria (Historical)
 ✅ Remove `DisableFlagParsing = true` from all commands
@@ -77,7 +77,7 @@ Replace all manual flag parsing in Atmos with the unified `pkg/flagparser` syste
 package cmd
 
 import (
-    "github.com/cloudposse/atmos/pkg/flagparser"
+    "github.com/cloudposse/atmos/pkg/flags"
     "github.com/spf13/cobra"
 )
 

@@ -334,7 +334,7 @@ builder.WithProcessingFlags()  // Adds process-templates, process-functions, ski
 ### Phase 1: `pkg/flags` Refactoring (Current PR) ✅
 
 **Completed:**
-- Renamed `pkg/flagparser` → `pkg/flags` for clearer naming
+- Renamed `pkg/flags` → `pkg/flags` for clearer naming
 - Renamed `*Interpreter` → `*Options` (options are the result of parsing)
 - Created `StandardOptionsBuilder` with type-safe builder pattern
 - All tests passing with 100% coverage on builder

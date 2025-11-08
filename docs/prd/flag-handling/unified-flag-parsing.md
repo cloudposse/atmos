@@ -6,7 +6,7 @@ This document contains historical design that has been partially superseded:
 
 **WHAT CHANGED (Migration Complete 2025-11-06)**:
 - ❌ **PassThroughFlagParser DELETED** - No longer exists
-- ✅ **AtmosFlagParser** - New parser for terraform with compatibility flages (-s → --stack, -i → --identity)
+- ✅ **AtmosFlagParser** - New parser for terraform with compatibility flags (-s → --stack, -i → --identity)
 - ✅ **StandardParser** - Used for helmfile, packer, workflow, and all other commands
 - ✅ **CompatibilityFlagsTranslator** - Handles terraform legacy flag compatibility
 
@@ -681,7 +681,7 @@ package terraform
 import (
     "github.com/spf13/cobra"
     "github.com/cloudposse/atmos/cmd/internal"
-    "github.com/cloudposse/atmos/pkg/flagparser"
+    "github.com/cloudposse/atmos/pkg/flags"
 )
 
 // TerraformCommandProvider implements CommandProvider.
@@ -823,7 +823,7 @@ func init() {
 package version
 
 import (
-    "github.com/cloudposse/atmos/pkg/flagparser"
+    "github.com/cloudposse/atmos/pkg/flags"
     "github.com/cloudposse/atmos/pkg/config"
 )
 
@@ -1046,7 +1046,7 @@ type FlagParser interface {
 **ACTUAL IMPLEMENTATION (2025-11-06)**:
 - `FlagParser` interface - Still used
 - `StandardParser` - Implements FlagParser for standard commands
-- `AtmosFlagParser` - Implements FlagParser for terraform with compatibility flages
+- `AtmosFlagParser` - Implements FlagParser for terraform with compatibility flags
 - `CompatibilityFlagsTranslator` - Translates -s → --stack, -i → --identity, etc.
 
 **DELETED (2025-11-06)**:
@@ -1374,11 +1374,11 @@ The strongly-typed interpreter design is a **significant architectural change** 
 ### Lines of Code Impact
 
 **New code to write:**
-- `pkg/flagparser/interpreter.go` - Base interfaces (~100 lines)
-- `pkg/flagparser/terraform_interpreter.go` - Terraform interpreter (~150 lines)
-- `pkg/flagparser/helmfile_interpreter.go` - Helmfile interpreter (~100 lines)
-- `pkg/flagparser/custom_interpreter.go` - Custom command interpreter (~150 lines)
-- `pkg/flagparser/identity.go` - IdentitySelector type (~80 lines)
+- `pkg/flags/interpreter.go` - Base interfaces (~100 lines)
+- `pkg/flags/terraform_interpreter.go` - Terraform interpreter (~150 lines)
+- `pkg/flags/helmfile_interpreter.go` - Helmfile interpreter (~100 lines)
+- `pkg/flags/custom_interpreter.go` - Custom command interpreter (~150 lines)
+- `pkg/flags/identity.go` - IdentitySelector type (~80 lines)
 - Parser updates to return typed interpreters (~200 lines across all parsers)
 - **Total new code: ~780 lines**
 
@@ -1766,7 +1766,7 @@ func (p *ParsedConfig) PopulateDeprecatedMap() {
 
 **ORIGINAL DESIGN**:
 ```
-pkg/flagparser/
+pkg/flags/
 ├── parser.go           // FlagParser interface
 ├── standard.go         // Standard flag parser implementation
 ├── passthrough.go      // PassThroughHandler interface and impl  ❌ DELETED
@@ -1800,7 +1800,7 @@ cmd/internal/
 ```
 
 **Key Changes**:
-- ❌ `pkg/flagparser/` → ✅ `pkg/flags/` (different path)
+- ❌ `pkg/flags/` → ✅ `pkg/flags/` (different path)
 - ❌ `passthrough.go` → ✅ `compatibility_flags.go` + `terraform/parser.go`
 - ❌ No middleware pattern - using standard Cobra RunE flow
 
@@ -2229,7 +2229,7 @@ package describe
 import (
     "github.com/spf13/cobra"
     "github.com/cloudposse/atmos/cmd/internal"
-    "github.com/cloudposse/atmos/pkg/flagparser"
+    "github.com/cloudposse/atmos/pkg/flags"
     "github.com/cloudposse/atmos/pkg/config"
 )
 
@@ -2375,7 +2375,7 @@ func NewTerraformCmd(
 
 **Goal**: Build foundational interfaces and implementations
 
-- [ ] Create `pkg/flagparser/` package
+- [ ] Create `pkg/flags/` package
   - [ ] Define `FlagParser` interface
   - [ ] Implement `StandardFlagParser`
   - [ ] Implement `PassThroughHandler`

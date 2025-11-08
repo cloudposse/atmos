@@ -112,7 +112,7 @@ if identityName != "" && !forceSelect {
 ### Step 1: Define GlobalFlags Struct
 
 ```go
-// pkg/flagparser/global_flags.go
+// pkg/flags/global_flags.go
 
 // GlobalFlags contains all persistent flags available to every command.
 type GlobalFlags struct {
@@ -153,7 +153,7 @@ type GlobalFlags struct {
 ### Step 2: Define Special Type for Identity
 
 ```go
-// pkg/flagparser/identity_selector.go
+// pkg/flags/identity_selector.go
 
 // IdentitySelector handles the identity flag which has three states:
 // 1. Not provided (use default from config/env)
@@ -193,7 +193,7 @@ func (i IdentitySelector) IsProvided() bool {
 ### Step 3: Parse Global Flags with Precedence
 
 ```go
-// pkg/flagparser/parser.go
+// pkg/flags/parser.go
 
 // parseGlobalFlags extracts all global flags with proper precedence.
 // Called ONCE per command execution, before command-specific parsing.
@@ -260,7 +260,7 @@ func (p *baseParser) parseIdentityFlag(cmd *cobra.Command) IdentitySelector {
 ### Step 4: Embed in Command Interpreters
 
 ```go
-// pkg/flagparser/terraform_interpreter.go
+// pkg/flags/terraform_interpreter.go
 
 type TerraformInterpreter struct {
     GlobalFlags  // ✅ Embedded - provides LogsLevel, Identity, and all other global flags!
@@ -281,7 +281,7 @@ type TerraformInterpreter struct {
 ```
 
 ```go
-// pkg/flagparser/auth_interpreter.go
+// pkg/flags/auth_interpreter.go
 
 type AuthInterpreter struct {
     GlobalFlags  // ✅ Same global flags - Identity already included!
@@ -672,8 +672,8 @@ func TestIdentitySelector(t *testing.T) {
 ## Migration Path
 
 ### Phase 1: Create Infrastructure (1 day)
-- [ ] Create `pkg/flagparser/global_flags.go`
-- [ ] Create `pkg/flagparser/identity_selector.go`
+- [ ] Create `pkg/flags/global_flags.go`
+- [ ] Create `pkg/flags/identity_selector.go`
 - [ ] Add `parseGlobalFlags()` to base parser
 - [ ] Add `parseIdentityFlag()` helper
 - [ ] Unit tests for IdentitySelector

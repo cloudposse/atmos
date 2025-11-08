@@ -17,7 +17,7 @@ type PagerSelector struct {
 
 // NewPagerSelector creates a PagerSelector from flag state.
 func NewPagerSelector(value string, provided bool) PagerSelector {
-	defer perf.Track(nil, "flagparser.NewPagerSelector")()
+	defer perf.Track(nil, "flags.NewPagerSelector")()
 
 	return PagerSelector{
 		value:    value,
@@ -28,7 +28,7 @@ func NewPagerSelector(value string, provided bool) PagerSelector {
 // IsEnabled returns true if pager should be enabled.
 // Returns false if explicitly set to "false" or not provided.
 func (p PagerSelector) IsEnabled() bool {
-	defer perf.Track(nil, "flagparser.PagerSelector.IsEnabled")()
+	defer perf.Track(nil, "flags.PagerSelector.IsEnabled")()
 
 	if !p.provided {
 		return false // Not set, use default from config
@@ -39,7 +39,7 @@ func (p PagerSelector) IsEnabled() bool {
 // Pager returns the pager command to use.
 // Returns empty string if using default pager or if disabled.
 func (p PagerSelector) Pager() string {
-	defer perf.Track(nil, "flagparser.PagerSelector.Pager")()
+	defer perf.Track(nil, "flags.PagerSelector.Pager")()
 
 	if p.value == "true" || p.value == "" || p.value == "false" {
 		return "" // Use default pager or disabled
@@ -49,14 +49,14 @@ func (p PagerSelector) Pager() string {
 
 // IsProvided returns true if the flag was explicitly set.
 func (p PagerSelector) IsProvided() bool {
-	defer perf.Track(nil, "flagparser.PagerSelector.IsProvided")()
+	defer perf.Track(nil, "flags.PagerSelector.IsProvided")()
 
 	return p.provided
 }
 
 // Value returns the raw flag value.
 func (p PagerSelector) Value() string {
-	defer perf.Track(nil, "flagparser.PagerSelector.Value")()
+	defer perf.Track(nil, "flags.PagerSelector.Value")()
 
 	return p.value
 }

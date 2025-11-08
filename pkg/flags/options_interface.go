@@ -37,7 +37,7 @@ type BaseOptions struct {
 
 // NewBaseOptions creates a new BaseOptions with the given arguments.
 func NewBaseOptions(globalFlags *global.Flags, positionalArgs, passThroughArgs []string) BaseOptions {
-	defer perf.Track(nil, "flagparser.NewBaseOptions")()
+	defer perf.Track(nil, "flags.NewBaseOptions")()
 
 	return BaseOptions{
 		Flags:           *globalFlags,
@@ -48,14 +48,14 @@ func NewBaseOptions(globalFlags *global.Flags, positionalArgs, passThroughArgs [
 
 // GetPositionalArgs implements CommandOptions.
 func (b *BaseOptions) GetPositionalArgs() []string {
-	defer perf.Track(nil, "flagparser.BaseOptions.GetPositionalArgs")()
+	defer perf.Track(nil, "flags.BaseOptions.GetPositionalArgs")()
 
 	return b.positionalArgs
 }
 
 // GetSeparatedArgs implements CommandOptions.
 func (b *BaseOptions) GetSeparatedArgs() []string {
-	defer perf.Track(nil, "flagparser.BaseOptions.GetSeparatedArgs")()
+	defer perf.Track(nil, "flags.BaseOptions.GetSeparatedArgs")()
 
 	return b.passThroughArgs
 }

@@ -49,49 +49,49 @@ type StringFlag struct {
 
 // GetName implements Flag.
 func (f *StringFlag) GetName() string {
-	defer perf.Track(nil, "flagparser.StringFlag.GetName")()
+	defer perf.Track(nil, "flags.StringFlag.GetName")()
 
 	return f.Name
 }
 
 // GetShorthand implements Flag.
 func (f *StringFlag) GetShorthand() string {
-	defer perf.Track(nil, "flagparser.StringFlag.GetShorthand")()
+	defer perf.Track(nil, "flags.StringFlag.GetShorthand")()
 
 	return f.Shorthand
 }
 
 // GetDescription implements Flag.
 func (f *StringFlag) GetDescription() string {
-	defer perf.Track(nil, "flagparser.StringFlag.GetDescription")()
+	defer perf.Track(nil, "flags.StringFlag.GetDescription")()
 
 	return f.Description
 }
 
 // GetDefault implements Flag.
 func (f *StringFlag) GetDefault() interface{} {
-	defer perf.Track(nil, "flagparser.StringFlag.GetDefault")()
+	defer perf.Track(nil, "flags.StringFlag.GetDefault")()
 
 	return f.Default
 }
 
 // IsRequired implements Flag.
 func (f *StringFlag) IsRequired() bool {
-	defer perf.Track(nil, "flagparser.StringFlag.IsRequired")()
+	defer perf.Track(nil, "flags.StringFlag.IsRequired")()
 
 	return f.Required
 }
 
 // GetNoOptDefVal implements Flag.
 func (f *StringFlag) GetNoOptDefVal() string {
-	defer perf.Track(nil, "flagparser.StringFlag.GetNoOptDefVal")()
+	defer perf.Track(nil, "flags.StringFlag.GetNoOptDefVal")()
 
 	return f.NoOptDefVal
 }
 
 // GetEnvVars implements Flag.
 func (f *StringFlag) GetEnvVars() []string {
-	defer perf.Track(nil, "flagparser.StringFlag.GetEnvVars")()
+	defer perf.Track(nil, "flags.StringFlag.GetEnvVars")()
 
 	return f.EnvVars
 }
@@ -99,7 +99,7 @@ func (f *StringFlag) GetEnvVars() []string {
 // GetValidValues returns the list of valid values for this flag.
 // Returns nil if no validation is needed.
 func (f *StringFlag) GetValidValues() []string {
-	defer perf.Track(nil, "flagparser.StringFlag.GetValidValues")()
+	defer perf.Track(nil, "flags.StringFlag.GetValidValues")()
 
 	return f.ValidValues
 }
@@ -115,49 +115,49 @@ type BoolFlag struct {
 
 // GetName implements Flag.
 func (f *BoolFlag) GetName() string {
-	defer perf.Track(nil, "flagparser.BoolFlag.GetName")()
+	defer perf.Track(nil, "flags.BoolFlag.GetName")()
 
 	return f.Name
 }
 
 // GetShorthand implements Flag.
 func (f *BoolFlag) GetShorthand() string {
-	defer perf.Track(nil, "flagparser.BoolFlag.GetShorthand")()
+	defer perf.Track(nil, "flags.BoolFlag.GetShorthand")()
 
 	return f.Shorthand
 }
 
 // GetDescription implements Flag.
 func (f *BoolFlag) GetDescription() string {
-	defer perf.Track(nil, "flagparser.BoolFlag.GetDescription")()
+	defer perf.Track(nil, "flags.BoolFlag.GetDescription")()
 
 	return f.Description
 }
 
 // GetDefault implements Flag.
 func (f *BoolFlag) GetDefault() interface{} {
-	defer perf.Track(nil, "flagparser.BoolFlag.GetDefault")()
+	defer perf.Track(nil, "flags.BoolFlag.GetDefault")()
 
 	return f.Default
 }
 
 // IsRequired implements Flag.
 func (f *BoolFlag) IsRequired() bool {
-	defer perf.Track(nil, "flagparser.BoolFlag.IsRequired")()
+	defer perf.Track(nil, "flags.BoolFlag.IsRequired")()
 
 	return false // Bool flags are never required
 }
 
 // GetNoOptDefVal implements Flag.
 func (f *BoolFlag) GetNoOptDefVal() string {
-	defer perf.Track(nil, "flagparser.BoolFlag.GetNoOptDefVal")()
+	defer perf.Track(nil, "flags.BoolFlag.GetNoOptDefVal")()
 
 	return "" // Bool flags don't use NoOptDefVal
 }
 
 // GetEnvVars implements Flag.
 func (f *BoolFlag) GetEnvVars() []string {
-	defer perf.Track(nil, "flagparser.BoolFlag.GetEnvVars")()
+	defer perf.Track(nil, "flags.BoolFlag.GetEnvVars")()
 
 	return f.EnvVars
 }
@@ -174,49 +174,49 @@ type IntFlag struct {
 
 // GetName implements Flag.
 func (f *IntFlag) GetName() string {
-	defer perf.Track(nil, "flagparser.IntFlag.GetName")()
+	defer perf.Track(nil, "flags.IntFlag.GetName")()
 
 	return f.Name
 }
 
 // GetShorthand implements Flag.
 func (f *IntFlag) GetShorthand() string {
-	defer perf.Track(nil, "flagparser.IntFlag.GetShorthand")()
+	defer perf.Track(nil, "flags.IntFlag.GetShorthand")()
 
 	return f.Shorthand
 }
 
 // GetDescription implements Flag.
 func (f *IntFlag) GetDescription() string {
-	defer perf.Track(nil, "flagparser.IntFlag.GetDescription")()
+	defer perf.Track(nil, "flags.IntFlag.GetDescription")()
 
 	return f.Description
 }
 
 // GetDefault implements Flag.
 func (f *IntFlag) GetDefault() interface{} {
-	defer perf.Track(nil, "flagparser.IntFlag.GetDefault")()
+	defer perf.Track(nil, "flags.IntFlag.GetDefault")()
 
 	return f.Default
 }
 
 // IsRequired implements Flag.
 func (f *IntFlag) IsRequired() bool {
-	defer perf.Track(nil, "flagparser.IntFlag.IsRequired")()
+	defer perf.Track(nil, "flags.IntFlag.IsRequired")()
 
 	return f.Required
 }
 
 // GetNoOptDefVal implements Flag.
 func (f *IntFlag) GetNoOptDefVal() string {
-	defer perf.Track(nil, "flagparser.IntFlag.GetNoOptDefVal")()
+	defer perf.Track(nil, "flags.IntFlag.GetNoOptDefVal")()
 
 	return "" // Int flags don't use NoOptDefVal
 }
 
 // GetEnvVars implements Flag.
 func (f *IntFlag) GetEnvVars() []string {
-	defer perf.Track(nil, "flagparser.IntFlag.GetEnvVars")()
+	defer perf.Track(nil, "flags.IntFlag.GetEnvVars")()
 
 	return f.EnvVars
 }
@@ -240,49 +240,49 @@ type StringSliceFlag struct {
 
 // GetName implements Flag.
 func (f *StringSliceFlag) GetName() string {
-	defer perf.Track(nil, "flagparser.StringSliceFlag.GetName")()
+	defer perf.Track(nil, "flags.StringSliceFlag.GetName")()
 
 	return f.Name
 }
 
 // GetShorthand implements Flag.
 func (f *StringSliceFlag) GetShorthand() string {
-	defer perf.Track(nil, "flagparser.StringSliceFlag.GetShorthand")()
+	defer perf.Track(nil, "flags.StringSliceFlag.GetShorthand")()
 
 	return f.Shorthand
 }
 
 // GetDescription implements Flag.
 func (f *StringSliceFlag) GetDescription() string {
-	defer perf.Track(nil, "flagparser.StringSliceFlag.GetDescription")()
+	defer perf.Track(nil, "flags.StringSliceFlag.GetDescription")()
 
 	return f.Description
 }
 
 // GetDefault implements Flag.
 func (f *StringSliceFlag) GetDefault() interface{} {
-	defer perf.Track(nil, "flagparser.StringSliceFlag.GetDefault")()
+	defer perf.Track(nil, "flags.StringSliceFlag.GetDefault")()
 
 	return f.Default
 }
 
 // IsRequired implements Flag.
 func (f *StringSliceFlag) IsRequired() bool {
-	defer perf.Track(nil, "flagparser.StringSliceFlag.IsRequired")()
+	defer perf.Track(nil, "flags.StringSliceFlag.IsRequired")()
 
 	return f.Required
 }
 
 // GetNoOptDefVal implements Flag.
 func (f *StringSliceFlag) GetNoOptDefVal() string {
-	defer perf.Track(nil, "flagparser.StringSliceFlag.GetNoOptDefVal")()
+	defer perf.Track(nil, "flags.StringSliceFlag.GetNoOptDefVal")()
 
 	return "" // StringSlice flags don't use NoOptDefVal.
 }
 
 // GetEnvVars implements Flag.
 func (f *StringSliceFlag) GetEnvVars() []string {
-	defer perf.Track(nil, "flagparser.StringSliceFlag.GetEnvVars")()
+	defer perf.Track(nil, "flags.StringSliceFlag.GetEnvVars")()
 
 	return f.EnvVars
 }

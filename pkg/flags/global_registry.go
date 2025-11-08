@@ -79,7 +79,7 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 //  2. --identity (alone) → IdentitySelector{value: "__SELECT__", provided: true}
 //  3. --identity=value → IdentitySelector{value: "value", provided: true}
 func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelector {
-	defer perf.Track(nil, "flagparser.parseIdentityFlag")()
+	defer perf.Track(nil, "flags.parseIdentityFlag")()
 
 	flag := cmd.Flags().Lookup(identityFlagName)
 	if flag == nil {
@@ -108,7 +108,7 @@ func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelect
 //  2. --pager (alone) → PagerSelector{value: "true", provided: true}
 //  3. --pager=value → PagerSelector{value: "value", provided: true}
 func parsePagerFlag(cmd *cobra.Command, v *viper.Viper) global.PagerSelector {
-	defer perf.Track(nil, "flagparser.parsePagerFlag")()
+	defer perf.Track(nil, "flags.parsePagerFlag")()
 
 	flag := cmd.Flags().Lookup(pagerFlagName)
 	if flag == nil {
@@ -134,7 +134,7 @@ func parsePagerFlag(cmd *cobra.Command, v *viper.Viper) global.PagerSelector {
 // GlobalFlagsRegistry returns a FlagRegistry with all global flags pre-configured.
 // This can be used to register global flags on commands that don't inherit from RootCmd.
 func GlobalFlagsRegistry() *FlagRegistry {
-	defer perf.Track(nil, "global.FlagsRegistry")()
+	defer perf.Track(nil, "flags.FlagsRegistry")()
 
 	registry := NewFlagRegistry()
 
@@ -150,7 +150,7 @@ func GlobalFlagsRegistry() *FlagRegistry {
 
 // registerWorkingDirectoryFlags registers working directory and path flags.
 func registerWorkingDirectoryFlags(registry *FlagRegistry) {
-	defer perf.Track(nil, "global.registerWorkingDirectoryFlags")()
+	defer perf.Track(nil, "flags.registerWorkingDirectoryFlags")()
 
 	registry.Register(&StringFlag{
 		Name:        "chdir",
@@ -187,7 +187,7 @@ func registerWorkingDirectoryFlags(registry *FlagRegistry) {
 
 // registerLoggingFlags registers logging configuration flags.
 func registerLoggingFlags(registry *FlagRegistry) {
-	defer perf.Track(nil, "global.registerLoggingFlags")()
+	defer perf.Track(nil, "flags.registerLoggingFlags")()
 
 	registry.Register(&StringFlag{
 		Name:        "logs-level",
@@ -216,7 +216,7 @@ func registerLoggingFlags(registry *FlagRegistry) {
 
 // registerAuthenticationFlags registers authentication and output flags.
 func registerAuthenticationFlags(registry *FlagRegistry) {
-	defer perf.Track(nil, "global.registerAuthenticationFlags")()
+	defer perf.Track(nil, "flags.registerAuthenticationFlags")()
 
 	// Identity flag (special NoOptDefVal handling).
 	registry.Register(&StringFlag{
@@ -241,7 +241,7 @@ func registerAuthenticationFlags(registry *FlagRegistry) {
 
 // registerProfilingFlags registers profiling configuration flags.
 func registerProfilingFlags(registry *FlagRegistry) {
-	defer perf.Track(nil, "global.registerProfilingFlags")()
+	defer perf.Track(nil, "flags.registerProfilingFlags")()
 
 	registry.Register(&BoolFlag{
 		Name:        "profiler-enabled",
@@ -286,7 +286,7 @@ func registerProfilingFlags(registry *FlagRegistry) {
 
 // registerPerformanceFlags registers performance visualization flags.
 func registerPerformanceFlags(registry *FlagRegistry) {
-	defer perf.Track(nil, "global.registerPerformanceFlags")()
+	defer perf.Track(nil, "flags.registerPerformanceFlags")()
 
 	registry.Register(&BoolFlag{
 		Name:        "heatmap",

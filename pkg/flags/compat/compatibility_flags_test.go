@@ -72,7 +72,7 @@ func assertPanic(t *testing.T, expectedMsg string) {
 	}
 }
 
-// NOTE: Tests for -s and -i removed because these are Cobra native shorthands, NOT compatibility flages.
+// NOTE: Tests for -s and -i removed because these are Cobra native shorthands, NOT compatibility flags.
 // Cobra handles -s → --stack automatically when you register flags with StringP("stack", "s", ...).
 // The compatibility translator should ONLY handle terraform-specific pass-through flags.
 
@@ -707,9 +707,9 @@ func TestCompatibilityFlagTranslator_ValidateTargetsInArgs(t *testing.T) {
 
 // buildTestCompatibilityTranslator creates a translator with test configuration.
 func buildTestCompatibilityTranslator() *CompatibilityFlagTranslator {
-	// Use actual terraform compatibility flages to ensure tests stay in sync.
+	// Use actual terraform compatibility flags to ensure tests stay in sync.
 	// Import is: "github.com/cloudposse/atmos/pkg/flags/terraform"
-	// NOTE: -s and -i are NOT compatibility flages - they are Cobra native shorthands.
+	// NOTE: -s and -i are NOT compatibility flags - they are Cobra native shorthands.
 	return NewCompatibilityFlagTranslator(map[string]CompatibilityFlag{
 		// Pass-through terraform flags.
 		"-var":          {Behavior: AppendToSeparated, Target: ""},
@@ -795,7 +795,7 @@ func TestCompatibilityFlagTranslator_ShorthandNormalization(t *testing.T) {
 			cmd.Flags().StringP("identity", "i", "", "identity")
 			cmd.Flags().StringP("stack", "s", "", "stack")
 
-			// Create translator with compatibility flages.
+			// Create translator with compatibility flags.
 			translator := NewCompatibilityFlagTranslator(map[string]CompatibilityFlag{
 				"-var": {Behavior: AppendToSeparated, Target: ""},
 			})
@@ -810,7 +810,7 @@ func TestCompatibilityFlagTranslator_ShorthandNormalization(t *testing.T) {
 				}
 			}
 
-			// STEP 2: Translate compatibility flages.
+			// STEP 2: Translate compatibility flags.
 			atmosArgs, separatedArgs := translator.Translate(normalizedArgs)
 
 			// Verify results.

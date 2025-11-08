@@ -28,7 +28,7 @@ type AtmosFlagParser struct {
 
 // NewAtmosFlagParser creates a new unified parser.
 func NewAtmosFlagParser(cmd *cobra.Command, v *viper.Viper, translator *compat.CompatibilityFlagTranslator, registry *FlagRegistry) *AtmosFlagParser {
-	defer perf.Track(nil, "flagparser.NewAtmosFlagParser")()
+	defer perf.Track(nil, "flags.NewAtmosFlagParser")()
 
 	return &AtmosFlagParser{
 		cmd:        cmd,
@@ -143,7 +143,7 @@ func splitAtSeparator(args []string) ([]string, []string) {
 // This works around Cobra's NoOptDefVal limitation where --identity value treats
 // "value" as a positional arg instead of the flag value.
 func (p *AtmosFlagParser) resolveNoOptDefValForEmptyFlags() {
-	defer perf.Track(nil, "flagparser.FlagParser.resolveNoOptDefValForEmptyFlags")()
+	defer perf.Track(nil, "flags.FlagParser.resolveNoOptDefValForEmptyFlags")()
 
 	// Hard-coded list of flags that support empty-value interactive selection.
 	// In future, this could be configurable via builder pattern.
@@ -172,7 +172,7 @@ func (p *AtmosFlagParser) resolveNoOptDefValForEmptyFlags() {
 // This resets the command's flag state to prevent flag values from one test
 // polluting subsequent tests when using a global parser instance.
 func (p *AtmosFlagParser) Reset() {
-	defer perf.Track(nil, "flagparser.FlagParser.Reset")()
+	defer perf.Track(nil, "flags.FlagParser.Reset")()
 
 	ResetCommandFlags(p.cmd)
 }
@@ -187,7 +187,7 @@ func (p *AtmosFlagParser) Reset() {
 //
 //	args := result.GetArgsForTool()  // Instead of manual: append(result.PositionalArgs, result.SeparatedArgs...)
 func (pc *ParsedConfig) GetArgsForTool() []string {
-	defer perf.Track(nil, "flagparser.ParsedConfig.GetArgsForTool")()
+	defer perf.Track(nil, "flags.ParsedConfig.GetArgsForTool")()
 
 	args := make([]string, 0, len(pc.PositionalArgs)+len(pc.SeparatedArgs))
 	args = append(args, pc.PositionalArgs...)
@@ -251,7 +251,7 @@ func NormalizeShorthandWithEquals(cmd *cobra.Command, arg string) (normalized st
 // -> Cobra parses --identity=prod and strips -- -> RunE receives ["sh", "-c", "echo"]
 // -> We need to treat these as separated args, not as flags to parse.
 func (p *AtmosFlagParser) adjustForCobraParsing(argsBeforeSep, argsAfterSep []string) ([]string, []string) {
-	defer perf.Track(nil, "flagparser.FlagParser.adjustForCobraParsing")()
+	defer perf.Track(nil, "flags.FlagParser.adjustForCobraParsing")()
 
 	if len(argsAfterSep) == 0 && len(argsBeforeSep) > 0 {
 		// No -- separator found, check if Cobra already parsed flags.
@@ -266,7 +266,7 @@ func (p *AtmosFlagParser) adjustForCobraParsing(argsBeforeSep, argsAfterSep []st
 
 // hasCobraAlreadyParsedFlags checks if any flags have been marked as Changed by Cobra.
 func (p *AtmosFlagParser) hasCobraAlreadyParsedFlags() bool {
-	defer perf.Track(nil, "flagparser.FlagParser.hasCobraAlreadyParsedFlags")()
+	defer perf.Track(nil, "flags.FlagParser.hasCobraAlreadyParsedFlags")()
 
 	cobraAlreadyParsed := false
 	p.cmd.Flags().VisitAll(func(f *pflag.Flag) {
@@ -282,7 +282,7 @@ func (p *AtmosFlagParser) hasCobraAlreadyParsedFlags() bool {
 // This fixes a Cobra quirk where -i= returns literal "=" instead of empty string.
 // This happens BEFORE compatibility flag translation because it's about native Cobra flags.
 func (p *AtmosFlagParser) normalizeShorthandFlags(argsBeforeSep []string) []string {
-	defer perf.Track(nil, "flagparser.FlagParser.normalizeShorthandFlags")()
+	defer perf.Track(nil, "flags.FlagParser.normalizeShorthandFlags")()
 
 	normalizedArgs := make([]string, len(argsBeforeSep))
 	for i, arg := range argsBeforeSep {
@@ -298,7 +298,7 @@ func (p *AtmosFlagParser) normalizeShorthandFlags(argsBeforeSep []string) []stri
 
 // parseAndBindFlags parses Cobra flags and binds them to Viper.
 func (p *AtmosFlagParser) parseAndBindFlags(atmosArgs []string) error {
-	defer perf.Track(nil, "flagparser.FlagParser.parseAndBindFlags")()
+	defer perf.Track(nil, "flags.FlagParser.parseAndBindFlags")()
 
 	// Let Cobra parse the normalized Atmos args.
 	// We need to temporarily set the args on the command for Cobra to parse them.
@@ -319,7 +319,7 @@ func (p *AtmosFlagParser) parseAndBindFlags(atmosArgs []string) error {
 
 // collectSeparatedArgs combines translated pass-through args and args after --.
 func (p *AtmosFlagParser) collectSeparatedArgs(translatedSeparated, argsAfterSep []string) []string {
-	defer perf.Track(nil, "flagparser.FlagParser.collectSeparatedArgs")()
+	defer perf.Track(nil, "flags.FlagParser.collectSeparatedArgs")()
 
 	separatedArgs := make([]string, 0, len(translatedSeparated)+len(argsAfterSep))
 	separatedArgs = append(separatedArgs, translatedSeparated...)
@@ -330,7 +330,7 @@ func (p *AtmosFlagParser) collectSeparatedArgs(translatedSeparated, argsAfterSep
 
 // buildFlagsMap builds a flags map from Viper for backward compatibility.
 func (p *AtmosFlagParser) buildFlagsMap() map[string]interface{} {
-	defer perf.Track(nil, "flagparser.FlagParser.buildFlagsMap")()
+	defer perf.Track(nil, "flags.FlagParser.buildFlagsMap")()
 
 	flagsMap := make(map[string]interface{})
 	for key := range p.viper.AllSettings() {

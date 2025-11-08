@@ -35,7 +35,7 @@ type parserConfig struct {
 //
 //	WithStringFlag("stack", "s", "", "Stack name")
 func WithStringFlag(name, shorthand, defaultValue, description string) Option {
-	defer perf.Track(nil, "flagparser.WithStringFlag")()
+	defer perf.Track(nil, "flags.WithStringFlag")()
 
 	return func(cfg *parserConfig) {
 		cfg.registry.Register(&StringFlag{
@@ -49,7 +49,7 @@ func WithStringFlag(name, shorthand, defaultValue, description string) Option {
 
 // WithBoolFlag adds a boolean flag to the parser configuration.
 func WithBoolFlag(name, shorthand string, defaultValue bool, description string) Option {
-	defer perf.Track(nil, "flagparser.WithBoolFlag")()
+	defer perf.Track(nil, "flags.WithBoolFlag")()
 
 	return func(cfg *parserConfig) {
 		cfg.registry.Register(&BoolFlag{
@@ -63,7 +63,7 @@ func WithBoolFlag(name, shorthand string, defaultValue bool, description string)
 
 // WithIntFlag adds an integer flag to the parser configuration.
 func WithIntFlag(name, shorthand string, defaultValue int, description string) Option {
-	defer perf.Track(nil, "flagparser.WithIntFlag")()
+	defer perf.Track(nil, "flags.WithIntFlag")()
 
 	return func(cfg *parserConfig) {
 		cfg.registry.Register(&IntFlag{
@@ -87,7 +87,7 @@ func WithIntFlag(name, shorthand string, defaultValue int, description string) O
 //
 //	WithStringSliceFlag("components", "", []string{}, "Filter by components")
 func WithStringSliceFlag(name, shorthand string, defaultValue []string, description string) Option {
-	defer perf.Track(nil, "flagparser.WithStringSliceFlag")()
+	defer perf.Track(nil, "flags.WithStringSliceFlag")()
 
 	return func(cfg *parserConfig) {
 		cfg.registry.Register(&StringSliceFlag{
@@ -101,7 +101,7 @@ func WithStringSliceFlag(name, shorthand string, defaultValue []string, descript
 
 // WithRequiredStringFlag adds a required string flag.
 func WithRequiredStringFlag(name, shorthand, description string) Option {
-	defer perf.Track(nil, "flagparser.WithRequiredStringFlag")()
+	defer perf.Track(nil, "flags.WithRequiredStringFlag")()
 
 	return func(cfg *parserConfig) {
 		cfg.registry.Register(&StringFlag{
@@ -123,7 +123,7 @@ func WithRequiredStringFlag(name, shorthand, description string) Option {
 //   - Binds to ATMOS_IDENTITY and IDENTITY env vars
 //   - Respects precedence: flag > env > config > default
 func WithIdentityFlag() Option {
-	defer perf.Track(nil, "flagparser.WithIdentityFlag")()
+	defer perf.Track(nil, "flags.WithIdentityFlag")()
 
 	return func(cfg *parserConfig) {
 		flag := GlobalFlagsRegistry().Get("identity")
@@ -135,7 +135,7 @@ func WithIdentityFlag() Option {
 
 // WithStackFlag adds the stack flag (-s).
 func WithStackFlag() Option {
-	defer perf.Track(nil, "flagparser.WithStackFlag")()
+	defer perf.Track(nil, "flags.WithStackFlag")()
 
 	return func(cfg *parserConfig) {
 		flag := CommonFlags().Get("stack")
@@ -147,7 +147,7 @@ func WithStackFlag() Option {
 
 // WithDryRunFlag adds the dry-run flag.
 func WithDryRunFlag() Option {
-	defer perf.Track(nil, "flagparser.WithDryRunFlag")()
+	defer perf.Track(nil, "flags.WithDryRunFlag")()
 
 	return func(cfg *parserConfig) {
 		flag := CommonFlags().Get("dry-run")
@@ -159,7 +159,7 @@ func WithDryRunFlag() Option {
 
 // WithCommonFlags adds all common Atmos flags (stack, identity, dry-run).
 func WithCommonFlags() Option {
-	defer perf.Track(nil, "flagparser.WithCommonFlags")()
+	defer perf.Track(nil, "flags.WithCommonFlags")()
 
 	return func(cfg *parserConfig) {
 		// CommonFlags now includes global.Flags + common flags (stack, dry-run).
@@ -180,7 +180,7 @@ func WithCommonFlags() Option {
 // WithTerraformFlags adds all Terraform-specific flags.
 // Global flags (identity, chdir, etc.) are inherited from RootCmd persistent flags, not registered here.
 func WithTerraformFlags() Option {
-	defer perf.Track(nil, "flagparser.WithTerraformFlags")()
+	defer perf.Track(nil, "flags.WithTerraformFlags")()
 
 	return func(cfg *parserConfig) {
 		for _, flag := range TerraformFlags().All() {
@@ -191,7 +191,7 @@ func WithTerraformFlags() Option {
 
 // WithHelmfileFlags adds all Helmfile-specific flags.
 func WithHelmfileFlags() Option {
-	defer perf.Track(nil, "flagparser.WithHelmfileFlags")()
+	defer perf.Track(nil, "flags.WithHelmfileFlags")()
 
 	return func(cfg *parserConfig) {
 		for _, flag := range HelmfileFlags().All() {
@@ -202,7 +202,7 @@ func WithHelmfileFlags() Option {
 
 // WithPackerFlags adds all Packer-specific flags.
 func WithPackerFlags() Option {
-	defer perf.Track(nil, "flagparser.WithPackerFlags")()
+	defer perf.Track(nil, "flags.WithPackerFlags")()
 
 	return func(cfg *parserConfig) {
 		for _, flag := range PackerFlags().All() {
@@ -219,7 +219,7 @@ func WithPackerFlags() Option {
 //	WithStringFlag("format", "f", "yaml", "Output format"),
 //	WithEnvVars("format", "ATMOS_FORMAT", "FORMAT"),
 func WithEnvVars(flagName string, envVars ...string) Option {
-	defer perf.Track(nil, "flagparser.WithEnvVars")()
+	defer perf.Track(nil, "flags.WithEnvVars")()
 
 	return func(cfg *parserConfig) {
 		flag := cfg.registry.Get(flagName)
@@ -251,7 +251,7 @@ func WithEnvVars(flagName string, envVars ...string) Option {
 //	WithStringFlag("identity", "i", "", "Identity name"),
 //	WithNoOptDefVal("identity", "__SELECT__"),  // --identity alone = "__SELECT__"
 func WithNoOptDefVal(flagName, value string) Option {
-	defer perf.Track(nil, "flagparser.WithNoOptDefVal")()
+	defer perf.Track(nil, "flags.WithNoOptDefVal")()
 
 	return func(cfg *parserConfig) {
 		flag := cfg.registry.Get(flagName)
@@ -270,7 +270,7 @@ func WithNoOptDefVal(flagName, value string) Option {
 //	WithStringFlag("format", "f", "yaml", "Output format"),
 //	WithValidValues("format", "json", "yaml", "table"),
 func WithValidValues(flagName string, validValues ...string) Option {
-	defer perf.Track(nil, "flagparser.WithValidValues")()
+	defer perf.Track(nil, "flags.WithValidValues")()
 
 	return func(cfg *parserConfig) {
 		flag := cfg.registry.Get(flagName)
@@ -288,7 +288,7 @@ func WithValidValues(flagName string, validValues ...string) Option {
 //
 //	WithViperPrefix("terraform")  // flags stored as terraform.stack, terraform.identity, etc.
 func WithViperPrefix(prefix string) Option {
-	defer perf.Track(nil, "flagparser.WithViperPrefix")()
+	defer perf.Track(nil, "flags.WithViperPrefix")()
 
 	return func(cfg *parserConfig) {
 		cfg.viperPrefix = prefix
@@ -304,7 +304,7 @@ func WithViperPrefix(prefix string) Option {
 //	registry.Register(&flagparser.StringFlag{...})
 //	parser := flagparser.NewStandardFlagParser(flagparser.WithRegistry(registry))
 func WithRegistry(registry *FlagRegistry) Option {
-	defer perf.Track(nil, "flagparser.WithRegistry")()
+	defer perf.Track(nil, "flags.WithRegistry")()
 
 	return func(cfg *parserConfig) {
 		cfg.registry = registry

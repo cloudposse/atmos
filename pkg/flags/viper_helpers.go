@@ -11,7 +11,7 @@ import (
 // bindFlagToViper binds a single flag to Viper with environment variable support.
 // This is shared helper code used by flag parsers.
 func bindFlagToViper(v *viper.Viper, viperKey string, flag Flag) error {
-	defer perf.Track(nil, "flagparser.bindFlagToViper")()
+	defer perf.Track(nil, "flags.bindFlagToViper")()
 
 	// Set default value in Viper so it's returned when flag is not explicitly set.
 	// This ensures defaults work correctly for CLI flags, ENV vars, and config files.

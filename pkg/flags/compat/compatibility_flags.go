@@ -45,7 +45,7 @@ type CompatibilityFlagTranslator struct {
 
 // NewCompatibilityFlagTranslator creates a new translator with the given flag map.
 func NewCompatibilityFlagTranslator(flagMap map[string]CompatibilityFlag) *CompatibilityFlagTranslator {
-	defer perf.Track(nil, "flagparser.NewCompatibilityFlagTranslator")()
+	defer perf.Track(nil, "flags.NewCompatibilityFlagTranslator")()
 
 	return &CompatibilityFlagTranslator{
 		flagMap: flagMap,
@@ -56,7 +56,7 @@ func NewCompatibilityFlagTranslator(flagMap map[string]CompatibilityFlag) *Compa
 // reference flags that are actually registered on the command.
 // This should be called after flags are registered but before parsing.
 func (t *CompatibilityFlagTranslator) ValidateTargets(cmd *cobra.Command) error {
-	defer perf.Track(nil, "flagparser.CompatibilityFlagTranslator.ValidateTargets")()
+	defer perf.Track(nil, "flags.CompatibilityFlagTranslator.ValidateTargets")()
 
 	for compatFlag, config := range t.flagMap {
 		// Only validate MapToAtmosFlag flags (those with Target set).
@@ -82,7 +82,7 @@ func (t *CompatibilityFlagTranslator) ValidateTargets(cmd *cobra.Command) error 
 // when they're already registered as Cobra shorthands via StringP("stack", "s", ...).
 // This should be called after flags are registered.
 func (t *CompatibilityFlagTranslator) ValidateNoConflicts(cmd *cobra.Command) error {
-	defer perf.Track(nil, "flagparser.CompatibilityFlagTranslator.ValidateNoConflicts")()
+	defer perf.Track(nil, "flags.CompatibilityFlagTranslator.ValidateNoConflicts")()
 
 	for compatFlag := range t.flagMap {
 		// Only check single-dash flags (potential shorthands).
@@ -113,7 +113,7 @@ func (t *CompatibilityFlagTranslator) ValidateNoConflicts(cmd *cobra.Command) er
 // reference flags that are actually registered on the command.
 // This only validates compatibility flags that appear in the args, not all registered flags.
 func (t *CompatibilityFlagTranslator) ValidateTargetsInArgs(cmd *cobra.Command, args []string) error {
-	defer perf.Track(nil, "flagparser.CompatibilityFlagTranslator.ValidateTargetsInArgs")()
+	defer perf.Track(nil, "flags.CompatibilityFlagTranslator.ValidateTargetsInArgs")()
 
 	// Extract compatibility flags used in args.
 	usedFlags := make(map[string]bool)
@@ -168,7 +168,7 @@ func (t *CompatibilityFlagTranslator) ValidateTargetsInArgs(cmd *cobra.Command, 
 //   - atmosArgs: Arguments for Cobra to parse (Atmos flags + positional args)
 //   - separatedArgs: Arguments to pass through to subprocess
 func (t *CompatibilityFlagTranslator) Translate(args []string) (atmosArgs []string, separatedArgs []string) {
-	defer perf.Track(nil, "flagparser.CompatibilityFlagTranslator.Translate")()
+	defer perf.Track(nil, "flags.CompatibilityFlagTranslator.Translate")()
 
 	atmosArgs = make([]string, 0, len(args))
 	separatedArgs = make([]string, 0)

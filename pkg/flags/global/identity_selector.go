@@ -19,7 +19,7 @@ type IdentitySelector struct {
 
 // NewIdentitySelector creates an IdentitySelector from flag state.
 func NewIdentitySelector(value string, provided bool) IdentitySelector {
-	defer perf.Track(nil, "flagparser.NewIdentitySelector")()
+	defer perf.Track(nil, "flags.NewIdentitySelector")()
 
 	return IdentitySelector{
 		value:    value,
@@ -30,7 +30,7 @@ func NewIdentitySelector(value string, provided bool) IdentitySelector {
 // IsInteractiveSelector returns true if --identity was used without a value.
 // This triggers interactive identity selection.
 func (i IdentitySelector) IsInteractiveSelector() bool {
-	defer perf.Track(nil, "flagparser.IdentitySelector.IsInteractiveSelector")()
+	defer perf.Track(nil, "flags.IdentitySelector.IsInteractiveSelector")()
 
 	return i.provided && i.value == cfg.IdentityFlagSelectValue // "__SELECT__"
 }
@@ -38,21 +38,21 @@ func (i IdentitySelector) IsInteractiveSelector() bool {
 // Value returns the identity name.
 // Returns empty string if not provided or if interactive selection.
 func (i IdentitySelector) Value() string {
-	defer perf.Track(nil, "flagparser.IdentitySelector.Value")()
+	defer perf.Track(nil, "flags.IdentitySelector.Value")()
 
 	return i.value
 }
 
 // IsEmpty returns true if no identity was provided.
 func (i IdentitySelector) IsEmpty() bool {
-	defer perf.Track(nil, "flagparser.IdentitySelector.IsEmpty")()
+	defer perf.Track(nil, "flags.IdentitySelector.IsEmpty")()
 
 	return !i.provided || i.value == ""
 }
 
 // IsProvided returns true if the flag was explicitly set.
 func (i IdentitySelector) IsProvided() bool {
-	defer perf.Track(nil, "flagparser.IdentitySelector.IsProvided")()
+	defer perf.Track(nil, "flags.IdentitySelector.IsProvided")()
 
 	return i.provided
 }

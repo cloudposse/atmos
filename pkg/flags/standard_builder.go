@@ -36,7 +36,7 @@ type StandardOptionsBuilder struct {
 
 // NewStandardOptionsBuilder creates a new builder for StandardParser.
 func NewStandardOptionsBuilder() *StandardOptionsBuilder {
-	defer perf.Track(nil, "flagparser.NewStandardOptionsBuilder")()
+	defer perf.Track(nil, "flags.NewStandardOptionsBuilder")()
 
 	return &StandardOptionsBuilder{
 		options: []Option{},
@@ -353,7 +353,7 @@ func (b *StandardOptionsBuilder) WithAll() *StandardOptionsBuilder {
 func (b *StandardOptionsBuilder) Build() *StandardParser {
 	defer perf.Track(nil, "flags.StandardOptionsBuilder.Build")()
 
-	defer perf.Track(nil, "flagparser.StandardOptionsBuilder.Build")()
+	defer perf.Track(nil, "flags.StandardOptionsBuilder.Build")()
 
 	parser := NewStandardParser(b.options...)
 

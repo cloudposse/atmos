@@ -89,7 +89,7 @@ type StandardOptions struct {
 // GetGlobalFlags returns a pointer to the embedded global.Flags.
 // Implements CommandOptions interface.
 func (s *StandardOptions) GetGlobalFlags() *global.Flags {
-	defer perf.Track(nil, "flagparser.StandardOptions.GetGlobalFlags")()
+	defer perf.Track(nil, "flags.StandardOptions.GetGlobalFlags")()
 
 	return &s.Flags
 }
@@ -97,7 +97,7 @@ func (s *StandardOptions) GetGlobalFlags() *global.Flags {
 // GetPositionalArgs returns positional arguments extracted by the parser.
 // For standard commands: typically component name or other required args.
 func (s *StandardOptions) GetPositionalArgs() []string {
-	defer perf.Track(nil, "flagparser.StandardOptions.GetPositionalArgs")()
+	defer perf.Track(nil, "flags.StandardOptions.GetPositionalArgs")()
 
 	return s.positionalArgs
 }
@@ -105,7 +105,7 @@ func (s *StandardOptions) GetPositionalArgs() []string {
 // GetSeparatedArgs returns pass-through arguments.
 // For standard commands: always empty (no pass-through).
 func (s *StandardOptions) GetSeparatedArgs() []string {
-	defer perf.Track(nil, "flagparser.StandardOptions.GetSeparatedArgs")()
+	defer perf.Track(nil, "flags.StandardOptions.GetSeparatedArgs")()
 
 	return []string{}
 }

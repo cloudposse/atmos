@@ -50,7 +50,7 @@ Atmos has **13+ global flags** defined on `RootCmd.PersistentFlags()` that shoul
 Use **struct embedding** (composition) to provide global flags to all interpreters:
 
 ```go
-// pkg/flagparser/global_flags.go
+// pkg/flags/global_flags.go
 
 // Flags contains all persistent flags available to every command.
 // These flags are inherited from RootCmd.PersistentFlags() and should be embedded
@@ -131,7 +131,7 @@ func (p PagerSelector) IsProvided() bool {
 Every command interpreter embeds `GlobalFlags`:
 
 ```go
-// pkg/flagparser/terraform_interpreter.go
+// pkg/flags/terraform_interpreter.go
 
 type TerraformInterpreter struct {
     GlobalFlags // Embedded - provides all global flags
@@ -161,7 +161,7 @@ interpreter.DryRun         // ✅ From TerraformInterpreter
 ```
 
 ```go
-// pkg/flagparser/helmfile_interpreter.go
+// pkg/flags/helmfile_interpreter.go
 
 type HelmfileInterpreter struct {
     GlobalFlags // Embedded - same global flags
@@ -183,7 +183,7 @@ interpreter.Stack          // ✅ From HelmfileInterpreter
 ```
 
 ```go
-// pkg/flagparser/custom_interpreter.go
+// pkg/flags/custom_interpreter.go
 
 type CustomCommandInterpreter struct {
     GlobalFlags // Embedded - same global flags
@@ -205,7 +205,7 @@ interpreter.Flags["environment"]       // ✅ From CustomCommandInterpreter
 Remove `BaseInterpreter` struct, use interface instead:
 
 ```go
-// pkg/flagparser/interpreter.go
+// pkg/flags/interpreter.go
 
 // CommandInterpreter is the base interface all interpreters implement.
 type CommandInterpreter interface {
@@ -225,7 +225,7 @@ type CommandInterpreter interface {
 Parser constructs `GlobalFlags` once, shares across all interpreters:
 
 ```go
-// pkg/flagparser/parser.go
+// pkg/flags/parser.go
 
 type baseParser struct {
     registry *FlagRegistry
@@ -286,7 +286,7 @@ func (p *baseParser) parsePagerFlag() PagerSelector {
 ```
 
 ```go
-// pkg/flagparser/terraform_parser.go
+// pkg/flags/terraform_parser.go
 
 func (p *TerraformParser) Parse(ctx context.Context, args []string) (*TerraformInterpreter, error) {
     // Step 1: Parse global flags (inherited from RootCmd)
@@ -379,7 +379,7 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 ### Testing
 
 ```go
-// pkg/flagparser/terraform_interpreter_test.go
+// pkg/flags/terraform_interpreter_test.go
 
 func TestTerraformInterpreter_GlobalFlags(t *testing.T) {
     interpreter := &TerraformInterpreter{
@@ -480,7 +480,7 @@ func GetLogsLevel(interpreter CommandInterpreter) string {
 ## Implementation Checklist
 
 Phase 1: Create Infrastructure
-- [ ] Create `pkg/flagparser/global_flags.go`
+- [ ] Create `pkg/flags/global_flags.go`
 - [ ] Define `GlobalFlags` struct
 - [ ] Define `PagerSelector` type
 - [ ] Add `parseGlobalFlags()` to base parser

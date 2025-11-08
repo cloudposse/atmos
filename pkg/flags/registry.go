@@ -20,7 +20,7 @@ type FlagRegistry struct {
 
 // NewFlagRegistry creates a new flag registry.
 func NewFlagRegistry() *FlagRegistry {
-	defer perf.Track(nil, "flagparser.NewFlagRegistry")()
+	defer perf.Track(nil, "flags.NewFlagRegistry")()
 
 	return &FlagRegistry{
 		flags: make(map[string]Flag),
@@ -31,7 +31,7 @@ func NewFlagRegistry() *FlagRegistry {
 // Panics if a flag with the same name already exists to prevent duplicate registrations.
 // This is a programming error that should be caught during development.
 func (r *FlagRegistry) Register(flag Flag) {
-	defer perf.Track(nil, "flagparser.FlagRegistry.Register")()
+	defer perf.Track(nil, "flags.FlagRegistry.Register")()
 
 	flagName := flag.GetName()
 	if r.Has(flagName) {
@@ -46,14 +46,14 @@ func (r *FlagRegistry) Register(flag Flag) {
 // Get retrieves a flag by name.
 // Returns nil if flag not found.
 func (r *FlagRegistry) Get(name string) Flag {
-	defer perf.Track(nil, "flagparser.FlagRegistry.Get")()
+	defer perf.Track(nil, "flags.FlagRegistry.Get")()
 
 	return r.flags[name]
 }
 
 // Has returns true if the registry contains a flag with the given name.
 func (r *FlagRegistry) Has(name string) bool {
-	defer perf.Track(nil, "flagparser.FlagRegistry.Has")()
+	defer perf.Track(nil, "flags.FlagRegistry.Has")()
 
 	_, exists := r.flags[name]
 	return exists
@@ -62,7 +62,7 @@ func (r *FlagRegistry) Has(name string) bool {
 // All returns all registered flags.
 // The returned slice is a copy and safe to modify.
 func (r *FlagRegistry) All() []Flag {
-	defer perf.Track(nil, "flagparser.FlagRegistry.All")()
+	defer perf.Track(nil, "flags.FlagRegistry.All")()
 
 	result := make([]Flag, 0, len(r.flags))
 	for _, flag := range r.flags {
@@ -73,7 +73,7 @@ func (r *FlagRegistry) All() []Flag {
 
 // Count returns the number of registered flags.
 func (r *FlagRegistry) Count() int {
-	defer perf.Track(nil, "flagparser.FlagRegistry.Count")()
+	defer perf.Track(nil, "flags.FlagRegistry.Count")()
 
 	return len(r.flags)
 }
@@ -92,7 +92,7 @@ func (r *FlagRegistry) Count() int {
 //	// Add command-specific flags
 //	registry.Register(&flagparser.StringFlag{Name: "format", ...})
 func CommonFlags() *FlagRegistry {
-	defer perf.Track(nil, "flagparser.CommonFlags")()
+	defer perf.Track(nil, "flags.CommonFlags")()
 
 	// CommonFlags contains flags that are common across terraform/helmfile/packer commands
 	// but are NOT global (not inherited from RootCmd).
@@ -128,7 +128,7 @@ func CommonFlags() *FlagRegistry {
 //   - skip-init: Skip terraform init
 //   - from-plan: Apply from previously generated plan
 func TerraformFlags() *FlagRegistry {
-	defer perf.Track(nil, "flagparser.TerraformFlags")()
+	defer perf.Track(nil, "flags.TerraformFlags")()
 
 	registry := CommonFlags()
 
@@ -164,7 +164,7 @@ func TerraformFlags() *FlagRegistry {
 
 // HelmfileFlags returns a registry with flags specific to Helmfile commands.
 func HelmfileFlags() *FlagRegistry {
-	defer perf.Track(nil, "flagparser.HelmfileFlags")()
+	defer perf.Track(nil, "flags.HelmfileFlags")()
 
 	registry := CommonFlags()
 
@@ -175,7 +175,7 @@ func HelmfileFlags() *FlagRegistry {
 
 // PackerFlags returns a registry with flags specific to Packer commands.
 func PackerFlags() *FlagRegistry {
-	defer perf.Track(nil, "flagparser.PackerFlags")()
+	defer perf.Track(nil, "flags.PackerFlags")()
 
 	registry := CommonFlags()
 
@@ -187,7 +187,7 @@ func PackerFlags() *FlagRegistry {
 // Validate checks if all required flags are present and have valid values.
 // Returns error if validation fails.
 func (r *FlagRegistry) Validate(flagValues map[string]interface{}) error {
-	defer perf.Track(nil, "flagparser.FlagRegistry.Validate")()
+	defer perf.Track(nil, "flags.FlagRegistry.Validate")()
 
 	for _, flag := range r.flags {
 		if !flag.IsRequired() {
@@ -212,7 +212,7 @@ func (r *FlagRegistry) Validate(flagValues map[string]interface{}) error {
 
 // RegisterStringFlag is a convenience method to register a string flag.
 func (r *FlagRegistry) RegisterStringFlag(name, shorthand, defaultValue, description string, required bool) {
-	defer perf.Track(nil, "flagparser.FlagRegistry.RegisterStringFlag")()
+	defer perf.Track(nil, "flags.FlagRegistry.RegisterStringFlag")()
 
 	r.Register(&StringFlag{
 		Name:        name,
@@ -225,7 +225,7 @@ func (r *FlagRegistry) RegisterStringFlag(name, shorthand, defaultValue, descrip
 
 // RegisterBoolFlag is a convenience method to register a boolean flag.
 func (r *FlagRegistry) RegisterBoolFlag(name, shorthand string, defaultValue bool, description string) {
-	defer perf.Track(nil, "flagparser.FlagRegistry.RegisterBoolFlag")()
+	defer perf.Track(nil, "flags.FlagRegistry.RegisterBoolFlag")()
 
 	r.Register(&BoolFlag{
 		Name:        name,
@@ -237,7 +237,7 @@ func (r *FlagRegistry) RegisterBoolFlag(name, shorthand string, defaultValue boo
 
 // RegisterIntFlag is a convenience method to register an integer flag.
 func (r *FlagRegistry) RegisterIntFlag(name, shorthand string, defaultValue int, description string, required bool) {
-	defer perf.Track(nil, "flagparser.FlagRegistry.RegisterIntFlag")()
+	defer perf.Track(nil, "flags.FlagRegistry.RegisterIntFlag")()
 
 	r.Register(&IntFlag{
 		Name:        name,
@@ -257,7 +257,7 @@ func (r *FlagRegistry) RegisterIntFlag(name, shorthand string, defaultValue int,
 //   - IntFlag → cmd.Flags().IntP()
 //   - StringSliceFlag → cmd.Flags().StringSlice()
 func (r *FlagRegistry) RegisterFlags(cmd *cobra.Command) {
-	defer perf.Track(nil, "flagparser.FlagRegistry.RegisterFlags")()
+	defer perf.Track(nil, "flags.FlagRegistry.RegisterFlags")()
 
 	for _, flag := range r.flags {
 		r.registerFlagToSet(cmd.Flags(), flag)
@@ -288,7 +288,7 @@ func (r *FlagRegistry) registerFlagToSet(flagSet *pflag.FlagSet, flag Flag) {
 // RegisterPersistentFlags registers all flags as persistent flags on the command.
 // Persistent flags are inherited by subcommands.
 func (r *FlagRegistry) RegisterPersistentFlags(cmd *cobra.Command) {
-	defer perf.Track(nil, "flagparser.FlagRegistry.RegisterPersistentFlags")()
+	defer perf.Track(nil, "flags.FlagRegistry.RegisterPersistentFlags")()
 
 	for _, flag := range r.flags {
 		r.registerFlagToSet(cmd.PersistentFlags(), flag)
@@ -309,7 +309,7 @@ func (r *FlagRegistry) RegisterPersistentFlags(cmd *cobra.Command) {
 // Only processes flags registered in this registry with non-empty NoOptDefVal.
 // This includes both long form (--identity) and shorthand (-i).
 func (r *FlagRegistry) PreprocessNoOptDefValArgs(args []string) []string {
-	defer perf.Track(nil, "flagparser.FlagRegistry.PreprocessNoOptDefValArgs")()
+	defer perf.Track(nil, "flags.FlagRegistry.PreprocessNoOptDefValArgs")()
 
 	noOptDefValFlags := r.buildNoOptDefValFlagsSet()
 
@@ -323,7 +323,7 @@ func (r *FlagRegistry) PreprocessNoOptDefValArgs(args []string) []string {
 
 // buildNoOptDefValFlagsSet builds a set of flag names (long and short) that have NoOptDefVal.
 func (r *FlagRegistry) buildNoOptDefValFlagsSet() map[string]bool {
-	defer perf.Track(nil, "flagparser.FlagRegistry.buildNoOptDefValFlagsSet")()
+	defer perf.Track(nil, "flags.FlagRegistry.buildNoOptDefValFlagsSet")()
 
 	noOptDefValFlags := make(map[string]bool)
 	for _, flag := range r.flags {
@@ -339,7 +339,7 @@ func (r *FlagRegistry) buildNoOptDefValFlagsSet() map[string]bool {
 
 // preprocessArgs preprocesses args to rewrite space-separated syntax to equals syntax for NoOptDefVal flags.
 func (r *FlagRegistry) preprocessArgs(args []string, noOptDefValFlags map[string]bool) []string {
-	defer perf.Track(nil, "flagparser.FlagRegistry.preprocessArgs")()
+	defer perf.Track(nil, "flags.FlagRegistry.preprocessArgs")()
 
 	result := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
@@ -364,7 +364,7 @@ func (r *FlagRegistry) preprocessArgs(args []string, noOptDefValFlags map[string
 
 // processFlagArg processes a single flag argument and returns the processed arg and whether to skip next arg.
 func (r *FlagRegistry) processFlagArg(arg string, args []string, i int, noOptDefValFlags map[string]bool) (string, bool) {
-	defer perf.Track(nil, "flagparser.FlagRegistry.processFlagArg")()
+	defer perf.Track(nil, "flags.FlagRegistry.processFlagArg")()
 
 	// Keep arg unchanged if it already has equals syntax.
 	if hasSeparatedValue(arg) {
@@ -389,7 +389,7 @@ func (r *FlagRegistry) processFlagArg(arg string, args []string, i int, noOptDef
 
 // hasValueFollowing checks if there's a value following the flag at position i.
 func (r *FlagRegistry) hasValueFollowing(args []string, i int) bool {
-	defer perf.Track(nil, "flagparser.FlagRegistry.hasValueFollowing")()
+	defer perf.Track(nil, "flags.FlagRegistry.hasValueFollowing")()
 
 	return i+1 < len(args) && !isFlagArg(args[i+1])
 }
@@ -431,7 +431,7 @@ func extractFlagName(arg string) string {
 // Binding enables flag precedence: CLI > ENV > config > default.
 // Each flag is bound to its environment variables if specified.
 func (r *FlagRegistry) BindToViper(v *viper.Viper) error {
-	defer perf.Track(nil, "flagparser.FlagRegistry.BindToViper")()
+	defer perf.Track(nil, "flags.FlagRegistry.BindToViper")()
 
 	for _, flag := range r.flags {
 		// Bind environment variables if specified

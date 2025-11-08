@@ -60,7 +60,7 @@ pkg/flags/
 ├── registry.go               # FlagRegistry
 ├── parser.go                 # FlagParser interface
 ├── standard.go               # StandardParser (for standard commands)
-├── terraform/parser.go       # AtmosFlagParser (Terraform-specific with compatibility flages)
+├── terraform/parser.go       # AtmosFlagParser (Terraform-specific with compatibility flags)
 └── compatibility_flags.go  # CompatibilityFlagsTranslator (handles -s → --stack)
 ```
 
@@ -168,7 +168,7 @@ func parseComponentOptions(cmd *cobra.Command, args []string) (*ComponentOptions
 
 ### Pattern 2: Complex Commands (Terraform with Compatibility Aliases)
 
-For commands that pass args to external tools (terraform, helmfile) and need compatibility flages:
+For commands that pass args to external tools (terraform, helmfile) and need compatibility flags:
 
 ```go
 // cmd/terraform/options.go

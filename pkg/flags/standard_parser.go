@@ -32,7 +32,7 @@ type StandardParser struct {
 //	    WithBoolFlag("dry-run", "", false, "Dry run mode"),
 //	)
 func NewStandardParser(opts ...Option) *StandardParser {
-	defer perf.Track(nil, "flagparser.NewStandardParser")()
+	defer perf.Track(nil, "flags.NewStandardParser")()
 
 	return &StandardParser{
 		parser: NewStandardFlagParser(opts...),
@@ -46,7 +46,7 @@ func (p *StandardParser) SetPositionalArgs(
 	validator cobra.PositionalArgs,
 	usage string,
 ) {
-	defer perf.Track(nil, "flagparser.StandardParser.SetPositionalArgs")()
+	defer perf.Track(nil, "flags.StandardParser.SetPositionalArgs")()
 
 	p.parser.SetPositionalArgs(specs, validator, usage)
 }
@@ -55,7 +55,7 @@ func (p *StandardParser) SetPositionalArgs(
 // Does NOT set DisableFlagParsing - allows Cobra to validate flags normally.
 // Commands that need pass-through set DisableFlagParsing=true manually.
 func (p *StandardParser) RegisterFlags(cmd *cobra.Command) {
-	defer perf.Track(nil, "flagparser.StandardParser.RegisterFlags")()
+	defer perf.Track(nil, "flags.StandardParser.RegisterFlags")()
 
 	p.cmd = cmd
 	p.parser.RegisterFlags(cmd)
@@ -64,7 +64,7 @@ func (p *StandardParser) RegisterFlags(cmd *cobra.Command) {
 // RegisterPersistentFlags adds flags as persistent flags (inherited by subcommands).
 // This is used for global flags that should be available to all subcommands.
 func (p *StandardParser) RegisterPersistentFlags(cmd *cobra.Command) {
-	defer perf.Track(nil, "flagparser.StandardParser.RegisterPersistentFlags")()
+	defer perf.Track(nil, "flags.StandardParser.RegisterPersistentFlags")()
 
 	p.cmd = cmd
 	p.parser.RegisterPersistentFlags(cmd)
@@ -72,7 +72,7 @@ func (p *StandardParser) RegisterPersistentFlags(cmd *cobra.Command) {
 
 // BindToViper binds flags to Viper for precedence handling.
 func (p *StandardParser) BindToViper(v *viper.Viper) error {
-	defer perf.Track(nil, "flagparser.StandardParser.BindToViper")()
+	defer perf.Track(nil, "flags.StandardParser.BindToViper")()
 
 	p.viper = v
 	return p.parser.BindToViper(v)
@@ -80,7 +80,7 @@ func (p *StandardParser) BindToViper(v *viper.Viper) error {
 
 // BindFlagsToViper binds Cobra flags to Viper for precedence handling.
 func (p *StandardParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Viper) error {
-	defer perf.Track(nil, "flagparser.StandardParser.BindFlagsToViper")()
+	defer perf.Track(nil, "flags.StandardParser.BindFlagsToViper")()
 
 	return p.parser.BindFlagsToViper(cmd, v)
 }
@@ -90,7 +90,7 @@ func (p *StandardParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Viper) er
 // Handles precedence (CLI > ENV > config > defaults) via Viper.
 // Extracts positional arguments (e.g., component name).
 func (p *StandardParser) Parse(ctx context.Context, args []string) (*StandardOptions, error) {
-	defer perf.Track(nil, "flagparser.StandardParser.Parse")()
+	defer perf.Track(nil, "flags.StandardParser.Parse")()
 
 	// Use underlying parser to parse flags and extract positional args.
 	parsedConfig, err := p.parser.Parse(ctx, args)
@@ -113,7 +113,7 @@ func (p *StandardParser) Parse(ctx context.Context, args []string) (*StandardOpt
 // extractPositionalValues extracts positional args into a map using TargetField mapping.
 // This is configured via WithPositionalArgs() on the builder.
 func (p *StandardParser) extractPositionalValues(positionalArgs []string) map[string]string {
-	defer perf.Track(nil, "flagparser.StandardParser.extractPositionalValues")()
+	defer perf.Track(nil, "flags.StandardParser.extractPositionalValues")()
 
 	positionalValues := make(map[string]string)
 	if p.parser.positionalArgs != nil {
@@ -133,7 +133,7 @@ func (p *StandardParser) extractPositionalValues(positionalArgs []string) map[st
 // 2. Positional arg from builder config.
 // 3. Hardcoded fallback for commands not using builder pattern.
 func (p *StandardParser) resolveComponentValue(flags map[string]interface{}, positionalValues map[string]string, positionalArgs []string) string {
-	defer perf.Track(nil, "flagparser.StandardParser.resolveComponentValue")()
+	defer perf.Track(nil, "flags.StandardParser.resolveComponentValue")()
 
 	component := GetString(flags, "component")
 	if component == "" {
@@ -150,7 +150,7 @@ func (p *StandardParser) resolveComponentValue(flags map[string]interface{}, pos
 
 // resolveSchemaTypeValue determines the schema type value from positional args if configured.
 func (p *StandardParser) resolveSchemaTypeValue(flags map[string]interface{}, positionalValues map[string]string) string {
-	defer perf.Track(nil, "flagparser.StandardParser.resolveSchemaTypeValue")()
+	defer perf.Track(nil, "flags.StandardParser.resolveSchemaTypeValue")()
 
 	schemaType := GetString(flags, "schema-type")
 	if schemaType == "" {
@@ -163,7 +163,7 @@ func (p *StandardParser) resolveSchemaTypeValue(flags map[string]interface{}, po
 
 // resolveKeyValue determines the key value from positional args if configured.
 func (p *StandardParser) resolveKeyValue(positionalValues map[string]string) string {
-	defer perf.Track(nil, "flagparser.StandardParser.resolveKeyValue")()
+	defer perf.Track(nil, "flags.StandardParser.resolveKeyValue")()
 
 	key := ""
 	if val, ok := positionalValues["Key"]; ok {
@@ -176,7 +176,7 @@ func (p *StandardParser) resolveKeyValue(positionalValues map[string]string) str
 //
 //nolint:revive,funlen // Function length exceeded due to large struct initialization (68 lines). Splitting would reduce readability.
 func (p *StandardParser) buildStandardOptions(parsedConfig *ParsedConfig, component, schemaType, key string) StandardOptions {
-	defer perf.Track(nil, "flagparser.StandardParser.buildStandardOptions")()
+	defer perf.Track(nil, "flags.StandardParser.buildStandardOptions")()
 
 	return StandardOptions{
 		Flags: global.Flags{
