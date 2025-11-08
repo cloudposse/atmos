@@ -190,12 +190,12 @@ func TestConfiguration_Permissions(t *testing.T) {
 		for _, file := range config.Files {
 			if file.IsDirectory {
 				if file.Permissions != 0o755 {
-					t.Errorf("Directory %s in template %s has permissions %o, expected 0755", 
+					t.Errorf("Directory %s in template %s has permissions %o, expected 0755",
 						file.Path, name, file.Permissions)
 				}
 			} else {
 				if file.Permissions != 0o644 {
-					t.Errorf("File %s in template %s has permissions %o, expected 0644", 
+					t.Errorf("File %s in template %s has permissions %o, expected 0644",
 						file.Path, name, file.Permissions)
 				}
 			}
@@ -212,7 +212,7 @@ func TestConfiguration_Metadata(t *testing.T) {
 	for name, config := range configs {
 		// Check that Name matches the template directory name
 		if config.Name != name {
-			t.Errorf("Template %s: Name field %q doesn't match directory name %q", 
+			t.Errorf("Template %s: Name field %q doesn't match directory name %q",
 				name, config.Name, name)
 		}
 
@@ -238,7 +238,7 @@ func TestFile_NonEmpty(t *testing.T) {
 			// Non-directory files should have content (or be deliberately empty)
 			// Directories should have empty content
 			if file.IsDirectory && file.Content != "" {
-				t.Errorf("Directory %s in template %s has non-empty content", 
+				t.Errorf("Directory %s in template %s has non-empty content",
 					file.Path, name)
 			}
 		}

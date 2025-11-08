@@ -22,4 +22,4 @@ releases:
       - controller:
           config:
             use-proxy-protocol: "false"
-            use-forwarded-headers: "true" 
+            use-forwarded-headers: "true"

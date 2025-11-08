@@ -15,10 +15,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/term"
 
-	"github.com/cloudposse/atmos/pkg/project/config"
-	tmpl "github.com/cloudposse/atmos/pkg/generator/templates"
-	"github.com/cloudposse/atmos/pkg/generator/filesystem"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
+	"github.com/cloudposse/atmos/pkg/generator/filesystem"
+	tmpl "github.com/cloudposse/atmos/pkg/generator/templates"
+	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
 // FileSkippedError indicates that a file was intentionally skipped

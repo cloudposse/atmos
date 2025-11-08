@@ -19,4 +19,4 @@ services:
 
 networks:
   localstack-network:
-    driver: bridge 
+    driver: bridge
