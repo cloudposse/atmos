@@ -261,14 +261,14 @@ func TestFormatThemeRow(t *testing.T) {
 				return
 			}
 
-			// Check active indicator (now uses "●" instead of ">").
-			hasActiveIndicator := strings.Contains(row[0], "●")
+			// Check active indicator (now uses IconActive instead of ">").
+			hasActiveIndicator := strings.Contains(row[0], IconActive)
 			if hasActiveIndicator != tt.wantActive {
 				t.Errorf("formatThemeRow() active indicator = %v, want %v", hasActiveIndicator, tt.wantActive)
 			}
 
 			// Check star (now in status column instead of name column).
-			hasStar := strings.Contains(row[0], "★")
+			hasStar := strings.Contains(row[0], IconRecommended)
 			if hasStar != tt.wantStar {
 				t.Errorf("formatThemeRow() star = %v, want %v", hasStar, tt.wantStar)
 			}
@@ -461,7 +461,7 @@ func TestFormatSimpleThemeList(t *testing.T) {
 
 			// Verify active indicator if applicable.
 			if tt.activeTheme != "" {
-				if !strings.Contains(output, "●") {
+				if !strings.Contains(output, IconActive) {
 					t.Error("formatSimpleThemeList() missing active indicator")
 				}
 			}

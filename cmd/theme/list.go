@@ -66,7 +66,7 @@ func executeThemeList(cmd *cobra.Command, args []string) error {
 	} else {
 		countMsg += " available."
 		if result.ShowStars {
-			countMsg += " ★ indicates recommended themes."
+			countMsg += " " + theme.IconRecommended + " indicates recommended themes."
 		}
 	}
 

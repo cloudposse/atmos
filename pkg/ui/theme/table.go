@@ -147,12 +147,12 @@ func applyTableStyle(t *table.Table, config *TableConfig) *table.Table {
 
 // isActiveRow checks if the row represents an active theme.
 func isActiveRow(rowData []string) bool {
-	return len(rowData) > 0 && strings.Contains(rowData[0], "●")
+	return len(rowData) > 0 && strings.Contains(rowData[0], IconActive)
 }
 
 // isRecommendedTheme checks if the status column contains a star indicator.
 func isRecommendedTheme(rowData []string) bool {
-	return len(rowData) > 0 && strings.HasPrefix(rowData[0], "★")
+	return len(rowData) > 0 && strings.HasPrefix(rowData[0], IconRecommended)
 }
 
 // getActiveColumnStyle returns the style for the active indicator column.

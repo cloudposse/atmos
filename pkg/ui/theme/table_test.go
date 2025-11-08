@@ -131,7 +131,7 @@ func TestIsActiveRow(t *testing.T) {
 	}{
 		{
 			name:     "active row",
-			rowData:  []string{"●", "theme1"},
+			rowData:  []string{IconActive, "theme1"},
 			expected: true,
 		},
 		{
@@ -162,7 +162,7 @@ func TestIsRecommendedTheme(t *testing.T) {
 	}{
 		{
 			name:     "recommended theme with star",
-			input:    "★",
+			input:    IconRecommended,
 			expected: true,
 		},
 		{

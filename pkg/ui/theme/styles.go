@@ -140,8 +140,8 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 			Foreground(lipgloss.Color(scheme.TextLight)),
 
 		// Special elements
-		Checkmark: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Success)).SetString("✓"),
-		XMark:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)).SetString("✗"),
+		Checkmark: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Success)).SetString(IconCheckmark),
+		XMark:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)).SetString(IconXMark),
 		Footer:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)).Italic(true),
 		Border: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).

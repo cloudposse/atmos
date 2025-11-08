@@ -70,7 +70,7 @@ type HelpStyle struct {
 //
 //	// New (theme-aware):
 //	styles := theme.GetCurrentStyles()
-//	fmt.Print(styles.Success.Render("✓"))
+//	fmt.Print(styles.Success.Render(theme.IconCheckmark))
 var Styles = struct {
 	VersionNumber lipgloss.Style
 	NewVersion    lipgloss.Style
@@ -89,7 +89,7 @@ var Styles = struct {
 	NewVersion:    lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGreen)),
 	Link:          lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)),
 	PackageName:   lipgloss.NewStyle().Foreground(lipgloss.Color(ColorPink)),
-	Checkmark:     lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCheckmark)).SetString("✓"),
+	Checkmark:     lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCheckmark)).SetString(IconCheckmark),
 	XMark:         lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).SetString("x"),
 	GrayText:      lipgloss.NewStyle().Foreground(lipgloss.Color(ColorDarkGray)),
 	SelectedItem:  lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color(ColorSelectedItem)),

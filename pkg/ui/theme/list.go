@@ -134,14 +134,14 @@ func buildThemeRows(themes []*Theme, activeTheme string, showStars bool) [][]str
 func formatThemeRow(t *Theme, activeTheme string, showStars bool) []string {
 	defer perf.Track(nil, "theme.formatThemeRow")()
 
-	// Status indicator column: active ("●") or recommended ("★") or empty.
+	// Status indicator column: active (IconActive) or recommended (IconRecommended) or empty.
 	// The styling is applied by the table's style function based on the indicator.
 	statusIndicator := ""
 	if strings.EqualFold(t.Name, activeTheme) {
 		// Dot for active theme - styling applied by table style function.
-		statusIndicator = "●"
+		statusIndicator = IconActive
 	} else if showStars && IsRecommended(t.Name) {
-		statusIndicator = "★"
+		statusIndicator = IconRecommended
 	}
 
 	// Theme name (no star suffix needed anymore).
@@ -197,12 +197,12 @@ func formatSimpleThemeList(themes []*Theme, activeTheme string, showingRecommend
 
 	// Theme rows.
 	for _, t := range themes {
-		// Status indicator: active ("●") or recommended ("★") or empty.
+		// Status indicator: active (IconActive) or recommended (IconRecommended) or empty.
 		statusIndicator := " "
 		if strings.EqualFold(t.Name, activeTheme) {
-			statusIndicator = "●"
+			statusIndicator = IconActive
 		} else if showStars && IsRecommended(t.Name) {
-			statusIndicator = "★"
+			statusIndicator = IconRecommended
 		}
 
 		themeType := getThemeTypeString(t)
@@ -278,7 +278,7 @@ func formatColorPalette(t *Theme) string {
 		// Create a colored block using lipgloss.
 		block := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(hexColor)).
-			Render("█")
+			Render(IconColorBlock)
 		result.WriteString(block)
 	}
 

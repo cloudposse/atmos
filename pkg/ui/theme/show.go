@@ -82,7 +82,7 @@ func formatThemeHeader(t *Theme, styles *StyleSet) string {
 
 	themeHeader := fmt.Sprintf("Theme: %s", t.Name)
 	if IsRecommended(t.Name) {
-		themeHeader += " " + styles.Success.Render("★ Recommended")
+		themeHeader += " " + styles.Success.Render(IconRecommended + " Recommended")
 	}
 	return styles.Title.Render(themeHeader) + sectionSeparator
 }
