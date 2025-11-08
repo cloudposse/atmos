@@ -85,7 +85,9 @@ func init() {
 	versionParser.RegisterFlags(versionCmd)
 
 	// Bind flags to Viper for environment variable support.
-	_ = versionParser.BindToViper(viper.GetViper())
+	if err := versionParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
