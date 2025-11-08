@@ -126,17 +126,16 @@ func buildThemeRows(themes []*Theme, activeTheme string, showStars bool) [][]str
 func formatThemeRow(t *Theme, activeTheme string, showStars bool) []string {
 	defer perf.Track(nil, "theme.formatThemeRow")()
 
-	// Active indicator.
-	activeIndicator := "  "
+	// Status indicator column: active (">") or recommended ("★") or empty.
+	statusIndicator := "  "
 	if strings.EqualFold(t.Name, activeTheme) {
-		activeIndicator = "> "
+		statusIndicator = "> "
+	} else if showStars && IsRecommended(t.Name) {
+		statusIndicator = "★ "
 	}
 
-	// Theme name with recommended indicator (only show star when requested).
+	// Theme name (no star suffix needed anymore).
 	name := t.Name
-	if showStars && IsRecommended(t.Name) {
-		name += "  ★"
-	}
 
 	// Theme type (Dark/Light).
 	themeType := getThemeTypeString(t)
@@ -153,7 +152,7 @@ func formatThemeRow(t *Theme, activeTheme string, showStars bool) []string {
 	}
 
 	return []string{
-		activeIndicator,
+		statusIndicator,
 		name,
 		themeType,
 		palette,
@@ -213,19 +212,17 @@ func formatSimpleThemeList(themes []*Theme, activeTheme string, showingRecommend
 	const lineWidth = 80
 
 	// Header.
-	output += fmt.Sprintf("   %-30s %-8s %-4s %-10s %s\n", "Name", "Type", "Rec", "Palette", "Source")
+	output += fmt.Sprintf("   %-30s %-8s %-10s %s\n", "Name", "Type", "Palette", "Source")
 	output += fmt.Sprintf("%s\n", strings.Repeat("=", lineWidth))
 
 	// Theme rows.
 	for _, t := range themes {
-		activeIndicator := "  "
+		// Status indicator: active (">") or recommended ("★") or empty.
+		statusIndicator := "  "
 		if strings.EqualFold(t.Name, activeTheme) {
-			activeIndicator = "> "
-		}
-
-		recommended := ""
-		if showStars && IsRecommended(t.Name) {
-			recommended = "★"
+			statusIndicator = "> "
+		} else if showStars && IsRecommended(t.Name) {
+			statusIndicator = "★ "
 		}
 
 		themeType := getThemeTypeString(t)
@@ -234,7 +231,7 @@ func formatSimpleThemeList(themes []*Theme, activeTheme string, showingRecommend
 		// For non-TTY, just show "8 colors" as a placeholder.
 		palette := "8 colors"
 
-		output += fmt.Sprintf("%-2s %-30s %-8s %-4s %-10s %s\n", activeIndicator, t.Name, themeType, recommended, palette, source)
+		output += fmt.Sprintf("%-2s %-30s %-8s %-10s %s\n", statusIndicator, t.Name, themeType, palette, source)
 	}
 
 	// Footer message.

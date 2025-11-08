@@ -150,19 +150,22 @@ func isActiveRow(rowData []string) bool {
 	return len(rowData) > 0 && rowData[0] == "> "
 }
 
-// isRecommendedTheme checks if the theme name contains a star indicator.
-func isRecommendedTheme(name string) bool {
-	return strings.HasSuffix(name, "★")
+// isRecommendedTheme checks if the status column contains a star indicator.
+func isRecommendedTheme(rowData []string) bool {
+	return len(rowData) > 0 && strings.HasPrefix(rowData[0], "★")
 }
 
 // getActiveColumnStyle returns the style for the active indicator column.
-func getActiveColumnStyle(isActive bool, styles *StyleSet) lipgloss.Style {
+func getActiveColumnStyle(isActive bool, isRecommended bool, styles *StyleSet) lipgloss.Style {
 	baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
 	if styles == nil {
 		return baseStyle
 	}
 	if isActive {
 		return baseStyle.Inherit(styles.Selected)
+	}
+	if isRecommended {
+		return baseStyle.Inherit(styles.TableSpecial)
 	}
 	return baseStyle
 }
@@ -176,7 +179,7 @@ func getNameColumnStyle(rowData []string, isActive bool, styles *StyleSet) lipgl
 	if isActive {
 		return baseStyle.Inherit(styles.TableActive)
 	}
-	if len(rowData) > 1 && isRecommendedTheme(rowData[1]) {
+	if isRecommendedTheme(rowData) {
 		return baseStyle.Inherit(styles.TableSpecial)
 	}
 	return baseStyle.Inherit(styles.TableRow)
@@ -201,10 +204,12 @@ func getTypeColumnStyle(rowData []string, styles *StyleSet) lipgloss.Style {
 
 // getCellStyle determines the appropriate style for a table cell.
 func getCellStyle(col int, rowData []string, isActive bool, styles *StyleSet) lipgloss.Style {
+	isRecommended := isRecommendedTheme(rowData)
+
 	switch col {
-	case 0: // Active indicator column
-		return getActiveColumnStyle(isActive, styles)
-	case 1: // Name column (may contain ★ for recommended)
+	case 0: // Status indicator column (active ">" or recommended "★")
+		return getActiveColumnStyle(isActive, isRecommended, styles)
+	case 1: // Name column
 		return getNameColumnStyle(rowData, isActive, styles)
 	case 2: // Type column (Dark/Light)
 		return getTypeColumnStyle(rowData, styles)
