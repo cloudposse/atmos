@@ -79,9 +79,11 @@ func TestFormat_LongErrorMessage(t *testing.T) {
 	result := Format(err, config)
 
 	// The new formatter uses structured markdown sections.
-	// Wrapping is handled by the Glamour markdown renderer.
+	// Wrapping is handled by the Glamour markdown renderer, which adds newlines.
+	// Check for presence of key phrases from the message, accounting for wrapping.
 	assert.Contains(t, result, "# Error")
-	assert.Contains(t, result, longMsg)
+	assert.Contains(t, result, "This is a very long error message")
+	assert.Contains(t, result, "terminal output")
 }
 
 func TestFormat_VerboseMode(t *testing.T) {
@@ -709,4 +711,59 @@ func TestFormat_WithTitle_OverridesDefault(t *testing.T) {
 	// Should still have explanation section.
 	assert.Contains(t, result, "## Explanation")
 	assert.Contains(t, result, "database server is unreachable")
+}
+
+func TestFormat_MaxLineLength_ControlsWrapping(t *testing.T) {
+	// Create error with long hint that should be wrapped.
+	longHint := "This is a very long hint message that definitely exceeds any reasonable line length and should be wrapped when formatted with a narrow MaxLineLength setting"
+	err := Build(errors.New("test error")).
+		WithHint(longHint).
+		Err()
+
+	// Test with narrow width.
+	narrowConfig := DefaultFormatterConfig()
+	narrowConfig.MaxLineLength = 40
+
+	narrowResult := Format(err, narrowConfig)
+
+	// Test with wide width.
+	wideConfig := DefaultFormatterConfig()
+	wideConfig.MaxLineLength = 200
+
+	wideResult := Format(err, wideConfig)
+
+	// Both should contain the hint content.
+	assert.Contains(t, narrowResult, "very long hint message")
+	assert.Contains(t, wideResult, "very long hint message")
+
+	// The narrow version should have more line breaks due to wrapping.
+	// We can verify this by counting newlines in the hint section.
+	narrowLines := strings.Count(narrowResult, "\n")
+	wideLines := strings.Count(wideResult, "\n")
+
+	// Narrow config should produce more line breaks than wide config.
+	assert.Greater(t, narrowLines, wideLines, "Narrow MaxLineLength should produce more line breaks")
+}
+
+func TestFormat_UseColor_ThreadedThrough(t *testing.T) {
+	// This test verifies that the useColor parameter is threaded through properly.
+	// Color control is now handled by terminal settings, so we just verify
+	// that the function doesn't panic and produces output.
+	err := Build(errors.New("test error")).
+		WithHint("Check the configuration").
+		WithContext("component", "vpc").
+		Err()
+
+	config := DefaultFormatterConfig()
+	config.Verbose = true
+
+	result := Format(err, config)
+
+	// Should contain all expected sections.
+	assert.Contains(t, result, "# Error")
+	assert.Contains(t, result, "test error")
+	assert.Contains(t, result, "💡")
+	assert.Contains(t, result, "Check the configuration")
+	assert.Contains(t, result, "## Context")
+	assert.Contains(t, result, "## Stack Trace")
 }

@@ -39,8 +39,8 @@ type FormatterConfig struct {
 	Verbose bool
 
 	// MaxLineLength is the maximum length before wrapping (default: 80).
-	// Note: Line wrapping is currently handled by the markdown renderer based on
-	// the global atmos configuration. This field is available for future use.
+	// This controls both the width passed to the markdown renderer and the
+	// wrapping of text in explanation and hint sections.
 	MaxLineLength int
 
 	// Title is an optional custom title for the error message.
@@ -121,10 +121,10 @@ func Format(err error, config FormatterConfig) string {
 	useColor := shouldUseColor()
 
 	// Build structured markdown document with sections.
-	md := buildMarkdownSections(err, config)
+	md := buildMarkdownSections(err, config, useColor)
 
-	// Render markdown through Glamour.
-	rendered := renderMarkdown(md)
+	// Render markdown through Glamour with configured width.
+	rendered := renderMarkdown(md, config.MaxLineLength)
 
 	// Strip ANSI codes if color is disabled.
 	if !useColor {
@@ -135,7 +135,7 @@ func Format(err error, config FormatterConfig) string {
 }
 
 // buildMarkdownSections builds the complete markdown document with all sections.
-func buildMarkdownSections(err error, config FormatterConfig) string {
+func buildMarkdownSections(err error, config FormatterConfig, useColor bool) string {
 	var md strings.Builder
 
 	// Section 1: Error header + message.
@@ -170,20 +170,20 @@ func buildMarkdownSections(err error, config FormatterConfig) string {
 	}
 
 	// Section 2: Explanation.
-	addExplanationSection(&md, err, wrappedMsg)
+	addExplanationSection(&md, err, wrappedMsg, config.MaxLineLength)
 
 	// Section 3 & 4: Examples and Hints.
-	addExampleAndHintsSection(&md, err)
+	addExampleAndHintsSection(&md, err, config.MaxLineLength)
 
 	// Section 4.5: Command Output (for ExecError with stderr).
 	addCommandOutputSection(&md, err)
 
 	// Section 5: Context.
-	addContextSection(&md, err)
+	addContextSection(&md, err, useColor)
 
 	// Section 6: Stack trace (verbose mode only).
 	if config.Verbose {
-		addStackTraceSection(&md, err)
+		addStackTraceSection(&md, err, useColor)
 	}
 
 	return md.String()
@@ -226,7 +226,7 @@ func extractSentinelAndWrappedMessage(err error) (sentinelMsg string, wrappedMsg
 }
 
 // addExplanationSection adds the explanation section if details or wrapped message exist.
-func addExplanationSection(md *strings.Builder, err error, wrappedMsg string) {
+func addExplanationSection(md *strings.Builder, err error, wrappedMsg string, maxLineLength int) {
 	details := errors.GetAllDetails(err)
 	hasContent := len(details) > 0 || wrappedMsg != ""
 
@@ -235,12 +235,14 @@ func addExplanationSection(md *strings.Builder, err error, wrappedMsg string) {
 
 		// Add wrapped message first if present.
 		if wrappedMsg != "" {
-			md.WriteString(wrappedMsg + newline + newline)
+			wrapped := wrapText(wrappedMsg, maxLineLength)
+			md.WriteString(wrapped + newline + newline)
 		}
 
 		// Add details from error chain.
 		for _, detail := range details {
-			fmt.Fprintf(md, "%s"+newline, detail)
+			wrapped := wrapText(fmt.Sprintf("%v", detail), maxLineLength)
+			md.WriteString(wrapped + newline)
 		}
 
 		if len(details) > 0 {
@@ -280,7 +282,7 @@ func categorizeHints(allHints []string) (examples []string, hints []string) {
 }
 
 // addExampleAndHintsSection separates hints into examples and regular hints, then adds both sections.
-func addExampleAndHintsSection(md *strings.Builder, err error) {
+func addExampleAndHintsSection(md *strings.Builder, err error, maxLineLength int) {
 	allHints := errors.GetAllHints(err)
 	examples, hints := categorizeHints(allHints)
 
@@ -308,8 +310,9 @@ func addExampleAndHintsSection(md *strings.Builder, err error) {
 	if len(hints) > 0 {
 		md.WriteString(newline + newline + "## Hints" + newline + newline)
 		for _, hint := range hints {
-			// Add blank line after each hint to ensure proper line breaks in markdown rendering.
-			md.WriteString("💡 " + hint + newline + newline)
+			// Wrap hint text but preserve the emoji prefix and blank line structure.
+			wrapped := wrapText(hint, maxLineLength)
+			md.WriteString("💡 " + wrapped + newline + newline)
 		}
 	}
 }
@@ -329,7 +332,10 @@ func addCommandOutputSection(md *strings.Builder, err error) {
 }
 
 // addContextSection adds the context section if context exists.
-func addContextSection(md *strings.Builder, err error) {
+func addContextSection(md *strings.Builder, err error, useColor bool) {
+	// Context is rendered as a markdown table, so we use formatContextForMarkdown.
+	// The useColor parameter is available for future use if we need color-aware context rendering.
+	_ = useColor
 	context := formatContextForMarkdown(err)
 	if context != "" {
 		md.WriteString(newline + newline + "## Context" + newline + newline)
@@ -339,32 +345,39 @@ func addContextSection(md *strings.Builder, err error) {
 }
 
 // addStackTraceSection adds the stack trace section in verbose mode.
-func addStackTraceSection(md *strings.Builder, err error) {
+func addStackTraceSection(md *strings.Builder, err error, useColor bool) {
+	// Stack traces are rendered in code blocks, so color doesn't apply.
+	// The useColor parameter is available for future use if needed.
+	_ = useColor
 	md.WriteString(newline + newline + "## Stack Trace" + newline + newline)
 	md.WriteString("```" + newline)
 	fmt.Fprintf(md, "%+v", err)
 	md.WriteString(newline + "```" + newline)
 }
 
-// renderMarkdown renders markdown string through Glamour or creates a minimal renderer.
-func renderMarkdown(md string) string {
-	renderer := GetMarkdownRenderer()
-	if renderer == nil {
-		// Create minimal renderer with default config when global renderer not initialized.
-		// This happens during early errors before atmos config is loaded.
-		defaultConfig := schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				Docs: schema.Docs{
-					MaxWidth: DefaultMarkdownWidth,
-				},
+// renderMarkdown renders markdown string through Glamour with specified width.
+func renderMarkdown(md string, maxLineLength int) string {
+	// Use provided maxLineLength, or fall back to default if not set.
+	width := maxLineLength
+	if width <= 0 {
+		width = DefaultMarkdownWidth
+	}
+
+	// Always create a fresh renderer with the specified width to ensure
+	// MaxLineLength parameter is respected. The global renderer may have
+	// a different width configured.
+	config := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Docs: schema.Docs{
+				MaxWidth: width,
 			},
-		}
-		var err error
-		renderer, err = markdown.NewTerminalMarkdownRenderer(defaultConfig)
-		if err != nil {
-			// Last resort fallback: return plain markdown.
-			return md
-		}
+		},
+	}
+
+	renderer, err := markdown.NewTerminalMarkdownRenderer(config)
+	if err != nil {
+		// Fallback: return plain markdown if renderer creation fails.
+		return md
 	}
 
 	rendered, renderErr := renderer.RenderErrorf(md)
