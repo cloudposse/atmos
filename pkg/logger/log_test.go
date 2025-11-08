@@ -436,3 +436,50 @@ func BenchmarkGlobalWith(b *testing.B) {
 		With("key", "value").Info("benchmark message")
 	}
 }
+
+// TestLevelToString tests the LevelToString function that converts charm.Level to string.
+func TestLevelToString(t *testing.T) {
+	tests := []struct {
+		name     string
+		level    log.Level
+		expected string
+	}{
+		{
+			name:     "TraceLevel",
+			level:    TraceLevel,
+			expected: "trace",
+		},
+		{
+			name:     "DebugLevel",
+			level:    DebugLevel,
+			expected: "debug",
+		},
+		{
+			name:     "InfoLevel",
+			level:    InfoLevel,
+			expected: "info",
+		},
+		{
+			name:     "WarnLevel",
+			level:    WarnLevel,
+			expected: "warn",
+		},
+		{
+			name:     "ErrorLevel",
+			level:    ErrorLevel,
+			expected: "error",
+		},
+		{
+			name:     "FatalLevel",
+			level:    FatalLevel,
+			expected: "fatal",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := LevelToString(tt.level)
+			assert.Equal(t, tt.expected, result, "LevelToString(%v) should return %q", tt.level, tt.expected)
+		})
+	}
+}

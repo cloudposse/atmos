@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -52,7 +53,7 @@ func NewSpinner(message string) *tea.Program {
 		// Workaround for non-TTY environments.
 		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 		log.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
-		fmt.Println(message)
+		fmt.Fprintln(os.Stderr, message)
 	}
 
 	p := tea.NewProgram(modelSpinner{

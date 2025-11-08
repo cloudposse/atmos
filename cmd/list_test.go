@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
+	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/list/errors"
 )
 
@@ -201,4 +202,43 @@ func TestListCmds_Error(t *testing.T) {
 
 	err = listWorkflowsCmd.RunE(listWorkflowsCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "list workflows command should return an error when called with invalid flags")
+}
+
+// TestListCmds_NoResults verifies that the list commands can handle empty results.
+// This tests the condition that triggers "No components found" and "No stacks found" messages.
+// Note: This test verifies the underlying filter functions return empty slices, which is the
+// condition that causes the RunE functions to display the "No X found" UI error messages.
+func TestListCmds_NoResults(t *testing.T) {
+	// Test that FilterAndListComponents can return empty results
+	t.Run("list components returns empty when no components exist", func(t *testing.T) {
+		emptyStacksMap := map[string]any{
+			"test-stack": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{},
+					"helmfile":  map[string]any{},
+				},
+			},
+		}
+
+		output, err := l.FilterAndListComponents("", emptyStacksMap)
+		assert.NoError(t, err)
+		assert.Empty(t, output, "Expected empty output when no components exist")
+	})
+
+	// Test that FilterAndListStacks can return empty results
+	t.Run("list stacks returns empty when no matching stacks exist", func(t *testing.T) {
+		stacksMap := map[string]any{
+			"test-stack": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"existing-component": map[string]any{},
+					},
+				},
+			},
+		}
+
+		output, err := l.FilterAndListStacks(stacksMap, "nonexistent-component")
+		assert.NoError(t, err)
+		assert.Nil(t, output, "Expected nil output when no matching stacks exist")
+	})
 }

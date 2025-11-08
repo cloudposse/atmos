@@ -15,6 +15,10 @@ Run any tool (Terraform, AWS CLI, kubectl, etc.) with the right cloud identity i
 
 <Screengrab title="atmos auth exec --help" slug="atmos-auth-exec--help" />
 
+:::tip Exec vs Shell
+Use `exec` for single commands or automation. Use [`shell`](/cli/commands/auth/shell) for interactive sessions where you'll run multiple commands.
+:::
+
 ## Usage
 
 ```shell
@@ -34,8 +38,11 @@ atmos auth exec [--identity <name>] -- <command> [args...]
 ## Examples
 
 ```shell
-# Run terraform with authenticated env
+# Run terraform with authenticated env (uses default identity)
 atmos auth exec -- terraform plan -var-file=env.tfvars
+
+# Interactively select identity
+atmos auth exec --identity -- aws sts get-caller-identity
 
 # Use a specific identity
 atmos auth exec --identity prod-admin -- aws sts get-caller-identity
@@ -48,7 +55,13 @@ atmos auth exec -- env | grep AWS
 
 <dl>
   <dt>`--identity` <em>(alias `-i`)</em></dt>
-  <dd>Specify the identity to use. If omitted, the default identity is used.</dd>
+  <dd>
+    Specify the identity to use. This flag has three modes:
+
+    - **With value** (`--identity admin`): Use the specified identity
+    - **Without value** (`--identity`): Show interactive selector to choose identity
+    - **Omitted**: Use the default identity configured in `atmos.yaml`
+  </dd>
 </dl>
 
 ## Notes

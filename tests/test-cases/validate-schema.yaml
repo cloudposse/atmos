@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=schema.json
+# UI output tests for validate schema command
+tests:
+  - name: "atmos validate schema success with UI output"
+    enabled: false
+    snapshot: true
+    description: "Verify validate schema shows (disabled - needs valid atmos.yaml fixture) checkmark for valid files"
+    workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - "validate"
+      - "schema"
+      - "atmos"
+    expect:
+      exit_code: 0
+      stderr:
+        - "✓.*Validated"

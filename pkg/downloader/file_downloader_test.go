@@ -6,8 +6,8 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 )
 
 func TestFileDownloader_Fetch_Success(t *testing.T) {

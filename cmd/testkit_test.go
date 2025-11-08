@@ -156,3 +156,22 @@ func TestTestKit_NestedTests(t *testing.T) {
 
 	// After all nested tests, state fully restored.
 }
+
+func TestTestKit_OsArgsRestoration(t *testing.T) {
+	// Capture initial os.Args.
+	initialArgs := make([]string, len(os.Args))
+	copy(initialArgs, os.Args)
+
+	// Run test that modifies os.Args.
+	t.Run("modifies os.Args", func(t *testing.T) {
+		_ = NewTestKit(t)
+
+		// Modify os.Args.
+		os.Args = []string{"atmos", "test", "modified"}
+		assert.Equal(t, []string{"atmos", "test", "modified"}, os.Args)
+		// Cleanup happens automatically when subtest ends.
+	})
+
+	// Verify os.Args was restored after subtest.
+	assert.Equal(t, initialArgs, os.Args, "os.Args should be restored after subtest")
+}

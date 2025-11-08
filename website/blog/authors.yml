@@ -3,3 +3,9 @@ atmos:
   title: atmos
   url: https://github.com/cloudposse/atmos
   image_url: https://github.com/cloudposse/atmos/raw/main/docs/img/atmos-logo-128.svg
+
+osterman:
+  name: Erik Osterman
+  title: Founder @ Cloud Posse
+  url: https://github.com/osterman
+  image_url: https://github.com/osterman.png

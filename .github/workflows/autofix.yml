@@ -4,7 +4,9 @@
 # specific identifier for execution. This is a strict requirement of Autofix CI.
 name: autofix.ci
 on: pull_request
-permissions: {}
+permissions:
+  contents: read
+  actions: write
 jobs:
   autofix:
     runs-on:
@@ -13,9 +15,12 @@ jobs:
       - tag=atmos
       - extras=s3-cache
       - private=false
-    permissions: {}
+    permissions:
+      contents: read
+      actions: write
     timeout-minutes: 15
     steps:
+      - uses: runs-on/action@v2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
@@ -58,4 +63,8 @@ jobs:
           pre-commit run trailing-whitespace --all-files || true
           pre-commit run end-of-file-fixer --all-files || true
 
-      - uses: autofix-ci/action@2891949f3779a1cafafae1523058501de3d4e944 # v1.3.1
+      # Generate NOTICE file on all PRs to ensure it stays up-to-date
+      - name: Generate NOTICE file
+        run: ./scripts/generate-notice.sh
+
+      - uses: autofix-ci/action@ff86a557419858bb967097bfc916833f5647fa8c # v1.3.2

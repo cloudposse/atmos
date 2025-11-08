@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/huh"
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -37,23 +36,10 @@ var authUserConfigureCmd = &cobra.Command{
 			return errors.Join(errUtils.ErrInvalidAuthConfig, err)
 		}
 
-		// Gather identities that use a provider of type aws/user.
-		var selectable []string
-		if atmosConfig.Auth.Identities == nil {
-			return fmt.Errorf("%w: no auth identities configured in atmos.yaml", errUtils.ErrInvalidAuthConfig)
-		}
-		defaultChoice := ""
-		for ident := range atmosConfig.Auth.Identities {
-			identity := atmosConfig.Auth.Identities[ident]
-			if identity.Kind == "aws/user" {
-				selectable = append(selectable, ident)
-				if identity.Default && defaultChoice == "" {
-					defaultChoice = ident
-				}
-			}
-		}
-		if len(selectable) == 0 {
-			return fmt.Errorf("%w: no identities configured for provider type 'aws/user'. Define one under auth.identities in atmos.yaml", errUtils.ErrInvalidAuthConfig)
+		// Select aws/user identities
+		selectable, _, err := selectAWSUserIdentities(atmosConfig.Auth.Identities)
+		if err != nil {
+			return err
 		}
 
 		// Choose identity
@@ -70,25 +56,66 @@ var authUserConfigureCmd = &cobra.Command{
 		// For AWS User identities, use the identity name directly as alias
 		alias := choice // AWS User identities are standalone, no provider needed
 
-		// Prompt for credentials
-		var accessKeyID, secretAccessKey, mfaArn string
-		form := huh.NewForm(
-			huh.NewGroup(
-				huh.NewInput().Title("AWS Access Key ID").Value(&accessKeyID).Validate(func(s string) error {
-					if s == "" {
-						return errUtils.ErrMissingInput
-					}
-					return nil
-				}),
-				huh.NewInput().Title("AWS Secret Access Key").Value(&secretAccessKey).EchoMode(huh.EchoModePassword).Validate(func(s string) error {
-					if s == "" {
-						return errUtils.ErrMissingInput
-					}
-					return nil
-				}),
-				huh.NewInput().Title("AWS User MFA ARN (optional)").Value(&mfaArn),
-			),
-		).WithTheme(uiutils.NewAtmosHuhTheme())
+		// Extract credential information from YAML config
+		selectedIdentity := atmosConfig.Auth.Identities[choice]
+		yamlInfo := extractAWSUserInfo(selectedIdentity)
+
+		// Check if all credentials are managed by Atmos configuration.
+		if yamlInfo.AllInYAML {
+			// All credentials are in YAML - nothing to configure in keyring.
+			fmt.Fprintln(cmd.ErrOrStderr(), "All credentials are managed by Atmos configuration (atmos.yaml)")
+			fmt.Fprintln(cmd.ErrOrStderr(), "To update credentials, edit your atmos.yaml configuration file")
+			if yamlInfo.MfaArn != "" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "MFA ARN is also managed by Atmos configuration: %s\n", yamlInfo.MfaArn)
+			}
+			return nil
+		}
+
+		// Build form fields based on what's already in YAML config.
+		var accessKeyID, secretAccessKey, mfaArn, sessionDuration string
+		var formFields []huh.Field
+
+		// Access Key ID
+		formFields = append(formFields, buildCredentialFormField(formFieldConfig{
+			YAMLValue:  yamlInfo.AccessKeyID,
+			InputTitle: "AWS Access Key ID",
+			NoteTitle:  "AWS Access Key ID (managed by Atmos configuration)",
+			NoteDesc:   yamlInfo.AccessKeyID,
+			IsOptional: false,
+		}, &accessKeyID))
+
+		// Secret Access Key
+		formFields = append(formFields, buildCredentialFormField(formFieldConfig{
+			YAMLValue:  yamlInfo.SecretAccessKey,
+			InputTitle: "AWS Secret Access Key",
+			NoteTitle:  "AWS Secret Access Key (managed by Atmos configuration)",
+			NoteDesc:   "****** (configured in atmos.yaml)",
+			IsPassword: true,
+			IsOptional: false,
+		}, &secretAccessKey))
+
+		// MFA ARN
+		formFields = append(formFields, buildCredentialFormField(formFieldConfig{
+			YAMLValue:  yamlInfo.MfaArn,
+			InputTitle: "AWS User MFA ARN (optional)",
+			NoteTitle:  "AWS User MFA ARN (managed by Atmos configuration)",
+			NoteDesc:   yamlInfo.MfaArn,
+			IsOptional: true,
+		}, &mfaArn))
+
+		// Session Duration
+		formFields = append(formFields, buildCredentialFormField(formFieldConfig{
+			YAMLValue:      yamlInfo.SessionDuration,
+			InputTitle:     "Session Duration (optional, default: 12h)",
+			NoteTitle:      "Session Duration (managed by Atmos configuration)",
+			NoteDesc:       fmt.Sprintf("%s (configured in atmos.yaml)", yamlInfo.SessionDuration),
+			IsOptional:     true,
+			DefaultValue:   "12h",
+			ValidateFunc:   validateSessionDuration,
+			DescriptionMsg: "How long before you need to re-enter MFA. Examples: 3600 (seconds), 1h, 12h, 1d, 24h (max 36h with MFA)",
+		}, &sessionDuration))
+
+		form := huh.NewForm(huh.NewGroup(formFields...)).WithTheme(uiutils.NewAtmosHuhTheme())
 		if err := form.Run(); err != nil {
 			return err
 		}
@@ -101,13 +128,17 @@ var authUserConfigureCmd = &cobra.Command{
 			AccessKeyID:     accessKeyID,
 			SecretAccessKey: secretAccessKey,
 			MfaArn:          mfaArn,
+			SessionDuration: sessionDuration,
 		}
 
 		// Store the credentials
 		if err := store.Store(alias, creds); err != nil {
 			return errors.Join(errUtils.ErrAwsAuth, err)
 		}
-		log.Info("Saved credentials to keyring", "alias", alias)
+		fmt.Fprintf(cmd.ErrOrStderr(), "✓ Saved credentials to keyring: %s\n", alias)
+		if sessionDuration != "" {
+			fmt.Fprintf(cmd.ErrOrStderr(), "✓ Session duration configured: %s\n", sessionDuration)
+		}
 		return nil
 	},
 }

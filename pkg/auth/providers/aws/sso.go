@@ -22,6 +22,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -41,10 +42,11 @@ func isInteractive() bool {
 
 // ssoProvider implements AWS IAM Identity Center authentication.
 type ssoProvider struct {
-	name     string
-	config   *schema.Provider
-	startURL string
-	region   string
+	name         string
+	config       *schema.Provider
+	startURL     string
+	region       string
+	cacheStorage CacheStorage
 }
 
 // NewSSOProvider creates a new AWS SSO provider.
@@ -65,10 +67,11 @@ func NewSSOProvider(name string, config *schema.Provider) (*ssoProvider, error) 
 	}
 
 	return &ssoProvider{
-		name:     name,
-		config:   config,
-		startURL: config.StartURL,
-		region:   config.Region,
+		name:         name,
+		config:       config,
+		startURL:     config.StartURL,
+		region:       config.Region,
+		cacheStorage: &defaultCacheStorage{}, // Use default filesystem operations.
 	}, nil
 }
 
@@ -91,6 +94,22 @@ func (p *ssoProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
 	// Note: SSO provider no longer caches credentials directly.
 	// Caching is handled at the manager level to prevent duplicates.
+
+	// Check for cached SSO token first to avoid unnecessary device authorization.
+	cachedToken, cachedExpiry, err := p.loadCachedToken()
+	if err != nil {
+		log.Debug("Error loading cached token, will proceed with device authorization", "error", err)
+	}
+	if cachedToken != "" {
+		log.Debug("Using cached SSO token", "expiresAt", cachedExpiry)
+		return &authTypes.AWSCredentials{
+			AccessKeyID: cachedToken, // Used by identities to get actual credentials
+			Region:      p.region,
+			Expiration:  cachedExpiry.Format(time.RFC3339),
+		}, nil
+	}
+
+	// No valid cached token, proceed with device authorization flow.
 
 	// Check if we're in a headless environment - SSO device flow requires user interaction.
 	if !isInteractive() {
@@ -115,7 +134,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	// to avoid conflicts with external AWS env vars.
 	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load AWS config: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	log.Debug("AWS config loaded successfully")
 
@@ -129,7 +148,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		ClientType: aws.String("public"),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to register SSO client: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to register SSO client: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	log.Debug("SSO client registered successfully")
 
@@ -141,7 +160,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		StartUrl:     aws.String(p.startURL),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to start device authorization: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to start device authorization: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	log.Debug("Device authorization started")
 
@@ -160,6 +179,11 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		expiration = time.Now().Add(time.Duration(p.getSessionDuration()) * time.Minute)
 	}
 	log.Debug("Authentication successful", "expiration", expiration)
+
+	// Save token to cache for future use (non-fatal if fails).
+	if err := p.saveCachedToken(accessToken, expiration); err != nil {
+		log.Debug("Failed to cache SSO token", "error", err)
+	}
 
 	return &authTypes.AWSCredentials{
 		AccessKeyID: accessToken, // Used by identities to get actual credentials
@@ -276,12 +300,20 @@ func displayVerificationPlainText(code, url string) {
 
 // Validate validates the provider configuration.
 func (p *ssoProvider) Validate() error {
+	defer perf.Track(nil, "aws.ssoProvider.Validate")()
+
 	if p.startURL == "" {
 		return fmt.Errorf("%w: start_url is required", errUtils.ErrInvalidProviderConfig)
 	}
 	if p.region == "" {
 		return fmt.Errorf("%w: region is required", errUtils.ErrInvalidProviderConfig)
 	}
+
+	// Validate spec.files.base_path if provided.
+	if err := awsCloud.ValidateFilesBasePath(p.config); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -290,6 +322,18 @@ func (p *ssoProvider) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 	env["AWS_REGION"] = p.region
 	return env, nil
+}
+
+// PrepareEnvironment prepares environment variables for external processes.
+// For SSO providers, this method is typically not called directly since SSO providers
+// authenticate to get identity credentials, which then have their own PrepareEnvironment.
+// However, we implement it for interface compliance.
+func (p *ssoProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
+	defer perf.Track(nil, "aws.ssoProvider.PrepareEnvironment")()
+
+	// SSO provider doesn't write credential files itself - that's done by identities.
+	// Just return the environment unchanged.
+	return environ, nil
 }
 
 // Note: SSO caching is now handled at the manager level to prevent duplicate entries.
@@ -388,7 +432,7 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			m.done = true
-			m.result = &pollResult{err: fmt.Errorf("%w: authentication cancelled", errUtils.ErrAuthenticationFailed)}
+			m.result = &pollResult{err: errUtils.ErrUserAborted}
 			if m.cancel != nil {
 				m.cancel()
 			}
@@ -475,11 +519,51 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 			continue
 		}
 
-		return "", time.Time{}, fmt.Errorf("%w: failed to create token: %v", errUtils.ErrAuthenticationFailed, err)
+		return "", time.Time{}, fmt.Errorf("%w: failed to create token: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	if accessToken == "" {
 		return "", time.Time{}, fmt.Errorf("%w: authentication timed out", errUtils.ErrAuthenticationFailed)
 	}
 	return accessToken, tokenExpiresAt, nil
+}
+
+// Logout removes provider-specific credential storage.
+func (p *ssoProvider) Logout(ctx context.Context) error {
+	defer perf.Track(nil, "aws.ssoProvider.Logout")()
+
+	// Delete cached SSO token (non-fatal if fails).
+	if err := p.deleteCachedToken(); err != nil {
+		log.Debug("Failed to delete cached SSO token", "error", err)
+	}
+
+	// Get base_path from provider spec if configured.
+	basePath := awsCloud.GetFilesBasePath(p.config)
+
+	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	if err != nil {
+		return errors.Join(errUtils.ErrProviderLogout, errUtils.ErrLogoutFailed, err)
+	}
+
+	if err := fileManager.Cleanup(p.name); err != nil {
+		log.Debug("Failed to cleanup AWS files for SSO provider", "provider", p.name, "error", err)
+		return errors.Join(errUtils.ErrProviderLogout, errUtils.ErrLogoutFailed, err)
+	}
+
+	log.Debug("Cleaned up AWS files for SSO provider", "provider", p.name)
+	return nil
+}
+
+// GetFilesDisplayPath returns the display path for AWS credential files.
+func (p *ssoProvider) GetFilesDisplayPath() string {
+	defer perf.Track(nil, "aws.ssoProvider.GetFilesDisplayPath")()
+
+	basePath := awsCloud.GetFilesBasePath(p.config)
+
+	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	if err != nil {
+		return "~/.aws/atmos"
+	}
+
+	return fileManager.GetDisplayPath()
 }

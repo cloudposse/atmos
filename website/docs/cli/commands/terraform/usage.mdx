@@ -425,6 +425,36 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         This requires that the target reference is already cloned by Git, and the information about it exists in the `.git` directory
     </dd>
 
+    <dt>`--identity` <em>(alias `-i`)</em> <em>(optional)</em></dt>
+    <dd>
+        Specify the identity to authenticate before running Terraform commands. This flag has four modes:
+
+        - **With identity name** (`--identity admin`): Use the specified identity
+        - **Without value** (`--identity`): Show interactive selector to choose identity
+        - **With `false`** (`--identity=false`): Disable Atmos authentication and use AWS SDK defaults
+        - **Omitted**: Use the default identity configured in `atmos.yaml`, or prompt if no default is set
+
+        ```shell
+        # Use specific identity
+        atmos terraform plan <component> -s <stack> --identity admin
+
+        # Interactively select identity
+        atmos terraform apply <component> -s <stack> --identity
+
+        # Disable authentication (use AWS SDK defaults)
+        atmos terraform plan <component> -s <stack> --identity=false
+
+        # Use default identity (or prompt if none configured)
+        atmos terraform plan <component> -s <stack>
+        ```
+
+        When set to `false` (or `0`, `no`, `off`), Atmos skips identity authentication entirely and uses standard cloud provider SDK credential resolution (e.g., environment variables, shared credentials file, instance metadata, OIDC). This is useful in CI/CD environments using external authentication mechanisms.
+
+        See [Disabling Identity Authentication](/cli/commands/auth/usage#disabling-identity-authentication) for more details.
+
+        **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
+    </dd>
+
 </dl>
 
 :::note

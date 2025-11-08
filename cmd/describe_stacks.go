@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -69,6 +70,14 @@ func getRunnableDescribeStacksCmd(
 		if err != nil {
 			return err
 		}
+
+		// Get identity from flag and create AuthManager if provided.
+		identityName := GetIdentityFromFlags(cmd, os.Args)
+		authManager, err := CreateAuthManagerFromIdentity(identityName, &atmosConfig.Auth)
+		if err != nil {
+			return err
+		}
+		describe.AuthManager = authManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 

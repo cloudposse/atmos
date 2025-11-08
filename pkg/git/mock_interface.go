@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	v5 "github.com/go-git/go-git/v5"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockRepositoryOperations is a mock of RepositoryOperations interface.

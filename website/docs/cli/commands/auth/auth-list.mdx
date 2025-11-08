@@ -47,8 +47,16 @@ atmos auth list --format json
 # Export as YAML
 atmos auth list --format yaml
 
-# View authentication chains in tree format
-atmos auth list --format tree --identities
+# Generate Graphviz diagram
+brew install graphviz
+atmos auth list --format graphviz > auth.dot
+dot -Tpng auth.dot -o auth.png
+
+# Generate Mermaid diagram
+atmos auth list --format mermaid
+
+# Generate Markdown with embedded Mermaid
+atmos auth list --format markdown > auth.md
 ```
 
 ## Output Formats
@@ -73,6 +81,21 @@ atmos auth list --format tree --identities
   <dd>
     Human-readable YAML output of provider and identity configurations. Good for reviewing configuration or generating documentation.
   </dd>
+
+  <dt>`graphviz` / `dot`</dt>
+  <dd>
+    Graphviz DOT format for creating visual diagrams. Use with `dot` command to generate PNG, SVG, or PDF diagrams. Requires `brew install graphviz` on macOS.
+  </dd>
+
+  <dt>`mermaid`</dt>
+  <dd>
+    Mermaid diagram syntax for rendering in GitHub, GitLab, Confluence, and other Mermaid-compatible platforms. Shows providers and identities as a flowchart with styled nodes.
+  </dd>
+
+  <dt>`markdown` / `md`</dt>
+  <dd>
+    Markdown document with embedded Mermaid diagram in a code fence. Ready to commit to your repository documentation.
+  </dd>
 </dl>
 
 ## Flags
@@ -80,7 +103,7 @@ atmos auth list --format tree --identities
 <dl>
   <dt>`--format` / `-f`</dt>
   <dd>
-    Output format: `table`, `tree`, `json`, or `yaml`. Default: `table`.
+    Output format: `table`, `tree`, `json`, `yaml`, `graphviz`, `mermaid`, or `markdown`. Default: `table`.
   </dd>
 
   <dt>`--providers [names]`</dt>
@@ -130,23 +153,99 @@ Chains can be arbitrarily long when using multiple role assumptions or identity 
 
 ## Tree Format Details
 
-The tree format shows hierarchical relationships with indentation:
+The tree format shows hierarchical relationships with providers as roots and their identities as children:
 
 ```
-Providers
+Authentication Configuration
 ├─ aws-sso (aws-sso) [DEFAULT]
 │  ├─ Region: us-east-1
 │  ├─ Start URL: https://example.awsapps.com/start
-│  └─ Session
-│     └─ Duration: 12h
-
-Identities
-├─ admin (aws/assume-role) [DEFAULT]
-│  ├─ Via Provider: aws-sso
-│  ├─ Chain: aws-sso → admin
-│  └─ Principal
-│     └─ arn: arn:aws:iam::123456789012:role/AdminRole
+│  ├─ Session
+│  │  └─ Duration: 12h
+│  └─ Identities
+│     ├─ admin (aws/assume-role) [DEFAULT]
+│     │  ├─ Principal
+│     │  │  └─ arn: arn:aws:iam::123456789012:role/AdminRole
+│     │  └─ ops (aws/assume-role)
+│     │     └─ Principal
+│     │        └─ arn: arn:aws:iam::987654321098:role/OpsRole
+│     └─ developer (aws/assume-role)
+│        └─ Principal
+│           └─ arn: arn:aws:iam::123456789012:role/DeveloperRole
 ```
+
+## Graphviz Format Example
+
+The Graphviz format generates DOT language for creating professional diagrams:
+
+```dot
+digraph AuthConfig {
+  rankdir=LR;
+  node [shape=box, style=rounded];
+
+  "aws-sso" [label="aws-sso\n(aws-sso)", style="rounded,filled", fillcolor=lightblue];
+  "admin" [label="admin\n(aws/assume-role)", style="rounded,filled", fillcolor=lightgreen];
+  "developer" [label="developer\n(aws/assume-role)"];
+
+  "aws-sso" -> "admin";
+  "aws-sso" -> "developer";
+}
+```
+
+Generate visualizations with:
+
+```shell
+# PNG image
+atmos auth list --format graphviz | dot -Tpng > auth.png
+
+# SVG (scalable)
+atmos auth list --format graphviz | dot -Tsvg > auth.svg
+
+# PDF document
+atmos auth list --format graphviz | dot -Tpdf > auth.pdf
+```
+
+## Mermaid Format Example
+
+The Mermaid format works in GitHub, GitLab, and many documentation platforms:
+
+```mermaid
+graph LR
+  aws_sso["aws-sso<br/>aws-sso"]
+  admin["admin<br/>aws/assume-role"]
+  developer["developer<br/>aws/assume-role"]
+  aws_sso --> admin
+  aws_sso --> developer
+
+  classDef provider fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+  classDef identity fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+  classDef default stroke:#ff9800,stroke-width:3px
+
+  class aws_sso provider
+  class aws_sso default
+  class admin identity
+  class admin default
+  class developer identity
+```
+
+Use in documentation by adding to Markdown:
+
+````markdown
+```mermaid
+graph LR
+  aws_sso["aws-sso<br/>aws-sso"]
+  admin["admin<br/>aws/assume-role"]
+  aws_sso --> admin
+
+  classDef provider fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+  classDef identity fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+
+  class aws_sso provider
+  class admin identity
+```
+````
+
+Or use the `--format markdown` to generate the complete document automatically.
 
 ## Related Commands
 
@@ -154,3 +253,26 @@ Identities
 - [`atmos auth login`](/cli/commands/auth/login) - Authenticate with a provider
 - [`atmos auth validate`](/cli/commands/auth/validate) - Validate authentication configuration
 - [`atmos auth env`](/cli/commands/auth/env) - Export credentials as environment variables
+
+## Version Support
+
+`atmos auth list` is available in Atmos `v1.195.0` and later. To get started:
+
+```shell
+# Install latest version
+brew upgrade atmos
+
+# Verify version
+atmos version
+```
+
+## What's Next
+
+This is just the beginning. We're continuing to improve authentication management in Atmos with:
+
+- Enhanced visualization options for better understanding of authentication flows
+- Interactive TUI mode for browsing configurations
+- Better integration with Dev Containers for seamless development environments
+- Support for additional cloud providers and identity providers (PRs welcome!)
+
+Want to contribute? Check out our [GitHub repository](https://github.com/cloudposse/atmos) to submit feature requests or pull requests for new authentication providers.

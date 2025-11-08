@@ -7,6 +7,8 @@ import (
 	awsIdentities "github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	awsProviders "github.com/cloudposse/atmos/pkg/auth/providers/aws"
 	githubProviders "github.com/cloudposse/atmos/pkg/auth/providers/github"
+	mockProviders "github.com/cloudposse/atmos/pkg/auth/providers/mock"
+	mockawsProviders "github.com/cloudposse/atmos/pkg/auth/providers/mock/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -25,6 +27,10 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 		return awsProviders.NewSAMLProvider(name, config)
 	case "github/oidc":
 		return githubProviders.NewOIDCProvider(name, config)
+	case "mock":
+		return mockProviders.NewProvider(name, config), nil
+	case "mock-aws":
+		return mockawsProviders.NewProvider(name, config), nil
 	default:
 		return nil, fmt.Errorf("%w: unsupported provider kind: %s", errUtils.ErrInvalidProviderKind, config.Kind)
 	}
@@ -43,6 +49,10 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 		return awsIdentities.NewAssumeRoleIdentity(name, config)
 	case "aws/user":
 		return awsIdentities.NewUserIdentity(name, config)
+	case "mock":
+		return mockProviders.NewIdentity(name, config), nil
+	case "mock-aws":
+		return mockawsProviders.NewIdentity(name, config), nil
 	default:
 		return nil, fmt.Errorf("%w: unsupported identity kind: %s", errUtils.ErrInvalidIdentityKind, config.Kind)
 	}

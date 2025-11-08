@@ -13,6 +13,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -74,8 +75,11 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 
 	_, err = ExecuteValidateComponent(&atmosConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
 	if err != nil {
+		u.PrintfMessageToTUI("\r%s Component validation failed\n", theme.Styles.XMark)
 		return "", "", err
 	}
+	u.PrintfMessageToTUI("\r%s Component validated successfully\n", theme.Styles.Checkmark)
+	log.Debug("Component validation completed", "component", componentName, "stack", stack)
 
 	return componentName, stack, nil
 }

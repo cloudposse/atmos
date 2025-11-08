@@ -3,6 +3,7 @@ slug: welcome
 title: Welcome to the Atmos Changelog
 authors: [atmos]
 tags: [atmos, announcements]
+date: 2025-10-12
 ---
 
 We're excited to launch the Atmos Changelog—your go-to source for feature announcements, technical deep dives, and best practices for managing cloud infrastructure at scale.

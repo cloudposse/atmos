@@ -64,6 +64,7 @@ func TestGetBackendAttribute(t *testing.T) {
 }
 
 func TestProcessTerraformStateFile(t *testing.T) {
+	// Test simple string value.
 	jsonData := []byte(`{
 		"version": 4,
 		"terraform_version": "1.0.0",
@@ -78,11 +79,106 @@ func TestProcessTerraformStateFile(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "hello", result["test_output"])
 
+	// Test number value (should remain number, not string).
+	numberData := []byte(`{
+		"version": 4,
+		"terraform_version": "1.0.0",
+		"outputs": {
+			"port": {
+				"value": 8080,
+				"type": "number"
+			},
+			"ratio": {
+				"value": 3.14,
+				"type": "number"
+			}
+		}
+	}`)
+	result, err = tb.ProcessTerraformStateFile(numberData)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(8080), result["port"])
+	assert.Equal(t, 3.14, result["ratio"])
+
+	// Test map/object value.
+	mapData := []byte(`{
+		"version": 4,
+		"terraform_version": "1.0.0",
+		"outputs": {
+			"config": {
+				"value": {
+					"host": "localhost",
+					"port": 8080,
+					"enabled": true
+				},
+				"type": "object"
+			}
+		}
+	}`)
+	result, err = tb.ProcessTerraformStateFile(mapData)
+	assert.NoError(t, err)
+	assert.IsType(t, map[string]any{}, result["config"])
+	configMap := result["config"].(map[string]any)
+	assert.Equal(t, "localhost", configMap["host"])
+	assert.Equal(t, float64(8080), configMap["port"])
+	assert.Equal(t, true, configMap["enabled"])
+
+	// Test array value.
+	arrayData := []byte(`{
+		"version": 4,
+		"terraform_version": "1.0.0",
+		"outputs": {
+			"zones": {
+				"value": ["us-east-1a", "us-east-1b", "us-east-1c"],
+				"type": "list"
+			}
+		}
+	}`)
+	result, err = tb.ProcessTerraformStateFile(arrayData)
+	assert.NoError(t, err)
+	assert.IsType(t, []any{}, result["zones"])
+	zones := result["zones"].([]any)
+	assert.Equal(t, 3, len(zones))
+	assert.Equal(t, "us-east-1a", zones[0])
+
+	// Test complex nested structure.
+	nestedData := []byte(`{
+		"version": 4,
+		"terraform_version": "1.0.0",
+		"outputs": {
+			"cluster": {
+				"value": {
+					"nodes": [
+						{"name": "node1", "cpu": 2},
+						{"name": "node2", "cpu": 4}
+					],
+					"metadata": {
+						"region": "us-east-1",
+						"count": 2
+					}
+				},
+				"type": "object"
+			}
+		}
+	}`)
+	result, err = tb.ProcessTerraformStateFile(nestedData)
+	assert.NoError(t, err)
+	assert.IsType(t, map[string]any{}, result["cluster"])
+	cluster := result["cluster"].(map[string]any)
+	assert.IsType(t, []any{}, cluster["nodes"])
+	nodes := cluster["nodes"].([]any)
+	assert.Equal(t, 2, len(nodes))
+	assert.IsType(t, map[string]any{}, nodes[0])
+	node1 := nodes[0].(map[string]any)
+	assert.Equal(t, "node1", node1["name"])
+	assert.Equal(t, float64(2), node1["cpu"])
+
+	// Test empty state.
 	emptyData := []byte(``)
 	result, err = tb.ProcessTerraformStateFile(emptyData)
 	assert.NoError(t, err)
 	assert.Nil(t, result)
 
+	// Test invalid JSON.
 	invalidData := []byte(`{bad json}`)
 	_, err = tb.ProcessTerraformStateFile(invalidData)
 	assert.Error(t, err)
@@ -177,7 +273,7 @@ func TestGetTerraformBackend(t *testing.T) {
 				TerraformDirAbsolutePath: filepath.Join(tmpDir, "terraform"),
 			}
 
-			outputs, err := tb.GetTerraformBackend(atmosConfig, &tt.componentData)
+			outputs, err := tb.GetTerraformBackend(atmosConfig, &tt.componentData, nil)
 
 			if tt.expectError {
 				assert.Error(t, err)

@@ -20,7 +20,7 @@ func CheckComponentExists(atmosConfig *schema.AtmosConfiguration, componentName 
 	}
 
 	// Get all stacks to check for the component
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return false
 	}

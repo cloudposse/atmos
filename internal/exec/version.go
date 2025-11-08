@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"encoding/json"
 	"fmt"
 	"runtime"
 	"strings"
@@ -12,8 +11,8 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -147,17 +146,12 @@ func (v versionExec) displayVersionInFormat(forceCheck bool, format string) erro
 	}
 	switch format {
 	case "json":
-		if data, err := json.MarshalIndent(version, " ", " "); err == nil {
-			fmt.Println(string(data))
-		}
+		return tuiUtils.WriteJSON(version)
 	case "yaml":
-		if data, err := yaml.Marshal(version); err == nil {
-			fmt.Println(string(data))
-		}
+		return tuiUtils.WriteYAML(version)
 	default:
 		return ErrInvalidFormat
 	}
-	return nil
 }
 
 func (v versionExec) checkRelease() {
@@ -171,7 +165,8 @@ func (v versionExec) checkRelease() {
 	currentRelease := strings.TrimPrefix(version.Version, "v")
 
 	if latestRelease == currentRelease {
-		log.Info("You are running the latest version of Atmos", "version", latestRelease)
+		u.PrintfMessageToTUI("\n%s You are running the latest version of Atmos\n\n", theme.Styles.Checkmark)
+		log.Debug("Version check completed", "version", latestRelease)
 	} else {
 		v.printMessageToUpgradeToAtmosLatestRelease(latestRelease)
 	}

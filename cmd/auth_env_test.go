@@ -57,7 +57,7 @@ func TestAuthEnvCmd(t *testing.T) {
 		},
 		{
 			name: "json format with specific identity",
-			args: []string{"--format", "json", "--identity", "test-identity"},
+			args: []string{"--format", "json", "--identity=test-identity"},
 			setupConfig: func() *schema.AtmosConfiguration {
 				return &schema.AtmosConfiguration{
 					Auth: schema.AuthConfig{
@@ -141,7 +141,7 @@ func TestAuthEnvCmd(t *testing.T) {
 		},
 		{
 			name: "invalid identity specified",
-			args: []string{"--identity", "nonexistent"},
+			args: []string{"--identity=nonexistent"},
 			setupConfig: func() *schema.AtmosConfiguration {
 				return &schema.AtmosConfiguration{
 					Auth: schema.AuthConfig{

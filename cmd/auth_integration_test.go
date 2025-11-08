@@ -16,9 +16,9 @@ import (
 )
 
 func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
-	// Skip integration tests in CI or if no auth config is available
+	// Use memory keyring for CI, system keyring otherwise
 	if os.Getenv("CI") != "" {
-		t.Skipf("Skipping integration tests in CI environment.")
+		t.Setenv("ATMOS_KEYRING_TYPE", "memory")
 	}
 
 	// Create test auth configuration
@@ -68,7 +68,7 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 		assert.NotNil(t, authManager)
 
 		// Test GetDefaultIdentity
-		defaultIdentity, err := authManager.GetDefaultIdentity()
+		defaultIdentity, err := authManager.GetDefaultIdentity(false)
 		require.NoError(t, err)
 		assert.Equal(t, "test-identity", defaultIdentity)
 

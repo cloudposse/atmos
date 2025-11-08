@@ -87,6 +87,44 @@ jobs:
             gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
           fi
 
+      - name: Update comment with success message if changelog added
+        if: steps.check-labels.outputs.requires_changelog == 'true' && steps.check-blog.outputs.has_changelog == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          # Get list of blog files added
+          BLOG_FILES=$(gh pr diff $PR_NUMBER --name-only | grep -E '^website/blog/.*\.(md|mdx)$' | grep -v 'tags.yml' || true)
+
+          # Find existing comment (warning or success)
+          EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- changelog-check -->")) | .id' | head -1)
+          EXISTING_COMMENT_BODY=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- changelog-check -->")) | .body' | head -1)
+
+          SUCCESS_COMMENT_BODY="<!-- changelog-check -->
+          > [!NOTE]
+          > #### Changelog Added ✅
+          >
+          > $(echo "$BLOG_FILES" | sed 's/^/- `/' | sed 's/$/`/')
+          >
+          > Thank you!"
+
+          if [ -n "$EXISTING_COMMENT" ]; then
+            # Check if comment already shows success
+            if echo "$EXISTING_COMMENT_BODY" | grep -q "Changelog Added ✅"; then
+              echo "ℹ️ Comment already shows success - no update needed"
+            else
+              echo "Updating existing comment with success message..."
+              gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
+                -f body="$SUCCESS_COMMENT_BODY" || {
+                echo "⚠️ Failed to update comment (it may have been deleted)"
+              }
+              echo "✅ Comment updated from warning to success"
+            fi
+          else
+            echo "ℹ️ No existing comment to update (comment only created when changelog is missing)"
+          fi
+
       - name: Fail if changelog missing
         if: steps.check-labels.outputs.requires_changelog == 'true' && steps.check-blog.outputs.has_changelog == 'false'
         run: |
@@ -99,6 +137,10 @@ jobs:
           exit 1
 
       - name: Success
-        if: steps.check-labels.outputs.requires_changelog == 'false'
+        if: steps.check-labels.outputs.requires_changelog == 'false' || steps.check-blog.outputs.has_changelog == 'true'
         run: |
-          echo "✅ No changelog entry required for this PR"
+          if [ "${{ steps.check-labels.outputs.requires_changelog }}" = "false" ]; then
+            echo "✅ No changelog entry required for this PR"
+          else
+            echo "✅ Changelog entry found - check passed"
+          fi

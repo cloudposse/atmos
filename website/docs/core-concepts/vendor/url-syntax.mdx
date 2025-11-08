@@ -268,8 +268,37 @@ source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:lat
 source: "oci://docker.io/library/nginx:alpine"
 ```
 
-:::info OCI Authentication
-OCI registries use standard container registry authentication. Ensure you're logged in with `docker login` or equivalent.
+:::info OCI Authentication Precedence
+Atmos uses the following precedence order for OCI registry authentication:
+
+1. **Docker credentials** (highest precedence) - Credentials from `docker login` stored in `~/.docker/config.json`
+2. **Environment variables** - For GitHub Container Registry (ghcr.io):
+   - **Token:** `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`
+   - **Username:** `ATMOS_GITHUB_USERNAME`, `GITHUB_ACTOR`, or `GITHUB_USERNAME`
+3. **Anonymous** - Fallback for public images
+
+**Examples:**
+
+```bash
+# Method 1: Authenticate with Docker (works for any registry)
+docker login ghcr.io -u YOUR_USERNAME
+# Enter your token when prompted
+
+# Method 2: Use environment variables for GHCR
+export GITHUB_TOKEN=ghp_your_token
+export GITHUB_ACTOR=your_username  # Or ATMOS_GITHUB_USERNAME
+
+# Method 3: GitHub Actions (automatic)
+# GITHUB_TOKEN and GITHUB_ACTOR are automatically available
+```
+
+**Important GHCR Requirements:**
+- GitHub Container Registry requires **both** a username and token for authentication
+- Username must be your actual GitHub username (not `x-access-token`)
+- Without a username, authentication will fail even if token is set
+- In GitHub Actions, `GITHUB_ACTOR` is automatically set to the workflow actor's username
+
+User Docker credentials always take precedence over environment variable tokens.
 :::
 
   </TabItem>
@@ -345,15 +374,46 @@ sources:
 
 ## Authentication
 
-### Token Injection
+### Credential Precedence Order
 
-Atmos automatically injects tokens for supported platforms:
+Atmos uses the following precedence order for credentials when accessing Git repositories:
 
-| Platform | Environment Variables | Username |
-|----------|----------------------|----------|
-| GitHub | `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` | `x-access-token` |
-| GitLab | `ATMOS_GITLAB_TOKEN` or `GITLAB_TOKEN` | `oauth2` |
-| Bitbucket | `ATMOS_BITBUCKET_TOKEN` or `BITBUCKET_TOKEN` | `x-token-auth` |
+1. **User-specified credentials in URL** (highest precedence) - If you specify credentials directly in the `source` URL, they are always used
+2. **Automatic token injection** - If no credentials are in the URL, Atmos injects tokens from environment variables
+3. **No authentication** - If no credentials are provided and no tokens are available
+
+:::tip User Credentials Always Win
+If your `source` URL includes credentials (e.g., `https://myuser:mytoken@github.com/repo.git`), Atmos will **never** overwrite them with automatic token injection. This allows you to use specific credentials per repository when needed.
+:::
+
+### Automatic Token Injection
+
+Atmos automatically injects tokens for supported platforms when **no user credentials are in the URL**:
+
+| Platform | Environment Variables | Username | Enabled by Default |
+|----------|----------------------|----------|--------------------|
+| GitHub | `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` | `x-access-token` | ✅ Yes |
+| GitLab | `ATMOS_GITLAB_TOKEN` or `GITLAB_TOKEN` | `oauth2` | ❌ No |
+| Bitbucket | `ATMOS_BITBUCKET_TOKEN` or `BITBUCKET_TOKEN` | `x-token-auth` | ❌ No |
+
+**Token Resolution:** For each platform, Atmos first tries the `ATMOS_*` prefixed token, then falls back to the standard token if not set.
+
+**Configuration in `atmos.yaml`:**
+
+GitHub token injection is enabled by default. To disable it:
+```yaml
+settings:
+  inject_github_token: false
+```
+
+To enable GitLab or Bitbucket token injection:
+```yaml
+settings:
+  inject_gitlab_token: true
+  inject_bitbucket_token: true
+```
+
+See the [CLI Configuration](/cli/configuration) documentation for more details on these settings.
 
 ### SSH Keys
 

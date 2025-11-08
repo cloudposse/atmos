@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -27,9 +28,22 @@ type DescribeDependentsExecProps struct {
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
+	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+// DescribeDependentsArgs holds arguments for ExecuteDescribeDependents.
+type DescribeDependentsArgs struct {
+	Component            string
+	Stack                string
+	IncludeSettings      bool
+	ProcessTemplates     bool
+	ProcessYamlFunctions bool
+	Skip                 []string
+	OnlyInStack          string
+	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
+}
+
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DescribeDependentsExec interface {
 	Execute(describeDependentsExecProps *DescribeDependentsExecProps) error
 }
@@ -38,12 +52,7 @@ type describeDependentsExec struct {
 	atmosConfig               *schema.AtmosConfiguration
 	executeDescribeDependents func(
 		atmosConfig *schema.AtmosConfiguration,
-		component string,
-		stack string,
-		includeSettings bool,
-		processTemplates bool,
-		processYamlFunctions bool,
-		skip []string,
+		args *DescribeDependentsArgs,
 	) ([]schema.Dependent, error)
 	newPageCreator        pager.PageCreator
 	isTTYSupportForStdout func() bool
@@ -72,12 +81,16 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 
 	dependents, err := d.executeDescribeDependents(
 		d.atmosConfig,
-		describeDependentsExecProps.Component,
-		describeDependentsExecProps.Stack,
-		describeDependentsExecProps.IncludeSettings,
-		describeDependentsExecProps.ProcessTemplates,
-		describeDependentsExecProps.ProcessYamlFunctions,
-		describeDependentsExecProps.Skip,
+		&DescribeDependentsArgs{
+			Component:            describeDependentsExecProps.Component,
+			Stack:                describeDependentsExecProps.Stack,
+			IncludeSettings:      describeDependentsExecProps.IncludeSettings,
+			ProcessTemplates:     describeDependentsExecProps.ProcessTemplates,
+			ProcessYamlFunctions: describeDependentsExecProps.ProcessYamlFunctions,
+			Skip:                 describeDependentsExecProps.Skip,
+			OnlyInStack:          "", // empty string means process all stacks for direct CLI usage
+			AuthManager:          describeDependentsExecProps.AuthManager,
+		},
 	)
 	if err != nil {
 		return err
@@ -109,12 +122,7 @@ func (d *describeDependentsExec) Execute(describeDependentsExecProps *DescribeDe
 // ExecuteDescribeDependents produces a list of Atmos components in Atmos stacks that depend on the provided Atmos component.
 func ExecuteDescribeDependents(
 	atmosConfig *schema.AtmosConfiguration,
-	component string,
-	stack string,
-	includeSettings bool,
-	processTemplates bool,
-	processYamlFunctions bool,
-	skip []string,
+	args *DescribeDependentsArgs,
 ) ([]schema.Dependent, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeDependents")()
 
@@ -125,55 +133,57 @@ func ExecuteDescribeDependents(
 	dependents := []schema.Dependent{}
 	var ok bool
 
-	// Get all stacks with all components
+	// Get all stacks with all components, filtered by onlyInStack if provided.
 	stacks, err := ExecuteDescribeStacks(
 		atmosConfig,
-		"",
+		args.OnlyInStack,
 		nil,
 		nil,
 		nil,
 		false,
-		processTemplates,
-		processYamlFunctions,
+		args.ProcessTemplates,
+		args.ProcessYamlFunctions,
 		false,
-		skip,
+		args.Skip,
+		args.AuthManager, // AuthManager passed from describe dependents command layer
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	providedComponentSection, err := ExecuteDescribeComponent(
-		component,
-		stack,
-		processTemplates,
-		processYamlFunctions,
-		skip,
-	)
+	providedComponentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            args.Component,
+		Stack:                args.Stack,
+		ProcessTemplates:     args.ProcessTemplates,
+		ProcessYamlFunctions: args.ProcessYamlFunctions,
+		Skip:                 args.Skip,
+		AuthManager:          args.AuthManager,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	// Get the provided component `vars`
+	// Get the provided component `vars`.
 	var providedComponentVarsSection map[string]any
 	if providedComponentVarsSection, ok = providedComponentSection["vars"].(map[string]any); !ok {
 		return dependents, nil
 	}
 
-	// Convert the provided component `vars` section to the `Context` structure
+	// Convert the provided component `vars` section to the `Context` structure.
 	var providedComponentVars schema.Context
 	err = mapstructure.Decode(providedComponentVarsSection, &providedComponentVars)
 	if err != nil {
 		return nil, err
 	}
 
-	// Iterate over all stacks and all components in the stacks
+	// Iterate over all stacks and all components in the stacks.
 	for stackName, stackSection := range stacks {
 		var stackSectionMap map[string]any
 		if stackSectionMap, ok = stackSection.(map[string]any); !ok {
 			continue
 		}
 
-		// Get the stack `components` section
+		// Get the stack `components` section.
 		var stackComponentsSection map[string]any
 		if stackComponentsSection, ok = stackSectionMap["components"].(map[string]any); !ok {
 			continue
@@ -191,12 +201,12 @@ func ExecuteDescribeDependents(
 					continue
 				}
 
-				// Skip the stack component if it's the same as the provided component
-				if stackComponentName == component {
+				// Skip the stack component if it's the same as the provided component.
+				if stackComponentName == args.Component {
 					continue
 				}
 
-				// Skip abstract and disabled components
+				// Skip abstract and disabled components.
 				if metadataSection, ok := stackComponentMap["metadata"].(map[string]any); ok {
 					if metadataType, ok := metadataSection["type"].(string); ok {
 						if metadataType == "abstract" {
@@ -208,52 +218,52 @@ func ExecuteDescribeDependents(
 					}
 				}
 
-				// Get the stack component `vars`
+				// Get the stack component `vars`.
 				var stackComponentVarsSection map[string]any
 				if stackComponentVarsSection, ok = stackComponentMap["vars"].(map[string]any); !ok {
-					return dependents, nil
+					continue
 				}
 
-				// Convert the stack component `vars` section to the `Context` structure
+				// Convert the stack component `vars` section to the `Context` structure.
 				var stackComponentVars schema.Context
 				err = mapstructure.Decode(stackComponentVarsSection, &stackComponentVars)
 				if err != nil {
 					return nil, err
 				}
 
-				// Get the stack component `settings`
+				// Get the stack component `settings`.
 				var stackComponentSettingsSection map[string]any
 				if stackComponentSettingsSection, ok = stackComponentMap["settings"].(map[string]any); !ok {
 					continue
 				}
 
-				// Convert the `settings` section to the `Settings` structure
+				// Convert the `settings` section to the `Settings` structure.
 				var stackComponentSettings schema.Settings
 				err = mapstructure.Decode(stackComponentSettingsSection, &stackComponentSettings)
 				if err != nil {
 					return nil, err
 				}
 
-				// Skip if the stack component has an empty `settings.depends_on` section
+				// Skip if the stack component has an empty `settings.depends_on` section.
 				if reflect.ValueOf(stackComponentSettings).IsZero() ||
 					reflect.ValueOf(stackComponentSettings.DependsOn).IsZero() {
 					continue
 				}
 
-				// Check if the stack component is a dependent of the provided component
+				// Check if the stack component is a dependent of the provided component.
 				for _, dependsOn := range stackComponentSettings.DependsOn {
-					if dependsOn.Component != component {
+					if dependsOn.Component != args.Component {
 						continue
 					}
 
 					// Include the component if any of the following is true:
-					// - `stack` is specified in `depends_on` and the provided component's stack is equal to the stack in `depends_on`
-					// - `stack` is not specified in `depends_on` and the provided component is from the same stack as the component in `depends_on`
+					// - `stack` is specified in `depends_on` and the provided component's stack is equal to the stack in `depends_on`.
+					// - `stack` is not specified in `depends_on` and the provided component is from the same stack as the component in `depends_on`.
 					if dependsOn.Stack != "" {
-						if stack != dependsOn.Stack {
+						if args.Stack != dependsOn.Stack {
 							continue
 						}
-					} else if stack != stackName &&
+					} else if args.Stack != stackName &&
 						dependsOn.Namespace == "" &&
 						dependsOn.Tenant == "" &&
 						dependsOn.Environment == "" &&
@@ -262,8 +272,8 @@ func ExecuteDescribeDependents(
 					}
 
 					// Include the component from the stack if any of the following is true:
-					// - `namespace` is specified in `depends_on` and the provided component's namespace is equal to the namespace in `depends_on`
-					// - `namespace` is not specified in `depends_on` and the provided component is from the same namespace as the component in `depends_on`
+					// - `namespace` is specified in `depends_on` and the provided component's namespace is equal to the namespace in `depends_on`.
+					// - `namespace` is not specified in `depends_on` and the provided component is from the same namespace as the component in `depends_on`.
 					if dependsOn.Namespace != "" {
 						if providedComponentVars.Namespace != dependsOn.Namespace {
 							continue
@@ -273,8 +283,8 @@ func ExecuteDescribeDependents(
 					}
 
 					// Include the component from the stack if any of the following is true:
-					// - `tenant` is specified in `depends_on` and the provided component's tenant is equal to the tenant in `depends_on`
-					// - `tenant` is not specified in `depends_on` and the provided component is from the same tenant as the component in `depends_on`
+					// - `tenant` is specified in `depends_on` and the provided component's tenant is equal to the tenant in `depends_on`.
+					// - `tenant` is not specified in `depends_on` and the provided component is from the same tenant as the component in `depends_on`.
 					if dependsOn.Tenant != "" {
 						if providedComponentVars.Tenant != dependsOn.Tenant {
 							continue
@@ -284,8 +294,8 @@ func ExecuteDescribeDependents(
 					}
 
 					// Include the component from the stack if any of the following is true:
-					// - `environment` is specified in `depends_on` and the component's environment is equal to the environment in `depends_on`
-					// - `environment` is not specified in `depends_on` and the provided component is from the same environment as the component in `depends_on`
+					// - `environment` is specified in `depends_on` and the component's environment is equal to the environment in `depends_on`.
+					// - `environment` is not specified in `depends_on` and the provided component is from the same environment as the component in `depends_on`.
 					if dependsOn.Environment != "" {
 						if providedComponentVars.Environment != dependsOn.Environment {
 							continue
@@ -295,8 +305,8 @@ func ExecuteDescribeDependents(
 					}
 
 					// Include the component from the stack if any of the following is true:
-					// - `stage` is specified in `depends_on` and the provided component's stage is equal to the stage in `depends_on`
-					// - `stage` is not specified in `depends_on` and the provided component is from the same stage as the component in `depends_on`
+					// - `stage` is specified in `depends_on` and the provided component's stage is equal to the stage in `depends_on`.
+					// - `stage` is not specified in `depends_on` and the provided component is from the same stage as the component in `depends_on`.
 					if dependsOn.Stage != "" {
 						if providedComponentVars.Stage != dependsOn.Stage {
 							continue
@@ -317,9 +327,9 @@ func ExecuteDescribeDependents(
 						Stage:         stackComponentVars.Stage,
 					}
 
-					// Add Spacelift stack and Atlantis project if they are configured for the dependent stack component
+					// Add Spacelift stack and Atlantis project if they are configured for the dependent stack component.
 					if stackComponentType == "terraform" {
-						// Spacelift stack
+						// Spacelift stack.
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
 							ComponentFromArg:         stackComponentName,
 							Stack:                    stackName,
@@ -337,7 +347,7 @@ func ExecuteDescribeDependents(
 						}
 						dependent.SpaceliftStack = spaceliftStackName
 
-						// Atlantis project
+						// Atlantis project.
 						atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
 						if err != nil {
 							return nil, err
@@ -345,7 +355,7 @@ func ExecuteDescribeDependents(
 						dependent.AtlantisProject = atlantisProjectName
 					}
 
-					if includeSettings {
+					if args.IncludeSettings {
 						dependent.Settings = stackComponentSettingsSection
 					}
 
@@ -365,11 +375,11 @@ func sortDependentsByStackSlug(deps []schema.Dependent) {
 		return
 	}
 	sort.SliceStable(deps, func(i, j int) bool {
-		// primary key
+		// primary key.
 		if deps[i].StackSlug != deps[j].StackSlug {
 			return deps[i].StackSlug < deps[j].StackSlug
 		}
-		// tie-breakers to keep order stable across runs
+		// tie-breakers to keep order stable across runs.
 		if deps[i].Component != deps[j].Component {
 			return deps[i].Component < deps[j].Component
 		}
