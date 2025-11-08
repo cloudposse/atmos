@@ -126,10 +126,12 @@ func buildThemeRows(themes []*Theme, activeTheme string, showStars bool) [][]str
 func formatThemeRow(t *Theme, activeTheme string, showStars bool) []string {
 	defer perf.Track(nil, "theme.formatThemeRow")()
 
-	// Status indicator column: active (">") or recommended ("★") or empty.
+	// Status indicator column: active (green "●") or recommended ("★") or empty.
 	statusIndicator := "  "
 	if strings.EqualFold(t.Name, activeTheme) {
-		statusIndicator = "> "
+		// Green dot for active theme (same as version list).
+		greenDot := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("●")
+		statusIndicator = greenDot + " "
 	} else if showStars && IsRecommended(t.Name) {
 		statusIndicator = "★ "
 	}
@@ -217,10 +219,10 @@ func formatSimpleThemeList(themes []*Theme, activeTheme string, showingRecommend
 
 	// Theme rows.
 	for _, t := range themes {
-		// Status indicator: active (">") or recommended ("★") or empty.
+		// Status indicator: active ("●") or recommended ("★") or empty.
 		statusIndicator := "  "
 		if strings.EqualFold(t.Name, activeTheme) {
-			statusIndicator = "> "
+			statusIndicator = "● "
 		} else if showStars && IsRecommended(t.Name) {
 			statusIndicator = "★ "
 		}

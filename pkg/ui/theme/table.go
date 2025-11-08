@@ -147,7 +147,7 @@ func applyTableStyle(t *table.Table, config *TableConfig) *table.Table {
 
 // isActiveRow checks if the row represents an active theme.
 func isActiveRow(rowData []string) bool {
-	return len(rowData) > 0 && rowData[0] == "> "
+	return len(rowData) > 0 && strings.Contains(rowData[0], "●")
 }
 
 // isRecommendedTheme checks if the status column contains a star indicator.
