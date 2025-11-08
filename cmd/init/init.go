@@ -14,6 +14,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/generator/ui"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 // initCmd represents the init command.
@@ -147,7 +149,17 @@ func executeInit(
 	}
 
 	// Create the UI instance
-	initUI := ui.NewInitUI()
+	// Create I/O context for this command
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		return fmt.Errorf("failed to create I/O context: %w", err)
+	}
+
+	// Create terminal writer for I/O
+	termWriter := iolib.NewTerminalWriter(ioCtx)
+	term := terminal.New(terminal.WithIO(termWriter))
+
+	initUI := ui.NewInitUI(ioCtx, term)
 
 	// Get available template configurations
 	configs, err := templates.GetAvailableConfigurations()
