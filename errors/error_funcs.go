@@ -42,6 +42,11 @@ func SetVerboseFlag(verbose bool) {
 
 // InitializeMarkdown initializes a new Markdown renderer.
 func InitializeMarkdown(config *schema.AtmosConfiguration) {
+	if config == nil {
+		log.Warn("InitializeMarkdown called with nil config")
+		return
+	}
+
 	var err error
 	render, err = markdown.NewTerminalMarkdownRenderer(*config)
 	if err != nil {
