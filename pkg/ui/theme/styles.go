@@ -91,9 +91,6 @@ type StyleSet struct {
 }
 
 // GetStyles generates styles from a color scheme.
-//
-//revive:disable:function-length
-//nolint:funlen // Comprehensive style initialization better kept together.
 func GetStyles(scheme *ColorScheme) *StyleSet {
 	if scheme == nil {
 		return nil
@@ -121,31 +118,19 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		Label:       lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)).Bold(true),
 
 		// Table styles
-		TableHeader: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(scheme.HeaderText)).
-			Bold(true).
-			Align(lipgloss.Center),
-		TableRow: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(scheme.RowText)),
-		TableActive: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(scheme.Selected)).
-			Bold(true),
-		TableBorder: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(scheme.Border)),
-		TableSpecial: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(scheme.Gold)),
-		TableDarkType: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(scheme.TextMuted)),
-		TableLightType: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(scheme.TextLight)),
+		TableHeader:    getTableHeaderStyle(scheme),
+		TableRow:       lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.RowText)),
+		TableActive:    getTableActiveStyle(scheme),
+		TableBorder:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Border)),
+		TableSpecial:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Gold)),
+		TableDarkType:  lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
+		TableLightType: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextLight)),
 
 		// Special elements
 		Checkmark: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Success)).SetString(IconCheckmark),
 		XMark:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)).SetString(IconXMark),
 		Footer:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)).Italic(true),
-		Border: lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(scheme.Border)),
+		Border:    getBorderStyle(scheme),
 
 		// Version styles
 		VersionNumber: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
@@ -153,105 +138,174 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		PackageName:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Secondary)),
 
 		// Pager styles
-		Pager: struct {
-			StatusBar        lipgloss.Style
-			StatusBarHelp    lipgloss.Style
-			StatusBarMessage lipgloss.Style
-			ErrorMessage     lipgloss.Style
-			Highlight        lipgloss.Style
-			HelpView         lipgloss.Style
-		}{
-			StatusBar: lipgloss.NewStyle().
-				Foreground(lipgloss.Color(scheme.TextMuted)).
-				Background(lipgloss.Color(scheme.BackgroundDark)),
-			StatusBarHelp: lipgloss.NewStyle().
-				Foreground(lipgloss.Color(scheme.TextMuted)).
-				Background(lipgloss.Color(scheme.BackgroundHighlight)),
-			StatusBarMessage: lipgloss.NewStyle().
-				Foreground(lipgloss.Color(scheme.Success)).
-				Background(lipgloss.Color(scheme.BackgroundDark)),
-			ErrorMessage: lipgloss.NewStyle().
-				Foreground(lipgloss.Color(scheme.Error)).
-				Background(lipgloss.Color(scheme.BackgroundDark)),
-			Highlight: lipgloss.NewStyle().
-				Background(lipgloss.Color(scheme.Warning)).
-				Foreground(lipgloss.Color(scheme.TextInverse)).
-				Bold(true),
-			HelpView: lipgloss.NewStyle().
-				Foreground(lipgloss.Color(scheme.TextMuted)).
-				Background(lipgloss.Color(scheme.BackgroundHighlight)),
-		},
+		Pager: getPagerStyles(scheme),
 
 		// TUI component styles
-		TUI: struct {
-			ItemStyle         lipgloss.Style
-			SelectedItemStyle lipgloss.Style
-			BorderFocused     lipgloss.Style
-			BorderUnfocused   lipgloss.Style
-		}{
-			ItemStyle:         lipgloss.NewStyle().PaddingLeft(4),
-			SelectedItemStyle: lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color(scheme.Selected)),
-			BorderFocused: lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color(scheme.Border)),
-			BorderUnfocused: lipgloss.NewStyle().
-				Border(lipgloss.HiddenBorder()),
-		},
+		TUI: getTUIStyles(scheme),
 
 		// Diff/Output styles
-		Diff: struct {
-			Added   lipgloss.Style
-			Removed lipgloss.Style
-			Changed lipgloss.Style
-			Header  lipgloss.Style
-		}{
-			Added:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Success)),
-			Removed: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)),
-			Changed: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
-			Header:  lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)).Bold(true),
-		},
+		Diff: getDiffStyles(scheme),
 
 		// Help/Documentation styles
-		Help: struct {
-			Heading      lipgloss.Style
-			CommandName  lipgloss.Style
-			CommandDesc  lipgloss.Style
-			FlagName     lipgloss.Style
-			FlagDesc     lipgloss.Style
-			FlagDataType lipgloss.Style
-			UsageBlock   lipgloss.Style
-			ExampleBlock lipgloss.Style
-			Code         lipgloss.Style
-		}{
-			Heading: lipgloss.NewStyle().
-				Foreground(lipgloss.Color(scheme.Primary)).
-				Bold(true).
-				Transform(func(s string) string {
-					return strings.ToUpper(strings.ReplaceAll(s, "_", " "))
-				}),
-			CommandName: lipgloss.NewStyle().
-				Foreground(lipgloss.Color(scheme.Primary)).
-				Bold(true),
-			CommandDesc: lipgloss.NewStyle().
-				Foreground(lipgloss.Color(scheme.TextSecondary)),
-			FlagName: lipgloss.NewStyle().
-				Foreground(lipgloss.Color(scheme.TextSecondary)), // Lighter color for flag names
-			FlagDesc: lipgloss.NewStyle().
-				Foreground(lipgloss.Color(scheme.TextPrimary)),
-			FlagDataType: lipgloss.NewStyle().
-				Foreground(lipgloss.Color(scheme.TextMuted)), // Darker color for flag types (no faint)
-			UsageBlock: lipgloss.NewStyle().
-				Background(lipgloss.Color(scheme.BackgroundHighlight)).
-				Padding(1, 2).
-				Margin(1, 0),
-			ExampleBlock: lipgloss.NewStyle().
-				Background(lipgloss.Color(scheme.BackgroundHighlight)).
-				Padding(1, 2).
-				Margin(1, 0).
-				Foreground(lipgloss.Color(scheme.Primary)),
-			Code: lipgloss.NewStyle().
-				Foreground(lipgloss.Color(scheme.Secondary)), // Purple for consistency with markdown
-		},
+		Help: getHelpStyles(scheme),
+	}
+}
+
+// getTableHeaderStyle returns the table header style for the given color scheme.
+func getTableHeaderStyle(scheme *ColorScheme) lipgloss.Style {
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color(scheme.HeaderText)).
+		Bold(true).
+		Align(lipgloss.Center)
+}
+
+// getTableActiveStyle returns the table active row style for the given color scheme.
+func getTableActiveStyle(scheme *ColorScheme) lipgloss.Style {
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color(scheme.Selected)).
+		Bold(true)
+}
+
+// getBorderStyle returns the border style for the given color scheme.
+func getBorderStyle(scheme *ColorScheme) lipgloss.Style {
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(scheme.Border))
+}
+
+// getPagerStyles returns the pager styles for the given color scheme.
+func getPagerStyles(scheme *ColorScheme) struct {
+	StatusBar        lipgloss.Style
+	StatusBarHelp    lipgloss.Style
+	StatusBarMessage lipgloss.Style
+	ErrorMessage     lipgloss.Style
+	Highlight        lipgloss.Style
+	HelpView         lipgloss.Style
+} {
+	return struct {
+		StatusBar        lipgloss.Style
+		StatusBarHelp    lipgloss.Style
+		StatusBarMessage lipgloss.Style
+		ErrorMessage     lipgloss.Style
+		Highlight        lipgloss.Style
+		HelpView         lipgloss.Style
+	}{
+		StatusBar: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(scheme.TextMuted)).
+			Background(lipgloss.Color(scheme.BackgroundDark)),
+		StatusBarHelp: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(scheme.TextMuted)).
+			Background(lipgloss.Color(scheme.BackgroundHighlight)),
+		StatusBarMessage: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(scheme.Success)).
+			Background(lipgloss.Color(scheme.BackgroundDark)),
+		ErrorMessage: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(scheme.Error)).
+			Background(lipgloss.Color(scheme.BackgroundDark)),
+		Highlight: lipgloss.NewStyle().
+			Background(lipgloss.Color(scheme.Warning)).
+			Foreground(lipgloss.Color(scheme.TextInverse)).
+			Bold(true),
+		HelpView: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(scheme.TextMuted)).
+			Background(lipgloss.Color(scheme.BackgroundHighlight)),
+	}
+}
+
+// getTUIStyles returns the TUI component styles for the given color scheme.
+func getTUIStyles(scheme *ColorScheme) struct {
+	ItemStyle         lipgloss.Style
+	SelectedItemStyle lipgloss.Style
+	BorderFocused     lipgloss.Style
+	BorderUnfocused   lipgloss.Style
+} {
+	return struct {
+		ItemStyle         lipgloss.Style
+		SelectedItemStyle lipgloss.Style
+		BorderFocused     lipgloss.Style
+		BorderUnfocused   lipgloss.Style
+	}{
+		ItemStyle:         lipgloss.NewStyle().PaddingLeft(4),
+		SelectedItemStyle: lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color(scheme.Selected)),
+		BorderFocused: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color(scheme.Border)),
+		BorderUnfocused: lipgloss.NewStyle().
+			Border(lipgloss.HiddenBorder()),
+	}
+}
+
+// getDiffStyles returns the diff/output styles for the given color scheme.
+func getDiffStyles(scheme *ColorScheme) struct {
+	Added   lipgloss.Style
+	Removed lipgloss.Style
+	Changed lipgloss.Style
+	Header  lipgloss.Style
+} {
+	return struct {
+		Added   lipgloss.Style
+		Removed lipgloss.Style
+		Changed lipgloss.Style
+		Header  lipgloss.Style
+	}{
+		Added:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Success)),
+		Removed: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)),
+		Changed: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
+		Header:  lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)).Bold(true),
+	}
+}
+
+// getHelpStyles returns the help/documentation styles for the given color scheme.
+func getHelpStyles(scheme *ColorScheme) struct {
+	Heading      lipgloss.Style
+	CommandName  lipgloss.Style
+	CommandDesc  lipgloss.Style
+	FlagName     lipgloss.Style
+	FlagDesc     lipgloss.Style
+	FlagDataType lipgloss.Style
+	UsageBlock   lipgloss.Style
+	ExampleBlock lipgloss.Style
+	Code         lipgloss.Style
+} {
+	return struct {
+		Heading      lipgloss.Style
+		CommandName  lipgloss.Style
+		CommandDesc  lipgloss.Style
+		FlagName     lipgloss.Style
+		FlagDesc     lipgloss.Style
+		FlagDataType lipgloss.Style
+		UsageBlock   lipgloss.Style
+		ExampleBlock lipgloss.Style
+		Code         lipgloss.Style
+	}{
+		Heading: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(scheme.Primary)).
+			Bold(true).
+			Transform(func(s string) string {
+				return strings.ToUpper(strings.ReplaceAll(s, "_", " "))
+			}),
+		CommandName: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(scheme.Primary)).
+			Bold(true),
+		CommandDesc: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(scheme.TextSecondary)),
+		FlagName: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(scheme.TextSecondary)), // Lighter color for flag names.
+		FlagDesc: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(scheme.TextPrimary)),
+		FlagDataType: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(scheme.TextMuted)), // Darker color for flag types (no faint).
+		UsageBlock: lipgloss.NewStyle().
+			Background(lipgloss.Color(scheme.BackgroundHighlight)).
+			Padding(1, 2).
+			Margin(1, 0),
+		ExampleBlock: lipgloss.NewStyle().
+			Background(lipgloss.Color(scheme.BackgroundHighlight)).
+			Padding(1, 2).
+			Margin(1, 0).
+			Foreground(lipgloss.Color(scheme.Primary)),
+		Code: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(scheme.Secondary)), // Purple for consistency with markdown.
 	}
 }
 
