@@ -115,23 +115,13 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 
 	// Configure global logger with the log level from flags/env/config.
 	// This ensures auth pre-hooks (executed during processStackConfigs) respect the log level.
-	switch atmosConfig.Logs.Level {
-	case "Trace":
-		log.SetLevel(log.TraceLevel)
-	case "Debug":
-		log.SetLevel(log.DebugLevel)
-	case "Info":
-		log.SetLevel(log.InfoLevel)
-	case "Warning":
-		log.SetLevel(log.WarnLevel)
-	case "Off":
-		// Disable logging by setting level above FatalLevel.
-		// charmbracelet/log only recognizes defined Level constants, so we use FatalLevel + 1
-		// instead of math.MaxInt32 which would not work correctly.
-		log.SetLevel(log.FatalLevel + 1)
-	default:
-		log.SetLevel(log.WarnLevel)
+	// Parse and convert log level using existing utilities for consistency.
+	logLevel, err := log.ParseLogLevel(atmosConfig.Logs.Level)
+	if err != nil {
+		// Default to Info on parse error (matches ParseLogLevel behavior for empty string).
+		logLevel = log.LogLevelInfo
 	}
+	log.SetLevel(log.ConvertLogLevel(logLevel))
 }
 
 // TODO: This function works well, but we should generally avoid implementing manual flag parsing,
