@@ -20,7 +20,7 @@ Each scaffold directory represents a different test case, covering various scena
 #### `default/`
 - **Purpose**: Basic template with simple README generation
 - **Tests**: Template processing, basic file creation, markdown rendering
-- **Features**: 
+- **Features**:
   - Simple template variable substitution
   - Atmos project structure documentation
   - No interactive configuration required
@@ -40,7 +40,7 @@ Each scaffold directory represents a different test case, covering various scena
   - Editor configuration setup
 
 #### `gitignore/`
-- **Purpose**: Tests generation of `.gitignore` files  
+- **Purpose**: Tests generation of `.gitignore` files
 - **Tests**: Git ignore file creation, version control setup
 - **Features**:
   - Git configuration files
@@ -124,7 +124,7 @@ Each scaffold directory represents a different test case, covering various scena
 - All scaffolds test basic `{{.Config.key}}` template variable replacement
 - Advanced scaffolds test conditional logic and complex expressions
 
-### Path Templating  
+### Path Templating
 - `path-test/` specifically tests templated file and directory paths
 - Tests handling of empty/optional path segments
 - Validates conditional file creation based on variable values

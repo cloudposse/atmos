@@ -29,4 +29,4 @@ This example demonstrates how to use Atmos stacks to manage infrastructure compo
 - **Stacks**: Define environment-specific configurations
 - **Components**: Reusable infrastructure modules
 - **Variables**: Environment-specific values
-- **Imports**: Share common configurations across stacks 
+- **Imports**: Share common configurations across stacks

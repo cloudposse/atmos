@@ -40,4 +40,4 @@ templates:
     gomplate:
       enabled: true
       timeout: 10
-      datasources: {} 
+      datasources: {}
