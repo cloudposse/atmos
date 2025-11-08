@@ -11,7 +11,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// ListThemesOptions contains options for listing themes.
+// ListThemesOptions configures which themes to display and how to mark them.
+// RecommendedOnly filters the list to show only recommended themes (marked with star indicator).
+// ActiveTheme specifies the currently active theme name to be highlighted with an active indicator.
 type ListThemesOptions struct {
 	RecommendedOnly bool
 	ActiveTheme     string
