@@ -135,7 +135,7 @@ func formatThemeRow(t *Theme, activeTheme string, showStars bool) []string {
 	// Theme name with recommended indicator (only show star when requested).
 	name := t.Name
 	if showStars && IsRecommended(t.Name) {
-		name += " ★"
+		name += "  ★"
 	}
 
 	// Theme type (Dark/Light).
