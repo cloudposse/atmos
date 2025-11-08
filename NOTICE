@@ -195,7 +195,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/containerd/containerd/v2
     License: Apache-2.0
-    URL: https://github.com/containerd/containerd/blob/v2.1.4/LICENSE
+    URL: https://github.com/containerd/containerd/blob/v2.1.5/LICENSE
 
   - github.com/containerd/errdefs
     License: Apache-2.0
