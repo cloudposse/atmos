@@ -22,7 +22,8 @@ type Credit struct {
 	Link string `json:"link"`
 }
 
-// Meta contains theme metadata.
+// Meta holds theme metadata including whether the theme is designed for dark mode
+// and optional credit information for the theme's creators or sources.
 type Meta struct {
 	IsDark  bool      `json:"isDark"`
 	Credits *[]Credit `json:"credits,omitempty"`

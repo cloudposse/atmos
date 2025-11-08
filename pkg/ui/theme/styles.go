@@ -300,7 +300,9 @@ func InitializeStyles(scheme *ColorScheme) {
 	lastColorScheme = scheme // Cache the color scheme for color getters
 }
 
-// InitializeStylesFromTheme initializes the styles from a theme name.
+// InitializeStylesFromTheme initializes the global CurrentStyles from the specified theme name.
+// The themeName parameter specifies which color scheme to load (e.g., "atmos", "dracula").
+// Returns an error if the theme cannot be found or loaded.
 func InitializeStylesFromTheme(themeName string) error {
 	scheme, err := GetColorSchemeForTheme(themeName)
 	if err != nil {

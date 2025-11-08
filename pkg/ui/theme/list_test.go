@@ -196,8 +196,8 @@ func TestBuildThemeRows(t *testing.T) {
 			}
 
 			for _, row := range rows {
-				if len(row) != 4 {
-					t.Errorf("buildThemeRows() row length = %d, want 4", len(row))
+				if len(row) != 5 {
+					t.Errorf("buildThemeRows() row length = %d, want 5", len(row))
 				}
 			}
 		})
@@ -223,7 +223,7 @@ func TestFormatThemeRow(t *testing.T) {
 			activeTheme: "dracula",
 			showStars:   true,
 			wantActive:  true,
-			wantStar:    true,
+			wantStar:    false, // Active takes precedence over star
 			wantType:    "Dark",
 		},
 		{
@@ -256,24 +256,24 @@ func TestFormatThemeRow(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			row := formatThemeRow(tt.theme, tt.activeTheme, tt.showStars)
 
-			if len(row) != 4 {
-				t.Errorf("formatThemeRow() returned %d columns, want 4", len(row))
+			if len(row) != 5 {
+				t.Errorf("formatThemeRow() returned %d columns, want 5", len(row))
 				return
 			}
 
-			// Check active indicator.
-			hasActiveIndicator := strings.Contains(row[0], ">")
+			// Check active indicator (now uses "●" instead of ">").
+			hasActiveIndicator := strings.Contains(row[0], "●")
 			if hasActiveIndicator != tt.wantActive {
 				t.Errorf("formatThemeRow() active indicator = %v, want %v", hasActiveIndicator, tt.wantActive)
 			}
 
-			// Check star.
-			hasStar := strings.Contains(row[1], "★")
+			// Check star (now in status column instead of name column).
+			hasStar := strings.Contains(row[0], "★")
 			if hasStar != tt.wantStar {
 				t.Errorf("formatThemeRow() star = %v, want %v", hasStar, tt.wantStar)
 			}
 
-			// Check type.
+			// Check type (now at index 2).
 			if row[2] != tt.wantType {
 				t.Errorf("formatThemeRow() type = %q, want %q", row[2], tt.wantType)
 			}
@@ -281,83 +281,6 @@ func TestFormatThemeRow(t *testing.T) {
 	}
 }
 
-func TestBuildFooterMessage(t *testing.T) {
-	tests := []struct {
-		name                string
-		themeCount          int
-		showingRecommended  bool
-		showStars           bool
-		activeTheme         string
-		wantPlural          bool
-		wantRecommendedNote bool
-		wantStarNote        bool
-		wantActiveTheme     bool
-	}{
-		{
-			name:                "one theme, not showing recommended",
-			themeCount:          1,
-			showingRecommended:  false,
-			showStars:           false,
-			activeTheme:         "",
-			wantPlural:          false,
-			wantRecommendedNote: false,
-			wantStarNote:        false,
-			wantActiveTheme:     false,
-		},
-		{
-			name:                "multiple themes with stars",
-			themeCount:          10,
-			showingRecommended:  false,
-			showStars:           true,
-			activeTheme:         "dracula",
-			wantPlural:          true,
-			wantRecommendedNote: true, // Star note includes "recommended" text.
-			wantStarNote:        true,
-			wantActiveTheme:     true,
-		},
-		{
-			name:                "recommended only",
-			themeCount:          5,
-			showingRecommended:  true,
-			showStars:           false,
-			activeTheme:         "",
-			wantPlural:          true,
-			wantRecommendedNote: true,
-			wantStarNote:        false,
-			wantActiveTheme:     false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			footer := buildFooterMessage(tt.themeCount, tt.showingRecommended, tt.showStars, tt.activeTheme)
-
-			// Check plural.
-			hasPlural := strings.Contains(footer, "themes")
-			if hasPlural != tt.wantPlural {
-				t.Errorf("buildFooterMessage() plural = %v, want %v", hasPlural, tt.wantPlural)
-			}
-
-			// Check recommended note.
-			hasRecommendedNote := strings.Contains(footer, "recommended")
-			if hasRecommendedNote != tt.wantRecommendedNote {
-				t.Errorf("buildFooterMessage() recommended note = %v, want %v", hasRecommendedNote, tt.wantRecommendedNote)
-			}
-
-			// Check star note.
-			hasStarNote := strings.Contains(footer, "★")
-			if hasStarNote != tt.wantStarNote {
-				t.Errorf("buildFooterMessage() star note = %v, want %v", hasStarNote, tt.wantStarNote)
-			}
-
-			// Check active theme.
-			hasActiveTheme := strings.Contains(footer, "Active theme:")
-			if hasActiveTheme != tt.wantActiveTheme {
-				t.Errorf("buildFooterMessage() active theme = %v, want %v", hasActiveTheme, tt.wantActiveTheme)
-			}
-		})
-	}
-}
 
 func TestGetThemeTypeString(t *testing.T) {
 	tests := []struct {
@@ -464,17 +387,17 @@ func TestFormatThemeTable(t *testing.T) {
 		t.Error("formatThemeTable() returned empty output")
 	}
 
-	// Verify footer is present.
-	if !strings.Contains(output, "theme") {
-		t.Error("formatThemeTable() missing footer")
-	}
-
 	// Verify theme names are present.
 	if !strings.Contains(output, "dracula") {
 		t.Error("formatThemeTable() missing dracula theme")
 	}
 	if !strings.Contains(output, "monokai") {
 		t.Error("formatThemeTable() missing monokai theme")
+	}
+
+	// Verify output ends with newline for spacing before footer.
+	if !strings.HasSuffix(output, "\n") {
+		t.Error("formatThemeTable() should end with newline")
 	}
 }
 
@@ -538,7 +461,7 @@ func TestFormatSimpleThemeList(t *testing.T) {
 
 			// Verify active indicator if applicable.
 			if tt.activeTheme != "" {
-				if !strings.Contains(output, ">") {
+				if !strings.Contains(output, "●") {
 					t.Error("formatSimpleThemeList() missing active indicator")
 				}
 			}

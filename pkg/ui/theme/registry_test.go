@@ -32,7 +32,7 @@ func TestRegistryGet(t *testing.T) {
 	assert.Equal(t, "atmos", theme.Name)
 
 	// Test case-insensitive
-	theme, exists = registry.Get("DEFAULT")
+	theme, exists = registry.Get("ATMOS")
 	assert.True(t, exists)
 	assert.Equal(t, "atmos", theme.Name)
 

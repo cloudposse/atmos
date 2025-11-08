@@ -131,7 +131,7 @@ func TestIsActiveRow(t *testing.T) {
 	}{
 		{
 			name:     "active row",
-			rowData:  []string{"> ", "theme1"},
+			rowData:  []string{"●", "theme1"},
 			expected: true,
 		},
 		{
@@ -162,12 +162,12 @@ func TestIsRecommendedTheme(t *testing.T) {
 	}{
 		{
 			name:     "recommended theme with star",
-			input:    "dracula★",
+			input:    "★",
 			expected: true,
 		},
 		{
 			name:     "theme without star",
-			input:    "dracula",
+			input:    "",
 			expected: false,
 		},
 		{
@@ -179,7 +179,9 @@ func TestIsRecommendedTheme(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isRecommendedTheme(tt.input)
+			// isRecommendedTheme now expects []string (row data), so wrap the input
+			rowData := []string{tt.input}
+			result := isRecommendedTheme(rowData)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -189,14 +191,20 @@ func TestGetActiveColumnStyle(t *testing.T) {
 	InitializeStylesFromTheme("atmos")
 	styles := GetCurrentStyles()
 
-	activeStyle := getActiveColumnStyle(true, styles)
+	// Test active (not recommended)
+	activeStyle := getActiveColumnStyle(true, false, styles)
 	assert.NotNil(t, activeStyle)
 
-	inactiveStyle := getActiveColumnStyle(false, styles)
+	// Test recommended (not active)
+	recommendedStyle := getActiveColumnStyle(false, true, styles)
+	assert.NotNil(t, recommendedStyle)
+
+	// Test inactive (not recommended)
+	inactiveStyle := getActiveColumnStyle(false, false, styles)
 	assert.NotNil(t, inactiveStyle)
 
 	// Test with nil styles
-	nilStyle := getActiveColumnStyle(true, nil)
+	nilStyle := getActiveColumnStyle(true, false, nil)
 	assert.NotNil(t, nilStyle)
 }
 

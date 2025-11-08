@@ -134,11 +134,12 @@ func buildThemeRows(themes []*Theme, activeTheme string, showStars bool) [][]str
 func formatThemeRow(t *Theme, activeTheme string, showStars bool) []string {
 	defer perf.Track(nil, "theme.formatThemeRow")()
 
-	// Status indicator column: active (green "●") or recommended ("★") or empty.
+	// Status indicator column: active ("●") or recommended ("★") or empty.
+	// The styling is applied by the table's style function based on the indicator.
 	statusIndicator := ""
 	if strings.EqualFold(t.Name, activeTheme) {
-		// Green dot for active theme (same as version list).
-		statusIndicator = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("●")
+		// Dot for active theme - styling applied by table style function.
+		statusIndicator = "●"
 	} else if showStars && IsRecommended(t.Name) {
 		statusIndicator = "★"
 	}

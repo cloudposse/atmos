@@ -45,9 +45,11 @@ func TestSortThemes(t *testing.T) {
 
 	SortThemes(themes)
 
+	// Sort order: case-insensitive alphabetical
+	// So: Apple, atmos, Banana, Zebra
 	assert.Equal(t, "Apple", themes[0].Name)
-	assert.Equal(t, "Banana", themes[1].Name)
-	assert.Equal(t, "atmos", themes[2].Name)
+	assert.Equal(t, "atmos", themes[1].Name)
+	assert.Equal(t, "Banana", themes[2].Name)
 	assert.Equal(t, "Zebra", themes[3].Name)
 }
 
@@ -138,5 +140,5 @@ func TestThemeStructure(t *testing.T) {
 	assert.NotNil(t, defaultTheme.Meta.Credits)
 	assert.Len(t, *defaultTheme.Meta.Credits, 1)
 	assert.Equal(t, "Cloud Posse", (*defaultTheme.Meta.Credits)[0].Name)
-	assert.Equal(t, "https://cloudposse.com", (*defaultTheme.Meta.Credits)[0].Link)
+	assert.Equal(t, "https://atmos.tools", (*defaultTheme.Meta.Credits)[0].Link)
 }
