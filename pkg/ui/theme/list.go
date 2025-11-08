@@ -298,10 +298,11 @@ func formatColorPalette(t *Theme) string {
 
 	var result strings.Builder
 	for _, hexColor := range colors {
-		// Create a colored block using lipgloss.
+		// Create a colored block using background color instead of foreground.
+		// This ensures all colors are visible, even black/white on dark/light terminals.
 		block := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(hexColor)).
-			Render("█")
+			Background(lipgloss.Color(hexColor)).
+			Render(" ")
 		result.WriteString(block)
 	}
 
