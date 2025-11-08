@@ -19,8 +19,12 @@ type ListThemesOptions struct {
 
 // ListThemesResult contains the formatted output for theme listing.
 type ListThemesResult struct {
-	Output string
-	Error  error
+	Output           string
+	Error            error
+	ThemeCount       int
+	ActiveTheme      string
+	ShowStars        bool
+	RecommendedOnly  bool
 }
 
 // ListThemes generates a formatted list of available themes.
@@ -45,8 +49,12 @@ func ListThemes(opts ListThemesOptions) ListThemesResult {
 	output := displayThemeList(themes, opts.ActiveTheme, opts.RecommendedOnly, showStars)
 
 	return ListThemesResult{
-		Output: output,
-		Error:  nil,
+		Output:          output,
+		Error:           nil,
+		ThemeCount:      len(themes),
+		ActiveTheme:     opts.ActiveTheme,
+		ShowStars:       showStars,
+		RecommendedOnly: opts.RecommendedOnly,
 	}
 }
 
@@ -161,40 +169,6 @@ func formatThemeRow(t *Theme, activeTheme string, showStars bool) []string {
 	}
 }
 
-// buildFooterMessage creates the footer text for the theme list.
-func buildFooterMessage(themeCount int, showingRecommendedOnly bool, showStars bool, activeTheme string, styles *StyleSet) string {
-	defer perf.Track(nil, "theme.buildFooterMessage")()
-
-	var parts []string
-
-	// Theme count with info style
-	countMsg := fmt.Sprintf("%d theme", themeCount)
-	if themeCount != 1 {
-		countMsg += "s"
-	}
-
-	if showingRecommendedOnly {
-		countMsg += " (recommended). Use without --recommended to see all themes."
-	} else {
-		countMsg += " available."
-		if showStars {
-			countMsg += " ★ indicates recommended themes."
-		}
-	}
-
-	infoStyled := styles.Info.Render(countMsg)
-	parts = append(parts, infoStyled)
-
-	// Active theme with success style
-	if activeTheme != "" {
-		activeMsg := fmt.Sprintf("Active theme: %s", activeTheme)
-		successStyled := styles.Success.Render(activeMsg)
-		parts = append(parts, successStyled)
-	}
-
-	return "\n" + strings.Join(parts, "\n")
-}
-
 // formatThemeTable formats themes into a styled Charmbracelet table.
 func formatThemeTable(themes []*Theme, activeTheme string, showingRecommendedOnly bool, showStars bool) string {
 	defer perf.Track(nil, "theme.formatThemeTable")()
@@ -204,12 +178,7 @@ func formatThemeTable(themes []*Theme, activeTheme string, showingRecommendedOnl
 	rows := buildThemeRows(themes, activeTheme, showStars)
 
 	// Use the new themed table creation.
-	output := CreateThemedTable(headers, rows) + "\n"
-
-	// Footer message.
-	styles := GetCurrentStyles()
-	footer := buildFooterMessage(len(themes), showingRecommendedOnly, showStars, activeTheme, styles)
-	output += footer + "\n"
+	output := CreateThemedTable(headers, rows)
 
 	return output
 }

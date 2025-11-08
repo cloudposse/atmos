@@ -2,6 +2,7 @@ package theme
 
 import (
 	_ "embed"
+	"fmt"
 
 	"github.com/spf13/cobra"
 
@@ -49,5 +50,35 @@ func executeThemeList(cmd *cobra.Command, args []string) error {
 		return result.Error
 	}
 
-	return ui.Write(result.Output)
+	// Write the table output
+	if err := ui.Write(result.Output); err != nil {
+		return err
+	}
+
+	// Write footer messages with styling
+	countMsg := fmt.Sprintf("%d theme", result.ThemeCount)
+	if result.ThemeCount != 1 {
+		countMsg += "s"
+	}
+
+	if result.RecommendedOnly {
+		countMsg += " (recommended). Use without --recommended to see all themes."
+	} else {
+		countMsg += " available."
+		if result.ShowStars {
+			countMsg += " ★ indicates recommended themes."
+		}
+	}
+
+	if err := ui.Info(countMsg); err != nil {
+		return err
+	}
+
+	if result.ActiveTheme != "" {
+		if err := ui.Success(fmt.Sprintf("Active theme: %s", result.ActiveTheme)); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
