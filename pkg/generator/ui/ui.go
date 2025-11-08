@@ -13,12 +13,15 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/term"
 
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/filesystem"
 	tmpl "github.com/cloudposse/atmos/pkg/generator/templates"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/project/config"
+	"github.com/cloudposse/atmos/pkg/terminal"
+	atmosui "github.com/cloudposse/atmos/pkg/ui"
 )
 
 // FileSkippedError indicates that a file was intentionally skipped
@@ -80,10 +83,12 @@ type InitUI struct {
 	errorStyle   lipgloss.Style
 	output       strings.Builder
 	processor    *engine.Processor
+	ioCtx        iolib.Context
+	term         terminal.Terminal
 }
 
 // NewInitUI creates a new InitUI instance
-func NewInitUI() *InitUI {
+func NewInitUI(ioCtx iolib.Context, term terminal.Terminal) *InitUI {
 	return &InitUI{
 		checkmark:    "✓",
 		xMark:        "✗",
@@ -92,6 +97,8 @@ func NewInitUI() *InitUI {
 		errorStyle:   lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
 		output:       strings.Builder{},
 		processor:    engine.NewProcessor(),
+		ioCtx:        ioCtx,
+		term:         term,
 	}
 }
 
@@ -102,8 +109,8 @@ func (ui *InitUI) SetThreshold(thresholdPercent int) {
 
 // GetTerminalWidth returns the current terminal width with a fallback
 func (ui *InitUI) GetTerminalWidth() int {
-	width, _, err := term.GetSize(uintptr(os.Stdout.Fd()))
-	if err != nil {
+	width := ui.term.Width(terminal.Stdout)
+	if width == 0 {
 		return 80 // fallback width
 	}
 	return width
@@ -126,9 +133,12 @@ func (ui *InitUI) colorSource(source string) string {
 	}
 }
 
-// flushOutput writes the accumulated output to stdout and clears the buffer
+// flushOutput writes the accumulated output to stderr (UI channel) and clears the buffer.
+// The buffered content is UI messages (configuration summaries, progress updates, etc.)
 func (ui *InitUI) flushOutput() {
-	fmt.Print(ui.output.String())
+	if err := atmosui.Write(ui.output.String()); err != nil {
+		log.Trace("Failed to flush UI output", "error", err)
+	}
 	ui.output.Reset()
 }
 
@@ -461,8 +471,8 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 		valueSources[key] = "flag"
 	}
 
-	// Debug: Print valueSources map
-	fmt.Printf("DEBUG: valueSources map: %+v\n", valueSources)
+	// Debug: Log valueSources map.
+	log.Debug("valueSources map", "valueSources", valueSources)
 
 	// Prompt the user to edit the configuration values unless --use-defaults is specified
 	// This allows them to review and modify values from command line, config, or defaults
@@ -476,8 +486,8 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 	// Get configuration summary data and display it
 	rows, header := config.GetConfigurationSummary(scaffoldConfig, mergedValues, valueSources)
 
-	// Debug: Print valueSources to see what we have
-	fmt.Printf("DEBUG: valueSources: %+v\n", valueSources)
+	// Debug: Log valueSources to verify configuration sources.
+	log.Debug("Configuration value sources", "valueSources", valueSources)
 
 	ui.displayConfigurationTable(header, rows)
 
@@ -682,8 +692,8 @@ func (ui *InitUI) displayConfigurationTable(header []string, rows [][]string) {
 		return
 	}
 	// Get terminal width
-	width, _, err := term.GetSize(uintptr(os.Stdout.Fd()))
-	if err != nil {
+	width := ui.term.Width(terminal.Stdout)
+	if width == 0 {
 		width = 80 // fallback width
 	}
 
@@ -780,8 +790,8 @@ func (ui *InitUI) displayConfigurationTable(header []string, rows [][]string) {
 // DisplayTemplateTable displays template data in a formatted table
 func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 	// Get terminal width
-	width, _, err := term.GetSize(uintptr(os.Stdout.Fd()))
-	if err != nil {
+	width := ui.term.Width(terminal.Stdout)
+	if width == 0 {
 		width = 80 // fallback width
 	}
 
@@ -863,12 +873,22 @@ func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 
 	t.SetStyles(s)
 
-	// Print the table
-	fmt.Println()
-	fmt.Println("Available Scaffold Templates")
-	fmt.Println()
-	fmt.Println(t.View())
-	fmt.Println()
+	// Write the table to UI channel.
+	if err := atmosui.Writeln(""); err != nil {
+		log.Trace("Failed to write blank line", "error", err)
+	}
+	if err := atmosui.Writeln("Available Scaffold Templates"); err != nil {
+		log.Trace("Failed to write table header", "error", err)
+	}
+	if err := atmosui.Writeln(""); err != nil {
+		log.Trace("Failed to write blank line", "error", err)
+	}
+	if err := atmosui.Writeln(t.View()); err != nil {
+		log.Trace("Failed to write table", "error", err)
+	}
+	if err := atmosui.Writeln(""); err != nil {
+		log.Trace("Failed to write blank line", "error", err)
+	}
 }
 
 // PromptForTemplate prompts the user to select a template from available options

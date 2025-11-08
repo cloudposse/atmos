@@ -8,10 +8,29 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
+// createTestUI creates a UI instance with I/O for testing.
+func createTestUI(t *testing.T) *InitUI {
+	t.Helper()
+
+	// Create I/O context with default settings (stdout/stderr)
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		t.Fatalf("Failed to create I/O context: %v", err)
+	}
+
+	// Create terminal with I/O
+	termWriter := iolib.NewTerminalWriter(ioCtx)
+	term := terminal.New(terminal.WithIO(termWriter))
+
+	return NewInitUI(ioCtx, term)
+}
+
 func TestNewInitUI(t *testing.T) {
-	ui := NewInitUI()
+	ui := createTestUI(t)
 
 	if ui.checkmark != "✓" {
 		t.Errorf("Expected checkmark to be ✓, got %s", ui.checkmark)
@@ -25,7 +44,7 @@ func TestNewInitUI(t *testing.T) {
 }
 
 func TestProcessFile_NewFile(t *testing.T) {
-	ui := NewInitUI()
+	ui := createTestUI(t)
 	tempDir := t.TempDir()
 
 	file := templates.File{
@@ -55,7 +74,7 @@ func TestProcessFile_NewFile(t *testing.T) {
 }
 
 func TestProcessFile_ExistingFile_NoFlags(t *testing.T) {
-	ui := NewInitUI()
+	ui := createTestUI(t)
 	tempDir := t.TempDir()
 
 	// Create existing file
