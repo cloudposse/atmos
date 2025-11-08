@@ -6,7 +6,7 @@
 
 ## Problem Statement
 
-Current flag parser implementation has a disconnect between flag definitions and interpreter struct fields:
+Current flag parser implementation has a disconnect between flag definitions and options struct fields:
 
 ```go
 // Flag definition (strings - not type-safe)
@@ -15,9 +15,9 @@ parser := NewStandardParser(
     WithStringFlag("format", "f", "yaml", "Output format"),
 )
 
-// Interpreter usage (disconnected - runtime errors if flag name changes)
-interpreter.Stack   // No compile-time guarantee "stack" flag exists
-interpreter.Format  // Could be renamed independently of flag definition
+// Options usage (disconnected - runtime errors if flag name changes)
+opts.Stack   // No compile-time guarantee "stack" flag exists
+opts.Format  // Could be renamed independently of flag definition
 ```
 
 **Problems:**
@@ -32,15 +32,15 @@ Connect flag definitions directly to struct fields through strongly-typed builde
 
 ```go
 // Builder methods guarantee flag name matches struct field
-builder := NewStandardInterpreterBuilder().
+builder := NewStandardOptionsBuilder().
     WithStack(true).        // Adds "stack" flag + maps to .Stack field
     WithFormat("yaml").     // Adds "format" flag + maps to .Format field
     WithQuery()             // Adds "query" flag + maps to .Query field
 
 // Compile-time guarantee: These fields exist
-interpreter.Stack   // ✅ Type-safe
-interpreter.Format  // ✅ Type-safe
-interpreter.Query   // ✅ Type-safe
+opts.Stack   // ✅ Type-safe
+opts.Format  // ✅ Type-safe
+opts.Query   // ✅ Type-safe
 ```
 
 ## Benefits
@@ -50,7 +50,7 @@ interpreter.Query   // ✅ Type-safe
 **Before:**
 ```go
 WithStringFlag("stackk", "s", "", "Stack")  // ✅ Compiles (typo undetected)
-interpreter.Stack  // Runtime: flag "stackk" doesn't map to .Stack
+opts.Stack  // Runtime: flag "stackk" doesn't map to .Stack
 ```
 
 **After:**
@@ -85,7 +85,7 @@ func TestWithStack(t *testing.T) {
 
 ```go
 // Explicit: You see exactly what flags this command supports
-builder := NewStandardInterpreterBuilder().
+builder := NewStandardOptionsBuilder().
     WithStack(true).        // Required stack flag
     WithFormat("yaml").     // Optional format flag with default
     WithDryRun()            // Optional boolean flag
@@ -93,24 +93,24 @@ builder := NewStandardInterpreterBuilder().
 
 ## Implementation
 
-### StandardInterpreterBuilder
+### StandardOptionsBuilder
 
 ```go
-type StandardInterpreterBuilder struct {
+type StandardOptionsBuilder struct {
     registry *FlagRegistry
     options  []Option
 }
 
-func NewStandardInterpreterBuilder() *StandardInterpreterBuilder {
-    return &StandardInterpreterBuilder{
+func NewStandardOptionsBuilder() *StandardOptionsBuilder {
+    return &StandardOptionsBuilder{
         registry: NewFlagRegistry(),
         options:  []Option{},
     }
 }
 
 // WithStack adds required or optional stack flag.
-// Maps to StandardInterpreter.Stack field.
-func (b *StandardInterpreterBuilder) WithStack(required bool) *StandardInterpreterBuilder {
+// Maps to StandardOptions.Stack field.
+func (b *StandardOptionsBuilder) WithStack(required bool) *StandardOptionsBuilder {
     b.options = append(b.options, WithStringFlag("stack", "s", "", "Atmos stack"))
     if required {
         b.options = append(b.options, WithRequired("stack"))
@@ -119,14 +119,14 @@ func (b *StandardInterpreterBuilder) WithStack(required bool) *StandardInterpret
 }
 
 // WithFormat adds format flag with specified default.
-// Maps to StandardInterpreter.Format field.
-func (b *StandardInterpreterBuilder) WithFormat(defaultValue string) *StandardInterpreterBuilder {
+// Maps to StandardOptions.Format field.
+func (b *StandardOptionsBuilder) WithFormat(defaultValue string) *StandardOptionsBuilder {
     b.options = append(b.options, WithStringFlag("format", "f", defaultValue, "Output format"))
     return b
 }
 
 // Build creates the StandardParser with configured flags.
-func (b *StandardInterpreterBuilder) Build() *StandardParser {
+func (b *StandardOptionsBuilder) Build() *StandardParser {
     return NewStandardParser(b.options...)
 }
 ```
@@ -135,10 +135,10 @@ func (b *StandardInterpreterBuilder) Build() *StandardParser {
 
 ```go
 // cmd/describe_component.go
-var describeComponentParser *flagparser.StandardParser
+var describeComponentParser *flags.StandardParser
 
 func init() {
-    describeComponentParser = flagparser.NewStandardInterpreterBuilder().
+    describeComponentParser = flags.NewStandardOptionsBuilder().
         WithStack(true).                // Required
         WithFormat("yaml").             // Default: yaml
         WithFile().                     // Optional
@@ -151,16 +151,16 @@ func init() {
 }
 
 func runCommand(cmd *cobra.Command, args []string) error {
-    interpreter, err := describeComponentParser.Parse(ctx, args)
+    opts, err := describeComponentParser.Parse(ctx, args)
     if err != nil {
         return err
     }
 
     // Type-safe field access - guaranteed to exist!
     return executeCommand(
-        interpreter.Stack,      // Compile-time guarantee
-        interpreter.Format,     // Compile-time guarantee
-        interpreter.Query,      // Compile-time guarantee
+        opts.Stack,      // Compile-time guarantee
+        opts.Format,     // Compile-time guarantee
+        opts.Query,      // Compile-time guarantee
     )
 }
 ```
@@ -170,10 +170,10 @@ func runCommand(cmd *cobra.Command, args []string) error {
 ### 1. One Method Per Flag
 
 Each common flag gets exactly one builder method:
-- `WithStack(required bool)` → `interpreter.Stack`
-- `WithFormat(default string)` → `interpreter.Format`
-- `WithComponent(required bool)` → `interpreter.Component`
-- `WithIdentity()` → `interpreter.Identity` (from GlobalFlags)
+- `WithStack(required bool)` → `opts.Stack`
+- `WithFormat(default string)` → `opts.Format`
+- `WithComponent(required bool)` → `opts.Component`
+- `WithIdentity()` → `opts.Identity` (from GlobalFlags)
 
 ### 2. Method Name Matches Field Name
 
@@ -257,7 +257,7 @@ WithStringFlag("stack", "s", "", "Stack name")
 
 ```go
 func TestWithStack(t *testing.T) {
-    builder := NewStandardInterpreterBuilder().WithStack(true)
+    builder := NewStandardOptionsBuilder().WithStack(true)
     parser := builder.Build()
 
     // Verify flag exists and is required
@@ -266,7 +266,7 @@ func TestWithStack(t *testing.T) {
 }
 
 func TestWithFormat(t *testing.T) {
-    builder := NewStandardInterpreterBuilder().WithFormat("json")
+    builder := NewStandardOptionsBuilder().WithFormat("json")
     parser := builder.Build()
 
     // Verify flag exists with correct default
@@ -279,17 +279,17 @@ func TestWithFormat(t *testing.T) {
 
 ```go
 func TestDescribeComponentWithBuilder(t *testing.T) {
-    parser := NewStandardInterpreterBuilder().
+    parser := NewStandardOptionsBuilder().
         WithStack(true).
         WithFormat("yaml").
         Build()
 
-    interpreter, err := parser.Parse(ctx, []string{"--stack", "prod"})
+    opts, err := parser.Parse(ctx, []string{"--stack", "prod"})
     require.NoError(t, err)
 
     // Type-safe access
-    assert.Equal(t, "prod", interpreter.Stack)
-    assert.Equal(t, "yaml", interpreter.Format)
+    assert.Equal(t, "prod", opts.Stack)
+    assert.Equal(t, "yaml", opts.Format)
 }
 ```
 
