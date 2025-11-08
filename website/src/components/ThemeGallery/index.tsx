@@ -37,8 +37,10 @@ interface Theme {
   meta: ThemeMeta;
 }
 
-export default function ThemeGallery({ recommended = false }: { recommended?: boolean }) {
+export default function ThemeGallery({ recommended = false, searchable = false }: { recommended?: boolean; searchable?: boolean }) {
   const [themes, setThemes] = useState<Theme[]>([]);
+  const [filteredThemes, setFilteredThemes] = useState<Theme[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,10 +48,11 @@ export default function ThemeGallery({ recommended = false }: { recommended?: bo
     fetch('/themes.json')
       .then(res => res.json())
       .then((data: Theme[]) => {
-        const filteredThemes = recommended
+        const filtered = recommended
           ? data.filter(theme => theme.meta.recommended)
           : data;
-        setThemes(filteredThemes);
+        setThemes(filtered);
+        setFilteredThemes(filtered);
         setLoading(false);
       })
       .catch(err => {
@@ -57,6 +60,45 @@ export default function ThemeGallery({ recommended = false }: { recommended?: bo
         setLoading(false);
       });
   }, [recommended]);
+
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredThemes(themes);
+      return;
+    }
+
+    const query = searchQuery.toLowerCase();
+    const filtered = themes.filter(theme => {
+      // Search in theme name
+      if (theme.name.toLowerCase().includes(query)) return true;
+
+      // Search in theme type (dark/light)
+      const themeType = theme.meta.isDark ? 'dark' : 'light';
+      if (themeType.includes(query)) return true;
+
+      // Search in credits
+      if (theme.meta.credits?.some(credit =>
+        credit.name.toLowerCase().includes(query) ||
+        credit.link.toLowerCase().includes(query)
+      )) return true;
+
+      // Search in color values
+      const colorValues = [
+        theme.black, theme.red, theme.green, theme.yellow,
+        theme.blue, theme.magenta, theme.cyan, theme.white,
+        theme.brightBlack, theme.brightRed, theme.brightGreen,
+        theme.brightYellow, theme.brightBlue, theme.brightMagenta,
+        theme.brightCyan, theme.brightWhite, theme.background,
+        theme.foreground
+      ].join(' ').toLowerCase();
+
+      if (colorValues.includes(query)) return true;
+
+      return false;
+    });
+
+    setFilteredThemes(filtered);
+  }, [searchQuery, themes]);
 
   if (loading) {
     return <div className={styles.loading}>Loading themes...</div>;
@@ -67,8 +109,23 @@ export default function ThemeGallery({ recommended = false }: { recommended?: bo
   }
 
   return (
-    <div className={styles.gallery}>
-      {themes.map(theme => (
+    <div>
+      {searchable && (
+        <div className={styles.searchContainer}>
+          <input
+            type="text"
+            className={styles.searchInput}
+            placeholder="Search themes by name, type (dark/light), author, or color..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <div className={styles.searchResults}>
+            Showing {filteredThemes.length} of {themes.length} themes
+          </div>
+        </div>
+      )}
+      <div className={styles.gallery}>
+        {filteredThemes.map(theme => (
         <div key={theme.name} className={styles.themeCard}>
           <div className={styles.themeHeader}>
             <h3 className={styles.themeName}>
@@ -143,7 +200,8 @@ export default function ThemeGallery({ recommended = false }: { recommended?: bo
             )}
           </div>
         </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
