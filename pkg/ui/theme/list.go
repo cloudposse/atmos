@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -99,7 +101,8 @@ func displayThemeList(themes []*Theme, activeTheme string, showingRecommendedOnl
 	defer perf.Track(nil, "theme.displayThemeList")()
 
 	// Check if we're in TTY mode.
-	if !term.IsTTYSupportForStdout() {
+	// Note: theme list output goes to stderr via ui.Write(), so check stderr TTY support.
+	if !term.IsTTYSupportForStderr() {
 		// Fall back to simple text output for non-TTY.
 		return formatSimpleThemeList(themes, activeTheme, showingRecommendedOnly, showStars)
 	}
@@ -138,6 +141,9 @@ func formatThemeRow(t *Theme, activeTheme string, showStars bool) []string {
 	// Theme type (Dark/Light).
 	themeType := getThemeTypeString(t)
 
+	// Color palette - show the main 8 ANSI colors as colored blocks.
+	palette := formatColorPalette(t)
+
 	// Source.
 	source := getThemeSourceString(t)
 	const maxSourceLen = 50
@@ -150,6 +156,7 @@ func formatThemeRow(t *Theme, activeTheme string, showStars bool) []string {
 		activeIndicator,
 		name,
 		themeType,
+		palette,
 		source,
 	}
 }
@@ -184,7 +191,7 @@ func formatThemeTable(themes []*Theme, activeTheme string, showingRecommendedOnl
 	defer perf.Track(nil, "theme.formatThemeTable")()
 
 	// Prepare headers and rows.
-	headers := []string{"", "Name", "Type", "Source"}
+	headers := []string{"", "Name", "Type", "Palette", "Source"}
 	rows := buildThemeRows(themes, activeTheme, showStars)
 
 	// Use the new themed table creation.
@@ -206,7 +213,7 @@ func formatSimpleThemeList(themes []*Theme, activeTheme string, showingRecommend
 	const lineWidth = 80
 
 	// Header.
-	output += fmt.Sprintf("   %-30s %-8s %-4s %s\n", "Name", "Type", "Rec", "Source")
+	output += fmt.Sprintf("   %-30s %-8s %-4s %-10s %s\n", "Name", "Type", "Rec", "Palette", "Source")
 	output += fmt.Sprintf("%s\n", strings.Repeat("=", lineWidth))
 
 	// Theme rows.
@@ -224,7 +231,10 @@ func formatSimpleThemeList(themes []*Theme, activeTheme string, showingRecommend
 		themeType := getThemeTypeString(t)
 		source := getThemeSourceString(t)
 
-		output += fmt.Sprintf("%-2s %-30s %-8s %-4s %s\n", activeIndicator, t.Name, themeType, recommended, source)
+		// For non-TTY, just show "8 colors" as a placeholder.
+		palette := "8 colors"
+
+		output += fmt.Sprintf("%-2s %-30s %-8s %-4s %-10s %s\n", activeIndicator, t.Name, themeType, recommended, palette, source)
 	}
 
 	// Footer message.
@@ -268,4 +278,32 @@ func getThemeSourceString(t *Theme) string {
 		return credits[0].Name
 	}
 	return ""
+}
+
+// formatColorPalette creates a visual representation of the theme's color palette.
+func formatColorPalette(t *Theme) string {
+	defer perf.Track(nil, "theme.formatColorPalette")()
+
+	// Use the main 8 ANSI colors similar to the web gallery.
+	colors := []string{
+		t.Background,
+		t.Foreground,
+		t.Red,
+		t.Green,
+		t.Yellow,
+		t.Blue,
+		t.Magenta,
+		t.Cyan,
+	}
+
+	var result strings.Builder
+	for _, hexColor := range colors {
+		// Create a colored block using lipgloss.
+		block := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(hexColor)).
+			Render("█")
+		result.WriteString(block)
+	}
+
+	return result.String()
 }

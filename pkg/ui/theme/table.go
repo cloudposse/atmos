@@ -208,6 +208,8 @@ func getCellStyle(col int, rowData []string, isActive bool, styles *StyleSet) li
 		return getNameColumnStyle(rowData, isActive, styles)
 	case 2: // Type column (Dark/Light)
 		return getTypeColumnStyle(rowData, styles)
+	case 3: // Palette column (colored blocks, no additional styling)
+		return lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
 	default: // Source column and others
 		baseStyle := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
 		if styles == nil {
