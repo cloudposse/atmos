@@ -60,6 +60,47 @@ func getFormatter() (*formatter, error) {
 
 // Package-level functions that delegate to the global formatter.
 
+// Toast writes a toast notification with a custom icon and message to stderr (UI channel).
+// This is the primary pattern for toast-style notifications with flexible icon support.
+// Flow: ui.Toast() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+//
+// Parameters:
+//   - icon: Custom icon/emoji (e.g., "📦", "🔧", "✓", or use theme.Styles.Checkmark.String())
+//   - message: The message text
+//
+// Example usage:
+//
+//	ui.Toast("📦", "Using latest version: 1.2.3")
+//	ui.Toast("🔧", "Tool not installed")
+//	ui.Toast(theme.Styles.Checkmark.String(), "Deployment complete")
+func Toast(icon, message string) error {
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
+	formatted := fmt.Sprintf("%s %s", icon, message) + newline
+	return f.terminal.Write(formatted)
+}
+
+// Toastf writes a formatted toast notification with a custom icon to stderr (UI channel).
+// This is the primary pattern for formatted toast-style notifications with flexible icon support.
+// Flow: ui.Toastf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+//
+// Parameters:
+//   - icon: Custom icon/emoji (e.g., "📦", "🔧", "✓", or use theme.Styles.Checkmark.String())
+//   - format: Printf-style format string
+//   - a: Format arguments
+//
+// Example usage:
+//
+//	ui.Toastf("📦", "Using latest version: %s", version)
+//	ui.Toastf("🔧", "Tool %s is not installed", toolName)
+//	ui.Toastf(theme.Styles.Checkmark.String(), "Installed %s/%s@%s", owner, repo, version)
+func Toastf(icon, format string, a ...interface{}) error {
+	message := fmt.Sprintf(format, a...)
+	return Toast(icon, message)
+}
+
 // Markdown writes rendered markdown to stdout (data channel).
 // Use this for help text, documentation, and other pipeable content.
 func Markdown(content string) error {
@@ -113,89 +154,105 @@ func MarkdownMessagef(format string, a ...interface{}) error {
 }
 
 // Success writes a success message with green checkmark to stderr (UI channel).
-// Flow: ui.Success() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// This is a convenience wrapper around Toast() with themed success icon and color.
+// Flow: ui.Success() → ui.Toast() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Success(text string) error {
 	f, err := getFormatter()
 	if err != nil {
 		return err
 	}
+	// Use formatter to get colored success message, then write via terminal
 	formatted := f.Success(text) + newline
 	return f.terminal.Write(formatted)
 }
 
 // Successf writes a formatted success message with green checkmark to stderr (UI channel).
-// Flow: ui.Successf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// This is a convenience wrapper around Toastf() with themed success icon and color.
+// Flow: ui.Successf() → ui.Toastf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Successf(format string, a ...interface{}) error {
 	f, err := getFormatter()
 	if err != nil {
 		return err
 	}
+	// Use formatter to get colored success message, then write via terminal
 	formatted := f.Successf(format, a...) + newline
 	return f.terminal.Write(formatted)
 }
 
 // Error writes an error message with red X to stderr (UI channel).
-// Flow: ui.Error() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// This is a convenience wrapper around Toast() with themed error icon and color.
+// Flow: ui.Error() → ui.Toast() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Error(text string) error {
 	f, err := getFormatter()
 	if err != nil {
 		return err
 	}
+	// Use formatter to get colored error message, then write via terminal
 	formatted := f.Error(text) + newline
 	return f.terminal.Write(formatted)
 }
 
 // Errorf writes a formatted error message with red X to stderr (UI channel).
-// Flow: ui.Errorf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// This is a convenience wrapper around Toastf() with themed error icon and color.
+// Flow: ui.Errorf() → ui.Toastf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Errorf(format string, a ...interface{}) error {
 	f, err := getFormatter()
 	if err != nil {
 		return err
 	}
+	// Use formatter to get colored error message, then write via terminal
 	formatted := f.Errorf(format, a...) + newline
 	return f.terminal.Write(formatted)
 }
 
 // Warning writes a warning message with yellow warning sign to stderr (UI channel).
-// Flow: ui.Warning() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// This is a convenience wrapper around Toast() with themed warning icon and color.
+// Flow: ui.Warning() → ui.Toast() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Warning(text string) error {
 	f, err := getFormatter()
 	if err != nil {
 		return err
 	}
+	// Use formatter to get colored warning message, then write via terminal
 	formatted := f.Warning(text) + newline
 	return f.terminal.Write(formatted)
 }
 
 // Warningf writes a formatted warning message with yellow warning sign to stderr (UI channel).
-// Flow: ui.Warningf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// This is a convenience wrapper around Toastf() with themed warning icon and color.
+// Flow: ui.Warningf() → ui.Toastf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Warningf(format string, a ...interface{}) error {
 	f, err := getFormatter()
 	if err != nil {
 		return err
 	}
+	// Use formatter to get colored warning message, then write via terminal
 	formatted := f.Warningf(format, a...) + newline
 	return f.terminal.Write(formatted)
 }
 
 // Info writes an info message with cyan info icon to stderr (UI channel).
-// Flow: ui.Info() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// This is a convenience wrapper around Toast() with themed info icon and color.
+// Flow: ui.Info() → ui.Toast() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Info(text string) error {
 	f, err := getFormatter()
 	if err != nil {
 		return err
 	}
+	// Use formatter to get colored info message, then write via terminal
 	formatted := f.Info(text) + newline
 	return f.terminal.Write(formatted)
 }
 
 // Infof writes a formatted info message with cyan info icon to stderr (UI channel).
-// Flow: ui.Infof() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// This is a convenience wrapper around Toastf() with themed info icon and color.
+// Flow: ui.Infof() → ui.Toastf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Infof(format string, a ...interface{}) error {
 	f, err := getFormatter()
 	if err != nil {
 		return err
 	}
+	// Use formatter to get colored info message, then write via terminal
 	formatted := f.Infof(format, a...) + newline
 	return f.terminal.Write(formatted)
 }

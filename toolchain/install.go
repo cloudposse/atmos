@@ -2,17 +2,15 @@ package toolchain
 
 import (
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Bubble Tea spinner model.
@@ -119,7 +117,7 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 		if err != nil {
 			return fmt.Errorf("failed to get latest version for %s/%s: %w", owner, repo, err)
 		}
-		fmt.Printf("📦 Using latest version: %s\n", latestVersion)
+		_ = ui.Toastf("📦", "Using latest version: %s", latestVersion)
 		version = latestVersion
 		isLatest = true
 	}
@@ -165,19 +163,19 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 			p.Send(installDoneMsg{})
 		}
 		if showProgressBar {
-			fmt.Fprintf(os.Stderr, "%s Install failed %s/%s@%s: %v\n", theme.Styles.XMark, owner, repo, version, err)
+			_ = ui.Errorf("Install failed %s/%s@%s: %v", owner, repo, version, err)
 		}
 		return err
 	}
 	if isLatest {
 		if err := installer.CreateLatestFile(owner, repo, version); err != nil {
 			if showProgressBar {
-				fmt.Fprintf(os.Stderr, "%s Failed to create latest file for %s/%s: %v\n", theme.Styles.XMark, owner, repo, err)
+				_ = ui.Errorf("Failed to create latest file for %s/%s: %v", owner, repo, err)
 			}
 		}
 	}
 	if showProgressBar {
-		fmt.Fprintf(os.Stderr, "%s Installed %s/%s@%s to %s\n", theme.Styles.Checkmark, owner, repo, version, binaryPath)
+		_ = ui.Successf("Installed %s/%s@%s to %s", owner, repo, version, binaryPath)
 	}
 	if showProgressBar && p != nil {
 		p.Send(installDoneMsg{})
@@ -185,7 +183,7 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 		time.Sleep(100 * time.Millisecond)
 	}
 	if err := AddToolToVersions(DefaultToolVersionsFilePath, repo, version); err == nil && showProgressBar {
-		fmt.Fprintf(os.Stderr, "%s Registered %s %s in .tool-versions\n", theme.Styles.Checkmark, repo, version)
+		_ = ui.Successf("Registered %s %s in .tool-versions", repo, version)
 	}
 	return nil
 }
@@ -200,7 +198,7 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 
 	toolList := buildToolList(installer, toolVersions)
 	if len(toolList) == 0 {
-		fmt.Fprintf(os.Stderr, "No tools found in %s\n", toolVersionsPath)
+		_ = ui.Writef("No tools found in %s\n", toolVersionsPath)
 		return nil
 	}
 
@@ -221,10 +219,10 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 		case "skipped":
 			alreadyInstalledCount++
 		}
-		showProgress(os.Stderr, &spinner, progressBar, tool, progressState{index: i, total: len(toolList), result: result, err: err})
+		showProgress(&spinner, progressBar, tool, progressState{index: i, total: len(toolList), result: result, err: err})
 	}
 
-	printSummary(os.Stderr, installedCount, failedCount, alreadyInstalledCount, len(toolList))
+	printSummary(installedCount, failedCount, alreadyInstalledCount, len(toolList))
 	return nil
 }
 
@@ -266,49 +264,45 @@ type progressState struct {
 }
 
 func showProgress(
-	stderr *os.File,
 	spinner *bspinner.Model,
 	progressBar progress.Model,
 	tool toolInfo,
 	state progressState,
 ) {
-	var msg string
 	switch state.result {
 	case "skipped":
-		msg = fmt.Sprintf("%s Skipped %s/%s@%s (already installed)", theme.Styles.Checkmark, tool.owner, tool.repo, tool.version)
+		_ = ui.Successf("Skipped %s/%s@%s (already installed)", tool.owner, tool.repo, tool.version)
 	case "installed":
-		msg = fmt.Sprintf("%s Installed %s/%s@%s", theme.Styles.Checkmark, tool.owner, tool.repo, tool.version)
+		_ = ui.Successf("Installed %s/%s@%s", tool.owner, tool.repo, tool.version)
 	case "failed":
-		msg = fmt.Sprintf("%s Install failed %s/%s@%s: %v", theme.Styles.XMark, tool.owner, tool.repo, tool.version, state.err)
+		_ = ui.Errorf("Install failed %s/%s@%s: %v", tool.owner, tool.repo, tool.version, state.err)
 	}
 
 	percent := float64(state.index+1) / float64(state.total)
 	bar := progressBar.ViewAs(percent)
-	resetLine(stderr, term.IsTerminal(int(stderr.Fd())))
-	fmt.Fprintln(stderr, msg)
 
+	// Show animated progress bar
 	for j := 0; j < 5; j++ {
-		printProgressBar(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s %s", spinner.View(), bar))
+		_ = ui.Writef("\r%s %s", spinner.View(), bar)
 		spin, _ := spinner.Update(bspinner.TickMsg{})
 		spinner = &spin
 		time.Sleep(50 * time.Millisecond)
 	}
 }
 
-func printSummary(stderr *os.File, installed, failed, skipped, total int) {
-	resetLine(stderr, term.IsTerminal(int(stderr.Fd())))
-	fmt.Fprintln(stderr)
+func printSummary(installed, failed, skipped, total int) {
+	_ = ui.Writeln("")
 
 	switch {
 	case total == 0:
-		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s No tools to install", theme.Styles.Checkmark))
+		_ = ui.Success("No tools to install")
 	case failed == 0 && skipped == 0:
-		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools", theme.Styles.Checkmark, installed))
+		_ = ui.Successf("Installed %d tools", installed)
 	case failed == 0 && skipped > 0:
-		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools, skipped %d", theme.Styles.Checkmark, installed, skipped))
+		_ = ui.Successf("Installed %d tools, skipped %d", installed, skipped)
 	case failed > 0 && skipped == 0:
-		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d", theme.Styles.XMark, installed, failed))
+		_ = ui.Errorf("Installed %d tools, failed %d", installed, failed)
 	default:
-		printStatusLine(stderr, term.IsTerminal(int(stderr.Fd())), fmt.Sprintf("%s Installed %d tools, failed %d, skipped %d", theme.Styles.XMark, installed, failed, skipped))
+		_ = ui.Errorf("Installed %d tools, failed %d, skipped %d", installed, failed, skipped)
 	}
 }
