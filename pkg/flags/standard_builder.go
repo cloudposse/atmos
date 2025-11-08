@@ -353,8 +353,6 @@ func (b *StandardOptionsBuilder) WithAll() *StandardOptionsBuilder {
 func (b *StandardOptionsBuilder) Build() *StandardParser {
 	defer perf.Track(nil, "flags.StandardOptionsBuilder.Build")()
 
-	defer perf.Track(nil, "flags.StandardOptionsBuilder.Build")()
-
 	parser := NewStandardParser(b.options...)
 
 	// Configure positional args if provided
