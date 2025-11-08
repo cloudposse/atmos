@@ -1,0 +1,73 @@
+---
+title: atmos theme list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List available terminal themes for Atmos CLI
+---
+
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+:::note Purpose
+Use this command to discover and browse available terminal themes that can be used to customize the appearance of Atmos CLI output, including tables, markdown rendering, and help text.
+:::
+
+<Screengrab title="atmos theme list --help" slug="atmos-theme-list--help" />
+
+## Usage
+
+```shell
+atmos theme list [options]
+```
+
+## Examples
+
+```shell
+# List all available themes
+atmos theme list
+
+# Show only recommended themes for best compatibility
+atmos theme list --recommended
+```
+
+## Arguments
+
+This command does not require any arguments.
+
+## Flags
+
+<dl>
+  <dt>`--recommended`</dt>
+  <dd>Show only recommended themes that have been tested for optimal readability and compatibility with Atmos</dd>
+</dl>
+
+## Output
+
+The command displays a table with the following information:
+
+- **Name** - The theme name to use with `ATMOS_THEME` environment variable or `settings.terminal.theme` in `atmos.yaml`
+- **Type** - Whether the theme is optimized for Dark or Light terminals
+- **Rec** - Shows "★" for recommended themes when listing all themes
+- **Source** - Attribution or link to the theme's original source
+
+## Setting a Theme
+
+To use a theme from the list:
+
+1. **Environment variable**: Set `ATMOS_THEME=<theme-name>` before running Atmos commands
+2. **Configuration file**: Add to your `atmos.yaml`:
+   ```yaml
+   settings:
+     terminal:
+       theme: <theme-name>
+   ```
+
+## Alias
+
+The `atmos list themes` command is an alias for `atmos theme list` and behaves identically, except it shows only recommended themes by default and uses the `--all` flag to show all themes.
+
+## Related Commands
+
+- [`atmos theme show`](/cli/commands/theme/show) - Display detailed preview of a specific theme
+- [`atmos list themes`](/cli/commands/list/themes) - Alias command with different default behavior
