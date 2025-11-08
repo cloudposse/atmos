@@ -180,7 +180,7 @@ func formatThemeTable(themes []*Theme, activeTheme string, showingRecommendedOnl
 	// Use the new themed table creation.
 	output := CreateThemedTable(headers, rows)
 
-	return output
+	return output + "\n"
 }
 
 // formatSimpleThemeList formats themes as simple text for non-TTY output.
