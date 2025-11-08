@@ -3,6 +3,7 @@ package errors
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/viper"
 	"golang.org/x/text/cases"
@@ -108,7 +109,27 @@ func printFormattedError(err error, title string, suggestion string) {
 		// Wrap error with legacy parameters using error builder.
 		builder := Build(err)
 		if suggestion != "" {
-			builder = builder.WithHint(suggestion)
+			// Trim leading/trailing whitespace for analysis.
+			trimmed := strings.TrimSpace(suggestion)
+
+			// Check if suggestion contains markdown sections (backward compatibility).
+			// Old code passed suggestions like "\n## Explanation\n..." which should be
+			// added as explanations, not hints, to avoid rendering empty hint sections.
+			if strings.Contains(suggestion, "\n##") || strings.HasPrefix(trimmed, "##") {
+				// Strip the "## Explanation" header if present since formatter adds it.
+				cleaned := strings.TrimLeft(suggestion, "\n")
+				cleaned = strings.TrimPrefix(cleaned, "## Explanation\n")
+				cleaned = strings.TrimPrefix(cleaned, "## Explanation")
+				cleaned = strings.TrimSpace(cleaned)
+				builder = builder.WithExplanation(cleaned)
+			} else {
+				// Only add as hint if it's not empty after trimming.
+				// This prevents rendering empty "## Hints" sections for suggestions
+				// that are just whitespace or newlines.
+				if trimmed != "" {
+					builder = builder.WithHint(trimmed)
+				}
+			}
 		}
 		// Note: title is handled by the formatter's title parameter, not as a hint.
 		err = builder.Err()
@@ -128,15 +149,10 @@ func printFormattedError(err error, title string, suggestion string) {
 		verbose = verboseFlag
 	}
 
-	// Determine color mode.
-	colorMode := atmosConfig.Errors.Format.Color
-	if colorMode == "" {
-		colorMode = "auto"
-	}
-
+	// Color mode is now determined by terminal settings (--no-color, --force-color, etc.)
+	// and does not need to be configured here.
 	config := FormatterConfig{
 		Verbose:       verbose,
-		Color:         colorMode,
 		MaxLineLength: DefaultMaxLineLength,
 		Title:         title, // Use provided title if any.
 	}

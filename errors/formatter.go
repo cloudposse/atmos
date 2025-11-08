@@ -9,10 +9,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/cockroachdb/errors"
+	"github.com/spf13/viper"
 	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -36,10 +38,6 @@ type FormatterConfig struct {
 	// Verbose enables detailed error chain output.
 	Verbose bool
 
-	// Color controls color output: "auto", "always", or "never".
-	// When set to "never", ANSI color codes are stripped from output.
-	Color string
-
 	// MaxLineLength is the maximum length before wrapping (default: 80).
 	// Note: Line wrapping is currently handled by the markdown renderer based on
 	// the global atmos configuration. This field is available for future use.
@@ -53,7 +51,6 @@ type FormatterConfig struct {
 func DefaultFormatterConfig() FormatterConfig {
 	return FormatterConfig{
 		Verbose:       false,
-		Color:         "auto",
 		MaxLineLength: DefaultMaxLineLength,
 	}
 }
@@ -119,8 +116,9 @@ func Format(err error, config FormatterConfig) string {
 		return ""
 	}
 
-	// Determine color usage from config.
-	useColor := shouldUseColor(config.Color)
+	// Determine color usage from terminal settings.
+	// This respects --no-color, --force-color, NO_COLOR env var, and terminal.color config.
+	useColor := shouldUseColor()
 
 	// Build structured markdown document with sections.
 	md := buildMarkdownSections(err, config)
@@ -414,18 +412,32 @@ func formatContextForMarkdown(err error) string {
 }
 
 // shouldUseColor determines if color output should be used.
-func shouldUseColor(colorMode string) bool {
-	switch colorMode {
-	case "always":
-		return true
-	case "never":
-		return false
-	case "auto":
-		// Check if stderr is a TTY.
-		return term.IsTerminal(int(os.Stderr.Fd()))
-	default:
-		return term.IsTerminal(int(os.Stderr.Fd()))
+// This uses the terminal package's color logic which respects:
+// - --no-color, --color, --force-color flags
+// - NO_COLOR, CLICOLOR, CLICOLOR_FORCE environment variables
+// - settings.terminal.color and settings.terminal.no_color in atmos.yaml
+func shouldUseColor() bool {
+	// Build terminal config from all sources (flags, env vars, atmos.yaml).
+	termConfig := &terminal.Config{
+		NoColor:    viper.GetBool("no-color"),
+		Color:      viper.GetBool("color"),
+		ForceColor: viper.GetBool("force-color"),
+
+		EnvNoColor:       os.Getenv("NO_COLOR") != "",
+		EnvCLIColor:      os.Getenv("CLICOLOR"),
+		EnvCLIColorForce: os.Getenv("CLICOLOR_FORCE") != "" || os.Getenv("FORCE_COLOR") != "",
 	}
+
+	// Add atmos.yaml settings if available.
+	if atmosConfig != nil {
+		termConfig.AtmosConfig = *atmosConfig
+	}
+
+	// Check if stderr is a TTY.
+	isTTY := term.IsTerminal(int(os.Stderr.Fd()))
+
+	// Use terminal package's color logic.
+	return termConfig.ShouldUseColor(isTTY)
 }
 
 // stripANSI removes ANSI escape codes from a string.

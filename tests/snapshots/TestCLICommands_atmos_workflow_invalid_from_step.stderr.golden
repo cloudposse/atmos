@@ -5,10 +5,6 @@
 
 **Error:** invalid from-step flag
 
-## Hints
-
-💡
-
 ## Explanation
 
 The --from-step flag was set to dne, but this step does not exist in workflow pass.

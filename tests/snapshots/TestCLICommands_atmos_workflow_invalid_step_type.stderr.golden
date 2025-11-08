@@ -5,10 +5,6 @@
 
 **Error:** invalid workflow step type
 
-## Hints
-
-💡
-
 ## Explanation
 
 Step type invalid is not supported. Each step must specify a valid type.

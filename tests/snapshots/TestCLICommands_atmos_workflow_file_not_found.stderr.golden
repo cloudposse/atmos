@@ -5,10 +5,6 @@
 
 **Error:** workflow file not found
 
-## Hints
-
-💡
-
 ## Explanation
 
 The workflow manifest file stacks/workflows/dne.yaml does not exist.

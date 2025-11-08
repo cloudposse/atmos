@@ -432,8 +432,7 @@ type ErrorsConfig struct {
 
 // ErrorFormatConfig contains formatting options for errors.
 type ErrorFormatConfig struct {
-	Verbose bool   `yaml:"verbose,omitempty" json:"verbose,omitempty" mapstructure:"verbose"`
-	Color   string `yaml:"color,omitempty" json:"color,omitempty" mapstructure:"color"` // auto, always, never
+	Verbose bool `yaml:"verbose,omitempty" json:"verbose,omitempty" mapstructure:"verbose"`
 }
 
 // SentryConfig contains Sentry error reporting configuration.

@@ -12,7 +12,6 @@ func TestDefaultFormatterConfig(t *testing.T) {
 	config := DefaultFormatterConfig()
 
 	assert.False(t, config.Verbose)
-	assert.Equal(t, "auto", config.Color)
 	assert.Equal(t, 80, config.MaxLineLength)
 }
 
@@ -26,7 +25,6 @@ func TestFormat_NilError(t *testing.T) {
 func TestFormat_SimpleError(t *testing.T) {
 	err := errors.New("test error")
 	config := DefaultFormatterConfig()
-	config.Color = "never" // Disable color for testing.
 
 	result := Format(err, config)
 
@@ -41,7 +39,6 @@ func TestFormat_ErrorWithHint(t *testing.T) {
 	)
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -60,7 +57,6 @@ func TestFormat_ErrorWithMultipleHints(t *testing.T) {
 	)
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -78,7 +74,6 @@ func TestFormat_LongErrorMessage(t *testing.T) {
 	err := errors.New(longMsg)
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 	config.MaxLineLength = 80
 
 	result := Format(err, config)
@@ -93,7 +88,6 @@ func TestFormat_VerboseMode(t *testing.T) {
 	err := errors.New("test error")
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 	config.Verbose = true
 
 	result := Format(err, config)
@@ -104,27 +98,13 @@ func TestFormat_VerboseMode(t *testing.T) {
 }
 
 func TestFormat_ColorModes(t *testing.T) {
+	// Color mode is now determined by terminal settings (--no-color, --force-color, etc.)
+	// This test verifies that Format() works regardless of color settings.
 	err := errors.New("test error")
+	config := DefaultFormatterConfig()
 
-	tests := []struct {
-		name      string
-		colorMode string
-	}{
-		{"always", "always"},
-		{"never", "never"},
-		{"auto", "auto"},
-		{"invalid", "invalid"}, // Should fallback to auto.
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := DefaultFormatterConfig()
-			config.Color = tt.colorMode
-
-			result := Format(err, config)
-			assert.Contains(t, result, "test error")
-		})
-	}
+	result := Format(err, config)
+	assert.Contains(t, result, "test error")
 }
 
 func TestFormat_WithBuilder(t *testing.T) {
@@ -137,7 +117,6 @@ func TestFormat_WithBuilder(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -148,24 +127,14 @@ func TestFormat_WithBuilder(t *testing.T) {
 }
 
 func TestShouldUseColor(t *testing.T) {
-	tests := []struct {
-		name      string
-		colorMode string
-		expected  bool
-	}{
-		{"always", "always", true},
-		{"never", "never", false},
-		// "auto" and "invalid" depend on TTY, so we don't test exact values.
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.colorMode == "always" || tt.colorMode == "never" {
-				result := shouldUseColor(tt.colorMode)
-				assert.Equal(t, tt.expected, result)
-			}
-		})
-	}
+	// shouldUseColor() now uses terminal package's logic which respects:
+	// - --no-color, --color, --force-color flags
+	// - NO_COLOR, CLICOLOR, CLICOLOR_FORCE environment variables
+	// - settings.terminal.color and settings.terminal.no_color in atmos.yaml
+	// The exact value depends on these settings and TTY detection.
+	// We just verify it returns a boolean without panicking.
+	result := shouldUseColor()
+	assert.IsType(t, false, result)
 }
 
 func TestWrapText(t *testing.T) {
@@ -288,7 +257,6 @@ func TestFormat_VerboseWithContext(t *testing.T) {
 
 	config := DefaultFormatterConfig()
 	config.Verbose = true
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -320,7 +288,6 @@ func TestFormat_NonVerboseWithContext(t *testing.T) {
 
 	config := DefaultFormatterConfig()
 	config.Verbose = false // Non-verbose mode.
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -344,7 +311,6 @@ func TestFormat_WithExplanation(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -364,7 +330,6 @@ func TestFormat_WithExample(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -389,7 +354,6 @@ func TestFormat_WithAllSections(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 	config.Verbose = true
 
 	result := Format(err, config)
@@ -432,7 +396,6 @@ func TestFormat_SectionOrder(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 	config.Verbose = true
 
 	result := Format(err, config)
@@ -462,7 +425,6 @@ func TestFormat_ExampleAndHintsSeparation(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -489,7 +451,6 @@ func TestFormat_NoExplanation_NoSection(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -506,7 +467,6 @@ func TestFormat_NoExample_NoSection(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -520,7 +480,6 @@ func TestFormat_NoHints_NoSection(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -539,7 +498,6 @@ func TestFormat_ContextMarkdownTable(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 	config.Verbose = true
 
 	result := Format(err, config)
@@ -585,7 +543,6 @@ func TestFormat_VerboseStackTrace(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 	config.Verbose = true
 
 	result := Format(err, config)
@@ -604,7 +561,6 @@ func TestFormat_NonVerboseNoStackTrace(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 	config.Verbose = false
 
 	result := Format(err, config)
@@ -620,7 +576,6 @@ func TestFormat_CustomTitle_SingleH1(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -644,7 +599,6 @@ func TestFormat_NoCustomTitle_DefaultH1(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -669,7 +623,6 @@ func TestFormat_HintsInSection_NotInErrorMessage(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result := Format(err, config)
 
@@ -711,7 +664,6 @@ func TestFormat_MultipleErrors_NoH1Duplication(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result1 := Format(err1, config)
 	result2 := Format(err2, config)
@@ -745,7 +697,6 @@ func TestFormat_WithTitle_OverridesDefault(t *testing.T) {
 		Err()
 
 	config := DefaultFormatterConfig()
-	config.Color = "never"
 
 	result := Format(err, config)
 

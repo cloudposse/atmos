@@ -19,7 +19,6 @@ func TestExampleErrorFormatting(t *testing.T) {
 	err1 := errors.New("component 'vpc' not found in stack 'prod/us-east-1'")
 	formatted1 := Format(err1, FormatterConfig{
 		Verbose:       false,
-		Color:         "auto",
 		MaxLineLength: 80,
 	})
 	fmt.Fprintf(os.Stderr, "%s\n\n", formatted1)
@@ -29,7 +28,6 @@ func TestExampleErrorFormatting(t *testing.T) {
 	err2 = errors.WithHint(err2, "Use 'atmos list components --stack prod/us-east-1' to see available components")
 	formatted2 := Format(err2, FormatterConfig{
 		Verbose:       false,
-		Color:         "auto",
 		MaxLineLength: 80,
 	})
 	fmt.Fprintf(os.Stderr, "%s\n\n", formatted2)
@@ -41,7 +39,6 @@ func TestExampleErrorFormatting(t *testing.T) {
 	err3 = errors.WithHint(err3, "Ensure database is running and accessible")
 	formatted3 := Format(err3, FormatterConfig{
 		Verbose:       false,
-		Color:         "auto",
 		MaxLineLength: 80,
 	})
 	fmt.Fprintf(os.Stderr, "%s\n\n", formatted3)
@@ -55,7 +52,6 @@ func TestExampleErrorFormatting(t *testing.T) {
 	err4 = errors.WithHint(err4, "Verify database credentials in atmos.yaml")
 	formatted4 := Format(err4, FormatterConfig{
 		Verbose:       false,
-		Color:         "auto",
 		MaxLineLength: 80,
 	})
 	fmt.Fprintf(os.Stderr, "%s\n\n", formatted4)
@@ -63,7 +59,6 @@ func TestExampleErrorFormatting(t *testing.T) {
 	fmt.Fprintf(os.Stderr, "=== Example 5: Same Error Chain (Verbose) ===\n")
 	formatted5 := Format(err4, FormatterConfig{
 		Verbose:       true,
-		Color:         "auto",
 		MaxLineLength: 80,
 	})
 	fmt.Fprintf(os.Stderr, "%s\n\n", formatted5)
@@ -78,7 +73,6 @@ func TestExampleErrorFormatting(t *testing.T) {
 		Err()
 	formatted6 := Format(err6, FormatterConfig{
 		Verbose:       false,
-		Color:         "auto",
 		MaxLineLength: 80,
 	})
 	fmt.Fprintf(os.Stderr, "%s\n\n", formatted6)
@@ -87,24 +81,7 @@ func TestExampleErrorFormatting(t *testing.T) {
 	err7 := errors.New("failed to initialize component vpc in stack prod/us-east-1 with terraform workspace prod-use1 due to configuration validation error in file stacks/prod/us-east-1.yaml")
 	formatted7 := Format(err7, FormatterConfig{
 		Verbose:       false,
-		Color:         "auto",
 		MaxLineLength: 80,
 	})
 	fmt.Fprintf(os.Stderr, "%s\n\n", formatted7)
-
-	fmt.Fprintf(os.Stderr, "=== Example 8: No Color Mode ===\n")
-	formatted8 := Format(err6, FormatterConfig{
-		Verbose:       false,
-		Color:         "never",
-		MaxLineLength: 80,
-	})
-	fmt.Fprintf(os.Stderr, "%s\n\n", formatted8)
-
-	fmt.Fprintf(os.Stderr, "=== Example 9: Force Color Mode ===\n")
-	formatted9 := Format(err6, FormatterConfig{
-		Verbose:       false,
-		Color:         "always",
-		MaxLineLength: 80,
-	})
-	fmt.Fprintf(os.Stderr, "%s\n\n", formatted9)
 }

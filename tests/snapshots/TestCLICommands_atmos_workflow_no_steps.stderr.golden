@@ -5,10 +5,6 @@
 
 **Error:** workflow has no steps defined
 
-## Hints
-
-💡
-
 ## Explanation
 
 Workflow no-steps is empty and requires at least one step to execute.

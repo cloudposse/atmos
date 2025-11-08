@@ -199,14 +199,13 @@ if err != nil {
 
 ## Error Formatting
 
-The formatter provides smart error display with TTY detection, color support, and structured markdown sections:
+The formatter provides smart error display with structured markdown sections. Color output is controlled by the global terminal settings (see Terminal Color Control below):
 
 ```go
 import errUtils "github.com/cloudposse/atmos/errors"
 
 config := errUtils.DefaultFormatterConfig()
 config.Verbose = false  // Collapsed mode
-config.Color = "auto"   // auto, always, never
 
 formatted := errUtils.Format(err, config)
 fmt.Fprint(os.Stderr, formatted)
@@ -266,8 +265,24 @@ Sections are conditionally rendered - they only appear if data is available.
 ### Configuration Options
 
 - **Verbose**: `false` (default) shows compact errors with context table, `true` shows full stack traces
-- **Color**: `"auto"` (default) uses TTY detection, `"always"` forces color, `"never"` disables color
 - **MaxLineLength**: `80` (default) wraps long error messages
+
+### Terminal Color Control
+
+Color output is controlled by the global terminal settings, not the error formatter config. The formatter automatically respects:
+
+- **CLI Flags**: `--no-color`, `--color`, `--force-color`
+- **Environment Variables**: `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE`
+- **Configuration**: `settings.terminal.color` and `settings.terminal.no_color` in `atmos.yaml`
+
+Example:
+```bash
+# Disable color for error output
+atmos terraform plan --no-color
+
+# Force color even when piped
+atmos terraform plan --force-color | tee output.log
+```
 
 ## Exit Codes
 
@@ -313,7 +328,6 @@ In `atmos.yaml`:
 errors:
   format:
     verbose: false
-    color: auto
   sentry:
     enabled: true
     dsn: "https://examplePublicKey@o0.ingest.sentry.io/0"
@@ -508,7 +522,6 @@ go test -v ./errors -run TestExampleErrorFormatting
 # - Errors with hints
 # - Error chains (collapsed and verbose)
 # - Builder pattern examples
-# - Color modes (auto, always, never)
 # - Long message wrapping
 ```
 
@@ -525,10 +538,9 @@ err := errUtils.Build(errors.New("test error")).
     WithHint("This is a helpful hint").
     Err()
 
-// Format it
+// Format it (color controlled by terminal settings)
 formatted := errUtils.Format(err, errUtils.FormatterConfig{
     Verbose:       false,  // or true for stack traces
-    Color:         "auto", // or "always", "never"
     MaxLineLength: 80,
 })
 
