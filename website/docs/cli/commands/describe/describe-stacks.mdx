@@ -57,6 +57,8 @@ atmos describe stacks --query <yq-expression>
 # Authenticate before describing (when YAML functions require credentials)
 atmos describe stacks --identity my-aws-identity
 atmos describe stacks --identity # Interactive selection
+# Disable authentication (use AWS SDK defaults)
+atmos describe stacks --identity=false
 atmos describe stacks -i my-aws-identity -s tenant1-ue2-dev
 ```
 

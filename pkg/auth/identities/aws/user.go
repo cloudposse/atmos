@@ -67,9 +67,24 @@ func (i *userIdentity) GetProviderName() (string, error) {
 	return awsUserProviderName, nil
 }
 
-// Authenticate performs authentication by retrieving long-lived credentials and generating session tokens.
+// Authenticate performs authentication by checking for existing valid session credentials
+// or generating new session tokens if needed.
 func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (types.ICredentials, error) {
-	// Resolve base (long-lived) credentials from config or store.
+	// First, try to load existing session credentials from AWS files.
+	// This prevents unnecessary GetSessionToken API calls when valid credentials already exist.
+	existingCreds, err := i.LoadCredentials(ctx)
+	if err == nil && existingCreds != nil {
+		// Check if the loaded credentials are still valid (not expired).
+		if !existingCreds.IsExpired() {
+			log.Debug("Using existing valid session credentials from AWS files", logKeyIdentity, i.name)
+			return existingCreds, nil
+		}
+		log.Debug("Existing session credentials are expired, generating new ones", logKeyIdentity, i.name)
+	} else {
+		log.Debug("No existing session credentials found, generating new ones", logKeyIdentity, i.name, "error", err)
+	}
+
+	// No valid existing credentials - resolve base credentials and generate new session tokens.
 	longLivedCreds, err := i.resolveLongLivedCredentials()
 	if err != nil {
 		return nil, err
