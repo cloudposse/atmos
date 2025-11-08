@@ -356,6 +356,12 @@ func addStackTraceSection(md *strings.Builder, err error, useColor bool) {
 }
 
 // renderMarkdown renders markdown string through Glamour with specified width.
+//
+// This function creates a fresh markdown renderer for each call rather than using
+// the global renderer from pkg/ui to ensure:
+// 1. The FormatterConfig.MaxLineLength parameter is respected (global renderer may have different width)
+// 2. Error formatting works before the UI system is initialized (early startup errors)
+// 3. No circular dependencies (pkg/ui imports errors package)
 func renderMarkdown(md string, maxLineLength int) string {
 	// Use provided maxLineLength, or fall back to default if not set.
 	width := maxLineLength

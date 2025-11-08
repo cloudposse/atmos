@@ -157,6 +157,18 @@ func printFormattedError(err error, title string, suggestion string) {
 		Title:         title, // Use provided title if any.
 	}
 	formatted := Format(err, config)
+
+	// Write directly to os.Stderr instead of using ui.MarkdownMessage() to avoid
+	// circular dependencies and ensure error formatting works before UI initialization.
+	//
+	// Why not use ui.MarkdownMessage():
+	// 1. Circular dependency: pkg/ui imports errors package, so errors cannot import ui
+	// 2. Initialization order: Error formatting must work before the UI system is initialized
+	//    (e.g., early startup errors, configuration loading failures)
+	// 3. Self-contained errors package: The errors package is designed to be low-level
+	//    and independent, ensuring errors can always be reported regardless of system state
+	//
+	// The formatted output is already rendered markdown, so writing to stderr is correct.
 	_, printErr := os.Stderr.WriteString(formatted + "\n")
 	if printErr != nil {
 		log.Error(printErr)
