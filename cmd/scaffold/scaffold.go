@@ -21,7 +21,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/project/config"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 //go:embed scaffold-schema.json
@@ -361,7 +360,9 @@ func executeValidateScaffold(
 	}
 
 	if len(scaffoldPaths) == 0 {
-		utils.PrintfMessageToTUI("No scaffold.yaml files found to validate\n")
+		if err := atmosui.Info("No scaffold.yaml files found to validate"); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -370,26 +371,43 @@ func executeValidateScaffold(
 	errorCount := 0
 
 	for _, scaffoldPath := range scaffoldPaths {
-		utils.PrintfMessageToTUI("Validating %s\n", scaffoldPath)
+		if err := atmosui.Infof("Validating %s", scaffoldPath); err != nil {
+			return err
+		}
 
 		if err := validateScaffoldFile(scaffoldPath); err != nil {
-			utils.PrintfMessageToTUI("✗ %s: %v\n", scaffoldPath, err)
+			if writeErr := atmosui.Errorf("%s: %v", scaffoldPath, err); writeErr != nil {
+				return writeErr
+			}
 			errorCount++
 		} else {
-			utils.PrintfMessageToTUI("✓ %s: valid\n", scaffoldPath)
+			if err := atmosui.Successf("%s: valid", scaffoldPath); err != nil {
+				return err
+			}
 			validCount++
 		}
 	}
 
 	// Print summary
-	utils.PrintfMessageToTUI("\nValidation Summary:\n")
-	utils.PrintfMessageToTUI("✓ Valid files: %d\n", validCount)
+	if err := atmosui.Writeln(""); err != nil {
+		return err
+	}
+	if err := atmosui.Writeln("Validation Summary:"); err != nil {
+		return err
+	}
+	if err := atmosui.Successf("Valid files: %d", validCount); err != nil {
+		return err
+	}
 	if errorCount > 0 {
-		utils.PrintfMessageToTUI("✗ Invalid files: %d\n", errorCount)
+		if err := atmosui.Errorf("Invalid files: %d", errorCount); err != nil {
+			return err
+		}
 		return fmt.Errorf("%w: %d scaffold files failed validation", errUtils.ErrScaffoldValidation, errorCount)
 	}
 
-	utils.PrintfMessageToTUI("All scaffold files are valid\n")
+	if err := atmosui.Success("All scaffold files are valid"); err != nil {
+		return err
+	}
 	return nil
 }
 
