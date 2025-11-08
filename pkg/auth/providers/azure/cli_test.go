@@ -1,6 +1,7 @@
 package azure
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -278,4 +279,185 @@ func TestCLIProvider_SpecFieldTypes(t *testing.T) {
 			require.NotNil(t, provider)
 		})
 	}
+}
+
+func TestCLIProvider_Validate(t *testing.T) {
+	tests := []struct {
+		name        string
+		provider    *cliProvider
+		expectError bool
+		errorType   error
+	}{
+		{
+			name: "valid provider",
+			provider: &cliProvider{
+				tenantID: "tenant-123",
+			},
+			expectError: false,
+		},
+		{
+			name: "missing tenant ID",
+			provider: &cliProvider{
+				tenantID: "",
+			},
+			expectError: true,
+			errorType:   errUtils.ErrInvalidProviderConfig,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.provider.Validate()
+
+			if tt.expectError {
+				require.Error(t, err)
+				if tt.errorType != nil {
+					assert.ErrorIs(t, err, tt.errorType)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestCLIProvider_Environment(t *testing.T) {
+	tests := []struct {
+		name        string
+		provider    *cliProvider
+		expectedEnv map[string]string
+	}{
+		{
+			name: "all fields present",
+			provider: &cliProvider{
+				tenantID:       "tenant-123",
+				subscriptionID: "sub-456",
+				location:       "eastus",
+			},
+			expectedEnv: map[string]string{
+				"AZURE_TENANT_ID":       "tenant-123",
+				"AZURE_SUBSCRIPTION_ID": "sub-456",
+				"AZURE_LOCATION":        "eastus",
+			},
+		},
+		{
+			name: "only tenant ID",
+			provider: &cliProvider{
+				tenantID:       "tenant-123",
+				subscriptionID: "",
+				location:       "",
+			},
+			expectedEnv: map[string]string{
+				"AZURE_TENANT_ID": "tenant-123",
+			},
+		},
+		{
+			name: "empty fields",
+			provider: &cliProvider{
+				tenantID:       "",
+				subscriptionID: "",
+				location:       "",
+			},
+			expectedEnv: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env, err := tt.provider.Environment()
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedEnv, env)
+		})
+	}
+}
+
+func TestCLIProvider_PrepareEnvironment(t *testing.T) {
+	tests := []struct {
+		name             string
+		provider         *cliProvider
+		inputEnv         map[string]string
+		expectedContains map[string]string
+		expectedMissing  []string
+	}{
+		{
+			name: "basic environment preparation",
+			provider: &cliProvider{
+				tenantID:       "tenant-123",
+				subscriptionID: "sub-456",
+				location:       "eastus",
+			},
+			inputEnv: map[string]string{
+				"HOME": "/home/user",
+				"PATH": "/usr/bin",
+			},
+			expectedContains: map[string]string{
+				"HOME":                  "/home/user",
+				"PATH":                  "/usr/bin",
+				"AZURE_SUBSCRIPTION_ID": "sub-456",
+				"ARM_SUBSCRIPTION_ID":   "sub-456",
+				"AZURE_TENANT_ID":       "tenant-123",
+				"ARM_TENANT_ID":         "tenant-123",
+				"AZURE_LOCATION":        "eastus",
+				"ARM_LOCATION":          "eastus",
+				"ARM_USE_CLI":           "true",
+			},
+		},
+		{
+			name: "clears conflicting variables",
+			provider: &cliProvider{
+				tenantID:       "tenant-123",
+				subscriptionID: "sub-456",
+			},
+			inputEnv: map[string]string{
+				"AZURE_CLIENT_ID":     "conflicting-client-id",
+				"AZURE_CLIENT_SECRET": "conflicting-secret",
+				"HOME":                "/home/user",
+			},
+			expectedContains: map[string]string{
+				"HOME":                  "/home/user",
+				"AZURE_SUBSCRIPTION_ID": "sub-456",
+				"ARM_SUBSCRIPTION_ID":   "sub-456",
+				"AZURE_TENANT_ID":       "tenant-123",
+				"ARM_TENANT_ID":         "tenant-123",
+				"ARM_USE_CLI":           "true",
+			},
+			expectedMissing: []string{
+				"AZURE_CLIENT_ID",
+				"AZURE_CLIENT_SECRET",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			result, err := tt.provider.PrepareEnvironment(ctx, tt.inputEnv)
+
+			require.NoError(t, err)
+
+			// Check expected variables.
+			for key, expectedValue := range tt.expectedContains {
+				assert.Equal(t, expectedValue, result[key], "Expected %s=%s", key, expectedValue)
+			}
+
+			// Check unwanted variables are missing.
+			for _, key := range tt.expectedMissing {
+				_, exists := result[key]
+				assert.False(t, exists, "Expected %s to be missing", key)
+			}
+		})
+	}
+}
+
+func TestCLIProvider_Logout(t *testing.T) {
+	provider := &cliProvider{
+		name:     "test-cli",
+		tenantID: "tenant-123",
+	}
+
+	// Logout should be a no-op and always return nil.
+	ctx := context.Background()
+	err := provider.Logout(ctx)
+	assert.NoError(t, err)
 }
