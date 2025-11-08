@@ -48,4 +48,4 @@ This example demonstrates how to use Atmos with Helmfile to manage Kubernetes ap
 - **Declarative**: Define desired state in YAML
 - **Versioned**: Pin chart versions for reproducibility
 - **Scalable**: Manage multiple environments consistently
-- **Integrated**: Works seamlessly with Atmos workflows 
+- **Integrated**: Works seamlessly with Atmos workflows
