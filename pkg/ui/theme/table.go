@@ -150,9 +150,14 @@ func isActiveRow(rowData []string) bool {
 	return len(rowData) > 0 && strings.Contains(rowData[0], IconActive)
 }
 
-// isRecommendedTheme checks if the status column contains a star indicator.
+// isRecommendedTheme checks if any cell in the row contains a star indicator.
 func isRecommendedTheme(rowData []string) bool {
-	return len(rowData) > 0 && strings.HasPrefix(rowData[0], IconRecommended)
+	for _, cell := range rowData {
+		if strings.Contains(cell, IconRecommended) {
+			return true
+		}
+	}
+	return false
 }
 
 // getActiveColumnStyle returns the style for the active indicator column.
