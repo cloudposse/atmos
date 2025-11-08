@@ -620,7 +620,8 @@ func checkPreconditions(t *testing.T, preconditions []string) {
 
 	// Map of precondition names to their check functions
 	preconditionChecks := map[string]func(*testing.T){
-		"github_token": RequireOCIAuthentication,
+		"github_token":    RequireOCIAuthentication,
+		"aws_credentials": RequireAWSCredentials,
 	}
 
 	// Check each precondition

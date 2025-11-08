@@ -58,6 +58,8 @@ tests:
       - "nonprod"
     env:
       ATMOS_LOGS_LEVEL: Debug
+    preconditions:
+      - "aws_credentials"
     expect:
       exit_code: 1
       stderr:
