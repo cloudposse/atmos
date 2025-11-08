@@ -3,6 +3,7 @@ package errors
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -36,9 +37,12 @@ type FormatterConfig struct {
 	Verbose bool
 
 	// Color controls color output: "auto", "always", or "never".
+	// When set to "never", ANSI color codes are stripped from output.
 	Color string
 
 	// MaxLineLength is the maximum length before wrapping (default: 80).
+	// Note: Line wrapping is currently handled by the markdown renderer based on
+	// the global atmos configuration. This field is available for future use.
 	MaxLineLength int
 
 	// Title is an optional custom title for the error message.
@@ -115,11 +119,21 @@ func Format(err error, config FormatterConfig) string {
 		return ""
 	}
 
+	// Determine color usage from config.
+	useColor := shouldUseColor(config.Color)
+
 	// Build structured markdown document with sections.
 	md := buildMarkdownSections(err, config)
 
 	// Render markdown through Glamour.
-	return renderMarkdown(md)
+	rendered := renderMarkdown(md)
+
+	// Strip ANSI codes if color is disabled.
+	if !useColor {
+		rendered = stripANSI(rendered)
+	}
+
+	return rendered
 }
 
 // buildMarkdownSections builds the complete markdown document with all sections.
@@ -248,13 +262,8 @@ func extractCustomTitle(err error) string {
 	return ""
 }
 
-// addExampleAndHintsSection separates hints into examples and regular hints, then adds both sections.
-func addExampleAndHintsSection(md *strings.Builder, err error) {
-	allHints := errors.GetAllHints(err)
-	var examples []string
-	var hints []string
-
-	// Separate hints into examples, title, and regular hints.
+// categorizeHints separates hints into examples and regular hints, filtering out empty hints.
+func categorizeHints(allHints []string) (examples []string, hints []string) {
 	for _, hint := range allHints {
 		switch {
 		case strings.HasPrefix(hint, "TITLE:"):
@@ -263,9 +272,19 @@ func addExampleAndHintsSection(md *strings.Builder, err error) {
 		case strings.HasPrefix(hint, "EXAMPLE:"):
 			examples = append(examples, strings.TrimPrefix(hint, "EXAMPLE:"))
 		default:
-			hints = append(hints, hint)
+			// Skip empty or whitespace-only hints.
+			if trimmed := strings.TrimSpace(hint); trimmed != "" {
+				hints = append(hints, hint)
+			}
 		}
 	}
+	return examples, hints
+}
+
+// addExampleAndHintsSection separates hints into examples and regular hints, then adds both sections.
+func addExampleAndHintsSection(md *strings.Builder, err error) {
+	allHints := errors.GetAllHints(err)
+	examples, hints := categorizeHints(allHints)
 
 	// Add Example section.
 	if len(examples) > 0 {
@@ -407,6 +426,14 @@ func shouldUseColor(colorMode string) bool {
 	default:
 		return term.IsTerminal(int(os.Stderr.Fd()))
 	}
+}
+
+// stripANSI removes ANSI escape codes from a string.
+func stripANSI(s string) string {
+	// ANSI escape code pattern: ESC [ ... m where ... can be numbers separated by semicolons.
+	// More comprehensive pattern to catch all ANSI codes including SGR (colors/formatting).
+	ansiPattern := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+	return ansiPattern.ReplaceAllString(s, "")
 }
 
 // wrapText wraps text to the specified width while preserving intentional line breaks.

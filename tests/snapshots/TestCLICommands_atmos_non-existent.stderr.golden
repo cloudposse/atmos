@@ -1,7 +1,7 @@
 
 # Incorrect Usage
 
-Unknown command non-existent for atmos
+**Error:** Unknown command non-existent for atmos
 
 Valid subcommands are:
 
@@ -25,6 +25,10 @@ Valid subcommands are:
 • vendor
 • version
 • workflow
+
+## Hints
+
+💡
 
 Run atmos --help for usage
 

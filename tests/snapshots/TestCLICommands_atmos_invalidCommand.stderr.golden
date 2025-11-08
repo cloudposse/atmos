@@ -3,8 +3,10 @@
 
 # Invalid Command
 
-The atmos invalidCommand command has no steps or subcommands configured.
+**Error:** The atmos invalidCommand command has no steps or subcommands configured.
 
-For more information, refer to the docs https://atmos.tools/cli/configuration/commands
+## Hints
+
+💡 https://atmos.tools/cli/configuration/commands
 
 

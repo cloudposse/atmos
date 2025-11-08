@@ -402,14 +402,19 @@ func TestComponentNotFoundError(t *testing.T) {
     assert.True(t, errors.Is(err, errUtils.ErrComponentNotFound))
 
     // Check exit code
-    exitCode := errUtils.ExtractExitCode(err)
+    exitCode := errUtils.GetExitCode(err)
     assert.Equal(t, 2, exitCode)
 
     // Check error message
     assert.Contains(t, err.Error(), "Component 'vpc' not found")
 
-    // Check context (in verbose mode)
-    formatted := errUtils.FormatError(err, true)
+    // Check formatted output (with verbose mode and color enabled)
+    config := errUtils.FormatterConfig{
+        Verbose:       true,
+        Color:         "always",
+        MaxLineLength: 80,
+    }
+    formatted := errUtils.Format(err, config)
     assert.Contains(t, formatted, "component")
     assert.Contains(t, formatted, "stack")
 }

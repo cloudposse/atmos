@@ -1,7 +1,7 @@
 
 # Incorrect Usage
 
-The command atmos terraform requires a subcommand
+**Error:** The command atmos terraform requires a subcommand
 
 Valid subcommands are:
 
@@ -44,6 +44,8 @@ Valid subcommands are:
 
   $ atmos terraform [subcommand] <component-name> -s <stack-name>
 
-For more information, refer to the docs https://atmos.tools/cli/commands/terraform/usage
+## Hints
+
+💡 https://atmos.tools/cli/commands/terraform/usage
 
 

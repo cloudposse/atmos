@@ -1,7 +1,7 @@
 
 # Incorrect Usage
 
-Unknown command invalid-command for atmos auth
+**Error:** Unknown command invalid-command for atmos auth
 
 Valid subcommands are:
 
@@ -15,6 +15,10 @@ Valid subcommands are:
 • user
 • validate
 • whoami
+
+## Hints
+
+💡
 
 Run atmos auth --help for usage
 
