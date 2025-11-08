@@ -135,16 +135,17 @@ profiles:
    - Example: `profiles.base_path: "./custom-profiles"`
    - If relative, resolved from `atmos.yaml` directory
 
-2. **Project-local profiles**:
+2. **Project-local hidden profiles**:
    - `{atmos_cli_config_path}/.atmos/profiles/` (hidden directory, project-specific)
    - Example: `/infrastructure/atmos/.atmos/profiles/`
+   - Higher precedence than non-hidden `profiles/` directory
 
 3. **XDG user profiles** (follows XDG Base Directory Specification):
    - `$XDG_CONFIG_HOME/atmos/profiles/` (default: `~/.config/atmos/profiles/`)
    - `$ATMOS_XDG_CONFIG_HOME/atmos/profiles/` (Atmos-specific override)
    - Platform-aware: Uses `~/.config` on Linux/macOS, `%APPDATA%` on Windows
 
-4. **Project profiles (non-hidden)**:
+4. **Project-local non-hidden profiles** (lowest precedence):
    - `{atmos_cli_config_path}/profiles/` (non-hidden directory)
    - Example: `/infrastructure/atmos/profiles/`
    - Alternative to hidden `.atmos/profiles/` for users who prefer visible directories
@@ -293,6 +294,10 @@ Tip: View profile details with 'atmos profile show <profile>'
 - Location column showing profile source (Project, User, Custom)
 - Optional description extracted from profile metadata or first comment
 
+**FR5.2.2**: Command alias `atmos list profiles` MUST be provided for consistency with other list commands (`atmos list components`, `atmos list stacks`, `atmos list instances`):
+- Both `atmos profile list` and `atmos list profiles` MUST produce identical output
+- Help text for both commands MUST reference the alias
+
 **FR5.3**: `atmos profile list` MUST support JSON and YAML output formats via `--format` flag
 
 **FR5.4**: New command `atmos profile show <profile>` MUST display merged configuration for a profile
@@ -369,6 +374,83 @@ active_profiles:
 - From which locations
 - File merge order
 - Configuration precedence
+
+#### FR6: Tag-Based Resource Filtering (Phase 2 Enhancement)
+
+**Note**: This feature is scoped as a Phase 2 enhancement and is NOT included in the initial profiles implementation. This section documents the design for future implementation.
+
+**FR6.1**: Profile tags MUST enable automatic filtering of resources when explicitly activated.
+
+**FR6.2**: Tag-based filtering MUST be opt-in (disabled by default) to maintain backward compatibility.
+
+**FR6.3**: Tag filtering activation methods (when implemented):
+- **Global flag**: `--filter-by-profile-tags` enables filtering for the current command
+- **Configuration**: `profiles.filter_by_tags: true` in `atmos.yaml` enables filtering by default
+- **Default behavior**: Disabled (show all resources regardless of tags)
+
+**FR6.4**: Initial implementation scope (Phase 2):
+The following commands will implement tag filtering when this feature is developed:
+1. `atmos auth list identities` - Filter identities by matching tags
+2. `atmos list components` - Filter components by matching tags
+3. `atmos describe stacks` - Filter stacks by matching tags
+
+**Note**: These three commands are the initial scope. Additional commands can be enhanced in future iterations.
+
+**FR6.5**: Tag matching logic (OR semantics):
+- If active profile has tags `["developer", "local"]`
+- Filter matches resources with **any** of those tags (OR logic)
+- Example: Identity with `tags: ["developer"]` → **Shown** (matches one tag)
+- Example: Identity with `tags: ["production"]` → **Hidden** (no matching tags)
+- Example: Identity with `tags: ["developer", "production"]` → **Shown** (matches at least one tag)
+
+**FR6.6**: Multiple active profiles with tag filtering:
+- When multiple profiles are active: `--profile developer,ci`
+- Profile tags are **unioned** into a single tag set
+- Example: If `developer` has tags `["developer", "local"]` and `ci` has tags `["ci", "github-actions"]`
+- Combined tag set: `["developer", "local", "ci", "github-actions"]`
+- Resources matching **any** tag in the combined set are shown
+
+**FR6.7**: UX hints for filtered output:
+When tag filtering is active, commands MUST indicate filtering is enabled:
+```bash
+# Example output
+$ atmos auth list identities --profile developer --filter-by-profile-tags
+
+Showing identities matching profile tags: developer, local
+(Use --no-filter-by-profile-tags to show all identities)
+
+Available Identities
+┏━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Name              ┃ Kind             ┃ Tags        ┃
+┡━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ dev-sandbox       │ aws/permission-… │ developer   │
+│ local-testing     │ aws/static       │ local       │
+└───────────────────┴──────────────────┴─────────────┘
+```
+
+**FR6.8**: Tag filtering configuration example:
+```yaml
+# profiles/developer/_metadata.yaml
+metadata:
+  name: developer
+  tags: ["developer", "local"]
+
+# When filtering is enabled, only resources with these tags will be shown
+```
+
+**FR6.9**: Implementation requirements (Phase 2):
+When this feature is implemented, the following tasks must be completed:
+1. **Flag implementation**: Add `--filter-by-profile-tags` flag to root command
+2. **Configuration support**: Add `profiles.filter_by_tags` to `AtmosConfiguration` schema
+3. **Per-command filtering hooks**: Each command listed in FR6.4 must implement filtering logic
+4. **UX hints**: Add user-facing messages indicating when filtering is active
+5. **Tests**: Unit and integration tests for tag filtering behavior
+6. **Documentation**: User-facing docs explaining tag filtering feature
+
+**FR6.10**: Resources without tags:
+- Resources without a `tags` field are treated as having an empty tag set `[]`
+- When tag filtering is active, resources without tags are **hidden** (no matching tags)
+- Exception: If profile has no tags (empty tag set), filtering is effectively disabled for that profile
 
 ### Technical Requirements
 
@@ -451,59 +533,18 @@ func mergeConfigMetadata(existing *ConfigMetadata, incoming *ConfigMetadata) {
 }
 ```
 
-#### TR2a: Tag-Based Filtering
-
-**TR2a.1**: Profile tags MUST enable automatic filtering of resources when active
-
-**TR2a.2**: When profile with tags is active, commands MUST filter resources by matching tags:
-- `atmos describe stacks` - Show only stacks with matching tags
-- `atmos list components` - Show only components with matching tags
-- `atmos auth list identities` - Show only identities with matching tags
-
-**TR2a.3**: Tag matching logic:
-- If profile has tags `["developer", "local"]`
-- Filter matches resources with **any** of those tags (OR logic)
-- Example: Identity with `tags: ["developer"]` → Shown
-- Example: Identity with `tags: ["production"]` → Hidden
-
-**TR2a.4**: Tag filtering MUST be opt-in via flag or configuration:
-- Flag: `--filter-by-profile-tags` (enables automatic filtering)
-- Config: `profiles.filter_by_tags: true` (enables by default)
-- Default: Disabled (backward compatible - show all resources)
-
-**TR2a.5**: Tag filtering examples:
-
-```yaml
-# profiles/developer/_metadata.yaml
-metadata:
-  name: developer
-  tags: ["developer", "local"]
-
-# When --profile developer --filter-by-profile-tags active:
-# Only shows identities/stacks/components with tags: ["developer"] or ["local"]
-```
-
-```bash
-# List only developer identities when developer profile active
-atmos auth list identities --profile developer --filter-by-profile-tags
-
-# Output: Only shows identities tagged with "developer" or "local"
-```
-
-**TR2a.6**: Multiple profiles with tag filtering:
-- When multiple profiles active: `--profile developer,ci`
-- Tags are **unioned**: `["developer", "local", "ci", "github-actions"]`
-- Resources matching **any** tag are shown
-
-**TR2a.7**: Tag filtering MUST work with:
-- Identity listing: `atmos auth list identities`
-- Component listing: `atmos list components`
-- Stack listing: `atmos describe stacks`
-- Future: Any resource with `tags` field
+**Note**: Tag-based filtering has been moved to a separate Functional Requirement (FR6: Tag-Based Resource Filtering) and scoped as a Phase 2 enhancement. It is not part of the initial profiles implementation.
 
 #### TR3: Performance
 
-**TR3.1**: Profile loading MUST complete within 100ms for typical profiles (<10 files)
+**TR3.1**: Profile loading MUST complete within 100ms for typical profiles, where "typical" is defined as:
+- 5–10 YAML files per profile
+- ≤1,000 lines per file
+- ≤500KB total file size across all profile files
+- Maximum YAML nesting depth of 6 levels
+- No cross-file imports or runtime-evaluated merges (e.g., `!terraform.output`)
+- Examples: 6 files, 800 lines each, 350KB total; no complex imports
+- Test vectors: Benchmark suite in `tests/benchmarks/profiles/typical/` (profile-small-6files.yaml, profile-medium-10files.yaml) MUST meet 100ms target
 
 **TR3.2**: Profile discovery MUST be cached during a single Atmos command execution
 
@@ -657,10 +698,26 @@ profiles:
 ```
 
 **Profile location precedence:**
-1. `profiles.base_path` (if configured in `atmos.yaml`)
-2. `{atmos_cli_config_path}/.atmos/profiles/` (hidden)
-3. `$XDG_CONFIG_HOME/atmos/profiles/` (e.g., `~/.config/atmos/profiles/`)
-4. `{atmos_cli_config_path}/profiles/` (non-hidden)
+
+1. **Configurable profile directory** (highest precedence):
+   - `profiles.base_path` in `atmos.yaml` (can be relative or absolute)
+   - Example: `profiles.base_path: "./custom-profiles"`
+   - If relative, resolved from `atmos.yaml` directory
+
+2. **Project-local hidden profiles**:
+   - `{atmos_cli_config_path}/.atmos/profiles/` (hidden directory, project-specific)
+   - Example: `/infrastructure/atmos/.atmos/profiles/`
+   - Higher precedence than non-hidden `profiles/` directory
+
+3. **XDG user profiles** (follows XDG Base Directory Specification):
+   - `$XDG_CONFIG_HOME/atmos/profiles/` (default: `~/.config/atmos/profiles/`)
+   - `$ATMOS_XDG_CONFIG_HOME/atmos/profiles/` (Atmos-specific override)
+   - Platform-aware: Uses `~/.config` on Linux/macOS, `%APPDATA%` on Windows
+
+4. **Project-local non-hidden profiles** (lowest precedence):
+   - `{atmos_cli_config_path}/profiles/` (non-hidden directory)
+   - Example: `/infrastructure/atmos/profiles/`
+   - Alternative to hidden `.atmos/profiles/` for users who prefer visible directories
 
 **Note:** Profile configuration is meta - if a profile sets `profiles.base_path`, it affects subsequent profile loading. This is intentional to allow profiles to configure the system.
 
