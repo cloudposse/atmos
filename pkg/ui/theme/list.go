@@ -19,12 +19,12 @@ type ListThemesOptions struct {
 
 // ListThemesResult contains the formatted output for theme listing.
 type ListThemesResult struct {
-	Output           string
-	Error            error
-	ThemeCount       int
-	ActiveTheme      string
-	ShowStars        bool
-	RecommendedOnly  bool
+	Output          string
+	Error           error
+	ThemeCount      int
+	ActiveTheme     string
+	ShowStars       bool
+	RecommendedOnly bool
 }
 
 // ListThemes generates a formatted list of available themes.
