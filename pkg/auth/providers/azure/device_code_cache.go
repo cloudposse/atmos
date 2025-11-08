@@ -277,17 +277,17 @@ func (p *deviceCodeProvider) updateAzureCLICache(accessToken string, expiresAt t
 	expiresOn := expiresAt.Unix()
 
 	tokenEntry := map[string]interface{}{
-		"credential_type":       "AccessToken",
-		"secret":                accessToken,
-		"home_account_id":       homeAccountID,
-		"environment":           environment,
-		"client_id":             clientID,
-		"target":                scope,
-		"realm":                 realm,
-		"token_type":            "Bearer",
-		"cached_at":             fmt.Sprintf("%d", cachedAt),
-		"expires_on":            fmt.Sprintf("%d", expiresOn),
-		"extended_expires_on":   fmt.Sprintf("%d", expiresOn),
+		"credential_type":     "AccessToken",
+		"secret":              accessToken,
+		"home_account_id":     homeAccountID,
+		"environment":         environment,
+		"client_id":           clientID,
+		"target":              scope,
+		"realm":               realm,
+		"token_type":          "Bearer",
+		"cached_at":           fmt.Sprintf("%d", cachedAt),
+		"expires_on":          fmt.Sprintf("%d", expiresOn),
+		"extended_expires_on": fmt.Sprintf("%d", expiresOn),
 	}
 
 	accessTokenSection[cacheKey] = tokenEntry

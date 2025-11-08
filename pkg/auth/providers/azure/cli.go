@@ -186,8 +186,8 @@ func (p *cliProvider) PrepareEnvironment(ctx context.Context, environ map[string
 		p.subscriptionID,
 		p.tenantID,
 		p.location,
-		"",  // No credentials file for CLI provider.
-		"",  // Access token loaded from credential store by SetEnvironmentVariables.
+		"", // No credentials file for CLI provider.
+		"", // Access token loaded from credential store by SetEnvironmentVariables.
 	), nil
 }
 

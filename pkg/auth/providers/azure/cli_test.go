@@ -13,11 +13,11 @@ import (
 
 func TestNewCLIProvider(t *testing.T) {
 	tests := []struct {
-		name        string
+		name         string
 		providerName string
-		config      *schema.Provider
-		expectError bool
-		errorType   error
+		config       *schema.Provider
+		expectError  bool
+		errorType    error
 	}{
 		{
 			name:         "valid CLI provider config",

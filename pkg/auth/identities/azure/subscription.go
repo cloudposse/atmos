@@ -99,8 +99,8 @@ func (i *subscriptionIdentity) Authenticate(ctx context.Context, baseCreds authT
 		TokenType:          azureCreds.TokenType,
 		Expiration:         azureCreds.Expiration,
 		TenantID:           azureCreds.TenantID,
-		SubscriptionID:     i.subscriptionID, // Use identity's subscription.
-		Location:           i.location,       // Use identity's location if specified.
+		SubscriptionID:     i.subscriptionID,              // Use identity's subscription.
+		Location:           i.location,                    // Use identity's location if specified.
 		GraphAPIToken:      azureCreds.GraphAPIToken,      // Preserve Graph API token from provider.
 		GraphAPIExpiration: azureCreds.GraphAPIExpiration, // Preserve Graph API token expiration.
 		KeyVaultToken:      azureCreds.KeyVaultToken,      // Preserve KeyVault API token from provider.

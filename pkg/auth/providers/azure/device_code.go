@@ -489,8 +489,8 @@ func (p *deviceCodeProvider) PrepareEnvironment(ctx context.Context, environ map
 		p.subscriptionID,
 		p.tenantID,
 		p.location,
-		"",  // Credentials file path set by identity.
-		"",  // Access token loaded from credential store by SetEnvironmentVariables.
+		"", // Credentials file path set by identity.
+		"", // Access token loaded from credential store by SetEnvironmentVariables.
 	), nil
 }
 

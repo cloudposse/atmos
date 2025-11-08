@@ -44,12 +44,12 @@ func TestPrepareEnvironment(t *testing.T) {
 		{
 			name: "clears conflicting Azure credential environment variables",
 			inputEnv: map[string]string{
-				"AZURE_CLIENT_ID":                "conflicting-client-id",
-				"AZURE_CLIENT_SECRET":            "conflicting-secret",
-				"AZURE_CLIENT_CERTIFICATE_PATH":  "/path/to/cert",
-				"ARM_CLIENT_ID":                  "conflicting-arm-client",
-				"ARM_CLIENT_SECRET":              "conflicting-arm-secret",
-				"HOME":                           "/home/user",
+				"AZURE_CLIENT_ID":               "conflicting-client-id",
+				"AZURE_CLIENT_SECRET":           "conflicting-secret",
+				"AZURE_CLIENT_CERTIFICATE_PATH": "/path/to/cert",
+				"ARM_CLIENT_ID":                 "conflicting-arm-client",
+				"ARM_CLIENT_SECRET":             "conflicting-arm-secret",
+				"HOME":                          "/home/user",
 			},
 			subscriptionID:  "12345678-1234-1234-1234-123456789012",
 			tenantID:        "87654321-4321-4321-4321-210987654321",
@@ -203,9 +203,9 @@ func TestPrepareEnvironment(t *testing.T) {
 
 func TestPrepareEnvironment_DoesNotMutateInput(t *testing.T) {
 	original := map[string]string{
-		"HOME":                 "/home/user",
-		"AZURE_CLIENT_ID":      "should-be-preserved-in-original",
-		"AWS_ACCESS_KEY_ID":    "should-be-preserved-in-original",
+		"HOME":              "/home/user",
+		"AZURE_CLIENT_ID":   "should-be-preserved-in-original",
+		"AWS_ACCESS_KEY_ID": "should-be-preserved-in-original",
 	}
 
 	// Make a copy to compare later.

@@ -41,9 +41,9 @@ func TestConsoleURLGenerator_GetConsoleURL(t *testing.T) {
 				TenantID:       "tenant-123",
 				SubscriptionID: "sub-456",
 			},
-			options: types.ConsoleURLOptions{},
-			expectedURL:  "https://portal.azure.com/#@tenant-123",
-			expectError:  false,
+			options:     types.ConsoleURLOptions{},
+			expectedURL: "https://portal.azure.com/#@tenant-123",
+			expectError: false,
 		},
 		{
 			name: "subscription destination",
@@ -98,8 +98,8 @@ func TestConsoleURLGenerator_GetConsoleURL(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "missing access token",
-			creds:       &types.AzureCredentials{
+			name: "missing access token",
+			creds: &types.AzureCredentials{
 				TenantID: "tenant-123",
 			},
 			options:     types.ConsoleURLOptions{},
@@ -107,8 +107,8 @@ func TestConsoleURLGenerator_GetConsoleURL(t *testing.T) {
 			errorType:   errUtils.ErrInvalidAuthConfig,
 		},
 		{
-			name:        "missing tenant ID",
-			creds:       &types.AzureCredentials{
+			name: "missing tenant ID",
+			creds: &types.AzureCredentials{
 				AccessToken: "test-token",
 			},
 			options:     types.ConsoleURLOptions{},

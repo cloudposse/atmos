@@ -19,11 +19,11 @@ type AzureCredentials struct {
 	Expiration         string `json:"expiration,omitempty"`           // RFC3339 timestamp
 	TenantID           string `json:"tenant_id,omitempty"`            // Azure AD tenant ID
 	SubscriptionID     string `json:"subscription_id,omitempty"`      // Azure subscription ID
-	Location              string `json:"location,omitempty"`                 // Azure region (e.g., "eastus")
-	GraphAPIToken         string `json:"graph_api_token,omitempty"`          // Microsoft Graph API token
-	GraphAPIExpiration    string `json:"graph_api_expiration,omitempty"`     // RFC3339 timestamp for Graph API token
-	KeyVaultToken         string `json:"key_vault_token,omitempty"`          // Azure KeyVault API token
-	KeyVaultExpiration    string `json:"key_vault_expiration,omitempty"`     // RFC3339 timestamp for KeyVault token
+	Location           string `json:"location,omitempty"`             // Azure region (e.g., "eastus")
+	GraphAPIToken      string `json:"graph_api_token,omitempty"`      // Microsoft Graph API token
+	GraphAPIExpiration string `json:"graph_api_expiration,omitempty"` // RFC3339 timestamp for Graph API token
+	KeyVaultToken      string `json:"key_vault_token,omitempty"`      // Azure KeyVault API token
+	KeyVaultExpiration string `json:"key_vault_expiration,omitempty"` // RFC3339 timestamp for KeyVault token
 }
 
 // IsExpired returns true if the credentials are expired.

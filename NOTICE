@@ -960,6 +960,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/internal/v1.11.2/sdk/internal/LICENSE.txt
 
+  - github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions
+    License: MIT
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/resourcemanager/resources/armsubscriptions/v1.3.0/sdk/resourcemanager/resources/armsubscriptions/LICENSE.txt
+
   - github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets
     License: MIT
     URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/security/keyvault/azsecrets/v1.4.0/sdk/security/keyvault/azsecrets/LICENSE.txt
