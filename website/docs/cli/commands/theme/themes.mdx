@@ -12,31 +12,6 @@ import ThemeGallery from '@site/src/components/ThemeGallery'
 
 Explore the complete collection of terminal themes available for Atmos. Use the search bar to find themes by name, type (dark/light), author, or even specific colors.
 
-<ThemeGallery searchable />
-
-## Using a Theme
-
-Once you've found a theme you like, you can use it in two ways:
-
-### Environment Variable
-
-Set the `ATMOS_THEME` environment variable:
-
-```shell
-export ATMOS_THEME=dracula
-atmos terraform plan
-```
-
-### Configuration File
-
-Add the theme to your `atmos.yaml`:
-
-```yaml
-settings:
-  terminal:
-    theme: dracula
-```
-
 ## Search Tips
 
 The search is flexible and matches against multiple fields:
@@ -47,8 +22,8 @@ The search is flexible and matches against multiple fields:
 - **Color values**: Search for specific hex colors like "#ff0000"
 - **Combined terms**: Search "dracula light" to find light variants
 
-## Related Commands
+<ThemeGallery searchable />
 
-- [`atmos theme list`](/cli/commands/theme/list) - List themes in the terminal
-- [`atmos theme show`](/cli/commands/theme/show) - Preview a specific theme
-- [`atmos list themes`](/cli/commands/list/themes) - Alternative listing command
+:::tip
+To configure a theme in your Atmos configuration, see the [usage page](/cli/commands/theme/usage).
+:::
