@@ -6,12 +6,12 @@ This folder contains the website powering official [Atmos](https://atmos.tools) 
 
 1. Install dependencies by running `brew bundle install`. This command will look for the `Brewfile` and install its
    contents.
-2. Install Node.js dependencies by running `pnpm install` (recommended) or `npm install`
-3. Build the local search base by running `pnpm run build` or `npm run build`
-4. Start the local web server by running `pnpm start` or `npm start`
+2. Install Node.js dependencies by running `pnpm install`.
+3. Build the local search base by running `pnpm run build`.
+4. Start the local web server by running `pnpm start`.
 
-The shortcut for running all these commands is just to run `make all`
+The shortcut for running all these commands is just to run `make all`.
 
 ### Why pnpm?
 
-We recommend using [pnpm](https://pnpm.io/) over npm for better performance and more efficient disk space usage. pnpm creates a single, shared store for packages and uses hard links to reference them in your project, making installs faster and saving disk space.
+We use [pnpm](https://pnpm.io/) for better performance and more efficient disk space usage. pnpm creates a single, shared store for packages and uses hard links to reference them in your project, making installs faster and saving disk space.
