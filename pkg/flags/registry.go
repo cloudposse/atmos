@@ -88,9 +88,9 @@ func (r *FlagRegistry) Count() int {
 //
 // Usage:
 //
-//	registry := flagparser.CommonFlags()
+//	registry := flags.CommonFlags()
 //	// Add command-specific flags
-//	registry.Register(&flagparser.StringFlag{Name: "format", ...})
+//	registry.Register(&flags.StringFlag{Name: "format", ...})
 func CommonFlags() *FlagRegistry {
 	defer perf.Track(nil, "flags.CommonFlags")()
 

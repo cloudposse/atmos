@@ -20,7 +20,7 @@ import (
 //
 // Example:
 //
-//	parser := flagparser.NewStandardOptionsBuilder().
+//	parser := flags.NewStandardOptionsBuilder().
 //	    WithStack(true).        // Required stack flag → .Stack field
 //	    WithFormat("yaml").     // Format flag with default → .Format field
 //	    WithQuery().            // Optional query flag → .Query field

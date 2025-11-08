@@ -26,9 +26,9 @@ import (
 //
 // Usage:
 //
-//	parser := flagparser.NewStandardFlagParser(
-//	    flagparser.WithStringFlag("stack", "s", "", "Stack name"),
-//	    flagparser.WithBoolFlag("dry-run", "", false, "Dry run mode"),
+//	parser := flags.NewStandardFlagParser(
+//	    flags.WithStringFlag("stack", "s", "", "Stack name"),
+//	    flags.WithBoolFlag("dry-run", "", false, "Dry run mode"),
 //	)
 //
 //	// In command setup:
@@ -49,10 +49,10 @@ type StandardFlagParser struct {
 //
 // Example:
 //
-//	parser := flagparser.NewStandardFlagParser(
-//	    flagparser.WithStackFlag(),
-//	    flagparser.WithIdentityFlag(),
-//	    flagparser.WithStringFlag("format", "f", "yaml", "Output format"),
+//	parser := flags.NewStandardFlagParser(
+//	    flags.WithStackFlag(),
+//	    flags.WithIdentityFlag(),
+//	    flags.WithStringFlag("format", "f", "yaml", "Output format"),
 //	)
 func NewStandardFlagParser(opts ...Option) *StandardFlagParser {
 	defer perf.Track(nil, "flags.NewStandardFlagParser")()

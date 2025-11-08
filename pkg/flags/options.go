@@ -10,9 +10,9 @@ import (
 //
 // Usage:
 //
-//	parser := flagparser.NewStandardFlagParser(
-//	    flagparser.WithStringFlag("stack", "s", "", "Stack name"),
-//	    flagparser.WithBoolFlag("dry-run", "", false, "Dry run mode"),
+//	parser := flags.NewStandardFlagParser(
+//	    flags.WithStringFlag("stack", "s", "", "Stack name"),
+//	    flags.WithBoolFlag("dry-run", "", false, "Dry run mode"),
 //	)
 type Option func(*parserConfig)
 
@@ -300,9 +300,9 @@ func WithViperPrefix(prefix string) Option {
 //
 // Usage:
 //
-//	registry := flagparser.NewFlagRegistry()
-//	registry.Register(&flagparser.StringFlag{...})
-//	parser := flagparser.NewStandardFlagParser(flagparser.WithRegistry(registry))
+//	registry := flags.NewFlagRegistry()
+//	registry.Register(&flags.StringFlag{...})
+//	parser := flags.NewStandardFlagParser(flags.WithRegistry(registry))
 func WithRegistry(registry *FlagRegistry) Option {
 	defer perf.Track(nil, "flags.WithRegistry")()
 

@@ -19,9 +19,9 @@ import (
 //
 // Usage:
 //
-//	parser := flagparser.NewStandardFlagParser(
-//	    flagparser.WithStringFlag("stack", "s", "", "Stack name"),
-//	    flagparser.WithBoolFlag("dry-run", "", false, "Dry run mode"),
+//	parser := flags.NewStandardFlagParser(
+//	    flags.WithStringFlag("stack", "s", "", "Stack name"),
+//	    flags.WithBoolFlag("dry-run", "", false, "Dry run mode"),
 //	)
 //
 //	// In command setup:
