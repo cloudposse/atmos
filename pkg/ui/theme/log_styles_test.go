@@ -91,7 +91,7 @@ func TestLogStyles_Integration(t *testing.T) {
 	registry, err := NewRegistry()
 	require.NoError(t, err)
 
-	theme := registry.GetOrDefault("default")
+	theme := registry.GetOrDefault("atmos")
 	scheme := GenerateColorScheme(theme)
 	styles := GetLogStyles(&scheme)
 

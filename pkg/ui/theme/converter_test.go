@@ -153,7 +153,7 @@ func TestCreateChromaStyle(t *testing.T) {
 
 func TestGetGlamourStyleForTheme(t *testing.T) {
 	// Test with existing theme
-	styleBytes, err := GetGlamourStyleForTheme("default")
+	styleBytes, err := GetGlamourStyleForTheme("atmos")
 	assert.NoError(t, err)
 	assert.NotNil(t, styleBytes)
 

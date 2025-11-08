@@ -278,10 +278,10 @@ func GetCurrentStyles() *StyleSet {
 	// Load the new theme and generate styles
 	scheme, err := GetColorSchemeForTheme(themeName)
 	if err != nil {
-		// Fall back to default theme if there's an error
+		// Fall back to atmos theme if there's an error
 		registry, _ := NewRegistry()
 		if registry != nil {
-			defaultTheme := registry.GetOrDefault("default")
+			defaultTheme := registry.GetOrDefault("atmos")
 			tmpScheme := GenerateColorScheme(defaultTheme)
 			scheme = &tmpScheme
 		}
@@ -336,8 +336,8 @@ func getActiveThemeName() string {
 		return theme
 	}
 
-	// Default to "default" theme
-	return "default"
+	// Default to "atmos" theme
+	return "atmos"
 }
 
 // Helper functions for getting theme-aware colors and styles

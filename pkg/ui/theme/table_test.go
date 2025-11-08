@@ -19,7 +19,7 @@ func TestDefaultTableConfig(t *testing.T) {
 }
 
 func TestCreateTable_MinimalStyle(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 	config := DefaultTableConfig()
 	config.Style = TableStyleMinimal
 
@@ -36,7 +36,7 @@ func TestCreateTable_MinimalStyle(t *testing.T) {
 }
 
 func TestCreateTable_BorderedStyle(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 	config := DefaultTableConfig()
 	config.Style = TableStyleBordered
 
@@ -52,7 +52,7 @@ func TestCreateTable_BorderedStyle(t *testing.T) {
 }
 
 func TestCreateTable_PlainStyle(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 	config := DefaultTableConfig()
 	config.Style = TableStylePlain
 
@@ -67,7 +67,7 @@ func TestCreateTable_PlainStyle(t *testing.T) {
 }
 
 func TestCreateMinimalTable(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 
 	headers := []string{"Name", "Status"}
 	rows := [][]string{
@@ -83,7 +83,7 @@ func TestCreateMinimalTable(t *testing.T) {
 }
 
 func TestCreateBorderedTable(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 
 	headers := []string{"Name", "Status"}
 	rows := [][]string{
@@ -96,7 +96,7 @@ func TestCreateBorderedTable(t *testing.T) {
 }
 
 func TestCreatePlainTable(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 
 	headers := []string{"Name", "Status"}
 	rows := [][]string{
@@ -109,7 +109,7 @@ func TestCreatePlainTable(t *testing.T) {
 }
 
 func TestCreateThemedTable(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 
 	headers := []string{"Active", "Name", "Type", "Source"}
 	rows := [][]string{
@@ -186,7 +186,7 @@ func TestIsRecommendedTheme(t *testing.T) {
 }
 
 func TestGetActiveColumnStyle(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 	styles := GetCurrentStyles()
 
 	activeStyle := getActiveColumnStyle(true, styles)
@@ -201,7 +201,7 @@ func TestGetActiveColumnStyle(t *testing.T) {
 }
 
 func TestGetNameColumnStyle(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 	styles := GetCurrentStyles()
 
 	tests := []struct {
@@ -235,7 +235,7 @@ func TestGetNameColumnStyle(t *testing.T) {
 }
 
 func TestGetTypeColumnStyle(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 	styles := GetCurrentStyles()
 
 	tests := []struct {
@@ -265,7 +265,7 @@ func TestGetTypeColumnStyle(t *testing.T) {
 }
 
 func TestGetCellStyle(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 	styles := GetCurrentStyles()
 
 	rowData := []string{"> ", "dracula★", "Dark", "source"}
@@ -285,7 +285,7 @@ func TestGetCellStyle(t *testing.T) {
 }
 
 func TestCreateTableStyleFunc(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 	styles := GetCurrentStyles()
 
 	rows := [][]string{
@@ -326,7 +326,7 @@ func TestCreateTableStyleFunc_NilStyles(t *testing.T) {
 }
 
 func TestTableConfig_WithCustomStyleFunc(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 
 	customStyleFunc := func(row, col int) lipgloss.Style {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000"))

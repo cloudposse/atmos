@@ -38,9 +38,9 @@ func NewRegistry() (*Registry, error) {
 	// Sort the themes for consistent listing
 	SortThemes(r.sorted)
 
-	// Ensure default theme exists
-	if _, exists := r.Get("default"); !exists {
-		return nil, fmt.Errorf("%w: theme 'default' not found", ErrThemeNotFound)
+	// Ensure atmos theme exists
+	if _, exists := r.Get("atmos"); !exists {
+		return nil, fmt.Errorf("%w: theme 'atmos' not found", ErrThemeNotFound)
 	}
 
 	return r, nil
@@ -57,8 +57,8 @@ func (r *Registry) GetOrDefault(name string) *Theme {
 	if theme, exists := r.Get(name); exists {
 		return theme
 	}
-	// Return default theme - we know it exists from NewRegistry validation
-	defaultTheme, _ := r.Get("default")
+	// Return atmos theme - we know it exists from NewRegistry validation
+	defaultTheme, _ := r.Get("atmos")
 	return defaultTheme
 }
 

@@ -132,7 +132,7 @@ func TestGetColorSchemeForTheme(t *testing.T) {
 	}{
 		{
 			name:        "valid theme - default",
-			themeName:   "default",
+			themeName:   "atmos",
 			expectError: false,
 		},
 		{
@@ -186,7 +186,7 @@ func TestGetColorSchemeForTheme_RegistryError(t *testing.T) {
 	themesJSON = []byte("invalid json content {[}]")
 
 	// Call GetColorSchemeForTheme with any theme name.
-	scheme, err := GetColorSchemeForTheme("default")
+	scheme, err := GetColorSchemeForTheme("atmos")
 
 	// Assert that an error is returned.
 	require.Error(t, err, "GetColorSchemeForTheme should return error when registry initialization fails")

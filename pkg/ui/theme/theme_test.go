@@ -16,7 +16,7 @@ func TestLoadThemes(t *testing.T) {
 	// Find and verify the default theme
 	var defaultTheme *Theme
 	for _, theme := range themes {
-		if theme.Name == "default" {
+		if theme.Name == "atmos" {
 			defaultTheme = theme
 			break
 		}
@@ -26,7 +26,7 @@ func TestLoadThemes(t *testing.T) {
 }
 
 func TestIsRecommended(t *testing.T) {
-	assert.True(t, IsRecommended("default"))
+	assert.True(t, IsRecommended("atmos"))
 	assert.True(t, IsRecommended("Dracula"))
 	assert.True(t, IsRecommended("Catppuccin Mocha"))
 	assert.True(t, IsRecommended("dracula")) // Case insensitive
@@ -39,7 +39,7 @@ func TestSortThemes(t *testing.T) {
 	themes := []*Theme{
 		{Name: "Zebra"},
 		{Name: "Apple"},
-		{Name: "default"},
+		{Name: "atmos"},
 		{Name: "Banana"},
 	}
 
@@ -47,13 +47,13 @@ func TestSortThemes(t *testing.T) {
 
 	assert.Equal(t, "Apple", themes[0].Name)
 	assert.Equal(t, "Banana", themes[1].Name)
-	assert.Equal(t, "default", themes[2].Name)
+	assert.Equal(t, "atmos", themes[2].Name)
 	assert.Equal(t, "Zebra", themes[3].Name)
 }
 
 func TestFilterRecommended(t *testing.T) {
 	themes := []*Theme{
-		{Name: "default"},
+		{Name: "atmos"},
 		{Name: "NotRecommended1"},
 		{Name: "Dracula"},
 		{Name: "NotRecommended2"},
@@ -63,22 +63,22 @@ func TestFilterRecommended(t *testing.T) {
 	recommended := FilterRecommended(themes)
 
 	assert.Len(t, recommended, 3)
-	assert.Equal(t, "default", recommended[0].Name)
+	assert.Equal(t, "atmos", recommended[0].Name)
 	assert.Equal(t, "Dracula", recommended[1].Name)
 	assert.Equal(t, "Catppuccin Mocha", recommended[2].Name)
 }
 
 func TestFindTheme(t *testing.T) {
 	themes := []*Theme{
-		{Name: "default"},
+		{Name: "atmos"},
 		{Name: "Dracula"},
 		{Name: "Solarized Dark"},
 	}
 
 	// Test exact match
-	theme, found := FindTheme(themes, "default")
+	theme, found := FindTheme(themes, "atmos")
 	assert.True(t, found)
-	assert.Equal(t, "default", theme.Name)
+	assert.Equal(t, "atmos", theme.Name)
 
 	// Test case-insensitive match
 	theme, found = FindTheme(themes, "DRACULA")
@@ -103,7 +103,7 @@ func TestThemeStructure(t *testing.T) {
 	// Find the default theme
 	var defaultTheme *Theme
 	for _, theme := range themes {
-		if theme.Name == "default" {
+		if theme.Name == "atmos" {
 			defaultTheme = theme
 			break
 		}
@@ -111,7 +111,7 @@ func TestThemeStructure(t *testing.T) {
 	assert.NotNil(t, defaultTheme, "Default theme should exist")
 
 	// Verify the structure of the default theme
-	assert.Equal(t, "default", defaultTheme.Name)
+	assert.Equal(t, "atmos", defaultTheme.Name)
 	assert.NotEmpty(t, defaultTheme.Background)
 	assert.NotEmpty(t, defaultTheme.Foreground)
 	assert.NotEmpty(t, defaultTheme.Black)

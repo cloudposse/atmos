@@ -56,7 +56,7 @@ type Theme struct {
 
 // RecommendedThemes is a curated list of themes that work well with Atmos.
 var RecommendedThemes = []string{
-	"default",          // Atmos native theme
+	"atmos",            // Atmos native theme
 	"Dracula",          // Popular dark theme with excellent contrast
 	"Catppuccin Mocha", // Modern dark theme, easy on the eyes
 	"Catppuccin Latte", // Modern light theme

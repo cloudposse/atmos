@@ -16,10 +16,10 @@ func TestNewRegistry(t *testing.T) {
 	assert.Greater(t, len(registry.sorted), 30)
 
 	// Verify default theme exists
-	defaultTheme, exists := registry.Get("default")
+	defaultTheme, exists := registry.Get("atmos")
 	assert.True(t, exists)
 	assert.NotNil(t, defaultTheme)
-	assert.Equal(t, "default", defaultTheme.Name)
+	assert.Equal(t, "atmos", defaultTheme.Name)
 }
 
 func TestRegistryGet(t *testing.T) {
@@ -27,14 +27,14 @@ func TestRegistryGet(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test exact match
-	theme, exists := registry.Get("default")
+	theme, exists := registry.Get("atmos")
 	assert.True(t, exists)
-	assert.Equal(t, "default", theme.Name)
+	assert.Equal(t, "atmos", theme.Name)
 
 	// Test case-insensitive
 	theme, exists = registry.Get("DEFAULT")
 	assert.True(t, exists)
-	assert.Equal(t, "default", theme.Name)
+	assert.Equal(t, "atmos", theme.Name)
 
 	// Test with spaces
 	theme, exists = registry.Get("catppuccin mocha")
@@ -59,12 +59,12 @@ func TestRegistryGetOrDefault(t *testing.T) {
 	// Test non-existent theme returns default
 	theme = registry.GetOrDefault("NonExistentTheme")
 	assert.NotNil(t, theme)
-	assert.Equal(t, "default", theme.Name)
+	assert.Equal(t, "atmos", theme.Name)
 
 	// Test empty string returns default
 	theme = registry.GetOrDefault("")
 	assert.NotNil(t, theme)
-	assert.Equal(t, "default", theme.Name)
+	assert.Equal(t, "atmos", theme.Name)
 }
 
 func TestRegistryList(t *testing.T) {
@@ -104,7 +104,7 @@ func TestRegistryListRecommended(t *testing.T) {
 		themeNames[theme.Name] = true
 	}
 
-	assert.True(t, themeNames["default"])
+	assert.True(t, themeNames["atmos"])
 	assert.True(t, themeNames["Dracula"])
 }
 
@@ -179,7 +179,7 @@ func TestValidateTheme(t *testing.T) {
 	}{
 		{
 			name:      "valid theme - default",
-			themeName: "default",
+			themeName: "atmos",
 			wantErr:   false,
 		},
 		{
@@ -240,7 +240,7 @@ func TestValidateTheme_ErrorListsAvailableThemes(t *testing.T) {
 	assert.Error(t, err)
 
 	// Check that error lists some known themes
-	assert.Contains(t, err.Error(), "default")
+	assert.Contains(t, err.Error(), "atmos")
 	assert.Contains(t, err.Error(), "Dracula")
 	assert.Contains(t, err.Error(), "GruvboxDark")
 

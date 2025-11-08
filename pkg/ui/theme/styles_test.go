@@ -60,13 +60,13 @@ func TestInitializeStyles(t *testing.T) {
 }
 
 func TestInitializeStylesFromTheme(t *testing.T) {
-	err := InitializeStylesFromTheme("default")
+	err := InitializeStylesFromTheme("atmos")
 	require.NoError(t, err)
 	assert.NotNil(t, CurrentStyles)
 
 	// Test invalid theme
 	err = InitializeStylesFromTheme("")
-	require.NoError(t, err) // Empty theme should default to "default"
+	require.NoError(t, err) // Empty theme should default to "atmos"
 	assert.NotNil(t, CurrentStyles)
 }
 
@@ -91,42 +91,42 @@ func TestGetCurrentStyles_WithEnvironment(t *testing.T) {
 
 func TestGetSuccessStyle(t *testing.T) {
 	// Initialize with a known theme
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 
 	style := GetSuccessStyle()
 	assert.NotNil(t, style)
 }
 
 func TestGetErrorStyle(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 
 	style := GetErrorStyle()
 	assert.NotNil(t, style)
 }
 
 func TestGetWarningStyle(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 
 	style := GetWarningStyle()
 	assert.NotNil(t, style)
 }
 
 func TestGetInfoStyle(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 
 	style := GetInfoStyle()
 	assert.NotNil(t, style)
 }
 
 func TestGetDebugStyle(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 
 	style := GetDebugStyle()
 	assert.NotNil(t, style)
 }
 
 func TestGetTraceStyle(t *testing.T) {
-	InitializeStylesFromTheme("default")
+	InitializeStylesFromTheme("atmos")
 
 	style := GetTraceStyle()
 	assert.NotNil(t, style)
@@ -179,7 +179,7 @@ func TestGetActiveThemeName_Precedence(t *testing.T) {
 			name:          "defaults to default",
 			atmosTheme:    "",
 			themeEnv:      "",
-			expectedTheme: "default",
+			expectedTheme: "atmos",
 		},
 	}
 
