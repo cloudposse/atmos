@@ -9,7 +9,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator"
 )
 
-// Configuration represents a template configuration from embedded FS.
+// Configuration represents a template configuration loaded from the embedded filesystem.
+// It contains metadata about a scaffold template including its name, description, and
+// the collection of files to be generated. Key fields:
+//   - Name: Human-readable template name
+//   - Description: Brief description of the template's purpose
+//   - TemplateID: Unique identifier for the template
+//   - TargetDir: Default target directory for template output
+//   - Files: Collection of files/directories in this template
+//   - README: Optional README content for the template
 type Configuration struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
@@ -19,7 +27,23 @@ type Configuration struct {
 	README      string `yaml:"readme"`
 }
 
-// File represents a file in the embedded template.
+// File represents an embedded template file used by the generator.
+// This struct is specifically for files loaded from the embedded filesystem (embed.FS)
+// and differs from other File types in the codebase:
+//   - engine.File: Used for runtime template processing and file generation
+//   - types.File: Used for API/DTO models and general file representations
+//
+// Use this File type when:
+//   - Working with generator templates loaded from embedded assets
+//   - Loading template configurations from the embedded filesystem
+//   - Representing files before they are processed by the templating engine
+//
+// Key fields:
+//   - Path: Relative path within the template
+//   - Content: Raw file content (may contain template syntax if IsTemplate is true)
+//   - IsDirectory: Whether this represents a directory structure
+//   - IsTemplate: Whether content should be processed as a Go template
+//   - Permissions: Unix file permissions to apply when creating files
 type File struct {
 	Path        string      `yaml:"path"`
 	Content     string      `yaml:"content"`
@@ -28,7 +52,16 @@ type File struct {
 	Permissions os.FileMode `yaml:"permissions"`
 }
 
-// GetAvailableConfigurations loads available template configurations from embedded FS.
+// GetAvailableConfigurations loads available template configurations from the embedded templates filesystem.
+// It scans the templates directory, loads each template configuration, and returns a map of template name
+// to Configuration.
+//
+// Returns:
+//   - map[string]Configuration: Map of template names to their configurations
+//   - error: Non-nil if reading the templates directory fails
+//
+// The function returns an error only when the templates directory itself cannot be read.
+// Individual template loading errors are silently skipped to allow partial success.
 func GetAvailableConfigurations() (map[string]Configuration, error) {
 	configs := make(map[string]Configuration)
 
@@ -138,8 +171,11 @@ func readTemplateFiles(templatePath string) ([]File, error) {
 				return nil, fmt.Errorf("failed to read file '%s': %w", filePath, err)
 			}
 
-			// Determine if file is a template (has .tmpl extension or contains template syntax)
-			isTemplate := strings.HasSuffix(entry.Name(), ".tmpl") || strings.Contains(string(content), "{{")
+			// Determine if file is a template based on .tmpl extension.
+			// Only files with .tmpl extension are treated as templates to avoid
+			// false positives from files that incidentally contain "{{" (e.g., JSON,
+			// code examples, documentation).
+			isTemplate := strings.HasSuffix(entry.Name(), ".tmpl")
 
 			files = append(files, File{
 				Path:        strings.TrimPrefix(filePath, templatePath+"/"),

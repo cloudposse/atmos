@@ -379,8 +379,8 @@ func TestProcessTemplateWithGomplateFunctions(t *testing.T) {
 		},
 		{
 			name:     "string manipulation",
-			template: `{{replace .Config.text "world" "gomplate"}}`,
-			expected: "gomplate",
+			template: `{{replace "world" "gomplate" .Config.text}}`,
+			expected: "hello gomplate",
 		},
 	}
 
