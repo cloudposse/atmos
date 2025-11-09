@@ -633,6 +633,16 @@ errors:
     tags:
       service: "atmos"
       team: "platform"
+
+# You can use Atmos template functions for dynamic values
+errors:
+  sentry:
+    enabled: true
+    dsn: !env SENTRY_DSN
+    environment: !env ATMOS_ENVIRONMENT
+    release: !env CI_COMMIT_TAG  # Set from CI/CD pipeline
+    tags:
+      service: "atmos"
 ```
 
 ### Stack-Level Override
