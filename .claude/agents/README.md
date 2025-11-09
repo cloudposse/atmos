@@ -11,6 +11,12 @@ Expert in creating and maintaining Claude agents with correct frontmatter, conte
 
 **Use when:** Creating new agents, updating existing agents, or optimizing agent instructions.
 
+### ui-test-developer
+
+Expert in testing Atmos TUI components using Charmbracelet libraries (Bubble Tea, Huh, Lipgloss). Specializes in TeaTest patterns, ANSI handling, and incremental coverage improvements.
+
+**Use when:** Writing tests for pkg/generator/ui, improving UI test coverage, debugging TUI test failures, analyzing untested UI functions.
+
 ## Strategic Approach
 
 As Atmos grows, we create focused agents for each major subsystem. This scales development velocity through specialized
