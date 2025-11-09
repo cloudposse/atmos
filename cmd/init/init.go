@@ -4,15 +4,19 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 )
+
+var initParser *flags.StandardParser
 
 // initCmd represents the init command.
 var initCmd = &cobra.Command{
@@ -41,17 +45,22 @@ If no target directory is specified, you will be prompted for one.`,
 			target = args[1]
 		}
 
-		force, _ := cmd.Flags().GetBool("force")
-		interactive, _ := cmd.Flags().GetBool("interactive")
+		v := viper.GetViper()
+		if err := initParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
 
-		// Get template values from --set flags
-		setFlags, _ := cmd.Flags().GetStringSlice("set")
+		// Get flag values with proper precedence: flag > env > config > default
+		force := v.GetBool("force")
+		interactive := v.GetBool("interactive")
+
+		// Parse string map from --set flags
+		templateValuesMap := flags.ParseStringMap(v, "set")
+
+		// Convert map[string]string to map[string]interface{} for template engine
 		templateValues := make(map[string]interface{})
-		for _, flag := range setFlags {
-			key, value := parseSetFlag(flag)
-			if key != "" {
-				templateValues[key] = value
-			}
+		for k, val := range templateValuesMap {
+			templateValues[k] = val
 		}
 
 		return executeInit(
@@ -66,9 +75,21 @@ If no target directory is specified, you will be prompted for one.`,
 }
 
 func init() {
-	initCmd.Flags().BoolP("force", "f", false, "Overwrite existing files")
-	initCmd.Flags().BoolP("interactive", "i", true, "Interactive mode for template selection and configuration")
-	initCmd.Flags().StringSlice("set", []string{}, "Set template values (can be used multiple times: --set key=value)")
+	// Create StandardParser with init-specific flags
+	initParser = flags.NewStandardParser(
+		flags.WithBoolFlag("force", "f", false, "Overwrite existing files"),
+		flags.WithBoolFlag("interactive", "i", true, "Interactive mode for template selection and configuration"),
+		flags.WithStringMapFlag("set", "", map[string]string{}, "Set template values (can be used multiple times: --set key=value)"),
+		flags.WithEnvVars("force", "ATMOS_INIT_FORCE"),
+		flags.WithEnvVars("interactive", "ATMOS_INIT_INTERACTIVE"),
+		flags.WithEnvVars("set", "ATMOS_INIT_SET"),
+	)
+
+	// Register flags with command
+	initParser.RegisterFlags(initCmd)
+
+	// Bind to Viper for precedence handling
+	_ = initParser.BindToViper(viper.GetViper())
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
@@ -93,13 +114,19 @@ func (i *InitCommandProvider) GetGroup() string {
 	return "Configuration Management"
 }
 
-// parseSetFlag parses a --set flag in the format key=value.
-func parseSetFlag(flag string) (string, string) {
-	parts := strings.SplitN(flag, "=", 2)
-	if len(parts) != 2 {
-		return "", ""
-	}
-	return parts[0], parts[1]
+// GetFlagsBuilder returns the flags builder for this command.
+func (i *InitCommandProvider) GetFlagsBuilder() flags.Builder {
+	return initParser
+}
+
+// GetPositionalArgsBuilder returns nil as this command doesn't use positional args builder.
+func (i *InitCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+// GetCompatibilityFlags returns nil as this command doesn't need compatibility flags.
+func (i *InitCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }
 
 // executeInit initializes a new Atmos project from a template.

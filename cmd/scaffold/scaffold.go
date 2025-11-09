@@ -9,10 +9,13 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/project/config"
@@ -21,6 +24,8 @@ import (
 
 //go:embed scaffold-schema.json
 var scaffoldSchemaData string
+
+var scaffoldGenerateParser *flags.StandardParser
 
 // ScaffoldConfig represents a scaffold configuration.
 type ScaffoldConfig struct {
@@ -77,17 +82,22 @@ If no target directory is specified, you will be prompted for one.`,
 			target = args[1]
 		}
 
-		force, _ := cmd.Flags().GetBool("force")
-		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		v := viper.GetViper()
+		if err := scaffoldGenerateParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
 
-		// Get template values from --set flags
-		setFlags, _ := cmd.Flags().GetStringSlice("set")
+		// Get flag values with proper precedence: flag > env > config > default
+		force := v.GetBool("force")
+		dryRun := v.GetBool("dry-run")
+
+		// Parse string map from --set flags
+		templateValuesMap := flags.ParseStringMap(v, "set")
+
+		// Convert map[string]string to map[string]interface{} for template engine
 		templateValues := make(map[string]interface{})
-		for _, flag := range setFlags {
-			key, value := parseSetFlag(flag)
-			if key != "" {
-				templateValues[key] = value
-			}
+		for k, val := range templateValuesMap {
+			templateValues[k] = val
 		}
 
 		return executeScaffoldGenerate(
@@ -135,10 +145,21 @@ If a file is specified, validates that specific scaffold.yaml file.`,
 }
 
 func init() {
-	// Add flags to generate command
-	scaffoldGenerateCmd.Flags().BoolP("force", "f", false, "Overwrite existing files")
-	scaffoldGenerateCmd.Flags().Bool("dry-run", false, "Preview changes without writing files")
-	scaffoldGenerateCmd.Flags().StringSlice("set", []string{}, "Set template values (can be used multiple times: --set key=value)")
+	// Create StandardParser for generate subcommand flags
+	scaffoldGenerateParser = flags.NewStandardParser(
+		flags.WithBoolFlag("force", "f", false, "Overwrite existing files"),
+		flags.WithBoolFlag("dry-run", "", false, "Preview changes without writing files"),
+		flags.WithStringMapFlag("set", "", map[string]string{}, "Set template values (can be used multiple times: --set key=value)"),
+		flags.WithEnvVars("force", "ATMOS_SCAFFOLD_FORCE"),
+		flags.WithEnvVars("dry-run", "ATMOS_SCAFFOLD_DRY_RUN"),
+		flags.WithEnvVars("set", "ATMOS_SCAFFOLD_SET"),
+	)
+
+	// Register flags to generate subcommand
+	scaffoldGenerateParser.RegisterFlags(scaffoldGenerateCmd)
+
+	// Bind to Viper for precedence handling
+	_ = scaffoldGenerateParser.BindToViper(viper.GetViper())
 
 	// Add subcommands to scaffold parent
 	scaffoldCmd.AddCommand(scaffoldGenerateCmd)
@@ -167,13 +188,19 @@ func (s *ScaffoldCommandProvider) GetGroup() string {
 	return "Configuration Management"
 }
 
-// parseSetFlag parses a --set flag in the format key=value.
-func parseSetFlag(flag string) (string, string) {
-	parts := strings.SplitN(flag, "=", 2)
-	if len(parts) != 2 {
-		return "", ""
-	}
-	return parts[0], parts[1]
+// GetFlagsBuilder returns the flags builder for this command.
+func (s *ScaffoldCommandProvider) GetFlagsBuilder() flags.Builder {
+	return scaffoldGenerateParser
+}
+
+// GetPositionalArgsBuilder returns nil as this command doesn't use positional args builder.
+func (s *ScaffoldCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+// GetCompatibilityFlags returns nil as this command doesn't need compatibility flags.
+func (s *ScaffoldCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }
 
 // executeScaffoldGenerate generates code from a scaffold template.
