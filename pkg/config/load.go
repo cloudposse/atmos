@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -97,6 +98,13 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// Viper lowercases all map keys, but we need to preserve original case for identity names.
 	if err := preserveIdentityCase(v, &atmosConfig); err != nil {
 		log.Debug("Failed to preserve identity case", "error", err)
+		// Don't fail config loading if this step fails, just log it.
+	}
+
+	// Apply git root discovery for default base path.
+	// This enables running Atmos from any subdirectory, similar to Git.
+	if err := applyGitRootBasePath(&atmosConfig); err != nil {
+		log.Debug("Failed to apply git root base path", "error", err)
 		// Don't fail config loading if this step fails, just log it.
 	}
 
@@ -729,4 +737,100 @@ func preserveIdentityCase(v *viper.Viper, atmosConfig *schema.AtmosConfiguration
 	log.Debug("Preserved identity case mapping", "identities", len(caseMap))
 
 	return nil
+}
+
+// applyGitRootBasePath resolves BasePath to git repository root when using default config.
+// This enables running Atmos from any subdirectory, similar to Git.
+//
+// CRITICAL: Only applies when current directory does NOT have any Atmos configuration.
+// This ensures local configs/directories take precedence over git root discovery.
+//
+// Only applies when ALL conditions are true:
+// 1. No Atmos configuration in current working directory
+// 2. Using default embedded config (Default flag is true)
+// 3. BasePath is default value (".")
+// 4. ATMOS_GIT_ROOT_BASEPATH is not explicitly set to "false"
+// 5. Currently in a git repository
+//
+// Tests can disable by setting ATMOS_GIT_ROOT_BASEPATH=false.
+func applyGitRootBasePath(atmosConfig *schema.AtmosConfiguration) error {
+	// Allow tests to disable git root discovery.
+	//nolint:forbidigo // ATMOS_GIT_ROOT_BASEPATH is specifically for feature control, not application configuration.
+	if os.Getenv("ATMOS_GIT_ROOT_BASEPATH") == "false" {
+		log.Trace("Git root base path disabled via ATMOS_GIT_ROOT_BASEPATH=false")
+		return nil
+	}
+
+	log.Debug("Git root base path discovery enabled")
+
+	// CRITICAL: Only apply if current directory does NOT have any Atmos configuration.
+	// This ensures local configs/directories take precedence over git root discovery.
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Trace("Failed to get current directory", "error", err)
+		return nil
+	}
+
+	// Check for any Atmos configuration indicators in current directory.
+	if hasLocalAtmosConfig(cwd) {
+		return nil
+	}
+
+	// Only apply to default config with default base path.
+	if !atmosConfig.Default {
+		log.Trace("Skipping git root base path (not default config)")
+		return nil
+	}
+
+	if atmosConfig.BasePath != "." && atmosConfig.BasePath != "" {
+		log.Trace("Skipping git root base path (explicit base_path set)", "base_path", atmosConfig.BasePath)
+		return nil
+	}
+
+	// Resolve git root.
+	gitRoot, err := u.ProcessTagGitRoot("!repo-root .")
+	if err != nil {
+		log.Trace("Git root detection failed", "error", err)
+		return err
+	}
+
+	// Only update if we found a different root.
+	if gitRoot != "." {
+		atmosConfig.BasePath = gitRoot
+		log.Debug("Using git repository root as base path", "path", gitRoot)
+	} else {
+		log.Trace("Git root same as current directory")
+	}
+
+	return nil
+}
+
+// hasLocalAtmosConfig checks if the current directory has any Atmos configuration.
+// This includes config files, config directories, and default import directories.
+//
+// Returns true if ANY of these exist in the given directory:
+// - atmos.yaml (main config file)
+// - .atmos.yaml (hidden config file)
+// - .atmos/ (config directory)
+// - .atmos.d/ (default imports directory)
+// - atmos.d/ (default imports directory - alternate)
+func hasLocalAtmosConfig(dir string) bool {
+	configIndicators := []string{
+		AtmosConfigFileName,           // Main config file.
+		DotAtmosConfigFileName,        // Hidden config file.
+		AtmosConfigDirName,            // Config directory.
+		DotAtmosDefaultImportsDirName, // Default imports directory.
+		AtmosDefaultImportsDirName,    // Default imports directory (alternate).
+	}
+
+	for _, indicator := range configIndicators {
+		indicatorPath := filepath.Join(dir, indicator)
+		if _, err := os.Stat(indicatorPath); err == nil {
+			log.Trace("Found Atmos configuration in current directory, skipping git root discovery",
+				"indicator", indicator, "path", indicatorPath)
+			return true
+		}
+	}
+
+	return false
 }
