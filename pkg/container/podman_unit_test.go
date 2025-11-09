@@ -3,8 +3,10 @@ package container
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,29 +68,39 @@ func TestPodmanRuntime_cleanPodmanOutput_Comprehensive(t *testing.T) {
 	}
 }
 
-// TestPodmanRuntime_executePodmanList tests the List command execution logic.
-func TestPodmanRuntime_executePodmanList_ArgumentBuilding(t *testing.T) {
+// TestBuildPodmanListArgs tests the argument construction for podman ps command.
+func TestBuildPodmanListArgs(t *testing.T) {
 	tests := []struct {
-		name          string
-		filters       map[string]string
-		expectedArgs  []string
-		expectFilters bool
-		filterCount   int
+		name    string
+		filters map[string]string
+		// validateArgs is a function that validates the returned args.
+		// We can't use exact equality due to map iteration order for filters.
+		validateArgs func(t *testing.T, args []string)
 	}{
 		{
-			name:          "no filters",
-			filters:       nil,
-			expectedArgs:  []string{"ps", "-a", "--format", "json"},
-			expectFilters: false,
+			name:    "no filters",
+			filters: nil,
+			validateArgs: func(t *testing.T, args []string) {
+				// Exact match for no filters case.
+				assert.Equal(t, []string{"ps", "-a", "--format", "json"}, args)
+			},
 		},
 		{
 			name: "single filter",
 			filters: map[string]string{
 				"status": "running",
 			},
-			expectedArgs:  []string{"ps", "-a", "--format", "json", "--filter", "status=running"},
-			expectFilters: true,
-			filterCount:   1,
+			validateArgs: func(t *testing.T, args []string) {
+				// First 4 args must be base args in order.
+				assert.Equal(t, "ps", args[0])
+				assert.Equal(t, "-a", args[1])
+				assert.Equal(t, "--format", args[2])
+				assert.Equal(t, "json", args[3])
+				// Next args are filter pairs.
+				assert.Len(t, args, 6) // 4 base + 2 filter args.
+				assert.Equal(t, "--filter", args[4])
+				assert.Equal(t, "status=running", args[5])
+			},
 		},
 		{
 			name: "multiple filters",
@@ -96,43 +108,46 @@ func TestPodmanRuntime_executePodmanList_ArgumentBuilding(t *testing.T) {
 				"status": "exited",
 				"name":   "test",
 			},
-			expectedArgs:  []string{"ps", "-a", "--format", "json"},
-			expectFilters: true,
-			filterCount:   2,
+			validateArgs: func(t *testing.T, args []string) {
+				// First 4 args must be base args in order.
+				assert.Equal(t, "ps", args[0])
+				assert.Equal(t, "-a", args[1])
+				assert.Equal(t, "--format", args[2])
+				assert.Equal(t, "json", args[3])
+				// Length must be base + 2 filter pairs.
+				assert.Len(t, args, 8) // 4 base + 4 filter args (2 filters * 2 args each).
+				// Verify filter args are present (order may vary due to map iteration).
+				filterArgs := args[4:]
+				assert.Contains(t, filterArgs, "--filter")
+				assert.Contains(t, filterArgs, "status=exited")
+				assert.Contains(t, filterArgs, "name=test")
+				// Count --filter occurrences.
+				filterCount := 0
+				for _, arg := range filterArgs {
+					if arg == "--filter" {
+						filterCount++
+					}
+				}
+				assert.Equal(t, 2, filterCount)
+			},
 		},
 		{
-			name:          "empty filter map",
-			filters:       map[string]string{},
-			expectedArgs:  []string{"ps", "-a", "--format", "json"},
-			expectFilters: false,
+			name:    "empty filter map",
+			filters: map[string]string{},
+			validateArgs: func(t *testing.T, args []string) {
+				// Exact match for empty filters case.
+				assert.Equal(t, []string{"ps", "-a", "--format", "json"}, args)
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Build args as executePodmanList does.
-			args := []string{"ps", "-a", "--format", "json"}
+			// Call the actual implementation.
+			args := buildPodmanListArgs(tt.filters)
 
-			for key, value := range tt.filters {
-				args = append(args, "--filter", key+"="+value)
-			}
-
-			// Verify base args are present.
-			assert.Contains(t, args, "ps")
-			assert.Contains(t, args, "-a")
-			assert.Contains(t, args, "--format")
-			assert.Contains(t, args, "json")
-
-			if tt.expectFilters {
-				// Verify filter count.
-				filterArgCount := 0
-				for _, arg := range args {
-					if arg == "--filter" {
-						filterArgCount++
-					}
-				}
-				assert.Equal(t, tt.filterCount, filterArgCount)
-			}
+			// Validate using test-specific validation function.
+			tt.validateArgs(t, args)
 		})
 	}
 }
@@ -359,10 +374,38 @@ func TestPodmanRuntime_parsePodmanContainer_DetailedEdgeCases(t *testing.T) {
 	}
 }
 
+// testPodmanInspectRuntime is a test helper that implements the Inspect logic
+// with a fake List implementation for testing.
+type testPodmanInspectRuntime struct {
+	containers []Info
+}
+
+func (t *testPodmanInspectRuntime) Inspect(ctx context.Context, containerID string) (*Info, error) {
+	// This replicates the real Inspect logic from PodmanRuntime.
+	// Get containers from our fake List.
+	containers, err := t.List(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Find container by matching ID or name (same logic as real Inspect).
+	for _, container := range containers {
+		if container.ID == containerID || container.Name == containerID {
+			return &container, nil
+		}
+	}
+
+	return nil, errUtils.ErrContainerNotFound
+}
+
+func (t *testPodmanInspectRuntime) List(_ context.Context, _ map[string]string) ([]Info, error) {
+	return t.containers, nil
+}
+
 // TestPodmanRuntime_Inspect_Logic tests Inspect's delegation to List.
 func TestPodmanRuntime_Inspect_Logic(t *testing.T) {
 	// Inspect uses List internally and searches for matching container.
-	// We test the search logic here.
+	// This test validates the Inspect search logic by providing test data via a fake List.
 
 	tests := []struct {
 		name         string
@@ -435,23 +478,26 @@ func TestPodmanRuntime_Inspect_Logic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Replicate Inspect's search logic.
-			var found *Info
-			for _, container := range tt.containers {
-				if container.ID == tt.searchID || container.Name == tt.searchID {
-					containerCopy := container
-					found = &containerCopy
-					break
-				}
+			// Create test runtime that returns our test containers from List.
+			runtime := &testPodmanInspectRuntime{
+				containers: tt.containers,
 			}
 
+			// Call Inspect implementation (which delegates to our fake List).
+			ctx := context.Background()
+			result, err := runtime.Inspect(ctx, tt.searchID)
+
+			// Validate results.
 			if tt.expectFound {
-				require.NotNil(t, found, "container should be found")
-				assert.Equal(t, tt.expectedInfo.ID, found.ID)
-				assert.Equal(t, tt.expectedInfo.Name, found.Name)
-				assert.Equal(t, tt.expectedInfo.Image, found.Image)
+				require.NoError(t, err, "Inspect should not return error when container is found")
+				require.NotNil(t, result, "Inspect should return container info")
+				assert.Equal(t, tt.expectedInfo.ID, result.ID)
+				assert.Equal(t, tt.expectedInfo.Name, result.Name)
+				assert.Equal(t, tt.expectedInfo.Image, result.Image)
 			} else {
-				assert.Nil(t, found, "container should not be found")
+				require.Error(t, err, "Inspect should return error when container not found")
+				assert.Nil(t, result, "Inspect should return nil when container not found")
+				assert.ErrorIs(t, err, errUtils.ErrContainerNotFound)
 			}
 		})
 	}
@@ -573,10 +619,10 @@ func TestPodmanRuntime_Create_ContainerIDExtraction(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Replicate the extraction logic from podman.go Create (lines 72-84).
-			lines := splitLines(tt.output)
+			lines := strings.Split(tt.output, "\n")
 			var containerID string
 			for i := len(lines) - 1; i >= 0; i-- {
-				line := trimWhitespace(lines[i])
+				line := strings.TrimSpace(lines[i])
 				if line != "" {
 					containerID = line
 					break
@@ -590,38 +636,6 @@ func TestPodmanRuntime_Create_ContainerIDExtraction(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Helper functions for testing.
-func splitLines(s string) []string {
-	result := []string{}
-	current := ""
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			result = append(result, current)
-			current = ""
-		} else {
-			current += string(s[i])
-		}
-	}
-	result = append(result, current)
-	return result
-}
-
-func trimWhitespace(s string) string {
-	start := 0
-	end := len(s)
-	for start < end && isWhitespace(s[start]) {
-		start++
-	}
-	for start < end && isWhitespace(s[end-1]) {
-		end--
-	}
-	return s[start:end]
-}
-
-func isWhitespace(c byte) bool {
-	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
 }
 
 // TestPodmanRuntime_NewPodmanRuntime tests constructor.
