@@ -1,4 +1,4 @@
-package exec
+package devcontainer
 
 import (
 	"bytes"
@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/cloudposse/atmos/pkg/devcontainer"
 )
 
 func TestGetShellArgs(t *testing.T) {
@@ -73,22 +71,22 @@ func captureStdout(f func()) string {
 	return buf.String()
 }
 
-func TestPrintDevcontainerSettings(t *testing.T) {
+func TestPrintSettings(t *testing.T) {
 	tests := []struct {
 		name             string
-		settings         *devcontainer.Settings
+		settings         *Settings
 		expectedContains []string
 	}{
 		{
 			name: "with runtime setting",
-			settings: &devcontainer.Settings{
+			settings: &Settings{
 				Runtime: "docker",
 			},
 			expectedContains: []string{"Runtime: docker"},
 		},
 		{
 			name:             "with empty runtime",
-			settings:         &devcontainer.Settings{},
+			settings:         &Settings{},
 			expectedContains: []string{},
 		},
 	}
@@ -96,7 +94,7 @@ func TestPrintDevcontainerSettings(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output := captureStdout(func() {
-				printDevcontainerSettings(tt.settings)
+				printSettings(tt.settings)
 			})
 
 			for _, expected := range tt.expectedContains {
@@ -106,30 +104,30 @@ func TestPrintDevcontainerSettings(t *testing.T) {
 	}
 }
 
-func TestPrintDevcontainerBasicInfo(t *testing.T) {
-	config := &devcontainer.Config{
+func TestPrintBasicInfo(t *testing.T) {
+	config := &Config{
 		Name:  "test-container",
 		Image: "ubuntu:22.04",
 	}
 
 	output := captureStdout(func() {
-		printDevcontainerBasicInfo(config)
+		printBasicInfo(config)
 	})
 
 	assert.Contains(t, output, "Name: test-container")
 	assert.Contains(t, output, "Image: ubuntu:22.04")
 }
 
-func TestPrintDevcontainerBuildInfo(t *testing.T) {
+func TestPrintBuildInfo(t *testing.T) {
 	tests := []struct {
 		name             string
-		config           *devcontainer.Config
+		config           *Config
 		expectedContains []string
 	}{
 		{
 			name: "with build config and args",
-			config: &devcontainer.Config{
-				Build: &devcontainer.Build{
+			config: &Config{
+				Build: &Build{
 					Dockerfile: "Dockerfile",
 					Context:    ".",
 					Args: map[string]string{
@@ -149,8 +147,8 @@ func TestPrintDevcontainerBuildInfo(t *testing.T) {
 		},
 		{
 			name: "with build config without args",
-			config: &devcontainer.Config{
-				Build: &devcontainer.Build{
+			config: &Config{
+				Build: &Build{
 					Dockerfile: "Dockerfile.dev",
 					Context:    "/app",
 				},
@@ -163,7 +161,7 @@ func TestPrintDevcontainerBuildInfo(t *testing.T) {
 		},
 		{
 			name:             "without build config",
-			config:           &devcontainer.Config{},
+			config:           &Config{},
 			expectedContains: []string{},
 		},
 	}
@@ -171,7 +169,7 @@ func TestPrintDevcontainerBuildInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output := captureStdout(func() {
-				printDevcontainerBuildInfo(tt.config)
+				printBuildInfo(tt.config)
 			})
 
 			for _, expected := range tt.expectedContains {
@@ -181,15 +179,15 @@ func TestPrintDevcontainerBuildInfo(t *testing.T) {
 	}
 }
 
-func TestPrintDevcontainerWorkspaceInfo(t *testing.T) {
+func TestPrintWorkspaceInfo(t *testing.T) {
 	tests := []struct {
 		name             string
-		config           *devcontainer.Config
+		config           *Config
 		expectedContains []string
 	}{
 		{
 			name: "with both folder and mount",
-			config: &devcontainer.Config{
+			config: &Config{
 				WorkspaceFolder: "/workspace",
 				WorkspaceMount:  "type=bind,source=/host,target=/workspace",
 			},
@@ -200,7 +198,7 @@ func TestPrintDevcontainerWorkspaceInfo(t *testing.T) {
 		},
 		{
 			name: "with folder only",
-			config: &devcontainer.Config{
+			config: &Config{
 				WorkspaceFolder: "/app",
 			},
 			expectedContains: []string{
@@ -209,7 +207,7 @@ func TestPrintDevcontainerWorkspaceInfo(t *testing.T) {
 		},
 		{
 			name:             "without workspace info",
-			config:           &devcontainer.Config{},
+			config:           &Config{},
 			expectedContains: []string{},
 		},
 	}
@@ -217,7 +215,7 @@ func TestPrintDevcontainerWorkspaceInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output := captureStdout(func() {
-				printDevcontainerWorkspaceInfo(tt.config)
+				printWorkspaceInfo(tt.config)
 			})
 
 			for _, expected := range tt.expectedContains {
@@ -227,15 +225,15 @@ func TestPrintDevcontainerWorkspaceInfo(t *testing.T) {
 	}
 }
 
-func TestPrintDevcontainerMounts(t *testing.T) {
+func TestPrintMounts(t *testing.T) {
 	tests := []struct {
 		name             string
-		config           *devcontainer.Config
+		config           *Config
 		expectedContains []string
 	}{
 		{
 			name: "with mounts",
-			config: &devcontainer.Config{
+			config: &Config{
 				Mounts: []string{
 					"type=bind,source=/host,target=/container",
 					"type=volume,source=my-vol,target=/data",
@@ -249,7 +247,7 @@ func TestPrintDevcontainerMounts(t *testing.T) {
 		},
 		{
 			name:             "without mounts",
-			config:           &devcontainer.Config{},
+			config:           &Config{},
 			expectedContains: []string{},
 		},
 	}
@@ -257,7 +255,7 @@ func TestPrintDevcontainerMounts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output := captureStdout(func() {
-				printDevcontainerMounts(tt.config)
+				printMounts(tt.config)
 			})
 
 			for _, expected := range tt.expectedContains {
@@ -267,15 +265,15 @@ func TestPrintDevcontainerMounts(t *testing.T) {
 	}
 }
 
-func TestPrintDevcontainerPorts(t *testing.T) {
+func TestPrintPorts(t *testing.T) {
 	tests := []struct {
 		name             string
-		config           *devcontainer.Config
+		config           *Config
 		expectedContains []string
 	}{
 		{
 			name: "with forward ports",
-			config: &devcontainer.Config{
+			config: &Config{
 				ForwardPorts: []interface{}{8080, "3000:3001"},
 			},
 			expectedContains: []string{
@@ -284,7 +282,7 @@ func TestPrintDevcontainerPorts(t *testing.T) {
 		},
 		{
 			name:             "without ports",
-			config:           &devcontainer.Config{},
+			config:           &Config{},
 			expectedContains: []string{},
 		},
 	}
@@ -292,7 +290,7 @@ func TestPrintDevcontainerPorts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output := captureStdout(func() {
-				printDevcontainerPorts(tt.config)
+				printPorts(tt.config)
 			})
 
 			for _, expected := range tt.expectedContains {
@@ -302,15 +300,15 @@ func TestPrintDevcontainerPorts(t *testing.T) {
 	}
 }
 
-func TestPrintDevcontainerEnv(t *testing.T) {
+func TestPrintEnv(t *testing.T) {
 	tests := []struct {
 		name             string
-		config           *devcontainer.Config
+		config           *Config
 		expectedContains []string
 	}{
 		{
 			name: "with environment variables",
-			config: &devcontainer.Config{
+			config: &Config{
 				ContainerEnv: map[string]string{
 					"NODE_ENV": "production",
 					"DEBUG":    "true",
@@ -324,7 +322,7 @@ func TestPrintDevcontainerEnv(t *testing.T) {
 		},
 		{
 			name:             "without environment variables",
-			config:           &devcontainer.Config{},
+			config:           &Config{},
 			expectedContains: []string{},
 		},
 	}
@@ -332,7 +330,7 @@ func TestPrintDevcontainerEnv(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output := captureStdout(func() {
-				printDevcontainerEnv(tt.config)
+				printEnv(tt.config)
 			})
 
 			for _, expected := range tt.expectedContains {
@@ -342,15 +340,15 @@ func TestPrintDevcontainerEnv(t *testing.T) {
 	}
 }
 
-func TestPrintDevcontainerRunArgs(t *testing.T) {
+func TestPrintRunArgs(t *testing.T) {
 	tests := []struct {
 		name             string
-		config           *devcontainer.Config
+		config           *Config
 		expectedContains []string
 	}{
 		{
 			name: "with run arguments",
-			config: &devcontainer.Config{
+			config: &Config{
 				RunArgs: []string{"--rm", "--network=host"},
 			},
 			expectedContains: []string{
@@ -361,7 +359,7 @@ func TestPrintDevcontainerRunArgs(t *testing.T) {
 		},
 		{
 			name:             "without run arguments",
-			config:           &devcontainer.Config{},
+			config:           &Config{},
 			expectedContains: []string{},
 		},
 	}
@@ -369,7 +367,7 @@ func TestPrintDevcontainerRunArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output := captureStdout(func() {
-				printDevcontainerRunArgs(tt.config)
+				printRunArgs(tt.config)
 			})
 
 			for _, expected := range tt.expectedContains {
@@ -379,15 +377,15 @@ func TestPrintDevcontainerRunArgs(t *testing.T) {
 	}
 }
 
-func TestPrintDevcontainerRemoteUser(t *testing.T) {
+func TestPrintRemoteUser(t *testing.T) {
 	tests := []struct {
 		name             string
-		config           *devcontainer.Config
+		config           *Config
 		expectedContains []string
 	}{
 		{
 			name: "with remote user",
-			config: &devcontainer.Config{
+			config: &Config{
 				RemoteUser: "node",
 			},
 			expectedContains: []string{
@@ -396,7 +394,7 @@ func TestPrintDevcontainerRemoteUser(t *testing.T) {
 		},
 		{
 			name:             "without remote user",
-			config:           &devcontainer.Config{},
+			config:           &Config{},
 			expectedContains: []string{},
 		},
 	}
@@ -404,7 +402,7 @@ func TestPrintDevcontainerRemoteUser(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			output := captureStdout(func() {
-				printDevcontainerRemoteUser(tt.config)
+				printRemoteUser(tt.config)
 			})
 
 			for _, expected := range tt.expectedContains {

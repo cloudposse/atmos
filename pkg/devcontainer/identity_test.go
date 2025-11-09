@@ -1,4 +1,4 @@
-package exec
+package devcontainer
 
 import (
 	"testing"
@@ -7,18 +7,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/cloudposse/atmos/pkg/devcontainer"
 )
 
 func TestGetAtmosXDGEnvironment(t *testing.T) {
 	tests := []struct {
 		name     string
-		config   *devcontainer.Config
+		config   *Config
 		expected map[string]string
 	}{
 		{
 			name: "with workspace folder specified",
-			config: &devcontainer.Config{
+			config: &Config{
 				WorkspaceFolder: "/workspaces/my-project",
 			},
 			expected: map[string]string{
@@ -30,7 +29,7 @@ func TestGetAtmosXDGEnvironment(t *testing.T) {
 		},
 		{
 			name:   "with empty workspace folder defaults to /workspace",
-			config: &devcontainer.Config{},
+			config: &Config{},
 			expected: map[string]string{
 				"XDG_CONFIG_HOME": "/workspace/.atmos",
 				"XDG_DATA_HOME":   "/workspace/.atmos",
@@ -40,7 +39,7 @@ func TestGetAtmosXDGEnvironment(t *testing.T) {
 		},
 		{
 			name: "with custom workspace path",
-			config: &devcontainer.Config{
+			config: &Config{
 				WorkspaceFolder: "/custom/path",
 			},
 			expected: map[string]string{
@@ -239,15 +238,15 @@ func TestParseMountPaths(t *testing.T) {
 func TestAddCredentialMounts(t *testing.T) {
 	tests := []struct {
 		name        string
-		config      *devcontainer.Config
+		config      *Config
 		paths       []types.Path
 		wantErr     bool
 		errContains string
-		validate    func(t *testing.T, config *devcontainer.Config)
+		validate    func(t *testing.T, config *Config)
 	}{
 		{
 			name: "adds mount for existing required path",
-			config: &devcontainer.Config{
+			config: &Config{
 				WorkspaceMount:  "type=bind,source=/host/project,target=/workspace",
 				WorkspaceFolder: "/workspace",
 			},
@@ -259,7 +258,7 @@ func TestAddCredentialMounts(t *testing.T) {
 				},
 			},
 			wantErr: false,
-			validate: func(t *testing.T, config *devcontainer.Config) {
+			validate: func(t *testing.T, config *Config) {
 				require.NotNil(t, config.Mounts)
 				require.Len(t, config.Mounts, 1)
 				assert.Contains(t, config.Mounts[0], "type=bind")
@@ -269,7 +268,7 @@ func TestAddCredentialMounts(t *testing.T) {
 		},
 		{
 			name: "skips optional path that doesn't exist",
-			config: &devcontainer.Config{
+			config: &Config{
 				WorkspaceMount:  "type=bind,source=/host/project,target=/workspace",
 				WorkspaceFolder: "/workspace",
 			},
@@ -281,14 +280,14 @@ func TestAddCredentialMounts(t *testing.T) {
 				},
 			},
 			wantErr: false,
-			validate: func(t *testing.T, config *devcontainer.Config) {
+			validate: func(t *testing.T, config *Config) {
 				// Mount should not be added for nonexistent optional path.
 				assert.Empty(t, config.Mounts)
 			},
 		},
 		{
 			name: "errors on required path that doesn't exist",
-			config: &devcontainer.Config{
+			config: &Config{
 				WorkspaceMount:  "type=bind,source=/host/project,target=/workspace",
 				WorkspaceFolder: "/workspace",
 			},
@@ -304,7 +303,7 @@ func TestAddCredentialMounts(t *testing.T) {
 		},
 		{
 			name: "respects read_only metadata false",
-			config: &devcontainer.Config{
+			config: &Config{
 				WorkspaceMount:  "type=bind,source=/host/project,target=/workspace",
 				WorkspaceFolder: "/workspace",
 			},
@@ -319,7 +318,7 @@ func TestAddCredentialMounts(t *testing.T) {
 				},
 			},
 			wantErr: false,
-			validate: func(t *testing.T, config *devcontainer.Config) {
+			validate: func(t *testing.T, config *Config) {
 				require.NotNil(t, config.Mounts)
 				require.Len(t, config.Mounts, 1)
 				assert.Contains(t, config.Mounts[0], "type=bind")
@@ -328,19 +327,19 @@ func TestAddCredentialMounts(t *testing.T) {
 		},
 		{
 			name: "handles empty paths slice",
-			config: &devcontainer.Config{
+			config: &Config{
 				WorkspaceMount:  "type=bind,source=/host/project,target=/workspace",
 				WorkspaceFolder: "/workspace",
 			},
 			paths:   []types.Path{},
 			wantErr: false,
-			validate: func(t *testing.T, config *devcontainer.Config) {
+			validate: func(t *testing.T, config *Config) {
 				assert.Empty(t, config.Mounts)
 			},
 		},
 		{
 			name: "handles nil mounts initially",
-			config: &devcontainer.Config{
+			config: &Config{
 				WorkspaceMount:  "type=bind,source=/host/project,target=/workspace",
 				WorkspaceFolder: "/workspace",
 				Mounts:          nil,
@@ -353,7 +352,7 @@ func TestAddCredentialMounts(t *testing.T) {
 				},
 			},
 			wantErr: false,
-			validate: func(t *testing.T, config *devcontainer.Config) {
+			validate: func(t *testing.T, config *Config) {
 				require.NotNil(t, config.Mounts)
 				require.Len(t, config.Mounts, 1)
 			},
