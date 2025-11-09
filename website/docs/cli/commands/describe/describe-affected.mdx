@@ -122,6 +122,8 @@ atmos describe affected --exclude-locked
 # Authenticate before describing (when YAML functions require credentials)
 atmos describe affected --identity my-aws-identity
 atmos describe affected --identity # Interactive selection
+# Disable authentication (use AWS SDK defaults)
+atmos describe affected --identity=false
 atmos describe affected -i my-aws-identity --ref refs/heads/main
 ```
 

@@ -122,8 +122,10 @@ const (
 	StackStr     = "stack"
 
 	// Auth flags.
-	IdentityFlag            = "--identity"
-	IdentityFlagSelectValue = "__SELECT__" // Special value when --identity is used without argument.
+	IdentityFlagName          = "identity" // Flag name without prefix.
+	IdentityFlag              = "--identity"
+	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
+	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
 
 	// Performance profiling flags.
 	ProfilerEnabledFlag = "--profiler-enabled"
