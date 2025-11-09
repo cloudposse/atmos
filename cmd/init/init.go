@@ -10,10 +10,8 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
-	"github.com/cloudposse/atmos/pkg/generator/ui"
-	iolib "github.com/cloudposse/atmos/pkg/io"
-	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 // initCmd represents the init command.
@@ -123,18 +121,13 @@ func executeInit(
 		}
 	}
 
-	// Create the UI instance
-	// Create I/O context for this command
-	ioCtx, err := iolib.NewContext()
+	// Create generator context
+	genCtx, err := setup.NewGeneratorContext()
 	if err != nil {
-		return fmt.Errorf("failed to create I/O context: %w", err)
+		return fmt.Errorf("failed to create generator context: %w", err)
 	}
 
-	// Create terminal writer for I/O
-	termWriter := iolib.NewTerminalWriter(ioCtx)
-	term := terminal.New(terminal.WithIO(termWriter))
-
-	initUI := ui.NewInitUI(ioCtx, term)
+	initUI := genCtx.UI
 
 	// Get available template configurations
 	configs, err := templates.GetAvailableConfigurations()
