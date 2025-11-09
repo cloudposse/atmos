@@ -369,10 +369,10 @@ func TestThemeListFlagPrecedence(t *testing.T) {
 
 func TestExecuteThemeListActiveThemeResolution(t *testing.T) {
 	tests := []struct {
-		name            string
+		name             string
 		setupAtmosConfig func() *schema.AtmosConfiguration
-		setupViper      func(v *viper.Viper)
-		expectedTheme   string
+		setupViper       func(v *viper.Viper)
+		expectedTheme    string
 	}{
 		{
 			name: "defaults to atmos when no config",
