@@ -19,7 +19,10 @@ type ListThemesOptions struct {
 	ActiveTheme     string
 }
 
-// ListThemesResult contains the formatted output for theme listing.
+// ListThemesResult represents the formatted output returned when listing themes.
+// It includes the rendered output string, any error encountered, the total count of themes displayed,
+// the name of the currently active theme, whether star indicators are shown for recommended themes,
+// and whether the output is filtered to show only recommended themes.
 type ListThemesResult struct {
 	Output          string
 	Error           error

@@ -7,7 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 )
 
-// TableStyle represents different table design styles.
+// TableStyle represents the different table design styles used for rendering tables in the terminal.
+// Supported styles include bordered (full borders), minimal (header separator only), and plain (no borders).
 type TableStyle int
 
 const (
