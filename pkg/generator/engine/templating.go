@@ -16,37 +16,49 @@ import (
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
-// File represents a file to be processed
+// File represents a file to be processed by the templating engine.
+// It contains the file path (which can itself be a template), the content,
+// whether the content should be processed as a template, and the file permissions.
 type File struct {
-	Path        string
-	Content     string
-	IsTemplate  bool
-	Permissions os.FileMode
+	Path        string      // Path to the file, may contain template syntax for dynamic naming
+	Content     string      // File content, processed as template if IsTemplate is true
+	IsTemplate  bool        // Whether to process Content as a Go template
+	Permissions os.FileMode // Unix file permissions to apply when creating the file
 }
 
-// FileSkippedError represents when a file is intentionally skipped
+// FileSkippedError represents when a file is intentionally skipped during processing.
+// Files may be skipped when their rendered path contains empty segments, special values
+// like "false" or "<no value>", or other indicators that the file should not be created.
 type FileSkippedError struct {
-	Path         string
-	RenderedPath string
+	Path         string // Original file path from the template
+	RenderedPath string // Rendered path after template processing
 }
 
+// Error returns a formatted error message indicating the file was skipped.
 func (e *FileSkippedError) Error() string {
 	return fmt.Sprintf("file skipped: %s (rendered as: %s)", e.Path, e.RenderedPath)
 }
 
-// Processor handles template processing for the init command
+// Processor handles template processing for scaffold and init commands.
+// It provides template rendering with Gomplate and Sprig functions,
+// file path templating, and intelligent file merging capabilities.
 type Processor struct {
 	merger *merge.ThreeWayMerger
 }
 
-// NewProcessor creates a new template processor
+// NewProcessor creates a new template processor with default settings.
+// The processor is initialized with a 50% threshold for 3-way merges,
+// meaning merges will be rejected if more than 50% of lines would change.
 func NewProcessor() *Processor {
 	return &Processor{
 		merger: merge.NewThreeWayMerger(50), // Default 50% threshold
 	}
 }
 
-// SetMaxChanges sets the maximum number of changes allowed for 3-way merge
+// SetMaxChanges sets the maximum percentage of changes allowed for 3-way merge operations.
+// The thresholdPercent parameter controls how aggressive the merge behavior is:
+// a lower value (e.g., 30) is more conservative, while a higher value (e.g., 80)
+// allows more extensive changes during merges.
 func (p *Processor) SetMaxChanges(thresholdPercent int) {
 	p.merger = merge.NewThreeWayMerger(thresholdPercent)
 }
@@ -111,7 +123,21 @@ func (p *Processor) Merge(existingContent, newContent, fileName string) (string,
 	return p.merger.Merge(existingContent, newContent, fileName)
 }
 
-// ProcessFile handles the creation of a single file with full templating support.
+// ProcessFile processes a file with templating support, handling path rendering,
+// skip logic, and merge/overwrite behavior based on flags.
+//
+// The method performs the following steps:
+//  1. Renders the file path as a template (supports dynamic file naming)
+//  2. Checks if the file should be skipped based on the rendered path
+//  3. Creates necessary directories
+//  4. Handles existing files based on force/update flags:
+//     - force: overwrites existing files
+//     - update: performs a 3-way merge with existing content
+//     - neither: returns an error if file exists
+//  5. Processes file content as a template if IsTemplate is true
+//  6. Writes the final content to disk with specified permissions
+//
+// Returns FileSkippedError if the file is intentionally skipped (not considered an error).
 func (p *Processor) ProcessFile(file File, targetPath string, force, update bool, scaffoldConfig interface{}, userValues map[string]interface{}) error {
 	// Extract delimiters from config
 	delimiters := extractDelimiters(scaffoldConfig)
@@ -302,7 +328,15 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 	return nil
 }
 
-// ShouldSkipFile determines if a file should be skipped based on its rendered path
+// ShouldSkipFile determines if a file should be skipped based on its rendered path.
+//
+// Files are skipped in the following cases:
+//   - Empty path or special values: "", "false", "null", "<no value>"
+//   - Paths with empty segments: "foo//bar", "/foo", "foo/"
+//   - Paths that would create invalid filesystem entries
+//
+// This is useful for conditional file generation where template variables
+// may evaluate to empty or false values, indicating the file should not be created.
 func (p *Processor) ShouldSkipFile(renderedPath string) bool {
 	// Skip if the path is empty, "false", "null", or "<no value>"
 	if renderedPath == "" || renderedPath == "false" || renderedPath == "null" || renderedPath == "<no value>" {
