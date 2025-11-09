@@ -93,11 +93,11 @@ func TestInitializeFormValues(t *testing.T) {
 // TestGroupFieldsByType tests the groupFieldsByType function.
 func TestGroupFieldsByType(t *testing.T) {
 	tests := []struct {
-		name                string
-		scaffoldConfig      *ScaffoldConfig
-		expectedBasic       int
-		expectedConfig      int
-		expectedAdvanced    int
+		name             string
+		scaffoldConfig   *ScaffoldConfig
+		expectedBasic    int
+		expectedConfig   int
+		expectedAdvanced int
 	}{
 		{
 			name: "mixed field types",
