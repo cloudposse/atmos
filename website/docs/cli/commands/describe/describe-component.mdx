@@ -135,11 +135,14 @@ atmos describe component . --stack dev --provenance
 
 <dl>
   <dt>`component` <em>(required)</em></dt>
-  <dd>Atmos component name or filesystem path.<br/><br/>
-  Supports both:<br/>
-  - Component names: `vpc`, `infra/vpc`, `test/test-component`<br/>
-  - Filesystem paths: `.` (current directory), `./vpc`, `components/terraform/vpc`<br/><br/>
-  When using paths, Atmos automatically resolves the path to the component name based on your stack configuration.
+  <dd>
+    Atmos component name or filesystem path.<br/><br/>
+    Supports both:
+    <ul>
+      <li>Component names: <code>vpc</code>, <code>infra/vpc</code>, <code>test/test-component</code></li>
+      <li>Filesystem paths: <code>.</code> (current directory), <code>./vpc</code>, <code>components/terraform/vpc</code></li>
+    </ul>
+    When using paths, Atmos automatically resolves the path to the component name based on your stack configuration.
   </dd>
 </dl>
 
