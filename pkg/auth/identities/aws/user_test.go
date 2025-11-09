@@ -100,6 +100,110 @@ func TestAuthenticateStandaloneAWSUser(t *testing.T) {
 // Use in-memory keyring for this test package.
 func init() { keyring.MockInit() }
 
+// TestUserIdentity_Authenticate_UsesExistingSessionCredentials verifies that Authenticate()
+// checks for existing valid session credentials before generating new ones.
+// This prevents unnecessary GetSessionToken API calls and fixes the issue where
+// terraform/workflow commands would fail when trying to generate new tokens with expired base credentials.
+func TestUserIdentity_Authenticate_UsesExistingSessionCredentials(t *testing.T) {
+	// Setup: Create a temporary directory for AWS files.
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Create identity with config that would trigger MFA (which would fail if called).
+	identity, err := NewUserIdentity("test-user", &schema.Identity{
+		Kind: "aws/user",
+		Credentials: map[string]any{
+			"access_key_id":     "AKIA_LONG_LIVED",
+			"secret_access_key": "SECRET_LONG_LIVED",
+			"region":            "us-east-1",
+		},
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	// Setup: Write valid session credentials to AWS files (simulating previous authentication).
+	validSessionCreds := &types.AWSCredentials{
+		AccessKeyID:     "AKIA_SESSION",
+		SecretAccessKey: "SECRET_SESSION",
+		SessionToken:    "SESSION_TOKEN_123",
+		Region:          "us-east-1",
+		// Set expiration 2 hours in the future (well beyond the 15-minute buffer).
+		Expiration: time.Now().Add(2 * time.Hour).Format(time.RFC3339),
+	}
+
+	err = userIdent.writeAWSFiles(validSessionCreds, "us-east-1")
+	require.NoError(t, err)
+
+	// Test: Call Authenticate() - it should use existing credentials without calling GetSessionToken.
+	// We don't need to mock GetSessionToken because it should never be called.
+	ctx := context.Background()
+	resultCreds, err := userIdent.Authenticate(ctx, nil)
+
+	// Verify: Authentication succeeded without calling GetSessionToken.
+	require.NoError(t, err, "Authenticate should succeed using existing session credentials")
+	require.NotNil(t, resultCreds, "Credentials should not be nil")
+
+	// Verify: The returned credentials match the existing session credentials.
+	awsCreds, ok := resultCreds.(*types.AWSCredentials)
+	require.True(t, ok, "Credentials should be AWSCredentials type")
+	assert.Equal(t, "AKIA_SESSION", awsCreds.AccessKeyID, "Should use existing session access key")
+	assert.Equal(t, "SECRET_SESSION", awsCreds.SecretAccessKey, "Should use existing session secret")
+	assert.Equal(t, "SESSION_TOKEN_123", awsCreds.SessionToken, "Should use existing session token")
+	assert.NotEmpty(t, awsCreds.Expiration, "Expiration should be set")
+}
+
+// TestUserIdentity_Authenticate_GeneratesNewWhenExpired verifies that Authenticate()
+// generates new session credentials when existing ones are expired.
+func TestUserIdentity_Authenticate_GeneratesNewWhenExpired(t *testing.T) {
+	// Setup: Create a temporary directory for AWS files.
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Mock MFA prompt to avoid interactive prompt.
+	originalPromptFunc := promptMfaTokenFunc
+	defer func() { promptMfaTokenFunc = originalPromptFunc }()
+	promptMfaTokenFunc = func(_ *types.AWSCredentials) (string, error) {
+		return "", errors.New("mock: should not call MFA prompt in this test")
+	}
+
+	// Create identity without MFA to avoid prompt.
+	identity, err := NewUserIdentity("test-user", &schema.Identity{
+		Kind: "aws/user",
+		Credentials: map[string]any{
+			"access_key_id":     "AKIA_LONG_LIVED",
+			"secret_access_key": "SECRET_LONG_LIVED",
+			"region":            "us-east-1",
+		},
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	// Setup: Write EXPIRED session credentials to AWS files.
+	expiredSessionCreds := &types.AWSCredentials{
+		AccessKeyID:     "AKIA_SESSION_EXPIRED",
+		SecretAccessKey: "SECRET_SESSION_EXPIRED",
+		SessionToken:    "EXPIRED_TOKEN",
+		Region:          "us-east-1",
+		// Set expiration in the past.
+		Expiration: time.Now().Add(-1 * time.Hour).Format(time.RFC3339),
+	}
+
+	err = userIdent.writeAWSFiles(expiredSessionCreds, "us-east-1")
+	require.NoError(t, err)
+
+	// Test: Call Authenticate() - it should detect expired credentials and attempt to generate new ones.
+	// Since we can't actually call AWS STS in tests, we expect this to fail at the generateSessionToken step.
+	ctx := context.Background()
+	_, err = userIdent.Authenticate(ctx, nil)
+
+	// Verify: Authentication attempted to generate new token (would fail because no real AWS creds).
+	// The important thing is that it tried, proving it detected the expiration.
+	// In a real scenario with valid base credentials, this would succeed.
+	assert.Error(t, err, "Should attempt to generate new session token for expired credentials")
+}
+
 func TestUser_credentialsFromConfig(t *testing.T) {
 	// Missing secret when access_key_id present -> error.
 	id, err := NewUserIdentity("me", &schema.Identity{Kind: "aws/user", Credentials: map[string]any{
