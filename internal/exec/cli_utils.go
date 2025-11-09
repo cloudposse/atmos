@@ -155,6 +155,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
 	configAndStacksInfo.Identity = argsAndFlagsInfo.Identity
+	configAndStacksInfo.NeedsPathResolution = argsAndFlagsInfo.NeedsPathResolution
 
 	// Fallback to ATMOS_IDENTITY environment variable if identity not set via flag.
 	// Use os.Getenv directly to avoid polluting viper config with temporary binding.

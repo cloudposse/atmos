@@ -47,6 +47,23 @@ This automatically resolves the path to the component name configured in your st
 - Must be inside a component directory under the configured base path
 - Must specify `--stack` flag
 - Component must exist in the specified stack configuration
+- **The component path must resolve to a unique component name** - If multiple components in the stack reference the same component path, you must use the unique component name instead of the path
+
+:::warning Path Resolution Limitation
+Path-based resolution only works when the component path resolves to a **single unique component** in the stack.
+
+For example, if both `station/1` and `station/2` reference `components/terraform/weather`:
+```bash
+cd components/terraform/weather
+atmos validate component . --stack dev  # ❌ Error: ambiguous - which component?
+```
+
+Instead, you must use the unique component names:
+```bash
+atmos validate component station/1 --stack dev  # ✓ Explicit and unambiguous
+atmos validate component station/2 --stack dev  # ✓ Explicit and unambiguous
+```
+:::
 
 :::tip
 Run `atmos validate component --help` to see all the available options

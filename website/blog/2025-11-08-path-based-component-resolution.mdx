@@ -76,6 +76,43 @@ atmos helmfile diff . --stack dev
 atmos helmfile apply . --stack prod
 ```
 
+## Important Limitation
+
+Path-based resolution only works when the component path resolves to a **single unique component** in the stack. If multiple components reference the same filesystem path, you must use the unique component name.
+
+**Example scenario where path resolution won't work:**
+
+```yaml
+# stacks/deploy/dev.yaml
+components:
+  terraform:
+    station/1:
+      metadata:
+        component: weather  # Points to components/terraform/weather
+      vars:
+        name: station-1
+
+    station/2:
+      metadata:
+        component: weather  # Also points to components/terraform/weather
+      vars:
+        name: station-2
+```
+
+In this case, both `station/1` and `station/2` reference the same path `components/terraform/weather`. You cannot use:
+
+```bash
+cd components/terraform/weather
+atmos terraform plan . --stack dev  # ❌ Ambiguous - which component?
+```
+
+Instead, you must use the unique component names:
+
+```bash
+atmos terraform plan station/1 --stack dev  # ✓ Explicit and unambiguous
+atmos terraform plan station/2 --stack dev  # ✓ Explicit and unambiguous
+```
+
 ## Backward Compatibility
 
 All existing component name syntax continues to work unchanged:
@@ -91,6 +128,7 @@ atmos terraform plan infra/vpc --stack dev
 - Must be inside a component directory under the configured base path
 - Must specify `--stack` flag when using paths
 - Component must exist in the specified stack configuration
+- **The component path must resolve to a unique component name** - If multiple components in the stack reference the same component path (e.g., `station/1` and `station/2` both using `components/terraform/weather`), you must use the unique component name instead of the path
 
 ## Documentation
 

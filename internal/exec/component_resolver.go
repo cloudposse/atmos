@@ -32,3 +32,14 @@ func ResolveComponentFromPathWithoutTypeCheck(
 ) (string, error) {
 	return componentResolver.ResolveComponentFromPathWithoutTypeCheck(atmosConfig, path, stack)
 }
+
+// ResolveComponentFromPathWithoutValidation resolves a filesystem path to a component name without stack validation.
+// This is used during command-line argument parsing to extract the component name from a path.
+// Stack validation happens later in ProcessStacks() to avoid duplicate work.
+func ResolveComponentFromPathWithoutValidation(
+	atmosConfig *schema.AtmosConfiguration,
+	path string,
+	expectedComponentType string,
+) (string, error) {
+	return componentResolver.ResolveComponentFromPathWithoutValidation(atmosConfig, path, expectedComponentType)
+}

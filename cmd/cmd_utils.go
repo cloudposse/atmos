@@ -699,22 +699,27 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 
 	// Resolve path-based component arguments to component names
 	if info.NeedsPathResolution && info.ComponentFromArg != "" {
-		atmosConfig, err := cfg.InitCliConfig(info, true)
+		atmosConfig, err := cfg.InitCliConfig(info, false)
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err), "", "")
 		}
 
-		resolvedComponent, err := e.ResolveComponentFromPath(
+		// Extract component name from path without stack validation.
+		// Stack validation happens later in ProcessStacks().
+		//
+		// Note: This extracts the directory-based component name (e.g., "vpc" from "components/terraform/vpc").
+		// If multiple components reference the same directory via metadata.component, the user must
+		// use the exact component name instead of the path (e.g., "vpc/1" or "vpc/2", not ".").
+		resolvedComponent, err := e.ResolveComponentFromPathWithoutValidation(
 			&atmosConfig,
 			info.ComponentFromArg,
-			info.Stack,
 			commandName, // Component type is the command name (terraform, helmfile, packer)
 		)
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(
 				fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err),
 				"",
-				fmt.Sprintf("Hint: Make sure the path is within your component directories and the component exists in stack '%s'", info.Stack),
+				"Hint: Make sure the path is within your component directories",
 			)
 		}
 

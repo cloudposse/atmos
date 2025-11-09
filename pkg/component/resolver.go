@@ -139,6 +139,57 @@ func (r *Resolver) ResolveComponentFromPathWithoutTypeCheck(
 	return resolvedComponent, nil
 }
 
+// ResolveComponentFromPathWithoutValidation resolves a filesystem path to a component name without stack validation.
+//
+// This function extracts the component name from a filesystem path without validating it exists in a stack.
+// It's used during command-line argument parsing to convert path-based component arguments (like ".")
+// into component names. Stack validation happens later in ProcessStacks() to avoid duplicate work.
+//
+// Parameters:
+//   - atmosConfig: Atmos configuration
+//   - path: Filesystem path (can be ".", relative, or absolute)
+//   - expectedComponentType: Expected component type ("terraform", "helmfile", "packer")
+//
+// Returns:
+//   - Component name extracted from path (e.g., "vpc/security-group" from "/path/to/components/terraform/vpc/security-group")
+//   - Error if path cannot be resolved or component type doesn't match
+func (r *Resolver) ResolveComponentFromPathWithoutValidation(
+	atmosConfig *schema.AtmosConfiguration,
+	path string,
+	expectedComponentType string,
+) (string, error) {
+	defer perf.Track(atmosConfig, "component.ResolveComponentFromPathWithoutValidation")()
+
+	log.Debug("Resolving component from path (without validation)",
+		"path", path,
+		"expected_type", expectedComponentType,
+	)
+
+	// 1. Extract component info from path.
+	componentInfo, err := u.ExtractComponentInfoFromPath(atmosConfig, path)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
+	}
+
+	// 2. Verify component type matches.
+	if componentInfo.ComponentType != expectedComponentType {
+		return "", fmt.Errorf(
+			"%w: path resolves to %s component but command expects %s component",
+			errUtils.ErrComponentTypeMismatch,
+			componentInfo.ComponentType,
+			expectedComponentType,
+		)
+	}
+
+	log.Debug("Successfully resolved component from path (without validation)",
+		"path", path,
+		"component", componentInfo.FullComponent,
+		"type", componentInfo.ComponentType,
+	)
+
+	return componentInfo.FullComponent, nil
+}
+
 // validateComponentInStack checks if a component exists in the specified stack configuration.
 // Returns the actual stack key (which may be an alias) that matched the component.
 func (r *Resolver) validateComponentInStack(
@@ -215,6 +266,8 @@ func (r *Resolver) validateComponentInStack(
 	}
 
 	// If no direct match, check for aliases via component or metadata.component fields.
+	// Collect ALL matches to detect ambiguous cases.
+	var matches []string
 	for stackKey, componentConfig := range typeComponentsMap {
 		componentConfigMap, ok := componentConfig.(map[string]any)
 		if !ok {
@@ -223,34 +276,46 @@ func (r *Resolver) validateComponentInStack(
 
 		// Check 'component' field.
 		if comp, ok := componentConfigMap["component"].(string); ok && comp == componentName {
-			log.Debug("Component validated successfully in stack (alias via component field)",
-				"path_component", componentName,
-				"stack_key", stackKey,
-				"stack", stack,
-				"type", componentType,
-			)
-			return stackKey, nil
+			matches = append(matches, stackKey)
+			continue
 		}
 
 		// Check 'metadata.component' field.
 		if metadata, ok := componentConfigMap["metadata"].(map[string]any); ok {
 			if metaComp, ok := metadata["component"].(string); ok && metaComp == componentName {
-				log.Debug("Component validated successfully in stack (alias via metadata.component field)",
-					"path_component", componentName,
-					"stack_key", stackKey,
-					"stack", stack,
-					"type", componentType,
-				)
-				return stackKey, nil
+				matches = append(matches, stackKey)
 			}
 		}
 	}
 
-	return "", fmt.Errorf(
-		"%w: component '%s' not found in stack '%s' (type: %s)",
-		errUtils.ErrComponentNotInStack,
-		componentName,
-		stack,
-		componentType,
+	// Handle results.
+	if len(matches) == 0 {
+		return "", fmt.Errorf(
+			"%w: component '%s' not found in stack '%s' (type: %s)",
+			errUtils.ErrComponentNotInStack,
+			componentName,
+			stack,
+			componentType,
+		)
+	}
+
+	if len(matches) > 1 {
+		return "", fmt.Errorf(
+			"%w: path resolves to '%s' which is referenced by multiple components in stack '%s': %v. "+
+				"Please use the exact component name instead of a path",
+			errUtils.ErrAmbiguousComponentPath,
+			componentName,
+			stack,
+			matches,
+		)
+	}
+
+	// Exactly one match found.
+	log.Debug("Component validated successfully in stack (alias match)",
+		"path_component", componentName,
+		"stack_key", matches[0],
+		"stack", stack,
+		"type", componentType,
 	)
+	return matches[0], nil
 }

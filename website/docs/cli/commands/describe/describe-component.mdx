@@ -48,9 +48,26 @@ This automatically resolves the path to the component name configured in your st
 - Must be inside a component directory under the configured base path
 - Must specify `--stack` flag
 - Component must exist in the specified stack configuration
+- **The component path must resolve to a unique component name** - If multiple components in the stack reference the same component path, you must use the unique component name instead of the path
 
 **Error handling:**
 If the path cannot be resolved, Atmos will provide a clear error message explaining whether the path is within component directories and whether the component exists in the stack.
+
+:::warning Path Resolution Limitation
+Path-based resolution only works when the component path resolves to a **single unique component** in the stack.
+
+For example, if both `station/1` and `station/2` reference `components/terraform/weather`:
+```bash
+cd components/terraform/weather
+atmos describe component . --stack dev  # ❌ Error: ambiguous - which component?
+```
+
+Instead, you must use the unique component names:
+```bash
+atmos describe component station/1 --stack dev  # ✓ Explicit and unambiguous
+atmos describe component station/2 --stack dev  # ✓ Explicit and unambiguous
+```
+:::
 
 :::info YAML Functions and Authentication
 By default, `atmos describe component` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during component processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
