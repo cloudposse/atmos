@@ -113,13 +113,13 @@ var (
 	ErrLocalRepoFetch       = errors.New("local repo unavailable")
 
 	// I/O and output errors.
-	ErrBuildIOConfig   = errors.New("failed to build I/O config")
-	ErrUnknownStream   = errors.New("unknown I/O stream")
-	ErrWriteToStream   = errors.New("failed to write to stream")
-	ErrMaskingContent  = errors.New("failed to mask content")
-	ErrHeadLookup      = errors.New("HEAD not found")
-	ErrInvalidFormat   = errors.New("invalid format")
-	ErrOutputFormat    = errors.New("output format error")
+	ErrBuildIOConfig  = errors.New("failed to build I/O config")
+	ErrUnknownStream  = errors.New("unknown I/O stream")
+	ErrWriteToStream  = errors.New("failed to write to stream")
+	ErrMaskingContent = errors.New("failed to mask content")
+	ErrHeadLookup     = errors.New("HEAD not found")
+	ErrInvalidFormat  = errors.New("invalid format")
+	ErrOutputFormat   = errors.New("output format error")
 
 	// Slice utility errors.
 	ErrNilInput         = errors.New("input must not be nil")

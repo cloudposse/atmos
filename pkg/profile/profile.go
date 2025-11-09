@@ -6,11 +6,11 @@ import (
 
 // ProfileInfo contains information about a discovered profile.
 type ProfileInfo struct {
-	Name        string              // Profile name (directory name).
-	Path        string              // Absolute path to profile directory.
-	LocationType string             // Location type: "configurable", "project-hidden", "xdg", "project".
-	Files       []string            // List of configuration files in the profile.
-	Metadata    *schema.ConfigMetadata // Optional metadata from the profile.
+	Name         string                 // Profile name (directory name).
+	Path         string                 // Absolute path to profile directory.
+	LocationType string                 // Location type: "configurable", "project-hidden", "xdg", "project".
+	Files        []string               // List of configuration files in the profile.
+	Metadata     *schema.ConfigMetadata // Optional metadata from the profile.
 }
 
 // ProfileManager defines the interface for profile operations.
