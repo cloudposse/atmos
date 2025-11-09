@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/generator"
@@ -129,6 +130,58 @@ func loadConfiguration(templatePath string) (*Configuration, error) {
 	}, nil
 }
 
+// templateMagicCommentPattern matches magic comments that indicate a file should be treated as a template.
+// Supported formats:
+//   - # atmos:template (shell, Python, Ruby, YAML, etc.)
+//   - // atmos:template (Go, JavaScript, C++, etc.)
+//   - /* atmos:template */ (C-style block comments)
+//   - <!-- atmos:template --> (HTML, XML, Markdown)
+//
+// The magic comment must appear within the first 10 lines of the file and is case-insensitive.
+var templateMagicCommentPattern = regexp.MustCompile(`(?i)(?:^|//|#|/\*|<!--)\s*atmos:template\s*(?:\*/|-->)?`)
+
+// hasTemplateMagicComment checks if the content contains an atmos:template magic comment
+// in the first maxLines lines of the file.
+func hasTemplateMagicComment(content string, maxLines int) bool {
+	lines := strings.Split(content, "\n")
+	if len(lines) > maxLines {
+		lines = lines[:maxLines]
+	}
+
+	for _, line := range lines {
+		if templateMagicCommentPattern.MatchString(strings.TrimSpace(line)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// stripTemplateMagicComment removes the atmos:template magic comment from the content.
+// This ensures the magic comment doesn't appear in the generated output.
+func stripTemplateMagicComment(content string) string {
+	lines := strings.Split(content, "\n")
+	var filtered []string
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Skip lines that contain only the magic comment
+		if templateMagicCommentPattern.MatchString(trimmed) {
+			// Check if the line is ONLY the magic comment (possibly with comment markers)
+			// If it's a standalone comment line, skip it entirely
+			cleaned := templateMagicCommentPattern.ReplaceAllString(trimmed, "")
+			cleaned = strings.TrimSpace(cleaned)
+			// If nothing remains after removing the magic comment, skip this line
+			if cleaned == "" || cleaned == "//" || cleaned == "#" || cleaned == "/*" || cleaned == "*/" || cleaned == "<!--" || cleaned == "-->" {
+				continue
+			}
+		}
+		filtered = append(filtered, line)
+	}
+
+	return strings.Join(filtered, "\n")
+}
+
 // readTemplateFiles recursively reads all files from a template directory.
 func readTemplateFiles(templatePath string) ([]File, error) {
 	var files []File
@@ -171,15 +224,26 @@ func readTemplateFiles(templatePath string) ([]File, error) {
 				return nil, fmt.Errorf("failed to read file '%s': %w", filePath, err)
 			}
 
-			// Determine if file is a template based on .tmpl extension.
-			// Only files with .tmpl extension are treated as templates to avoid
-			// false positives from files that incidentally contain "{{" (e.g., JSON,
-			// code examples, documentation).
-			isTemplate := strings.HasSuffix(entry.Name(), ".tmpl")
+			contentStr := string(content)
+
+			// Determine if file is a template using multiple detection methods:
+			// 1. Files with .tmpl extension are always treated as templates
+			// 2. Files with atmos:template magic comment in first 10 lines
+			//
+			// This avoids false positives from files that incidentally contain "{{"
+			// (e.g., JSON, code examples, documentation) while allowing explicit
+			// template marking via magic comments.
+			isTemplate := strings.HasSuffix(entry.Name(), ".tmpl") || hasTemplateMagicComment(contentStr, 10)
+
+			// Strip the magic comment from the content if present
+			// This ensures it doesn't appear in generated output
+			if hasTemplateMagicComment(contentStr, 10) {
+				contentStr = stripTemplateMagicComment(contentStr)
+			}
 
 			files = append(files, File{
 				Path:        strings.TrimPrefix(filePath, templatePath+"/"),
-				Content:     string(content),
+				Content:     contentStr,
 				IsDirectory: false,
 				IsTemplate:  isTemplate,
 				Permissions: 0o644,
