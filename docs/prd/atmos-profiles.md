@@ -4,10 +4,17 @@
 
 This document describes the requirements and implementation for Atmos profiles, which enable users to maintain multiple configuration presets that can be activated via CLI flags or environment variables. Profiles provide environment-specific, role-based, or context-specific configuration overrides without modifying the base `atmos.yaml` configuration.
 
+## Implementation Resources
+
+- **Detailed Implementation Plan**: `.scratch/profiles-implementation-plan.md` - Step-by-step tasks with code examples
+- **Refactoring Plan**: `.scratch/profiles-loading-refactor.md` - Shared config directory loading function
+- **Architecture Summary**: `.scratch/profiles-architecture-summary.md` - Package structure and modern command pattern
+
 ## Dependencies
 
 This PRD depends on:
 - **[Auth Default Settings PRD](./auth-default-settings.md)** - Provides `auth.defaults.identity` for deterministic default identity selection in profiles
+- **PR #1763** - Error handling infrastructure must be merged before implementation
 
 ## Problem Statement
 
@@ -1332,13 +1339,24 @@ atmos auth list identities --profile platform-admin --filter-by-profile-tags
 
 ### Implementation Plan
 
+**Architecture**: This implementation follows the modern Atmos command pattern where command logic lives in `cmd/` packages and shared functionality lives in focused `pkg/` packages. The `internal/exec/` folder is legacy and will NOT be extended.
+
+**Reference implementation**: `cmd/theme/` demonstrates the exact pattern to follow.
+
+**Package structure**:
+- `cmd/profile/` - All profile command implementations
+- `pkg/profile/` - Shared profile discovery, validation, and loading logic
+- `pkg/config/` - Profile loading integration with config system
+
+**Detailed implementation guide**: See `.scratch/profiles-implementation-plan.md` for step-by-step tasks with code examples.
+
 #### Phase 1: Core Profile Loading (Week 1-2)
 
 **Tasks:**
 
-1. **Add `--profile` flag using new flag handling system:**
-   - Use `pkg/flags` builder pattern in `cmd/root.go`
-   - Add to `GlobalOptionsBuilder` in `pkg/flags/global_builder.go`:
+1. **Add `--profile` flag to global flags:**
+   - Update `pkg/flags/global/flags.go` to add `Profile []string` field
+   - Register flag in `pkg/flags/global_builder.go`:
      ```go
      b.options = append(b.options, func(cfg *parserConfig) {
          cfg.registry.Register(&StringSliceFlag{
@@ -1370,37 +1388,47 @@ atmos auth list identities --profile platform-admin --filter-by-profile-tags
      ```
    - Update JSON schemas in `pkg/datafetcher/schema/`
 
-3. **Implement profile discovery logic in `pkg/config/load.go`:**
-   - `discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) []string` - Returns ordered list of profile search paths
-   - `loadProfiles(v *viper.Viper, profileNames []string, searchPaths []string) error` - Main profile loading orchestrator
-   - `findProfileDirectory(profileName string, searchPaths []string) (string, error)` - Searches for profile across all locations
-   - `loadProfileFiles(v *viper.Viper, profileDir string) error` - Loads all YAML files from profile directory
+3. **Create shared config directory loading function:**
+   - Add `loadAtmosConfigsFromDirectory(searchPattern, dst, source)` to `pkg/config/load.go`
+   - Reuses existing `SearchAtmosConfig()` and `mergeConfigFile()` infrastructure
+   - Refactor `.atmos.d/` loading to use this shared function (see `.scratch/profiles-loading-refactor.md`)
+   - Benefits: Single source of truth, consistent behavior, better error messages
 
-4. **Implement XDG profile location support:**
+4. **Implement profile discovery and loading in `pkg/profile/`:**
+   - `pkg/profile/profile.go` - Core profile logic:
+     - `DiscoverAllProfiles(atmosConfig) ([]ProfileInfo, error)` - Find all available profiles
+     - `GetProfileDetails(atmosConfig, profileName) (*ProfileDetails, error)` - Get details for specific profile
+     - `MergeProfileConfiguration(atmosConfig, profileName) (map[string]interface{}, error)` - Load and merge profile
+   - `pkg/profile/interface.go` - Define `ProfileLoader` interface for testability
+   - Generate mocks with `//go:generate mockgen` for testing
+
+5. **Integrate profile loading into config system:**
+   - Add `LoadProfiles(v *viper.Viper, profileNames []string, atmosConfig)` to `pkg/config/profiles.go`
+   - Uses `loadAtmosConfigsFromDirectory()` for consistent loading behavior
+   - Inject profiles after `.atmos.d/` but before local `atmos.yaml` in config loading chain
+
+6. **Implement XDG profile location support:**
    - Use `pkg/xdg.GetXDGConfigDir("profiles", 0o755)` for user-global profiles
    - Respect `ATMOS_XDG_CONFIG_HOME` and `XDG_CONFIG_HOME` environment variables
 
-5. **Reuse existing `mergeDefaultImports()` pattern for profile file loading:**
-   - Lexicographic ordering of files within profile directory
-   - Deep merge semantics for configuration values
+7. **Profile file loading behavior:**
+   - Lexicographic ordering of files within profile directory (via `SearchAtmosConfig()`)
+   - Deep merge semantics for configuration values (via `mergeConfigFile()`)
+   - Recursive directory support with depth-based sorting
+   - Priority file handling (atmos.yaml loaded first)
 
-6. **Support profile inheritance via existing `import:` field processing:**
-   - Profiles can use `import:` to include other configurations
-   - Follow same merge semantics as `.atmos.d/` imports
-
-7. **Add profile precedence logic:**
+8. **Profile precedence logic:**
    - Multiple profiles: left-to-right (first profile lowest precedence)
    - Multiple locations: configurable > project-local hidden > XDG > project-local non-hidden
-
-8. **Update configuration loading flow:**
-   - Inject profiles after `.atmos.d/` but before local `atmos.yaml`
-   - Maintain precedence chain: embedded defaults → system → home → working dir → env vars → config path → `.atmos.d/` → **profiles** → local `atmos.yaml`
+   - Configuration loading chain: embedded defaults → system → home → working dir → env vars → config path → `.atmos.d/` → **profiles** → local `atmos.yaml`
 
 **Deliverables:**
-- Profile loading implementation in `pkg/config/`
-- Top-level `profiles` configuration schema
-- Flag registration using `pkg/flags` builder pattern
-- Unit tests for profile discovery and precedence
+- Shared config directory loading function in `pkg/config/load.go`
+- Profile discovery and loading package in `pkg/profile/`
+- Profile integration in `pkg/config/profiles.go`
+- Top-level `profiles` configuration schema in `pkg/schema/`
+- Global `--profile` flag in `pkg/flags/global/`
+- Unit tests for profile discovery, loading, and precedence
 - Integration tests with sample profiles
 
 #### Phase 2: Profile Management Commands & Provenance (Week 3)
@@ -1425,38 +1453,46 @@ atmos auth list identities --profile platform-admin --filter-by-profile-tags
    - Add blank import to `cmd/root.go`: `_ "github.com/cloudposse/atmos/cmd/profile"`
 
 2. **Implement `atmos profile list` subcommand:**
-   - `cmd/profile/list.go` - List all profiles across all locations
-   - **Use new theme system for table rendering:**
-     - Use `pkg/ui/theme/table.go` for lipgloss table creation
-     - Follow `cmd/theme/list.go` pattern for table styling
-     - Tables automatically adapt to terminal theme via `theme.GetCurrentTheme()`
-   - Support structured output flags via `pkg/flags` builder:
-     - `--format json|yaml` for machine-readable output
-     - Use `data.WriteJSON()` / `data.WriteYAML()` from `pkg/data`
-   - Group by location (Project, User, Custom)
-   - Show brief description if available from `_metadata.yaml`
-   - Use `ui.Success()`, `ui.Info()` for status messages
+   - `cmd/profile/list.go` - Command implementation with modern table rendering
+   - Calls `profile.DiscoverAllProfiles(atmosConfigPtr)` from `pkg/profile/`
+   - **Modern Design** (follows `cmd/version/list.go` pattern):
+     - Green dot (●) indicator for active profiles
+     - Clean lipgloss table with only header border (no borders around table)
+     - Gray text for secondary information (location column)
+     - Minimal, modern aesthetic matching `atmos version list`
+   - **Table columns:**
+     - Empty column with green dot (●) for active profiles
+     - PROFILE - Profile name
+     - DESCRIPTION - From `_metadata.yaml` or "-"
+     - LOCATION - Gray text showing "Project", "User", or "Custom"
+   - **Output handling:**
+     - Structured output: `--format json|yaml` using `data.WriteJSON()` / `data.WriteYAML()`
+     - Human output: lipgloss table to stderr, summary with `ui.Info()`
+   - **Active profile detection:**
+     - Check `--profile` flag or `ATMOS_PROFILE` env var
+     - Show green dot for currently active profiles
+     - Display count of active profiles in footer
 
 3. **Implement `atmos profile show <profile>` subcommand:**
-   - `cmd/profile/show.go` - Show detailed profile information
-   - **Use modern UI/theme patterns:**
-     - Use `pkg/ui/theme` for consistent styling and colors
-     - Tables via `theme.RenderTable()` for file listings
-     - YAML syntax highlighting via existing `u.GetHighlightedYAML()`
-     - Theme-aware color scheme automatically adapts to user's terminal theme
-   - Support flags:
-     - `--format json|yaml` - Machine-readable output
+   - `cmd/profile/show.go` - Command implementation for profile details
+   - Calls `profile.GetProfileDetails(atmosConfigPtr, profileName)` and `profile.MergeProfileConfiguration()` from `pkg/profile/`
+   - **UI/Theme integration:**
+     - Tables via lipgloss (follow `cmd/theme/show.go` pattern)
+     - YAML syntax highlighting via `u.GetHighlightedYAML()`
+     - Theme-aware styling adapts to terminal theme
+   - **Flags:**
+     - `--format json|yaml` - Structured output
      - `--files` - Show file list only
-     - `--provenance` - Show configuration value origins
-   - **Output channel usage (pkg/io and pkg/ui):**
-     - Data output (stdout): `data.WriteYAML()`, `data.WriteJSON()`
-     - UI messages (stderr): `ui.Info()`, `ui.Success()`, `ui.Write()`
-   - Respect terminal capabilities:
-     - Colors automatically degrade based on terminal support
-     - Respects `--color`, `--no-color`, `NO_COLOR` env var
-     - Width adapts to terminal size or config `max_width`
+     - `--provenance` - Show configuration value origins (future)
+   - **Output channels:**
+     - Data (stdout): `data.WriteYAML()`, `data.WriteJSON()`
+     - UI (stderr): `ui.Info()`, `ui.Success()`, `ui.Write()`
+   - **Terminal capability handling:**
+     - Automatic color degradation
+     - Respects `--color`, `--no-color`, `--force-color`, `NO_COLOR`
+     - Width adapts to terminal or config `max_width`
    - Show all locations where profile is found
-   - Display file merge order with theme-styled tables
+   - Display file merge order
 
 4. **Implement `atmos list profiles` alias command:**
    - `cmd/list_profiles.go` - Alias for consistency with other list commands
@@ -1464,40 +1500,29 @@ atmos auth list identities --profile platform-admin --filter-by-profile-tags
    - Both commands produce identical output
    - Help text cross-references the alias
 
-5. **Add provenance support to `atmos describe config`:**
-   - Add `--provenance` flag to `cmd/describe_config.go`
-   - Update `internal/exec/describe_config.go` to accept `Provenance bool` param
-   - Enable provenance tracking by setting `atmosConfig.TrackProvenance = true`
-   - Pass `MergeContext` through configuration loading when provenance enabled
-   - Render provenance using inline comments (reuse describe component pattern)
+5. **Error handling with error builder pattern:**
+   - Add profile-specific sentinel errors to `errors/errors.go`:
+     - `ErrProfileNotFound`
+     - `ErrProfileDirNotExist`
+     - `ErrProfileInvalid`
+   - Use `errUtils.Build()` pattern with `WithHintf()`, `WithContext()`, `WithExitCode()`
+   - Clear, actionable error messages with context
 
-6. **Implement profile discovery helper in `internal/exec/`:**
-   - `internal/exec/profile.go` - Profile discovery and introspection logic
-   - `DiscoverAllProfiles(atmosConfig) ([]ProfileInfo, error)`
-   - `GetProfileDetails(atmosConfig, profileName) (*ProfileDetails, error)`
-   - `MergeProfileConfiguration(profileName) (map[string]any, error)`
-   - `MergeProfileConfigurationWithContext(profileName, mergeContext) (map[string]any, error)` - For provenance tracking
-
-7. **Add comprehensive debug logging:**
-   - Use structured logging with `log` package
-   - Log profile discovery process
-   - Log file merge order
-   - Log configuration precedence
-
-8. **Enhance error messages:**
-   - Use `ui.Error()` for user-facing errors
-   - Profile not found with available profiles list
-   - Profile syntax errors with file path
-   - Profile conflicts with clear explanation
+6. **Debug logging:**
+   - Structured logging via `log` package
+   - Log profile discovery process at `log.Debug()` level
+   - Log file merge order at `log.Trace()` level
+   - Log configuration precedence decisions
 
 **Deliverables:**
-- `atmos profile` command with `list` and `show` subcommands
-- `atmos list profiles` alias command
-- `atmos describe config --provenance` enhancement
-- Profile introspection API in `internal/exec/` with provenance support
+- Profile command implementation in `cmd/profile/` (profile.go, list.go, show.go)
+- Profile discovery and loading in `pkg/profile/` with interface and mocks
+- `atmos list profiles` alias command in `cmd/list_profiles.go`
 - Theme-aware UI using `pkg/ui/theme` and `pkg/io` patterns
-- Enhanced debugging and error messages
-- Unit tests for profile commands and provenance tracking
+- Error builder pattern with profile-specific sentinel errors
+- Structured debug logging
+- Unit tests for `cmd/profile/*` commands
+- Unit tests for `pkg/profile/` logic with mocks
 - CLI integration tests with golden snapshots
 
 #### Phase 3: Documentation and Examples (Week 4)
@@ -1517,7 +1542,7 @@ atmos auth list identities --profile platform-admin --filter-by-profile-tags
 - Comprehensive documentation in `website/docs/`
 - Blog post in `website/blog/`
 - Example profile configurations in `examples/profiles/`
-- Provenance usage documentation with examples
+- Updated JSON/YAML schemas in `pkg/datafetcher/schema/`
 
 ### Error Handling
 
