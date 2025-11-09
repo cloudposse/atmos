@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -27,7 +28,8 @@ func ExecWithSpinner(progressMsg, completedMsg string, operation func() error) e
 			_ = ui.Writeln("")
 			return err
 		}
-		_ = ui.Writeln(theme.Styles.Checkmark.String())
+		checkmark := theme.GetCurrentStyles().Checkmark.String()
+		_ = ui.Writeln(checkmark)
 		return nil
 	}
 
@@ -103,18 +105,17 @@ func (m spinnerModel) View() string {
 			return ""
 		}
 		// Show completed message with checkmark.
-		// \r returns to start of line, \x1b[K clears to end of line.
-		return fmt.Sprintf("\r\x1b[K%s %s\n", theme.Styles.Checkmark.String(), m.completedMsg)
+		checkmark := theme.GetCurrentStyles().Checkmark.String()
+		return fmt.Sprintf("%s%s %s\n", terminal.EscResetLine, checkmark, m.completedMsg)
 	}
 	// Show progress message with spinner.
-	// \r returns to start of line, \x1b[K clears to end of line.
-	return fmt.Sprintf("\r\x1b[K%s %s", m.spinner.View(), m.progressMsg)
+	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), m.progressMsg)
 }
 
 func newSpinnerModel(progressMsg, completedMsg string) spinnerModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = theme.Styles.Link
+	s.Style = theme.GetCurrentStyles().Spinner
 	return spinnerModel{
 		spinner:      s,
 		progressMsg:  progressMsg,

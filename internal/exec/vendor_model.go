@@ -144,7 +144,7 @@ func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 		progress.WithoutPercentage(),
 	)
 	s := spinner.New()
-	s.Style = theme.Styles.Link
+	s.Style = theme.GetCurrentStyles().Spinner
 
 	if len(pkgs) == 0 {
 		return modelVendor{done: true}, nil

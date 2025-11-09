@@ -421,7 +421,7 @@ func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcCli
 	// Create and run the spinner.
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
+	s.Style = theme.GetCurrentStyles().Spinner
 
 	model := spinnerModel{
 		spinner:    s,

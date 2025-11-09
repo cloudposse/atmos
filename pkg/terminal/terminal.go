@@ -17,6 +17,11 @@ const (
 	escBEL = "\007"  // Bell/Alert character
 	escOSC = "\033]" // Operating System Command
 	escST  = "\007"  // String Terminator (can also be "\033\\")
+
+	// ANSI cursor control sequences.
+	EscCarriageReturn = "\r"      // Return cursor to start of line
+	EscClearLine      = "\x1b[K"  // Clear from cursor to end of line
+	EscResetLine      = "\r\x1b[K" // Return to start and clear entire line
 )
 
 // IOWriter is the interface for writing to I/O streams.

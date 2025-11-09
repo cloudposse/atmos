@@ -29,6 +29,7 @@ type StyleSet struct {
 	Command     lipgloss.Style
 	Description lipgloss.Style
 	Label       lipgloss.Style // Section labels/headers (non-status)
+	Spinner     lipgloss.Style // Loading/progress indicators
 
 	// Table styles
 	TableHeader    lipgloss.Style
@@ -116,6 +117,7 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		Command:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)),
 		Description: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextPrimary)),
 		Label:       lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)).Bold(true),
+		Spinner:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Spinner)),
 
 		// Table styles
 		TableHeader:    getTableHeaderStyle(scheme),
