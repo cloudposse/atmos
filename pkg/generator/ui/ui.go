@@ -24,16 +24,6 @@ import (
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 )
 
-// FileSkippedError indicates that a file was intentionally skipped
-type FileSkippedError struct {
-	Path         string
-	RenderedPath string
-}
-
-func (e *FileSkippedError) Error() string {
-	return fmt.Sprintf("file skipped: %s (rendered to: %s)", e.Path, e.RenderedPath)
-}
-
 // truncateString truncates a string to the specified length and adds "..." if truncated
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
@@ -171,13 +161,8 @@ func (ui *InitUI) ExecuteWithDelimiters(embedsConfig tmpl.Configuration, targetP
 		return ui.executeWithCommandValues(embedsConfig, targetPath, force, update, cmdTemplateValues)
 	}
 
-	// Load user configuration and prompt if needed
-	userConfig, err := config.LoadUserConfiguration()
-	if err != nil {
-		return fmt.Errorf("failed to load user configuration: %w", err)
-	}
-
-	return ui.executeWithUserConfig(embedsConfig, targetPath, force, update, userConfig)
+	// For templates without scaffold.yaml and no command values, use empty values
+	return ui.executeWithCommandValues(embedsConfig, targetPath, force, update, make(map[string]interface{}))
 }
 
 // ExecuteWithInteractiveFlow provides a unified flow for both init and scaffold commands
@@ -388,7 +373,7 @@ func (ui *InitUI) executeWithUserConfig(embedsConfig tmpl.Configuration, targetP
 		// Display result using proper UI output
 		if err != nil {
 			// Check if this is a FileSkippedError
-			if skipErr, ok := err.(*FileSkippedError); ok {
+			if skipErr, ok := err.(*engine.FileSkippedError); ok {
 				// File was intentionally skipped
 				ui.writeOutput("  %s %s %s\n",
 					ui.grayStyle.Render("•"),
@@ -584,7 +569,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath s
 		// Display result using proper UI output
 		if err != nil {
 			// Check if this is a FileSkippedError
-			if skipErr, ok := err.(*FileSkippedError); ok {
+			if skipErr, ok := err.(*engine.FileSkippedError); ok {
 				// File was intentionally skipped
 				ui.writeOutput("  %s %s %s\n",
 					ui.grayStyle.Render("•"),

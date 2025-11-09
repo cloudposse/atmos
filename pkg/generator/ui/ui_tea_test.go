@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 )
 
@@ -176,12 +177,12 @@ func TestSpinnerModel_View(t *testing.T) {
 
 // TestFileSkippedError tests the FileSkippedError error type.
 func TestFileSkippedError(t *testing.T) {
-	err := &FileSkippedError{
+	err := &engine.FileSkippedError{
 		Path:         "{{.Config.env}}/config.yaml",
 		RenderedPath: "production/config.yaml",
 	}
 
-	expected := "file skipped: {{.Config.env}}/config.yaml (rendered to: production/config.yaml)"
+	expected := "file skipped: {{.Config.env}}/config.yaml (rendered as: production/config.yaml)"
 	if err.Error() != expected {
 		t.Errorf("Expected %q, got %q", expected, err.Error())
 	}
