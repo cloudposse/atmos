@@ -375,13 +375,13 @@ func TestMergeErrorConfigs(t *testing.T) {
 
 func TestSetComponentBooleanOverrides(t *testing.T) {
 	tests := []struct {
-		name     string
-		global   *schema.ErrorsConfig
-		component *schema.ErrorsConfig
-		setEnabled bool
-		setDebug   bool
+		name            string
+		global          *schema.ErrorsConfig
+		component       *schema.ErrorsConfig
+		setEnabled      bool
+		setDebug        bool
 		setCaptureStack bool
-		expected *schema.ErrorsConfig
+		expected        *schema.ErrorsConfig
 	}{
 		{
 			name: "non-YAML caller disables Sentry with DSN",
@@ -399,8 +399,8 @@ func TestSetComponentBooleanOverrides(t *testing.T) {
 					Environment: "staging",
 				},
 			},
-			setEnabled:       true, // Indicate Enabled was explicitly set.
-			setDebug:         false,
+			setEnabled:      true, // Indicate Enabled was explicitly set.
+			setDebug:        false,
 			setCaptureStack: false,
 			expected: &schema.ErrorsConfig{
 				Sentry: schema.SentryConfig{
@@ -414,25 +414,25 @@ func TestSetComponentBooleanOverrides(t *testing.T) {
 			name: "non-YAML caller enables debug with other fields",
 			global: &schema.ErrorsConfig{
 				Sentry: schema.SentryConfig{
-					Enabled:     true,
-					DSN:         "https://global@sentry.io/123",
-					Debug:       false,
+					Enabled: true,
+					DSN:     "https://global@sentry.io/123",
+					Debug:   false,
 				},
 			},
 			component: &schema.ErrorsConfig{
 				Sentry: schema.SentryConfig{
-					DSN:         "https://component@sentry.io/456",
-					Debug:       true, // Explicitly enable debug.
+					DSN:   "https://component@sentry.io/456",
+					Debug: true, // Explicitly enable debug.
 				},
 			},
-			setEnabled:       false,
-			setDebug:         true, // Indicate Debug was explicitly set.
+			setEnabled:      false,
+			setDebug:        true, // Indicate Debug was explicitly set.
 			setCaptureStack: false,
 			expected: &schema.ErrorsConfig{
 				Sentry: schema.SentryConfig{
-					Enabled:     true, // Inherited from global.
-					DSN:         "https://component@sentry.io/456",
-					Debug:       true, // Component override applied.
+					Enabled: true, // Inherited from global.
+					DSN:     "https://component@sentry.io/456",
+					Debug:   true, // Component override applied.
 				},
 			},
 		},

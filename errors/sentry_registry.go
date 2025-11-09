@@ -207,9 +207,9 @@ func SetComponentBooleanOverrides(component *schema.ErrorsConfig, enabled, debug
 		return
 	}
 	componentMetadataStore[component] = componentErrorConfigWithMetadata{
-		config:                           component,
-		sentryEnabledExplicitlySet:       enabled,
-		sentryDebugExplicitlySet:          debug,
+		config:                          component,
+		sentryEnabledExplicitlySet:      enabled,
+		sentryDebugExplicitlySet:        debug,
 		sentryCaptureStackExplicitlySet: captureStackContext,
 	}
 }
