@@ -431,21 +431,105 @@ func ProcessStacks(
 		}
 
 		if foundStackCount == 0 {
-			cliConfigYaml := ""
+			// Component not found - try fallback to path resolution.
+			// If the component argument looks like it could be a path (e.g., "components/terraform/vpc"),
+			// try resolving it as a filesystem path and retry with the resolved component name.
+			log.Debug("Component not found by name, attempting path resolution fallback",
+				"component", configAndStacksInfo.ComponentFromArg,
+				"stack", configAndStacksInfo.Stack,
+			)
 
-			if atmosConfig.Logs.Level == u.LogLevelTrace {
-				y, _ := u.ConvertToYAML(atmosConfig)
-				cliConfigYaml = fmt.Sprintf("\n\n\nCLI config: %v\n", y)
+			resolvedComponent, pathErr := ResolveComponentFromPathWithoutValidation(
+				atmosConfig,
+				configAndStacksInfo.ComponentFromArg,
+				configAndStacksInfo.ComponentType,
+			)
+
+			if pathErr == nil {
+				// Path resolution succeeded - retry with resolved component name.
+				log.Debug("Path resolution succeeded, retrying with resolved component",
+					"original", configAndStacksInfo.ComponentFromArg,
+					"resolved", resolvedComponent,
+				)
+
+				// Update ComponentFromArg with resolved name and retry the loop.
+				configAndStacksInfo.ComponentFromArg = resolvedComponent
+				foundStackCount = 0
+				foundStacks = nil
+
+				for stackName := range stacksMap {
+					// Check if we've found the component in the stack.
+					err = ProcessComponentConfig(
+						&configAndStacksInfo,
+						stackName,
+						stacksMap,
+						configAndStacksInfo.ComponentType,
+						configAndStacksInfo.ComponentFromArg,
+					)
+					if err != nil {
+						continue
+					}
+
+					if atmosConfig.Stacks.NameTemplate != "" {
+						tmpl, err2 := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+						if err2 != nil {
+							continue
+						}
+						configAndStacksInfo.ContextPrefix = tmpl
+					} else if atmosConfig.Stacks.NamePattern != "" {
+						// Process context.
+						configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+
+						configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
+							configAndStacksInfo.Context,
+							GetStackNamePattern(atmosConfig),
+							stackName,
+						)
+						if err != nil {
+							continue
+						}
+					} else {
+						return configAndStacksInfo, errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml' CLI config")
+					}
+
+					configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
+					configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+
+					// Check if we've found the stack.
+					if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
+						configAndStacksInfo.StackFile = stackName
+						foundConfigAndStacksInfo = configAndStacksInfo
+						foundStackCount++
+						foundStacks = append(foundStacks, stackName)
+
+						log.Debug(
+							fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
+								configAndStacksInfo.ComponentFromArg,
+								configAndStacksInfo.Stack,
+								stackName,
+							))
+					}
+				}
 			}
 
-			return configAndStacksInfo,
-				fmt.Errorf("%w: Could not find the component `%s` in the stack `%s`.\n"+
-					"Check that all the context variables are correctly defined in the stack manifests.\n"+
-					"Are the component and stack names correct? Did you forget an import?%v",
-					errUtils.ErrInvalidComponent,
-					configAndStacksInfo.ComponentFromArg,
-					configAndStacksInfo.Stack,
-					cliConfigYaml)
+			// If still not found after path resolution attempt, return error.
+			if foundStackCount == 0 {
+				cliConfigYaml := ""
+
+				if atmosConfig.Logs.Level == u.LogLevelTrace {
+					y, _ := u.ConvertToYAML(atmosConfig)
+					cliConfigYaml = fmt.Sprintf("\n\n\nCLI config: %v\n", y)
+				}
+
+				return configAndStacksInfo,
+					fmt.Errorf("%w: Could not find the component `%s` in the stack `%s`.\n"+
+						"Check that all the context variables are correctly defined in the stack manifests.\n"+
+						"Are the component and stack names correct? Did you forget an import?%v",
+						errUtils.ErrInvalidComponent,
+						configAndStacksInfo.ComponentFromArg,
+						configAndStacksInfo.Stack,
+						cliConfigYaml)
+			}
 		} else if foundStackCount > 1 {
 			err = fmt.Errorf("%w: Found duplicate config for the component `%s` in the stack `%s` in the manifests: %v\n"+
 				"Check that all the context variables are correctly defined in the manifests and not duplicated\n"+
