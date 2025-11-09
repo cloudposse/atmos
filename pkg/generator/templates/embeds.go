@@ -3,7 +3,7 @@ package templates
 import (
 	"fmt"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/generator"
@@ -33,6 +33,7 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 	configs := make(map[string]Configuration)
 
 	// Read templates directory
+	// Note: embed.FS always uses forward slashes, even on Windows
 	templatesDir := "templates"
 	entries, err := generator.Templates.ReadDir(templatesDir)
 	if err != nil {
@@ -41,7 +42,8 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			templatePath := filepath.Join(templatesDir, entry.Name())
+			// Use path.Join (forward slashes) not filepath.Join for embed.FS
+			templatePath := path.Join(templatesDir, entry.Name())
 			config, err := loadConfiguration(templatePath)
 			if err != nil {
 				// Skip templates that can't be loaded
@@ -64,19 +66,21 @@ func loadConfiguration(templatePath string) (*Configuration, error) {
 
 	// Find README if it exists
 	var readmeContent string
-	readmePath := filepath.Join(templatePath, "README.md")
+	// Use path.Join (forward slashes) not filepath.Join for embed.FS
+	readmePath := path.Join(templatePath, "README.md")
 	if data, err := generator.Templates.ReadFile(readmePath); err == nil {
 		readmeContent = string(data)
 	}
 
 	// Default metadata
-	templateName := filepath.Base(templatePath)
+	templateName := path.Base(templatePath)
 	configName := templateName
 	configDescription := fmt.Sprintf("%s template", templateName)
 	templateID := templateName
 
 	// Try to load scaffold.yaml for metadata
-	scaffoldPath := filepath.Join(templatePath, "scaffold.yaml")
+	// Use path.Join (forward slashes) not filepath.Join for embed.FS
+	scaffoldPath := path.Join(templatePath, "scaffold.yaml")
 	if data, err := generator.Templates.ReadFile(scaffoldPath); err == nil {
 		// Parse scaffold.yaml to extract metadata (basic parsing)
 		// For now, just use defaults since we don't have full scaffold parsing
@@ -102,7 +106,8 @@ func readTemplateFiles(templatePath string) ([]File, error) {
 	}
 
 	for _, entry := range entries {
-		filePath := filepath.Join(templatePath, entry.Name())
+		// Use path.Join (forward slashes) not filepath.Join for embed.FS
+		filePath := path.Join(templatePath, entry.Name())
 
 		if entry.IsDir() {
 			// Add directory entry
@@ -122,7 +127,8 @@ func readTemplateFiles(templatePath string) ([]File, error) {
 
 			// Prepend directory path to sub-files
 			for _, subFile := range subFiles {
-				subFile.Path = filepath.Join(entry.Name(), subFile.Path)
+				// Use path.Join (forward slashes) for consistency in File.Path
+				subFile.Path = path.Join(entry.Name(), subFile.Path)
 				files = append(files, subFile)
 			}
 		} else {
