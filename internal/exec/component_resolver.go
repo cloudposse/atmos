@@ -5,10 +5,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var (
-	// componentResolver is a package-level resolver instance that uses the exec stack loader.
-	componentResolver *comp.Resolver
-)
+// componentResolver is a package-level resolver instance that uses the exec stack loader.
+var componentResolver *comp.Resolver
 
 func init() {
 	componentResolver = comp.NewResolver(NewStackLoader())
