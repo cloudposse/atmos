@@ -174,19 +174,19 @@ func TestTemplateFilenameProcessing(t *testing.T) {
 		{
 			name:         "simple namespace substitution",
 			filePath:     "{{.Config.namespace}}/config.yaml",
-			expectedPath: "production/config.yaml",
+			expectedPath: filepath.Join("production", "config.yaml"),
 			shouldError:  false,
 		},
 		{
 			name:         "nested path with multiple variables",
 			filePath:     "{{.Config.namespace}}/{{.Config.environment}}/app.yaml",
-			expectedPath: "production/staging/app.yaml",
+			expectedPath: filepath.Join("production", "staging", "app.yaml"),
 			shouldError:  false,
 		},
 		{
 			name:         "no template syntax",
 			filePath:     "static/config.yaml",
-			expectedPath: "static/config.yaml",
+			expectedPath: filepath.Join("static", "config.yaml"),
 			shouldError:  false,
 		},
 		{
@@ -204,7 +204,7 @@ func TestTemplateFilenameProcessing(t *testing.T) {
 		{
 			name:         "empty template result",
 			filePath:     "{{.Config.empty}}/config.yaml",
-			expectedPath: "<no value>/config.yaml", // This would be skipped in real usage due to empty segment
+			expectedPath: filepath.Join("<no value>", "config.yaml"), // This would be skipped in real usage due to empty segment
 			shouldError:  false,
 		},
 	}

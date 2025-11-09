@@ -3,6 +3,7 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/project/config"
@@ -445,13 +446,15 @@ func TestWriteNewFile(t *testing.T) {
 					t.Error("File was not created")
 				}
 
-				// Verify permissions
-				info, err := os.Stat(fullPath)
-				if err != nil {
-					t.Fatalf("Failed to stat file: %v", err)
-				}
-				if info.Mode().Perm() != tt.file.Permissions {
-					t.Errorf("Expected permissions %o, got %o", tt.file.Permissions, info.Mode().Perm())
+				// Verify permissions (skip on Windows where permissions work differently)
+				if runtime.GOOS != "windows" {
+					info, err := os.Stat(fullPath)
+					if err != nil {
+						t.Fatalf("Failed to stat file: %v", err)
+					}
+					if info.Mode().Perm() != tt.file.Permissions {
+						t.Errorf("Expected permissions %o, got %o", tt.file.Permissions, info.Mode().Perm())
+					}
 				}
 			}
 		})
