@@ -8,6 +8,9 @@ tests:
     description: "Test terraform plan using . to reference current directory"
     workdir: "fixtures/scenarios/complete/components/terraform/top-level-component1"
     command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../../.."
+      ATMOS_BASE_PATH: "../../.."
     args:
       - "terraform"
       - "plan"
@@ -25,6 +28,9 @@ tests:
     description: "Test terraform plan using relative path"
     workdir: "fixtures/scenarios/complete/components/terraform"
     command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../.."
+      ATMOS_BASE_PATH: "../.."
     args:
       - "terraform"
       - "plan"
@@ -42,6 +48,8 @@ tests:
     description: "Test terraform plan with component in subfolder"
     workdir: "fixtures/scenarios/complete/components/terraform/infra/vpc"
     command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../../../../.."
     args:
       - "terraform"
       - "plan"
@@ -78,6 +86,8 @@ tests:
     description: "Test error when component doesn't exist in specified stack"
     workdir: "fixtures/scenarios/complete/components/terraform/top-level-component1"
     command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../../.."
     args:
       - "terraform"
       - "plan"
@@ -96,6 +106,9 @@ tests:
     description: "Test error when path is the component base directory itself"
     workdir: "fixtures/scenarios/complete/components/terraform"
     command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../.."
+      ATMOS_BASE_PATH: "../.."
     args:
       - "terraform"
       - "plan"
@@ -115,6 +128,8 @@ tests:
     description: "Test error when using terraform component path with helmfile command"
     workdir: "fixtures/scenarios/complete/components/terraform/top-level-component1"
     command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../../.."
     args:
       - "helmfile"
       - "diff"
@@ -169,6 +184,8 @@ tests:
     description: "Test describe component using . to reference current directory"
     workdir: "fixtures/scenarios/complete/components/terraform/top-level-component1"
     command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../../.."
     args:
       - "describe"
       - "component"
@@ -185,6 +202,9 @@ tests:
     description: "Test describe component using relative path"
     workdir: "fixtures/scenarios/complete/components/terraform"
     command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../.."
+      ATMOS_BASE_PATH: "../.."
     args:
       - "describe"
       - "component"
@@ -201,6 +221,8 @@ tests:
     description: "Test describe component with component in subfolder"
     workdir: "fixtures/scenarios/complete/components/terraform/infra/vpc"
     command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../../../../.."
     args:
       - "describe"
       - "component"
@@ -252,6 +274,8 @@ tests:
     description: "Test validate component using . to reference current directory"
     workdir: "fixtures/scenarios/complete/components/terraform/top-level-component1"
     command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../../.."
     args:
       - "validate"
       - "component"
@@ -268,6 +292,9 @@ tests:
     description: "Test validate component using relative path"
     workdir: "fixtures/scenarios/complete/components/terraform"
     command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../.."
+      ATMOS_BASE_PATH: "../.."
     args:
       - "validate"
       - "component"

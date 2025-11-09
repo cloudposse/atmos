@@ -58,6 +58,9 @@ tests:
     description: "Test that directory completion is enabled for path input"
     workdir: "fixtures/scenarios/completions"
     command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_BASE_PATH: "."
     args:
       - "__completeNoDesc"
       - "terraform"
@@ -75,6 +78,9 @@ tests:
     description: "Test directory completion for current directory"
     workdir: "fixtures/scenarios/completions"
     command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_BASE_PATH: "."
     args:
       - "__completeNoDesc"
       - "terraform"
