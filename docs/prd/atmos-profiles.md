@@ -355,21 +355,7 @@ logs:
 
 **FR5.10**: `atmos describe config` MUST support `--provenance` flag to show where configuration values originated (including active profiles)
 
-**FR5.11**: `atmos describe config` MUST show currently active profiles in output
-
-**FR5.12**: `atmos describe config` with active profiles MUST show:
-```yaml
-# Active profiles: developer, debug
-active_profiles:
-  - name: developer
-    locations:
-      - /infrastructure/atmos/.atmos/profiles/developer
-  - name: debug
-    locations:
-      - ~/.config/atmos/profiles/debug
-```
-
-**FR5.13**: Debug logging (`--logs-level trace`) MUST show profile loading details:
+**FR5.11**: Debug logging (`--logs-level trace`) MUST show profile loading details:
 - Which profiles are being loaded
 - From which locations
 - File merge order
@@ -1492,18 +1478,13 @@ atmos auth list identities --profile platform-admin --filter-by-profile-tags
    - `MergeProfileConfiguration(profileName) (map[string]any, error)`
    - `MergeProfileConfigurationWithContext(profileName, mergeContext) (map[string]any, error)` - For provenance tracking
 
-7. **Update `atmos describe config`:**
-   - Add `active_profiles` section to output
-   - Show profile names and locations
-   - Use theme-aware formatting for consistency
-
-8. **Add comprehensive debug logging:**
+7. **Add comprehensive debug logging:**
    - Use structured logging with `log` package
    - Log profile discovery process
    - Log file merge order
    - Log configuration precedence
 
-9. **Enhance error messages:**
+8. **Enhance error messages:**
    - Use `ui.Error()` for user-facing errors
    - Profile not found with available profiles list
    - Profile syntax errors with file path
@@ -1515,7 +1496,6 @@ atmos auth list identities --profile platform-admin --filter-by-profile-tags
 - `atmos describe config --provenance` enhancement
 - Profile introspection API in `internal/exec/` with provenance support
 - Theme-aware UI using `pkg/ui/theme` and `pkg/io` patterns
-- Updated `describe config` with profile information
 - Enhanced debugging and error messages
 - Unit tests for profile commands and provenance tracking
 - CLI integration tests with golden snapshots
