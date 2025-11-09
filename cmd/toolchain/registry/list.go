@@ -24,9 +24,7 @@ const (
 	columnWidthType  = 15
 )
 
-var (
-	listParser *flags.StandardParser
-)
+var listParser *flags.StandardParser
 
 // listCmd represents the 'toolchain registry list' command.
 var listCmd = &cobra.Command{

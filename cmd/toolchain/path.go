@@ -8,9 +8,7 @@ import (
 	"github.com/cloudposse/atmos/toolchain"
 )
 
-var (
-	pathParser *flags.StandardParser
-)
+var pathParser *flags.StandardParser
 
 var pathCmd = &cobra.Command{
 	Use:   "path",

@@ -8,9 +8,7 @@ import (
 	"github.com/cloudposse/atmos/toolchain"
 )
 
-var (
-	getParser *flags.StandardParser
-)
+var getParser *flags.StandardParser
 
 var getCmd = &cobra.Command{
 	Use:   "get [tool]",

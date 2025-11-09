@@ -24,9 +24,7 @@ const (
 	columnWidthToolRegistry = 20
 )
 
-var (
-	searchParser *flags.StandardParser
-)
+var searchParser *flags.StandardParser
 
 // searchCmd represents the 'toolchain registry search' command.
 var searchCmd = &cobra.Command{

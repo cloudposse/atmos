@@ -17,10 +17,8 @@ import (
 	toolchainpkg "github.com/cloudposse/atmos/toolchain"
 )
 
-var (
-	// ToolchainParser handles flag parsing for toolchain persistent flags.
-	toolchainParser *flags.StandardParser
-)
+// ToolchainParser handles flag parsing for toolchain persistent flags.
+var toolchainParser *flags.StandardParser
 
 // SetAtmosConfig sets the Atmos configuration for the toolchain command.
 // This is called from root.go after atmosConfig is initialized.
