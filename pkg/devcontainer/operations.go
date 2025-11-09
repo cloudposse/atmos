@@ -13,6 +13,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
+const (
+	// defaultContainerStopTimeout is the default timeout for stopping containers.
+	defaultContainerStopTimeout = 10 * time.Second
+)
+
 // containerParams holds parameters for container operations.
 type containerParams struct {
 	ctx           context.Context
@@ -93,7 +98,7 @@ func stopContainerIfRunning(ctx context.Context, runtime container.Runtime, cont
 		fmt.Sprintf("Stopping container %s", containerInfo.Name),
 		fmt.Sprintf("Stopped container %s", containerInfo.Name),
 		func() error {
-			if err := runtime.Stop(ctx, containerInfo.ID, 10*time.Second); err != nil {
+			if err := runtime.Stop(ctx, containerInfo.ID, defaultContainerStopTimeout); err != nil {
 				return fmt.Errorf("%w: failed to stop container: %w", errUtils.ErrContainerRuntimeOperation, err)
 			}
 			return nil

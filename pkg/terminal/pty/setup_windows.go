@@ -13,6 +13,8 @@ import (
 // Returns a cleanup function that must be called when done.
 // Note: Windows doesn't support SIGWINCH for resize handling.
 func setupTerminal(ptmx *os.File) (func(), error) {
+	_ = ptmx // ptmx is used in Unix implementation but not needed on Windows
+
 	// Set terminal to raw mode (only if stdin is a TTY).
 	var oldState *term.State
 	var err error

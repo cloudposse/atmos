@@ -1462,7 +1462,7 @@ When you find command-specific functions in `internal/exec/`:
 ### Benefits of Plugin-Ready Architecture
 
 **Before (scattered logic):**
-```
+```text
 cmd/devcontainer/start.go           # Cobra command definition
 cmd/devcontainer/stop.go            # Cobra command definition
 cmd/devcontainer/attach.go          # Cobra command definition
@@ -1472,7 +1472,7 @@ internal/exec/devcontainer_identity.go # Identity logic (~214 lines)
 ```
 
 **After (plugin-ready with pkg/):**
-```
+```text
 pkg/devcontainer/
 ├── lifecycle.go      # Reusable business logic (Start, Stop, Attach, etc.)
 ├── operations.go     # Helper operations (container management)

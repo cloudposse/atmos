@@ -416,7 +416,7 @@ atmos devcontainer exec geodesic --pty -- echo test
 
 The following are **explicitly out of scope** for the initial implementation:
 
-1. **Terminal size handling** - No SIGWINCH signal handling
+1. **Terminal size handling** - SIGWINCH signal handling is implemented via pty.InheritSize for Unix-like systems (see pkg/terminal/pty/setup_unix.go); edge cases may still exist for complex resize scenarios
 2. **Advanced signal forwarding** - Basic signals only (Ctrl+C)
 3. **Terminal state management** - No raw mode terminal state handling
 4. **Configuration in atmos.yaml** - Flag-only for now
