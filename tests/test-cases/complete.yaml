@@ -45,5 +45,6 @@ tests:
     expect:
       diff: []
       stderr:
-        - "command has no steps or subcommands configured"
+        - "# Invalid Command"
+        - "\\*\\*Error:\\*\\* The atmos invalidCommand command has no steps or subcommands"
       exit_code: 1
