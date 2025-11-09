@@ -13,8 +13,12 @@ terraform {
 }
 
 # Main resource configuration
+# S3 bucket naming rules:
+# - Must be 3-63 characters
+# - Lowercase letters, numbers, hyphens only
+# - No consecutive hyphens, no leading/trailing hyphens
 resource "aws_s3_bucket" "main" {
-  bucket = "{{ .Config.project_name }}-{{ .Config.environment }}"
+  bucket = "{{ .Config.project_name | lower | regexReplaceAll `[^a-z0-9-]` `-` | regexReplaceAll `-+` `-` | strings.TrimPrefix `-` | strings.TrimSuffix `-` | strings.Trunc 50 }}-{{ .Config.environment | lower | regexReplaceAll `[^a-z0-9-]` `-` | regexReplaceAll `-+` `-` | strings.TrimPrefix `-` | strings.TrimSuffix `-` }}"
 
   tags = {
     Name        = "{{ .Config.project_name }}"
