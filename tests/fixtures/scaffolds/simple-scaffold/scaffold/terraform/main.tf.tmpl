@@ -18,7 +18,7 @@ terraform {
 # - Lowercase letters, numbers, hyphens only
 # - No consecutive hyphens, no leading/trailing hyphens
 resource "aws_s3_bucket" "main" {
-  bucket = "{{ .Config.project_name | lower | regexReplaceAll `[^a-z0-9-]` `-` | regexReplaceAll `-+` `-` | strings.TrimPrefix `-` | strings.TrimSuffix `-` | strings.Trunc 50 }}-{{ .Config.environment | lower | regexReplaceAll `[^a-z0-9-]` `-` | regexReplaceAll `-+` `-` | strings.TrimPrefix `-` | strings.TrimSuffix `-` }}"
+  bucket = "{{ printf \"%s-%s\" (.Config.project_name | lower | regexReplaceAll `[^a-z0-9-]` `-` | regexReplaceAll `-+` `-` | strings.TrimPrefix `-` | strings.TrimSuffix `-` | strings.Trunc 31) (.Config.environment | lower | regexReplaceAll `[^a-z0-9-]` `-` | regexReplaceAll `-+` `-` | strings.TrimPrefix `-` | strings.TrimSuffix `-` | strings.Trunc 31) | regexReplaceAll `^-+` `` | regexReplaceAll `-+` `-` | regexReplaceAll `-$` `` }}"
 
   tags = {
     Name        = "{{ .Config.project_name }}"
