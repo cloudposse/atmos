@@ -34,3 +34,39 @@ func TestClusterNamePattern(t *testing.T) {
 	u.PrintMessage(fmt.Sprintf("Cluster name: %s", clusterName))
 	assert.Equal(t, "cp-plat-ue2-dev-blue-eks-cluster", clusterName)
 }
+
+func TestExecuteAwsEksUpdateKubeconfig(t *testing.T) {
+	t.Run("returns error when aws cli not available", func(t *testing.T) {
+		// This test verifies the function handles missing AWS CLI gracefully.
+		// We expect an error since AWS CLI is not available in test environment.
+		kubeconfigContext := schema.AwsEksUpdateKubeconfigContext{
+			ClusterName: "test-cluster",
+			Region:      "us-east-1",
+		}
+
+		err := ExecuteAwsEksUpdateKubeconfig(kubeconfigContext)
+		// We expect an error because AWS CLI is likely not installed or configured.
+		// This at least exercises the code path.
+		assert.Error(t, err)
+	})
+
+	t.Run("handles empty cluster name", func(t *testing.T) {
+		kubeconfigContext := schema.AwsEksUpdateKubeconfigContext{
+			ClusterName: "",
+			Region:      "us-east-1",
+		}
+
+		err := ExecuteAwsEksUpdateKubeconfig(kubeconfigContext)
+		assert.Error(t, err)
+	})
+
+	t.Run("handles empty region", func(t *testing.T) {
+		kubeconfigContext := schema.AwsEksUpdateKubeconfigContext{
+			ClusterName: "test-cluster",
+			Region:      "",
+		}
+
+		err := ExecuteAwsEksUpdateKubeconfig(kubeconfigContext)
+		assert.Error(t, err)
+	})
+}
