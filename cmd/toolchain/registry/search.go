@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -178,4 +179,31 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 
 	// Print table.
 	fmt.Println(t.View())
+}
+
+// SearchCommandProvider implements the CommandProvider interface.
+type SearchCommandProvider struct{}
+
+func (s *SearchCommandProvider) GetCommand() *cobra.Command {
+	return searchCmd
+}
+
+func (s *SearchCommandProvider) GetName() string {
+	return "search"
+}
+
+func (s *SearchCommandProvider) GetGroup() string {
+	return "Toolchain Commands"
+}
+
+func (s *SearchCommandProvider) GetFlagsBuilder() flags.Builder {
+	return searchParser
+}
+
+func (s *SearchCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (s *SearchCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }

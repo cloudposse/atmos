@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/toolchain"
 )
 
@@ -47,4 +48,31 @@ func init() {
 	if err := pathParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+}
+
+// PathCommandProvider implements the CommandProvider interface.
+type PathCommandProvider struct{}
+
+func (p *PathCommandProvider) GetCommand() *cobra.Command {
+	return pathCmd
+}
+
+func (p *PathCommandProvider) GetName() string {
+	return "path"
+}
+
+func (p *PathCommandProvider) GetGroup() string {
+	return "Toolchain Commands"
+}
+
+func (p *PathCommandProvider) GetFlagsBuilder() flags.Builder {
+	return pathParser
+}
+
+func (p *PathCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (p *PathCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }

@@ -6,6 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/xdg"
 	"github.com/cloudposse/atmos/toolchain"
 )
@@ -28,4 +30,31 @@ var cleanCmd = &cobra.Command{
 		tempCacheDir := filepath.Join(os.TempDir(), "atmos-toolchain-cache")
 		return toolchain.CleanToolsAndCaches(toolsDir, cacheDir, tempCacheDir)
 	},
+}
+
+// CleanCommandProvider implements the CommandProvider interface.
+type CleanCommandProvider struct{}
+
+func (c *CleanCommandProvider) GetCommand() *cobra.Command {
+	return cleanCmd
+}
+
+func (c *CleanCommandProvider) GetName() string {
+	return "clean"
+}
+
+func (c *CleanCommandProvider) GetGroup() string {
+	return "Toolchain Commands"
+}
+
+func (c *CleanCommandProvider) GetFlagsBuilder() flags.Builder {
+	return nil
+}
+
+func (c *CleanCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (c *CleanCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }

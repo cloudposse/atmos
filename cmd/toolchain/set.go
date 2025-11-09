@@ -3,6 +3,8 @@ package toolchain
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/toolchain"
 )
 
@@ -19,4 +21,31 @@ var setCmd = &cobra.Command{
 		}
 		return toolchain.SetToolVersion(toolName, version, 0)
 	},
+}
+
+// SetCommandProvider implements the CommandProvider interface.
+type SetCommandProvider struct{}
+
+func (s *SetCommandProvider) GetCommand() *cobra.Command {
+	return setCmd
+}
+
+func (s *SetCommandProvider) GetName() string {
+	return "set"
+}
+
+func (s *SetCommandProvider) GetGroup() string {
+	return "Toolchain Commands"
+}
+
+func (s *SetCommandProvider) GetFlagsBuilder() flags.Builder {
+	return nil
+}
+
+func (s *SetCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (s *SetCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/toolchain"
 )
 
@@ -41,4 +42,31 @@ func init() {
 	if err := infoParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+}
+
+// InfoCommandProvider implements the CommandProvider interface.
+type InfoCommandProvider struct{}
+
+func (i *InfoCommandProvider) GetCommand() *cobra.Command {
+	return infoCmd
+}
+
+func (i *InfoCommandProvider) GetName() string {
+	return "info"
+}
+
+func (i *InfoCommandProvider) GetGroup() string {
+	return "Toolchain Commands"
+}
+
+func (i *InfoCommandProvider) GetFlagsBuilder() flags.Builder {
+	return infoParser
+}
+
+func (i *InfoCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (i *InfoCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }

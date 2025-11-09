@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/toolchain"
 )
 
@@ -51,4 +52,31 @@ func init() {
 	if err := getParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+}
+
+// GetCommandProvider implements the CommandProvider interface.
+type GetCommandProvider struct{}
+
+func (g *GetCommandProvider) GetCommand() *cobra.Command {
+	return getCmd
+}
+
+func (g *GetCommandProvider) GetName() string {
+	return "get"
+}
+
+func (g *GetCommandProvider) GetGroup() string {
+	return "Toolchain Commands"
+}
+
+func (g *GetCommandProvider) GetFlagsBuilder() flags.Builder {
+	return getParser
+}
+
+func (g *GetCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (g *GetCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }

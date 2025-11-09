@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -187,4 +188,31 @@ func displayToolsTable(tools []*toolchainregistry.Tool) {
 
 	// Print table.
 	fmt.Println(t.View())
+}
+
+// ListCommandProvider implements the CommandProvider interface.
+type ListCommandProvider struct{}
+
+func (l *ListCommandProvider) GetCommand() *cobra.Command {
+	return listCmd
+}
+
+func (l *ListCommandProvider) GetName() string {
+	return "list"
+}
+
+func (l *ListCommandProvider) GetGroup() string {
+	return "Toolchain Commands"
+}
+
+func (l *ListCommandProvider) GetFlagsBuilder() flags.Builder {
+	return listParser
+}
+
+func (l *ListCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (l *ListCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }

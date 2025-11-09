@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/toolchain"
 )
 
@@ -55,4 +56,31 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	defaultVersion := v.GetBool("default")
 
 	return toolchain.RunInstall(toolSpec, defaultVersion, reinstall)
+}
+
+// InstallCommandProvider implements the CommandProvider interface.
+type InstallCommandProvider struct{}
+
+func (i *InstallCommandProvider) GetCommand() *cobra.Command {
+	return installCmd
+}
+
+func (i *InstallCommandProvider) GetName() string {
+	return "install"
+}
+
+func (i *InstallCommandProvider) GetGroup() string {
+	return "Toolchain Commands"
+}
+
+func (i *InstallCommandProvider) GetFlagsBuilder() flags.Builder {
+	return installParser
+}
+
+func (i *InstallCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (i *InstallCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }

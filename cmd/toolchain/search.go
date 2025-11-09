@@ -4,6 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	registrycmd "github.com/cloudposse/atmos/cmd/toolchain/registry"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 // searchAliasCmd is an alias to 'toolchain registry search'.
@@ -28,4 +30,31 @@ Results are sorted by relevance score.`,
 		// Call the RunE function directly instead of Execute() to avoid recursion.
 		return searchCmd.RunE(searchCmd, args)
 	},
+}
+
+// SearchCommandProvider implements the CommandProvider interface.
+type SearchCommandProvider struct{}
+
+func (s *SearchCommandProvider) GetCommand() *cobra.Command {
+	return searchAliasCmd
+}
+
+func (s *SearchCommandProvider) GetName() string {
+	return "search"
+}
+
+func (s *SearchCommandProvider) GetGroup() string {
+	return "Toolchain Commands"
+}
+
+func (s *SearchCommandProvider) GetFlagsBuilder() flags.Builder {
+	return nil
+}
+
+func (s *SearchCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (s *SearchCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }
