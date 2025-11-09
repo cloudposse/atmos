@@ -1,5 +1,3 @@
-const fetch = require('node-fetch');
-
 async function fetchLatestRelease() {
   const headers = {
     'Accept': 'application/vnd.github.v3+json'

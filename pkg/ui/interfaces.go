@@ -4,6 +4,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // Formatter provides text formatting with automatic degradation.
@@ -44,7 +45,7 @@ type Formatter interface {
 	Label(text string) string   // Returns label-styled text
 
 	// Theme access
-	Styles() *StyleSet // Access to full StyleSet
+	Styles() *theme.StyleSet // Access to full theme-aware StyleSet
 
 	// Capability queries (delegates to terminal.Terminal)
 	ColorProfile() terminal.ColorProfile
@@ -53,25 +54,4 @@ type Formatter interface {
 	// Markdown rendering - returns rendered markdown string (pure function, no I/O)
 	// For writing markdown to channels, use package-level ui.Markdown() or ui.MarkdownMessage()
 	Markdown(content string) (string, error)
-}
-
-// StyleSet provides pre-configured lipgloss styles for common UI elements.
-// This is a simplified version that will be replaced by PR #1433's full theme system.
-type StyleSet struct {
-	// Text styles
-	Title   lipgloss.Style
-	Heading lipgloss.Style
-	Body    lipgloss.Style
-	Muted   lipgloss.Style
-
-	// Status styles
-	Success lipgloss.Style
-	Warning lipgloss.Style
-	Error   lipgloss.Style
-	Info    lipgloss.Style
-
-	// UI element styles
-	Link    lipgloss.Style
-	Command lipgloss.Style
-	Label   lipgloss.Style
 }

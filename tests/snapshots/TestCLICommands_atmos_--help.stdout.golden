@@ -24,6 +24,7 @@ Available Commands:
   pro                            Access premium features integrated with atmos-pro.com
   support                        Show Atmos support options
   terraform                      Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
+  theme                          Manage terminal themes for Atmos CLI
   toolchain                      Toolchain CLI
   validate                       Validate configurations against OPA policies and JSON schemas
   vendor                         Manage external dependencies for components or stacks
@@ -122,5 +123,6 @@ Flags:
 
 
 Use atmos [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+
 
 

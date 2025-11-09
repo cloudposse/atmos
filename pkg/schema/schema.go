@@ -239,6 +239,7 @@ type Terminal struct {
 	Title              bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
 	Alerts             bool               `yaml:"alerts,omitempty" json:"alerts,omitempty" mapstructure:"alerts"`
 	Mask               MaskSettings       `yaml:"mask,omitempty" json:"mask,omitempty" mapstructure:"mask"`
+	Theme              string             `yaml:"theme,omitempty" json:"theme,omitempty" mapstructure:"theme"`
 }
 
 // MaskSettings contains configuration for sensitive data masking.
