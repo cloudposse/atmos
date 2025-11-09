@@ -172,6 +172,74 @@ jobs:
         run: atmos terraform apply my-component -s prod
 ```
 
+### Service Principals for Automation
+
+Service principals provide non-interactive authentication for automated workflows, CI/CD pipelines, and scheduled jobs:
+
+```yaml
+auth:
+  providers:
+    azure-automation:
+      kind: azure/service-principal
+      tenant_id: "YOUR_TENANT_ID"
+      client_id: "YOUR_SERVICE_PRINCIPAL_CLIENT_ID"
+      subscription_id: "YOUR_SUBSCRIPTION_ID"
+      location: "eastus"
+
+  identities:
+    azure-automation-prod:
+      kind: azure/subscription
+      via:
+        provider: azure-automation
+      principal:
+        subscription_id: "YOUR_SUBSCRIPTION_ID"
+```
+
+**Create a service principal:**
+```bash
+# Create service principal and assign Contributor role
+az ad sp create-for-rbac \
+  --name "atmos-automation" \
+  --role Contributor \
+  --scopes /subscriptions/YOUR_SUBSCRIPTION_ID
+
+# Output includes:
+# {
+#   "appId": "YOUR_CLIENT_ID",
+#   "displayName": "atmos-automation",
+#   "password": "YOUR_CLIENT_SECRET",
+#   "tenant": "YOUR_TENANT_ID"
+# }
+```
+
+**Authenticate using environment variables:**
+```bash
+# Set credentials in environment
+export AZURE_CLIENT_ID="YOUR_CLIENT_ID"
+export AZURE_CLIENT_SECRET="YOUR_CLIENT_SECRET"
+export AZURE_TENANT_ID="YOUR_TENANT_ID"
+export AZURE_SUBSCRIPTION_ID="YOUR_SUBSCRIPTION_ID"
+
+# Authenticate
+atmos auth login --identity azure-automation-prod
+
+# Run Terraform
+atmos terraform apply my-component -s prod
+```
+
+**Common use cases:**
+- **Scheduled Jobs**: Cron jobs or Azure DevOps scheduled pipelines
+- **CI/CD Pipelines**: Jenkins, GitLab CI, CircleCI (when OIDC not available)
+- **Automation Scripts**: Python/Go scripts for infrastructure management
+- **Multi-tenant SaaS**: Isolated credentials per customer environment
+
+**Security best practices:**
+- Store `client_secret` in secure secret management (Azure Key Vault, HashiCorp Vault)
+- Use least-privilege RBAC roles (avoid Owner, prefer specific roles like Network Contributor)
+- Rotate credentials regularly (90-day rotation recommended)
+- Use certificate-based authentication for production (more secure than secrets)
+- Prefer OIDC over service principals when available (passwordless)
+
 ## Multi-Subscription Workflows
 
 Work with multiple Azure subscriptions seamlessly:
