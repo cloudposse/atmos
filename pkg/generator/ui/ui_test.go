@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	atmosui "github.com/cloudposse/atmos/pkg/ui"
 )
 
 // createTestUI creates a UI instance with I/O for testing.
@@ -21,6 +22,9 @@ func createTestUI(t *testing.T) *InitUI {
 	if err != nil {
 		t.Fatalf("Failed to create I/O context: %v", err)
 	}
+
+	// Initialize UI formatter with I/O context
+	atmosui.InitFormatter(ioCtx)
 
 	// Create terminal with I/O
 	termWriter := iolib.NewTerminalWriter(ioCtx)
