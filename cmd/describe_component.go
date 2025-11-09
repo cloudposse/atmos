@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -11,6 +12,7 @@ import (
 	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // describeComponentCmd describes configuration for components
@@ -88,22 +90,14 @@ var describeComponentCmd = &cobra.Command{
 
 		// Resolve path-based component arguments to component names
 		if needsPathResolution {
-			if stack == "" {
-				return errors.New("--stack flag is required when using path-based component resolution")
-			}
-
-			// We don't know the component type yet - describe component detects it
-			// So we'll try to resolve the path without component type validation
-			// The component type will be validated during ExecuteDescribeComponent
-			resolvedComponent, err := e.ResolveComponentFromPathWithoutTypeCheck(
-				&atmosConfig,
-				component,
-				stack,
-			)
+			// We don't know the component type yet - describe component detects it.
+			// Extract component info from path without type checking or stack validation.
+			// Stack validation will happen later in ExecuteDescribeComponent.
+			componentInfo, err := u.ExtractComponentInfoFromPath(&atmosConfig, component)
 			if err != nil {
-				return err
+				return fmt.Errorf("path resolution failed: %w", err)
 			}
-			component = resolvedComponent
+			component = componentInfo.FullComponent
 		}
 
 		// Get identity from flag and create AuthManager if provided.

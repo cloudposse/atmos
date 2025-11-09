@@ -430,7 +430,14 @@ func ProcessStacks(
 			return configAndStacksInfo, nil
 		}
 
-		if foundStackCount == 0 {
+		// Only attempt path resolution fallback if the component argument contains path separators.
+		// This prevents treating plain component names (like "vpc") as relative paths, which would
+		// incorrectly resolve them from the current working directory.
+		// Examples that should trigger fallback: "components/terraform/vpc", "infra/vpc"
+		// Examples that should NOT trigger fallback: "vpc", "top-level-component1"
+		shouldAttemptPathResolution := foundStackCount == 0 && strings.Contains(configAndStacksInfo.ComponentFromArg, string(filepath.Separator))
+
+		if shouldAttemptPathResolution {
 			// Component not found - try fallback to path resolution.
 			// If the component argument looks like it could be a path (e.g., "components/terraform/vpc"),
 			// try resolving it as a filesystem path and retry with the resolved component name.

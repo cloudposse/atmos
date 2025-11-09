@@ -236,18 +236,18 @@ tests:
     enabled: true
     snapshot: true
     description: "Test error when path is outside component directories"
-    workdir: "/tmp"
+    workdir: "fixtures/scenarios/complete"
     command: "atmos"
     args:
       - "describe"
       - "component"
-      - "."
+      - "/tmp"
       - "--stack"
       - "tenant1-ue2-dev"
     expect:
       diff: []
       stderr:
-        - "path is not within Atmos component directories"
+        - "path is not within"
       exit_code: 1
 
   - name: describe component with component name (backward compatibility)
