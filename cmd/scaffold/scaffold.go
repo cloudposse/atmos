@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/project/config"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 )
@@ -26,6 +27,9 @@ import (
 var scaffoldSchemaData string
 
 var scaffoldGenerateParser *flags.StandardParser
+
+// Valid prompt types for scaffold configuration.
+var validPromptTypes = []string{"input", "select", "confirm", "multiselect"}
 
 // ScaffoldConfig represents a scaffold configuration.
 type ScaffoldConfig struct {
@@ -93,6 +97,22 @@ If no target directory is specified, you will be prompted for one.`,
 
 		// Parse string map from --set flags
 		templateValuesMap := flags.ParseStringMap(v, "set")
+
+		// Validate --set flags were properly formatted
+		// Get raw flag values to check for malformed entries
+		if cmd.Flags().Changed("set") {
+			rawSetFlags, _ := cmd.Flags().GetStringSlice("set")
+			for _, entry := range rawSetFlags {
+				if !strings.Contains(entry, "=") {
+					log.Warn("Malformed --set flag ignored (missing '='): " + entry)
+				} else {
+					parts := strings.SplitN(entry, "=", 2)
+					if strings.TrimSpace(parts[0]) == "" {
+						log.Warn("Malformed --set flag ignored (empty key): " + entry)
+					}
+				}
+			}
+		}
 
 		// Convert map[string]string to map[string]interface{} for template engine
 		templateValues := make(map[string]interface{})
@@ -487,8 +507,16 @@ func validateScaffoldFile(scaffoldPath string) error {
 		if prompt.Type == "" {
 			return fmt.Errorf("prompt %d: type is required", i)
 		}
-		if prompt.Type != "input" && prompt.Type != "select" && prompt.Type != "confirm" && prompt.Type != "multiselect" {
-			return fmt.Errorf("prompt %d: invalid type '%s'", i, prompt.Type)
+		// Validate prompt type using validPromptTypes constant
+		valid := false
+		for _, validType := range validPromptTypes {
+			if prompt.Type == validType {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return fmt.Errorf("prompt %d: invalid type '%s' (must be one of: %s)", i, prompt.Type, strings.Join(validPromptTypes, ", "))
 		}
 	}
 
