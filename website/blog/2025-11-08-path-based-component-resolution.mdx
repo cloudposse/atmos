@@ -1,0 +1,100 @@
+---
+slug: path-based-component-resolution
+title: "Path-Based Component Resolution for Terraform, Helmfile, Packer, Describe, and Validate Commands"
+authors: [osterman]
+tags: [feature, terraform, helmfile, packer, ux]
+date: 2025-11-08
+---
+
+Atmos now supports using filesystem paths instead of component names for all component commands. Navigate to any component directory and use `.` to reference it - no need to remember exact component names.
+
+<!--truncate-->
+
+## What's New
+
+You can now use filesystem paths with all component-related commands:
+
+```bash
+# Navigate to component directory
+cd components/terraform/vpc
+
+# Use . to reference current directory
+atmos terraform plan . --stack dev
+atmos describe component . --stack dev
+atmos validate component . --stack dev
+```
+
+This works with all Terraform, Helmfile, and Packer commands that accept a component argument.
+
+## Supported Path Formats
+
+- **`.`** - Current directory
+- **`./component`** - Relative path from current directory
+- **`../other-component`** - Relative path to sibling directory
+- **`/absolute/path/to/component`** - Absolute path
+
+## Features
+
+- **Auto-detection** - Atmos automatically detects component type (terraform/helmfile/packer) from the filesystem path
+- **Stack validation** - Validates the component exists in the specified stack configuration
+- **Tab completion** - Shell completion works with both paths and component names
+- **Error handling** - Clear error messages when paths can't be resolved
+
+## Examples
+
+### Terraform Commands
+
+```bash
+cd components/terraform/vpc
+atmos terraform plan . --stack dev
+atmos terraform apply . --stack prod
+atmos terraform output . --stack staging
+```
+
+### Describe Component
+
+```bash
+cd components/terraform/infra/vpc
+atmos describe component . --stack dev
+atmos describe component . --stack dev --format json
+atmos describe component . --stack dev --provenance
+```
+
+### Validate Component
+
+```bash
+cd components/terraform/vpc
+atmos validate component . --stack dev
+atmos validate component . --stack dev --schema-path vpc-schema.json --schema-type jsonschema
+```
+
+### Helmfile Commands
+
+```bash
+cd components/helmfile/my-app
+atmos helmfile diff . --stack dev
+atmos helmfile apply . --stack prod
+```
+
+## Backward Compatibility
+
+All existing component name syntax continues to work unchanged:
+
+```bash
+# Traditional component names still work
+atmos terraform plan vpc --stack dev
+atmos terraform plan infra/vpc --stack dev
+```
+
+## Requirements
+
+- Must be inside a component directory under the configured base path
+- Must specify `--stack` flag when using paths
+- Component must exist in the specified stack configuration
+
+## Documentation
+
+For more details, see:
+- [Terraform Commands](/cli/commands/terraform/usage)
+- [Describe Component](/cli/commands/describe/describe-component)
+- [Validate Component](/cli/commands/validate/validate-component)

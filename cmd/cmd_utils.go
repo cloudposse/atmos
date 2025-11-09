@@ -696,6 +696,38 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
+
+	// Resolve path-based component arguments to component names
+	if info.NeedsPathResolution && info.ComponentFromArg != "" {
+		atmosConfig, err := cfg.InitCliConfig(info, true)
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err), "", "")
+		}
+
+		resolvedComponent, err := e.ResolveComponentFromPath(
+			&atmosConfig,
+			info.ComponentFromArg,
+			info.Stack,
+			commandName, // Component type is the command name (terraform, helmfile, packer)
+		)
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(
+				fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err),
+				"",
+				fmt.Sprintf("Hint: Make sure the path is within your component directories and the component exists in stack '%s'", info.Stack),
+			)
+		}
+
+		log.Debug("Resolved component from path",
+			"original_path", info.ComponentFromArg,
+			"resolved_component", resolvedComponent,
+			"stack", info.Stack,
+		)
+
+		info.ComponentFromArg = resolvedComponent
+		info.NeedsPathResolution = false // Mark as resolved
+	}
+
 	return info
 }
 
@@ -779,7 +811,49 @@ func showUsageExample(cmd *cobra.Command, details string) {
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// If a component was provided as the first argument, filter stacks by that component.
 	if len(args) > 0 && args[0] != "" {
-		output, err := listStacksForComponent(args[0])
+		component := args[0]
+
+		// Check if argument is a path that needs resolution
+		// Paths are: ".", or contain path separators
+		if component == "." || strings.Contains(component, string(filepath.Separator)) {
+			// Attempt to resolve path to component name for stack filtering
+			// Use silent error handling - if resolution fails, just list all stacks (graceful degradation)
+			configAndStacksInfo := schema.ConfigAndStacksInfo{}
+			atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+			if err == nil {
+				// Determine component type from command
+				// Walk up command chain to find root command (terraform, helmfile, packer)
+				componentType := determineComponentTypeFromCommand(cmd)
+
+				// Try to resolve the path (without stack context for completion)
+				resolvedComponent, err := e.ResolveComponentFromPath(
+					&atmosConfig,
+					component,
+					"", // No stack context yet - we're completing the stack flag
+					componentType,
+				)
+				if err == nil {
+					component = resolvedComponent
+					log.Trace("Resolved path for stack completion",
+						"original", args[0],
+						"resolved", component,
+					)
+				} else {
+					// If resolution fails, fall through to list all stacks (graceful degradation)
+					log.Trace("Could not resolve path for stack completion, listing all stacks",
+						"path", component,
+						"error", err,
+					)
+					output, err := listStacks(cmd)
+					if err != nil {
+						return nil, cobra.ShellCompDirectiveNoFileComp
+					}
+					return output, cobra.ShellCompDirectiveNoFileComp
+				}
+			}
+		}
+
+		output, err := listStacksForComponent(component)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
@@ -792,6 +866,25 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return output, cobra.ShellCompDirectiveNoFileComp
+}
+
+// determineComponentTypeFromCommand walks up the command chain to find the component type.
+func determineComponentTypeFromCommand(cmd *cobra.Command) string {
+	// Walk up to find the root component command (terraform, helmfile, packer).
+	current := cmd
+	for current != nil {
+		switch current.Name() {
+		case "terraform":
+			return "terraform"
+		case "helmfile":
+			return "helmfile"
+		case "packer":
+			return "packer"
+		}
+		current = current.Parent()
+	}
+	// Default to terraform if we can't determine
+	return "terraform"
 }
 
 // listStacksForComponent returns stacks that contain the specified component.
@@ -877,6 +970,14 @@ func identityArgCompletion(cmd *cobra.Command, args []string, toComplete string)
 
 func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) == 0 {
+		// Check if user is typing a path
+		// Enable directory completion for paths
+		if toComplete == "." || strings.Contains(toComplete, string(filepath.Separator)) {
+			log.Trace("Enabling directory completion for path input", "toComplete", toComplete)
+			return nil, cobra.ShellCompDirectiveFilterDirs
+		}
+
+		// Otherwise, suggest component names from stack configurations
 		output, err := listComponents(cmd)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp

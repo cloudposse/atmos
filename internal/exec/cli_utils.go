@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -690,6 +691,11 @@ func processArgsAndFlags(
 					info.AdditionalArgsAndFlags = []string{secondArg}
 				} else {
 					info.ComponentFromArg = secondArg
+					// Check if argument is a path that needs resolution
+					// Paths are: ".", or contain path separators
+					if secondArg == "." || strings.Contains(secondArg, string(filepath.Separator)) {
+						info.NeedsPathResolution = true
+					}
 				}
 			}
 			if len(additionalArgsAndFlags) > 2 {

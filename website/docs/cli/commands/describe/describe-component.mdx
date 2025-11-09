@@ -24,6 +24,34 @@ Execute the `atmos describe component` command like this:
 atmos describe component <component> -s <stack>
 ```
 
+### Path-Based Component Resolution
+
+Atmos supports using filesystem paths instead of component names for convenience. This allows you to navigate to a component directory and use `.` to reference it:
+
+```shell
+# Navigate to component directory
+cd components/terraform/vpc
+
+# Use . to reference current directory
+atmos describe component . --stack dev
+```
+
+This automatically resolves the path to the component name configured in your stack, eliminating the need to remember exact component names.
+
+**Supported path formats:**
+- `.` - Current directory
+- `./component` - Relative path from current directory
+- `../other-component` - Relative path to sibling directory
+- `/absolute/path/to/component` - Absolute path
+
+**Requirements:**
+- Must be inside a component directory under the configured base path
+- Must specify `--stack` flag
+- Component must exist in the specified stack configuration
+
+**Error handling:**
+If the path cannot be resolved, Atmos will provide a clear error message explaining whether the path is within component directories and whether the component exists in the stack.
+
 :::info YAML Functions and Authentication
 By default, `atmos describe component` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during component processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
 :::
@@ -33,6 +61,8 @@ Run `atmos describe component --help` to see all the available options
 :::
 
 ## Examples
+
+### Component Name Examples
 
 ```shell
 atmos describe component infra/vpc -s tenant1-ue2-dev
@@ -76,11 +106,41 @@ atmos describe component vpc -s tenant1-ue2-dev --identity=false
 atmos describe component vpc -s tenant1-ue2-dev -i my-aws-identity
 ```
 
+### Path-Based Examples
+
+```shell
+# Navigate to component directory and use current directory
+cd components/terraform/vpc
+atmos describe component . --stack dev
+
+# Use relative path
+cd components/terraform
+atmos describe component ./vpc --stack dev
+
+# Use from project root with relative path
+atmos describe component components/terraform/vpc --stack dev
+
+# Describe nested component
+cd components/terraform/infra/vpc
+atmos describe component . --stack dev
+
+# Combine with other flags
+cd components/terraform/vpc
+atmos describe component . --stack dev --format json
+atmos describe component . --stack dev --query .vars.tags
+atmos describe component . --stack dev --provenance
+```
+
 ## Arguments
 
 <dl>
   <dt>`component` <em>(required)</em></dt>
-  <dd>Atmos component.</dd>
+  <dd>Atmos component name or filesystem path.<br/><br/>
+  Supports both:<br/>
+  - Component names: `vpc`, `infra/vpc`, `test/test-component`<br/>
+  - Filesystem paths: `.` (current directory), `./vpc`, `components/terraform/vpc`<br/><br/>
+  When using paths, Atmos automatically resolves the path to the component name based on your stack configuration.
+  </dd>
 </dl>
 
 ## Flags

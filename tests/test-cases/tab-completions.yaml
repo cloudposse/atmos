@@ -50,3 +50,38 @@ tests:
         - "dev"
         - "prod"
       exit_code: 0
+
+  # Path-based completion tests
+  - name: completion for path should enable directory suggestions
+    enabled: true
+    snapshot: true
+    description: "Test that directory completion is enabled for path input"
+    workdir: "fixtures/scenarios/completions"
+    command: "atmos"
+    args:
+      - "__completeNoDesc"
+      - "terraform"
+      - "plan"
+      - "./"
+    expect:
+      diff: []
+      stdout:
+        - ":16"  # ShellCompDirectiveFilterDirs = 16
+      exit_code: 0
+
+  - name: completion for current directory path
+    enabled: true
+    snapshot: true
+    description: "Test directory completion for current directory"
+    workdir: "fixtures/scenarios/completions"
+    command: "atmos"
+    args:
+      - "__completeNoDesc"
+      - "terraform"
+      - "plan"
+      - "."
+    expect:
+      diff: []
+      stdout:
+        - ":16"  # ShellCompDirectiveFilterDirs = 16
+      exit_code: 0

@@ -1,0 +1,295 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  # Basic path resolution tests
+  - name: terraform plan with current directory (.)
+    enabled: true
+    snapshot: true
+    description: "Test terraform plan using . to reference current directory"
+    workdir: "fixtures/scenarios/complete/components/terraform/top-level-component1"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "."
+      - "--stack"
+      - "tenant1-ue2-dev"
+      - "--dry-run"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: terraform plan with relative path
+    enabled: true
+    snapshot: true
+    description: "Test terraform plan using relative path"
+    workdir: "fixtures/scenarios/complete/components/terraform"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "./top-level-component1"
+      - "--stack"
+      - "tenant1-ue2-dev"
+      - "--dry-run"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: terraform plan with nested component path
+    enabled: true
+    snapshot: true
+    description: "Test terraform plan with component in subfolder"
+    workdir: "fixtures/scenarios/complete/components/terraform/infra/vpc"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "."
+      - "--stack"
+      - "tenant1-ue2-dev"
+      - "--dry-run"
+    expect:
+      diff: []
+      exit_code: 0
+
+  # Error handling tests
+  - name: terraform plan with path not in component directory
+    enabled: true
+    snapshot: true
+    description: "Test error when path is outside component directories"
+    workdir: "/tmp"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "."
+      - "--stack"
+      - "tenant1-ue2-dev"
+    expect:
+      diff: []
+      stderr:
+        - "path is not within Atmos component directories"
+      exit_code: 1
+
+  - name: terraform plan with path but component not in stack
+    enabled: true
+    snapshot: true
+    description: "Test error when component doesn't exist in specified stack"
+    workdir: "fixtures/scenarios/complete/components/terraform/top-level-component1"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "."
+      - "--stack"
+      - "nonexistent-stack"
+    expect:
+      diff: []
+      stderr:
+        - "not found"
+      exit_code: 1
+
+  - name: terraform plan with path at component base directory
+    enabled: true
+    snapshot: true
+    description: "Test error when path is the component base directory itself"
+    workdir: "fixtures/scenarios/complete/components/terraform"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "."
+      - "--stack"
+      - "tenant1-ue2-dev"
+    expect:
+      diff: []
+      stderr:
+        - "must specify a component directory"
+      exit_code: 1
+
+  # Component type mismatch tests
+  - name: helmfile command with terraform component path
+    enabled: true
+    snapshot: true
+    description: "Test error when using terraform component path with helmfile command"
+    workdir: "fixtures/scenarios/complete/components/terraform/top-level-component1"
+    command: "atmos"
+    args:
+      - "helmfile"
+      - "diff"
+      - "."
+      - "--stack"
+      - "tenant1-ue2-dev"
+    expect:
+      diff: []
+      stderr:
+        - "component type does not match"
+      exit_code: 1
+
+  # Validation that normal component names still work
+  - name: terraform plan with component name (backward compatibility)
+    enabled: true
+    snapshot: true
+    description: "Test that traditional component names still work"
+    workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "top-level-component1"
+      - "--stack"
+      - "tenant1-ue2-dev"
+      - "--dry-run"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: terraform plan with slash-separated component name (backward compatibility)
+    enabled: true
+    snapshot: true
+    description: "Test that component names with slashes still work"
+    workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "infra/vpc"
+      - "--stack"
+      - "tenant1-ue2-dev"
+      - "--dry-run"
+    expect:
+      diff: []
+      exit_code: 0
+
+  # Describe component tests
+  - name: describe component with current directory (.)
+    enabled: true
+    snapshot: true
+    description: "Test describe component using . to reference current directory"
+    workdir: "fixtures/scenarios/complete/components/terraform/top-level-component1"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "."
+      - "--stack"
+      - "tenant1-ue2-dev"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: describe component with relative path
+    enabled: true
+    snapshot: true
+    description: "Test describe component using relative path"
+    workdir: "fixtures/scenarios/complete/components/terraform"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "./top-level-component1"
+      - "--stack"
+      - "tenant1-ue2-dev"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: describe component with nested component path
+    enabled: true
+    snapshot: true
+    description: "Test describe component with component in subfolder"
+    workdir: "fixtures/scenarios/complete/components/terraform/infra/vpc"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "."
+      - "--stack"
+      - "tenant1-ue2-dev"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: describe component with path not in component directory
+    enabled: true
+    snapshot: true
+    description: "Test error when path is outside component directories"
+    workdir: "/tmp"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "."
+      - "--stack"
+      - "tenant1-ue2-dev"
+    expect:
+      diff: []
+      stderr:
+        - "path is not within Atmos component directories"
+      exit_code: 1
+
+  - name: describe component with component name (backward compatibility)
+    enabled: true
+    snapshot: true
+    description: "Test that traditional component names still work with describe"
+    workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "top-level-component1"
+      - "--stack"
+      - "tenant1-ue2-dev"
+    expect:
+      diff: []
+      exit_code: 0
+
+  # Validate component tests
+  - name: validate component with current directory (.)
+    enabled: true
+    snapshot: true
+    description: "Test validate component using . to reference current directory"
+    workdir: "fixtures/scenarios/complete/components/terraform/top-level-component1"
+    command: "atmos"
+    args:
+      - "validate"
+      - "component"
+      - "."
+      - "--stack"
+      - "tenant1-ue2-dev"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: validate component with relative path
+    enabled: true
+    snapshot: true
+    description: "Test validate component using relative path"
+    workdir: "fixtures/scenarios/complete/components/terraform"
+    command: "atmos"
+    args:
+      - "validate"
+      - "component"
+      - "./top-level-component1"
+      - "--stack"
+      - "tenant1-ue2-dev"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: validate component with component name (backward compatibility)
+    enabled: true
+    snapshot: true
+    description: "Test that traditional component names still work with validate"
+    workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - "validate"
+      - "component"
+      - "top-level-component1"
+      - "--stack"
+      - "tenant1-ue2-dev"
+    expect:
+      diff: []
+      exit_code: 0

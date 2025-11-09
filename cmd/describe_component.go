@@ -3,6 +3,8 @@ package cmd
 import (
 	"errors"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -71,6 +73,9 @@ var describeComponentCmd = &cobra.Command{
 
 		component := args[0]
 
+		// Check if argument is a path that needs resolution
+		needsPathResolution := component == "." || strings.Contains(component, string(filepath.Separator))
+
 		// Load atmos configuration to get auth config.
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
 			ComponentFromArg: component,
@@ -78,6 +83,26 @@ var describeComponentCmd = &cobra.Command{
 		}, false)
 		if err != nil {
 			return errors.Join(errUtils.ErrFailedToInitConfig, err)
+		}
+
+		// Resolve path-based component arguments to component names
+		if needsPathResolution {
+			if stack == "" {
+				return errors.New("--stack flag is required when using path-based component resolution")
+			}
+
+			// We don't know the component type yet - describe component detects it
+			// So we'll try to resolve the path without component type validation
+			// The component type will be validated during ExecuteDescribeComponent
+			resolvedComponent, err := e.ResolveComponentFromPathWithoutTypeCheck(
+				&atmosConfig,
+				component,
+				stack,
+			)
+			if err != nil {
+				return err
+			}
+			component = resolvedComponent
 		}
 
 		// Get identity from flag and create AuthManager if provided.

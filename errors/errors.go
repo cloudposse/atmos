@@ -456,6 +456,13 @@ var (
 	ErrIdentityNotInConfig  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption  = errors.New("invalid logout option")
+
+	// Component path resolution errors.
+	ErrPathNotInComponentDir = errors.New("path is not within Atmos component directories")
+	ErrComponentTypeMismatch = errors.New("path component type does not match command")
+	ErrComponentNotInStack   = errors.New("component not found in stack configuration")
+	ErrPathResolutionFailed  = errors.New("failed to resolve component from path")
+	ErrPathIsComponentBase   = errors.New("must specify a component directory, not the base directory")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

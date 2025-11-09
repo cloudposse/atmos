@@ -1,10 +1,16 @@
 package cmd
 
 import (
+	"errors"
+	"path/filepath"
+	"strings"
+
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // validateComponentCmd validates atmos components
@@ -18,6 +24,46 @@ var validateComponentCmd = &cobra.Command{
 		handleHelpRequest(cmd, args)
 		// Check Atmos configuration
 		checkAtmosConfig()
+
+		// Handle path-based component resolution
+		if len(args) > 0 {
+			component := args[0]
+			needsPathResolution := component == "." || strings.Contains(component, string(filepath.Separator))
+
+			if needsPathResolution {
+				flags := cmd.Flags()
+				stack, err := flags.GetString("stack")
+				if err != nil {
+					return err
+				}
+
+				if stack == "" {
+					return errors.New("--stack flag is required when using path-based component resolution")
+				}
+
+				// Load atmos configuration
+				atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+					ComponentFromArg: component,
+					Stack:            stack,
+				}, false)
+				if err != nil {
+					return err
+				}
+
+				// Resolve path to component name (without type check - validate detects type)
+				resolvedComponent, err := e.ResolveComponentFromPathWithoutTypeCheck(
+					&atmosConfig,
+					component,
+					stack,
+				)
+				if err != nil {
+					return err
+				}
+
+				// Replace the argument with the resolved component name
+				args[0] = resolvedComponent
+			}
+		}
 
 		_, _, err := e.ExecuteValidateComponentCmd(cmd, args)
 		if err != nil {

@@ -23,11 +23,38 @@ atmos validate component <component> -s <stack> [options]
 
 This command validates an Atmos component in a stack using JSON Schema and OPA policies.
 
+### Path-Based Component Resolution
+
+Atmos supports using filesystem paths instead of component names for convenience:
+
+```shell
+# Navigate to component directory
+cd components/terraform/vpc
+
+# Use . to reference current directory
+atmos validate component . --stack dev
+```
+
+This automatically resolves the path to the component name configured in your stack.
+
+**Supported path formats:**
+- `.` - Current directory
+- `./component` - Relative path from current directory
+- `../other-component` - Relative path to sibling directory
+- `/absolute/path/to/component` - Absolute path
+
+**Requirements:**
+- Must be inside a component directory under the configured base path
+- Must specify `--stack` flag
+- Component must exist in the specified stack configuration
+
 :::tip
 Run `atmos validate component --help` to see all the available options
 :::
 
 ## Examples
+
+### Component Name Examples
 
 ```shell
 atmos validate component infra/vpc -s tenant1-ue2-dev
@@ -38,11 +65,37 @@ atmos validate component infra/vpc -s tenant1-ue2-dev --schema-path vpc/validate
 atmos validate component infra/vpc -s tenant1-ue2-dev --timeout 15
 ```
 
+### Path-Based Examples
+
+```shell
+# Navigate to component directory and use current directory
+cd components/terraform/vpc
+atmos validate component . --stack dev
+
+# Use relative path
+cd components/terraform
+atmos validate component ./vpc --stack dev
+
+# Use from project root with relative path
+atmos validate component components/terraform/vpc --stack dev
+
+# Combine with validation options
+cd components/terraform/vpc
+atmos validate component . --stack dev --schema-path vpc-schema.json --schema-type jsonschema
+atmos validate component . --stack dev --schema-path vpc-policy.rego --schema-type opa
+atmos validate component . --stack dev --timeout 15
+```
+
 ## Arguments
 
 <dl>
   <dt>`component` <em>(required)</em></dt>
-  <dd>Atmos component.</dd>
+  <dd>Atmos component name or filesystem path.<br/><br/>
+  Supports both:<br/>
+  - Component names: `vpc`, `infra/vpc`, `test/test-component`<br/>
+  - Filesystem paths: `.` (current directory), `./vpc`, `components/terraform/vpc`<br/><br/>
+  When using paths, Atmos automatically resolves the path to the component name based on your stack configuration.
+  </dd>
 </dl>
 
 ## Flags

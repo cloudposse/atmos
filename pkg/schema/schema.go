@@ -501,6 +501,7 @@ type ArgsAndFlagsInfo struct {
 	Affected                  bool
 	All                       bool
 	Identity                  string
+	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution
 }
 
 // AuthContext holds active authentication credentials for multiple providers.
@@ -625,6 +626,7 @@ type ConfigAndStacksInfo struct {
 	All                       bool
 	Components                []string
 	Identity                  string
+	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution
 }
 
 type BackoffStrategy string
