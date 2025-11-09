@@ -40,14 +40,15 @@ Flags:
 
         --base-path string           Base path for Atmos project
 
-    -C, --chdir string               Change working directory before processing
-                                     (run as if Atmos started in this directory)
+    -C, --chdir string               Change working directory before executing
+                                     the command (run as if Atmos started in
+                                     this directory)
 
         --config stringSlice         Paths to configuration files
                                      (comma-separated or repeated flag) (default
                                      [])
 
-        --config-path stringSlice    Paths to configuration directories
+        --config-path stringSlice    Paths to search for Atmos configuration
                                      (comma-separated or repeated flag) (default
                                      [])
 
@@ -68,6 +69,10 @@ Flags:
 
     -h, --help                       help for atmos
 
+        --identity string            Identity to use for authentication. Use
+                                     --identity to select interactively,
+                                     --identity=NAME to specify
+
         --logs-file string           The file to write Atmos logs to. Logs can
                                      be written to any file or any standard file
                                      descriptor, including '/dev/stdout',
@@ -77,7 +82,7 @@ Flags:
         --logs-level string          Logs level. Supported log levels are Trace,
                                      Debug, Info, Warning, Off. If the log level
                                      is set to Off, Atmos will not log any
-                                     messages (default Info)
+                                     messages (default Warning)
 
         --mask                       Enable automatic masking of sensitive data
                                      in output (use --mask=false to disable)
@@ -110,7 +115,7 @@ Flags:
         --redirect-stderr string     File descriptor to redirect stderr to.
                                      Errors can be redirected to any file or any
                                      standard file descriptor (including
-                                     /dev/null)
+                                     '/dev/null')
 
     -v, --verbose                    Enable verbose error output with full
                                      context, stack traces, and detailed

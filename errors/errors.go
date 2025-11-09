@@ -50,16 +50,23 @@ var (
 	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
 	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
 	ErrInvalidOffset                         = errors.New("offset must be >= 0")
+	ErrDuplicateFlagRegistration             = errors.New("duplicate flag registration")
 	ErrInvalidSinceDate                      = errors.New("invalid date format for --since")
 	ErrUnsupportedOutputFormat               = errors.New("unsupported output format")
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 
-	// ErrAuthConsole is returned when auth console command operations fail.
+	// Authentication and TTY errors.
 	ErrAuthConsole          = errors.New("auth console operation failed")
 	ErrProviderNotSupported = errors.New("provider does not support this operation")
 	ErrUnknownServiceAlias  = errors.New("unknown service alias")
+	ErrTTYRequired          = errors.New("requires a TTY")
+
+	// Component and positional argument errors.
+	ErrComponentRequired     = errors.New("component is required")
+	ErrInvalidPositionalArgs = errors.New("invalid positional arguments")
+	ErrWorkflowNameRequired  = errors.New("workflow name is required")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -122,6 +129,10 @@ var (
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
+	// Flag validation errors.
+	ErrCompatibilityFlagMissingTarget = errors.New("compatibility flag references non-existent flag")
+	ErrInvalidFlagValue               = errors.New("invalid value for flag")
+
 	// File and URL handling errors.
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
@@ -146,9 +157,11 @@ var (
 	ErrAtmosFilesDirConfigNotFound = errors.New("atmos configuration file not found in directory")
 	ErrAtmosConfigNotFound         = errors.New("atmos configuration file not found")
 
-	ErrMissingStack                               = errors.New("stack is required")
+	ErrMissingStack                               = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrMissingComponent                           = errors.New("component is required")
 	ErrMissingComponentType                       = errors.New("component type is required")
+	ErrRequiredFlagNotProvided                    = errors.New("required flag not provided")
+	ErrRequiredFlagEmpty                          = errors.New("required flag cannot be empty")
 	ErrInvalidArguments                           = errors.New("invalid arguments")
 	ErrInvalidComponent                           = errors.New("invalid component")
 	ErrInvalidComponentMapType                    = errors.New("invalid component map type")
@@ -459,7 +472,7 @@ var (
 	ErrNoDefaultIdentity             = errors.New("no default identity configured for authentication")
 	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
 	ErrNoIdentitiesAvailable         = errors.New("no identities available")
-	ErrIdentitySelectionRequiresTTY  = errors.New("interactive identity selection requires a TTY")
+	ErrIdentitySelectionRequiresTTY  = fmt.Errorf("interactive identity selection: %w", ErrTTYRequired)
 	ErrAuthenticationChainNotBuilt   = errors.New("authentication chain not built")
 	ErrInvalidStackConfig            = errors.New("invalid stack config")
 	ErrNoCommandSpecified            = errors.New("no command specified")
