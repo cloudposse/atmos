@@ -116,83 +116,23 @@ errors:
     dsn: "https://your-sentry-dsn@sentry.io/project"
     environment: "production"
 
-    # Control what gets captured
-    capture:
-      # Static errors (expected scenarios like validation failures)
-      static_errors: true
-
-      # Unexpected errors (bugs, panics)
-      unexpected_errors: true
-
-      # Command errors (failed terraform/helmfile commands)
-      command_errors: true
-
-    # Attach Atmos context to every error
+    # Custom tags for filtering and grouping
     tags:
-      - component
-      - stack
-      - workflow
+      team: "platform"
+      service: "atmos"
 ```
 
 **What you get:**
 
-**Error Aggregation** - See all errors across your infrastructure:
-- Group similar errors together
-- Track frequency and trends
-- Identify which teams/components are affected
+- **Centralized error tracking** - All Atmos failures in one place
+- **Rich context** - Component, stack, workflow, and exit codes automatically attached
+- **Error aggregation** - Group similar errors, track trends, identify patterns
+- **Team visibility** - See which components/stacks fail most often
+- **Actionable alerts** - Get notified when critical operations fail
 
-**Rich Context** - Every error includes:
-- Component and stack being deployed
-- Workflow step that failed
-- User and environment details
-- Full stack trace for unexpected errors
+Sentry captures **command failures only**—errors that cause Atmos to exit with a non-zero exit code. This includes configuration errors, missing components, validation failures, and workflow failures. Every error includes hints (as breadcrumbs), context tags, and full stack traces for debugging.
 
-**Enterprise Visibility** - Understand your infrastructure health:
-- Which errors are most common?
-- Are certain components more error-prone?
-- How many validation errors vs. actual bugs?
-- Which teams need support?
-
-**Example use cases:**
-
-```yaml
-# Scenario 1: Track validation errors across teams
-# See which stack configurations fail validation most often
-
-# Scenario 2: Monitor production deployments
-# Get alerted when production workflows fail
-
-# Scenario 3: Identify systemic issues
-# Notice that 80% of errors are from missing AWS credentials
-# → Fix once at the organization level
-```
-
-### 5. Smart Error Classification
-
-Errors are automatically categorized:
-
-**Static Errors** (expected, user-fixable):
-- Configuration validation failures
-- Missing required parameters
-- Invalid workflow definitions
-- File not found errors
-
-**Unexpected Errors** (bugs):
-- Panics and crashes
-- Nil pointer dereferences
-- Unhandled edge cases
-
-**Command Errors** (external tool failures):
-- Terraform plan failures
-- Helmfile apply errors
-- Shell command failures
-
-Each category can be:
-- **Formatted differently** - More detail for unexpected errors
-- **Tracked separately** - Different Sentry tags
-- **Handled uniquely** - Stack traces for panics, hints for config errors
-
-### 6. Developer-Friendly Error Building
+### 5. Developer-Friendly Error Building
 
 For Atmos contributors, creating helpful errors is now simple:
 
@@ -285,10 +225,8 @@ Add to your `atmos.yaml`:
 ```yaml
 errors:
   # Control error display
-  formatter:
-    verbose: true        # Show full stack traces
-    color: auto          # auto, always, never
-    max_line_length: 120 # Wrap long lines
+  format:
+    verbose: false  # Show full stack traces (default: false)
 
   # Sentry integration
   sentry:
@@ -296,20 +234,16 @@ errors:
     dsn: "${ATMOS_SENTRY_DSN}"
     environment: "${ATMOS_ENV}"
 
-    capture:
-      static_errors: true      # Expected errors (validation)
-      unexpected_errors: true  # Bugs and panics
-      command_errors: true     # External tool failures
+    # Sample rate: 1.0 = 100%, 0.5 = 50% (default: 1.0)
+    sample_rate: 1.0
 
+    # Include code context in stack traces (default: true)
+    capture_stack_context: true
+
+    # Custom tags for filtering and grouping
     tags:
-      - component
-      - stack
-      - workflow
-
-    # Optional: custom tags
-    extra_tags:
-      team: platform
-      region: us-east-1
+      team: "platform"
+      region: "us-east-1"
 ```
 
 ### Environment Variables
@@ -317,8 +251,7 @@ errors:
 ```bash
 # Override config file settings
 export ATMOS_SENTRY_DSN="https://..."
-export ATMOS_SENTRY_ENVIRONMENT="production"
-export ATMOS_ERROR_VERBOSE="true"
+export ATMOS_VERBOSE="true"
 ```
 
 ## Migration Guide
@@ -347,7 +280,7 @@ return errUtils.Build(errUtils.ErrWorkflowNotFound).
     Err()
 ```
 
-See `errors/errors.md` for the complete developer guide.
+See `docs/errors.md` for the complete developer guide.
 
 ## Why This Matters
 
@@ -366,10 +299,8 @@ This is infrastructure we wish we'd had years ago. Now it's built into Atmos by 
 
 We're continuing to improve error handling:
 
-- **More helpful hints** - Adding guidance to every error across Atmos
-- **Contextual suggestions** - AI-powered hints based on your specific configuration
-- **Error analytics** - Built-in dashboards for error patterns and trends
-- **Community hints** - Share error solutions across the Atmos community
+- **More helpful hints** - Adding guidance to more errors across Atmos
+- **Enhanced context** - Automatically include more relevant information with each error
 
 ## Get Involved
 
@@ -380,7 +311,7 @@ We'd love your feedback:
 - **Share analytics** - Tell us what error tracking insights are most valuable
 - **Report issues** - Let us know if any errors need better messages
 
-See the [Error Handling Documentation](https://atmos.tools/core-concepts/error-handling) for complete details.
+See the [Error Handling Documentation](/cli/configuration/errors) for complete details.
 
 ---
 
