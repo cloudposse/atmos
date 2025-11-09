@@ -610,6 +610,272 @@ return errUtils.Build(errUtils.ErrMissingStack).
     Err()
 ```
 
+## Component-Level Sentry Configuration
+
+### Overview
+
+Atmos supports overriding Sentry configuration at the stack and component level, allowing fine-grained control over error tracking, sampling rates, and tagging for different components.
+
+### Global Configuration
+
+Configure Sentry globally in `atmos.yaml`:
+
+```yaml
+errors:
+  sentry:
+    enabled: true
+    dsn: "https://your-dsn@sentry.io/project"
+    environment: "production"
+    release: "1.0.0"
+    sample_rate: 0.1  # 10% sampling by default
+    debug: false
+    capture_stack_context: true
+    tags:
+      service: "atmos"
+      team: "platform"
+```
+
+### Stack-Level Override
+
+Define settings for all components in a stack:
+
+```yaml
+# stacks/prod/critical.yaml
+settings:
+  errors:
+    sentry:
+      sample_rate: 1.0  # 100% sampling for all components in this stack
+      tags:
+        team: "payments"
+        criticality: "critical"
+        sla: "99.99"
+
+components:
+  terraform:
+    payment-processor:
+      # Inherits settings.errors.sentry from stack level
+
+    payment-gateway:
+      # Can override specific settings
+      settings:
+        errors:
+          sentry:
+            tags:
+              subteam: "gateway"  # Additional tag
+```
+
+### Component-Level Override
+
+Override settings for a specific component:
+
+```yaml
+# stacks/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      settings:
+        errors:
+          sentry:
+            tags:
+              team: "infrastructure"
+
+    rds:
+      settings:
+        errors:
+          sentry:
+            sample_rate: 0.5  # 50% sampling for non-critical component
+            environment: "prod-database"
+            tags:
+              team: "database"
+              component_type: "rds"
+```
+
+### Configuration Merging
+
+Component settings are deep merged with global settings in the following order:
+
+1. **Global** (`atmos.yaml`) - Base configuration
+2. **Stack** (`settings.errors.sentry`) - Stack-level overrides
+3. **Component** (`components.terraform.X.settings.errors.sentry`) - Component-specific overrides
+
+**Example:**
+
+```yaml
+# atmos.yaml (global)
+errors:
+  sentry:
+    enabled: true
+    dsn: "https://example@sentry.io/1"
+    environment: "production"
+    sample_rate: 0.1  # 10% default
+    tags:
+      service: "atmos"
+
+# stacks/prod/critical.yaml (stack level)
+settings:
+  errors:
+    sentry:
+      sample_rate: 1.0  # Override to 100%
+      tags:
+        team: "payments"  # Add team tag
+
+components:
+  terraform:
+    payment-processor:
+      # Merged config:
+      # - enabled: true (from global)
+      # - dsn: "https://example@sentry.io/1" (from global)
+      # - environment: "production" (from global)
+      # - sample_rate: 1.0 (from stack)
+      # - tags:
+      #     service: "atmos" (from global)
+      #     team: "payments" (from stack)
+
+      settings:
+        errors:
+          sentry:
+            tags:
+              criticality: "critical"  # Add component-specific tag
+      # Final merged config adds criticality: "critical" to tags
+```
+
+### Using Component-Specific Error Capture
+
+```go
+import (
+    errUtils "github.com/cloudposse/atmos/errors"
+    "github.com/cloudposse/atmos/pkg/schema"
+)
+
+// In a command that has access to ConfigAndStacksInfo
+func executeComponentAction(info *schema.ConfigAndStacksInfo) error {
+    // ... component logic ...
+
+    if err != nil {
+        // Capture with component-specific Sentry config
+        errUtils.CaptureErrorWithComponentConfig(err, info, map[string]string{
+            "action": "terraform-plan",
+            "region": "us-east-1",
+        })
+        return err
+    }
+
+    return nil
+}
+```
+
+### Use Cases
+
+#### Critical Components with Full Sampling
+
+```yaml
+# stacks/prod/critical.yaml
+settings:
+  errors:
+    sentry:
+      sample_rate: 1.0  # Capture all errors
+      tags:
+        criticality: "critical"
+        pci_compliant: "true"
+
+components:
+  terraform:
+    payment-processor:
+    fraud-detection:
+    user-auth:
+```
+
+#### Team-Based Error Grouping
+
+```yaml
+# stacks/prod/database.yaml
+settings:
+  errors:
+    sentry:
+      tags:
+        team: "database"
+        oncall: "db-team@company.com"
+
+components:
+  terraform:
+    rds-primary:
+    rds-replica:
+    redis-cache:
+```
+
+#### Environment-Specific Configuration
+
+```yaml
+# stacks/staging/us-west-2.yaml
+settings:
+  errors:
+    sentry:
+      environment: "staging"
+      sample_rate: 0.5  # 50% sampling in staging
+      tags:
+        auto_deploy: "true"
+```
+
+#### Gradual Rollout with Sampling
+
+```yaml
+# Start with low sampling
+components:
+  terraform:
+    new-experimental-feature:
+      settings:
+        errors:
+          sentry:
+            sample_rate: 0.01  # 1% sampling initially
+
+# Increase as confidence grows
+# sample_rate: 0.1  # 10%
+# sample_rate: 0.5  # 50%
+# sample_rate: 1.0  # 100%
+```
+
+### Client Management
+
+Atmos automatically manages Sentry clients per configuration:
+
+- **Client Reuse**: Identical configurations share the same Sentry client
+- **Isolation**: Different configurations use separate clients
+- **Automatic Cleanup**: Clients are flushed and closed on shutdown
+
+### Multiple Sentry Projects
+
+Use different DSNs for different components:
+
+```yaml
+# Global default
+errors:
+  sentry:
+    dsn: "https://default@sentry.io/general"
+
+# Component override
+components:
+  terraform:
+    special-component:
+      settings:
+        errors:
+          sentry:
+            dsn: "https://special@sentry.io/special-project"
+```
+
+### Troubleshooting
+
+**Sentry Not Receiving Errors:**
+1. Check DSN configuration in `atmos.yaml`
+2. Verify `enabled: true` at the appropriate level
+3. Check sample rate isn't too low
+4. Enable debug mode: `sentry.debug: true`
+5. Check network connectivity to Sentry
+
+**Errors Not Using Component Config:**
+1. Ensure `settings.errors.sentry` is in the component section
+2. Verify stack processing is working: `atmos describe component X -s Y`
+3. Check that the command uses `CaptureErrorWithComponentConfig()`
+
 ## Reference
 
 - [cockroachdb/errors Documentation](https://github.com/cockroachdb/errors)

@@ -10,6 +10,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	// CloseSentryTimeout is the timeout for flushing Sentry events before shutdown.
+	CloseSentryTimeout = 2 * time.Second
+)
+
 // InitializeSentry initializes the Sentry SDK with the provided configuration.
 func InitializeSentry(config *schema.SentryConfig) error {
 	if config == nil || !config.Enabled {
@@ -45,9 +50,18 @@ func InitializeSentry(config *schema.SentryConfig) error {
 }
 
 // CloseSentry flushes any pending Sentry events and closes the client.
+// Deprecated: Use CloseAllSentry() instead to properly close all component-specific clients.
 func CloseSentry() {
-	const flushTimeout = 2 * time.Second
-	sentry.Flush(flushTimeout)
+	sentry.Flush(CloseSentryTimeout)
+}
+
+// CloseAllSentry closes all Sentry clients in the registry.
+func CloseAllSentry() {
+	// Close global client.
+	CloseSentry()
+
+	// Close all component-specific clients.
+	GetRegistry().CloseAll()
 }
 
 // CaptureError captures an error and sends it to Sentry using cockroachdb/errors native support.
@@ -117,6 +131,102 @@ func CaptureErrorWithContext(err error, context map[string]string) {
 		// Set Atmos context as tags with "atmos." prefix.
 		for key, value := range context {
 			event.Tags["atmos."+key] = value
+		}
+
+		// Extract and set hints as breadcrumbs.
+		hints := errors.GetAllHints(err)
+		for _, hint := range hints {
+			scope.AddBreadcrumb(&sentry.Breadcrumb{
+				Type:     "info",
+				Category: "hint",
+				Message:  hint,
+				Level:    sentry.LevelInfo,
+			}, 100)
+		}
+
+		// Extract exit code if present.
+		exitCode := GetExitCode(err)
+		if exitCode != 0 && exitCode != 1 {
+			event.Tags["atmos.exit_code"] = fmt.Sprintf("%d", exitCode)
+		}
+
+		// Capture the pre-built event.
+		hub.CaptureEvent(event)
+	})
+}
+
+// CaptureErrorWithComponentConfig captures an error using component-specific Sentry configuration.
+// It uses the merged error configuration from component settings, falling back to global config.
+func CaptureErrorWithComponentConfig(err error, info *schema.ConfigAndStacksInfo, context map[string]string) {
+	if err == nil {
+		return
+	}
+
+	// Get component error configuration.
+	componentErrorConfig, configErr := GetComponentErrorConfig(info)
+	if configErr != nil {
+		// Log error but continue with global config.
+		if atmosConfig != nil {
+			componentErrorConfig = &atmosConfig.Errors
+		} else {
+			// Can't get any config - use global Sentry hub.
+			CaptureErrorWithContext(err, context)
+			return
+		}
+	}
+
+	// Merge with global config if available.
+	var finalConfig *schema.ErrorsConfig
+	if atmosConfig != nil {
+		finalConfig = MergeErrorConfigs(&atmosConfig.Errors, componentErrorConfig)
+	} else if componentErrorConfig != nil {
+		finalConfig = componentErrorConfig
+	} else {
+		// No config available - use global hub.
+		CaptureErrorWithContext(err, context)
+		return
+	}
+
+	// Get or create Sentry client for this configuration.
+	hub, hubErr := GetRegistry().GetOrCreateClient(&finalConfig.Sentry)
+	if hubErr != nil {
+		// Failed to create client - fall back to global hub.
+		CaptureErrorWithContext(err, context)
+		return
+	}
+
+	// If Sentry is disabled for this component, return early.
+	if hub == nil {
+		return
+	}
+
+	// Build Sentry report using cockroachdb/errors native support.
+	event, extraDetails := errors.BuildSentryReport(err)
+
+	hub.WithScope(func(scope *sentry.Scope) {
+		// Add extra details from cockroachdb/errors as context.
+		for key, value := range extraDetails {
+			if contextMap, ok := value.(map[string]interface{}); ok {
+				scope.SetContext(key, contextMap)
+			}
+		}
+
+		// Set Atmos context as tags with "atmos." prefix.
+		for key, value := range context {
+			event.Tags["atmos."+key] = value
+		}
+
+		// Add component identification tags.
+		if info != nil {
+			if info.Component != "" {
+				event.Tags["atmos.component"] = info.Component
+			}
+			if info.Stack != "" {
+				event.Tags["atmos.stack"] = info.Stack
+			}
+			if info.ComponentType != "" {
+				event.Tags["atmos.component_type"] = info.ComponentType
+			}
 		}
 
 		// Extract and set hints as breadcrumbs.
