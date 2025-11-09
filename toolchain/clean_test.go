@@ -52,16 +52,33 @@ func TestCleanToolsAndCaches(t *testing.T) {
 		}
 	}
 
-	// Helper to capture stderr (TUI output goes to stderr)
-	captureOutput := func(f func()) string {
+	// Helper to capture stderr (TUI output goes to stderr).
+	captureOutput := func(t *testing.T, f func()) string {
 		originalStderr := os.Stderr
-		r, w, _ := os.Pipe()
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("failed to create pipe: %v", err)
+		}
+
 		os.Stderr = w
+
+		// Ensure stderr is restored and pipes are closed even if f() panics.
+		defer func() {
+			os.Stderr = originalStderr
+		}()
+		defer r.Close()
+		defer w.Close()
+
 		f()
+
+		// Close write end to unblock ReadFrom.
 		w.Close()
-		os.Stderr = originalStderr
+
 		var buf bytes.Buffer
-		_, _ = buf.ReadFrom(r)
+		if _, err := buf.ReadFrom(r); err != nil {
+			t.Fatalf("failed to read from pipe: %v", err)
+		}
+
 		return buf.String()
 	}
 
@@ -197,7 +214,7 @@ Warning: failed to delete %s: permission denied
 			toolsDir, cacheDir, tempCacheDir := tt.setup(t)
 
 			// Capture output
-			output := captureOutput(func() {
+			output := captureOutput(t, func() {
 				err := CleanToolsAndCaches(toolsDir, cacheDir, tempCacheDir)
 				if (err != nil) != tt.expectedError {
 					t.Errorf("expected error: %v, got: %v", tt.expectedError, err)

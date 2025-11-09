@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/viper"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -140,9 +138,8 @@ func UpdatePathForTools(atmosConfig *schema.AtmosConfiguration, dependencies map
 		return nil
 	}
 
-	// Prepend to existing PATH
-	// Use viper which checks environment variables automatically.
-	currentPath := viper.GetString("PATH")
+	// Prepend to existing PATH.
+	currentPath := os.Getenv("PATH")
 	newPath := strings.Join(append(paths, currentPath), string(os.PathListSeparator))
 	os.Setenv("PATH", newPath)
 

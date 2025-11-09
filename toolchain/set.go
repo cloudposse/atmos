@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 type versionItem struct {
@@ -325,8 +326,7 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 		return fmt.Errorf("failed to set version: %w", err)
 	}
 
-	fmt.Printf("✓ Set %s@%s in %s\n", resolvedKey, version, atmosConfig.Toolchain.VersionsFile)
-	return nil
+	return ui.Successf("Set %s@%s in %s", resolvedKey, version, atmosConfig.Toolchain.VersionsFile)
 }
 
 // fetchGitHubVersions fetches available versions and titles from GitHub releases.

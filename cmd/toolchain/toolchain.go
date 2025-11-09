@@ -87,12 +87,30 @@ func init() {
 
 	// Add tool-versions file flag.
 	toolchainCmd.PersistentFlags().StringVar(&toolVersionsFile, "tool-versions", ".tool-versions", "Path to tool-versions file")
+	if err := viper.BindPFlag("toolchain.tool-versions", toolchainCmd.PersistentFlags().Lookup("tool-versions")); err != nil {
+		fmt.Fprintf(os.Stderr, "Error binding tool-versions flag: %v\n", err)
+	}
+	if err := viper.BindEnv("toolchain.tool-versions", "ATMOS_TOOL_VERSIONS"); err != nil {
+		fmt.Fprintf(os.Stderr, "Error binding ATMOS_TOOL_VERSIONS environment variable: %v\n", err)
+	}
 
 	// Add tools directory flag.
 	toolchainCmd.PersistentFlags().StringVar(&toolsDir, "tools-dir", ".tools", "Directory to store installed tools")
+	if err := viper.BindPFlag("toolchain.tools-dir", toolchainCmd.PersistentFlags().Lookup("tools-dir")); err != nil {
+		fmt.Fprintf(os.Stderr, "Error binding tools-dir flag: %v\n", err)
+	}
+	if err := viper.BindEnv("toolchain.tools-dir", "ATMOS_TOOLS_DIR"); err != nil {
+		fmt.Fprintf(os.Stderr, "Error binding ATMOS_TOOLS_DIR environment variable: %v\n", err)
+	}
 
 	// Add tools config file flag.
 	toolchainCmd.PersistentFlags().StringVar(&toolsConfigFile, "tools-config", "tools.yaml", "Path to tools configuration file")
+	if err := viper.BindPFlag("toolchain.tools-config", toolchainCmd.PersistentFlags().Lookup("tools-config")); err != nil {
+		fmt.Fprintf(os.Stderr, "Error binding tools-config flag: %v\n", err)
+	}
+	if err := viper.BindEnv("toolchain.tools-config", "ATMOS_TOOLS_CONFIG"); err != nil {
+		fmt.Fprintf(os.Stderr, "Error binding ATMOS_TOOLS_CONFIG environment variable: %v\n", err)
+	}
 
 	// Add all subcommands.
 	toolchainCmd.AddCommand(addCmd)

@@ -6,6 +6,7 @@ import (
 	"syscall"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 var execFunc = syscall.Exec
@@ -60,7 +61,7 @@ func ensureToolInstalled(tool string) (string, error) {
 		}
 	}
 
-	fmt.Printf("🔧 Tool %s is not installed. Installing automatically...\n", tool)
+	_ = ui.Toastf("🔧", "Tool %s is not installed. Installing automatically...", tool)
 	if installErr := RunInstall(tool, false, true); installErr != nil {
 		return "", fmt.Errorf("failed to auto-install %s: %w",
 			tool, installErr)

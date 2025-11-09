@@ -188,6 +188,11 @@ func Verify(filePath string) error {
 
 	// Validate each tool entry
 	for toolName, tool := range lockFile.Tools {
+		// Guard against nil entries.
+		if tool == nil {
+			return fmt.Errorf("nil tool entry: %s", toolName)
+		}
+
 		if tool.Version == "" {
 			return fmt.Errorf("%w: %s", ErrToolMissingVersion, toolName)
 		}

@@ -102,9 +102,27 @@ func (m *LockFileManager) RemoveTool(ctx context.Context, tool, version string) 
 
 	lock, err := lockfile.Load(m.filePath)
 	if err != nil {
+		// Treat missing file as no-op.
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
 	}
 
+	// Look up the specific tool entry.
+	existingTool, exists := lock.Tools[tool]
+	if !exists {
+		// Tool not in lockfile - no-op.
+		return nil
+	}
+
+	// If caller specified a version, verify it matches.
+	if version != "" && existingTool.Version != version {
+		return fmt.Errorf("refusing to remove tool '%s': lockfile has version '%s' but removal requested version '%s'",
+			tool, existingTool.Version, version)
+	}
+
+	// Remove the tool entry.
 	lock.RemoveTool(tool)
 	return lockfile.Save(m.filePath, lock)
 }

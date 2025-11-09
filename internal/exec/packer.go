@@ -122,6 +122,9 @@ func ExecutePacker(
 		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
 			return fmt.Errorf("failed to update PATH for component: %w", err)
 		}
+
+		// Propagate updated PATH into environment for subprocess.
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", os.Getenv("PATH")))
 	}
 
 	// Check if the component 'settings.validation' section is specified and validate the component.

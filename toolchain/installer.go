@@ -21,6 +21,7 @@ import (
 
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/xdg"
 	"github.com/cloudposse/atmos/toolchain/registry"
 )
 
@@ -66,12 +67,19 @@ type Installer struct {
 func NewInstallerWithResolver(resolver ToolResolver) *Installer {
 	defer perf.Track(nil, "toolchain.NewInstaller")()
 
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Warn("Falling back to temp dir for cache.", "error", err)
-		homeDir = os.TempDir()
+	// Use XDG-compliant cache directory.
+	cacheDir, err := xdg.GetXDGCacheDir("toolchain", 0o755)
+	if err != nil || cacheDir == "" {
+		// Fallback to manual construction if XDG fails.
+		log.Warn("XDG cache dir unavailable, falling back to manual construction", "error", err)
+		homeDir, homeErr := os.UserHomeDir()
+		if homeErr != nil {
+			log.Warn("Falling back to temp dir for cache", "error", homeErr)
+			cacheDir = filepath.Join(os.TempDir(), ".cache", "tools-cache")
+		} else {
+			cacheDir = filepath.Join(homeDir, ".cache", "tools-cache")
+		}
 	}
-	cacheDir := filepath.Join(homeDir, ".cache", "tools-cache")
 	binDir := filepath.Join(GetInstallPath(), "bin")
 	registries := []string{
 		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs",
