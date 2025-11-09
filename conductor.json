@@ -1,6 +1,6 @@
 {
     "scripts": {
-        "setup": "cd website && npm install",
-        "run": "cd website && npm start -- -p $CONDUCTOR_PORT"
+        "setup": "cd website && source ~/.nvm/nvm.sh && nvm install && pnpm install --shamefully-hoist",
+        "run": "cd website && source ~/.nvm/nvm.sh && nvm install && pnpm install --shamefully-hoist && pnpm exec docusaurus start --port $CONDUCTOR_PORT"
     }
 }

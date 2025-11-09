@@ -195,7 +195,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/containerd/containerd/v2
     License: Apache-2.0
-    URL: https://github.com/containerd/containerd/blob/v2.1.4/LICENSE
+    URL: https://github.com/containerd/containerd/blob/v2.1.5/LICENSE
 
   - github.com/containerd/errdefs
     License: Apache-2.0
@@ -1123,6 +1123,10 @@ MIT LICENSED DEPENDENCIES
   - github.com/cloudposse/atmos/pkg/config/homedir
     License: MIT
     URL: https://github.com/cloudposse/atmos/blob/HEAD/pkg/config/homedir/LICENSE
+
+  - github.com/cloudposse/atmos/pkg/ui/theme
+    License: MIT
+    URL: https://github.com/cloudposse/atmos/blob/HEAD/pkg/ui/theme/LICENSE-THEMES
 
   - github.com/common-nighthawk/go-figure
     License: MIT
