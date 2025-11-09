@@ -58,9 +58,21 @@ func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 
 	// Set the paths via Viper.
 	toolsDir := filepath.Join(tempDir, ".tools")
+
+	// Save previous viper settings for cleanup
+	prevToolVersions := viper.Get("toolchain.tool-versions")
+	prevToolsDir := viper.Get("toolchain.tools-dir")
+	prevToolsConfig := viper.Get("toolchain.tools-config")
+
 	viper.Set("toolchain.tool-versions", toolVersionsPath)
 	viper.Set("toolchain.tools-dir", toolsDir)
 	viper.Set("toolchain.tools-config", toolsConfigPath)
+
+	t.Cleanup(func() {
+		viper.Set("toolchain.tool-versions", prevToolVersions)
+		viper.Set("toolchain.tools-dir", prevToolsDir)
+		viper.Set("toolchain.tools-config", prevToolsConfig)
+	})
 
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{

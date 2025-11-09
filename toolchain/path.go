@@ -24,7 +24,7 @@ func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("%w: no tools configured in tool-versions file", ErrToolNotFound)
 		}
-		return fmt.Errorf("error reading tool-versions file: %w", err)
+		return fmt.Errorf("%w: reading %s: %v", ErrFileOperation, GetToolVersionsFilePath(), err)
 	}
 
 	if len(toolVersions.Tools) == 0 {
@@ -34,14 +34,15 @@ func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
 	// Build PATH entries for each tool
 	var pathEntries []string
 	var toolPaths []ToolPath
+	seen := make(map[string]struct{}) // Track seen paths to avoid duplicates
 
 	for toolName, versions := range toolVersions.Tools {
 		if len(versions) == 0 {
 			continue
 		}
 		version := versions[0] // default version
-		// Resolve tool name to owner/repo
-		owner, repo, err := installer.resolver.Resolve(toolName)
+		// Resolve tool name to owner/repo using parseToolSpec for consistency
+		owner, repo, err := installer.parseToolSpec(toolName)
 		if err != nil {
 			// Skip tools that can't be resolved
 			continue
@@ -68,7 +69,12 @@ func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
 			dirPath = filepath.Dir(absBinaryPath)
 		}
 
-		pathEntries = append(pathEntries, dirPath)
+		// Deduplicate PATH entries
+		if _, exists := seen[dirPath]; !exists {
+			seen[dirPath] = struct{}{}
+			pathEntries = append(pathEntries, dirPath)
+		}
+
 		toolPaths = append(toolPaths, ToolPath{
 			Tool:    toolName,
 			Version: version,

@@ -31,9 +31,14 @@ func findBinaryPath(toolNameFull string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to load .tool-versions file: %w", err)
 	}
+
+	// Extract tool name and version from input
 	toolName := toolNameFull
+	var version string
 	if strings.Contains(toolName, versionSplit) {
-		toolName = strings.Split(toolName, versionSplit)[0]
+		parts := strings.Split(toolNameFull, versionSplit)
+		toolName = parts[0]
+		version = parts[1]
 	}
 
 	versions, exists := toolVersions.Tools[toolName]
@@ -41,10 +46,9 @@ func findBinaryPath(toolNameFull string) (string, error) {
 		return "", fmt.Errorf("%w: tool '%s' not configured in .tool-versions", ErrToolNotFound, toolName)
 	}
 
-	// Use the most recent version
-	version := versions[len(versions)-1]
-	if strings.Contains(toolNameFull, versionSplit) {
-		version = strings.Split(toolNameFull, versionSplit)[1]
+	// Use the most recent version if not specified
+	if version == "" {
+		version = versions[len(versions)-1]
 	}
 
 	// Now that we know the tool is configured, use the installer to resolve the canonical name

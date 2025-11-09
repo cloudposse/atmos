@@ -224,6 +224,17 @@ func TestGetAllVersions(t *testing.T) {
 	}
 }
 
+// setupToolchainTestEnv sets up the test environment with HOME, ATMOS_TOOLS_DIR, and tools.yaml.
+func setupToolchainTestEnv(t *testing.T, tempDir string) {
+	t.Helper()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("ATMOS_TOOLS_DIR", tempDir)
+	toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
+	err := os.WriteFile(toolsConfigPath, []byte("aliases:\n  terraform: hashicorp/terraform\n"), 0o644)
+	require.NoError(t, err)
+	t.Setenv("ATMOS_TOOLS_CONFIG_FILE", toolsConfigPath)
+}
+
 func TestAddToolToVersionsAsDefault(t *testing.T) {
 	t.Run("Adds tool as default (first position)", func(t *testing.T) {
 		tempDir := t.TempDir()
@@ -236,16 +247,8 @@ func TestAddToolToVersionsAsDefault(t *testing.T) {
 		err := SaveToolVersions(filePath, toolVersions)
 		require.NoError(t, err)
 
-		// Now test AddToolToVersionsAsDefault which does include duplicate checking
-		// We need to set up environment for installer
-		t.Setenv("HOME", tempDir)
-		t.Setenv("ATMOS_TOOLS_DIR", tempDir)
-
-		// Create minimal tools.yaml to allow installer to initialize
-		toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
-		err = os.WriteFile(toolsConfigPath, []byte("aliases:\n  terraform: hashicorp/terraform\n"), 0o644)
-		require.NoError(t, err)
-		t.Setenv("ATMOS_TOOLS_CONFIG_FILE", toolsConfigPath)
+		// Set up test environment
+		setupToolchainTestEnv(t, tempDir)
 
 		// Add as default
 		err = AddToolToVersionsAsDefault(filePath, "terraform", "1.5.7")
@@ -273,15 +276,8 @@ func TestAddToolToVersionsAsDefault(t *testing.T) {
 		err := SaveToolVersions(filePath, toolVersions)
 		require.NoError(t, err)
 
-		// Set up environment for installer
-		t.Setenv("HOME", tempDir)
-		t.Setenv("ATMOS_TOOLS_DIR", tempDir)
-
-		// Create minimal tools.yaml
-		toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
-		err = os.WriteFile(toolsConfigPath, []byte("aliases:\n  terraform: hashicorp/terraform\n"), 0o644)
-		require.NoError(t, err)
-		t.Setenv("ATMOS_TOOLS_CONFIG_FILE", toolsConfigPath)
+		// Set up test environment
+		setupToolchainTestEnv(t, tempDir)
 
 		// Set existing version as default
 		err = AddToolToVersionsAsDefault(filePath, "terraform", "1.5.6")

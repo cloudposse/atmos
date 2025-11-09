@@ -86,15 +86,7 @@ func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Ins
 		}
 	}
 
-	err = uninstallSingleTool(installer, owner, repo, version, true)
-
-	// Always attempt to remove the latest file and parent directory after uninstalling @latest
-	if args[0] == toolSpec && strings.HasSuffix(toolSpec, "@latest") {
-		_ = os.Remove(filepath.Join(installer.binDir, owner, repo, "latest"))
-		_ = os.Remove(filepath.Join(installer.binDir, owner, repo)) // will only remove if empty
-	}
-
-	return err
+	return uninstallSingleTool(installer, owner, repo, version, true)
 }
 
 func RunUninstall(toolSpec string) error {
@@ -113,9 +105,6 @@ func RunUninstall(toolSpec string) error {
 		return fmt.Errorf("%w: %s. Expected format: owner/repo@version or tool@version", ErrInvalidToolSpec, toolSpec)
 	}
 
-	if installer == nil {
-		installer = NewInstaller()
-	}
 	owner, repo, err := installer.parseToolSpec(tool)
 	if err != nil {
 		// For uninstall operations, be more lenient with tool names
@@ -154,15 +143,7 @@ func RunUninstall(toolSpec string) error {
 		}
 	}
 
-	err = uninstallSingleTool(installer, owner, repo, version, true)
-
-	// Always attempt to remove the latest file and parent directory after uninstalling @latest
-	if strings.HasSuffix(toolSpec, "@latest") {
-		_ = os.Remove(filepath.Join(installer.binDir, owner, repo, "latest"))
-		_ = os.Remove(filepath.Join(installer.binDir, owner, repo)) // will only remove if empty
-	}
-
-	return err
+	return uninstallSingleTool(installer, owner, repo, version, true)
 }
 
 // Keep the original runUninstall for CLI usage.
@@ -248,7 +229,7 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 	// Load tool versions
 	toolVersions, err := LoadToolVersions(toolVersionsPath)
 	if err != nil {
-		return fmt.Errorf("failed to load .tool-versions: %w", err)
+		return fmt.Errorf("%w: failed to load %s: %v", ErrFileOperation, toolVersionsPath, err)
 	}
 
 	// Count total tools for progress tracking

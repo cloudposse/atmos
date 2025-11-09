@@ -8,27 +8,26 @@ import (
 )
 
 func resetLine(stderr *os.File, isTTY bool) {
-	defer perf.Track(nil, "toolchain.DownloadWithProgress")()
+	defer perf.Track(nil, "toolchain.resetLine")()
 
 	if isTTY {
 		fmt.Fprintf(stderr, "\r\033[K")
-		stderr.Sync()
 	}
 }
 
 func printStatusLine(stderr *os.File, isTTY bool, line string) {
-	defer perf.Track(nil, "toolchain.DownloadWithProgress")()
+	defer perf.Track(nil, "toolchain.printStatusLine")()
 
 	resetLine(stderr, isTTY)
 	fmt.Fprintln(stderr, line)
-	stderr.Sync()
 }
 
 func printProgressBar(stderr *os.File, isTTY bool, line string) {
+	defer perf.Track(nil, "toolchain.printProgressBar")()
+
 	if isTTY {
 		fmt.Fprintf(stderr, "\r\033[K%s", line)
 	} else {
 		fmt.Fprintln(stderr, line)
 	}
-	stderr.Sync()
 }

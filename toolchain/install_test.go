@@ -80,11 +80,9 @@ func TestRunInstallWithNoArgs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Temporarily set the global toolVersionsFile variable
-	originalToolVersionsFile := GetToolVersionsFilePath()
+	prev := atmosConfig
 	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: toolVersionsPath}})
-	defer func() {
-		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: originalToolVersionsFile}})
-	}()
+	t.Cleanup(func() { SetAtmosConfig(prev) })
 
 	// Test that runInstall with no arguments doesn't error
 	// This prevents regression where the function might error when no specific tool is provided

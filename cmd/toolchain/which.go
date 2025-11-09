@@ -9,10 +9,11 @@ import (
 )
 
 var whichCmd = &cobra.Command{
-	Use:   "which <tool>",
-	Short: "Show path to installed tool binary",
-	Long:  `Show the full path to an installed tool binary.`,
-	Args:  cobra.ExactArgs(1),
+	Use:     "which <tool>",
+	Short:   "Show path to installed tool binary",
+	Long:    `Show the full path to an installed tool binary.`,
+	Example: "  atmos toolchain which hashicorp/terraform",
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return toolchain.WhichExec(args[0])
 	},

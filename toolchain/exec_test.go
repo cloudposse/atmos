@@ -69,6 +69,10 @@ func TestRunExecCommand_Success(t *testing.T) {
 	resetExecMock()
 	execFunc = mockExec // swap syscall.Exec with mock
 
+	// Set explicit install path for predictable test
+	tempDir := t.TempDir()
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{InstallPath: filepath.Join(tempDir, ".tools")}})
+
 	fake := &fakeInstaller{
 		resolveOwner: "hashicorp",
 		resolveRepo:  "terraform",
@@ -77,7 +81,6 @@ func TestRunExecCommand_Success(t *testing.T) {
 	}
 
 	args := []string{"terraform@1.13.1", "--version"}
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{}})
 	AddToolToVersions(GetToolVersionsFilePath(), "terraform", "1.13.1")
 	t.Log(ensureToolInstalled("terraform@1.13.1"))
 	err := RunExecCommand(fake, args)
@@ -85,7 +88,7 @@ func TestRunExecCommand_Success(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	expected := filepath.FromSlash(".tools/bin/hashicorp/terraform/1.13.1/terraform")
+	expected := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.13.1", "terraform")
 	if calledExecPath != expected {
 		t.Errorf("expected exec path %q, got %q", expected, calledExecPath)
 	}

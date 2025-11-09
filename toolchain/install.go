@@ -2,6 +2,7 @@ package toolchain
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -70,7 +71,7 @@ type installDoneMsg struct{}
 
 // Run spinner with Bubble Tea - proper way.
 func runBubbleTeaSpinner(message string) *tea.Program {
-	p := tea.NewProgram(initialSpinnerModel(message))
+	p := tea.NewProgram(initialSpinnerModel(message), tea.WithOutput(os.Stderr))
 	return p
 }
 

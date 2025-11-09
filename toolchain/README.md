@@ -340,7 +340,7 @@ func InstallExec(tool string) error {
 
 Declares tool versions for a project:
 
-```
+```text
 # Tools for this project
 terraform 1.9.8
 helm 3.17.0
