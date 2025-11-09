@@ -93,8 +93,7 @@ func TestListCommand_NonExistentToolVersionsFile(t *testing.T) {
 		},
 	})
 	err := RunList()
-	require.Error(t, err, "Should error when tool-versions file doesn't exist")
-	assert.Contains(t, err.Error(), "failed to load .tool-versions")
+	require.NoError(t, err, "Should handle missing tool-versions file gracefully with helpful message")
 }
 
 func TestListCommand_ToolsNotInstalled(t *testing.T) {
@@ -197,9 +196,8 @@ func TestListCommand_NoArgs(t *testing.T) {
 	t.Chdir(dir)
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 	err := RunList()
-	// This should fail when no .tool-versions file exists
-	require.Error(t, err, "Should fail when no .tool-versions file exists")
-	assert.Contains(t, err.Error(), "failed to load .tool-versions")
+	// Should handle missing .tool-versions file gracefully
+	require.NoError(t, err, "Should handle missing tool-versions file gracefully with helpful message")
 }
 
 func TestFormatFileSize(t *testing.T) {

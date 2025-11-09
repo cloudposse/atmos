@@ -9,8 +9,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/toolchain"
 	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
 )
@@ -68,11 +68,14 @@ func listConfiguredRegistries(_ context.Context) error {
 
 	// For MVP, show placeholder message.
 	// TODO: Load registries from atmos.yaml configuration.
-	u.PrintfMarkdownToTUI("**Configured registries:**\n\n")
-	u.PrintfMessageToTUI("Registry configuration from atmos.yaml:\n")
-	u.PrintfMessageToTUI("  - aqua-public (aqua, priority: 10)\n")
-	u.PrintfMessageToTUI("\n")
-	u.PrintfMessageToTUI("Use 'atmos toolchain registry list <name>' to see tools in a registry\n")
+	message := `**Configured registries:**
+
+Registry configuration from atmos.yaml:
+  - aqua-public (aqua, priority: 10)
+
+Use 'atmos toolchain registry list <name>' to see tools in a registry
+`
+	_ = ui.MarkdownMessage(message)
 
 	return nil
 }
@@ -101,15 +104,16 @@ func listRegistryTools(ctx context.Context, registryName string) error {
 	}
 
 	if len(tools) == 0 {
-		u.PrintfMessageToTUI("No tools found in registry '%s'\n", registryName)
+		_ = ui.Infof("No tools found in registry '%s'", registryName)
 		return nil
 	}
 
 	// Get metadata for header.
 	meta, err := reg.GetMetadata(ctx)
 	if err == nil {
-		u.PrintfMarkdownToTUI("**Tools in registry '%s'** (showing %d):\n\n", registryName, len(tools))
-		u.PrintfMessageToTUI("Type: %s\nSource: %s\n\n", meta.Type, meta.Source)
+		header := fmt.Sprintf("**Tools in registry '%s'** (showing %d):\n\nType: %s\nSource: %s\n\n",
+			registryName, len(tools), meta.Type, meta.Source)
+		_ = ui.MarkdownMessage(header)
 	}
 
 	// Display as table.

@@ -4,8 +4,7 @@ import (
 	"fmt"
 
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // AddToolVersion contains the actual business logic for adding/updating a tool.
@@ -28,6 +27,6 @@ func AddToolVersion(tool, version string) error {
 	if err := AddToolToVersions(GetToolVersionsFilePath(), tool, version); err != nil {
 		return err
 	}
-	u.PrintfMarkdownToTUI("%s Added/updated **%s** %s in %s\n", theme.Styles.Checkmark, tool, version, atmosConfig.Toolchain.VersionsFile)
+	_ = ui.Successf("Added/updated %s %s in %s", tool, version, atmosConfig.Toolchain.VersionsFile)
 	return nil
 }

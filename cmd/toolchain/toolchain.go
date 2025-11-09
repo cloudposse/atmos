@@ -9,7 +9,10 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	registrycmd "github.com/cloudposse/atmos/cmd/toolchain/registry"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	toolchainpkg "github.com/cloudposse/atmos/toolchain"
 )
 
@@ -39,6 +42,15 @@ var toolchainCmd = &cobra.Command{
 	Short: "Toolchain CLI",
 	Long:  `A standalone tool to install CLI binaries using registry metadata.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Initialize I/O context and global formatter (required for ui.* functions).
+		// This must happen before any ui.* calls.
+		ioCtx, ioErr := iolib.NewContext()
+		if ioErr != nil {
+			return fmt.Errorf("failed to initialize I/O context: %w", ioErr)
+		}
+		ui.InitFormatter(ioCtx)
+		data.InitWriter(ioCtx)
+
 		// Initialize the toolchain package with the Atmos configuration.
 		// This ensures that the toolchain package has access to the configuration.
 		atmosCfg := &schema.AtmosConfiguration{

@@ -4,8 +4,7 @@ import (
 	"fmt"
 
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // RemoveToolVersion removes either the entire tool or a specific version.
@@ -61,9 +60,9 @@ func RemoveToolVersion(filePath, tool, version string) error {
 	}
 
 	if version == "" {
-		u.PrintfMarkdownToTUI("%s Removed **%s** from %s\n", theme.Styles.Checkmark, tool, filePath)
+		_ = ui.Successf("Removed %s from %s", tool, filePath)
 	} else {
-		u.PrintfMarkdownToTUI("%s Removed **%s@%s** from %s\n", theme.Styles.Checkmark, tool, version, filePath)
+		_ = ui.Successf("Removed %s@%s from %s", tool, version, filePath)
 	}
 	return nil
 }

@@ -13,7 +13,7 @@ import (
 	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/pkg/perf"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Table row data structure.
@@ -35,14 +35,30 @@ func RunList() error {
 	installer := NewInstaller()
 	toolVersionsFile := GetToolVersionsFilePath()
 
-	// Load tool versions from file
+	// Load tool versions from file.
 	toolVersions, err := LoadToolVersions(toolVersionsFile)
 	if err != nil {
+		// Handle missing file gracefully with a helpful message.
+		if os.IsNotExist(err) {
+			message := "# No Configuration Found\n\n" +
+				fmt.Sprintf("No `.tool-versions` file found at: `%s`\n\n", toolVersionsFile) +
+				"## To get started:\n\n" +
+				"Add a tool to automatically create your configuration:\n\n" +
+				"```shell\n" +
+				"atmos toolchain add terraform@1.6.0\n" +
+				"```\n\n" +
+				"Then list your tools:\n\n" +
+				"```shell\n" +
+				"atmos toolchain list\n" +
+				"```\n"
+			_ = ui.MarkdownMessage(message)
+			return nil
+		}
 		return fmt.Errorf("failed to load .tool-versions: %w", err)
 	}
 
 	if len(toolVersions.Tools) == 0 {
-		u.PrintfMessageToTUI("No tools configured in .tool-versions file\n")
+		_ = ui.Writeln("No tools configured in .tool-versions file")
 		return nil
 	}
 
@@ -57,14 +73,14 @@ func RunList() error {
 		// Use existing infrastructure to resolve tool
 		resolvedKey, version, found := LookupToolVersion(toolName, toolVersions, installer.resolver)
 		if !found {
-			u.PrintfMessageToTUI("Warning: Could not resolve tool '%s'\n", toolName)
+			_ = ui.Warningf("Could not resolve tool '%s'", toolName)
 			continue
 		}
 
 		// Get owner/repo from resolved key
 		owner, repo, err := installer.resolver.Resolve(resolvedKey)
 		if err != nil {
-			u.PrintfMessageToTUI("Warning: Could not resolve owner/repo for '%s': %v\n", resolvedKey, err)
+			_ = ui.Warningf("Could not resolve owner/repo for '%s': %v", resolvedKey, err)
 			continue
 		}
 
@@ -317,7 +333,7 @@ func RunList() error {
 		table.WithColumns(columns),
 		table.WithRows(tableRows),
 		table.WithFocused(false), // Non-interactive
-		table.WithHeight(len(tableRows)),
+		table.WithHeight(len(tableRows)+1),
 	)
 
 	// Debug: log table configuration

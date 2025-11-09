@@ -9,8 +9,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/toolchain"
 	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
 )
@@ -89,19 +89,25 @@ func executeSearchCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(results) == 0 {
-		u.PrintfMessageToTUI("No tools found matching '%s'\n", query)
-		u.PrintfMessageToTUI("\nTry:\n")
-		u.PrintfMessageToTUI("  - Using a different search term\n")
-		u.PrintfMessageToTUI("  - Checking 'atmos toolchain registry list' for available tools\n")
+		message := fmt.Sprintf(`No tools found matching '%s'
+
+Try:
+  - Using a different search term
+  - Checking 'atmos toolchain registry list' for available tools
+`, query)
+		_ = ui.Info(message)
 		return nil
 	}
 
 	// Display results.
-	u.PrintfMarkdownToTUI("**Found %d tools matching '%s':**\n\n", len(results), query)
+	_ = ui.MarkdownMessagef("**Found %d tools matching '%s':**\n\n", len(results), query)
 	displaySearchResults(results)
 
-	u.PrintfMessageToTUI("\nUse 'atmos toolchain info <tool>' for details\n")
-	u.PrintfMessageToTUI("Use 'atmos toolchain install <tool>@<version>' to install\n")
+	footer := `
+Use 'atmos toolchain info <tool>' for details
+Use 'atmos toolchain install <tool>@<version>' to install
+`
+	_ = ui.Write(footer)
 
 	return nil
 }

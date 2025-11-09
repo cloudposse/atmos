@@ -9,8 +9,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/toolchain/registry"
 )
 
@@ -92,7 +92,7 @@ func InfoExec(toolName, outputFormat string) error {
 			AvailableVersions: availableVersions,
 			DefaultVersion:    defaultVersion,
 		})
-		u.PrintfMarkdownToTUI("%s", markdown)
+		_ = ui.MarkdownMessage(markdown)
 	}
 
 	return nil
