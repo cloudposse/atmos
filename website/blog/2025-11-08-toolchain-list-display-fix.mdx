@@ -1,0 +1,55 @@
+---
+slug: toolchain-list-display-fix
+title: "Improved Toolchain List Display and Error Messages"
+authors: [osterman]
+tags: [bugfix, toolchain, ui]
+date: 2025-11-08
+---
+
+The `atmos toolchain list` command now displays tool entries correctly and provides helpful error messages when configuration is missing.
+
+<!--truncate-->
+
+## What Changed
+
+This release fixes several issues with the toolchain list command that were preventing tools from being displayed and providing confusing error messages.
+
+### Fixed Table Display
+
+The toolchain list command was showing only the table header without any data rows, even when tools were configured in `.tool-versions`. This was caused by an off-by-one error in the bubbles table component configuration. The command now correctly displays all configured tools with their installation status.
+
+### Improved Error Messages
+
+When running `atmos toolchain list` without a `.tool-versions` file, the command previously showed a confusing "not valid usage" error message. Now it displays a helpful markdown-formatted message with clear instructions:
+
+```
+# No Configuration Found
+
+No .tool-versions file found at: .tool-versions
+
+## To get started:
+
+Add a tool to automatically create your configuration:
+
+atmos toolchain add terraform@1.6.0
+
+Then list your tools:
+
+atmos toolchain list
+```
+
+### UI System Migration
+
+All toolchain output has been migrated to use the new `ui.*` functions instead of the deprecated `u.Print*` methods. This ensures consistent formatting across all commands and proper rendering to stderr/stdout channels.
+
+## Impact
+
+These changes improve the developer experience when working with Atmos toolchain management by:
+- Making it immediately clear when no tools are configured
+- Guiding users to the correct workflow (`atmos toolchain add`) instead of manual file editing
+- Ensuring all configured tools are visible in the list output
+- Providing consistent, well-formatted output across all toolchain commands
+
+## Upgrade Notes
+
+No action required—this fix is backward compatible with existing `.tool-versions` files.
