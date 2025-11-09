@@ -430,12 +430,18 @@ func ProcessStacks(
 			return configAndStacksInfo, nil
 		}
 
-		// Only attempt path resolution fallback if the component argument contains path separators.
-		// This prevents treating plain component names (like "vpc") as relative paths, which would
-		// incorrectly resolve them from the current working directory.
-		// Examples that should trigger fallback: "components/terraform/vpc", "infra/vpc"
-		// Examples that should NOT trigger fallback: "vpc", "top-level-component1"
-		shouldAttemptPathResolution := foundStackCount == 0 && strings.Contains(configAndStacksInfo.ComponentFromArg, string(filepath.Separator))
+		// Only attempt path resolution fallback if the component argument contains forward slashes,
+		// which indicates it's likely a file path rather than a simple component name.
+		// This prevents treating plain component names (like "vpc") as relative paths from CWD.
+		//
+		// Note: Component names in stack configs can contain forward slashes (like "infra/vpc"),
+		// but these are namespace prefixes, not file paths. The key distinction is:
+		// - "infra/vpc" as a component name → already found in first loop, no fallback needed
+		// - "components/terraform/vpc" as a path → not found in first loop, fallback needed
+		//
+		// Examples that should trigger fallback: "components/terraform/vpc"
+		// Examples that should NOT trigger fallback: "vpc", "top-level-component1", "infra/vpc" (if defined in stack)
+		shouldAttemptPathResolution := foundStackCount == 0 && strings.Contains(configAndStacksInfo.ComponentFromArg, "/")
 
 		if shouldAttemptPathResolution {
 			// Component not found - try fallback to path resolution.
@@ -518,25 +524,25 @@ func ProcessStacks(
 					}
 				}
 			}
+		}
 
-			// If still not found after path resolution attempt, return error.
-			if foundStackCount == 0 {
-				cliConfigYaml := ""
+		// If still not found after path resolution attempt (or if path resolution was skipped), return error.
+		if foundStackCount == 0 {
+			cliConfigYaml := ""
 
-				if atmosConfig.Logs.Level == u.LogLevelTrace {
-					y, _ := u.ConvertToYAML(atmosConfig)
-					cliConfigYaml = fmt.Sprintf("\n\n\nCLI config: %v\n", y)
-				}
-
-				return configAndStacksInfo,
-					fmt.Errorf("%w: Could not find the component `%s` in the stack `%s`.\n"+
-						"Check that all the context variables are correctly defined in the stack manifests.\n"+
-						"Are the component and stack names correct? Did you forget an import?%v",
-						errUtils.ErrInvalidComponent,
-						configAndStacksInfo.ComponentFromArg,
-						configAndStacksInfo.Stack,
-						cliConfigYaml)
+			if atmosConfig.Logs.Level == u.LogLevelTrace {
+				y, _ := u.ConvertToYAML(atmosConfig)
+				cliConfigYaml = fmt.Sprintf("\n\n\nCLI config: %v\n", y)
 			}
+
+			return configAndStacksInfo,
+				fmt.Errorf("%w: Could not find the component `%s` in the stack `%s`.\n"+
+					"Check that all the context variables are correctly defined in the stack manifests.\n"+
+					"Are the component and stack names correct? Did you forget an import?%v",
+					errUtils.ErrInvalidComponent,
+					configAndStacksInfo.ComponentFromArg,
+					configAndStacksInfo.Stack,
+					cliConfigYaml)
 		} else if foundStackCount > 1 {
 			err = fmt.Errorf("%w: Found duplicate config for the component `%s` in the stack `%s` in the manifests: %v\n"+
 				"Check that all the context variables are correctly defined in the manifests and not duplicated\n"+

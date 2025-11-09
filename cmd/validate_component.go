@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 
@@ -10,6 +11,7 @@ import (
 	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // validateComponentCmd validates atmos components
@@ -49,18 +51,16 @@ var validateComponentCmd = &cobra.Command{
 					return err
 				}
 
-				// Resolve path to component name (without type check - validate detects type)
-				resolvedComponent, err := e.ResolveComponentFromPathWithoutTypeCheck(
-					&atmosConfig,
-					component,
-					stack,
-				)
+				// Extract component info from path without type checking or stack validation.
+				// Validate component will detect the component type, and stack validation
+				// happens later in ExecuteValidateComponentCmd after stacks are loaded.
+				componentInfo, err := u.ExtractComponentInfoFromPath(&atmosConfig, component)
 				if err != nil {
-					return err
+					return fmt.Errorf("path resolution failed: %w", err)
 				}
 
 				// Replace the argument with the resolved component name
-				args[0] = resolvedComponent
+				args[0] = componentInfo.FullComponent
 			}
 		}
 

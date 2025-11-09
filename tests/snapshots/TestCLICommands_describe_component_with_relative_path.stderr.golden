@@ -1,4 +1,2 @@
 
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
- ERRO  DEBUG: Extracting component info from path original=./top-level-component1 normalized=/absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1
- ERRO  DEBUG: Successfully extracted component info type=terraform folder_prefix="" component=top-level-component1 full=top-level-component1
