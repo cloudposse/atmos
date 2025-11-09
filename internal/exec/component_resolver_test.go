@@ -19,14 +19,14 @@ func TestResolveComponentFromPath(t *testing.T) {
 	}
 
 	tests := []struct {
-		name               string
-		path               string
-		stack              string
-		componentType      string
-		want               string
-		wantErr            bool
-		errorIs            error
-		setupStacks        bool
+		name                string
+		path                string
+		stack               string
+		componentType       string
+		want                string
+		wantErr             bool
+		errorIs             error
+		setupStacks         bool
 		skipStackValidation bool
 	}{
 		{

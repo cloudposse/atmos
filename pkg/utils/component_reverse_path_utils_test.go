@@ -94,7 +94,7 @@ func TestExtractComponentInfoFromPath(t *testing.T) {
 		{
 			name: "helmfile component",
 			atmosConfig: &schema.AtmosConfiguration{
-				BasePath:                tmpDir,
+				BasePath:                 tmpDir,
 				TerraformDirAbsolutePath: terraformBase, // Need this so terraform type doesn't match
 				HelmfileDirAbsolutePath:  helmfileBase,
 				Components: schema.Components{
