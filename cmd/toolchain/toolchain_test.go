@@ -9,7 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	toolchainpkg "github.com/cloudposse/atmos/toolchain"
 )
 
@@ -33,12 +36,18 @@ func TestToolchainGetCommand(t *testing.T) {
 func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 	t.Helper()
 
+	// Initialize I/O context and formatter for testing.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "Failed to create I/O context")
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
 	// Create a test .tool-versions file.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
-	err := os.WriteFile(toolVersionsPath, []byte(toolVersionsContent), 0o644)
+	err = os.WriteFile(toolVersionsPath, []byte(toolVersionsContent), 0o644)
 	require.NoError(t, err)
 
 	// Create tools config.
@@ -57,7 +66,7 @@ func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			VersionsFile:    toolVersionsPath,
-			ToolsDir:        toolsDir,
+			InstallPath:     toolsDir,
 			ToolsConfigFile: toolsConfigPath,
 		},
 	}
@@ -93,6 +102,12 @@ func TestToolchainRemoveCommand(t *testing.T) {
 }
 
 func TestToolchainCommandsWithoutToolVersionsFile(t *testing.T) {
+	// Initialize I/O context and formatter for testing.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "Failed to create I/O context")
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
@@ -103,20 +118,26 @@ func TestToolchainCommandsWithoutToolVersionsFile(t *testing.T) {
 	viper.Set("toolchain.tools-config", filepath.Join(tempDir, "tools.yaml"))
 
 	// Test that list command handles missing file gracefully.
-	err := listCmd.RunE(listCmd, []string{})
+	err = listCmd.RunE(listCmd, []string{})
 	// Should either return error or handle gracefully.
 	// We're just checking it doesn't panic.
 	_ = err
 }
 
 func TestToolchainCleanCommand(t *testing.T) {
+	// Initialize I/O context and formatter for testing.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "Failed to create I/O context")
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
 	// Create tools directory with some files.
 	toolsDirPath := filepath.Join(tempDir, ".tools")
-	err := os.MkdirAll(filepath.Join(toolsDirPath, "bin", "hashicorp", "terraform", "1.5.7"), 0o755)
+	err = os.MkdirAll(filepath.Join(toolsDirPath, "bin", "hashicorp", "terraform", "1.5.7"), 0o755)
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(toolsDirPath, "bin", "hashicorp", "terraform", "1.5.7", "terraform"), []byte("test"), 0o755)
 	require.NoError(t, err)
@@ -131,8 +152,8 @@ func TestToolchainCleanCommand(t *testing.T) {
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath:        toolVersionsPath,
-			ToolsDir:        toolsDirPath,
+			VersionsFile:    toolVersionsPath,
+			InstallPath:     toolsDirPath,
 			ToolsConfigFile: toolsConfigPath,
 		},
 	}
@@ -144,6 +165,12 @@ func TestToolchainCleanCommand(t *testing.T) {
 }
 
 func TestToolchainPathCommand(t *testing.T) {
+	// Initialize I/O context and formatter for testing.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "Failed to create I/O context")
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
@@ -151,7 +178,7 @@ func TestToolchainPathCommand(t *testing.T) {
 	// Create a test .tool-versions file.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	content := "terraform 1.5.7\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
+	err = os.WriteFile(toolVersionsPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Create tools directory structure with actual binary.
@@ -177,8 +204,8 @@ func TestToolchainPathCommand(t *testing.T) {
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath:        toolVersionsPath,
-			ToolsDir:        toolsDirPath,
+			VersionsFile:    toolVersionsPath,
+			InstallPath:     toolsDirPath,
 			ToolsConfigFile: toolsConfigPath,
 		},
 	}
@@ -190,6 +217,12 @@ func TestToolchainPathCommand(t *testing.T) {
 }
 
 func TestToolchainWhichCommand(t *testing.T) {
+	// Initialize I/O context and formatter for testing.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "Failed to create I/O context")
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
@@ -197,7 +230,7 @@ func TestToolchainWhichCommand(t *testing.T) {
 	// Create a test .tool-versions file.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	content := "terraform 1.5.7\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
+	err = os.WriteFile(toolVersionsPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Create tools directory with binary.
@@ -222,8 +255,8 @@ func TestToolchainWhichCommand(t *testing.T) {
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath:        toolVersionsPath,
-			ToolsDir:        toolsDirPath,
+			VersionsFile:    toolVersionsPath,
+			InstallPath:     toolsDirPath,
 			ToolsConfigFile: toolsConfigPath,
 		},
 	}
@@ -235,6 +268,12 @@ func TestToolchainWhichCommand(t *testing.T) {
 }
 
 func TestToolchainSetCommand(t *testing.T) {
+	// Initialize I/O context and formatter for testing.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "Failed to create I/O context")
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
@@ -242,7 +281,7 @@ func TestToolchainSetCommand(t *testing.T) {
 	// Create a test .tool-versions file with multiple versions.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	content := "terraform 1.5.5 1.5.6 1.5.7\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
+	err = os.WriteFile(toolVersionsPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Create tools config.
@@ -260,8 +299,8 @@ func TestToolchainSetCommand(t *testing.T) {
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath:        toolVersionsPath,
-			ToolsDir:        toolsDirPath,
+			VersionsFile:    toolVersionsPath,
+			InstallPath:     toolsDirPath,
 			ToolsConfigFile: toolsConfigPath,
 		},
 	}
@@ -278,6 +317,12 @@ func TestToolchainSetCommand(t *testing.T) {
 }
 
 func TestToolchainUninstallCommand(t *testing.T) {
+	// Initialize I/O context and formatter for testing.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "Failed to create I/O context")
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
@@ -285,7 +330,7 @@ func TestToolchainUninstallCommand(t *testing.T) {
 	// Create a test .tool-versions file.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	content := "terraform 1.5.7\n"
-	err := os.WriteFile(toolVersionsPath, []byte(content), 0o644)
+	err = os.WriteFile(toolVersionsPath, []byte(content), 0o644)
 	require.NoError(t, err)
 
 	// Create tools directory with binary.
@@ -310,8 +355,8 @@ func TestToolchainUninstallCommand(t *testing.T) {
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath:        toolVersionsPath,
-			ToolsDir:        toolsDirPath,
+			VersionsFile:    toolVersionsPath,
+			InstallPath:     toolsDirPath,
 			ToolsConfigFile: toolsConfigPath,
 		},
 	}

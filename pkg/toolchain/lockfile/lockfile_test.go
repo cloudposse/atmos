@@ -323,7 +323,7 @@ metadata:
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid lock file metadata version")
+	assert.Contains(t, err.Error(), "metadata version is 0")
 }
 
 func TestVerify_MissingToolVersion(t *testing.T) {
@@ -343,7 +343,7 @@ func TestVerify_MissingToolVersion(t *testing.T) {
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "has no version")
+	assert.Contains(t, err.Error(), "tool missing version")
 }
 
 func TestVerify_NoPlatforms(t *testing.T) {
@@ -380,7 +380,7 @@ func TestVerify_MissingPlatformURL(t *testing.T) {
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "has no URL")
+	assert.Contains(t, err.Error(), "platform entry missing URL")
 }
 
 func TestVerify_MissingPlatformChecksum(t *testing.T) {
@@ -400,7 +400,7 @@ func TestVerify_MissingPlatformChecksum(t *testing.T) {
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "has no checksum")
+	assert.Contains(t, err.Error(), "platform entry missing checksum")
 }
 
 func TestVerify_FileNotFound(t *testing.T) {

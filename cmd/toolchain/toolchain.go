@@ -53,8 +53,9 @@ var toolchainCmd = &cobra.Command{
 		// This ensures that the toolchain package has access to the configuration.
 		atmosCfg := &schema.AtmosConfiguration{
 			Toolchain: schema.Toolchain{
-				VersionsFile: v.GetString("toolchain.tool-versions"),
-				InstallPath:  v.GetString("toolchain.tools-dir"),
+				VersionsFile:    v.GetString("toolchain.tool-versions"),
+				InstallPath:     v.GetString("toolchain.tools-dir"),
+				ToolsConfigFile: v.GetString("toolchain.tools-config"),
 			},
 		}
 

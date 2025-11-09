@@ -146,7 +146,8 @@ func (r *Renderer) Render(content string) (string, error) {
 			result = append(result, " "+styled)
 		} else {
 			// Keep all lines including blank lines for proper markdown paragraph spacing.
-			result = append(result, line)
+			// But remove trailing whitespace that glamour adds for padding.
+			result = append(result, strings.TrimRight(line, " \t"))
 		}
 	}
 
@@ -169,7 +170,17 @@ func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return renderer.Render(content)
+	rendered, err := renderer.Render(content)
+	if err != nil {
+		return "", err
+	}
+
+	// Remove trailing whitespace that glamour adds for padding.
+	lines := strings.Split(rendered, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.Join(lines, "\n"), nil
 }
 
 func (r *Renderer) RenderAscii(content string) (string, error) {
@@ -182,7 +193,17 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return renderer.Render(content)
+	rendered, err := renderer.Render(content)
+	if err != nil {
+		return "", err
+	}
+
+	// Remove trailing whitespace that glamour adds for padding.
+	lines := strings.Split(rendered, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.Join(lines, "\n"), nil
 }
 
 // RenderWorkflow renders workflow documentation with specific styling.

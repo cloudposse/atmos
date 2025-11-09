@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/charmbracelet/glamour"
@@ -442,5 +443,11 @@ func (f *formatter) Markdown(content string) (string, error) {
 		return content, err
 	}
 
-	return rendered, nil
+	// Remove trailing whitespace that glamour adds for padding.
+	lines := strings.Split(rendered, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+
+	return strings.Join(lines, "\n"), nil
 }

@@ -1,6 +1,6 @@
 
 
-This command generates configuration files to automate and streamline Terraform workflows with Atlantis.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+This command generates configuration files to automate and streamline Terraform workflows with Atlantis.
 
 Usage:
 
@@ -103,6 +103,6 @@ Global Flags:
                                      arguments and flags for the command.
 
 
-Use atmos atlantis generate [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+Use atmos atlantis generate [subcommand] --help for more information about a command.
 
 
