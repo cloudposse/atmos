@@ -170,6 +170,11 @@ func executeInit(
 	// Handle template selection
 	var selectedConfig templates.Configuration
 	if templateName == "" {
+		// Check if interactive mode is disabled
+		if !interactive {
+			return fmt.Errorf("%w: template name must be provided in non-interactive mode", errUtils.ErrInitialization)
+		}
+
 		// Interactive template selection
 		selectedName, err := initUI.PromptForTemplate("embeds", configs)
 		if err != nil {

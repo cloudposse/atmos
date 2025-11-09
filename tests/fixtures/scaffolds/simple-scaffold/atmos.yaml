@@ -28,7 +28,7 @@ scaffold:
       ref: "v1.0.0"
       target_dir: "./components/terraform/{{ .Config.name }}"
       values:
-                  bucket_name: "{{ .Config.name }}-{{ .Config.environment }}"
+        bucket_name: "{{ .Config.name }}-{{ .Config.environment }}"
         environment: "{{ .Config.environment }}"
         author: "{{ .Config.author }}"
 
@@ -37,5 +37,5 @@ scaffold:
       ref: "v2.0.0"
       target_dir: "./components/terraform/{{ .Config.name }}-vpc"
       values:
-                  vpc_name: "{{ .Config.name }}-vpc"
+        vpc_name: "{{ .Config.name }}-vpc"
         environment: "{{ .Config.environment }}"
