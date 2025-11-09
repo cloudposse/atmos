@@ -4,13 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -697,7 +697,7 @@ func processArgsAndFlags(
 					// - Starts with "./" or "../" (relative path)
 					// - Starts with "/" (absolute path)
 					// Otherwise, treat it as a component name (even if it contains slashes).
-					if IsExplicitComponentPath(secondArg) {
+					if comp.IsExplicitComponentPath(secondArg) {
 						info.NeedsPathResolution = true
 					}
 				}
@@ -742,20 +742,4 @@ func getCliVars(args []string) (map[string]any, error) {
 		}
 	}
 	return variables, nil
-}
-
-// IsExplicitComponentPath determines if a component argument represents an explicit filesystem path.
-// Returns true if the argument should be treated as a filesystem path rather than a component name.
-//
-// An argument is considered an explicit path if it:
-// - Is "." (current directory)
-// - Starts with "./" or "../" (relative path)
-// - Is an absolute path (starts with "/")
-//
-// Otherwise, it's treated as a component name (even if it contains slashes like "vpc/security-group").
-func IsExplicitComponentPath(component string) bool {
-	return component == "." ||
-		strings.HasPrefix(component, "./") ||
-		strings.HasPrefix(component, "../") ||
-		filepath.IsAbs(component)
 }

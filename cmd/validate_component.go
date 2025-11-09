@@ -7,6 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -26,7 +27,7 @@ var validateComponentCmd = &cobra.Command{
 		// Handle path-based component resolution
 		if len(args) > 0 {
 			component := args[0]
-			needsPathResolution := e.IsExplicitComponentPath(component)
+			needsPathResolution := comp.IsExplicitComponentPath(component)
 
 			if needsPathResolution {
 				flags := cmd.Flags()

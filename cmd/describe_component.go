@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -83,7 +84,7 @@ var describeComponentCmd = &cobra.Command{
 		// Determine if we need path resolution.
 		// Only resolve as a filesystem path if the argument explicitly indicates a path.
 		// Otherwise, treat it as a component name (even if it contains slashes).
-		needsPathResolution := e.IsExplicitComponentPath(component)
+		needsPathResolution := comp.IsExplicitComponentPath(component)
 
 		// Resolve path-based component arguments to component names
 		if needsPathResolution {
