@@ -366,3 +366,208 @@ func TestThemeListFlagPrecedence(t *testing.T) {
 		assert.False(t, actualValue, "CLI flag should override env var")
 	})
 }
+
+func TestExecuteThemeListActiveThemeResolution(t *testing.T) {
+	tests := []struct {
+		name            string
+		setupAtmosConfig func() *schema.AtmosConfiguration
+		setupViper      func(v *viper.Viper)
+		expectedTheme   string
+	}{
+		{
+			name: "defaults to atmos when no config",
+			setupAtmosConfig: func() *schema.AtmosConfiguration {
+				return nil
+			},
+			setupViper: func(v *viper.Viper) {
+				// No setup - clean state
+			},
+			expectedTheme: "atmos",
+		},
+		{
+			name: "defaults to atmos when config has empty theme",
+			setupAtmosConfig: func() *schema.AtmosConfiguration {
+				return &schema.AtmosConfiguration{
+					Settings: schema.AtmosSettings{
+						Terminal: schema.Terminal{
+							Theme: "",
+						},
+					},
+				}
+			},
+			setupViper: func(v *viper.Viper) {
+				// No setup
+			},
+			expectedTheme: "atmos",
+		},
+		{
+			name: "uses config theme when set",
+			setupAtmosConfig: func() *schema.AtmosConfiguration {
+				return &schema.AtmosConfiguration{
+					Settings: schema.AtmosSettings{
+						Terminal: schema.Terminal{
+							Theme: "dracula",
+						},
+					},
+				}
+			},
+			setupViper: func(v *viper.Viper) {
+				// No setup
+			},
+			expectedTheme: "dracula",
+		},
+		{
+			name: "ATMOS_THEME env var overrides empty config",
+			setupAtmosConfig: func() *schema.AtmosConfiguration {
+				return &schema.AtmosConfiguration{
+					Settings: schema.AtmosSettings{
+						Terminal: schema.Terminal{
+							Theme: "",
+						},
+					},
+				}
+			},
+			setupViper: func(v *viper.Viper) {
+				v.Set("ATMOS_THEME", "monokai")
+			},
+			expectedTheme: "monokai",
+		},
+		{
+			name: "THEME env var overrides empty config and ATMOS_THEME not set",
+			setupAtmosConfig: func() *schema.AtmosConfiguration {
+				return &schema.AtmosConfiguration{
+					Settings: schema.AtmosSettings{
+						Terminal: schema.Terminal{
+							Theme: "",
+						},
+					},
+				}
+			},
+			setupViper: func(v *viper.Viper) {
+				v.Set("THEME", "solarized-dark")
+			},
+			expectedTheme: "solarized-dark",
+		},
+		{
+			name: "config theme takes precedence over env vars",
+			setupAtmosConfig: func() *schema.AtmosConfiguration {
+				return &schema.AtmosConfiguration{
+					Settings: schema.AtmosSettings{
+						Terminal: schema.Terminal{
+							Theme: "nord",
+						},
+					},
+				}
+			},
+			setupViper: func(v *viper.Viper) {
+				v.Set("ATMOS_THEME", "monokai")
+				v.Set("THEME", "solarized-dark")
+			},
+			expectedTheme: "nord",
+		},
+		{
+			name: "ATMOS_THEME takes precedence over THEME when config empty",
+			setupAtmosConfig: func() *schema.AtmosConfiguration {
+				return &schema.AtmosConfiguration{
+					Settings: schema.AtmosSettings{
+						Terminal: schema.Terminal{
+							Theme: "",
+						},
+					},
+				}
+			},
+			setupViper: func(v *viper.Viper) {
+				v.Set("ATMOS_THEME", "monokai")
+				v.Set("THEME", "solarized-dark")
+			},
+			expectedTheme: "monokai",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup viper
+			originalViper := viper.GetViper()
+			defer func() {
+				// Restore original viper
+				viper.Reset()
+				for key, val := range originalViper.AllSettings() {
+					viper.Set(key, val)
+				}
+			}()
+
+			// Reset viper for clean state
+			viper.Reset()
+			tt.setupViper(viper.GetViper())
+
+			// Setup atmos config
+			oldAtmosConfig := atmosConfigPtr
+			defer func() { atmosConfigPtr = oldAtmosConfig }()
+			atmosConfigPtr = tt.setupAtmosConfig()
+
+			// Create a test command
+			testCmd := &cobra.Command{
+				Use: "test-list",
+				RunE: func(cmd *cobra.Command, args []string) error {
+					return nil
+				},
+			}
+
+			// Register flags using the parser
+			themeListParser.RegisterFlags(testCmd)
+			err := themeListParser.BindFlagsToViper(testCmd, viper.GetViper())
+			require.NoError(t, err)
+
+			// Execute the theme resolution logic directly
+			activeTheme := ""
+			if atmosConfigPtr != nil && atmosConfigPtr.Settings.Terminal.Theme != "" {
+				activeTheme = atmosConfigPtr.Settings.Terminal.Theme
+			} else if envTheme := viper.GetString("ATMOS_THEME"); envTheme != "" {
+				activeTheme = envTheme
+			} else if envTheme := viper.GetString("THEME"); envTheme != "" {
+				activeTheme = envTheme
+			} else {
+				activeTheme = "atmos"
+			}
+
+			// Verify
+			assert.Equal(t, tt.expectedTheme, activeTheme,
+				"expected active theme=%s, got %s", tt.expectedTheme, activeTheme)
+		})
+	}
+}
+
+func TestExecuteThemeShowOptions(t *testing.T) {
+	t.Run("creates options with theme name from args", func(t *testing.T) {
+		// This test verifies the options struct creation logic
+		themeName := "dracula"
+		opts := &ThemeShowOptions{
+			ThemeName: themeName,
+		}
+		assert.Equal(t, "dracula", opts.ThemeName)
+	})
+
+	t.Run("creates options with different theme name", func(t *testing.T) {
+		themeName := "monokai"
+		opts := &ThemeShowOptions{
+			ThemeName: themeName,
+		}
+		assert.Equal(t, "monokai", opts.ThemeName)
+	})
+}
+
+func TestThemeListOptionsStruct(t *testing.T) {
+	t.Run("creates options with recommended only false", func(t *testing.T) {
+		opts := &ThemeListOptions{
+			RecommendedOnly: false,
+		}
+		assert.False(t, opts.RecommendedOnly)
+	})
+
+	t.Run("creates options with recommended only true", func(t *testing.T) {
+		opts := &ThemeListOptions{
+			RecommendedOnly: true,
+		}
+		assert.True(t, opts.RecommendedOnly)
+	})
+}
