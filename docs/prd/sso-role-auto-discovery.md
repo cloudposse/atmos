@@ -761,8 +761,9 @@ func getDiscoveryOutputPath(providerName string, provider *schema.Provider) stri
     }
 
     // Default: XDG cache directory
-    cacheDir, _ := xdg.GetXDGCacheDir("aws", 0700)
-    return filepath.Join(cacheDir, providerName, "discovered-identities.yaml")
+    subpath := filepath.Join("aws", providerName)
+    cacheDir, _ := xdg.GetXDGCacheDir(subpath, 0700)
+    return filepath.Join(cacheDir, "discovered-identities.yaml")
 }
 ```
 
