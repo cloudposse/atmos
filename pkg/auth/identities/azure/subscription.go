@@ -151,7 +151,7 @@ func (i *subscriptionIdentity) Environment() (map[string]string, error) {
 // PrepareEnvironment prepares environment variables for external processes.
 func (i *subscriptionIdentity) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	// Add identity-specific environment variables.
-	result := make(map[string]string, len(environ)+3)
+	result := make(map[string]string)
 	for k, v := range environ {
 		result[k] = v
 	}

@@ -694,6 +694,14 @@ func TestDeviceCodeProvider_updateAzureCLICache_Integration(t *testing.T) {
 	// This is an integration test for updateAzureCLICache.
 	// We can't fully test it without real JWT tokens, but we can test the structure.
 
+	// Create isolated temp directory for test.
+	tmpHome := t.TempDir()
+
+	// Sandbox home directory to prevent writes to real user home.
+	t.Setenv("HOME", tmpHome)              // Unix/Linux/macOS
+	t.Setenv("USERPROFILE", tmpHome)       // Windows
+	t.Setenv("AZURE_CONFIG_DIR", tmpHome)  // Azure CLI config override
+
 	// Create a valid test JWT with OID and UPN claims.
 	createTestJWT := func(oid, upn string) string {
 		header := base64.RawURLEncoding.EncodeToString([]byte(`{"typ":"JWT","alg":"RS256"}`))
@@ -720,12 +728,6 @@ func TestDeviceCodeProvider_updateAzureCLICache_Integration(t *testing.T) {
 
 	err := provider.updateAzureCLICache(accessToken, now.Add(1*time.Hour), graphToken, now.Add(2*time.Hour), keyVaultToken, now.Add(3*time.Hour))
 
-	// The function should succeed without errors.
-	// However, it will fail to write to tmpDir because it uses os.UserHomeDir().
-	// We can't mock os.UserHomeDir(), so this test verifies the function doesn't panic.
-	// The actual MSAL cache update is tested implicitly by the Azure CLI integration.
-
-	// Since we can't control home directory in tests, we expect this to succeed
-	// but not actually write files (non-fatal errors are logged).
+	// The function should succeed without errors in the sandboxed environment.
 	assert.NoError(t, err)
 }
