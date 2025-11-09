@@ -162,6 +162,11 @@ jobs:
           helmfile-version: ${{ env.HELMFILE_VERSION }}
           helmfile-args: version
           helmfile-auto-init: "false"
+          helm-plugins: ""
+
+      - name: Install helm-diff plugin
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: helm plugin install https://github.com/databus23/helm-diff
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft

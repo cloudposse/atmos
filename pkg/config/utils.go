@@ -590,12 +590,13 @@ func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *
 
 func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.LogsLevel) > 0 {
-		if _, err := log.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
+		normalizedLevel, err := log.ParseLogLevel(configAndStacksInfo.LogsLevel)
+		if err != nil {
 			return err
 		}
-		// Only set the log level if validation passes
-		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
-		log.Debug(cmdLineArg, LogsLevelFlag, configAndStacksInfo.LogsLevel)
+		// Set the normalized log level (title case, with aliases resolved)
+		atmosConfig.Logs.Level = string(normalizedLevel)
+		log.Debug(cmdLineArg, LogsLevelFlag, atmosConfig.Logs.Level)
 	}
 	if len(configAndStacksInfo.LogsFile) > 0 {
 		atmosConfig.Logs.File = configAndStacksInfo.LogsFile
