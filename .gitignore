@@ -109,3 +109,4 @@ toolchain/.tool-versions
 
 # Scratch/temporary analysis files
 .scratch/
+scratch/
