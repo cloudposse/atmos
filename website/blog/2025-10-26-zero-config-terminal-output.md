@@ -345,7 +345,6 @@ Zero overhead for capability detection:
 ## What's Next
 
 This foundation enables exciting future enhancements:
-- **Theme system** (PR #1433) - User-configurable color schemes
 - **Progress bars** - Automatic for TTY, plain for pipes
 - **Interactive prompts** - Automatic TTY detection
 - **Spinner animations** - Show in TTY, silent in CI

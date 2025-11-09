@@ -61,7 +61,8 @@ func getFormatter() (*formatter, error) {
 // Package-level functions that delegate to the global formatter.
 
 // Markdown writes rendered markdown to stdout (data channel).
-// Use this for help text, documentation, and other pipeable content.
+// Use this for help text, documentation, and other pipeable formatted content.
+// Note: Delegates to globalFormatter.Markdown() for rendering, then writes to data channel.
 func Markdown(content string) error {
 	formatterMu.RLock()
 	defer formatterMu.RUnlock()
@@ -231,13 +232,14 @@ var Format Formatter
 type formatter struct {
 	ioCtx    io.Context
 	terminal terminal.Terminal
-	styles   *StyleSet
+	styles   *theme.StyleSet
 }
 
 // NewFormatter creates a new Formatter with I/O context and terminal.
 // Most code should use the package-level functions instead (ui.Markdown, ui.Success, etc.).
 func NewFormatter(ioCtx io.Context, term terminal.Terminal) Formatter {
-	styles := generateStyleSet(term.ColorProfile())
+	// Use theme-aware styles based on configured theme
+	styles := theme.GetCurrentStyles()
 
 	return &formatter{
 		ioCtx:    ioCtx,
@@ -246,7 +248,7 @@ func NewFormatter(ioCtx io.Context, term terminal.Terminal) Formatter {
 	}
 }
 
-func (f *formatter) Styles() *StyleSet {
+func (f *formatter) Styles() *theme.StyleSet {
 	return f.styles
 }
 
@@ -350,17 +352,26 @@ func (f *formatter) Markdown(content string) (string, error) {
 		}
 	}
 
-	// Build glamour options based on color profile
+	// Build glamour options with theme-aware styling
 	var opts []glamour.TermRendererOption
 
 	if maxWidth > 0 {
 		opts = append(opts, glamour.WithWordWrap(maxWidth))
 	}
 
-	// Select style based on color profile
-	styleName := f.selectMarkdownStyle()
-	if styleName != "" {
-		opts = append(opts, glamour.WithStylePath(styleName))
+	// Use theme-aware glamour styles
+	if f.terminal.ColorProfile() != terminal.ColorNone {
+		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
+		if themeName == "" {
+			themeName = "default"
+		}
+		glamourStyle, err := theme.GetGlamourStyleForTheme(themeName)
+		if err == nil {
+			opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
+		}
+		// Fallback to notty style if theme conversion fails
+	} else {
+		opts = append(opts, glamour.WithStylePath("notty"))
 	}
 
 	renderer, err := glamour.NewTermRenderer(opts...)
@@ -377,55 +388,4 @@ func (f *formatter) Markdown(content string) (string, error) {
 	}
 
 	return rendered, nil
-}
-
-// selectMarkdownStyle returns the glamour style name based on terminal color profile.
-// This will be replaced with full theme system from PR #1433.
-func (f *formatter) selectMarkdownStyle() string {
-	switch f.terminal.ColorProfile() {
-	case terminal.ColorNone:
-		return "notty"
-	case terminal.Color16, terminal.Color256, terminal.ColorTrue:
-		// Use dark style as default - this will be theme-aware in PR #1433
-		return "dark"
-	default:
-		return ""
-	}
-}
-
-// generateStyleSet creates a StyleSet based on color profile.
-// This is a simplified version - will be replaced by theme system from PR #1433.
-func generateStyleSet(profile terminal.ColorProfile) *StyleSet {
-	if profile == terminal.ColorNone {
-		// No color - return styles with no formatting
-		return &StyleSet{
-			Title:   lipgloss.NewStyle(),
-			Heading: lipgloss.NewStyle(),
-			Body:    lipgloss.NewStyle(),
-			Muted:   lipgloss.NewStyle(),
-			Success: lipgloss.NewStyle(),
-			Warning: lipgloss.NewStyle(),
-			Error:   lipgloss.NewStyle(),
-			Info:    lipgloss.NewStyle(),
-			Link:    lipgloss.NewStyle(),
-			Command: lipgloss.NewStyle(),
-			Label:   lipgloss.NewStyle(),
-		}
-	}
-
-	// Use existing theme.Styles for now
-	// This will be replaced with full theme system from PR #1433
-	return &StyleSet{
-		Title:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.ColorCyan)),
-		Heading: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBlue)),
-		Body:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorWhite)),
-		Muted:   theme.Styles.GrayText,
-		Success: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen)),
-		Warning: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange)),
-		Error:   lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed)),
-		Info:    lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan)),
-		Link:    theme.Styles.Link,
-		Command: theme.Styles.CommandName,
-		Label:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(theme.ColorBlue)),
-	}
 }
