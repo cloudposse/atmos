@@ -175,7 +175,7 @@ var RootCmd = &cobra.Command{
 				errUtils.CheckErrorPrintAndExit(flagErr, "", "")
 			}
 			errUtils.SetVerboseFlag(verbose)
-		} else {
+		} else if viper.IsSet(verboseFlagName) {
 			// CLI flag not set - check environment variable via Viper.
 			verbose := viper.GetBool(verboseFlagName)
 			errUtils.SetVerboseFlag(verbose)

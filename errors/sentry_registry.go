@@ -182,30 +182,37 @@ func MergeErrorConfigs(global *schema.ErrorsConfig, component *schema.ErrorsConf
 		return global
 	}
 
+	if global == nil {
+		global = &schema.ErrorsConfig{}
+	}
+
 	// Start with a copy of global config.
 	merged := &schema.ErrorsConfig{
 		Format: global.Format,
 		Sentry: global.Sentry,
 	}
 
-	// Check if component has any Sentry configuration.
-	hasComponentSentry := component.Sentry.Enabled ||
-		component.Sentry.DSN != "" ||
+	// Check if component has any explicit Sentry configuration (non-boolean fields).
+	// Boolean fields are handled separately to allow explicit true/false overrides.
+	hasComponentSentry := component.Sentry.DSN != "" ||
 		component.Sentry.Environment != "" ||
 		component.Sentry.Release != "" ||
 		component.Sentry.SampleRate > 0 ||
-		component.Sentry.Debug ||
-		component.Sentry.CaptureStackContext ||
 		len(component.Sentry.Tags) > 0
 
+	// Also check if boolean fields differ from global (explicit override).
+	hasBooleanOverride := component.Sentry.Enabled != global.Sentry.Enabled ||
+		component.Sentry.Debug != global.Sentry.Debug ||
+		component.Sentry.CaptureStackContext != global.Sentry.CaptureStackContext
+
 	// Override Sentry config if component specifies it.
-	if hasComponentSentry {
+	if hasComponentSentry || hasBooleanOverride {
 		// Component has Sentry config - merge it.
-		merged.Sentry = mergeSentryConfigs(&global.Sentry, &component.Sentry)
+		merged.Sentry = mergeSentryConfigs(&global.Sentry, &component.Sentry, hasComponentSentry)
 	}
 
 	// Override format config if component specifies it.
-	if component.Format.Verbose {
+	if component.Format.Verbose != global.Format.Verbose {
 		merged.Format.Verbose = component.Format.Verbose
 	}
 
@@ -213,11 +220,15 @@ func MergeErrorConfigs(global *schema.ErrorsConfig, component *schema.ErrorsConf
 }
 
 // mergeSentryConfigs merges component Sentry config with global Sentry config.
-func mergeSentryConfigs(global *schema.SentryConfig, component *schema.SentryConfig) schema.SentryConfig {
-	merged := *global // Start with global config.
+// hasExplicitConfig indicates whether the component has explicit non-boolean Sentry config.
+func mergeSentryConfigs(global *schema.SentryConfig, component *schema.SentryConfig, hasExplicitConfig bool) schema.SentryConfig {
+	var merged schema.SentryConfig
+	if global != nil {
+		merged = *global // Start with global config.
+	}
 
 	// Copy global tags to avoid modifying the original.
-	if global.Tags != nil {
+	if global != nil && global.Tags != nil {
 		merged.Tags = make(map[string]string)
 		for key, value := range global.Tags {
 			merged.Tags[key] = value
@@ -225,11 +236,6 @@ func mergeSentryConfigs(global *schema.SentryConfig, component *schema.SentryCon
 	}
 
 	// Override fields that are explicitly set in component config.
-	// For booleans, we always use the component value if the component config has any Sentry settings.
-	// This allows components to explicitly enable/disable Sentry.
-	if component.Enabled || component.DSN != "" {
-		merged.Enabled = component.Enabled
-	}
 	if component.DSN != "" {
 		merged.DSN = component.DSN
 	}
@@ -242,14 +248,32 @@ func mergeSentryConfigs(global *schema.SentryConfig, component *schema.SentryCon
 	if component.SampleRate > 0 {
 		merged.SampleRate = component.SampleRate
 	}
-	// Debug is a boolean, so we need to check if it's explicitly set.
-	// We use the component value directly since false is a valid override.
-	if component.Debug {
+
+	// For boolean fields:
+	// - If component has explicit non-boolean config (DSN/Environment/Tags/etc), assume booleans
+	//   are zero values unless the caller knows otherwise. Don't override them.
+	// - If component has NO explicit config (only booleans differ from global), apply the boolean.
+	//   This allows disabling Sentry via `enabled: false` without setting other fields.
+	if !hasExplicitConfig && global != nil {
+		// Component only has boolean overrides (no DSN/Environment/Tags).
+		// Apply boolean differences - this allows `enabled: false` to disable Sentry.
+		if component.Enabled != global.Enabled {
+			merged.Enabled = component.Enabled
+		}
+		if component.Debug != global.Debug {
+			merged.Debug = component.Debug
+		}
+		if component.CaptureStackContext != global.CaptureStackContext {
+			merged.CaptureStackContext = component.CaptureStackContext
+		}
+	} else if global == nil {
+		// No global config - use component values directly.
+		merged.Enabled = component.Enabled
 		merged.Debug = component.Debug
-	}
-	if component.CaptureStackContext {
 		merged.CaptureStackContext = component.CaptureStackContext
 	}
+	// Else: hasExplicitConfig=true - component has Environment/DSN/Tags.
+	// Don't override booleans (they're likely zero values from YAML decoding).
 
 	// Merge tags (component tags override global tags with same key).
 	if len(component.Tags) > 0 {
