@@ -382,7 +382,7 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 - **Use error builder for complex errors** - adds hints, context, and exit codes
 - **Use `errors.Is()` for error checking** - robust against wrapping
 - **NEVER use dynamic errors directly** - triggers linting warnings
-- **See `docs/errors.md`** for complete developer guide
+- **See `docs/errors.md`** for complete developer guide.
 
 **Important distinction:**
 - **`fmt.Errorf` with single `%w`**: Creates error **chain** - `errors.Unwrap()` returns next error. Use when error context builds sequentially through call stack. **Prefer this when error chain matters.**
@@ -493,7 +493,7 @@ ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, 
 - **No coverage theater** - Each test must validate real behavior, not inflate metrics
 - **Remove always-skipped tests** - Either fix the underlying issue or delete the test
 - **Table-driven tests need real scenarios** - Use production-like inputs, not contrived data
-- **Use `errors.Is()` for error checking** - Use `assert.ErrorIs(err, ErrSentinel)` for our errors and stdlib errors (e.g., `fs.ErrNotExist`, `exec.ErrNotFound`). String matching is only OK for third-party errors or testing specific message formatting
+- **Use `errors.Is()` for error checking** - Use `assert.ErrorIs(err, ErrSentinel)` for our errors and stdlib errors (e.g., `fs.ErrNotExist`, `exec.ErrNotFound`). String matching is only OK for third-party errors or testing specific message formatting.
 
 ### Mock Generation (MANDATORY)
 Use `go.uber.org/mock/mockgen` with `//go:generate` directives. Never manual mocks.
@@ -595,13 +595,13 @@ git add tests/snapshots/*
 
 **Why this matters**: Atmos uses `term.IsTTYSupportForStdout()` to detect terminal capability. Piping breaks this detection:
 - ✅ No pipes → TTY detected → Proper ANSI rendering → Correct snapshots
-- ❌ With pipes → No TTY → ASCII fallback → Wrong snapshots
+- ❌ With pipes → No TTY → ASCII fallback → Wrong snapshots.
 
 ### Test Data
 Use fixtures in `tests/test-cases/` for integration tests. Each test case should have:
 - `atmos.yaml` - Configuration
 - `stacks/` - Stack definitions
-- `components/` - Component configurations
+- `components/` - Component configurations.
 
 ### Golden Snapshots (MANDATORY)
 - **NEVER modify files under `tests/test-cases/` or `tests/testdata/`** unless explicitly instructed
