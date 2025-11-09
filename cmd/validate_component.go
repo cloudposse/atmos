@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -28,7 +26,7 @@ var validateComponentCmd = &cobra.Command{
 		// Handle path-based component resolution
 		if len(args) > 0 {
 			component := args[0]
-			needsPathResolution := component == "." || strings.Contains(component, string(filepath.Separator))
+			needsPathResolution := e.IsExplicitComponentPath(component)
 
 			if needsPathResolution {
 				flags := cmd.Flags()

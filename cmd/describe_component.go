@@ -3,8 +3,6 @@ package cmd
 import (
 	"errors"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -73,9 +71,6 @@ var describeComponentCmd = &cobra.Command{
 
 		component := args[0]
 
-		// Check if argument is a path that needs resolution
-		needsPathResolution := component == "." || strings.Contains(component, string(filepath.Separator))
-
 		// Load atmos configuration to get auth config.
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
 			ComponentFromArg: component,
@@ -84,6 +79,11 @@ var describeComponentCmd = &cobra.Command{
 		if err != nil {
 			return errors.Join(errUtils.ErrFailedToInitConfig, err)
 		}
+
+		// Determine if we need path resolution.
+		// Only resolve as a filesystem path if the argument explicitly indicates a path.
+		// Otherwise, treat it as a component name (even if it contains slashes).
+		needsPathResolution := e.IsExplicitComponentPath(component)
 
 		// Resolve path-based component arguments to component names
 		if needsPathResolution {
