@@ -3,6 +3,7 @@ package cmd
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -111,7 +112,12 @@ func executeProfileShowCommand(cmd *cobra.Command, args []string) error {
 	// Get profile details.
 	profileInfo, err := manager.GetProfile(&atmosConfig, profileName)
 	if err != nil {
-		return fmt.Errorf("%w: profile '%s' not found (run 'atmos profile list' to see available profiles)", errUtils.ErrProfileNotFound, profileName)
+		// Only add "not found" hint if this is specifically a ProfileNotFound error.
+		if errors.Is(err, errUtils.ErrProfileNotFound) {
+			return fmt.Errorf("%w: profile '%s' not found (run 'atmos profile list' to see available profiles)", errUtils.ErrProfileNotFound, profileName)
+		}
+		// Return other errors unchanged to preserve their context.
+		return err
 	}
 
 	// Render output based on format.

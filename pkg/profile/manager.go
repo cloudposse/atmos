@@ -21,7 +21,9 @@ func (m *DefaultProfileManager) GetProfileLocations(atmosConfig *schema.AtmosCon
 	defer perf.Track(atmosConfig, "profile.GetProfileLocations")()
 
 	var locations []ProfileLocation
-	cliConfigPath := atmosConfig.CliConfigPath
+
+	// Derive base directory from CliConfigPath (which may be a file path to atmos.yaml).
+	baseDir := filepath.Dir(atmosConfig.CliConfigPath)
 
 	// 1. Configurable base_path (highest precedence).
 	if atmosConfig.Profiles.BasePath != "" {
@@ -29,7 +31,7 @@ func (m *DefaultProfileManager) GetProfileLocations(atmosConfig *schema.AtmosCon
 
 		// If relative, resolve from atmos.yaml directory.
 		if !filepath.IsAbs(basePath) {
-			basePath = filepath.Join(cliConfigPath, basePath)
+			basePath = filepath.Join(baseDir, basePath)
 		}
 
 		exists := dirExists(basePath)
@@ -42,7 +44,7 @@ func (m *DefaultProfileManager) GetProfileLocations(atmosConfig *schema.AtmosCon
 	}
 
 	// 2. Project-local hidden profiles.
-	projectHiddenPath := filepath.Join(cliConfigPath, ".atmos", "profiles")
+	projectHiddenPath := filepath.Join(baseDir, ".atmos", "profiles")
 	locations = append(locations, ProfileLocation{
 		Path:       projectHiddenPath,
 		Type:       "project-hidden",
@@ -62,7 +64,7 @@ func (m *DefaultProfileManager) GetProfileLocations(atmosConfig *schema.AtmosCon
 	}
 
 	// 4. Project-local non-hidden profiles (lowest precedence).
-	projectPath := filepath.Join(cliConfigPath, "profiles")
+	projectPath := filepath.Join(baseDir, "profiles")
 	locations = append(locations, ProfileLocation{
 		Path:       projectPath,
 		Type:       "project",
@@ -243,10 +245,12 @@ func loadProfileMetadata(atmosYamlPath string) (*schema.ConfigMetadata, error) {
 	}
 
 	// Only return metadata if at least one field is set.
+	// Note: We check Deprecated explicitly to preserve profiles that only set metadata.deprecated: true.
 	if config.Metadata.Name == "" &&
 		config.Metadata.Description == "" &&
 		config.Metadata.Version == "" &&
-		len(config.Metadata.Tags) == 0 {
+		len(config.Metadata.Tags) == 0 &&
+		!config.Metadata.Deprecated {
 		return nil, nil
 	}
 

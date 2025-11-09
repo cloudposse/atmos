@@ -30,7 +30,9 @@ type ProfileLocation struct {
 // 4. Project-local non-hidden (profiles/)
 func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) ([]ProfileLocation, error) {
 	var locations []ProfileLocation
-	cliConfigPath := atmosConfig.CliConfigPath
+
+	// Derive base directory from CliConfigPath (which may be a file path to atmos.yaml).
+	baseDir := filepath.Dir(atmosConfig.CliConfigPath)
 
 	// 1. Configurable base_path (highest precedence).
 	if atmosConfig.Profiles.BasePath != "" {
@@ -38,7 +40,7 @@ func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) ([]Profile
 
 		// If relative, resolve from atmos.yaml directory.
 		if !filepath.IsAbs(basePath) {
-			basePath = filepath.Join(cliConfigPath, basePath)
+			basePath = filepath.Join(baseDir, basePath)
 		}
 
 		locations = append(locations, ProfileLocation{
@@ -49,7 +51,7 @@ func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) ([]Profile
 	}
 
 	// 2. Project-local hidden profiles.
-	projectHiddenPath := filepath.Join(cliConfigPath, ".atmos", "profiles")
+	projectHiddenPath := filepath.Join(baseDir, ".atmos", "profiles")
 	locations = append(locations, ProfileLocation{
 		Path:       projectHiddenPath,
 		Type:       "project-hidden",
@@ -67,7 +69,7 @@ func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) ([]Profile
 	}
 
 	// 4. Project-local non-hidden profiles (lowest precedence).
-	projectPath := filepath.Join(cliConfigPath, "profiles")
+	projectPath := filepath.Join(baseDir, "profiles")
 	locations = append(locations, ProfileLocation{
 		Path:       projectPath,
 		Type:       "project",

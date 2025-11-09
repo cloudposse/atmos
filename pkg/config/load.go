@@ -598,7 +598,7 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	// Search for `atmos.d/` configurations.
 	searchPattern := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
 	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
-		log.Debug("Failed to load atmos.d configs", "error", err)
+		log.Trace("Failed to load atmos.d configs", "error", err)
 		// Don't return error - just log and continue.
 		// This maintains existing behavior where .atmos.d loading is optional.
 	}
@@ -606,7 +606,7 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	// Search for `.atmos.d` configurations.
 	searchPattern = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
 	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
-		log.Debug("Failed to load .atmos.d configs", "error", err)
+		log.Trace("Failed to load .atmos.d configs", "error", err)
 		// Don't return error - just log and continue.
 		// This maintains existing behavior where .atmos.d loading is optional.
 	}

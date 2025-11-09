@@ -59,14 +59,6 @@ func TestDiscoverProfileLocations(t *testing.T) {
 			require.NoError(t, err)
 			assert.Len(t, locations, tt.expectedLocations)
 
-			// Verify location types are present.
-			var types []string
-			for _, loc := range locations {
-				if loc.Type != "configurable" || tt.atmosConfig.Profiles.BasePath != "" {
-					types = append(types, loc.Type)
-				}
-			}
-
 			for _, expectedType := range tt.expectedTypes {
 				found := false
 				for _, loc := range locations {
