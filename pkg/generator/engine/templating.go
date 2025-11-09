@@ -111,98 +111,130 @@ func (p *Processor) Merge(existingContent, newContent, fileName string) (string,
 	return p.merger.Merge(existingContent, newContent, fileName)
 }
 
-// ProcessFile handles the creation of a single file with full templating support
+// ProcessFile handles the creation of a single file with full templating support.
 func (p *Processor) ProcessFile(file File, targetPath string, force, update bool, scaffoldConfig interface{}, userValues map[string]interface{}) error {
-	// Get delimiters from scaffold config or use defaults
-	delimiters := []string{"{{", "}}"}
-	if scaffoldConfig != nil {
-		// Try *config.ScaffoldConfig first (pointer)
-		if cfg, ok := scaffoldConfig.(*config.ScaffoldConfig); ok {
-			if len(cfg.Delimiters) == 2 {
-				delimiters = []string{cfg.Delimiters[0], cfg.Delimiters[1]}
-			}
-		} else if cfg, ok := scaffoldConfig.(config.ScaffoldConfig); ok {
-			// Try config.ScaffoldConfig (value)
-			if len(cfg.Delimiters) == 2 {
-				delimiters = []string{cfg.Delimiters[0], cfg.Delimiters[1]}
-			}
-		} else if scaffoldConfigMap, ok := scaffoldConfig.(map[string]interface{}); ok {
-			// Fallback to map handling for backwards compatibility
-			if delims, exists := scaffoldConfigMap["delimiters"]; exists {
-				if delimsSlice, ok := delims.([]interface{}); ok && len(delimsSlice) == 2 {
-					delimiters = []string{delimsSlice[0].(string), delimsSlice[1].(string)}
-				}
-			}
-		}
+	// Extract delimiters from config
+	delimiters := extractDelimiters(scaffoldConfig)
+
+	// Process and validate the file path
+	renderedPath, err := p.processFilePath(file.Path, targetPath, scaffoldConfig, userValues, delimiters)
+	if err != nil {
+		return err
 	}
 
-	// Process the file path as a template if user values are provided
-	renderedPath := file.Path
-	if userValues != nil {
-		var err error
-		renderedPath, err = p.ProcessTemplateWithDelimiters(file.Path, targetPath, scaffoldConfig, userValues, delimiters)
-		if err != nil {
-			return fmt.Errorf("failed to process file path template %s: %w", file.Path, err)
-		}
-	}
-
-	// Check if the rendered path should be skipped
+	// Check if file should be skipped
 	if p.ShouldSkipFile(renderedPath) {
 		return &FileSkippedError{Path: file.Path, RenderedPath: renderedPath}
 	}
 
-	// Create full file path with rendered path
+	// Prepare target path and directory
 	fullPath := filepath.Join(targetPath, renderedPath)
+	if err := ensureDirectory(fullPath); err != nil {
+		return err
+	}
 
-	// Create directory if needed
+	// Handle existing file
+	if fileExists(fullPath) {
+		return p.handleExistingFile(file, fullPath, targetPath, force, update, scaffoldConfig, userValues, delimiters)
+	}
+
+	// Process and write new file
+	return p.writeNewFile(file, fullPath, targetPath, scaffoldConfig, userValues, delimiters)
+}
+
+// extractDelimiters extracts template delimiters from scaffold config or returns defaults.
+func extractDelimiters(scaffoldConfig interface{}) []string {
+	delimiters := []string{"{{", "}}"}
+
+	if scaffoldConfig == nil {
+		return delimiters
+	}
+
+	// Try *config.ScaffoldConfig first (pointer)
+	if cfg, ok := scaffoldConfig.(*config.ScaffoldConfig); ok {
+		if len(cfg.Delimiters) == 2 {
+			return []string{cfg.Delimiters[0], cfg.Delimiters[1]}
+		}
+	} else if cfg, ok := scaffoldConfig.(config.ScaffoldConfig); ok {
+		// Try config.ScaffoldConfig (value)
+		if len(cfg.Delimiters) == 2 {
+			return []string{cfg.Delimiters[0], cfg.Delimiters[1]}
+		}
+	} else if scaffoldConfigMap, ok := scaffoldConfig.(map[string]interface{}); ok {
+		// Fallback to map handling for backwards compatibility
+		if delims, exists := scaffoldConfigMap["delimiters"]; exists {
+			if delimsSlice, ok := delims.([]interface{}); ok && len(delimsSlice) == 2 {
+				return []string{delimsSlice[0].(string), delimsSlice[1].(string)}
+			}
+		}
+	}
+
+	return delimiters
+}
+
+// processFilePath processes the file path as a template and returns the rendered path.
+func (p *Processor) processFilePath(filePath, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) (string, error) {
+	if userValues == nil {
+		return filePath, nil
+	}
+
+	renderedPath, err := p.ProcessTemplateWithDelimiters(filePath, targetPath, scaffoldConfig, userValues, delimiters)
+	if err != nil {
+		return "", fmt.Errorf("failed to process file path template %s: %w", filePath, err)
+	}
+
+	return renderedPath, nil
+}
+
+// ensureDirectory creates the directory for the given file path if it doesn't exist.
+func ensureDirectory(fullPath string) error {
 	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
+	return nil
+}
 
-	// Check if file already exists
-	if _, err := os.Stat(fullPath); err == nil {
-		// File exists, handle based on flags
-		if !force && !update {
-			return fmt.Errorf("file already exists: %s (use --force to overwrite or --update to merge)", file.Path)
-		}
+// fileExists checks if a file exists at the given path.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
 
-		if update {
-			// Process template first, then attempt 3-way merge
-			processedContent, err := p.ProcessTemplateWithDelimiters(file.Content, targetPath, scaffoldConfig, userValues, delimiters)
-			if err != nil {
-				return fmt.Errorf("failed to process template for file %s: %w", file.Path, err)
-			}
-
-			// Create a temporary file with processed content for merging
-			tempFile := file
-			tempFile.Content = processedContent
-
-			if err := p.mergeFile(fullPath, tempFile, targetPath); err != nil {
-				return fmt.Errorf("failed to merge file %s: %w", file.Path, err)
-			}
-			return nil
-		}
-		// force flag is set, continue to overwrite
+// handleExistingFile handles the case where the target file already exists.
+func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, force, update bool, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) error {
+	// Check flags
+	if !force && !update {
+		return fmt.Errorf("file already exists: %s (use --force to overwrite or --update to merge)", file.Path)
 	}
 
-	// Process content as template if user values are provided or if file is marked as template
-	content := file.Content
-	if userValues != nil || file.IsTemplate {
-		processedContent, err := p.ProcessTemplateWithDelimiters(content, targetPath, scaffoldConfig, userValues, delimiters)
+	// Handle update mode (3-way merge)
+	if update {
+		processedContent, err := p.ProcessTemplateWithDelimiters(file.Content, targetPath, scaffoldConfig, userValues, delimiters)
 		if err != nil {
-			// Add detailed debugging information
-			return fmt.Errorf("failed to process template for file %s: %w\nTemplate content preview: %s\nUser values: %+v",
-				file.Path, err,
-				truncateString(content, 200),
-				userValues)
+			return fmt.Errorf("failed to process template for file %s: %w", file.Path, err)
 		}
-		content = processedContent
 
-		// Validate that the processed content contains no unprocessed templates
-		if err := p.ValidateNoUnprocessedTemplatesWithDelimiters(content, delimiters); err != nil {
-			return fmt.Errorf("generated file %s contains unprocessed template syntax: %w", file.Path, err)
+		// Create a temporary file with processed content for merging
+		tempFile := file
+		tempFile.Content = processedContent
+
+		if err := p.mergeFile(fullPath, tempFile, targetPath); err != nil {
+			return fmt.Errorf("failed to merge file %s: %w", file.Path, err)
 		}
+		return nil
+	}
+
+	// force flag is set, allow overwrite by returning nil (caller will write)
+	return nil
+}
+
+// writeNewFile processes the file content and writes it to disk.
+func (p *Processor) writeNewFile(file File, fullPath, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) error {
+	// Process content as template if needed
+	content, err := p.processFileContent(file, targetPath, scaffoldConfig, userValues, delimiters)
+	if err != nil {
+		return err
 	}
 
 	// Write file
@@ -211,6 +243,31 @@ func (p *Processor) ProcessFile(file File, targetPath string, force, update bool
 	}
 
 	return nil
+}
+
+// processFileContent processes file content as a template and validates it.
+func (p *Processor) processFileContent(file File, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) (string, error) {
+	content := file.Content
+
+	// Only process if user values provided or file is marked as template
+	if userValues == nil && !file.IsTemplate {
+		return content, nil
+	}
+
+	processedContent, err := p.ProcessTemplateWithDelimiters(content, targetPath, scaffoldConfig, userValues, delimiters)
+	if err != nil {
+		return "", fmt.Errorf("failed to process template for file %s: %w\nTemplate content preview: %s\nUser values: %+v",
+			file.Path, err,
+			truncateString(content, 200),
+			userValues)
+	}
+
+	// Validate that the processed content contains no unprocessed templates
+	if err := p.ValidateNoUnprocessedTemplatesWithDelimiters(processedContent, delimiters); err != nil {
+		return "", fmt.Errorf("generated file %s contains unprocessed template syntax: %w", file.Path, err)
+	}
+
+	return processedContent, nil
 }
 
 // mergeFile attempts a 3-way merge for existing files
