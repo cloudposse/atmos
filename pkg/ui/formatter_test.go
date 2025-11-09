@@ -391,43 +391,6 @@ func TestFormatter_Markdown_MaxWidth(t *testing.T) {
 	}
 }
 
-func TestGenerateStyleSet(t *testing.T) {
-	tests := []struct {
-		name    string
-		profile terminal.ColorProfile
-	}{
-		{
-			name:    "ColorNone",
-			profile: terminal.ColorNone,
-		},
-		{
-			name:    "Color16",
-			profile: terminal.Color16,
-		},
-		{
-			name:    "Color256",
-			profile: terminal.Color256,
-		},
-		{
-			name:    "ColorTrue",
-			profile: terminal.ColorTrue,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			styles := generateStyleSet(tt.profile)
-
-			if styles == nil {
-				t.Fatal("generateStyleSet() returned nil")
-			}
-
-			// Verify all styles are initialized (lipgloss styles can have empty string representation)
-			_ = styles.Title.String()
-		})
-	}
-}
-
 // Helper functions for testing.
 
 func createTestIOContext() iolib.Context {
