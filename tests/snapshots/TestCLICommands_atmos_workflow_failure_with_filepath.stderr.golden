@@ -8,7 +8,9 @@ Executing command: `atmos terraform plan mock -s idontexist`
 
 ## Explanation
 
-Could not find the component mock in the stack idontexist. Check that all the context variables are correctly defined in the stack manifests. Are the component and stack names correct? Did you forget an import?
+Could not find the component mock in the stack idontexist. Check that all the
+context variables are correctly defined in the stack manifests. Are the
+component and stack names correct? Did you forget an import?
 
 
 

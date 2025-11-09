@@ -3,7 +3,8 @@
 
 # Invalid Command
 
-**Error:** The atmos invalidCommand command has no steps or subcommands configured.
+**Error:** The atmos invalidCommand command has no steps or subcommands
+configured.
 
 ## Hints
 

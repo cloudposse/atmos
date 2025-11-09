@@ -9,6 +9,7 @@ Validating Atmos Component: infra/vpc
 
 ## Explanation
 
-In 'dev', only 2 Availability Zones are allowed VPC name must be a valid string from 2 to 20 alphanumeric chars
+In 'dev', only 2 Availability Zones are allowed VPC name must be a valid string
+from 2 to 20 alphanumeric chars
 
 

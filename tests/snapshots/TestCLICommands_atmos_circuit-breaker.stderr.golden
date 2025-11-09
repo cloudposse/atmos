@@ -3,7 +3,8 @@
 
 # Error
 
-**Error:** ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion? current=11, max=10
+**Error:** ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion?
+current=11, max=10
 
 
 

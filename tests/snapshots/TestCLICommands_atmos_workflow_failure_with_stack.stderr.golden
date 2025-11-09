@@ -8,7 +8,9 @@ Executing command: `atmos terraform plan idontexist`
 
 ## Explanation
 
-Could not find the component idontexist in the stack prod. Check that all the context variables are correctly defined in the stack manifests. Are the component and stack names correct? Did you forget an import?
+Could not find the component idontexist in the stack prod. Check that all the
+context variables are correctly defined in the stack manifests. Are the
+component and stack names correct? Did you forget an import?
 
 
 

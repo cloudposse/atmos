@@ -227,6 +227,9 @@ func extractSentinelAndWrappedMessage(err error) (sentinelMsg string, wrappedMsg
 
 // addExplanationSection adds the explanation section if details or wrapped message exist.
 func addExplanationSection(md *strings.Builder, err error, wrappedMsg string, maxLineLength int) {
+	// maxLineLength is unused here because the markdown renderer handles wrapping.
+	_ = maxLineLength
+
 	details := errors.GetAllDetails(err)
 	hasContent := len(details) > 0 || wrappedMsg != ""
 
@@ -234,15 +237,15 @@ func addExplanationSection(md *strings.Builder, err error, wrappedMsg string, ma
 		md.WriteString(newline + newline + "## Explanation" + newline + newline)
 
 		// Add wrapped message first if present.
+		// Don't wrap - let the markdown renderer handle it to preserve structure.
 		if wrappedMsg != "" {
-			wrapped := wrapText(wrappedMsg, maxLineLength)
-			md.WriteString(wrapped + newline + newline)
+			md.WriteString(wrappedMsg + newline + newline)
 		}
 
 		// Add details from error chain.
+		// Don't wrap - let the markdown renderer handle it to preserve code blocks and newlines.
 		for _, detail := range details {
-			wrapped := wrapText(fmt.Sprintf("%v", detail), maxLineLength)
-			md.WriteString(wrapped + newline)
+			md.WriteString(fmt.Sprintf("%v", detail) + newline)
 		}
 
 		if len(details) > 0 {
@@ -310,9 +313,10 @@ func addExampleAndHintsSection(md *strings.Builder, err error, maxLineLength int
 	if len(hints) > 0 {
 		md.WriteString(newline + newline + "## Hints" + newline + newline)
 		for _, hint := range hints {
-			// Wrap hint text but preserve the emoji prefix and blank line structure.
-			wrapped := wrapText(hint, maxLineLength)
-			md.WriteString("💡 " + wrapped + newline + newline)
+			// Don't wrap - let the markdown renderer handle it to preserve structure.
+			// The maxLineLength parameter is unused here.
+			_ = maxLineLength
+			md.WriteString("💡 " + hint + newline + newline)
 		}
 	}
 }
@@ -468,6 +472,13 @@ func stripANSI(s string) string {
 }
 
 // wrapText wraps text to the specified width while preserving intentional line breaks.
+//
+// DEPRECATED: This function is no longer used in production code.
+// The markdown renderer (Glamour) handles text wrapping natively and correctly
+// preserves markdown structure (code blocks, newlines, etc.). This function
+// destroys markdown structure by calling strings.Fields() which removes ALL
+// newlines, making it unsuitable for formatting error messages with code blocks.
+//
 // IMPORTANT: This function should NOT be used on text with intentional newlines,
 // as strings.Fields() splits on ALL whitespace including newlines, which destroys
 // the original line break structure. Only use this for wrapping single paragraphs.
