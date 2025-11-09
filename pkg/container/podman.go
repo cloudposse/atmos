@@ -135,6 +135,16 @@ func (p *PodmanRuntime) Remove(ctx context.Context, containerID string, force bo
 	return nil
 }
 
+// findContainerByIDOrName searches for a container in the given list by ID or name.
+func findContainerByIDOrName(containers []Info, searchID string) (*Info, error) {
+	for _, container := range containers {
+		if container.ID == searchID || container.Name == searchID {
+			return &container, nil
+		}
+	}
+	return nil, fmt.Errorf("%w: %s", errUtils.ErrContainerNotFound, searchID)
+}
+
 // Inspect gets detailed information about a container.
 func (p *PodmanRuntime) Inspect(ctx context.Context, containerID string) (*Info, error) {
 	defer perf.Track(nil, "container.PodmanRuntime.Inspect")()
@@ -146,14 +156,7 @@ func (p *PodmanRuntime) Inspect(ctx context.Context, containerID string) (*Info,
 		return nil, fmt.Errorf("%w: failed to list containers: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 
-	// Find container by matching ID or name.
-	for _, container := range containers {
-		if container.ID == containerID || container.Name == containerID {
-			return &container, nil
-		}
-	}
-
-	return nil, fmt.Errorf("%w: %s", errUtils.ErrContainerNotFound, containerID)
+	return findContainerByIDOrName(containers, containerID)
 }
 
 // List lists containers matching the given filters.
@@ -173,12 +176,19 @@ func (p *PodmanRuntime) List(ctx context.Context, filters map[string]string) ([]
 	return parsePodmanContainers(podmanContainers), nil
 }
 
-func executePodmanList(ctx context.Context, filters map[string]string) ([]byte, error) {
+// buildPodmanListArgs constructs the arguments for podman ps command.
+func buildPodmanListArgs(filters map[string]string) []string {
 	args := []string{"ps", "-a", "--format", "json"}
 
 	for key, value := range filters {
 		args = append(args, "--filter", fmt.Sprintf("%s=%s", key, value))
 	}
+
+	return args
+}
+
+func executePodmanList(ctx context.Context, filters map[string]string) ([]byte, error) {
+	args := buildPodmanListArgs(filters)
 
 	cmd := exec.CommandContext(ctx, podmanCmd, args...)
 	output, err := cmd.CombinedOutput()

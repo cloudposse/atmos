@@ -374,38 +374,9 @@ func TestPodmanRuntime_parsePodmanContainer_DetailedEdgeCases(t *testing.T) {
 	}
 }
 
-// testPodmanInspectRuntime is a test helper that implements the Inspect logic
-// with a fake List implementation for testing.
-type testPodmanInspectRuntime struct {
-	containers []Info
-}
-
-func (t *testPodmanInspectRuntime) Inspect(ctx context.Context, containerID string) (*Info, error) {
-	// This replicates the real Inspect logic from PodmanRuntime.
-	// Get containers from our fake List.
-	containers, err := t.List(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	// Find container by matching ID or name (same logic as real Inspect).
-	for _, container := range containers {
-		if container.ID == containerID || container.Name == containerID {
-			return &container, nil
-		}
-	}
-
-	return nil, errUtils.ErrContainerNotFound
-}
-
-func (t *testPodmanInspectRuntime) List(_ context.Context, _ map[string]string) ([]Info, error) {
-	return t.containers, nil
-}
-
-// TestPodmanRuntime_Inspect_Logic tests Inspect's delegation to List.
-func TestPodmanRuntime_Inspect_Logic(t *testing.T) {
-	// Inspect uses List internally and searches for matching container.
-	// This test validates the Inspect search logic by providing test data via a fake List.
+// TestFindContainerByIDOrName tests the container search logic used by Inspect.
+func TestFindContainerByIDOrName(t *testing.T) {
+	// This tests the actual production search logic extracted from Inspect.
 
 	tests := []struct {
 		name         string
@@ -478,25 +449,19 @@ func TestPodmanRuntime_Inspect_Logic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create test runtime that returns our test containers from List.
-			runtime := &testPodmanInspectRuntime{
-				containers: tt.containers,
-			}
-
-			// Call Inspect implementation (which delegates to our fake List).
-			ctx := context.Background()
-			result, err := runtime.Inspect(ctx, tt.searchID)
+			// Call the actual production search function.
+			result, err := findContainerByIDOrName(tt.containers, tt.searchID)
 
 			// Validate results.
 			if tt.expectFound {
-				require.NoError(t, err, "Inspect should not return error when container is found")
-				require.NotNil(t, result, "Inspect should return container info")
+				require.NoError(t, err, "findContainerByIDOrName should not return error when container is found")
+				require.NotNil(t, result, "findContainerByIDOrName should return container info")
 				assert.Equal(t, tt.expectedInfo.ID, result.ID)
 				assert.Equal(t, tt.expectedInfo.Name, result.Name)
 				assert.Equal(t, tt.expectedInfo.Image, result.Image)
 			} else {
-				require.Error(t, err, "Inspect should return error when container not found")
-				assert.Nil(t, result, "Inspect should return nil when container not found")
+				require.Error(t, err, "findContainerByIDOrName should return error when container not found")
+				assert.Nil(t, result, "findContainerByIDOrName should return nil when container not found")
 				assert.ErrorIs(t, err, errUtils.ErrContainerNotFound)
 			}
 		})

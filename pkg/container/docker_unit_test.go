@@ -464,8 +464,6 @@ func TestDockerRuntime_List_JSONParsing(t *testing.T) {
 
 			// This tests the exact parsing logic from docker.go List() method.
 			var containers []Info
-			scanner := json.NewDecoder(nil) // Not used, we'll parse manually.
-			_ = scanner
 
 			// Replicate the parsing logic from docker.go:218-254.
 			lines := tt.jsonLines

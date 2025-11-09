@@ -3,13 +3,11 @@ package container
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	// removed runtime import
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
@@ -72,14 +70,14 @@ func isAvailable(ctx context.Context, runtimeType Type) bool {
 	defer perf.Track(nil, "container.isAvailable")()
 
 	// Check if binary exists in PATH.
-	_, err := exec.LookPath(string(runtimeType))
+	_, err := globalExecutor.LookPath(string(runtimeType))
 	if err != nil {
 		log.Debug("Runtime binary not found in PATH", logKeyRuntime, runtimeType)
 		return false
 	}
 
 	// Check if runtime is responsive.
-	cmd := exec.CommandContext(ctx, string(runtimeType), "info") //nolint:gosec // runtimeType is from enum, not user input
+	cmd := globalExecutor.CommandContext(ctx, string(runtimeType), "info")
 	if err := cmd.Run(); err != nil {
 		log.Debug("Runtime is not responsive", logKeyRuntime, runtimeType, "error", err)
 
@@ -87,7 +85,7 @@ func isAvailable(ctx context.Context, runtimeType Type) bool {
 		if runtimeType == TypePodman {
 			if tryStartPodmanMachine(ctx) {
 				// Retry check after starting machine.
-				cmd := exec.CommandContext(ctx, string(runtimeType), "info") //nolint:gosec // runtimeType is from enum, not user input
+				cmd := globalExecutor.CommandContext(ctx, string(runtimeType), "info")
 				if err := cmd.Run(); err == nil {
 					log.Debug("Successfully started Podman machine", logKeyRuntime, runtimeType)
 					return true
@@ -128,15 +126,20 @@ func tryStartPodmanMachine(ctx context.Context) bool {
 func podmanMachineExists(ctx context.Context) bool {
 	defer perf.Track(nil, "container.podmanMachineExists")()
 
-	cmd := exec.CommandContext(ctx, "podman", "machine", "list", "--format", "{{.Name}}")
+	cmd := globalExecutor.CommandContext(ctx, "podman", "machine", "list", "--format", "{{.Name}}")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Debug("Failed to list Podman machines", "error", err)
 		return false
 	}
 
-	// Check if there's any non-empty output (machine names).
-	machines := strings.TrimSpace(string(output))
+	return hasMachines(string(output))
+}
+
+// hasMachines checks if the output from 'podman machine list' contains any machine names.
+// Returns true if there's any non-whitespace content, false otherwise.
+func hasMachines(output string) bool {
+	machines := strings.TrimSpace(output)
 	return machines != ""
 }
 
@@ -148,7 +151,7 @@ func initializePodmanMachine(ctx context.Context) error {
 		"Initializing Podman machine",
 		"Initialized Podman machine",
 		func() error {
-			cmd := exec.CommandContext(ctx, "podman", "machine", "init")
+			cmd := globalExecutor.CommandContext(ctx, "podman", "machine", "init")
 			output, err := cmd.CombinedOutput()
 			if err != nil {
 				return fmt.Errorf("failed to initialize: %w: %s", err, string(output))
@@ -165,7 +168,7 @@ func startPodmanMachine(ctx context.Context) error {
 		"Starting Podman machine",
 		"Started Podman machine",
 		func() error {
-			cmd := exec.CommandContext(ctx, "podman", "machine", "start")
+			cmd := globalExecutor.CommandContext(ctx, "podman", "machine", "start")
 			output, err := cmd.CombinedOutput()
 			if err != nil {
 				return fmt.Errorf("failed to start: %w: %s", err, string(output))
