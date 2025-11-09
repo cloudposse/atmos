@@ -38,7 +38,7 @@ func init() {
 	// Create flag parser with recommended flag.
 	themeListParser = flags.NewStandardFlagParser(
 		flags.WithBoolFlag("recommended", "", false, "Show only recommended themes"),
-		flags.WithEnvVars("recommended", "ATMOS_RECOMMENDED"),
+		flags.WithEnvVars("recommended", "ATMOS_THEME_RECOMMENDED"),
 	)
 
 	// Register flags with cobra.
