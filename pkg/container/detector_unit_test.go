@@ -348,11 +348,11 @@ func TestIsAvailable_Logic(t *testing.T) {
 // TestTryStartPodmanMachine_Logic tests Podman machine start logic.
 func TestTryStartPodmanMachine_Logic(t *testing.T) {
 	tests := []struct {
-		name                 string
-		machineExists        bool
-		initSucceeds         bool
-		startSucceeds        bool
-		expectMachineReady   bool
+		name               string
+		machineExists      bool
+		initSucceeds       bool
+		startSucceeds      bool
+		expectMachineReady bool
 	}{
 		{
 			name:               "machine exists and starts successfully",
@@ -453,7 +453,6 @@ func TestDetectRuntime_ErrorMessages(t *testing.T) {
 
 			ctx := context.Background()
 			runtime, err := DetectRuntime(ctx)
-
 			// We expect an error for these cases (unless the runtime actually is available).
 			// If no error, skip assertion (runtime is available on this system).
 			if err != nil {
@@ -471,7 +470,6 @@ func TestDetectRuntime_ContextCancellation(t *testing.T) {
 	cancel() // Cancel immediately.
 
 	runtime, err := DetectRuntime(ctx)
-
 	// Behavior depends on implementation details and timing.
 	// In most cases, a cancelled context will cause command execution to fail.
 	// We document that both outcomes are possible.

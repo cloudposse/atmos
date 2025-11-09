@@ -491,8 +491,8 @@ func TestRenderListTable(t *testing.T) {
 		notContains      []string
 	}{
 		{
-			name:    "empty configs",
-			configs: map[string]*Config{},
+			name:         "empty configs",
+			configs:      map[string]*Config{},
 			runningNames: map[string]bool{},
 			expectedContains: []string{
 				"NAME",

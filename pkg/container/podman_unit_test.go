@@ -69,11 +69,11 @@ func TestPodmanRuntime_cleanPodmanOutput_Comprehensive(t *testing.T) {
 // TestPodmanRuntime_executePodmanList tests the List command execution logic.
 func TestPodmanRuntime_executePodmanList_ArgumentBuilding(t *testing.T) {
 	tests := []struct {
-		name           string
-		filters        map[string]string
-		expectedArgs   []string
-		expectFilters  bool
-		filterCount    int
+		name          string
+		filters       map[string]string
+		expectedArgs  []string
+		expectFilters bool
+		filterCount   int
 	}{
 		{
 			name:          "no filters",
@@ -475,8 +475,8 @@ func TestPodmanRuntime_List_JSONUnmarshalEdgeCases(t *testing.T) {
 			expectedCount: 2,
 		},
 		{
-			name: "empty JSON array",
-			jsonOutput: `[]`,
+			name:          "empty JSON array",
+			jsonOutput:    `[]`,
 			expectError:   false,
 			expectedCount: 0,
 		},
@@ -533,10 +533,10 @@ func TestPodmanRuntime_Create_ContainerIDExtraction(t *testing.T) {
 	// but we add a few more edge cases here.
 
 	tests := []struct {
-		name         string
-		output       string
-		expectedID   string
-		expectEmpty  bool
+		name        string
+		output      string
+		expectedID  string
+		expectEmpty bool
 	}{
 		{
 			name:        "ID on last line",
