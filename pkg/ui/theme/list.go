@@ -120,7 +120,7 @@ func displayThemeList(themes []*Theme, activeTheme string, showingRecommendedOnl
 		return formatSimpleThemeList(themes, activeTheme, showingRecommendedOnly, showStars)
 	}
 
-	return formatThemeTable(themes, activeTheme, showingRecommendedOnly, showStars)
+	return formatThemeTable(themes, activeTheme, showStars)
 }
 
 // buildThemeRows converts themes to table rows for display.
@@ -176,7 +176,7 @@ func formatThemeRow(t *Theme, activeTheme string, showStars bool) []string {
 }
 
 // formatThemeTable formats themes into a styled Charmbracelet table.
-func formatThemeTable(themes []*Theme, activeTheme string, showingRecommendedOnly bool, showStars bool) string {
+func formatThemeTable(themes []*Theme, activeTheme string, showStars bool) string {
 	defer perf.Track(nil, "theme.formatThemeTable")()
 
 	// Prepare headers and rows.

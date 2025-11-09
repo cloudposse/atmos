@@ -380,7 +380,7 @@ func TestFormatThemeTable(t *testing.T) {
 		},
 	}
 
-	output := formatThemeTable(themes, "dracula", false, true)
+	output := formatThemeTable(themes, "dracula", true)
 
 	if output == "" {
 		t.Error("formatThemeTable() returned empty output")
