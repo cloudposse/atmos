@@ -116,6 +116,10 @@ func ProcessCommandLineArgs(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+	configAndStacksInfo.ProfilesFromArg, err = cmd.Flags().GetStringSlice("profile")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
 	finalAdditionalArgsAndFlags := argsAndFlagsInfo.AdditionalArgsAndFlags
 	if len(additionalArgsAndFlags) > 0 {
 		finalAdditionalArgsAndFlags = append(finalAdditionalArgsAndFlags, additionalArgsAndFlags...)

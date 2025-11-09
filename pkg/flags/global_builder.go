@@ -114,6 +114,17 @@ func (b *GlobalOptionsBuilder) registerAuthenticationFlags(defaults *global.Flag
 	b.options = append(b.options, WithStringFlag("identity", "", defaults.Identity.Value(), "Identity to use for authentication. Use --identity to select interactively, --identity=NAME to specify"))
 	b.options = append(b.options, WithEnvVars("identity", "ATMOS_IDENTITY"))
 	b.options = append(b.options, WithNoOptDefVal("identity", "__SELECT__"))
+
+	// Profiles - configuration profiles.
+	b.options = append(b.options, func(cfg *parserConfig) {
+		cfg.registry.Register(&StringSliceFlag{
+			Name:        "profile",
+			Shorthand:   "",
+			Default:     defaults.Profile,
+			Description: "Activate configuration profiles (comma-separated or repeated flag)",
+			EnvVars:     []string{"ATMOS_PROFILE"},
+		})
+	})
 }
 
 // registerProfilingFlags registers profiling configuration flags.

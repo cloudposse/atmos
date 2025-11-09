@@ -148,6 +148,16 @@ var (
 	ErrExpectedFile                = errors.New("--config expected file found directory")
 	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
 	ErrEmptyConfigPath             = errors.New("config path cannot be empty")
+
+	// Profile errors.
+	ErrProfileNotFound         = errors.New("profile not found")
+	ErrProfileSyntax           = errors.New("profile syntax error")
+	ErrProfileDiscovery        = errors.New("failed to discover profiles")
+	ErrProfileLoad             = errors.New("failed to load profile")
+	ErrProfileMerge            = errors.New("failed to merge profile configuration")
+	ErrProfileDirNotExist      = errors.New("profile directory does not exist")
+	ErrProfileDirNotAccessible = errors.New("profile directory not accessible")
+	ErrProfileInvalidMetadata  = errors.New("invalid profile metadata")
 	ErrEmptyConfigFile             = errors.New("config file path cannot be empty")
 	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
 
