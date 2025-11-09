@@ -5,9 +5,11 @@ description: >-
 
   **Invoke when:**
   - User requests creation of a new agent
+  - User asks to review, audit, or validate an existing agent
   - Existing agent needs updates or improvements
   - Agent frontmatter needs correction
   - Agent instructions need optimization for context efficiency
+  - Agent invocation triggers are unclear or need clarification
   - Multiple agents need coordination patterns
 
 tools: Read, Write, Edit, Grep, Glob, Bash, Task, TodoWrite

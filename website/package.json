@@ -4,6 +4,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "docusaurus": "docusaurus",
+    "prebuild": "cp ../pkg/ui/theme/themes.json static/themes.json",
     "start": "docusaurus start",
     "build": "docusaurus build",
     "postbuild": "cp build/llms.txt static/llms.txt && cp build/llms-full.txt static/llms-full.txt && ./scripts/clean-llms-imports.sh",

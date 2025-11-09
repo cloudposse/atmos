@@ -7,13 +7,21 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// MarkdownRenderer is the interface for rendering markdown.
+// This avoids circular dependency with pkg/ui.
+type MarkdownRenderer interface {
+	Markdown(content string) (string, error)
+}
+
 var (
-	globalIOContext io.Context
-	ioMu            sync.RWMutex
+	globalIOContext      io.Context
+	globalMarkdownRender MarkdownRenderer
+	ioMu                 sync.RWMutex
 )
 
 // InitWriter initializes the global data writer with an I/O context.
@@ -24,6 +32,16 @@ func InitWriter(ioCtx io.Context) {
 	ioMu.Lock()
 	defer ioMu.Unlock()
 	globalIOContext = ioCtx
+}
+
+// SetMarkdownRenderer sets the markdown renderer for data.Markdown().
+// This should be called after ui.InitFormatter() in root.go.
+func SetMarkdownRenderer(renderer MarkdownRenderer) {
+	defer perf.Track(nil, "data.SetMarkdownRenderer")()
+
+	ioMu.Lock()
+	defer ioMu.Unlock()
+	globalMarkdownRender = renderer
 }
 
 // getIOContext returns the global I/O context instance.
@@ -85,4 +103,41 @@ func WriteYAML(v interface{}) error {
 		return err
 	}
 	return Write(string(output))
+}
+
+// Markdown renders markdown content and writes to the data channel (stdout).
+// Use this for help text, documentation, and other pipeable formatted content.
+// Flow: data.Markdown() → MarkdownRenderer.Markdown() → io.Write(DataStream) → masking → stdout.
+func Markdown(content string) error {
+	defer perf.Track(nil, "data.Markdown")()
+
+	ioMu.RLock()
+	renderer := globalMarkdownRender
+	ioCtx := globalIOContext
+	ioMu.RUnlock()
+
+	if ioCtx == nil {
+		panic("data.InitWriter() must be called before using data.Markdown()")
+	}
+
+	if renderer == nil {
+		return errUtils.ErrUIFormatterNotInitialized
+	}
+
+	rendered, err := renderer.Markdown(content)
+	if err != nil {
+		// Degrade gracefully - write plain content if rendering fails
+		rendered = content
+	}
+
+	return ioCtx.Write(io.DataStream, rendered)
+}
+
+// Markdownf renders formatted markdown content and writes to the data channel (stdout).
+// Flow: data.Markdownf() → data.Markdown() → io.Write(DataStream) → masking → stdout.
+func Markdownf(format string, a ...interface{}) error {
+	defer perf.Track(nil, "data.Markdownf")()
+
+	content := fmt.Sprintf(format, a...)
+	return Markdown(content)
 }

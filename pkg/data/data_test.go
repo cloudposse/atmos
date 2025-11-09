@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
@@ -411,4 +412,230 @@ func TestGetIOContext_Panic(t *testing.T) {
 	}()
 
 	getIOContext()
+}
+
+// mockMarkdownRenderer is a test implementation of MarkdownRenderer.
+type mockMarkdownRenderer struct {
+	renderFunc func(string) (string, error)
+}
+
+func (m *mockMarkdownRenderer) Markdown(content string) (string, error) {
+	if m.renderFunc != nil {
+		return m.renderFunc(content)
+	}
+	return "rendered: " + content, nil
+}
+
+func TestMarkdown(t *testing.T) {
+	stdout, stderr, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	// Setup mock renderer.
+	mockRenderer := &mockMarkdownRenderer{}
+	SetMarkdownRenderer(mockRenderer)
+
+	tests := []struct {
+		name       string
+		content    string
+		renderFunc func(string) (string, error)
+		want       string
+		wantErr    bool
+	}{
+		{
+			name:    "simple markdown",
+			content: "# Hello",
+			want:    "rendered: # Hello",
+			wantErr: false,
+		},
+		{
+			name:    "empty content",
+			content: "",
+			want:    "rendered: ",
+			wantErr: false,
+		},
+		{
+			name:    "multiline markdown",
+			content: "# Title\n\nParagraph with **bold**.",
+			want:    "rendered: # Title\n\nParagraph with **bold**.",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stdout.Reset()
+			stderr.Reset()
+
+			if tt.renderFunc != nil {
+				mockRenderer.renderFunc = tt.renderFunc
+			} else {
+				mockRenderer.renderFunc = nil
+			}
+
+			err := Markdown(tt.content)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Markdown() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			got := stdout.String()
+			if got != tt.want {
+				t.Errorf("Markdown() output = %q, want %q", got, tt.want)
+			}
+
+			// Verify nothing written to stderr.
+			if stderr.Len() != 0 {
+				t.Errorf("Markdown() wrote to stderr: %q", stderr.String())
+			}
+		})
+	}
+}
+
+func TestMarkdownf(t *testing.T) {
+	stdout, stderr, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	// Setup mock renderer.
+	mockRenderer := &mockMarkdownRenderer{}
+	SetMarkdownRenderer(mockRenderer)
+
+	tests := []struct {
+		name    string
+		format  string
+		args    []interface{}
+		want    string
+		wantErr bool
+	}{
+		{
+			name:    "formatted markdown",
+			format:  "# %s",
+			args:    []interface{}{"Hello"},
+			want:    "rendered: # Hello",
+			wantErr: false,
+		},
+		{
+			name:    "multiple arguments",
+			format:  "## %s - Count: %d",
+			args:    []interface{}{"Title", 42},
+			want:    "rendered: ## Title - Count: 42",
+			wantErr: false,
+		},
+		{
+			name:    "no arguments",
+			format:  "# Static Title",
+			args:    []interface{}{},
+			want:    "rendered: # Static Title",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stdout.Reset()
+			stderr.Reset()
+
+			err := Markdownf(tt.format, tt.args...)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Markdownf() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			got := stdout.String()
+			if got != tt.want {
+				t.Errorf("Markdownf() output = %q, want %q", got, tt.want)
+			}
+
+			// Verify nothing written to stderr.
+			if stderr.Len() != 0 {
+				t.Errorf("Markdownf() wrote to stderr: %q", stderr.String())
+			}
+		})
+	}
+}
+
+func TestMarkdown_RendererNotInitialized(t *testing.T) {
+	stdout, stderr, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	// Save old renderer.
+	ioMu.Lock()
+	oldRenderer := globalMarkdownRender
+	globalMarkdownRender = nil
+	ioMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		ioMu.Lock()
+		globalMarkdownRender = oldRenderer
+		ioMu.Unlock()
+	}()
+
+	err := Markdown("# Test")
+	if err == nil {
+		t.Error("Markdown() should return error when renderer not initialized")
+	}
+
+	// Should not have written anything.
+	if stdout.Len() != 0 {
+		t.Errorf("Markdown() wrote to stdout: %q", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("Markdown() wrote to stderr: %q", stderr.String())
+	}
+}
+
+func TestMarkdown_RendererError(t *testing.T) {
+	stdout, stderr, cleanup := setupTestIO(t)
+	defer cleanup()
+
+	// Setup mock renderer that returns error.
+	mockRenderer := &mockMarkdownRenderer{
+		renderFunc: func(content string) (string, error) {
+			return "", errUtils.ErrUIFormatterNotInitialized
+		},
+	}
+	SetMarkdownRenderer(mockRenderer)
+
+	content := "# Test"
+	err := Markdown(content)
+	// Should write plain content when rendering fails.
+	if err != nil {
+		t.Errorf("Markdown() should degrade gracefully, got error: %v", err)
+	}
+
+	got := stdout.String()
+	if got != content {
+		t.Errorf("Markdown() output = %q, want %q (plain content)", got, content)
+	}
+
+	// Verify nothing written to stderr.
+	if stderr.Len() != 0 {
+		t.Errorf("Markdown() wrote to stderr: %q", stderr.String())
+	}
+}
+
+func TestMarkdown_ContextNotInitialized(t *testing.T) {
+	// Save current context.
+	ioMu.Lock()
+	oldCtx := globalIOContext
+	globalIOContext = nil
+	ioMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		ioMu.Lock()
+		globalIOContext = oldCtx
+		ioMu.Unlock()
+	}()
+
+	// Should panic when context not initialized.
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("Markdown() did not panic when globalIOContext is nil")
+		}
+	}()
+
+	_ = Markdown("# Test")
 }

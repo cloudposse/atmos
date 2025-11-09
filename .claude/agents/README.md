@@ -17,6 +17,12 @@ Expert in testing Atmos TUI components using Charmbracelet libraries (Bubble Tea
 
 **Use when:** Writing tests for pkg/generator/ui, improving UI test coverage, debugging TUI test failures, analyzing untested UI functions.
 
+### tui-expert
+
+Theme-aware Terminal UI system expert. Use for developing UI components, refactoring to theme-aware patterns, and theme architecture guidance.
+
+**Use when:** Working with theme system, TUI components, or terminal output formatting.
+
 ## Strategic Approach
 
 As Atmos grows, we create focused agents for each major subsystem. This scales development velocity through specialized

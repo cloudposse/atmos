@@ -1,0 +1,167 @@
+---
+title: atmos list themes
+sidebar_label: themes
+sidebar_class_name: command
+id: themes
+description: List available terminal themes for markdown rendering
+---
+
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+:::note Purpose
+Use this command to discover available terminal themes that can be used to customize the appearance of markdown output in Atmos.
+:::
+
+<Screengrab title="atmos list themes --help" slug="atmos-list-themes--help" />
+
+## Usage
+
+```shell
+atmos list themes [flags]
+```
+
+## Description
+
+This command lists available terminal themes that can be used for markdown rendering in Atmos.
+
+By default, it shows only recommended themes that have been tested to work well with Atmos output. These themes provide excellent readability for infrastructure-related content.
+
+Use the `--all` flag to see the complete list of all available themes imported from popular terminal theme collections.
+
+## Examples
+
+### Show recommended themes (default)
+
+```shell
+atmos list themes
+```
+
+<Terminal title="atmos list themes">
+```
+Name                           Type     Rec  Source
+================================================================================
+   Catppuccin Latte               Light
+   Catppuccin Mocha               Dark
+   Dracula                        Dark          https://github.com/zenorocha/dracula-theme
+   GitHub Dark                    Dark
+   Gruvbox Light                  Light         https://github.com/morhetz
+   Material                       Light         https://github.com/stoeffel/material-iterm
+   default                        Dark          https://cloudposse.com
+   nord                           Dark          https://github.com/Teraskull
+
+8 themes (recommended). Use --all to see all themes.
+```
+</Terminal>
+
+### Show all available themes
+
+```shell
+atmos list themes --all
+```
+
+<Terminal title="atmos list themes --all">
+```
+Name                           Type     Rec  Source
+================================================================================
+   3024 Day                       Light         https://github.com/0x3024
+   3024 Night                     Dark          https://github.com/0x3024
+   Aardvark Blue                  Dark
+   Abernathy                      Dark
+   Adventure                      Dark          https://github.com/hongzimao/iTerm2-Color-Schemes
+...
+   Zeonica                        Dark
+
+349 themes available.
+```
+</Terminal>
+
+## Flags
+
+<dl>
+  <dt>`--all`</dt>
+  <dd>Show all available themes instead of just recommended ones (default: `false`)</dd>
+</dl>
+
+## Configuration
+
+To use a theme, set it in your `atmos.yaml` configuration file:
+
+```yaml
+settings:
+  terminal:
+    theme: "dracula"  # Theme name from the list
+```
+
+The theme will be applied to all markdown output, including:
+- Command help text
+- Error messages
+- Documentation output
+- Workflow descriptions
+
+## Theme Precedence
+
+When determining which theme to use, Atmos follows this precedence:
+
+1. **Theme setting** - If `settings.terminal.theme` is set, that theme is used
+2. **Custom colors** - If no theme is set but custom markdown colors are configured, those are used
+3. **Default theme** - If neither theme nor custom colors are set, the "default" theme is used
+
+### Combining Themes with Custom Colors
+
+You can override specific colors of a theme by setting custom markdown colors in your configuration:
+
+```yaml
+settings:
+  terminal:
+    theme: "dracula"
+  markdown:
+    h1:
+      color: "#FF79C6"  # Override H1 color while keeping other theme colors
+```
+
+## Recommended Themes
+
+The following themes are recommended for use with Atmos as they provide excellent readability for infrastructure output:
+
+### Dark Themes
+- **default** - Atmos native theme optimized for infrastructure output
+- **Dracula** - High contrast dark theme with vibrant colors
+- **Catppuccin Mocha** - Modern pastel dark theme, easy on the eyes
+- **Tokyo Night** - Clean theme inspired by Tokyo city lights
+- **Nord** - Arctic-inspired color palette
+- **Gruvbox Dark** - Retro groove theme with warm colors
+- **GitHub Dark** - GitHub's familiar dark mode
+- **One Dark** - Atom's iconic dark theme
+- **Solarized Dark** - Scientifically-designed colors for reduced eye strain
+- **Material** - Google's Material Design colors
+
+### Light Themes
+- **Catppuccin Latte** - Modern pastel light theme
+- **Gruvbox Light** - Retro groove light theme with warm colors
+- **GitHub Light** - GitHub's familiar light mode
+- **Solarized Light** - Precision colors for comfortable daylight viewing
+
+## Related Commands
+
+- [`atmos docs`](/cli/commands/docs/usage) - Generate documentation with themed markdown
+- [`atmos describe component`](/cli/commands/describe/component) - View component details with themed output
+
+## Theme Credits and Attribution
+
+The terminal themes included in Atmos are sourced from the [charmbracelet/vhs](https://github.com/charmbracelet/vhs) project, which has curated an extensive collection of terminal themes from the community.
+
+### License
+The theme collection is used under the MIT License:
+- Copyright (c) 2022 Charmbracelet, Inc
+- Original source: https://github.com/charmbracelet/vhs
+
+### Individual Theme Credits
+Each theme preserves its original creator's attribution in the `meta.credits` field. When you list themes, you can see the original source or creator for each theme. These themes come from various sources including:
+- [iTerm2 Color Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes)
+- Individual theme creators and their repositories
+- Terminal emulator projects.
+
+The "default" theme is an original creation by Cloud Posse, optimized specifically for Atmos output.
+
+We gratefully acknowledge all the theme creators whose work enhances the terminal experience for Atmos users.

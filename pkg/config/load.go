@@ -121,6 +121,7 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.terminal.pager", "ATMOS_PAGER", "PAGER")
 	bindEnv(v, "settings.terminal.color", "ATMOS_COLOR", "COLOR")
 	bindEnv(v, "settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
+	bindEnv(v, "settings.terminal.theme", "ATMOS_THEME", "THEME")
 
 	// Atmos Pro settings
 	bindEnv(v, "settings.pro.base_url", AtmosProBaseUrlEnvVarName)

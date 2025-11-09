@@ -138,6 +138,12 @@ runs:
 
         EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .id' | head -1)
 
+        if [ -n "$EXISTING_COMMENT" ]; then
+          echo "Found existing comment with ID: $EXISTING_COMMENT"
+        else
+          echo "No existing comment found"
+        fi
+
         OVERSIZED="${{ steps.check.outputs.oversized_files }}"
         TOTAL_FILES="${{ steps.check.outputs.total_files }}"
 
@@ -150,16 +156,26 @@ runs:
           FILE_SIZE=$(echo "$FILE_ENTRY" | cut -d: -f2)
           FILE_EXCESS=$((FILE_SIZE - MAX_SIZE))
           FILE_EXCESS_PERCENT=$((FILE_EXCESS * 100 / MAX_SIZE))
-          FILE_LIST="${FILE_LIST}- \`${FILE_NAME}\`: **${FILE_SIZE} bytes** (over by ${FILE_EXCESS} bytes, ~${FILE_EXCESS_PERCENT}%)
-        "
+          FILE_LIST="${FILE_LIST}> - \`${FILE_NAME}\`: **${FILE_SIZE} bytes** (over by ${FILE_EXCESS} bytes, ~${FILE_EXCESS_PERCENT}%)"$'\n'
         done
 
-        if [ "$TOTAL_FILES" -eq 1 ]; then
-          TITLE="Modified File Too Large"
-          DESCRIPTION="The modified file exceeds the **${MAX_SIZE} byte** size limit:"
+        # Detect if we're checking CLAUDE.md or agent files
+        if echo "${{ inputs.file-patterns }}" | grep -q "CLAUDE.md"; then
+          FILE_TYPE="CLAUDE.md"
+          FILE_TYPE_PLURAL="CLAUDE.md files"
+          ACTION_VERB="refactor the oversized CLAUDE.md file"
         else
-          TITLE="Modified Files Too Large"
-          DESCRIPTION="The following modified files exceed the **${MAX_SIZE} byte** size limit:"
+          FILE_TYPE="Claude agent file"
+          FILE_TYPE_PLURAL="Claude agent files"
+          ACTION_VERB="refactor the oversized agent files"
+        fi
+
+        if [ "$TOTAL_FILES" -eq 1 ]; then
+          TITLE="${FILE_TYPE} Too Large"
+          DESCRIPTION="The modified ${FILE_TYPE} exceeds the **${MAX_SIZE} byte** size limit:"
+        else
+          TITLE="${FILE_TYPE_PLURAL} Too Large"
+          DESCRIPTION="The following modified ${FILE_TYPE_PLURAL} exceed the **${MAX_SIZE} byte** size limit:"
         fi
 
         COMMENT_BODY="<!-- claude-md-size-check -->
@@ -169,19 +185,22 @@ runs:
         > ${DESCRIPTION}
         >
         ${FILE_LIST}
-        >
-        > **Action needed:** Please compress the oversized files. Consider:
-        > - Removing verbose explanations
-        > - Consolidating redundant examples
-        > - Keeping only essential requirements
-        > - Moving detailed guides to separate docs in \`docs/\` or \`docs/prd/\`
-        >
-        > All MANDATORY requirements must be preserved."
+        **Action needed:** Please ${ACTION_VERB}. Consider:
+
+        - Removing verbose explanations
+        - Consolidating redundant examples
+        - Keeping only essential requirements
+        - Moving detailed guides to separate docs in \`docs/\` or \`docs/prd/\`
+
+        All MANDATORY requirements must be preserved."
 
         if [ -n "$EXISTING_COMMENT" ]; then
-          echo "Updating existing comment..."
+          echo "Updating existing comment ID: $EXISTING_COMMENT..."
           gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
-            -f body="$COMMENT_BODY"
+            -f body="$COMMENT_BODY" || {
+            echo "⚠️ Failed to update comment (it may have been deleted), creating new comment..."
+            gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
+          }
         else
           echo "Creating new comment..."
           gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
