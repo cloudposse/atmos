@@ -3,7 +3,7 @@ slug: toolchain-management
 title: "Native Toolchain Management with Aqua Registry Integration"
 authors: [osterman]
 tags: [feature, toolchain, aqua]
-date: 2025-01-08
+date: 2025-11-09
 ---
 
 Atmos now includes native toolchain management that seamlessly integrates with the Aqua registry ecosystem—giving you access to hundreds of pre-configured CLI tools without the overhead of external tool managers.
@@ -152,24 +152,39 @@ This means you can use short, friendly names like `terraform` or `kubectl` witho
 
 ## Component Dependencies
 
-Atmos toolchain integrates seamlessly with component configuration. Declare tool dependencies directly in your component metadata:
+Atmos toolchain integrates seamlessly with stack configuration. Declare tool dependencies at multiple levels with proper inheritance:
 
 ```yaml
-# components/terraform/vpc/component.yaml
-metadata:
+# Global dependencies (applies to all components)
+dependencies:
+  tools:
+    aws-cli: "2.0.0"
+    jq: "latest"
+
+# Component type dependencies (applies to all terraform components)
+terraform:
   dependencies:
     tools:
       terraform: "1.9.8"
-      kubectl: "1.28.0"
+      tflint: "0.54.0"
+
+# Component instance dependencies (specific component)
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.9.8"
+          checkov: "latest"
 ```
 
-When you provision the component, Atmos automatically:
-1. Resolves tool dependencies from the component metadata
+When you provision a component, Atmos automatically:
+1. Resolves tool dependencies from stack configuration (with inheritance)
 2. Installs missing tools
 3. Updates PATH to include installed tools
 4. Executes the component with the correct tool versions
 
-This ensures every component runs with exactly the tools it needs, eliminating version conflicts.
+This ensures every component runs with exactly the tools it needs, eliminating version conflicts. Dependencies also work for workflows and custom commands!
 
 ## Configuration Flexibility
 
@@ -210,44 +225,15 @@ Atmos toolchain follows the [XDG Base Directory Specification](https://specifica
 
 This ensures proper integration with system conventions and user preferences.
 
-## Security and Validation
+## Safety and Reliability
 
-### Lockfile Support
+The toolchain includes safety features for robust operation:
 
-Atmos toolchain includes robust lockfile management for reproducible builds:
-
-```yaml
-# .tool-versions.lock
-metadata:
-  version: 1
-  last_updated: "2025-01-08T10:30:00Z"
-
-tools:
-  terraform:
-    version: "1.9.8"
-    platforms:
-      linux/amd64:
-        url: "https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip"
-        checksum: "sha256:..."
-      darwin/arm64:
-        url: "https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_darwin_arm64.zip"
-        checksum: "sha256:..."
-```
-
-The lockfile ensures:
-- **Reproducible installations**: Same versions and binaries across all environments
-- **Integrity verification**: SHA256 checksums prevent tampering
-- **Platform-specific resolution**: Correct binaries for each OS/architecture
-- **Version protection**: Prevents accidental removal of the wrong version
-
-### Safe Operations
-
-The toolchain includes safety checks:
-
-- **Version verification**: Removing a tool verifies the version matches the lockfile
-- **Nil guards**: Prevents panics on malformed lockfile entries
+- **Version pinning**: `.tool-versions` ensures consistent tool versions across environments
 - **Error handling**: Graceful fallbacks for missing files or network issues
-- **Helpful messages**: Clear guidance when configuration is missing
+- **Helpful messages**: Clear guidance when configuration is missing or tools aren't found
+- **Clean uninstall**: `atmos toolchain clean` removes unused tool versions
+- **Cross-platform**: Works consistently on Linux, macOS, and Windows
 
 ## Benefits Over Traditional Tool Managers
 
@@ -362,23 +348,22 @@ atmos toolchain exec terraform -- version
 
 No configuration required—just start using it!
 
-## Upgrade Notes
+## Backward Compatibility
 
-This is the initial release of Atmos toolchain management. All features are backward compatible:
+Atmos toolchain is fully backward compatible:
 
-- Existing `.tool-versions` files work without modification
-- No breaking changes to component configuration
+- Existing `.tool-versions` files (asdf format) work without modification
+- No breaking changes to component or stack configuration
 - All existing commands continue to work as before
-- Toolchain commands are additive—they don't affect existing workflows
+- Toolchain commands are completely additive
 
-## What's Next
+## Future Enhancements
 
-Future enhancements planned:
+We're continually improving the toolchain experience. Planned enhancements include:
 
+- **Lockfile support**: Reproducible builds with checksums and platform-specific binaries
 - **Custom registries**: Support for private tool registries
-- **Version constraints**: Semantic version ranges (e.g., `^1.9.0`)
-- **Auto-update**: Automatic tool updates when new versions are available
-- **Performance**: Parallel downloads and caching improvements
-- **Analytics**: Usage tracking for team insights
+- **Version constraints**: Semantic version ranges (e.g., `^1.9.0`, `~> 1.10.0`)
+- **Performance optimizations**: Parallel downloads and improved caching
 
-We'd love your feedback! Try the new toolchain commands and let us know what you think.
+We'd love your feedback! Try the toolchain commands and let us know what you think.

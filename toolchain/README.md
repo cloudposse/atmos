@@ -9,21 +9,55 @@ The `toolchain` package provides programmatic tool version management for Atmos,
 - Installing CLI tools (terraform, helm, kubectl, etc.) with version pinning
 - Executing tools with specific versions via `atmos toolchain exec`
 - Managing multiple concurrent versions of the same tool
-- Integration with Aqua registry for package definitions
+- Integration with Aqua registry for package definitions (1000+ tools)
 - Support for `.tool-versions` files (ASDF-compatible format)
+- Automatic tool installation based on component, workflow, and command dependencies
+
+## Implementation Status
+
+### ✅ Implemented Features
+
+- **Core Commands**: add, remove, set, install, uninstall, clean, list, get, info, exec, which, path
+- **Registry Integration**: Aqua registry with search and list capabilities
+- **Tool Dependencies**: Component-level, workflow, and custom command dependencies with auto-install
+- **XDG Compliance**: Uses XDG Base Directory Specification for cache
+- **GitHub Integration**: Automatic GitHub token authentication for API calls
+- **ASDF Compatibility**: Full compatibility with `.tool-versions` files
+
+### 🚧 Planned Features
+
+- **Lockfile Support**: `.tool-versions.lock` for reproducible builds with checksums
+- **Version Constraints**: Semantic version ranges (e.g., `^1.9.0`, `~> 1.10.0`)
+- **Custom Registries**: Support for private tool registries
+- **Performance Optimizations**: Parallel downloads and improved caching
 
 ## Package Structure
 
 ```
 toolchain/
 ├── aqua_registry.go        # Aqua registry integration and package resolution
+├── atmos_registry.go       # Atmos-specific registry (placeholder)
 ├── github.go               # GitHub API client for release discovery
 ├── installer.go            # Core installation logic and binary extraction
-├── local_config.go         # Local tools.yaml configuration management
 ├── tool_versions.go        # .tool-versions file parsing and management
 ├── types.go                # Core data structures and YAML types
+├── add.go                  # Add tools to .tool-versions
+├── remove.go               # Remove tools from .tool-versions
+├── set.go                  # Set default tool version
+├── install.go              # Install tools
+├── uninstall.go            # Uninstall tools
+├── clean.go                # Clean tools and cache
+├── list.go                 # List installed tools
+├── get.go                  # Get available versions
+├── info.go                 # Tool information
+├── exec.go                 # Execute tools
 ├── which.go                # Tool lookup and path resolution
-├── *_test.go               # Unit tests (76.3% coverage)
+├── path.go                 # PATH management
+├── registry/               # Registry implementations
+│   ├── aqua.go            # Aqua registry client
+│   ├── interface.go       # Registry interface
+│   └── types.go           # Registry types
+├── *_test.go               # Unit tests
 └── README.md               # This file
 ```
 
@@ -65,10 +99,11 @@ The toolchain uses the Aqua registry format but implements its own parser rather
 - Supports comments and blank lines
 - Thread-safe read/write operations
 
-#### LocalConfigManager (`local_config.go`)
-- Manages `tools.yaml` for tool aliases
-- Maps friendly names to registry paths (`terraform` → `hashicorp/terraform`)
-- Prevents duplicate entries in `.tool-versions`
+#### Registry System (`registry/`)
+- Interface-based registry pattern for extensibility
+- Aqua registry implementation for 1000+ tools
+- Supports search, list, and tool resolution
+- Future support for custom registries
 
 ## Integration Points
 
@@ -82,28 +117,41 @@ toolchain:
   file_path: .tool-versions      # Tool version declarations
 ```
 
-### Component Dependencies (Planned)
+### Component Dependencies
 
-Future feature to declare tool dependencies at component or stack level:
+Tool dependencies can be declared at multiple levels in stack configuration with proper inheritance:
 
 ```yaml
-# Stack-level (applies to all components)
+# Global dependencies (applies to all components)
 dependencies:
   tools:
-    terraform: "~> 1.10.0"
-    tflint: "^0.54.0"
+    aws-cli: "2.0.0"
+    jq: "latest"
 
+# Component-type dependencies (applies to all terraform components)
+terraform:
+  dependencies:
+    tools:
+      terraform: "1.9.8"
+      tflint: "0.54.0"
+
+# Component instance dependencies (specific component)
 components:
   terraform:
     vpc:
-      # Component-level (overrides stack-level)
       dependencies:
         tools:
-          terraform: "1.10.3"
+          terraform: "1.9.8"
           checkov: "latest"
 ```
 
-**Status**: 🚧 Not implemented (see `docs/prd/toolchain-implementation.md`)
+**Status**: ✅ Implemented for components, workflows, and custom commands
+
+**Implementation**: See `pkg/dependencies/resolver.go` for the dependency resolution logic. When you run `atmos terraform plan`, Atmos automatically:
+1. Resolves tool dependencies from stack configuration (with inheritance)
+2. Installs missing tools
+3. Updates PATH to include installed tools
+4. Executes the component with the correct tool versions
 
 ## Usage Patterns
 
@@ -113,26 +161,39 @@ components:
 import "github.com/cloudposse/atmos/toolchain"
 
 // Install specific version
-err := toolchain.InstallExec("terraform@1.10.3")
+err := toolchain.RunInstall("terraform@1.9.8", false, false)
 
 // Install all from .tool-versions
-err := toolchain.InstallExec("")
+err := toolchain.RunInstall("", false, false)
 ```
 
 ### Executing Tools
 
 ```go
 // Exec replaces current process with tool binary
-err := toolchain.ExecExec("terraform@1.10.3", []string{"--version"})
+err := toolchain.RunExec("terraform@1.9.8", []string{"plan"})
 
 // Which prints path to tool binary
-err := toolchain.WhichExec("terraform@1.10.3")
+err := toolchain.RunWhich("terraform")
 ```
 
-### Listing Installed Tools
+### Managing Tools
 
 ```go
-err := toolchain.ListExec()
+// Add tool to .tool-versions
+err := toolchain.RunAdd("terraform@1.9.8")
+
+// Remove tool from .tool-versions
+err := toolchain.RunRemove("terraform")
+
+// List installed tools
+err := toolchain.RunList()
+
+// Get available versions
+err := toolchain.ListToolVersions(true, 10, "terraform")
+
+// Clean tools and cache
+err := toolchain.CleanToolsAndCaches(toolsDir, cacheDir, tempDir)
 ```
 
 ## Supported Package Types
@@ -173,43 +234,49 @@ url: https://releases.hashicorp.com/terraform/{{.Version}}/terraform_{{.Version}
 
 ## Testing
 
-### Coverage: 76.3%
-
-**Target**: 80-90%
+### Test Coverage
 
 Run tests:
 ```bash
-go test ./toolchain/...
+make test                    # Quick tests
+make testacc                 # Full test suite
+make testacc-cover          # With coverage report
 ```
 
-With coverage:
+Or directly:
 ```bash
+go test ./toolchain/...
 go test ./toolchain/... -coverprofile=coverage.out
 go tool cover -html=coverage.out
 ```
 
 ### Test Helpers
 
-- `NewMockAquaRegistry()` - Mock registry for testing
-- `NewMockInstaller()` - Mock installer for testing
 - Uses `t.TempDir()` for isolated test environments
+- I/O context initialization via `InitTestIOContext(t)`
+- Mock registries with controlled responses
+- Table-driven tests for comprehensive coverage
 
 ### Example Test
 
 ```go
 func TestInstallTool(t *testing.T) {
     tempDir := t.TempDir()
+
+    // Initialize I/O context for UI functions
+    InitTestIOContext(t)
+
     SetAtmosConfig(&schema.AtmosConfiguration{
         Toolchain: schema.Toolchain{
-            ToolsDir: tempDir,
-            FilePath: filepath.Join(tempDir, ".tool-versions"),
+            InstallPath: tempDir,
+            VersionsFile: filepath.Join(tempDir, ".tool-versions"),
         },
     })
 
-    err := InstallExec("terraform@1.10.3")
+    err := RunInstall("terraform@1.9.8", false, false)
     require.NoError(t, err)
 
-    binaryPath := filepath.Join(tempDir, "bin", "hashicorp", "terraform", "1.10.3", "terraform")
+    binaryPath := filepath.Join(tempDir, "hashicorp", "terraform", "1.9.8", "terraform")
     assert.FileExists(t, binaryPath)
 }
 ```
@@ -275,7 +342,7 @@ Declares tool versions for a project:
 
 ```
 # Tools for this project
-terraform 1.10.3
+terraform 1.9.8
 helm 3.17.0
 kubectl 1.32.0
 ```
@@ -286,33 +353,49 @@ kubectl 1.32.0
 - Blank lines ignored
 - Multiple versions supported (space-separated)
 
-### `tools.yaml` (Local Aliases)
+**Tool Name Resolution:**
+- Exact matches: `hashicorp/terraform` → `hashicorp/terraform`
+- Alias resolution: `terraform` → resolved via Aqua registry to `hashicorp/terraform`
+- Short names automatically resolved to canonical registry paths
 
-Maps friendly names to registry paths:
+## Available Commands
 
-```yaml
-aliases:
-  terraform: hashicorp/terraform
-  helm: helm/helm
-  kubectl: kubernetes-sigs/kubectl
-```
+All commands are available via `atmos toolchain`:
 
-**Location:** `./.tools/tools.yaml` (created automatically)
+### Core Commands
+- `add <tool@version>` - Add tool to .tool-versions
+- `remove <tool>` - Remove tool from .tool-versions
+- `set <tool> <version>` - Set default tool version
+- `install [tool@version]` - Install tool(s)
+- `uninstall [tool@version]` - Uninstall tool(s)
+- `clean` - Remove all tools and cache
+- `list` - List installed tools with status
+- `get [tool]` - Get available versions
+- `info <tool>` - Show tool information
+- `exec <tool@version> -- <args>` - Execute tool with specific version
+- `which <tool>` - Show path to tool binary
+- `path` - Show toolchain PATH entries
 
-## Common Patterns
+### Registry Commands
+- `registry list [registry-name]` - List registries or tools in registry
+- `registry search <query>` - Search for tools across registries
+- `search <query>` - Alias to `registry search`
+
+## Development Patterns
 
 ### Adding a New Command
 
 1. Create command file in `cmd/toolchain/`
 2. Implement business logic in `toolchain/`
 3. Add tests in `toolchain/*_test.go`
-4. Update PRD in `docs/prd/toolchain-implementation.md`
+4. Add documentation in `website/docs/cli/commands/toolchain/`
+5. Update PRD in `docs/prd/toolchain-implementation.md`
 
 ### Adding Support for New Package Type
 
 1. Update `types.go` with new package type constant
 2. Extend `installer.go` with new download logic
-3. Add parsing logic in `aqua_registry.go`
+3. Add parsing logic in registry implementation
 4. Add tests for new package type
 
 ## Dependencies
@@ -324,16 +407,20 @@ aliases:
 
 ## Future Enhancements
 
-See `docs/prd/toolchain-implementation.md` for detailed roadmap:
+See `docs/prd/tool-dependencies-integration.md` for detailed roadmap:
 
-- **Component Dependencies**: Tool requirements at component/stack level
-- **Atmos Self-Management**: Auto-exec based on `.tool-versions`
-- **Configurable Registries**: Support custom registries beyond Aqua
-- **Enhanced Test Coverage**: Reach 80-90% coverage target
+- **Lockfile Support**: `.tool-versions.lock` for reproducible builds with checksums
+- **Version Constraints**: Semantic version ranges (e.g., `^1.9.0`, `~> 1.10.0`)
+- **Custom Registries**: Support for private tool registries beyond Aqua
+- **Performance Optimizations**: Parallel downloads and improved caching
+- **Auto-Update**: Automatic tool updates when new versions are available
 
 ## References
 
-- **PRD**: `docs/prd/toolchain-implementation.md`
+- **Implementation PRD**: `docs/prd/toolchain-implementation.md`
+- **Dependencies PRD**: `docs/prd/tool-dependencies-integration.md`
 - **Commands**: `cmd/toolchain/`
+- **Dependency Resolver**: `pkg/dependencies/`
 - **HTTP Client**: `pkg/http/`
 - **Aqua Registry**: https://github.com/aquaproj/aqua-registry
+- **Documentation**: `website/docs/cli/commands/toolchain/`
