@@ -373,6 +373,87 @@ func TestMergeErrorConfigs(t *testing.T) {
 	}
 }
 
+func TestSetComponentBooleanOverrides(t *testing.T) {
+	tests := []struct {
+		name     string
+		global   *schema.ErrorsConfig
+		component *schema.ErrorsConfig
+		setEnabled bool
+		setDebug   bool
+		setCaptureStack bool
+		expected *schema.ErrorsConfig
+	}{
+		{
+			name: "non-YAML caller disables Sentry with DSN",
+			global: &schema.ErrorsConfig{
+				Sentry: schema.SentryConfig{
+					Enabled:     true,
+					DSN:         "https://global@sentry.io/123",
+					Environment: "production",
+				},
+			},
+			component: &schema.ErrorsConfig{
+				Sentry: schema.SentryConfig{
+					Enabled:     false, // Explicitly disable.
+					DSN:         "https://component@sentry.io/456",
+					Environment: "staging",
+				},
+			},
+			setEnabled:       true, // Indicate Enabled was explicitly set.
+			setDebug:         false,
+			setCaptureStack: false,
+			expected: &schema.ErrorsConfig{
+				Sentry: schema.SentryConfig{
+					Enabled:     false, // Component override applied.
+					DSN:         "https://component@sentry.io/456",
+					Environment: "staging",
+				},
+			},
+		},
+		{
+			name: "non-YAML caller enables debug with other fields",
+			global: &schema.ErrorsConfig{
+				Sentry: schema.SentryConfig{
+					Enabled:     true,
+					DSN:         "https://global@sentry.io/123",
+					Debug:       false,
+				},
+			},
+			component: &schema.ErrorsConfig{
+				Sentry: schema.SentryConfig{
+					DSN:         "https://component@sentry.io/456",
+					Debug:       true, // Explicitly enable debug.
+				},
+			},
+			setEnabled:       false,
+			setDebug:         true, // Indicate Debug was explicitly set.
+			setCaptureStack: false,
+			expected: &schema.ErrorsConfig{
+				Sentry: schema.SentryConfig{
+					Enabled:     true, // Inherited from global.
+					DSN:         "https://component@sentry.io/456",
+					Debug:       true, // Component override applied.
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set metadata to indicate which booleans were explicitly set.
+			SetComponentBooleanOverrides(tt.component, tt.setEnabled, tt.setDebug, tt.setCaptureStack)
+
+			result := MergeErrorConfigs(tt.global, tt.component)
+
+			assert.Equal(t, tt.expected.Sentry.Enabled, result.Sentry.Enabled)
+			assert.Equal(t, tt.expected.Sentry.DSN, result.Sentry.DSN)
+			assert.Equal(t, tt.expected.Sentry.Environment, result.Sentry.Environment)
+			assert.Equal(t, tt.expected.Sentry.Debug, result.Sentry.Debug)
+			assert.Equal(t, tt.expected.Sentry.CaptureStackContext, result.Sentry.CaptureStackContext)
+		})
+	}
+}
+
 func TestSentryClientRegistryReuse(t *testing.T) {
 	// Create a new registry for testing.
 	registry := &SentryClientRegistry{

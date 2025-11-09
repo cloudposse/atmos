@@ -188,6 +188,32 @@ func GetComponentErrorConfig(info *schema.ConfigAndStacksInfo) (*schema.ErrorsCo
 // This is used to track which boolean fields were explicitly set in YAML.
 var componentMetadataStore = make(map[*schema.ErrorsConfig]componentErrorConfigWithMetadata)
 
+// SetComponentBooleanOverrides allows non-YAML callers to explicitly indicate which boolean
+// Sentry fields should override global config. This is useful for programmatic configuration
+// where you want to set enabled=false alongside DSN or other fields.
+//
+// Example:
+//
+//	componentConfig := &schema.ErrorsConfig{
+//	    Sentry: schema.SentryConfig{
+//	        Enabled: false,  // Explicitly disable
+//	        DSN: "https://...",  // But still provide DSN
+//	    },
+//	}
+//	errUtils.SetComponentBooleanOverrides(componentConfig, true, false, false)
+//	merged := errUtils.MergeErrorConfigs(globalConfig, componentConfig)
+func SetComponentBooleanOverrides(component *schema.ErrorsConfig, enabled, debug, captureStackContext bool) {
+	if component == nil {
+		return
+	}
+	componentMetadataStore[component] = componentErrorConfigWithMetadata{
+		config:                           component,
+		sentryEnabledExplicitlySet:       enabled,
+		sentryDebugExplicitlySet:          debug,
+		sentryCaptureStackExplicitlySet: captureStackContext,
+	}
+}
+
 // getComponentErrorConfigWithMetadata decodes component error settings and tracks which boolean fields were explicitly set.
 func getComponentErrorConfigWithMetadata(errorsSettings map[string]any) componentErrorConfigWithMetadata {
 	var config schema.ErrorsConfig
@@ -240,18 +266,24 @@ func MergeErrorConfigs(global *schema.ErrorsConfig, component *schema.ErrorsConf
 	// Determine which boolean fields have explicit overrides.
 	var explicitBooleans booleanOverrides
 	if hasMetadata {
+		// YAML caller - use metadata to detect explicit boolean fields.
 		explicitBooleans.enabled = metadata.sentryEnabledExplicitlySet
 		explicitBooleans.debug = metadata.sentryDebugExplicitlySet
 		explicitBooleans.captureStackContext = metadata.sentryCaptureStackExplicitlySet
 	} else if !hasComponentSentry {
-		// Fallback: When no metadata AND no explicit non-boolean config,
-		// check if boolean fields differ from global (explicit override).
-		// This preserves the old behavior for tests.
+		// No metadata AND no explicit non-boolean config.
+		// Check if boolean fields differ from global (explicit override).
+		// This preserves the old behavior for tests with only boolean overrides.
 		explicitBooleans.enabled = component.Sentry.Enabled != global.Sentry.Enabled
 		explicitBooleans.debug = component.Sentry.Debug != global.Sentry.Debug
 		explicitBooleans.captureStackContext = component.Sentry.CaptureStackContext != global.Sentry.CaptureStackContext
 	}
-	// Else: hasComponentSentry && !hasMetadata - assume zero values, don't override booleans.
+	// Else: hasComponentSentry && !hasMetadata
+	// No metadata but has explicit non-boolean config (DSN/Environment/Tags).
+	// Don't set explicitBooleans - assume boolean values are zero values unless proven otherwise.
+	// Non-YAML callers who need to override booleans should either:
+	// 1. Call SetComponentBooleanOverrides() before MergeErrorConfigs(), OR
+	// 2. Ensure boolean values differ from global (works only when not mixing with other fields)
 
 	hasBooleanOverride := explicitBooleans.enabled || explicitBooleans.debug || explicitBooleans.captureStackContext
 
