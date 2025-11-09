@@ -154,9 +154,9 @@ func (r *SentryClientRegistry) CloseAll() {
 
 // componentErrorConfigWithMetadata holds both the decoded config and metadata about which fields were explicitly set.
 type componentErrorConfigWithMetadata struct {
-	config                        *schema.ErrorsConfig
-	sentryEnabledExplicitlySet    bool
-	sentryDebugExplicitlySet      bool
+	config                          *schema.ErrorsConfig
+	sentryEnabledExplicitlySet      bool
+	sentryDebugExplicitlySet        bool
 	sentryCaptureStackExplicitlySet bool
 }
 
