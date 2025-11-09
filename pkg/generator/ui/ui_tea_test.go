@@ -84,11 +84,11 @@ func TestSpinnerModel_Update(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		msg           tea.Msg
-		expectQuit    bool
-		checkMessage  bool
-		checkSpinner  bool
+		name         string
+		msg          tea.Msg
+		expectQuit   bool
+		checkMessage bool
+		checkSpinner bool
 	}{
 		{
 			name: "ctrl+c quits",
@@ -192,9 +192,9 @@ func TestInitUI_ColorSource(t *testing.T) {
 	ui := createTestUI(t)
 
 	tests := []struct {
-		name          string
-		source        string
-		expectedText  string
+		name         string
+		source       string
+		expectedText string
 	}{
 		{
 			name:         "scaffold source",

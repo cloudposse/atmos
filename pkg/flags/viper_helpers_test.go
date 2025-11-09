@@ -128,9 +128,9 @@ func TestParseStringMap(t *testing.T) {
 			},
 		},
 		{
-			name:  "empty string slice",
-			key:   "set",
-			value: []string{},
+			name:     "empty string slice",
+			key:      "set",
+			value:    []string{},
 			expected: map[string]string{},
 		},
 		{
