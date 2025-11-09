@@ -256,6 +256,8 @@ func (p *StandardFlagParser) registerFlagToSet(flagSet *pflag.FlagSet, flag Flag
 		p.registerIntFlag(flagSet, f, markRequired)
 	case *StringSliceFlag:
 		p.registerStringSliceFlag(flagSet, f, markRequired)
+	case *StringMapFlag:
+		p.registerStringMapFlag(flagSet, f, markRequired)
 	default:
 		// Unknown flag type - skip.
 		// In production, this could log a warning.
@@ -303,6 +305,29 @@ func (p *StandardFlagParser) registerStringSliceFlag(flagSet *pflag.FlagSet, f *
 	defer perf.Track(nil, "flags.StandardFlagParser.registerStringSliceFlag")()
 
 	flagSet.StringSliceP(f.Name, f.Shorthand, f.Default, f.Description)
+
+	if f.Required {
+		_ = markRequired(f.Name)
+	}
+}
+
+// registerStringMapFlag registers a string map flag as a StringSlice for Cobra.
+// StringMapFlag is registered as StringSlice because Cobra doesn't have native map support.
+// The parsing of key=value pairs happens in ParseStringMap() helper (viper_helpers.go).
+func (p *StandardFlagParser) registerStringMapFlag(flagSet *pflag.FlagSet, f *StringMapFlag, markRequired func(string) error) {
+	defer perf.Track(nil, "flags.StandardFlagParser.registerStringMapFlag")()
+
+	// Convert default map to []string for Cobra registration.
+	// This allows Cobra to handle the flag as a repeated string slice.
+	var defaultSlice []string
+	if f.Default != nil {
+		for k, v := range f.Default {
+			defaultSlice = append(defaultSlice, k+"="+v)
+		}
+	}
+
+	// Register as StringSlice - Cobra will accept repeated --flag key=value.
+	flagSet.StringSliceP(f.Name, f.Shorthand, defaultSlice, f.Description)
 
 	if f.Required {
 		_ = markRequired(f.Name)
