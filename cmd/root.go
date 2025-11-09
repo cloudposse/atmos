@@ -28,6 +28,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
+	"github.com/cloudposse/atmos/pkg/flags"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -157,10 +158,12 @@ func processChdirFlag(cmd *cobra.Command) error {
 
 // RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
-	Use:                "atmos",
-	Short:              "Universal Tool for DevOps and Cloud Automation",
-	Long:               `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
-	FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
+	Use:   "atmos",
+	Short: "Universal Tool for DevOps and Cloud Automation",
+	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+	// Note: FParseErrWhitelist is NOT set on RootCmd to allow proper flag validation.
+	// Individual commands that need to pass through flags (terraform, helmfile, packer)
+	// set FParseErrWhitelist{UnknownFlags: true} explicitly.
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Determine if the command is a help command or if the help flag is set.
 		isHelpCommand := cmd.Name() == "help"
@@ -715,45 +718,22 @@ func init() {
 	// Add the template function for wrapped flag usages.
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
-	RootCmd.PersistentFlags().StringP("chdir", "C", "", "Change working directory before processing (run as if Atmos started in this directory)")
-	RootCmd.PersistentFlags().String("redirect-stderr", "", "File descriptor to redirect `stderr` to. "+
-		"Errors can be redirected to any file or any standard file descriptor (including `/dev/null`)")
-	RootCmd.PersistentFlags().Bool("version", false, "Display the Atmos CLI version")
-	RootCmd.PersistentFlags().Lookup("version").DefValue = ""
-
-	RootCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
-	RootCmd.PersistentFlags().String("logs-file", "/dev/stderr", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
-	RootCmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	RootCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
-	RootCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
-	RootCmd.PersistentFlags().Bool("no-color", false, "Disable color output")
-	RootCmd.PersistentFlags().Bool("force-color", false, "Force color output even when not a TTY (useful for screenshots)")
-	RootCmd.PersistentFlags().Bool("force-tty", false, "Force TTY mode with sane defaults when terminal detection fails (useful for screenshots)")
-	RootCmd.PersistentFlags().Bool("mask", true, "Enable automatic masking of sensitive data in output (use --mask=false to disable)")
-	RootCmd.PersistentFlags().String("pager", "", "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)")
-	// Set NoOptDefVal so --pager without value means "true".
-	RootCmd.PersistentFlags().Lookup("pager").NoOptDefVal = "true"
-	RootCmd.PersistentFlags().Bool("profiler-enabled", false, "Enable pprof profiling server")
-	RootCmd.PersistentFlags().Int("profiler-port", profiler.DefaultProfilerPort, "Port for pprof profiling server")
-	RootCmd.PersistentFlags().String("profiler-host", "localhost", "Host for pprof profiling server")
-	RootCmd.PersistentFlags().String("profile-file", "", "Write profiling data to file instead of starting server")
-	RootCmd.PersistentFlags().String("profile-type", "cpu",
-		"Type of profile to collect when using --profile-file. "+
-			"Options: cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace")
-	RootCmd.PersistentFlags().Bool("heatmap", false, "Show performance heatmap visualization after command execution (includes P95 latency)")
-	RootCmd.PersistentFlags().String("heatmap-mode", "bar", "Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI)")
-
-	// Bind terminal flags to environment variables.
-	if err := viper.BindEnv("force-tty", "ATMOS_FORCE_TTY"); err != nil {
-		log.Error("Failed to bind ATMOS_FORCE_TTY environment variable", "error", err)
+	// Register all global flags as persistent flags using builder pattern.
+	// Global flags are registered as persistent so they're inherited by all subcommands.
+	// This provides:
+	//   - Single source of truth for defaults (NewGlobalFlags())
+	//   - Automatic environment variable binding
+	//   - Consistent with other command builders
+	//   - Testable flag precedence
+	globalParser := flags.NewGlobalOptionsBuilder().Build()
+	globalParser.RegisterPersistentFlags(RootCmd)
+	if err := globalParser.BindToViper(viper.GetViper()); err != nil {
+		log.Error("Failed to bind global flags to viper", "error", err)
 	}
-	// Bind both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to the same viper key (they are equivalent).
-	if err := viper.BindEnv("force-color", "ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"); err != nil {
-		log.Error("Failed to bind ATMOS_FORCE_COLOR/CLICOLOR_FORCE environment variables", "error", err)
-	}
-	// Bind mask flag to environment variable.
-	if err := viper.BindEnv("mask", "ATMOS_MASK"); err != nil {
-		log.Error("Failed to bind ATMOS_MASK environment variable", "error", err)
+
+	// Special handling for version flag: clear DefValue for cleaner --help output.
+	if versionFlag := RootCmd.PersistentFlags().Lookup("version"); versionFlag != nil {
+		versionFlag.DefValue = ""
 	}
 
 	// Bind environment variables for GitHub authentication.
@@ -784,7 +764,23 @@ func initCobraConfig() {
 		if c.Use == "atmos" {
 			return b.UsageFunc(c)
 		}
-		showUsageAndExit(c, c.Flags().Args())
+		// Get actual arguments (handles DisableFlagParsing=true case).
+		arguments := flags.GetActualArgs(c, os.Args)
+
+		// IMPORTANT: Check if command has Args validator and args are valid.
+		// If args pass validation, they're positional args, not unknown subcommands.
+		// This prevents "Unknown command component1" errors for valid positional args.
+		if len(arguments) > 0 {
+			if err := flags.ValidateArgsOrNil(c, arguments); err == nil {
+				// Args are valid positional arguments - show usage without "Unknown command" error
+				showErrorExampleFromMarkdown(c, "")
+				errUtils.Exit(1)
+				return nil
+			}
+			// Args validation failed - fall through to show error with first arg as unknown command
+		}
+
+		showUsageAndExit(c, arguments)
 		return nil
 	})
 	RootCmd.SetHelpFunc(func(command *cobra.Command, args []string) {
@@ -794,10 +790,8 @@ func initCobraConfig() {
 		}
 
 		if !(Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")) {
-			arguments := os.Args[len(strings.Split(command.CommandPath(), " ")):]
-			if len(command.Flags().Args()) > 0 {
-				arguments = command.Flags().Args()
-			}
+			// Get actual arguments (handles DisableFlagParsing=true case).
+			arguments := flags.GetActualArgs(command, os.Args)
 			showUsageAndExit(command, arguments)
 		}
 		// Print a styled Atmos logo to the terminal.
