@@ -1,0 +1,32 @@
+---
+slug: theme-commands-environment-variables
+title: "Theme Commands Now Support Environment Variables"
+authors: [osterman]
+tags: [enhancement]
+---
+
+The `atmos theme list` command now supports environment variables with proper flag precedence handling.
+
+<!--truncate-->
+
+## What Changed
+
+The theme commands have been migrated to use the modern `StandardFlagParser` pattern, enabling environment variable support and consistent flag precedence across all Atmos commands.
+
+## Usage
+
+```bash
+# Use environment variable
+export ATMOS_THEME_RECOMMENDED=true
+atmos theme list
+
+# CLI flag overrides environment variable
+atmos theme list --recommended=false
+```
+
+## Benefits
+
+- **Environment variable support**: Set `ATMOS_THEME_RECOMMENDED=true` to filter recommended themes
+- **Flag precedence**: CLI flags > environment variables > config files > defaults
+- **Consistency**: Same pattern as `terraform`, `helmfile`, and `packer` commands
+- **Type safety**: Removed global variables in favor of type-safe options structs
