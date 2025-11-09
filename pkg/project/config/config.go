@@ -186,10 +186,28 @@ func GetConfigPath() (string, error) {
 	return filepath.Join(homeDir, ".atmos"), nil
 }
 
-// PromptForScaffoldConfig prompts the user for scaffold configuration values using a form
-// This creates a fully dynamic form based on the scaffold.yaml structure
+// PromptForScaffoldConfig prompts the user for scaffold configuration values using a form.
+// This creates a fully dynamic form based on the scaffold.yaml structure.
 func PromptForScaffoldConfig(scaffoldConfig *ScaffoldConfig, userValues map[string]interface{}) error {
 	// Initialize form values with user values and defaults
+	formValues := initializeFormValues(scaffoldConfig, userValues)
+
+	// Build the form with grouped fields
+	huhForm, valueGetters := buildConfigForm(scaffoldConfig, formValues)
+
+	// Run the form interaction
+	if err := runFormInteraction(huhForm); err != nil {
+		return err
+	}
+
+	// Extract form values back to userValues
+	extractFormValues(userValues, valueGetters)
+
+	return nil
+}
+
+// initializeFormValues merges default values with user-provided values.
+func initializeFormValues(scaffoldConfig *ScaffoldConfig, userValues map[string]interface{}) map[string]interface{} {
 	formValues := make(map[string]interface{})
 
 	// Set defaults from scaffold config
@@ -204,101 +222,96 @@ func PromptForScaffoldConfig(scaffoldConfig *ScaffoldConfig, userValues map[stri
 		formValues[key] = value
 	}
 
+	return formValues
+}
+
+// fieldItem represents a field with its key for grouping.
+type fieldItem struct {
+	key   string
+	field FieldDefinition
+}
+
+// buildConfigForm builds the configuration form with grouped fields.
+// Returns the form and value getters for extracting values after submission.
+func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]interface{}) (*huh.Form, map[string]func() interface{}) {
 	// Should we run in accessible mode?
 	accessible, _ := strconv.ParseBool(os.Getenv("ACCESSIBLE"))
 
-	// Build form groups dynamically
-	var groups []*huh.Group
-
-	// Group fields by type for better UX
-	basicFields := []struct {
-		key   string
-		field FieldDefinition
-	}{}
-	configFields := []struct {
-		key   string
-		field FieldDefinition
-	}{}
-	advancedFields := []struct {
-		key   string
-		field FieldDefinition
-	}{}
-
-	for key, field := range scaffoldConfig.Fields {
-		switch field.Type {
-		case "input", "text":
-			basicFields = append(basicFields, struct {
-				key   string
-				field FieldDefinition
-			}{key, field})
-		case "select":
-			configFields = append(configFields, struct {
-				key   string
-				field FieldDefinition
-			}{key, field})
-		case "multiselect", "confirm":
-			advancedFields = append(advancedFields, struct {
-				key   string
-				field FieldDefinition
-			}{key, field})
-		default:
-			basicFields = append(basicFields, struct {
-				key   string
-				field FieldDefinition
-			}{key, field})
-		}
-	}
+	// Group fields by type
+	basicFields, configFields, advancedFields := groupFieldsByType(scaffoldConfig)
 
 	// Store value getters for after form completion
 	valueGetters := make(map[string]func() interface{})
 
-	// Add basic fields group
+	// Build form groups
+	var groups []*huh.Group
+
 	if len(basicFields) > 0 {
-		var basicGroupFields []huh.Field
-		for _, item := range basicFields {
-			field, getter := createField(item.key, item.field, formValues)
-			basicGroupFields = append(basicGroupFields, field)
-			valueGetters[item.key] = getter
-		}
-		groups = append(groups, huh.NewGroup(basicGroupFields...))
+		groups = append(groups, createFormGroup(basicFields, formValues, valueGetters))
 	}
 
-	// Add config fields group
 	if len(configFields) > 0 {
-		var configGroupFields []huh.Field
-		for _, item := range configFields {
-			field, getter := createField(item.key, item.field, formValues)
-			configGroupFields = append(configGroupFields, field)
-			valueGetters[item.key] = getter
-		}
-		groups = append(groups, huh.NewGroup(configGroupFields...))
+		groups = append(groups, createFormGroup(configFields, formValues, valueGetters))
 	}
 
-	// Add advanced fields group
 	if len(advancedFields) > 0 {
-		var advancedGroupFields []huh.Field
-		for _, item := range advancedFields {
-			field, getter := createField(item.key, item.field, formValues)
-			advancedGroupFields = append(advancedGroupFields, field)
-			valueGetters[item.key] = getter
-		}
-		groups = append(groups, huh.NewGroup(advancedGroupFields...))
+		groups = append(groups, createFormGroup(advancedFields, formValues, valueGetters))
 	}
 
 	// Create the form
 	huhForm := huh.NewForm(groups...).WithAccessible(accessible)
 
+	return huhForm, valueGetters
+}
+
+// groupFieldsByType groups fields into basic, config, and advanced categories.
+func groupFieldsByType(scaffoldConfig *ScaffoldConfig) ([]fieldItem, []fieldItem, []fieldItem) {
+	var basicFields, configFields, advancedFields []fieldItem
+
+	for key, field := range scaffoldConfig.Fields {
+		item := fieldItem{key: key, field: field}
+		switch field.Type {
+		case "input", "text":
+			basicFields = append(basicFields, item)
+		case "select":
+			configFields = append(configFields, item)
+		case "multiselect", "confirm":
+			advancedFields = append(advancedFields, item)
+		default:
+			basicFields = append(basicFields, item)
+		}
+	}
+
+	return basicFields, configFields, advancedFields
+}
+
+// createFormGroup creates a huh.Group from a list of fields.
+func createFormGroup(items []fieldItem, formValues map[string]interface{}, valueGetters map[string]func() interface{}) *huh.Group {
+	var groupFields []huh.Field
+
+	for _, item := range items {
+		field, getter := createField(item.key, item.field, formValues)
+		groupFields = append(groupFields, field)
+		valueGetters[item.key] = getter
+	}
+
+	return huh.NewGroup(groupFields...)
+}
+
+// runFormInteraction runs the form and handles user interaction.
+func runFormInteraction(huhForm *huh.Form) error {
 	err := huhForm.Run()
 	if err != nil {
 		return fmt.Errorf("user aborted the configuration: %w", err)
 	}
+	return nil
+}
 
-	// Copy form values back to userValues map using the value getters
+// extractFormValues copies form values back to userValues map using value getters.
+func extractFormValues(userValues map[string]interface{}, valueGetters map[string]func() interface{}) {
 	for key, getter := range valueGetters {
 		userValues[key] = getter()
 	}
-
-	return nil
 }
 
 // createField creates a huh field based on the field definition
