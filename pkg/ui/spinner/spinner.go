@@ -103,10 +103,12 @@ func (m spinnerModel) View() string {
 			return ""
 		}
 		// Show completed message with checkmark.
-		return fmt.Sprintf("\r%s %s\n", theme.Styles.Checkmark.String(), m.completedMsg)
+		// \r returns to start of line, \x1b[K clears to end of line.
+		return fmt.Sprintf("\r\x1b[K%s %s\n", theme.Styles.Checkmark.String(), m.completedMsg)
 	}
 	// Show progress message with spinner.
-	return fmt.Sprintf("\r%s %s", m.spinner.View(), m.progressMsg)
+	// \r returns to start of line, \x1b[K clears to end of line.
+	return fmt.Sprintf("\r\x1b[K%s %s", m.spinner.View(), m.progressMsg)
 }
 
 func newSpinnerModel(progressMsg, completedMsg string) spinnerModel {

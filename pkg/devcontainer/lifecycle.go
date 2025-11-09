@@ -831,7 +831,7 @@ func rebuildContainer(p *rebuildParams) error {
 		return err
 	}
 
-	u.PrintfMessageToTUI("\n%s Container %s rebuilt successfully\n", theme.Styles.Checkmark.String(), p.containerName)
+	u.PrintfMessageToTUI("%s Container %s rebuilt successfully\n", theme.Styles.Checkmark.String(), p.containerName)
 	return nil
 }
 
