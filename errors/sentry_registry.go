@@ -170,11 +170,16 @@ func GetComponentErrorConfig(info *schema.ConfigAndStacksInfo) (*schema.ErrorsCo
 	// Check if component has errors settings override.
 	if info.ComponentSettingsSection != nil {
 		if errorsSettings, ok := info.ComponentSettingsSection["errors"].(map[string]any); ok {
-			metadata := getComponentErrorConfigWithMetadata(errorsSettings)
+			metadata, err := getComponentErrorConfigWithMetadata(errorsSettings)
+			if err != nil {
+				return nil, err
+			}
 			if metadata.config != nil {
 				// Store metadata in the config for use during merge.
 				// Note: We use a package-level map to avoid modifying the schema.
+				componentMetadataStoreMu.Lock()
 				componentMetadataStore[metadata.config] = metadata
+				componentMetadataStoreMu.Unlock()
 			}
 			return metadata.config, nil
 		}
@@ -186,7 +191,35 @@ func GetComponentErrorConfig(info *schema.ConfigAndStacksInfo) (*schema.ErrorsCo
 
 // componentMetadataStore maps component configs to their metadata.
 // This is used to track which boolean fields were explicitly set in YAML.
-var componentMetadataStore = make(map[*schema.ErrorsConfig]componentErrorConfigWithMetadata)
+//
+// Lifecycle: Metadata is stored when GetComponentErrorConfig() is called or when
+// SetComponentBooleanOverrides() is explicitly invoked. It is automatically cleaned
+// up when MergeErrorConfigs() is called. If merge never happens (e.g., in error paths),
+// call ClearComponentMetadata() to prevent memory leaks in long-running processes.
+var (
+	componentMetadataStore   = make(map[*schema.ErrorsConfig]componentErrorConfigWithMetadata)
+	componentMetadataStoreMu sync.RWMutex
+)
+
+// ClearComponentMetadata removes metadata for a specific component config.
+// This should be called if a component config will not be merged (e.g., in error paths)
+// to prevent memory leaks in long-running processes.
+func ClearComponentMetadata(component *schema.ErrorsConfig) {
+	if component == nil {
+		return
+	}
+	componentMetadataStoreMu.Lock()
+	defer componentMetadataStoreMu.Unlock()
+	delete(componentMetadataStore, component)
+}
+
+// ClearAllComponentMetadata removes all stored metadata.
+// This is useful for cleanup in long-running processes or tests.
+func ClearAllComponentMetadata() {
+	componentMetadataStoreMu.Lock()
+	defer componentMetadataStoreMu.Unlock()
+	componentMetadataStore = make(map[*schema.ErrorsConfig]componentErrorConfigWithMetadata)
+}
 
 // SetComponentBooleanOverrides allows non-YAML callers to explicitly indicate which boolean
 // Sentry fields should override global config. This is useful for programmatic configuration
@@ -206,6 +239,8 @@ func SetComponentBooleanOverrides(component *schema.ErrorsConfig, enabled, debug
 	if component == nil {
 		return
 	}
+	componentMetadataStoreMu.Lock()
+	defer componentMetadataStoreMu.Unlock()
 	componentMetadataStore[component] = componentErrorConfigWithMetadata{
 		config:                          component,
 		sentryEnabledExplicitlySet:      enabled,
@@ -215,10 +250,10 @@ func SetComponentBooleanOverrides(component *schema.ErrorsConfig, enabled, debug
 }
 
 // getComponentErrorConfigWithMetadata decodes component error settings and tracks which boolean fields were explicitly set.
-func getComponentErrorConfigWithMetadata(errorsSettings map[string]any) componentErrorConfigWithMetadata {
+func getComponentErrorConfigWithMetadata(errorsSettings map[string]any) (componentErrorConfigWithMetadata, error) {
 	var config schema.ErrorsConfig
 	if err := mapstructure.Decode(errorsSettings, &config); err != nil {
-		return componentErrorConfigWithMetadata{}
+		return componentErrorConfigWithMetadata{}, fmt.Errorf("failed to decode component error settings: %w", err)
 	}
 
 	metadata := componentErrorConfigWithMetadata{
@@ -232,7 +267,7 @@ func getComponentErrorConfigWithMetadata(errorsSettings map[string]any) componen
 		_, metadata.sentryCaptureStackExplicitlySet = sentrySettings["capture_stack_context"]
 	}
 
-	return metadata
+	return metadata, nil
 }
 
 // MergeErrorConfigs merges component-level error config with global config.
@@ -261,7 +296,9 @@ func MergeErrorConfigs(global *schema.ErrorsConfig, component *schema.ErrorsConf
 		len(component.Sentry.Tags) > 0
 
 	// Get metadata about which boolean fields were explicitly set.
+	componentMetadataStoreMu.RLock()
 	metadata, hasMetadata := componentMetadataStore[component]
+	componentMetadataStoreMu.RUnlock()
 
 	// Determine which boolean fields have explicit overrides.
 	var explicitBooleans booleanOverrides
@@ -300,7 +337,9 @@ func MergeErrorConfigs(global *schema.ErrorsConfig, component *schema.ErrorsConf
 
 	// Clean up metadata after merge.
 	if hasMetadata {
+		componentMetadataStoreMu.Lock()
 		delete(componentMetadataStore, component)
+		componentMetadataStoreMu.Unlock()
 	}
 
 	return merged

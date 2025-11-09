@@ -454,6 +454,66 @@ func TestSetComponentBooleanOverrides(t *testing.T) {
 	}
 }
 
+func TestClearComponentMetadata(t *testing.T) {
+	// Clear any existing metadata first.
+	ClearAllComponentMetadata()
+
+	component := &schema.ErrorsConfig{
+		Sentry: schema.SentryConfig{
+			Enabled: false,
+			DSN:     "https://component@sentry.io/456",
+		},
+	}
+
+	// Set metadata.
+	SetComponentBooleanOverrides(component, true, false, false)
+
+	// Verify metadata exists.
+	componentMetadataStoreMu.RLock()
+	_, exists := componentMetadataStore[component]
+	componentMetadataStoreMu.RUnlock()
+	assert.True(t, exists, "Metadata should exist after SetComponentBooleanOverrides")
+
+	// Clear metadata for this component.
+	ClearComponentMetadata(component)
+
+	// Verify metadata is removed.
+	componentMetadataStoreMu.RLock()
+	_, exists = componentMetadataStore[component]
+	componentMetadataStoreMu.RUnlock()
+	assert.False(t, exists, "Metadata should be removed after ClearComponentMetadata")
+
+	// Test nil component (should not panic).
+	ClearComponentMetadata(nil)
+}
+
+func TestClearAllComponentMetadata(t *testing.T) {
+	// Clear first.
+	ClearAllComponentMetadata()
+
+	// Add multiple metadata entries.
+	component1 := &schema.ErrorsConfig{Sentry: schema.SentryConfig{Enabled: false}}
+	component2 := &schema.ErrorsConfig{Sentry: schema.SentryConfig{Enabled: true}}
+
+	SetComponentBooleanOverrides(component1, true, false, false)
+	SetComponentBooleanOverrides(component2, true, false, false)
+
+	// Verify entries exist.
+	componentMetadataStoreMu.RLock()
+	count := len(componentMetadataStore)
+	componentMetadataStoreMu.RUnlock()
+	assert.Equal(t, 2, count, "Should have 2 metadata entries")
+
+	// Clear all.
+	ClearAllComponentMetadata()
+
+	// Verify all removed.
+	componentMetadataStoreMu.RLock()
+	count = len(componentMetadataStore)
+	componentMetadataStoreMu.RUnlock()
+	assert.Equal(t, 0, count, "All metadata should be removed")
+}
+
 func TestSentryClientRegistryReuse(t *testing.T) {
 	// Create a new registry for testing.
 	registry := &SentryClientRegistry{
