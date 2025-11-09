@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -78,15 +78,15 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 
 		// Handle --replace: destroy and recreate the instance.
 		if opts.Replace {
-			if err := e.ExecuteDevcontainerRebuild(atmosConfigPtr, name, opts.Instance, opts.Identity, opts.NoPull); err != nil {
+			if err := devcontainer.Rebuild(atmosConfigPtr, name, opts.Instance, opts.Identity, opts.NoPull); err != nil {
 				return err
 			}
 			// Attach to the newly created container.
-			err := e.ExecuteDevcontainerAttach(atmosConfigPtr, name, opts.Instance, opts.UsePTY)
+			err := devcontainer.Attach(atmosConfigPtr, name, opts.Instance, opts.UsePTY)
 
 			// If --rm flag is set, remove the container after exit.
 			if opts.Rm {
-				if rmErr := e.ExecuteDevcontainerRemove(atmosConfigPtr, name, opts.Instance, true); rmErr != nil {
+				if rmErr := devcontainer.Remove(atmosConfigPtr, name, opts.Instance, true); rmErr != nil {
 					if err != nil {
 						return err
 					}
@@ -99,7 +99,7 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 
 		// Handle --new: create a new instance with auto-generated name.
 		if opts.New {
-			newInstance, err := e.GenerateNewDevcontainerInstance(atmosConfigPtr, name, opts.Instance)
+			newInstance, err := devcontainer.GenerateNewInstance(atmosConfigPtr, name, opts.Instance)
 			if err != nil {
 				return err
 			}
@@ -107,17 +107,17 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 		}
 
 		// Start the container (creates if necessary).
-		if err := e.ExecuteDevcontainerStart(atmosConfigPtr, name, opts.Instance, opts.Identity); err != nil {
+		if err := devcontainer.Start(atmosConfigPtr, name, opts.Instance, opts.Identity); err != nil {
 			return err
 		}
 
 		// Attach to the container.
-		err = e.ExecuteDevcontainerAttach(atmosConfigPtr, name, opts.Instance, opts.UsePTY)
+		err = devcontainer.Attach(atmosConfigPtr, name, opts.Instance, opts.UsePTY)
 
 		// If --rm flag is set, remove the container after exit.
 		if opts.Rm {
 			// Remove the container (force=true to remove even if running).
-			if rmErr := e.ExecuteDevcontainerRemove(atmosConfigPtr, name, opts.Instance, true); rmErr != nil {
+			if rmErr := devcontainer.Remove(atmosConfigPtr, name, opts.Instance, true); rmErr != nil {
 				// If attach failed, return attach error; otherwise return remove error.
 				if err != nil {
 					return err

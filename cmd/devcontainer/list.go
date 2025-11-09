@@ -1,10 +1,10 @@
 package devcontainer
 
 import (
-	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
 
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/cmd/markdown"
+	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -19,7 +19,7 @@ Shows the name, image, and configured ports for each devcontainer.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.list.RunE")()
 
-		return e.ExecuteDevcontainerList(atmosConfigPtr)
+		return devcontainer.List(atmosConfigPtr)
 	},
 }
 

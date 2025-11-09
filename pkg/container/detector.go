@@ -9,9 +9,10 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	// removed runtime import
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/spinner"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 const (

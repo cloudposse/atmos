@@ -85,7 +85,7 @@ User Terminal ←─→ Atmos PTY Proxy ←─→ docker exec -it ←─→ Cont
 The PTY layer integrates seamlessly with the existing `pkg/io` masking infrastructure:
 
 ```go
-// pkg/pty/pty.go uses existing masking infrastructure
+// pkg/terminal/pty/pty.go uses existing masking infrastructure
 type Options struct {
     Masker        iolib.Masker     // From pkg/io
     EnableMasking bool
@@ -164,7 +164,7 @@ Future extensions (out of scope):
 - ⏳ `atmos terraform shell --pty` (if implemented)
 
 #### FR5: Reusable Package
-- Create `pkg/pty` package for reusability
+- Create `pkg/terminal/pty` package for reusability
 - Interface-driven design for testability
 - Documented with examples
 
@@ -197,9 +197,11 @@ Future extensions (out of scope):
 ### Package Structure
 
 ```
-pkg/pty/
+pkg/terminal/pty/
   ├── pty.go           # Core PTY execution with masking
   ├── pty_test.go      # Unit tests
+  ├── setup_unix.go    # Unix-specific terminal setup
+  ├── setup_windows.go # Windows-specific terminal setup
   └── README.md        # Package documentation
 ```
 
@@ -266,11 +268,11 @@ Masking behavior (highest to lowest priority):
 ## Implementation Plan
 
 ### Phase 1: Core PTY Package (Week 1)
-- [ ] Create `pkg/pty/pty.go` with `ExecWithPTY()`
-- [ ] Implement `IsSupported()` platform check
-- [ ] Add `maskedWriter` wrapper
-- [ ] Unit tests for `pkg/pty`
-- [ ] Basic integration test
+- [x] Create `pkg/terminal/pty/pty.go` with `ExecWithPTY()`
+- [x] Implement `IsSupported()` platform check
+- [x] Add `maskedWriter` wrapper
+- [x] Unit tests for `pkg/terminal/pty`
+- [x] Basic integration test
 
 **Deliverable**: Reusable PTY package tested on macOS/Linux
 
@@ -432,6 +434,7 @@ These may be addressed in future iterations based on user feedback.
 
 ### Internal Dependencies
 - `pkg/io` (masking infrastructure)
+- `pkg/terminal` (terminal capabilities and PTY operations)
 - `pkg/container` (runtime interface)
 - `pkg/devcontainer` (configuration)
 
@@ -466,7 +469,7 @@ Leverages patterns from `tests/cli_test.go`:
    - Integration points
    - Implementation plan
 
-2. **Package README** (`pkg/pty/README.md`)
+2. **Package README** (`pkg/terminal/pty/README.md`)
    - Usage examples for other commands
    - API documentation
    - How to extend

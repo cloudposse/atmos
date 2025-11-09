@@ -1,4 +1,4 @@
-package exec
+package devcontainer
 
 import (
 	"context"
@@ -9,8 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
-	"github.com/cloudposse/atmos/pkg/devcontainer"
-	"github.com/cloudposse/atmos/pkg/spinner"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -18,7 +17,7 @@ import (
 type containerParams struct {
 	ctx           context.Context
 	runtime       container.Runtime
-	config        *devcontainer.Config
+	config        *Config
 	containerName string
 	name          string
 	instance      string
@@ -139,7 +138,7 @@ func createContainer(params *containerParams) (string, error) {
 		fmt.Sprintf("Creating container %s", params.containerName),
 		fmt.Sprintf("Created container %s", params.containerName),
 		func() error {
-			createConfig := devcontainer.ToCreateConfig(params.config, params.containerName, params.name, params.instance)
+			createConfig := ToCreateConfig(params.config, params.containerName, params.name, params.instance)
 
 			id, err := params.runtime.Create(params.ctx, createConfig)
 			if err != nil {
@@ -173,7 +172,7 @@ func isContainerRunning(status string) bool {
 }
 
 // buildImageIfNeeded builds a container image if build configuration is specified.
-func buildImageIfNeeded(ctx context.Context, runtime container.Runtime, config *devcontainer.Config, devcontainerName string) error {
+func buildImageIfNeeded(ctx context.Context, runtime container.Runtime, config *Config, devcontainerName string) error {
 	// If no build config, image must be specified (already validated).
 	if config.Build == nil {
 		return nil
@@ -206,7 +205,7 @@ func buildImageIfNeeded(ctx context.Context, runtime container.Runtime, config *
 }
 
 // displayContainerInfo displays key information about the container in a user-friendly format.
-func displayContainerInfo(config *devcontainer.Config) {
+func displayContainerInfo(config *Config) {
 	var info []string
 
 	// Show image.

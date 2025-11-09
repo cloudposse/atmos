@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -44,7 +44,7 @@ Experimental: Use --pty for PTY mode with masking support (not available on Wind
 		}
 
 		name := args[0]
-		return e.ExecuteDevcontainerAttach(atmosConfigPtr, name, opts.Instance, opts.UsePTY)
+		return devcontainer.Attach(atmosConfigPtr, name, opts.Instance, opts.UsePTY)
 	},
 }
 

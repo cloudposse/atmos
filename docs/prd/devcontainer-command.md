@@ -986,13 +986,11 @@ cmd/devcontainer/
 ├── config.go                 # Config subcommand
 └── *_test.go                 # Command tests
 
-internal/exec/
-├── devcontainer.go           # Business logic
-├── devcontainer_create.go    # Create operation logic
-├── devcontainer_lifecycle.go # Start/stop/remove logic
-├── devcontainer_attach.go    # Attach/exec logic
-├── devcontainer_list.go      # List operation logic
-└── devcontainer_test.go      # Tests
+pkg/devcontainer/
+├── lifecycle.go              # Business logic (Start, Stop, Attach, Exec, List, etc.)
+├── operations.go             # Container operations (create, remove, build, pull)
+├── identity.go               # Identity injection logic (authentication support)
+└── *_test.go                 # Tests
 
 website/docs/cli/commands/devcontainer/
 ├── index.mdx                 # Overview

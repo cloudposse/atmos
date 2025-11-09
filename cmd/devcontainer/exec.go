@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -50,7 +50,7 @@ from the command to execute.`,
 
 		name := args[0]
 		command := args[1:]
-		return e.ExecuteDevcontainerExec(atmosConfigPtr, e.DevcontainerExecParams{
+		return devcontainer.Exec(atmosConfigPtr, devcontainer.ExecParams{
 			Name:        name,
 			Instance:    opts.Instance,
 			Interactive: opts.Interactive,

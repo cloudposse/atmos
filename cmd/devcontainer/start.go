@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -46,13 +46,13 @@ Use --identity to launch the container with Atmos-managed credentials.`,
 		}
 
 		name := args[0]
-		if err := e.ExecuteDevcontainerStart(atmosConfigPtr, name, opts.Instance, opts.Identity); err != nil {
+		if err := devcontainer.Start(atmosConfigPtr, name, opts.Instance, opts.Identity); err != nil {
 			return err
 		}
 
 		// If --attach flag is set, attach to the container after starting.
 		if opts.Attach {
-			return e.ExecuteDevcontainerAttach(atmosConfigPtr, name, opts.Instance, false)
+			return devcontainer.Attach(atmosConfigPtr, name, opts.Instance, false)
 		}
 
 		return nil

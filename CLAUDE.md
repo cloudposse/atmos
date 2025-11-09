@@ -18,13 +18,56 @@ make lint                    # golangci-lint on changed files
 
 ## Architecture
 
-- **`cmd/`** - CLI commands (one per file)
-- **`internal/exec/`** - Business logic
-- **`pkg/`** - config, stack, component, utils, validate, workflow, hooks, telemetry
+- **`cmd/`** - CLI commands (one per file, lightweight - flags and command registration only)
+- **`pkg/`** - Reusable business logic packages (config, stack, component, devcontainer, container, store, git, auth, etc.)
+- **`internal/exec/`** - Legacy business logic (being phased out - prefer pkg/)
 
 **Stack Pipeline**: Load atmos.yaml → process imports/inheritance → apply overrides → render templates → generate config.
 
 **Templates and YAML functions**: Go templates + Gomplate with `atmos.Component()`, `!terraform.state`, `!terraform.output`, store integration.
+
+### Package Organization Philosophy (MANDATORY)
+
+**Prefer `pkg/` over `internal/exec/` or new `internal/` packages:**
+- **Create focused packages in `pkg/`** - Each new feature/domain gets its own package (e.g., `pkg/devcontainer`, `pkg/store`, `pkg/git`)
+- **Commands are thin wrappers** - `cmd/` files only handle CLI concerns (flags, arguments, command registration)
+- **Business logic lives in `pkg/`** - All domain logic, orchestration, and operations belong in reusable packages
+- **Plugin-ready architecture** - Packages in `pkg/` can be imported and reused, supporting future plugin systems
+
+**Anti-pattern:**
+```go
+// WRONG: Adding business logic to internal/exec
+internal/exec/new_feature.go  // ❌ Avoid this
+
+// WRONG: Adding business logic to cmd/
+cmd/mycommand/mycommand.go    // ❌ Should only have CLI setup
+func (cmd *MyCmd) Run() {
+    // hundreds of lines of business logic  // ❌ Wrong place
+}
+```
+
+**Correct pattern:**
+```go
+// CORRECT: Business logic in focused pkg/
+pkg/myfeature/
+  ├── myfeature.go           // ✅ Core business logic
+  ├── myfeature_test.go      // ✅ Unit tests
+  ├── operations.go          // ✅ Helper operations
+  └── types.go               // ✅ Domain types
+
+// CORRECT: Thin CLI wrapper in cmd/
+cmd/mycommand/mycommand.go   // ✅ Just CLI setup
+func (cmd *MyCmd) Run() {
+    return myfeature.Execute(atmosConfig, opts)  // ✅ Delegates to pkg/
+}
+```
+
+**Examples of well-structured packages:**
+- `pkg/devcontainer/` - Devcontainer lifecycle management (List, Start, Stop, Attach, Exec, etc.)
+- `pkg/store/` - Multi-provider secret store with registry pattern
+- `pkg/git/` - Git operations and repository management
+- `pkg/auth/` - Authentication and identity management
+- `pkg/container/` - Container runtime abstraction (Docker/Podman)
 
 ## Architectural Patterns (MANDATORY)
 
@@ -290,25 +333,33 @@ atmos terraform plan --mask=false
 ```
 
 ### Package Organization (MANDATORY)
+See "Package Organization Philosophy" section above for the overall strategy. Key principles:
+
 - **Avoid utils package bloat** - Don't add new functions to `pkg/utils/`
+- **Avoid internal/exec** - Don't add new business logic to `internal/exec/` (legacy, being phased out)
 - **Create purpose-built packages** - New functionality gets its own package in `pkg/`
 - **Well-tested, focused packages** - Each package has clear responsibility
-- **Examples**: `pkg/store/`, `pkg/git/`, `pkg/pro/`, `pkg/filesystem/`
+- **Examples**: `pkg/devcontainer/`, `pkg/store/`, `pkg/git/`, `pkg/pro/`, `pkg/container/`, `pkg/auth/`
 
 **Anti-pattern:**
 ```go
 // WRONG: Adding to utils
 pkg/utils/new_feature.go
+
+// WRONG: Adding to internal/exec
+internal/exec/new_feature.go
 ```
 
 **Correct pattern:**
 ```go
-// CORRECT: New focused package
+// CORRECT: New focused package in pkg/
 pkg/newfeature/
-  ├── newfeature.go
-  ├── newfeature_test.go
-  ├── interface.go
-  └── mock_interface_test.go
+  ├── newfeature.go           // Main business logic
+  ├── newfeature_test.go      // Unit tests
+  ├── operations.go           // Helper operations (if needed)
+  ├── types.go                // Domain types (if needed)
+  ├── interface.go            // Interface definitions (if needed)
+  └── mock_interface_test.go  // Generated mocks (if needed)
 ```
 
 ## Code Patterns & Conventions

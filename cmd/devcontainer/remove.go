@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -43,7 +43,7 @@ Use --force to remove a running container without stopping it first.`,
 		}
 
 		name := args[0]
-		return e.ExecuteDevcontainerRemove(atmosConfigPtr, name, opts.Instance, opts.Force)
+		return devcontainer.Remove(atmosConfigPtr, name, opts.Instance, opts.Force)
 	},
 }
 

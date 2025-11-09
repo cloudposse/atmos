@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -47,13 +47,13 @@ need to start fresh.`,
 		}
 
 		name := args[0]
-		if err := e.ExecuteDevcontainerRebuild(atmosConfigPtr, name, opts.Instance, opts.Identity, opts.NoPull); err != nil {
+		if err := devcontainer.Rebuild(atmosConfigPtr, name, opts.Instance, opts.Identity, opts.NoPull); err != nil {
 			return err
 		}
 
 		// If --attach flag is set, attach to the container after rebuilding.
 		if opts.Attach {
-			return e.ExecuteDevcontainerAttach(atmosConfigPtr, name, opts.Instance, false)
+			return devcontainer.Attach(atmosConfigPtr, name, opts.Instance, false)
 		}
 
 		return nil

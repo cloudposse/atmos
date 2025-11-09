@@ -171,7 +171,7 @@ atmos devcontainer rebuild <name> [--identity <identity-name>]
 
 #### 3.1 Provider-Agnostic Environment Variable Injection
 
-**File:** `internal/exec/devcontainer.go`
+**File:** `pkg/devcontainer/lifecycle.go`
 
 ```go
 // injectIdentityEnvironment injects authenticated identity environment variables into container config.
@@ -230,7 +230,7 @@ func injectIdentityEnvironment(ctx context.Context, config *devcontainer.Config,
 
 #### 3.2 Atmos XDG Environment Variables
 
-**File:** `internal/exec/devcontainer_identity.go`
+**File:** `pkg/devcontainer/identity.go`
 
 ```go
 // getAtmosXDGEnvironment returns Atmos-specific XDG environment variables for the container.
@@ -268,7 +268,7 @@ func getAtmosXDGEnvironment(config *devcontainer.Config) map[string]string {
 
 #### 3.3 Path Translation for Credential Files
 
-**File:** `internal/exec/devcontainer_identity.go`
+**File:** `pkg/devcontainer/identity.go`
 
 ```go
 // translatePathsForContainer translates host filesystem paths to container filesystem paths.
@@ -400,7 +400,7 @@ func init() {
 **Updated Function Signatures:**
 
 ```go
-// File: internal/exec/devcontainer.go
+// File: pkg/devcontainer/lifecycle.go
 
 // ExecuteDevcontainerShell launches an interactive shell with optional identity.
 func ExecuteDevcontainerShell(

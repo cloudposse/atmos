@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -52,13 +52,13 @@ Use --rm to automatically remove the container after stopping.`,
 		name := args[0]
 
 		// Stop the container.
-		if err := e.ExecuteDevcontainerStop(atmosConfigPtr, name, opts.Instance, opts.Timeout); err != nil {
+		if err := devcontainer.Stop(atmosConfigPtr, name, opts.Instance, opts.Timeout); err != nil {
 			return err
 		}
 
 		// If --rm flag is set, remove the container after stopping.
 		if opts.Rm {
-			if err := e.ExecuteDevcontainerRemove(atmosConfigPtr, name, opts.Instance, true); err != nil {
+			if err := devcontainer.Remove(atmosConfigPtr, name, opts.Instance, true); err != nil {
 				return err
 			}
 		}

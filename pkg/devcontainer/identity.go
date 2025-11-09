@@ -1,4 +1,4 @@
-package exec
+package devcontainer
 
 import (
 	"context"
@@ -14,16 +14,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
-	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // injectIdentityEnvironment injects authenticated identity environment variables into container config.
 // This is provider-agnostic - it works with AWS, Azure, GitHub, GCP, or any auth provider.
-func injectIdentityEnvironment(ctx context.Context, config *devcontainer.Config, identityName string) error {
+func injectIdentityEnvironment(ctx context.Context, config *Config, identityName string) error {
 	defer func() {
 		// Use nil for atmosConfig since we're in a utility function.
-		// perf.Track(nil, "exec.injectIdentityEnvironment")()
+		// perf.Track(nil, "devcontainer.injectIdentityEnvironment")()
 	}()
 
 	if identityName == "" {
@@ -81,7 +80,7 @@ func injectIdentityEnvironment(ctx context.Context, config *devcontainer.Config,
 }
 
 // addCredentialMounts adds credential file/directory mounts to devcontainer config.
-func addCredentialMounts(config *devcontainer.Config, paths []types.Path) error {
+func addCredentialMounts(config *Config, paths []types.Path) error {
 	hostPath, containerPath := parseMountPaths(config.WorkspaceMount, config.WorkspaceFolder)
 
 	for _, credPath := range paths {
@@ -130,7 +129,7 @@ func addCredentialMounts(config *devcontainer.Config, paths []types.Path) error 
 
 // getAtmosXDGEnvironment returns Atmos-specific XDG environment variables for the container.
 // These ensure Atmos inside the container uses the correct paths for config, cache, and data.
-func getAtmosXDGEnvironment(config *devcontainer.Config) map[string]string {
+func getAtmosXDGEnvironment(config *Config) map[string]string {
 	// Determine container base path (where workspace is mounted).
 	containerBasePath := config.WorkspaceFolder
 	if containerBasePath == "" {

@@ -4,7 +4,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
 
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -22,7 +22,7 @@ imported devcontainer.json files.`,
 		defer perf.Track(atmosConfigPtr, "devcontainer.config.RunE")()
 
 		name := args[0]
-		return e.ExecuteDevcontainerConfig(atmosConfigPtr, name)
+		return devcontainer.ShowConfig(atmosConfigPtr, name)
 	},
 }
 

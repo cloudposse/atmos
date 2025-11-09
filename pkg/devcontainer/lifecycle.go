@@ -1,5 +1,5 @@
-//nolint:revive // file-length-limit: Reduced from 907 to 689 lines (24% reduction), contains core devcontainer lifecycle management
-package exec
+//nolint:revive // file-length-limit: Contains core devcontainer lifecycle management functions
+package devcontainer
 
 import (
 	"context"
@@ -15,12 +15,11 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/container"
-	"github.com/cloudposse/atmos/pkg/devcontainer"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/pty"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal/pty"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -32,8 +31,8 @@ const (
 	errListContainers = "%w: failed to list containers: %w"
 )
 
-// DevcontainerExecParams encapsulates parameters for ExecuteDevcontainerExec.
-type DevcontainerExecParams struct {
+// ExecParams encapsulates parameters for ExecuteExec.
+type ExecParams struct {
 	Name        string
 	Instance    string
 	Interactive bool
@@ -41,9 +40,9 @@ type DevcontainerExecParams struct {
 	Command     []string
 }
 
-// ExecuteDevcontainerList lists all available devcontainers with running status.
-func ExecuteDevcontainerList(atmosConfig *schema.AtmosConfiguration) error {
-	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerList")()
+// List lists all available devcontainers with running status.
+func List(atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "devcontainer.List")()
 
 	// Reload config to ensure we have the latest with all fields populated.
 	// This is necessary because the config passed via SetAtmosConfig may be incomplete.
@@ -52,7 +51,7 @@ func ExecuteDevcontainerList(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 
-	configs, err := devcontainer.LoadAllConfigs(&freshConfig)
+	configs, err := LoadAllConfigs(&freshConfig)
 	if err != nil {
 		return err
 	}
@@ -63,7 +62,7 @@ func ExecuteDevcontainerList(atmosConfig *schema.AtmosConfiguration) error {
 	}
 
 	// Get runtime and list running containers.
-	runtime, err := devcontainer.DetectRuntime("")
+	runtime, err := DetectRuntime("")
 	if err != nil {
 		return fmt.Errorf("%w: failed to initialize container runtime: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
@@ -77,8 +76,8 @@ func ExecuteDevcontainerList(atmosConfig *schema.AtmosConfiguration) error {
 	// Build set of running devcontainer names.
 	runningNames := make(map[string]bool)
 	for _, c := range runningContainers {
-		if devcontainer.IsAtmosDevcontainer(c.Name) {
-			if name, _ := devcontainer.ParseContainerName(c.Name); name != "" {
+		if IsAtmosDevcontainer(c.Name) {
+			if name, _ := ParseContainerName(c.Name); name != "" {
 				if c.Status == "running" {
 					runningNames[name] = true
 				}
@@ -87,12 +86,12 @@ func ExecuteDevcontainerList(atmosConfig *schema.AtmosConfiguration) error {
 	}
 
 	// Render the table using lipgloss.
-	renderDevcontainerListTable(configs, runningNames)
+	renderListTable(configs, runningNames)
 	return nil
 }
 
-// renderDevcontainerListTable renders devcontainer list as a formatted table.
-func renderDevcontainerListTable(configs map[string]*devcontainer.Config, runningNames map[string]bool) {
+// renderListTable renders devcontainer list as a formatted table.
+func renderListTable(configs map[string]*Config, runningNames map[string]bool) {
 	// Sort names for consistent output.
 	var names []string
 	for name := range configs {
@@ -118,8 +117,8 @@ func renderDevcontainerListTable(configs map[string]*devcontainer.Config, runnin
 		}
 
 		// Get ports.
-		ports, _ := devcontainer.ParsePorts(config.ForwardPorts, config.PortsAttributes)
-		portsStr := devcontainer.FormatPortBindings(ports)
+		ports, _ := ParsePorts(config.ForwardPorts, config.PortsAttributes)
+		portsStr := FormatPortBindings(ports)
 
 		// Format row.
 		row := fmt.Sprintf("%s %-20s %-40s %-30s", indicator, name, image, portsStr)
@@ -142,9 +141,9 @@ func renderDevcontainerListTable(configs map[string]*devcontainer.Config, runnin
 	}
 }
 
-// ExecuteDevcontainerStart starts a devcontainer with optional identity.
-func ExecuteDevcontainerStart(atmosConfig *schema.AtmosConfiguration, name, instance, identityName string) error {
-	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerStart")()
+// Start starts a devcontainer with optional identity.
+func Start(atmosConfig *schema.AtmosConfiguration, name, instance, identityName string) error {
+	defer perf.Track(atmosConfig, "devcontainer.Start")()
 
 	ctx := context.Background()
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -152,7 +151,7 @@ func ExecuteDevcontainerStart(atmosConfig *schema.AtmosConfiguration, name, inst
 		return err
 	}
 
-	config, settings, err := devcontainer.LoadConfig(&freshConfig, name)
+	config, settings, err := LoadConfig(&freshConfig, name)
 	if err != nil {
 		return err
 	}
@@ -164,12 +163,12 @@ func ExecuteDevcontainerStart(atmosConfig *schema.AtmosConfiguration, name, inst
 		}
 	}
 
-	runtime, err := devcontainer.DetectRuntime(settings.Runtime)
+	runtime, err := DetectRuntime(settings.Runtime)
 	if err != nil {
 		return err
 	}
 
-	containerName, err := devcontainer.GenerateContainerName(name, instance)
+	containerName, err := GenerateContainerName(name, instance)
 	if err != nil {
 		return err
 	}
@@ -195,9 +194,9 @@ func ExecuteDevcontainerStart(atmosConfig *schema.AtmosConfiguration, name, inst
 	return startExistingContainer(ctx, runtime, &containers[0], containerName)
 }
 
-// ExecuteDevcontainerStop stops a devcontainer.
-func ExecuteDevcontainerStop(atmosConfig *schema.AtmosConfiguration, name, instance string, timeout int) error {
-	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerStop")()
+// Stop stops a devcontainer.
+func Stop(atmosConfig *schema.AtmosConfiguration, name, instance string, timeout int) error {
+	defer perf.Track(atmosConfig, "devcontainer.Stop")()
 
 	ctx := context.Background()
 
@@ -208,19 +207,19 @@ func ExecuteDevcontainerStop(atmosConfig *schema.AtmosConfiguration, name, insta
 	}
 
 	// Load settings to get runtime.
-	_, settings, err := devcontainer.LoadConfig(&freshConfig, name)
+	_, settings, err := LoadConfig(&freshConfig, name)
 	if err != nil {
 		return err
 	}
 
 	// Detect runtime.
-	runtime, err := devcontainer.DetectRuntime(settings.Runtime)
+	runtime, err := DetectRuntime(settings.Runtime)
 	if err != nil {
 		return err
 	}
 
 	// Generate container name.
-	containerName, err := devcontainer.GenerateContainerName(name, instance)
+	containerName, err := GenerateContainerName(name, instance)
 	if err != nil {
 		return err
 	}
@@ -259,29 +258,29 @@ func ExecuteDevcontainerStop(atmosConfig *schema.AtmosConfiguration, name, insta
 		})
 }
 
-// ExecuteDevcontainerAttach attaches to a running devcontainer.
+// Attach attaches to a running devcontainer.
 // TODO: Add --identity flag support. When implemented, ENV file paths from identity
 // must be resolved relative to container paths (e.g., /localhost or bind mount location),
 // not host paths, since the container runs in its own filesystem namespace.
-func ExecuteDevcontainerAttach(atmosConfig *schema.AtmosConfiguration, name, instance string, usePTY bool) error {
-	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerAttach")()
+func Attach(atmosConfig *schema.AtmosConfiguration, name, instance string, usePTY bool) error {
+	defer perf.Track(atmosConfig, "devcontainer.Attach")()
 
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return err
 	}
 
-	config, settings, err := devcontainer.LoadConfig(&freshConfig, name)
+	config, settings, err := LoadConfig(&freshConfig, name)
 	if err != nil {
 		return err
 	}
 
-	runtime, err := devcontainer.DetectRuntime(settings.Runtime)
+	runtime, err := DetectRuntime(settings.Runtime)
 	if err != nil {
 		return err
 	}
 
-	containerName, err := devcontainer.GenerateContainerName(name, instance)
+	containerName, err := GenerateContainerName(name, instance)
 	if err != nil {
 		return err
 	}
@@ -341,7 +340,7 @@ type attachParams struct {
 	ctx           context.Context
 	runtime       container.Runtime
 	containerInfo *container.Info
-	config        *devcontainer.Config
+	config        *Config
 	containerName string
 	usePTY        bool
 }
@@ -484,29 +483,29 @@ func getShellArgs(userEnvProbe string) []string {
 	return nil
 }
 
-// ExecuteDevcontainerExec executes a command in a running devcontainer.
+// Exec executes a command in a running devcontainer.
 // TODO: Add --identity flag support. When implemented, ENV file paths from identity
 // must be resolved relative to container paths (e.g., /localhost or bind mount location),
 // not host paths, since the container runs in its own filesystem namespace.
-func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, params DevcontainerExecParams) error {
-	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerExec")()
+func Exec(atmosConfig *schema.AtmosConfiguration, params ExecParams) error {
+	defer perf.Track(atmosConfig, "devcontainer.Exec")()
 
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return err
 	}
 
-	_, settings, err := devcontainer.LoadConfig(&freshConfig, params.Name)
+	_, settings, err := LoadConfig(&freshConfig, params.Name)
 	if err != nil {
 		return err
 	}
 
-	runtime, err := devcontainer.DetectRuntime(settings.Runtime)
+	runtime, err := DetectRuntime(settings.Runtime)
 	if err != nil {
 		return err
 	}
 
-	containerName, err := devcontainer.GenerateContainerName(params.Name, params.Instance)
+	containerName, err := GenerateContainerName(params.Name, params.Instance)
 	if err != nil {
 		return err
 	}
@@ -527,7 +526,7 @@ func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, params Devc
 	})
 }
 
-// ExecuteDevcontainerRemove removes a devcontainer by name and instance.
+// Remove removes a devcontainer by name and instance.
 // The operation is idempotent - returns nil if the container does not exist.
 //
 // Reloads configuration, detects the container runtime, and generates the container name.
@@ -539,8 +538,8 @@ func ExecuteDevcontainerExec(atmosConfig *schema.AtmosConfiguration, params Devc
 //   - name: Devcontainer name from configuration
 //   - instance: Instance identifier (e.g., "default", "prod")
 //   - force: If true, stops running containers before removal; if false, fails on running containers
-func ExecuteDevcontainerRemove(atmosConfig *schema.AtmosConfiguration, name, instance string, force bool) error {
-	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerRemove")()
+func Remove(atmosConfig *schema.AtmosConfiguration, name, instance string, force bool) error {
+	defer perf.Track(atmosConfig, "devcontainer.Remove")()
 
 	// Reload config to ensure we have the latest with all fields populated.
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -548,13 +547,13 @@ func ExecuteDevcontainerRemove(atmosConfig *schema.AtmosConfiguration, name, ins
 		return err
 	}
 
-	_, settings, err := devcontainer.LoadConfig(&freshConfig, name)
+	_, settings, err := LoadConfig(&freshConfig, name)
 	if err != nil {
 		return err
 	}
 
 	// Initialize container runtime.
-	runtime, err := devcontainer.DetectRuntime(settings.Runtime)
+	runtime, err := DetectRuntime(settings.Runtime)
 	if err != nil {
 		return fmt.Errorf("%w: failed to initialize container runtime: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
@@ -562,7 +561,7 @@ func ExecuteDevcontainerRemove(atmosConfig *schema.AtmosConfiguration, name, ins
 	ctx := context.Background()
 
 	// Generate container name.
-	containerName, err := devcontainer.GenerateContainerName(name, instance)
+	containerName, err := GenerateContainerName(name, instance)
 	if err != nil {
 		return err
 	}
@@ -590,45 +589,45 @@ func ExecuteDevcontainerRemove(atmosConfig *schema.AtmosConfiguration, name, ins
 	return removeContainer(ctx, runtime, containerInfo, containerName)
 }
 
-// ExecuteDevcontainerConfig shows the configuration for a devcontainer.
-func ExecuteDevcontainerConfig(atmosConfig *schema.AtmosConfiguration, name string) error {
-	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerConfig")()
+// ShowConfig shows the configuration for a devcontainer.
+func ShowConfig(atmosConfig *schema.AtmosConfiguration, name string) error {
+	defer perf.Track(atmosConfig, "devcontainer.ShowConfig")()
 
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return err
 	}
 
-	config, settings, err := devcontainer.LoadConfig(&freshConfig, name)
+	config, settings, err := LoadConfig(&freshConfig, name)
 	if err != nil {
 		return err
 	}
 
-	printDevcontainerSettings(settings)
-	printDevcontainerBasicInfo(config)
-	printDevcontainerBuildInfo(config)
-	printDevcontainerWorkspaceInfo(config)
-	printDevcontainerMounts(config)
-	printDevcontainerPorts(config)
-	printDevcontainerEnv(config)
-	printDevcontainerRunArgs(config)
-	printDevcontainerRemoteUser(config)
+	printSettings(settings)
+	printBasicInfo(config)
+	printBuildInfo(config)
+	printWorkspaceInfo(config)
+	printMounts(config)
+	printPorts(config)
+	printEnv(config)
+	printRunArgs(config)
+	printRemoteUser(config)
 
 	return nil
 }
 
-func printDevcontainerSettings(settings *devcontainer.Settings) {
+func printSettings(settings *Settings) {
 	if settings.Runtime != "" {
 		fmt.Printf("Runtime: %s\n\n", settings.Runtime)
 	}
 }
 
-func printDevcontainerBasicInfo(config *devcontainer.Config) {
+func printBasicInfo(config *Config) {
 	fmt.Printf("Name: %s\n", config.Name)
 	fmt.Printf("Image: %s\n", config.Image)
 }
 
-func printDevcontainerBuildInfo(config *devcontainer.Config) {
+func printBuildInfo(config *Config) {
 	if config.Build == nil {
 		return
 	}
@@ -645,7 +644,7 @@ func printDevcontainerBuildInfo(config *devcontainer.Config) {
 	}
 }
 
-func printDevcontainerWorkspaceInfo(config *devcontainer.Config) {
+func printWorkspaceInfo(config *Config) {
 	if config.WorkspaceFolder != "" {
 		fmt.Printf("\nWorkspace Folder: %s\n", config.WorkspaceFolder)
 	}
@@ -655,7 +654,7 @@ func printDevcontainerWorkspaceInfo(config *devcontainer.Config) {
 	}
 }
 
-func printDevcontainerMounts(config *devcontainer.Config) {
+func printMounts(config *Config) {
 	if len(config.Mounts) == 0 {
 		return
 	}
@@ -666,8 +665,8 @@ func printDevcontainerMounts(config *devcontainer.Config) {
 	}
 }
 
-func printDevcontainerPorts(config *devcontainer.Config) {
-	ports, _ := devcontainer.ParsePorts(config.ForwardPorts, config.PortsAttributes)
+func printPorts(config *Config) {
+	ports, _ := ParsePorts(config.ForwardPorts, config.PortsAttributes)
 	if len(ports) == 0 {
 		return
 	}
@@ -682,7 +681,7 @@ func printDevcontainerPorts(config *devcontainer.Config) {
 	}
 }
 
-func printDevcontainerEnv(config *devcontainer.Config) {
+func printEnv(config *Config) {
 	if len(config.ContainerEnv) == 0 {
 		return
 	}
@@ -693,7 +692,7 @@ func printDevcontainerEnv(config *devcontainer.Config) {
 	}
 }
 
-func printDevcontainerRunArgs(config *devcontainer.Config) {
+func printRunArgs(config *Config) {
 	if len(config.RunArgs) == 0 {
 		return
 	}
@@ -704,15 +703,15 @@ func printDevcontainerRunArgs(config *devcontainer.Config) {
 	}
 }
 
-func printDevcontainerRemoteUser(config *devcontainer.Config) {
+func printRemoteUser(config *Config) {
 	if config.RemoteUser != "" {
 		fmt.Printf("\nRemote User: %s\n", config.RemoteUser)
 	}
 }
 
-// ExecuteDevcontainerLogs shows logs from a devcontainer.
-func ExecuteDevcontainerLogs(atmosConfig *schema.AtmosConfiguration, name, instance string, follow bool, tail string) error {
-	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerLogs")()
+// Logs shows logs from a devcontainer.
+func Logs(atmosConfig *schema.AtmosConfiguration, name, instance string, follow bool, tail string) error {
+	defer perf.Track(atmosConfig, "devcontainer.Logs")()
 
 	// Reload config to ensure we have the latest with all fields populated.
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -720,19 +719,19 @@ func ExecuteDevcontainerLogs(atmosConfig *schema.AtmosConfiguration, name, insta
 		return err
 	}
 
-	_, settings, err := devcontainer.LoadConfig(&freshConfig, name)
+	_, settings, err := LoadConfig(&freshConfig, name)
 	if err != nil {
 		return err
 	}
 
 	// Get container runtime.
-	runtime, err := devcontainer.DetectRuntime(settings.Runtime)
+	runtime, err := DetectRuntime(settings.Runtime)
 	if err != nil {
 		return err
 	}
 
 	// Generate container name.
-	containerName, err := devcontainer.GenerateContainerName(name, instance)
+	containerName, err := GenerateContainerName(name, instance)
 	if err != nil {
 		return err
 	}
@@ -748,16 +747,16 @@ func ExecuteDevcontainerLogs(atmosConfig *schema.AtmosConfiguration, name, insta
 	return runtime.Logs(ctx, containerName, follow, tail, nil, nil)
 }
 
-// ExecuteDevcontainerRebuild rebuilds a devcontainer from scratch.
-func ExecuteDevcontainerRebuild(atmosConfig *schema.AtmosConfiguration, name, instance, identityName string, noPull bool) error {
-	defer perf.Track(atmosConfig, "exec.ExecuteDevcontainerRebuild")()
+// Rebuild rebuilds a devcontainer from scratch.
+func Rebuild(atmosConfig *schema.AtmosConfiguration, name, instance, identityName string, noPull bool) error {
+	defer perf.Track(atmosConfig, "devcontainer.Rebuild")()
 
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return err
 	}
 
-	config, settings, err := devcontainer.LoadConfig(&freshConfig, name)
+	config, settings, err := LoadConfig(&freshConfig, name)
 	if err != nil {
 		return err
 	}
@@ -770,13 +769,13 @@ func ExecuteDevcontainerRebuild(atmosConfig *schema.AtmosConfiguration, name, in
 		}
 	}
 
-	runtime, err := devcontainer.DetectRuntime(settings.Runtime)
+	runtime, err := DetectRuntime(settings.Runtime)
 	if err != nil {
 		return err
 	}
 
 	ctx := context.Background()
-	containerName, err := devcontainer.GenerateContainerName(name, instance)
+	containerName, err := GenerateContainerName(name, instance)
 	if err != nil {
 		return err
 	}
@@ -796,7 +795,7 @@ func ExecuteDevcontainerRebuild(atmosConfig *schema.AtmosConfiguration, name, in
 type rebuildParams struct {
 	ctx           context.Context
 	runtime       container.Runtime
-	config        *devcontainer.Config
+	config        *Config
 	containerName string
 	name          string
 	instance      string
@@ -836,31 +835,31 @@ func rebuildContainer(p *rebuildParams) error {
 	return nil
 }
 
-// GenerateNewDevcontainerInstance generates a new unique instance name by finding
+// GenerateNewInstance generates a new unique instance name by finding
 // existing containers for the given devcontainer name and incrementing the highest number.
 // Pattern: {baseInstance}-1, {baseInstance}-2, etc.
 // Returns the new instance name (e.g., "default-1", "default-2").
-func GenerateNewDevcontainerInstance(atmosConfig *schema.AtmosConfiguration, name, baseInstance string) (string, error) {
-	defer perf.Track(atmosConfig, "exec.GenerateNewDevcontainerInstance")()
+func GenerateNewInstance(atmosConfig *schema.AtmosConfiguration, name, baseInstance string) (string, error) {
+	defer perf.Track(atmosConfig, "devcontainer.GenerateNewInstance")()
 
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return "", err
 	}
 
-	_, settings, err := devcontainer.LoadConfig(&freshConfig, name)
+	_, settings, err := LoadConfig(&freshConfig, name)
 	if err != nil {
 		return "", err
 	}
 
-	runtime, err := devcontainer.DetectRuntime(settings.Runtime)
+	runtime, err := DetectRuntime(settings.Runtime)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to initialize container runtime: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 
 	ctx := context.Background()
 	if baseInstance == "" {
-		baseInstance = devcontainer.DefaultInstance
+		baseInstance = DefaultInstance
 	}
 
 	containers, err := runtime.List(ctx, nil)
@@ -878,7 +877,7 @@ func findMaxInstanceNumber(containers []container.Info, name, baseInstance strin
 	basePattern := fmt.Sprintf("%s-", baseInstance)
 
 	for _, c := range containers {
-		parsedName, parsedInstance := devcontainer.ParseContainerName(c.Name)
+		parsedName, parsedInstance := ParseContainerName(c.Name)
 		if parsedName != name {
 			continue
 		}
