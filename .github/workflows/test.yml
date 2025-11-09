@@ -411,6 +411,7 @@ jobs:
           # - examples/demo-stack-templating
           # - examples/demo-multi-cloud
           - examples/demo-vendoring
+          - examples/config-profiles
           - tests/fixtures/scenarios/complete
 
     timeout-minutes: 20
