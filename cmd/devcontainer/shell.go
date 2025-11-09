@@ -2,21 +2,26 @@ package devcontainer
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-var (
-	shellInstance string
-	shellIdentity string
-	shellUsePTY   bool // Experimental PTY mode flag.
-	shellNew      bool // Create a new instance.
-	shellReplace  bool // Replace existing instance.
-	shellRm       bool // Remove container after exit.
-	shellNoPull   bool // Skip image pull when rebuilding.
-)
+var shellParser *flags.StandardParser
+
+// ShellOptions contains parsed flags for the shell command.
+type ShellOptions struct {
+	Instance string
+	Identity string
+	UsePTY   bool
+	New      bool
+	Replace  bool
+	Rm       bool
+	NoPull   bool
+}
 
 var shellCmd = &cobra.Command{
 	Use:   "shell [name]",
@@ -54,6 +59,17 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.shell.RunE")()
 
+		// Parse flags using new options pattern.
+		v := viper.GetViper()
+		if err := shellParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		opts, err := parseShellOptions(cmd, v, args)
+		if err != nil {
+			return err
+		}
+
 		// Get devcontainer name from args or prompt user.
 		name, err := getDevcontainerName(args)
 		if err != nil {
@@ -61,16 +77,16 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 		}
 
 		// Handle --replace: destroy and recreate the instance.
-		if shellReplace {
-			if err := e.ExecuteDevcontainerRebuild(atmosConfigPtr, name, shellInstance, shellIdentity, shellNoPull); err != nil {
+		if opts.Replace {
+			if err := e.ExecuteDevcontainerRebuild(atmosConfigPtr, name, opts.Instance, opts.Identity, opts.NoPull); err != nil {
 				return err
 			}
 			// Attach to the newly created container.
-			err := e.ExecuteDevcontainerAttach(atmosConfigPtr, name, shellInstance, shellUsePTY)
+			err := e.ExecuteDevcontainerAttach(atmosConfigPtr, name, opts.Instance, opts.UsePTY)
 
 			// If --rm flag is set, remove the container after exit.
-			if shellRm {
-				if rmErr := e.ExecuteDevcontainerRemove(atmosConfigPtr, name, shellInstance, true); rmErr != nil {
+			if opts.Rm {
+				if rmErr := e.ExecuteDevcontainerRemove(atmosConfigPtr, name, opts.Instance, true); rmErr != nil {
 					if err != nil {
 						return err
 					}
@@ -82,26 +98,26 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 		}
 
 		// Handle --new: create a new instance with auto-generated name.
-		if shellNew {
-			newInstance, err := e.GenerateNewDevcontainerInstance(atmosConfigPtr, name, shellInstance)
+		if opts.New {
+			newInstance, err := e.GenerateNewDevcontainerInstance(atmosConfigPtr, name, opts.Instance)
 			if err != nil {
 				return err
 			}
-			shellInstance = newInstance
+			opts.Instance = newInstance
 		}
 
 		// Start the container (creates if necessary).
-		if err := e.ExecuteDevcontainerStart(atmosConfigPtr, name, shellInstance, shellIdentity); err != nil {
+		if err := e.ExecuteDevcontainerStart(atmosConfigPtr, name, opts.Instance, opts.Identity); err != nil {
 			return err
 		}
 
 		// Attach to the container.
-		err = e.ExecuteDevcontainerAttach(atmosConfigPtr, name, shellInstance, shellUsePTY)
+		err = e.ExecuteDevcontainerAttach(atmosConfigPtr, name, opts.Instance, opts.UsePTY)
 
 		// If --rm flag is set, remove the container after exit.
-		if shellRm {
+		if opts.Rm {
 			// Remove the container (force=true to remove even if running).
-			if rmErr := e.ExecuteDevcontainerRemove(atmosConfigPtr, name, shellInstance, true); rmErr != nil {
+			if rmErr := e.ExecuteDevcontainerRemove(atmosConfigPtr, name, opts.Instance, true); rmErr != nil {
 				// If attach failed, return attach error; otherwise return remove error.
 				if err != nil {
 					return err
@@ -114,14 +130,47 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 	},
 }
 
+// parseShellOptions parses command flags into ShellOptions.
+//
+//nolint:unparam // args parameter kept for consistency with other parse functions
+func parseShellOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*ShellOptions, error) {
+	return &ShellOptions{
+		Instance: v.GetString("instance"),
+		Identity: v.GetString("identity"),
+		UsePTY:   v.GetBool("pty"),
+		New:      v.GetBool("new"),
+		Replace:  v.GetBool("replace"),
+		Rm:       v.GetBool("rm"),
+		NoPull:   v.GetBool("no-pull"),
+	}, nil
+}
+
 func init() {
-	shellCmd.Flags().StringVar(&shellInstance, "instance", "default", "Instance name for this devcontainer")
-	shellCmd.Flags().StringVarP(&shellIdentity, "identity", "i", "", "Authenticate with specified identity")
-	shellCmd.Flags().BoolVar(&shellUsePTY, "pty", false, "Experimental: Use PTY mode with masking support (not available on Windows)")
-	shellCmd.Flags().BoolVar(&shellNew, "new", false, "Create a new instance with auto-generated name")
-	shellCmd.Flags().BoolVar(&shellReplace, "replace", false, "Destroy and recreate the current instance")
-	shellCmd.Flags().BoolVar(&shellRm, "rm", false, "Automatically remove the container when the shell exits")
-	shellCmd.Flags().BoolVar(&shellNoPull, "no-pull", false, "Skip pulling the image when using --replace (use cached image)")
+	// Create parser with shell-specific flags using functional options.
+	shellParser = flags.NewStandardParser(
+		flags.WithStringFlag("instance", "", "default", "Instance name for this devcontainer"),
+		flags.WithStringFlag("identity", "i", "", "Authenticate with specified identity"),
+		flags.WithBoolFlag("pty", "", false, "Experimental: Use PTY mode with masking support (not available on Windows)"),
+		flags.WithBoolFlag("new", "", false, "Create a new instance with auto-generated name"),
+		flags.WithBoolFlag("replace", "", false, "Destroy and recreate the current instance"),
+		flags.WithBoolFlag("rm", "", false, "Automatically remove the container when the shell exits"),
+		flags.WithBoolFlag("no-pull", "", false, "Skip pulling the image when using --replace (use cached image)"),
+		flags.WithEnvVars("instance", "ATMOS_DEVCONTAINER_INSTANCE"),
+		flags.WithEnvVars("identity", "ATMOS_DEVCONTAINER_IDENTITY"),
+		flags.WithEnvVars("pty", "ATMOS_DEVCONTAINER_PTY"),
+		flags.WithEnvVars("new", "ATMOS_DEVCONTAINER_NEW"),
+		flags.WithEnvVars("replace", "ATMOS_DEVCONTAINER_REPLACE"),
+		flags.WithEnvVars("rm", "ATMOS_DEVCONTAINER_RM"),
+		flags.WithEnvVars("no-pull", "ATMOS_DEVCONTAINER_NO_PULL"),
+	)
+
+	// Register flags using the standard RegisterFlags method.
+	shellParser.RegisterFlags(shellCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := shellParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	// Mark flags as mutually exclusive.
 	shellCmd.MarkFlagsMutuallyExclusive("new", "replace")

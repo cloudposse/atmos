@@ -1,17 +1,22 @@
 package devcontainer
 
 import (
-	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/markdown"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-var (
-	attachInstance string
-	attachUsePTY   bool // Experimental PTY mode flag.
-)
+var attachParser *flags.StandardParser
+
+// AttachOptions contains parsed flags for the attach command.
+type AttachOptions struct {
+	Instance string
+	UsePTY   bool
+}
 
 var attachCmd = &cobra.Command{
 	Use:   "attach <name>",
@@ -27,13 +32,48 @@ Experimental: Use --pty for PTY mode with masking support (not available on Wind
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.attach.RunE")()
 
+		// Parse flags using new options pattern.
+		v := viper.GetViper()
+		if err := attachParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		opts, err := parseAttachOptions(cmd, v, args)
+		if err != nil {
+			return err
+		}
+
 		name := args[0]
-		return e.ExecuteDevcontainerAttach(atmosConfigPtr, name, attachInstance, attachUsePTY)
+		return e.ExecuteDevcontainerAttach(atmosConfigPtr, name, opts.Instance, opts.UsePTY)
 	},
 }
 
+// parseAttachOptions parses command flags into AttachOptions.
+//
+//nolint:unparam // args parameter kept for consistency with other parse functions
+func parseAttachOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*AttachOptions, error) {
+	return &AttachOptions{
+		Instance: v.GetString("instance"),
+		UsePTY:   v.GetBool("pty"),
+	}, nil
+}
+
 func init() {
-	attachCmd.Flags().StringVar(&attachInstance, "instance", "default", "Instance name for this devcontainer")
-	attachCmd.Flags().BoolVar(&attachUsePTY, "pty", false, "Experimental: Use PTY mode with masking support (not available on Windows)")
+	// Create parser with attach-specific flags using functional options.
+	attachParser = flags.NewStandardParser(
+		flags.WithStringFlag("instance", "", "default", "Instance name for this devcontainer"),
+		flags.WithBoolFlag("pty", "", false, "Experimental: Use PTY mode with masking support (not available on Windows)"),
+		flags.WithEnvVars("instance", "ATMOS_DEVCONTAINER_INSTANCE"),
+		flags.WithEnvVars("pty", "ATMOS_DEVCONTAINER_PTY"),
+	)
+
+	// Register flags using the standard RegisterFlags method.
+	attachParser.RegisterFlags(attachCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := attachParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
 	devcontainerCmd.AddCommand(attachCmd)
 }

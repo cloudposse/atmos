@@ -1,18 +1,23 @@
 package devcontainer
 
 import (
-	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/markdown"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-var (
-	logsInstance string
-	logsFollow   bool
-	logsTail     string
-)
+var logsParser *flags.StandardParser
+
+// LogsOptions contains parsed flags for the logs command.
+type LogsOptions struct {
+	Instance string
+	Follow   bool
+	Tail     string
+}
 
 var logsCmd = &cobra.Command{
 	Use:   "logs <name>",
@@ -27,14 +32,51 @@ or --tail to limit the number of lines shown.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.logs.RunE")()
 
+		// Parse flags using new options pattern.
+		v := viper.GetViper()
+		if err := logsParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		opts, err := parseLogsOptions(cmd, v, args)
+		if err != nil {
+			return err
+		}
+
 		name := args[0]
-		return e.ExecuteDevcontainerLogs(atmosConfigPtr, name, logsInstance, logsFollow, logsTail)
+		return e.ExecuteDevcontainerLogs(atmosConfigPtr, name, opts.Instance, opts.Follow, opts.Tail)
 	},
 }
 
+// parseLogsOptions parses command flags into LogsOptions.
+//
+//nolint:unparam // args parameter kept for consistency with other parse functions
+func parseLogsOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*LogsOptions, error) {
+	return &LogsOptions{
+		Instance: v.GetString("instance"),
+		Follow:   v.GetBool("follow"),
+		Tail:     v.GetString("tail"),
+	}, nil
+}
+
 func init() {
-	logsCmd.Flags().StringVar(&logsInstance, "instance", "default", "Instance name for this devcontainer")
-	logsCmd.Flags().BoolVarP(&logsFollow, "follow", "f", false, "Follow log output")
-	logsCmd.Flags().StringVar(&logsTail, "tail", "all", "Number of lines to show from the end of the logs")
+	// Create parser with logs-specific flags using functional options.
+	logsParser = flags.NewStandardParser(
+		flags.WithStringFlag("instance", "", "default", "Instance name for this devcontainer"),
+		flags.WithBoolFlag("follow", "f", false, "Follow log output"),
+		flags.WithStringFlag("tail", "", "all", "Number of lines to show from the end of the logs"),
+		flags.WithEnvVars("instance", "ATMOS_DEVCONTAINER_INSTANCE"),
+		flags.WithEnvVars("follow", "ATMOS_DEVCONTAINER_FOLLOW"),
+		flags.WithEnvVars("tail", "ATMOS_DEVCONTAINER_TAIL"),
+	)
+
+	// Register flags using the standard RegisterFlags method.
+	logsParser.RegisterFlags(logsCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := logsParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
 	devcontainerCmd.AddCommand(logsCmd)
 }

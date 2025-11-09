@@ -1,19 +1,24 @@
 package devcontainer
 
 import (
-	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/markdown"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-var (
-	rebuildInstance string
-	rebuildAttach   bool
-	rebuildNoPull   bool
-	rebuildIdentity string
-)
+var rebuildParser *flags.StandardParser
+
+// RebuildOptions contains parsed flags for the rebuild command.
+type RebuildOptions struct {
+	Instance string
+	Attach   bool
+	NoPull   bool
+	Identity string
+}
 
 var rebuildCmd = &cobra.Command{
 	Use:   "rebuild <name>",
@@ -30,24 +35,63 @@ need to start fresh.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.rebuild.RunE")()
 
+		// Parse flags using new options pattern.
+		v := viper.GetViper()
+		if err := rebuildParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		opts, err := parseRebuildOptions(cmd, v, args)
+		if err != nil {
+			return err
+		}
+
 		name := args[0]
-		if err := e.ExecuteDevcontainerRebuild(atmosConfigPtr, name, rebuildInstance, rebuildIdentity, rebuildNoPull); err != nil {
+		if err := e.ExecuteDevcontainerRebuild(atmosConfigPtr, name, opts.Instance, opts.Identity, opts.NoPull); err != nil {
 			return err
 		}
 
 		// If --attach flag is set, attach to the container after rebuilding.
-		if rebuildAttach {
-			return e.ExecuteDevcontainerAttach(atmosConfigPtr, name, rebuildInstance, false)
+		if opts.Attach {
+			return e.ExecuteDevcontainerAttach(atmosConfigPtr, name, opts.Instance, false)
 		}
 
 		return nil
 	},
 }
 
+// parseRebuildOptions parses command flags into RebuildOptions.
+//
+//nolint:unparam // args parameter kept for consistency with other parse functions
+func parseRebuildOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*RebuildOptions, error) {
+	return &RebuildOptions{
+		Instance: v.GetString("instance"),
+		Attach:   v.GetBool("attach"),
+		NoPull:   v.GetBool("no-pull"),
+		Identity: v.GetString("identity"),
+	}, nil
+}
+
 func init() {
-	rebuildCmd.Flags().StringVar(&rebuildInstance, "instance", "default", "Instance name for this devcontainer")
-	rebuildCmd.Flags().BoolVar(&rebuildAttach, "attach", false, "Attach to the container after rebuilding")
-	rebuildCmd.Flags().BoolVar(&rebuildNoPull, "no-pull", false, "Don't pull the latest image before rebuilding")
-	rebuildCmd.Flags().StringVarP(&rebuildIdentity, "identity", "i", "", "Authenticate with specified identity")
+	// Create parser with rebuild-specific flags using functional options.
+	rebuildParser = flags.NewStandardParser(
+		flags.WithStringFlag("instance", "", "default", "Instance name for this devcontainer"),
+		flags.WithBoolFlag("attach", "", false, "Attach to the container after rebuilding"),
+		flags.WithBoolFlag("no-pull", "", false, "Don't pull the latest image before rebuilding"),
+		flags.WithStringFlag("identity", "i", "", "Authenticate with specified identity"),
+		flags.WithEnvVars("instance", "ATMOS_DEVCONTAINER_INSTANCE"),
+		flags.WithEnvVars("attach", "ATMOS_DEVCONTAINER_ATTACH"),
+		flags.WithEnvVars("no-pull", "ATMOS_DEVCONTAINER_NO_PULL"),
+		flags.WithEnvVars("identity", "ATMOS_DEVCONTAINER_IDENTITY"),
+	)
+
+	// Register flags using the standard RegisterFlags method.
+	rebuildParser.RegisterFlags(rebuildCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := rebuildParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
 	devcontainerCmd.AddCommand(rebuildCmd)
 }

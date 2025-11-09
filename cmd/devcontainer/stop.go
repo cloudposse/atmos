@@ -1,10 +1,12 @@
 package devcontainer
 
 import (
-	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/markdown"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -12,11 +14,14 @@ const (
 	defaultStopTimeout = 10 // seconds
 )
 
-var (
-	stopInstance string
-	stopTimeout  int
-	stopRm       bool // Remove container after stopping.
-)
+var stopParser *flags.StandardParser
+
+// StopOptions contains parsed flags for the stop command.
+type StopOptions struct {
+	Instance string
+	Timeout  int
+	Rm       bool
+}
 
 var stopCmd = &cobra.Command{
 	Use:   "stop <name>",
@@ -33,16 +38,27 @@ Use --rm to automatically remove the container after stopping.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.stop.RunE")()
 
+		// Parse flags using new options pattern.
+		v := viper.GetViper()
+		if err := stopParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		opts, err := parseStopOptions(cmd, v, args)
+		if err != nil {
+			return err
+		}
+
 		name := args[0]
 
 		// Stop the container.
-		if err := e.ExecuteDevcontainerStop(atmosConfigPtr, name, stopInstance, stopTimeout); err != nil {
+		if err := e.ExecuteDevcontainerStop(atmosConfigPtr, name, opts.Instance, opts.Timeout); err != nil {
 			return err
 		}
 
 		// If --rm flag is set, remove the container after stopping.
-		if stopRm {
-			if err := e.ExecuteDevcontainerRemove(atmosConfigPtr, name, stopInstance, true); err != nil {
+		if opts.Rm {
+			if err := e.ExecuteDevcontainerRemove(atmosConfigPtr, name, opts.Instance, true); err != nil {
 				return err
 			}
 		}
@@ -51,9 +67,35 @@ Use --rm to automatically remove the container after stopping.`,
 	},
 }
 
+// parseStopOptions parses command flags into StopOptions.
+//
+//nolint:unparam // args parameter kept for consistency with other parse functions
+func parseStopOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*StopOptions, error) {
+	return &StopOptions{
+		Instance: v.GetString("instance"),
+		Timeout:  v.GetInt("timeout"),
+		Rm:       v.GetBool("rm"),
+	}, nil
+}
+
 func init() {
-	stopCmd.Flags().StringVar(&stopInstance, "instance", "default", "Instance name for this devcontainer")
-	stopCmd.Flags().IntVar(&stopTimeout, "timeout", defaultStopTimeout, "Timeout in seconds for stopping the container")
-	stopCmd.Flags().BoolVar(&stopRm, "rm", false, "Automatically remove the container after stopping")
+	// Create parser with stop-specific flags using functional options.
+	stopParser = flags.NewStandardParser(
+		flags.WithStringFlag("instance", "", "default", "Instance name for this devcontainer"),
+		flags.WithIntFlag("timeout", "", defaultStopTimeout, "Timeout in seconds for stopping the container"),
+		flags.WithBoolFlag("rm", "", false, "Automatically remove the container after stopping"),
+		flags.WithEnvVars("instance", "ATMOS_DEVCONTAINER_INSTANCE"),
+		flags.WithEnvVars("timeout", "ATMOS_DEVCONTAINER_TIMEOUT"),
+		flags.WithEnvVars("rm", "ATMOS_DEVCONTAINER_RM"),
+	)
+
+	// Register flags using the standard RegisterFlags method.
+	stopParser.RegisterFlags(stopCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := stopParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
 	devcontainerCmd.AddCommand(stopCmd)
 }
