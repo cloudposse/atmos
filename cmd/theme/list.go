@@ -64,9 +64,21 @@ func executeThemeList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get the current active theme from configuration.
+	// Use the same resolution logic as the theme system itself:
+	// 1. Check atmos.yaml config
+	// 2. Check ATMOS_THEME env var
+	// 3. Check THEME env var
+	// 4. Default to "atmos"
 	activeTheme := ""
-	if atmosConfigPtr != nil {
+	if atmosConfigPtr != nil && atmosConfigPtr.Settings.Terminal.Theme != "" {
 		activeTheme = atmosConfigPtr.Settings.Terminal.Theme
+	} else if envTheme := viper.GetString("ATMOS_THEME"); envTheme != "" {
+		activeTheme = envTheme
+	} else if envTheme := viper.GetString("THEME"); envTheme != "" {
+		activeTheme = envTheme
+	} else {
+		// Default to "atmos" theme (same as pkg/ui/theme/styles.go:getActiveThemeName)
+		activeTheme = "atmos"
 	}
 
 	result := theme.ListThemes(theme.ListThemesOptions{
