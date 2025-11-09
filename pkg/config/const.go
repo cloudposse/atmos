@@ -13,9 +13,9 @@ const (
 	DotAtmosConfigFileName = ".atmos.yaml"
 
 	// Config directory names for local configuration detection.
-	AtmosConfigDirName             = ".atmos"
-	AtmosDefaultImportsDirName     = "atmos.d"
-	DotAtmosDefaultImportsDirName  = ".atmos.d"
+	AtmosConfigDirName            = ".atmos"
+	AtmosDefaultImportsDirName    = "atmos.d"
+	DotAtmosDefaultImportsDirName = ".atmos.d"
 
 	// GlobalOptionsFlag is a custom flag to specify helmfile `GLOBAL OPTIONS`
 	// https://github.com/roboll/helmfile#cli-reference
