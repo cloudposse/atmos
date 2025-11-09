@@ -217,7 +217,7 @@ err := errUtils.Build(errUtils.ErrValidationFailed).
 ```
 
 Output with `--verbose`:
-```
+```text
 ✗ Validation failed
 
 💡 Review the validation errors above and fix your configuration

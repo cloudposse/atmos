@@ -42,6 +42,9 @@ func SetVerboseFlag(verbose bool) {
 
 // InitializeMarkdown initializes a new Markdown renderer.
 func InitializeMarkdown(config *schema.AtmosConfiguration) {
+	// Bind ATMOS_VERBOSE environment variable once during initialization.
+	_ = viper.BindEnv(EnvVerbose, EnvVerbose)
+
 	if config == nil {
 		log.Warn("InitializeMarkdown called with nil config")
 		return
@@ -139,9 +142,6 @@ func printFormattedError(err error, title string, suggestion string) {
 		// Note: title is handled by the formatter's title parameter, not as a hint.
 		err = builder.Err()
 	}
-
-	// Bind ATMOS_VERBOSE environment variable.
-	_ = viper.BindEnv(EnvVerbose, EnvVerbose)
 
 	// Check for --verbose flag (CLI flag > env var > config).
 	verbose := atmosConfig.Errors.Format.Verbose

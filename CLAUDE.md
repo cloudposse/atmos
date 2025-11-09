@@ -552,6 +552,7 @@ git diff tests/snapshots/
 3. Commit and push the regenerated snapshot
 4. If still fails: Environment mismatch - contact maintainers
 
+```go
 func TestGitHubVendoring(t *testing.T) {
     // Check GitHub access with rate limits
     rateLimits := tests.RequireGitHubAccess(t)

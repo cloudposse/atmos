@@ -96,6 +96,11 @@ func PrintfMarkdownToTUI(format string, a ...interface{}) {
 func InitializeMarkdown(atmosConfig *schema.AtmosConfiguration) {
 	defer perf.Track(atmosConfig, "utils.InitializeMarkdown")()
 
+	if atmosConfig == nil {
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize markdown renderer: atmos configuration is nil"), "", "")
+		return
+	}
+
 	var err error
 	render, err = markdown.NewTerminalMarkdownRenderer(*atmosConfig)
 	if err != nil {
