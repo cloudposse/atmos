@@ -454,6 +454,78 @@ func TestSetComponentBooleanOverrides(t *testing.T) {
 	}
 }
 
+func TestMergeErrorConfigs_HeuristicForNonYAMLCallers(t *testing.T) {
+	// Test that non-YAML callers can enable booleans alongside other config
+	// without calling SetComponentBooleanOverrides (using heuristic).
+	tests := []struct {
+		name      string
+		global    *schema.ErrorsConfig
+		component *schema.ErrorsConfig
+		expected  *schema.ErrorsConfig
+	}{
+		{
+			name: "non-YAML caller enables debug with DSN (no SetComponentBooleanOverrides)",
+			global: &schema.ErrorsConfig{
+				Sentry: schema.SentryConfig{
+					Enabled:     true,
+					DSN:         "https://global@sentry.io/123",
+					Debug:       false,
+					Environment: "production",
+				},
+			},
+			component: &schema.ErrorsConfig{
+				Sentry: schema.SentryConfig{
+					DSN:   "https://component@sentry.io/456",
+					Debug: true, // Heuristic: true is treated as explicit.
+				},
+			},
+			expected: &schema.ErrorsConfig{
+				Sentry: schema.SentryConfig{
+					Enabled:     true, // Inherited from global.
+					DSN:         "https://component@sentry.io/456",
+					Debug:       true, // Component override via heuristic.
+					Environment: "production",
+				},
+			},
+		},
+		{
+			name: "non-YAML caller with false value inherits from global (backward compat)",
+			global: &schema.ErrorsConfig{
+				Sentry: schema.SentryConfig{
+					Enabled:     true,
+					DSN:         "https://global@sentry.io/123",
+					Environment: "production",
+				},
+			},
+			component: &schema.ErrorsConfig{
+				Sentry: schema.SentryConfig{
+					Enabled: false, // Heuristic: false treated as zero value.
+					DSN:     "https://component@sentry.io/456",
+				},
+			},
+			expected: &schema.ErrorsConfig{
+				Sentry: schema.SentryConfig{
+					Enabled:     true, // Inherited from global (false ignored by heuristic).
+					DSN:         "https://component@sentry.io/456",
+					Environment: "production",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Don't call SetComponentBooleanOverrides - rely on heuristic.
+			result := MergeErrorConfigs(tt.global, tt.component)
+
+			assert.Equal(t, tt.expected.Sentry.Enabled, result.Sentry.Enabled)
+			assert.Equal(t, tt.expected.Sentry.DSN, result.Sentry.DSN)
+			assert.Equal(t, tt.expected.Sentry.Environment, result.Sentry.Environment)
+			assert.Equal(t, tt.expected.Sentry.Debug, result.Sentry.Debug)
+		})
+	}
+}
+
 func TestClearComponentMetadata(t *testing.T) {
 	// Clear any existing metadata first.
 	ClearAllComponentMetadata()
