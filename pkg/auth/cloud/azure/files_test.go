@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -85,7 +86,8 @@ func TestAzureFileManager_GetCredentialsPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := mgr.GetCredentialsPath(tt.providerName)
-			assert.Equal(t, tt.expected, result)
+			// Normalize paths for cross-platform comparison.
+			assert.Equal(t, filepath.ToSlash(tt.expected), filepath.ToSlash(result))
 		})
 	}
 }
@@ -151,10 +153,12 @@ func TestAzureFileManager_WriteCredentials(t *testing.T) {
 			_, err = os.Stat(credPath)
 			require.NoError(t, err, "Credentials file should exist")
 
-			// Verify file permissions.
-			info, err := os.Stat(credPath)
-			require.NoError(t, err)
-			assert.Equal(t, os.FileMode(PermissionRW), info.Mode().Perm(), "File should have 0600 permissions")
+			// Verify file permissions (Unix only - Windows doesn't support Unix permissions).
+			if runtime.GOOS != "windows" {
+				info, err := os.Stat(credPath)
+				require.NoError(t, err)
+				assert.Equal(t, os.FileMode(PermissionRW), info.Mode().Perm(), "File should have 0600 permissions")
+			}
 
 			// Verify JSON content.
 			data, err := os.ReadFile(credPath)
