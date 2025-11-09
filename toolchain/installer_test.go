@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -816,8 +818,7 @@ func TestEmitJSONPath(t *testing.T) {
 			toolPaths: []ToolPath{},
 			finalPath: "/usr/local/bin:/usr/bin",
 			expected: `{
-  "tools": [
-  ],
+  "tools": [],
   "final_path": "/usr/local/bin:/usr/bin",
   "count": 0
 }`,
@@ -873,6 +874,13 @@ func TestEmitJSONPath(t *testing.T) {
 			r, w, _ := os.Pipe()
 			os.Stdout = w
 
+			// Initialize IO context for data package
+			ioCtx, err := iolib.NewContext()
+			if err != nil {
+				t.Fatalf("failed to create IO context: %v", err)
+			}
+			data.InitWriter(ioCtx)
+
 			// Execute function
 			emitJSONPath(tt.toolPaths, tt.finalPath)
 
@@ -882,7 +890,7 @@ func TestEmitJSONPath(t *testing.T) {
 
 			// Read output
 			var buf strings.Builder
-			_, err := io.Copy(&buf, r)
+			_, err = io.Copy(&buf, r)
 			if err != nil {
 				t.Fatalf("Failed to read output: %v", err)
 			}

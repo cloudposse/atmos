@@ -22,12 +22,12 @@ func CleanToolsAndCaches(toolsDir, cacheDir, tempCacheDir string) error {
 	cacheCount, _ := cleanDir(cacheDir, false) // warnings only
 	tempCacheCount, _ := cleanDir(tempCacheDir, false)
 
-	_ = ui.Successf("Deleted %d files/directories from %s", toolsCount, toolsDir)
+	_ = ui.Successf("Deleted **%d** files/directories from %s", toolsCount, toolsDir)
 	if cacheCount > 0 {
-		_ = ui.Successf("Deleted %d files from %s cache", cacheCount, cacheDir)
+		_ = ui.Successf("Deleted **%d** files from %s cache", cacheCount, cacheDir)
 	}
 	if tempCacheCount > 0 {
-		_ = ui.Successf("Deleted %d files from %s cache", tempCacheCount, tempCacheDir)
+		_ = ui.Successf("Deleted **%d** files from %s cache", tempCacheCount, tempCacheDir)
 	}
 
 	return nil

@@ -449,6 +449,8 @@ import (
 )
 
 func TestEmitPath(t *testing.T) {
+	setupTestIO(t)
+
 	SetAtmosConfig(&schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			ToolsDir: t.TempDir(),

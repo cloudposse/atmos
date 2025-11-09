@@ -8,6 +8,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestCleanToolsAndCaches(t *testing.T) {
@@ -60,7 +63,15 @@ func TestCleanToolsAndCaches(t *testing.T) {
 			t.Fatalf("failed to create pipe: %v", err)
 		}
 
+		// Redirect stderr to our pipe
 		os.Stderr = w
+
+		// Initialize IO context for UI functions
+		ioCtx, err := iolib.NewContext()
+		if err != nil {
+			t.Fatalf("failed to create IO context: %v", err)
+		}
+		ui.InitFormatter(ioCtx)
 
 		// Ensure stderr is restored and pipes are closed even if f() panics.
 		defer func() {

@@ -427,6 +427,8 @@ func TestUninstallAllVersionsOfTool(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			setupTestIO(t)
+
 			tempDir := t.TempDir()
 			t.Setenv("HOME", tempDir)
 			SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{}})

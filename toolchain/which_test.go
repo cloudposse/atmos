@@ -11,6 +11,8 @@ import (
 )
 
 func TestWhichCommand_ToolNotConfigured(t *testing.T) {
+	setupTestIO(t)
+
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
@@ -29,6 +31,8 @@ func TestWhichCommand_ToolNotConfigured(t *testing.T) {
 }
 
 func TestWhichCommand_InvalidTool(t *testing.T) {
+	setupTestIO(t)
+
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
@@ -48,6 +52,8 @@ func TestWhichCommand_InvalidTool(t *testing.T) {
 }
 
 func TestWhichCommand_InvalidToolName(t *testing.T) {
+	setupTestIO(t)
+
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
@@ -68,6 +74,8 @@ func TestWhichCommand_InvalidToolName(t *testing.T) {
 }
 
 func TestWhichCommand_EmptyToolName(t *testing.T) {
+	setupTestIO(t)
+
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
@@ -87,6 +95,8 @@ func TestWhichCommand_EmptyToolName(t *testing.T) {
 }
 
 func TestWhichCommand_ToolConfiguredButNotInstalled(t *testing.T) {
+	setupTestIO(t)
+
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
@@ -108,6 +118,8 @@ func TestWhichCommand_ToolConfiguredButNotInstalled(t *testing.T) {
 }
 
 func TestWhichCommand_ToolConfiguredAndInstalled(t *testing.T) {
+	setupTestIO(t)
+
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
@@ -136,6 +148,8 @@ func TestWhichCommand_ToolConfiguredAndInstalled(t *testing.T) {
 }
 
 func TestWhichCommand_NoToolVersionsFile(t *testing.T) {
+	setupTestIO(t)
+
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
@@ -150,6 +164,8 @@ func TestWhichCommand_NoToolVersionsFile(t *testing.T) {
 }
 
 func TestWhichCommand_CanonicalName(t *testing.T) {
+	setupTestIO(t)
+
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
@@ -177,6 +193,8 @@ func TestWhichCommand_CanonicalName(t *testing.T) {
 }
 
 func TestWhichCommand_WithVersionSpecifier(t *testing.T) {
+	setupTestIO(t)
+
 	// Create a temporary directory
 	tempDir := t.TempDir()
 

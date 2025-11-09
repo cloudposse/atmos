@@ -1730,6 +1730,8 @@ func TestOriginalSetToolVersion_Wrapper(t *testing.T) {
 
 // TestSetToolVersion_WithValidVersion tests SetToolVersion with a provided version.
 func TestSetToolVersion_WithValidVersion(t *testing.T) {
+	setupTestIO(t)
+
 	// Create a temporary tool-versions file
 	tmpFile, err := os.CreateTemp("", "tool-versions-*")
 	require.NoError(t, err)
@@ -1781,6 +1783,8 @@ func TestSetToolVersion_WithInvalidTool(t *testing.T) {
 
 // TestSetToolVersion_WithCanonicalFormat tests SetToolVersion with org/repo format.
 func TestSetToolVersion_WithCanonicalFormat(t *testing.T) {
+	setupTestIO(t)
+
 	// Create a temporary tool-versions file
 	tmpFile, err := os.CreateTemp("", "tool-versions-*")
 	require.NoError(t, err)
