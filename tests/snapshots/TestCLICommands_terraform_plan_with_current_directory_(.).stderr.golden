@@ -1,20 +1,8 @@
 
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 
+# Error                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+invalid component: Could not find the component . in the stack tenant1-ue2-dev. Check that all the context variables are correctly defined in the stack manifests. Are the component and stack names correct? Did you forget an import?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
 
-## Missing Configuration
 
-The atmos.yaml CLI config file specifies the directory for Atmos stacks as ../../../stacks, but the directory does not exist.
-
-
-## Getting Started
-
-To configure and start using Atmos, refer to the following documents:
-
-**Atmos CLI Configuration:** https://atmos.tools/cli/configuration
-
-**Atmos Components:** https://atmos.tools/core-concepts/components
-
-**Atmos Stacks:** https://atmos.tools/core-concepts/stacks
-
-**Quick Start:** https://atmos.tools/quick-start

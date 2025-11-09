@@ -10,7 +10,6 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../../.."
-      ATMOS_BASE_PATH: "../../.."
     args:
       - "terraform"
       - "plan"
@@ -30,7 +29,6 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
-      ATMOS_BASE_PATH: "../.."
     args:
       - "terraform"
       - "plan"
@@ -108,7 +106,6 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
-      ATMOS_BASE_PATH: "../.."
     args:
       - "terraform"
       - "plan"
@@ -204,7 +201,6 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
-      ATMOS_BASE_PATH: "../.."
     args:
       - "describe"
       - "component"
@@ -294,7 +290,6 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
-      ATMOS_BASE_PATH: "../.."
     args:
       - "validate"
       - "component"
