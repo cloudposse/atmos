@@ -7,15 +7,11 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
-	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/spinner"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // containerParams holds parameters for container operations.
@@ -28,51 +24,9 @@ type containerParams struct {
 	instance      string
 }
 
-// runWithSpinner runs an operation with a spinner UI.
-// ProgressMsg is shown while operation is running (e.g., "Starting container").
-// CompletedMsg is shown when operation completes successfully (e.g., "Started container").
+// runWithSpinner is a wrapper for spinner.ExecWithSpinner for backwards compatibility.
 func runWithSpinner(progressMsg, completedMsg string, operation func() error) error {
-	// Check if TTY is available.
-	isTTY := term.IsTTYSupportForStdout()
-
-	if !isTTY {
-		// No TTY - just run the operation and show simple output on one line.
-		_ = ui.Writef("%s... ", progressMsg)
-		err := operation()
-		if err != nil {
-			_ = ui.Writeln("")
-			return err
-		}
-		_ = ui.Writeln(theme.Styles.Checkmark.String())
-		return nil
-	}
-
-	// TTY available - use spinner.
-	model := newDevcontainerSpinner(progressMsg, completedMsg)
-
-	// Use inline mode - output to stderr, no alternate screen.
-	p := tea.NewProgram(
-		model,
-		tea.WithOutput(iolib.UI),
-		tea.WithoutSignalHandler(),
-	)
-
-	// Run operation in background.
-	go func() {
-		err := operation()
-		p.Send(devcontainerOpCompleteMsg{err: err})
-	}()
-
-	finalModel, err := p.Run()
-	if err != nil {
-		return fmt.Errorf("spinner error: %w", err)
-	}
-
-	if m, ok := finalModel.(devcontainerSpinnerModel); ok && m.err != nil {
-		return m.err
-	}
-
-	return nil
+	return spinner.ExecWithSpinner(progressMsg, completedMsg, operation)
 }
 
 // createAndStartNewContainer creates and starts a new container.

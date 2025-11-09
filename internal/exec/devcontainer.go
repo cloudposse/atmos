@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/viper"
 
@@ -41,67 +39,6 @@ type DevcontainerExecParams struct {
 	Interactive bool
 	UsePTY      bool
 	Command     []string
-}
-
-// devcontainerSpinnerModel is a simple spinner model for devcontainer operations.
-type devcontainerSpinnerModel struct {
-	spinner      spinner.Model
-	progressMsg  string // Message shown during operation (e.g., "Starting container").
-	completedMsg string // Message shown when done (e.g., "Started container").
-	done         bool
-	err          error
-}
-
-type devcontainerOpCompleteMsg struct {
-	err error
-}
-
-//nolint:gocritic // bubbletea models must be passed by value
-func (m devcontainerSpinnerModel) Init() tea.Cmd {
-	return m.spinner.Tick
-}
-
-//nolint:gocritic // bubbletea models must be passed by value
-func (m devcontainerSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
-			return m, tea.Quit
-		}
-	case devcontainerOpCompleteMsg:
-		m.done = true
-		m.err = msg.err
-		return m, tea.Quit
-	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-	}
-	return m, nil
-}
-
-//nolint:gocritic // bubbletea models must be passed by value
-func (m devcontainerSpinnerModel) View() string {
-	if m.done {
-		if m.err != nil {
-			return ""
-		}
-		// Show completed message with checkmark.
-		return fmt.Sprintf("\r%s %s\n", theme.Styles.Checkmark.String(), m.completedMsg)
-	}
-	// Show progress message with spinner.
-	return fmt.Sprintf("\r%s %s", m.spinner.View(), m.progressMsg)
-}
-
-func newDevcontainerSpinner(progressMsg, completedMsg string) devcontainerSpinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.Styles.Link
-	return devcontainerSpinnerModel{
-		spinner:      s,
-		progressMsg:  progressMsg,
-		completedMsg: completedMsg,
-	}
 }
 
 // ExecuteDevcontainerList lists all available devcontainers with running status.

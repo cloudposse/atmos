@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/spinner"
 )
 
 const (
@@ -98,24 +100,77 @@ func isAvailable(ctx context.Context, runtimeType Type) bool {
 	return true
 }
 
-// tryStartPodmanMachine attempts to start the default Podman machine.
-// Returns true if machine was started successfully, false otherwise.
+// tryStartPodmanMachine attempts to start or initialize the default Podman machine.
+// Returns true if machine is ready, false otherwise.
 func tryStartPodmanMachine(ctx context.Context) bool {
 	defer perf.Track(nil, "container.tryStartPodmanMachine")()
 
-	log.Info("Podman machine is not running. Starting Podman machine...")
+	// Check if any machine exists.
+	if !podmanMachineExists(ctx) {
+		// No machine exists - initialize one first.
+		if err := initializePodmanMachine(ctx); err != nil {
+			log.Debug("Failed to initialize Podman machine", "error", err)
+			return false
+		}
+	}
 
-	// Try to start the machine.
-	cmd := exec.CommandContext(ctx, "podman", "machine", "start")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Debug("Failed to start Podman machine", "error", err, "output", string(output))
+	// Start the machine.
+	if err := startPodmanMachine(ctx); err != nil {
+		log.Debug("Failed to start Podman machine", "error", err)
 		return false
 	}
 
-	log.Info("Successfully started Podman machine")
-	log.Debug("Podman machine start output", "output", string(output))
 	return true
+}
+
+// podmanMachineExists checks if any Podman machine exists.
+func podmanMachineExists(ctx context.Context) bool {
+	defer perf.Track(nil, "container.podmanMachineExists")()
+
+	cmd := exec.CommandContext(ctx, "podman", "machine", "list", "--format", "{{.Name}}")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Debug("Failed to list Podman machines", "error", err)
+		return false
+	}
+
+	// Check if there's any non-empty output (machine names).
+	machines := strings.TrimSpace(string(output))
+	return machines != ""
+}
+
+// initializePodmanMachine initializes a new Podman machine with spinner UI.
+func initializePodmanMachine(ctx context.Context) error {
+	defer perf.Track(nil, "container.initializePodmanMachine")()
+
+	return spinner.ExecWithSpinner(
+		"Initializing Podman machine",
+		"Initialized Podman machine",
+		func() error {
+			cmd := exec.CommandContext(ctx, "podman", "machine", "init")
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return fmt.Errorf("failed to initialize: %w: %s", err, string(output))
+			}
+			return nil
+		})
+}
+
+// startPodmanMachine starts the Podman machine with spinner UI.
+func startPodmanMachine(ctx context.Context) error {
+	defer perf.Track(nil, "container.startPodmanMachine")()
+
+	return spinner.ExecWithSpinner(
+		"Starting Podman machine",
+		"Started Podman machine",
+		func() error {
+			cmd := exec.CommandContext(ctx, "podman", "machine", "start")
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return fmt.Errorf("failed to start: %w: %s", err, string(output))
+			}
+			return nil
+		})
 }
 
 // GetRuntimeType returns the type of a runtime instance.
