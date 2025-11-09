@@ -302,8 +302,8 @@ func TestMergeErrorConfigs(t *testing.T) {
 					DSN:         "https://global@sentry.io/123",
 					Environment: "production",
 					Tags: map[string]string{
-						"service": "atmos",     // From global.
-						"team":    "platform",  // From component.
+						"service": "atmos",    // From global.
+						"team":    "platform", // From component.
 					},
 				},
 			},

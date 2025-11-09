@@ -27,14 +27,14 @@ func TestIntegration_ComponentLevelSentryConfig(t *testing.T) {
 	}
 
 	tests := []struct {
-		name                  string
-		componentSettings     map[string]any
-		expectedEnabled       bool
-		expectedEnvironment   string
-		expectedSampleRate    float64
-		expectedTags          map[string]string
-		expectedClientCount   int
-		expectSameAsOther     bool
+		name                   string
+		componentSettings      map[string]any
+		expectedEnabled        bool
+		expectedEnvironment    string
+		expectedSampleRate     float64
+		expectedTags           map[string]string
+		expectedClientCount    int
+		expectSameAsOther      bool
 		otherComponentSettings map[string]any
 	}{
 		{
@@ -63,7 +63,7 @@ func TestIntegration_ComponentLevelSentryConfig(t *testing.T) {
 			},
 			expectedEnabled:     true,
 			expectedEnvironment: "staging", // Component override.
-			expectedSampleRate:  0.1,        // From global.
+			expectedSampleRate:  0.1,       // From global.
 			expectedTags: map[string]string{
 				"service": "atmos", // From global.
 			},
@@ -245,10 +245,10 @@ func TestIntegration_StackLevelSentryConfig(t *testing.T) {
 			"sentry": map[string]any{
 				"sample_rate": 0.5, // Override for this component.
 				"tags": map[string]string{
-					"team":        "payments",    // From stack.
-					"criticality": "critical",    // From stack.
-					"sla":         "99.99",       // From stack.
-					"subteam":     "gateway",     // Component-specific.
+					"team":        "payments", // From stack.
+					"criticality": "critical", // From stack.
+					"sla":         "99.99",    // From stack.
+					"subteam":     "gateway",  // Component-specific.
 				},
 			},
 		},
@@ -308,13 +308,13 @@ func TestIntegration_RealWorldExample(t *testing.T) {
 	}
 
 	scenarios := []struct {
-		name          string
-		component     string
-		stack         string
-		settings      map[string]any
-		expectedTags  map[string]string
-		expectedRate  float64
-		expectedEnv   string
+		name         string
+		component    string
+		stack        string
+		settings     map[string]any
+		expectedTags map[string]string
+		expectedRate float64
+		expectedEnv  string
 	}{
 		{
 			name:      "VPC component - standard monitoring",
