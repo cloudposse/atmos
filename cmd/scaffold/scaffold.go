@@ -235,12 +235,33 @@ func executeScaffoldGenerate(
 
 	scaffoldUI := generatorUI.NewInitUI(ioCtx, term)
 
-	// For now, try to find scaffold templates in the same embedded templates
-	// This is a simplified implementation - the original experiment supported
-	// more complex scaffold template discovery from atmos.yaml configuration
+	// Load embedded templates first
 	configs, err := templates.GetAvailableConfigurations()
 	if err != nil {
 		return fmt.Errorf("%w: failed to get available scaffold templates: %w", errUtils.ErrScaffoldGeneration, err)
+	}
+
+	// Load and merge scaffold templates from atmos.yaml
+	scaffoldSection, err := config.ReadAtmosScaffoldSection(".")
+	if err != nil {
+		return fmt.Errorf("%w: failed to read scaffold section from atmos.yaml: %w", errUtils.ErrScaffoldGeneration, err)
+	}
+
+	// Merge configured templates (they take precedence over embedded)
+	if templatesData, ok := scaffoldSection["templates"]; ok {
+		if templatesMap, ok := templatesData.(map[string]interface{}); ok {
+			for templateName, templateData := range templatesMap {
+				// Convert atmos.yaml scaffold template to Configuration
+				config, err := convertScaffoldTemplateToConfiguration(templateName, templateData)
+				if err != nil {
+					// Log error but continue with other templates
+					atmosui.Warning(fmt.Sprintf("Failed to load scaffold template '%s': %v", templateName, err))
+					continue
+				}
+				// Configured templates override embedded templates
+				configs[templateName] = config
+			}
+		}
 	}
 
 	// Handle template selection
@@ -482,4 +503,40 @@ func validateScaffoldFile(scaffoldPath string) error {
 	}
 
 	return nil
+}
+
+// convertScaffoldTemplateToConfiguration converts an atmos.yaml scaffold template entry to a templates.Configuration.
+func convertScaffoldTemplateToConfiguration(name string, templateData interface{}) (templates.Configuration, error) {
+	templateMap, ok := templateData.(map[string]interface{})
+	if !ok {
+		return templates.Configuration{}, fmt.Errorf("template data is not a valid map")
+	}
+
+	config := templates.Configuration{
+		Name:        name,
+		Description: fmt.Sprintf("Scaffold template: %s", name),
+		TemplateID:  name,
+	}
+
+	// Extract description if provided
+	if desc, ok := templateMap["description"].(string); ok {
+		config.Description = desc
+	}
+
+	// Extract source (for remote templates)
+	if source, ok := templateMap["source"].(string); ok {
+		// For remote templates, we would need to fetch and process them
+		// For now, create a placeholder that indicates this is a remote template
+		config.Description = fmt.Sprintf("%s (source: %s)", config.Description, source)
+	}
+
+	// Extract target_dir if provided
+	if targetDir, ok := templateMap["target_dir"].(string); ok {
+		config.TargetDir = targetDir
+	}
+
+	// Note: We don't load actual files here since they might be remote or require
+	// additional processing. The actual template processing will be handled by
+	// the generator when the template is selected.
+	return config, nil
 }

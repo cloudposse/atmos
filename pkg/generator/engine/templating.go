@@ -9,9 +9,11 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
-	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
+
+	"github.com/cloudposse/atmos/pkg/generator/merge"
+	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
 // File represents a file to be processed
@@ -114,7 +116,18 @@ func (p *Processor) ProcessFile(file File, targetPath string, force, update bool
 	// Get delimiters from scaffold config or use defaults
 	delimiters := []string{"{{", "}}"}
 	if scaffoldConfig != nil {
-		if scaffoldConfigMap, ok := scaffoldConfig.(map[string]interface{}); ok {
+		// Try *config.ScaffoldConfig first (pointer)
+		if cfg, ok := scaffoldConfig.(*config.ScaffoldConfig); ok {
+			if len(cfg.Delimiters) == 2 {
+				delimiters = []string{cfg.Delimiters[0], cfg.Delimiters[1]}
+			}
+		} else if cfg, ok := scaffoldConfig.(config.ScaffoldConfig); ok {
+			// Try config.ScaffoldConfig (value)
+			if len(cfg.Delimiters) == 2 {
+				delimiters = []string{cfg.Delimiters[0], cfg.Delimiters[1]}
+			}
+		} else if scaffoldConfigMap, ok := scaffoldConfig.(map[string]interface{}); ok {
+			// Fallback to map handling for backwards compatibility
 			if delims, exists := scaffoldConfigMap["delimiters"]; exists {
 				if delimsSlice, ok := delims.([]interface{}); ok && len(delimsSlice) == 2 {
 					delimiters = []string{delimsSlice[0].(string), delimsSlice[1].(string)}
