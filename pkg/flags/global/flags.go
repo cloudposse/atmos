@@ -80,7 +80,7 @@ func NewFlags() Flags {
 		NoColor:      false,
 		ForceColor:   false,
 		ForceTTY:     false,
-		Mask:         true, // Enabled by default for security.
+		Mask:         true,       // Enabled by default for security.
 		Profile:      []string{}, // No profiles active by default.
 		ProfilerPort: DefaultProfilerPort,
 		ProfilerHost: "localhost",

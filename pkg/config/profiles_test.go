@@ -313,28 +313,28 @@ logs:
 	require.NoError(t, os.WriteFile(filepath.Join(devProfileDir, "settings.yaml"), []byte(devYAML), 0o644))
 
 	tests := []struct {
-		name                 string
-		profileNames         []string
-		expectError          bool
-		expectedMaxWidth     int
-		expectedLogsLevel    string
-		expectedColor        bool
-		checkColor           bool
-		expectedErrMsg       string
+		name              string
+		profileNames      []string
+		expectError       bool
+		expectedMaxWidth  int
+		expectedLogsLevel string
+		expectedColor     bool
+		checkColor        bool
+		expectedErrMsg    string
 	}{
 		{
-			name:              "load single profile",
-			profileNames:      []string{"base"},
-			expectError:       false,
-			expectedMaxWidth:  100,
-			expectedColor:     true,
-			checkColor:        true,
+			name:             "load single profile",
+			profileNames:     []string{"base"},
+			expectError:      false,
+			expectedMaxWidth: 100,
+			expectedColor:    true,
+			checkColor:       true,
 		},
 		{
 			name:              "load multiple profiles (rightmost wins)",
 			profileNames:      []string{"base", "developer"},
 			expectError:       false,
-			expectedMaxWidth:  120, // From developer (overrides base)
+			expectedMaxWidth:  120,  // From developer (overrides base)
 			expectedColor:     true, // From base
 			checkColor:        true,
 			expectedLogsLevel: "Debug", // From developer
