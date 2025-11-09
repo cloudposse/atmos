@@ -10,6 +10,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -109,7 +110,8 @@ func LoadUserValues(scaffoldPath string) (map[string]interface{}, error) {
 
 	// Try to read the config file
 	if err := v.ReadInConfig(); err != nil {
-		if os.IsNotExist(err) {
+		var notFound viper.ConfigFileNotFoundError
+		if errors.As(err, &notFound) || os.IsNotExist(err) {
 			// File doesn't exist, return empty map
 			return make(map[string]interface{}), nil
 		}
