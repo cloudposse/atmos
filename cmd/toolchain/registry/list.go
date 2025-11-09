@@ -7,7 +7,9 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -23,10 +25,7 @@ const (
 )
 
 var (
-	listLimit  int
-	listOffset int
-	listFormat string
-	listSort   string
+	listParser *flags.StandardParser
 )
 
 // listCmd represents the 'toolchain registry list' command.
@@ -42,14 +41,35 @@ If a registry name is provided, displays all tools in that registry.`,
 }
 
 func init() {
-	listCmd.Flags().IntVar(&listLimit, "limit", defaultListLimit, "Maximum number of results to show")
-	listCmd.Flags().IntVar(&listOffset, "offset", 0, "Skip first N results (pagination)")
-	listCmd.Flags().StringVar(&listFormat, "format", "table", "Output format (table, json, yaml)")
-	listCmd.Flags().StringVar(&listSort, "sort", "name", "Sort order (name, date, popularity)")
+	// Create parser with list-specific flags.
+	listParser = flags.NewStandardParser(
+		flags.WithIntFlag("limit", "", defaultListLimit, "Maximum number of results to show"),
+		flags.WithIntFlag("offset", "", 0, "Skip first N results (pagination)"),
+		flags.WithStringFlag("format", "", "table", "Output format (table, json, yaml)"),
+		flags.WithStringFlag("sort", "", "name", "Sort order (name, date, popularity)"),
+		flags.WithEnvVars("limit", "ATMOS_TOOLCHAIN_LIMIT"),
+		flags.WithEnvVars("offset", "ATMOS_TOOLCHAIN_OFFSET"),
+		flags.WithEnvVars("format", "ATMOS_TOOLCHAIN_FORMAT"),
+		flags.WithEnvVars("sort", "ATMOS_TOOLCHAIN_SORT"),
+	)
+
+	// Register flags.
+	listParser.RegisterFlags(listCmd)
+
+	// Bind flags to Viper.
+	if err := listParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 }
 
 func executeListCommand(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "registry.executeListCommand")()
+
+	// Bind flags to Viper for precedence handling.
+	v := viper.GetViper()
+	if err := listParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
 
 	ctx := context.Background()
 
@@ -82,6 +102,12 @@ Use 'atmos toolchain registry list <name>' to see tools in a registry
 
 func listRegistryTools(ctx context.Context, registryName string) error {
 	defer perf.Track(nil, "registry.listRegistryTools")()
+
+	// Get flag values from Viper.
+	v := viper.GetViper()
+	listLimit := v.GetInt("limit")
+	listOffset := v.GetInt("offset")
+	listSort := v.GetString("sort")
 
 	// Create registry based on name.
 	// For MVP, only support aqua-public.

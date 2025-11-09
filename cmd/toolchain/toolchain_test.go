@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -46,10 +47,11 @@ func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 	err = os.WriteFile(toolsConfigPath, []byte(toolsConfigContent), 0o644)
 	require.NoError(t, err)
 
-	// Set the flags to use our temp files.
+	// Set the paths via Viper.
 	toolsDir := filepath.Join(tempDir, ".tools")
-	toolVersionsFile = toolVersionsPath
-	toolsConfigFile = toolsConfigPath
+	viper.Set("toolchain.tool-versions", toolVersionsPath)
+	viper.Set("toolchain.tools-dir", toolsDir)
+	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
@@ -95,10 +97,10 @@ func TestToolchainCommandsWithoutToolVersionsFile(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	// Set paths to non-existent files.
-	toolVersionsFile = filepath.Join(tempDir, ".tool-versions")
-	toolsDir = filepath.Join(tempDir, ".tools")
-	toolsConfigFile = filepath.Join(tempDir, "tools.yaml")
+	// Set paths to non-existent files via Viper.
+	viper.Set("toolchain.tool-versions", filepath.Join(tempDir, ".tool-versions"))
+	viper.Set("toolchain.tools-dir", filepath.Join(tempDir, ".tools"))
+	viper.Set("toolchain.tools-config", filepath.Join(tempDir, "tools.yaml"))
 
 	// Test that list command handles missing file gracefully.
 	err := listCmd.RunE(listCmd, []string{})
@@ -119,17 +121,19 @@ func TestToolchainCleanCommand(t *testing.T) {
 	err = os.WriteFile(filepath.Join(toolsDirPath, "bin", "hashicorp", "terraform", "1.5.7", "terraform"), []byte("test"), 0o755)
 	require.NoError(t, err)
 
-	// Set the flags.
-	toolVersionsFile = filepath.Join(tempDir, ".tool-versions")
-	toolsDir = toolsDirPath
-	toolsConfigFile = filepath.Join(tempDir, "tools.yaml")
+	// Set the flags via Viper.
+	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
+	viper.Set("toolchain.tool-versions", toolVersionsPath)
+	viper.Set("toolchain.tools-dir", toolsDirPath)
+	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			FilePath:        toolVersionsFile,
-			ToolsDir:        toolsDir,
-			ToolsConfigFile: toolsConfigFile,
+			FilePath:        toolVersionsPath,
+			ToolsDir:        toolsDirPath,
+			ToolsConfigFile: toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -166,15 +170,15 @@ func TestToolchainPathCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set the flags.
-	toolVersionsFile = toolVersionsPath
-	toolsDir = toolsDirPath
-	toolsConfigFile = toolsConfigPath
+	viper.Set("toolchain.tool-versions", toolVersionsPath)
+	viper.Set("toolchain.tools-dir", toolsDirPath)
+	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			FilePath:        toolVersionsPath,
-			ToolsDir:        toolsDir,
+			ToolsDir:        toolsDirPath,
 			ToolsConfigFile: toolsConfigPath,
 		},
 	}
@@ -211,15 +215,15 @@ func TestToolchainWhichCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set the flags.
-	toolVersionsFile = toolVersionsPath
-	toolsDir = toolsDirPath
-	toolsConfigFile = toolsConfigPath
+	viper.Set("toolchain.tool-versions", toolVersionsPath)
+	viper.Set("toolchain.tools-dir", toolsDirPath)
+	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			FilePath:        toolVersionsPath,
-			ToolsDir:        toolsDir,
+			ToolsDir:        toolsDirPath,
 			ToolsConfigFile: toolsConfigPath,
 		},
 	}
@@ -248,15 +252,16 @@ func TestToolchainSetCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set the flags.
-	toolVersionsFile = toolVersionsPath
-	toolsDir = filepath.Join(tempDir, ".tools")
-	toolsConfigFile = toolsConfigPath
+	toolsDirPath := filepath.Join(tempDir, ".tools")
+	viper.Set("toolchain.tool-versions", toolVersionsPath)
+	viper.Set("toolchain.tools-dir", toolsDirPath)
+	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			FilePath:        toolVersionsPath,
-			ToolsDir:        toolsDir,
+			ToolsDir:        toolsDirPath,
 			ToolsConfigFile: toolsConfigPath,
 		},
 	}
@@ -298,15 +303,15 @@ func TestToolchainUninstallCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set the flags.
-	toolVersionsFile = toolVersionsPath
-	toolsDir = toolsDirPath
-	toolsConfigFile = toolsConfigPath
+	viper.Set("toolchain.tool-versions", toolVersionsPath)
+	viper.Set("toolchain.tools-dir", toolsDirPath)
+	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			FilePath:        toolVersionsPath,
-			ToolsDir:        toolsDir,
+			ToolsDir:        toolsDirPath,
 			ToolsConfigFile: toolsConfigPath,
 		},
 	}

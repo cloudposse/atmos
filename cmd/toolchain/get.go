@@ -1,18 +1,15 @@
 package toolchain
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/toolchain"
 )
 
 var (
-	showAllVersions bool
-	versionLimit    int
+	getParser *flags.StandardParser
 )
 
 var getCmd = &cobra.Command{
@@ -21,38 +18,39 @@ var getCmd = &cobra.Command{
 	Long:  `Display version information for a tool from .tool-versions file.`,
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Bind flags to Viper for precedence handling.
+		v := viper.GetViper()
+		if err := getParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
 		toolName := ""
 		if len(args) > 0 {
 			toolName = args[0]
 		}
+
 		// Read from viper to respect config precedence (file/env/flag).
-		all := viper.GetBool("toolchain.get.all")
-		limit := viper.GetInt("toolchain.get.limit")
+		all := v.GetBool("all")
+		limit := v.GetInt("limit")
+
 		return toolchain.ListToolVersions(all, limit, toolName)
 	},
 }
 
 func init() {
-	getCmd.Flags().BoolVar(&showAllVersions, "all", false, "Show all available versions")
-	getCmd.Flags().IntVar(&versionLimit, "limit", 10, "Limit number of versions to display")
+	// Create parser with get-specific flags.
+	getParser = flags.NewStandardParser(
+		flags.WithBoolFlag("all", "", false, "Show all available versions"),
+		flags.WithIntFlag("limit", "", 10, "Limit number of versions to display"),
+		flags.WithEnvVars("all", "ATMOS_TOOLCHAIN_ALL"),
+		flags.WithEnvVars("limit", "ATMOS_TOOLCHAIN_LIMIT"),
+	)
 
-	// Bind flags to viper for config precedence.
-	if err := viper.BindPFlag("toolchain.get.all", getCmd.Flags().Lookup("all")); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding toolchain.get.all flag: %v\n", err)
-	}
-	if err := viper.BindPFlag("toolchain.get.limit", getCmd.Flags().Lookup("limit")); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding toolchain.get.limit flag: %v\n", err)
-	}
+	// Register flags.
+	getParser.RegisterFlags(getCmd)
 
-	// Bind environment variables.
-	if err := viper.BindEnv("toolchain.get.all", "ATMOS_TOOLCHAIN_GET_ALL"); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding ATMOS_TOOLCHAIN_GET_ALL environment variable: %v\n", err)
+	// Bind flags to Viper.
+	if err := getParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
 	}
-	if err := viper.BindEnv("toolchain.get.limit", "ATMOS_TOOLCHAIN_GET_LIMIT"); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding ATMOS_TOOLCHAIN_GET_LIMIT environment variable: %v\n", err)
-	}
-
-	// Set defaults via viper.
-	viper.SetDefault("toolchain.get.all", false)
-	viper.SetDefault("toolchain.get.limit", 10)
 }

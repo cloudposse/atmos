@@ -2,11 +2,15 @@ package toolchain
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/toolchain"
 )
 
-var outputFormat string
+var (
+	infoParser *flags.StandardParser
+)
 
 var infoCmd = &cobra.Command{
 	Use:   "info <tool>",
@@ -14,10 +18,29 @@ var infoCmd = &cobra.Command{
 	Long:  `Display detailed information about a tool from the registry.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Bind flags to Viper for precedence handling.
+		v := viper.GetViper()
+		if err := infoParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		outputFormat := v.GetString("output")
 		return toolchain.InfoExec(args[0], outputFormat)
 	},
 }
 
 func init() {
-	infoCmd.Flags().StringVarP(&outputFormat, "output", "o", "table", "Output format (table, yaml, json)")
+	// Create parser with info-specific flags.
+	infoParser = flags.NewStandardParser(
+		flags.WithStringFlag("output", "o", "table", "Output format (table, yaml, json)"),
+		flags.WithEnvVars("output", "ATMOS_TOOLCHAIN_OUTPUT"),
+	)
+
+	// Register flags.
+	infoParser.RegisterFlags(infoCmd)
+
+	// Bind flags to Viper.
+	if err := infoParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 }

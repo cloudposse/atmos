@@ -7,7 +7,9 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -23,11 +25,7 @@ const (
 )
 
 var (
-	searchLimit         int
-	searchRegistry      string
-	searchFormat        string
-	searchInstalledOnly bool
-	searchAvailableOnly bool
+	searchParser *flags.StandardParser
 )
 
 // searchCmd represents the 'toolchain registry search' command.
@@ -45,18 +43,46 @@ Results are sorted by relevance score.`,
 }
 
 func init() {
-	searchCmd.Flags().IntVar(&searchLimit, "limit", defaultSearchLimit, "Maximum number of results to show")
-	searchCmd.Flags().StringVar(&searchRegistry, "registry", "", "Search only in specific registry")
-	searchCmd.Flags().StringVar(&searchFormat, "format", "table", "Output format (table, json, yaml)")
-	searchCmd.Flags().BoolVar(&searchInstalledOnly, "installed-only", false, "Show only installed tools")
-	searchCmd.Flags().BoolVar(&searchAvailableOnly, "available-only", false, "Show only non-installed tools")
+	// Create parser with search-specific flags.
+	searchParser = flags.NewStandardParser(
+		flags.WithIntFlag("limit", "", defaultSearchLimit, "Maximum number of results to show"),
+		flags.WithStringFlag("registry", "", "", "Search only in specific registry"),
+		flags.WithStringFlag("format", "", "table", "Output format (table, json, yaml)"),
+		flags.WithBoolFlag("installed-only", "", false, "Show only installed tools"),
+		flags.WithBoolFlag("available-only", "", false, "Show only non-installed tools"),
+		flags.WithEnvVars("limit", "ATMOS_TOOLCHAIN_LIMIT"),
+		flags.WithEnvVars("registry", "ATMOS_TOOLCHAIN_REGISTRY"),
+		flags.WithEnvVars("format", "ATMOS_TOOLCHAIN_FORMAT"),
+		flags.WithEnvVars("installed-only", "ATMOS_TOOLCHAIN_INSTALLED_ONLY"),
+		flags.WithEnvVars("available-only", "ATMOS_TOOLCHAIN_AVAILABLE_ONLY"),
+	)
+
+	// Register flags.
+	searchParser.RegisterFlags(searchCmd)
+
+	// Bind flags to Viper.
+	if err := searchParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 }
 
 func executeSearchCommand(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "registry.executeSearchCommand")()
 
+	// Bind flags to Viper for precedence handling.
+	v := viper.GetViper()
+	if err := searchParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
 	query := args[0]
 	ctx := context.Background()
+
+	// Get flag values from Viper.
+	searchLimit := v.GetInt("limit")
+	searchRegistry := v.GetString("registry")
+	searchInstalledOnly := v.GetBool("installed-only")
+	searchAvailableOnly := v.GetBool("available-only")
 
 	// Create registry based on flag or use default.
 	var reg toolchainregistry.ToolRegistry

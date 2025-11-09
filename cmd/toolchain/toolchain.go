@@ -2,7 +2,6 @@ package toolchain
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -10,22 +9,17 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	registrycmd "github.com/cloudposse/atmos/cmd/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	toolchainpkg "github.com/cloudposse/atmos/toolchain"
 )
 
-const (
-	// GitHub token flag is the name of the GitHub token flag and configuration key.
-	githubTokenFlag = "github-token"
-)
-
 var (
-	githubToken      string
-	toolVersionsFile string
-	toolsDir         string
-	toolsConfigFile  string
+	// ToolchainParser handles flag parsing for toolchain persistent flags.
+	toolchainParser *flags.StandardParser
 )
 
 // SetAtmosConfig sets the Atmos configuration for the toolchain command.
@@ -51,12 +45,18 @@ var toolchainCmd = &cobra.Command{
 		ui.InitFormatter(ioCtx)
 		data.InitWriter(ioCtx)
 
+		// Bind flags to Viper for precedence handling.
+		v := viper.GetViper()
+		if err := toolchainParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
 		// Initialize the toolchain package with the Atmos configuration.
 		// This ensures that the toolchain package has access to the configuration.
 		atmosCfg := &schema.AtmosConfiguration{
 			Toolchain: schema.Toolchain{
-				VersionsFile: toolVersionsFile,
-				InstallPath:  toolsDir,
+				VersionsFile: v.GetString("toolchain.tool-versions"),
+				InstallPath:  v.GetString("toolchain.tools-dir"),
 			},
 		}
 
@@ -72,44 +72,40 @@ var toolchainCmd = &cobra.Command{
 }
 
 func init() {
-	// Add GitHub token flag and bind to environment variables.
-	toolchainCmd.PersistentFlags().StringVar(&githubToken, githubTokenFlag, "", "GitHub token for authenticated requests")
-	if err := toolchainCmd.PersistentFlags().MarkHidden(githubTokenFlag); err != nil {
-		fmt.Fprintf(os.Stderr, "Error hiding %s flag: %v\n", githubTokenFlag, err)
-	}
-	// Bind environment variables with proper precedence (ATMOS_GITHUB_TOKEN takes precedence over GITHUB_TOKEN).
-	if err := viper.BindPFlag(githubTokenFlag, toolchainCmd.PersistentFlags().Lookup(githubTokenFlag)); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding %s flag: %v\n", githubTokenFlag, err)
-	}
-	if err := viper.BindEnv(githubTokenFlag, "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding %s environment variables: %v\n", githubTokenFlag, err)
+	// Create parser with toolchain-specific persistent flags using functional options.
+	toolchainParser = flags.NewStandardParser(
+		flags.WithStringFlag("github-token", "", "", "GitHub token for authenticated requests"),
+		flags.WithStringFlag("tool-versions", "", ".tool-versions", "Path to tool-versions file"),
+		flags.WithStringFlag("tools-dir", "", ".tools", "Directory to store installed tools"),
+		flags.WithStringFlag("tools-config", "", "tools.yaml", "Path to tools configuration file"),
+		flags.WithEnvVars("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"),
+		flags.WithEnvVars("tool-versions", "ATMOS_TOOL_VERSIONS"),
+		flags.WithEnvVars("tools-dir", "ATMOS_TOOLS_DIR"),
+		flags.WithEnvVars("tools-config", "ATMOS_TOOLS_CONFIG"),
+	)
+
+	// Register persistent flags (inherited by all subcommands).
+	toolchainParser.RegisterPersistentFlags(toolchainCmd)
+
+	// Hide the github-token flag from help.
+	if err := toolchainCmd.PersistentFlags().MarkHidden("github-token"); err != nil {
+		panic(err)
 	}
 
-	// Add tool-versions file flag.
-	toolchainCmd.PersistentFlags().StringVar(&toolVersionsFile, "tool-versions", ".tool-versions", "Path to tool-versions file")
-	if err := viper.BindPFlag("toolchain.tool-versions", toolchainCmd.PersistentFlags().Lookup("tool-versions")); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding tool-versions flag: %v\n", err)
+	// Bind flags to Viper for environment variable support.
+	// We need custom Viper keys for toolchain flags, so bind them manually.
+	v := viper.GetViper()
+	if err := v.BindPFlag("github-token", toolchainCmd.PersistentFlags().Lookup("github-token")); err != nil {
+		panic(err)
 	}
-	if err := viper.BindEnv("toolchain.tool-versions", "ATMOS_TOOL_VERSIONS"); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding ATMOS_TOOL_VERSIONS environment variable: %v\n", err)
+	if err := v.BindPFlag("toolchain.tool-versions", toolchainCmd.PersistentFlags().Lookup("tool-versions")); err != nil {
+		panic(err)
 	}
-
-	// Add tools directory flag.
-	toolchainCmd.PersistentFlags().StringVar(&toolsDir, "tools-dir", ".tools", "Directory to store installed tools")
-	if err := viper.BindPFlag("toolchain.tools-dir", toolchainCmd.PersistentFlags().Lookup("tools-dir")); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding tools-dir flag: %v\n", err)
+	if err := v.BindPFlag("toolchain.tools-dir", toolchainCmd.PersistentFlags().Lookup("tools-dir")); err != nil {
+		panic(err)
 	}
-	if err := viper.BindEnv("toolchain.tools-dir", "ATMOS_TOOLS_DIR"); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding ATMOS_TOOLS_DIR environment variable: %v\n", err)
-	}
-
-	// Add tools config file flag.
-	toolchainCmd.PersistentFlags().StringVar(&toolsConfigFile, "tools-config", "tools.yaml", "Path to tools configuration file")
-	if err := viper.BindPFlag("toolchain.tools-config", toolchainCmd.PersistentFlags().Lookup("tools-config")); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding tools-config flag: %v\n", err)
-	}
-	if err := viper.BindEnv("toolchain.tools-config", "ATMOS_TOOLS_CONFIG"); err != nil {
-		fmt.Fprintf(os.Stderr, "Error binding ATMOS_TOOLS_CONFIG environment variable: %v\n", err)
+	if err := v.BindPFlag("toolchain.tools-config", toolchainCmd.PersistentFlags().Lookup("tools-config")); err != nil {
+		panic(err)
 	}
 
 	// Add all subcommands.
@@ -149,4 +145,19 @@ func (t *ToolchainCommandProvider) GetName() string {
 // GetGroup returns the command group for help organization.
 func (t *ToolchainCommandProvider) GetGroup() string {
 	return "Toolchain Commands"
+}
+
+// GetFlagsBuilder returns the flags builder for this command.
+func (t *ToolchainCommandProvider) GetFlagsBuilder() flags.Builder {
+	return toolchainParser
+}
+
+// GetPositionalArgsBuilder returns the positional args builder for this command.
+func (t *ToolchainCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+// GetCompatibilityFlags returns compatibility flags for this command.
+func (t *ToolchainCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }
