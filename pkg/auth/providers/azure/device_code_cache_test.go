@@ -698,9 +698,9 @@ func TestDeviceCodeProvider_updateAzureCLICache_Integration(t *testing.T) {
 	tmpHome := t.TempDir()
 
 	// Sandbox home directory to prevent writes to real user home.
-	t.Setenv("HOME", tmpHome)              // Unix/Linux/macOS
-	t.Setenv("USERPROFILE", tmpHome)       // Windows
-	t.Setenv("AZURE_CONFIG_DIR", tmpHome)  // Azure CLI config override
+	t.Setenv("HOME", tmpHome)             // Unix/Linux/macOS
+	t.Setenv("USERPROFILE", tmpHome)      // Windows
+	t.Setenv("AZURE_CONFIG_DIR", tmpHome) // Azure CLI config override
 
 	// Create a valid test JWT with OID and UPN claims.
 	createTestJWT := func(oid, upn string) string {
