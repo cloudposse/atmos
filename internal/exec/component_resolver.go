@@ -1,262 +1,36 @@
 package exec
 
 import (
-	"fmt"
-
-	errUtils "github.com/cloudposse/atmos/errors"
-	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/perf"
+	comp "github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+var (
+	// componentResolver is a package-level resolver instance that uses the exec stack loader.
+	componentResolver *comp.Resolver
+)
+
+func init() {
+	componentResolver = comp.NewResolver(NewStackLoader())
+}
+
 // ResolveComponentFromPath resolves a filesystem path to a component name and validates it exists in the stack.
-//
-// This function:
-// 1. Extracts component type and name from the filesystem path
-// 2. Verifies the component type matches the expected type
-// 3. Validates the component exists in the specified stack configuration (if stack is provided)
-//
-// Parameters:
-//   - atmosConfig: Atmos configuration
-//   - path: Filesystem path (can be ".", relative, or absolute)
-//   - stack: Stack name to validate against (empty string to skip stack validation)
-//   - expectedComponentType: Expected component type ("terraform", "helmfile", "packer")
-//
-// Returns:
-//   - Component name as it appears in stack configuration (e.g., "vpc/security-group")
-//   - Error if path cannot be resolved or component doesn't exist in stack
-//
-// Example:
-//
-//	componentName, err := ResolveComponentFromPath(cfg, ".", "dev", "terraform")
-//	// Returns: "vpc/security-group" if current dir is components/terraform/vpc/security-group
+// This is a wrapper around pkg/component.Resolver.ResolveComponentFromPath for backwards compatibility.
 func ResolveComponentFromPath(
 	atmosConfig *schema.AtmosConfiguration,
 	path string,
 	stack string,
 	expectedComponentType string,
 ) (string, error) {
-	defer perf.Track(atmosConfig, "exec.ResolveComponentFromPath")()
-
-	log.Debug("Resolving component from path",
-		"path", path,
-		"stack", stack,
-		"expected_type", expectedComponentType,
-	)
-
-	// 1. Extract component info from path.
-	componentInfo, err := u.ExtractComponentInfoFromPath(atmosConfig, path)
-	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
-	}
-
-	// 2. Verify component type matches.
-	if componentInfo.ComponentType != expectedComponentType {
-		return "", fmt.Errorf(
-			"%w: path resolves to %s component but command expects %s component",
-			errUtils.ErrComponentTypeMismatch,
-			componentInfo.ComponentType,
-			expectedComponentType,
-		)
-	}
-
-	// 3. If stack is specified, validate component exists in stack and get actual stack key.
-	var resolvedComponent string
-	if stack != "" {
-		stackKey, err := validateComponentInStack(atmosConfig, componentInfo.FullComponent, stack, expectedComponentType)
-		if err != nil {
-			return "", err
-		}
-		resolvedComponent = stackKey
-	} else {
-		resolvedComponent = componentInfo.FullComponent
-	}
-
-	log.Debug("Successfully resolved component from path",
-		"path", path,
-		"component", resolvedComponent,
-		"type", componentInfo.ComponentType,
-		"stack", stack,
-	)
-
-	return resolvedComponent, nil
+	return componentResolver.ResolveComponentFromPath(atmosConfig, path, stack, expectedComponentType)
 }
 
 // ResolveComponentFromPathWithoutTypeCheck resolves a filesystem path to a component name without validating component type.
-//
-// This function is used by describe component which auto-detects component type,
-// so we only need to:
-// 1. Extract component name from the filesystem path
-// 2. Validate the component exists in the specified stack configuration (if stack is provided)
-//
-// The component type is NOT validated - caller is responsible for type detection/validation.
-//
-// Parameters:
-//   - atmosConfig: Atmos configuration
-//   - path: Filesystem path (can be ".", relative, or absolute)
-//   - stack: Stack name to validate against (empty string to skip stack validation)
-//
-// Returns:
-//   - Component name as it appears in stack configuration (e.g., "vpc/security-group")
-//   - Error if path cannot be resolved or component doesn't exist in stack
-//
-// Example:
-//
-//	componentName, err := ResolveComponentFromPathWithoutTypeCheck(cfg, ".", "dev")
-//	// Returns: "vpc/security-group" if current dir is components/terraform/vpc/security-group
+// This is a wrapper around pkg/component.Resolver.ResolveComponentFromPathWithoutTypeCheck for backwards compatibility.
 func ResolveComponentFromPathWithoutTypeCheck(
 	atmosConfig *schema.AtmosConfiguration,
 	path string,
 	stack string,
 ) (string, error) {
-	defer perf.Track(atmosConfig, "exec.ResolveComponentFromPathWithoutTypeCheck")()
-
-	log.Debug("Resolving component from path (without type check)",
-		"path", path,
-		"stack", stack,
-	)
-
-	// 1. Extract component info from path.
-	componentInfo, err := u.ExtractComponentInfoFromPath(atmosConfig, path)
-	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
-	}
-
-	// 2. If stack is specified, validate component exists in stack and get actual stack key.
-	var resolvedComponent string
-	if stack != "" {
-		stackKey, err := validateComponentInStack(atmosConfig, componentInfo.FullComponent, stack, componentInfo.ComponentType)
-		if err != nil {
-			return "", err
-		}
-		resolvedComponent = stackKey
-	} else {
-		resolvedComponent = componentInfo.FullComponent
-	}
-
-	log.Debug("Successfully resolved component from path (without type check)",
-		"path", path,
-		"component", resolvedComponent,
-		"detected_type", componentInfo.ComponentType,
-		"stack", stack,
-	)
-
-	return resolvedComponent, nil
-}
-
-// validateComponentInStack checks if a component exists in the specified stack configuration.
-// Returns the actual stack key (which may be an alias) that matched the component.
-func validateComponentInStack(
-	atmosConfig *schema.AtmosConfiguration,
-	componentName string,
-	stack string,
-	componentType string,
-) (string, error) {
-	defer perf.Track(atmosConfig, "exec.validateComponentInStack")()
-
-	log.Debug("Validating component exists in stack",
-		"component", componentName,
-		"stack", stack,
-		"type", componentType,
-	)
-
-	// Load all stacks.
-	stacksMap, _, err := FindStacksMap(atmosConfig, false)
-	if err != nil {
-		return "", fmt.Errorf("failed to load stacks: %w", err)
-	}
-
-	// Check if stack exists.
-	stackConfig, ok := stacksMap[stack]
-	if !ok {
-		return "", fmt.Errorf("stack '%s' not found", stack)
-	}
-
-	// Extract components section.
-	stackConfigMap, ok := stackConfig.(map[string]any)
-	if !ok {
-		return "", fmt.Errorf("invalid stack configuration for '%s'", stack)
-	}
-
-	components, ok := stackConfigMap["components"]
-	if !ok {
-		return "", fmt.Errorf("%w: stack '%s' has no components section", errUtils.ErrComponentNotInStack, stack)
-	}
-
-	componentsMap, ok := components.(map[string]any)
-	if !ok {
-		return "", fmt.Errorf("%w: invalid components section in stack '%s'", errUtils.ErrComponentNotInStack, stack)
-	}
-
-	// Extract component type section (terraform/helmfile/packer).
-	typeComponents, ok := componentsMap[componentType]
-	if !ok {
-		return "", fmt.Errorf(
-			"%w: stack '%s' has no %s components",
-			errUtils.ErrComponentNotInStack,
-			stack,
-			componentType,
-		)
-	}
-
-	typeComponentsMap, ok := typeComponents.(map[string]any)
-	if !ok {
-		return "", fmt.Errorf(
-			"%w: invalid %s components section in stack '%s'",
-			errUtils.ErrComponentNotInStack,
-			componentType,
-			stack,
-		)
-	}
-
-	// First check for direct key match.
-	if _, exists := typeComponentsMap[componentName]; exists {
-		log.Debug("Component validated successfully in stack (direct match)",
-			"component", componentName,
-			"stack", stack,
-			"type", componentType,
-		)
-		return componentName, nil
-	}
-
-	// If no direct match, check for aliases via component or metadata.component fields.
-	for stackKey, componentConfig := range typeComponentsMap {
-		componentConfigMap, ok := componentConfig.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		// Check 'component' field.
-		if comp, ok := componentConfigMap["component"].(string); ok && comp == componentName {
-			log.Debug("Component validated successfully in stack (alias via component field)",
-				"path_component", componentName,
-				"stack_key", stackKey,
-				"stack", stack,
-				"type", componentType,
-			)
-			return stackKey, nil
-		}
-
-		// Check 'metadata.component' field.
-		if metadata, ok := componentConfigMap["metadata"].(map[string]any); ok {
-			if metaComp, ok := metadata["component"].(string); ok && metaComp == componentName {
-				log.Debug("Component validated successfully in stack (alias via metadata.component field)",
-					"path_component", componentName,
-					"stack_key", stackKey,
-					"stack", stack,
-					"type", componentType,
-				)
-				return stackKey, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf(
-		"%w: component '%s' not found in stack '%s' (type: %s)",
-		errUtils.ErrComponentNotInStack,
-		componentName,
-		stack,
-		componentType,
-	)
+	return componentResolver.ResolveComponentFromPathWithoutTypeCheck(atmosConfig, path, stack)
 }

@@ -171,7 +171,7 @@ func ProcessComponentConfig(
 }
 
 var (
-	// FindStacksMapCache stores the results of FindStacksMap to avoid re-processing
+	// findStacksMapCache stores the results of FindStacksMap to avoid re-processing
 	// all YAML files multiple times within the same command execution.
 	// Cache key: JSON-serialized atmosConfig key fields + ignoreMissingFiles flag.
 	findStacksMapCache   map[string]*findStacksMapCacheEntry
