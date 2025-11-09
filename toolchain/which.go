@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -21,8 +22,7 @@ func WhichExec(toolName string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(binaryPath)
-	return nil
+	return data.Writeln(binaryPath)
 }
 
 func findBinaryPath(toolNameFull string) (string, error) {

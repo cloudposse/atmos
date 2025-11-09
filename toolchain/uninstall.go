@@ -14,6 +14,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -253,7 +254,7 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 	// Count total tools for progress tracking
 	totalTools := len(toolVersions.Tools)
 	if totalTools == 0 {
-		fmt.Fprintf(os.Stderr, "No tools found in %s\n", toolVersionsPath)
+		_ = ui.Writef("No tools found in %s\n", toolVersionsPath)
 		return nil
 	}
 
@@ -273,7 +274,7 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 		for _, version := range versions {
 			owner, repo, err := installer.parseToolSpec(tool)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "⚠️  Skipping invalid tool specification: %s\n", tool)
+				_ = ui.Warningf("Skipping invalid tool specification: %s", tool)
 				continue
 			}
 			_, err = installer.FindBinaryPath(owner, repo, version)
@@ -285,13 +286,13 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 					repo    string
 				}{tool, version, owner, repo})
 			} else {
-				fmt.Fprintf(os.Stderr, "%s Skipped %s/%s@%s (not installed)\n", theme.Styles.Checkmark, owner, repo, version)
+				_ = ui.Successf("Skipped %s/%s@%s (not installed)", owner, repo, version)
 			}
 		}
 	}
 
 	if len(installedTools) == 0 {
-		fmt.Fprintf(os.Stderr, "No tools to uninstall\n")
+		_ = ui.Writeln("No tools to uninstall")
 		return nil
 	}
 
@@ -371,8 +372,7 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 
 	// Check if the tool directory exists.
 	if _, err := os.Stat(toolDir); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "%s Tool %s/%s is not installed\n", theme.Styles.Checkmark, owner, repo)
-		return nil
+		return ui.Successf("Tool %s/%s is not installed", owner, repo)
 	}
 
 	versionsToUninstall, err := getVersionsToUninstall(toolDir)
@@ -381,21 +381,20 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 	}
 
 	if len(versionsToUninstall) == 0 {
-		fmt.Fprintf(os.Stderr, "%s No versions of %s/%s are installed\n", theme.Styles.Checkmark, owner, repo)
-		return nil
+		return ui.Successf("No versions of %s/%s are installed", owner, repo)
 	}
 
 	// Only show the "Uninstalling all versions" message if there's more than 1 version.
 	if len(versionsToUninstall) > 1 {
-		fmt.Fprintf(os.Stderr, "Uninstalling all versions of %s/%s (%d versions)\n", owner, repo, len(versionsToUninstall))
+		_ = ui.Writef("Uninstalling all versions of %s/%s (%d versions)\n", owner, repo, len(versionsToUninstall))
 	}
 
 	// Uninstall each version.
 	for _, version := range versionsToUninstall {
 		if err := uninstallSingleTool(installer, owner, repo, version, false); err != nil {
-			fmt.Fprintf(os.Stderr, "%s Failed to uninstall %s/%s@%s: %v\n", theme.Styles.XMark, owner, repo, version, err)
+			_ = ui.Errorf("Failed to uninstall %s/%s@%s: %v", owner, repo, version, err)
 		} else {
-			fmt.Fprintf(os.Stderr, "%s Uninstalled %s/%s@%s\n", theme.Styles.Checkmark, owner, repo, version)
+			_ = ui.Successf("Uninstalled %s/%s@%s", owner, repo, version)
 		}
 	}
 
@@ -410,7 +409,7 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 
 	// Only show summary if there are multiple versions.
 	if len(versionsToUninstall) > 1 {
-		fmt.Fprintf(os.Stderr, "%s Uninstalled all versions of %s/%s\n", theme.Styles.Checkmark, owner, repo)
+		return ui.Successf("Uninstalled all versions of %s/%s", owner, repo)
 	}
 	return nil
 }

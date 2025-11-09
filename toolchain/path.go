@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -98,14 +99,12 @@ func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
 	// Output based on flags
 	switch {
 	case jsonFlag:
-		emitJSONPath(toolPaths, finalPath)
+		return emitJSONPath(toolPaths, finalPath)
 	case exportFlag:
-		fmt.Printf("export PATH=\"%s\"\n", finalPath)
+		return data.Writef("export PATH=\"%s\"\n", finalPath)
 	default:
-		fmt.Println(finalPath)
+		return data.Writeln(finalPath)
 	}
-
-	return nil
 }
 
 // ToolPath represents a tool with its version and path.
@@ -115,23 +114,15 @@ type ToolPath struct {
 	Path    string `json:"path"`
 }
 
-func emitJSONPath(toolPaths []ToolPath, finalPath string) {
-	// Simple JSON output (you could use encoding/json for more complex cases)
-	fmt.Printf("{\n")
-	fmt.Printf("  \"tools\": [\n")
-	for i, tool := range toolPaths {
-		fmt.Printf("    {\n")
-		fmt.Printf("      \"tool\": \"%s\",\n", tool.Tool)
-		fmt.Printf("      \"version\": \"%s\",\n", tool.Version)
-		fmt.Printf("      \"path\": \"%s\"\n", tool.Path)
-		if i < len(toolPaths)-1 {
-			fmt.Printf("    },\n")
-		} else {
-			fmt.Printf("    }\n")
-		}
+func emitJSONPath(toolPaths []ToolPath, finalPath string) error {
+	output := struct {
+		Tools     []ToolPath `json:"tools"`
+		FinalPath string     `json:"final_path"`
+		Count     int        `json:"count"`
+	}{
+		Tools:     toolPaths,
+		FinalPath: finalPath,
+		Count:     len(toolPaths),
 	}
-	fmt.Printf("  ],\n")
-	fmt.Printf("  \"final_path\": \"%s\",\n", finalPath)
-	fmt.Printf("  \"count\": %d\n", len(toolPaths))
-	fmt.Printf("}\n")
+	return data.WriteJSON(output)
 }
