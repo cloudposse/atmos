@@ -545,12 +545,6 @@ func HasUserConfig(scaffoldPath string) bool {
 	return err == nil
 }
 
-// LoadUserConfiguration loads user configuration and prompts if needed
-// This function is deprecated in favor of dynamic scaffold configuration
-func LoadUserConfiguration() (*Config, error) {
-	return nil, fmt.Errorf("LoadUserConfiguration is deprecated, use dynamic scaffold configuration instead")
-}
-
 // UserConfig represents the user's configuration with template metadata and values
 type UserConfig struct {
 	TemplateID string                 `yaml:"template_id"`
