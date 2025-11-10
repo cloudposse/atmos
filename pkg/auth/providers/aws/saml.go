@@ -397,9 +397,10 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 	return env, nil
 }
 
-// Paths returns provider-namespaced credential and config file paths.
-// Returns AWS credentials and config files using AWSFileManager for proper provider isolation.
-// Credentials file is required, config file is optional.
+// Paths returns the credential and config file paths used by this SAML provider.
+// It returns provider-namespaced paths using AWSFileManager to support multiple
+// AWS provider instances. The credentials path is required, and the config path
+// is optional. Both paths are marked read-only for container mounting security.
 //
 //nolint:dupl // SSO and SAML providers have identical path logic but are separate implementations
 func (p *samlProvider) Paths() ([]types.Path, error) {

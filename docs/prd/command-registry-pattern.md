@@ -10,7 +10,7 @@ This document describes the command registry pattern for Atmos, which provides a
 
 Atmos has 116+ Go files in a flat `cmd/` directory structure:
 
-```
+```text
 cmd/
 ├── about.go
 ├── atlantis.go
