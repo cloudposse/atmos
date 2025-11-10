@@ -59,11 +59,15 @@ func init() {
 
 // profileShowFormatFlagCompletion provides shell completion for the format flag.
 func profileShowFormatFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "cmd.profileShowFormatFlagCompletion")()
+
 	return []string{"text", "json", "yaml"}, cobra.ShellCompDirectiveNoFileComp
 }
 
 // profileNameCompletion provides shell completion for profile names.
 func profileNameCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "cmd.profileNameCompletion")()
+
 	// Don't complete if we already have a profile name.
 	if len(args) > 0 {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -144,6 +148,8 @@ func executeProfileShowCommand(cmd *cobra.Command, args []string) error {
 
 // renderProfileJSON renders a profile as JSON.
 func renderProfileJSON(p *profile.ProfileInfo) (string, error) {
+	defer perf.Track(nil, "cmd.renderProfileJSON")()
+
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to marshal profile to JSON: %s", errUtils.ErrOutputFormat, err)
@@ -153,6 +159,8 @@ func renderProfileJSON(p *profile.ProfileInfo) (string, error) {
 
 // renderProfileYAML renders a profile as YAML.
 func renderProfileYAML(p *profile.ProfileInfo) (string, error) {
+	defer perf.Track(nil, "cmd.renderProfileYAML")()
+
 	data, err := yaml.Marshal(p)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to marshal profile to YAML: %s", errUtils.ErrOutputFormat, err)
