@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -217,16 +218,15 @@ func registerLoggingFlags(registry *FlagRegistry) {
 func registerAuthenticationFlags(registry *FlagRegistry) {
 	defer perf.Track(nil, "flags.registerAuthenticationFlags")()
 
-	// Identity flag.
-	// NOTE: NoOptDefVal is not used to avoid Cobra parsing issues with commands that have
-	// positional arguments. When NoOptDefVal is set and space-separated values are used
-	// (--identity value), Cobra misinterprets the value as a subcommand/positional argument.
+	// Identity flag with NoOptDefVal for interactive selection.
+	// NoOptDefVal enables the pattern: --identity (interactive), --identity value (explicit).
 	registry.Register(&StringFlag{
 		Name:        identityFlagName,
 		Shorthand:   "i",
 		Default:     "",
 		Description: "Identity to use for authentication",
 		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
+		NoOptDefVal: cfg.IdentityFlagSelectValue, // "__SELECT__"
 	})
 
 	// Pager flag (special NoOptDefVal handling).
