@@ -63,27 +63,6 @@ This separation allows you to add `eval $(atmos auth env)` to your shell profile
 
 See the [`atmos auth shell`](/cli/commands/auth/shell) documentation for more details on session isolation.
 
-
-### Formats
-
-<dl>
-  <dt>`bash` (default)</dt>
-  <dd>
-    Prints `export KEY='value'` lines.
-  </dd>
-
-  <dt>`json`</dt>
-  <dd>
-    Prints a JSON object of environment variables.
-  </dd>
-
-  <dt>`dotenv`</dt>
-  <dd>
-    Prints `KEY='value'` lines.
-  </dd>
-</dl>
-
-
 ## Examples
 
 ```shell
@@ -116,25 +95,6 @@ A key advantage of `atmos auth env` is that it outputs environment variables for
 # Add to ~/.zshrc or ~/.bashrc
 eval $(atmos auth env)
 ```
-
-This approach:
-- Sets environment variables for the default identity
-- Uses cached credentials if they exist and are valid
-- **Does not trigger login prompts** - you can run `atmos auth login` separately when needed
-- Tools that require credentials will fail gracefully, prompting you to login when necessary
-
-The separation between setting environment variables (`atmos auth env`) and authentication (`atmos auth login`) means you can:
-1. Set environment variables once with `eval $(atmos auth env)` in your profile
-2. Authenticate when needed with `atmos auth login`
-3. Re-authenticate when credentials expire without re-evaluating `atmos auth env`
-
-:::info Using with Warp Terminal
-[Warp](https://warp.dev) is a modern terminal that works well with `atmos auth env`. When working with Warp or other feature-rich terminals, use `atmos auth env` instead of `atmos auth shell` to maintain the terminal's UI features (command palette, AI assistant, blocks, etc.).
-
-The `atmos auth shell` command launches a subshell that loses the terminal emulator's feature-rich UIs. Instead, use a helper function like `use-identity()` (shown below) that calls `atmos auth env` to get credentials for AWS CLI or other operations while maintaining your terminal's interface.
-
-Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensures that new terminal windows and panes automatically have the appropriate environment variables set for your default identity.
-:::
 
 <details>
 <summary>Helper Function for Identity Switching</summary>
@@ -195,6 +155,25 @@ This helper function:
 
 </details>
 
+This approach:
+- Sets environment variables for the default identity
+- Uses cached credentials if they exist and are valid
+- **Does not trigger login prompts** - you can run `atmos auth login` separately when needed
+- Tools that require credentials will fail gracefully, prompting you to login when necessary
+
+The separation between setting environment variables (`atmos auth env`) and authentication (`atmos auth login`) means you can:
+1. Set environment variables once with `eval $(atmos auth env)` in your profile
+2. Authenticate when needed with `atmos auth login`
+3. Re-authenticate when credentials expire without re-evaluating `atmos auth env`
+
+:::info Using with Warp Terminal
+[Warp](https://warp.dev) is a modern terminal that works well with `atmos auth env`. When working with Warp or other feature-rich terminals, use `atmos auth env` instead of `atmos auth shell` to maintain the terminal's UI features (command palette, AI assistant, blocks, etc.).
+
+The `atmos auth shell` command launches a subshell that loses the terminal emulator's feature-rich UIs. Instead, use a helper function like `use-identity()` (shown above) that calls `atmos auth env` to get credentials for AWS CLI or other operations while maintaining your terminal's interface.
+
+Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensures that new terminal windows and panes automatically have the appropriate environment variables set for your default identity.
+:::
+
 ## Flags
 
 <dl>
@@ -208,7 +187,13 @@ This helper function:
   </dd>
 
   <dt>`--format` <em>(alias `-f`)</em></dt>
-  <dd>Output format. Supported: `bash`, `json`, `dotenv`. Default: `bash`.</dd>
+  <dd>
+    Output format for the environment variables. Default: `bash`.
+
+    - **`bash`** (default): Prints `export KEY='value'` lines suitable for shell evaluation
+    - **`json`**: Prints a JSON object of environment variables
+    - **`dotenv`**: Prints `KEY='value'` lines in dotenv format
+  </dd>
 
   <dt>`--login`</dt>
   <dd>
