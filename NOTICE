@@ -970,7 +970,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/HdrHistogram/hdrhistogram-go
     License: MIT
-    URL: https://github.com/HdrHistogram/hdrhistogram-go/blob/v1.1.2/LICENSE
+    URL: https://github.com/HdrHistogram/hdrhistogram-go/blob/v1.2.0/LICENSE
 
   - github.com/Masterminds/semver/v3
     License: MIT
