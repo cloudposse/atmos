@@ -24,15 +24,10 @@ func AddToolVersion(tool, version string) error {
 	}
 
 	// Add the tool to the version file.
-	if err := AddToolToVersions(GetToolVersionsFilePath(), tool, version); err != nil {
+	filePath := GetToolVersionsFilePath()
+	if err := AddToolToVersions(filePath, tool, version); err != nil {
 		return err
 	}
 
-	// Check for nil before accessing nested fields.
-	if atmosConfig != nil {
-		_ = ui.Successf("Added/updated %s %s in %s", tool, version, atmosConfig.Toolchain.VersionsFile)
-	} else {
-		_ = ui.Successf("Added/updated %s %s", tool, version)
-	}
-	return nil
+	return ui.Successf("Added/updated %s %s in %s", tool, version, filePath)
 }

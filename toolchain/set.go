@@ -320,14 +320,14 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 		version = finalVersionModel.selected
 	}
 
-	// Add the tool with the selected version
-	toolVersionsFile := GetToolVersionsFilePath()
-	err = AddToolToVersions(toolVersionsFile, resolvedKey, version)
+	// Add the tool with the selected version.
+	filePath := GetToolVersionsFilePath()
+	err = AddToolToVersions(filePath, resolvedKey, version)
 	if err != nil {
 		return fmt.Errorf("failed to set version: %w", err)
 	}
 
-	return ui.Successf("Set %s@%s in %s", resolvedKey, version, toolVersionsFile)
+	return ui.Successf("Set %s@%s in %s", resolvedKey, version, filePath)
 }
 
 // fetchGitHubVersions fetches available versions and titles from GitHub releases.

@@ -10,6 +10,7 @@ import (
 )
 
 func TestAddCommand_ValidTool(t *testing.T) {
+	setupTestIO(t)
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
@@ -27,6 +28,7 @@ func TestAddCommand_ValidTool(t *testing.T) {
 }
 
 func TestAddCommand_ValidToolWithAlias(t *testing.T) {
+	setupTestIO(t)
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
@@ -44,6 +46,7 @@ func TestAddCommand_ValidToolWithAlias(t *testing.T) {
 }
 
 func TestAddCommand_ValidToolWithCanonicalName(t *testing.T) {
+	setupTestIO(t)
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
@@ -99,6 +102,7 @@ func TestAddCommand_InvalidToolWithCanonicalName(t *testing.T) {
 }
 
 func TestAddCommand_UpdateExistingTool(t *testing.T) {
+	setupTestIO(t)
 	// Create a temporary .tool-versions file with existing tool
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
@@ -126,6 +130,7 @@ func TestAddCommand_UpdateExistingTool(t *testing.T) {
 }
 
 func TestAddCommand_InvalidVersion(t *testing.T) {
+	setupTestIO(t)
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
@@ -147,6 +152,7 @@ func TestAddCommand_InvalidVersion(t *testing.T) {
 }
 
 func TestAddCommand_CustomToolVersionsFile(t *testing.T) {
+	setupTestIO(t)
 	// Create a temporary directory with custom .tool-versions file
 	tempDir := t.TempDir()
 	customToolVersionsFile := filepath.Join(tempDir, "custom-versions")
@@ -166,6 +172,7 @@ func TestAddCommand_CustomToolVersionsFile(t *testing.T) {
 }
 
 func TestAddCommand_AquaRegistryTool(t *testing.T) {
+	setupTestIO(t)
 	// Create a temporary .tool-versions file
 	tempDir := t.TempDir()
 	toolVersionsFile := filepath.Join(tempDir, DefaultToolVersionsFilePath)
