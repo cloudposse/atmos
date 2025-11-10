@@ -34,6 +34,11 @@ func CleanToolsAndCaches(toolsDir, cacheDir, tempCacheDir string) error {
 }
 
 func cleanDir(path string, fatal bool) (int, error) {
+	// Defensive: refuse to operate on empty or root-like paths.
+	if isDangerousPath(path) {
+		return 0, fmt.Errorf("%w: refusing to delete dangerous path: %s", ErrFileOperation, path)
+	}
+
 	count, err := countFiles(path)
 	if err != nil && !os.IsNotExist(err) {
 		msg := fmt.Sprintf("failed to count files in %s: %v", path, err)
@@ -67,4 +72,26 @@ func countFiles(root string) (int, error) {
 		return nil
 	})
 	return count, err
+}
+
+// isDangerousPath checks if a path is dangerous to delete (empty, root, or drive root).
+func isDangerousPath(path string) bool {
+	// Clean the path first to normalize it (handles //, /./, /../, etc.).
+	cleaned := filepath.Clean(path)
+
+	if cleaned == "" || cleaned == "." || cleaned == "/" {
+		return true
+	}
+
+	// Check for drive roots on Windows (C:, D:, etc.).
+	if len(cleaned) == 2 && cleaned[1] == ':' {
+		return true
+	}
+
+	// Also check for drive roots with slash (C:\, D:\).
+	if len(cleaned) == 3 && cleaned[1] == ':' && (cleaned[2] == '\\' || cleaned[2] == '/') {
+		return true
+	}
+
+	return false
 }

@@ -81,6 +81,11 @@ func SaveToolVersions(filePath string, toolVersions *ToolVersions) error {
 func AddVersionToTool(toolVersions *ToolVersions, tool, version string, asDefault bool) {
 	defer perf.Track(nil, "toolchain.AddVersionToTool")()
 
+	// Guard against nil map.
+	if toolVersions.Tools == nil {
+		toolVersions.Tools = make(map[string][]string)
+	}
+
 	versions := toolVersions.Tools[tool]
 	for i, v := range versions {
 		if v == version {
