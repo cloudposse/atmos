@@ -3,7 +3,7 @@ package telemetry
 import (
 	"fmt"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // PosthogLogger is an adapter that implements the posthog.Logger interface
@@ -11,7 +11,7 @@ import (
 // integrated with Atmos logging and respect log levels. It also prevents
 // PostHog errors from being printed directly to stdout/stderr.
 type PosthogLogger struct {
-	logger *log.Logger
+	logger *log.AtmosLogger
 }
 
 // NewPosthogLogger creates a new PosthogLogger instance.

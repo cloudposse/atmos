@@ -10,6 +10,8 @@ import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 # CLI Configuration
 
@@ -100,6 +102,16 @@ logs:
   # Supported log levels: Trace, Debug, Info, Warning, Off
   # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
   level: Info
+profiler:
+  # Enable or disable the pprof profiling server
+  # Can also be set using '--profiler-enabled' command-line flag
+  enabled: false
+  # Host to bind the profiling server to
+  # Can also be set using '--profiler-host' command-line flag
+  host: "localhost"
+  # Port to run the profiling server on
+  # Can also be set using '--profiler-port' command-line flag
+  port: 6060
 schemas:
   jsonschema:
     base_path: stacks/schemas/jsonschema
@@ -145,25 +157,25 @@ Atmos extends standard YAML with several custom functions that can be used in at
   <dt>`!env`</dt>
   <dd>
     Used to retrieve environment variables.
-    See the [`!env` documentation](/core-concepts/stacks/yaml-functions/env) for more details.
+    See the [`!env` documentation](/functions/yaml/env) for more details.
   </dd>
 
   <dt>`!exec`</dt>
   <dd>
     Used to execute shell scripts and assign their output.
-    See the [`!exec` documentation](/core-concepts/stacks/yaml-functions/exec) for more details.
+    See the [`!exec` documentation](/functions/yaml/exec) for more details.
   </dd>
 
   <dt>`!include`</dt>
   <dd>
     Used to include other YAML files into the current configuration.
-    See the [`!include` documentation](/core-concepts/stacks/yaml-functions/include) for more details.
+    See the [`!include` documentation](/functions/yaml/include) for more details.
   </dd>
 
   <dt>`!repo-root`</dt>
   <dd>
     Used to retrieve the root directory of the Atmos repository. If the Git root is not found, it will return a default value if specified; otherwise, it returns an error.
-    See the [`!repo-root` documentation](/core-concepts/stacks/yaml-functions/repo-root) for more details.
+    See the [`!repo-root` documentation](/functions/yaml/repo-root) for more details.
   </dd>
 </dl>
 ## Imports
@@ -216,6 +228,68 @@ If `base_path` is provided, `components.terraform.base_path`, `components.helmfi
 ```yaml
 base_path: "."
 ```
+
+### Windows Path Handling
+
+When configuring paths in `atmos.yaml` on Windows, there are important considerations for how YAML interprets backslashes:
+
+:::warning Windows Path Escaping
+Backslashes (`\`) are treated as escape characters only inside double-quoted YAML scalars. Single-quoted and plain scalars treat backslashes literally. Use single quotes or plain scalars for Windows paths, or double-escape backslashes in double quotes.
+:::
+
+#### Correct Ways to Specify Windows Paths
+
+<Tabs defaultValue="forward">
+<TabItem value="forward" label="Forward Slashes (Recommended)">
+```yaml
+# Forward slashes work on all platforms including Windows
+components:
+  terraform:
+    base_path: "C:/Users/username/projects/components/terraform"
+```
+</TabItem>
+
+<TabItem value="escaped" label="Escaped Backslashes">
+```yaml
+# Double backslashes to escape them in YAML
+components:
+  terraform:
+    base_path: "C:\\Users\\username\\projects\\components\\terraform"
+```
+</TabItem>
+
+<TabItem value="single" label="Single Quotes (Backslashes Literal)">
+```yaml
+# Single quotes treat backslashes as literal characters
+components:
+  terraform:
+    base_path: 'C:\Users\username\projects\components\terraform'
+```
+</TabItem>
+
+<TabItem value="unquoted" label="Unquoted Paths">
+```yaml
+# Unquoted paths with forward slashes also work
+components:
+  terraform:
+    base_path: C:/Users/username/projects/components/terraform
+```
+</TabItem>
+</Tabs>
+
+#### Incorrect Windows Path Format
+
+```yaml
+# ❌ WRONG: Single backslashes get interpreted as escape sequences
+components:
+  terraform:
+    base_path: "C:\Users\username\projects\components\terraform"
+    # This becomes: C:Usersusernameprojectscomponentsterraform (invalid)
+```
+
+:::tip Best Practice
+Use forward slashes (`/`) for all paths in `atmos.yaml`. They work correctly on all operating systems including Windows, Linux, and macOS.
+:::
 
 ## Settings
 
@@ -288,7 +362,70 @@ The `settings` section configures Atmos global settings.
 
   <dt>`settings.inject_github_token`</dt>
   <dd>
-    Adds the `GITHUB_TOKEN` as a Bearer token for GitHub API requests, enabling authentication for private repositories and increased rate limits. If `ATMOS_GITHUB_TOKEN` is set, it takes precedence, overriding this behavior.
+    Enables automatic GitHub token injection when vendoring from private GitHub repositories. Defaults to `true`.
+
+    When enabled, Atmos automatically injects authentication credentials from `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variables. This eliminates the need to embed credentials in vendor URLs.
+
+    Set to `false` to disable automatic GitHub token injection.
+  </dd>
+
+  <dt>`settings.inject_gitlab_token`</dt>
+  <dd>
+    Enables automatic GitLab token injection when vendoring from private GitLab repositories. Defaults to `false`.
+
+    When enabled, Atmos automatically injects authentication credentials from `ATMOS_GITLAB_TOKEN` or `GITLAB_TOKEN` environment variables.
+
+    Set to `true` to enable automatic GitLab token injection:
+    ```yaml
+    settings:
+      inject_gitlab_token: true
+    ```
+  </dd>
+
+  <dt>`settings.inject_bitbucket_token`</dt>
+  <dd>
+    Enables automatic Bitbucket token injection when vendoring from private Bitbucket repositories. Defaults to `false`.
+
+    When enabled, Atmos automatically injects authentication credentials from `ATMOS_BITBUCKET_TOKEN` or `BITBUCKET_TOKEN` environment variables.
+
+    Set to `true` to enable automatic Bitbucket token injection:
+    ```yaml
+    settings:
+      inject_bitbucket_token: true
+    ```
+
+    For Bitbucket, you can also configure a custom username via `bitbucket_username` setting. If not specified, defaults to `x-token-auth`.
+  </dd>
+
+  <dt>`settings.github_username`</dt>
+  <dd>
+    Specifies the GitHub username for OCI registry authentication to GitHub Container Registry (ghcr.io).
+
+    When pulling artifacts from ghcr.io using `oci://ghcr.io/...` sources, Atmos requires a GitHub username along with the token. The username can be configured via:
+
+    - `github_username` setting in `atmos.yaml`
+    - `ATMOS_GITHUB_USERNAME` environment variable (highest precedence)
+    - `GITHUB_ACTOR` environment variable (automatically set in GitHub Actions)
+    - `GITHUB_USERNAME` environment variable
+
+    **Configuration example:**
+    ```yaml
+    settings:
+      github_username: "myusername"
+    ```
+
+    **GitHub Actions usage:**
+    ```yaml
+    # In GitHub Actions, GITHUB_ACTOR is automatically available
+    # No additional configuration needed
+    - name: Pull from GHCR
+      run: atmos vendor pull -c my-component
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # GITHUB_ACTOR is automatically set by GitHub Actions
+    ```
+
+    **Note:** Unlike Git repository authentication (which uses `x-access-token` as username), GitHub Container Registry requires your actual GitHub username. Without a username, authentication will fail even if `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` is set.
   </dd>
 
   <dt>`settings.docs` (Deprecated)</dt>
@@ -566,6 +703,84 @@ BASE: f7aa382aa8b3d48be8f06cfdb27aad344b89aff4 HEAD
 ````
 </Terminal>
 
+## Profiler
+
+Atmos includes built-in performance profiling capabilities using Go's pprof profiler. This allows you to analyze CPU usage, memory allocations, goroutines, and other performance metrics when running Atmos commands.
+
+The profiler is configured in the `profiler` section:
+
+<File title="atmos.yaml">
+```yaml
+profiler:
+  # Enable or disable the pprof profiling server
+  enabled: false
+  # Host to bind the profiling server to (default: localhost)
+  host: "localhost"
+  # Port to run the profiling server on (default: 6060)
+  port: 6060
+```
+</File>
+
+<dl>
+  <dt>`profiler.enabled`</dt>
+  <dd>
+    Enable or disable the pprof profiling server. When enabled, Atmos will start an HTTP server that serves pprof endpoints for performance analysis. Can also be set using the `--profiler-enabled` command-line flag.
+  </dd>
+
+  <dt>`profiler.host`</dt>
+  <dd>
+    The host address to bind the profiling server to. Defaults to `localhost` for security. Can also be set using the `--profiler-host` command-line flag.
+  </dd>
+
+  <dt>`profiler.port`</dt>
+  <dd>
+    The port number for the profiling server. Defaults to `6060` (the standard pprof port). Can also be set using the `--profiler-port` command-line flag.
+  </dd>
+</dl>
+
+### Using the Profiler
+
+When the profiler is enabled, Atmos will start a pprof server and display the URL when any command is run:
+
+<Terminal title="atmos terraform plan vpc -s plat-ue2-dev --profiler-enabled">
+```console
+pprof profiler available at: http://localhost:6060/debug/pprof/
+Executing 'terraform plan' command...
+```
+</Terminal>
+
+The profiler provides several endpoints for different types of analysis:
+
+- **CPU Profile**: `http://localhost:6060/debug/pprof/profile` - 30-second CPU profile
+- **Memory Profile**: `http://localhost:6060/debug/pprof/heap` - Memory heap profile
+- **Goroutines**: `http://localhost:6060/debug/pprof/goroutine` - Stack traces of all current goroutines
+- **Web Interface**: `http://localhost:6060/debug/pprof/` - Interactive web interface
+
+### Analyzing Performance Data
+
+You can use Go's pprof tool to analyze the profiling data:
+
+<Terminal title="Analyzing CPU profile">
+```console
+# Capture and analyze CPU profile
+go tool pprof http://localhost:6060/debug/pprof/profile
+
+# Capture and analyze memory profile
+go tool pprof http://localhost:6060/debug/pprof/heap
+
+# Generate a web-based visualization
+go tool pprof -http=:8080 http://localhost:6060/debug/pprof/profile
+```
+</Terminal>
+
+### Security Considerations
+
+:::warning Security Notice
+The profiler exposes detailed runtime information about your Atmos process. Only enable it when needed for debugging or performance analysis, and ensure the host/port are not accessible from untrusted networks.
+:::
+
+By default, the profiler binds to `localhost` only, which prevents external access. If you need to access the profiler from another machine, make sure to use appropriate network security measures.
+
 ## Aliases
 
 CLI command aliases are configured in the `aliases` section.
@@ -629,7 +844,7 @@ Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifes
 functions and data sources:
 
  - [Go `text/template` functions](https://pkg.go.dev/text/template#hdr-Functions)
- - [Atmos Template Functions](/core-concepts/stacks/templates/functions)
+ - [Atmos Template Functions](/functions/template)
  - [Sprig Functions](https://masterminds.github.io/sprig/)
  - [Gomplate Functions](https://docs.gomplate.ca/functions/)
  - [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
@@ -769,49 +984,18 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | ATMOS_SCHEMAS_ATMOS_MANIFEST                          | schemas.atmos.manifest                          | Path to JSON Schema to validate Atmos stack manifests. For more details, refer to [Atmos Manifest JSON Schema](/cli/schemas)                                                                                                                                        |
 | ATMOS_LOGS_FILE                                       | logs.file                                       | The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`). If omitted, `/dev/stdout` will be used                                                                   |
 | ATMOS_LOGS_LEVEL                                      | logs.level                                      | Logs level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log any messages (note that this does not prevent other tools like Terraform from logging)                                        |
+| ATMOS_PROFILER_ENABLED                                | profiler.enabled                                | Enable or disable the pprof HTTP profiling server. When enabled, starts an HTTP server for interactive profiling                                                                                                                                                   |
+| ATMOS_PROFILER_HOST                                   | profiler.host                                   | Host address for the profiling server. Default: `localhost`. Use `0.0.0.0` to allow external connections (security consideration)                                                                                                                                  |
+| ATMOS_PROFILER_PORT                                   | profiler.port                                   | Port for the profiling server. Default: `6060`                                                                                                                                                                                                                      |
+| ATMOS_PROFILE_FILE                                    | profiler.file                                   | Write profiling data to the specified file (enables profiling automatically). When specified, enables file-based profiling instead of server-based                                                                                                                |
+| ATMOS_PROFILE_TYPE                                    | profiler.profile_type                           | Type of profile to collect when using `ATMOS_PROFILE_FILE`. Options: `cpu`, `heap`, `allocs`, `goroutine`, `block`, `mutex`, `threadcreate`, `trace`. Default: `cpu`                                                                                              |
 | ATMOS_SETTINGS_LIST_MERGE_STRATEGY                    | settings.list_merge_strategy                    | Specifies how lists are merged in Atmos stack manifests. The following strategies are supported: `replace`, `append`, `merge`                                                                                                                                       |
 | ATMOS_VERSION_CHECK_ENABLED                           | version.check.enabled                           | Enable/disable Atmos version checks for updates to the newest release                                                                                                                                                                                               |
 | ATMOS_GITHUB_TOKEN                                    | N/A                                             | Bearer token for GitHub API requests, enabling authentication for private repositories and higher rate limits                                                                                                                                                       |
+| ATMOS_GITHUB_USERNAME                                 | settings.github_username                        | GitHub username for OCI registry authentication to ghcr.io. Falls back to GITHUB_ACTOR (GitHub Actions) or GITHUB_USERNAME if not set. Required when pulling from GitHub Container Registry                                                                        |
 | ATMOS_BITBUCKET_TOKEN                                 | N/A                                             | App password for Bitbucket API requests is set to avoid rate limits. Unauthenticated Requests are limited to 60 requests per hour across all API resources.                                                                                                         |
 | ATMOS_BITBUCKET_USERNAME                              | N/A                                             | Username for Bitbucket authentication. Takes precedence over BITBUCKET_USERNAME.                                                                                                                                                                                    |
 | ATMOS_GITLAB_TOKEN                                    | N/A                                             | Personal Access Token (PAT) for GitLab authentication. Unauthenticated users are limited to 6 requests per minute per IP address for certain endpoints, while authenticated users have higher thresholds.                                                           |
-| Variable                                              | YAML Path                                       | Description                                                                                                                                                                                                                  |
-|:------------------------------------------------------|:------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| ATMOS_CLI_CONFIG_PATH                                 | N/A                                             | Where to find `atmos.yaml`. Path to a folder where `atmos.yaml` CLI config file is located (e.g. `/config`)                                                                                                                  |
-| ATMOS_BASE_PATH                                       | base_path                                       | Base path to `components` and `stacks` folders                                                                                                                                                                               |
-| ATMOS_VENDOR_BASE_PATH                                | vendor.base_path                                | Path to vendor configuration file or directory containing vendor files. If a directory is specified, all .yaml files in the directory will be processed in lexicographical order. Supports both absolute and relative paths. |
-| ATMOS_COMPONENTS_TERRAFORM_COMMAND                    | components.terraform.command                    | The executable to be called by Atmos when running Terraform commands                                                                                                                                                       |
-| ATMOS_COMPONENTS_TERRAFORM_BASE_PATH                  | components.terraform.base_path                  | Base path to Terraform components                                                                                                                                                                                            |
-| ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE         | components.terraform.apply_auto_approve         | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                                                                                                     |
-| ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT            | components.terraform.deploy_run_init            | Run `terraform init` when executing `atmos terraform deploy` command                                                                                                                                                         |
-| ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE       | components.terraform.init_run_reconfigure       | Run `terraform init -reconfigure` when executing `atmos terraform` commands                                                                                                                                                  |
-| ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS             | components.terraform.init.pass_vars             | Pass the generated varfile to `terraform init` using the `--var-file` flag. [OpenTofu supports passing a varfile to `init`](https://opentofu.org/docs/cli/commands/init/#general-options) to dynamically configure backends  |
-| ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE | components.terraform.auto_generate_backend_file | If set to `true`, auto-generate Terraform backend config files when executing `atmos terraform` commands                                                                                                                     |
-| ATMOS_COMPONENTS_HELMFILE_COMMAND                     | components.helmfile.command                     | The executable to be called by Atmos when running Helmfile commands                                                                                                                                                        |
-| ATMOS_COMPONENTS_HELMFILE_BASE_PATH                   | components.helmfile.base_path                   | Path to helmfile components                                                                                                                                                                                                  |
-| ATMOS_COMPONENTS_HELMFILE_USE_EKS                     | components.helmfile.use_eks                     | If set to `true`, download `kubeconfig` from EKS by running `aws eks update-kubeconfig` command before executing `atmos helmfile` commands                                                                                   |
-| ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH             | components.helmfile.kubeconfig_path             | Path to write the `kubeconfig` file when executing `aws eks update-kubeconfig` command                                                                                                                                       |
-| ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN    | components.helmfile.helm_aws_profile_pattern    | Pattern for AWS profile to use when executing `atmos helmfile` commands                                                                                                                                                      |
-| ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN        | components.helmfile.cluster_name_pattern        | Pattern for EKS cluster name to use when executing `atmos helmfile` commands                                                                                                                                                 |
-| ATMOS_COMPONENTS_PACKER_COMMAND                       | components.packer.command                       | The executable to be called by Atmos when running Packer commands                                                                                                                                                        |
-| ATMOS_COMPONENTS_PACKER_BASE_PATH                     | components.packer.base_path                     | Path to Packer components                                                                                                                                                                                                  |
-| ATMOS_STACKS_BASE_PATH                                | stacks.base_path                                | Base path to Atmos stack manifests                                                                                                                                                                                           |
-| ATMOS_STACKS_INCLUDED_PATHS                           | stacks.included_paths                           | List of paths to use as top-level stack manifests                                                                                                                                                                            |
-| ATMOS_STACKS_EXCLUDED_PATHS                           | stacks.excluded_paths                           | List of paths to not consider as top-level stacks                                                                                                                                                                            |
-| ATMOS_STACKS_NAME_PATTERN                             | stacks.name_pattern                             | Stack name pattern to use as Atmos stack names                                                                                                                                                                               |
-| ATMOS_STACKS_NAME_TEMPLATE                            | stacks.name_template                            | Stack name Golang template to use as Atmos stack names                                                                                                                                                                       |
-| ATMOS_WORKFLOWS_BASE_PATH                             | workflows.base_path                             | Base path to Atmos workflows                                                                                                                                                                                                 |
-| ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH                    | schemas.jsonschema.base_path                    | Base path to JSON schemas for component validation                                                                                                                                                                           |
-| ATMOS_SCHEMAS_OPA_BASE_PATH                           | schemas.opa.base_path                           | Base path to OPA policies for component validation                                                                                                                                                                           |
-| ATMOS_SCHEMAS_ATMOS_MANIFEST                          | schemas.atmos.manifest                          | Path to JSON Schema to validate Atmos stack manifests. For more details, refer to [Atmos Manifest JSON Schema](/cli/schemas)                                                                                                 |
-| ATMOS_LOGS_FILE                                       | logs.file                                       | The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`). If omitted, `/dev/stdout` will be used                            |
-| ATMOS_LOGS_LEVEL                                      | logs.level                                      | Logs level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log any messages (note that this does not prevent other tools like Terraform from logging) |
-| ATMOS_SETTINGS_LIST_MERGE_STRATEGY                    | settings.list_merge_strategy                    | Specifies how lists are merged in Atmos stack manifests. The following strategies are supported: `replace`, `append`, `merge`                                                                                                |
-| ATMOS_VERSION_CHECK_ENABLED                           | version.check.enabled                           | Enable/disable Atmos version checks for updates to the newest release                                                                                                                                                        |
-| ATMOS_GITHUB_TOKEN                                    | N/A                                             | Bearer token for GitHub API requests, enabling authentication for private repositories and higher rate limits                                                                                                                |
-| ATMOS_BITBUCKET_TOKEN                                 | N/A                                             | App password for Bitbucket API requests is set to avoid rate limits. Unauthenticated Requests are limited to 60 requests per hour across all API resources.                                                                  |
-| ATMOS_BITBUCKET_USERNAME                              | N/A                                             | Username for Bitbucket authentication. Takes precedence over BITBUCKET_USERNAME.                                                                                                                                             |
-| ATMOS_GITLAB_TOKEN                                    | N/A                                             | Personal Access Token (PAT) for GitLab authentication. Unauthenticated users are limited to 6 requests per minute per IP address for certain endpoints, while authenticated users have higher thresholds.                    |
 
 ### Context
 

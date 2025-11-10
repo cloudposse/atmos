@@ -53,13 +53,13 @@ and the Atmos YAML functions `!terraform.state` and `!terraform.output` in your 
 The `atmos.Component` template function allows reading any Atmos section or any attribute (not just outputs) from a section
 of an Atmos component in a stack.
 
-For more details on `atmos.Component` function, refer to [`atmos.Component`](/core-concepts/stacks/templates/functions/atmos.Component).
+For more details on `atmos.Component` function, refer to [`atmos.Component`](/functions/template/atmos.Component).
 
 The `!terraform.state` and `!terraform.output` Atmos YAML functions allow reading any output (remote state) of an Atmos component in a stack.
 
-For more details on `!terraform.state` YAML function, refer to [`!terraform.state`](/core-concepts/stacks/yaml-functions/terraform.state).
+For more details on `!terraform.state` YAML function, refer to [`!terraform.state`](/functions/yaml/terraform.state).
 
-For more details on `!terraform.output` YAML function, refer to [`!terraform.output`](/core-concepts/stacks/yaml-functions/terraform.output).
+For more details on `!terraform.output` YAML function, refer to [`!terraform.output`](/functions/yaml/terraform.output).
 :::
 
 
@@ -356,13 +356,13 @@ For this to work for both the `atmos` CLI and the Terraform provider, we recomme
 
 <ActionCard title="Use Remote State in Stack Configurations">
 Atmos supports alternative ways to read the outputs (remote state) of components directly in Atmos stack manifests by
-using the [`!terraform.output`](/core-concepts/stacks/yaml-functions/terraform.output) Atmos YAML function
-and the [`atmos.Component`](/core-concepts/stacks/templates/functions/atmos.Component) Go template function instead of using
+using the [`!terraform.output`](/functions/yaml/terraform.output) Atmos YAML function
+and the [`atmos.Component`](/functions/template/atmos.Component) Go template function instead of using
 the [`remote-state`](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) module
 and configuring Terraform/OpenTofu components to use the module.
 
-<PrimaryCTA to="/core-concepts/stacks/yaml-functions/terraform.output">Learn how to use '!terraform.output' YAML function</PrimaryCTA>
+<PrimaryCTA to="/functions/yaml/terraform.output">Learn how to use '!terraform.output' YAML function</PrimaryCTA>
 
-<PrimaryCTA to="/core-concepts/stacks/templates/functions/atmos.Component">Learn how to use 'atmos.Component' template function</PrimaryCTA>
+<PrimaryCTA to="/functions/template/atmos.Component">Learn how to use 'atmos.Component' template function</PrimaryCTA>
 
 </ActionCard>

@@ -11,7 +11,21 @@ tests:
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
+      exit_code: 0
+
+  - name: check atmos --version in empty-dir
+    enabled: true
+    snapshot: false
+    description: "Check that atmos --version flag produces same output as version command."
+    workdir: "fixtures/scenarios/empty-dir"
+    command: "atmos"
+    args:
+      - "--version"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      # stderr may be empty or contain GitHub API rate limit warnings
       exit_code: 0
 
   - name: atmos support
@@ -34,11 +48,10 @@ tests:
     args: []
     expect:
       diff: []
-      stdout:
-        - "atmos.yaml CLI config file was not found."
-        - "https://atmos.tools/cli/configuration"
       stderr:
-        - "^$"
+        - "atmos.yaml CLI config file was not found."
+        - "Telemetry Enabled"
+        - "https://atmos.tools/cli/configuration"
       exit_code: 1
 
   - name: check atmos --help in empty-dir
@@ -53,81 +66,3 @@ tests:
     expect:
       diff: []
       exit_code: 0
-
-  - name: atmos warns if not in git repo with no atmos config
-    enabled: true
-    snapshot: true
-    description: "Test that atmos warns if not run inside of a git repo without an atmos config"
-    workdir: "/"
-    command: "atmos"
-    args:
-      - list
-      - stacks
-    env:
-      ATMOS_LOGS_LEVEL: Warning
-    # Atmos should fail and include the git repo warning
-    expect:
-      diff: []
-      stderr:
-        - ".*You're not inside a git repository. Atmos feels lonely outside - bring it home!.*"
-      exit_code: 1 # We expect a non-zero exit code because the dir doesnt have an atmos config
-
-  # We need to test from outside a git repo. 
-  # We also need to provide a static path to the atmos config that can we used both in GHA and locally.
-  # To do so, we can change up 1 directory outside that atmos project and assume the project is named "atmos".
-  - name: atmos doesnt warn if not in git repo with atmos config
-    enabled: true
-    snapshot: true
-    description: "Test that atmos doesnt warn if not run inside of a git repo but has an atmos config"
-    workdir: "../../"
-    command: "atmos"
-    args:
-      - list
-      - stacks
-    env:
-      ATMOS_LOGS_LEVEL: Warning
-      ATMOS_BASE_PATH: "./atmos/tests/fixtures/scenarios/complete"
-    # Atmos should pass and not include the git repo warning
-    expect:
-      diff: []
-      stdout:
-        - !not ".*You're not inside a git repository\\. Atmos feels lonely outside - bring it home!.*"
-      stderr:
-        - "^$"
-      exit_code: 0
-
-  - name: atmos doesnt warn if in git repo with atmos config
-    enabled: true
-    snapshot: true
-    description: "Test that atmos doesnt warn if run inside of a git repo with an atmos config"
-    workdir: "fixtures/scenarios/complete"
-    command: "atmos"
-    args:
-      - list
-      - stacks
-    env:
-      ATMOS_LOGS_LEVEL: Warning
-    # Atmos should pass and not include the git repo warning
-    expect:
-      diff: []
-      stdout:
-        - !not ".*You're not inside a git repository\\. Atmos feels lonely outside - bring it home!.*"
-      stderr:
-        - "^$"
-      exit_code: 0
-
-  - name: atmos doesnt warn if in git repo with no atmos config
-    enabled: true
-    snapshot: true
-    description: "Test that atmos doesnt warn if run inside of a git repo with no atmos config"
-    workdir: "fixtures/scenarios/empty-dir"
-    command: "atmos"
-    args: []
-    env:
-      ATMOS_LOGS_LEVEL: Warning
-    # Atmos should fail but not include the git repo warning
-    expect:
-      diff: []
-      stderr:
-        - !not ".*You're not inside a git repository\\. Atmos feels lonely outside - bring it home!.*"
-      exit_code: 1

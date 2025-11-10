@@ -60,7 +60,7 @@ configurations.
 
 - The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
   archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
-  [OCI registries](https://opencontainers.org).
+  [OCI registries](https://opencontainers.org). See [Vendor URL Syntax](/core-concepts/vendor/url-syntax) for complete documentation on supported URL formats and authentication.
 
 - The `targets` in the `sources` support absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
   are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths
@@ -258,9 +258,19 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
 
 ## Flags
 
-| Flag          | Description                                                                                                  | Alias | Required |
-|:--------------|:-------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--component` | Atmos component to pull                                                                                      | `-c`  | no       |
-| `--tags`      | Only vendor the components that have the specified tags.<br/>`tags` is a comma-separated values (CSV) string |       | no       |
-| `--type`      | Component type: `terraform` or `helmfile` (`terraform` is default)                                           | `-t`  | no       |
-| `--dry-run`   | Dry run                                                                                                      |       | no       |
+<dl>
+  <dt>`--component` / `-c` <em>(optional)</em></dt>
+  <dd>Atmos component to pull.</dd>
+
+  <dt>`--everything` <em>(optional)</em></dt>
+  <dd>Vendor all components.</dd>
+
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Only vendor the components that have the specified tags.<br/>`tags` is a comma-separated values (CSV) string.</dd>
+
+  <dt>`--type` / `-t` <em>(optional)</em></dt>
+  <dd>Component type: `terraform` or `helmfile` (`terraform` is default).</dd>
+
+  <dt>`--dry-run` <em>(optional)</em></dt>
+  <dd>Dry run.</dd>
+</dl>

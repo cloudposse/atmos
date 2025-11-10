@@ -1,0 +1,192 @@
+name: 'PR Size Labeler'
+description: 'Label PRs based on the number of lines changed'
+inputs:
+  xs_label:
+    description: 'Label for extra small PRs'
+    required: false
+    default: 'size/xs'
+  xs_max_size:
+    description: 'Maximum number of lines changed for XS'
+    required: false
+    default: '10'
+  s_label:
+    description: 'Label for small PRs'
+    required: false
+    default: 'size/s'
+  s_max_size:
+    description: 'Maximum number of lines changed for S'
+    required: false
+    default: '100'
+  m_label:
+    description: 'Label for medium PRs'
+    required: false
+    default: 'size/m'
+  m_max_size:
+    description: 'Maximum number of lines changed for M'
+    required: false
+    default: '500'
+  l_label:
+    description: 'Label for large PRs'
+    required: false
+    default: 'size/l'
+  l_max_size:
+    description: 'Maximum number of lines changed for L'
+    required: false
+    default: '1000'
+  xl_label:
+    description: 'Label for extra large PRs'
+    required: false
+    default: 'size/xl'
+  fail_if_xl:
+    description: 'Fail the action if the PR is XL'
+    required: false
+    default: 'false'
+  files_to_ignore:
+    description: 'Files to ignore (newline or space separated)'
+    required: false
+    default: ''
+  ignore_line_deletions:
+    description: 'Ignore line deletions when calculating size'
+    required: false
+    default: 'false'
+  ignore_file_deletions:
+    description: 'Ignore file deletions when calculating size'
+    required: false
+    default: 'false'
+runs:
+  using: 'composite'
+  steps:
+    - name: Label PR based on size
+      uses: actions/github-script@v8
+      with:
+        github-token: ${{ github.token }}
+        script: |
+          const prNumber = context.issue.number;
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+
+          // Get configuration values
+          const xs_label = '${{ inputs.xs_label }}';
+          const xs_max_size = parseInt('${{ inputs.xs_max_size }}');
+          const s_label = '${{ inputs.s_label }}';
+          const s_max_size = parseInt('${{ inputs.s_max_size }}');
+          const m_label = '${{ inputs.m_label }}';
+          const m_max_size = parseInt('${{ inputs.m_max_size }}');
+          const l_label = '${{ inputs.l_label }}';
+          const l_max_size = parseInt('${{ inputs.l_max_size }}');
+          const xl_label = '${{ inputs.xl_label }}';
+          const fail_if_xl = '${{ inputs.fail_if_xl }}' === 'true';
+          const ignore_line_deletions = '${{ inputs.ignore_line_deletions }}' === 'true';
+          const ignore_file_deletions = '${{ inputs.ignore_file_deletions }}' === 'true';
+
+          // Parse files to ignore
+          const files_to_ignore = `${{ inputs.files_to_ignore }}`.split(/[\s\n]+/).filter(f => f);
+
+          // Get all PR files using pagination
+          const files = await github.paginate(github.rest.pulls.listFiles, {
+            owner,
+            repo,
+            pull_number: prNumber,
+            per_page: 100
+          });
+
+          console.log(`Processing ${files.length} files in PR`);
+
+          // Calculate total changes
+          let totalChanges = 0;
+
+          for (const file of files) {
+            // Check if file should be ignored
+            const filename = file.filename;
+            let shouldIgnore = false;
+
+            for (const pattern of files_to_ignore) {
+              // Simple pattern matching (could be enhanced with glob patterns)
+              if (filename === pattern || filename.endsWith(pattern)) {
+                shouldIgnore = true;
+                break;
+              }
+            }
+
+            if (shouldIgnore) {
+              console.log(`Ignoring file: ${filename}`);
+              continue;
+            }
+
+            // Check if file was deleted and should be ignored
+            if (ignore_file_deletions && file.status === 'removed') {
+              console.log(`Ignoring deleted file: ${filename}`);
+              continue;
+            }
+
+            // Calculate changes for this file
+            let fileChanges = file.additions;
+            if (!ignore_line_deletions) {
+              fileChanges += file.deletions;
+            }
+
+            totalChanges += fileChanges;
+          }
+
+          console.log(`Total changes: ${totalChanges}`);
+
+          // Determine the appropriate label
+          let newLabel;
+          if (totalChanges <= xs_max_size) {
+            newLabel = xs_label;
+          } else if (totalChanges <= s_max_size) {
+            newLabel = s_label;
+          } else if (totalChanges <= m_max_size) {
+            newLabel = m_label;
+          } else if (totalChanges <= l_max_size) {
+            newLabel = l_label;
+          } else {
+            newLabel = xl_label;
+          }
+
+          console.log(`Assigning label: ${newLabel}`);
+
+          // Get all size labels
+          const allSizeLabels = [xs_label, s_label, m_label, l_label, xl_label];
+
+          // Get current labels on the PR
+          const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
+            owner,
+            repo,
+            issue_number: prNumber
+          });
+
+          const currentLabelNames = currentLabels.map(l => l.name);
+
+          // Remove old size labels
+          for (const label of allSizeLabels) {
+            if (label !== newLabel && currentLabelNames.includes(label)) {
+              console.log(`Removing label: ${label}`);
+              try {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  name: label
+                });
+              } catch (error) {
+                console.log(`Failed to remove label ${label}: ${error.message}`);
+              }
+            }
+          }
+
+          // Add the new label
+          if (!currentLabelNames.includes(newLabel)) {
+            console.log(`Adding label: ${newLabel}`);
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: prNumber,
+              labels: [newLabel]
+            });
+          }
+
+          // Fail if XL and configured to do so
+          if (newLabel === xl_label && fail_if_xl) {
+            core.setFailed(`PR is too large (${totalChanges} changes). Please consider breaking it up into smaller PRs.`);
+          }

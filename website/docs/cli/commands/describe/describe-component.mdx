@@ -24,6 +24,10 @@ Execute the `atmos describe component` command like this:
 atmos describe component <component> -s <stack>
 ```
 
+:::info YAML Functions and Authentication
+By default, `atmos describe component` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during component processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
+:::
+
 :::tip
 Run `atmos describe component --help` to see all the available options
 :::
@@ -58,26 +62,83 @@ atmos describe component vpc -s plat-ue2-prod --query .vars.tags
 atmos describe component vpc -s plat-ue2-prod -q .settings
 
 atmos describe component vpc -s plat-ue2-prod --pager=more
+
+atmos describe component vpc -s tenant1-ue2-dev --provenance
+
+# Authenticate before describing (when YAML functions require credentials)
+atmos describe component vpc -s tenant1-ue2-dev --identity my-aws-identity
+
+atmos describe component vpc -s tenant1-ue2-dev --identity # Interactive selection
+
+# Disable authentication (use AWS SDK defaults)
+atmos describe component vpc -s tenant1-ue2-dev --identity=false
+
+atmos describe component vpc -s tenant1-ue2-dev -i my-aws-identity
 ```
 
 ## Arguments
 
-| Argument    | Description     | Required |
-|:------------|:----------------|:---------|
-| `component` | Atmos component | yes      |
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>Atmos component.</dd>
+</dl>
 
 ## Flags
 
-| Flag                  | Description                                                                                                                                                                                                                                                                                                                                                                                 | Alias | Required |
-|:----------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--stack`             | Atmos stack                                                                                                                                                                                                                                                                                                                                                                                 | `-s`  | yes      |
-| `--format`            | Output format: `yaml` or `json` (`yaml` is default)                                                                                                                                                                                                                                                                                                                                         | `-f`  | no       |
-| `--file`              | If specified, write the result to the file                                                                                                                                                                                                                                                                                                                                                  |       | no       |
-| `--process-templates` | Enable/disable processing of all `Go` templates<br/>in Atmos stacks manifests when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the templates are processed.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe component <c> -s <stack> --process-templates=false`                                     |       | no       |
-| `--process-functions` | Enable/disable processing of all Atmos YAML functions<br/>in Atmos stacks manifests when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the functions are processed.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe component <c> -s <stack> --process-functions=false`                               |       | no       |
-| `--skip`              | Skip processing a specific Atmos YAML function<br/>in Atmos stacks manifests when executing the command.<br/>To specify more than one function,<br/>use multiple `--skip` flags, or separate the functions with a comma:<br/>`atmos describe component <c> -s <stack> --skip=terraform.output --skip=include`<br/>`atmos describe component <c> -s <stack> --skip=terraform.output,include` |       | no       |
-| `--query`             | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe component <c> -s <stack> --query .vars.tags`<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq                                                                                                                                                                                          | `-q`  | no       |
-| `--pager`             | Disable/Enable the paging user experience                                                                                                                                                                                                                                                                                                                                                   |       |          |
+<dl>
+  <dt>`--stack` / `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--format` / `-f` <em>(optional)</em></dt>
+  <dd>Output format: `yaml` or `json` (`yaml` is default).</dd>
+
+  <dt>`--file` <em>(optional)</em></dt>
+  <dd>If specified, write the result to the file.</dd>
+
+  <dt>`--process-templates` <em>(optional)</em></dt>
+  <dd>Enable/disable processing of all `Go` templates<br/>in Atmos stacks manifests when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the templates are processed.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe component <c> -s <stack> --process-templates=false`.</dd>
+
+  <dt>`--process-functions` <em>(optional)</em></dt>
+  <dd>Enable/disable processing of all Atmos YAML functions<br/>in Atmos stacks manifests when executing the command.<br/>Use the flag to see the component configuration<br/>before and after the functions are processed.<br/>If the flag is not provided, it's set to `true` by default.<br/>`atmos describe component <c> -s <stack> --process-functions=false`.</dd>
+
+  <dt>`--skip` <em>(optional)</em></dt>
+  <dd>Skip processing a specific Atmos YAML function<br/>in Atmos stacks manifests when executing the command.<br/>To specify more than one function,<br/>use multiple `--skip` flags, or separate the functions with a comma:<br/>`atmos describe component <c> -s <stack> --skip=terraform.output --skip=include`<br/>`atmos describe component <c> -s <stack> --skip=terraform.output,include`.</dd>
+
+  <dt>`--query` / `-q` <em>(optional)</em></dt>
+  <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe component <c> -s <stack> --query .vars.tags`<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
+
+  <dt>`--provenance` <em>(optional)</em></dt>
+  <dd>
+    Enable provenance tracking to show where configuration values originated.
+    <br/><br/>
+    <strong>YAML format on TTY:</strong>
+    <ul>
+      <li>Inline comments with file path, line number, and column</li>
+      <li>Symbol-based inheritance indicators: ● (defined/overridden), ○ (inherited), ∴ (computed/templated)</li>
+      <li>Depth tracking with <code>[N]</code> notation: <code>[1]</code> for parent stack, <code>[2+]</code> for deeper imports</li>
+      <li>Color-coded depth indicators: cyan (depth 1), green (depth 2), orange (depth 3), red (depth 4+)</li>
+      <li>Two-column side-by-side layout (Configuration │ Provenance)</li>
+    </ul>
+    <strong>YAML format non-TTY (pipes):</strong>
+    <ul>
+      <li>Inline comments without color codes</li>
+      <li>Single-column layout (preserves valid YAML)</li>
+    </ul>
+    <strong>JSON format:</strong>
+    <ul>
+      <li>Provenance embedded as <code>__atmos_provenance</code> metadata fields</li>
+      <li>Structure: <code>{'{"file": "path", "line": N, "column": N, "type": "import|inline|override|computed", "depth": N}'}</code></li>
+      <li>No inline comments (JSON doesn't support comments)</li>
+    </ul>
+    <code>atmos describe component &lt;c&gt; -s &lt;stack&gt; --provenance</code>
+  </dd>
+
+  <dt>`--pager` <em>(optional)</em></dt>
+  <dd>Disable/Enable the paging user experience.</dd>
+
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before describing the component.<br/>This is required when YAML template functions (e.g., `!terraform.state`, `!terraform.output`)<br/>need to access remote resources requiring authentication.<br/>Use without a value for interactive identity selection:<br/>`atmos describe component <c> -s <stack> --identity` (interactive)<br/>`atmos describe component <c> -s <stack> --identity my-aws-identity` (specific identity)<br/><br/>For more details, refer to [Authentication](/cli/commands/auth/usage).</dd>
+</dl>
 
 ## Output
 

@@ -64,7 +64,13 @@ jobs:
 
   lint-golangci:
     name: "Lint (golangci)"
-    runs-on: ubuntu-latest
+    runs-on:
+      - runs-on=${{github.run_id}}
+      - runner=terraform
+      - tag=atmos
+      - extras=s3-cache
+      - private=false
+
     if: github.event_name == 'pull_request'
     permissions:
       # Required: allow read access to the content for analysis.
@@ -81,20 +87,113 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        id: golangci
+      # golangci-lint-action@v4.0.0+ requires explicit Go setup
+      # Without this step, the action may fail intermittently with
+      # "could not load export data" errors due to cache corruption
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          version: v2.4.0
-          only-new-issues: true # Shows only issues introduced in the PR
-          # Not all line numbers in diff may match the linter's line outputs
-          # See: https://github.com/golangci/golangci-lint/issues/4376#issuecomment-1938874827
-          # Always exit 0 so we upload the sarif file to CodeQL
+          go-version-file: go.mod
+          cache: true
+
+      # Pre-populate module cache to prevent goanalysis_metalinter failures.
+      # Without this, the linter may fail with "could not load export data" errors.
+      # See: https://github.com/golangci/golangci-lint/issues/5437
+      - name: Download modules
+        run: go mod download
+
+      # Install the golangci-lint v2 CLI tool (not the linters themselves).
+      # This tool is needed to run `golangci-lint custom` which builds a custom binary
+      # that includes both standard linters AND our custom module plugins.
+      - name: Install golangci-lint v2 for custom build
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
+
+      # Build a custom golangci-lint binary with our lintroller plugin compiled in.
+      #
+      # How this works:
+      # 1. `golangci-lint custom` reads .custom-gcl.yml
+      # 2. Clones golangci-lint repo and adds blank imports for each plugin
+      # 3. Builds a single binary (custom-gcl) containing:
+      #    - All standard golangci-lint linters (bodyclose, cyclop, etc.)
+      #    - All custom plugin linters (lintroller, etc.)
+      # 4. We copy it to /usr/local/bin/golangci-lint so the action uses it
+      #
+      # This approach allows multiple custom linters - just add them to .custom-gcl.yml
+      # and they'll all be compiled into the same custom-gcl binary.
+      - name: Build custom golangci-lint with lintroller plugin
+        run: |
+          set -e  # Exit on any error
+          # Ensure lintroller module is ready
+          cd tools/lintroller && go mod tidy && cd ../..
+
+          # Build custom golangci-lint with plugins
+          if ! golangci-lint custom; then
+            echo "Error: golangci-lint custom build failed" >&2
+            exit 1
+          fi
+
+          # Verify the custom binary was created and is executable
+          if [[ ! -f ./custom-gcl ]]; then
+            echo "Error: custom-gcl binary not found" >&2
+            exit 1
+          fi
+
+          if [[ ! -x ./custom-gcl ]]; then
+            echo "Error: custom-gcl binary is not executable" >&2
+            exit 1
+          fi
+
+          # Move the system binary out of the way and replace it with our custom one
+          # This ensures the action uses our custom binary with lintroller
+          if ! mv ~/go/bin/golangci-lint ~/go/bin/golangci-lint.system; then
+            echo "Error: failed to move system golangci-lint binary" >&2
+            exit 1
+          fi
+
+          if ! cp ./custom-gcl ~/go/bin/golangci-lint; then
+            echo "Error: failed to copy custom-gcl to ~/go/bin/golangci-lint" >&2
+            exit 1
+          fi
+
+          if ! chmod +x ~/go/bin/golangci-lint; then
+            echo "Error: failed to make ~/go/bin/golangci-lint executable" >&2
+            exit 1
+          fi
+
+          golangci-lint --version
+
+      # Run the golangci-lint action using our custom binary with plugins.
+      #
+      # Key settings:
+      # - install-mode: none - Tells the action to use the binary already in PATH
+      #                        (our custom-gcl that we just installed)
+      # - only-new-issues: true - Only report issues in changed code
+      # - SARIF output - For GitHub Advanced Security / CodeQL integration
+      # - issues-exit-code: 0 - Always exit 0 so we upload SARIF to CodeQL
+      #
+      # The action provides:
+      # - Inline PR annotations for linting issues
+      # - Caching for faster runs
+      # - GitHub UI integration
+      #
+      # Our custom binary includes lintroller, so violations of:
+      # - os.MkdirTemp in tests (should use t.TempDir)
+      # - os.Setenv in tests (should use t.Setenv)
+      # - t.Setenv in defer blocks (should use os.Setenv)
+      # will appear in the SARIF output and GitHub Security tab.
+      - name: Run golangci-lint with lintroller plugin
+        uses: golangci/golangci-lint-action@v8.0.0
+        with:
+          version: v2.5.0
+          install-mode: none
+          only-new-issues: true
           args: >
             --output.sarif.path=golangci-lint.sarif
             --issues-exit-code=0
 
       - name: Upload filtered SARIF results
+        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: golangci-lint.sarif
@@ -149,12 +248,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: PR Size Labeler
-        uses: codelytv/pr-size-labeler@v1.10.2
+        uses: ./.github/actions/pr-sizer
         with:
           xs_label: "size/xs"
           xs_max_size: "10"
@@ -166,7 +262,7 @@ jobs:
           l_max_size: "1000"
           xl_label: "size/xl"
           fail_if_xl: "false"
-          files_to_ignore: >
+          files_to_ignore: |
             package-lock.json
             yarn.lock
             go.sum

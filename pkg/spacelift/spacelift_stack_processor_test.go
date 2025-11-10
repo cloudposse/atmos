@@ -101,7 +101,15 @@ func TestSpaceliftStackProcessor(t *testing.T) {
 
 	yamlSpaceliftStacks, err := u.ConvertToYAML(spaceliftStacks)
 	assert.Nil(t, err)
-	t.Log(yamlSpaceliftStacks)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if yamlSpaceliftStacks != "" {
+				t.Logf("Spacelift stacks:\n%s", yamlSpaceliftStacks)
+			} else {
+				t.Logf("Spacelift stacks (raw): %+v", spaceliftStacks)
+			}
+		}
+	})
 }
 
 func TestLegacySpaceliftStackProcessor(t *testing.T) {
@@ -183,5 +191,13 @@ func TestLegacySpaceliftStackProcessor(t *testing.T) {
 
 	yamlSpaceliftStacks, err := u.ConvertToYAML(spaceliftStacks)
 	assert.Nil(t, err)
-	t.Log(yamlSpaceliftStacks)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if yamlSpaceliftStacks != "" {
+				t.Logf("Spacelift stacks:\n%s", yamlSpaceliftStacks)
+			} else {
+				t.Logf("Spacelift stacks (raw): %+v", spaceliftStacks)
+			}
+		}
+	})
 }

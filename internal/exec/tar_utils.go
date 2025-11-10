@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/charmbracelet/log" // Charmbracelet structured logger
+	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
 	"github.com/pkg/errors"
 )
 

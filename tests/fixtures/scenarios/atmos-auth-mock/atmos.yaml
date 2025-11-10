@@ -1,0 +1,54 @@
+base_path: "./"
+components:
+  terraform:
+    base_path: "../../components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+# Mock AWS authentication provider for testing purposes only.
+# This provider simulates AWS authentication without requiring real cloud credentials.
+# Used exclusively for integration testing of AWS-specific authentication features.
+auth:
+  providers:
+    mock-provider:
+      kind: mock-aws
+      config:
+        description: "Mock AWS provider for testing"
+
+  identities:
+    mock-identity:
+      kind: mock-aws
+      default: true
+      via:
+        provider: mock-provider
+      principal:
+        account:
+          id: "123456789012"
+
+    mock-identity-2:
+      kind: mock-aws
+      via:
+        provider: mock-provider
+      principal:
+        account:
+          id: "987654321098"
+
+logs:
+  level: Info
+
+commands:
+  - name: test-identity
+    description: Test custom command with identity
+    identity: mock-identity
+    steps:
+      - 'echo "Testing custom command with identity"'
+
+  - name: test-identity-multi
+    description: Test custom command with identity and multiple steps
+    identity: mock-identity-2
+    steps:
+      - 'echo "Step 1 with identity"'
+      - 'echo "Step 2 with identity"'

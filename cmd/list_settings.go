@@ -3,7 +3,7 @@ package cmd
 import (
 	"errors"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -124,7 +124,7 @@ func getStacksMapForSettings(processingFlags *fl.ProcessingFlags, componentFilte
 
 	// Execute describe stacks
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false,
-		processingFlags.Templates, processingFlags.Functions, false, nil)
+		processingFlags.Templates, processingFlags.Functions, false, nil, nil)
 	if err != nil {
 		return nil, &listerrors.DescribeStacksError{Cause: err}
 	}

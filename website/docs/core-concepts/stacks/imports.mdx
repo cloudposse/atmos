@@ -78,11 +78,45 @@ This means:
 - You don't need to explicitly specify template extensions - Atmos will find them automatically
 :::
 
+## Import Path Resolution
+
+Atmos supports two types of import paths:
+
+### Base-Relative Paths (Default)
+Most imports use paths relative to the `stacks.base_path` configured in `atmos.yaml`:
+- `catalog/vpc/defaults`
+- `mixins/region/us-east-2`
+- `orgs/acme/_defaults`
+
+These paths are resolved from the base stacks directory, regardless of where the importing file is located.
+
+### File-Relative Paths
+Imports starting with `.` or `..` are relative to the current file's directory:
+- `./_defaults` - imports from the same directory as the current file
+- `../shared/_defaults` - imports from a sibling `shared` directory
+
+This is useful when you want to import files that are co-located with the current configuration.
+
 ## Conventions
 
 We recommend placing all baseline "imports" in the `stacks/catalog` folder, however, they can exist anywhere.
 
 Use [mixins](/core-concepts/stacks/inheritance/mixins) for reusable snippets of configurations that alter the behavior of Stacks in some way.
+
+### The _defaults.yaml Pattern
+
+Many Atmos projects use `_defaults.yaml` as a naming convention for default configurations at each level of the hierarchy. This is purely a convention—Atmos has no special handling for these files. They must be explicitly imported like any other file.
+
+The underscore prefix ensures they:
+- Sort to the top of directory listings (lexicographic sorting)
+- Are visually distinct from actual stack configurations
+- Are excluded from stack discovery (via `excluded_paths` configuration)
+
+:::info
+The `_defaults.yaml` pattern is a common convention, not an Atmos feature. These files are only excluded from stack discovery because they match the pattern in `excluded_paths` configuration. They must always be explicitly imported to take effect.
+:::
+
+For a complete explanation of this pattern, see the [_defaults.yaml Design Pattern](/design-patterns/defaults-pattern) documentation.
 
 ## Imports Schema
 
@@ -104,12 +138,13 @@ For a list of paths to the imported files, just provide a list of strings like t
 
 ### Imports with Templates
 
-Sometimes you may want to import files that use Go templates. In this case, you can provide a list of objects with `context` that can be used to dynamically generate a stack configuration.
-
+Sometimes you may want to import files that use Go templates. Templates can be used with or without providing a `context` - files with `.yaml.tmpl` or `.yml.tmpl` extensions are always processed as Go templates.
 
 :::important
-  The imported files must have the `.yaml.tmpl` extension to be processed as Go templates and to be able to use the `context` variables.
-  Additionally, the `skip_templates_processing` flag can be used to skip template processing for the imported file.
+  Files with the `.yaml.tmpl` or `.yml.tmpl` extension are always processed as Go templates, regardless of whether `context` is provided.
+  This allows you to use template functions that don't require context (like `{{ now }}`, `{{ env "VAR" }}`, `{{ uuidv4 }}`, etc.) even without providing context variables.
+  If you don't want a file to be processed as a template, use the `.yaml` or `.yml` extension instead.
+  The `skip_templates_processing` flag can be used to explicitly skip template processing for any imported file.
   Templating must be enabled in [`atmos.yaml`](/core-concepts/stacks/templates) for Atmos to process the imported files as Go templates.
 :::
 
@@ -129,6 +164,29 @@ For example, here we import a file with a template and provide a `context` to pa
       skip_templates_processing: false
       ignore_missing_template_values: true
       skip_if_missing: true
+  ```
+
+You can also use templates without providing any context variables. This is useful for including dynamic values that don't depend on context:
+
+  ```yaml
+  import:
+    # This template file uses functions that don't require context
+    - path: "catalog/metadata.yaml.tmpl"
+      # No context needed - the template can use functions like:
+      # {{ now | date "2006-01-02" }}
+      # {{ env "BUILD_NUMBER" }}
+      # {{ uuidv4 }}
+      # {{ randAlphaNum 10 }}
+  ```
+
+Example template file (`catalog/metadata.yaml.tmpl`) without context:
+
+  ```yaml
+  metadata:
+    generated_at: {{ now | date "2006-01-02T15:04:05Z07:00" }}
+    build_number: {{ env "BUILD_NUMBER" | default "local" }}
+    deployment_id: {{ uuidv4 }}
+    version: "1.0.0"
   ```
 
 The `import` section supports the following fields:

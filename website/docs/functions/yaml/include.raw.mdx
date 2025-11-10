@@ -1,0 +1,203 @@
+---
+title: "!include.raw"
+sidebar_position: 8
+sidebar_label: "!include.raw"
+sidebar_class_name: command
+description: Force inclusion of files as raw strings regardless of their extension or content
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Note from "@site/src/components/Note"
+
+<Intro>
+    The `!include.raw` function forces any file to be included as a raw string,
+    bypassing automatic parsing based on file extension.
+</Intro>
+
+While the regular [`!include`](./include) function parses files based on their extension (JSON, YAML, HCL),
+`!include.raw` always returns the file content as a plain string. This is useful when you need
+the actual file content as text rather than parsed data structures.
+
+## Usage
+
+```yaml
+vars:
+  # Always injects content from file or URL as string
+  json_string: !include.raw config.json
+  yaml_string: !include.raw settings.yaml
+  hcl_string: !include.raw terraform.tfvars
+```
+
+## Common Use Cases
+
+### Template Files
+
+Include template files that need to be processed later:
+
+```yaml
+components:
+  terraform:
+    my-service:
+      vars:
+        # Kubernetes manifest template as string
+        manifest_template: !include.raw k8s-deployment-template.yaml
+
+        # JSON config template for interpolation
+        config_template: !include.raw config-template.json
+
+        # Terraform HCL template
+        tf_template: !include.raw module-template.tf
+```
+
+### Documentation and Scripts
+
+Include documentation or scripts as strings:
+
+```yaml
+metadata:
+  # Include markdown documentation
+  readme: !include.raw README.md
+  changelog: !include.raw CHANGELOG.md
+
+  # Include shell scripts
+  install_script: !include.raw ./scripts/install.sh
+  deploy_script: !include.raw ./scripts/deploy.sh
+```
+
+### Preserving Formatting
+
+When you need to preserve the exact formatting of a file:
+
+```yaml
+vars:
+  # Preserve JSON formatting for display or logging
+  example_config: !include.raw example-config.json
+
+  # Keep YAML with comments intact
+  annotated_yaml: !include.raw annotated-config.yaml
+
+  # Include HCL with original formatting
+  terraform_example: !include.raw example.tf
+```
+
+### Configuration as Strings
+
+When you need configuration files as strings for further processing:
+
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        # Pass JSON config as string to Terraform
+        json_config_string: !include.raw app-config.json
+
+        # YAML config for base64 encoding
+        yaml_config_string: !include.raw settings.yaml
+```
+
+## Remote Files
+
+The `!include.raw` function works with all remote sources supported by `!include`:
+
+```yaml
+vars:
+  # GitHub raw content
+  remote_template: !include.raw https://raw.githubusercontent.com/org/repo/main/template.yaml
+
+  # S3 bucket files
+  s3_script: !include.raw s3://my-bucket/scripts/deploy.sh
+
+  # Google Cloud Storage
+  gcs_config: !include.raw gcs://my-bucket/configs/app.json
+
+  # With query parameters (extension detection ignores query strings)
+  versioned_template: !include.raw https://api.example.com/template.yaml?version=2
+```
+
+## Comparison with !include
+
+| Function | File: `config.json` | Content | Result |
+|----------|-------------------|---------|---------|
+| `!include` | `config.json` | `{"key": "value"}` | Parsed JSON object: `{key: value}` |
+| `!include.raw` | `config.json` | `{"key": "value"}` | Raw string: `'{"key": "value"}'` |
+
+### Example
+
+Given a file `config.json`:
+```json
+{
+  "database": {
+    "host": "localhost",
+    "port": 5432
+  }
+}
+```
+
+Using in a stack manifest:
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        # Parsed as JSON object
+        config_parsed: !include config.json
+        # Result: {database: {host: localhost, port: 5432}}
+
+        # Raw string
+        config_string: !include.raw config.json
+        # Result: '{"database":{"host":"localhost","port":5432}}'
+```
+
+## YQ Expressions Not Supported
+
+<Note>
+The `!include.raw` function does not support YQ expressions since it always returns raw strings.
+Use the regular `!include` function when you need to query structured data with YQ.
+</Note>
+
+```yaml
+vars:
+  # ❌ YQ expressions are not supported with !include.raw
+  # This will fail - !include.raw does not process YQ expressions
+  invalid: !include.raw config.json .database.host
+
+  # ✅ Use regular !include for YQ expressions
+  valid: !include config.json .database.host
+```
+
+## File Extension Handling
+
+Unlike `!include` which uses file extensions to determine parsing behavior,
+`!include.raw` completely ignores file extensions:
+
+```yaml
+vars:
+  # All return raw strings regardless of extension
+  json_raw: !include.raw data.json          # Raw string
+  yaml_raw: !include.raw config.yaml        # Raw string
+  hcl_raw: !include.raw terraform.tfvars    # Raw string
+  text_raw: !include.raw readme.txt         # Raw string
+  no_ext_raw: !include.raw LICENSE          # Raw string
+```
+
+## Supported Sources
+
+The `!include.raw` function supports the same sources as `!include`:
+
+### Local Files
+- Absolute paths: `!include.raw /path/to/file.json`
+- Relative paths: `!include.raw ../configs/settings.yaml`
+- Base path relative: `!include.raw stacks/catalog/template.tf`
+
+### Remote Files
+- HTTP/HTTPS: `!include.raw https://example.com/config.json`
+- S3: `!include.raw s3::https://bucket.s3.amazonaws.com/file.yaml`
+- GCS: `!include.raw gcs::gs://bucket/path/file.hcl`
+- Git: `!include.raw git::https://github.com/org/repo.git//file.txt?ref=v1.0.0`
+
+## See Also
+
+- [`!include`](./include) - Standard include function with automatic parsing based on file extension
+- [YAML Functions](/functions/yaml) - Overview of all YAML functions in Atmos

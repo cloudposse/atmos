@@ -2,13 +2,17 @@
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> atmos terraform deploy myapp --stack dev
 
-
 <span style="font-weight:bold;">Initializing the backend...</span>
-
 <span style="font-weight:bold;">Initializing provider plugins...</span>
 
-
 <span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">Terraform has been successfully initialized!</span><span style="color:green;"></span>
+<span style="color:red;">
+
+</span><span style="color:green;"></span><span style="font-weight:bold;color:green;">Created and switched to workspace &quot;dev&quot;!</span><span style="color:green;">
+
+You're now on a new, empty workspace. Workspaces isolate their state,
+so if you run &quot;terraform plan&quot; Terraform will not see any existing state
+for this configuration.</span>
 <span style="font-weight:bold;">data.http.weather: Reading...</span>
 <span style="font-weight:bold;">data.http.weather: Read complete after 1s 
     [id=https://wttr.in/Stockholm?0&amp;format=&amp;lang=se&amp;u=m]</span>
@@ -20,46 +24,46 @@ Terraform will perform the following actions:
 
 <span style="font-weight:bold;">  # local_file.cache</span> will be created
   <span style="color:green;">+</span> resource &quot;local_file&quot; &quot;cache&quot; {
-      <span style="color:green;">+</span> <span style="font-weight:bold;"></span>content              =
+      <span style="color:green;">+</span> content              =
 
             Weather report: Stockholm
             
-                            Overcast
-              <span style="font-weight:bold;color:#555555;">     .--.    </span> <span style="color:#00ffaf;">+2</span>(<span style="color:#00ffff;">-1</span>) °C      
-              <span style="font-weight:bold;color:#555555;">  .-(    ).  </span> <span style="font-weight:bold;">↑</span> <span style="color:#d7ff00;">11</span> km/h      
-              <span style="font-weight:bold;color:#555555;"> (___.__)__) </span> 6 km           
-                            0.0 mm         
+              <span style="color:#c0c0c0;">     .-.     </span> Light drizzle
+              <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#00ff00;">+9</span>(<span style="color:#00ff5f;">6</span>) °C       
+              <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">→</span> <span style="color:#ffaf00;">21</span> km/h      
+              <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 10 km          
+              <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.2 mm
 
 
-      <span style="color:green;">+</span> <span style="font-weight:bold;"></span>content_base64sha256 = (known after apply)
-      <span style="color:green;">+</span> <span style="font-weight:bold;"></span>content_base64sha512 = (known after apply)
-      <span style="color:green;">+</span> <span style="font-weight:bold;"></span>content_md5          = (known after apply)
-      <span style="color:green;">+</span> <span style="font-weight:bold;"></span>content_sha1         = (known after apply)
-      <span style="color:green;">+</span> <span style="font-weight:bold;"></span>content_sha256       = (known after apply)
-      <span style="color:green;">+</span> <span style="font-weight:bold;"></span>content_sha512       = (known after apply)
-      <span style="color:green;">+</span> <span style="font-weight:bold;"></span>directory_permission = &quot;0777&quot;
-      <span style="color:green;">+</span> <span style="font-weight:bold;"></span>file_permission      = &quot;0777&quot;
-      <span style="color:green;">+</span> <span style="font-weight:bold;"></span>filename             = &quot;cache.dev.txt&quot;
-      <span style="color:green;">+</span> <span style="font-weight:bold;"></span>id                   = (known after apply)
+      <span style="color:green;">+</span> content_base64sha256 = (known after apply)
+      <span style="color:green;">+</span> content_base64sha512 = (known after apply)
+      <span style="color:green;">+</span> content_md5          = (known after apply)
+      <span style="color:green;">+</span> content_sha1         = (known after apply)
+      <span style="color:green;">+</span> content_sha256       = (known after apply)
+      <span style="color:green;">+</span> content_sha512       = (known after apply)
+      <span style="color:green;">+</span> directory_permission = &quot;0777&quot;
+      <span style="color:green;">+</span> file_permission      = &quot;0777&quot;
+      <span style="color:green;">+</span> filename             = &quot;cache.dev.txt&quot;
+      <span style="color:green;">+</span> id                   = (known after apply)
     }
 
 <span style="font-weight:bold;">Plan:</span> 1 to add, 0 to change, 0 to destroy.
 
-<span style="font-weight:bold;">Changes to Outputs:</span>
-  <span style="color:green;">+</span> <span style="font-weight:bold;"></span>lang     = &quot;se&quot;
-  <span style="color:green;">+</span> <span style="font-weight:bold;"></span>location = &quot;Stockholm&quot;
-  <span style="color:green;">+</span> <span style="font-weight:bold;"></span>stage    = &quot;dev&quot;
-  <span style="color:green;">+</span> <span style="font-weight:bold;"></span>units    = &quot;m&quot;
-  <span style="color:green;">+</span> <span style="font-weight:bold;"></span>url      = &quot;https://wttr.in/Stockholm?0&amp;format=&amp;lang=se&amp;u=m&quot;
-  <span style="color:green;">+</span> <span style="font-weight:bold;"></span>weather  =
+Changes to Outputs:
+  <span style="color:green;">+</span> lang     = &quot;se&quot;
+  <span style="color:green;">+</span> location = &quot;Stockholm&quot;
+  <span style="color:green;">+</span> stage    = &quot;dev&quot;
+  <span style="color:green;">+</span> units    = &quot;m&quot;
+  <span style="color:green;">+</span> url      = &quot;https://wttr.in/Stockholm?0&amp;format=&amp;lang=se&amp;u=m&quot;
+  <span style="color:green;">+</span> weather  =
 
         Weather report: Stockholm
         
-                        Overcast
-          <span style="font-weight:bold;color:#555555;">     .--.    </span> <span style="color:#00ffaf;">+2</span>(<span style="color:#00ffff;">-1</span>) °C      
-          <span style="font-weight:bold;color:#555555;">  .-(    ).  </span> <span style="font-weight:bold;">↑</span> <span style="color:#d7ff00;">11</span> km/h      
-          <span style="font-weight:bold;color:#555555;"> (___.__)__) </span> 6 km           
-                        0.0 mm         
+          <span style="color:#c0c0c0;">     .-.     </span> Light drizzle
+          <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#00ff00;">+9</span>(<span style="color:#00ff5f;">6</span>) °C       
+          <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">→</span> <span style="color:#ffaf00;">21</span> km/h      
+          <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 10 km          
+          <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.2 mm
 
 
 <span style="font-weight:bold;">local_file.cache: Creating...</span>
@@ -78,11 +82,12 @@ weather =
 
 Weather report: Stockholm
 
-                Overcast
-  <span style="font-weight:bold;color:#555555;">     .--.    </span> <span style="color:#00ffaf;">+2</span>(<span style="color:#00ffff;">-1</span>) °C      
-  <span style="font-weight:bold;color:#555555;">  .-(    ).  </span> <span style="font-weight:bold;">↑</span> <span style="color:#d7ff00;">11</span> km/h      
-  <span style="font-weight:bold;color:#555555;"> (___.__)__) </span> 6 km           
-                0.0 mm         
+  <span style="color:#c0c0c0;">     .-.     </span> Light drizzle
+  <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#00ff00;">+9</span>(<span style="color:#00ff5f;">6</span>) °C       
+  <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">→</span> <span style="color:#ffaf00;">21</span> km/h      
+  <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 10 km          
+  <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.2 mm         
+
 
 
 

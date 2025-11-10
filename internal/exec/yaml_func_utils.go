@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -14,8 +15,31 @@ func ProcessCustomYamlTags(
 	input schema.AtmosSectionMapType,
 	currentStack string,
 	skip []string,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) (schema.AtmosSectionMapType, error) {
-	return processNodes(atmosConfig, input, currentStack, skip), nil
+	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTags")()
+
+	// Create a scoped resolution context to prevent memory leaks and cross-call contamination.
+	// Save any existing context, install a fresh one, and restore on exit.
+	restoreCtx := scopedResolutionContext()
+	defer restoreCtx()
+
+	// Get the fresh context we just installed.
+	resolutionCtx := GetOrCreateResolutionContext()
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo), nil
+}
+
+func ProcessCustomYamlTagsWithContext(
+	atmosConfig *schema.AtmosConfiguration,
+	input schema.AtmosSectionMapType,
+	currentStack string,
+	skip []string,
+	resolutionCtx *ResolutionContext,
+	stackInfo *schema.ConfigAndStacksInfo,
+) (schema.AtmosSectionMapType, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTagsWithContext")()
+
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo), nil
 }
 
 func processNodes(
@@ -23,6 +47,18 @@ func processNodes(
 	data map[string]any,
 	currentStack string,
 	skip []string,
+	stackInfo *schema.ConfigAndStacksInfo,
+) map[string]any {
+	return processNodesWithContext(atmosConfig, data, currentStack, skip, nil, stackInfo)
+}
+
+func processNodesWithContext(
+	atmosConfig *schema.AtmosConfiguration,
+	data map[string]any,
+	currentStack string,
+	skip []string,
+	resolutionCtx *ResolutionContext,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) map[string]any {
 	newMap := make(map[string]any)
 	var recurse func(any) any
@@ -30,7 +66,7 @@ func processNodes(
 	recurse = func(node any) any {
 		switch v := node.(type) {
 		case string:
-			return processCustomTags(atmosConfig, v, currentStack, skip)
+			return processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 
 		case map[string]any:
 			newNestedMap := make(map[string]any)
@@ -63,30 +99,83 @@ func processCustomTags(
 	input string,
 	currentStack string,
 	skip []string,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) any {
-	switch {
-	case strings.HasPrefix(input, u.AtmosYamlFuncTemplate) && !skipFunc(skip, u.AtmosYamlFuncTemplate):
-		return processTagTemplate(input)
-	case strings.HasPrefix(input, u.AtmosYamlFuncExec) && !skipFunc(skip, u.AtmosYamlFuncExec):
+	return processCustomTagsWithContext(atmosConfig, input, currentStack, skip, nil, stackInfo)
+}
+
+// matchesPrefix checks if input has the given prefix and the function is not skipped.
+func matchesPrefix(input, prefix string, skip []string) bool {
+	return strings.HasPrefix(input, prefix) && !skipFunc(skip, prefix)
+}
+
+// processContextAwareTags processes tags that support cycle detection.
+func processContextAwareTags(
+	atmosConfig *schema.AtmosConfiguration,
+	input string,
+	currentStack string,
+	skip []string,
+	resolutionCtx *ResolutionContext,
+	stackInfo *schema.ConfigAndStacksInfo,
+) (any, bool) {
+	if matchesPrefix(input, u.AtmosYamlFuncTerraformOutput, skip) {
+		return processTagTerraformOutputWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo), true
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncTerraformState, skip) {
+		return processTagTerraformStateWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo), true
+	}
+	return nil, false
+}
+
+// processSimpleTags processes tags that don't need cycle detection.
+func processSimpleTags(
+	atmosConfig *schema.AtmosConfiguration,
+	input string,
+	currentStack string,
+	skip []string,
+) (any, bool) {
+	if matchesPrefix(input, u.AtmosYamlFuncTemplate, skip) {
+		return processTagTemplate(input), true
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncExec, skip) {
 		res, err := u.ProcessTagExec(input)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return res
-	case strings.HasPrefix(input, u.AtmosYamlFuncStoreGet) && !skipFunc(skip, u.AtmosYamlFuncStoreGet):
-		return processTagStoreGet(atmosConfig, input, currentStack)
-	case strings.HasPrefix(input, u.AtmosYamlFuncStore) && !skipFunc(skip, u.AtmosYamlFuncStore):
-		return processTagStore(atmosConfig, input, currentStack)
-	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformOutput) && !skipFunc(skip, u.AtmosYamlFuncTerraformOutput):
-		return processTagTerraformOutput(atmosConfig, input, currentStack)
-	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformState) && !skipFunc(skip, u.AtmosYamlFuncTerraformState):
-		return processTagTerraformState(atmosConfig, input, currentStack)
-	case strings.HasPrefix(input, u.AtmosYamlFuncEnv) && !skipFunc(skip, u.AtmosYamlFuncEnv):
+		return res, true
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncStoreGet, skip) {
+		return processTagStoreGet(atmosConfig, input, currentStack), true
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncStore, skip) {
+		return processTagStore(atmosConfig, input, currentStack), true
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncEnv, skip) {
 		res, err := u.ProcessTagEnv(input)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return res
-	default:
-		// If any other YAML explicit tag (not currently supported by Atmos) is used, return it w/o processing
-		return input
+		return res, true
 	}
+	return nil, false
+}
+
+func processCustomTagsWithContext(
+	atmosConfig *schema.AtmosConfiguration,
+	input string,
+	currentStack string,
+	skip []string,
+	resolutionCtx *ResolutionContext,
+	stackInfo *schema.ConfigAndStacksInfo,
+) any {
+	// Try context-aware tags first.
+	if result, handled := processContextAwareTags(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo); handled {
+		return result
+	}
+
+	// Try simple tags.
+	if result, handled := processSimpleTags(atmosConfig, input, currentStack, skip); handled {
+		return result
+	}
+
+	// If any other YAML explicit tag (not currently supported by Atmos) is used, return it w/o processing.
+	return input
 }
 
 func skipFunc(skip []string, f string) bool {

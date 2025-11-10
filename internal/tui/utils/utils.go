@@ -6,14 +6,30 @@ import (
 	"io"
 	"os"
 
-	"github.com/alecthomas/chroma/quick"
+	"github.com/alecthomas/chroma/v2/quick"
 	"github.com/arsham/figurine/figurine"
 	"github.com/charmbracelet/glamour"
-	"github.com/cloudposse/atmos/pkg/schema"
-	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/jwalton/go-supportscolor"
 	xterm "golang.org/x/term"
+
+	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/schema"
+	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
 )
+
+// WriteJSON writes JSON to stdout (data channel).
+// This is a convenience wrapper around data.WriteJSON().
+func WriteJSON(v interface{}) error {
+	return data.WriteJSON(v)
+}
+
+// WriteYAML writes YAML to stdout (data channel).
+// This is a convenience wrapper around data.WriteYAML().
+func WriteYAML(v interface{}) error {
+	return data.WriteYAML(v)
+}
 
 // HighlightCode returns a syntax highlighted code for the specified language
 func HighlightCode(code string, language string, syntaxTheme string) (string, error) {
@@ -76,4 +92,15 @@ func RenderMarkdown(markdownText string, style string) (string, error) {
 	}
 
 	return out, nil
+}
+
+// NewAtmosHuhTheme returns the Atmos-styled Huh theme for interactive prompts.
+func NewAtmosHuhTheme() *huh.Theme {
+	t := huh.ThemeCharm()
+	cream := lipgloss.AdaptiveColor{Light: "#FFFDF5", Dark: "#FFFDF5"}
+	purple := lipgloss.AdaptiveColor{Light: "#5B00FF", Dark: "#5B00FF"}
+	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cream).Background(purple)
+	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(purple)
+	t.Blurred.Title = t.Blurred.Title.Foreground(purple)
+	return t
 }

@@ -1,0 +1,70 @@
+base_path: "./"
+components:
+  terraform:
+    base_path: "../../components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
+auth:
+  providers:
+    provider-oidc:
+      kind: github/oidc
+      region: us-east-1
+      spec:
+        audience: sts.us-east-1.amazonaws.com
+
+    test-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://test.awsapps.com/start
+
+  identities:
+    oidc:
+      kind: aws/assume-role
+      via:
+        provider: provider-oidc
+      principal:
+        assume_role: arn:aws:iam::000000000000:role/Dummy
+
+    test-admin:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: test-sso
+      principal:
+        name: AdminAccess
+        account:
+          id: "123456789012"
+
+    test-readonly:
+      kind: aws/permission-set
+      via:
+        provider: test-sso
+      principal:
+        name: ReadOnlyAccess
+        account:
+          name: "plat-sandbox"
+
+    test-user:
+      kind: aws/user
+      credentials:
+        access_key_id: EXAMPLEACCESSKEYID
+        secret_access_key: EXAMPLESECRETACCESSKEY
+        region: us-east-1
+
+    test-user-no-creds:
+      kind: aws/user
+
+    test-role:
+      kind: aws/assume-role
+      via:
+        provider: test-sso
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/TestRole
+        session_name: test-session
+
+logs:
+  level: Info

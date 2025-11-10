@@ -1,0 +1,103 @@
+---
+title: atmos auth shell
+sidebar_label: shell
+sidebar_class_name: command
+id: shell
+description: Launch an interactive shell with authentication environment variables configured for the selected identity.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Start an authenticated shell session with all the necessary cloud credentials pre-configured. Perfect for interactive work where you need to run multiple commands without re-authenticating each time. The shell respects your `$SHELL` preference and supports custom shell arguments.
+</Intro>
+
+<Screengrab title="atmos auth shell --help" slug="atmos-auth-shell--help" />
+
+:::tip Shell vs Exec
+Use `shell` for interactive sessions where you'll run multiple commands. Use [`exec`](/cli/commands/auth/exec) for single commands or automation.
+:::
+
+## Usage
+
+```shell
+atmos auth shell [--identity <name>] [--shell <path>] [-- <shell-args>...]
+```
+
+## Examples
+
+```shell
+# Launch default shell with default identity
+atmos auth shell
+
+# Interactively select identity (even if default is configured)
+atmos auth shell --identity
+
+# Use a specific identity
+atmos auth shell --identity prod-admin
+
+# Use short form of identity flag
+atmos auth shell -i staging-admin
+
+# Interactive selection with short form
+atmos auth shell -i
+
+# Override shell program
+atmos auth shell --shell /bin/zsh
+
+# Pass custom shell arguments
+atmos auth shell -- -c "env | grep AWS"
+
+# Launch without loading shell configs
+atmos auth shell -- --norc
+
+# Combine options
+atmos auth shell --identity staging-readonly --shell /bin/bash -- -c "terraform plan"
+```
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    Specify the identity to use for authentication. This flag has three modes:
+
+    - **With value** (`--identity admin`): Use the specified identity
+    - **Without value** (`--identity`): Force interactive selector, even if a default identity is configured
+    - **Omitted**: Use the default identity configured in `atmos.yaml`, or prompt if no default is set
+
+    **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
+  </dd>
+
+  <dt>`--shell`</dt>
+  <dd>Specify the shell program to use. Defaults to `$SHELL`, then `bash`, then `sh`. On Windows, defaults to `cmd.exe`.</dd>
+</dl>
+
+## Arguments
+
+<dl>
+  <dt>shell-args...</dt>
+  <dd>Optional shell arguments to pass after `--`. If not provided, launches a login shell by default (`-l`).</dd>
+</dl>
+
+## Environment Variables
+
+The shell session will have the following environment variables set:
+
+- **`ATMOS_IDENTITY`** - The name of the authenticated identity
+- **`ATMOS_SHLVL`** - Shell nesting level (increments for nested Atmos shells)
+- **AWS configuration paths** (for AWS identities):
+  - `AWS_SHARED_CREDENTIALS_FILE` - Path to Atmos-managed credentials file
+  - `AWS_CONFIG_FILE` - Path to Atmos-managed config file
+  - `AWS_PROFILE` - Profile name corresponding to your identity
+
+:::info Secure Credential Handling
+Atmos never exposes sensitive credentials directly in environment variables. Instead, it writes credentials to managed configuration files following XDG Base Directory Specification (e.g., `~/.config/atmos/aws/` on both Linux and macOS) and sets environment variables pointing to these files. This approach follows AWS SDK best practices and works seamlessly with any tool that uses the AWS SDK, including Terraform, AWS CLI, kubectl with AWS authentication, and more.
+:::
+
+## Notes
+
+- Type `exit` or press `Ctrl+D` to leave the authenticated shell
+- The shell can be nested; `ATMOS_SHLVL` tracks the nesting depth
+- Use `--` to separate Atmos flags from shell-specific arguments
+- Environment variables from authentication take precedence over existing values

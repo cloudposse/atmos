@@ -40,14 +40,20 @@ atmos helmfile generate varfile echo-server --stack tenant1-ue2-dev --file=vars.
 
 ## Arguments
 
-| Argument    | Description              | Required |
-|:------------|:-------------------------|:---------|
-| `component` | Atmos helmfile component | yes      |
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>Atmos helmfile component.</dd>
+</dl>
 
 ## Flags
 
-| Flag        | Description                                                                                                           | Alias | Required |
-|:------------|:----------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--stack`   | Atmos stack                                                                                                           | `-s`  | yes      |
-| `--file`    | File name to write the varfile to.<br/>If not specified, the varfile name is generated automatically from the context | `-f`  | no       |
-| `--dry-run` | Dry run                                                                                                               |       | no       |
+<dl>
+  <dt>`--stack` / `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--file` / `-f` <em>(optional)</em></dt>
+  <dd>File name to write the varfile to.<br/>If not specified, the varfile name is generated automatically from the context.</dd>
+
+  <dt>`--dry-run` <em>(optional)</em></dt>
+  <dd>Dry run.</dd>
+</dl>

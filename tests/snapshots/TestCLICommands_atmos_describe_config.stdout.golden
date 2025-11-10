@@ -30,7 +30,8 @@
     "packer": {
       "base_path": "",
       "command": ""
-    }
+    },
+    "Plugins": null
   },
   "stacks": {
     "base_path": "stacks",
@@ -85,7 +86,10 @@
         "wrap": false
       },
       "color": true,
-      "no_color": false
+      "no_color": false,
+      "mask": {
+        "enabled": false
+      }
     },
     "docs": {
       "max_width": 0,
@@ -124,11 +128,12 @@
     "InjectGithubToken": true,
     "GithubToken": "",
     "AtmosGithubToken": "",
-    "InjectBitbucketToken": false,
+    "GithubUsername": "",
+    "InjectBitbucketToken": true,
     "BitbucketToken": "",
     "AtmosBitbucketToken": "",
     "BitbucketUsername": "",
-    "InjectGitlabToken": false,
+    "InjectGitlabToken": true,
     "AtmosGitlabToken": "",
     "GitlabToken": "",
     "pro": {
@@ -186,5 +191,21 @@
         "terraform": {}
       }
     }
+  },
+  "auth": {
+    "logs": {
+      "file": "",
+      "level": ""
+    },
+    "keyring": {},
+    "providers": null,
+    "identities": null
+  },
+  "profiler": {
+    "enabled": false,
+    "port": 0,
+    "host": "",
+    "file": "",
+    "profile_type": ""
   }
 }

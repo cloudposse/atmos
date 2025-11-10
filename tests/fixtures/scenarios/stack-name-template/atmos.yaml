@@ -27,7 +27,7 @@ stacks:
   # name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
 
   # `name_template` can have complex logic and use template expressions and functions:
-  # - Atmos functions (https://atmos.tools/core-concepts/stacks/templates/functions)
+  # - Atmos functions (https://atmos.tools/functions)
   # - Sprig functions (https://masterminds.github.io/sprig)
   # - Gomplate functions (https://docs.gomplate.ca/functions)
   # https://yaml-multiline.info

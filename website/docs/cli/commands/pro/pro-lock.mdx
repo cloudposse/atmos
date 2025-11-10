@@ -42,9 +42,16 @@ atmos pro lock --component vpc --stack plat-ue2-dev --ttl 300
 
 ## Flags
 
-| Flag          | Description                                                                                | Alias | Required |
-| :------------ | :----------------------------------------------------------------------------------------- | :---- | :------- |
-| `--component` | Atmos component to lock                                                                    | `-c`  | yes      |
-| `--stack`     | Atmos stack to lock                                                                        | `-s`  | yes      |
-| `--ttl`       | The time to live (TTL) for the lock, in seconds. Defaults to 30                            | `-t`  | no       |
-| `--message`   | A message to display to other users who try to lock the stack. Defaults to "Locked by Atmos" | `-m`  | no       |
+<dl>
+  <dt>`--component` <em>(alias `-c`)</em> <em>(required)</em></dt>
+  <dd>Atmos component to lock.</dd>
+
+  <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+  <dd>Atmos stack to lock.</dd>
+
+  <dt>`--ttl` <em>(alias `-t`)</em> <em>(optional)</em></dt>
+  <dd>The time to live (TTL) for the lock, in seconds. Defaults to 30.</dd>
+
+  <dt>`--message` <em>(alias `-m`)</em> <em>(optional)</em></dt>
+  <dd>A message to display to other users who try to lock the stack. Defaults to "Locked by Atmos".</dd>
+</dl>

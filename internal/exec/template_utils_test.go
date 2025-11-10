@@ -2,39 +2,16 @@ package exec
 
 import (
 	"encoding/json"
+	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
 
-// TestCreateTempDirectory verifies that a temporary directory is created with the expected permissions.
-func TestCreateTempDirectory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping permission check on Windows: Unix permissions not applicable")
-	}
-
-	dir, err := createTempDirectory()
-	if err != nil {
-		t.Fatalf("createTempDirectory returned error: %v", err)
-	}
-	defer os.RemoveAll(dir)
-
-	// Check that the directory exists.
-	info, err := os.Stat(dir)
-	if err != nil {
-		t.Fatalf("failed to stat directory: %v", err)
-	}
-	if !info.IsDir() {
-		t.Errorf("Expected a directory, got a file")
-	}
-
-	// Check that the permissions are exactlydefaultDirPermissions.
-	mode := info.Mode().Perm()
-	if mode != defaultDirPermissions {
-		t.Errorf("Expected mode %o, got %o", defaultDirPermissions, mode)
-	}
-}
+// Unix-specific test moved to template_utils_unix_test.go:
+// - TestCreateTempDirectory
 
 // TestWriteMergedDataToFile tests that merged data is written to a file and returns a valid file URL.
 func TestWriteMergedDataToFile(t *testing.T) {
@@ -62,8 +39,30 @@ func TestWriteMergedDataToFile(t *testing.T) {
 	}
 
 	// Read the file from the URL.
-	// Remove the "file://" prefix.
-	filePath := strings.TrimPrefix(urlStr, "file://")
+	// Parse the URL properly to handle both Windows and Unix paths.
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		t.Fatalf("failed to parse URL %s: %v", urlStr, err)
+	}
+	// Convert the URL to a file path.
+	filePath := parsedURL.Path
+	if runtime.GOOS == "windows" {
+		// On Windows, file URLs can have two forms:
+		// 1. file://C:/temp/file.json (no leading slash in Path)
+		// 2. file:///C:/temp/file.json (leading slash in Path)
+		// If there's a leading slash followed by a drive letter, remove the slash.
+		if len(filePath) > 2 && filePath[0] == '/' && filePath[2] == ':' {
+			filePath = filePath[1:]
+		}
+		// If the path doesn't have a drive letter, it's likely the URL was
+		// constructed incorrectly. Check if Host contains the drive letter.
+		if parsedURL.Host != "" && (len(filePath) < 2 || filePath[1] != ':') {
+			// Combine host and path for Windows file URLs
+			filePath = parsedURL.Host + filePath
+		}
+		// Convert forward slashes to backslashes for Windows
+		filePath = filepath.FromSlash(filePath)
+	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("failed to read file: %v", err)
@@ -99,7 +98,30 @@ func TestWriteOuterTopLevelFile(t *testing.T) {
 	}
 
 	// Verify that the file contains the dummyFileURL.
-	filePath := strings.TrimPrefix(urlStr, "file://")
+	// Parse the URL properly to handle both Windows and Unix paths.
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		t.Fatalf("failed to parse URL %s: %v", urlStr, err)
+	}
+	// Convert the URL to a file path.
+	filePath := parsedURL.Path
+	if runtime.GOOS == "windows" {
+		// On Windows, file URLs can have two forms:
+		// 1. file://C:/temp/file.json (no leading slash in Path)
+		// 2. file:///C:/temp/file.json (leading slash in Path)
+		// If there's a leading slash followed by a drive letter, remove the slash.
+		if len(filePath) > 2 && filePath[0] == '/' && filePath[2] == ':' {
+			filePath = filePath[1:]
+		}
+		// If the path doesn't have a drive letter, it's likely the URL was
+		// constructed incorrectly. Check if Host contains the drive letter.
+		if parsedURL.Host != "" && (len(filePath) < 2 || filePath[1] != ':') {
+			// Combine host and path for Windows file URLs
+			filePath = parsedURL.Host + filePath
+		}
+		// Convert forward slashes to backslashes for Windows
+		filePath = filepath.FromSlash(filePath)
+	}
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("failed to read file: %v", err)
@@ -116,7 +138,7 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 		// No variables to interpolate.
 	}
 	tmpl := "Static Content"
-	result, err := ProcessTmplWithDatasourcesGomplate("test", tmpl, mergedData, false)
+	result, err := ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, false)
 	if err != nil {
 		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
 	}
@@ -131,7 +153,7 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 	}
 	tmpl = " {{- $data := (ds \"config\") -}}\n\nHello {{ $data.name | default \"Project Title\" }}!"
 
-	result, err = ProcessTmplWithDatasourcesGomplate("test", tmpl, mergedData, false)
+	result, err = ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, false)
 	if err != nil {
 		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
 	}
@@ -148,7 +170,7 @@ func TestProcessTmplWithDatasourcesGomplate(t *testing.T) {
 	}
 	tmpl = "{{- $data := (ds \"config\") -}}\n\nVersion: {{ $data.config.version }}"
 
-	result, err = ProcessTmplWithDatasourcesGomplate("test", tmpl, mergedData, false)
+	result, err = ProcessTmplWithDatasourcesGomplate(nil, "test", tmpl, mergedData, false)
 	if err != nil {
 		t.Fatalf("ProcessTmplWithDatasourcesGomplate returned error: %v", err)
 	}

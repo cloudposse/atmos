@@ -36,11 +36,7 @@ func TestIsRemoteSource(t *testing.T) {
 // TestGetTerraformSource tests getTerraformSource in valid, invalid, and empty cases.
 func TestGetTerraformSource(t *testing.T) {
 	// Create a temporary base directory.
-	baseDir, err := os.MkdirTemp("", "test-getTerraformSource")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(baseDir)
+	baseDir := t.TempDir()
 
 	// Create a valid subdirectory.
 	validDir := filepath.Join(baseDir, "valid")
@@ -191,11 +187,7 @@ func (s mockRenderer) Render(tmplName, tmplValue string, mergedData map[string]i
 
 func TestGenerateDocument_WithInjectedRenderer(t *testing.T) {
 	// Create a temporary target directory.
-	targetDir, err := os.MkdirTemp("", "test-generateDocument")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(targetDir)
+	targetDir := t.TempDir()
 
 	// Create a temporary YAML file to act as docs input.
 	tmpYAML, err := os.CreateTemp("", "test-docs-input")
@@ -248,6 +240,139 @@ func TestRunTerraformDocs_Error(t *testing.T) {
 	_, err := runTerraformDocs("nonexistent_directory", &schema.TerraformDocsReadmeSettings{})
 	if err == nil {
 		t.Errorf("Expected error for invalid terraform module directory, got nil")
+	}
+}
+
+// TestResolvePath tests the resolvePath function with various path types.
+func TestResolvePath(t *testing.T) {
+	tests := []struct {
+		name        string
+		path        string
+		baseDir     string
+		expectError bool
+		checkAbs    bool
+	}{
+		{
+			name:        "empty path returns error",
+			path:        "",
+			baseDir:     "/tmp",
+			expectError: true,
+		},
+		{
+			name:        "absolute path",
+			path:        "/absolute/path/to/file",
+			baseDir:     "/tmp",
+			expectError: false,
+			checkAbs:    true,
+		},
+		{
+			name:        "explicit relative with ./",
+			path:        "./relative/path",
+			baseDir:     "/tmp",
+			expectError: false,
+			checkAbs:    true,
+		},
+		{
+			name:        "explicit relative with ../",
+			path:        "../relative/path",
+			baseDir:     "/tmp",
+			expectError: false,
+			checkAbs:    true,
+		},
+		{
+			name:        "implicit relative path joins with baseDir",
+			path:        "relative/file.txt",
+			baseDir:     "/tmp/base",
+			expectError: false,
+			checkAbs:    true,
+		},
+		{
+			name:        "simple filename joins with baseDir",
+			path:        "file.txt",
+			baseDir:     "/tmp/base",
+			expectError: false,
+			checkAbs:    true,
+		},
+		{
+			name:        "path with spaces",
+			path:        "path with spaces/file.txt",
+			baseDir:     "/tmp/base",
+			expectError: false,
+			checkAbs:    true,
+		},
+		{
+			name:        "current directory as path",
+			path:        ".",
+			baseDir:     "/tmp/base",
+			expectError: false,
+			checkAbs:    true,
+		},
+		{
+			name:        "parent directory as path",
+			path:        "..",
+			baseDir:     "/tmp/base",
+			expectError: false,
+			checkAbs:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := resolvePath(tt.path, tt.baseDir, "")
+
+			// Check error expectation
+			if tt.expectError && err == nil {
+				t.Errorf("Expected error, got nil")
+				return
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Expected no error, got %v", err)
+				return
+			}
+
+			// Check absolute path if required
+			if tt.checkAbs && result != "" && !filepath.IsAbs(result) {
+				t.Errorf("Expected absolute path, got %q", result)
+			}
+		})
+	}
+}
+
+// TestResolvePath_JoinBehavior tests that implicit relative paths are correctly joined with baseDir.
+func TestResolvePath_JoinBehavior(t *testing.T) {
+	tests := []struct {
+		name           string
+		path           string
+		baseDir        string
+		expectedSuffix string // What the path should contain (platform-agnostic)
+	}{
+		{
+			name:           "implicit relative joins with baseDir",
+			path:           "foo/bar.txt",
+			baseDir:        "/tmp/base",
+			expectedSuffix: filepath.Join("base", "foo", "bar.txt"),
+		},
+		{
+			name:           "simple filename joins with baseDir",
+			path:           "file.txt",
+			baseDir:        "/tmp/base",
+			expectedSuffix: filepath.Join("base", "file.txt"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := resolvePath(tt.path, tt.baseDir, "")
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			// Normalize both paths to use forward slashes for comparison
+			normalizedResult := filepath.ToSlash(result)
+			normalizedExpected := filepath.ToSlash(tt.expectedSuffix)
+			if !strings.Contains(normalizedResult, normalizedExpected) {
+				t.Errorf("Expected result to contain %q, got %q", normalizedExpected, normalizedResult)
+			}
+		})
 	}
 }
 

@@ -1,18 +1,18 @@
 package exec
 
 import (
-	"encoding/json"
 	"fmt"
 	"runtime"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -28,6 +28,8 @@ type versionExec struct {
 }
 
 func NewVersionExec(atmosConfig *schema.AtmosConfiguration) *versionExec {
+	defer perf.Track(atmosConfig, "exec.NewVersionExec")()
+
 	return &versionExec{
 		atmosConfig:     atmosConfig,
 		printStyledText: tuiUtils.PrintStyledText,
@@ -42,6 +44,8 @@ func NewVersionExec(atmosConfig *schema.AtmosConfiguration) *versionExec {
 }
 
 func (v versionExec) Execute(checkFlag bool, format string) error {
+	defer perf.Track(nil, "exec.Execute")()
+
 	if format != "" {
 		return v.displayVersionInFormat(checkFlag, format)
 	}
@@ -52,8 +56,6 @@ func (v versionExec) Execute(checkFlag bool, format string) error {
 		//nolint:revive // deep-exit: log.Fatal is appropriate here for version display errors
 		log.Fatal(err)
 	}
-
-	telemetry.PrintTelemetryDisclosure()
 
 	atmosIcon := "\U0001F47D"
 
@@ -106,6 +108,8 @@ func (v versionExec) isCheckVersionEnabled(forceCheck bool) bool {
 }
 
 func (v versionExec) GetLatestVersion(forceCheck bool) (string, bool) {
+	defer perf.Track(nil, "exec.GetLatestVersion")()
+
 	if !v.isCheckVersionEnabled(forceCheck) {
 		return "", false
 	}
@@ -142,17 +146,12 @@ func (v versionExec) displayVersionInFormat(forceCheck bool, format string) erro
 	}
 	switch format {
 	case "json":
-		if data, err := json.MarshalIndent(version, " ", " "); err == nil {
-			fmt.Println(string(data))
-		}
+		return tuiUtils.WriteJSON(version)
 	case "yaml":
-		if data, err := yaml.Marshal(version); err == nil {
-			fmt.Println(string(data))
-		}
+		return tuiUtils.WriteYAML(version)
 	default:
 		return ErrInvalidFormat
 	}
-	return nil
 }
 
 func (v versionExec) checkRelease() {
@@ -166,7 +165,8 @@ func (v versionExec) checkRelease() {
 	currentRelease := strings.TrimPrefix(version.Version, "v")
 
 	if latestRelease == currentRelease {
-		log.Info("You are running the latest version of Atmos", "version", latestRelease)
+		u.PrintfMessageToTUI("\n%s You are running the latest version of Atmos\n\n", theme.Styles.Checkmark)
+		log.Debug("Version check completed", "version", latestRelease)
 	} else {
 		v.printMessageToUpgradeToAtmosLatestRelease(latestRelease)
 	}

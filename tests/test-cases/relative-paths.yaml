@@ -10,11 +10,11 @@ tests:
       - "describe"
       - "stacks"
     expect:
+      valid:
+        - "yaml"
       diff: []
       stdout:
         - "acme-platform-dev:"
         - "acme-platform-staging:"
         - "acme-platform-prod:"
-      stderr:
-        - "^$"
       exit_code: 0

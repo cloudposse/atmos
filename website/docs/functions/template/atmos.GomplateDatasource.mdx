@@ -1,0 +1,247 @@
+---
+title: atmos.GomplateDatasource
+sidebar_position: 2
+sidebar_label: atmos.GomplateDatasource
+sidebar_class_name: command
+description: Fetch external data from APIs, files, or cloud services with automatic caching
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+**Stop hardcoding values in your infrastructure configurations.** The `atmos.GomplateDatasource` function lets you pull live data from anywhere - APIs, cloud services, databases, files - directly into your Atmos stacks. Instead of manually updating IP addresses, account IDs, or configuration values, your infrastructure can fetch them automatically at runtime. Plus, with built-in caching, it's lightning fast even when you reference the same data hundreds of times.
+</Intro>
+
+## What are Datasources?
+
+Think of datasources as **live connections to your data**, wherever it lives. Instead of copying and pasting values into your configurations (and keeping them updated), datasources let Atmos fetch the latest data automatically when it runs.
+
+**The Problem:** Traditional infrastructure configurations require you to:
+- Hardcode values that change (IP addresses, account IDs, API keys)
+- Manually update configurations when external systems change
+- Duplicate data across multiple files
+- Risk using outdated or incorrect values
+
+**The Solution:** Datasources let you:
+- **Pull live data** from any API, database, or cloud service
+- **Stay synchronized** with external systems automatically
+- **Centralize configuration** in its proper home (not in your IaC)
+- **Access secrets securely** from vaults without exposing them
+- **Query cloud metadata** like account IDs, regions, or resource tags dynamically
+
+### Real-World Example
+
+**Without Datasources (Manual, Error-Prone):**
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        account_id: "123456789012"  # Hardcoded - wrong in other environments!
+        allowed_ip: "203.0.113.45"  # Bob's IP - outdated when he moves
+        db_password: "prod-pass-123" # SECURITY RISK! Password in git
+```
+
+**With Datasources (Dynamic, Secure):**
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        account_id: '{{ (atmos.GomplateDatasource "aws").account_id }}'
+        allowed_ip: '{{ (atmos.GomplateDatasource "myip").ip }}'
+        db_password: '{{ (atmos.GomplateDatasource "vault").database.password }}'
+```
+
+### Common Use Cases
+
+- **Service Discovery**: Query current IP addresses, endpoints, or service locations
+- **Dynamic Configuration**: Fetch configuration values from external systems
+- **Secret Management**: Retrieve secrets from HashiCorp Vault, AWS Secrets Manager, etc.
+- **Metadata Queries**: Get AWS account info, region data, or resource tags
+- **External Data Import**: Load data from CSV files, JSON APIs, or databases
+
+## Usage
+
+```yaml
+  {{ (atmos.GomplateDatasource "<alias>").<attribute> }}
+```
+
+## Arguments
+
+<dl>
+  <dt>`alias`</dt>
+  <dd>The datasource alias defined in your Atmos configuration</dd>
+
+  <dt>`attribute`</dt>
+  <dd>Attribute name (field) to extract from the datasource response</dd>
+</dl>
+
+## Supported Datasource Types
+
+Gomplate supports numerous datasource types:
+- **HTTP/HTTPS**: REST APIs and web services
+- **File**: Local files (JSON, YAML, TOML, CSV, etc.)
+- **AWS**: Systems Manager Parameter Store, Secrets Manager, S3
+- **Cloud**: Azure Key Vault, Google Cloud Storage
+- **Vault**: HashiCorp Vault secrets
+- **Environment**: Environment variables
+- **Git**: Git repository data
+- **Consul**: HashiCorp Consul key-value store
+
+## How it Works
+
+### Automatic Caching
+
+The `atmos.GomplateDatasource` function automatically caches results in memory during stack processing:
+
+1. **First call**: Fetches data from the external source and stores in cache
+2. **Subsequent calls**: Returns cached data without additional external calls
+3. **Cache scope**: Per Atmos execution (cache is cleared between runs)
+
+This caching mechanism provides several benefits:
+- **Performance**: Dramatically faster stack processing with multiple datasource references
+- **Reliability**: Reduces failures from rate limiting or network issues
+- **Cost savings**: Fewer API calls to metered services
+- **Consistency**: All references get the same data within a single execution
+
+### Comparison with Direct Gomplate Datasources
+
+| Feature | `datasource` (Gomplate) | `atmos.GomplateDatasource` |
+|---------|------------------------|---------------------------|
+| External calls | Every invocation | Once per alias |
+| Performance | Slower with multiple uses | Fast (cached) |
+| Rate limiting risk | High | Low |
+| Network failures | Each call can fail | Single point of failure |
+| Use case | Single reference | Multiple references |
+
+## Examples
+
+### Basic API Call
+
+<File>
+```yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        timeout: 5
+        datasources:
+          # Define a datasource to get current IP
+          ip:
+            url: "https://api.ipify.org?format=json"
+            headers:
+              accept:
+                - "application/json"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # This will be cached after first call
+        public_ip: '{{ (atmos.GomplateDatasource "ip").ip }}'
+
+    firewall:
+      vars:
+        # Reuses cached result - no additional API call
+        allowed_ip: '{{ (atmos.GomplateDatasource "ip").ip }}'
+```
+</File>
+
+### AWS Systems Manager Parameter
+
+<File>
+```yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        datasources:
+          # Fetch from AWS SSM Parameter Store
+          database:
+            url: "aws+smp:///myapp/database/config?region=us-east-1"
+
+components:
+  terraform:
+    app:
+      vars:
+        # All these use cached result after first fetch
+        db_host: '{{ (atmos.GomplateDatasource "database").host }}'
+        db_port: '{{ (atmos.GomplateDatasource "database").port }}'
+        db_name: '{{ (atmos.GomplateDatasource "database").name }}'
+```
+</File>
+
+### Loading External Configuration
+
+<File>
+```yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        datasources:
+          # Load configuration from external YAML file
+          config:
+            url: "file:///configs/app-config.yaml"
+
+components:
+  terraform:
+    application:
+      vars:
+        # Access nested configuration values
+        feature_flags: '{{ (atmos.GomplateDatasource "config").features }}'
+        api_limits: '{{ (atmos.GomplateDatasource "config").limits.api }}'
+```
+</File>
+
+## Performance Example
+
+Consider this configuration that references the same datasource multiple times:
+
+<File>
+```yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        timeout: 5
+        datasources:
+          metadata:
+            url: "https://api.example.com/metadata"
+
+components:
+  terraform:
+    component1:
+      vars:
+        region: '{{ (datasource "metadata").region }}'           # API call #1
+        account: '{{ (atmos.GomplateDatasource "metadata").account }}'  # API call #2 (cached)
+
+    component2:
+      vars:
+        region: '{{ (atmos.GomplateDatasource "metadata").region }}'    # Cached
+        env: '{{ (atmos.GomplateDatasource "metadata").environment }}'  # Cached
+
+    component3:
+      vars:
+        cluster: '{{ (atmos.GomplateDatasource "metadata").cluster }}'  # Cached
+```
+</File>
+
+**Without caching**: 5 API calls (potential for timeouts, rate limiting)
+**With `atmos.GomplateDatasource`**: 1 API call (4 cache hits)
+
+## Best Practices
+
+1. **Always use `atmos.GomplateDatasource` for repeated references** to the same external data
+2. **Configure appropriate timeouts** in the `gomplate.timeout` setting
+3. **Handle errors gracefully** - external sources can fail
+4. **Use caching strategically** - cache expensive or rate-limited APIs
+5. **Document your datasources** - explain what external data is being fetched and why
+
+## See Also
+
+- [Gomplate Datasources Documentation](https://docs.gomplate.ca/datasources/)
+- [Atmos Template Settings](/cli/configuration#templates)
+- [Template Functions](/functions/template)

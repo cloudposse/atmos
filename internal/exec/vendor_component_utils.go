@@ -12,7 +12,8 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/Masterminds/sprig/v3"
+	"github.com/cloudposse/atmos/pkg/perf"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/jfrog/jfrog-client-go/utils/log"
@@ -30,7 +31,6 @@ const ociScheme = "oci://"
 var (
 	ErrMissingMixinURI             = errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
 	ErrMissingMixinFilename        = errors.New("'filename' must be specified for each 'mixin' in the 'component.yaml' file")
-	ErrUnsupportedComponentType    = errors.New("'%s' is not supported type. Valid types are 'terraform' and 'helmfile'")
 	ErrMixinEmpty                  = errors.New("mixin URI cannot be empty")
 	ErrMixinNotImplemented         = errors.New("local mixin installation not implemented")
 	ErrStackPullNotSupported       = errors.New("command 'atmos vendor pull --stack <stack>' is not supported yet")
@@ -61,17 +61,22 @@ func ReadAndProcessComponentVendorConfigFile(
 	component string,
 	componentType string,
 ) (schema.VendorComponentConfig, string, error) {
+	defer perf.Track(atmosConfig, "exec.ReadAndProcessComponentVendorConfigFile")()
+
 	var componentBasePath string
 	var componentConfig schema.VendorComponentConfig
 
 	switch componentType {
-	case "terraform":
+	case cfg.TerraformComponentType:
 		componentBasePath = atmosConfig.Components.Terraform.BasePath
-	case "helmfile":
+	case cfg.HelmfileComponentType:
 		componentBasePath = atmosConfig.Components.Helmfile.BasePath
+	case cfg.PackerComponentType:
+		componentBasePath = atmosConfig.Components.Packer.BasePath
 	default:
-		return componentConfig, "", fmt.Errorf("%s,%w", componentType, ErrUnsupportedComponentType)
+		return componentConfig, "", fmt.Errorf("%s,%w", componentType, errUtils.ErrUnsupportedComponentType)
 	}
+
 	componentPath := filepath.Join(atmosConfig.BasePath, componentBasePath, component)
 
 	dirExists, err := u.IsDirectory(componentPath)
@@ -120,6 +125,8 @@ func ExecuteStackVendorInternal(
 	stack string,
 	dryRun bool,
 ) error {
+	defer perf.Track(nil, "exec.ExecuteStackVendorInternal")()
+
 	return ErrStackPullNotSupported
 }
 
@@ -227,13 +234,15 @@ func ExecuteComponentVendorInternal(
 	componentPath string,
 	dryRun bool,
 ) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorInternal")()
+
 	if vendorComponentSpec.Source.Uri == "" {
 		return fmt.Errorf("%w:'%s'", ErrUriMustSpecified, cfg.ComponentVendorConfigFileName)
 	}
 	uri := vendorComponentSpec.Source.Uri
 	// Parse 'uri' template
 	if vendorComponentSpec.Source.Version != "" {
-		t, err := template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
+		t, err := template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(getSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
 		if err != nil {
 			return err
 		}
@@ -291,7 +300,7 @@ func handleLocalFileScheme(componentPath, uri string) (string, bool, bool) {
 	var useLocalFileSystem, sourceIsLocalFile bool
 
 	// Handle absolute path resolution
-	if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+	if absPath, err := u.JoinPathAndValidate(componentPath, uri); err == nil {
 		uri = absPath
 		useLocalFileSystem = true
 		sourceIsLocalFile = u.FileExists(uri)
@@ -338,12 +347,12 @@ func processComponentMixins(vendorComponentSpec *schema.VendorComponentSpec, com
 		// If it's a file path, check if it's an absolute path.
 		// If it's not absolute path, join it with the base path (component dir) and convert to absolute path.
 		if !useOciScheme {
-			if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+			if absPath, err := u.JoinPathAndValidate(componentPath, uri); err == nil {
 				uri = absPath
 			}
 		}
 		// Check if it's a local file .
-		if absPath, err := u.JoinAbsolutePathWithPath(componentPath, uri); err == nil {
+		if absPath, err := u.JoinPathAndValidate(componentPath, uri); err == nil {
 			if u.FileExists(absPath) {
 				continue
 			}
@@ -371,7 +380,7 @@ func parseMixinURI(mixin *schema.VendorComponentMixins) (string, error) {
 		return mixin.Uri, nil
 	}
 
-	tmpl, err := template.New("mixin-uri").Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(mixin.Uri)
+	tmpl, err := template.New("mixin-uri").Funcs(getSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(mixin.Uri)
 	if err != nil {
 		return "", err
 	}

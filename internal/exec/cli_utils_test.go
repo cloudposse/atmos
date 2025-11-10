@@ -4,7 +4,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -131,7 +133,330 @@ func Test_processArgsAndFlags_invalidFlag(t *testing.T) {
 	)
 
 	assert.Error(t, err)
-	assert.ErrorContains(t, err, "invalid flag: --init-pass-vars=invalid=true")
+	assert.ErrorContains(t, err, "invalid flag")
+	assert.ErrorContains(t, err, "--init-pass-vars=invalid=true")
+}
+
+func Test_processArgsAndFlags_errorPaths(t *testing.T) {
+	tests := []struct {
+		name              string
+		componentType     string
+		inputArgsAndFlags []string
+		expectedError     string
+	}{
+		// Missing flag values (need to include plan as subcommand to avoid early return).
+		{
+			name:              "terraform-command flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--terraform-command"},
+			expectedError:     "--terraform-command",
+		},
+		{
+			name:              "terraform-dir flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--terraform-dir"},
+			expectedError:     "--terraform-dir",
+		},
+		{
+			name:              "append-user-agent flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--append-user-agent"},
+			expectedError:     "--append-user-agent",
+		},
+		{
+			name:              "helmfile-command flag without value",
+			componentType:     "helmfile",
+			inputArgsAndFlags: []string{"sync", "--helmfile-command"},
+			expectedError:     "--helmfile-command",
+		},
+		{
+			name:              "helmfile-dir flag without value",
+			componentType:     "helmfile",
+			inputArgsAndFlags: []string{"sync", "--helmfile-dir"},
+			expectedError:     "--helmfile-dir",
+		},
+		{
+			name:              "config-dir flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--config-dir"},
+			expectedError:     "--config-dir",
+		},
+		{
+			name:              "base-path flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--base-path"},
+			expectedError:     "--base-path",
+		},
+		{
+			name:              "vendor-base-path flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--vendor-base-path"},
+			expectedError:     "--vendor-base-path",
+		},
+		{
+			name:              "deploy-run-init flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--deploy-run-init"},
+			expectedError:     "--deploy-run-init",
+		},
+		{
+			name:              "auto-generate-backend-file flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--auto-generate-backend-file"},
+			expectedError:     "--auto-generate-backend-file",
+		},
+		{
+			name:              "init-run-reconfigure flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--init-run-reconfigure"},
+			expectedError:     "--init-run-reconfigure",
+		},
+		{
+			name:              "logs-level flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--logs-level"},
+			expectedError:     "--logs-level",
+		},
+		{
+			name:              "logs-file flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--logs-file"},
+			expectedError:     "--logs-file",
+		},
+		// Invalid flag formats with multiple equals signs.
+		{
+			name:              "terraform-command with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--terraform-command=plan=extra"},
+			expectedError:     "--terraform-command=plan=extra",
+		},
+		{
+			name:              "terraform-dir with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--terraform-dir=/path=extra"},
+			expectedError:     "--terraform-dir=/path=extra",
+		},
+		{
+			name:              "append-user-agent with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--append-user-agent=agent=extra"},
+			expectedError:     "--append-user-agent=agent=extra",
+		},
+		{
+			name:              "helmfile-command with multiple equals",
+			componentType:     "helmfile",
+			inputArgsAndFlags: []string{"sync", "--helmfile-command=sync=extra"},
+			expectedError:     "--helmfile-command=sync=extra",
+		},
+		{
+			name:              "helmfile-dir with multiple equals",
+			componentType:     "helmfile",
+			inputArgsAndFlags: []string{"sync", "--helmfile-dir=/path=extra"},
+			expectedError:     "--helmfile-dir=/path=extra",
+		},
+		{
+			name:              "config-dir with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--config-dir=/path=extra"},
+			expectedError:     "--config-dir=/path=extra",
+		},
+		{
+			name:              "base-path with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--base-path=/path=extra"},
+			expectedError:     "--base-path=/path=extra",
+		},
+		{
+			name:              "vendor-base-path with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--vendor-base-path=/path=extra"},
+			expectedError:     "--vendor-base-path=/path=extra",
+		},
+		{
+			name:              "deploy-run-init with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--deploy-run-init=true=extra"},
+			expectedError:     "--deploy-run-init=true=extra",
+		},
+		{
+			name:              "auto-generate-backend-file with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--auto-generate-backend-file=true=extra"},
+			expectedError:     "--auto-generate-backend-file=true=extra",
+		},
+		{
+			name:              "init-run-reconfigure with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--init-run-reconfigure=true=extra"},
+			expectedError:     "--init-run-reconfigure=true=extra",
+		},
+		{
+			name:              "logs-level with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--logs-level=Debug=extra"},
+			expectedError:     "--logs-level=Debug=extra",
+		},
+		{
+			name:              "logs-file with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--logs-file=/path=extra"},
+			expectedError:     "--logs-file=/path=extra",
+		},
+		{
+			name:              "init-pass-vars flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--init-pass-vars"},
+			expectedError:     "--init-pass-vars",
+		},
+		{
+			name:              "init-pass-vars with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"init", "--init-pass-vars=true=extra"},
+			expectedError:     "--init-pass-vars=true=extra",
+		},
+		{
+			name:              "skip-planfile flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--skip-planfile"},
+			expectedError:     "--skip-planfile",
+		},
+		{
+			name:              "skip-planfile with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--skip-planfile=true=extra"},
+			expectedError:     "--skip-planfile=true=extra",
+		},
+		{
+			name:              "schemas-atmos-manifest flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-atmos-manifest"},
+			expectedError:     "--schemas-atmos-manifest",
+		},
+		{
+			name:              "schemas-atmos-manifest with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-atmos-manifest=/path=extra"},
+			expectedError:     "--schemas-atmos-manifest=/path=extra",
+		},
+		{
+			name:              "redirect-stderr flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--redirect-stderr"},
+			expectedError:     "--redirect-stderr",
+		},
+		{
+			name:              "redirect-stderr with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--redirect-stderr=/path=extra"},
+			expectedError:     "--redirect-stderr=/path=extra",
+		},
+		{
+			name:              "planfile flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--planfile"},
+			expectedError:     "--planfile",
+		},
+		{
+			name:              "planfile with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--planfile=/path=extra"},
+			expectedError:     "--planfile=/path=extra",
+		},
+		{
+			name:              "schemas-jsonschema-dir flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-jsonschema-dir"},
+			expectedError:     "--schemas-jsonschema-dir",
+		},
+		{
+			name:              "schemas-jsonschema-dir with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-jsonschema-dir=/path=extra"},
+			expectedError:     "--schemas-jsonschema-dir=/path=extra",
+		},
+		{
+			name:              "schemas-opa-dir flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-opa-dir"},
+			expectedError:     "--schemas-opa-dir",
+		},
+		{
+			name:              "schemas-opa-dir with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-opa-dir=/path=extra"},
+			expectedError:     "--schemas-opa-dir=/path=extra",
+		},
+		{
+			name:              "schemas-cue-dir flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-cue-dir"},
+			expectedError:     "--schemas-cue-dir",
+		},
+		{
+			name:              "schemas-cue-dir with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--schemas-cue-dir=/path=extra"},
+			expectedError:     "--schemas-cue-dir=/path=extra",
+		},
+		{
+			name:              "settings-list-merge-strategy flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--settings-list-merge-strategy"},
+			expectedError:     "--settings-list-merge-strategy",
+		},
+		{
+			name:              "settings-list-merge-strategy with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--settings-list-merge-strategy=append=extra"},
+			expectedError:     "--settings-list-merge-strategy=append=extra",
+		},
+		{
+			name:              "query flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--query"},
+			expectedError:     "--query",
+		},
+		{
+			name:              "query with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--query=.foo=bar"},
+			expectedError:     "--query=.foo=bar",
+		},
+		{
+			name:              "stacks-dir flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--stacks-dir"},
+			expectedError:     "--stacks-dir",
+		},
+		{
+			name:              "stacks-dir with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--stacks-dir=/path=extra"},
+			expectedError:     "--stacks-dir=/path=extra",
+		},
+		{
+			name:              "workflows-dir flag without value",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--workflows-dir"},
+			expectedError:     "--workflows-dir",
+		},
+		{
+			name:              "workflows-dir with multiple equals",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"plan", "--workflows-dir=/path=extra"},
+			expectedError:     "--workflows-dir=/path=extra",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
+
+			assert.Error(t, err)
+			assert.ErrorContains(t, err, "invalid flag")
+			assert.ErrorContains(t, err, tt.expectedError)
+		})
+	}
 }
 
 func Test_getCliVars(t *testing.T) {
@@ -227,6 +552,136 @@ func Test_getCliVars(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestProcessCommandLineArgs_IdentityFromEnvironmentVariable(t *testing.T) {
+	tests := []struct {
+		name           string
+		envValue       string
+		flagValue      string
+		args           []string
+		expectedResult string
+		description    string
+	}{
+		{
+			name:           "uses environment variable when flag not provided",
+			envValue:       "test-identity-from-env",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: "test-identity-from-env",
+			description:    "ATMOS_IDENTITY env var should be used when --identity flag is not provided",
+		},
+		{
+			name:           "flag takes precedence over environment variable",
+			envValue:       "test-identity-from-env",
+			flagValue:      "test-identity-from-flag",
+			args:           []string{"plan", "component", "--stack", "stack", "--identity", "test-identity-from-flag"},
+			expectedResult: "test-identity-from-flag",
+			description:    "--identity flag should override ATMOS_IDENTITY env var",
+		},
+		{
+			name:           "empty when neither flag nor env var provided",
+			envValue:       "",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: "",
+			description:    "Identity should be empty when neither flag nor env var is set",
+		},
+		{
+			name:           "uses environment variable with identity flag equals syntax",
+			envValue:       "test-identity-from-env",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: "test-identity-from-env",
+			description:    "ATMOS_IDENTITY should work regardless of flag syntax",
+		},
+		{
+			name:           "flag with equals syntax takes precedence",
+			envValue:       "test-identity-from-env",
+			flagValue:      "test-identity-from-flag-equals",
+			args:           []string{"plan", "component", "--stack", "stack", "--identity=test-identity-from-flag-equals"},
+			expectedResult: "test-identity-from-flag-equals",
+			description:    "--identity=value syntax should override ATMOS_IDENTITY env var",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up environment variable.
+			if tt.envValue != "" {
+				t.Setenv("ATMOS_IDENTITY", tt.envValue)
+			}
+
+			// Create a minimal cobra command for testing with required flags.
+			cmd := &cobra.Command{
+				Use: "terraform",
+			}
+			cmd.Flags().String("stack", "", "stack name")
+			cmd.Flags().String("identity", "", "identity name")
+			cmd.Flags().String("base-path", "", "base path")
+			cmd.Flags().StringSlice("config", []string{}, "config files")
+			cmd.Flags().StringSlice("config-path", []string{}, "config paths")
+
+			// Process the command-line arguments.
+			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})
+
+			// Verify results.
+			require.NoError(t, err, "ProcessCommandLineArgs should not return error")
+			assert.Equal(t, tt.expectedResult, result.Identity, tt.description)
+		})
+	}
+}
+
+// TestProcessCommandLineArgs_IdentityFlagParsing verifies that the --identity flag
+// is correctly parsed in both space-separated and equals syntax formats.
+func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		expectedResult string
+	}{
+		{
+			name:           "identity flag with space separator",
+			args:           []string{"plan", "component", "--stack", "stack", "--identity", "my-identity"},
+			expectedResult: "my-identity",
+		},
+		{
+			name:           "identity flag with equals syntax",
+			args:           []string{"plan", "component", "--stack", "stack", "--identity=my-identity"},
+			expectedResult: "my-identity",
+		},
+		{
+			name:           "identity flag with hyphenated name",
+			args:           []string{"plan", "component", "--stack", "stack", "--identity", "core-identity/managers"},
+			expectedResult: "core-identity/managers",
+		},
+		{
+			name:           "identity flag at different position",
+			args:           []string{"--identity", "early-identity", "plan", "component", "--stack", "stack"},
+			expectedResult: "early-identity",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a minimal cobra command for testing with required flags.
+			cmd := &cobra.Command{
+				Use: "terraform",
+			}
+			cmd.Flags().String("stack", "", "stack name")
+			cmd.Flags().String("identity", "", "identity name")
+			cmd.Flags().String("base-path", "", "base path")
+			cmd.Flags().StringSlice("config", []string{}, "config files")
+			cmd.Flags().StringSlice("config-path", []string{}, "config paths")
+
+			// Process the command-line arguments.
+			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})
+
+			// Verify results.
+			require.NoError(t, err, "ProcessCommandLineArgs should not return error")
+			assert.Equal(t, tt.expectedResult, result.Identity, "Identity should match expected value")
 		})
 	}
 }

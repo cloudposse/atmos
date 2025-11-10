@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/charmbracelet/log"
+	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 )
@@ -15,13 +17,21 @@ var ErrRelPath = errors.New("error determining relative path")
 // getAllStacksComponentsPaths retrieves all components relatives paths to base Terraform directory from the stacks map.
 func getAllStacksComponentsPaths(stacksMap map[string]any) []string {
 	var allComponentsPaths []string
+	uniquePaths := make(map[string]bool)
+
 	for _, stackData := range stacksMap {
 		componentsPath, err := getComponentsPaths(stackData)
 		if err != nil {
 			log.Debug("Skip invalid components path", "path", componentsPath)
 			continue // Skip invalid components path.
 		}
-		allComponentsPaths = append(allComponentsPaths, componentsPath...)
+		// Add only unique paths to avoid duplicates when multiple stacks reference the same component.
+		for _, path := range componentsPath {
+			if !uniquePaths[path] {
+				uniquePaths[path] = true
+				allComponentsPaths = append(allComponentsPaths, path)
+			}
+		}
 	}
 	return allComponentsPaths
 }
@@ -29,12 +39,12 @@ func getAllStacksComponentsPaths(stacksMap map[string]any) []string {
 func getComponentsPaths(stackData any) ([]string, error) {
 	stackMap, ok := stackData.(map[string]any)
 	if !ok {
-		return nil, ErrParseStacks
+		return nil, errUtils.ErrParseStacks
 	}
 
 	componentsMap, ok := stackMap["components"].(map[string]any)
 	if !ok {
-		return nil, ErrParseComponents
+		return nil, errUtils.ErrParseComponents
 	}
 
 	terraformComponents, ok := componentsMap["terraform"].(map[string]any)
@@ -60,6 +70,8 @@ func getComponentsPaths(stackData any) ([]string, error) {
 }
 
 func CollectComponentsDirectoryObjects(terraformDirAbsolutePath string, allComponentsRelativePaths []string, filesToClear []string) ([]Directory, error) {
+	defer perf.Track(nil, "exec.CollectComponentsDirectoryObjects")()
+
 	var allFolders []Directory
 	for _, path := range allComponentsRelativePaths {
 		componentPath := filepath.Join(terraformDirAbsolutePath, path)
@@ -74,6 +86,8 @@ func CollectComponentsDirectoryObjects(terraformDirAbsolutePath string, allCompo
 }
 
 func CollectComponentObjects(terraformDirAbsolutePath string, componentPath string, patterns []string) ([]Directory, error) {
+	defer perf.Track(nil, "exec.CollectComponentObjects")()
+
 	if err := validateInputPath(terraformDirAbsolutePath); err != nil {
 		return nil, err
 	}

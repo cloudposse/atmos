@@ -49,16 +49,84 @@ const config = {
                     {
                         from: '/reference/terraform-limitations',
                         to: '/introduction/why-atmos'
+                    },
+                    // Redirects for template functions moved to /functions/template/
+                    {
+                        from: '/core-concepts/stacks/templates/functions/atmos.Component',
+                        to: '/functions/template/atmos.Component'
+                    },
+                    {
+                        from: '/core-concepts/stacks/templates/functions/atmos.GomplateDatasource',
+                        to: '/functions/template/atmos.GomplateDatasource'
+                    },
+                    {
+                        from: '/core-concepts/stacks/templates/functions/atmos.Store',
+                        to: '/functions/template/atmos.Store'
+                    },
+                    // Redirects for YAML functions moved to /functions/yaml/
+                    {
+                        from: '/core-concepts/stacks/yaml-functions/env',
+                        to: '/functions/yaml/env'
+                    },
+                    {
+                        from: '/core-concepts/stacks/yaml-functions/exec',
+                        to: '/functions/yaml/exec'
+                    },
+                    {
+                        from: '/core-concepts/stacks/yaml-functions/include',
+                        to: '/functions/yaml/include'
+                    },
+                    {
+                        from: '/core-concepts/stacks/yaml-functions/include.raw',
+                        to: '/functions/yaml/include.raw'
+                    },
+                    {
+                        from: '/core-concepts/stacks/yaml-functions/repo-root',
+                        to: '/functions/yaml/repo-root'
+                    },
+                    {
+                        from: '/core-concepts/stacks/yaml-functions/store.get',
+                        to: '/functions/yaml/store.get'
+                    },
+                    {
+                        from: '/core-concepts/stacks/yaml-functions/store',
+                        to: '/functions/yaml/store'
+                    },
+                    {
+                        from: '/core-concepts/stacks/yaml-functions/template',
+                        to: '/functions/yaml/template'
+                    },
+                    {
+                        from: '/core-concepts/stacks/yaml-functions/terraform.output',
+                        to: '/functions/yaml/terraform.output'
+                    },
+                    {
+                        from: '/core-concepts/stacks/yaml-functions/terraform.state',
+                        to: '/functions/yaml/terraform.state'
+                    },
+                    // Redirect for the YAML functions index page
+                    {
+                        from: '/core-concepts/stacks/yaml-functions',
+                        to: '/functions'
+                    },
+                    // Redirect for the main functions index page
+                    {
+                        from: '/core-concepts/stacks/templates/functions',
+                        to: '/functions'
+                    },
+                    // Alternative paths that might have been used
+                    {
+                        from: '/core-concepts/template-functions',
+                        to: '/functions'
                     }
                 ],
             },
         ],
         [
-            '@grnet/docusaurus-terminology', {
+            path.resolve(__dirname, './plugins/glossary-tooltips'), {
                 docsDir: './docs/',
-                termsDir: './reference/glossary/',
-                glossaryFilepath: './docs/reference/glossary/index.mdx',
-                glossaryComponentPath: '../../../src/components/glossary/Glossary.tsx'
+                termsDir: './docs/glossary/',
+                glossaryFilepath: './docs/glossary/index.mdx',
         }],
         [
             'custom-loaders', {}
@@ -85,6 +153,22 @@ const config = {
         ],
         [
             path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
+        ],
+        [
+            'docusaurus-plugin-llms',
+            {
+                generateLLMsTxt: true,
+                generateLLMsFullTxt: true,
+                docsDir: 'docs',
+                includeBlog: true,
+                includeOrder: [
+                    'introduction/*',
+                    'quick-start/*',
+                    'install/*',
+                    'core-concepts/*',
+                    'cli/*',
+                ],
+            },
         ]
     ],
 
@@ -103,6 +187,12 @@ const config = {
                 },
                 blog: {
                     showReadingTime: true,
+                    postsPerPage: 'ALL',
+                    blogSidebarCount: 'ALL',
+                    blogSidebarTitle: 'All posts',
+                    blogTitle: 'Atmos Changelog',
+                    blogDescription: 'Release notes for Atmos',
+                    include: ['**/*.{md,mdx}'],
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
@@ -156,6 +246,11 @@ const config = {
                         label: 'Community',
                         position: 'left',
                         to: '/community'
+                    },
+                    {
+                        label: 'Changelog',
+                        position: 'left',
+                        to: '/blog'
                     },
                     // Algolia search configuration
                     {

@@ -1,7 +1,6 @@
 package component
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,7 +13,6 @@ func TestComponentProcessor(t *testing.T) {
 	var component string
 	var stack string
 	namespace := ""
-	var yamlConfig string
 
 	var tenant1Ue2DevTestTestComponent map[string]any
 	component = "test/test-component"
@@ -76,9 +74,17 @@ func TestComponentProcessor(t *testing.T) {
 	assert.Equal(t, "orgs/cp/tenant1/dev/us-east-2", tenant1Ue2DevTestTestComponentDeps2[8])
 	assert.Equal(t, "tenant1-ue2-dev", tenant1Ue2DevTestTestComponentTerraformWorkspace2)
 
-	yamlConfig, err = u.ConvertToYAML(tenant1Ue2DevTestTestComponent)
+	yamlConfig, err := u.ConvertToYAML(tenant1Ue2DevTestTestComponent)
 	assert.Nil(t, err)
-	t.Log(yamlConfig)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if yamlConfig != "" {
+				t.Logf("Component configuration:\n%s", yamlConfig)
+			} else {
+				t.Logf("Component configuration (raw): %+v", tenant1Ue2DevTestTestComponent)
+			}
+		}
+	})
 
 	var tenant1Ue2DevTestTestComponentOverrideComponent map[string]any
 	component = "test/test-component-override"
@@ -123,9 +129,17 @@ func TestComponentProcessor(t *testing.T) {
 	assert.Equal(t, "tenant1-ue2-dev-test-test-component-override-2", tenant1Ue2DevTestTestComponentOverrideComponent2Workspace)
 	assert.Equal(t, "test-test-component", tenant1Ue2DevTestTestComponentOverrideComponent2WorkspaceKeyPrefix)
 
-	yamlConfig, err = u.ConvertToYAML(tenant1Ue2DevTestTestComponentOverrideComponent2)
+	yamlConfig2, err := u.ConvertToYAML(tenant1Ue2DevTestTestComponentOverrideComponent2)
 	assert.Nil(t, err)
-	t.Log(yamlConfig)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if yamlConfig2 != "" {
+				t.Logf("Component override 2 configuration:\n%s", yamlConfig2)
+			} else {
+				t.Logf("Component override 2 configuration (raw): %+v", tenant1Ue2DevTestTestComponentOverrideComponent2)
+			}
+		}
+	})
 
 	// Test having a dash `-` in the stage name
 	var tenant1Ue2Test1TestTestComponentOverrideComponent2 map[string]any
@@ -164,7 +178,6 @@ func TestComponentProcessor(t *testing.T) {
 }
 
 func TestComponentProcessorHierarchicalInheritance(t *testing.T) {
-	var yamlConfig string
 	namespace := ""
 	component := "derived-component-2"
 	tenant := "tenant1"
@@ -178,9 +191,17 @@ func TestComponentProcessorHierarchicalInheritance(t *testing.T) {
 	componentHierarchicalInheritanceTestVar := componentVars["hierarchical_inheritance_test"].(string)
 	assert.Equal(t, "base-component-1", componentHierarchicalInheritanceTestVar)
 
-	yamlConfig, err = u.ConvertToYAML(componentMap)
+	yamlConfig, err := u.ConvertToYAML(componentMap)
 	assert.Nil(t, err)
-	t.Log(yamlConfig)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if yamlConfig != "" {
+				t.Logf("Component map configuration:\n%s", yamlConfig)
+			} else {
+				t.Logf("Component map configuration (raw): %+v", componentMap)
+			}
+		}
+	})
 }
 
 func TestComponentProcessor_StackNameTemplate(t *testing.T) {
@@ -219,11 +240,7 @@ func TestComponentProcessor_StackNameTemplate_Errors(t *testing.T) {
 	_, err = ProcessComponentFromContext(component, namespace, tenant, environment, stage, stacksPath, stacksPath)
 	assert.ErrorContains(t, err, "'environment' requires 'tenant' and 'namespace'")
 
-	err = os.Setenv("ATMOS_STACKS_NAME_TEMPLATE", "{{ .invalid }}")
-	assert.NoError(t, err, "Setting 'ATMOS_STACKS_NAME_TEMPLATE' environment variable should execute without error")
-	defer func() {
-		os.Unsetenv("ATMOS_STACKS_NAME_TEMPLATE")
-	}()
+	t.Setenv("ATMOS_STACKS_NAME_TEMPLATE", "{{ .invalid }}")
 
 	_, err = ProcessComponentFromContext(component, namespace, tenant, environment, stage, stacksPath, stacksPath)
 	assert.ErrorContains(t, err, "map has no entry for key \"invalid\"")

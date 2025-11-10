@@ -1,0 +1,79 @@
+---
+title: atmos auth whoami
+sidebar_label: whoami
+sidebar_class_name: command
+sidebar_position: 8
+id: whoami
+description: Show current authentication status for the selected identity.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Display the current authentication context, including the effective identity and associated credentials. Useful for verifying which account is active and troubleshooting identity or session issues.
+</Intro>
+
+<Screengrab title="atmos auth whoami --help" slug="atmos-auth-whoami--help" />
+
+## Usage
+
+```shell
+atmos auth whoami [--identity <name>] [--output json]
+```
+
+## Examples
+
+```shell
+# Show current identity (human-friendly)
+atmos auth whoami
+
+# Interactively select identity to inspect
+atmos auth whoami --identity
+
+# Show a specific identity
+atmos auth whoami --identity dev-admin
+
+# Use short form of identity flag
+atmos auth whoami -i dev-admin
+
+# Interactive selection with short form
+atmos auth whoami -i
+
+# JSON output (redacts home directory from paths)
+atmos auth whoami --output json
+```
+
+## Arguments
+
+<dl>
+  <dt>n/a</dt>
+  <dd>No positional arguments.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    Specify the target identity to inspect. This flag has three modes:
+
+    - **With value** (`--identity admin`): Use the specified identity
+    - **Without value** (`--identity`): Show interactive selector to choose identity
+    - **Omitted**: Use the default identity configured in `atmos.yaml`, or prompt if no default is set
+
+    **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
+  </dd>
+
+  <dt>`--output` <em>(alias `-o`)</em></dt>
+  <dd>Output format. Supported: `json`. Default is human-readable.</dd>
+</dl>
+
+## Environment variables
+
+<dl>
+  <dt>`ATMOS_IDENTITY`</dt>
+  <dd>Default identity when `--identity` is not provided.</dd>
+
+  <dt>`ATMOS_AUTH_WHOAMI_OUTPUT`</dt>
+  <dd>Set to `json` for JSON output by default.</dd>
+</dl>

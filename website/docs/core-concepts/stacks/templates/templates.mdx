@@ -16,7 +16,7 @@ import SecondaryCTA from '@site/src/components/SecondaryCTA'
 
 <Intro>
     Use templates as an _escape hatch_, when standard [inheritance](/core-concepts/stacks/inheritance) or
-    [Atmos Functions](/core-concepts/stacks/yaml-functions) are insufficient.
+    [Atmos Functions](/functions/yaml) are insufficient.
     Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests and functions to customize Stack configurations.
 </Intro>
 
@@ -136,11 +136,11 @@ In `Go` templates, you can use the following functions and data sources:
  - [Sprig Functions](https://masterminds.github.io/sprig/)
  - [Gomplate Functions](https://docs.gomplate.ca/functions/) (note, this is "Gomplate" and not "Go template")
  - [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
- - [Atmos Template Functions](/core-concepts/stacks/templates/functions)
+ - [Atmos Template Functions](/functions/template)
 
 <ActionCard>
     Functions are a crucial part of templating in Atmos stack manifests. They allow you to manipulate data and perform operations on the data to customize the stack configurations.
-    <PrimaryCTA to="/core-concepts/stacks/templates/functions">Learn About Functions</PrimaryCTA>
+    <PrimaryCTA to="/functions/template">Learn About Functions</PrimaryCTA>
 </ActionCard>
 
 ### Configuring Templating in Atmos Stack Manifests
@@ -367,7 +367,7 @@ Using Go templates and template functions in Atmos stack configurations is gener
 Atmos processes stack configuration files in multiple stages: first as Go templates, and then as YAML. During the Go template stage, every template function must be evaluated and resolved before Atmos can load the file. This introduces a critical dependency: Atmos cannot proceed unless all referenced resources are available and accessible.
 :::
 
-1. **Performance**: Functions like [`Atmos.Component`](/core-concepts/stacks/templates/functions/atmos.Component) may require Atmos to retrieve extensive information about other components or outputs that depend on Terraform remote state. This adds latency, especially if used extensively across your stack configurations. In the case of retrieving Terraform outputs, Atmos must initialize the Terraform component which involves downloading all Terraform providers, which is slow. Commands like [`atmos describe stacks`](/cli/commands/describe/stacks) or [`atmos describe affected`](/cli/commands/describe/affected), which rely on evaluating all templates, can become noticeably slower as the number of remote calls increases.
+1. **Performance**: Functions like [`Atmos.Component`](/functions/template/atmos.Component) may require Atmos to retrieve extensive information about other components or outputs that depend on Terraform remote state. This adds latency, especially if used extensively across your stack configurations. In the case of retrieving Terraform outputs, Atmos must initialize the Terraform component which involves downloading all Terraform providers, which is slow. Commands like [`atmos describe stacks`](/cli/commands/describe/stacks) or [`atmos describe affected`](/cli/commands/describe/affected), which rely on evaluating all templates, can become noticeably slower as the number of remote calls increases.
 2. **Availability Risks:** Templated references to remote resources introduce fragility. If a referenced resource becomes unavailable—whether due to downtime, decommissioning, or network issues—Atmos commands that depend on those templates will fail. This can severely impact high availability (HA) scenarios and your ability to reliably deploy or manage infrastructure.
 
 ### Template Function Best Practices

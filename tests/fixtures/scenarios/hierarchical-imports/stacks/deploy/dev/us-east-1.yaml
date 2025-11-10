@@ -1,0 +1,41 @@
+# Level 4: Final stack configuration for dev/us-east-1
+# This is the top-level stack that imports everything
+# Import order is CRITICAL - each subsequent import should override previous ones
+
+import:
+  # Step 1: Import account configuration (sets stage=dev)
+  - catalog/mixins/account/dev
+
+  # Step 2: Import region configuration (sets region=us-east-1)
+  # This also imports provider configs via glob
+  - catalog/mixins/region/us-east-1
+
+  # Step 3: Import component configurations
+  - catalog/components/test-component/variants
+
+vars:
+  # Final override at stack level
+  import_order_test: "level-4-stack-dev-us-east-1"
+
+  # Stack-specific variables
+  environment: "dev"
+  stack_name: "dev-us-east-1"
+
+  # Final tags that should be deep-merged with all previous levels
+  tags:
+    Stack: "dev-us-east-1"
+    Source: "level-4-stack"
+
+settings:
+  import_order_test: "level-4-stack-dev-us-east-1-settings"
+  stack:
+    name: "dev-us-east-1"
+    type: "final"
+
+# Expected final values after all merges (for test validation):
+# - import_order_test: "level-4-stack-dev-us-east-1" (from this file)
+# - region: "us-east-1" (from catalog/mixins/region/us-east-1)
+# - stage: "dev" (from catalog/mixins/account/dev)
+# - vpc_cidr: "10.1.0.0/16" (from catalog/mixins/region/us-east-1)
+# - provider_priority: "c" (from catalog/mixins/provider/aws-c - last in glob sort)
+# - tags should include all tags from all levels (deep merge)

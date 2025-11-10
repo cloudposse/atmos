@@ -16,6 +16,10 @@ It takes an original plan file (`--orig`) and optionally a new plan file (`--new
 
 The command shows differences in variables, resources, and outputs between the two plans.
 
+:::info
+[Data sources](https://opentofu.org/docs/language/data-sources/) are automatically skipped during comparison and will not appear in the diff.
+:::
+
 ## Usage
 
 ```shell
@@ -24,18 +28,26 @@ atmos terraform plan-diff <component> -s <stack> --orig=<original-plan-file> [--
 
 ## Arguments
 
-| Argument    | Description                                          |
-| ----------- | ---------------------------------------------------- |
-| `component` | The name of the component to run the command against |
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>The name of the component to run the command against.</dd>
+</dl>
 
 ## Flags
 
-| Flag          | Description                                                |
-| ------------- | ---------------------------------------------------------- |
-| `-s, --stack` | The stack name to use (required)                           |
-| `--orig`      | Path to the original Terraform plan file (required)        |
-| `--new`       | Path to the new Terraform plan file (optional)             |
-| `--skip-init` | Skip running `terraform init` before executing the command |
+<dl>
+  <dt>`-s` / `--stack` <em>(required)</em></dt>
+  <dd>The stack name to use.</dd>
+
+  <dt>`--orig` <em>(required)</em></dt>
+  <dd>Path to the original Terraform plan file.</dd>
+
+  <dt>`--new` <em>(optional)</em></dt>
+  <dd>Path to the new Terraform plan file.</dd>
+
+  <dt>`--skip-init` <em>(optional)</em></dt>
+  <dd>Skip running `terraform init` before executing the command.</dd>
+</dl>
 
 You can also pass any additional flags and arguments that are supported by the `terraform plan` command when generating a new plan.
 
@@ -51,6 +63,30 @@ atmos terraform plan-diff myapp -s dev --orig=orig.plan
 
 ```shell
 atmos terraform plan-diff myapp -s dev --orig=orig.plan --new=new.plan
+```
+
+### Example with data resources
+
+When your Terraform configuration includes data sources, they will be automatically filtered out of the diff:
+
+```shell
+# Your plan might include data sources like:
+# data.aws_ami.example
+# data.aws_vpc.main
+# aws_instance.web_server
+# aws_s3_bucket.storage
+
+# The diff will only show managed resources:
+atmos terraform plan-diff myapp -s dev --orig=orig.plan
+```
+
+**Output:**
+```text
+Resources:
+-----------
++ aws_instance.web_server
+~ aws_s3_bucket.storage
+  ~ versioning.enabled: false => true
 ```
 
 ## Output Format

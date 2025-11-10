@@ -1,3 +1,22 @@
+# golangci-lint v2 configuration
+# This config is used by both standard golangci-lint and custom builds with plugins.
+#
+# Custom Linters (Module Plugins):
+# - Custom linters are defined in .custom-gcl.yml and built into a custom binary
+# - The custom binary (custom-gcl) contains ALL standard linters + custom plugins
+# - Enable custom linters here in the 'enable' list (e.g., 'lintroller')
+# - Configure custom linters in 'settings.custom.<linter-name>' section below
+#
+# To add a new custom linter:
+# 1. Add plugin to .custom-gcl.yml
+# 2. Run `golangci-lint custom` to build custom-gcl binary
+# 3. Enable the linter in the 'enable' list below
+# 4. Configure it in 'settings.custom.<linter-name>' section
+#
+# References:
+# - Configuration docs: https://golangci-lint.run/docs/linters/configuration/
+# - Module plugins: https://golangci-lint.run/docs/plugins/module-plugins/
+
 version: "2"
 run:
   tests: true
@@ -5,9 +24,11 @@ linters:
   enable:
     - bodyclose
     - cyclop
+    - depguard  # Controls allowed/forbidden package imports
     - dogsled
     - dupl
     - err113
+    - errorlint  # Detects %v instead of %w in fmt.Errorf, errors.Is/errors.As usage
     - forbidigo
     - funlen
     - gocognit
@@ -15,6 +36,7 @@ linters:
     - godot
     - gosec
     - importas
+    - lintroller  # Custom plugin: Atmos-specific test rules (see settings.custom.lintroller)
     - loggercheck
     - misspell
     - nestif
@@ -25,18 +47,82 @@ linters:
     - tparallel
     - unconvert
     - unparam
+    - unused
     - whitespace
   settings:
     cyclop:
       max-complexity: 15
+    depguard:
+      rules:
+        # Auth Architecture: Provider-Agnostic Core
+        # Core auth packages must remain provider-agnostic.
+        # Provider-specific code belongs in pkg/auth/providers/, pkg/auth/identities/, or pkg/auth/cloud/.
+        provider-agnostic-auth:
+          files:
+            - "$all"
+            - "!**/pkg/auth/providers/**"
+            - "!**/pkg/auth/identities/**"
+            - "!**/pkg/auth/cloud/**"
+            - "!**/pkg/auth/factory/**"
+            - "!**/pkg/auth/types/aws_credentials.go"
+            - "!**/pkg/auth/types/github_oidc_credentials.go"
+            - "$test"
+          deny:
+            # AWS: Identity and auth-related SDKs
+            - pkg: "github.com/aws/aws-sdk-go-v2"
+              desc: "AWS SDK imports forbidden in provider-agnostic auth code; use pkg/auth/providers/aws/, pkg/auth/identities/aws/, or pkg/auth/cloud/aws/ for AWS-specific implementations"
+            # Azure: Identity and auth SDKs (Entra ID, Azure AD)
+            - pkg: "github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+              desc: "Azure Identity SDK imports forbidden in provider-agnostic auth code; use pkg/auth/providers/azure/ or pkg/auth/identities/azure/ for Azure-specific implementations"
+            - pkg: "github.com/AzureAD"
+              desc: "Azure AD SDK imports forbidden in provider-agnostic auth code; use pkg/auth/providers/azure/ or pkg/auth/identities/azure/ for Azure-specific implementations"
+            # GCP: Identity and auth SDKs
+            - pkg: "cloud.google.com/go/iam"
+              desc: "GCP IAM SDK imports forbidden in provider-agnostic auth code; use pkg/auth/providers/gcp/ or pkg/auth/identities/gcp/ for GCP-specific implementations"
+            - pkg: "google.golang.org/api/iam"
+              desc: "GCP IAM API imports forbidden in provider-agnostic auth code; use pkg/auth/providers/gcp/ or pkg/auth/identities/gcp/ for GCP-specific implementations"
+            - pkg: "google.golang.org/api/iamcredentials"
+              desc: "GCP IAM Credentials API imports forbidden in provider-agnostic auth code; use pkg/auth/providers/gcp/ or pkg/auth/identities/gcp/ for GCP-specific implementations"
+            # GitHub: Identity SDKs
+            - pkg: "github.com/google/go-github"
+              desc: "GitHub SDK imports forbidden in provider-agnostic auth code; use pkg/auth/providers/github/ for GitHub-specific implementations"
     dogsled:
       max-blank-identifiers: 3
     dupl:
       threshold: 150
+    errorlint:
+      # Check for non-wrapping format verbs (%v) in fmt.Errorf calls.
+      # Enforces using %w to properly wrap errors for errors.Is/errors.As.
+      errorf: true
+      # Check whether fmt.Errorf uses the %w verb for formatting errors.
+      # Note: supports multiple %w verbs per fmt.Errorf call (requires Go 1.20+).
+      errorf-multi: true
+      # Check for plain type assertions and suggest replacing them with errors.As.
+      asserts: true
+      # Check for plain error comparisons and suggest replacing them with errors.Is.
+      comparison: true
     forbidigo:
       forbid:
         - pattern: os\.Getenv
           msg: Use `viper.BindEnv` for new environment variables instead of `os.Getenv`
+        - pattern: '\.(Skip|SkipNow)\('
+          msg: Use `t.Skipf("<reason>")` with a descriptive reason; do not use `t.Skip`/`t.SkipNow`
+        - pattern: ^path\.Join$
+          msg: Use `filepath.Join` for OS-appropriate path separators instead of `path.Join` (which always uses forward slashes)
+        - pattern: term\.IsTerminal\(
+          msg: Use `term.IsTTYSupportForStdout()`, `term.IsTTYSupportForStderr()`, or `term.IsTTYSupportForStdin()` instead of `term.IsTerminal()` for consistent and mockable TTY detection
+        - pattern: github\.com/golang/mock
+          msg: Use `go.uber.org/mock` instead of archived `github.com/golang/mock`
+        - pattern: github\.com/mitchellh/go-homedir
+          msg: Use `github.com/cloudposse/atmos/pkg/config/homedir` (our forked version) instead of `github.com/mitchellh/go-homedir`
+        - pattern: log\.Info\(.*[Dd][Ee][Bb][Uu][Gg]
+          msg: Use `log.Debug()` for debug messages instead of `log.Info()` with "DEBUG" in the message
+        - pattern: log\.Warn\(.*[Dd][Ee][Bb][Uu][Gg]
+          msg: Use `log.Debug()` for debug messages instead of `log.Warn()` with "DEBUG" in the message
+        - pattern: log\.Error\(.*[Dd][Ee][Bb][Uu][Gg]
+          msg: Use `log.Debug()` for debug messages instead of `log.Error()` with "DEBUG" in the message
+      exclude-godoc-examples: false
+      analyze-types: true
     funlen:
       lines: 60
       statements: 40
@@ -62,10 +148,40 @@ linters:
         - G101
     importas:
       alias:
-        - pkg: github.com/charmbracelet/log
+        - pkg: github.com/cloudposse/atmos/pkg/logger
           alias: log
       no-unaliased: true
       no-extra-aliases: false
+    # Custom linter configurations (module plugins)
+    # These settings only apply when using the custom-gcl binary built via `golangci-lint custom`.
+    # Standard golangci-lint binary will not have these linters available.
+    #
+    # Each custom linter must:
+    # - Be listed in .custom-gcl.yml plugins section
+    # - Be enabled in the linters.enable list above
+    # - Have type: "module" specified here
+    # - Implement the golangci-lint plugin interface
+    #
+    # To add a new custom linter configuration:
+    # Add a new section here with your linter's name and settings.
+    custom:
+      lintroller:
+        type: "module"  # Required: indicates this is a module plugin (not Go .so plugin)
+        description: "Atmos project-specific linting rules (t.Setenv/os.Setenv/os.MkdirTemp/perf.Track checks)"
+        settings:
+          # These settings are passed to the plugin's Settings struct (see tools/lintroller/plugin.go)
+          # Each rule can be independently enabled/disabled
+          tsetenv-in-defer: true      # Detects t.Setenv called inside defer blocks (use os.Setenv in defer instead)
+          os-setenv-in-test: true     # Detects os.Setenv in test files (use t.Setenv instead for auto cleanup)
+          os-mkdirtemp-in-test: true  # Detects os.MkdirTemp in test files (use t.TempDir instead for auto cleanup)
+          perf-track: true            # Detects missing defer perf.Track() in public functions per coding guidelines (see excludedPackages/excludedReceivers in rule_perf_track.go)
+
+      # Example: Add another custom linter configuration
+      # another-linter:
+      #   type: "module"
+      #   description: "Another custom linter"
+      #   settings:
+      #     some-rule: true
     lll:
       line-length: 120
       tab-width: 4
@@ -78,11 +194,12 @@ linters:
       require-string-key: true
       no-printf-like: true
       rules:
-        - (github.com/charmbracelet/log.Logger).Info
-        - (github.com/charmbracelet/log.Logger).Error
-        - (github.com/charmbracelet/log.Logger).Warn
-        - (github.com/charmbracelet/log.Logger).Debug
-        - (github.com/charmbracelet/log.Logger).Fatal
+        - (github.com/cloudposse/atmos/pkg/logger.AtmosLogger).Info
+        - (github.com/cloudposse/atmos/pkg/logger.AtmosLogger).Error
+        - (github.com/cloudposse/atmos/pkg/logger.AtmosLogger).Warn
+        - (github.com/cloudposse/atmos/pkg/logger.AtmosLogger).Debug
+        - (github.com/cloudposse/atmos/pkg/logger.AtmosLogger).Fatal
+        - (github.com/cloudposse/atmos/pkg/logger.AtmosLogger).Trace
     nestif:
       min-complexity: 4
     revive:
@@ -137,6 +254,9 @@ linters:
       - std-error-handling
     rules:
       - linters:
+          - godot
+        path: mock_.*\.go$
+      - linters:
           - err113
           - errcheck
           - forbidigo
@@ -148,6 +268,19 @@ linters:
       - linters:
           - cyclop
         path: (.+)_test\.go
+      # Allow fmt.Errorf when wrapping static errors from errUtils package
+      - linters:
+          - err113
+        source: 'fmt\.Errorf\("%w: .+", errUtils\.'
+      # Allow fmt.Errorf when wrapping any static Err* variable
+      - linters:
+          - err113
+        source: 'fmt\.Errorf\("%w: .+", Err[A-Z]'
+      # Allow errors.Join with fmt.Errorf for converting strings to errors
+      - linters:
+          - err113
+        path: ".*"
+        source: 'errors\.Join\(.*errUtils\..*fmt\.Errorf'
     paths:
       - experiments/.*
       - third_party$

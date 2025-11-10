@@ -1,16 +1,7 @@
 package filematch
 
-import (
-	"os"
-	"path/filepath"
-)
-
-// fileSystem defines the filesystem operations needed by MatchFiles.
-type fileSystem interface {
-	Getwd() (string, error)
-	Walk(root string, walkFn filepath.WalkFunc) error
-	Stat(path string) (os.FileInfo, error)
-}
+// REMOVED: fileSystem interface - now using shared filesystem.FileSystem from pkg/filesystem.
+// This eliminates duplication and allows consistent mocking across the codebase.
 
 // globCompiler defines the glob pattern compilation behavior.
 type globCompiler interface {
@@ -22,7 +13,9 @@ type compiledGlob interface {
 	Match(string) bool
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
+// FileMatcher matches file paths against configured patterns and returns the subset of paths that match.
 type FileMatcher interface {
 	MatchFiles([]string) ([]string, error)
 }

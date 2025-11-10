@@ -3,15 +3,17 @@ package exec
 import (
 	"encoding/json"
 
-	log "github.com/charmbracelet/log"
-
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func processTagTemplate(
 	input string,
 ) any {
+	defer perf.Track(nil, "exec.processTagTemplate")()
+
 	log.Debug("Executing", "Atmos YAML function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTemplate)

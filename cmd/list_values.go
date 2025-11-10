@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -261,7 +261,7 @@ func initAtmosAndDescribeStacksForList(componentName string, processingFlags *fl
 	}
 
 	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, processingFlags.Templates, processingFlags.Functions, false, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, processingFlags.Templates, processingFlags.Functions, false, nil, nil)
 	if err != nil {
 		return schema.AtmosConfiguration{}, nil, fmt.Errorf(ErrFmtWrapErr, ErrDescribingStacks, err)
 	}

@@ -12,6 +12,8 @@ tests:
       - "-s"
       - "nonprod"
     expect:
+      valid:
+        - "yaml"
       exit_code: 0
       stdout:
         - "workspace_key_prefix: mock"

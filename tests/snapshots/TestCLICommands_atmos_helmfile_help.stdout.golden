@@ -1,8 +1,4 @@
 
-Notice: Atmos now collects completely anonymous telemetry regarding usage.
-This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
-by visiting the following URL: https://atmos.tools/cli/telemetry
 
 This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
 
@@ -40,6 +36,9 @@ Global Flags:
 
         --base-path string           Base path for Atmos project
 
+    -C, --chdir string               Change working directory before processing
+                                     (run as if Atmos started in this directory)
+
         --config stringSlice         Paths to configuration files
                                      (comma-separated or repeated flag) (default
                                      [])
@@ -47,6 +46,21 @@ Global Flags:
         --config-path stringSlice    Paths to configuration directories
                                      (comma-separated or repeated flag) (default
                                      [])
+
+        --force-color                Force color output even when not a TTY
+                                     (useful for screenshots) (default false)
+
+        --force-tty                  Force TTY mode with sane defaults when
+                                     terminal detection fails (useful for
+                                     screenshots) (default false)
+
+        --heatmap                    Show performance heatmap visualization
+                                     after command execution (includes P95
+                                     latency) (default false)
+
+        --heatmap-mode string        Heatmap visualization mode: bar, sparkline,
+                                     table (press 1-3 to switch in TUI) (default
+                                     bar)
 
         --logs-file string           The file to write Atmos logs to. Logs can
                                      be written to any file or any standard file
@@ -59,6 +73,10 @@ Global Flags:
                                      is set to Off, Atmos will not log any
                                      messages (default Info)
 
+        --mask                       Enable automatic masking of sensitive data
+                                     in output (use --mask=false to disable)
+                                     (default true)
+
         --no-color                   Disable color output (default false)
 
         --pager string               Enable pager for output (--pager or
@@ -66,10 +84,29 @@ Global Flags:
                                      disable, --pager=less to use specific
                                      pager)
 
+        --profile-file string        Write profiling data to file instead of
+                                     starting server
+
+        --profile-type string        Type of profile to collect when using
+                                     --profile-file. Options: cpu, heap, allocs,
+                                     goroutine, block, mutex, threadcreate,
+                                     trace (default cpu)
+
+        --profiler-enabled           Enable pprof profiling server (default
+                                     false)
+
+        --profiler-host string       Host for pprof profiling server (default
+                                     localhost)
+
+        --profiler-port int          Port for pprof profiling server (default
+                                     6060)
+
         --redirect-stderr string     File descriptor to redirect stderr to.
                                      Errors can be redirected to any file or any
                                      standard file descriptor (including
                                      /dev/null)
+
+        --version                    Display the Atmos CLI version
 
 
 Use atmos helmfile [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            

@@ -1,8 +1,4 @@
 
-Notice: Atmos now collects completely anonymous telemetry regarding usage.
-This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
-by visiting the following URL: https://atmos.tools/cli/telemetry
 
 Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
 
@@ -38,6 +34,10 @@ Global Flags:
 
         --base-path string            Base path for Atmos project
 
+    -C, --chdir string                Change working directory before processing
+                                      (run as if Atmos started in this
+                                      directory)
+
         --clone-target-ref            Clone the target reference with which to
                                       compare the current branch: atmos
                                       terraform  --affected
@@ -63,6 +63,25 @@ Global Flags:
         --dry-run                     Simulate the command without making any
                                       changes (default false)
 
+        --force-color                 Force color output even when not a TTY
+                                      (useful for screenshots) (default false)
+
+        --force-tty                   Force TTY mode with sane defaults when
+                                      terminal detection fails (useful for
+                                      screenshots) (default false)
+
+        --heatmap                     Show performance heatmap visualization
+                                      after command execution (includes P95
+                                      latency) (default false)
+
+        --heatmap-mode string         Heatmap visualization mode: bar,
+                                      sparkline, table (press 1-3 to switch in
+                                      TUI) (default bar)
+
+    -i, --identity string             Specify the identity to authenticate to
+                                      before running Terraform commands. Use
+                                      without value to interactively select.
+
         --include-dependents          For each affected component, detect the
                                       dependent components and process them in
                                       the dependency order, recursively: atmos
@@ -86,6 +105,10 @@ Global Flags:
                                       log level is set to Off, Atmos will not
                                       log any messages (default Info)
 
+        --mask                        Enable automatic masking of sensitive data
+                                      in output (use --mask=false to disable)
+                                      (default true)
+
         --no-color                    Disable color output (default false)
 
         --pager string                Enable pager for output (--pager or
@@ -100,6 +123,23 @@ Global Flags:
         --process-templates           Enable/disable Go template processing in
                                       Atmos stack manifests when executing
                                       terraform commands (default true)
+
+        --profile-file string         Write profiling data to file instead of
+                                      starting server
+
+        --profile-type string         Type of profile to collect when using
+                                      --profile-file. Options: cpu, heap,
+                                      allocs, goroutine, block, mutex,
+                                      threadcreate, trace (default cpu)
+
+        --profiler-enabled            Enable pprof profiling server (default
+                                      false)
+
+        --profiler-host string        Host for pprof profiling server (default
+                                      localhost)
+
+        --profiler-port int           Port for pprof profiling server (default
+                                      6060)
 
     -q, --query string                Execute atmos terraform <command> on the
                                       components filtered by a YQ expression, in
@@ -152,6 +192,8 @@ Global Flags:
                                       or configuration set for deployment in
                                       Atmos CLI.
 
+        --version                     Display the Atmos CLI version
+
         --                            Use double dashes to separate
                                       Atmos-specific options from native
                                       arguments and flags for the command.
@@ -160,6 +202,7 @@ Global Flags:
 Examples:
 
 – Apply changes to a terraform component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
   $ atmos terraform apply <component-name> -s <stack-name>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
 
 

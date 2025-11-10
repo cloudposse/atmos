@@ -3,11 +3,10 @@ package hooks
 import (
 	"fmt"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -31,7 +30,14 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 		}, nil
 	}
 
-	sections, err := e.ExecuteDescribeComponent(info.ComponentFromArg, info.Stack, true, true, []string{})
+	sections, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            info.ComponentFromArg,
+		Stack:                info.Stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{},
+		AuthManager:          nil,
+	})
 	if err != nil {
 		return &Hooks{}, fmt.Errorf("failed to execute describe component: %w", err)
 	}
@@ -64,20 +70,15 @@ func (h Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, i
 	for _, hook := range h.items {
 		switch hook.Command {
 		case "store":
-			storeCmd := &StoreCommand{
-				Name:        "store",
-				atmosConfig: atmosConfig,
-				info:        info,
-			}
-			err := storeCmd.RunE(&hook, event, cmd, args)
+			storeCmd, err := NewStoreCommand(atmosConfig, info)
 			if err != nil {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				return err
+			}
+			err = storeCmd.RunE(&hook, event, cmd, args)
+			if err != nil {
+				return err
 			}
 		}
 	}
 	return nil
-}
-
-func (h Hooks) ConvertToHooks(input map[string]any) (Hooks, error) {
-	return Hooks{}, nil
 }

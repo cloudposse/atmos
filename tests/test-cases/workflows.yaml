@@ -52,7 +52,10 @@ tests:
         - "nonexistentcommand"
         - "To resume the workflow from this step, run:"
         - "atmos workflow shell-command-not-found -f test --from-step step1"
-      exit_code: 1
+      # Exit code 127 is the standard Unix/POSIX exit code for "command not found".
+      # This differs from exit code 1 (generic error) and provides more specific information.
+      # The workflow correctly preserves the shell's actual exit code rather than converting it to 1.
+      exit_code: 127
 
   - name: atmos workflow failure
     enabled: true
@@ -284,3 +287,20 @@ tests:
         - "To resume the workflow from this step, run:"
         - "atmos workflow fail -f subdir/test --from-step step1"
       exit_code: 1
+
+  - name: atmos workflow shell command with PATH
+    enabled: true
+    snapshot: false
+    description: "Ensure atmos workflow shell commands can find executables in PATH"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "shell-with-path"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stdout:
+        - "PATH="
+      exit_code: 0

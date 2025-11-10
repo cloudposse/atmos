@@ -3,11 +3,15 @@ package exec
 import (
 	"fmt"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filematch"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/validator"
 )
 
@@ -30,6 +34,8 @@ type atmosValidatorExecutor struct {
 }
 
 func NewAtmosValidatorExecutor(atmosConfig *schema.AtmosConfiguration) *atmosValidatorExecutor {
+	defer perf.Track(atmosConfig, "exec.NewAtmosValidatorExecutor")()
+
 	fileDownloader := downloader.NewGoGetterDownloader(atmosConfig)
 	return &atmosValidatorExecutor{
 		validator:      validator.NewYAMLSchemaValidator(atmosConfig),
@@ -40,6 +46,8 @@ func NewAtmosValidatorExecutor(atmosConfig *schema.AtmosConfiguration) *atmosVal
 }
 
 func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmd(sourceKey string, customSchema string) error {
+	defer perf.Track(nil, "exec.ExecuteAtmosValidateSchemaCmd")()
+
 	validationSchemaWithFiles, err := av.buildValidationSchema(sourceKey, customSchema)
 	if err != nil {
 		return err
@@ -127,7 +135,8 @@ func (av *atmosValidatorExecutor) printValidation(schema string, files []string)
 			return count, err
 		}
 		if len(validationErrors) == 0 {
-			log.Info("No Validation Errors", "file", file, "schema", schema)
+			u.PrintfMessageToTUI("%s Validated %s\n", theme.Styles.Checkmark, file)
+			log.Debug("Schema validation passed", "file", file, "schema", schema)
 			continue
 		}
 		log.Error("Invalid YAML", "file", file)

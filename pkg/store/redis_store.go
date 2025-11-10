@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -131,6 +132,9 @@ func (s *RedisStore) Set(stack string, component string, key string, value inter
 	if key == "" {
 		return ErrEmptyKey
 	}
+	if value == nil {
+		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
+	}
 
 	// Construct the full parameter name using getKey
 	paramName, err := s.getKey(stack, component, key)
@@ -164,11 +168,11 @@ func (s *RedisStore) GetKey(key string) (interface{}, error) {
 
 	// Get the value from Redis
 	resp := s.redisClient.Get(context.Background(), redisKey)
-	if resp.Err() != nil {
-		if resp.Err().Error() == "redis: nil" {
-			return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, redisKey, resp.Err())
+	if err := resp.Err(); err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, fmt.Errorf(errWrapFormatWithID, ErrResourceNotFound, redisKey, err)
 		}
-		return nil, fmt.Errorf(errFormat, ErrGetParameter, resp.Err())
+		return nil, fmt.Errorf(errFormat, ErrGetParameter, err)
 	}
 
 	value := resp.Val()

@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// awsCmd executes 'aws' CLI commands
+// awsCmd executes 'aws' CLI commands.
 var awsCmd = &cobra.Command{
 	Use:                "aws",
 	Short:              "Run AWS-specific commands for interacting with cloud resources",

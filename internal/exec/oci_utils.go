@@ -21,6 +21,9 @@ import (
 	"github.com/google/uuid"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
+	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -57,14 +60,26 @@ func bindEnv(v *viper.Viper, key string, envVars ...string) {
 		log.Debug("Failed to bind environment variable", "key", key, "envVars", envVars, logFieldError, err)
 	}
 }
+)
+
+var defaultOCIFileSystem = filesystem.NewOSFileSystem()
 
 // processOciImage processes an OCI image and extracts its layers to the specified destination directory.
 func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string) error {
-	tempDir, err := os.MkdirTemp("", uuid.New().String())
+	return processOciImageWithFS(atmosConfig, imageName, destDir, defaultOCIFileSystem)
+}
+
+// processOciImageWithFS processes an OCI image using a FileSystem implementation.
+func processOciImageWithFS(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string, fs filesystem.FileSystem) error {
+	tempDir, err := fs.MkdirTemp("", uuid.New().String())
 	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %w", err)
+		return errors.Join(errUtils.ErrCreateTempDirectory, err)
 	}
-	defer removeTempDir(tempDir)
+	defer func() {
+		if err := fs.RemoveAll(tempDir); err != nil {
+			log.Debug("Failed to remove temp directory", "path", tempDir, "error", err)
+		}
+	}()
 
 	ref, err := name.ParseReference(imageName)
 	if err != nil {
@@ -74,7 +89,7 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 
 	descriptor, err := pullImage(ref, atmosConfig)
 	if err != nil {
-		return fmt.Errorf("failed to pull image: %w", err)
+		return errors.Join(errUtils.ErrPullImage, err)
 	}
 
 	img, err := descriptor.Image()
@@ -120,30 +135,43 @@ func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, d
 }
 
 // pullImage pulls an OCI image from the specified reference and returns its descriptor.
-func pullImage(ref name.Reference, atmosConfig *schema.AtmosConfiguration) (*remote.Descriptor, error) {
-	var opts []remote.Option
+// Authentication precedence:
+// 1. User's Docker credentials (~/.docker/config.json via DefaultKeychain) - highest precedence
+// 2. ATMOS_GITHUB_TOKEN or GITHUB_TOKEN environment variables (for ghcr.io only)
+// 3. Anonymous authentication - fallback.
+func pullImage(atmosConfig *schema.AtmosConfiguration, ref name.Reference) (*remote.Descriptor, error) {
+	var authMethod authn.Authenticator
+	var authSource string
 
-	// Get registry from parsed reference
 	registry := ref.Context().Registry.Name()
 
-	// Try to get authentication from various sources
-	auth, err := getRegistryAuth(registry, atmosConfig)
+	// First, try to use credentials from the user's Docker config.
+	// This allows users to authenticate with `docker login` and have those credentials respected.
+	keychainAuth, err := authn.DefaultKeychain.Resolve(ref.Context())
 	if err != nil {
-		if errors.Is(err, errNoAuthenticationFound) {
-			log.Debug("No authentication found, using anonymous.", logFieldRegistry, registry)
-			opts = append(opts, remote.WithAuth(authn.Anonymous))
-		} else {
-			log.Error("Registry auth error.", logFieldRegistry, registry, logFieldError, err)
-			return nil, fmt.Errorf("resolve registry auth: %w", err)
-		}
-	} else {
-		opts = append(opts, remote.WithAuth(auth))
-		log.Debug("Using authentication for registry", logFieldRegistry, registry)
+		log.Debug("DefaultKeychain resolution failed, will try other auth methods", "error", err)
+	} else if keychainAuth != authn.Anonymous {
+		// User has credentials configured for this registry - highest precedence
+		authMethod = keychainAuth
+		authSource = "Docker keychain (~/.docker/config.json)"
 	}
 
-	descriptor, err := remote.Get(ref, opts...)
+	// If no user credentials, try environment variable token injection for ghcr.io
+	if authMethod == nil && strings.EqualFold(registry, "ghcr.io") {
+		authMethod, authSource = getGHCRAuth(atmosConfig)
+	}
+
+	// Fall back to anonymous authentication if no credentials found
+	if authMethod == nil {
+		authMethod = authn.Anonymous
+		authSource = "anonymous"
+	}
+
+	log.Debug("Authenticating to OCI registry", "registry", registry, "method", authSource)
+
+	descriptor, err := remote.Get(ref, remote.WithAuth(authMethod))
 	if err != nil {
-		log.Error("Failed to pull OCI image", "image", ref.Name(), logFieldError, err)
+		log.Error("Failed to pull OCI image", "image", ref.Name(), "registry", registry, "auth", authSource, "error", err)
 		return nil, fmt.Errorf("failed to pull image '%s': %w", ref.Name(), err)
 	}
 

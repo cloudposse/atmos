@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/internal/exec"
@@ -24,7 +23,6 @@ var ValidateStacksCmd = &cobra.Command{
 			return err
 		}
 
-		log.Info("All stacks validated successfully")
 		return nil
 	},
 }

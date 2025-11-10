@@ -41,7 +41,10 @@ atmos describe config --query <yq-expression>
 
 ## Flags
 
-| Flag       | Description                                                                                                                                                                            | Alias | Required |
-|:-----------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------|:---------|
-| `--format` | Output format: `json` or `yaml` (`json` is default)                                                                                                                                    | `-f`  | no       |
-| `--query`  | Query the results of the command using `yq` expressions.<br/><br/>`atmos describe config --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq | `-q`  | no       |
+<dl>
+  <dt>`--format` / `-f` <em>(optional)</em></dt>
+  <dd>Output format: `json` or `yaml` (`json` is default).</dd>
+
+  <dt>`--query` / `-q` <em>(optional)</em></dt>
+  <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe config --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
+</dl>

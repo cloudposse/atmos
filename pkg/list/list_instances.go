@@ -2,20 +2,21 @@ package list
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
 
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	term "github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/list/format"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -169,7 +170,7 @@ func sortInstances(instances []schema.Instance) []schema.Instance {
 // formatInstances formats the instances for output.
 func formatInstances(instances []schema.Instance) string {
 	formatOpts := format.FormatOptions{
-		TTY:           term.IsTerminal(int(os.Stdout.Fd())),
+		TTY:           term.IsTTYSupportForStdout(),
 		CustomHeaders: []string{componentHeader, stackHeader},
 	}
 
@@ -203,33 +204,42 @@ func formatInstances(instances []schema.Instance) string {
 	return format.CreateStyledTable(formatOpts.CustomHeaders, tableRows)
 }
 
-// uploadInstances uploads instances to Atmos Pro API.
-func uploadInstances(instances []schema.Instance) error {
-	repo, err := git.GetLocalRepo()
+// uploadInstancesWithDeps uploads instances to Atmos Pro API using injected dependencies.
+// This function is testable via mocks. Use uploadInstances() for production code.
+func uploadInstancesWithDeps(
+	instances []schema.Instance,
+	gitOps git.RepositoryOperations,
+	configLoader cfg.Loader,
+	clientFactory pro.ClientFactory,
+) error {
+	repo, err := gitOps.GetLocalRepo()
 	if err != nil {
 		log.Error(errUtils.ErrFailedToGetLocalRepo.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetLocalRepo, err)
+		return errors.Join(errUtils.ErrFailedToGetLocalRepo, err)
 	}
-	repoInfo, err := git.GetRepoInfo(repo)
+
+	repoInfo, err := gitOps.GetRepoInfo(repo)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToGetRepoInfo.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToGetRepoInfo, err)
+		return errors.Join(errUtils.ErrFailedToGetRepoInfo, err)
 	}
+
 	if repoInfo.RepoUrl == "" || repoInfo.RepoName == "" || repoInfo.RepoOwner == "" || repoInfo.RepoHost == "" {
 		log.Warn("Git repo info is incomplete; upload may be rejected.", "repo_url", repoInfo.RepoUrl, "repo_name", repoInfo.RepoName, "repo_owner", repoInfo.RepoOwner, "repo_host", repoInfo.RepoHost)
 	}
 
 	// Initialize CLI config for API client.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := configLoader.InitCliConfig(&configInfo, false)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToInitConfig.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToInitConfig, err)
+		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
 
-	apiClient, err := pro.NewAtmosProAPIClientFromEnv(&atmosConfig)
+	apiClient, err := clientFactory.NewClient(&atmosConfig)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToCreateAPIClient.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToCreateAPIClient, err)
+		return errors.Join(errUtils.ErrFailedToCreateAPIClient, err)
 	}
 
 	req := dtos.InstancesUploadRequest{
@@ -243,20 +253,35 @@ func uploadInstances(instances []schema.Instance) error {
 	err = apiClient.UploadInstances(&req)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToUploadInstances.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToUploadInstances, err)
+		return errors.Join(errUtils.ErrFailedToUploadInstances, err)
 	}
 
 	u.PrintfMessageToTUI("Successfully uploaded instances to Atmos Pro API.")
 	return nil
 }
 
-// processInstances collects, filters, and sorts instances.
-func processInstances(atmosConfig *schema.AtmosConfiguration) ([]schema.Instance, error) {
+// uploadInstances uploads instances to Atmos Pro API.
+// This is a convenience wrapper around uploadInstancesWithDeps() for production use.
+func uploadInstances(instances []schema.Instance) error {
+	return uploadInstancesWithDeps(
+		instances,
+		&git.DefaultRepositoryOperations{},
+		&cfg.DefaultLoader{},
+		&pro.DefaultClientFactory{},
+	)
+}
+
+// processInstancesWithDeps collects, filters, and sorts instances using injected dependencies.
+// This function is testable via mocks. Use processInstances() for production code.
+func processInstancesWithDeps(
+	atmosConfig *schema.AtmosConfiguration,
+	stacksProcessor e.StacksProcessor,
+) ([]schema.Instance, error) {
 	// Get all stacks with template processing enabled to render template variables.
-	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
+	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrExecuteDescribeStacks, err)
+		return nil, errors.Join(errUtils.ErrExecuteDescribeStacks, err)
 	}
 
 	// Collect instances.
@@ -268,27 +293,33 @@ func processInstances(atmosConfig *schema.AtmosConfiguration) ([]schema.Instance
 	return instances, nil
 }
 
+// processInstances collects, filters, and sorts instances.
+// This is a convenience wrapper around processInstancesWithDeps() for production use.
+func processInstances(atmosConfig *schema.AtmosConfiguration) ([]schema.Instance, error) {
+	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{})
+}
+
 // ExecuteListInstancesCmd executes the list instances command.
 func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
 	// Inline initializeConfig.
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToInitConfig.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrFailedToInitConfig, err)
+		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
 
 	// Get flags.
 	upload, err := cmd.Flags().GetBool("upload")
 	if err != nil {
 		log.Error(errUtils.ErrParseFlag.Error(), "flag", "upload", "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrParseFlag, err)
+		return errors.Join(errUtils.ErrParseFlag, err)
 	}
 
 	// Process instances.
 	instances, err := processInstances(&atmosConfig)
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
-		return fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrProcessInstances, err)
+		return errors.Join(errUtils.ErrProcessInstances, err)
 	}
 
 	// Inline handleOutput.

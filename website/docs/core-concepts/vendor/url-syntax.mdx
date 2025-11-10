@@ -1,0 +1,536 @@
+---
+title: Vendor URL Syntax
+description: Learn how to use URLs and paths in Atmos vendor manifests
+sidebar_position: 2
+sidebar_label: URL Syntax
+id: url-syntax
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+Atmos vendor sources support a wide variety of URL schemes and path formats for pulling external components, stacks, and configurations. Understanding the URL syntax helps you effectively vendor dependencies from any source.
+</Intro>
+
+## URL Schemes
+
+Atmos vendoring is built on [HashiCorp's go-getter library](https://github.com/hashicorp/go-getter), with additional support for OCI registries and smart defaults for Git hosting platforms.
+
+### Supported Schemes
+
+| Scheme | Description | Example |
+|--------|-------------|---------|
+| ` `(no scheme) | Implicit HTTPS for Git hosts | `github.com/owner/repo.git?ref=v1.0` |
+| `https://` | HTTPS protocol | `https://github.com/owner/repo.git//path?ref=v1.0` |
+| `git::` | Explicit Git protocol | `git::https://github.com/owner/repo.git?ref=v1.0` |
+| `oci://` | OCI registries (Atmos extension) | `oci://ghcr.io/owner/image:tag` |
+| `file://` | Local filesystem | `file:///absolute/path/to/components` |
+| `ssh://` | SSH protocol | `ssh://git@github.com/owner/repo.git` |
+| SCP-style | SSH shorthand | `git@github.com:owner/repo.git` |
+
+:::tip
+Most of the time, you can use the **simplest form** without an explicit scheme. Atmos will automatically detect the right protocol.
+:::
+
+## Subdirectory Syntax
+
+One of the most powerful features is the **subdirectory delimiter** that lets you vendor only a specific directory from a repository.
+
+### The Double-Slash Delimiter
+
+The double-slash (`//`) is a special delimiter (not a path separator) that separates:
+1. **Left side**: The source to download (repository URL, archive, etc.)
+2. **Right side**: The subdirectory within that source to extract
+
+<Tabs>
+  <TabItem value="subdir" label="With Subdirectory" default>
+    ```yaml
+    source: "github.com/cloudposse-terraform-components/aws-vpc.git//modules/public-subnets?ref=1.398.0"
+    ```
+
+    **Result:** Clones the repository and extracts only the `modules/public-subnets` subdirectory.
+  </TabItem>
+
+  <TabItem value="root" label="Root Directory">
+    ```yaml
+    source: "github.com/cloudposse-terraform-components/aws-s3-bucket.git//.?ref=v5.7.0"
+    ```
+
+    **Result:** Clones the repository and uses the root directory (`.` means current directory).
+  </TabItem>
+
+  <TabItem value="no-delimiter" label="Without Delimiter">
+    ```yaml
+    source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.0"
+    ```
+
+    **Result:** For Git URLs without a subdirectory, Atmos automatically adds `//.` for you (root of repository).
+  </TabItem>
+</Tabs>
+
+### Common Patterns
+
+| Pattern | What It Means | When To Use |
+|---------|---------------|-------------|
+| `repo.git//path/to/dir` | Extract `path/to/dir` subdirectory | When you only need a specific directory |
+| `repo.git//.` | Extract root directory | When you need the entire repository |
+| `repo.git` | No subdirectory specified | Atmos adds `//.` automatically for Git URLs |
+
+:::caution Deprecated: Triple-Slash Pattern
+The triple-slash pattern (`///`) was used in older Atmos versions to indicate the root directory:
+
+```yaml
+# Old syntax (still works but deprecated)
+source: "github.com/owner/repo.git///?ref=v1.0"
+
+# New syntax (explicit and clear)
+source: "github.com/owner/repo.git//.?ref=v1.0"
+```
+
+Atmos automatically normalizes the triple-slash pattern for backward compatibility, but we recommend using `//.` for clarity.
+:::
+
+## Query Parameters
+
+Query parameters are appended to the URL and control how the source is downloaded.
+
+### Common Parameters
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `ref=<value>` | Git reference (branch, tag, commit) | `?ref=main` or `?ref=v1.0.0` |
+| `depth=<n>` | Git clone depth (shallow clone) | `?depth=1` |
+| `sshkey=<path>` | Path to SSH private key | `?sshkey=~/.ssh/id_rsa` |
+
+:::tip Automatic Shallow Clones
+Atmos automatically adds `depth=1` to Git clones for faster downloads. You can override this by explicitly setting `depth`.
+:::
+
+### Examples
+
+<Tabs>
+  <TabItem value="tag" label="Git Tag" default>
+    ```yaml
+    source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.398.0"
+    ```
+  </TabItem>
+
+  <TabItem value="branch" label="Git Branch">
+    ```yaml
+    source: "github.com/cloudposse/atmos.git//examples?ref=main"
+    ```
+  </TabItem>
+
+  <TabItem value="commit" label="Git Commit SHA">
+    ```yaml
+    source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=a1b2c3d4"
+    ```
+  </TabItem>
+
+  <TabItem value="depth" label="Custom Clone Depth">
+    ```yaml
+    source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=main&depth=10"
+    ```
+  </TabItem>
+</Tabs>
+
+## URL Patterns by Platform
+
+<Tabs>
+  <TabItem value="github" label="GitHub" default>
+
+### Implicit HTTPS (recommended)
+```yaml
+# Simple - implicit HTTPS, root directory
+source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.398.0"
+```
+
+### With Subdirectory
+```yaml
+# Clone and extract specific subdirectory
+source: "github.com/cloudposse-terraform-components/aws-vpc.git//modules/public-subnets?ref=v1.398.0"
+```
+
+### Explicit git:: Protocol
+```yaml
+# Explicit git protocol
+source: "git::https://github.com/cloudposse/atmos.git//examples?ref=main"
+```
+
+### SSH Authentication
+```yaml
+# SSH protocol (requires SSH key setup)
+source: "git::ssh://git@github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.0.0"
+
+# Or SCP-style shorthand
+source: "git@github.com:cloudposse-terraform-components/aws-vpc.git?ref=v1.0.0"
+```
+
+### With Credentials (Not Recommended)
+```yaml
+# HTTPS with embedded credentials (not recommended, use tokens)
+source: "https://user:password@github.com/owner/repo.git?ref=v1.0"
+```
+
+:::tip Token Authentication
+Atmos automatically injects GitHub tokens from `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variables. No need to embed credentials in URLs!
+:::
+
+  </TabItem>
+
+  <TabItem value="gitlab" label="GitLab">
+
+### Implicit HTTPS
+```yaml
+# Simple - implicit HTTPS
+source: "gitlab.com/group/project.git?ref=v1.0.0"
+```
+
+### With Subdirectory
+```yaml
+# Extract specific directory
+source: "gitlab.com/group/project.git//terraform/modules?ref=main"
+```
+
+:::tip GitLab Token Authentication
+Set `ATMOS_GITLAB_TOKEN` or `GITLAB_TOKEN` for automatic authentication.
+:::
+
+  </TabItem>
+
+  <TabItem value="bitbucket" label="Bitbucket">
+
+### Implicit HTTPS
+```yaml
+# Simple - implicit HTTPS
+source: "bitbucket.org/owner/repo.git?ref=main"
+```
+
+### With Subdirectory
+```yaml
+# Extract specific directory
+source: "bitbucket.org/owner/repo.git//infrastructure?ref=main"
+```
+
+:::tip Bitbucket Token Authentication
+Set `ATMOS_BITBUCKET_TOKEN` or `BITBUCKET_TOKEN` for automatic authentication.
+:::
+
+  </TabItem>
+
+  <TabItem value="azure" label="Azure DevOps">
+
+### Azure DevOps Repositories
+```yaml
+# Azure DevOps Git repositories
+source: "dev.azure.com/organization/project/_git/repository//path?ref=main"
+```
+
+  </TabItem>
+
+  <TabItem value="self-hosted" label="Self-Hosted Git">
+
+### Self-Hosted Git Servers
+```yaml
+# Any self-hosted Git server
+source: "git.company.com/team/repository.git//modules?ref=v1.0.0"
+
+# With explicit HTTPS
+source: "https://git.company.com/team/repository.git?ref=v1.0.0"
+```
+
+  </TabItem>
+
+  <TabItem value="oci" label="OCI Registries">
+
+Atmos supports pulling artifacts from OCI-compatible registries like GitHub Container Registry (ghcr.io), AWS ECR, Google Artifact Registry, and more.
+
+### OCI Syntax
+```yaml
+source: "oci://<registry>/<namespace>/<image>:<tag>"
+```
+
+### GitHub Container Registry
+```yaml
+source: "oci://ghcr.io/cloudposse/components/vpc:v1.0.0"
+```
+
+### AWS ECR Public
+```yaml
+source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest"
+```
+
+### Docker Hub
+```yaml
+source: "oci://docker.io/library/nginx:alpine"
+```
+
+:::info OCI Authentication Precedence
+Atmos uses the following precedence order for OCI registry authentication:
+
+1. **Docker credentials** (highest precedence) - Credentials from `docker login` stored in `~/.docker/config.json`
+2. **Environment variables** - For GitHub Container Registry (ghcr.io):
+   - **Token:** `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`
+   - **Username:** `ATMOS_GITHUB_USERNAME`, `GITHUB_ACTOR`, or `GITHUB_USERNAME`
+3. **Anonymous** - Fallback for public images
+
+**Examples:**
+
+```bash
+# Method 1: Authenticate with Docker (works for any registry)
+docker login ghcr.io -u YOUR_USERNAME
+# Enter your token when prompted
+
+# Method 2: Use environment variables for GHCR
+export GITHUB_TOKEN=ghp_your_token
+export GITHUB_ACTOR=your_username  # Or ATMOS_GITHUB_USERNAME
+
+# Method 3: GitHub Actions (automatic)
+# GITHUB_TOKEN and GITHUB_ACTOR are automatically available
+```
+
+**Important GHCR Requirements:**
+- GitHub Container Registry requires **both** a username and token for authentication
+- Username must be your actual GitHub username (not `x-access-token`)
+- Without a username, authentication will fail even if token is set
+- In GitHub Actions, `GITHUB_ACTOR` is automatically set to the workflow actor's username
+
+User Docker credentials always take precedence over environment variable tokens.
+:::
+
+  </TabItem>
+</Tabs>
+
+## Local Paths
+
+### Relative Paths
+
+```yaml
+# Relative to vendor.yaml location
+source: "../../../components/terraform/mixins"
+```
+
+### Absolute Paths
+
+```yaml
+# Absolute filesystem path
+source: "/absolute/path/to/components"
+```
+
+### file:// URI
+
+```yaml
+# file:// URI (gets converted to absolute path)
+source: "file:///path/to/local/components"
+```
+
+:::caution Path Traversal Security
+Atmos validates local paths to prevent directory traversal attacks. Paths with `..` are carefully validated.
+:::
+
+## HTTP/HTTPS Downloads
+
+### Archive Files
+
+```yaml
+# Download and extract archives
+source: "https://example.com/components.tar.gz"
+source: "https://example.com/components.zip"
+```
+
+### Single Files
+
+```yaml
+# Download a single file
+source: "https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf"
+```
+
+## Template Variables
+
+Atmos supports Go templates in vendor URLs for dynamic configuration.
+
+### Available Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{{.Component}}` | Component name | Replaced with the value of `component:` field |
+| `{{.Version}}` | Component version | Replaced with the value of `version:` field |
+
+### Example
+
+```yaml
+sources:
+  - component: "vpc"
+    source: "github.com/cloudposse-terraform-components/aws-{{.Component}}.git?ref={{.Version}}"
+    version: "1.398.0"
+    targets:
+      - "components/terraform/{{.Component}}"
+```
+
+**Result:** Downloads from `aws-vpc` repository at version `1.398.0` to `components/terraform/vpc`.
+
+## Authentication
+
+### Credential Precedence Order
+
+Atmos uses the following precedence order for credentials when accessing Git repositories:
+
+1. **User-specified credentials in URL** (highest precedence) - If you specify credentials directly in the `source` URL, they are always used
+2. **Automatic token injection** - If no credentials are in the URL, Atmos injects tokens from environment variables
+3. **No authentication** - If no credentials are provided and no tokens are available
+
+:::tip User Credentials Always Win
+If your `source` URL includes credentials (e.g., `https://myuser:mytoken@github.com/repo.git`), Atmos will **never** overwrite them with automatic token injection. This allows you to use specific credentials per repository when needed.
+:::
+
+### Automatic Token Injection
+
+Atmos automatically injects tokens for supported platforms when **no user credentials are in the URL**:
+
+| Platform | Environment Variables | Username | Enabled by Default |
+|----------|----------------------|----------|--------------------|
+| GitHub | `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` | `x-access-token` | ✅ Yes |
+| GitLab | `ATMOS_GITLAB_TOKEN` or `GITLAB_TOKEN` | `oauth2` | ❌ No |
+| Bitbucket | `ATMOS_BITBUCKET_TOKEN` or `BITBUCKET_TOKEN` | `x-token-auth` | ❌ No |
+
+**Token Resolution:** For each platform, Atmos first tries the `ATMOS_*` prefixed token, then falls back to the standard token if not set.
+
+**Configuration in `atmos.yaml`:**
+
+GitHub token injection is enabled by default. To disable it:
+```yaml
+settings:
+  inject_github_token: false
+```
+
+To enable GitLab or Bitbucket token injection:
+```yaml
+settings:
+  inject_gitlab_token: true
+  inject_bitbucket_token: true
+```
+
+See the [CLI Configuration](/cli/configuration) documentation for more details on these settings.
+
+### SSH Keys
+
+For SSH-based Git access:
+
+```yaml
+# SSH with default key (~/.ssh/id_rsa)
+source: "git@github.com:owner/private-repo.git?ref=main"
+
+# SSH with custom key
+source: "git@github.com:owner/private-repo.git?ref=main&sshkey=~/.ssh/custom_key"
+```
+
+### Embedded Credentials
+
+```yaml
+# Not recommended: credentials in URL
+source: "https://username:password@github.com/owner/repo.git?ref=v1.0"
+```
+
+:::danger Security Warning
+Embedding credentials in URLs is **not recommended**. Use environment variables for tokens or SSH keys instead.
+:::
+
+## Best Practices
+
+### 1. Use Explicit Versions
+
+<Tabs>
+  <TabItem value="good" label="✅ Good" default>
+    ```yaml
+    # Pin to specific version
+    source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.398.0"
+    ```
+  </TabItem>
+
+  <TabItem value="bad" label="❌ Avoid">
+    ```yaml
+    # Unpinned version (follows branch HEAD)
+    source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=main"
+    ```
+  </TabItem>
+</Tabs>
+
+### 2. Use Subdirectories When Needed
+
+```yaml
+# ✅ Extract specific subdirectory from a repository
+source: "github.com/cloudposse-terraform-components/aws-vpc.git//modules/public-subnets?ref=v1.398.0"
+
+# ✅ Use root directory (no subdirectory needed)
+source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.398.0"
+```
+
+### 3. Use Token Authentication
+
+<Terminal>
+```bash
+# Set GitHub token
+export ATMOS_GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Or use standard GitHub token
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+</Terminal>
+
+### 4. Prefer OCI for Binary Artifacts
+
+```yaml
+# ✅ OCI for container images and binary artifacts
+source: "oci://ghcr.io/cloudposse/components/terraform/stable/aws/vpc:v1.0.0"
+
+# ✅ Git for source code
+source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref=v1.398.0"
+```
+
+## Troubleshooting
+
+### Empty Directories After Vendor Pull
+
+**Symptom:** `atmos vendor pull` creates directories but no files are pulled.
+
+**Causes:**
+1. Using triple-slash (`///`) instead of double-slash-dot (`//.`) for root directory
+2. Incorrect subdirectory path
+3. Files excluded by `excluded_paths` or `included_paths` glob patterns
+
+**Solution:**
+```yaml
+# ✅ Correct: Use //. for root
+source: "github.com/owner/repo.git//.?ref=v1.0"
+
+# ❌ Avoid: Triple-slash (deprecated)
+source: "github.com/owner/repo.git///?ref=v1.0"
+```
+
+### Authentication Failures
+
+**Symptom:** `fatal: Authentication failed` or `permission denied`
+
+**Solution:**
+1. Verify token is set: `echo $ATMOS_GITHUB_TOKEN`
+2. Check token has correct permissions (repo access)
+3. For SSH: Verify SSH keys are set up (`ssh -T git@github.com`)
+
+### Rate Limits
+
+**Symptom:** `API rate limit exceeded`
+
+**Solution:** Set authentication tokens to increase rate limits:
+- GitHub: 60 req/hr (unauthenticated) → 5,000 req/hr (authenticated)
+- GitLab: Similar improvements with tokens
+- Bitbucket: Token required for most operations
+
+## Related Documentation
+
+- [Vendor Manifest](/core-concepts/vendor/vendor-manifest) - Complete vendor.yaml reference
+- [Vendor Pull Command](/cli/commands/vendor/pull) - CLI command documentation
+- [go-getter Documentation](https://github.com/hashicorp/go-getter) - Underlying library reference
+- [OCI Distribution Spec](https://github.com/opencontainers/distribution-spec) - OCI registry specification

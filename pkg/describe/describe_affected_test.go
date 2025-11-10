@@ -1,7 +1,6 @@
 package describe
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,6 +13,9 @@ import (
 )
 
 func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
+	// Skip long tests in short mode (this test takes ~36 seconds due to Git cloning)
+	tests.SkipIfShort(t)
+
 	// Check for Git repository with valid remotes and GitHub access (for cloning)
 	tests.RequireGitRemoteWithValidURL(t)
 	tests.RequireGitHubAccess(t)
@@ -50,8 +52,15 @@ func TestDescribeAffectedWithTargetRefClone(t *testing.T) {
 
 	affectedYaml, err := u.ConvertToYAML(affected)
 	assert.Nil(t, err)
-
-	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", affectedYaml))
+	t.Cleanup(func() {
+		if t.Failed() {
+			if affectedYaml != "" {
+				t.Logf("Affected components and stacks:\n%s", affectedYaml)
+			} else {
+				t.Logf("Affected components and stacks (raw): %+v", affected)
+			}
+		}
+	})
 }
 
 func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
@@ -87,6 +96,13 @@ func TestDescribeAffectedWithTargetRepoPath(t *testing.T) {
 
 	affectedYaml, err := u.ConvertToYAML(affected)
 	assert.Nil(t, err)
-
-	t.Log(fmt.Sprintf("\nAffected components and stacks:\n%v", affectedYaml))
+	t.Cleanup(func() {
+		if t.Failed() {
+			if affectedYaml != "" {
+				t.Logf("Affected components and stacks:\n%s", affectedYaml)
+			} else {
+				t.Logf("Affected components and stacks (raw): %+v", affected)
+			}
+		}
+	})
 }

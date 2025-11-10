@@ -1,0 +1,31 @@
+workflows:
+  test-identity-shell:
+    description: Test workflow with identity for shell commands
+    steps:
+      - command: echo "Testing with mock identity"
+        type: shell
+        identity: mock-identity
+        name: test-shell-with-identity
+
+  test-identity-atmos:
+    description: Test workflow with identity for atmos commands
+    steps:
+      - command: version
+        type: atmos
+        identity: mock-identity
+        name: test-atmos-with-identity
+
+  test-identity-mixed:
+    description: Test workflow with mixed identity usage
+    steps:
+      - command: echo "Step without identity"
+        type: shell
+        name: step-without-identity
+      - command: echo "Step with mock-identity"
+        type: shell
+        identity: mock-identity
+        name: step-with-identity-1
+      - command: echo "Step with mock-identity-2"
+        type: shell
+        identity: mock-identity-2
+        name: step-with-identity-2

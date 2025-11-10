@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -15,7 +16,10 @@ import (
 func ReadTerraformBackendLocal(
 	atmosConfig *schema.AtmosConfiguration,
 	componentSections *map[string]any,
+	_ *schema.AuthContext, // Auth context not used for local backend.
 ) ([]byte, error) {
+	defer perf.Track(atmosConfig, "terraform_backend.ReadTerraformBackendLocal")()
+
 	tfStateFilePath := filepath.Join(
 		atmosConfig.TerraformDirAbsolutePath,
 		GetTerraformComponent(componentSections),

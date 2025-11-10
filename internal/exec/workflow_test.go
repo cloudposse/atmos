@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,11 +12,8 @@ import (
 func TestExecuteWorkflow(t *testing.T) {
 	stacksPath := "../../../tests/fixtures/scenarios/workflows"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
-
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	workflowsDir := stacksPath + "/stacks/workflows"
 	workflowPath := workflowsDir + "/test.yaml"
@@ -127,7 +123,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "workflow step execution failed",
+			errMsg:           "subcommand exited with code 1",
 		},
 		{
 			name:         "failing atmos command",
@@ -146,7 +142,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "workflow step execution failed",
+			errMsg:           "subcommand exited with code",
 		},
 		{
 			name:         "workflow with stack override",
@@ -185,7 +181,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "workflow step execution failed",
+			errMsg:           "subcommand exited with code",
 		},
 		{
 			name:         "failing atmos command with command line stack override",
@@ -205,7 +201,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "dev",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "workflow step execution failed",
+			errMsg:           "subcommand exited with code",
 		},
 	}
 
@@ -219,6 +215,7 @@ func TestExecuteWorkflow(t *testing.T) {
 				tt.dryRun,
 				tt.commandLineStack,
 				tt.fromStep,
+				"", // No command-line identity for these tests
 			)
 
 			if tt.wantErr {

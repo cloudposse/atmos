@@ -123,6 +123,67 @@ logs:
 	assert.False(t, v.IsSet("logs.file"), "logs.file should not exist (section replaced)")
 }
 
+func TestMergeConfig_AtmosDCommandsMerging(t *testing.T) {
+	// Test that commands from .atmos.d are merged with main config commands.
+	tempDir := t.TempDir()
+
+	// Create .atmos.d directory with a command file.
+	atmosDDir := filepath.Join(tempDir, ".atmos.d")
+	err := os.Mkdir(atmosDDir, 0o755)
+	require.NoError(t, err)
+
+	atmosDContent := `
+commands:
+  - name: "dev"
+    description: "Development workflow commands"
+    commands:
+      - name: "setup"
+        description: "Set up development environment"
+        steps:
+          - echo "Setting up..."
+`
+	createConfigFile(t, atmosDDir, "dev.yaml", atmosDContent)
+
+	// Create main config with its own commands.
+	mainContent := `
+base_path: ./
+commands:
+  - name: "terraform"
+    description: "Terraform commands"
+  - name: "helmfile"
+    description: "Helmfile commands"
+`
+	createConfigFile(t, tempDir, "atmos.yaml", mainContent)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	err = mergeConfig(v, tempDir, CliConfigFileName, true)
+	assert.NoError(t, err)
+
+	// Verify that commands from both .atmos.d and main config are present.
+	commands := v.Get("commands")
+	assert.NotNil(t, commands)
+
+	commandsList, ok := commands.([]interface{})
+	assert.True(t, ok, "commands should be a slice")
+	assert.Equal(t, 3, len(commandsList), "should have all 3 commands (1 from .atmos.d + 2 from main)")
+
+	// Verify all commands are present.
+	commandNames := make(map[string]bool)
+	for _, cmd := range commandsList {
+		cmdMap, ok := cmd.(map[string]interface{})
+		assert.True(t, ok, "command should be a map")
+		name, ok := cmdMap["name"].(string)
+		assert.True(t, ok, "command should have a name")
+		commandNames[name] = true
+		t.Logf("Found command: %s", name)
+	}
+
+	assert.True(t, commandNames["dev"], "dev command from .atmos.d should be present")
+	assert.True(t, commandNames["terraform"], "terraform command from main config should be present")
+	assert.True(t, commandNames["helmfile"], "helmfile command from main config should be present")
+}
+
 func TestMergeConfig_ProcessImportsWithInvalidYAML(t *testing.T) {
 	// Test error handling when import file contains invalid YAML.
 	tempDir := t.TempDir()
