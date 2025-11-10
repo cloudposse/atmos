@@ -1,7 +1,7 @@
 ---
 slug: welcome
 title: Welcome to the Atmos Changelog
-authors: [atmos]
+authors: [aknysh]
 tags: [atmos, announcements]
 date: 2025-10-12
 ---
