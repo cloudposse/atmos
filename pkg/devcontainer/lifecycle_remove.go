@@ -2,6 +2,7 @@ package devcontainer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -46,8 +47,11 @@ func (m *Manager) Remove(atmosConfig *schema.AtmosConfiguration, name, instance 
 	// Check if container exists.
 	containerInfo, err := runtime.Inspect(ctx, containerName)
 	if err != nil {
-		// Container doesn't exist - nothing to remove, consider this success.
-		return nil
+		// Only treat "not found" as success; propagate other errors.
+		if errors.Is(err, errUtils.ErrContainerNotFound) {
+			return nil
+		}
+		return fmt.Errorf("%w: failed to inspect container: %w", errUtils.ErrContainerRuntimeOperation, err)
 	}
 
 	// Stop container if running and force=false.

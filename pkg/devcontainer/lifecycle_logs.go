@@ -2,6 +2,7 @@ package devcontainer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -34,7 +35,10 @@ func (m *Manager) Logs(atmosConfig *schema.AtmosConfiguration, name, instance st
 	ctx := context.Background()
 	_, err = runtime.Inspect(ctx, containerName)
 	if err != nil {
-		return fmt.Errorf("%w: container %s not found", errUtils.ErrContainerNotFound, containerName)
+		if errors.Is(err, errUtils.ErrContainerNotFound) {
+			return fmt.Errorf("%w: container %s not found", errUtils.ErrContainerNotFound, containerName)
+		}
+		return fmt.Errorf("%w: failed to inspect container %s: %w", errUtils.ErrContainerRuntimeOperation, containerName, err)
 	}
 
 	// Show logs using default iolib.Data/UI channels.

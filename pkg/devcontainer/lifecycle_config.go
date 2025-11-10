@@ -85,7 +85,11 @@ func printMounts(config *Config) {
 
 // printPorts prints port forwarding configuration.
 func printPorts(config *Config) {
-	ports, _ := ParsePorts(config.ForwardPorts, config.PortsAttributes)
+	ports, err := ParsePorts(config.ForwardPorts, config.PortsAttributes)
+	if err != nil {
+		fmt.Printf("\nForward Ports: Error parsing ports: %v\n", err)
+		return
+	}
 	if len(ports) == 0 {
 		return
 	}
