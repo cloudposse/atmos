@@ -321,12 +321,13 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 	}
 
 	// Add the tool with the selected version
-	err = AddToolToVersions(atmosConfig.Toolchain.VersionsFile, resolvedKey, version)
+	toolVersionsFile := GetToolVersionsFilePath()
+	err = AddToolToVersions(toolVersionsFile, resolvedKey, version)
 	if err != nil {
 		return fmt.Errorf("failed to set version: %w", err)
 	}
 
-	return ui.Successf("Set %s@%s in %s", resolvedKey, version, atmosConfig.Toolchain.VersionsFile)
+	return ui.Successf("Set %s@%s in %s", resolvedKey, version, toolVersionsFile)
 }
 
 // fetchGitHubVersions fetches available versions and titles from GitHub releases.
