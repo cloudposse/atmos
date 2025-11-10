@@ -1,14 +1,17 @@
 // Package devcontainer provides naming and validation for devcontainer instances.
 //
-// # Naming Limitation
+// # Naming Convention
 //
-// Container name parsing has an inherent ambiguity when both name and instance contain hyphens.
-// The parsing logic (split by "-", last part is instance) cannot distinguish between:
-//   - name="my-dev-env", instance="test-1" → "atmos-devcontainer-my-dev-env-test-1"
-//   - name="my-dev-env-test", instance="1" → "atmos-devcontainer-my-dev-env-test-1"
+// Devcontainer names use dot separators to avoid parsing ambiguity:
+//   Format: atmos-devcontainer.{name}.{instance}
+//   Example: atmos-devcontainer.backend-api.test-1
 //
-// This is typically acceptable since instance names are usually simple (default, alice, prod),
-// but users should avoid hyphens in instance names when using hyphenated devcontainer names.
+// Both name and instance can contain hyphens and underscores without ambiguity.
+// The dot separator ensures unambiguous parsing when splitting container names.
+//
+// For backward compatibility, the parser also supports the legacy hyphen format:
+//   Legacy: atmos-devcontainer-{name}-{instance}
+//   Note: Legacy parsing is best-effort and may be ambiguous with hyphenated names.
 package devcontainer
 
 import (
@@ -48,7 +51,7 @@ const (
 var namePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
 // GenerateContainerName generates a container name from devcontainer name and instance.
-// Format: atmos-devcontainer-{name}-{instance}.
+// Format: atmos-devcontainer.{name}.{instance}.
 func GenerateContainerName(name, instance string) (string, error) {
 	defer perf.Track(nil, "devcontainer.GenerateContainerName")()
 
@@ -64,7 +67,7 @@ func GenerateContainerName(name, instance string) (string, error) {
 		return "", fmt.Errorf("%w: invalid instance name: %w", errUtils.ErrInvalidDevcontainerConfig, err)
 	}
 
-	containerName := fmt.Sprintf("%s-%s-%s", ContainerPrefix, name, instance)
+	containerName := fmt.Sprintf("%s.%s.%s", ContainerPrefix, name, instance)
 
 	// Validate total container name length (Docker/Podman limit is 253, but 63 for DNS compatibility).
 	if len(containerName) > maxNameLength {
@@ -77,27 +80,45 @@ func GenerateContainerName(name, instance string) (string, error) {
 
 // ParseContainerName parses a container name into devcontainer name and instance.
 // Returns empty strings if the name doesn't match the expected format.
+//
+// Supports both new dot format and legacy hyphen format for backward compatibility:
+//   - New format: atmos-devcontainer.{name}.{instance}
+//   - Legacy format: atmos-devcontainer-{name}-{instance} (best-effort, may be ambiguous)
 func ParseContainerName(containerName string) (name, instance string) {
 	defer perf.Track(nil, "devcontainer.ParseContainerName")()
 
-	// Remove prefix
-	if !strings.HasPrefix(containerName, ContainerPrefix+"-") {
+	// Try new dot format first
+	if strings.HasPrefix(containerName, ContainerPrefix+".") {
+		remainder := strings.TrimPrefix(containerName, ContainerPrefix+".")
+
+		// Split by dot - unambiguous
+		parts := strings.SplitN(remainder, ".", 2)
+		if len(parts) == 2 {
+			return parts[0], parts[1]
+		}
+
 		return "", ""
 	}
 
-	remainder := strings.TrimPrefix(containerName, ContainerPrefix+"-")
+	// Fallback to legacy hyphen format (best-effort)
+	if strings.HasPrefix(containerName, ContainerPrefix+"-") {
+		remainder := strings.TrimPrefix(containerName, ContainerPrefix+"-")
 
-	// Split into parts
-	parts := strings.Split(remainder, "-")
-	if len(parts) < 2 {
-		return "", ""
+		// Split into parts
+		parts := strings.Split(remainder, "-")
+		if len(parts) < 2 {
+			return "", ""
+		}
+
+		// Last part is instance, everything before is name
+		// Note: This is ambiguous if both name and instance contain hyphens
+		instance = parts[len(parts)-1]
+		name = strings.Join(parts[:len(parts)-1], "-")
+
+		return name, instance
 	}
 
-	// Last part is instance, everything before is name
-	instance = parts[len(parts)-1]
-	name = strings.Join(parts[:len(parts)-1], "-")
-
-	return name, instance
+	return "", ""
 }
 
 // ValidateName validates a devcontainer or instance name.
@@ -122,8 +143,10 @@ func ValidateName(name string) error {
 }
 
 // IsAtmosDevcontainer checks if a container name is an Atmos devcontainer.
+// Supports both new dot format and legacy hyphen format.
 func IsAtmosDevcontainer(containerName string) bool {
 	defer perf.Track(nil, "devcontainer.IsAtmosDevcontainer")()
 
-	return strings.HasPrefix(containerName, ContainerPrefix+"-")
+	return strings.HasPrefix(containerName, ContainerPrefix+".") ||
+		strings.HasPrefix(containerName, ContainerPrefix+"-")
 }

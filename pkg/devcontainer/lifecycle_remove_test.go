@@ -36,10 +36,10 @@ func TestManager_Remove(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(&container.Info{
 						ID:     "stopped-id",
-						Name:   "atmos-devcontainer-test-default",
+						Name:   "atmos-devcontainer.test.default",
 						Status: "exited",
 					}, nil)
 				runtime.EXPECT().
@@ -61,10 +61,10 @@ func TestManager_Remove(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(&container.Info{
 						ID:     "running-id",
-						Name:   "atmos-devcontainer-test-default",
+						Name:   "atmos-devcontainer.test.default",
 						Status: "running",
 					}, nil)
 				runtime.EXPECT().
@@ -89,10 +89,10 @@ func TestManager_Remove(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(&container.Info{
 						ID:     "running-id",
-						Name:   "atmos-devcontainer-test-default",
+						Name:   "atmos-devcontainer.test.default",
 						Status: "running",
 					}, nil)
 			},
@@ -113,7 +113,7 @@ func TestManager_Remove(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(nil, errUtils.ErrContainerNotFound)
 			},
 			expectError: false, // Idempotent - no error if container doesn't exist.

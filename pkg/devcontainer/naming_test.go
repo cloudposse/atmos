@@ -22,31 +22,31 @@ func TestGenerateContainerName(t *testing.T) {
 			name:     "valid name and instance",
 			devName:  "geodesic",
 			instance: "default",
-			expected: "atmos-devcontainer-geodesic-default",
+			expected: "atmos-devcontainer.geodesic.default",
 		},
 		{
 			name:     "valid name with empty instance uses default",
 			devName:  "terraform",
 			instance: "",
-			expected: "atmos-devcontainer-terraform-default",
+			expected: "atmos-devcontainer.terraform.default",
 		},
 		{
 			name:     "valid name with hyphens",
 			devName:  "my-dev-env",
 			instance: "test-1",
-			expected: "atmos-devcontainer-my-dev-env-test-1",
+			expected: "atmos-devcontainer.my-dev-env.test-1",
 		},
 		{
 			name:     "valid name with underscores",
 			devName:  "my_dev_env",
 			instance: "test_1",
-			expected: "atmos-devcontainer-my_dev_env-test_1",
+			expected: "atmos-devcontainer.my_dev_env.test_1",
 		},
 		{
 			name:     "valid name with mixed separators",
 			devName:  "my-dev_env",
 			instance: "test-1_2",
-			expected: "atmos-devcontainer-my-dev_env-test-1_2",
+			expected: "atmos-devcontainer.my-dev_env.test-1_2",
 		},
 		{
 			name:          "empty devcontainer name",
@@ -107,30 +107,71 @@ func TestParseContainerName(t *testing.T) {
 		expectedName     string
 		expectedInstance string
 	}{
+		// New dot format tests (unambiguous)
 		{
-			name:             "valid container name",
+			name:             "dot format: simple name",
+			containerName:    "atmos-devcontainer.geodesic.default",
+			expectedName:     "geodesic",
+			expectedInstance: "default",
+		},
+		{
+			name:             "dot format: name with hyphens",
+			containerName:    "atmos-devcontainer.my-dev-env.default",
+			expectedName:     "my-dev-env",
+			expectedInstance: "default",
+		},
+		{
+			name:             "dot format: instance with hyphens",
+			containerName:    "atmos-devcontainer.myapp.test-1",
+			expectedName:     "myapp",
+			expectedInstance: "test-1",
+		},
+		{
+			name:             "dot format: both with hyphens (unambiguous!)",
+			containerName:    "atmos-devcontainer.my-app.test-1",
+			expectedName:     "my-app",
+			expectedInstance: "test-1",
+		},
+		{
+			name:             "dot format: underscores",
+			containerName:    "atmos-devcontainer.my_dev_env.test_1",
+			expectedName:     "my_dev_env",
+			expectedInstance: "test_1",
+		},
+		{
+			name:             "dot format: mixed separators",
+			containerName:    "atmos-devcontainer.my-dev_env.test-1_2",
+			expectedName:     "my-dev_env",
+			expectedInstance: "test-1_2",
+		},
+
+		// Legacy hyphen format tests (ambiguous with hyphens)
+		{
+			name:             "legacy: simple name",
 			containerName:    "atmos-devcontainer-geodesic-default",
 			expectedName:     "geodesic",
 			expectedInstance: "default",
 		},
 		{
-			name:             "container name with hyphens in devcontainer name",
+			name:             "legacy: name with hyphens (ambiguous)",
 			containerName:    "atmos-devcontainer-my-dev-env-test-1",
 			expectedName:     "my-dev-env-test",
 			expectedInstance: "1",
 		},
 		{
-			name:             "container name with underscores",
+			name:             "legacy: underscores",
 			containerName:    "atmos-devcontainer-my_dev_env-test_1",
 			expectedName:     "my_dev_env",
 			expectedInstance: "test_1",
 		},
 		{
-			name:             "container name with multiple hyphens",
+			name:             "legacy: multiple hyphens",
 			containerName:    "atmos-devcontainer-a-b-c-d-e",
 			expectedName:     "a-b-c-d",
 			expectedInstance: "e",
 		},
+
+		// Invalid formats
 		{
 			name:             "invalid prefix",
 			containerName:    "other-container-name-instance",
@@ -144,14 +185,26 @@ func TestParseContainerName(t *testing.T) {
 			expectedInstance: "",
 		},
 		{
-			name:             "prefix only",
+			name:             "prefix only (hyphen)",
 			containerName:    "atmos-devcontainer",
 			expectedName:     "",
 			expectedInstance: "",
 		},
 		{
-			name:             "prefix with single part",
+			name:             "prefix only (dot)",
+			containerName:    "atmos-devcontainer.",
+			expectedName:     "",
+			expectedInstance: "",
+		},
+		{
+			name:             "prefix with single part (hyphen)",
 			containerName:    "atmos-devcontainer-name",
+			expectedName:     "",
+			expectedInstance: "",
+		},
+		{
+			name:             "prefix with single part (dot)",
+			containerName:    "atmos-devcontainer.name",
 			expectedName:     "",
 			expectedInstance: "",
 		},
@@ -278,18 +331,33 @@ func TestIsAtmosDevcontainer(t *testing.T) {
 		containerName string
 		expected      bool
 	}{
+		// New dot format
 		{
-			name:          "valid atmos devcontainer",
+			name:          "dot format: valid atmos devcontainer",
+			containerName: "atmos-devcontainer.geodesic.default",
+			expected:      true,
+		},
+		{
+			name:          "dot format: with hyphens",
+			containerName: "atmos-devcontainer.my-dev.instance-1",
+			expected:      true,
+		},
+
+		// Legacy hyphen format
+		{
+			name:          "legacy: valid atmos devcontainer",
 			containerName: "atmos-devcontainer-geodesic-default",
 			expected:      true,
 		},
 		{
-			name:          "valid atmos devcontainer with hyphens",
+			name:          "legacy: with hyphens",
 			containerName: "atmos-devcontainer-my-dev-instance-1",
 			expected:      true,
 		},
+
+		// Invalid formats
 		{
-			name:          "prefix only",
+			name:          "prefix only (no separator)",
 			containerName: "atmos-devcontainer",
 			expected:      false,
 		},

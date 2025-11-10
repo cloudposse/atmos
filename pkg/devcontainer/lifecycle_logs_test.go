@@ -38,14 +38,14 @@ func TestManager_Logs(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(&container.Info{
 						ID:     "container-id",
-						Name:   "atmos-devcontainer-test-default",
+						Name:   "atmos-devcontainer.test.default",
 						Status: "running",
 					}, nil)
 				runtime.EXPECT().
-					Logs(gomock.Any(), "atmos-devcontainer-test-default", false, "100", nil, nil).
+					Logs(gomock.Any(), "atmos-devcontainer.test.default", false, "100", nil, nil).
 					Return(nil)
 			},
 			expectError: false,
@@ -64,14 +64,14 @@ func TestManager_Logs(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(&container.Info{
 						ID:     "container-id",
-						Name:   "atmos-devcontainer-test-default",
+						Name:   "atmos-devcontainer.test.default",
 						Status: "running",
 					}, nil)
 				runtime.EXPECT().
-					Logs(gomock.Any(), "atmos-devcontainer-test-default", true, "all", nil, nil).
+					Logs(gomock.Any(), "atmos-devcontainer.test.default", true, "all", nil, nil).
 					Return(nil)
 			},
 			expectError: false,
@@ -90,12 +90,12 @@ func TestManager_Logs(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(nil, errUtils.ErrContainerNotFound)
 			},
 			expectError:   true,
 			errorIs:       errUtils.ErrContainerNotFound,
-			errorContains: "container atmos-devcontainer-test-default not found",
+			errorContains: "container atmos-devcontainer.test.default not found",
 		},
 		{
 			name:     "config load fails",
@@ -142,14 +142,14 @@ func TestManager_Logs(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(&container.Info{
 						ID:     "container-id",
-						Name:   "atmos-devcontainer-test-default",
+						Name:   "atmos-devcontainer.test.default",
 						Status: "running",
 					}, nil)
 				runtime.EXPECT().
-					Logs(gomock.Any(), "atmos-devcontainer-test-default", false, "100", nil, nil).
+					Logs(gomock.Any(), "atmos-devcontainer.test.default", false, "100", nil, nil).
 					Return(errors.New("logs failed"))
 			},
 			expectError:   true,

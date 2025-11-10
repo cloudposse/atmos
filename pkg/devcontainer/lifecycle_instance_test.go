@@ -42,7 +42,7 @@ func TestManager_GenerateNewInstance(t *testing.T) {
 			expectError:    false,
 		},
 		{
-			name:         "generate next instance - returns dev-1 due to parsing bug",
+			name:         "generate next instance with hyphenated base (dot format)",
 			devName:      "test",
 			baseInstance: "dev",
 			setupMocks: func(loader *MockConfigLoader, detector *MockRuntimeDetector, runtime *MockRuntime) {
@@ -55,16 +55,16 @@ func TestManager_GenerateNewInstance(t *testing.T) {
 				runtime.EXPECT().
 					List(gomock.Any(), nil).
 					Return([]container.Info{
-						{Name: "atmos-devcontainer-test-dev-1"},
-						{Name: "atmos-devcontainer-test-dev-2"},
-						{Name: "atmos-devcontainer-other-dev-1"},
+						{Name: "atmos-devcontainer.test.dev-1"},
+						{Name: "atmos-devcontainer.test.dev-2"},
+						{Name: "atmos-devcontainer.other.dev-1"},
 					}, nil)
 			},
-			expectedResult: "dev-1", // Bug: should be dev-3, but parsing doesn't find existing instances
+			expectedResult: "dev-3",
 			expectError:    false,
 		},
 		{
-			name:         "generate instance with gaps - returns dev-1 due to parsing bug",
+			name:         "generate instance with gaps (dot format)",
 			devName:      "test",
 			baseInstance: "dev",
 			setupMocks: func(loader *MockConfigLoader, detector *MockRuntimeDetector, runtime *MockRuntime) {
@@ -77,12 +77,12 @@ func TestManager_GenerateNewInstance(t *testing.T) {
 				runtime.EXPECT().
 					List(gomock.Any(), nil).
 					Return([]container.Info{
-						{Name: "atmos-devcontainer-test-dev-1"},
-						{Name: "atmos-devcontainer-test-dev-5"},
-						{Name: "atmos-devcontainer-test-dev-3"},
+						{Name: "atmos-devcontainer.test.dev-1"},
+						{Name: "atmos-devcontainer.test.dev-5"},
+						{Name: "atmos-devcontainer.test.dev-3"},
 					}, nil)
 			},
-			expectedResult: "dev-1", // Bug: should be dev-6, but parsing doesn't find existing instances
+			expectedResult: "dev-6",
 			expectError:    false,
 		},
 		{
@@ -117,8 +117,8 @@ func TestManager_GenerateNewInstance(t *testing.T) {
 				runtime.EXPECT().
 					List(gomock.Any(), nil).
 					Return([]container.Info{
-						{Name: "atmos-devcontainer-other-default-10"},
-						{Name: "atmos-devcontainer-another-default-20"},
+						{Name: "atmos-devcontainer.other.default-10"},
+						{Name: "atmos-devcontainer.another.default-20"},
 					}, nil)
 			},
 			expectedResult: "default-1",
@@ -210,17 +210,6 @@ func TestManager_GenerateNewInstance(t *testing.T) {
 }
 
 func TestFindMaxInstanceNumber(t *testing.T) {
-	// Note: There is a known parsing bug where container names with hyphens
-	// create ambiguity. This test documents the ACTUAL behavior.
-	// ParseContainerName("atmos-devcontainer-myapp-default-1") returns:
-	// name="myapp-default", instance="1"
-	//
-	// findMaxInstanceNumber looks for instances starting with "default-",
-	// but ParseContainerName returns just "1", so nothing matches.
-	//
-	// This function currently only works when containers DON'T use
-	// GenerateContainerName with baseInstance containing hyphens.
-
 	tests := []struct {
 		name         string
 		containers   []container.Info
@@ -236,14 +225,46 @@ func TestFindMaxInstanceNumber(t *testing.T) {
 			expected:     0,
 		},
 		{
-			name: "returns 0 due to parsing bug with hyphenated names",
+			name: "finds max instance number with dot format",
+			containers: []container.Info{
+				{Name: "atmos-devcontainer.myapp.default-1"},
+				{Name: "atmos-devcontainer.myapp.default-5"},
+			},
+			devName:      "myapp",
+			baseInstance: "default",
+			expected:     5,
+		},
+		{
+			name: "finds max with hyphenated devcontainer name (dot format)",
+			containers: []container.Info{
+				{Name: "atmos-devcontainer.backend-api.dev-1"},
+				{Name: "atmos-devcontainer.backend-api.dev-3"},
+				{Name: "atmos-devcontainer.backend-api.dev-2"},
+			},
+			devName:      "backend-api",
+			baseInstance: "dev",
+			expected:     3,
+		},
+		{
+			name: "ignores legacy hyphen format (ambiguous parsing)",
 			containers: []container.Info{
 				{Name: "atmos-devcontainer-myapp-default-1"},
 				{Name: "atmos-devcontainer-myapp-default-5"},
 			},
-			devName:      "myapp-default",
+			devName:      "myapp",
 			baseInstance: "default",
-			expected:     0, // Bug: should be 5, but parsing doesn't work
+			expected:     0, // Legacy format not reliably parseable with hyphenated names
+		},
+		{
+			name: "ignores containers from different devcontainers",
+			containers: []container.Info{
+				{Name: "atmos-devcontainer.myapp.default-3"},
+				{Name: "atmos-devcontainer.other.default-10"},
+				{Name: "atmos-devcontainer.another.default-20"},
+			},
+			devName:      "myapp",
+			baseInstance: "default",
+			expected:     3,
 		},
 	}
 

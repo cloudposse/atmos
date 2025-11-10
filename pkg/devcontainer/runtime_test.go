@@ -71,11 +71,11 @@ func TestToCreateConfig(t *testing.T) {
 				Image:           "ubuntu:22.04",
 				WorkspaceFolder: "/workspace",
 			},
-			containerName:    "atmos-devcontainer-test-default",
+			containerName:    "atmos-devcontainer.test.default",
 			devcontainerName: "test",
 			instance:         "default",
 			assertFunc: func(t *testing.T, cc *container.CreateConfig) {
-				assert.Equal(t, "atmos-devcontainer-test-default", cc.Name)
+				assert.Equal(t, "atmos-devcontainer.test.default", cc.Name)
 				assert.Equal(t, "ubuntu:22.04", cc.Image)
 				assert.Equal(t, "/workspace", cc.WorkspaceFolder)
 				assert.NotNil(t, cc.Labels)

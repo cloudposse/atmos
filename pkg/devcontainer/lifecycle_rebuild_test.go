@@ -42,10 +42,10 @@ func TestManager_Rebuild(t *testing.T) {
 					Return(runtime, nil)
 				// stopAndRemoveContainer checks if container exists
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(&container.Info{
 						ID:     "old-id",
-						Name:   "atmos-devcontainer-test-default",
+						Name:   "atmos-devcontainer.test.default",
 						Status: "running",
 					}, nil)
 				// Stop the container
@@ -92,7 +92,7 @@ func TestManager_Rebuild(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(nil, errors.New("not found"))
 				runtime.EXPECT().
 					Pull(gomock.Any(), "ubuntu:22.04").
@@ -123,7 +123,7 @@ func TestManager_Rebuild(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(nil, errors.New("not found"))
 				// No Pull call expected when noPull=true
 				runtime.EXPECT().
@@ -196,10 +196,10 @@ func TestManager_Rebuild(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(&container.Info{
 						ID:     "old-id",
-						Name:   "atmos-devcontainer-test-default",
+						Name:   "atmos-devcontainer.test.default",
 						Status: "running",
 					}, nil)
 				runtime.EXPECT().
@@ -224,7 +224,7 @@ func TestManager_Rebuild(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(nil, errors.New("not found"))
 				runtime.EXPECT().
 					Pull(gomock.Any(), "ubuntu:22.04").
@@ -248,7 +248,7 @@ func TestManager_Rebuild(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(nil, errors.New("not found"))
 				runtime.EXPECT().
 					Create(gomock.Any(), gomock.Any()).
@@ -272,7 +272,7 @@ func TestManager_Rebuild(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(nil, errors.New("not found"))
 				runtime.EXPECT().
 					Create(gomock.Any(), gomock.Any()).
@@ -299,10 +299,10 @@ func TestManager_Rebuild(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(&container.Info{
 						ID:     "old-id",
-						Name:   "atmos-devcontainer-test-default",
+						Name:   "atmos-devcontainer.test.default",
 						Status: "running",
 					}, nil)
 				runtime.EXPECT().
@@ -336,7 +336,7 @@ func TestManager_Rebuild(t *testing.T) {
 					DetectRuntime("docker").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(nil, errors.New("not found"))
 				runtime.EXPECT().
 					Create(gomock.Any(), gomock.Any()).
@@ -362,7 +362,7 @@ func TestManager_Rebuild(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 					Return(nil, errors.New("not found"))
 				runtime.EXPECT().
 					Create(gomock.Any(), gomock.Any()).
@@ -392,10 +392,10 @@ func TestManager_Rebuild(t *testing.T) {
 						DetectRuntime("").
 						Return(runtime, nil),
 					runtime.EXPECT().
-						Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+						Inspect(gomock.Any(), "atmos-devcontainer.test.default").
 						Return(&container.Info{
 							ID:     "old-id",
-							Name:   "atmos-devcontainer-test-default",
+							Name:   "atmos-devcontainer.test.default",
 							Status: "running",
 						}, nil),
 					runtime.EXPECT().

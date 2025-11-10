@@ -37,11 +37,11 @@ func TestManager_Stop(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					List(gomock.Any(), map[string]string{"name": "atmos-devcontainer-test-default"}).
+					List(gomock.Any(), map[string]string{"name": "atmos-devcontainer.test.default"}).
 					Return([]container.Info{
 						{
 							ID:     "running-id",
-							Name:   "atmos-devcontainer-test-default",
+							Name:   "atmos-devcontainer.test.default",
 							Status: "running",
 						},
 					}, nil)
@@ -68,7 +68,7 @@ func TestManager_Stop(t *testing.T) {
 					Return([]container.Info{
 						{
 							ID:     "stopped-id",
-							Name:   "atmos-devcontainer-test-default",
+							Name:   "atmos-devcontainer.test.default",
 							Status: "exited",
 						},
 					}, nil)
@@ -93,7 +93,7 @@ func TestManager_Stop(t *testing.T) {
 			},
 			expectError:   true,
 			errorIs:       errUtils.ErrDevcontainerNotFound,
-			errorContains: "container atmos-devcontainer-test-default not found",
+			errorContains: "container atmos-devcontainer.test.default not found",
 		},
 		{
 			name:     "config load fails",

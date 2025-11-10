@@ -39,7 +39,7 @@ func TestManager_Start(t *testing.T) {
 					DetectRuntime("").
 					Return(runtime, nil)
 				runtime.EXPECT().
-					List(gomock.Any(), map[string]string{"name": "atmos-devcontainer-test-default"}).
+					List(gomock.Any(), map[string]string{"name": "atmos-devcontainer.test.default"}).
 					Return([]container.Info{}, nil)
 				// createAndStartNewContainer calls
 				runtime.EXPECT().
@@ -98,7 +98,7 @@ func TestManager_Start(t *testing.T) {
 					Return([]container.Info{
 						{
 							ID:     "existing-id",
-							Name:   "atmos-devcontainer-test-default",
+							Name:   "atmos-devcontainer.test.default",
 							Status: "exited",
 						},
 					}, nil)
@@ -124,7 +124,7 @@ func TestManager_Start(t *testing.T) {
 					Return([]container.Info{
 						{
 							ID:     "running-id",
-							Name:   "atmos-devcontainer-test-default",
+							Name:   "atmos-devcontainer.test.default",
 							Status: "running",
 						},
 					}, nil)

@@ -81,11 +81,11 @@ func TestManager_List(t *testing.T) {
 					List(gomock.Any(), gomock.Any()).
 					Return([]container.Info{
 						{
-							Name:   "atmos-devcontainer-test-default",
+							Name:   "atmos-devcontainer.test.default",
 							Status: "running",
 						},
 						{
-							Name:   "atmos-devcontainer-dev-default",
+							Name:   "atmos-devcontainer.dev.default",
 							Status: "exited",
 						},
 					}, nil)
