@@ -22,6 +22,9 @@ var (
 	// ErrHTTPRequest indicates an HTTP request failed.
 	ErrHTTPRequest = errors.New("HTTP request failed")
 
+	// ErrHTTP404 indicates an HTTP 404 Not Found response.
+	ErrHTTP404 = errors.New("HTTP 404 Not Found")
+
 	// ErrRegistryParse indicates the registry file could not be parsed.
 	ErrRegistryParse = errors.New("registry parse error")
 

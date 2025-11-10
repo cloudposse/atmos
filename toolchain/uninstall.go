@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -192,7 +191,7 @@ func uninstallSingleTool(installer *Installer, owner, repo, version string, show
 	err = installer.Uninstall(owner, repo, version)
 	if err != nil {
 		// If the binary is already gone, treat as success
-		if strings.Contains(err.Error(), "not installed") || os.IsNotExist(err) {
+		if errors.Is(err, ErrToolNotFound) || os.IsNotExist(err) {
 			if showProgressBar {
 				printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s/%s@%s not installed", theme.Styles.Checkmark, owner, repo, version))
 			}

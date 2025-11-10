@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -382,6 +383,9 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return "", fmt.Errorf("%w: failed to download asset: %w", ErrHTTPRequest, ErrHTTP404)
+		}
 		return "", fmt.Errorf("%w: failed to download asset: HTTP %d", ErrHTTPRequest, resp.StatusCode)
 	}
 
@@ -434,7 +438,7 @@ func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, versio
 
 // isHTTP404 returns true if the error is a 404 from downloadAsset.
 func isHTTP404(err error) bool {
-	return strings.Contains(err.Error(), "HTTP 404")
+	return errors.Is(err, ErrHTTP404)
 }
 
 // extractAndInstall extracts the binary from the asset and installs it.
