@@ -279,6 +279,11 @@ settings:
 func TestLoadProfiles(t *testing.T) {
 	// Create temporary directory structure.
 	tmpDir := t.TempDir()
+
+	// Isolate XDG_CONFIG_HOME to prevent test from accessing system directories.
+	cleanup := withTestXDGConfigHome(t, tmpDir)
+	t.Cleanup(cleanup)
+
 	profilesDir := filepath.Join(tmpDir, "profiles")
 
 	// Create base profile.
