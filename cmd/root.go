@@ -45,10 +45,10 @@ import (
 	// The init() function in each package registers the command with the registry.
 	"github.com/cloudposse/atmos/cmd/internal"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
+	toolchainCmd "github.com/cloudposse/atmos/cmd/toolchain"
 	"github.com/cloudposse/atmos/cmd/version"
 
 	_ "github.com/cloudposse/atmos/cmd/about"
-	_ "github.com/cloudposse/atmos/cmd/toolchain"
 )
 
 const (
@@ -566,6 +566,7 @@ func Execute() error {
 	// Set atmosConfig for commands that need access to config.
 	version.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
+	toolchainCmd.SetAtmosConfig(&atmosConfig)
 
 	utils.InitializeMarkdown(atmosConfig)
 	errUtils.InitializeMarkdown(atmosConfig)

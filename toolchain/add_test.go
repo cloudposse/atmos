@@ -177,7 +177,7 @@ func TestAddCommand_AquaRegistryTool(t *testing.T) {
 		Toolchain: schema.Toolchain{VersionsFile: toolVersionsFile},
 	})
 	err := AddToolVersion("kubectl", "v1.2.7")
-	require.NoError(t, err, "Should fail when adding tool from Aqua registry")
+	require.NoError(t, err, "Should succeed when adding tool from Aqua registry")
 
 	// Verify the tool was added to the file
 	toolVersions, err := LoadToolVersions(toolVersionsFile)

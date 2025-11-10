@@ -1,10 +1,10 @@
 
-- Install all the tools added in tool-versions
+- Install all the tools added in .tool-versions
 ```
  $ atmos toolchain install
 ```
 
-- Install a specifc version of a tool
+- Install a specific version of a tool
 ```
- $ atmos toolchain install <tool>@<verions>
+ $ atmos toolchain install <tool>@<version>
 ```
