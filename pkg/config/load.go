@@ -100,6 +100,13 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		// Don't fail config loading if this step fails, just log it.
 	}
 
+	// Apply git root discovery for default base path.
+	// This enables running Atmos from any subdirectory, similar to Git.
+	if err := applyGitRootBasePath(&atmosConfig); err != nil {
+		log.Debug("Failed to apply git root base path", "error", err)
+		// Don't fail config loading if this step fails, just log it.
+	}
+
 	return atmosConfig, nil
 }
 
@@ -121,6 +128,7 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.terminal.pager", "ATMOS_PAGER", "PAGER")
 	bindEnv(v, "settings.terminal.color", "ATMOS_COLOR", "COLOR")
 	bindEnv(v, "settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
+	bindEnv(v, "settings.terminal.theme", "ATMOS_THEME", "THEME")
 
 	// Atmos Pro settings
 	bindEnv(v, "settings.pro.base_url", AtmosProBaseUrlEnvVarName)
