@@ -526,7 +526,45 @@ Use `no-release` label for docs-only changes.
 
 ### PR Tools
 Check status: `gh pr checks {pr} --repo cloudposse/atmos`
-Reply to threads: Use `gh api graphql` with `addPullRequestReviewThreadReply`
+
+**Responding to CodeRabbit Review Comments (MANDATORY):**
+When addressing CodeRabbit review comments, you MUST reply to the specific review threads, not just add a general PR comment.
+
+**IMPORTANT:**
+- ❌ `gh pr comment` - Does NOT notify CodeRabbit or resolve threads
+- ✅ Reply to specific review threads using the GitHub web interface or API
+
+**How to reply to review threads:**
+1. Get review thread IDs via GitHub API
+2. Use GraphQL mutation `addPullRequestReviewThreadReply` to post replies
+3. Each reply should reference the specific issue and explain the fix or dismissal
+
+**Example workflow:**
+```bash
+# Find unresolved review threads
+gh api graphql -f query='query { repository(owner: "cloudposse", name: "atmos") {
+  pullRequest(number: XXXX) {
+    reviewThreads(first: 100) {
+      nodes { id isResolved comments(first: 1) { nodes { body path } } }
+    }
+  }
+} }'
+
+# Reply to a specific thread (use the thread ID from above)
+gh api graphql -f query='mutation {
+  addPullRequestReviewThreadReply(input: {
+    pullRequestReviewThreadId: "THREAD_ID"
+    body: "Explanation of fix or why this is a false positive"
+  }) {
+    comment { id }
+  }
+}'
+```
+
+**When to reply:**
+- Always reply when fixing an issue to confirm resolution
+- Always reply when dismissing as false positive with clear explanation
+- Include file:line references and code snippets when helpful
 
 ### Bug Fixing (MANDATORY)
 1. Write failing test
