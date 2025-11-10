@@ -806,6 +806,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// This is needed for tests that change to parent directories
 	tc.Env["TEST_EXCLUDE_ATMOS_D"] = repoRoot
 
+	// Disable git root base path discovery in tests.
+	// Tests expect BasePath to be "." by default, not the repository root.
+	tc.Env["ATMOS_GIT_ROOT_BASEPATH"] = "false"
+
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
 	err := removeCacheFile()
