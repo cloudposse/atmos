@@ -112,7 +112,7 @@ auth:
 
 **Precedence:**
 
-```
+```text
 1. --identity=explicit-name      (CLI flag with value)
 2. ATMOS_IDENTITY env var        (environment variable)
 3. auth.defaults.identity        (global selected default) ← NEW
@@ -149,20 +149,20 @@ auth:
 
 // AuthConfig defines the authentication configuration structure.
 type AuthConfig struct {
-	Logs            Logs                `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
-	Keyring         KeyringConfig       `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
-	Defaults        *AuthDefaults       `yaml:"defaults,omitempty" json:"defaults,omitempty" mapstructure:"defaults"` // NEW
-	Providers       map[string]Provider `yaml:"providers" json:"providers" mapstructure:"providers"`
-	Identities      map[string]Identity `yaml:"identities" json:"identities" mapstructure:"identities"`
-	IdentityCaseMap map[string]string   `yaml:"-" json:"-" mapstructure:"-"`
+    Logs            Logs                `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+    Keyring         KeyringConfig       `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
+    Defaults        *AuthDefaults       `yaml:"defaults,omitempty" json:"defaults,omitempty" mapstructure:"defaults"` // NEW
+    Providers       map[string]Provider `yaml:"providers" json:"providers" mapstructure:"providers"`
+    Identities      map[string]Identity `yaml:"identities" json:"identities" mapstructure:"identities"`
+    IdentityCaseMap map[string]string   `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // AuthDefaults defines global defaults for auth behavior.
 type AuthDefaults struct {
-	Identity string          `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"` // Selected default identity name
-	Session  *SessionConfig  `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`     // Default session config
-	Console  *ConsoleConfig  `yaml:"console,omitempty" json:"console,omitempty" mapstructure:"console"`     // Default console config
-	Keyring  *KeyringConfig  `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`     // Default keyring config
+    Identity string          `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"` // Selected default identity name
+    Session  *SessionConfig  `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`     // Default session config
+    Console  *ConsoleConfig  `yaml:"console,omitempty" json:"console,omitempty" mapstructure:"console"`     // Default console config
+    Keyring  *KeyringConfig  `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`     // Default keyring config
 }
 ```
 
@@ -173,54 +173,54 @@ type AuthDefaults struct {
 
 // GetDefaultIdentity returns the name of the default identity, if any.
 func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
-	defer perf.Track(nil, "auth.Manager.GetDefaultIdentity")()
+    defer perf.Track(nil, "auth.Manager.GetDefaultIdentity")()
 
-	// If forceSelect is true, user explicitly requested identity selection.
-	if forceSelect {
-		if !isInteractive() {
-			return "", errUtils.ErrIdentitySelectionRequiresTTY
-		}
-		return m.promptForIdentity("Select an identity:", m.ListIdentities())
-	}
+    // If forceSelect is true, user explicitly requested identity selection.
+    if forceSelect {
+        if !isInteractive() {
+            return "", errUtils.ErrIdentitySelectionRequiresTTY
+        }
+        return m.promptForIdentity("Select an identity:", m.ListIdentities())
+    }
 
-	// NEW: Check auth.defaults.identity first (global selected default).
-	if m.config.Defaults != nil && m.config.Defaults.Identity != "" {
-		selectedDefault := m.config.Defaults.Identity
+    // NEW: Check auth.defaults.identity first (global selected default).
+    if m.config.Defaults != nil && m.config.Defaults.Identity != "" {
+        selectedDefault := m.config.Defaults.Identity
 
-		// Validate the identity exists.
-		if _, exists := m.config.Identities[selectedDefault]; !exists {
-			return "", fmt.Errorf("%w: auth.defaults.identity '%s' not found",
-				errUtils.ErrDefaultIdentity, selectedDefault)
-		}
+        // Validate the identity exists.
+        if _, exists := m.config.Identities[selectedDefault]; !exists {
+            return "", fmt.Errorf("%w: auth.defaults.identity '%s' not found",
+                errUtils.ErrDefaultIdentity, selectedDefault)
+        }
 
-		return selectedDefault, nil
-	}
+        return selectedDefault, nil
+    }
 
-	// Existing logic: Find all identities with default: true.
-	var defaultIdentities []string
-	for name, identity := range m.config.Identities {
-		if identity.Default {
-			defaultIdentities = append(defaultIdentities, name)
-		}
-	}
+    // Existing logic: Find all identities with default: true.
+    var defaultIdentities []string
+    for name, identity := range m.config.Identities {
+        if identity.Default {
+            defaultIdentities = append(defaultIdentities, name)
+        }
+    }
 
-	// Handle different scenarios based on number of default identities found.
-	switch len(defaultIdentities) {
-	case 0:
-		if !isInteractive() {
-			return "", errUtils.ErrNoDefaultIdentity
-		}
-		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
-	case 1:
-		return defaultIdentities[0], nil
-	default:
-		// Multiple defaults found.
-		if !isInteractive() {
-			return "", fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities,
-				fmt.Sprintf(backtickedFmt, defaultIdentities))
-		}
-		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
-	}
+    // Handle different scenarios based on number of default identities found.
+    switch len(defaultIdentities) {
+    case 0:
+        if !isInteractive() {
+            return "", errUtils.ErrNoDefaultIdentity
+        }
+        return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
+    case 1:
+        return defaultIdentities[0], nil
+    default:
+        // Multiple defaults found.
+        if !isInteractive() {
+            return "", fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities,
+                fmt.Sprintf(backtickedFmt, defaultIdentities))
+        }
+        return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
+    }
 }
 ```
 
@@ -418,7 +418,7 @@ auth:
 ```
 
 **Precedence with environment variables:**
-```
+```text
 1. --identity=explicit            (CLI flag - highest)
 2. ATMOS_IDENTITY                 (explicit identity selection)
 3. ATMOS_DEFAULTS_IDENTITY        (selected default via env var) ← NEW
@@ -436,7 +436,7 @@ auth:
 
 ### Complete Precedence Chain
 
-```
+```text
 Identity Resolution (with all mechanisms):
 1. --identity=explicit-name           (CLI flag with value)
 2. ATMOS_IDENTITY env var             (explicit identity selection)
@@ -593,7 +593,7 @@ auth:
 **Issue:** Both `identity.default: true` and `auth.defaults.identity` exist.
 
 **Mitigation:**
-- Clear documentation: "Selected default" vs "Favorites"
+- Clear documentation: "Selected default" vs. "Favorites"
 - `auth.defaults.identity` always wins (clear precedence)
 - Recommendation: Use `auth.defaults.identity` in profiles, `identity.default: true` in base config
 
@@ -639,7 +639,7 @@ auth:
 2. Add `auth.defaults` examples to PRD
 3. Update profiles PRD with `auth.defaults` usage
 4. Add CI profile example using `auth.defaults.identity`
-5. Document favorites vs selected default semantics
+5. Document favorites vs. selected default semantics
 
 **Deliverables:**
 - Updated auth documentation
@@ -754,8 +754,8 @@ Only allow single `identity.default: true` in non-interactive mode.
    **Rationale:**
    - Current proposal solves the immediate problem (CI + profiles)
    - Provider-level defaults add significant complexity
-   - Unclear precedence: global vs provider-level vs identity-level
-   - Use case needs validation (when would you select by provider vs by identity?)
+   - Unclear precedence: global vs. provider-level vs. identity-level
+   - Use case needs validation (when would you select by provider vs. by identity?)
    - Can be added later without breaking changes
 
    **Alternative:** Document pattern using profiles

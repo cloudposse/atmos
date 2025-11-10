@@ -41,7 +41,7 @@ auth:
 
 ### Challenges
 
-1. **Multi-environment workflows** - Developers need different settings for local development vs CI/CD environments
+1. **Multi-environment workflows** - Developers need different settings for local development vs. CI/CD environments
 2. **Role-based configuration** - Different team members (developers, DevOps, platform engineers) need different defaults
 3. **Debugging complexity** - Temporarily enabling debug/trace logs requires editing configuration files
 4. **CI/CD integration** - GitHub Actions, GitLab CI, and other automation need specialized settings (e.g., OIDC authentication)
@@ -66,7 +66,7 @@ ATMOS_PROFILE=ci atmos terraform apply component -s prod
 ```
 
 #### UC2: Role-Based Defaults
-**Actor**: Developer vs Platform Engineer
+**Actor**: Developer vs. Platform Engineer
 **Scenario**: Different team roles need different default identities and permissions
 - **Developer profile**: Limited permissions, sandbox AWS account, verbose output
 - **Platform Engineer profile**: Admin permissions, production access, concise output
@@ -170,7 +170,7 @@ profiles:
 **FR1.8**: Profile inheritance MUST be supported via the existing `import:` mechanism in profile YAML files
 
 Example structure:
-```
+```text
 # Project-local profiles
 infrastructure/
 └── atmos/
@@ -279,7 +279,7 @@ ATMOS_PROFILE=developer,debug atmos describe stacks
 **FR5.1**: New command `atmos profile list` MUST list all available profiles across all locations
 
 **FR5.2**: `atmos profile list` output format (using lipgloss table):
-```
+```text
 Available Profiles
 
 ┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┓
@@ -310,7 +310,7 @@ Tip: View profile details with 'atmos profile show <profile>'
 **FR5.4**: New command `atmos profile show <profile>` MUST display merged configuration for a profile
 
 **FR5.5**: `atmos profile show <profile>` output format (using lipgloss styling):
-```
+```text
 Profile: developer
 
 Locations
@@ -405,7 +405,7 @@ The following commands will implement tag filtering when this feature is develop
 
 **FR6.7**: UX hints for filtered output:
 When tag filtering is active, commands MUST indicate filtering is enabled:
-```bash
+```text
 # Example output
 $ atmos auth list identities --profile developer --filter-by-profile-tags
 
@@ -530,7 +530,7 @@ func mergeConfigMetadata(existing *ConfigMetadata, incoming *ConfigMetadata) {
 
 #### TR3: Performance
 
-**TR3.1**: Profile loading MUST complete within 100ms for typical profiles, where "typical" is defined as:
+**TR3.1**: Profile loading MUST complete within 100 ms for typical profiles, where "typical" is defined as:
 - 5–10 YAML files per profile
 - ≤1,000 lines per file
 - ≤500KB total file size across all profile files
@@ -620,7 +620,7 @@ describeConfigCmd.PersistentFlags().Bool("provenance", false, "Enable provenance
 
 ### Configuration Loading Flow
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Atmos Configuration Loading                   │
 └─────────────────────────────────────────────────────────────────┘
@@ -721,7 +721,7 @@ atmos profile list
 ```
 
 Output:
-```
+```text
 Available Profiles
 
 ┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┓
@@ -771,7 +771,7 @@ atmos profile show developer
 ```
 
 Output:
-```
+```text
 Profile: developer
 
 Locations
@@ -808,7 +808,7 @@ atmos profile show developer --files
 ```
 
 Output:
-```
+```text
 Profile: developer
 
 Locations
@@ -1151,7 +1151,7 @@ settings:
     color: true                     # atmos.yaml:15
 ```
 
-Note: Values from active profiles show `profiles/<name>/<file>` as the source. Values from base `atmos.yaml` show `atmos.yaml` as the source. This helps users understand which configurations are coming from profiles vs base config.
+Note: Values from active profiles show `profiles/<name>/<file>` as the source. Values from base `atmos.yaml` show `atmos.yaml` as the source. This helps users understand which configurations are coming from profiles vs. base config.
 
 With multiple profiles:
 ```bash
@@ -1159,7 +1159,7 @@ atmos describe config --profile developer,debug --provenance
 ```
 
 Output shows precedence (rightmost profile wins):
-```
+```text
 Active Profiles: developer, debug (left-to-right precedence)
 
 Configuration (with provenance)
@@ -1241,7 +1241,7 @@ atmos auth list identities --profile developer --filter-by-profile-tags
 ```
 
 **Output (filtered):**
-```
+```text
 Available Identities (filtered by profile tags: developer, local, development)
 
 ┏━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┓
@@ -1262,7 +1262,7 @@ atmos auth list identities --profile developer
 ```
 
 **Output (unfiltered):**
-```
+```text
 Available Identities
 
 ┏━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┓
@@ -1547,7 +1547,7 @@ atmos auth list identities --profile platform-admin --filter-by-profile-tags
 ### Error Handling
 
 #### Profile Not Found
-```
+```text
 Error: Profile 'ci' not found
 
 Requested profile 'ci' does not exist.
@@ -1563,7 +1563,7 @@ Tip: Create profile directory with: mkdir -p /infrastructure/atmos/profiles/ci
 ```
 
 #### Invalid Profile Configuration
-```
+```text
 Error: Failed to load profile 'ci'
 
 Syntax error in /infrastructure/atmos/profiles/ci/auth.yaml:
@@ -1575,7 +1575,7 @@ Path: /infrastructure/atmos/profiles/ci/auth.yaml
 ```
 
 #### Multiple Profiles with Conflicts
-```
+```text
 Warning: Configuration conflict in profiles
 
 Setting 'logs.level' is defined in multiple profiles:
@@ -1677,7 +1677,7 @@ auth:
 
 When profiles are active, the full precedence chain is:
 
-```
+```text
 1. --identity=explicit            (CLI flag)
 2. ATMOS_IDENTITY                 (env var)
 3. auth.defaults.identity         (from active profile) ← Profiles use this
