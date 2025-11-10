@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -312,6 +313,11 @@ func TestFileStore_PermissionError(t *testing.T) {
 
 	if os.Getuid() == 0 {
 		t.Skip("Skipping permission test when running as root")
+	}
+
+	// Skip on Windows - chmod doesn't work the same way on Windows.
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping permission test on Windows - chmod semantics differ")
 	}
 
 	baseDir := t.TempDir()
