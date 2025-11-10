@@ -32,6 +32,7 @@ func RemoveToolVersion(filePath, tool, version string) error {
 		if err := SaveToolVersions(filePath, toolVersions); err != nil {
 			return err
 		}
+		_ = ui.Successf("Removed %s from %s", tool, filePath)
 		return nil
 	}
 
@@ -59,10 +60,6 @@ func RemoveToolVersion(filePath, tool, version string) error {
 		return err
 	}
 
-	if version == "" {
-		_ = ui.Successf("Removed %s from %s", tool, filePath)
-	} else {
-		_ = ui.Successf("Removed %s@%s from %s", tool, version, filePath)
-	}
+	_ = ui.Successf("Removed %s@%s from %s", tool, version, filePath)
 	return nil
 }
