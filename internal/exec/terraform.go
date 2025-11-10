@@ -74,6 +74,19 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
+	// If AuthManager was created and identity was auto-detected (info.Identity was empty),
+	// store the authenticated identity back into info.Identity so that hooks can access it.
+	// This prevents TerraformPreHook from prompting for identity selection again.
+	if authManager != nil && info.Identity == "" {
+		chain := authManager.GetChain()
+		if len(chain) > 0 {
+			// The last element in the chain is the authenticated identity.
+			authenticatedIdentity := chain[len(chain)-1]
+			info.Identity = authenticatedIdentity
+			log.Debug("Stored authenticated identity for hooks", "identity", authenticatedIdentity)
+		}
+	}
+
 	if shouldProcessStacks {
 		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
 		if err != nil {

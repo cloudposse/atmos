@@ -11,13 +11,16 @@ The `!terraform.state` YAML function has a simpler authentication flow than `!te
 ## Complete Call Flow
 
 ```text
-Terraform Command Execution (with --identity flag)
+Terraform Command Execution (with or without --identity flag)
   ↓
 cmd/terraform_utils.go:terraformRun()
-  ↓ Parses --identity flag → info.Identity
+  ↓ Parses --identity flag → info.Identity (or empty if not provided)
   ↓
 internal/exec/terraform.go:ExecuteTerraform()
-  ↓ Creates AuthManager from info.Identity (OUR FIX)
+  ↓ Creates AuthManager from info.Identity
+  ↓ If info.Identity is empty, auto-detects default identity
+  ↓ If no defaults exist and interactive mode, prompts user ONCE
+  ↓ Stores authenticated identity in info.Identity for hooks
   ↓
 internal/exec/utils.go:ProcessStacks(..., authManager)
   ↓ Passes authManager parameter (OUR FIX)
@@ -30,16 +33,16 @@ Component YAML processed with stackInfo.AuthContext available
 YAML function encountered: !terraform.state vpc vpc_id
   ↓
 internal/exec/yaml_func_terraform_state.go:processTagTerraformStateWithContext()
-  ↓ Line 89-93: Extracts authContext from stackInfo.AuthContext
-  ↓ Line 95: Passes authContext to stateGetter.GetState()
+  ↓ Extracts authContext from stackInfo.AuthContext
+  ↓ Passes authContext to stateGetter.GetState()
   ↓
 internal/exec/terraform_state_getter.go:GetState()
-  ↓ Line 40: Calls GetTerraformState()
+  ↓ Calls GetTerraformState()
   ↓
 internal/exec/terraform_state_utils.go:GetTerraformState()
-  ↓ Line 232-239: Creates authContextWrapper from authContext
-  ↓ Line 241-248: Calls ExecuteDescribeComponent(AuthManager: authMgr)
-  ↓ Line 280-296: CRITICAL AUTHENTICATION STEP
+  ↓ Creates authContextWrapper from authContext
+  ↓ Calls ExecuteDescribeComponent(AuthManager: authMgr)
+  ↓ CRITICAL AUTHENTICATION STEP:
   ↓   if authContext != nil && authContext.AWS != nil:
   ↓     - Creates AWS SDK config with authContext credentials
   ↓     - Uses AWS_SHARED_CREDENTIALS_FILE from authContext
@@ -48,14 +51,14 @@ internal/exec/terraform_state_utils.go:GetTerraformState()
   ↓     - Uses AWS_REGION from authContext
   ↓     - Disables IMDS fallback (AWS_EC2_METADATA_DISABLED=true)
   ↓
-  ↓ Line 298: Creates S3 client with authenticated config
-  ↓ Line 310: Calls GetObject() to read state from S3
+  ↓ Creates S3 client with authenticated config
+  ↓ Calls GetObject() to read state from S3
   ↓   - Uses AWS profile to assume role
   ↓   - Reads state file from S3 bucket
   ↓   - Returns state data
   ↓
-  ↓ Line 330: Parses state JSON
-  ↓ Line 350: Extracts attribute value from state
+  ↓ Parses state JSON
+  ↓ Extracts attribute value from state
   ↓
   ↓ Returns attribute value
 ```
@@ -78,12 +81,33 @@ internal/exec/terraform_state_utils.go:GetTerraformState()
 - **Backend configuration**: Auto-generates backend.tf.json with role ARN and workspace
 - **Subprocess overhead**: Must execute terraform binary
 
+## Identity Resolution
+
+Identity resolution for `!terraform.state` works the same as `!terraform.output`. See the [terraform-output-yaml-func-authentication-flow.md](./terraform-output-yaml-func-authentication-flow.md#identity-resolution) document for complete details.
+
+**Summary of identity resolution order:**
+
+1. **`--identity` CLI flag** (highest priority) - Explicit identity specification
+2. **Auto-detection from default identity** - Single default from config
+3. **Interactive selection** - User prompted once (TTY only)
+4. **No authentication** - Backward compatible (CI mode or no auth configured)
+5. **Explicitly disabled** - `--identity=off` for external auth
+
+**Key behavior:**
+- Selected/auto-detected identity is stored in `info.Identity`
+- Prevents double-prompting from hooks
+- Single authentication per command execution
+
 ## Critical Code Sections
 
-### 1. AuthContext Population (OUR FIX)
+### 1. Identity Resolution and AuthManager Creation
+
+See the [terraform-output-yaml-func-authentication-flow.md](./terraform-output-yaml-func-authentication-flow.md#critical-code-sections) document for complete implementation details of `CreateAndAuthenticateManager()` and `autoDetectDefaultIdentity()`.
+
+### 2. AuthContext Population
 
 **File**: `internal/exec/utils.go`
-**Line**: ~400 (in ProcessComponentConfig)
+**Function**: `ProcessComponentConfig()`
 
 ```go
 // Populate AuthContext from AuthManager if provided (from --identity flag).
@@ -95,10 +119,10 @@ if authManager != nil {
 }
 ```
 
-### 2. AuthContext Extraction in YAML Function
+### 3. AuthContext Extraction in YAML Function
 
 **File**: `internal/exec/yaml_func_terraform_state.go`
-**Lines**: 89-95
+**Function**: `processTagTerraformStateWithContext()`
 
 ```go
 // Extract authContext from stackInfo if available.
@@ -110,10 +134,10 @@ if stackInfo != nil {
 value, err := stateGetter.GetState(atmosConfig, stack, component, attribute, authContext)
 ```
 
-### 3. AWS SDK Config Creation with AuthContext
+### 4. AWS SDK Config Creation with AuthContext
 
 **File**: `internal/exec/terraform_state_utils.go`
-**Lines**: 280-296
+**Function**: `GetTerraformState()`
 
 ```go
 // Add auth-based configuration if authContext is provided.
@@ -153,10 +177,10 @@ if authContext != nil && authContext.AWS != nil {
 }
 ```
 
-### 4. S3 State Retrieval with Credentials
+### 5. S3 State Retrieval with Credentials
 
 **File**: `internal/exec/terraform_state_utils.go`
-**Lines**: 298-330
+**Function**: `GetTerraformState()`
 
 ```go
 // Create S3 client with authenticated config.
@@ -210,11 +234,14 @@ if err := json.Unmarshal(stateData, &state); err != nil {
 
 ## Testing Verification
 
-To verify the fix works for `!terraform.state`:
+Testing scenarios for `!terraform.state` are identical to `!terraform.output`. Both YAML functions use the same identity resolution and authentication flow. See the [terraform-output-yaml-func-authentication-flow.md](./terraform-output-yaml-func-authentication-flow.md#testing-verification) document for complete test scenarios.
+
+### Quick Test Examples
+
+#### Test 1: Explicit `--identity` Flag
 
 ```bash
 # Component config with !terraform.state function
-# stacks/catalog/runs-on/cloudposse.yaml
 components:
   terraform:
     runs-on/cloudposse:
@@ -225,28 +252,60 @@ components:
 # Execute with --identity flag
 atmos terraform plan runs-on/cloudposse -s core-ue2-auto --identity core-identity/managers-team-access
 
-# Expected behavior:
-# 1. AuthManager created from --identity flag
-# 2. AuthContext populated in stackInfo
-# 3. !terraform.state receives AuthContext
-# 4. GetTerraformState creates AWS SDK config with auth credentials
-# 5. S3 client reads state with proper role assumption
-# 6. No IMDS timeout errors
+# Expected: Authenticates with specified identity, no prompts
 ```
+
+#### Test 2: Auto-Detection of Default Identity
+
+```yaml
+# atmos.yaml or stack config
+auth:
+  identities:
+    core-auto/terraform:
+      default: true
+```
+
+```bash
+# Execute WITHOUT --identity flag
+atmos terraform plan runs-on/cloudposse -s core-ue2-auto
+
+# Expected: Auto-detects default identity, authenticates automatically, no prompts
+```
+
+#### Test 3: Interactive Selection (No Defaults)
+
+```bash
+# No --identity flag, no defaults, interactive terminal
+atmos terraform plan runs-on/cloudposse -s core-ue2-auto
+
+# Expected: Prompts user ONCE to select identity, no second prompt from hooks
+```
+
+For complete test scenarios including CI mode and explicitly disabled auth, see [Testing Verification](./terraform-output-yaml-func-authentication-flow.md#testing-verification) in the terraform-output documentation.
 
 ## Architecture Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     User Executes Command                        │
-│  atmos terraform plan component -s stack --identity identity    │
+│  atmos terraform plan component -s stack [--identity identity]  │
+│  (--identity flag is optional)                                   │
 └────────────────────────────┬────────────────────────────────────┘
                              ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│                    ExecuteTerraform() [OUR FIX]                  │
-│  - Parses --identity flag                                        │
-│  - Creates AuthManager with credentials                          │
-│  - Stores identity info in AuthContext                           │
+│              CreateAndAuthenticateManager()                      │
+│  Identity Resolution (see terraform-output doc for details):     │
+│  1. --identity=off → nil (auth disabled)                         │
+│  2. --identity provided → use it                                 │
+│  3. No flag → auto-detect default or prompt (interactive)        │
+│  4. Authenticate with resolved identity                          │
+│  5. Return AuthManager with AuthContext                          │
+└────────────────────────────┬────────────────────────────────────┘
+                             ↓
+┌─────────────────────────────────────────────────────────────────┐
+│              ExecuteTerraform() - Identity Storage               │
+│  - Store authenticated identity in info.Identity for hooks       │
+│  - Prevents TerraformPreHook from prompting again                │
 └────────────────────────────┬────────────────────────────────────┘
                              ↓
 ┌─────────────────────────────────────────────────────────────────┐
@@ -287,14 +346,36 @@ atmos terraform plan runs-on/cloudposse -s core-ue2-auto --identity core-identit
 
 ## Conclusion
 
-Our fix **correctly handles both** `!terraform.state` and `!terraform.output` YAML functions:
+The authentication system **correctly handles both** `!terraform.state` and `!terraform.output` YAML functions with flexible identity resolution:
 
-1. **Common path**: Both functions receive AuthContext through stackInfo from ProcessComponentConfig
-2. **Divergent execution**:
+1. **Flexible Identity Resolution**:
+   - CLI flag authentication (`--identity`)
+   - Auto-detection of default identities
+   - Interactive selection when no defaults
+   - Backward compatible (no auth when not configured)
+   - Support for external auth (`--identity=off`)
+
+2. **Common Authentication Path**:
+   - Both functions receive AuthContext through stackInfo from ProcessComponentConfig
+   - Identity resolution happens once at command start
+   - Selected/auto-detected identity stored for hooks
+   - No double-prompting
+
+3. **Divergent Execution**:
    - `!terraform.state`: Uses AuthContext directly with AWS SDK to read S3
    - `!terraform.output`: Converts AuthContext to environment variables for terraform binary
 
-The key insight is that **both authentication methods rely on stackInfo.AuthContext being populated**, which our fix ensures by threading AuthManager through ProcessComponentConfig.
+4. **Key Features**:
+   - ✅ No `--identity` flag required when default identity configured
+   - ✅ Single prompt for identity selection (no double-prompting)
+   - ✅ CI/CD friendly (auto-detects non-interactive mode)
+   - ✅ Backward compatible (existing workflows unchanged)
+   - ✅ Flexible (supports external auth mechanisms)
+
+The key insight is that **both authentication methods rely on stackInfo.AuthContext being populated**, which the system ensures by:
+1. Creating AuthManager with auto-detected or explicitly specified identity
+2. Storing authenticated identity in info.Identity for hooks
+3. Threading AuthManager through ProcessComponentConfig to populate AuthContext
 
 ## Performance Comparison
 
@@ -340,12 +421,15 @@ Both functions require:
 
 ## Error Handling
 
-Common errors with `!terraform.state`:
+Common errors:
 
-1. **Missing AuthContext**: "failed to load AWS config" with IMDS timeout
-2. **Invalid credentials**: "operation error S3: GetObject, failed to sign request"
-3. **Missing permissions**: "AccessDenied: Access Denied"
-4. **Invalid state path**: "NoSuchKey: The specified key does not exist"
-5. **Invalid attribute**: "attribute 'xyz' not found in state"
+1. **No credentials available**: "failed to load AWS config" - Occurs when AuthContext is not provided (no `--identity` flag) and the default AWS credential chain has no valid credentials (no environment variables, no shared credentials file, IMDS timeout on non-EC2 instances)
+2. **Invalid credentials**: "operation error S3: GetObject, failed to sign request" - AWS SDK cannot sign the S3 request with provided credentials
+3. **Missing S3 permissions**: "AccessDenied: Access Denied" - IAM role lacks s3:GetObject permission on the state bucket
+4. **Invalid state path**: "NoSuchKey: The specified key does not exist" - State file doesn't exist at the calculated S3 path
+5. **Missing backend configuration**: "backend configuration not found" - Component metadata doesn't contain required backend settings
+6. **Invalid attribute path**: "attribute 'xyz' not found in state" - Requested attribute doesn't exist in the terraform state outputs
+
+**Note:** Missing AuthContext (no `--identity` flag) is not an error - `!terraform.state` gracefully falls back to the default AWS credential chain for backward compatibility.
 
 All errors are properly wrapped with context for debugging.
