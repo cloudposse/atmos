@@ -934,7 +934,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/Azure/azure-sdk-for-go/sdk/azcore
     License: MIT
-    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/azcore/v1.19.1/sdk/azcore/LICENSE.txt
+    URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/azcore/v1.20.0/sdk/azcore/LICENSE.txt
 
   - github.com/Azure/azure-sdk-for-go/sdk/azidentity
     License: MIT
@@ -970,7 +970,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/HdrHistogram/hdrhistogram-go
     License: MIT
-    URL: https://github.com/HdrHistogram/hdrhistogram-go/blob/v1.1.2/LICENSE
+    URL: https://github.com/HdrHistogram/hdrhistogram-go/blob/v1.2.0/LICENSE
 
   - github.com/Masterminds/semver/v3
     License: MIT

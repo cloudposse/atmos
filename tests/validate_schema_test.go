@@ -195,11 +195,10 @@ version: "1.0.0"
 	require.NoError(t, readErr)
 	output := buf.String()
 
-	t.Cleanup(func() {
-		if t.Failed() {
-			t.Logf("Schema validation output:\n%s", output)
-		}
-	})
+	// Log output immediately if there's an error or error output.
+	if err != nil || bytes.Contains([]byte(output), []byte("ERRO")) {
+		t.Logf("Schema validation output:\n%s", output)
+	}
 
 	// Verify validation succeeded.
 	assert.NoError(t, err, "Schema validation should succeed for all valid files")

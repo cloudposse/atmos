@@ -66,13 +66,9 @@ func runTerraformApply(t *testing.T, environment string) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	t.Cleanup(func() {
-		if t.Failed() {
-			t.Logf("Terraform stdout:\n%s", stdout.String())
-			t.Logf("Terraform stderr:\n%s", stderr.String())
-		}
-	})
 	if err != nil {
+		t.Logf("Terraform stdout:\n%s", stdout.String())
+		t.Logf("Terraform stderr:\n%s", stderr.String())
 		t.Fatalf("Failed to run terraform apply mycomponent -s %s: %v", environment, stderr.String())
 	}
 }
