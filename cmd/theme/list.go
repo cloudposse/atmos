@@ -3,6 +3,7 @@ package theme
 import (
 	_ "embed"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -44,8 +45,8 @@ func init() {
 	// Register flags with cobra.
 	themeListParser.RegisterFlags(themeListCmd)
 
-	// Bind both env vars and pflags to viper for full precedence support (flag > env > config > default).
-	if err := themeListParser.BindFlagsToViper(themeListCmd, viper.GetViper()); err != nil {
+	// Bind env vars to Viper during init for environment variable support.
+	if err := themeListParser.BindToViper(viper.GetViper()); err != nil {
 		// Log error but don't fail initialization.
 		// This allows the command to still work even if Viper binding fails.
 		_ = err
@@ -58,9 +59,15 @@ func init() {
 func executeThemeList(cmd *cobra.Command, args []string) error {
 	defer perf.Track(atmosConfigPtr, "theme.list.RunE")()
 
-	// Parse flags into options using Viper for proper precedence (flag > env > config > default).
+	// Bind parsed flags to Viper for precedence (flag > env > config > default).
+	v := viper.GetViper()
+	if err := themeListParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	// Parse flags into options using Viper for proper precedence.
 	opts := &ThemeListOptions{
-		RecommendedOnly: viper.GetBool("recommended"),
+		RecommendedOnly: v.GetBool("recommended"),
 	}
 
 	// Get the current active theme from configuration.
@@ -69,12 +76,16 @@ func executeThemeList(cmd *cobra.Command, args []string) error {
 	// 2. Check ATMOS_THEME env var
 	// 3. Check THEME env var
 	// 4. Default to "atmos"
+	//
+	// Note: We use os.Getenv() directly for ATMOS_THEME and THEME because they are
+	// global configuration variables (not command-specific flags). They control theme
+	// resolution across all commands, so binding them to Viper would be redundant.
 	activeTheme := ""
 	if atmosConfigPtr != nil && atmosConfigPtr.Settings.Terminal.Theme != "" {
 		activeTheme = atmosConfigPtr.Settings.Terminal.Theme
-	} else if envTheme := viper.GetString("ATMOS_THEME"); envTheme != "" {
+	} else if envTheme := os.Getenv("ATMOS_THEME"); envTheme != "" {
 		activeTheme = envTheme
-	} else if envTheme := viper.GetString("THEME"); envTheme != "" {
+	} else if envTheme := os.Getenv("THEME"); envTheme != "" {
 		activeTheme = envTheme
 	} else {
 		// Default to "atmos" theme (same as pkg/ui/theme/styles.go:getActiveThemeName)
