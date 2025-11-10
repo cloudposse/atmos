@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -145,11 +144,14 @@ func TestGetComponentAuthConfig_MergesComponentAuth(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	// Change to fixture directory so InitCliConfig finds atmos.yaml.
+	workDir := "../../tests/fixtures/scenarios/atmos-auth"
+	t.Chdir(workDir)
+
 	// Initialize atmos config with auth test fixture.
-	atmosConfig, err := initAtmosConfigFromPath(t, "../../../tests/fixtures/scenarios/atmos-auth/atmos.yaml")
-	if err != nil {
-		t.Skipf("Skipping integration test: failed to load config: %v", err)
-	}
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err, "Should load Atmos config")
 
 	// Skip if auth config wasn't loaded (test fixture might not be available).
 	if len(atmosConfig.Auth.Identities) == 0 {
@@ -237,21 +239,6 @@ func TestGetComponentAuthConfig_PartialOverride(t *testing.T) {
 }
 
 // Helper functions for testing.
-
-// initAtmosConfigFromPath loads atmos configuration from a file path.
-func initAtmosConfigFromPath(t *testing.T, configPath string) (schema.AtmosConfiguration, error) {
-	t.Helper()
-
-	absPath, err := filepath.Abs(configPath)
-	require.NoError(t, err)
-
-	configAndStacksInfo := schema.ConfigAndStacksInfo{
-		AtmosCliConfigPath: absPath,
-	}
-
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
-	return atmosConfig, err
-}
 
 // mergeMaps is a helper function to test merge logic directly.
 func mergeMaps(t *testing.T, atmosConfig *schema.AtmosConfiguration, maps ...map[string]any) (map[string]any, error) {

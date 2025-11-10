@@ -997,15 +997,13 @@ if identityName == cfg.IdentityFlagDisabledValue {
 - `TestCreateAndAuthenticateManager_ExplicitlyDisabled` - `--identity=off` support
 - `TestCreateAndAuthenticateManager_SelectValueInCIMode` - Interactive selection disabled in CI
 
-**Added integration tests in `internal/exec/terraform_identity_storage_test.go`:**
+Integration testing is covered by:
+- `internal/exec/describe_affected_authmanager_test.go` - AuthManager propagation
+- `internal/exec/describe_component_authmanager_test.go` - Component authentication
+- `internal/exec/describe_stacks_authmanager_propagation_test.go` - Stack processing
+- `tests/test-cases/auth-*.yaml` - End-to-end CLI tests
 
-- `TestExecuteTerraform_PreservesExplicitIdentity` - CLI flag is not overwritten
-- `TestExecuteTerraform_NoIdentityNoAuth` - Backward compatibility
-- `TestExecuteTerraform_IdentityStorageFlow` - All identity storage scenarios
-- `TestExecuteTerraform_GetChainReturnsAuthenticatedIdentity` - GetChain() contract verification
-- `TestExecuteTerraform_DebugLoggingForIdentityStorage` - Debug logging verification
-
-**Test Results:** 19/19 unit tests PASS, 5/5 integration tests PASS (1 skipped by design)
+**Test Results:** 19/19 unit tests PASS
 
 All tests pass ✅
 
