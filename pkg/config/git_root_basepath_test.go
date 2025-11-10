@@ -114,6 +114,18 @@ func TestApplyGitRootBasePath(t *testing.T) {
 			expectChange: false,
 			expectedPath: "",
 		},
+		{
+			name: "git root discovery succeeds - happy path",
+			config: schema.AtmosConfiguration{
+				Default:  true,
+				BasePath: ".",
+			},
+			env: map[string]string{
+				"TEST_GIT_ROOT": "/mock/git/repo/root",
+			},
+			expectChange: true,
+			expectedPath: "/mock/git/repo/root",
+		},
 	}
 
 	for _, tt := range tests {
