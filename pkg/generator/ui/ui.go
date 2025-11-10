@@ -675,82 +675,47 @@ func (ui *InitUI) renderREADME(readmeContent string, targetPath string) error {
 	return ui.renderMarkdown(processedContent)
 }
 
-// displayConfigurationTable displays configuration data in a formatted table
-func (ui *InitUI) displayConfigurationTable(header []string, rows [][]string) {
-	// Don't display table if there are no rows to show
-	if len(rows) == 0 {
-		return
+// columnWidths holds the calculated widths for table columns.
+type columnWidths struct {
+	setting int
+	value   int
+	source  int
+}
+
+// calculateColumnWidths computes the optimal width for each column based on content.
+// It ensures minimum widths and adds padding for readability.
+func (ui *InitUI) calculateColumnWidths(rows [][]string) columnWidths {
+	widths := columnWidths{
+		setting: 12, // Minimum width for setting names
+		value:   45, // Minimum width for values
+		source:  12, // Minimum width for sources
 	}
-	// Get terminal width
-	width := ui.term.Width(terminal.Stdout)
-	if width == 0 {
-		width = 80 // fallback width
-	}
-
-	// Calculate table width (leave some margin)
-	tableWidth := width - 20
-
-	// Convert rows to table.Row format and apply source colors
-	var tableRows []table.Row
-	for _, row := range rows {
-		// Apply color to source column based on the source value
-		source := row[2]
-		coloredSource := ui.colorSource(source)
-
-		// Create new row with colored source
-		coloredRow := []string{row[0], row[1], coloredSource}
-		tableRows = append(tableRows, table.Row(coloredRow))
-	}
-
-	// Calculate column widths based on content
-	settingWidth := 12 // Minimum width for setting names
-	valueWidth := 45   // Minimum width for values
-	sourceWidth := 12  // Minimum width for sources
 
 	// Find the maximum content width for each column
 	for _, row := range rows {
-		if len(row[0]) > settingWidth {
-			settingWidth = len(row[0])
+		if len(row[0]) > widths.setting {
+			widths.setting = len(row[0])
 		}
-		if len(row[1]) > valueWidth {
-			valueWidth = len(row[1])
+		if len(row[1]) > widths.value {
+			widths.value = len(row[1])
 		}
-		// For source column, we need to account for the colored strings
-		source := row[2]
-		coloredSource := ui.colorSource(source)
-		// Use the length of the colored string (including ANSI codes) for width calculation
-		if len(coloredSource) > sourceWidth {
-			sourceWidth = len(coloredSource)
+		// For source column, account for colored strings
+		coloredSource := ui.colorSource(row[2])
+		if len(coloredSource) > widths.source {
+			widths.source = len(coloredSource)
 		}
 	}
 
-	// Add some padding to each column
-	settingWidth += 2
-	valueWidth += 2
-	sourceWidth += 2
+	// Add padding to each column
+	widths.setting += 2
+	widths.value += 2
+	widths.source += 2
 
-	// Calculate total table width needed
-	totalContentWidth := settingWidth + valueWidth + sourceWidth + 6 // +6 for borders and spacing
+	return widths
+}
 
-	// If content is wider than screen, use content width; otherwise use screen width
-	if totalContentWidth > tableWidth {
-		tableWidth = totalContentWidth
-	}
-
-	// Create table
-	t := table.New(
-		table.WithColumns([]table.Column{
-			{Title: "Setting", Width: settingWidth},
-			{Title: "Value", Width: valueWidth},
-			{Title: "Source", Width: sourceWidth},
-		}),
-		table.WithRows(tableRows),
-		table.WithWidth(tableWidth),
-		table.WithFocused(false),
-		table.WithHeight(len(tableRows)+1), // Set explicit height to minimize spacing
-	)
-
-	// Style the table with colors
+// applyTableStyles applies consistent styling to the table including colors and borders.
+func applyTableStyles(t table.Model) {
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.RoundedBorder()).
@@ -759,15 +724,65 @@ func (ui *InitUI) displayConfigurationTable(header []string, rows [][]string) {
 		Bold(true).
 		Foreground(lipgloss.Color("#FFFFFF")) // White
 
-	// Use a custom style function to apply source-specific colors
 	s.Cell = s.Cell.Foreground(lipgloss.Color("#FFFFFF")).Bold(false)
 
-	// Add custom styling for source column
 	s.Selected = s.Selected.
 		Foreground(lipgloss.Color("#FFFFFF")). // White
 		Background(lipgloss.Color("#000000"))  // Black
 
 	t.SetStyles(s)
+}
+
+// prepareTableRows converts raw rows to table.Row format with colored sources.
+func (ui *InitUI) prepareTableRows(rows [][]string) []table.Row {
+	tableRows := make([]table.Row, 0, len(rows))
+	for _, row := range rows {
+		coloredSource := ui.colorSource(row[2])
+		coloredRow := []string{row[0], row[1], coloredSource}
+		tableRows = append(tableRows, table.Row(coloredRow))
+	}
+	return tableRows
+}
+
+// displayConfigurationTable displays configuration data in a formatted table.
+func (ui *InitUI) displayConfigurationTable(header []string, rows [][]string) {
+	// Don't display table if there are no rows to show
+	if len(rows) == 0 {
+		return
+	}
+
+	// Get terminal width with fallback
+	width := ui.term.Width(terminal.Stdout)
+	if width == 0 {
+		width = 80
+	}
+	tableWidth := width - 20 // Leave margin
+
+	// Prepare table data
+	tableRows := ui.prepareTableRows(rows)
+	widths := ui.calculateColumnWidths(rows)
+
+	// Calculate total width needed
+	totalContentWidth := widths.setting + widths.value + widths.source + 6 // +6 for borders
+	if totalContentWidth > tableWidth {
+		tableWidth = totalContentWidth
+	}
+
+	// Create table
+	t := table.New(
+		table.WithColumns([]table.Column{
+			{Title: "Setting", Width: widths.setting},
+			{Title: "Value", Width: widths.value},
+			{Title: "Source", Width: widths.source},
+		}),
+		table.WithRows(tableRows),
+		table.WithWidth(tableWidth),
+		table.WithFocused(false),
+		table.WithHeight(len(tableRows)+1),
+	)
+
+	// Apply styling
+	applyTableStyles(t)
 
 	// Print the table
 	ui.writeOutput("\n")
