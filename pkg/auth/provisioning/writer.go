@@ -14,7 +14,7 @@ import (
 
 const (
 	// DefaultCacheDir is the default cache directory relative to XDG_CACHE_HOME.
-	DefaultCacheDir = "atmos/aws"
+	DefaultCacheDir = "atmos/auth"
 
 	// ProvisionedFileName is the filename for provisioned identities.
 	ProvisionedFileName = "provisioned-identities.yaml"
@@ -22,7 +22,7 @@ const (
 
 // Writer handles writing provisioned identities to disk.
 type Writer struct {
-	// CacheDir is the base cache directory (e.g., ~/.cache/atmos/aws).
+	// CacheDir is the base cache directory (e.g., ~/.cache/atmos/auth).
 	CacheDir string
 }
 
@@ -109,7 +109,7 @@ func buildConfig(result *Result) map[string]interface{} {
 }
 
 // getDefaultCacheDir returns the default cache directory.
-// Uses XDG_CACHE_HOME if set, otherwise ~/.cache/atmos/aws.
+// Uses XDG_CACHE_HOME if set, otherwise ~/.cache/atmos/auth.
 func getDefaultCacheDir() (string, error) {
 	defer perf.Track(nil, "provisioning.getDefaultCacheDir")()
 

@@ -586,7 +586,7 @@ func injectProvisionedIdentityImports(src *schema.AtmosConfiguration) error {
 		cacheHome = filepath.Join(homeDir, ".cache")
 	}
 
-	baseProvisioningDir := filepath.Join(cacheHome, "atmos", "aws")
+	baseProvisioningDir := filepath.Join(cacheHome, "atmos", "auth")
 
 	// Collect provisioned identity files for each provider.
 	var provisionedImports []string

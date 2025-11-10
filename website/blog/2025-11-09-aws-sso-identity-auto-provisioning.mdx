@@ -73,7 +73,7 @@ Auto-provisioning follows a two-phase design:
 2. Provider with `auto_provision_identities: true` queries AWS SSO APIs
 3. `ListAccounts` discovers all accessible AWS accounts
 4. `ListAccountRoles` discovers permission sets for each account
-5. Identities are written to `~/.cache/atmos/aws/sso-prod/provisioned-identities.yaml`
+5. Identities are written to `~/.cache/atmos/auth/sso-prod/provisioned-identities.yaml`
 
 **Phase 2: Config Loading**
 1. User runs any Atmos command: `atmos terraform plan`
@@ -174,7 +174,7 @@ Manual configuration takes precedence over provisioned configuration due to impo
 Provisioned identities are stored in the XDG cache directory:
 
 ```
-~/.cache/atmos/aws/
+~/.cache/atmos/auth/
 └── sso-prod/
     └── provisioned-identities.yaml
 ```
@@ -182,13 +182,13 @@ Provisioned identities are stored in the XDG cache directory:
 You can inspect this file to see exactly what was provisioned:
 
 ```bash
-cat ~/.cache/atmos/aws/sso-prod/provisioned-identities.yaml
+cat ~/.cache/atmos/auth/sso-prod/provisioned-identities.yaml
 ```
 
 To force re-provisioning, delete the cache file and re-authenticate:
 
 ```bash
-rm -rf ~/.cache/atmos/aws/sso-prod
+rm -rf ~/.cache/atmos/auth/sso-prod
 atmos auth login sso-prod
 ```
 

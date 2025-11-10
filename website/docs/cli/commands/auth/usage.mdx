@@ -205,7 +205,7 @@ When you enable `auto_provision_identities: true` on a provider, Atmos automatic
 
 1. **Discovers available resources** during authentication (accounts, permission sets, roles)
 2. **Provisions identities** for each discovered resource
-3. **Writes configuration** to `~/.cache/atmos/aws/{provider}/provisioned-identities.yaml`
+3. **Writes configuration** to `~/.cache/atmos/auth/{provider}/provisioned-identities.yaml`
 4. **Auto-imports** provisioned identities during config loading
 
 Provisioned identities work alongside manual identities. Your manual configuration takes precedence over provisioned configuration.
@@ -303,14 +303,14 @@ Manual configuration takes precedence over provisioned configuration.
 Provisioned identities are cached in:
 
 ```
-~/.cache/atmos/aws/{provider-name}/provisioned-identities.yaml
+~/.cache/atmos/auth/{provider-name}/provisioned-identities.yaml
 ```
 
 To force re-provisioning:
 
 ```bash
 # Delete cache
-rm -rf ~/.cache/atmos/aws/sso-prod
+rm -rf ~/.cache/atmos/auth/sso-prod
 
 # Re-authenticate
 atmos auth login sso-prod
@@ -323,7 +323,7 @@ atmos auth login sso-prod
 2. Provider calls AWS SSO `ListAccounts` API
 3. For each account, calls `ListAccountRoles` API
 4. Creates identity for each permission set
-5. Writes to cache: `~/.cache/atmos/aws/{provider}/provisioned-identities.yaml`
+5. Writes to cache: `~/.cache/atmos/auth/{provider}/provisioned-identities.yaml`
 
 **Phase 2: Config Loading**
 1. Config loader automatically discovers provisioned identity files
@@ -345,7 +345,7 @@ Planned support:
 
 **Provisioned identities not appearing:**
 1. Verify `auto_provision_identities: true` is set
-2. Check cache exists: `ls ~/.cache/atmos/aws/{provider}/`
+2. Check cache exists: `ls ~/.cache/atmos/auth/{provider}/`
 3. Re-authenticate: `atmos auth login {provider}`
 4. Enable debug logging: `atmos auth login --log-level debug`
 
