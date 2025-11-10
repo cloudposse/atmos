@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -43,11 +44,13 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig, allowInteractive b
 		// - Multiple defaults (user chooses between defaults)
 		// - No defaults (user chooses from all identities)
 		if allowInteractive {
+			log.Debug("No default identity found, prompting user for selection")
 			// GetDefaultIdentity(true) prompts the user to select from available identities.
 			defaultIdentity, err = tempManager.GetDefaultIdentity(true)
 			if err != nil {
 				return "", err
 			}
+			log.Debug("User selected identity", "identity", defaultIdentity)
 			return defaultIdentity, nil
 		}
 
@@ -108,14 +111,18 @@ func CreateAndAuthenticateManager(
 	authConfig *schema.AuthConfig,
 	selectValue string,
 ) (AuthManager, error) {
+	log.Debug("CreateAndAuthenticateManager called", "identityName", identityName, "hasAuthConfig", authConfig != nil)
+
 	// Check if authentication is explicitly disabled via --identity=off/false/no/0.
 	// This allows users to use external identity mechanisms (e.g., Leapp).
 	if identityName == cfg.IdentityFlagDisabledValue {
+		log.Debug("Authentication explicitly disabled")
 		return nil, nil
 	}
 
 	// Auto-detect default identity if no identity name provided.
 	if identityName == "" {
+		log.Debug("No identity name provided, attempting auto-detection")
 		// Return nil if auth is not configured at all (backward compatible).
 		if authConfig == nil || len(authConfig.Identities) == 0 {
 			return nil, nil
