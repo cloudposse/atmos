@@ -3,15 +3,17 @@
 // # Naming Convention
 //
 // Devcontainer names use dot separators to avoid parsing ambiguity:
-//   Format: atmos-devcontainer.{name}.{instance}
-//   Example: atmos-devcontainer.backend-api.test-1
+//
+//	Format: atmos-devcontainer.{name}.{instance}
+//	Example: atmos-devcontainer.backend-api.test-1
 //
 // Both name and instance can contain hyphens and underscores without ambiguity.
 // The dot separator ensures unambiguous parsing when splitting container names.
 //
 // For backward compatibility, the parser also supports the legacy hyphen format:
-//   Legacy: atmos-devcontainer-{name}-{instance}
-//   Note: Legacy parsing is best-effort and may be ambiguous with hyphenated names.
+//
+//	Legacy: atmos-devcontainer-{name}-{instance}
+//	Note: Legacy parsing is best-effort and may be ambiguous with hyphenated names.
 package devcontainer
 
 import (
