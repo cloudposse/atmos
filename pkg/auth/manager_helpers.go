@@ -14,7 +14,8 @@ import (
 
 // autoDetectDefaultIdentity attempts to find and return a default identity from configuration.
 // Returns empty string if no default identity is found (not an error condition).
-func autoDetectDefaultIdentity(authConfig *schema.AuthConfig) (string, error) {
+// If multiple defaults exist and allowInteractive is true, prompts user to select.
+func autoDetectDefaultIdentity(authConfig *schema.AuthConfig, allowInteractive bool) (string, error) {
 	// Create a temporary manager to call GetDefaultIdentity which handles:
 	// - Global defaults from atmos.yaml
 	// - Stack-level defaults from stack configs
@@ -30,12 +31,28 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig) (string, error) {
 		return "", errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Try to get default identity (forceSelect=false, so won't prompt unless multiple defaults).
+	// Try to get default identity (forceSelect=false, doesn't prompt).
+	// This returns:
+	// - Identity name if exactly one default exists
+	// - Error if multiple defaults exist
+	// - Error if no defaults exist
 	defaultIdentity, err := tempManager.GetDefaultIdentity(false)
 	if err != nil {
-		// No default identity configured or other error - return empty string (no authentication).
+		// If interactive mode is allowed and we're in a TTY, prompt user to select.
+		// This handles both:
+		// - Multiple defaults (user chooses between defaults)
+		// - No defaults (user chooses from all identities)
+		if allowInteractive {
+			// GetDefaultIdentity(true) prompts the user to select from available identities.
+			defaultIdentity, err = tempManager.GetDefaultIdentity(true)
+			if err != nil {
+				return "", err
+			}
+			return defaultIdentity, nil
+		}
+
+		// Non-interactive or not allowed - return empty string (no authentication).
 		// This is backward compatible: commands without --identity flag work as before.
-		//nolint:nilerr // Intentionally suppress error - no default identity is not a failure case
 		return "", nil
 	}
 
@@ -61,9 +78,18 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig) (string, error) {
 // Auto-detection behavior when identityName is empty:
 //   - If auth is not configured (no identities), returns nil (no authentication)
 //   - If auth is configured, checks for default identity in both global atmos.yaml and stack configs
-//   - If exactly one default identity exists, authenticates with it automatically
-//   - If multiple defaults exist in interactive mode, prompts user to select one
-//   - If no defaults exist, returns nil (no authentication)
+//   - If exactly ONE default identity exists, authenticates with it automatically
+//   - If MULTIPLE defaults exist:
+//   - Interactive mode: prompts user to select one from defaults
+//   - Non-interactive mode (CI): returns nil (no authentication)
+//   - If NO defaults exist:
+//   - Interactive mode: prompts user to select from all available identities
+//   - Non-interactive mode (CI): returns nil (no authentication)
+//
+// Interactive selection behavior:
+//   - When triggered (via selectValue OR no defaults in interactive mode), prompts user ONCE
+//   - Selected identity is cached in AuthManager for the entire command execution
+//   - All YAML functions use the same selected identity (no repeated prompts)
 //
 // Parameters:
 //   - identityName: The identity to authenticate (can be "__SELECT__" for interactive selection,
@@ -73,7 +99,7 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig) (string, error) {
 //
 // Returns:
 //   - AuthManager with populated AuthContext after successful authentication
-//   - nil if authentication disabled, no identity specified, or no default identity configured
+//   - nil if authentication disabled, no identity specified, or no default identity configured (in CI mode)
 //   - error if authentication fails or auth is not configured when identity is specified
 //
 //nolint:revive // Complexity is acceptable for authentication logic with auto-detection, validation, and error handling
@@ -95,18 +121,23 @@ func CreateAndAuthenticateManager(
 			return nil, nil
 		}
 
+		// Check if we're in interactive mode to allow prompting if needed.
+		interactive := isInteractive()
+
 		// Try to find default identity from configuration.
-		defaultIdentity, err := autoDetectDefaultIdentity(authConfig)
+		// If multiple defaults exist or no defaults exist, will prompt in interactive mode.
+		defaultIdentity, err := autoDetectDefaultIdentity(authConfig, interactive)
 		if err != nil {
 			return nil, err
 		}
 
-		// If no default identity found, return nil (no authentication).
+		// If still no identity after auto-detection, return nil (no authentication).
+		// This only happens in non-interactive mode when no defaults are configured.
 		if defaultIdentity == "" {
 			return nil, nil
 		}
 
-		// Found default identity - use it for authentication.
+		// Found or selected default identity - use it for authentication.
 		identityName = defaultIdentity
 	}
 
