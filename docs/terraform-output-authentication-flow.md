@@ -3,6 +3,7 @@
 ## Overview
 
 The `!terraform.output` YAML function has a more complex authentication flow than `!terraform.state` because it:
+
 1. Executes the terraform binary (`terraform init` and `terraform output`)
 2. Reads the generated backend configuration from `backend.tf.json`
 3. Uses AWS credentials to assume roles and access remote state in S3
@@ -71,11 +72,13 @@ internal/exec/terraform_output_utils.go:execTerraformOutput()
 ## Key Differences from !terraform.state
 
 ### !terraform.state
+
 - **Direct AWS SDK usage**: Uses AWS SDK Go v2 to read state from S3
 - **AuthContext usage**: Passed to AWS SDK config loader
 - **Credential source**: AuthContext provides credentials directly to SDK
 
 ### !terraform.output
+
 - **Terraform binary execution**: Spawns terraform process with environment variables
 - **AuthContext usage**: Converted to environment variables (AWS_PROFILE, AWS_SHARED_CREDENTIALS_FILE, etc.)
 - **Credential source**: Terraform binary reads credentials from files using AWS_PROFILE
@@ -85,20 +88,22 @@ internal/exec/terraform_output_utils.go:execTerraformOutput()
 ## Critical Code Sections
 
 ### 1. AuthContext Population (OUR FIX)
+
 **File**: `internal/exec/utils.go`
 **Line**: ~400 (in ProcessComponentConfig)
 
 ```go
 // Populate AuthContext from AuthManager if provided (from --identity flag).
 if authManager != nil {
-	managerStackInfo := authManager.GetStackInfo()
-	if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
-		configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
-	}
+managerStackInfo := authManager.GetStackInfo()
+if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+}
 }
 ```
 
 ### 2. AuthContext Extraction in YAML Function
+
 **File**: `internal/exec/yaml_func_terraform_output.go`
 **Lines**: 102-108
 
@@ -106,49 +111,51 @@ if authManager != nil {
 // Extract authContext from stackInfo if available.
 var authContext *schema.AuthContext
 if stackInfo != nil {
-	authContext = stackInfo.AuthContext
+authContext = stackInfo.AuthContext
 }
 
 value, exists, err := outputGetter.GetOutput(atmosConfig, stack, component, output, false, authContext)
 ```
 
 ### 3. Environment Variable Preparation
+
 **File**: `internal/exec/terraform_output_utils.go`
 **Lines**: 312-330
 
 ```go
 // Add auth-based environment variables if authContext is provided.
 if authContext != nil && authContext.AWS != nil {
-	log.Debug("Adding auth-based environment variables",
-		"profile", authContext.AWS.Profile,
-		"credentials_file", authContext.AWS.CredentialsFile,
-		"config_file", authContext.AWS.ConfigFile,
-	)
+log.Debug("Adding auth-based environment variables",
+"profile", authContext.AWS.Profile,
+"credentials_file", authContext.AWS.CredentialsFile,
+"config_file", authContext.AWS.ConfigFile,
+)
 
-	// Use shared AWS environment preparation helper.
-	// This clears conflicting credential env vars, sets AWS_SHARED_CREDENTIALS_FILE,
-	// AWS_CONFIG_FILE, AWS_PROFILE, region, and disables IMDS fallback.
-	environMap = awsCloud.PrepareEnvironment(
-		environMap,
-		authContext.AWS.Profile,
-		authContext.AWS.CredentialsFile,
-		authContext.AWS.ConfigFile,
-		authContext.AWS.Region,
-	)
+// Use shared AWS environment preparation helper.
+// This clears conflicting credential env vars, sets AWS_SHARED_CREDENTIALS_FILE,
+// AWS_CONFIG_FILE, AWS_PROFILE, region, and disables IMDS fallback.
+environMap = awsCloud.PrepareEnvironment(
+environMap,
+authContext.AWS.Profile,
+authContext.AWS.CredentialsFile,
+authContext.AWS.ConfigFile,
+authContext.AWS.Region,
+)
 }
 ```
 
 ### 4. Terraform Execution with Credentials
+
 **File**: `internal/exec/terraform_output_utils.go`
 **Lines**: 348-356, 377, 438
 
 ```go
 // Set the environment variables in the process that executes the `tfexec` functions.
 if len(environMap) > 0 {
-	err = tf.SetEnv(environMap)
-	if err != nil {
-		return nil, err
-	}
+err = tf.SetEnv(environMap)
+if err != nil {
+return nil, err
+}
 }
 
 // Line 377: terraform init with credentials
@@ -168,7 +175,8 @@ outputMeta, outputErr = tf.Output(ctx)
 
 ✅ **Environment Variables Set**: execTerraformOutput uses authContext to set AWS env vars
 
-✅ **Terraform Binary Uses Credentials**: The terraform binary reads AWS credentials from the environment variables and files
+✅ **Terraform Binary Uses Credentials**: The terraform binary reads AWS credentials from the environment variables and
+files
 
 ## Testing Verification
 
@@ -255,7 +263,8 @@ Our fix **correctly handles both** `!terraform.state` and `!terraform.output` YA
 
 1. **Common path**: Both functions receive AuthContext through stackInfo from ProcessComponentConfig
 2. **Divergent execution**:
-   - `!terraform.state`: Uses AuthContext directly with AWS SDK to read S3
-   - `!terraform.output`: Converts AuthContext to environment variables for terraform binary
+  - `!terraform.state`: Uses AuthContext directly with AWS SDK to read S3
+  - `!terraform.output`: Converts AuthContext to environment variables for terraform binary
 
-The key insight is that **both authentication methods rely on stackInfo.AuthContext being populated**, which our fix ensures by threading AuthManager through ProcessComponentConfig.
+The key insight is that **both authentication methods rely on stackInfo.AuthContext being populated**, which our fix
+ensures by threading AuthManager through ProcessComponentConfig.

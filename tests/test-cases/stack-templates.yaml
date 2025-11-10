@@ -45,7 +45,7 @@ tests:
         - "nonprod-tfstate-lock"
 
   - name: "atmos stack manifest templates with terraform init"
-    enabled: false  # Disabled: requires AWS credentials for S3 backend. CI has ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true which bypasses precondition checks.
+    enabled: true
     tty: false
     description: "Ensure the Go templates are evaluated for the backend when executing 'atmos terraform init."
     workdir: "fixtures/scenarios/stack-templates/"

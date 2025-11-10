@@ -108,18 +108,18 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	if os.Getenv("NO_PAGER") != "" {
 		// Check if --pager flag was explicitly provided
 		if _, hasPagerFlag := flagKeyValue["pager"]; !hasPagerFlag {
-			// NO_PAGER is set and no explicit --pager flag was provided, disable the pager
+			// NO_PAGER is set, and no explicit --pager flag was provided, disable the pager
 			atmosConfig.Settings.Terminal.Pager = "false"
 		}
 	}
 
-	// Configure global logger with the log level from flags/env/config.
+	// Configure the global logger with the log level from flags/env/config.
 	// This ensures auth pre-hooks (executed during processStackConfigs) respect the log level.
 	// Parse and convert log level using existing utilities for consistency.
 	logLevel, err := log.ParseLogLevel(atmosConfig.Logs.Level)
 	if err != nil {
-		// Default to Info on parse error (matches ParseLogLevel behavior for empty string).
-		logLevel = log.LogLevelInfo
+		// Default to Warning on parse error.
+		logLevel = log.LogLevelWarning
 	}
 	log.SetLevel(log.ConvertLogLevel(logLevel))
 }

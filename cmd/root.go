@@ -288,7 +288,7 @@ var RootCmd = &cobra.Command{
 
 // SetupLogger configures the global logger based on the provided Atmos configuration.
 //
-//nolint:revive,cyclop,funlen // Function complexity is acceptable for logger configuration.
+//nolint:revive,cyclop // Function complexity is acceptable for logger configuration.
 func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 	switch atmosConfig.Logs.Level {
 	case "Trace":
