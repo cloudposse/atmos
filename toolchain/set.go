@@ -480,6 +480,7 @@ type customDelegate struct {
 	list.DefaultDelegate
 }
 
+// ModelI is the minimal list model interface used by customDelegate.
 type ModelI interface {
 	Items() []list.Item
 }

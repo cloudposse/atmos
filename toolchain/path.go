@@ -13,8 +13,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// EmitPath outputs the PATH entries for installed toolchain binaries.
+// The exportFlag outputs in shell export format, jsonFlag outputs JSON,
+// and relativeFlag uses relative paths instead of absolute.
 func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
-	defer perf.Track(nil, "toolchain.PathExec")()
+	defer perf.Track(nil, "toolchain.EmitPath")()
 
 	installer := NewInstaller()
 

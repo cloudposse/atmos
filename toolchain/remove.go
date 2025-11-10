@@ -7,8 +7,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// RemoveToolVersion removes either the entire tool or a specific version.
-// Returns the version removed (empty if all versions were removed).
+// RemoveToolVersion removes either the entire tool or a specific version from the file.
+// If version is empty, removes all versions of the tool.
 func RemoveToolVersion(filePath, tool, version string) error {
 	defer perf.Track(nil, "toolchain.RemoveToolVersionFromFile")()
 

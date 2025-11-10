@@ -29,6 +29,7 @@ type toolRow struct {
 	isInstalled bool
 }
 
+// RunList prints a table of tools from .tool-versions, marking installed/default versions.
 func RunList() error {
 	defer perf.Track(nil, "toolchain.RunList")()
 

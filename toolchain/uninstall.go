@@ -89,6 +89,7 @@ func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Ins
 	return uninstallSingleTool(installer, owner, repo, version, true)
 }
 
+// RunUninstall removes tools by spec (owner/repo, tool, or ).
 func RunUninstall(toolSpec string) error {
 	defer perf.Track(nil, "toolchain.RunUninstall")()
 

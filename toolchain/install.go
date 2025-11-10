@@ -75,6 +75,10 @@ func runBubbleTeaSpinner(message string) *tea.Program {
 	return p
 }
 
+// RunInstall installs the specified tool (owner/repo@version or alias@version).
+// If toolSpec is empty, installs all tools from .tool-versions file.
+// The setAsDefault parameter controls whether to set the installed version as default.
+// The reinstallFlag parameter forces reinstallation even if already installed.
 func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 	defer perf.Track(nil, "toolchain.Install")()
 

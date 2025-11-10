@@ -18,6 +18,7 @@ var (
 
 var atmosConfig *schema.AtmosConfiguration
 
+// SetAtmosConfig injects the current Atmos configuration into the toolchain package.
 func SetAtmosConfig(config *schema.AtmosConfiguration) {
 	defer perf.Track(nil, "toolchain.SetAtmosConfig")()
 
