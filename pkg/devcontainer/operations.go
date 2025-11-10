@@ -55,24 +55,6 @@ func createAndStartNewContainer(params *containerParams) error {
 	return nil
 }
 
-// startExistingContainer starts an existing container if it's not running.
-func startExistingContainer(ctx context.Context, runtime container.Runtime, containerInfo *container.Info, containerName string) error {
-	if isContainerRunning(containerInfo.Status) {
-		_ = ui.Infof("Container %s is already running", containerName)
-		return nil
-	}
-
-	return runWithSpinner(
-		fmt.Sprintf("Starting container %s", containerName),
-		fmt.Sprintf("Started container %s", containerName),
-		func() error {
-			if err := runtime.Start(ctx, containerInfo.ID); err != nil {
-				return fmt.Errorf("%w: failed to start container: %w", errUtils.ErrContainerRuntimeOperation, err)
-			}
-			return nil
-		})
-}
-
 // stopAndRemoveContainer stops and removes a container if it exists.
 func stopAndRemoveContainer(ctx context.Context, runtime container.Runtime, containerName string) error {
 	containerInfo, err := runtime.Inspect(ctx, containerName)

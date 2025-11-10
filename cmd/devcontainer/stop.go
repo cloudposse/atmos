@@ -49,16 +49,17 @@ Use --rm to automatically remove the container after stopping.`,
 			return err
 		}
 
+		mgr := devcontainer.NewManager()
 		name := args[0]
 
 		// Stop the container.
-		if err := devcontainer.Stop(atmosConfigPtr, name, opts.Instance, opts.Timeout); err != nil {
+		if err := mgr.Stop(atmosConfigPtr, name, opts.Instance, opts.Timeout); err != nil {
 			return err
 		}
 
 		// If --rm flag is set, remove the container after stopping.
 		if opts.Rm {
-			if err := devcontainer.Remove(atmosConfigPtr, name, opts.Instance, true); err != nil {
+			if err := mgr.Remove(atmosConfigPtr, name, opts.Instance, true); err != nil {
 				return err
 			}
 		}

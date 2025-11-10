@@ -44,7 +44,8 @@ Experimental: Use --pty for PTY mode with masking support (not available on Wind
 		}
 
 		name := args[0]
-		return devcontainer.Attach(atmosConfigPtr, name, opts.Instance, opts.UsePTY)
+		mgr := devcontainer.NewManager()
+		return mgr.Attach(atmosConfigPtr, name, opts.Instance, opts.UsePTY)
 	},
 }
 

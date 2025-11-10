@@ -43,7 +43,8 @@ Use --force to remove a running container without stopping it first.`,
 		}
 
 		name := args[0]
-		return devcontainer.Remove(atmosConfigPtr, name, opts.Instance, opts.Force)
+		mgr := devcontainer.NewManager()
+		return mgr.Remove(atmosConfigPtr, name, opts.Instance, opts.Force)
 	},
 }
 

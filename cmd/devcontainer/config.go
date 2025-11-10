@@ -22,7 +22,8 @@ imported devcontainer.json files.`,
 		defer perf.Track(atmosConfigPtr, "devcontainer.config.RunE")()
 
 		name := args[0]
-		return devcontainer.ShowConfig(atmosConfigPtr, name)
+		mgr := devcontainer.NewManager()
+		return mgr.ShowConfig(atmosConfigPtr, name)
 	},
 }
 

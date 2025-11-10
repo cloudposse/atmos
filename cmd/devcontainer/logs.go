@@ -44,7 +44,8 @@ or --tail to limit the number of lines shown.`,
 		}
 
 		name := args[0]
-		return devcontainer.Logs(atmosConfigPtr, name, opts.Instance, opts.Follow, opts.Tail)
+		mgr := devcontainer.NewManager()
+		return mgr.Logs(atmosConfigPtr, name, opts.Instance, opts.Follow, opts.Tail)
 	},
 }
 

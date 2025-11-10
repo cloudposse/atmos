@@ -19,7 +19,8 @@ Shows the name, image, and configured ports for each devcontainer.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.list.RunE")()
 
-		return devcontainer.List(atmosConfigPtr)
+		mgr := devcontainer.NewManager()
+		return mgr.List(atmosConfigPtr)
 	},
 }
 

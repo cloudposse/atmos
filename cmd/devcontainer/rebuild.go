@@ -47,13 +47,14 @@ need to start fresh.`,
 		}
 
 		name := args[0]
-		if err := devcontainer.Rebuild(atmosConfigPtr, name, opts.Instance, opts.Identity, opts.NoPull); err != nil {
+		mgr := devcontainer.NewManager()
+		if err := mgr.Rebuild(atmosConfigPtr, name, opts.Instance, opts.Identity, opts.NoPull); err != nil {
 			return err
 		}
 
 		// If --attach flag is set, attach to the container after rebuilding.
 		if opts.Attach {
-			return devcontainer.Attach(atmosConfigPtr, name, opts.Instance, false)
+			return mgr.Attach(atmosConfigPtr, name, opts.Instance, false)
 		}
 
 		return nil

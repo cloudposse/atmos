@@ -50,7 +50,8 @@ from the command to execute.`,
 
 		name := args[0]
 		command := args[1:]
-		return devcontainer.Exec(atmosConfigPtr, devcontainer.ExecParams{
+		mgr := devcontainer.NewManager()
+		return mgr.Exec(atmosConfigPtr, devcontainer.ExecParams{
 			Name:        name,
 			Instance:    opts.Instance,
 			Interactive: opts.Interactive,

@@ -45,14 +45,15 @@ Use --identity to launch the container with Atmos-managed credentials.`,
 			return err
 		}
 
+		mgr := devcontainer.NewManager()
 		name := args[0]
-		if err := devcontainer.Start(atmosConfigPtr, name, opts.Instance, opts.Identity); err != nil {
+		if err := mgr.Start(atmosConfigPtr, name, opts.Instance, opts.Identity); err != nil {
 			return err
 		}
 
 		// If --attach flag is set, attach to the container after starting.
 		if opts.Attach {
-			return devcontainer.Attach(atmosConfigPtr, name, opts.Instance, false)
+			return mgr.Attach(atmosConfigPtr, name, opts.Instance, false)
 		}
 
 		return nil
