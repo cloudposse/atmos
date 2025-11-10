@@ -554,9 +554,60 @@ func mergeImports(dst *viper.Viper) error {
 	if err != nil {
 		return err
 	}
+
+	// Inject provisioned identity imports before processing.
+	if err := injectProvisionedIdentityImports(&src); err != nil {
+		log.Debug("Failed to inject provisioned identity imports", "error", err)
+		// Non-fatal: continue with config loading even if injection fails.
+	}
+
 	if err := processConfigImports(&src, dst); err != nil {
 		return err
 	}
+	return nil
+}
+
+// injectProvisionedIdentityImports adds provisioned identity files to the import list.
+// Provisioned identities are written to XDG cache during authentication and should be.
+// imported BEFORE manual configuration to allow manual config to override.
+func injectProvisionedIdentityImports(src *schema.AtmosConfiguration) error {
+	// Check if there are any auth providers configured.
+	if src.Auth.Providers == nil || len(src.Auth.Providers) == 0 {
+		return nil
+	}
+
+	// Get XDG cache directory for provisioned identities.
+	cacheHome := os.Getenv("XDG_CACHE_HOME")
+	if cacheHome == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		cacheHome = filepath.Join(homeDir, ".cache")
+	}
+
+	baseProvisioningDir := filepath.Join(cacheHome, "atmos", "aws")
+
+	// Collect provisioned identity files for each provider.
+	var provisionedImports []string
+
+	for providerName := range src.Auth.Providers {
+		provisionedFile := filepath.Join(baseProvisioningDir, providerName, "provisioned-identities.yaml")
+
+		// Check if provisioned file exists.
+		if _, err := os.Stat(provisionedFile); err == nil {
+			log.Debug("Found provisioned identities file", "provider", providerName, "file", provisionedFile)
+			provisionedImports = append(provisionedImports, provisionedFile)
+		}
+	}
+
+	// Inject provisioned imports BEFORE existing imports.
+	// This ensures manual config (in existing imports) takes precedence over provisioned config.
+	if len(provisionedImports) > 0 {
+		log.Debug("Injecting provisioned identity imports", "count", len(provisionedImports))
+		src.Import = append(provisionedImports, src.Import...)
+	}
+
 	return nil
 }
 

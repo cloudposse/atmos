@@ -898,8 +898,70 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 		log.Debug("Cached provider credentials", "providerName", providerName)
 	}
 
+	// Run provisioning if provider supports it (non-fatal).
+	m.provisionIdentities(ctx, providerName, provider, credentials)
+
 	log.Debug("Provider authenticated", "provider", providerName)
 	return credentials, nil
+}
+
+// provisionIdentities runs identity provisioning if the provider supports it.
+// This is a non-fatal operation - failures are logged but don't block authentication.
+func (m *manager) provisionIdentities(ctx context.Context, providerName string, provider types.Provider, credentials types.ICredentials) {
+	defer perf.Track(nil, "auth.Manager.provisionIdentities")()
+
+	// Check if provider implements the Provisioner interface.
+	provisioner, ok := provider.(types.Provisioner)
+	if !ok {
+		log.Debug("Provider does not support provisioning, skipping", logKeyProvider, providerName)
+		return
+	}
+
+	// Run provisioning.
+	log.Debug("Running identity provisioning", logKeyProvider, providerName)
+	result, err := provisioner.ProvisionIdentities(ctx, credentials)
+	if err != nil {
+		log.Warn("Failed to provision identities, skipping", logKeyProvider, providerName, "error", err)
+		return
+	}
+
+	// Skip if no identities provisioned.
+	if result == nil || len(result.Identities) == 0 {
+		log.Debug("No identities provisioned", logKeyProvider, providerName)
+		return
+	}
+
+	log.Debug("Provisioned identities from provider",
+		logKeyProvider, providerName,
+		"accounts", result.Metadata.Counts.Accounts,
+		"roles", result.Metadata.Counts.Roles,
+		"identities", len(result.Identities))
+
+	// Write provisioned identities to cache.
+	if err := m.writeProvisionedIdentities(result); err != nil {
+		log.Warn("Failed to write provisioned identities, skipping", logKeyProvider, providerName, "error", err)
+		return
+	}
+
+	log.Debug("Successfully provisioned and cached identities", logKeyProvider, providerName, "count", len(result.Identities))
+}
+
+// writeProvisionedIdentities writes provisioned identities to the cache directory.
+func (m *manager) writeProvisionedIdentities(result *types.ProvisioningResult) error {
+	defer perf.Track(nil, "auth.Manager.writeProvisionedIdentities")()
+
+	writer, err := types.NewProvisioningWriter()
+	if err != nil {
+		return fmt.Errorf("failed to create provisioning writer: %w", err)
+	}
+
+	filePath, err := writer.Write(result)
+	if err != nil {
+		return fmt.Errorf("failed to write provisioned identities: %w", err)
+	}
+
+	log.Debug("Wrote provisioned identities to cache", "path", filePath)
+	return nil
 }
 
 // Helper functions for logging.

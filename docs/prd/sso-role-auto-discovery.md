@@ -1,4 +1,4 @@
-# AWS SSO Role Auto-Discovery
+# AWS SSO Identity Auto-Provisioning
 
 **Status**: Draft
 **Last Updated**: 2025-11-09
@@ -12,18 +12,16 @@
 Users must manually configure every AWS SSO permission set they want to use in Atmos, creating friction during onboarding and ongoing maintenance burden. For organizations with dozens of accounts and permission sets, this results in hundreds of lines of identity configuration that quickly becomes stale as SSO permissions change.
 
 ### Solution
-Automatic discovery and population of AWS SSO permission sets as Atmos identities. When enabled, logging in via `atmos auth login` queries AWS Identity Center APIs to discover all available permission sets across assigned accounts and generates a dynamic configuration file that seamlessly integrates with Atmos's existing config system.
+Automatic provisioning of AWS SSO permission sets as Atmos identities. When enabled, logging in via `atmos auth login` queries AWS Identity Center APIs to provision all available permission sets across assigned accounts and generates a dynamic configuration file that seamlessly integrates with Atmos's existing config system.
 
 ### Value Proposition
 - **Zero-config onboarding**: New users run `atmos auth login` and immediately see all identities they can use
-- **Always up-to-date**: Discovery runs on each login, automatically reflecting current SSO permissions
+- **Always up-to-date**: Provisioning runs on each login, automatically reflecting current SSO permissions
 - **Self-service access**: Users discover their available roles without manual configuration
 - **Reduced support burden**: Eliminates "how do I configure this role?" support requests
 
 ### Success Criteria
-- **Adoption**: 60%+ of AWS SSO users enable auto-discovery within 3 months
 - **Time to first auth**: <2 minutes from clone to authenticated (vs 10+ minutes manual config)
-- **Support tickets**: 80% reduction in identity configuration support requests
 - **User feedback**: "This just works" vs "I'm confused how to use this"
 
 ---
@@ -98,30 +96,30 @@ identities:
 
 #### Functional Requirements
 
-**FR1**: Auto-discover permission sets
+**FR1**: Auto-provision permission sets
 - **Given** a user with AWS SSO access to multiple accounts
 - **When** they run `atmos auth login --provider sso-prod`
 - **Then** system queries AWS Identity Center APIs and discovers all available permission sets
 
 **FR2**: Populate identities without manual configuration
-- **Given** auto-discovery completed successfully
+- **Given** auto-provisiony completed successfully
 - **When** user runs `atmos auth list`
 - **Then** all discovered permission sets appear as usable identities
 
 **FR3**: Work seamlessly with existing commands
-- **Given** discovered identities exist
+- **Given** provisioned identities exist
 - **When** user runs any Atmos command with `--identity` flag
-- **Then** discovered identities work identically to manually configured ones
+- **Then** provisioned identities work identically to manually configured ones
 
 **FR4**: Support manual identity overrides
-- **Given** both manual and discovered identities with same name
+- **Given** both manual and provisioned identities with same name
 - **When** config loading processes identities
 - **Then** manual identity takes precedence (standard import merge)
 
 **FR5**: Clean up on logout
-- **Given** user is logged in with discovered identities
+- **Given** user is logged in with provisioned identities
 - **When** user runs `atmos auth logout`
-- **Then** discovery cache is cleaned up automatically
+- **Then** provisioning cache is cleaned up automatically
 
 #### Non-Functional Requirements
 
@@ -131,19 +129,19 @@ identities:
 - Manual-only configurations unaffected
 
 **NFR2**: Graceful degradation
-- Discovery failures don't block authentication
-- Manual identities still work if discovery fails
+- Provisioning failures don't block authentication
+- Manual identities still work if provisioning fails
 - Clear error messages for common issues (insufficient permissions, API throttling)
 
 **NFR3**: Performance
-- Discovery completes in <10 seconds for 100 permission sets
+- Provisioning completes in <10 seconds for 100 permission sets
 - Uses parallel API calls where safe
 - Respects AWS API rate limits with exponential backoff
 
 **NFR4**: Security
-- Access tokens never written to discovery cache
-- Discovery file permissions: `0600` (owner read/write only)
-- No credentials stored in discovery file
+- Access tokens never written to provisioning cache
+- Provisioning file permissions: `0600` (owner read/write only)
+- No credentials stored in provisioning file
 
 ---
 
@@ -151,10 +149,10 @@ identities:
 
 ### Design Philosophy: Dynamic Configuration Import
 
-Instead of runtime-only identities or new commands, **enable auto-discovery at the provider level with a feature flag**. Discovery generates a valid Atmos configuration file that is automatically imported during config loading.
+Instead of runtime-only identities or new commands, **enable auto-provisiony at the provider level with a feature flag**. Discovery generates a valid Atmos configuration file that is automatically imported during config loading.
 
 **Key Principles**:
-- **Treat discovered identities like any other config**: Process through normal Atmos import chain
+- **Treat provisioned identities like any other config**: Process through normal Atmos import chain
 - **Require authentication**: Discovery only happens when logged in (no credentials, no discovery)
 - **Support mixed manual/auto**: Manual identities coexist with discovered ones
 - **No command pollution**: Works across all Atmos commands without new flags
@@ -223,7 +221,7 @@ Instead of runtime-only identities or new commands, **enable auto-discovery at t
 
 ### User Experience
 
-#### Enable Auto-Discovery
+#### Enable Auto-Provisioning
 
 ```yaml
 # atmos.yaml
@@ -233,18 +231,18 @@ providers:
     start_url: https://my-org.awsapps.com/start
     region: us-east-1
     spec:
-      # Enable automatic role discovery
-      auto_discover_identities: true
+      # Enable automatic identity provisioning
+      auto_provision_identities: true
 
-      # Optional: Configure discovery behavior
-      discovery:
+      # Optional: Configure provisioning behavior
+      provisioning:
         cache_duration: 1h
         filters:
           accounts: ["production", "staging"]
           roles: ["AdministratorAccess", "PowerUserAccess"]
 ```
 
-#### Login Triggers Discovery
+#### Login Triggers Provisioning
 
 ```bash
 $ atmos auth login --provider sso-prod
@@ -254,26 +252,39 @@ Verification Code: ABCD-EFGH
 Opening browser to: https://device.sso.us-east-1.amazonaws.com/...
 
 ✓ Authentication successful
-✓ Discovering available roles... (found 47 permission sets across 15 accounts)
-✓ Generated ~/.cache/atmos/aws/sso-prod/discovered-identities.yaml (47 identities)
+✓ Provisioning available roles... (found 47 permission sets across 15 accounts)
+✓ Generated ~/.cache/atmos/aws/sso-prod/provisioned-identities.yaml (47 identities)
 ```
 
-#### Use Discovered Identities
+#### Use Provisioned Identities
 
 ```bash
-# List all identities (manual + discovered)
+# List all identities (manual + provisioned)
 $ atmos auth list
-Identities: 47
-  Manual (1):
-    ✓ prod-admin (production / AdministratorAccess)
+ Authentication Configuration
+└──sso-prod (aws/iam-identity-center)
+   └──Identities
+      ├──● production/AdministratorAccess (sso-prod) 11h58m
+      │  └──Principal
+      │     ├──name: AdministratorAccess
+      │     └──account
+      │        ├──name: production
+      │        └──id: 123456789012
+      ├──● production/PowerUserAccess (sso-prod) 11h58m
+      │  └──Principal
+      │     ├──name: PowerUserAccess
+      │     └──account
+      │        ├──name: production
+      │        └──id: 123456789012
+      ├──● staging/AdministratorAccess (sso-prod) 11h58m
+      │  └──Principal
+      │     ├──name: AdministratorAccess
+      │     └──account
+      │        ├──name: staging
+      │        └──id: 234567890123
+      └──... (44 more identities)
 
-  Auto-Discovered (46):
-    ✓ production/AdministratorAccess
-    ✓ production/PowerUserAccess
-    ✓ staging/AdministratorAccess
-    ...
-
-# Use any discovered identity
+# Use any provisioned identity
 $ atmos terraform plan component -s stack --identity production/AdministratorAccess
 ✓ Using identity: production/AdministratorAccess
 
@@ -287,18 +298,18 @@ $ atmos workflow run deploy -f workflow.yaml --identity production/PowerUserAcce
 ```bash
 $ atmos auth logout --provider sso-prod
 ✓ Logged out from sso-prod
-✓ Cleaned up discovered identities cache
+✓ Cleaned up provisioned identities cache
 ```
 
-### Generated Discovery File
+### Generated Provisioning File
 
 ```yaml
-# ~/.cache/atmos/aws/sso-prod/discovered-identities.yaml
-# Auto-generated by Atmos SSO discovery
+# ~/.cache/atmos/aws/sso-prod/provisioned-identities.yaml
+# Auto-generated by Atmos identity provisioning
 # Provider: sso-prod
-# Generated: 2025-11-09T14:30:00Z
-# Expires: 2025-11-09T15:30:00Z (1h)
+# Provisioned: 2025-11-09T14:30:00Z
 # DO NOT EDIT - This file is regenerated on each login
+# Manual overrides should be placed in atmos.yaml
 
 auth:
   identities:
@@ -325,8 +336,8 @@ auth:
         access-level: admin
 
       metadata:
-        discovered: true
-        discovered_at: "2025-11-09T14:30:00Z"
+        provisioned: true
+        provisioned_at: "2025-11-09T14:30:00Z"
         permission_set_arn: "arn:aws:sso:::permissionSet/ssoins-1234/ps-abcd"
 
     production/PowerUserAccess:
@@ -345,8 +356,8 @@ auth:
         environment: production
         access-level: poweruser
       metadata:
-        discovered: true
-        discovered_at: "2025-11-09T14:30:00Z"
+        provisioned: true
+        provisioned_at: "2025-11-09T14:30:00Z"
 
     # ... 45 more identities ...
 ```
@@ -366,7 +377,7 @@ auth:
 4. Manually write identity YAML (10 minutes)
 5. Run deployment
 
-**With Auto-Discovery**:
+**With Auto-Provisioning**:
 1. Clone repo
 2. `atmos auth login --provider sso-prod` (2 minutes)
 3. `atmos terraform plan component -s stack --identity production/AdministratorAccess`
@@ -374,14 +385,14 @@ auth:
 
 **Time saved**: 30+ minutes, eliminates support request
 
-### Use Case 2: Mixed Manual and Discovered Identities
+### Use Case 2: Mixed Manual and Provisioned Identities
 
-**Scenario**: Team wants auto-discovery but needs custom env vars for specific identities
+**Scenario**: Team wants auto-provisioning but needs custom env vars for specific identities
 
 ```yaml
 # atmos.yaml - manual identity with customization
 identities:
-  prod-admin:  # Overrides discovered "production/AdministratorAccess"
+  prod-admin:  # Overrides provisioned "production/AdministratorAccess"
     kind: aws/permission-set
     via:
       provider: sso-prod
@@ -397,7 +408,7 @@ identities:
 ```
 
 **Result**:
-- 46 identities auto-discovered (low-touch)
+- 46 identities auto-provisioned (low-touch)
 - 1 identity manually configured (high-touch customization)
 - Manual identity overrides discovered one (standard import precedence)
 
@@ -432,20 +443,31 @@ providers:
 ```bash
 # Before login - shows manual identities only
 $ atmos auth list
-Identities (manual): 1
-  ⚠ prod-admin (production / AdministratorAccess) - not authenticated
-
-Note: 1 provider with auto-discovery enabled (sso-prod)
-      Run 'atmos auth login --provider sso-prod' to discover additional identities
+ Authentication Configuration
+└──sso-prod (aws/iam-identity-center)
+   └──Identities
+      └──⚠ prod-admin (sso-prod) NOT AUTHENTICATED
+         └──Principal
+            ├──name: AdministratorAccess
+            └──account
+               ├──name: production
+               └──id: 123456789012
 
 # After login - shows all identities
 $ atmos auth login --provider sso-prod
-✓ Generated discovered-identities.yaml (46 identities)
+✓ Provisioned 46 identities
 
 $ atmos auth list
-Identities: 47
-  Manual (1): prod-admin
-  Auto-Discovered (46): production/AdministratorAccess, ...
+ Authentication Configuration
+└──sso-prod (aws/iam-identity-center)
+   └──Identities
+      ├──● prod-admin (sso-prod) 11h58m
+      │  └──Principal
+      │     └──... (manual config with custom env vars)
+      ├──● production/AdministratorAccess (sso-prod) 11h58m
+      │  └──Principal
+      │     └──... (auto-provisioned)
+      └──... (45 more provisioned identities)
 ```
 
 **Benefit**: Preserves existing behavior, provides helpful guidance
@@ -454,71 +476,93 @@ Identities: 47
 
 ## 5. Technical Design
 
-### 5.1 Discovery Interface
+### 5.1 Provisioner Interface
 
 ```go
-// pkg/auth/types/discovery.go
-package types
+// pkg/auth/provisioning/provisioner.go
+package provisioning
 
-type IdentityDiscoverer interface {
-    // DiscoverIdentities queries the provider for available identities
-    DiscoverIdentities(ctx context.Context, creds ICredentials) (*DiscoveryResult, error)
+// Provisioner provisions identities from external sources.
+// Different providers may implement this to auto-provision identities
+// from their respective identity systems (AWS SSO, Azure AD, Okta, etc).
+type Provisioner interface {
+    // ProvisionIdentities queries the provider for available identities.
+    // Returns provisioned identities and metadata about the provisioning operation.
+    ProvisionIdentities(ctx context.Context, creds ICredentials) (*Result, error)
 }
 
-type DiscoveryResult struct {
-    Identities   map[string]*DiscoveredIdentity
-    Provider     string
-    DiscoveredAt time.Time
-    ExpiresAt    time.Time
-    Metadata     DiscoveryMetadata
+// Result contains the outcome of an identity provisioning operation.
+type Result struct {
+    Identities    map[string]*Identity  // Keyed by identity name
+    Provider      string                // Provider name that performed provisioning
+    ProvisionedAt time.Time            // When provisioning completed
+    ExpiresAt     time.Time            // Optional expiration for cached results
+    Metadata      Metadata             // Statistics about the operation
 }
 
-type DiscoveredIdentity struct {
-    Kind      string                 // "aws/permission-set"
+// Identity represents a single provisioned identity.
+type Identity struct {
+    Kind      string                 // Identity kind (e.g., "aws/permission-set")
     Via       *IdentityVia           // Provider reference
     Principal map[string]interface{} // Account + role info
     Tags      []string               // Simple list for filtering
-    Labels    map[string]string      // Key-value pairs from AWS tags
-    Metadata  map[string]interface{} // discovery timestamp, ARN, etc.
+    Labels    map[string]string      // Key-value pairs from cloud provider tags
+    Metadata  map[string]interface{} // Provisioning metadata (timestamp, ARN, etc.)
 }
 
-type DiscoveryMetadata struct {
-    AccountCount       int
-    PermissionSetCount int
-    APICallCount       int
-    Duration           time.Duration
+// Metadata contains statistics about a provisioning operation.
+type Metadata struct {
+    AccountCount       int           // Number of accounts queried
+    PermissionSetCount int           // Number of permission sets found
+    APICallCount       int           // Number of API calls made
+    Duration           time.Duration // Time taken to complete
 }
 ```
 
 ### 5.2 AWS SSO Implementation
 
 ```go
-// pkg/auth/providers/aws/sso_discovery.go
+// pkg/auth/providers/aws/sso_provisioning.go
 package aws
 
-func (p *ssoProvider) DiscoverIdentities(ctx context.Context, creds ICredentials) (*DiscoveryResult, error) {
-    // 1. Create AWS SSO client
+import (
+    "context"
+    "fmt"
+    "time"
+
+    "github.com/cloudposse/atmos/pkg/auth/provisioning"
+)
+
+// ProvisionIdentities implements the Provisioner interface for AWS SSO.
+// It queries AWS Identity Center APIs to discover all permission sets the user can access.
+func (p *ssoProvider) ProvisionIdentities(ctx context.Context, creds ICredentials) (*provisioning.Result, error) {
+    // 1. Create AWS SSO client using authenticated credentials
     ssoClient := sso.NewFromConfig(awsConfig)
     accessToken := creds.GetAccessToken()
 
-    // 2. List all accounts
+    // 2. List all AWS accounts the user can access
     accounts, err := p.listAccounts(ctx, ssoClient, accessToken)
     if err != nil {
         return nil, fmt.Errorf("failed to list accounts: %w", err)
     }
 
-    // 3. For each account, list roles (permission sets)
-    identities := make(map[string]*DiscoveredIdentity)
+    // 3. For each account, list available permission sets (roles)
+    identities := make(map[string]*provisioning.Identity)
+    apiCalls := 0
+    startTime := time.Now()
+
     for _, account := range accounts {
         roles, err := p.listAccountRoles(ctx, ssoClient, accessToken, account.AccountID)
+        apiCalls++
         if err != nil {
             log.Warn("Failed to list roles for account", "account", account.Name, "error", err)
             continue
         }
 
+        // Create an identity for each permission set
         for _, role := range roles {
             identityName := p.generateIdentityName(account.Name, role.RoleName)
-            identities[identityName] = &DiscoveredIdentity{
+            identities[identityName] = &provisioning.Identity{
                 Kind: "aws/permission-set",
                 Via: &IdentityVia{Provider: p.name},
                 Principal: map[string]interface{}{
@@ -529,17 +573,23 @@ func (p *ssoProvider) DiscoverIdentities(ctx context.Context, creds ICredentials
                     },
                 },
                 Metadata: map[string]interface{}{
-                    "discovered":    true,
-                    "discovered_at": time.Now(),
+                    "provisioned":    true,
+                    "provisioned_at": time.Now(),
                 },
             }
         }
     }
 
-    return &DiscoveryResult{
-        Identities:   identities,
-        Provider:     p.name,
-        DiscoveredAt: time.Now(),
+    return &provisioning.Result{
+        Identities:    identities,
+        Provider:      p.name,
+        ProvisionedAt: time.Now(),
+        Metadata: provisioning.Metadata{
+            AccountCount:       len(accounts),
+            PermissionSetCount: len(identities),
+            APICallCount:       apiCalls,
+            Duration:           time.Since(startTime),
+        },
     }, nil
 }
 
@@ -592,48 +642,66 @@ func (p *ssoProvider) listAccountRoles(ctx context.Context, client *sso.Client, 
 ### 5.3 Config Writer
 
 ```go
-// pkg/auth/config_writer.go
-package auth
+// pkg/auth/provisioning/writer.go
+package provisioning
 
-func WriteDiscoveredConfig(outputPath string, result *DiscoveryResult) error {
-    // Build Atmos config structure
+import (
+    "fmt"
+    "os"
+    "path/filepath"
+    "time"
+
+    "gopkg.in/yaml.v3"
+    "github.com/cloudposse/atmos/pkg/schema"
+)
+
+// WriteConfig writes provisioned identities to a YAML config file.
+// The output file is a valid Atmos configuration that can be imported.
+func WriteConfig(outputPath string, result *Result) error {
+    // Build Atmos config structure from provisioned identities
     config := schema.AuthConfig{
         Identities: make(map[string]schema.Identity),
     }
 
-    for name, discovered := range result.Identities {
+    for name, provisioned := range result.Identities {
         config.Identities[name] = schema.Identity{
-            Kind:      discovered.Kind,
-            Via:       discovered.Via,
-            Principal: discovered.Principal,
-            Tags:      discovered.Tags,
-            Labels:    discovered.Labels,
-            Metadata:  discovered.Metadata,
+            Kind:      provisioned.Kind,
+            Via:       provisioned.Via,
+            Principal: provisioned.Principal,
+            Tags:      provisioned.Tags,
+            Labels:    provisioned.Labels,
+            Metadata:  provisioned.Metadata,
         }
     }
 
-    // Marshal to YAML with header comment
+    // Marshal to YAML
     data, err := yaml.Marshal(map[string]interface{}{"auth": config})
     if err != nil {
-        return err
+        return fmt.Errorf("failed to marshal config: %w", err)
     }
 
-    header := fmt.Sprintf(`# Auto-generated by Atmos SSO discovery
+    // Add header comment with metadata
+    header := fmt.Sprintf(`# Auto-generated by Atmos identity provisioning
 # Provider: %s
-# Generated: %s
-# Expires: %s
+# Provisioned: %s
 # DO NOT EDIT - This file is regenerated on each login
+# Manual overrides should be placed in atmos.yaml
 
-`, result.Provider, result.DiscoveredAt.Format(time.RFC3339), result.ExpiresAt.Format(time.RFC3339))
+`, result.Provider, result.ProvisionedAt.Format(time.RFC3339))
 
     content := header + string(data)
 
-    // Write file with secure permissions
+    // Ensure directory exists with secure permissions
     if err := os.MkdirAll(filepath.Dir(outputPath), 0700); err != nil {
-        return err
+        return fmt.Errorf("failed to create directory: %w", err)
     }
 
-    return os.WriteFile(outputPath, []byte(content), 0600)
+    // Write file with owner-only permissions (no group/world access)
+    if err := os.WriteFile(outputPath, []byte(content), 0600); err != nil {
+        return fmt.Errorf("failed to write file: %w", err)
+    }
+
+    return nil
 }
 ```
 
@@ -645,12 +713,13 @@ func WriteDiscoveredConfig(outputPath string, result *DiscoveryResult) error {
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
     // ... existing authentication logic ...
 
-    // After successful provider authentication
-    if provider, ok := providerInterface.(types.IdentityDiscoverer); ok {
-        if m.shouldAutoDiscover(providerName) {
-            if err := m.discoverAndWriteConfig(ctx, providerName, provider, providerCreds); err != nil {
+    // After successful provider authentication, check if provisioning is enabled
+    if provisioner, ok := providerInterface.(provisioning.Provisioner); ok {
+        if m.shouldAutoProvision(providerName) {
+            if err := m.provisionAndWriteConfig(ctx, providerName, provisioner, providerCreds); err != nil {
                 // Non-fatal: warn but don't fail authentication
-                log.Warn("Failed to discover identities", "provider", providerName, "error", err)
+                // User can still authenticate with manually configured identities
+                log.Warn("Failed to provision identities", "provider", providerName, "error", err)
             }
         }
     }
@@ -658,45 +727,50 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
     // ... continue with identity authentication ...
 }
 
-func (m *manager) shouldAutoDiscover(providerName string) bool {
+func (m *manager) shouldAutoProvision(providerName string) bool {
     provider, exists := m.config.Providers[providerName]
     if !exists {
         return false
     }
 
-    if spec, ok := provider.Spec["auto_discover_identities"].(bool); ok {
+    if spec, ok := provider.Spec["auto_provision_identities"].(bool); ok {
         return spec
     }
 
     return false
 }
 
-func (m *manager) discoverAndWriteConfig(ctx context.Context, providerName string, discoverer types.IdentityDiscoverer, creds types.ICredentials) error {
-    // Discover identities
-    result, err := discoverer.DiscoverIdentities(ctx, creds)
+func (m *manager) provisionAndWriteConfig(ctx context.Context, providerName string, provisioner provisioning.Provisioner, creds types.ICredentials) error {
+    // Provision identities from the provider
+    result, err := provisioner.ProvisionIdentities(ctx, creds)
     if err != nil {
-        return err
+        return fmt.Errorf("failed to provision identities: %w", err)
     }
 
-    // Get output path from provider config
-    outputPath := m.getDiscoveryOutputPath(providerName)
+    // Get output path from provider config or use default
+    outputPath := m.getProvisioningOutputPath(providerName)
 
-    // Write config file
-    if err := WriteDiscoveredConfig(outputPath, result); err != nil {
-        return err
+    // Write provisioned identities to config file
+    if err := provisioning.WriteConfig(outputPath, result); err != nil {
+        return fmt.Errorf("failed to write config: %w", err)
     }
 
-    log.Info("Discovery complete", "provider", providerName, "identities", len(result.Identities), "path", outputPath)
+    log.Info("Identity provisioning complete",
+        "provider", providerName,
+        "identities", len(result.Identities),
+        "accounts", result.Metadata.AccountCount,
+        "duration", result.Metadata.Duration,
+        "path", outputPath)
     return nil
 }
 
 func (m *manager) LogoutProvider(ctx context.Context, providerName string) error {
     // ... existing logout logic ...
 
-    // Cleanup discovery file if auto-discovery enabled
-    if m.shouldAutoDiscover(providerName) {
-        if err := m.cleanupDiscoveryFile(providerName); err != nil {
-            log.Warn("Failed to cleanup discovery file", "provider", providerName, "error", err)
+    // Cleanup provisioning file if auto-provisioning enabled
+    if m.shouldAutoProvision(providerName) {
+        if err := m.cleanupProvisioningFile(providerName); err != nil {
+            log.Warn("Failed to cleanup provisioning file", "provider", providerName, "error", err)
         }
     }
 
@@ -712,25 +786,25 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
     // ... existing config loading ...
 
-    // After loading base config and processing imports
-    if err := injectDynamicAuthImports(&atmosConfig); err != nil {
-        log.Warn("Failed to inject dynamic auth imports", "error", err)
+    // After loading base config and processing imports, inject provisioned identity configs
+    if err := injectProvisionedIdentityImports(&atmosConfig); err != nil {
+        log.Warn("Failed to inject provisioned identity imports", "error", err)
         // Non-fatal: continue without dynamic imports
     }
 
     // ... continue with rest of config loading ...
 }
 
-func injectDynamicAuthImports(atmosConfig *schema.AtmosConfiguration) error {
+func injectProvisionedIdentityImports(atmosConfig *schema.AtmosConfiguration) error {
     for providerName, provider := range atmosConfig.Auth.Providers {
-        if shouldAutoDiscoverIdentities(&provider) {
-            outputPath := getDiscoveryOutputPath(providerName, &provider)
+        if shouldAutoProvisionIdentities(&provider) {
+            outputPath := getProvisioningOutputPath(providerName, &provider)
 
-            // Check if discovery file exists
+            // Check if provisioning file exists
             if _, err := os.Stat(outputPath); err == nil {
-                // File exists, add to imports
-                atmosConfig.Imports = append(atmosConfig.Imports, outputPath)
-                log.Debug("Injected dynamic auth import", "provider", providerName, "path", outputPath)
+                // File exists, add to imports (prepend so manual config overrides)
+                atmosConfig.Imports = append([]string{outputPath}, atmosConfig.Imports...)
+                log.Debug("Injected provisioned identity import", "provider", providerName, "path", outputPath)
             }
         }
     }
@@ -738,23 +812,23 @@ func injectDynamicAuthImports(atmosConfig *schema.AtmosConfiguration) error {
     return nil
 }
 
-func shouldAutoDiscoverIdentities(provider *schema.Provider) bool {
+func shouldAutoProvisionIdentities(provider *schema.Provider) bool {
     if provider.Spec == nil {
         return false
     }
 
-    if autoDiscover, ok := provider.Spec["auto_discover_identities"].(bool); ok {
-        return autoDiscover
+    if autoProvision, ok := provider.Spec["auto_provision_identities"].(bool); ok {
+        return autoProvision
     }
 
     return false
 }
 
-func getDiscoveryOutputPath(providerName string, provider *schema.Provider) string {
-    // Check for custom path in provider.Spec["discovery"]["output_path"]
+func getProvisioningOutputPath(providerName string, provider *schema.Provider) string {
+    // Check for custom path in provider.Spec["provisioning"]["output_path"]
     if provider.Spec != nil {
-        if discovery, ok := provider.Spec["discovery"].(map[string]interface{}); ok {
-            if outputPath, ok := discovery["output_path"].(string); ok {
+        if provisioning, ok := provider.Spec["provisioning"].(map[string]interface{}); ok {
+            if outputPath, ok := provisioning["output_path"].(string); ok {
                 return expandPath(outputPath)
             }
         }
@@ -763,13 +837,13 @@ func getDiscoveryOutputPath(providerName string, provider *schema.Provider) stri
     // Default: XDG cache directory
     subpath := filepath.Join("aws", providerName)
     cacheDir, _ := xdg.GetXDGCacheDir(subpath, 0700)
-    return filepath.Join(cacheDir, "discovered-identities.yaml")
+    return filepath.Join(cacheDir, "provisioned-identities.yaml")
 }
 ```
 
 ### 5.6 Data Flow
 
-#### Login Flow (Discovery)
+#### Login Flow (Provisioning)
 
 ```
 1. User: atmos auth login --provider sso-prod
@@ -778,24 +852,24 @@ func getDiscoveryOutputPath(providerName string, provider *schema.Provider) stri
    └─> Device flow → access token
    └─> Cache token in keyring
 
-3. Auth Manager: Check auto_discover_identities
-   └─> provider.Spec["auto_discover_identities"] == true?
+3. Auth Manager: Check auto_provision_identities
+   └─> provider.Spec["auto_provision_identities"] == true?
 
-4. Auth Manager: Discover Identities
-   └─> ssoProvider.DiscoverIdentities(ctx, accessToken)
+4. Auth Manager: Provision Identities
+   └─> ssoProvider.ProvisionIdentities(ctx, accessToken)
        └─> AWS ListAccounts API (paginated)
        └─> AWS ListAccountRoles API (per account, paginated)
        └─> Apply filters (if configured)
-       └─> Build DiscoveryResult
+       └─> Build provisioning.Result
 
 5. Auth Manager: Write Config
-   └─> WriteDiscoveredConfig(outputPath, result)
+   └─> provisioning.WriteConfig(outputPath, result)
        └─> Generate YAML with header
-       └─> Write to ~/.cache/atmos/aws/sso-prod/discovered-identities.yaml
+       └─> Write to ~/.cache/atmos/aws/sso-prod/provisioned-identities.yaml
        └─> Permissions: 0600
 
 6. Complete: Display summary
-   ✓ Discovered 47 identities across 15 accounts
+   ✓ Provisioned 47 identities across 15 accounts (2.3s)
 ```
 
 #### Config Loading Flow (Any Command)
@@ -810,18 +884,18 @@ func getDiscoveryOutputPath(providerName string, provider *schema.Provider) stri
    └─> imports: [path/to/catalogs/*.yaml]
    └─> Merge all manual imports
 
-4. Inject dynamic imports
-   └─> For each provider with auto_discover_identities:
-       └─> Check if ~/.cache/atmos/aws/{provider}/discovered-identities.yaml exists
-       └─> If exists: Add to imports list
+4. Inject provisioned identity imports
+   └─> For each provider with auto_provision_identities:
+       └─> Check if ~/.cache/atmos/aws/{provider}/provisioned-identities.yaml exists
+       └─> If exists: Prepend to imports list (so manual config overrides)
        └─> If not: Skip (user not logged in)
 
 5. Process dynamic imports
-   └─> Load discovered-identities.yaml
-   └─> Merge identities (manual precedence over discovered)
+   └─> Load provisioned-identities.yaml
+   └─> Merge identities (manual precedence over provisioned)
 
 6. Identity available
-   └─> "production/Admin" resolved from discovered config
+   └─> "production/Admin" resolved from provisioned config
    └─> Use normally (no special handling)
 ```
 
@@ -835,7 +909,7 @@ func getDiscoveryOutputPath(providerName string, provider *schema.Provider) stri
    └─> Remove cached credentials from keyring
 
 3. Auth Manager: Check auto_discover_identities
-   └─> If true: Clean discovery file
+   └─> If true: Clean provisioning file
 
 4. Auth Manager: cleanupDiscoveryFile()
    └─> Get path: ~/.cache/atmos/aws/sso-prod/discovered-identities.yaml
@@ -860,7 +934,7 @@ providers:
     region: us-east-1
 
     spec:
-      # Enable auto-discovery (default: false)
+      # Enable auto-provisiony (default: false)
       auto_discover_identities: true
 
       # Optional: Discovery configuration
@@ -924,7 +998,7 @@ providers:
               },
               "output_path": {
                 "type": "string",
-                "description": "Custom path for discovered identities file (XDG-compliant by default)"
+                "description": "Custom path for provisioned identities file (XDG-compliant by default)"
               },
               "filters": {
                 "type": "object",
@@ -986,7 +1060,7 @@ providers:
       },
       "metadata": {
         "type": "object",
-        "description": "Discovery metadata (discovered, discovered_at, permission_set_arn, etc.)"
+        "description": "Discovery metadata (discovered, provisioned_at, permission_set_arn, etc.)"
       }
     }
   }
@@ -999,7 +1073,7 @@ providers:
 
 ### Phase 1: Core Discovery (MVP) - 5-7 days
 
-**Goal**: Basic auto-discovery working end-to-end
+**Goal**: Basic auto-provisiony working end-to-end
 
 **Deliverables**:
 1. `pkg/auth/types/discovery.go` - Interface definitions
@@ -1016,9 +1090,9 @@ providers:
 
 **Success Criteria**:
 - `atmos auth login` discovers and writes config file
-- `atmos auth list` shows discovered identities
-- Any `--identity` flag works with discovered identities
-- `atmos auth logout` cleans up discovery file
+- `atmos auth list` shows provisioned identities
+- Any `--identity` flag works with provisioned identities
+- `atmos auth logout` cleans up provisioning file
 
 ### Phase 2: Filtering & Customization - 2-3 days
 
@@ -1031,13 +1105,13 @@ providers:
 4. Discovery configuration validation
 
 **Success Criteria**:
-- Filters reduce discovered identities as expected
+- Filters reduce provisioned identities as expected
 - Custom templates generate correct identity names
 - Invalid configs produce clear error messages
 
 ### Phase 3: Tags & Labels (AWS PermissionSet Tags) - 3-4 days
 
-**Goal**: Enrich discovered identities with AWS tags
+**Goal**: Enrich provisioned identities with AWS tags
 
 **Deliverables**:
 1. `sso_discovery.go` - PermissionSet tag discovery
@@ -1050,7 +1124,7 @@ providers:
 - `ssoadmin.ListTagsForResource()` - Get AWS tags from permission set
 
 **Success Criteria**:
-- Discovered identities include `tags` and `labels` fields
+- Provisioned identities include `tags` and `labels` fields
 - AWS PermissionSet tags correctly mapped to labels
 - Tags auto-generated from label values
 
@@ -1059,7 +1133,7 @@ providers:
 **Potential additions**:
 - Discovery metadata tracking (first seen, last used)
 - Discovery stats in `atmos auth list`
-- Export discovered identities to YAML for manual customization
+- Export provisioned identities to YAML for manual customization
 - Multiple SSO provider support with conflict resolution
 
 ---
@@ -1068,19 +1142,19 @@ providers:
 
 ### 1. Dynamic Config File vs Runtime Identities
 
-**Decision**: Write discovered identities to a dynamic YAML file, auto-import during config loading
+**Decision**: Write provisioned identities to a dynamic YAML file, auto-import during config loading
 
 **Rationale**:
-- Treats discovered identities like any other config (processed through normal Atmos import chain)
+- Treats provisioned identities like any other config (processed through normal Atmos import chain)
 - Works across all Atmos commands without flag pollution
 - Preserves `atmos auth list` working without login (shows manual identities)
 - Leverages existing import/merge logic for override behavior
 - No changes required to individual command implementations
 
-**Trade-off**: Requires login to see auto-discovered identities in `atmos auth list`
+**Trade-off**: Requires login to see auto-provisioned identities in `atmos auth list`
 
 **Alternatives Considered**:
-- **Runtime-only identities**: Would require every command to check for discovered identities at runtime
+- **Runtime-only identities**: Would require every command to check for provisioned identities at runtime
 - **New command structure**: Would require `atmos auth discover` separate from `atmos auth login`
 
 ### 2. XDG Cache Directory vs Project Directory
@@ -1096,7 +1170,7 @@ providers:
 - **Not backed up**: Cache directories typically excluded from system backups
 - **User-writable**: No permission issues
 
-**Trade-off**: Discovery file not in project directory (but accessible, configurable)
+**Trade-off**: Provisioning file not in project directory (but accessible, configurable)
 
 **Alternatives Considered**:
 - **Project directory** (`.atmos/cache/`): Would be checked into git accidentally
@@ -1123,13 +1197,13 @@ providers:
 
 ### 4. Manual Identity Precedence
 
-**Decision**: Manual identities override auto-discovered (standard Atmos import merge)
+**Decision**: Manual identities override auto-provisioned (standard Atmos import merge)
 
 **Rationale**:
-- Allows customizing specific identities while benefiting from auto-discovery
+- Allows customizing specific identities while benefiting from auto-provisiony
 - Consistent with Atmos import precedence rules
 - Clear semantic: "I explicitly configured this, use my config"
-- Enables gradual migration from manual to auto-discovery
+- Enables gradual migration from manual to auto-provisiony
 
 **Trade-off**: Manual config can silently override discovered (but this is expected behavior)
 
@@ -1154,14 +1228,14 @@ providers:
 **Rationale**:
 - Backward compatible (no behavior change unless enabled)
 - Allows gradual adoption across teams
-- Clear intent ("I want auto-discovery for this provider")
+- Clear intent ("I want auto-provisiony for this provider")
 - Per-provider granularity (can enable for prod but not dev)
 
 **Trade-off**: Not enabled by default (but new feature, conservative rollout)
 
 ### 7. Non-Fatal Discovery Failures
 
-**Decision**: Discovery failures warn but don't block authentication
+**Decision**: Provisioning failures warn but don't block authentication
 
 **Rationale**:
 - User can still authenticate and use manual identities
@@ -1191,19 +1265,10 @@ providers:
 
 ### Metrics & Success Criteria
 
-**Adoption**:
-- Target: 60% of AWS SSO users enable auto-discovery within 3 months
-- Measure: Track `auto_discover_identities` usage via telemetry
-
 **Time to First Auth**:
 - Target: <2 minutes from clone to authenticated
 - Baseline: 10+ minutes with manual configuration
 - Measure: Time from `git clone` to successful `atmos terraform plan`
-
-**Support Reduction**:
-- Target: 80% reduction in identity configuration support tickets
-- Baseline: Average 5 tickets/week related to identity config
-- Measure: Support ticket tags/categorization
 
 **User Satisfaction**:
 - Target: "This just works" feedback > "I'm confused" feedback
@@ -1273,7 +1338,7 @@ providers:
 
 ### A. Inspiration: aws-sso-cli
 
-The [aws-sso-cli](https://github.com/synfinatic/aws-sso-cli) tool demonstrates a successful implementation of AWS SSO role auto-discovery. We analyzed their approach and adapted key concepts for Atmos.
+The [aws-sso-cli](https://github.com/synfinatic/aws-sso-cli) tool demonstrates a successful implementation of AWS SSO role auto-provisiony. We analyzed their approach and adapted key concepts for Atmos.
 
 #### How aws-sso-cli Implements Discovery
 
@@ -1350,7 +1415,7 @@ rolesResp, err := ssoClient.ListAccountRoles(ctx, &sso.ListAccountRolesInput{
 
 ## 12. Conclusion
 
-AWS SSO role auto-discovery addresses a major pain point in Atmos onboarding and maintenance. By leveraging AWS Identity Center APIs and Atmos's existing config import system, we can provide zero-config identity population that "just works" while preserving backward compatibility and allowing manual customization.
+AWS SSO role auto-provisiony addresses a major pain point in Atmos onboarding and maintenance. By leveraging AWS Identity Center APIs and Atmos's existing config import system, we can provide zero-config identity population that "just works" while preserving backward compatibility and allowing manual customization.
 
 The phased implementation approach delivers immediate value (Phase 1 MVP) while establishing a foundation for advanced features (filtering, tags/labels). The design decisions prioritize user experience, backward compatibility, and alignment with Atmos's existing patterns (XDG paths, import precedence, provider-level configuration).
 

@@ -1,0 +1,167 @@
+package aws
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sso"
+	ssotypes "github.com/aws/aws-sdk-go-v2/service/sso/types"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/provisioning"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// ProvisionIdentities provisions identities from AWS SSO permission sets.
+// This method is called after authentication to discover available accounts and roles.
+func (p *ssoProvider) ProvisionIdentities(ctx context.Context, creds authTypes.ICredentials) (*provisioning.Result, error) {
+	defer perf.Track(nil, "aws.ssoProvider.ProvisionIdentities")()
+
+	// Only provision if enabled.
+	if p.config.AutoProvisionIdentities == nil || !*p.config.AutoProvisionIdentities {
+		log.Debug("Auto-provisioning disabled for provider", "provider", p.name)
+		return nil, nil
+	}
+
+	log.Debug("Starting identity provisioning for SSO provider", "provider", p.name)
+
+	// Extract SSO access token from credentials.
+	awsCreds, ok := creds.(*authTypes.AWSCredentials)
+	if !ok {
+		return nil, fmt.Errorf("%w: invalid credentials type for SSO provisioning", errUtils.ErrAuthenticationFailed)
+	}
+
+	accessToken := awsCreds.AccessKeyID // SSO token is stored in AccessKeyID field.
+
+	// Create SSO client.
+	ssoClient := sso.NewFromConfig(aws.Config{
+		Region: p.region,
+	})
+
+	// List all accounts accessible to this user.
+	accounts, err := p.listAccounts(ctx, ssoClient, accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to list SSO accounts: %w", errUtils.ErrAuthenticationFailed, err)
+	}
+
+	log.Debug("Listed SSO accounts", "count", len(accounts))
+
+	// For each account, list available roles.
+	identities := make(map[string]*schema.Identity)
+	roleCount := 0
+
+	for _, account := range accounts {
+		accountID := aws.ToString(account.AccountId)
+		accountName := aws.ToString(account.AccountName)
+
+		roles, err := p.listAccountRoles(ctx, ssoClient, accessToken, accountID)
+		if err != nil {
+			log.Warn("Failed to list roles for account, skipping", "account", accountName, "accountID", accountID, "error", err)
+			continue
+		}
+
+		log.Debug("Listed roles for account", "account", accountName, "accountID", accountID, "count", len(roles))
+
+		// Create an identity for each role.
+		for _, role := range roles {
+			roleName := aws.ToString(role.RoleName)
+			roleCount++
+
+			// Generate unique identity name: account-name/role-name.
+			identityName := fmt.Sprintf("%s/%s", accountName, roleName)
+
+			principal := &schema.Principal{
+				Name: roleName,
+				Account: &schema.Account{
+					Name: accountName,
+					ID:   accountID,
+				},
+			}
+
+			identities[identityName] = &schema.Identity{
+				Provider:  p.name,
+				Principal: principal.ToMap(),
+			}
+		}
+	}
+
+	log.Debug("Provisioned SSO identities", "provider", p.name, "accounts", len(accounts), "roles", roleCount, "identities", len(identities))
+
+	return &provisioning.Result{
+		Identities:    identities,
+		Provider:      p.name,
+		ProvisionedAt: time.Now(),
+		Metadata: provisioning.Metadata{
+			Source: "aws-sso",
+			Counts: &provisioning.Counts{
+				Accounts:   len(accounts),
+				Roles:      roleCount,
+				Identities: len(identities),
+			},
+			Extra: map[string]interface{}{
+				"start_url": p.startURL,
+				"region":    p.region,
+			},
+		},
+	}, nil
+}
+
+// listAccounts lists all AWS accounts accessible via SSO.
+func (p *ssoProvider) listAccounts(ctx context.Context, ssoClient *sso.Client, accessToken string) ([]ssotypes.AccountInfo, error) {
+	defer perf.Track(nil, "aws.ssoProvider.listAccounts")()
+
+	var accounts []ssotypes.AccountInfo
+	var nextToken *string
+
+	for {
+		output, err := ssoClient.ListAccounts(ctx, &sso.ListAccountsInput{
+			AccessToken: aws.String(accessToken),
+			NextToken:   nextToken,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list accounts: %w", err)
+		}
+
+		accounts = append(accounts, output.AccountList...)
+
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return accounts, nil
+}
+
+// listAccountRoles lists all roles available for a specific account.
+func (p *ssoProvider) listAccountRoles(ctx context.Context, ssoClient *sso.Client, accessToken, accountID string) ([]ssotypes.RoleInfo, error) {
+	defer perf.Track(nil, "aws.ssoProvider.listAccountRoles")()
+
+	var roles []ssotypes.RoleInfo
+	var nextToken *string
+
+	for {
+		output, err := ssoClient.ListAccountRoles(ctx, &sso.ListAccountRolesInput{
+			AccessToken: aws.String(accessToken),
+			AccountId:   aws.String(accountID),
+			NextToken:   nextToken,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list roles for account %s: %w", accountID, err)
+		}
+
+		roles = append(roles, output.RoleList...)
+
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return roles, nil
+}
