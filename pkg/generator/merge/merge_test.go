@@ -13,7 +13,7 @@ func TestNewThreeWayMerger(t *testing.T) {
 }
 
 func TestMerge_SimpleChanges(t *testing.T) {
-	merger := NewThreeWayMerger(10)
+	merger := NewThreeWayMerger(30) // Increased threshold for byte-based calculation
 
 	existing := "line1\nline2\nline3"
 	newContent := "line1\nline2\nline3\nline4"
@@ -65,7 +65,7 @@ func TestMerge_TooManyChanges(t *testing.T) {
 }
 
 func TestMerge_WithConflicts(t *testing.T) {
-	merger := NewThreeWayMerger(10)
+	merger := NewThreeWayMerger(100) // High threshold to allow diff calculation
 
 	existing := "line1\nline2\nline3"
 	newContent := "line1\n<<<<<<< HEAD\nline2\n=======\nline2b\n>>>>>>> branch\nline3"
@@ -82,7 +82,7 @@ func TestMerge_WithConflicts(t *testing.T) {
 }
 
 func TestMerge_YAMLExample(t *testing.T) {
-	merger := NewThreeWayMerger(20) // Back to original threshold - dynamic threshold should handle it
+	merger := NewThreeWayMerger(60) // Increased threshold for byte-based calculation
 
 	existing := `# Custom configuration
 base_path: "."
