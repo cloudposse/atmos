@@ -116,9 +116,12 @@ func ProcessCommandLineArgs(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
-	configAndStacksInfo.ProfilesFromArg, err = cmd.Flags().GetStringSlice("profile")
-	if err != nil {
-		return configAndStacksInfo, err
+	// Only get profile flag if it's defined (some commands like vendor don't have this flag).
+	if cmd.Flag("profile") != nil {
+		configAndStacksInfo.ProfilesFromArg, err = cmd.Flags().GetStringSlice("profile")
+		if err != nil {
+			return configAndStacksInfo, err
+		}
 	}
 	finalAdditionalArgsAndFlags := argsAndFlagsInfo.AdditionalArgsAndFlags
 	if len(additionalArgsAndFlags) > 0 {
