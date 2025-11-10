@@ -3,8 +3,12 @@ package auth
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -973,4 +977,232 @@ func TestManager_LogoutProvider_RemovesProvisionedIdentitiesCache(t *testing.T) 
 	if err != nil {
 		t.Errorf("LogoutProvider() should succeed even if cache file doesn't exist, got: %v", err)
 	}
+}
+
+func TestManager_LogoutProvider_CacheRemovalWithExistingFile(t *testing.T) {
+	// Test that LogoutProvider successfully removes an existing provisioned identities cache file.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-sso": {
+				Kind: "aws/iam-identity-center",
+			},
+		},
+		Identities: map[string]schema.Identity{},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers: map[string]types.Provider{
+			"test-sso": mockProvider,
+		},
+		identities: map[string]types.Identity{},
+	}
+
+	// Create a provisioned identities cache file.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	result := &types.ProvisioningResult{
+		Provider:      "test-sso",
+		ProvisionedAt: time.Now(),
+		Identities: map[string]*schema.Identity{
+			"account1/role1": {
+				Provider: "test-sso",
+			},
+		},
+		Metadata: types.ProvisioningMetadata{
+			Source: "aws-sso",
+			Counts: &types.ProvisioningCounts{
+				Accounts:   1,
+				Roles:      1,
+				Identities: 1,
+			},
+		},
+	}
+
+	filePath, err := writer.Write(result)
+	require.NoError(t, err)
+	assert.FileExists(t, filePath)
+
+	// Expect provider logout calls.
+	mockStore.EXPECT().Delete("test-sso").Return(nil)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	// Call LogoutProvider - should remove the cache file.
+	ctx := context.Background()
+	err = m.LogoutProvider(ctx, "test-sso")
+	require.NoError(t, err)
+
+	// Verify cache file was removed.
+	_, err = os.Stat(filePath)
+	assert.True(t, os.IsNotExist(err), "Cache file should be removed")
+}
+
+func TestManager_LogoutAll_RemovesAllProvisionedCaches(t *testing.T) {
+	// Test that LogoutAll removes provisioned identities caches for all providers.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider1 := types.NewMockProvider(ctrl)
+	mockProvider2 := types.NewMockProvider(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"sso1": {Kind: "aws/iam-identity-center"},
+			"sso2": {Kind: "aws/iam-identity-center"},
+		},
+		Identities: map[string]schema.Identity{},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers: map[string]types.Provider{
+			"sso1": mockProvider1,
+			"sso2": mockProvider2,
+		},
+		identities: map[string]types.Identity{},
+	}
+
+	// Create provisioned identities cache files for both providers.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	for _, providerName := range []string{"sso1", "sso2"} {
+		result := &types.ProvisioningResult{
+			Provider:      providerName,
+			ProvisionedAt: time.Now(),
+			Identities: map[string]*schema.Identity{
+				"account1/role1": {
+					Provider: providerName,
+				},
+			},
+			Metadata: types.ProvisioningMetadata{
+				Source: "aws-sso",
+				Counts: &types.ProvisioningCounts{
+					Accounts:   1,
+					Roles:      1,
+					Identities: 1,
+				},
+			},
+		}
+
+		filePath, err := writer.Write(result)
+		require.NoError(t, err)
+		assert.FileExists(t, filePath)
+	}
+
+	// Expect provider logout calls.
+	mockStore.EXPECT().Delete(gomock.Any()).Return(nil).AnyTimes()
+	mockProvider1.EXPECT().Logout(gomock.Any()).Return(nil)
+	mockProvider2.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	// Call LogoutAll - should remove both cache files.
+	ctx := context.Background()
+	err = m.LogoutAll(ctx)
+	require.NoError(t, err)
+
+	// Verify both cache files were removed.
+	for _, providerName := range []string{"sso1", "sso2"} {
+		filePath := writer.GetProvisionedIdentitiesPath(providerName)
+		_, err := os.Stat(filePath)
+		assert.True(t, os.IsNotExist(err), "Cache file for %s should be removed", providerName)
+	}
+}
+
+func TestManager_RemoveProvisionedIdentitiesCache(t *testing.T) {
+	// Test the removeProvisionedIdentitiesCache method directly.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockValidator := types.NewMockValidator(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers:  map[string]schema.Provider{},
+		Identities: map[string]schema.Identity{},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		validator:       mockValidator,
+		providers:       map[string]types.Provider{},
+		identities:      map[string]types.Identity{},
+	}
+
+	// Create a cache file.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	result := &types.ProvisioningResult{
+		Provider:      "test-provider",
+		ProvisionedAt: time.Now(),
+		Identities: map[string]*schema.Identity{
+			"account1/role1": {
+				Provider: "test-provider",
+			},
+		},
+		Metadata: types.ProvisioningMetadata{
+			Source: "test",
+		},
+	}
+
+	filePath, err := writer.Write(result)
+	require.NoError(t, err)
+	assert.FileExists(t, filePath)
+
+	// Remove the cache.
+	err = m.removeProvisionedIdentitiesCache("test-provider")
+	require.NoError(t, err)
+
+	// Verify file was removed.
+	_, err = os.Stat(filePath)
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestManager_RemoveProvisionedIdentitiesCache_NonExistent(t *testing.T) {
+	// Test removing non-existent cache (should succeed).
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockValidator := types.NewMockValidator(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers:  map[string]schema.Provider{},
+		Identities: map[string]schema.Identity{},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		validator:       mockValidator,
+		providers:       map[string]types.Provider{},
+		identities:      map[string]types.Identity{},
+	}
+
+	// Remove non-existent cache - should not error.
+	err := m.removeProvisionedIdentitiesCache("non-existent-provider")
+	require.NoError(t, err)
 }
