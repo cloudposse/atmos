@@ -492,4 +492,3 @@ func (m *mockSSOClientRolesPaginated) ListAccountRoles(ctx context.Context, inpu
 
 	return output, nil
 }
-
