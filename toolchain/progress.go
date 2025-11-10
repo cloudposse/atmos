@@ -1,33 +1,39 @@
 package toolchain
 
 import (
-	"fmt"
-	"os"
-
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-func resetLine(stderr *os.File, isTTY bool) {
+// isTTY returns true if stderr is a TTY (for progress bar display).
+func isTTY() bool {
+	return term.IsTTYSupportForStderr()
+}
+
+func resetLine() {
 	defer perf.Track(nil, "toolchain.resetLine")()
 
-	if isTTY {
-		fmt.Fprintf(stderr, "\r\033[K")
+	if isTTY() {
+		ui.Write("\r\033[K")
 	}
 }
 
-func printStatusLine(stderr *os.File, isTTY bool, line string) {
+func printStatusLine(line string) {
 	defer perf.Track(nil, "toolchain.printStatusLine")()
 
-	resetLine(stderr, isTTY)
-	fmt.Fprintln(stderr, line)
+	resetLine()
+	ui.Writeln(line)
 }
 
-func printProgressBar(stderr *os.File, isTTY bool, line string) {
+func printProgressBar(line string) {
 	defer perf.Track(nil, "toolchain.printProgressBar")()
 
-	if isTTY {
-		fmt.Fprintf(stderr, "\r\033[K%s", line)
+	// UI layer automatically handles TTY detection and ANSI codes.
+	// The isTTY check is kept for progress bar logic (show animation vs static output).
+	if isTTY() {
+		ui.Write("\r\033[K" + line)
 	} else {
-		fmt.Fprintln(stderr, line)
+		ui.Writeln(line)
 	}
 }

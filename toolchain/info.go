@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -77,7 +78,7 @@ func InfoExec(toolName, outputFormat string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get evaluated YAML: %w", err)
 		}
-		fmt.Print(evaluatedYAML)
+		data.Write(evaluatedYAML)
 	} else {
 		// Enhanced table format (default).
 		markdown := formatEnhancedToolInfo(&toolContext{

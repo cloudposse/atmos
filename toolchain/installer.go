@@ -3,6 +3,7 @@ package toolchain
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"errors"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -390,17 +392,17 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 		return "", fmt.Errorf("%w: failed to download asset: HTTP %d", ErrHTTPRequest, resp.StatusCode)
 	}
 
-	// Create the file
-	file, err := os.Create(cachePath)
+	// Read response body into memory.
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to create cache file: %w", ErrFileOperation, err)
+		return "", fmt.Errorf("%w: failed to read response body: %w", ErrHTTPRequest, err)
 	}
-	defer file.Close()
 
-	// Copy the response body to the file
-	_, err = io.Copy(file, resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("%w: failed to write cache file: %w", ErrFileOperation, err)
+	// Write atomically to cache using filesystem package.
+	fs := filesystem.NewOSFileSystem()
+	if err := fs.WriteFileAtomic(cachePath, buf.Bytes(), defaultFileWritePermissions); err != nil {
+		return "", fmt.Errorf("%w: failed to write cache file atomically: %w", ErrFileOperation, err)
 	}
 
 	return cachePath, nil

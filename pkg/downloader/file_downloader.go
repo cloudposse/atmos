@@ -20,6 +20,7 @@ type fileDownloader struct {
 	clientFactory     ClientFactory
 	tempPathGenerator func() string
 	fileReader        func(string) ([]byte, error)
+	atomicWriter      func(string, []byte, os.FileMode) error
 }
 
 // NewFileDownloader initializes a FileDownloader with dependency injection.
@@ -28,6 +29,7 @@ func NewFileDownloader(factory ClientFactory) FileDownloader {
 		clientFactory:     factory,
 		tempPathGenerator: func() string { return filepath.Join(os.TempDir(), uuid.New().String()) },
 		fileReader:        os.ReadFile,
+		atomicWriter:      writeFileAtomicDefault,
 	}
 }
 
@@ -109,4 +111,38 @@ func (fd *fileDownloader) FetchData(src string) ([]byte, error) {
 	}
 
 	return fd.fileReader(filePath)
+}
+
+// FetchAtomic downloads a file atomically to the destination.
+// Uses temp file + fsync + atomic rename to prevent partial downloads or corruption.
+func (fd *fileDownloader) FetchAtomic(src, dest string, mode ClientMode, timeout time.Duration) error {
+	// Download to a temporary location first.
+	tempPath := fd.tempPathGenerator()
+	defer os.Remove(tempPath)
+
+	// Fetch to temp location.
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	client, err := fd.clientFactory.NewClient(ctx, src, tempPath, mode)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errUtils.ErrCreateDownloadClient, err)
+	}
+
+	if err := client.Get(); err != nil {
+		return err
+	}
+
+	// Read the downloaded content.
+	data, err := fd.fileReader(tempPath)
+	if err != nil {
+		return fmt.Errorf("%w: failed to read downloaded file: %v", errUtils.ErrDownloadFile, err)
+	}
+
+	// Write atomically to final destination using injected writer.
+	if err := fd.atomicWriter(dest, data, 0o644); err != nil {
+		return fmt.Errorf("%w: failed to write file atomically: %v", errUtils.ErrDownloadFile, err)
+	}
+
+	return nil
 }

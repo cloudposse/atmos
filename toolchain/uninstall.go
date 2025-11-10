@@ -11,7 +11,6 @@ import (
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -160,7 +159,7 @@ func uninstallSingleTool(installer *Installer, owner, repo, version string, show
 		// If the binary is not found, treat as success (idempotent delete)
 		if errors.Is(err, ErrToolNotFound) || os.IsNotExist(err) {
 			if showProgressBar {
-				printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s/%s@%s not installed", theme.Styles.Checkmark, owner, repo, version))
+				printStatusLine(fmt.Sprintf("%s %s/%s@%s not installed", theme.Styles.Checkmark, owner, repo, version))
 			}
 			return nil
 		}
@@ -175,14 +174,14 @@ func uninstallSingleTool(installer *Installer, owner, repo, version string, show
 		// Show progress for finding tool
 		percent = progressFindingTool
 		bar := progressBar.ViewAs(percent)
-		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf(progressBarFormat, spinner.View(), bar))
+		printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
 		spinner, _ = spinner.Update(bspinner.TickMsg{})
 		time.Sleep(100 * time.Millisecond)
 
 		// Show progress for removing
 		percent = progressRemoving
 		bar = progressBar.ViewAs(percent)
-		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf(progressBarFormat, spinner.View(), bar))
+		printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
 		spinner.Update(bspinner.TickMsg{})
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -193,12 +192,12 @@ func uninstallSingleTool(installer *Installer, owner, repo, version string, show
 		// If the binary is already gone, treat as success
 		if errors.Is(err, ErrToolNotFound) || os.IsNotExist(err) {
 			if showProgressBar {
-				printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s/%s@%s not installed", theme.Styles.Checkmark, owner, repo, version))
+				printStatusLine(fmt.Sprintf("%s %s/%s@%s not installed", theme.Styles.Checkmark, owner, repo, version))
 			}
 			return nil
 		}
 		if showProgressBar {
-			printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s/%s@%s failed to uninstall: %v", theme.Styles.XMark, owner, repo, version, err))
+			printStatusLine(fmt.Sprintf("%s %s/%s@%s failed to uninstall: %v", theme.Styles.XMark, owner, repo, version, err))
 		}
 		return err
 	}
@@ -209,13 +208,11 @@ func uninstallSingleTool(installer *Installer, owner, repo, version string, show
 		progressBar := progress.New(progress.WithDefaultGradient())
 		spinner := bspinner.New()
 		bar := progressBar.ViewAs(percent)
-		printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf(progressBarFormat, spinner.View(), bar))
+		printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
 		time.Sleep(100 * time.Millisecond)
 		// Clear the line before printing the summary
-		if term.IsTerminal(int(os.Stderr.Fd())) {
-			fmt.Fprint(os.Stderr, "\r\033[K")
-		}
-		printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s/%s@%s uninstalled", theme.Styles.Checkmark, owner, repo, version))
+		resetLine()
+		printStatusLine(fmt.Sprintf("%s %s/%s@%s uninstalled", theme.Styles.Checkmark, owner, repo, version))
 	}
 
 	return nil
@@ -302,31 +299,30 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 		}
 		percent := float64(i+1) / float64(len(installedTools))
 		bar := progressBar.ViewAs(percent)
-		resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
-		fmt.Fprintln(os.Stderr, msg)
+		resetLine()
+		ui.Writeln(msg)
 		// Show animated progress for a moment
 		for j := 0; j < maxSpinnerUpdates; j++ {
-			printProgressBar(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf(progressBarFormat, spinner.View(), bar))
+			printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
 			spinner, _ = spinner.Update(bspinner.TickMsg{})
 			time.Sleep(50 * time.Millisecond)
 		}
 	}
-	resetLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())))
-	fmt.Fprintln(os.Stderr)
+	resetLine()
+	ui.Writeln("")
 
 	// Print summary message based on results
-	isTerminal := term.IsTerminal(int(os.Stderr.Fd()))
 	switch {
 	case totalTools == 0:
-		printStatusLine(os.Stderr, isTerminal, fmt.Sprintf("%s no tools to uninstall", theme.Styles.Checkmark))
+		printStatusLine(fmt.Sprintf("%s no tools to uninstall", theme.Styles.Checkmark))
 	case failedCount == 0 && alreadyRemovedCount == 0:
-		printStatusLine(os.Stderr, isTerminal, fmt.Sprintf("%s uninstalled %d tools", theme.Styles.Checkmark, installedCount))
+		printStatusLine(fmt.Sprintf("%s uninstalled %d tools", theme.Styles.Checkmark, installedCount))
 	case failedCount == 0 && alreadyRemovedCount > 0:
-		printStatusLine(os.Stderr, isTerminal, fmt.Sprintf("%s uninstalled %d tools, skipped %d", theme.Styles.Checkmark, installedCount, alreadyRemovedCount))
+		printStatusLine(fmt.Sprintf("%s uninstalled %d tools, skipped %d", theme.Styles.Checkmark, installedCount, alreadyRemovedCount))
 	case failedCount > 0:
-		printStatusLine(os.Stderr, isTerminal, fmt.Sprintf("%s uninstalled %d tools, %d failed, skipped %d", theme.Styles.XMark, installedCount, failedCount, alreadyRemovedCount))
+		printStatusLine(fmt.Sprintf("%s uninstalled %d tools, %d failed, skipped %d", theme.Styles.XMark, installedCount, failedCount, alreadyRemovedCount))
 	default:
-		printStatusLine(os.Stderr, isTerminal, fmt.Sprintf("%s uninstalled %d tools, %d failed, skipped %d", theme.Styles.Checkmark, installedCount, failedCount, alreadyRemovedCount))
+		printStatusLine(fmt.Sprintf("%s uninstalled %d tools, %d failed, skipped %d", theme.Styles.Checkmark, installedCount, failedCount, alreadyRemovedCount))
 	}
 
 	return nil
