@@ -187,6 +187,14 @@ func TestCleanCommandProvider(t *testing.T) {
 	t.Run("GetGroup returns correct group", func(t *testing.T) {
 		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
 	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
+	})
 }
 
 // TestExecCommandProvider tests ExecCommandProvider implementation.
@@ -205,6 +213,14 @@ func TestExecCommandProvider(t *testing.T) {
 
 	t.Run("GetGroup returns correct group", func(t *testing.T) {
 		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
 	})
 }
 
@@ -231,6 +247,14 @@ func TestGetCommandProvider(t *testing.T) {
 		require.NotNil(t, builder, "get command has flags and should return parser")
 		assert.Equal(t, getParser, builder)
 	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
+	})
 }
 
 // TestInfoCommandProvider tests InfoCommandProvider implementation.
@@ -247,10 +271,22 @@ func TestInfoCommandProvider(t *testing.T) {
 		assert.Equal(t, "info", provider.GetName())
 	})
 
+	t.Run("GetGroup returns correct group", func(t *testing.T) {
+		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
 	t.Run("GetFlagsBuilder returns non-nil parser", func(t *testing.T) {
 		builder := provider.GetFlagsBuilder()
 		require.NotNil(t, builder, "info command has flags and should return parser")
 		assert.Equal(t, infoParser, builder)
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
 	})
 }
 
@@ -268,10 +304,22 @@ func TestInstallCommandProvider(t *testing.T) {
 		assert.Equal(t, "install", provider.GetName())
 	})
 
+	t.Run("GetGroup returns correct group", func(t *testing.T) {
+		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
 	t.Run("GetFlagsBuilder returns non-nil parser", func(t *testing.T) {
 		builder := provider.GetFlagsBuilder()
 		require.NotNil(t, builder, "install command has flags and should return parser")
 		assert.Equal(t, installParser, builder)
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
 	})
 }
 
@@ -289,10 +337,22 @@ func TestPathCommandProvider(t *testing.T) {
 		assert.Equal(t, "path", provider.GetName())
 	})
 
+	t.Run("GetGroup returns correct group", func(t *testing.T) {
+		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
 	t.Run("GetFlagsBuilder returns non-nil parser", func(t *testing.T) {
 		builder := provider.GetFlagsBuilder()
 		require.NotNil(t, builder, "path command has flags and should return parser")
 		assert.Equal(t, pathParser, builder)
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
 	})
 }
 
@@ -309,6 +369,18 @@ func TestListCommandProvider(t *testing.T) {
 	t.Run("GetName returns correct name", func(t *testing.T) {
 		assert.Equal(t, "list", provider.GetName())
 	})
+
+	t.Run("GetGroup returns correct group", func(t *testing.T) {
+		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
+	})
 }
 
 // TestRemoveCommandProvider tests RemoveCommandProvider implementation.
@@ -323,6 +395,18 @@ func TestRemoveCommandProvider(t *testing.T) {
 
 	t.Run("GetName returns correct name", func(t *testing.T) {
 		assert.Equal(t, "remove", provider.GetName())
+	})
+
+	t.Run("GetGroup returns correct group", func(t *testing.T) {
+		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
 	})
 }
 
@@ -339,6 +423,18 @@ func TestSetCommandProvider(t *testing.T) {
 	t.Run("GetName returns correct name", func(t *testing.T) {
 		assert.Equal(t, "set", provider.GetName())
 	})
+
+	t.Run("GetGroup returns correct group", func(t *testing.T) {
+		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
+	})
 }
 
 // TestUninstallCommandProvider tests UninstallCommandProvider implementation.
@@ -353,6 +449,18 @@ func TestUninstallCommandProvider(t *testing.T) {
 
 	t.Run("GetName returns correct name", func(t *testing.T) {
 		assert.Equal(t, "uninstall", provider.GetName())
+	})
+
+	t.Run("GetGroup returns correct group", func(t *testing.T) {
+		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
 	})
 }
 
@@ -369,6 +477,18 @@ func TestWhichCommandProvider(t *testing.T) {
 	t.Run("GetName returns correct name", func(t *testing.T) {
 		assert.Equal(t, "which", provider.GetName())
 	})
+
+	t.Run("GetGroup returns correct group", func(t *testing.T) {
+		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
+	})
 }
 
 // TestSearchCommandProvider tests SearchCommandProvider implementation.
@@ -383,6 +503,18 @@ func TestSearchCommandProvider(t *testing.T) {
 
 	t.Run("GetName returns correct name", func(t *testing.T) {
 		assert.Equal(t, "search", provider.GetName())
+	})
+
+	t.Run("GetGroup returns correct group", func(t *testing.T) {
+		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
 	})
 }
 
@@ -408,6 +540,14 @@ func TestToolchainCommandProvider(t *testing.T) {
 		builder := provider.GetFlagsBuilder()
 		require.NotNil(t, builder, "toolchain command has persistent flags and should return parser")
 		assert.Equal(t, toolchainParser, builder)
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
 	})
 
 	t.Run("Command has subcommands", func(t *testing.T) {

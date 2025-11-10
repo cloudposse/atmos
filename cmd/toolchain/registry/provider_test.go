@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
 )
 
 // TestRegistryCommandProvider tests RegistryCommandProvider implementation.
@@ -145,6 +147,117 @@ func TestRegistrySubcommands(t *testing.T) {
 			subCmd, _, err := cmd.Find([]string{subName})
 			require.NoError(t, err)
 			assert.Equal(t, subName, subCmd.Name())
+		})
+	}
+}
+
+// TestGetRegistryCommand tests the GetRegistryCommand function.
+func TestGetRegistryCommand(t *testing.T) {
+	cmd := GetRegistryCommand()
+	require.NotNil(t, cmd, "GetRegistryCommand should return non-nil command")
+	assert.Equal(t, "registry", cmd.Use, "GetRegistryCommand should return registry command")
+}
+
+// TestListConfiguredRegistries tests listConfiguredRegistries function.
+func TestListConfiguredRegistries(t *testing.T) {
+	// This function just outputs a message - test that it doesn't error.
+	err := listConfiguredRegistries(nil)
+	assert.NoError(t, err, "listConfiguredRegistries should not return error")
+}
+
+// TestDisplayToolsTable tests displayToolsTable function with various inputs.
+func TestDisplayToolsTable(t *testing.T) {
+	tests := []struct {
+		name  string
+		tools []*toolchainregistry.Tool
+	}{
+		{
+			name:  "empty tools list",
+			tools: []*toolchainregistry.Tool{},
+		},
+		{
+			name: "single tool",
+			tools: []*toolchainregistry.Tool{
+				{
+					RepoOwner: "hashicorp",
+					RepoName:  "terraform",
+					Type:      "github_release",
+				},
+			},
+		},
+		{
+			name: "multiple tools",
+			tools: []*toolchainregistry.Tool{
+				{
+					RepoOwner: "hashicorp",
+					RepoName:  "terraform",
+					Type:      "github_release",
+				},
+				{
+					RepoOwner: "kubernetes",
+					RepoName:  "kubectl",
+					Type:      "github_release",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This function just outputs UI - test that it doesn't panic.
+			assert.NotPanics(t, func() {
+				displayToolsTable(tt.tools)
+			}, "displayToolsTable should not panic")
+		})
+	}
+}
+
+// TestDisplaySearchResults tests displaySearchResults function with various inputs.
+func TestDisplaySearchResults(t *testing.T) {
+	tests := []struct {
+		name  string
+		tools []*toolchainregistry.Tool
+	}{
+		{
+			name:  "empty results",
+			tools: []*toolchainregistry.Tool{},
+		},
+		{
+			name: "single result",
+			tools: []*toolchainregistry.Tool{
+				{
+					RepoOwner: "hashicorp",
+					RepoName:  "terraform",
+					Type:      "github_release",
+					Registry:  "aqua-public",
+				},
+			},
+		},
+		{
+			name: "multiple results",
+			tools: []*toolchainregistry.Tool{
+				{
+					RepoOwner: "hashicorp",
+					RepoName:  "terraform",
+					Type:      "github_release",
+					Registry:  "aqua-public",
+				},
+				{
+					RepoOwner: "kubernetes",
+					RepoName:  "kubectl",
+					Type:      "github_release",
+					Registry:  "aqua-public",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This function just outputs UI - test that it doesn't panic.
+			assert.NotPanics(t, func() {
+				displaySearchResults(tt.tools)
+			}, "displaySearchResults should not panic")
 		})
 	}
 }

@@ -382,3 +382,20 @@ func TestToolchainUninstallCommand(t *testing.T) {
 	_, err = os.Stat(binaryPath)
 	assert.True(t, os.IsNotExist(err), "Binary should be removed")
 }
+
+// TestSetAtmosConfig tests the SetAtmosConfig function.
+func TestSetAtmosConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosCfg := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile:    filepath.Join(tempDir, ".tool-versions"),
+			InstallPath:     filepath.Join(tempDir, ".tools"),
+			ToolsConfigFile: filepath.Join(tempDir, "tools.yaml"),
+		},
+	}
+
+	// Test that SetAtmosConfig doesn't panic.
+	assert.NotPanics(t, func() {
+		SetAtmosConfig(atmosCfg)
+	}, "SetAtmosConfig should not panic")
+}
