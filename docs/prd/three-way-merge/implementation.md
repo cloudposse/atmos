@@ -81,15 +81,13 @@ components:
     base_path: "components/terraform"
     apply_auto_approve: false
 
-# Ours: User's customized version (added project settings)
+# Ours: User's customized version (changed base_path)
 components:
   terraform:
-    base_path: "components/terraform"
+    base_path: "infrastructure/terraform"  # User changed to own convention
     apply_auto_approve: false
-    custom_hooks:                    # User added hooks
-      pre_apply: "./scripts/validate.sh"
 
-# Theirs: New template version (adds new features)
+# Theirs: New template version (adds new settings)
 components:
   terraform:
     base_path: "components/terraform"
@@ -97,14 +95,12 @@ components:
     deploy_run_init: true            # Template adds new feature
     auto_generate_backend_file: true
 
-# Desired result: Both preserved
+# Desired result: User's path + template's new features
 components:
   terraform:
-    base_path: "components/terraform"
+    base_path: "infrastructure/terraform"  # User's customization preserved
     apply_auto_approve: false
-    custom_hooks:                    # User's customization
-      pre_apply: "./scripts/validate.sh"
-    deploy_run_init: true            # Template's new feature
+    deploy_run_init: true                  # Template's new feature
     auto_generate_backend_file: true
 ```
 
