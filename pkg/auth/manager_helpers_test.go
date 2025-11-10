@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -596,4 +597,69 @@ func TestCreateAndAuthenticateManager_AutoDetectMultipleDefaults(t *testing.T) {
 	// We handle this gracefully by returning nil
 	assert.NoError(t, err, "Should not propagate error from GetDefaultIdentity")
 	assert.Nil(t, manager, "Manager should be nil when multiple defaults in CI mode")
+}
+
+func TestCreateAndAuthenticateManager_ExplicitlyDisabled(t *testing.T) {
+	// When --identity=off/false/no/0 is provided, authentication should be disabled
+	// even if auth is configured in atmos.yaml or stack configs.
+	// This allows users to use external identity mechanisms like Leapp.
+
+	authConfig := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-provider": {
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://test.awsapps.com/start",
+			},
+		},
+		Identities: map[string]schema.Identity{
+			"default-identity": {
+				Kind:    "aws/permission-set",
+				Default: true, // Even with default identity configured
+				Via: &schema.IdentityVia{
+					Provider: "test-provider",
+				},
+				Principal: map[string]interface{}{
+					"name": "DefaultAccess",
+					"account": map[string]interface{}{
+						"name": "default-account",
+					},
+				},
+			},
+		},
+	}
+
+	// Pass the __DISABLED__ sentinel value (from --identity=off/false/no/0)
+	manager, err := CreateAndAuthenticateManager(cfg.IdentityFlagDisabledValue, authConfig, "__SELECT__")
+
+	// Should return nil (no authentication) even though auth is configured
+	assert.NoError(t, err, "Should not error when authentication is explicitly disabled")
+	assert.Nil(t, manager, "Manager should be nil when authentication is explicitly disabled")
+}
+
+func TestCreateAndAuthenticateManager_NoAuthConfigured_NoIdentityFlag(t *testing.T) {
+	// When no auth is configured in atmos.yaml or stack configs,
+	// and no --identity flag is provided, Atmos Auth should not be used at all.
+	// This allows users to rely on external identity mechanisms (env vars, Leapp, IMDS, etc.)
+
+	// No identity flag provided (empty string)
+	// No auth config (nil)
+	manager, err := CreateAndAuthenticateManager("", nil, "__SELECT__")
+
+	// Should return nil (no authentication) - Atmos Auth not used
+	assert.NoError(t, err, "Should not error when no auth configured")
+	assert.Nil(t, manager, "Manager should be nil when no auth configured")
+}
+
+func TestCreateAndAuthenticateManager_NoAuthConfigured_WithExplicitIdentity(t *testing.T) {
+	// When no auth is configured but user provides --identity flag,
+	// should return error explaining that auth needs to be configured.
+
+	// No auth config but explicit identity provided
+	manager, err := CreateAndAuthenticateManager("some-identity", nil, "__SELECT__")
+
+	// Should error because auth is not configured
+	assert.Error(t, err, "Should error when identity specified but auth not configured")
+	assert.ErrorIs(t, err, errUtils.ErrAuthNotConfigured, "Should return ErrAuthNotConfigured")
+	assert.Nil(t, manager, "Manager should be nil on error")
 }

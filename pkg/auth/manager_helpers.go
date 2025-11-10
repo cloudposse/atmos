@@ -8,6 +8,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -43,11 +44,19 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig) (string, error) {
 
 // CreateAndAuthenticateManager creates and authenticates an AuthManager from an identity name.
 // If identityName is empty, attempts to auto-detect a default identity from configuration.
-// Returns nil AuthManager only if no identity is specified AND no default identity is configured.
+// Returns nil AuthManager only if no identity is specified AND no default identity is configured,
+// or if authentication is explicitly disabled.
 // Returns error if authentication fails or if identity is specified but auth is not configured.
 //
 // This helper is used by both CLI commands and internal execution logic to ensure
 // consistent authentication behavior across the codebase.
+//
+// Identity resolution behavior:
+//   - If identityName is cfg.IdentityFlagDisabledValue ("__DISABLED__"), returns nil (authentication explicitly disabled)
+//   - If identityName is empty and no auth configured, returns nil (no authentication)
+//   - If identityName is empty and auth configured, attempts auto-detection of default identity
+//   - If identityName is selectValue ("__SELECT__"), prompts for identity selection
+//   - Otherwise, uses the provided identityName
 //
 // Auto-detection behavior when identityName is empty:
 //   - If auth is not configured (no identities), returns nil (no authentication)
@@ -57,13 +66,14 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig) (string, error) {
 //   - If no defaults exist, returns nil (no authentication)
 //
 // Parameters:
-//   - identityName: The identity to authenticate (can be "__SELECT__" for interactive selection, or empty for auto-detection)
+//   - identityName: The identity to authenticate (can be "__SELECT__" for interactive selection,
+//     "__DISABLED__" to disable auth, or empty for auto-detection)
 //   - authConfig: The auth configuration from atmos.yaml and stack configs
 //   - selectValue: The special value that triggers interactive identity selection (typically "__SELECT__")
 //
 // Returns:
 //   - AuthManager with populated AuthContext after successful authentication
-//   - nil if no identity specified and no default identity configured
+//   - nil if authentication disabled, no identity specified, or no default identity configured
 //   - error if authentication fails or auth is not configured when identity is specified
 //
 //nolint:revive // Complexity is acceptable for authentication logic with auto-detection, validation, and error handling
@@ -72,6 +82,12 @@ func CreateAndAuthenticateManager(
 	authConfig *schema.AuthConfig,
 	selectValue string,
 ) (AuthManager, error) {
+	// Check if authentication is explicitly disabled via --identity=off/false/no/0.
+	// This allows users to use external identity mechanisms (e.g., Leapp).
+	if identityName == cfg.IdentityFlagDisabledValue {
+		return nil, nil
+	}
+
 	// Auto-detect default identity if no identity name provided.
 	if identityName == "" {
 		// Return nil if auth is not configured at all (backward compatible).
