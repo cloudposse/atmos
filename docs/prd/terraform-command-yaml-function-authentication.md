@@ -1,7 +1,6 @@
 # PRD: YAML Function Authentication in Terraform Commands
 
 **Status:** ✅ COMPLETE
-**Issue:** [infra-live#1640](https://github.com/cloudposse/infra-live/pull/1640)
 **Implementation Date:** November 7, 2025
 
 ## Executive Summary
@@ -57,7 +56,7 @@ components:
 
 The command fails with authentication errors:
 
-```
+```text
 failed to read Terraform state for component vpc in stack core-ue2-auto
 in YAML function: !terraform.state vpc vpc_id
 failed to get object from S3: operation error S3: GetObject,
@@ -82,7 +81,7 @@ authentication gap exists because:
 
 **Terraform Command Flow (BROKEN):**
 
-```
+```text
 cmd/terraform_utils.go:terraformRun()
   ↓ Parses --identity flag → info.Identity
   ↓
@@ -105,7 +104,7 @@ YAML functions evaluated WITHOUT AuthContext ❌
 
 **Describe Command Flow (WORKING - Fixed in PR #1742):**
 
-```
+```text
 cmd/describe_component.go → describeComponentRun()
   ↓ Parses --identity flag
   ↓
@@ -166,7 +165,11 @@ for describe commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error
 
 // After:
-func ExecuteTerraform(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, authManager *auth.Manager) error
+func ExecuteTerraform(
+	atmosConfig *schema.AtmosConfiguration,
+	info schema.ConfigAndStacksInfo,
+	authManager *auth.Manager,
+) error
 ```
 
 **2. Update `ProcessStacks()` signature:**
@@ -174,23 +177,23 @@ func ExecuteTerraform(atmosConfig *schema.AtmosConfiguration, info schema.Config
 ```go
 // Before:
 func ProcessStacks(
-atmosConfig *schema.AtmosConfiguration,
-configAndStacksInfo schema.ConfigAndStacksInfo,
-checkStack bool,
-processTemplates bool,
-processYamlFunctions bool,
-skip []string,
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
+	checkStack bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
 ) (schema.ConfigAndStacksInfo, error)
 
 // After:
 func ProcessStacks(
-atmosConfig *schema.AtmosConfiguration,
-configAndStacksInfo schema.ConfigAndStacksInfo,
-checkStack bool,
-processTemplates bool,
-processYamlFunctions bool,
-skip []string,
-authManager *auth.Manager,
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
+	checkStack bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
+	authManager *auth.Manager,
 ) (schema.ConfigAndStacksInfo, error)
 ```
 
@@ -199,40 +202,44 @@ authManager *auth.Manager,
 ```go
 // Before:
 func ProcessComponentConfig(
-configAndStacksInfo *schema.ConfigAndStacksInfo,
-stack string,
-stacksMap map[string]any,
-componentType string,
-component string,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	stack string,
+	stacksMap map[string]any,
+	componentType string,
+	component string,
 ) error
 
 // After:
 func ProcessComponentConfig(
-configAndStacksInfo *schema.ConfigAndStacksInfo,
-stack string,
-stacksMap map[string]any,
-componentType string,
-component string,
-authManager *auth.Manager,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	stack string,
+	stacksMap map[string]any,
+	componentType string,
+	component string,
+	authManager *auth.Manager,
 ) error
 ```
 
 #### Phase 2: Create AuthManager in ExecuteTerraform
 
 ```go
-func ExecuteTerraform(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, authManager *auth.Manager) error {
-defer perf.Track(nil, "exec.ExecuteTerraform")()
+func ExecuteTerraform(
+	atmosConfig *schema.AtmosConfiguration,
+	info schema.ConfigAndStacksInfo,
+	authManager *auth.Manager,
+) error {
+	defer perf.Track(nil, "exec.ExecuteTerraform")()
 
-// If authManager not provided but identity specified, create it
-if authManager == nil && info.Identity != "" {
-var err error
-authManager, err = auth.NewManager(atmosConfig, info.Identity)
-if err != nil {
-return fmt.Errorf("failed to create auth manager: %w", err)
-}
-}
+	// If authManager not provided but identity specified, create it.
+	if authManager == nil && info.Identity != "" {
+		var err error
+		authManager, err = auth.NewManager(atmosConfig, info.Identity)
+		if err != nil {
+			return fmt.Errorf("failed to create auth manager: %w", err)
+		}
+	}
 
-// ... rest of function, passing authManager to ProcessStacks
+	// ... rest of function, passing authManager to ProcessStacks
 }
 ```
 
@@ -249,14 +256,14 @@ Pass `authManager` parameter through:
 **terraform_utils.go:**
 
 ```go
-// Create AuthManager from info.Identity before calling ExecuteTerraform
+// Create AuthManager from info.Identity before calling ExecuteTerraform.
 var authManager *auth.Manager
 if info.Identity != "" {
-var err error
-authManager, err = auth.NewManager(&atmosConfig, info.Identity)
-if err != nil {
-return err
-}
+	var err error
+	authManager, err = auth.NewManager(&atmosConfig, info.Identity)
+	if err != nil {
+		return err
+	}
 }
 
 err = e.ExecuteTerraform(&atmosConfig, info, authManager)
@@ -280,9 +287,9 @@ Create test in `internal/exec/terraform_test.go`:
 
 ```go
 func TestExecuteTerraform_WithIdentityAndYAMLFunctions(t *testing.T) {
-// Test that --identity flag works with !terraform.state functions
-// Mock AuthManager to verify it's called correctly
-// Verify YAML functions receive AuthContext
+	// Test that --identity flag works with !terraform.state functions.
+	// Mock AuthManager to verify it's called correctly.
+	// Verify YAML functions receive AuthContext.
 }
 ```
 
@@ -290,13 +297,13 @@ Create test in `internal/exec/utils_test.go`:
 
 ```go
 func TestProcessStacks_WithAuthManager(t *testing.T) {
-// Test that ProcessStacks threads AuthManager correctly
-// Verify ProcessComponentConfig receives it
+	// Test that ProcessStacks threads AuthManager correctly.
+	// Verify ProcessComponentConfig receives it.
 }
 
 func TestProcessComponentConfig_WithAuthManager(t *testing.T) {
-// Test that ProcessComponentConfig uses AuthManager
-// Verify it's available during YAML function evaluation
+	// Test that ProcessComponentConfig uses AuthManager.
+	// Verify it's available during YAML function evaluation.
 }
 ```
 
@@ -306,10 +313,10 @@ Create test in `tests/cli_terraform_yaml_functions_auth_test.go`:
 
 ```go
 func TestTerraformPlanWithIdentityAndYAMLFunctions(t *testing.T) {
-// End-to-end test with real terraform command
-// Component config with !terraform.state functions
-// Verify --identity flag provides credentials
-// Verify YAML functions can access S3
+	// End-to-end test with real terraform command.
+	// Component config with !terraform.state functions.
+	// Verify --identity flag provides credentials.
+	// Verify YAML functions can access S3.
 }
 ```
 
@@ -435,49 +442,49 @@ Created a shared helper function to eliminate code duplication:
 
 ```go
 func CreateAndAuthenticateManager(
-identityName string,
-authConfig *schema.AuthConfig,
-selectValue string,
+	identityName string,
+	authConfig *schema.AuthConfig,
+	selectValue string,
 ) (AuthManager, error) {
-if identityName == "" {
-return nil, nil
-}
+	if identityName == "" {
+		return nil, nil
+	}
 
-// Check if auth is configured when identity is provided.
-if authConfig == nil || len(authConfig.Identities) == 0 {
-return nil, fmt.Errorf("%w: authentication requires at least one identity configured in atmos.yaml", errUtils.ErrAuthNotConfigured)
-}
+	// Check if auth is configured when identity is provided.
+	if authConfig == nil || len(authConfig.Identities) == 0 {
+		return nil, fmt.Errorf("%w: authentication requires at least one identity configured in atmos.yaml", errUtils.ErrAuthNotConfigured)
+	}
 
-// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
-authStackInfo := &schema.ConfigAndStacksInfo{
-AuthContext: &schema.AuthContext{},
-}
+	// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{},
+	}
 
-credStore := credentials.NewCredentialStore()
-validator := validation.NewValidator()
-authManager, err := NewAuthManager(authConfig, credStore, validator, authStackInfo)
-if err != nil {
-return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
-}
+	credStore := credentials.NewCredentialStore()
+	validator := validation.NewValidator()
+	authManager, err := NewAuthManager(authConfig, credStore, validator, authStackInfo)
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+	}
 
-// Handle interactive selection if identity matches the select value.
-forceSelect := identityName == selectValue
-if forceSelect {
-identityName, err = authManager.GetDefaultIdentity(forceSelect)
-if err != nil {
-return nil, err
-}
-}
+	// Handle interactive selection if identity matches the select value.
+	forceSelect := identityName == selectValue
+	if forceSelect {
+		identityName, err = authManager.GetDefaultIdentity(forceSelect)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-// CRITICAL: Authenticate to populate AuthContext with credentials.
-// This is critical for YAML functions like !terraform.state and !terraform.output
-// to access cloud resources with the proper credentials.
-_, err = authManager.Authenticate(context.Background(), identityName)
-if err != nil {
-return nil, err
-}
+	// CRITICAL: Authenticate to populate AuthContext with credentials.
+	// This is critical for YAML functions like !terraform.state and !terraform.output
+	// to access cloud resources with the proper credentials.
+	_, err = authManager.Authenticate(context.Background(), identityName)
+	if err != nil {
+		return nil, err
+	}
 
-return authManager, nil
+	return authManager, nil
 }
 ```
 
@@ -494,13 +501,13 @@ return authManager, nil
 
 ```go
 func ProcessStacks(
-atmosConfig *schema.AtmosConfiguration,
-configAndStacksInfo schema.ConfigAndStacksInfo,
-checkStack bool,
-processTemplates bool,
-processYamlFunctions bool,
-skip []string,
-authManager auth.AuthManager, // Added parameter
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo schema.ConfigAndStacksInfo,
+	checkStack bool,
+	processTemplates bool,
+	processYamlFunctions bool,
+	skip []string,
+	authManager auth.AuthManager, // Added parameter
 ) (schema.ConfigAndStacksInfo, error)
 ```
 
@@ -508,12 +515,12 @@ authManager auth.AuthManager, // Added parameter
 
 ```go
 func ProcessComponentConfig(
-configAndStacksInfo *schema.ConfigAndStacksInfo,
-stack string,
-stacksMap map[string]any,
-componentType string,
-component string,
-authManager auth.AuthManager, // Added parameter
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	stack string,
+	stacksMap map[string]any,
+	componentType string,
+	component string,
+	authManager auth.AuthManager, // Added parameter
 ) error
 ```
 
@@ -526,25 +533,25 @@ flexibility.
 
 ```go
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
-defer perf.Track(nil, "exec.ExecuteTerraform")()
+	defer perf.Track(nil, "exec.ExecuteTerraform")()
 
-// ... initialization code ...
+	// ... initialization code ...
 
-// Create and authenticate AuthManager from --identity flag if specified.
-// This enables YAML functions like !terraform.state to use authenticated credentials.
-authManager, err := auth.CreateAndAuthenticateManager(info.Identity, &atmosConfig.Auth, cfg.IdentityFlagSelectValue)
-if err != nil {
-return err
-}
+	// Create and authenticate AuthManager from --identity flag if specified.
+	// This enables YAML functions like !terraform.state to use authenticated credentials.
+	authManager, err := auth.CreateAndAuthenticateManager(info.Identity, &atmosConfig.Auth, cfg.IdentityFlagSelectValue)
+	if err != nil {
+		return err
+	}
 
-if shouldProcessStacks {
-info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
-if err != nil {
-return err
-}
-}
+	if shouldProcessStacks {
+		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
+		if err != nil {
+			return err
+		}
+	}
 
-// ... rest of function ...
+	// ... rest of function ...
 }
 ```
 
@@ -555,10 +562,10 @@ Added AuthContext population from AuthManager:
 ```go
 // Populate AuthContext from AuthManager if provided (from --identity flag).
 if authManager != nil {
-managerStackInfo := authManager.GetStackInfo()
-if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
-configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
-}
+	managerStackInfo := authManager.GetStackInfo()
+	if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+		configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+	}
 }
 ```
 
@@ -597,10 +604,10 @@ Refactored to delegate to shared helper, eliminating 45 lines of duplicate code:
 
 ```go
 func CreateAuthManagerFromIdentity(
-identityName string,
-authConfig *schema.AuthConfig,
+	identityName string,
+	authConfig *schema.AuthConfig,
 ) (auth.AuthManager, error) {
-return auth.CreateAndAuthenticateManager(identityName, authConfig, IdentityFlagSelectValue)
+	return auth.CreateAndAuthenticateManager(identityName, authConfig, IdentityFlagSelectValue)
 }
 ```
 
@@ -635,13 +642,13 @@ to populate AuthContext with credentials.
 // Authenticate to populate AuthContext with credentials.
 _, err = authManager.Authenticate(context.Background(), identityName)
 if err != nil {
-return nil, err
+	return nil, err
 }
 ```
 
 **Verification:** After adding the authentication call, testing in `infra-live` confirmed successful authentication:
 
-```
+```text
 INFO Authenticating with identity identity=core-identity/managers-team-access
 INFO Successfully authenticated identity=core-identity/managers-team-access
 DEBUG Adding auth-based environment variables
@@ -758,16 +765,16 @@ is configured at either the global or stack level.
 ```yaml
 auth:
   providers:
-    ins-sso:
+    acme-sso:
       kind: aws/iam-identity-center
       region: us-east-2
-      start_url: https://inspatial.awsapps.com/start
+      start_url: https://acme.awsapps.com/start
   identities:
     core-auto/terraform:
       kind: aws/permission-set
       default: true  # ← Auto-detected when no --identity flag
       via:
-        provider: ins-sso
+        provider: acme-sso
       principal:
         name: TerraformApplyAccess
         account:
@@ -826,40 +833,40 @@ atmos terraform plan vpc -s core-gbl-auto --identity other-identity
 
 ```go
 func CreateAndAuthenticateManager(
-    identityName string,
-    authConfig *schema.AuthConfig,
-    selectValue string,
+	identityName string,
+	authConfig *schema.AuthConfig,
+	selectValue string,
 ) (AuthManager, error) {
-    // Auto-detect default identity if no identity name provided
-    if identityName == "" {
-        // Return nil if auth is not configured (backward compatible)
-        if authConfig == nil || len(authConfig.Identities) == 0 {
-            return nil, nil
-        }
+	// Auto-detect default identity if no identity name provided.
+	if identityName == "" {
+		// Return nil if auth is not configured (backward compatible).
+		if authConfig == nil || len(authConfig.Identities) == 0 {
+			return nil, nil
+		}
 
-        // Create temporary manager to find default identity
-        tempStackInfo := &schema.ConfigAndStacksInfo{
-            AuthContext: &schema.AuthContext{},
-        }
-        credStore := credentials.NewCredentialStore()
-        validator := validation.NewValidator()
-        tempManager, err := NewAuthManager(authConfig, credStore, validator, tempStackInfo)
-        if err != nil {
-            return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
-        }
+		// Create temporary manager to find default identity.
+		tempStackInfo := &schema.ConfigAndStacksInfo{
+			AuthContext: &schema.AuthContext{},
+		}
+		credStore := credentials.NewCredentialStore()
+		validator := validation.NewValidator()
+		tempManager, err := NewAuthManager(authConfig, credStore, validator, tempStackInfo)
+		if err != nil {
+			return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+		}
 
-        // Try to get default identity
-        defaultIdentity, err := tempManager.GetDefaultIdentity(false)
-        if err != nil {
-            // No default identity - return nil (no authentication)
-            return nil, nil
-        }
+		// Try to get default identity.
+		defaultIdentity, err := tempManager.GetDefaultIdentity(false)
+		if err != nil {
+			// No default identity - return nil (no authentication).
+			return nil, nil
+		}
 
-        // Found default identity - use it
-        identityName = defaultIdentity
-    }
+		// Found default identity - use it.
+		identityName = defaultIdentity
+	}
 
-    // Rest of authentication logic...
+	// Rest of authentication logic...
 }
 ```
 
