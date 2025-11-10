@@ -97,14 +97,15 @@ func TestManager_ShowConfig(t *testing.T) {
 			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
 			os.Stdout = w
+			defer func() {
+				_ = w.Close()
+				os.Stdout = oldStdout
+			}()
 
 			err := mgr.ShowConfig(&schema.AtmosConfiguration{}, tt.devName)
 
-			// Restore stdout.
-			w.Close()
-			os.Stdout = oldStdout
-
 			// Read captured output.
+			_ = w.Close()
 			var buf bytes.Buffer
 			_, _ = io.Copy(&buf, r)
 
@@ -145,12 +146,14 @@ func TestPrintSettings(t *testing.T) {
 			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
 			os.Stdout = w
+			defer func() {
+				_ = w.Close()
+				os.Stdout = oldStdout
+			}()
 
 			printSettings(tt.settings)
 
-			w.Close()
-			os.Stdout = oldStdout
-
+			_ = w.Close()
 			var buf bytes.Buffer
 			_, _ = io.Copy(&buf, r)
 
@@ -187,12 +190,14 @@ func TestPrintBasicInfo(t *testing.T) {
 			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
 			os.Stdout = w
+			defer func() {
+				_ = w.Close()
+				os.Stdout = oldStdout
+			}()
 
 			printBasicInfo(tt.config)
 
-			w.Close()
-			os.Stdout = oldStdout
-
+			_ = w.Close()
 			var buf bytes.Buffer
 			_, _ = io.Copy(&buf, r)
 
@@ -259,12 +264,14 @@ func TestPrintBuildInfo(t *testing.T) {
 			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
 			os.Stdout = w
+			defer func() {
+				_ = w.Close()
+				os.Stdout = oldStdout
+			}()
 
 			printBuildInfo(tt.config)
 
-			w.Close()
-			os.Stdout = oldStdout
-
+			_ = w.Close()
 			var buf bytes.Buffer
 			_, _ = io.Copy(&buf, r)
 
@@ -329,12 +336,14 @@ func TestPrintWorkspaceInfo(t *testing.T) {
 			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
 			os.Stdout = w
+			defer func() {
+				_ = w.Close()
+				os.Stdout = oldStdout
+			}()
 
 			printWorkspaceInfo(tt.config)
 
-			w.Close()
-			os.Stdout = oldStdout
-
+			_ = w.Close()
 			var buf bytes.Buffer
 			_, _ = io.Copy(&buf, r)
 
@@ -386,12 +395,14 @@ func TestPrintMounts(t *testing.T) {
 			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
 			os.Stdout = w
+			defer func() {
+				_ = w.Close()
+				os.Stdout = oldStdout
+			}()
 
 			printMounts(tt.config)
 
-			w.Close()
-			os.Stdout = oldStdout
-
+			_ = w.Close()
 			var buf bytes.Buffer
 			_, _ = io.Copy(&buf, r)
 
@@ -459,12 +470,14 @@ func TestPrintPorts(t *testing.T) {
 			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
 			os.Stdout = w
+			defer func() {
+				_ = w.Close()
+				os.Stdout = oldStdout
+			}()
 
 			printPorts(tt.config)
 
-			w.Close()
-			os.Stdout = oldStdout
-
+			_ = w.Close()
 			var buf bytes.Buffer
 			_, _ = io.Copy(&buf, r)
 
@@ -516,12 +529,14 @@ func TestPrintEnv(t *testing.T) {
 			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
 			os.Stdout = w
+			defer func() {
+				_ = w.Close()
+				os.Stdout = oldStdout
+			}()
 
 			printEnv(tt.config)
 
-			w.Close()
-			os.Stdout = oldStdout
-
+			_ = w.Close()
 			var buf bytes.Buffer
 			_, _ = io.Copy(&buf, r)
 
@@ -570,12 +585,14 @@ func TestPrintRunArgs(t *testing.T) {
 			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
 			os.Stdout = w
+			defer func() {
+				_ = w.Close()
+				os.Stdout = oldStdout
+			}()
 
 			printRunArgs(tt.config)
 
-			w.Close()
-			os.Stdout = oldStdout
-
+			_ = w.Close()
 			var buf bytes.Buffer
 			_, _ = io.Copy(&buf, r)
 
@@ -618,12 +635,14 @@ func TestPrintRemoteUser(t *testing.T) {
 			oldStdout := os.Stdout
 			r, w, _ := os.Pipe()
 			os.Stdout = w
+			defer func() {
+				_ = w.Close()
+				os.Stdout = oldStdout
+			}()
 
 			printRemoteUser(tt.config)
 
-			w.Close()
-			os.Stdout = oldStdout
-
+			_ = w.Close()
 			var buf bytes.Buffer
 			_, _ = io.Copy(&buf, r)
 
