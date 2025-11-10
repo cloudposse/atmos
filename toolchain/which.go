@@ -11,11 +11,7 @@ import (
 
 const versionSplit = "@"
 
-func init() {
-	// No flags needed for which command
-}
-
-// WhichExec prints the absolute path to the resolved tool binary for toolName (optionally with ).
+// WhichExec prints the absolute path to the resolved tool binary for toolName (optionally with @version).
 // Returns an error if the tool is not configured or not installed.
 func WhichExec(toolName string) error {
 	defer perf.Track(nil, "toolchain.WhichExec")()

@@ -125,7 +125,7 @@ func printVersions(versions []string, defaultVersion string, installed map[strin
 	for _, v := range versions {
 		indicator := " "
 		if v == defaultVersion {
-			indicator = theme.Styles.Checkmark.String()
+			indicator = theme.Styles.Checkmark.Render()
 		}
 		if installed[v] {
 			fmt.Printf("%s %s\n", indicator, installedStyle.Render(v))
