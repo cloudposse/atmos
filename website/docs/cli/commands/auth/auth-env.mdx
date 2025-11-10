@@ -49,7 +49,6 @@ This separation allows you to add `eval $(atmos auth env)` to your shell profile
 
 **Use `atmos auth env` when:**
 - Adding authentication to your shell profile (`.zshrc`, `.bashrc`) for automatic configuration
-- Working with modern terminals like [Warp](https://warp.dev) where environment variables persist across panes
 - Integrating with CI/CD pipelines that need environment variables
 - Writing scripts that source credentials
 - You need credentials in a specific format (bash, json, dotenv)
@@ -130,7 +129,11 @@ The separation between setting environment variables (`atmos auth env`) and auth
 3. Re-authenticate when credentials expire without re-evaluating `atmos auth env`
 
 :::info Using with Warp Terminal
-[Warp](https://warp.dev) is a modern terminal that works well with `atmos auth env`. Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) is the preferred way to use Atmos authentication with Warp, as it ensures that new terminal windows and panes automatically have the appropriate environment variables set for your default identity.
+[Warp](https://warp.dev) is a modern terminal that works well with `atmos auth env`. When working with Warp or other feature-rich terminals, use `atmos auth env` instead of `atmos auth shell` to maintain the terminal's UI features (command palette, AI assistant, blocks, etc.).
+
+The `atmos auth shell` command launches a subshell that loses the terminal emulator's feature-rich UIs. Instead, use a helper function like `use-identity()` (shown below) that calls `atmos auth env` to get credentials for AWS CLI or other operations while maintaining your terminal's interface.
+
+Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensures that new terminal windows and panes automatically have the appropriate environment variables set for your default identity.
 :::
 
 <details>
