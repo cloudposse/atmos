@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -21,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // authLoginCmd logs in using a configured identity.
@@ -51,15 +51,16 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get identity from flag or use default.
-	// Read from cobra flags first (more reliable for persistent flags), then fall back to viper.
-	identityName, _ := cmd.Flags().GetString(IdentityFlagName)
-	if identityName == "" {
-		identityName = viper.GetString(IdentityFlagName)
-	}
+	// Use centralized function that handles Cobra's NoOptDefVal quirk correctly.
+	identityName := GetIdentityFromFlags(cmd, os.Args)
+
+	// Check if user wants to interactively select identity.
+	forceSelect := identityName == IdentityFlagSelectValue
 
 	// If no identity specified, get the default identity (which prompts if needed).
-	if identityName == "" {
-		identityName, err = authManager.GetDefaultIdentity()
+	// If --identity flag was used without value, forceSelect will be true.
+	if identityName == "" || forceSelect {
+		identityName, err = authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
 			return errors.Join(errUtils.ErrDefaultIdentity, err)
 		}
@@ -113,8 +114,7 @@ func formatDuration(d time.Duration) string {
 // displayAuthSuccess displays a styled success message with authentication details.
 func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 	// Display checkmark with success message.
-	checkMark := theme.Styles.Checkmark
-	fmt.Fprintf(os.Stderr, "\n%s Authentication successful!\n\n", checkMark)
+	u.PrintfMessageToTUI("\n%s Authentication successful!\n\n", theme.Styles.Checkmark)
 
 	// Build table rows.
 	var rows [][]string

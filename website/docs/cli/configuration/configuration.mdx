@@ -229,6 +229,50 @@ If `base_path` is provided, `components.terraform.base_path`, `components.helmfi
 base_path: "."
 ```
 
+### Git Root Discovery
+
+When using the default configuration and no local `atmos.yaml` exists in the current directory, Atmos automatically discovers the git repository root and uses it as the base path. This enables running Atmos from any subdirectory, just like Git.
+
+**How it works:**
+
+When you run Atmos from a subdirectory:
+1. Atmos checks if a local configuration exists in the current directory
+2. If no local configuration is found, it detects the git repository root
+3. The repository root is used as `base_path` automatically
+
+**Local configuration always takes precedence.** If any of these exist in the current directory, git root discovery is skipped:
+- `atmos.yaml` - Main config file
+- `.atmos.yaml` - Hidden config file
+- `.atmos/` - Config directory
+- `.atmos.d/` - Default imports directory
+- `atmos.d/` - Alternate imports directory
+
+**Example:**
+
+```bash
+# Repository structure:
+# /repo/
+#   atmos.yaml
+#   components/terraform/vpc/
+#     main.tf
+
+# Works from any subdirectory
+cd /repo/components/terraform/vpc
+atmos terraform plan vpc -s prod  # Automatically uses /repo as base_path
+```
+
+**Disabling git root discovery:**
+
+For testing or if you prefer explicit configuration, disable with an environment variable:
+
+```bash
+export ATMOS_GIT_ROOT_BASEPATH=false
+```
+
+:::tip
+This feature mirrors Git's behavior of finding the repository root from any subdirectory. You no longer need to `cd` back to the repository root to run Atmos commands.
+:::
+
 ### Windows Path Handling
 
 When configuring paths in `atmos.yaml` on Windows, there are important considerations for how YAML interprets backslashes:
@@ -362,7 +406,70 @@ The `settings` section configures Atmos global settings.
 
   <dt>`settings.inject_github_token`</dt>
   <dd>
-    Adds the `GITHUB_TOKEN` as a Bearer token for GitHub API requests, enabling authentication for private repositories and increased rate limits. If `ATMOS_GITHUB_TOKEN` is set, it takes precedence, overriding this behavior.
+    Enables automatic GitHub token injection when vendoring from private GitHub repositories. Defaults to `true`.
+
+    When enabled, Atmos automatically injects authentication credentials from `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variables. This eliminates the need to embed credentials in vendor URLs.
+
+    Set to `false` to disable automatic GitHub token injection.
+  </dd>
+
+  <dt>`settings.inject_gitlab_token`</dt>
+  <dd>
+    Enables automatic GitLab token injection when vendoring from private GitLab repositories. Defaults to `false`.
+
+    When enabled, Atmos automatically injects authentication credentials from `ATMOS_GITLAB_TOKEN` or `GITLAB_TOKEN` environment variables.
+
+    Set to `true` to enable automatic GitLab token injection:
+    ```yaml
+    settings:
+      inject_gitlab_token: true
+    ```
+  </dd>
+
+  <dt>`settings.inject_bitbucket_token`</dt>
+  <dd>
+    Enables automatic Bitbucket token injection when vendoring from private Bitbucket repositories. Defaults to `false`.
+
+    When enabled, Atmos automatically injects authentication credentials from `ATMOS_BITBUCKET_TOKEN` or `BITBUCKET_TOKEN` environment variables.
+
+    Set to `true` to enable automatic Bitbucket token injection:
+    ```yaml
+    settings:
+      inject_bitbucket_token: true
+    ```
+
+    For Bitbucket, you can also configure a custom username via `bitbucket_username` setting. If not specified, defaults to `x-token-auth`.
+  </dd>
+
+  <dt>`settings.github_username`</dt>
+  <dd>
+    Specifies the GitHub username for OCI registry authentication to GitHub Container Registry (ghcr.io).
+
+    When pulling artifacts from ghcr.io using `oci://ghcr.io/...` sources, Atmos requires a GitHub username along with the token. The username can be configured via:
+
+    - `github_username` setting in `atmos.yaml`
+    - `ATMOS_GITHUB_USERNAME` environment variable (highest precedence)
+    - `GITHUB_ACTOR` environment variable (automatically set in GitHub Actions)
+    - `GITHUB_USERNAME` environment variable
+
+    **Configuration example:**
+    ```yaml
+    settings:
+      github_username: "myusername"
+    ```
+
+    **GitHub Actions usage:**
+    ```yaml
+    # In GitHub Actions, GITHUB_ACTOR is automatically available
+    # No additional configuration needed
+    - name: Pull from GHCR
+      run: atmos vendor pull -c my-component
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # GITHUB_ACTOR is automatically set by GitHub Actions
+    ```
+
+    **Note:** Unlike Git repository authentication (which uses `x-access-token` as username), GitHub Container Registry requires your actual GitHub username. Without a username, authentication will fail even if `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` is set.
   </dd>
 
   <dt>`settings.docs` (Deprecated)</dt>
@@ -929,6 +1036,7 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | ATMOS_SETTINGS_LIST_MERGE_STRATEGY                    | settings.list_merge_strategy                    | Specifies how lists are merged in Atmos stack manifests. The following strategies are supported: `replace`, `append`, `merge`                                                                                                                                       |
 | ATMOS_VERSION_CHECK_ENABLED                           | version.check.enabled                           | Enable/disable Atmos version checks for updates to the newest release                                                                                                                                                                                               |
 | ATMOS_GITHUB_TOKEN                                    | N/A                                             | Bearer token for GitHub API requests, enabling authentication for private repositories and higher rate limits                                                                                                                                                       |
+| ATMOS_GITHUB_USERNAME                                 | settings.github_username                        | GitHub username for OCI registry authentication to ghcr.io. Falls back to GITHUB_ACTOR (GitHub Actions) or GITHUB_USERNAME if not set. Required when pulling from GitHub Container Registry                                                                        |
 | ATMOS_BITBUCKET_TOKEN                                 | N/A                                             | App password for Bitbucket API requests is set to avoid rate limits. Unauthenticated Requests are limited to 60 requests per hour across all API resources.                                                                                                         |
 | ATMOS_BITBUCKET_USERNAME                              | N/A                                             | Username for Bitbucket authentication. Takes precedence over BITBUCKET_USERNAME.                                                                                                                                                                                    |
 | ATMOS_GITLAB_TOKEN                                    | N/A                                             | Personal Access Token (PAT) for GitLab authentication. Unauthenticated users are limited to 6 requests per minute per IP address for certain endpoints, while authenticated users have higher thresholds.                                                           |

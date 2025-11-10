@@ -296,10 +296,11 @@ tests:
       - "--identity"
       - "nonexistent"
     expect:
+      ignore_trailing_whitespace: true
       diff: []
+      # Correctly rejects nonexistent identity immediately instead of falling back to default.
       stderr:
-        - "identity not found:"
-        - "nonexistent"
+        - "identity not found"
       exit_code: 1
 
   # Mock Provider Tests (enabled with mock authentication)

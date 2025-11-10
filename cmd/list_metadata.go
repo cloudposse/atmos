@@ -137,7 +137,7 @@ func listMetadata(cmd *cobra.Command, args []string) (string, error) {
 
 	// Get all stacks
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false,
-		params.ProcessingFlags.Templates, params.ProcessingFlags.Functions, false, nil)
+		params.ProcessingFlags.Templates, params.ProcessingFlags.Functions, false, nil, nil)
 	if err != nil {
 		return "", &listerrors.DescribeStacksError{Cause: err}
 	}

@@ -48,6 +48,9 @@
 **/.atmos/cache.yaml
 **/cache.*.txt
 
+# Conductor workspace uses pnpm, but project uses npm
+website/pnpm-lock.yaml
+
 # Development configs - track only specific files
 .atmos.d/*
 !.atmos.d/dev.yaml
@@ -67,6 +70,10 @@ coverage.*.tmp
 coverage/
 .gocoverdir/
 tests.test
+
+# Test binaries
+*.test
+**/*.test
 
 **/llms.txt
 **/llms-full.txt
@@ -89,6 +96,13 @@ tools/gomodcheck/.gomodcheck
 
 performance-optimization/
 
-# Merge conflict artifacts
+# Merge conflict artifacts and backup files
 *.orig
 *.rej
+*.bak
+*.go.bak
+**/*.go.bak
+
+# Scratch/temporary analysis files
+.scratch/
+scratch/

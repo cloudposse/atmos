@@ -43,7 +43,15 @@ atmos auth whoami
 
 <dl>
   <dt>`--identity` <em>(alias `-i`)</em></dt>
-  <dd>Specify the default identity for subcommands. Can be overridden per command.</dd>
+  <dd>
+    Specify the identity to use for authentication. Can be:
+    <ul>
+      <li>An identity name (e.g., <code>--identity admin</code>)</li>
+      <li>Empty for interactive selection (e.g., <code>--identity</code>)</li>
+      <li><code>false</code> to disable authentication (e.g., <code>--identity=false</code>)</li>
+    </ul>
+    When set to <code>false</code>, Atmos skips identity authentication and uses standard AWS credential resolution.
+  </dd>
 </dl>
 
 ## Subcommands
@@ -300,6 +308,10 @@ auth:
 
 ### AWS User (Break-glass)
 
+AWS User identities support static IAM user credentials with optional multi-factor authentication (MFA).
+
+#### Basic Configuration
+
 ```yaml
 auth:
   identities:
@@ -311,7 +323,7 @@ auth:
         region: us-east-1
 ```
 
-Alternatively
+Alternatively, store credentials in the system keychain:
 
 ```yaml
 auth:
@@ -323,6 +335,94 @@ auth:
 ```
 
 Then run `atmos auth user configure` to configure the credentials on the keychain. See [user configure](/cli/commands/auth/auth-user-configure) for details.
+
+#### Multi-Factor Authentication (MFA) for AWS
+
+AWS User identities support MFA devices for enhanced security. When an MFA device ARN is configured, Atmos will prompt for a time-based one-time password (TOTP) during authentication.
+
+:::note
+This section describes MFA implementation for AWS IAM users. Other cloud providers will have their own MFA implementations in future releases.
+:::
+
+**Configuration with MFA:**
+
+```yaml
+auth:
+  identities:
+    emergency-user:
+      kind: aws/user
+      credentials:
+        access_key_id: !env EMERGENCY_AWS_ACCESS_KEY_ID
+        secret_access_key: !env EMERGENCY_AWS_SECRET_ACCESS_KEY
+        mfa_arn: arn:aws:iam::123456789012:mfa/username
+        region: us-east-1
+```
+
+The `mfa_arn` can be specified in several ways:
+
+```yaml
+# Direct ARN (suitable for shared team configurations)
+mfa_arn: arn:aws:iam::123456789012:mfa/username
+
+# Environment variable reference (suitable for personal configurations)
+mfa_arn: !env AWS_MFA_ARN
+
+# Stored in keychain (via atmos auth user configure)
+# The mfa_arn field can be omitted from YAML if stored in keychain
+```
+
+**Finding Your MFA Device ARN:**
+
+1. Log into AWS Console
+2. Navigate to IAM → Users → [Your Username]
+3. Click the "Security credentials" tab
+4. Find "Assigned MFA device" section
+5. Copy the ARN (format: `arn:aws:iam::ACCOUNT_ID:mfa/USERNAME`)
+
+**Authentication Flow with MFA:**
+
+When you authenticate with an MFA-enabled identity:
+
+```bash
+$ atmos auth login --identity emergency-user
+╭─────────────────────────────────────────────────────╮
+│ Enter MFA Token                                     │
+├─────────────────────────────────────────────────────┤
+│ MFA Device: arn:aws:iam::123456789012:mfa/user     │
+│                                                     │
+│ ┌──────────────────────────────────────────────┐   │
+│ │ 123456                                       │   │
+│ └──────────────────────────────────────────────┘   │
+╰─────────────────────────────────────────────────────╯
+```
+
+Atmos will:
+1. Read your long-lived credentials (access key + secret)
+2. Prompt for a 6-digit TOTP code from your authenticator app
+3. Call AWS STS `GetSessionToken` with MFA device ARN and TOTP code
+4. Store temporary session credentials (valid for configured duration, default: 12h)
+5. Use session credentials for subsequent AWS API calls
+
+**Security Notes:**
+
+- **MFA Device ARN is not a secret** - It's safe to store in YAML configuration files
+- **TOTP codes are never stored** - You must enter them each time you authenticate
+- **Session tokens are cached** - Valid for 12 hours by default (configurable up to 36h with MFA), avoiding repeated MFA prompts
+- **Long-lived credentials remain secure** - Stored in OS keychain, not in plain text
+
+**When to Use MFA:**
+
+- Compliance requirements mandate MFA for privileged access
+- Break-glass/emergency access accounts requiring extra security
+- Production environment access
+- Any scenario where you want defense-in-depth authentication
+
+**Troubleshooting:**
+
+- **"MFA token must be 6 digits"** - Ensure you're entering exactly 6 digits from your authenticator app
+- **"Invalid MFA token"** - Check that your device's clock is synchronized (TOTP is time-based)
+- **"MFA device not found"** - Verify the MFA ARN matches your AWS IAM configuration
+- **Repeated MFA prompts** - Session tokens expire after the configured duration (default: 12h); re-authentication is required
 
 ## CLI Commands
 
@@ -454,6 +554,97 @@ $ atmos auth whoami
     prod-admin
     staging-admin
 ```
+
+## Disabling Identity Authentication
+
+In some scenarios (e.g., CI/CD environments), you may want to **explicitly disable** Atmos-managed identity authentication and use standard AWS credential resolution instead.
+
+### When to Disable Authentication
+
+- **CI/CD pipelines** using GitHub Actions OIDC or other native cloud provider authentication
+- **Development environments** where you want to use local AWS profiles temporarily
+- **Testing scenarios** where you want to bypass Atmos authentication
+- **Mixed environments** where some contexts use Atmos auth and others don't
+
+### How to Disable
+
+You can disable identity authentication by setting the `--identity` flag to `false` (or equivalent boolean false values):
+
+```bash
+# Disable via CLI flag
+atmos terraform plan mycomponent --stack=dev --identity=false
+
+# Disable via environment variable
+export ATMOS_IDENTITY=false
+atmos terraform plan mycomponent --stack=dev
+```
+
+### Supported Disable Values
+
+The following values are recognized as "disable authentication":
+
+- `false`, `False`, `FALSE` (case-insensitive)
+- `0` (zero)
+- `no`, `No`, `NO` (case-insensitive)
+- `off`, `Off`, `OFF` (case-insensitive)
+
+### Behavior When Disabled
+
+When authentication is disabled:
+
+1. **Atmos skips all identity authentication** - No providers are initialized, no identities are loaded
+2. **Uses standard credential resolution** - Falls back to cloud provider SDK defaults (e.g., for AWS: environment variables, shared credentials file, instance metadata, web identity tokens)
+3. **No configuration required** - Works even when `atmos.yaml` has identity configurations
+
+### GitHub Actions Example
+
+```yaml
+name: Deploy Infrastructure
+on: [push]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsRole
+          aws-region: us-east-1
+
+      - name: Deploy with Atmos (using GitHub OIDC credentials)
+        env:
+          ATMOS_IDENTITY: false  # Disable Atmos auth, use GitHub-provided credentials
+        run: |
+          atmos terraform apply mycomponent --stack=prod
+```
+
+### Local Development Example
+
+```bash
+# Use your personal cloud provider profile temporarily (e.g., AWS profile)
+export AWS_PROFILE=my-personal-profile
+atmos terraform plan mycomponent --stack=dev --identity=false
+
+# Or inline
+AWS_PROFILE=my-personal-profile atmos terraform plan mycomponent --stack=dev --identity=false
+```
+
+### Precedence
+
+When both Atmos identity and `--identity=false` are configured:
+
+1. `--identity=false` flag (highest priority)
+2. `ATMOS_IDENTITY=false` environment variable
+3. Default identity from `atmos.yaml`
+
+The disable flag **always takes precedence**, even over configured default identities.
 
 ## Credential Storage
 
@@ -722,6 +913,30 @@ deploy:
 - Use environment variables for sensitive data: `!env VAR_NAME`
 - Regularly rotate credentials
 - Use least-privilege access
+
+### Session Duration
+
+Configure session durations based on your security requirements:
+
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      session:
+        duration: "8h"  # Balance security and usability
+
+  identities:
+    prod-admin:
+      kind: aws/user
+      session:
+        duration: "1h"  # Shorter for high-security environments
+```
+
+**Supported formats**: Integers (seconds), Go durations (`"1h"`, `"8h"`), or days (`"1d"`)
+**IAM user limits**: 15m-12h (no MFA) or 15m-36h (with MFA)
+
+Shorter sessions are more secure but require more frequent re-authentication.
 
 ### Configuration Security
 

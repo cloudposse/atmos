@@ -5,7 +5,9 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/markdown"
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // aboutCmd represents the about command.
@@ -15,8 +17,7 @@ var aboutCmd = &cobra.Command{
 	Long:  `Display information about Atmos, its features, and benefits.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		utils.PrintfMarkdown("%s", markdown.AboutMarkdown)
-		return nil
+		return ui.Markdown(markdown.AboutMarkdown)
 	},
 }
 
@@ -42,4 +43,22 @@ func (a *AboutCommandProvider) GetName() string {
 // GetGroup returns the command group for help organization.
 func (a *AboutCommandProvider) GetGroup() string {
 	return "Other Commands"
+}
+
+// GetFlagsBuilder returns the flags builder for this command.
+// About command has no flags.
+func (a *AboutCommandProvider) GetFlagsBuilder() flags.Builder {
+	return nil
+}
+
+// GetPositionalArgsBuilder returns the positional args builder for this command.
+// About command has no positional arguments.
+func (a *AboutCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+// GetCompatibilityFlags returns compatibility flags for this command.
+// About command has no compatibility flags.
+func (a *AboutCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }

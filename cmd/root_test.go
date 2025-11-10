@@ -69,7 +69,11 @@ func TestNoColorLog(t *testing.T) {
 	if strings.Contains(output, "\033[") {
 		t.Errorf("Expected no color in output, but got: %s", output)
 	}
-	t.Log(output, "output")
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("Command output: %s", output)
+		}
+	})
 }
 
 func TestInitFunction(t *testing.T) {
@@ -509,6 +513,106 @@ func TestIsCompletionCommand(t *testing.T) {
 			// Test.
 			result := isCompletionCommand(cmd)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestParseChdirFromArgs tests the parseChdirFromArgs function that manually parses --chdir or -C flags.
+// This function is critical for commands with DisableFlagParsing=true (terraform, helmfile, packer).
+func TestParseChdirFromArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected string
+	}{
+		{
+			name:     "--chdir with equals sign",
+			args:     []string{"atmos", "--chdir=/tmp/foo", "terraform", "plan"},
+			expected: "/tmp/foo",
+		},
+		{
+			name:     "--chdir with space",
+			args:     []string{"atmos", "--chdir", "/tmp/bar", "terraform", "plan"},
+			expected: "/tmp/bar",
+		},
+		{
+			name:     "-C with equals sign",
+			args:     []string{"atmos", "-C=/tmp/baz", "terraform", "plan"},
+			expected: "/tmp/baz",
+		},
+		{
+			name:     "-C with space",
+			args:     []string{"atmos", "-C", "/tmp/qux", "terraform", "plan"},
+			expected: "/tmp/qux",
+		},
+		{
+			name:     "-C concatenated (no space or equals)",
+			args:     []string{"atmos", "-C/tmp/concat", "terraform", "plan"},
+			expected: "/tmp/concat",
+		},
+		{
+			name:     "-C concatenated with relative path",
+			args:     []string{"atmos", "-C../foo", "terraform", "plan"},
+			expected: "../foo",
+		},
+		{
+			name:     "no chdir flag",
+			args:     []string{"atmos", "terraform", "plan"},
+			expected: "",
+		},
+		{
+			name:     "--chdir at end without value",
+			args:     []string{"atmos", "terraform", "plan", "--chdir"},
+			expected: "",
+		},
+		{
+			name:     "-C at end without value",
+			args:     []string{"atmos", "terraform", "plan", "-C"},
+			expected: "",
+		},
+		{
+			name:     "multiple --chdir flags (first wins)",
+			args:     []string{"atmos", "--chdir=/first", "--chdir=/second", "terraform", "plan"},
+			expected: "/first",
+		},
+		{
+			name:     "mixed -C and --chdir (first wins)",
+			args:     []string{"atmos", "-C/first", "--chdir=/second", "terraform", "plan"},
+			expected: "/first",
+		},
+		{
+			name:     "--chdir with tilde",
+			args:     []string{"atmos", "--chdir=~/mydir", "terraform", "plan"},
+			expected: "~/mydir",
+		},
+		{
+			name:     "empty args",
+			args:     []string{},
+			expected: "",
+		},
+		{
+			name:     "single arg",
+			args:     []string{"atmos"},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save and restore os.Args.
+			originalArgs := os.Args
+			defer func() { os.Args = originalArgs }()
+
+			// Set os.Args to the test args.
+			os.Args = tt.args
+
+			// Call the function.
+			result := parseChdirFromArgs()
+
+			// Verify.
+			assert.Equal(t, tt.expected, result,
+				"parseChdirFromArgs() with args %v should return %q, got %q",
+				tt.args, tt.expected, result)
 		})
 	}
 }

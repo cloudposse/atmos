@@ -21,9 +21,6 @@ func RenderTable(
 ) (string, error) {
 	defer perf.Track(nil, "list.RenderTable")()
 
-	// Avoid unused-parameter compile error; pass config to perf if available.
-	_ = authManager
-
 	var output strings.Builder
 
 	// Create section header style.
@@ -50,7 +47,7 @@ func RenderTable(
 			output.WriteString(newline)
 		}
 
-		identityTable, err := createIdentitiesTable(identities)
+		identityTable, err := createIdentitiesTable(authManager, identities)
 		if err != nil {
 			return "", err
 		}
@@ -155,16 +152,18 @@ func applyTableStyles(t *table.Model) {
 }
 
 // createIdentitiesTable creates a table for identities.
-func createIdentitiesTable(identities map[string]schema.Identity) (table.Model, error) {
+func createIdentitiesTable(authManager authTypes.AuthManager, identities map[string]schema.Identity) (table.Model, error) {
 	defer perf.Track(nil, "list.createIdentitiesTable")()
 
 	columns := []table.Column{
+		{Title: "", Width: 1}, // Status indicator column.
 		{Title: "NAME", Width: identityNameWidth},
 		{Title: "KIND", Width: identityKindWidth},
 		{Title: "VIA PROVIDER", Width: identityViaProviderWidth},
 		{Title: "VIA IDENTITY", Width: identityViaIdentityWidth},
 		{Title: "DEFAULT", Width: identityDefaultWidth},
 		{Title: "ALIAS", Width: identityAliasWidth},
+		{Title: "EXPIRES", Width: identityExpiresWidth},
 	}
 
 	rows := make([]table.Row, 0, len(identities))
@@ -178,7 +177,7 @@ func createIdentitiesTable(identities map[string]schema.Identity) (table.Model, 
 
 	for _, name := range names {
 		identity := identities[name]
-		row := buildIdentityTableRow(&identity, name)
+		row := buildIdentityTableRow(authManager, &identity, name)
 		rows = append(rows, row)
 	}
 
@@ -195,7 +194,11 @@ func createIdentitiesTable(identities map[string]schema.Identity) (table.Model, 
 }
 
 // buildIdentityTableRow builds a table row for a single identity.
-func buildIdentityTableRow(identity *schema.Identity, name string) table.Row {
+func buildIdentityTableRow(authManager authTypes.AuthManager, identity *schema.Identity, name string) table.Row {
+	// Get authentication status indicator.
+	status := getIdentityAuthStatus(authManager, name)
+	statusIndicator := getStatusIndicator(status)
+
 	// Determine via provider.
 	viaProvider := emptyMarker
 	if identity.Via != nil && identity.Via.Provider != "" {
@@ -225,12 +228,23 @@ func buildIdentityTableRow(identity *schema.Identity, name string) table.Row {
 		alias = identity.Alias
 	}
 
+	// Expiration.
+	expiresStr := emptyMarker
+	if authManager != nil {
+		expirationDuration, expirationStatus := getExpirationInfo(authManager, name)
+		if expirationDuration != "" {
+			expiresStr = formatExpirationWithColor(expirationDuration, expirationStatus)
+		}
+	}
+
 	return table.Row{
+		statusIndicator, // Status dot as first column.
 		name,
 		identity.Kind,
 		viaProvider,
 		viaIdentity,
 		defaultStr,
 		alias,
+		expiresStr,
 	}
 }

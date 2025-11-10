@@ -29,11 +29,18 @@ This command generates a temporary, secure sign-in URL using your authenticated 
 ```shell
 # Open console with default identity
 atmos auth console
-```
 
-```shell
+# Interactively select identity
+atmos auth console --identity
+
 # Open console with specific identity
 atmos auth console --identity prod-admin
+
+# Use short form of identity flag
+atmos auth console -i prod-admin
+
+# Interactive selection with short form
+atmos auth console -i
 ```
 
 ### AWS-Specific Examples
@@ -146,9 +153,13 @@ atmos auth console --destination iam
 <dl>
   <dt>`--identity` / `-i`</dt>
   <dd>
-    Specify the Atmos identity to use for console access. If not provided, uses the default identity configured in `atmos.yaml`.
+    Specify the Atmos identity to use for console access. This flag has three modes:
 
-    **Example:** `--identity prod-admin`
+    - **With value** (`--identity admin`): Use the specified identity
+    - **Without value** (`--identity`): Show interactive selector to choose identity
+    - **Omitted**: Use the default identity configured in `atmos.yaml`, or prompt if no default is set
+
+    **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
   </dd>
 
   <dt>`--destination`</dt>

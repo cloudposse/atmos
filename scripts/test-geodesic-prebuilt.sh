@@ -125,6 +125,7 @@ echo -e "${BLUE}Ensuring mount directories exist...${NC}"
 mkdir -p "${HOME}/.aws"
 mkdir -p "${HOME}/.config/atmos"
 mkdir -p "${HOME}/.local/share/atmos/keyring"
+mkdir -p "${HOME}/.cache/atmos"
 echo -e "${GREEN}✓ Mount directories ready${NC}"
 echo ""
 
@@ -148,6 +149,7 @@ echo ""
 # Mount to standard XDG paths that Atmos expects (HOME=/root in container)
 # Mount infra-live to /workspace (Geodesic convention)
 # Mount AWS files including Atmos-managed credentials
+# Mount cache directory for SSO token caching
 # Use platform flag to ensure correct architecture
 # Use :Z instead of :z to force relabel and avoid caching issues
 ${CONTAINER_CMD} run -it --rm \
@@ -163,6 +165,7 @@ ${CONTAINER_CMD} run -it --rm \
     -v "${HOME}/.aws:/root/.aws:cached,z" \
     -v "${HOME}/.config/atmos:/root/.config/atmos:cached,z" \
     -v "${HOME}/.local/share/atmos:/root/.local/share/atmos:cached,z" \
+    -v "${HOME}/.cache/atmos:/root/.cache/atmos:cached,z" \
     "${GEODESIC_IMAGE}"
 
 echo ""

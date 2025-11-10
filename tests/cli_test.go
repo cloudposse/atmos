@@ -440,6 +440,32 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		result = customRegex.ReplaceAllString(result, replacement)
 	}
 
+	// 12. Normalize external absolute paths to avoid environment-specific paths in snapshots.
+	// Replace common absolute path prefixes with generic placeholders.
+	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
+	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
+	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
+	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
+
+	// 13. Normalize "Last Updated" timestamps in auth whoami output.
+	// These appear as "Last Updated  2025-10-28 13:10:27 CDT" in table output.
+	// Replace with a fixed timestamp to avoid snapshot mismatches.
+	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
+	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
+
+	// 14. Normalize credential expiration durations in auth list output.
+	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
+	// The duration changes every minute, so normalize to "1h 0m" like other duration normalizations.
+	// Matches patterns like "650202h14m", "650194h", "1h30m", "45m", etc. at the end of identity lines.
+	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h(?:\d+m)?\b`)
+	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
+
+	// 15. Normalize credential_store values in error messages.
+	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
+	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
+	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
+	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
+
 	return result, nil
 }
 
@@ -579,6 +605,11 @@ func TestMain(m *testing.M) {
 	// Parse flags first to get -v status
 	flag.Parse()
 
+	// CRITICAL: Unset ATMOS_CHDIR to prevent tests from accessing non-test directories.
+	// This prevents tests from inadvertently reading real infrastructure configs (e.g., infra-live).
+	// Tests should only use their fixture directories, not the user's working environment.
+	os.Unsetenv("ATMOS_CHDIR")
+
 	// Configure logger verbosity based on test flags
 	switch {
 	case os.Getenv("ATMOS_TEST_DEBUG") != "":
@@ -709,6 +740,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Reload XDG to pick up the new environment
 	xdg.Reload()
 
+	// Clear github_username environment variables for consistent snapshots.
+	// These are automatically bound to settings.github_username but cause
+	// environment-dependent output. Skip clearing only for vendor tests that need GitHub auth.
+	if !strings.Contains(tc.Name, "vendor") {
+		t.Setenv("ATMOS_GITHUB_USERNAME", "")
+		t.Setenv("GITHUB_ACTOR", "")
+		t.Setenv("GITHUB_USERNAME", "")
+	}
+
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
 		// Copying over the `.gitconfig` was not enough to fix the issue
@@ -812,6 +852,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Also set an environment variable to exclude the repository's .atmos.d
 	// This is needed for tests that change to parent directories
 	tc.Env["TEST_EXCLUDE_ATMOS_D"] = repoRoot
+
+	// Disable git root base path discovery in tests.
+	// Tests expect BasePath to be "." by default, not the repository root.
+	tc.Env["ATMOS_GIT_ROOT_BASEPATH"] = "false"
 
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
@@ -1413,8 +1457,14 @@ func getSnapshotFilenames(testName string, isTty bool) (stdout, stderr, tty stri
 // verifyTTYSnapshot handles snapshot verification for TTY mode tests.
 func verifyTTYSnapshot(t *testing.T, tc *TestCase, ttyPath, combinedOutput string, regenerate bool) bool {
 	if regenerate {
+		// Strip trailing whitespace from output before saving snapshot if requested.
+		outputToSave := combinedOutput
+		if tc.Expect.IgnoreTrailingWhitespace {
+			outputToSave = stripTrailingWhitespace(combinedOutput)
+		}
+
 		t.Logf("Updating TTY snapshot at %q", ttyPath)
-		updateSnapshot(ttyPath, combinedOutput)
+		updateSnapshot(ttyPath, outputToSave)
 		return true
 	}
 
@@ -1502,10 +1552,18 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Non-TTY mode: separate stdout and stderr snapshots
 	if regenerate {
+		// Strip trailing whitespace from output before saving snapshot if requested.
+		stdoutToSave := stdoutOutput
+		stderrToSave := stderrOutput
+		if tc.Expect.IgnoreTrailingWhitespace {
+			stdoutToSave = stripTrailingWhitespace(stdoutOutput)
+			stderrToSave = stripTrailingWhitespace(stderrOutput)
+		}
+
 		t.Logf("Updating stdout snapshot at %q", stdoutPath)
-		updateSnapshot(stdoutPath, stdoutOutput)
+		updateSnapshot(stdoutPath, stdoutToSave)
 		t.Logf("Updating stderr snapshot at %q", stderrPath)
-		updateSnapshot(stderrPath, stderrOutput)
+		updateSnapshot(stderrPath, stderrToSave)
 		return true
 	}
 

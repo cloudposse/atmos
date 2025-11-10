@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -91,6 +92,8 @@ func providersFlagCompletion(cmd *cobra.Command, args []string, toComplete strin
 		}
 	}
 
+	sort.Strings(providers)
+
 	return providers, cobra.ShellCompDirectiveNoFileComp
 }
 
@@ -107,6 +110,8 @@ func identitiesFlagCompletion(cmd *cobra.Command, args []string, toComplete stri
 			identities = append(identities, name)
 		}
 	}
+
+	sort.Strings(identities)
 
 	return identities, cobra.ShellCompDirectiveNoFileComp
 }

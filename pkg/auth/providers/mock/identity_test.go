@@ -178,13 +178,14 @@ func TestIdentity_Environment(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, env)
 
-		// Verify mock identity environment variable.
+		// Verify generic mock identity environment variables.
 		assert.Equal(t, "test-identity", env["MOCK_IDENTITY"])
+		assert.Equal(t, "test-identity", env["ATMOS_IDENTITY"])
 
-		// Verify AWS-like environment variables for testing.
-		assert.Equal(t, "/tmp/mock-credentials", env["AWS_SHARED_CREDENTIALS_FILE"])
-		assert.Equal(t, "/tmp/mock-config", env["AWS_CONFIG_FILE"])
-		assert.Equal(t, "test-identity", env["AWS_PROFILE"])
+		// Verify no AWS-specific environment variables in generic mock.
+		assert.NotContains(t, env, "AWS_SHARED_CREDENTIALS_FILE")
+		assert.NotContains(t, env, "AWS_CONFIG_FILE")
+		assert.NotContains(t, env, "AWS_PROFILE")
 	})
 }
 
@@ -224,10 +225,24 @@ func TestIdentity_Logout(t *testing.T) {
 	identity := NewIdentity("test-identity", config)
 	ctx := context.Background()
 
-	// Logout is a no-op for mock identity.
-	err := identity.Logout(ctx)
+	// First, authenticate to set up stored credentials.
+	err := identity.PostAuthenticate(ctx, &types.PostAuthenticateParams{})
+	require.NoError(t, err)
 
-	assert.NoError(t, err)
+	// Verify LoadCredentials succeeds after authentication.
+	creds, err := identity.LoadCredentials(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	// Now logout, which should clear the stored credentials state.
+	err = identity.Logout(ctx)
+	require.NoError(t, err)
+
+	// Verify LoadCredentials now fails after logout.
+	creds, err = identity.LoadCredentials(ctx)
+	require.Error(t, err)
+	require.Nil(t, creds)
+	require.ErrorIs(t, err, ErrNoStoredCredentials)
 }
 
 // TestIdentity_ImplementsInterface verifies that Identity implements types.Identity.
@@ -308,10 +323,22 @@ func TestIdentity_Concurrency(t *testing.T) {
 
 func TestIdentity_LoadCredentials(t *testing.T) {
 	tests := []struct {
-		name string
+		name             string
+		setupAuth        bool  // Whether to call PostAuthenticate before LoadCredentials
+		expectedError    error // Expected sentinel error (nil if no error expected)
+		expectedCredsNil bool
 	}{
 		{
-			name: "returns mock credentials",
+			name:             "returns error when no credentials stored (before authentication)",
+			setupAuth:        false,
+			expectedError:    ErrNoStoredCredentials,
+			expectedCredsNil: true,
+		},
+		{
+			name:             "returns credentials after authentication (stored state)",
+			setupAuth:        true,
+			expectedError:    nil,
+			expectedCredsNil: false,
 		},
 	}
 
@@ -321,23 +348,45 @@ func TestIdentity_LoadCredentials(t *testing.T) {
 				Kind: "mock",
 			}
 
-			identity := NewIdentity("test-identity", config)
+			identity := NewIdentity("test-load-creds", config)
 			ctx := context.Background()
 
+			// Cleanup credentials file after test.
+			t.Cleanup(func() {
+				_ = identity.Logout(ctx)
+			})
+
+			// Simulate authentication if requested.
+			if tt.setupAuth {
+				err := identity.PostAuthenticate(ctx, &types.PostAuthenticateParams{})
+				require.NoError(t, err, "PostAuthenticate should succeed")
+			}
+
+			// Attempt to load credentials.
 			creds, err := identity.LoadCredentials(ctx)
 
-			require.NoError(t, err)
-			require.NotNil(t, creds)
+			// Verify expectations.
+			if tt.expectedError != nil {
+				require.Error(t, err)
+				require.ErrorIs(t, err, tt.expectedError)
+			} else {
+				require.NoError(t, err)
+			}
 
-			// Verify it's mock credentials.
-			mockCreds, ok := creds.(*Credentials)
-			require.True(t, ok, "credentials should be mock Credentials type")
-			assert.Equal(t, "mock-access-key", mockCreds.AccessKeyID)
-			assert.Equal(t, "mock-secret-key", mockCreds.SecretAccessKey)
-			assert.Equal(t, "mock-session-token", mockCreds.SessionToken)
-			assert.Equal(t, "us-east-1", mockCreds.Region)
-			assert.False(t, mockCreds.Expiration.IsZero())
-			assert.True(t, mockCreds.Expiration.After(time.Now()))
+			if tt.expectedCredsNil {
+				require.Nil(t, creds)
+			} else {
+				require.NotNil(t, creds)
+				// Verify it's mock credentials with correct values.
+				mockCreds, ok := creds.(*Credentials)
+				require.True(t, ok, "credentials should be mock Credentials type")
+				assert.Equal(t, "mock-access-key", mockCreds.AccessKeyID)
+				assert.Equal(t, "mock-secret-key", mockCreds.SecretAccessKey)
+				assert.Equal(t, "mock-session-token", mockCreds.SessionToken)
+				assert.Equal(t, "us-east-1", mockCreds.Region)
+				assert.False(t, mockCreds.Expiration.IsZero())
+				assert.True(t, mockCreds.Expiration.After(time.Now()))
+			}
 		})
 	}
 }

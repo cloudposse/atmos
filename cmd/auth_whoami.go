@@ -133,11 +133,18 @@ func loadAuthManager() (authTypes.AuthManager, error) {
 }
 
 func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthManager) (string, error) {
-	identityName, _ := cmd.Flags().GetString("identity")
-	if identityName != "" {
+	// Get identity from flag or use default.
+	// Use GetIdentityFromFlags which handles Cobra's NoOptDefVal quirk correctly.
+	identityName := GetIdentityFromFlags(cmd, os.Args)
+
+	// Check if user wants to interactively select identity.
+	forceSelect := identityName == IdentityFlagSelectValue
+
+	if identityName != "" && !forceSelect {
 		return identityName, nil
 	}
-	defaultIdentity, err := authManager.GetDefaultIdentity()
+
+	defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 	if err != nil {
 		return "", fmt.Errorf("%w: no default identity configured and no identity specified: %v", errUtils.ErrInvalidAuthConfig, err)
 	}

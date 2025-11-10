@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -392,4 +393,78 @@ func TestApplyFilters_MultipleIdentities(t *testing.T) {
 	assert.Contains(t, filteredIdentities, "admin")
 	assert.Contains(t, filteredIdentities, "prod")
 	assert.NotContains(t, filteredIdentities, "dev")
+}
+
+func TestProvidersFlagCompletion_ReturnsSortedProviders(t *testing.T) {
+	// Setup: Create a test config file with providers in non-alphabetical order.
+	tempDir := t.TempDir()
+	configFile := tempDir + "/atmos.yaml"
+
+	configContent := `auth:
+  providers:
+    zebra-provider:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://example.awsapps.com/start
+    apple-provider:
+      kind: aws/saml
+      region: us-east-1
+      url: https://idp.example.com/saml
+    mango-provider:
+      kind: azure/oidc
+      audience: https://example.com
+`
+	err := os.WriteFile(configFile, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment to use test config (automatically reverted after test).
+	t.Chdir(tempDir)
+
+	cmd := createTestAuthListCmd()
+
+	// Execute completion function.
+	results, directive := providersFlagCompletion(cmd, []string{}, "")
+
+	// Verify results are sorted alphabetically.
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Equal(t, []string{"apple-provider", "mango-provider", "zebra-provider"}, results)
+}
+
+func TestIdentitiesFlagCompletion_ReturnsSortedIdentities(t *testing.T) {
+	// Setup: Create a test config file with identities in non-alphabetical order.
+	tempDir := t.TempDir()
+	configFile := tempDir + "/atmos.yaml"
+
+	configContent := `auth:
+  providers:
+    test-provider:
+      kind: aws/iam-identity-center
+  identities:
+    zebra-identity:
+      kind: aws/permission-set
+      via:
+        provider: test-provider
+    apple-identity:
+      kind: aws/permission-set
+      via:
+        provider: test-provider
+    mango-identity:
+      kind: aws/permission-set
+      via:
+        provider: test-provider
+`
+	err := os.WriteFile(configFile, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment to use test config (automatically reverted after test).
+	t.Chdir(tempDir)
+
+	cmd := createTestAuthListCmd()
+
+	// Execute completion function.
+	results, directive := identitiesFlagCompletion(cmd, []string{}, "")
+
+	// Verify results are sorted alphabetically.
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	assert.Equal(t, []string{"apple-identity", "mango-identity", "zebra-identity"}, results)
 }
