@@ -54,7 +54,7 @@ func (w *Writer) Write(result *Result) (string, error) {
 
 	// Create provider-specific cache directory.
 	providerDir := filepath.Join(w.CacheDir, result.Provider)
-	if err := os.MkdirAll(providerDir, 0700); err != nil {
+	if err := os.MkdirAll(providerDir, 0o700); err != nil {
 		return "", fmt.Errorf("%w: failed to create cache directory %s: %w", errUtils.ErrInvalidAuthConfig, providerDir, err)
 	}
 
@@ -69,7 +69,7 @@ func (w *Writer) Write(result *Result) (string, error) {
 
 	// Write to file.
 	filePath := filepath.Join(providerDir, ProvisionedFileName)
-	if err := os.WriteFile(filePath, data, 0600); err != nil {
+	if err := os.WriteFile(filePath, data, 0o600); err != nil {
 		return "", fmt.Errorf("%w: failed to write provisioned identities to %s: %w", errUtils.ErrParseFile, filePath, err)
 	}
 
