@@ -22,8 +22,8 @@ func (m *DefaultProfileManager) GetProfileLocations(atmosConfig *schema.AtmosCon
 
 	var locations []ProfileLocation
 
-	// Derive base directory from CliConfigPath (which may be a file path to atmos.yaml).
-	baseDir := filepath.Dir(atmosConfig.CliConfigPath)
+	// Use CliConfigPath as base directory (it contains the directory of atmos.yaml).
+	baseDir := atmosConfig.CliConfigPath
 
 	// 1. Configurable base_path (highest precedence).
 	if atmosConfig.Profiles.BasePath != "" {
