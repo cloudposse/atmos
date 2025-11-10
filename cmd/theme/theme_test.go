@@ -8,7 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestThemeCommand(t *testing.T) {
@@ -573,17 +575,173 @@ func TestThemeListOptionsStruct(t *testing.T) {
 }
 
 func TestExecuteThemeList(t *testing.T) {
-	// These integration tests are skipped because they require UI formatter initialization
-	// which is not set up in the unit test environment. The executeThemeList function
-	// calls ui.Write() and ui.Info() which require a properly initialized UI context.
-	// These tests should be converted to proper unit tests with mocked dependencies.
-	t.Skip("Integration tests requiring UI initialization are not yet supported")
+	// Initialize I/O context and formatter for testing (required for ui.Write/Success/Info).
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "Failed to create I/O context")
+	ui.InitFormatter(ioCtx)
+
+	t.Run("executes with default config defaults to atmos theme", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = nil
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// Execute
+		err := executeThemeList(themeListCmd, []string{})
+
+		// Should not error - theme registry should have 'atmos' theme
+		require.NoError(t, err, "executeThemeList should not error when no config is present")
+	})
+
+	t.Run("executes with config containing theme", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Terminal: schema.Terminal{
+					Theme: "dracula",
+				},
+			},
+		}
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// Execute
+		err := executeThemeList(themeListCmd, []string{})
+
+		// Should not error
+		require.NoError(t, err, "executeThemeList should not error when config contains theme")
+	})
+
+	t.Run("executes with ATMOS_THEME env var", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Terminal: schema.Terminal{
+					Theme: "", // Empty config
+				},
+			},
+		}
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// Set ATMOS_THEME env var
+		t.Setenv("ATMOS_THEME", "monokai")
+
+		// Execute
+		err := executeThemeList(themeListCmd, []string{})
+
+		// Should not error
+		require.NoError(t, err, "executeThemeList should not error when ATMOS_THEME env var is set")
+	})
+
+	t.Run("executes with THEME env var", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Terminal: schema.Terminal{
+					Theme: "", // Empty config
+				},
+			},
+		}
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// Set THEME env var (ATMOS_THEME not set)
+		t.Setenv("THEME", "solarized-dark")
+
+		// Execute
+		err := executeThemeList(themeListCmd, []string{})
+
+		// Should not error
+		require.NoError(t, err, "executeThemeList should not error when THEME env var is set")
+	})
+
+	t.Run("executes with recommended flag enabled", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = nil
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// Set recommended flag
+		viper.Set("recommended", true)
+
+		// Execute
+		err := executeThemeList(themeListCmd, []string{})
+
+		// Should not error
+		require.NoError(t, err, "executeThemeList should not error when recommended flag is enabled")
+	})
+
+	t.Run("executes with recommended flag disabled", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = nil
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// Set recommended flag to false
+		viper.Set("recommended", false)
+
+		// Execute
+		err := executeThemeList(themeListCmd, []string{})
+
+		// Should not error
+		require.NoError(t, err, "executeThemeList should not error when recommended flag is disabled")
+	})
 }
 
 func TestExecuteThemeShow(t *testing.T) {
-	// These integration tests are skipped because they require UI formatter initialization
-	// which is not set up in the unit test environment. The executeThemeShow function
-	// calls ui.Markdown() which requires a properly initialized UI context.
-	// These tests should be converted to proper unit tests with mocked dependencies.
-	t.Skip("Integration tests requiring UI initialization are not yet supported")
+	// Initialize I/O context and formatter for testing (required for ui.Markdown).
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "Failed to create I/O context")
+	ui.InitFormatter(ioCtx)
+
+	t.Run("executes with valid theme name", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = nil
+
+		// Execute with a common theme name
+		err := executeThemeShow(themeShowCmd, []string{"atmos"})
+
+		// Should not error if theme exists
+		require.NoError(t, err, "executeThemeShow should not return an error for valid theme 'atmos'")
+	})
+
+	t.Run("executes with different theme name", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = nil
+
+		// Execute with another theme name
+		err := executeThemeShow(themeShowCmd, []string{"dracula"})
+
+		// Should not error if theme exists
+		require.NoError(t, err, "executeThemeShow should not return an error for valid theme 'dracula'")
+	})
 }
