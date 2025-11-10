@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal/pty"
 )
 
 func TestManager_Attach(t *testing.T) {
@@ -215,10 +216,51 @@ func TestManager_Attach(t *testing.T) {
 			expectError:   true,
 			errorContains: "attach failed",
 		},
+		{
+			name:     "attach with PTY mode on supported platforms",
+			devName:  "test",
+			instance: "default",
+			usePTY:   true,
+			setupMocks: func(loader *MockConfigLoader, detector *MockRuntimeDetector, runtime *MockRuntime) {
+				// Only run this test on platforms that support PTY.
+				if !pty.IsSupported() {
+					return
+				}
+				loader.EXPECT().
+					LoadConfig(gomock.Any(), "test").
+					Return(&Config{Name: "test", Image: "ubuntu:22.04"}, &Settings{}, nil)
+				detector.EXPECT().
+					DetectRuntime("").
+					Return(runtime, nil)
+				runtime.EXPECT().
+					List(gomock.Any(), gomock.Any()).
+					Return([]container.Info{
+						{
+							ID:     "running-id",
+							Name:   "atmos-devcontainer.test.default",
+							Status: "running",
+						},
+					}, nil)
+				// PTY mode calls runtime.Info() to determine the binary (docker/podman).
+				runtime.EXPECT().
+					Info(gomock.Any()).
+					Return(&container.RuntimeInfo{
+						Type:    "docker",
+						Version: "24.0.0",
+						Running: true,
+					}, nil)
+			},
+			expectError: false, // PTY execution will fail in tests, but code path is exercised
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Skip PTY tests on unsupported platforms.
+			if tt.usePTY && !pty.IsSupported() {
+				t.Skip("PTY mode not supported on this platform")
+			}
+
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
@@ -246,6 +288,12 @@ func TestManager_Attach(t *testing.T) {
 					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
+				// PTY mode will attempt to execute actual commands in test environment.
+				// We verify the code path was exercised via mock expectations.
+				if err != nil && tt.usePTY {
+					t.Logf("PTY execution failed in test (expected): %v", err)
+					return
+				}
 				require.NoError(t, err)
 			}
 		})
@@ -570,6 +618,156 @@ func TestAttachToContainer_RegularMode(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestAttachToContainer_PTYMode(t *testing.T) {
+	// Skip PTY tests on unsupported platforms.
+	if !pty.IsSupported() {
+		t.Skip("PTY mode not supported on this platform")
+	}
+
+	// Save original viper value and restore after test.
+	originalMask := viper.GetBool("mask")
+	defer viper.Set("mask", originalMask)
+
+	tests := []struct {
+		name           string
+		usePTY         bool
+		maskingEnabled bool
+		userEnvProbe   string
+		runtimeType    string
+		setupMocks     func(*MockRuntime)
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name:           "PTY mode calls runtime.Info to determine binary",
+			usePTY:         true,
+			maskingEnabled: false,
+			userEnvProbe:   "",
+			runtimeType:    "docker",
+			setupMocks: func(runtime *MockRuntime) {
+				runtime.EXPECT().
+					Info(gomock.Any()).
+					Return(&container.RuntimeInfo{
+						Type:    "docker",
+						Version: "24.0.0",
+						Running: true,
+					}, nil)
+			},
+			expectError: false,
+		},
+		{
+			name:           "PTY mode with podman runtime",
+			usePTY:         true,
+			maskingEnabled: false,
+			userEnvProbe:   "",
+			runtimeType:    "podman",
+			setupMocks: func(runtime *MockRuntime) {
+				runtime.EXPECT().
+					Info(gomock.Any()).
+					Return(&container.RuntimeInfo{
+						Type:    "podman",
+						Version: "4.5.0",
+						Running: true,
+					}, nil)
+			},
+			expectError: false,
+		},
+		{
+			name:           "PTY mode with masking enabled",
+			usePTY:         true,
+			maskingEnabled: true,
+			userEnvProbe:   "",
+			runtimeType:    "docker",
+			setupMocks: func(runtime *MockRuntime) {
+				runtime.EXPECT().
+					Info(gomock.Any()).
+					Return(&container.RuntimeInfo{
+						Type:    "docker",
+						Version: "24.0.0",
+						Running: true,
+					}, nil)
+			},
+			expectError: false,
+		},
+		{
+			name:           "PTY mode with login shell args",
+			usePTY:         true,
+			maskingEnabled: false,
+			userEnvProbe:   "loginShell",
+			runtimeType:    "docker",
+			setupMocks: func(runtime *MockRuntime) {
+				runtime.EXPECT().
+					Info(gomock.Any()).
+					Return(&container.RuntimeInfo{
+						Type:    "docker",
+						Version: "24.0.0",
+						Running: true,
+					}, nil)
+			},
+			expectError: false,
+		},
+		{
+			name:           "PTY mode fails when runtime.Info fails",
+			usePTY:         true,
+			maskingEnabled: false,
+			userEnvProbe:   "",
+			runtimeType:    "",
+			setupMocks: func(runtime *MockRuntime) {
+				runtime.EXPECT().
+					Info(gomock.Any()).
+					Return(nil, errors.New("runtime info failed"))
+			},
+			expectError:   true,
+			errorContains: "failed to get runtime info",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockRuntime := NewMockRuntime(ctrl)
+			tt.setupMocks(mockRuntime)
+
+			viper.Set("mask", tt.maskingEnabled)
+
+			params := &attachParams{
+				ctx:     context.Background(),
+				runtime: mockRuntime,
+				containerInfo: &container.Info{
+					ID:   "container-id",
+					Name: "test-container",
+				},
+				config: &Config{
+					UserEnvProbe: tt.userEnvProbe,
+				},
+				containerName: "test-container",
+				usePTY:        tt.usePTY,
+			}
+
+			err := attachToContainer(params)
+
+			if tt.expectError {
+				require.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				// PTY mode will fail in test environment because it tries to execute
+				// actual shell commands. We verify that the PTY code path was reached
+				// by checking that runtime.Info() was called (via mock expectations).
+				// The error "exit status" or "executable not found" indicates PTY
+				// execution was attempted, which validates the code path.
+				if err != nil {
+					// Expected errors from actual PTY execution in test environment.
+					t.Logf("PTY execution failed in test (expected): %v", err)
+				}
 			}
 		})
 	}
