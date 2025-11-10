@@ -195,6 +195,181 @@ if authManager != nil && info.Identity == "" {
 - Ensures hooks use the same identity selected/auto-detected at the start
 - Maintains single source of truth for identity throughout command execution
 
+## Component-Level Auth Configuration
+
+Atmos supports defining auth configuration at **three levels** with component-level having the highest precedence:
+
+1. **Global** (in `atmos.yaml`) - Lowest precedence
+2. **Stack-level** (in stack YAML files) - Medium precedence
+3. **Component-level** (in component section of stack YAML) - Highest precedence
+
+### Global Auth Configuration
+
+Defined in `atmos.yaml`:
+
+```yaml
+auth:
+  identities:
+    global-identity:
+      default: true
+      provider: aws-sso
+      # ... provider config
+```
+
+### Component-Level Auth Configuration
+
+Defined in component section of stack YAML files:
+
+```yaml
+components:
+  terraform:
+    my-component:
+      auth:
+        identities:
+          component-specific-identity:
+            default: true
+            provider: aws-sso
+            # ... provider config
+      vars:
+        # component vars
+```
+
+### How Component-Level Auth Works
+
+**File**: `internal/exec/utils.go`
+**Function**: `GetComponentAuthConfig()`
+
+This function:
+1. Starts with global auth config from `atmos.yaml`
+2. Searches for the component in stack files
+3. Extracts component-specific `auth:` section if present
+4. Merges component auth config with global config
+5. Returns merged config for authentication
+
+**Key behaviors:**
+- Component identities **override** global identities with the same name
+- Component defaults take precedence over global defaults
+- If component defines `identity-a` with `default: true` and global defines `identity-b` with `default: true`, both are in the merged config (multiple defaults scenario)
+- The merged config is used by `CreateAndAuthenticateManager()` for identity resolution
+
+### Example: Component-Specific Default
+
+**Global config** (`atmos.yaml`):
+```yaml
+auth:
+  identities:
+    dev-identity:
+      default: true
+```
+
+**Component config** (`stacks/catalog/my-component.yaml`):
+```yaml
+components:
+  terraform:
+    my-component:
+      auth:
+        identities:
+          prod-identity:
+            default: true
+```
+
+**Result when running** `atmos terraform plan my-component -s prod-stack`:
+- Merged config has BOTH `dev-identity` and `prod-identity`
+- Both have `default: true`
+- In interactive mode: User prompted to choose between the two defaults
+- In CI mode: Returns nil (no authentication) due to ambiguous defaults
+
+### Example: Override Global Identity
+
+**Global config**:
+```yaml
+auth:
+  identities:
+    shared-identity:
+      default: false
+      provider: aws-sso
+```
+
+**Component config**:
+```yaml
+components:
+  terraform:
+    my-component:
+      auth:
+        identities:
+          shared-identity:
+            default: true  # Override: make it default for this component
+```
+
+**Result**: Component configuration overrides global - `shared-identity` becomes the default for `my-component` only.
+
+### Use Cases
+
+1. **Different identities per environment**:
+   ```yaml
+   # stacks/prod.yaml
+   components:
+     terraform:
+       app:
+         auth:
+           identities:
+             prod-admin:
+               default: true
+
+   # stacks/dev.yaml
+   components:
+     terraform:
+       app:
+         auth:
+           identities:
+             dev-user:
+               default: true
+   ```
+
+2. **Component-specific permissions**:
+   ```yaml
+   components:
+     terraform:
+       security-component:
+         auth:
+           identities:
+             security-team:
+               default: true
+
+       app-component:
+         auth:
+           identities:
+             app-team:
+               default: true
+   ```
+
+3. **No auth for specific components**:
+   ```yaml
+   components:
+     terraform:
+       local-only-component:
+         # No auth section - uses global config
+         # If global has no defaults, no authentication
+   ```
+
+### Implementation Flow
+
+```text
+ExecuteTerraform()
+  ↓
+GetComponentAuthConfig(stack, component, componentType)
+  ↓ Loads stacksMap via FindStacksMap()
+  ↓ Searches for component in stack files
+  ↓ Extracts component auth section
+  ↓ Merges with global auth config
+  ↓ Returns merged config
+  ↓
+CreateAndAuthenticateManager(identity, mergedAuthConfig)
+  ↓ Uses merged config for auto-detection
+  ↓ Finds default identities from both global + component
+  ↓ Authenticates with resolved identity
+```
+
 ## Critical Code Sections
 
 ### 1. Identity Resolution and AuthManager Creation

@@ -98,6 +98,37 @@ Identity resolution for `!terraform.state` works the same as `!terraform.output`
 - Prevents double-prompting from hooks
 - Single authentication per command execution
 
+## Component-Level Auth Configuration
+
+Component-level auth configuration works identically for both `!terraform.state` and `!terraform.output`. See the [terraform-output-yaml-func-authentication-flow.md](./terraform-output-yaml-func-authentication-flow.md#component-level-auth-configuration) document for complete details.
+
+**Quick summary:**
+
+Atmos supports auth configuration at three levels (component > stack > global):
+
+```yaml
+# Component-level (highest precedence)
+components:
+  terraform:
+    my-component:
+      auth:
+        identities:
+          component-identity:
+            default: true
+
+# Global-level in atmos.yaml (lowest precedence)
+auth:
+  identities:
+    global-identity:
+      default: true
+```
+
+**Key behaviors:**
+- Component identities override global identities with the same name
+- Merged config used for authentication
+- Enables per-component, per-environment, or per-team identity selection
+- See terraform-output documentation for detailed examples and use cases
+
 ## Critical Code Sections
 
 ### 1. Identity Resolution and AuthManager Creation

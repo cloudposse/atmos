@@ -67,9 +67,18 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Skip stack processing when cleaning with the `--force` flag to allow cleaning without requiring stack configuration.
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
+	// Get component-specific auth config and merge with global auth config.
+	// This allows components to define their own auth identities and defaults in stack configurations.
+	// The merged config is used for authentication to support component-level defaults.
+	mergedAuthConfig, err := GetComponentAuthConfig(&atmosConfig, info.Stack, info.ComponentFromArg, info.ComponentType)
+	if err != nil {
+		return err
+	}
+
 	// Create and authenticate AuthManager from --identity flag if specified.
+	// Uses merged auth config that includes both global and component-specific identities/defaults.
 	// This enables YAML template functions like !terraform.state to use authenticated credentials.
-	authManager, err := auth.CreateAndAuthenticateManager(info.Identity, &atmosConfig.Auth, cfg.IdentityFlagSelectValue)
+	authManager, err := auth.CreateAndAuthenticateManager(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue)
 	if err != nil {
 		return err
 	}
