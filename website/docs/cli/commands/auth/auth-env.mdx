@@ -133,7 +133,8 @@ The separation between setting environment variables (`atmos auth env`) and auth
 
 [Warp](https://warp.dev) is a modern terminal that works well with `atmos auth env`. Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensures that new terminal windows and panes automatically have the appropriate environment variables set for your default identity.
 
-### Helper Function for Identity Switching
+<details>
+<summary>Helper Function for Identity Switching</summary>
 
 For users who prefer a combined authentication and configuration flow, you can create a helper function:
 
@@ -188,6 +189,8 @@ This helper function:
 - Provides both interactive and non-interactive modes
 - Evaluates the output to set credentials in your current shell
 - Works with any cloud provider supported by Atmos
+
+</details>
 
 ## Flags
 
