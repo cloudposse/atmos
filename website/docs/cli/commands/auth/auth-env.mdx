@@ -129,9 +129,9 @@ The separation between setting environment variables (`atmos auth env`) and auth
 2. Authenticate when needed with `atmos auth login`
 3. Re-authenticate when credentials expire without re-evaluating `atmos auth env`
 
-### Using with Warp Terminal
-
-[Warp](https://warp.dev) is a modern terminal that works well with `atmos auth env`. Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensures that new terminal windows and panes automatically have the appropriate environment variables set for your default identity.
+:::info Using with Warp Terminal
+[Warp](https://warp.dev) is a modern terminal that works well with `atmos auth env`. Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) is the preferred way to use Atmos authentication with Warp, as it ensures that new terminal windows and panes automatically have the appropriate environment variables set for your default identity.
+:::
 
 <details>
 <summary>Helper Function for Identity Switching</summary>
