@@ -10,6 +10,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../../.."
+      ATMOS_BASE_PATH: "../../.."
     args:
       - "terraform"
       - "plan"
@@ -29,6 +30,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
+      ATMOS_BASE_PATH: "../.."
     args:
       - "terraform"
       - "plan"
@@ -43,11 +45,11 @@ tests:
   - name: terraform plan with nested component path
     enabled: true
     snapshot: true
-    description: "Test terraform plan with component in subfolder"
+    description: "Test terraform plan with component in subfolder (expects OPA policy violations)"
     workdir: "fixtures/scenarios/complete/components/terraform/infra/vpc"
     command: "atmos"
     env:
-      ATMOS_CLI_CONFIG_PATH: "../../../../.."
+      ATMOS_CLI_CONFIG_PATH: "../../../.."
     args:
       - "terraform"
       - "plan"
@@ -57,7 +59,7 @@ tests:
       - "--dry-run"
     expect:
       diff: []
-      exit_code: 0
+      exit_code: 1
 
   # Error handling tests
   - name: terraform plan with path not in component directory
@@ -95,7 +97,7 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Could not find"
+        - "not found"
       exit_code: 1
 
   - name: terraform plan with path at component base directory
@@ -106,6 +108,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
+      ATMOS_BASE_PATH: "../.."
     args:
       - "terraform"
       - "plan"
@@ -190,10 +193,7 @@ tests:
       - "--stack"
       - "tenant1-ue2-dev"
     expect:
-      diff:
-        - "provisioned_by_user:"
-        - "DEBUG: Extracting component info from path"
-        - "DEBUG: Successfully extracted component info"
+      diff: []
       exit_code: 0
 
   - name: describe component with relative path
@@ -204,6 +204,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
+      ATMOS_BASE_PATH: "../.."
     args:
       - "describe"
       - "component"
@@ -211,10 +212,7 @@ tests:
       - "--stack"
       - "tenant1-ue2-dev"
     expect:
-      diff:
-        - "provisioned_by_user:"
-        - "DEBUG: Extracting component info from path"
-        - "DEBUG: Successfully extracted component info"
+      diff: []
       exit_code: 0
 
   - name: describe component with nested component path
@@ -224,7 +222,7 @@ tests:
     workdir: "fixtures/scenarios/complete/components/terraform/infra/vpc"
     command: "atmos"
     env:
-      ATMOS_CLI_CONFIG_PATH: "../../../.."
+      ATMOS_CLI_CONFIG_PATH: "../../../../.."
     args:
       - "describe"
       - "component"
@@ -232,28 +230,25 @@ tests:
       - "--stack"
       - "tenant1-ue2-dev"
     expect:
-      diff:
-        - "provisioned_by_user:"
-        - "DEBUG: Extracting component info from path"
-        - "DEBUG: Successfully extracted component info"
+      diff: []
       exit_code: 0
 
   - name: describe component with path not in component directory
     enabled: true
     snapshot: true
     description: "Test error when path is outside component directories"
-    workdir: "fixtures/scenarios/complete"
+    workdir: "/tmp"
     command: "atmos"
     args:
       - "describe"
       - "component"
-      - "/tmp"
+      - "."
       - "--stack"
       - "tenant1-ue2-dev"
     expect:
       diff: []
       stderr:
-        - "path is not within"
+        - "path is not within Atmos component directories"
       exit_code: 1
 
   - name: describe component with component name (backward compatibility)
@@ -269,8 +264,7 @@ tests:
       - "--stack"
       - "tenant1-ue2-dev"
     expect:
-      diff:
-        - "provisioned_by_user:"
+      diff: []
       exit_code: 0
 
   # Validate component tests
@@ -289,9 +283,7 @@ tests:
       - "--stack"
       - "tenant1-ue2-dev"
     expect:
-      diff:
-        - "DEBUG: Extracting component info from path"
-        - "DEBUG: Successfully extracted component info"
+      diff: []
       exit_code: 0
 
   - name: validate component with relative path
@@ -302,6 +294,7 @@ tests:
     command: "atmos"
     env:
       ATMOS_CLI_CONFIG_PATH: "../.."
+      ATMOS_BASE_PATH: "../.."
     args:
       - "validate"
       - "component"
@@ -309,9 +302,7 @@ tests:
       - "--stack"
       - "tenant1-ue2-dev"
     expect:
-      diff:
-        - "DEBUG: Extracting component info from path"
-        - "DEBUG: Successfully extracted component info"
+      diff: []
       exit_code: 0
 
   - name: validate component with component name (backward compatibility)

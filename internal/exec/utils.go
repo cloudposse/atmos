@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -430,8 +431,7 @@ func ProcessStacks(
 			return configAndStacksInfo, nil
 		}
 
-		// Only attempt path resolution fallback if the component argument contains forward slashes,
-		// which indicates it's likely a file path rather than a simple component name.
+		// Only attempt path resolution fallback if the component argument looks like a file path.
 		// This prevents treating plain component names (like "vpc") as relative paths from CWD.
 		//
 		// Note: Component names in stack configs can contain forward slashes (like "infra/vpc"),
@@ -439,9 +439,21 @@ func ProcessStacks(
 		// - "infra/vpc" as a component name → already found in first loop, no fallback needed
 		// - "components/terraform/vpc" as a path → not found in first loop, fallback needed
 		//
-		// Examples that should trigger fallback: "components/terraform/vpc"
+		// Path indicators (trigger fallback):
+		// - Forward slash: "components/terraform/vpc"
+		// - Backslash (Windows): "components\terraform\vpc"
+		// - Dot paths: ".", "..", "./vpc"
+		//
 		// Examples that should NOT trigger fallback: "vpc", "top-level-component1", "infra/vpc" (if defined in stack)
-		shouldAttemptPathResolution := foundStackCount == 0 && strings.Contains(configAndStacksInfo.ComponentFromArg, "/")
+		pathArg := configAndStacksInfo.ComponentFromArg
+		hasForwardSlash := strings.Contains(pathArg, "/")
+		hasPlatformSep := filepath.Separator != '/' && strings.ContainsRune(pathArg, filepath.Separator)
+		// Check for dot paths with both forward slash and platform separator.
+		isDotPath := pathArg == "." || pathArg == ".." ||
+			strings.HasPrefix(pathArg, "./") || strings.HasPrefix(pathArg, "../") ||
+			strings.HasPrefix(pathArg, "."+string(filepath.Separator)) ||
+			strings.HasPrefix(pathArg, ".."+string(filepath.Separator))
+		shouldAttemptPathResolution := foundStackCount == 0 && (hasForwardSlash || hasPlatformSep || isDotPath)
 
 		if shouldAttemptPathResolution {
 			// Component not found - try fallback to path resolution.
