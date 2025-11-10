@@ -528,15 +528,37 @@ Use `no-release` label for docs-only changes.
 Check status: `gh pr checks {pr} --repo cloudposse/atmos`
 
 **Responding to CodeRabbit Review Comments (MANDATORY):**
-When addressing CodeRabbit review comments, you MUST reply to the specific review threads, not just add a general PR comment.
 
-**IMPORTANT:**
-- ❌ `gh pr comment` - Does NOT notify CodeRabbit or resolve threads
-- ✅ Reply to specific review threads using the GitHub web interface or API
+**CRITICAL: NEVER edit CodeRabbit's comments or anyone else's comments. ONLY reply to review threads.**
 
-**How to reply to review threads:**
-1. Get review thread IDs via GitHub API
-2. Use GraphQL mutation `addPullRequestReviewThreadReply` to post replies
+When addressing CodeRabbit review comments, you MUST reply to the specific review threads, not add a general PR comment or edit existing comments.
+
+**NEVER use these (they EDIT comments):**
+- ❌ `gh api repos/OWNER/REPO/pulls/comments/COMMENT_ID --method POST --field body="..."` (EDITS the comment)
+- ❌ `gh api repos/OWNER/REPO/pulls/comments/COMMENT_ID --method PATCH` (EDITS the comment)
+- ❌ `gh pr comment` (Does NOT notify CodeRabbit or resolve threads)
+
+**ALWAYS use this (replies to thread):**
+- ✅ GraphQL mutation `addPullRequestReviewThreadReply` with review thread ID
+
+**Correct workflow to reply to review threads:**
+1. Get review thread IDs (format: `PRRT_kwDOEW4XoM5fXXXXXX`) via GraphQL `reviewThreads` query
+2. Use GraphQL mutation to reply:
+```bash
+gh api graphql -f query='
+mutation {
+  addPullRequestReviewThreadReply(input: {
+    pullRequestReviewThreadId: "PRRT_kwDOEW4XoM5fXXXXXX"
+    body: "Your response here"
+  }) {
+    comment { id }
+  }
+}'
+```
+
+**Key distinction:**
+- Review thread ID: `PRRT_kwDOEW4XoM5fXXXXXX` (use this with `addPullRequestReviewThreadReply`)
+- Comment ID: `2508617685` (NEVER use this - it edits the comment)
 3. Each reply should reference the specific issue and explain the fix or dismissal
 
 **Example workflow:**
