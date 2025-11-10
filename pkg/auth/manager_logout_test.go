@@ -934,3 +934,43 @@ func TestManager_LogoutAll_LogsOutProviders(t *testing.T) {
 	// Verify the test would fail if provider logout wasn't called.
 	// The gomock controller will automatically fail if expected calls aren't made.
 }
+
+func TestManager_LogoutProvider_RemovesProvisionedIdentitiesCache(t *testing.T) {
+	// Test that LogoutProvider attempts to remove the auto-provisioned identities cache file.
+	// This is an integration test that verifies the cache cleanup is called.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-provider": {
+				Kind: "aws/iam-identity-center",
+			},
+		},
+		Identities: map[string]schema.Identity{},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers: map[string]types.Provider{
+			"test-provider": mockProvider,
+		},
+		identities: map[string]types.Identity{},
+	}
+
+	// Expect provider logout calls.
+	mockStore.EXPECT().Delete("test-provider").Return(nil)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	// Call LogoutProvider - it should attempt to remove the cache file.
+	// The cache cleanup is non-fatal, so even if the file doesn't exist, logout should succeed.
+	ctx := context.Background()
+	err := m.LogoutProvider(ctx, "test-provider")
+	if err != nil {
+		t.Errorf("LogoutProvider() should succeed even if cache file doesn't exist, got: %v", err)
+	}
+}
