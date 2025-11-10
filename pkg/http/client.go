@@ -1,4 +1,4 @@
-//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=client.go -destination=mock_client.go -package=http
+//go:generate go run go.uber.org/mock/mockgen@latest -source=client.go -destination=mock_client_test.go -package=http
 
 package http
 
@@ -13,6 +13,15 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+const (
+	// userAgent is the User-Agent header value for HTTP requests.
+	userAgent = "atmos-toolchain/1.0"
+
+	// MaxErrorBodySize limits how much of an HTTP error response body to include in error messages.
+	// This prevents log pollution and potential exposure of large sensitive payloads.
+	maxErrorBodySize = 64 * 1024 // 64 KB
 )
 
 // Client defines the interface for making HTTP requests.
@@ -98,7 +107,7 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 	host := req.URL.Hostname()
 	if (host == "api.github.com" || host == "raw.githubusercontent.com") && t.GitHubToken != "" {
 		req.Header.Set("Authorization", "Bearer "+t.GitHubToken)
-		req.Header.Set("User-Agent", "atmos-toolchain/1.0")
+		req.Header.Set("User-Agent", userAgent)
 	}
 
 	base := t.Base
@@ -132,12 +141,6 @@ func (c *DefaultClient) Do(req *http.Request) (*http.Response, error) {
 
 	return c.client.Do(req)
 }
-
-const (
-	// MaxErrorBodySize limits how much of an HTTP error response body to include in error messages.
-	// This prevents log pollution and potential exposure of large sensitive payloads.
-	maxErrorBodySize = 64 * 1024 // 64 KB
-)
 
 // Get performs an HTTP GET request with context using the provided client.
 func Get(ctx context.Context, url string, client Client) ([]byte, error) {
