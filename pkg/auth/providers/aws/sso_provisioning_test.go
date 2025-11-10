@@ -221,8 +221,9 @@ func TestProvisionIdentities_Success(t *testing.T) {
 	prodAdmin, ok := result.Identities["prod-account/AdminRole"]
 	require.True(t, ok, "prod-account/AdminRole identity should exist")
 	assert.Equal(t, "test-sso", prodAdmin.Provider)
-	assert.Equal(t, "role", prodAdmin.Kind)
-	assert.Equal(t, "aws-sso", prodAdmin.Via)
+	assert.Equal(t, "aws/permission-set", prodAdmin.Kind)
+	require.NotNil(t, prodAdmin.Via)
+	assert.Equal(t, "aws-sso", prodAdmin.Via.Provider)
 	assert.Equal(t, "AdminRole", prodAdmin.Principal["name"])
 	account, ok := prodAdmin.Principal["account"].(map[string]interface{})
 	require.True(t, ok)
@@ -233,15 +234,17 @@ func TestProvisionIdentities_Success(t *testing.T) {
 	prodReadOnly, ok := result.Identities["prod-account/ReadOnlyRole"]
 	require.True(t, ok, "prod-account/ReadOnlyRole identity should exist")
 	assert.Equal(t, "test-sso", prodReadOnly.Provider)
-	assert.Equal(t, "role", prodReadOnly.Kind)
-	assert.Equal(t, "aws-sso", prodReadOnly.Via)
+	assert.Equal(t, "aws/permission-set", prodReadOnly.Kind)
+	require.NotNil(t, prodReadOnly.Via)
+	assert.Equal(t, "aws-sso", prodReadOnly.Via.Provider)
 
 	// Check dev-account/DeveloperRole identity.
 	devDeveloper, ok := result.Identities["dev-account/DeveloperRole"]
 	require.True(t, ok, "dev-account/DeveloperRole identity should exist")
 	assert.Equal(t, "test-sso", devDeveloper.Provider)
-	assert.Equal(t, "role", devDeveloper.Kind)
-	assert.Equal(t, "aws-sso", devDeveloper.Via)
+	assert.Equal(t, "aws/permission-set", devDeveloper.Kind)
+	require.NotNil(t, devDeveloper.Via)
+	assert.Equal(t, "aws-sso", devDeveloper.Via.Provider)
 	assert.Equal(t, "DeveloperRole", devDeveloper.Principal["name"])
 	devAccount, ok := devDeveloper.Principal["account"].(map[string]interface{})
 	require.True(t, ok)

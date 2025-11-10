@@ -99,7 +99,9 @@ func (p *ssoProvider) provisionIdentitiesWithClient(ctx context.Context, ssoClie
 			}
 
 			identities[identityName] = &schema.Identity{
+				Kind:      "aws/permission-set",
 				Provider:  p.name,
+				Via:       &schema.IdentityVia{Provider: "aws-sso"},
 				Principal: principal.ToMap(),
 			}
 		}
