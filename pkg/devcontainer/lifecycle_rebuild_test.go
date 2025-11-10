@@ -285,6 +285,138 @@ func TestManager_Rebuild(t *testing.T) {
 			errorIs:       errUtils.ErrContainerRuntimeOperation,
 			errorContains: "failed to start container",
 		},
+		{
+			name:     "remove fails after stop succeeds",
+			devName:  "test",
+			instance: "default",
+			noPull:   false,
+			setupMocks: func(loader *MockConfigLoader, identity *MockIdentityManager, detector *MockRuntimeDetector, runtime *MockRuntime) {
+				config := &Config{Name: "test", Image: "ubuntu:22.04"}
+				loader.EXPECT().
+					LoadConfig(gomock.Any(), "test").
+					Return(config, &Settings{}, nil)
+				detector.EXPECT().
+					DetectRuntime("").
+					Return(runtime, nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Return(&container.Info{
+						ID:     "old-id",
+						Name:   "atmos-devcontainer-test-default",
+						Status: "running",
+					}, nil)
+				runtime.EXPECT().
+					Stop(gomock.Any(), "old-id", gomock.Any()).
+					Return(nil)
+				runtime.EXPECT().
+					Remove(gomock.Any(), "old-id", true).
+					Return(errors.New("remove failed"))
+			},
+			expectError:   true,
+			errorIs:       errUtils.ErrContainerRuntimeOperation,
+			errorContains: "failed to remove container",
+		},
+		{
+			name:     "explicit runtime specification - docker",
+			devName:  "test",
+			instance: "default",
+			noPull:   true,
+			setupMocks: func(loader *MockConfigLoader, identity *MockIdentityManager, detector *MockRuntimeDetector, runtime *MockRuntime) {
+				config := &Config{
+					Name:  "test",
+					Image: "ubuntu:22.04",
+				}
+				settings := &Settings{
+					Runtime: "docker",
+				}
+				loader.EXPECT().
+					LoadConfig(gomock.Any(), "test").
+					Return(config, settings, nil)
+				detector.EXPECT().
+					DetectRuntime("docker").
+					Return(runtime, nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Return(nil, errors.New("not found"))
+				runtime.EXPECT().
+					Create(gomock.Any(), gomock.Any()).
+					Return("new-id", nil)
+				runtime.EXPECT().
+					Start(gomock.Any(), "new-id").
+					Return(nil)
+			},
+			expectError: false,
+		},
+		{
+			name:     "no identity injection when identityName is empty",
+			devName:  "test",
+			instance: "default",
+			noPull:   true,
+			setupMocks: func(loader *MockConfigLoader, identity *MockIdentityManager, detector *MockRuntimeDetector, runtime *MockRuntime) {
+				config := &Config{Name: "test", Image: "ubuntu:22.04"}
+				loader.EXPECT().
+					LoadConfig(gomock.Any(), "test").
+					Return(config, &Settings{}, nil)
+				// InjectIdentityEnvironment should NOT be called
+				detector.EXPECT().
+					DetectRuntime("").
+					Return(runtime, nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+					Return(nil, errors.New("not found"))
+				runtime.EXPECT().
+					Create(gomock.Any(), gomock.Any()).
+					Return("new-id", nil)
+				runtime.EXPECT().
+					Start(gomock.Any(), "new-id").
+					Return(nil)
+			},
+			expectError: false,
+		},
+		{
+			name:     "operations execute in correct order",
+			devName:  "test",
+			instance: "default",
+			noPull:   false,
+			setupMocks: func(loader *MockConfigLoader, identity *MockIdentityManager, detector *MockRuntimeDetector, runtime *MockRuntime) {
+				config := &Config{
+					Name:  "test",
+					Image: "ubuntu:22.04",
+				}
+				// Use gomock.InOrder to enforce sequence: Inspect → Stop → Remove → Pull → Create → Start
+				gomock.InOrder(
+					loader.EXPECT().
+						LoadConfig(gomock.Any(), "test").
+						Return(config, &Settings{}, nil),
+					detector.EXPECT().
+						DetectRuntime("").
+						Return(runtime, nil),
+					runtime.EXPECT().
+						Inspect(gomock.Any(), "atmos-devcontainer-test-default").
+						Return(&container.Info{
+							ID:     "old-id",
+							Name:   "atmos-devcontainer-test-default",
+							Status: "running",
+						}, nil),
+					runtime.EXPECT().
+						Stop(gomock.Any(), "old-id", gomock.Any()).
+						Return(nil),
+					runtime.EXPECT().
+						Remove(gomock.Any(), "old-id", true).
+						Return(nil),
+					runtime.EXPECT().
+						Pull(gomock.Any(), "ubuntu:22.04").
+						Return(nil),
+					runtime.EXPECT().
+						Create(gomock.Any(), gomock.Any()).
+						Return("new-id", nil),
+					runtime.EXPECT().
+						Start(gomock.Any(), "new-id").
+						Return(nil),
+				)
+			},
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
