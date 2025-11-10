@@ -25,7 +25,7 @@ atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
 
 `atmos auth env` outputs environment variable exports for a specific cloud identity (e.g., `AWS_PROFILE`, `AWS_CONFIG_FILE`, `AWS_SHARED_CREDENTIALS_FILE`). You use this output to configure your shell environment by evaluating it with `eval $(atmos auth env)`.
 
-**Important:** This command **outputs environment variables** but does **not perform authentication**. It generates export statements pointing to credential files that are populated during login events. Since commands cannot modify their parent shell's environment, you must use `eval` to apply these variables to your current shell.
+**Important:** This command **outputs environment variables** and does **not perform authentication by default**. It generates export statements pointing to credential files that are populated during login events. Use the `--login` flag to trigger authentication if credentials are missing or expired. Since commands cannot modify their parent shell's environment, you must use `eval` to apply these variables to your current shell.
 
 **Typical Workflow:**
 
