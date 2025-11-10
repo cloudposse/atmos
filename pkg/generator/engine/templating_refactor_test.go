@@ -286,7 +286,7 @@ func TestHandleExistingFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			file := File{
 				Path:        "test.txt",
-				Content:     "new content",
+				Content:     "existing content with changes",
 				IsTemplate:  false,
 				Permissions: 0o644,
 			}
