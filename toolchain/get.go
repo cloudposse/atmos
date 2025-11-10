@@ -10,6 +10,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -128,9 +129,9 @@ func printVersions(versions []string, defaultVersion string, installed map[strin
 			indicator = theme.Styles.Checkmark.Render()
 		}
 		if installed[v] {
-			fmt.Printf("%s %s\n", indicator, installedStyle.Render(v))
+			_ = ui.Writef("%s %s", indicator, installedStyle.Render(v))
 		} else {
-			fmt.Printf("%s %s\n", indicator, notInstalledStyle.Render(v))
+			_ = ui.Writef("%s %s", indicator, notInstalledStyle.Render(v))
 		}
 	}
 }

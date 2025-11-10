@@ -22,6 +22,7 @@ import (
 
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/xdg"
 	"github.com/cloudposse/atmos/toolchain/registry"
 )
@@ -694,7 +695,7 @@ func extractEntry(tr *tar.Reader, header *tar.Header, dest string) error {
 	case tar.TypeReg:
 		return extractFile(tr, targetPath, header)
 	default:
-		fmt.Printf("Skipping unknown type: %s\n", header.Name)
+		_ = ui.Warningf("Skipping unknown type: %s", header.Name)
 		return nil
 	}
 }

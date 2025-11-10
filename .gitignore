@@ -112,3 +112,10 @@ toolchain/.tool-versions
 # Scratch/temporary analysis files
 .scratch/
 scratch/
+
+# Conductor scratch/temporary files
+scratch/
+*.log
+*_progress.txt
+*_summary.txt
+reply_to_*.sh

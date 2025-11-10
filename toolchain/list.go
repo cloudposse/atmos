@@ -369,11 +369,7 @@ func RunList() error {
 	t.SetStyles(defaultStyle)
 
 	// Print the table with conditional styling
-	// fmt.Println(renderTableWithConditionalStyling(t, rows, defaultStyle, uninstalledStyle))
-	// fmt.Println(t.View())
-
-	// Print the table with conditional styling
-	fmt.Println(renderTableWithConditionalStyling(t, rows, defaultStyle, uninstalledStyle))
+	_ = ui.Writeln(renderTableWithConditionalStyling(t, rows, defaultStyle, uninstalledStyle))
 
 	return nil
 }
