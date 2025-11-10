@@ -100,6 +100,13 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		// Don't fail config loading if this step fails, just log it.
 	}
 
+	// Apply git root discovery for default base path.
+	// This enables running Atmos from any subdirectory, similar to Git.
+	if err := applyGitRootBasePath(&atmosConfig); err != nil {
+		log.Debug("Failed to apply git root base path", "error", err)
+		// Don't fail config loading if this step fails, just log it.
+	}
+
 	return atmosConfig, nil
 }
 
