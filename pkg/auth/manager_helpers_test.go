@@ -408,3 +408,192 @@ func TestCreateAndAuthenticateManager_SelectValueParameter(t *testing.T) {
 
 	_ = manager
 }
+
+func TestCreateAndAuthenticateManager_AutoDetectSingleDefault(t *testing.T) {
+	// When no identity flag is provided and exactly one default identity exists,
+	// the function should automatically detect and use it.
+
+	authConfig := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-provider": {
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://test.awsapps.com/start",
+			},
+		},
+		Identities: map[string]schema.Identity{
+			"core-auto/terraform": {
+				Kind:    "aws/permission-set",
+				Default: true, // This should be auto-detected
+				Via: &schema.IdentityVia{
+					Provider: "test-provider",
+				},
+				Principal: map[string]interface{}{
+					"name": "TerraformApplyAccess",
+					"account": map[string]interface{}{
+						"name": "core-auto",
+					},
+				},
+			},
+			"non-default-identity": {
+				Kind:    "aws/permission-set",
+				Default: false,
+				Via: &schema.IdentityVia{
+					Provider: "test-provider",
+				},
+				Principal: map[string]interface{}{
+					"name": "OtherAccess",
+					"account": map[string]interface{}{
+						"name": "other",
+					},
+				},
+			},
+		},
+	}
+
+	// No identity flag provided (empty string)
+	manager, err := CreateAndAuthenticateManager("", authConfig, "__SELECT__")
+
+	// Should auto-detect default identity and attempt authentication
+	// The authentication itself will fail (no real AWS SSO), but manager should be created
+	if err != nil {
+		// Should be auth error (failed to authenticate), not config error
+		assert.NotErrorIs(t, err, errUtils.ErrAuthNotConfigured, "Should not error with 'auth not configured'")
+		assert.NotErrorIs(t, err, errUtils.ErrIdentityNotInConfig, "Should not error with 'identity not in config'")
+		// The error should be authentication-related
+		t.Logf("Authentication failed as expected in test environment: %v", err)
+	} else {
+		// In case authentication somehow succeeds (cached credentials, etc.)
+		assert.NotNil(t, manager, "Manager should not be nil when default identity is detected")
+	}
+}
+
+func TestCreateAndAuthenticateManager_AutoDetectNoDefault(t *testing.T) {
+	// When no identity flag is provided and NO default identity exists,
+	// the function should return nil (no authentication).
+
+	authConfig := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-provider": {
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://test.awsapps.com/start",
+			},
+		},
+		Identities: map[string]schema.Identity{
+			"identity-1": {
+				Kind:    "aws/permission-set",
+				Default: false, // Not default
+				Via: &schema.IdentityVia{
+					Provider: "test-provider",
+				},
+				Principal: map[string]interface{}{
+					"name": "Access1",
+					"account": map[string]interface{}{
+						"name": "account1",
+					},
+				},
+			},
+			"identity-2": {
+				Kind:    "aws/permission-set",
+				Default: false, // Not default
+				Via: &schema.IdentityVia{
+					Provider: "test-provider",
+				},
+				Principal: map[string]interface{}{
+					"name": "Access2",
+					"account": map[string]interface{}{
+						"name": "account2",
+					},
+				},
+			},
+		},
+	}
+
+	// No identity flag provided (empty string)
+	manager, err := CreateAndAuthenticateManager("", authConfig, "__SELECT__")
+
+	// Should return nil (no authentication) since no default identity exists
+	assert.NoError(t, err, "Should not error when no default identity")
+	assert.Nil(t, manager, "Manager should be nil when no default identity")
+}
+
+func TestCreateAndAuthenticateManager_AutoDetectNoAuthConfig(t *testing.T) {
+	// When no identity flag is provided and auth is not configured,
+	// the function should return nil (backward compatible).
+
+	// No identity flag, no auth config
+	manager, err := CreateAndAuthenticateManager("", nil, "__SELECT__")
+
+	assert.NoError(t, err, "Should not error when auth not configured")
+	assert.Nil(t, manager, "Manager should be nil when auth not configured")
+}
+
+func TestCreateAndAuthenticateManager_AutoDetectEmptyIdentities(t *testing.T) {
+	// When no identity flag is provided and identities map is empty,
+	// the function should return nil (backward compatible).
+
+	authConfig := &schema.AuthConfig{
+		Providers:  map[string]schema.Provider{},
+		Identities: map[string]schema.Identity{}, // Empty
+	}
+
+	// No identity flag provided
+	manager, err := CreateAndAuthenticateManager("", authConfig, "__SELECT__")
+
+	assert.NoError(t, err, "Should not error when identities map is empty")
+	assert.Nil(t, manager, "Manager should be nil when no identities configured")
+}
+
+func TestCreateAndAuthenticateManager_AutoDetectMultipleDefaults(t *testing.T) {
+	// When no identity flag is provided and MULTIPLE default identities exist,
+	// behavior depends on terminal mode:
+	// - CI mode: returns nil (can't prompt)
+	// - Interactive mode: would prompt user (we'll test CI mode)
+
+	authConfig := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-provider": {
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://test.awsapps.com/start",
+			},
+		},
+		Identities: map[string]schema.Identity{
+			"default-1": {
+				Kind:    "aws/permission-set",
+				Default: true, // Multiple defaults
+				Via: &schema.IdentityVia{
+					Provider: "test-provider",
+				},
+				Principal: map[string]interface{}{
+					"name": "Access1",
+					"account": map[string]interface{}{
+						"name": "account1",
+					},
+				},
+			},
+			"default-2": {
+				Kind:    "aws/permission-set",
+				Default: true, // Multiple defaults
+				Via: &schema.IdentityVia{
+					Provider: "test-provider",
+				},
+				Principal: map[string]interface{}{
+					"name": "Access2",
+					"account": map[string]interface{}{
+						"name": "account2",
+					},
+				},
+			},
+		},
+	}
+
+	// No identity flag provided
+	manager, err := CreateAndAuthenticateManager("", authConfig, "__SELECT__")
+
+	// In CI mode (no TTY), GetDefaultIdentity will error with multiple defaults
+	// We handle this gracefully by returning nil
+	assert.NoError(t, err, "Should not propagate error from GetDefaultIdentity")
+	assert.Nil(t, manager, "Manager should be nil when multiple defaults in CI mode")
+}

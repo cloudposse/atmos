@@ -1,4 +1,4 @@
-# Authentication Flow Analysis: !terraform.output YAML Function
+# Authentication Flow: !terraform.output YAML Function
 
 ## Overview
 
@@ -10,7 +10,7 @@ The `!terraform.output` YAML function has a more complex authentication flow tha
 
 ## Complete Call Flow
 
-```
+```text
 Terraform Command Execution (with --identity flag)
   ↓
 cmd/terraform_utils.go:terraformRun()
@@ -263,8 +263,9 @@ Our fix **correctly handles both** `!terraform.state` and `!terraform.output` YA
 
 1. **Common path**: Both functions receive AuthContext through stackInfo from ProcessComponentConfig
 2. **Divergent execution**:
-  - `!terraform.state`: Uses AuthContext directly with AWS SDK to read S3
-  - `!terraform.output`: Converts AuthContext to environment variables for terraform binary
+
+- `!terraform.state`: Uses AuthContext directly with AWS SDK to read S3
+- `!terraform.output`: Converts AuthContext to environment variables for terraform binary
 
 The key insight is that **both authentication methods rely on stackInfo.AuthContext being populated**, which our fix
 ensures by threading AuthManager through ProcessComponentConfig.
