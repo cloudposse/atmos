@@ -174,7 +174,7 @@ Instead of runtime-only identities or new commands, **enable auto-provisiony at 
                      ▼
          ┌───────────────────────┐
          │ Check Feature Flag:   │
-         │ auto_discover?        │
+         │ auto_provision?       │
          └───────────┬───────────┘
                      │ yes
                      ▼
@@ -188,7 +188,7 @@ Instead of runtime-only identities or new commands, **enable auto-provisiony at 
          ┌───────────────────────────────────────┐
          │ Generate Dynamic Config:              │
          │ ~/.cache/atmos/aws/sso-prod/          │
-         │   discovered-identities.yaml          │
+         │   provisioned-identities.yaml          │
          │                                       │
          │ auth:                                 │
          │   identities:                         │
@@ -424,7 +424,7 @@ providers:
     start_url: https://my-org.awsapps.com/start
     region: us-east-1
     spec:
-      auto_discover_identities: true
+      auto_provision_identities: true
       discovery:
         filters:
           accounts: ["production", "staging"]  # Only these accounts
@@ -908,11 +908,11 @@ func getProvisioningOutputPath(providerName string, provider *schema.Provider) s
    └─> Clean AWS files (credentials, config)
    └─> Remove cached credentials from keyring
 
-3. Auth Manager: Check auto_discover_identities
+3. Auth Manager: Check auto_provision_identities
    └─> If true: Clean provisioning file
 
 4. Auth Manager: cleanupDiscoveryFile()
-   └─> Get path: ~/.cache/atmos/aws/sso-prod/discovered-identities.yaml
+   └─> Get path: ~/.cache/atmos/aws/sso-prod/provisioned-identities.yaml
    └─> Delete file if exists
    └─> Log warning if fails (non-fatal)
 
@@ -935,7 +935,7 @@ providers:
 
     spec:
       # Enable auto-provisiony (default: false)
-      auto_discover_identities: true
+      auto_provision_identities: true
 
       # Optional: Discovery configuration
       discovery:
@@ -943,7 +943,7 @@ providers:
         cache_duration: 1h
 
         # Custom output path (default: XDG cache directory)
-        output_path: ~/.cache/atmos/aws/sso-prod/discovered-identities.yaml
+        output_path: ~/.cache/atmos/aws/sso-prod/provisioned-identities.yaml
 
         # Filters: Limit which identities are discovered
         filters:
@@ -983,7 +983,7 @@ providers:
       "spec": {
         "type": "object",
         "properties": {
-          "auto_discover_identities": {
+          "auto_provision_identities": {
             "type": "boolean",
             "description": "Automatically discover and populate identities from AWS SSO",
             "default": false
@@ -1081,7 +1081,7 @@ providers:
 3. `pkg/auth/config_writer.go` - Config file writer
 4. `pkg/auth/manager.go` - Discovery orchestration
 5. `pkg/config/load.go` - Dynamic import injection
-6. Schema updates for `auto_discover_identities` flag
+6. Schema updates for `auto_provision_identities` flag
 7. Unit tests for all components
 
 **APIs Used**:
@@ -1159,7 +1159,7 @@ providers:
 
 ### 2. XDG Cache Directory vs Project Directory
 
-**Decision**: Default to `{XDG_CACHE_HOME}/atmos/aws/{provider}/discovered-identities.yaml`
+**Decision**: Default to `{XDG_CACHE_HOME}/atmos/aws/{provider}/provisioned-identities.yaml`
 
 **Rationale**:
 - **XDG-compliant**: Follows XDG Base Directory Specification
@@ -1223,7 +1223,7 @@ providers:
 
 ### 6. Feature Flag Approach
 
-**Decision**: Opt-in via `auto_discover_identities: true` at provider level
+**Decision**: Opt-in via `auto_provision_identities: true` at provider level
 
 **Rationale**:
 - Backward compatible (no behavior change unless enabled)
@@ -1316,7 +1316,7 @@ providers:
 
 #### Risk 3: Config File Conflicts
 
-**Impact**: User manually edits discovered-identities.yaml
+**Impact**: User manually edits provisioned-identities.yaml
 
 **Mitigation**:
 - Add warning comment in generated file: "DO NOT EDIT"
