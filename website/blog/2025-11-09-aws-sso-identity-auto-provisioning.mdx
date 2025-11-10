@@ -171,24 +171,26 @@ Manual configuration takes precedence over provisioned configuration due to impo
 
 ### Cache Location
 
-Provisioned identities are stored in the XDG cache directory:
+Provisioned identities are stored following [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html):
 
 ```
-~/.cache/atmos/auth/
+$XDG_CACHE_HOME/atmos/auth/
 └── sso-prod/
     └── provisioned-identities.yaml
 ```
 
-You can inspect this file to see exactly what was provisioned:
+By default, this resolves to `~/.cache/atmos/auth/` on Linux/macOS and `%LOCALAPPDATA%\atmos\cache\` on Windows.
+
+You can inspect this file to see exactly what was provisioned. For example, on Linux/macOS:
 
 ```bash
 cat ~/.cache/atmos/auth/sso-prod/provisioned-identities.yaml
 ```
 
-To force re-provisioning, delete the cache file and re-authenticate:
+To force re-provisioning, logout and re-authenticate:
 
 ```bash
-rm -rf ~/.cache/atmos/auth/sso-prod
+atmos auth logout sso-prod
 atmos auth login sso-prod
 ```
 

@@ -300,17 +300,19 @@ Manual configuration takes precedence over provisioned configuration.
 
 ### Cache Management
 
-Provisioned identities are cached in:
+Provisioned identities are cached following [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html):
 
 ```
-~/.cache/atmos/auth/{provider-name}/provisioned-identities.yaml
+$XDG_CACHE_HOME/atmos/auth/{provider-name}/provisioned-identities.yaml
 ```
+
+By default, this resolves to `~/.cache/atmos/auth/` on Linux/macOS and `%LOCALAPPDATA%\atmos\cache\` on Windows.
 
 To force re-provisioning:
 
 ```bash
-# Delete cache
-rm -rf ~/.cache/atmos/auth/sso-prod
+# Logout to clear cache
+atmos auth logout sso-prod
 
 # Re-authenticate
 atmos auth login sso-prod

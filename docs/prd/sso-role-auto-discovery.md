@@ -1166,7 +1166,7 @@ providers:
 - **Ephemeral cache**: `XDG_CACHE_HOME` indicates regeneratable data (vs `XDG_CONFIG_HOME` for persistent config)
 - **Mirrors existing pattern**: AWS credentials already use XDG paths via AWS file manager
 - **Per-provider isolation**: Allows multiple SSO providers without conflicts
-- **Platform-appropriate**: Linux `~/.cache`, macOS `~/Library/Caches`, Windows `%LOCALAPPDATA%`
+- **Platform-appropriate**: Linux/macOS `~/.cache`, Windows `%LOCALAPPDATA%`
 - **Not backed up**: Cache directories typically excluded from system backups
 - **User-writable**: No permission issues
 

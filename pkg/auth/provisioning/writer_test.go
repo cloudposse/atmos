@@ -132,7 +132,7 @@ func TestNewWriter(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, writer)
 	assert.NotEmpty(t, writer.CacheDir)
-	assert.Contains(t, writer.CacheDir, "atmos/auth")
+	assert.Contains(t, writer.CacheDir, filepath.Join("atmos", "auth"))
 }
 
 func TestWriter_Write_InvalidInput(t *testing.T) {
