@@ -99,11 +99,12 @@ func EmitPath(exportFlag, jsonFlag, relativeFlag bool) error {
 	// Use viper which checks environment variables automatically.
 	currentPath := viper.GetString("PATH")
 	if currentPath == "" {
-		currentPath = "/usr/local/bin:/usr/bin:/bin"
+		// Default PATH for Unix-like systems (Windows uses PATH from environment).
+		currentPath = strings.Join([]string{"/usr/local/bin", "/usr/bin", "/bin"}, string(os.PathListSeparator))
 	}
 
-	// Construct final PATH
-	finalPath := strings.Join(pathEntries, ":") + ":" + currentPath
+	// Construct final PATH using platform-specific separator.
+	finalPath := strings.Join(pathEntries, string(os.PathListSeparator)) + string(os.PathListSeparator) + currentPath
 
 	// Output based on flags
 	switch {

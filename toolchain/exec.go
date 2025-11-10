@@ -3,13 +3,29 @@ package toolchain
 import (
 	"fmt"
 	"os"
-	"syscall"
+	"os/exec"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-var execFunc = syscall.Exec
+// execFunc is a function variable for executing external commands.
+// This allows for testing by replacing with a mock implementation.
+var execFunc = func(binaryPath string, args []string, env []string) error {
+	cmd := exec.Command(binaryPath, args[1:]...) // args[0] is the binary itself
+	cmd.Env = env
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	// Exit with the same code as the child process.
+	os.Exit(cmd.ProcessState.ExitCode())
+	return nil
+}
 
 // ToolRunner defines the interface for running and resolving tools (for real and mock installers).
 type ToolRunner interface {
@@ -43,7 +59,7 @@ func RunExecCommand(installer ToolRunner, args []string) error {
 		return fmt.Errorf("invalid tool name: %w", err)
 	}
 
-	binaryPath, err := ensureToolInstalled(toolSpec)
+	binaryPath, err := ensureToolInstalled(installer, toolSpec)
 	if err != nil {
 		return err
 	}
@@ -53,7 +69,8 @@ func RunExecCommand(installer ToolRunner, args []string) error {
 }
 
 // ensureToolInstalled checks if the binary exists, otherwise installs it.
-func ensureToolInstalled(tool string) (string, error) {
+// The installer parameter is injected for better testability.
+func ensureToolInstalled(installer ToolRunner, tool string) (string, error) {
 	binaryPath, err := findBinaryPath(tool)
 	if err == nil && binaryPath != "" {
 		if _, statErr := os.Stat(binaryPath); !os.IsNotExist(statErr) {
