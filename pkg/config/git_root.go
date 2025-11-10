@@ -21,8 +21,11 @@ import (
 // This allows users to run `atmos` from anywhere in a Git repository
 // without needing to specify --config-dir or base_path.
 func applyGitRootBasePath(atmosConfig *schema.AtmosConfiguration) error {
-	// Allow tests to disable git root discovery.
-	//nolint:forbidigo // ATMOS_GIT_ROOT_BASEPATH is specifically for feature control, not application configuration.
+	// Bootstrap configuration: Read directly because this controls git root discovery during
+	// config loading itself, before processEnvVars() populates the Settings struct.
+	// Similar pattern: ATMOS_CLI_CONFIG_PATH in readEnvAmosConfigPath() controls WHERE to load config.
+	// Cannot use atmosConfig.Settings as it's populated AFTER LoadConfig() completes.
+	//nolint:forbidigo // ATMOS_GIT_ROOT_BASEPATH is bootstrap config, not application configuration.
 	if os.Getenv("ATMOS_GIT_ROOT_BASEPATH") == "false" {
 		log.Trace("Git root base path disabled via ATMOS_GIT_ROOT_BASEPATH=false")
 		return nil
