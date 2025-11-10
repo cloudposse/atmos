@@ -33,7 +33,8 @@ func createTempBinary(t *testing.T, owner, repo, version string) string {
 	if err != nil {
 		t.Fatalf("failed to create temp binary path: %v", err)
 	}
-	err = os.WriteFile(binaryPath, []byte("fake binary"), defaultMkdirPermissions)
+	// Use 0o755 for executable binary files (defaultMkdirPermissions is for directories)
+	err = os.WriteFile(binaryPath, []byte("fake binary"), 0o755)
 	if err != nil {
 		t.Fatalf("failed to create temp binary: %v", err)
 	}

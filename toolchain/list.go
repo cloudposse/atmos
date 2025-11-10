@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"golang.org/x/term"
 
 	"github.com/charmbracelet/bubbles/table"
@@ -185,8 +186,14 @@ func RunList() error {
 		if rows[i].registry != rows[j].registry {
 			return rows[i].registry < rows[j].registry
 		}
-		// If same registry, sort by version (newest first)
-		return rows[i].version > rows[j].version
+		// If same registry, sort by semantic version (newest first)
+		vi, errI := semver.NewVersion(rows[i].version)
+		vj, errJ := semver.NewVersion(rows[j].version)
+		if errI != nil || errJ != nil {
+			// Fallback to lexicographic comparison if versions aren't valid semver
+			return rows[i].version > rows[j].version
+		}
+		return vi.GreaterThan(vj)
 	})
 
 	// Get terminal width

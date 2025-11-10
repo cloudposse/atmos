@@ -82,7 +82,7 @@ func TestRunExecCommand_Success(t *testing.T) {
 
 	args := []string{"terraform@1.13.1", "--version"}
 	AddToolToVersions(GetToolVersionsFilePath(), "terraform", "1.13.1")
-	t.Log(ensureToolInstalled("terraform@1.13.1"))
+	t.Log(ensureToolInstalled(fake, "terraform@1.13.1"))
 	err := RunExecCommand(fake, args)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -113,8 +113,8 @@ func TestRunExecCommand_InvalidTool(t *testing.T) {
 func TestRunExecCommand_NoArgs(t *testing.T) {
 	fake := &fakeInstaller{}
 	err := RunExecCommand(fake, []string{})
-	if err == nil || err.Error() != "invalid tool specification: no arguments provided. Expected format: tool@version" {
-		t.Fatalf("expected missing args error, got %v", err)
+	if !errors.Is(err, ErrInvalidToolSpec) {
+		t.Fatalf("expected ErrInvalidToolSpec, got %v", err)
 	}
 }
 

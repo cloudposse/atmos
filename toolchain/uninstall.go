@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -158,7 +159,7 @@ func uninstallSingleTool(installer *Installer, owner, repo, version string, show
 	_, err := installer.FindBinaryPath(owner, repo, version)
 	if err != nil {
 		// If the binary is not found, treat as success (idempotent delete)
-		if strings.Contains(err.Error(), "not installed") || os.IsNotExist(err) {
+		if errors.Is(err, ErrToolNotFound) || os.IsNotExist(err) {
 			if showProgressBar {
 				printStatusLine(os.Stderr, term.IsTerminal(int(os.Stderr.Fd())), fmt.Sprintf("%s %s/%s@%s not installed", theme.Styles.Checkmark, owner, repo, version))
 			}
