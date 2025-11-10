@@ -47,6 +47,7 @@ type ssoProvider struct {
 	startURL     string
 	region       string
 	cacheStorage CacheStorage
+	ssoClient    ssoClient // For dependency injection in tests.
 }
 
 // NewSSOProvider creates a new AWS SSO provider.

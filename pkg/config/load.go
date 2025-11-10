@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/provisioning"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -584,6 +585,8 @@ func injectProvisionedIdentityImports(src *schema.AtmosConfiguration) error {
 	}
 
 	// Get XDG cache directory for provisioned identities.
+	// This matches the logic in pkg/auth/provisioning/writer.go:getDefaultCacheDir().
+	// TODO: Refactor both this and provisioning/writer.go to use pkg/xdg.GetXDGCacheDir().
 	cacheHome := os.Getenv("XDG_CACHE_HOME")
 	if cacheHome == "" {
 		homeDir, err := os.UserHomeDir()
@@ -593,13 +596,14 @@ func injectProvisionedIdentityImports(src *schema.AtmosConfiguration) error {
 		cacheHome = filepath.Join(homeDir, ".cache")
 	}
 
-	baseProvisioningDir := filepath.Join(cacheHome, "atmos", "auth")
+	// Use constants from provisioning package to maintain consistency.
+	baseProvisioningDir := filepath.Join(cacheHome, provisioning.DefaultCacheDir)
 
 	// Collect provisioned identity files for each provider.
 	var provisionedImports []string
 
 	for providerName := range src.Auth.Providers {
-		provisionedFile := filepath.Join(baseProvisioningDir, providerName, "provisioned-identities.yaml")
+		provisionedFile := filepath.Join(baseProvisioningDir, providerName, provisioning.ProvisionedFileName)
 
 		// Check if provisioned file exists.
 		if _, err := os.Stat(provisionedFile); err == nil {

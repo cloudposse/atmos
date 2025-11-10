@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -14,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -160,25 +158,89 @@ func (m *mockSSOClient) ListAccountRoles(ctx context.Context, input *sso.ListAcc
 }
 
 func TestProvisionIdentities_Success(t *testing.T) {
-	// This test verifies the happy path for identity provisioning.
-	// Note: Full integration testing would require mocking the AWS SDK,
-	// which is complex. This test provides basic coverage.
-
+	// This test verifies the happy path for identity provisioning with actual provisioning logic.
 	enabled := true
+
+	// Create mock SSO client with test data.
+	mockClient := &mockSSOClient{
+		accounts: []ssotypes.AccountInfo{
+			{AccountName: aws.String("prod-account"), AccountId: aws.String("123456789012")},
+			{AccountName: aws.String("dev-account"), AccountId: aws.String("987654321098")},
+		},
+		roles: map[string][]ssotypes.RoleInfo{
+			"123456789012": {
+				{RoleName: aws.String("AdminRole")},
+				{RoleName: aws.String("ReadOnlyRole")},
+			},
+			"987654321098": {
+				{RoleName: aws.String("DeveloperRole")},
+			},
+		},
+	}
+
 	provider := &ssoProvider{
-		name:     "test-sso",
-		region:   "us-east-1",
-		startURL: "https://test.awsapps.com/start",
+		name:      "test-sso",
+		region:    "us-east-1",
+		startURL:  "https://test.awsapps.com/start",
+		ssoClient: mockClient,
 		config: &schema.Provider{
 			AutoProvisionIdentities: &enabled,
 		},
 	}
 
-	// Verify provider configuration.
-	assert.True(t, *provider.config.AutoProvisionIdentities)
-	assert.Equal(t, "test-sso", provider.name)
-	assert.Equal(t, "us-east-1", provider.region)
-	assert.Equal(t, "https://test.awsapps.com/start", provider.startURL)
+	// Create AWS credentials with access token.
+	creds := &authTypes.AWSCredentials{
+		AccessKeyID: "test-access-token", // SSO token stored in AccessKeyID field.
+		Region:      "us-east-1",
+	}
+
+	// Call ProvisionIdentities - should discover and provision all identities.
+	result, err := provider.provisionIdentitiesWithClient(context.Background(), mockClient, creds)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify provisioning result structure.
+	assert.Equal(t, "test-sso", result.Provider)
+	assert.NotZero(t, result.ProvisionedAt)
+
+	// Verify metadata.
+	assert.Equal(t, "aws-sso", result.Metadata.Source)
+	require.NotNil(t, result.Metadata.Counts)
+	assert.Equal(t, 2, result.Metadata.Counts.Accounts)
+	assert.Equal(t, 3, result.Metadata.Counts.Roles)
+	assert.Equal(t, 3, result.Metadata.Counts.Identities)
+
+	// Verify extra metadata fields.
+	assert.Equal(t, "https://test.awsapps.com/start", result.Metadata.Extra["start_url"])
+	assert.Equal(t, "us-east-1", result.Metadata.Extra["region"])
+
+	// Verify identities follow naming convention: account-name/role-name.
+	require.Len(t, result.Identities, 3)
+
+	// Check prod-account/AdminRole identity.
+	prodAdmin, ok := result.Identities["prod-account/AdminRole"]
+	require.True(t, ok, "prod-account/AdminRole identity should exist")
+	assert.Equal(t, "test-sso", prodAdmin.Provider)
+	assert.Equal(t, "AdminRole", prodAdmin.Principal["name"])
+	account, ok := prodAdmin.Principal["account"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "prod-account", account["name"])
+	assert.Equal(t, "123456789012", account["id"])
+
+	// Check prod-account/ReadOnlyRole identity.
+	prodReadOnly, ok := result.Identities["prod-account/ReadOnlyRole"]
+	require.True(t, ok, "prod-account/ReadOnlyRole identity should exist")
+	assert.Equal(t, "test-sso", prodReadOnly.Provider)
+
+	// Check dev-account/DeveloperRole identity.
+	devDeveloper, ok := result.Identities["dev-account/DeveloperRole"]
+	require.True(t, ok, "dev-account/DeveloperRole identity should exist")
+	assert.Equal(t, "test-sso", devDeveloper.Provider)
+	assert.Equal(t, "DeveloperRole", devDeveloper.Principal["name"])
+	devAccount, ok := devDeveloper.Principal["account"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "dev-account", devAccount["name"])
+	assert.Equal(t, "987654321098", devAccount["id"])
 }
 
 func TestIdentityNamingConvention(t *testing.T) {
@@ -431,63 +493,3 @@ func (m *mockSSOClientRolesPaginated) ListAccountRoles(ctx context.Context, inpu
 	return output, nil
 }
 
-// ssoClient interface for dependency injection in tests.
-type ssoClient interface {
-	ListAccounts(ctx context.Context, input *sso.ListAccountsInput, opts ...func(*sso.Options)) (*sso.ListAccountsOutput, error)
-	ListAccountRoles(ctx context.Context, input *sso.ListAccountRolesInput, opts ...func(*sso.Options)) (*sso.ListAccountRolesOutput, error)
-}
-
-// listAccountsWithClient is a testable version that accepts a client.
-func (p *ssoProvider) listAccountsWithClient(ctx context.Context, ssoClient ssoClient, accessToken string) ([]ssotypes.AccountInfo, error) {
-	defer perf.Track(nil, "aws.ssoProvider.listAccounts")()
-
-	var accounts []ssotypes.AccountInfo
-	var nextToken *string
-
-	for {
-		output, err := ssoClient.ListAccounts(ctx, &sso.ListAccountsInput{
-			AccessToken: aws.String(accessToken),
-			NextToken:   nextToken,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to list accounts: %w", err)
-		}
-
-		accounts = append(accounts, output.AccountList...)
-
-		if output.NextToken == nil {
-			break
-		}
-		nextToken = output.NextToken
-	}
-
-	return accounts, nil
-}
-
-// listAccountRolesWithClient is a testable version that accepts a client.
-func (p *ssoProvider) listAccountRolesWithClient(ctx context.Context, ssoClient ssoClient, accessToken, accountID string) ([]ssotypes.RoleInfo, error) {
-	defer perf.Track(nil, "aws.ssoProvider.listAccountRoles")()
-
-	var roles []ssotypes.RoleInfo
-	var nextToken *string
-
-	for {
-		output, err := ssoClient.ListAccountRoles(ctx, &sso.ListAccountRolesInput{
-			AccessToken: aws.String(accessToken),
-			AccountId:   aws.String(accountID),
-			NextToken:   nextToken,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to list roles for account %s: %w", accountID, err)
-		}
-
-		roles = append(roles, output.RoleList...)
-
-		if output.NextToken == nil {
-			break
-		}
-		nextToken = output.NextToken
-	}
-
-	return roles, nil
-}

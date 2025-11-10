@@ -17,6 +17,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// ssoClient interface for dependency injection in tests.
+type ssoClient interface {
+	ListAccounts(ctx context.Context, input *sso.ListAccountsInput, opts ...func(*sso.Options)) (*sso.ListAccountsOutput, error)
+	ListAccountRoles(ctx context.Context, input *sso.ListAccountRolesInput, opts ...func(*sso.Options)) (*sso.ListAccountRolesOutput, error)
+}
+
 // ProvisionIdentities provisions identities from AWS SSO permission sets.
 // This method is called after authentication to discover available accounts and roles.
 func (p *ssoProvider) ProvisionIdentities(ctx context.Context, creds authTypes.ICredentials) (*provisioning.Result, error) {
@@ -36,15 +42,24 @@ func (p *ssoProvider) ProvisionIdentities(ctx context.Context, creds authTypes.I
 		return nil, fmt.Errorf("%w: invalid credentials type for SSO provisioning", errUtils.ErrAuthenticationFailed)
 	}
 
-	accessToken := awsCreds.AccessKeyID // SSO token is stored in AccessKeyID field.
+	// Create SSO client if not injected (for testing).
+	client := p.ssoClient
+	if client == nil {
+		client = sso.NewFromConfig(aws.Config{
+			Region: p.region,
+		})
+	}
 
-	// Create SSO client.
-	ssoClient := sso.NewFromConfig(aws.Config{
-		Region: p.region,
-	})
+	return p.provisionIdentitiesWithClient(ctx, client, awsCreds)
+}
+
+// provisionIdentitiesWithClient provisions identities using a provided SSO client.
+// This enables dependency injection for testing.
+func (p *ssoProvider) provisionIdentitiesWithClient(ctx context.Context, ssoClient ssoClient, creds *authTypes.AWSCredentials) (*provisioning.Result, error) {
+	accessToken := creds.AccessKeyID // SSO token is stored in AccessKeyID field.
 
 	// List all accounts accessible to this user.
-	accounts, err := p.listAccounts(ctx, ssoClient, accessToken)
+	accounts, err := p.listAccountsWithClient(ctx, ssoClient, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to list SSO accounts: %w", errUtils.ErrAuthenticationFailed, err)
 	}
@@ -59,7 +74,7 @@ func (p *ssoProvider) ProvisionIdentities(ctx context.Context, creds authTypes.I
 		accountID := aws.ToString(account.AccountId)
 		accountName := aws.ToString(account.AccountName)
 
-		roles, err := p.listAccountRoles(ctx, ssoClient, accessToken, accountID)
+		roles, err := p.listAccountRolesWithClient(ctx, ssoClient, accessToken, accountID)
 		if err != nil {
 			log.Warn("Failed to list roles for account, skipping", "account", accountName, "accountID", accountID, "error", err)
 			continue
@@ -111,8 +126,8 @@ func (p *ssoProvider) ProvisionIdentities(ctx context.Context, creds authTypes.I
 	}, nil
 }
 
-// listAccounts lists all AWS accounts accessible via SSO.
-func (p *ssoProvider) listAccounts(ctx context.Context, ssoClient *sso.Client, accessToken string) ([]ssotypes.AccountInfo, error) {
+// listAccountsWithClient is a testable version that accepts a client interface.
+func (p *ssoProvider) listAccountsWithClient(ctx context.Context, ssoClient ssoClient, accessToken string) ([]ssotypes.AccountInfo, error) {
 	defer perf.Track(nil, "aws.ssoProvider.listAccounts")()
 
 	var accounts []ssotypes.AccountInfo
@@ -138,8 +153,8 @@ func (p *ssoProvider) listAccounts(ctx context.Context, ssoClient *sso.Client, a
 	return accounts, nil
 }
 
-// listAccountRoles lists all roles available for a specific account.
-func (p *ssoProvider) listAccountRoles(ctx context.Context, ssoClient *sso.Client, accessToken, accountID string) ([]ssotypes.RoleInfo, error) {
+// listAccountRolesWithClient is a testable version that accepts a client interface.
+func (p *ssoProvider) listAccountRolesWithClient(ctx context.Context, ssoClient ssoClient, accessToken, accountID string) ([]ssotypes.RoleInfo, error) {
 	defer perf.Track(nil, "aws.ssoProvider.listAccountRoles")()
 
 	var roles []ssotypes.RoleInfo
