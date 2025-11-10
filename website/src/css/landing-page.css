@@ -77,21 +77,18 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
 
 .landing-page header {
   display: flex;
-  max-height: 90vh;
-  min-height: 700px;
   height: 100vh;
   width: 100vw;
   justify-content: center;
-  margin-top: 2em;
-  margin-bottom: 2em;
-}
-
-.landing-page header img.screenshot {
-  margin: 2em;
+  align-items: center;
+  margin: 0;
+  padding: 0;
 }
 
 .landing-page .intro h1 {
-  font-size: 3em;
+  font-size: 4em;
+  font-weight: 700;
+  line-height: 1.1;
 }
 
 .landing-page .intro h2 {
@@ -108,6 +105,41 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
   text-align: center;
 }
 
+/* Clean Cloud Posse-style hero - tighter spacing */
+.hero__eyebrow {
+  font-size: 0.85em;
+  color: #666;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  font-weight: 400;
+}
+
+html[data-theme="dark"] .hero__eyebrow {
+  color: #999;
+}
+
+.hero__description {
+  font-size: 1.4em;
+  margin-top: 1.5rem;
+  line-height: 1.6em;
+  text-align: center;
+  color: #4a5568;
+  max-width: 900px;
+}
+
+html[data-theme="dark"] .hero__description {
+  color: #ccc;
+}
+
+/* Fixed-width container for typing animation to prevent layout shift */
+.typing-container {
+  display: inline-block;
+  width: 380px;
+  text-align: left;
+  vertical-align: bottom;
+}
+
 .landing-page .hero img {
   min-width: 50%;
   width: 100%;
@@ -116,16 +148,127 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
 
 .hero--full-height {
   box-sizing: border-box;
-  height: calc(90vh);
+  height: 100vh;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 0px 0;
+  justify-content: center;
+  padding: 0;
+  position: relative;
+}
+
+/* Subtle radial glow in center of hero section */
+.hero--full-height::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 1200px;
+  height: 1200px;
+  background: radial-gradient(
+    circle at center,
+    rgba(83, 140, 233, 0.18) 0%,
+    rgba(83, 140, 233, 0.10) 30%,
+    rgba(83, 140, 233, 0.03) 50%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+html[data-theme="light"] .hero--full-height::before {
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(245, 247, 250, 0.4) 30%,
+    transparent 70%
+  );
+}
+
+/* Ensure hero content is above the glow */
+.hero--full-height > * {
+  position: relative;
+  z-index: 1;
 }
 
 .hero__cta {
   gap: 1rem;
   justify-content: center;
   display: flex;
+  margin-top: 2rem;
+}
+
+/* Hero demo section - appears on scroll */
+.hero-demo {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 0 2rem 4rem 2rem;
+  width: 100%;
+  max-width: 1400px;
+  margin: -20vh auto 0 auto;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-demo-intro {
+  text-align: center;
+  max-width: 800px;
+  margin: 0 auto 2rem auto;
+  padding: 2rem;
+  width: 100%;
+  opacity: 0;
+  transition: opacity 0.6s ease-out;
+  pointer-events: none;
+}
+
+.hero-demo-intro.visible {
+  opacity: 1;
+}
+
+.hero-demo-intro h2 {
+  font-size: 2.5em;
+  margin-bottom: 0.75rem;
+  font-weight: 700;
+}
+
+html[data-theme="dark"] .hero-demo-intro h2 {
+  background: linear-gradient(
+      to right bottom,
+      rgb(255, 255, 255) 30%,
+      rgba(255, 255, 255, 0.5)
+    )
+    text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-demo-intro p {
+  font-size: 1.5em;
+  color: #4a5568;
+  line-height: 1.6;
+}
+
+html[data-theme="dark"] .hero-demo-intro p {
+  color: #999;
+}
+
+.hero-demo .screenshot-container {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  justify-content: center;
+}
+
+.hero-demo img.screenshot {
+  width: 100%;
+  min-height: 500px;
+  height: auto;
+  object-fit: contain;
+  box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
+  border-radius: 10px;
 }
 .landing-page main h2 {
   text-align: center;
@@ -150,6 +293,7 @@ html[data-theme="dark"] .landing-page main h2.section {
   background: rgb(0 0 0 / 21%);
 }
 html[data-theme="dark"] .hero h1,
+html[data-theme="dark"] .hero h1 *,
 html[data-theme="dark"] .section__description h2 {
   color: unset;
   background: linear-gradient(
@@ -213,6 +357,7 @@ strong.underline::after {
 .alternate-section {
   display: flex;
   gap: 2rem;
+  margin-top: 6rem;
   margin-bottom: 10rem;
   flex-wrap: nowrap;
   padding: 2rem;
@@ -229,9 +374,11 @@ strong.underline::after {
 
 @media screen and (max-width: 996px) {
   .landing-page header {
-    justify-content: flex-start;
+    height: auto;
+    min-height: 100vh;
     max-width: 100vw;
     overflow: hidden;
+    padding: 2rem 0;
   }
 
   .hero__cta {
@@ -239,6 +386,14 @@ strong.underline::after {
     display: flex;
     max-width: 100vw;
     flex-wrap: wrap;
+  }
+
+  .hero-demo {
+    padding: 2rem 1rem;
+  }
+
+  .hero-demo img.screenshot {
+    max-width: 95%;
   }
 
   .alternate-section {
@@ -277,4 +432,110 @@ strong.underline::after {
 .cta-section {
   text-align: center;
   padding: 2rem 0;
+}
+
+/* Modern Features Grid - tighter spacing */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  max-width: 1200px;
+  margin: 4rem auto;
+  padding: 0.5rem 2rem 0 2rem;
+}
+
+.feature-card {
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  padding: 1.75rem;
+  transition: all 0.3s ease;
+}
+
+html[data-theme="dark"] .feature-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.feature-card:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.2);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="dark"] .feature-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Feature header - icon and title inline */
+.feature-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+/* React icon styling */
+.feature-icon {
+  font-size: 2rem;
+  color: #1e5bb8;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+html[data-theme="dark"] .feature-icon {
+  color: #538ce9;
+}
+
+.feature-card h3 {
+  font-size: 1.3rem;
+  margin: 0;
+  color: #1a1d23;
+  text-align: left;
+}
+
+html[data-theme="dark"] .feature-card h3 {
+  color: #fff;
+}
+
+.feature-card p {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #4a5568;
+  margin: 0;
+}
+
+html[data-theme="dark"] .feature-card p {
+  color: #ccc;
+}
+
+@media screen and (max-width: 768px) {
+  .features-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    margin: 2rem auto;
+  }
+
+  .feature-card {
+    padding: 1.5rem;
+  }
+
+  .typing-container {
+    width: 280px;
+  }
+
+  .landing-page .intro h1 {
+    font-size: 2.5em;
+  }
+
+  .hero__description {
+    font-size: 1.1em;
+  }
+
+  .hero-demo img.screenshot {
+    max-width: 95%;
+  }
 }
