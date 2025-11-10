@@ -549,8 +549,10 @@ func TestCreateAndAuthenticateManager_AutoDetectEmptyIdentities(t *testing.T) {
 func TestCreateAndAuthenticateManager_AutoDetectMultipleDefaults(t *testing.T) {
 	// When no identity flag is provided and MULTIPLE default identities exist,
 	// behavior depends on terminal mode:
-	// - CI mode: returns nil (can't prompt)
-	// - Interactive mode: would prompt user (we'll test CI mode)
+	// - CI mode (no TTY): GetDefaultIdentity errors, we return nil (no auth)
+	// - Interactive mode (TTY): GetDefaultIdentity prompts to choose from ONLY the defaults
+	//
+	// This test runs in CI-like environment (no TTY), so we expect nil.
 
 	authConfig := &schema.AuthConfig{
 		Providers: map[string]schema.Provider{
@@ -593,10 +595,15 @@ func TestCreateAndAuthenticateManager_AutoDetectMultipleDefaults(t *testing.T) {
 	// No identity flag provided
 	manager, err := CreateAndAuthenticateManager("", authConfig, "__SELECT__")
 
-	// In CI mode (no TTY), GetDefaultIdentity will error with multiple defaults
-	// We handle this gracefully by returning nil
+	// In CI mode (no TTY), GetDefaultIdentity errors with multiple defaults.
+	// autoDetectDefaultIdentity handles this gracefully by returning empty string,
+	// which causes CreateAndAuthenticateManager to return nil (no authentication).
 	assert.NoError(t, err, "Should not propagate error from GetDefaultIdentity")
 	assert.Nil(t, manager, "Manager should be nil when multiple defaults in CI mode")
+
+	// NOTE: In interactive mode (TTY available), GetDefaultIdentity would prompt
+	// the user to choose from ONLY the two default identities (not all identities).
+	// This ensures users only see relevant choices when multiple defaults exist.
 }
 
 func TestCreateAndAuthenticateManager_ExplicitlyDisabled(t *testing.T) {

@@ -16,7 +16,7 @@ import (
 // autoDetectDefaultIdentity attempts to find and return a default identity from configuration.
 // Returns empty string if no default identity is found (not an error condition).
 // If multiple defaults exist and allowInteractive is true, prompts user to select.
-func autoDetectDefaultIdentity(authConfig *schema.AuthConfig, allowInteractive bool) (string, error) {
+func autoDetectDefaultIdentity(authConfig *schema.AuthConfig) (string, error) {
 	// Create a temporary manager to call GetDefaultIdentity which handles:
 	// - Global defaults from atmos.yaml
 	// - Stack-level defaults from stack configs
@@ -32,30 +32,30 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig, allowInteractive b
 		return "", errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Try to get default identity (forceSelect=false, doesn't prompt).
-	// This returns:
-	// - Identity name if exactly one default exists
-	// - Error if multiple defaults exist
-	// - Error if no defaults exist
+	// Try to get default identity using GetDefaultIdentity(forceSelect=false).
+	//
+	// Behavior depends on terminal mode (detected by isInteractive()):
+	//
+	// Interactive mode (TTY available):
+	//   - Exactly one default: Returns the default identity
+	//   - Multiple defaults: Prompts user to choose from ONLY the defaults
+	//   - No defaults: Prompts user to choose from ALL identities
+	//
+	// Non-interactive mode (CI/no TTY):
+	//   - Exactly one default: Returns the default identity
+	//   - Multiple defaults: Returns error (can't prompt)
+	//   - No defaults: Returns error (can't prompt)
+	//
+	// Note: We call GetDefaultIdentity(false) NOT GetDefaultIdentity(true) because:
+	// - forceSelect=false makes it aware of default identities
+	// - forceSelect=true would always show ALL identities, ignoring defaults
+	// - When multiple defaults exist, we want to show ONLY those defaults
 	defaultIdentity, err := tempManager.GetDefaultIdentity(false)
 	if err != nil {
-		// If interactive mode is allowed and we're in a TTY, prompt user to select.
-		// This handles both:
-		// - Multiple defaults (user chooses between defaults)
-		// - No defaults (user chooses from all identities)
-		if allowInteractive {
-			log.Debug("No default identity found, prompting user for selection")
-			// GetDefaultIdentity(true) prompts the user to select from available identities.
-			defaultIdentity, err = tempManager.GetDefaultIdentity(true)
-			if err != nil {
-				return "", err
-			}
-			log.Debug("User selected identity", "identity", defaultIdentity)
-			return defaultIdentity, nil
-		}
-
-		// Non-interactive or not allowed - return empty string (no authentication).
-		// This is backward compatible: commands without --identity flag work as before.
+		// Error means we're in non-interactive mode and couldn't determine identity.
+		// Return empty string (no authentication) to maintain backward compatibility.
+		// This is intentional - we gracefully handle the error instead of propagating it.
+		//nolint:nilerr // Intentionally returning nil to maintain backward compatibility
 		return "", nil
 	}
 
@@ -83,7 +83,7 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig, allowInteractive b
 //   - If auth is configured, checks for default identity in both global atmos.yaml and stack configs
 //   - If exactly ONE default identity exists, authenticates with it automatically
 //   - If MULTIPLE defaults exist:
-//   - Interactive mode: prompts user to select one from defaults
+//   - Interactive mode (TTY): prompts user to select one from ONLY the defaults
 //   - Non-interactive mode (CI): returns nil (no authentication)
 //   - If NO defaults exist:
 //   - Interactive mode: prompts user to select from all available identities
@@ -128,12 +128,10 @@ func CreateAndAuthenticateManager(
 			return nil, nil
 		}
 
-		// Check if we're in interactive mode to allow prompting if needed.
-		interactive := isInteractive()
-
 		// Try to find default identity from configuration.
 		// If multiple defaults exist or no defaults exist, will prompt in interactive mode.
-		defaultIdentity, err := autoDetectDefaultIdentity(authConfig, interactive)
+		// Interactive mode is detected automatically inside autoDetectDefaultIdentity.
+		defaultIdentity, err := autoDetectDefaultIdentity(authConfig)
 		if err != nil {
 			return nil, err
 		}
