@@ -18,18 +18,28 @@ This is an alias to 'atmos toolchain registry search' for convenience.
 
 The query is matched against tool owner, repo name, and description.
 Results are sorted by relevance score.`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Delegate directly to registry search command implementation.
+		// Get the actual search command from registry parent.
 		registryCmd := registrycmd.GetRegistryCommand()
 		searchCmd, _, err := registryCmd.Find([]string{"search"})
 		if err != nil {
 			return err
 		}
 
-		// Call the RunE function directly instead of Execute() to avoid recursion.
-		return searchCmd.RunE(searchCmd, args)
+		// Forward args and execute through Cobra to ensure proper flag parsing and PreRun execution.
+		searchCmd.SetArgs(args)
+		return searchCmd.ExecuteContext(cmd.Context())
 	},
+}
+
+func init() {
+	// Register flags from the actual search command on the alias.
+	// This ensures flags work on the alias too.
+	searchParser := registrycmd.GetSearchParser()
+	if searchParser != nil {
+		searchParser.RegisterFlags(searchAliasCmd)
+	}
 }
 
 // SearchCommandProvider implements the CommandProvider interface.
@@ -48,7 +58,7 @@ func (s *SearchCommandProvider) GetGroup() string {
 }
 
 func (s *SearchCommandProvider) GetFlagsBuilder() flags.Builder {
-	return nil
+	return registrycmd.GetSearchParser()
 }
 
 func (s *SearchCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {

@@ -127,7 +127,7 @@ func listRegistryTools(ctx context.Context, registryName string) error {
 	case "aqua-public", "aqua":
 		reg = toolchain.NewAquaRegistry()
 	default:
-		return fmt.Errorf("%w: %s", toolchainregistry.ErrUnknownRegistry, registryName)
+		return fmt.Errorf("%w: '%s' (supported registries: 'aqua-public', 'aqua')", toolchainregistry.ErrUnknownRegistry, registryName)
 	}
 
 	// Get tools from registry.

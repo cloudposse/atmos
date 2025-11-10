@@ -97,7 +97,7 @@ func TestCommandProviderImplementations(t *testing.T) {
 			providerName:      "search",
 			commandName:       "search",
 			group:             "Toolchain Commands",
-			expectFlagsParser: false,
+			expectFlagsParser: true,
 			getFlagsBuilder:   func() flags.Builder { return (&SearchCommandProvider{}).GetFlagsBuilder() },
 		},
 		{
@@ -507,6 +507,11 @@ func TestSearchCommandProvider(t *testing.T) {
 
 	t.Run("GetGroup returns correct group", func(t *testing.T) {
 		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
+	t.Run("GetFlagsBuilder returns non-nil parser", func(t *testing.T) {
+		builder := provider.GetFlagsBuilder()
+		require.NotNil(t, builder, "search command has flags and should return parser")
 	})
 
 	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
