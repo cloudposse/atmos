@@ -16,9 +16,9 @@ Set or update the version of a specific tool in your toolchain configuration. Th
 
 ## Usage
 
-Execute the `toolchain add` command like this:
+Execute the `toolchain set` command like this:
 
-```shellsdv
+```shell
 atmos toolchain set <tool> <version>
 ```
 
@@ -36,11 +36,11 @@ atmos toolchain set --file /path/to/.tool-versions kubectl 1.28.0
 <dl>
     <dt>`package` <em>(required)</em></dt>
     <dd>
-        Package to install from the aqua repository
+        Package to set in the toolchain configuration
     </dd>
-    <dt>`version` <em>(required)</em></dt>
+    <dt>`version` <em>(optional)</em></dt>
     <dd>
-        The version to add and update
+        The version to set (if omitted, interactive version selection is used)
     </dd>
 </dl>
 
