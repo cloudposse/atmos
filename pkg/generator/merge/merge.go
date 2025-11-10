@@ -25,11 +25,11 @@ func (m *ThreeWayMerger) Merge(existingContent, newContent, fileName string) (st
 	dmp := diffmatchpatch.New()
 	diffs := dmp.DiffMain(existingContent, newContent, true)
 
-	// Check if the diff is too complex (too many changes)
-	changeCount := 0
+	// Calculate the number of changed bytes (not chunks)
+	changedBytes := 0
 	for _, diff := range diffs {
 		if diff.Type != diffmatchpatch.DiffEqual {
-			changeCount++
+			changedBytes += len(diff.Text)
 		}
 	}
 
@@ -40,13 +40,10 @@ func (m *ThreeWayMerger) Merge(existingContent, newContent, fileName string) (st
 		maxContentSize = len(newContent)
 	}
 
-	// Calculate total content size for percentage calculation
-	totalContentSize := len(existingContent) + len(newContent)
-
-	// Calculate percentage of changes
+	// Calculate percentage of changes based on changed bytes
 	changePercentage := 0
-	if totalContentSize > 0 {
-		changePercentage = int(float64(changeCount) / float64(totalContentSize) * 100.0)
+	if maxContentSize > 0 {
+		changePercentage = int(float64(changedBytes) / float64(maxContentSize) * 100.0)
 	}
 
 	// Use the configured threshold percentage, or default to 50% if not set
