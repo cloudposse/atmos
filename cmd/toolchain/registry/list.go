@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -107,6 +109,16 @@ func listRegistryTools(ctx context.Context, registryName string) error {
 	listLimit := v.GetInt("limit")
 	listOffset := v.GetInt("offset")
 	listSort := v.GetString("sort")
+	listFormat := v.GetString("format")
+
+	// Validate format flag.
+	switch listFormat {
+	case "table", "json", "yaml":
+		// Valid formats.
+	default:
+		return fmt.Errorf("%w: format must be one of: table, json, yaml (got: %s)",
+			errUtils.ErrInvalidFlag, listFormat)
+	}
 
 	// Create registry based on name.
 	// For MVP, only support aqua-public.
@@ -133,18 +145,28 @@ func listRegistryTools(ctx context.Context, registryName string) error {
 		return nil
 	}
 
-	// Get metadata for header.
-	meta, err := reg.GetMetadata(ctx)
-	if err == nil {
-		header := fmt.Sprintf("**Tools in registry '%s'** (showing %d):\n\nType: %s\nSource: %s\n\n",
-			registryName, len(tools), meta.Type, meta.Source)
-		_ = ui.MarkdownMessage(header)
+	// Output based on format.
+	switch listFormat {
+	case "json":
+		return data.WriteJSON(tools)
+	case "yaml":
+		return data.WriteYAML(tools)
+	case "table":
+		// Get metadata for header.
+		meta, err := reg.GetMetadata(ctx)
+		if err == nil {
+			header := fmt.Sprintf("**Tools in registry '%s'** (showing %d):\n\nType: %s\nSource: %s\n\n",
+				registryName, len(tools), meta.Type, meta.Source)
+			_ = ui.MarkdownMessage(header)
+		}
+
+		// Display as table.
+		displayToolsTable(tools)
+		return nil
+	default:
+		// Should never reach here due to validation above.
+		return fmt.Errorf("%w: unsupported format: %s", errUtils.ErrInvalidFlag, listFormat)
 	}
-
-	// Display as table.
-	displayToolsTable(tools)
-
-	return nil
 }
 
 func displayToolsTable(tools []*toolchainregistry.Tool) {

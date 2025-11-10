@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -38,7 +37,17 @@ func GetGlobMatches(pattern string) ([]string, error) {
 
 	existingMatches, found := getGlobMatchesSyncMap.Load(pattern)
 	if found && existingMatches != nil {
-		return strings.Split(existingMatches.(string), ","), nil
+		// Assert to []string and return a cloned copy so callers can't mutate cached data.
+		cached, ok := existingMatches.([]string)
+		if !ok {
+			// If assertion fails, invalidate cache and fall through to recompute.
+			getGlobMatchesSyncMap.Delete(pattern)
+		} else {
+			// Return a clone to prevent callers from mutating the cached slice.
+			result := make([]string, len(cached))
+			copy(result, cached)
+			return result, nil
+		}
 	}
 
 	pattern = filepath.ToSlash(pattern)
@@ -59,7 +68,11 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		fullMatches = append(fullMatches, filepath.Join(base, match))
 	}
 
-	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))
+	// Store a copy of the slice in the cache (not the shared backing slice).
+	// This prevents callers from mutating cached data and preserves empty results.
+	cachedCopy := make([]string, len(fullMatches))
+	copy(cachedCopy, fullMatches)
+	getGlobMatchesSyncMap.Store(pattern, cachedCopy)
 
 	return fullMatches, nil
 }

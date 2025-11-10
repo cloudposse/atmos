@@ -39,9 +39,10 @@ func init() {
 
 // AquaRegistry represents the Aqua registry structure.
 type AquaRegistry struct {
-	client     httpClient.Client
-	cache      *RegistryCache
-	cacheStore cache.Store
+	client        httpClient.Client
+	cache         *RegistryCache
+	cacheStore    cache.Store
+	githubBaseURL string
 }
 
 // RegistryCache handles caching of registry files.
@@ -55,8 +56,18 @@ type scoredTool struct {
 	score int
 }
 
+// RegistryOption is a functional option for configuring AquaRegistry.
+type RegistryOption func(*AquaRegistry)
+
+// WithGitHubBaseURL sets the GitHub API base URL (primarily for testing).
+func WithGitHubBaseURL(url string) RegistryOption {
+	return func(ar *AquaRegistry) {
+		ar.githubBaseURL = url
+	}
+}
+
 // NewAquaRegistry creates a new Aqua registry client.
-func NewAquaRegistry() *AquaRegistry {
+func NewAquaRegistry(opts ...RegistryOption) *AquaRegistry {
 	defer perf.Track(nil, "aqua.NewAquaRegistry")()
 
 	// Use XDG-compliant cache directory.
@@ -68,15 +79,23 @@ func NewAquaRegistry() *AquaRegistry {
 		cacheBaseDir = filepath.Join(os.TempDir(), "atmos-toolchain-cache")
 	}
 
-	return &AquaRegistry{
+	ar := &AquaRegistry{
 		client: httpClient.NewDefaultClient(
 			httpClient.WithGitHubToken(httpClient.GetGitHubTokenFromEnv()),
 		),
 		cache: &RegistryCache{
 			baseDir: filepath.Join(cacheBaseDir, "registry"),
 		},
-		cacheStore: cache.NewFileStore(cacheBaseDir),
+		cacheStore:    cache.NewFileStore(cacheBaseDir),
+		githubBaseURL: "https://api.github.com", // default
 	}
+
+	// Apply options.
+	for _, opt := range opts {
+		opt(ar)
+	}
+
+	return ar
 }
 
 // get performs an HTTP GET request and returns the response.
@@ -408,7 +427,7 @@ func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 	defer perf.Track(nil, "aqua.AquaRegistry.GetLatestVersion")()
 
 	// GitHub API endpoint for releases
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, repo)
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases", ar.githubBaseURL, owner, repo)
 
 	resp, err := ar.get(apiURL)
 	if err != nil {
@@ -452,7 +471,7 @@ func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, erro
 	defer perf.Track(nil, "aqua.AquaRegistry.GetAvailableVersions")()
 
 	// GitHub API endpoint for releases
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, repo)
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases", ar.githubBaseURL, owner, repo)
 
 	resp, err := ar.get(apiURL)
 	if err != nil {

@@ -432,49 +432,59 @@ func TestAquaRegistry_GetLatestVersion(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	ar := NewAquaRegistry()
-	ar.client = &http.Client{}
+	// Wire the mock server to AquaRegistry
+	ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
 
-	// Test the GetLatestVersion method directly by calling the GitHub API
-	// This test will work if the GitHub API is accessible, otherwise it will be skipped
 	version, err := ar.GetLatestVersion("test", "tool")
-	if err != nil {
-		// If it fails due to network issues, that's expected in a test environment
-		t.Logf("GetLatestVersion failed (expected in test environment): %v", err)
-		return
-	}
-
-	// If it succeeds, verify the result
-	assert.NotEmpty(t, version)
+	require.NoError(t, err)
+	assert.Equal(t, "1.5.0", version) // Deterministic assertion
 }
 
 func TestAquaRegistry_GetLatestVersion_NoReleases(t *testing.T) {
-	// Test with a non-existent repository to simulate no releases
-	ar := NewAquaRegistry()
+	// Mock GitHub API server that returns empty releases array
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte("[]")) // Empty array
+	}))
+	defer ts.Close()
 
-	version, err := ar.GetLatestVersion("nonexistent-owner-12345", "nonexistent-repo-12345")
+	ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
+
+	version, err := ar.GetLatestVersion("test", "tool")
 	assert.Error(t, err)
 	assert.Empty(t, version)
-	// The error message may vary depending on GitHub API response
-	assert.True(t, strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "404"), "got: "+err.Error())
+	assert.True(t, strings.Contains(err.Error(), "no non-prerelease versions found"), "got: "+err.Error())
 }
 
 func TestAquaRegistry_GetAvailableVersions(t *testing.T) {
-	// Test with a real repository that should have releases
-	ar := NewAquaRegistry()
-
-	versions, err := ar.GetAvailableVersions("hashicorp", "terraform")
-	if err != nil {
-		// If it fails due to network issues, that's expected in a test environment
-		t.Logf("GetAvailableVersions failed (expected in test environment): %v", err)
-		return
+	// Mock GitHub API server
+	releases := []struct {
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
+	}{
+		{TagName: "v2.0.0-beta", Prerelease: true},
+		{TagName: "v1.5.0", Prerelease: false},
+		{TagName: "v1.4.0", Prerelease: false},
+		{TagName: "v1.3.0", Prerelease: false},
 	}
 
-	// If it succeeds, verify the result
-	assert.NotEmpty(t, versions)
-	assert.Greater(t, len(versions), 0)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(releases)
+	}))
+	defer ts.Close()
 
-	// All versions should be valid semver
+	// Wire the mock server to AquaRegistry
+	ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
+
+	versions, err := ar.GetAvailableVersions("test", "tool")
+	require.NoError(t, err)
+	require.Len(t, versions, 3) // Only non-prerelease versions
+	assert.Equal(t, "1.5.0", versions[0])
+	assert.Equal(t, "1.4.0", versions[1])
+	assert.Equal(t, "1.3.0", versions[2])
+
+	// All versions should be valid semver without 'v' prefix
 	for _, version := range versions {
 		assert.NotEmpty(t, version)
 		assert.False(t, strings.HasPrefix(version, versionPrefix))
