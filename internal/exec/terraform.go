@@ -70,7 +70,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Get component-specific auth config and merge with global auth config.
 	// This allows components to define their own auth identities and defaults in stack configurations.
 	// The merged config is used for authentication to support component-level defaults.
-	mergedAuthConfig, err := GetComponentAuthConfig(&atmosConfig, info.Stack, info.ComponentFromArg, info.ComponentType)
+	mergedAuthConfig, err := GetComponentAuthConfig(&atmosConfig, info.Stack, info.ComponentFromArg)
 	if err != nil {
 		return err
 	}
