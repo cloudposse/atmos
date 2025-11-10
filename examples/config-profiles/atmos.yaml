@@ -56,3 +56,11 @@ settings:
 # Version constraints
 version:
   min: "1.95.0"
+
+# Custom CLI commands
+commands:
+  - name: "test"
+    description: "Run tests for config-profiles example"
+    steps:
+      - atmos describe config
+      - atmos version
