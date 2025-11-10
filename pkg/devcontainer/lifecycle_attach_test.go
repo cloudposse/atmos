@@ -480,12 +480,12 @@ func TestAttachToContainer_RegularMode(t *testing.T) {
 	defer viper.Set("mask", originalMask)
 
 	tests := []struct {
-		name          string
-		usePTY        bool
+		name           string
+		usePTY         bool
 		maskingEnabled bool
-		userEnvProbe  string
-		setupMocks    func(*MockRuntime)
-		expectError   bool
+		userEnvProbe   string
+		setupMocks     func(*MockRuntime)
+		expectError    bool
 	}{
 		{
 			name:           "regular mode with masking disabled",
