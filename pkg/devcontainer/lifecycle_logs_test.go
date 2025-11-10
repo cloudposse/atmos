@@ -91,7 +91,7 @@ func TestManager_Logs(t *testing.T) {
 					Return(runtime, nil)
 				runtime.EXPECT().
 					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
-					Return(nil, errors.New("not found"))
+					Return(nil, errUtils.ErrContainerNotFound)
 			},
 			expectError:   true,
 			errorIs:       errUtils.ErrContainerNotFound,

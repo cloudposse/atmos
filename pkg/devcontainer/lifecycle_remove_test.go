@@ -114,7 +114,7 @@ func TestManager_Remove(t *testing.T) {
 					Return(runtime, nil)
 				runtime.EXPECT().
 					Inspect(gomock.Any(), "atmos-devcontainer-test-default").
-					Return(nil, errors.New("not found"))
+					Return(nil, errUtils.ErrContainerNotFound)
 			},
 			expectError: false, // Idempotent - no error if container doesn't exist.
 		},
