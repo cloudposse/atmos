@@ -62,5 +62,7 @@ commands:
   - name: "test"
     description: "Run tests for config-profiles example"
     steps:
-      - atmos describe config
-      - atmos version
+      - atmos profile list
+      - atmos profile show developer
+      - atmos profile show ci
+      - atmos profile show production
