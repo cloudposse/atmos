@@ -36,10 +36,16 @@ function Home() {
           </div>
         </header>
         <section className="hero-demo">
-          <ScrollFadeIn className="hero-demo-intro">
+          <motion.div
+            className="hero-demo-intro"
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ amount: 0.8 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+          >
             <h2>See Atmos in Action</h2>
             <p>Watch how Atmos simplifies infrastructure orchestration with an intuitive workflow</p>
-          </ScrollFadeIn>
+          </motion.div>
           <LazyDemo />
         </section>
         <main>

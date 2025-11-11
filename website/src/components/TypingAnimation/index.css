@@ -22,7 +22,7 @@
   line-height: 1;
   vertical-align: baseline;
   position: relative;
-  transform: scaleX(0.17);
+  transform: scaleX(0.153);
 }
 
 .typing-cursor::before {
