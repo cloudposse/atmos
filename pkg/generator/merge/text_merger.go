@@ -65,7 +65,7 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	// If there are conflicts, check if they exceed threshold
 	if hasConflicts && m.thresholdPercent > 0 {
 		// Calculate change percentage based on conflict size vs total size
-		changePercentage := m.calculateChangePercentage(base, ours, theirs, mergedContent)
+		changePercentage := m.calculateChangePercentage(base, ours, theirs)
 
 		if changePercentage > m.thresholdPercent {
 			return nil, fmt.Errorf("too many changes detected (%d%% changes, threshold: %d%%). %d conflicts found. Use --force to overwrite or manually merge",
@@ -81,8 +81,8 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 }
 
 // calculateChangePercentage calculates the percentage of content that has changed.
-// This compares how much ours and theirs differ from base, relative to base size.
-func (m *TextMerger) calculateChangePercentage(base, ours, theirs, merged string) int {
+// This compares how much base, ours, and theirs differ from each other, relative to base size.
+func (m *TextMerger) calculateChangePercentage(base, ours, theirs string) int {
 	// Calculate how many lines changed in ours vs base
 	baseLines := strings.Split(base, "\n")
 	oursLines := strings.Split(ours, "\n")

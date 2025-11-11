@@ -110,14 +110,14 @@ func (s *MetadataStorage) GetMetadataPath() string {
 }
 
 // NewInitMetadata creates generation metadata for an init command.
-func NewInitMetadata(templateName, templateVersion, baseRef string, variables map[string]string) *GenerationMetadata {
+func NewInitMetadata(templateName, templateVersion, templateSource, baseRef string, variables map[string]string) *GenerationMetadata {
 	return &GenerationMetadata{
 		Version: 1,
 		Command: "atmos init",
 		Template: TemplateInfo{
 			Name:    templateName,
 			Version: templateVersion,
-			Source:  "embedded", // Could be enhanced to track source
+			Source:  templateSource,
 		},
 		BaseRef:     baseRef,
 		GeneratedAt: time.Now(),
