@@ -7,7 +7,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-// ValidateTargetDirectory checks if the target directory exists and validates the operation
+// ValidateTargetDirectory checks if the target directory exists and validates the operation.
 func ValidateTargetDirectory(targetPath string, force, update bool) error {
 	// Check if target directory exists
 	if _, err := os.Stat(targetPath); err == nil {

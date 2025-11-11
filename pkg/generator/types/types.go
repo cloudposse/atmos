@@ -2,7 +2,7 @@ package types
 
 import "os"
 
-// File represents a file in a configuration
+// File represents a file in a configuration.
 type File struct {
 	Path        string      `yaml:"path"`
 	Content     string      `yaml:"content"`
@@ -10,7 +10,7 @@ type File struct {
 	Permissions os.FileMode `yaml:"permissions"`
 }
 
-// Configuration represents a template configuration
+// Configuration represents a template configuration.
 type Configuration struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`

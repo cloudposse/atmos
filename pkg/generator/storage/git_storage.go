@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -44,7 +45,7 @@ func (s *GitBaseStorage) LoadBase(filePath string) (string, bool, error) {
 	// Resolve the base reference to a commit hash
 	hash, err := s.repo.ResolveRevision(plumbing.Revision(s.baseRef))
 	if err != nil {
-		return "", false, fmt.Errorf("%w: failed to resolve git ref %q: %s", errUtils.ErrGitRefNotFound, s.baseRef, err)
+		return "", false, fmt.Errorf("%w: failed to resolve git ref %q: %w", errUtils.ErrGitRefNotFound, s.baseRef, err)
 	}
 
 	// Get the commit object
@@ -70,7 +71,7 @@ func (s *GitBaseStorage) LoadBase(filePath string) (string, bool, error) {
 	file, err := tree.File(normalizedPath)
 	if err != nil {
 		// File doesn't exist at this ref - this is not an error, just means no base version
-		if err == object.ErrFileNotFound {
+		if errors.Is(err, object.ErrFileNotFound) {
 			return "", false, nil
 		}
 		return "", false, fmt.Errorf("failed to read file %q at ref %q: %w", filePath, s.baseRef, err)
