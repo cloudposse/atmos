@@ -28,7 +28,7 @@ func ExecutePackerOutput(
 		return nil, err
 	}
 
-	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil)
+	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
 	if err != nil {
 		return nil, err
 	}
