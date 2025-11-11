@@ -33,6 +33,32 @@ var scaffoldGenerateParser *flags.StandardParser
 // Valid prompt types for scaffold configuration.
 var validPromptTypes = []string{"input", "select", "confirm", "multiselect"}
 
+// validateSetFlag validates a --set flag entry in the format "key=value".
+// Returns an error if the entry is malformed.
+func validateSetFlag(entry string) error {
+	if !strings.Contains(entry, "=") {
+		return fmt.Errorf("Malformed --set flag ignored (missing '='): %s", entry)
+	}
+
+	parts := strings.SplitN(entry, "=", 2)
+	if strings.TrimSpace(parts[0]) == "" {
+		return fmt.Errorf("Malformed --set flag ignored (empty key): %s", entry)
+	}
+
+	return nil
+}
+
+// parseSetFlag parses a --set flag entry in the format "key=value".
+// Returns the key and value, or an error if the entry is malformed.
+func parseSetFlag(entry string) (key string, value string, err error) {
+	if err := validateSetFlag(entry); err != nil {
+		return "", "", err
+	}
+
+	parts := strings.SplitN(entry, "=", 2)
+	return strings.TrimSpace(parts[0]), parts[1], nil
+}
+
 // ScaffoldConfig represents a scaffold configuration.
 type ScaffoldConfig struct {
 	Name         string              `yaml:"name"`
@@ -105,13 +131,8 @@ If no target directory is specified, you will be prompted for one.`,
 		if cmd.Flags().Changed("set") {
 			rawSetFlags, _ := cmd.Flags().GetStringSlice("set")
 			for _, entry := range rawSetFlags {
-				if !strings.Contains(entry, "=") {
-					log.Warn("Malformed --set flag ignored (missing '='): " + entry)
-				} else {
-					parts := strings.SplitN(entry, "=", 2)
-					if strings.TrimSpace(parts[0]) == "" {
-						log.Warn("Malformed --set flag ignored (empty key): " + entry)
-					}
+				if err := validateSetFlag(entry); err != nil {
+					log.Warn(err.Error())
 				}
 			}
 		}
