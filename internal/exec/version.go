@@ -1,7 +1,6 @@
 package exec
 
 import (
-	_ "embed"
 	"fmt"
 	"runtime"
 	"strings"
@@ -19,8 +18,30 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
-//go:embed examples/version_format_example.md
-var versionFormatExample string
+const versionFormatExample = `- Display version in JSON format
+
+` + "```" + `
+$ atmos version --format json
+` + "```" + `
+
+- Display version in YAML format
+
+` + "```" + `
+$ atmos version --format yaml
+` + "```" + `
+
+- Pipe JSON output to jq
+
+` + "```" + `
+$ atmos version --format json | jq -r .version
+` + "```" + `
+
+- Check for updates and display in JSON
+
+` + "```" + `
+$ atmos version --check --format json
+` + "```" + `
+`
 
 type versionExec struct {
 	atmosConfig                               *schema.AtmosConfiguration
@@ -185,7 +206,7 @@ func (v versionExec) displayVersionInFormat(forceCheck bool, format string) erro
 	default:
 		return errUtils.Build(errUtils.ErrVersionFormatInvalid).
 			WithExplanationf("The format '%s' is not supported for version output", format).
-			WithExampleFile(versionFormatExample).
+			WithExample(versionFormatExample).
 			WithHint("Use --format json for JSON output").
 			WithHint("Use --format yaml for YAML output").
 			WithContext("format", format).
