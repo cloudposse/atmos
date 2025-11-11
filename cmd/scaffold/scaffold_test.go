@@ -609,41 +609,61 @@ func TestScaffoldCmd_CoverageBooster(t *testing.T) {
 
 func TestScaffoldGenerateCmd_SetFlagParsing(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
-		valid bool
+		name          string
+		input         string
+		expectedKey   string
+		expectedValue string
+		expectError   bool
 	}{
 		{
-			name:  "valid key=value",
-			input: "key=value",
-			valid: true,
+			name:          "valid key=value",
+			input:         "key=value",
+			expectedKey:   "key",
+			expectedValue: "value",
+			expectError:   false,
 		},
 		{
-			name:  "missing equals",
-			input: "keyvalue",
-			valid: false,
+			name:        "missing equals",
+			input:       "keyvalue",
+			expectError: true,
 		},
 		{
-			name:  "empty key",
-			input: "=value",
-			valid: false,
+			name:        "empty key",
+			input:       "=value",
+			expectError: true,
 		},
 		{
-			name:  "valid with spaces in value",
-			input: "key=value with spaces",
-			valid: true,
+			name:          "valid with spaces in value",
+			input:         "key=value with spaces",
+			expectedKey:   "key",
+			expectedValue: "value with spaces",
+			expectError:   false,
+		},
+		{
+			name:          "key with leading/trailing spaces trimmed",
+			input:         " key =value",
+			expectedKey:   "key",
+			expectedValue: "value",
+			expectError:   false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// This tests the validation logic from scaffold.go:103-114
-			hasEquals := len(tt.input) > 0 && tt.input[0] != '=' &&
-				len(tt.input) > 1 && tt.input[1:] != "" &&
-				tt.input != "" && tt.input[0] != '='
+			// Test validation
+			err := validateSetFlag(tt.input)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 
-			if tt.valid {
-				assert.True(t, hasEquals || len(tt.input) == 0)
+			// Test parsing for valid inputs
+			if !tt.expectError {
+				key, value, parseErr := parseSetFlag(tt.input)
+				assert.NoError(t, parseErr)
+				assert.Equal(t, tt.expectedKey, key)
+				assert.Equal(t, tt.expectedValue, value)
 			}
 		})
 	}
