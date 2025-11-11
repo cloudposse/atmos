@@ -72,7 +72,6 @@ func executeThemeShow(cmd *cobra.Command, args []string) error {
 		// Check if it's a theme not found error and enrich it.
 		if errors.Is(result.Error, theme.ErrThemeNotFound) {
 			return errUtils.Build(errUtils.ErrThemeNotFound).
-				WithHintf("Theme `%s` not found", opts.ThemeName).
 				WithHintf("Run `atmos list themes` to see all available themes").
 				WithHint("Browse themes at https://atmos.tools/cli/commands/theme/browse").
 				WithExitCode(2).
