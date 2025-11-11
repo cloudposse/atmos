@@ -375,6 +375,65 @@ Add `defer perf.Track(atmosConfig, "pkg.FuncName")()` + blank line to all public
 ### Configuration Loading
 Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 
+### Flag Handling (MANDATORY)
+
+**CRITICAL: Unified flag parsing infrastructure is FULLY IMPLEMENTED in `pkg/flags/`.**
+
+**Current Architecture:**
+- ✅ `pkg/flags/` package is fully implemented with robust flag parsing infrastructure
+- ✅ Commands MUST use `flags.NewStandardParser()` for command-specific flags
+- ✅ **NEVER call `viper.BindEnv()` or `viper.BindPFlag()` directly** - Forbidigo enforces this
+- ✅ Flag-handler agent provides guidance on correct usage patterns
+
+**Correct Pattern:**
+```go
+// In cmd/mycommand/mycommand.go
+var (
+    myParser *flags.StandardParser
+)
+
+func init() {
+    // Create parser with command-specific flags
+    myParser = flags.NewStandardParser(
+        flags.WithBoolFlag("check", "c", false, "Enable checking"),
+        flags.WithStringFlag("format", "f", "", "Output format"),
+        flags.WithEnvVars("check", "ATMOS_MY_CHECK"),
+        flags.WithEnvVars("format", "ATMOS_MY_FORMAT"),
+    )
+
+    // Register flags with Cobra command
+    myParser.RegisterFlags(myCmd)
+
+    // Bind to Viper for precedence handling (flags > env > config > defaults)
+    if err := myParser.BindToViper(viper.GetViper()); err != nil {
+        panic(err)
+    }
+}
+```
+
+**In RunE:**
+```go
+RunE: func(cmd *cobra.Command, args []string) error {
+    // Parse flags using Viper (respects precedence)
+    v := viper.GetViper()
+    if err := myParser.BindFlagsToViper(cmd, v); err != nil {
+        return err
+    }
+
+    // Access values via Viper
+    check := v.GetBool("check")
+    format := v.GetString("format")
+
+    return exec.MyCommand(check, format)
+}
+```
+
+**Linter Protection (Forbidigo):**
+- ❌ `viper.BindEnv()` is BANNED outside `pkg/flags/`
+- ❌ `viper.BindPFlag()` is BANNED outside `pkg/flags/`
+- ✅ Consult flag-handler agent for all flag-related work
+- ✅ See `cmd/version/version.go` for reference implementation
+
 ### Error Handling (MANDATORY)
 - Wrap with static errors from `errors/errors.go`
 - Chain errors: `fmt.Errorf("%w: msg", errUtils.ErrFoo)` - creates error chain
