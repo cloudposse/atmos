@@ -383,7 +383,7 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 - ✅ `pkg/flags/` package is fully implemented with robust flag parsing infrastructure
 - ✅ Commands MUST use `flags.NewStandardParser()` for command-specific flags
 - ✅ **NEVER call `viper.BindEnv()` or `viper.BindPFlag()` directly** - Forbidigo enforces this
-- ✅ Flag-handler agent provides guidance on correct usage patterns
+- ✅ Flag-handler agent provides guidance on correct usage patterns.
 
 **Correct Pattern:**
 ```go
@@ -432,7 +432,7 @@ RunE: func(cmd *cobra.Command, args []string) error {
 - ❌ `viper.BindEnv()` is BANNED outside `pkg/flags/`
 - ❌ `viper.BindPFlag()` is BANNED outside `pkg/flags/`
 - ✅ Consult flag-handler agent for all flag-related work
-- ✅ See `cmd/version/version.go` for reference implementation
+- ✅ See `cmd/version/version.go` for reference implementation.
 
 ### Error Handling (MANDATORY)
 - Wrap with static errors from `errors/errors.go`

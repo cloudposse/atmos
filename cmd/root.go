@@ -578,10 +578,12 @@ func Execute() error {
 		}
 	}
 
-	// Initialize markdown renderers after error check
+	// Initialize markdown renderers only if config loaded successfully
 	// This prevents deep exits in InitializeMarkdown when config is invalid
-	utils.InitializeMarkdown(atmosConfig)
-	errUtils.InitializeMarkdown(atmosConfig)
+	if initErr == nil {
+		utils.InitializeMarkdown(atmosConfig)
+		errUtils.InitializeMarkdown(atmosConfig)
+	}
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
 	setupLogger(&atmosConfig)
