@@ -3,6 +3,8 @@ package merge
 import (
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestYAMLMerger_CleanMerges(t *testing.T) {
@@ -323,11 +325,13 @@ c: 300
 
 func TestYAMLMerger_CommentPreservation(t *testing.T) {
 	tests := []struct {
-		name       string
-		base       string
-		ours       string
-		theirs     string
-		wantHasKey string // Key that should be in result
+		name           string
+		base           string
+		ours           string
+		theirs         string
+		wantHasKey     string   // Key that should be in result
+		wantComments   []string // Comments that should be preserved
+		wantNoComments []string // Comments that should not be in result
 	}{
 		{
 			name: "preserves head comments",
@@ -340,7 +344,10 @@ key: value
 			theirs: `# Template comment
 key: value
 `,
-			wantHasKey: "key",
+			wantHasKey:   "key",
+			wantComments: []string{"# User comment"},
+			// Template comment should not appear since we prefer user's version
+			wantNoComments: []string{"# Template comment"},
 		},
 		{
 			name: "preserves comments when adding keys",
@@ -361,6 +368,10 @@ key: value
   retries: 3
 `,
 			wantHasKey: "timeout",
+			wantComments: []string{
+				"# User's setting",
+				"# Template's setting",
+			},
 		},
 	}
 
@@ -376,6 +387,20 @@ key: value
 			// Check that result is valid YAML
 			if !strings.Contains(result.Content, tt.wantHasKey) {
 				t.Errorf("Expected result to contain key %q, but it doesn't.\nGot:\n%s", tt.wantHasKey, result.Content)
+			}
+
+			// Check expected comments are present
+			for _, comment := range tt.wantComments {
+				if !strings.Contains(result.Content, comment) {
+					t.Errorf("Expected result to contain comment %q\nGot:\n%s", comment, result.Content)
+				}
+			}
+
+			// Check unwanted comments are not present
+			for _, comment := range tt.wantNoComments {
+				if strings.Contains(result.Content, comment) {
+					t.Errorf("Expected result NOT to contain comment %q\nGot:\n%s", comment, result.Content)
+				}
 			}
 		})
 	}
@@ -574,11 +599,12 @@ func TestYAMLMerger_RealWorldScenarios(t *testing.T) {
 
 func TestYAMLMerger_KeyDeletion(t *testing.T) {
 	tests := []struct {
-		name       string
-		base       string
-		ours       string
-		theirs     string
-		wantHasKey string
+		name          string
+		base          string
+		ours          string
+		theirs        string
+		wantHasKey    string
+		wantNotHasKey string
 	}{
 		{
 			name: "user deletes key, template keeps it - preserve deletion",
@@ -596,7 +622,8 @@ func TestYAMLMerger_KeyDeletion(t *testing.T) {
   feature_b: true
   feature_c: true
 `,
-			wantHasKey: "feature_a", // Should have feature_a and feature_c, not feature_b
+			wantHasKey:    "feature_a", // Should have feature_a and feature_c, not feature_b
+			wantNotHasKey: "feature_b",
 		},
 		{
 			name: "template deletes key, user keeps it - preserve user's version",
@@ -612,7 +639,8 @@ func TestYAMLMerger_KeyDeletion(t *testing.T) {
 			theirs: `settings:
   new_feature: false
 `,
-			wantHasKey: "old_feature", // User kept it, so preserve it
+			wantHasKey:    "old_feature", // User kept it, so preserve it
+			wantNotHasKey: "",            // Nothing should be deleted in this case
 		},
 	}
 
@@ -628,6 +656,115 @@ func TestYAMLMerger_KeyDeletion(t *testing.T) {
 			if !strings.Contains(result.Content, tt.wantHasKey) {
 				t.Errorf("Expected result to contain key %q\nGot:\n%s", tt.wantHasKey, result.Content)
 			}
+
+			if tt.wantNotHasKey != "" && strings.Contains(result.Content, tt.wantNotHasKey) {
+				t.Errorf("Expected result NOT to contain key %q\nGot:\n%s", tt.wantNotHasKey, result.Content)
+			}
+		})
+	}
+}
+
+func TestYAMLMerger_PreservesTagsAndStyle(t *testing.T) {
+	tests := []struct {
+		name     string
+		base     string
+		ours     string
+		theirs   string
+		wantTag  string
+		wantStr  string
+	}{
+		{
+			name: "preserves explicit !!str tag when user changes value",
+			base: `value: "123"
+`,
+			ours: `value: !!str 456
+`,
+			theirs: `value: "123"
+`,
+			wantTag: "!!str",
+			wantStr: "456",
+		},
+		{
+			name: "preserves folded scalar style",
+			base: `description: short
+`,
+			ours: `description: >
+  This is a folded
+  scalar that spans
+  multiple lines
+`,
+			theirs: `description: short
+`,
+			wantStr: "This is a folded scalar that spans multiple lines",
+		},
+		{
+			name: "preserves literal scalar style",
+			base: `script: echo hello
+`,
+			ours: `script: |
+  line one
+  line two
+  line three
+`,
+			theirs: `script: echo hello
+`,
+			wantStr: "line one\nline two\nline three",
+		},
+		{
+			name: "preserves tag when user changes value with explicit tag",
+			base: `port: 8080
+`,
+			ours: `port: !!str 9000
+`,
+			theirs: `port: 8080
+`,
+			wantTag: "!!str",
+			wantStr: "9000", // User's version wins
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewYAMLMerger(50)
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			// Parse result to check node properties
+			var resultNode yaml.Node
+			if err := yaml.Unmarshal([]byte(result.Content), &resultNode); err != nil {
+				t.Fatalf("Failed to parse merge result: %v", err)
+			}
+
+			// Navigate to the value node
+			if len(resultNode.Content) == 0 || resultNode.Content[0].Kind != yaml.MappingNode {
+				t.Fatal("Result is not a mapping")
+			}
+
+			mapping := resultNode.Content[0]
+			if len(mapping.Content) < 2 {
+				t.Fatal("Result mapping is empty")
+			}
+
+			valueNode := mapping.Content[1]
+
+			// Check tag if specified
+			if tt.wantTag != "" && valueNode.Tag != tt.wantTag {
+				t.Errorf("Expected tag %q, got %q", tt.wantTag, valueNode.Tag)
+			}
+
+			// Check value content
+			if tt.wantStr != "" {
+				// Normalize whitespace for comparison
+				gotValue := strings.TrimSpace(valueNode.Value)
+				wantValue := strings.TrimSpace(tt.wantStr)
+				if gotValue != wantValue {
+					t.Errorf("Expected value %q, got %q", wantValue, gotValue)
+				}
+			}
+
+			t.Logf("Result:\n%s", result.Content)
 		})
 	}
 }
