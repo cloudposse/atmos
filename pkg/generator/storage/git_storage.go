@@ -62,8 +62,12 @@ func (s *GitBaseStorage) LoadBase(filePath string) (string, bool, error) {
 	// Clean the file path (remove leading ./ if present)
 	cleanPath := filepath.Clean(filePath)
 
+	// Normalize path separators to forward slashes for go-git
+	// go-git expects forward slashes regardless of OS
+	normalizedPath := filepath.ToSlash(cleanPath)
+
 	// Try to get the file from the tree
-	file, err := tree.File(cleanPath)
+	file, err := tree.File(normalizedPath)
 	if err != nil {
 		// File doesn't exist at this ref - this is not an error, just means no base version
 		if err == object.ErrFileNotFound {

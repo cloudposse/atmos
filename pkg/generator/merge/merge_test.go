@@ -405,6 +405,8 @@ func TestThreeWayMerger_ConflictHandling(t *testing.T) {
 		theirs    string
 		threshold int
 		wantErr   bool
+		wantConflicts bool
+		wantConflictCount int
 	}{
 		{
 			name:     "YAML conflict: both modify same value",
@@ -417,6 +419,8 @@ func TestThreeWayMerger_ConflictHandling(t *testing.T) {
 `,
 			threshold: 100, // High threshold to allow conflict
 			wantErr:   false,
+			wantConflicts: true,
+			wantConflictCount: 1,
 		},
 		{
 			name:      "text conflict: both modify same line",
@@ -426,6 +430,8 @@ func TestThreeWayMerger_ConflictHandling(t *testing.T) {
 			theirs:    "template version\n",
 			threshold: 100,
 			wantErr:   false, // High threshold allows conflict
+			wantConflicts: true,
+			wantConflictCount: 1,
 		},
 	}
 
@@ -444,8 +450,22 @@ func TestThreeWayMerger_ConflictHandling(t *testing.T) {
 				return
 			}
 
-			if err == nil && result.HasConflicts {
-				t.Logf("Merge completed with %d conflicts (within threshold)", result.ConflictCount)
+			if err == nil {
+				if result.HasConflicts != tt.wantConflicts {
+					t.Errorf("HasConflicts = %v, want %v", result.HasConflicts, tt.wantConflicts)
+				}
+
+				if tt.wantConflicts && result.ConflictCount < tt.wantConflictCount {
+					t.Errorf("ConflictCount = %d, want at least %d", result.ConflictCount, tt.wantConflictCount)
+				}
+
+				if !tt.wantConflicts && result.ConflictCount != 0 {
+					t.Errorf("ConflictCount = %d, want 0 for non-conflict scenario", result.ConflictCount)
+				}
+
+				if result.HasConflicts {
+					t.Logf("Merge completed with %d conflicts (within threshold)", result.ConflictCount)
+				}
 			}
 		})
 	}

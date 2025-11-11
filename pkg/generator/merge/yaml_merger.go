@@ -10,6 +10,26 @@ import (
 
 // YAMLMerger handles 3-way merging of YAML files with structure awareness.
 // It preserves comments, anchors, and performs intelligent key-level merging.
+//
+// Why not use pkg/merge (mergego)?
+// The pkg/merge package uses dario.cat/mergo for runtime map[string]any merging during
+// stack configuration processing. This YAMLMerger serves a fundamentally different purpose:
+//
+//   - pkg/merge: Merges already-parsed data structures (map[string]any) for stack inheritance
+//   - pkg/generator/merge: Performs git-style 3-way merges for template updates with conflict detection
+//
+// Key differences:
+//   1. Level of operation: mergo works on Go data structures; this works on YAML nodes
+//   2. Merge strategy: mergo does 2-way merges; this does 3-way merges (base, ours, theirs)
+//   3. Conflict detection: mergo overwrites; this detects and reports conflicts
+//   4. Preservation: mergo doesn't preserve YAML formatting; this preserves comments and anchors
+//   5. Use case: mergo for config inheritance; this for updating user-modified files from templates
+//
+// Example: When a user runs "atmos init --update", this merger compares:
+//   - base: the original template file (from git history)
+//   - ours: the user's modified version (current working directory)
+//   - theirs: the new template version (from updated template)
+// It intelligently merges changes, preserving user customizations while incorporating template updates.
 type YAMLMerger struct {
 	thresholdPercent int // Percentage threshold (0-100) for change detection
 }
@@ -155,22 +175,32 @@ func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, c
 	result := &yaml.Node{
 		Kind:        yaml.MappingNode,
 		Tag:         ours.Tag,
+		Style:       ours.Style,
 		HeadComment: ours.HeadComment,
 		LineComment: ours.LineComment,
 		FootComment: ours.FootComment,
 		Content:     make([]*yaml.Node, 0),
 	}
 
-	// Build maps for easier lookup
+	// Build map for base lookup
 	baseMap := buildKeyMap(base)
-	oursMap := buildKeyMap(ours)
+	// Build map for theirs lookup (checking if keys exist)
 	theirsMap := buildKeyMap(theirs)
 
 	// Track which keys we've processed
 	processed := make(map[string]bool)
 
 	// Process keys from ours first (preserve user's key order)
-	for key, oursValue := range oursMap {
+	// Iterate over ours.Content directly to maintain order (maps are unordered in Go)
+	for i := 0; i < len(ours.Content); i += 2 {
+		if i+1 >= len(ours.Content) {
+			break
+		}
+
+		keyNode := ours.Content[i]
+		oursValue := ours.Content[i+1]
+		key := keyNode.Value
+
 		processed[key] = true
 
 		baseValue, inBase := baseMap[key]
@@ -183,30 +213,46 @@ func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, c
 		keyPath += key
 
 		if !inBase && !inTheirs {
-			// User added, not in template - keep it
-			result.Content = append(result.Content, createKeyNode(key), oursValue)
+			// User added, not in template - keep it (with comments)
+			result.Content = append(result.Content, keyNode, oursValue)
 		} else if !inBase && inTheirs {
 			// Both added the same key - merge values
-			merged, err := m.mergeNodes(&yaml.Node{Kind: yaml.ScalarNode}, oursValue, theirsValue, keyPath, conflicts)
+			if oursValue.Kind != theirsValue.Kind {
+				conflicts.addConflict(keyPath)
+				result.Content = append(result.Content, keyNode, oursValue)
+				continue
+			}
+
+			basePlaceholder := createEmptyNodeOfKind(oursValue)
+			merged, err := m.mergeNodes(basePlaceholder, oursValue, theirsValue, keyPath, conflicts)
 			if err != nil {
 				return nil, err
 			}
-			result.Content = append(result.Content, createKeyNode(key), merged)
+			result.Content = append(result.Content, keyNode, merged)
 		} else if inBase && !inTheirs {
-			// User modified, template deleted - keep user's version (preserve user changes)
-			result.Content = append(result.Content, createKeyNode(key), oursValue)
+			// User modified, template deleted - keep user's version (preserve user changes and comments)
+			result.Content = append(result.Content, keyNode, oursValue)
 		} else {
-			// All three have the key - merge values
+			// All three have the key - merge values (preserve user's key comments)
 			merged, err := m.mergeNodes(baseValue, oursValue, theirsValue, keyPath, conflicts)
 			if err != nil {
 				return nil, err
 			}
-			result.Content = append(result.Content, createKeyNode(key), merged)
+			result.Content = append(result.Content, keyNode, merged)
 		}
 	}
 
 	// Add keys from theirs that aren't in ours (template additions)
-	for key, theirsValue := range theirsMap {
+	// Iterate over theirs.Content directly to preserve key comments
+	for i := 0; i < len(theirs.Content); i += 2 {
+		if i+1 >= len(theirs.Content) {
+			break
+		}
+
+		theirKeyNode := theirs.Content[i]
+		theirValue := theirs.Content[i+1]
+		key := theirKeyNode.Value
+
 		if processed[key] {
 			continue
 		}
@@ -215,8 +261,8 @@ func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, c
 		_, inBase := baseMap[key]
 
 		if !inBase {
-			// Template added new key - include it
-			result.Content = append(result.Content, createKeyNode(key), theirsValue)
+			// Template added new key - include it (with template's comments)
+			result.Content = append(result.Content, theirKeyNode, theirValue)
 		}
 		// If it was in base but not ours, user deleted it - respect deletion
 	}
@@ -232,10 +278,11 @@ func (m *YAMLMerger) mergeSequences(base, ours, theirs *yaml.Node, path string, 
 		conflicts.addConflict(path)
 	}
 
-	// Preserve user's version with comments
+	// Preserve user's version with comments and style
 	result := &yaml.Node{
 		Kind:        yaml.SequenceNode,
 		Tag:         ours.Tag,
+		Style:       ours.Style,
 		HeadComment: ours.HeadComment,
 		LineComment: ours.LineComment,
 		FootComment: ours.FootComment,
@@ -252,10 +299,11 @@ func (m *YAMLMerger) mergeScalars(base, ours, theirs *yaml.Node, path string, co
 		conflicts.addConflict(path)
 	}
 
-	// Preserve user's value with their comments
+	// Preserve user's value with their comments, tag, and style (folding, literal, etc.)
 	result := &yaml.Node{
 		Kind:        yaml.ScalarNode,
 		Tag:         ours.Tag,
+		Style:       ours.Style,
 		Value:       ours.Value,
 		HeadComment: ours.HeadComment,
 		LineComment: ours.LineComment,
@@ -291,6 +339,24 @@ func createKeyNode(key string) *yaml.Node {
 		Tag:   "!!str",
 		Value: key,
 	}
+}
+
+// createEmptyNodeOfKind creates an empty placeholder node matching the given node's kind.
+func createEmptyNodeOfKind(node *yaml.Node) *yaml.Node {
+	placeholder := &yaml.Node{
+		Kind:  node.Kind,
+		Tag:   node.Tag,
+		Style: node.Style,
+	}
+
+	switch node.Kind {
+	case yaml.MappingNode, yaml.SequenceNode, yaml.DocumentNode:
+		placeholder.Content = make([]*yaml.Node, 0)
+	case yaml.ScalarNode:
+		placeholder.Value = ""
+	}
+
+	return placeholder
 }
 
 // nodesEqual checks if two YAML nodes are structurally equal.

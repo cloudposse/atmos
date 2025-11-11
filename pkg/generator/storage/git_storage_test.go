@@ -256,7 +256,7 @@ func TestGitBaseStorage_GetMergeBase(t *testing.T) {
 		name           string
 		setupRepo      func(*testing.T, *git.Repository, string) (string, string) // Returns (ref1, ref2)
 		expectedError  bool
-		validateResult func(*testing.T, string, map[string]string) // hash -> commits map
+		validateResult func(*testing.T, string, string, string) // mergeBase, ref1, ref2
 	}{
 		{
 			name: "finds merge base between HEAD and main",
@@ -288,9 +288,9 @@ func TestGitBaseStorage_GetMergeBase(t *testing.T) {
 				// Merge base should be hash2 (where branch diverged)
 				return "HEAD", hash2
 			},
-			validateResult: func(t *testing.T, mergeBase string, commits map[string]string) {
-				// Merge base should exist
-				assert.NotEmpty(t, mergeBase)
+			validateResult: func(t *testing.T, mergeBase string, ref1 string, ref2 string) {
+				// Merge base should be ref2 (hash2)
+				assert.Equal(t, ref2, mergeBase)
 			},
 		},
 		{
@@ -302,9 +302,10 @@ func TestGitBaseStorage_GetMergeBase(t *testing.T) {
 				})
 				return hash, hash
 			},
-			validateResult: func(t *testing.T, mergeBase string, commits map[string]string) {
+			validateResult: func(t *testing.T, mergeBase string, ref1 string, ref2 string) {
 				// Same commit should return itself as merge base
-				assert.NotEmpty(t, mergeBase)
+				assert.Equal(t, ref1, mergeBase)
+				assert.Equal(t, ref2, mergeBase)
 			},
 		},
 		{
@@ -344,7 +345,7 @@ func TestGitBaseStorage_GetMergeBase(t *testing.T) {
 
 			require.NoError(t, err)
 			if tt.validateResult != nil {
-				tt.validateResult(t, mergeBase, nil)
+				tt.validateResult(t, mergeBase, ref1, ref2)
 			}
 		})
 	}
