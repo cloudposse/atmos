@@ -97,6 +97,10 @@ Global Flags:
                                      or configuration set for deployment in
                                      Atmos CLI.
 
+    -v, --verbose                    Enable verbose error output with full
+                                     context, stack traces, and detailed
+                                     information (default false)
+
         --version                    Display the Atmos CLI version
 
         --                           Use double dashes to separate

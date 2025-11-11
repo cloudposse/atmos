@@ -3,6 +3,7 @@
 
 # Error
 
-stack is required; specify it on the command line using the flag --stack <stack> (shorthand -s)
+**Error:** stack is required; specify it on the command line using the flag --
+stack <stack> (shorthand -s)
 
 

@@ -3,10 +3,11 @@
 
 # Workflow Error
 
-invalid workflow manifest
+**Error:** invalid workflow manifest
 
 ## Explanation
 
-The workflow manifest stacks/workflows/test-invalid.yaml must be a map with the top-level workflows: key.
+The workflow manifest stacks/workflows/test-invalid.yaml must be a map with the
+top-level workflows: key.
 
 

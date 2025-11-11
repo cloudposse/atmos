@@ -4,13 +4,19 @@ Executing command: `atmos terraform plan idontexist`
 
 # Error
 
-invalid component: Could not find the component idontexist in the stack prod. Check that all the context variables are correctly defined in the stack manifests. Are the component and stack names correct? Did you forget an import?
+**Error:** invalid component
+
+## Explanation
+
+Could not find the component idontexist in the stack prod. Check that all the
+context variables are correctly defined in the stack manifests. Are the
+component and stack names correct? Did you forget an import?
 
 
 
 # Workflow Error
 
-workflow step execution failed
+**Error:** workflow step execution failed
 
 ## Explanation
 

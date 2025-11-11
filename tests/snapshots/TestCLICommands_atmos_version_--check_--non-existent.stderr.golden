@@ -1,8 +1,10 @@
 
 # Incorrect Usage
 
-unknown flag --non-existent for command atmos version
+**Error:** unknown flag --non-existent for command atmos version
 
-Run atmos version --help for usage
+## Hints
+
+💡 Run atmos version --help for usage
 
 

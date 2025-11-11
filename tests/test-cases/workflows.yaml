@@ -167,7 +167,8 @@ tests:
         - "Workflow Error"
         - "invalid from-step flag"
         - "## Explanation"
-        - "The --from-step flag was set to dne, but this step does not exist in workflow pass."
+        - "The --from-step flag was set to dne, but this step does not exist in workflow"
+        - "pass"
         - "### Available steps:"
         - "step1"
       exit_code: 1
@@ -217,7 +218,8 @@ tests:
         - "Workflow Error"
         - "invalid workflow manifest"
         - "## Explanation"
-        - "The workflow manifest stacks/workflows/test-invalid.yaml must be a map with the top-level workflows: key."
+        - "The workflow manifest stacks/workflows/test-invalid.yaml must be a map with the"
+        - "top-level workflows: key"
       exit_code: 1
 
   - name: atmos workflow file not found

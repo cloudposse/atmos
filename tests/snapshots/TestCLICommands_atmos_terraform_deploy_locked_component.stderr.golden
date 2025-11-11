@@ -1,6 +1,10 @@
 
 # Error
 
-locked component cannot be provisioned: component 'mock' cannot be modified (metadata.locked: true)
+**Error:** locked component cannot be provisioned
+
+## Explanation
+
+component 'mock' cannot be modified (metadata.locked: true)
 
 

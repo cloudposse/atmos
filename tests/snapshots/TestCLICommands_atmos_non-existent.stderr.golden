@@ -1,7 +1,7 @@
 
 # Incorrect Usage
 
-Unknown command non-existent for atmos
+**Error:** Unknown command non-existent for atmos
 
 Valid subcommands are:
 
@@ -22,12 +22,13 @@ Valid subcommands are:
 • terraform
 • tf
 • theme
-• toolchain
 • validate
 • vendor
 • version
 • workflow
 
-Run atmos --help for usage
+## Hints
+
+💡 Run atmos --help for usage
 
 

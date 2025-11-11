@@ -3,11 +3,12 @@
 
 # Workflow Error
 
-invalid from-step flag
+**Error:** invalid from-step flag
 
 ## Explanation
 
-The --from-step flag was set to dne, but this step does not exist in workflow pass.
+The --from-step flag was set to dne, but this step does not exist in workflow
+pass.
 
 ### Available steps:
 

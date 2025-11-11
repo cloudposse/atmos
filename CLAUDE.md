@@ -376,17 +376,103 @@ Add `defer perf.Track(atmosConfig, "pkg.FuncName")()` + blank line to all public
 Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 
 ### Error Handling (MANDATORY)
-- Wrap with static errors from `errors/errors.go`
-- Chain errors: `fmt.Errorf("%w: msg", errUtils.ErrFoo)` - creates error chain
-- Join errors: `errors.Join(errUtils.ErrFoo, err)` - combines independent errors
-- Multiple wrapping: `fmt.Errorf("%w: context: %w", errUtils.ErrBase, err)` (valid Go 1.20+)
-- Check: `errors.Is(err, target)`
-- Never dynamic errors or string comparison
+- **All errors MUST be wrapped using static errors defined in `errors/errors.go`**
+- **Use `errors.Join` for combining multiple errors** - preserves all error chains
+- **Use `fmt.Errorf` with `%w` for adding string context** - when you need formatted strings
+- **Use error builder for complex errors** - adds hints, context, and exit codes
+- **Use `errors.Is()` for error checking** - robust against wrapping
+- **NEVER use dynamic errors directly** - triggers linting warnings
+- **See `docs/errors.md`** for complete developer guide.
 
 **Important distinction:**
 - **`fmt.Errorf` with single `%w`**: Creates error **chain** - `errors.Unwrap()` returns next error. Use when error context builds sequentially through call stack. **Prefer this when error chain matters.**
 - **`errors.Join`**: Creates **flat list** - `errors.Unwrap()` returns `nil`, must use `Unwrap() []error` interface. Use for independent errors (parallel operations, multiple validations).
 - **`fmt.Errorf` with multiple `%w`**: Like `errors.Join` but adds format string. Valid Go 1.20+, returns `Unwrap() []error`.
+
+**Combining Multiple Errors:**
+```go
+// ✅ CORRECT: Use errors.Join (unlimited errors, no formatting)
+return errors.Join(errUtils.ErrFailedToProcess, underlyingErr)
+
+// Note: Go 1.20+ supports fmt.Errorf("%w: %w", ...) but errors.Join is preferred
+```
+
+**Adding String Context:**
+```go
+return fmt.Errorf("%w: component=%s stack=%s", errUtils.ErrInvalidComponent, component, stack)
+```
+
+**Error Builder for Complex Errors:**
+```go
+import (
+    errUtils "github.com/cloudposse/atmos/errors"
+)
+
+// Use builder for errors with hints, context, and exit codes.
+err := errUtils.Build(errUtils.ErrLoadAwsConfig).
+    WithHint("Check database credentials in atmos.yaml").
+    WithHintf("Verify network connectivity to %s", dbHost).
+    WithContext("component", "vpc").
+    WithContext("stack", "prod").
+    WithExitCode(2).
+    Err()
+```
+
+**Checking Errors:**
+```go
+// ✅ CORRECT: Works with wrapped errors
+if errors.Is(err, context.DeadlineExceeded) { ... }
+
+// ❌ WRONG: Breaks with wrapping
+if err.Error() == "context deadline exceeded" { ... }
+```
+
+**Static Error Definitions:**
+```go
+// Define in errors/errors.go
+var (
+    ErrInvalidComponent = errors.New("invalid component")
+    ErrInvalidStack     = errors.New("invalid stack")
+)
+```
+
+**Exit Codes:**
+```go
+// Attach exit code
+err := errUtils.WithExitCode(err, 2)  // Usage error
+
+// Or use builder
+err := errUtils.Build(err).WithExitCode(2).Err()
+
+// Extract exit code
+exitCode := errUtils.GetExitCode(err)
+// Returns: 0 (nil), custom code, exec.ExitError code, or 1 (default)
+```
+
+**Error Formatting:**
+```go
+// Format error for display with hints and color
+config := errUtils.DefaultFormatterConfig()
+config.Verbose = false  // Compact mode
+config.Color = "auto"   // TTY detection
+
+formatted := errUtils.Format(err, config)
+fmt.Fprint(os.Stderr, formatted)
+```
+
+**Sentry Integration:**
+```go
+// Initialize Sentry from config
+err := errUtils.InitializeSentry(&atmosConfig.Errors.Sentry)
+defer errUtils.CloseSentry()
+
+// Capture error with Atmos context
+context := map[string]string{
+    "component": "vpc",
+    "stack":     "prod",
+}
+errUtils.CaptureErrorWithContext(err, context)
+```
 
 ### Testing Strategy (MANDATORY)
 - **Prefer unit tests with mocks** over integration tests
@@ -400,7 +486,14 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, args). Required for any test touching RootCmd.
 
 ### Test Quality (MANDATORY)
-Test behavior not implementation. No stub/tautological tests. Use DI for testability. Real scenarios only.
+- **Test behavior, not implementation** - Verify inputs/outputs, not internal state
+- **Never test stub functions** - Either implement the function or remove the test
+- **Avoid tautological tests** - Don't test that hardcoded stubs return hardcoded values
+- **Make code testable** - Use dependency injection to avoid hard dependencies on `os.Exit`, `CheckErrorPrintAndExit`, or external systems
+- **No coverage theater** - Each test must validate real behavior, not inflate metrics
+- **Remove always-skipped tests** - Either fix the underlying issue or delete the test
+- **Table-driven tests need real scenarios** - Use production-like inputs, not contrived data
+- **Use `errors.Is()` for error checking** - Use `assert.ErrorIs(err, ErrSentinel)` for our errors and stdlib errors (e.g., `fs.ErrNotExist`, `exec.ErrNotFound`). String matching is only OK for third-party errors or testing specific message formatting.
 
 ### Mock Generation (MANDATORY)
 Use `go.uber.org/mock/mockgen` with `//go:generate` directives. Never manual mocks.
@@ -458,6 +551,63 @@ git diff tests/snapshots/
 2. Verify: `go test ./tests -run 'TestName'`
 3. Commit and push the regenerated snapshot
 4. If still fails: Environment mismatch - contact maintainers
+
+```go
+func TestGitHubVendoring(t *testing.T) {
+    // Check GitHub access with rate limits
+    rateLimits := tests.RequireGitHubAccess(t)
+    if rateLimits != nil && rateLimits.Remaining < 20 {
+        t.Skipf("Need at least 20 GitHub API requests, only %d remaining", rateLimits.Remaining)
+    }
+    // ... test code
+}
+```
+
+### Running Specific Tests
+```bash
+# Run specific test
+go test ./pkg/config -run TestConfigLoad
+# Run with coverage
+go test ./pkg/config -cover
+# Integration tests
+go test ./tests -run TestCLI
+```
+
+### Regenerating Test Snapshots
+
+When CLI output changes, regenerate snapshots to match:
+
+```bash
+# Regenerate ALL snapshots
+go test ./tests -v -regenerate-snapshots
+
+# Regenerate specific test snapshot
+go test ./tests -v -run 'TestCLICommands/atmos_workflow_invalid_step_type' -regenerate-snapshots
+
+# Review changes
+git diff tests/snapshots
+
+# Add updated snapshots
+git add tests/snapshots/*
+```
+
+**CRITICAL**: Never use pipe redirection (`2>&1`, `| head`, `| tail`) when running tests. Piping interferes with TTY detection and causes tests to use ASCII fallback mode instead of proper ANSI rendering, resulting in incorrect snapshots.
+
+**Why this matters**: Atmos uses `term.IsTTYSupportForStdout()` to detect terminal capability. Piping breaks this detection:
+- ✅ No pipes → TTY detected → Proper ANSI rendering → Correct snapshots
+- ❌ With pipes → No TTY → ASCII fallback → Wrong snapshots.
+
+### Test Data
+Use fixtures in `tests/test-cases/` for integration tests. Each test case should have:
+- `atmos.yaml` - Configuration
+- `stacks/` - Stack definitions
+- `components/` - Component configurations.
+
+### Golden Snapshots (MANDATORY)
+- **NEVER modify files under `tests/test-cases/` or `tests/testdata/`** unless explicitly instructed
+- These directories contain golden snapshots that are sensitive to even minor changes
+- Golden snapshots are used to verify expected output remains consistent
+- If you need to update golden snapshots, do so intentionally and document the reason
 
 See `tests/README.md` for details.
 
@@ -588,10 +738,326 @@ gh api graphql -f query='mutation {
 - Always reply when dismissing as false positive with clear explanation
 - Include file:line references and code snippets when helpful
 
-### Bug Fixing (MANDATORY)
-1. Write failing test
-2. Fix iteratively
-3. Verify with full test suite
+```go
+   func (m *MyCommandProvider) GetGroup() string {
+       return "Other Commands" // See docs/developing-atmos-commands.md
+   }
+   ```
+3. **Add blank import to `cmd/root.go`**: `_ "github.com/cloudposse/atmos/cmd/mycommand"`
+4. **Implement business logic** in `internal/exec/mycommand.go`
+5. **Add tests** in `cmd/mycommand/mycommand_test.go`
+6. **Create Docusaurus documentation** in `website/docs/cli/commands/<command>/<subcommand>.mdx`
+7. **Build website to verify**: `cd website && npm run build`
+8. **Create pull request following template format**
+
+**See:**
+- **[docs/developing-atmos-commands.md](docs/developing-atmos-commands.md)** - Complete guide with patterns and examples
+- **[docs/prd/command-registry-pattern.md](docs/prd/command-registry-pattern.md)** - Architecture and design decisions
+
+### Documentation Requirements (MANDATORY)
+- **All new commands/flags/parameters MUST have Docusaurus documentation**
+- **Use definition lists `<dl>` instead of tables** for arguments and flags:
+  ```mdx
+  ## Arguments
+
+  <dl>
+    <dt>`component`</dt>
+    <dd>Atmos component name</dd>
+
+    <dt>`stack`</dt>
+    <dd>Atmos stack name</dd>
+  </dl>
+
+  ## Flags
+
+  <dl>
+    <dt>`--stack` / `-s`</dt>
+    <dd>Atmos stack (required)</dd>
+
+    <dt>`--format`</dt>
+    <dd>Output format: `yaml`, `json`, or `table` (default: `yaml`)</dd>
+  </dl>
+  ```
+
+- **Follow Docusaurus conventions** from existing files:
+  ```mdx
+  ---
+  title: atmos command subcommand
+  sidebar_label: subcommand
+  sidebar_class_name: command
+  id: subcommand
+  description: Brief description of what the command does
+  ---
+  import Screengrab from '@site/src/components/Screengrab'
+  import Terminal from '@site/src/components/Terminal'
+
+  :::note Purpose
+  Use this command to [describe purpose with links to concepts].
+  :::
+
+  <Screengrab title="atmos command subcommand --help" slug="atmos-command-subcommand--help" />
+
+  ## Usage
+
+  ```shell
+  atmos command subcommand <args> [options]
+  ```
+
+  ## Examples
+
+  ```shell
+  atmos command subcommand example1
+  atmos command subcommand example2 --flag=value
+  ```
+
+- **File location**: `website/docs/cli/commands/<command>/<subcommand>.mdx`
+- **Link to core concepts** using `/core-concepts/` paths
+- **Include purpose note** and help screengrab
+- **Use consistent section ordering**: Usage → Examples → Arguments → Flags
+
+### Website Documentation Build (MANDATORY)
+- **ALWAYS build the website after any documentation changes** to verify there are no broken links or formatting issues
+- **Build command**: Run from the `website/` directory:
+  ```bash
+  cd website
+  npm run build
+  ```
+- **When to build**:
+  - After adding/modifying any `.mdx` or `.md` files in `website/docs/`
+  - After adding images to `website/static/img/`
+  - After changing navigation in `website/sidebars.js`
+  - After modifying any component in `website/src/`
+- **What to check**:
+  - Build completes without errors
+  - No broken links reported
+  - No missing images
+  - Proper rendering of MDX components
+- **Example workflow**:
+  ```bash
+  # 1. Make documentation changes
+  vim website/docs/cli/commands/describe/stacks.mdx
+
+  # 2. Build to verify
+  cd website
+  npm run build
+
+  # 3. If errors, fix and rebuild
+  # 4. Commit changes only after successful build
+  ```
+
+### Pull Request Requirements (MANDATORY)
+- **Follow the pull request template** in `.github/PULL_REQUEST_TEMPLATE.md`:
+  ```markdown
+  ## what
+  - High-level description of changes in plain English
+  - Use bullet points for clarity
+
+  ## why
+  - Business justification for the changes
+  - Explain why these changes solve the problem
+  - Use bullet points for clarity
+
+  ## references
+  - Link to supporting GitHub issues or documentation
+  - Use `closes #123` if PR closes an issue
+  ```
+- **Add changelog blog post for feature releases**:
+  - PRs labeled `minor` or `major` MUST include a blog post in `website/blog/`
+  - Create a new file: `website/blog/YYYY-MM-DD-feature-name.md`
+  - Follow the format of existing blog posts (see template below)
+  - Include `<!--truncate-->` marker after the introduction paragraph
+  - The CI workflow will fail and comment on the PR if this is missing
+
+### Blog Post Guidelines (MANDATORY)
+
+Blog posts serve different audiences and must be tagged appropriately:
+
+#### Audience Types
+
+**1. User-Facing Posts** (Features, Improvements, Bug Fixes)
+- **Audience**: Teams using Atmos to manage infrastructure
+- **Focus**: How the change benefits users, usage examples, migration guides
+- **Required tags**: Choose one or more:
+  - `feature` - New user-facing capabilities
+  - `enhancement` - Improvements to existing features
+  - `bugfix` - Important bug fixes that affect users
+- **Example tags**: `[feature, terraform, workflows]`
+
+**2. Contributor-Facing Posts** (Refactoring, Internal Changes, Developer Tools)
+- **Audience**: Atmos contributors and core developers
+- **Focus**: Internal code structure, refactoring, developer experience
+- **Required tag**: `contributors`
+- **Additional tags**: Describe the technical area
+- **Example tags**: `[contributors, atmos-core, refactoring]`
+
+#### Blog Post Template
+
+```markdown
+---
+slug: descriptive-slug
+title: "Clear, Descriptive Title"
+authors: [atmos]
+tags: [primary-tag, secondary-tag, ...]  # See audience types above
+---
+
+Brief introduction paragraph explaining what changed and why it matters.
+
+<!--truncate-->
+
+## What Changed
+
+Describe the change with code examples or visuals.
+
+## Why This Matters / Impact on Users
+
+Explain the benefits or reasoning.
+
+## [For User Posts] How to Use It
+
+Provide practical examples and usage instructions.
+
+## [For Contributor Posts] For Atmos Contributors
+
+Clarify this is internal with zero user impact, link to technical docs.
+
+## Get Involved
+
+- Link to relevant documentation
+- Encourage discussion/contributions
+```
+
+#### Tag Reference
+
+**Primary Audience Tags:**
+- `feature` - New user-facing feature
+- `enhancement` - Improvement to existing feature
+- `bugfix` - Important bug fix
+- `contributors` - For Atmos core contributors (internal changes)
+
+**Secondary Technical Tags (for contributor posts):**
+- `atmos-core` - Changes to Atmos codebase/internals
+- `refactoring` - Code refactoring and restructuring
+- `testing` - Test infrastructure improvements
+- `ci-cd` - CI/CD pipeline changes
+- `developer-experience` - Developer tooling improvements
+
+**Secondary Technical Tags (for user posts):**
+- `terraform` - Terraform-specific features
+- `helmfile` - Helmfile-specific features
+- `workflows` - Workflow features
+- `validation` - Validation features
+- `performance` - Performance improvements
+- `cloud-architecture` - Cloud architecture patterns (user-facing)
+
+**General Tags:**
+- `announcements` - Major announcements
+- `breaking-changes` - Breaking changes requiring migration
+
+- **Use `no-release` label for documentation-only changes**
+- **Ensure all CI checks pass** before requesting review
+
+### Checking PR Security Alerts and CI Status
+Use the GitHub CLI (`gh`) to inspect PR checks and security alerts:
+
+```bash
+# View PR checks status
+gh pr checks {pr-number} --repo {owner/repo}
+
+# Get check run annotations for a specific check (e.g., linting issues)
+gh api repos/{owner/repo}/check-runs/{check-run-id}/annotations
+
+# Get code scanning alerts for the repository
+gh api repos/{owner/repo}/code-scanning/alerts
+
+# Example for Atmos repository:
+gh pr checks 1450 --repo cloudposse/atmos
+gh api repos/cloudposse/atmos/check-runs/49737026433/annotations
+```
+
+### Responding to PR Review Threads (MANDATORY)
+- **ALWAYS reply to specific review threads** - Do not create new PR comments
+- **Use GraphQL API to reply to threads**:
+  ```bash
+  gh api graphql -f query='
+  mutation {
+    addPullRequestReviewThreadReply(input: {
+      pullRequestReviewThreadId: "PRRT_kwDOEW4XoM5..."
+      body: "Your response here"
+    }) {
+      comment { id }
+    }
+  }'
+  ```
+- Get unresolved threads:
+  ```bash
+  gh api graphql -f query='
+  query {
+    repository(owner: "cloudposse", name: "atmos") {
+      pullRequest(number: 1504) {
+        reviewThreads(first: 50) {
+          nodes {
+            id
+            isResolved
+            path
+            line
+            comments(first: 1) {
+              nodes { body }
+            }
+          }
+        }
+      }
+    }
+  }' | jq -r '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)'
+  ```
+
+### Adding Template Function
+1. Implement in `internal/exec/template_funcs.go`
+2. Register in template function map
+3. Add comprehensive tests
+4. Document in website if user-facing
+
+### Bug Fixing Workflow (MANDATORY)
+1. **Write a test to reproduce the bug** - create failing test that demonstrates the issue
+2. **Run the test to confirm it fails** - verify the test reproduces the expected behavior
+3. **Fix the bug iteratively** - make changes and re-run test until it passes
+4. **Verify fix doesn't break existing functionality** - run full test suite
+
+```go
+// Example: Test should describe the expected behavior, not that it's a bug fix
+func TestParseConfig_HandlesEmptyStringInput(t *testing.T) {
+    // Setup conditions that reproduce the issue
+    input := ""
+
+    // Call the function that should handle this case
+    result, err := ParseConfig(input)
+
+    // Assert the expected behavior (this should initially fail)
+    assert.NoError(t, err)
+    assert.Equal(t, DefaultConfig, result)
+}
+
+// Or for error conditions:
+func TestValidateStack_ReturnsErrorForInvalidFormat(t *testing.T) {
+    invalidStack := "malformed-stack-config"
+
+    err := ValidateStack(invalidStack)
+
+    assert.Error(t, err)
+    assert.Contains(t, err.Error(), "invalid format")
+}
+```
+
+### Extending Store Integration
+1. Implement interface in `pkg/store/`
+2. Add to store registry
+3. Update configuration schema
+4. Add integration tests with mocks
+
+### Stack Processing Changes
+1. Core logic in `pkg/stack/` and `internal/exec/stack_processor_utils.go`
+2. Test with multiple inheritance scenarios
+3. Validate template rendering still works
+4. Update schema if configuration changes
 
 ## Critical Development Requirements
 

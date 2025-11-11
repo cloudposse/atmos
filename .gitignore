@@ -111,6 +111,7 @@ toolchain/.tool-versions
 
 # Scratch/temporary analysis files
 .scratch/
+TEST_FAILURE_ANALYSIS.md
 scratch/
 
 # Conductor scratch/temporary files

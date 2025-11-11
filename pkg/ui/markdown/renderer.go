@@ -15,6 +15,24 @@ import (
 
 const defaultWidth = 80
 
+// trimTrailingSpaces removes trailing spaces and tabs from each line while preserving blank lines.
+// IMPORTANT: This function ONLY removes whitespace at the END of lines (before the \n).
+// It NEVER removes newlines themselves. Newlines must always be preserved.
+// Only trailing spaces and tabs (horizontal whitespace) are removed.
+//
+// Line breaks and spacing should be controlled by:
+//   - Markdown content itself (blank lines between paragraphs, etc.)
+//   - Markdown stylesheets (renderer configuration)
+//   - NOT by post-processing that removes newlines
+func trimTrailingSpaces(s string) string {
+	lines := strings.Split(s, newline)
+	for i, line := range lines {
+		// Only trim trailing spaces and tabs, NOT newlines.
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.Join(lines, newline)
+}
+
 // Renderer is a markdown renderer using Glamour.
 type Renderer struct {
 	renderer              *glamour.TermRenderer
@@ -115,6 +133,9 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 		// Fallback to ASCII rendering for non-TTY stdout
 		result, err = r.RenderAsciiWithoutWordWrap(content)
 	}
+	if err == nil {
+		result = trimTrailingSpaces(result)
+	}
 	return result, err
 }
 
@@ -125,23 +146,23 @@ func (r *Renderer) Render(content string) (string, error) {
 	if r.isTTYSupportForStdout() {
 		rendered, err = r.renderer.Render(content)
 	} else {
-		// Fallback to ASCII rendering for non-TTY stdout
+		// Fallback to ASCII rendering for non-TTY stdout.
 		rendered, err = r.RenderAscii(content)
 	}
 	if err != nil {
 		return "", err
 	}
-	// Remove duplicate URLs and trailing newlines
-	lines := strings.Split(rendered, "\n")
+	// Post-process the rendered output to handle trailing newlines and command styling.
+	lines := strings.Split(rendered, newline)
 	var result []string
 
-	// Create a purple style
+	// Create a purple style for command examples.
 	purpleStyle := termenv.Style{}.Foreground(r.profile.Color(Purple)).Bold()
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "$") && term.IsTTYSupportForStdout() {
-			// Add custom styling for command examples
+			// Add custom styling for command examples.
 			styled := purpleStyle.Styled(line)
 			result = append(result, " "+styled)
 		} else {
@@ -151,13 +172,14 @@ func (r *Renderer) Render(content string) (string, error) {
 		}
 	}
 
-	// Remove only trailing blank lines
+	// Remove only trailing blank lines.
 	for len(result) > 0 && strings.TrimSpace(result[len(result)-1]) == "" {
 		result = result[:len(result)-1]
 	}
 
-	// Add a single newline at the end plus extra spacing
-	return strings.Join(result, "\n"), nil
+	// Join lines and trim trailing spaces from each line.
+	output := strings.Join(result, newline)
+	return trimTrailingSpaces(output), nil
 }
 
 func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
@@ -170,17 +192,11 @@ func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	rendered, err := renderer.Render(content)
-	if err != nil {
-		return "", err
+	result, err := renderer.Render(content)
+	if err == nil {
+		result = trimTrailingSpaces(result)
 	}
-
-	// Remove trailing whitespace that glamour adds for padding.
-	lines := strings.Split(rendered, "\n")
-	for i, line := range lines {
-		lines[i] = strings.TrimRight(line, " \t")
-	}
-	return strings.Join(lines, "\n"), nil
+	return result, err
 }
 
 func (r *Renderer) RenderAscii(content string) (string, error) {
@@ -193,17 +209,11 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	rendered, err := renderer.Render(content)
-	if err != nil {
-		return "", err
+	result, err := renderer.Render(content)
+	if err == nil {
+		result = trimTrailingSpaces(result)
 	}
-
-	// Remove trailing whitespace that glamour adds for padding.
-	lines := strings.Split(rendered, "\n")
-	for i, line := range lines {
-		lines[i] = strings.TrimRight(line, " \t")
-	}
-	return strings.Join(lines, "\n"), nil
+	return result, err
 }
 
 // RenderWorkflow renders workflow documentation with specific styling.
@@ -237,11 +247,16 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 
 // RenderErrorf renders an error message with specific styling.
 func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, error) {
+	var result string
+	var err error
 	if r.isTTYSupportForStderr() {
-		return r.Render(content)
+		result, err = r.Render(content)
+	} else {
+		// Fallback to ASCII rendering for non-TTY stderr
+		result, err = r.RenderAscii(content)
 	}
-	// Fallback to ASCII rendering for non-TTY stderr
-	return r.RenderAscii(content)
+	// Note: trimTrailingSpaces already applied in Render() and RenderAscii()
+	return result, err
 }
 
 // RenderSuccess renders a success message with specific styling.
