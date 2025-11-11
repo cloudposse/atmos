@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -195,32 +196,32 @@ func TestAddCommand_AquaRegistryTool(t *testing.T) {
 
 func TestAddCommand_EdgeCases(t *testing.T) {
 	tests := []struct {
-		name        string
-		tool        string
-		version     string
-		expectError bool
-		errorMsg    string
+		name          string
+		tool          string
+		version       string
+		expectError   bool
+		expectedError error
 	}{
 		{
-			name:        "empty tool name",
-			tool:        "",
-			version:     "1.0.0",
-			expectError: true,
-			errorMsg:    "tool not found",
+			name:          "empty tool name",
+			tool:          "",
+			version:       "1.0.0",
+			expectError:   true,
+			expectedError: ErrToolNotFound,
 		},
 		{
-			name:        "empty version",
-			tool:        "terraform",
-			version:     "",
-			expectError: true,
-			errorMsg:    "cannot add tool",
+			name:          "empty version",
+			tool:          "terraform",
+			version:       "",
+			expectError:   true,
+			expectedError: ErrInvalidToolSpec,
 		},
 		{
-			name:        "malformed tool name",
-			tool:        "invalid/tool/name",
-			version:     "1.0.0",
-			expectError: true,
-			errorMsg:    "invalid tool specification",
+			name:          "malformed tool name",
+			tool:          "invalid/tool/name",
+			version:       "1.0.0",
+			expectError:   true,
+			expectedError: ErrInvalidToolSpec,
 		},
 	}
 
@@ -237,7 +238,7 @@ func TestAddCommand_EdgeCases(t *testing.T) {
 			err := AddToolVersion(tt.tool, tt.version)
 			if tt.expectError {
 				require.Error(t, err, "Should fail for edge case")
-				assert.Contains(t, err.Error(), tt.errorMsg)
+				require.True(t, errors.Is(err, tt.expectedError))
 			} else {
 				require.NoError(t, err, "Should succeed for valid edge case")
 			}

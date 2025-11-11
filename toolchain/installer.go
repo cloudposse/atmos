@@ -453,7 +453,10 @@ func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version st
 	}
 
 	// Determine the binary name
-	binaryName := tool.Name
+	binaryName := tool.BinaryName
+	if binaryName == "" {
+		binaryName = tool.Name
+	}
 	if binaryName == "" {
 		binaryName = tool.RepoName
 	}
@@ -523,7 +526,10 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *registry.Tool) 
 		return fmt.Errorf("%w: failed to extract ZIP: %w", ErrFileOperation, err)
 	}
 
-	binaryName := tool.Name
+	binaryName := tool.BinaryName
+	if binaryName == "" {
+		binaryName = tool.Name
+	}
 	if binaryName == "" {
 		binaryName = tool.RepoName
 	}
@@ -752,7 +758,10 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *registry.Tool
 		return fmt.Errorf("%w: failed to extract tar.gz: %w", ErrFileOperation, err)
 	}
 
-	binaryName := tool.Name
+	binaryName := tool.BinaryName
+	if binaryName == "" {
+		binaryName = tool.Name
+	}
 	if binaryName == "" {
 		binaryName = tool.RepoName
 	}

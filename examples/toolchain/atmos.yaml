@@ -5,6 +5,7 @@
 # 2. Official Aqua registry (for standard tools)
 #
 # All registries in this example are functional and can be tested immediately.
+# The custom-registry/registry.yaml file is included with example tools (jq, yq).
 
 toolchain:
   # Install path for toolchain binaries (default: .tools)
@@ -43,8 +44,8 @@ toolchain:
           url: "https://releases.example.com/{{trimV .Version}}/tool-{{.OS}}-{{.Arch}}.zip"
 
     # Local custom registry (medium priority)
-    # Single-file registry at ./custom-registry/registry.yaml
-    # Contains example tools (jq, yq) to demonstrate custom registry
+    # Single-file registry at ./custom-registry/registry.yaml (included in examples)
+    # Contains example tools (jq, yq) to demonstrate custom registry format
     # In production, this could be a corporate registry or internal mirror
     - name: custom-local
       type: aqua

@@ -47,6 +47,7 @@ import (
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
 	toolchainCmd "github.com/cloudposse/atmos/cmd/toolchain"
 	"github.com/cloudposse/atmos/cmd/version"
+	"github.com/cloudposse/atmos/toolchain"
 
 	_ "github.com/cloudposse/atmos/cmd/about"
 )
@@ -572,6 +573,7 @@ func Execute() error {
 	version.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
 	toolchainCmd.SetAtmosConfig(&atmosConfig)
+	toolchain.SetAtmosConfig(&atmosConfig)
 
 	utils.InitializeMarkdown(atmosConfig)
 	errUtils.InitializeMarkdown(atmosConfig)

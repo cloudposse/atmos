@@ -55,6 +55,7 @@ var toolchainCmd = &cobra.Command{
 			Toolchain: schema.Toolchain{
 				VersionsFile:    v.GetString("toolchain.tool-versions"),
 				InstallPath:     v.GetString("toolchain.tools-dir"),
+				ToolsDir:        v.GetString("toolchain.tools-dir"),
 				ToolsConfigFile: v.GetString("toolchain.tools-config"),
 			},
 		}

@@ -33,17 +33,28 @@ func InfoExec(toolName, outputFormat string) error {
 	// Get installed versions from tool-versions file.
 	installedVersions := []string{}
 	defaultVersion := ""
+	var version string
 	if toolVersions, err := LoadToolVersions(GetToolVersionsFilePath()); err == nil {
 		if versions, exists := toolVersions.Tools[toolName]; exists && len(versions) > 0 {
 			installedVersions = versions
 			defaultVersion = versions[len(versions)-1] // Last one is default.
 		}
+
+		// Try to find a version using LookupToolVersionOrLatest.
+		_, version, _, _ = LookupToolVersionOrLatest(toolName, toolVersions, installer.GetResolver())
 	}
 
-	// Use default version or pick a reasonable one.
-	version := defaultVersion
-	if version == "" {
-		version = "latest" // Fallback.
+	// If no version found or if it's still "latest", resolve to concrete latest version.
+	if version == "" || version == "latest" {
+		// Get the actual latest version from the registry.
+		reg := NewAquaRegistry()
+		latestVersion, err := reg.GetLatestVersion(owner, repo)
+		if err == nil {
+			version = latestVersion
+		} else {
+			// If we can't get the latest version, fall back to "latest" literal.
+			version = "latest"
+		}
 	}
 
 	// Find the tool configuration.

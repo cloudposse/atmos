@@ -163,9 +163,10 @@ func Success(text string) error {
 	if err != nil {
 		return err
 	}
-	// Use formatter to get colored success message, then write via terminal
-	formatted := f.Success(text) + newline
-	return f.terminal.Write(formatted)
+	// Delegate to Toast with themed icon and styled text
+	icon := "✓"
+	styledText := f.styles.Success.Render(text)
+	return Toast(icon, styledText)
 }
 
 // Successf writes a formatted success message with green checkmark to stderr (UI channel).
@@ -176,9 +177,11 @@ func Successf(format string, a ...interface{}) error {
 	if err != nil {
 		return err
 	}
-	// Use formatter to get colored success message, then write via terminal
-	formatted := f.Successf(format, a...) + newline
-	return f.terminal.Write(formatted)
+	// Delegate to Toastf with themed icon and styled text
+	icon := "✓"
+	message := fmt.Sprintf(format, a...)
+	styledText := f.styles.Success.Render(message)
+	return Toast(icon, styledText)
 }
 
 // Error writes an error message with red X to stderr (UI channel).
@@ -189,9 +192,10 @@ func Error(text string) error {
 	if err != nil {
 		return err
 	}
-	// Use formatter to get colored error message, then write via terminal
-	formatted := f.Error(text) + newline
-	return f.terminal.Write(formatted)
+	// Delegate to Toast with themed icon and styled text
+	icon := "✗"
+	styledText := f.styles.Error.Render(text)
+	return Toast(icon, styledText)
 }
 
 // Errorf writes a formatted error message with red X to stderr (UI channel).
@@ -202,9 +206,11 @@ func Errorf(format string, a ...interface{}) error {
 	if err != nil {
 		return err
 	}
-	// Use formatter to get colored error message, then write via terminal
-	formatted := f.Errorf(format, a...) + newline
-	return f.terminal.Write(formatted)
+	// Delegate to Toastf with themed icon and styled text
+	icon := "✗"
+	message := fmt.Sprintf(format, a...)
+	styledText := f.styles.Error.Render(message)
+	return Toast(icon, styledText)
 }
 
 // Warning writes a warning message with yellow warning sign to stderr (UI channel).
@@ -215,9 +221,10 @@ func Warning(text string) error {
 	if err != nil {
 		return err
 	}
-	// Use formatter to get colored warning message, then write via terminal
-	formatted := f.Warning(text) + newline
-	return f.terminal.Write(formatted)
+	// Delegate to Toast with themed icon and styled text
+	icon := "⚠"
+	styledText := f.styles.Warning.Render(text)
+	return Toast(icon, styledText)
 }
 
 // Warningf writes a formatted warning message with yellow warning sign to stderr (UI channel).
@@ -228,9 +235,11 @@ func Warningf(format string, a ...interface{}) error {
 	if err != nil {
 		return err
 	}
-	// Use formatter to get colored warning message, then write via terminal
-	formatted := f.Warningf(format, a...) + newline
-	return f.terminal.Write(formatted)
+	// Delegate to Toastf with themed icon and styled text
+	icon := "⚠"
+	message := fmt.Sprintf(format, a...)
+	styledText := f.styles.Warning.Render(message)
+	return Toast(icon, styledText)
 }
 
 // Info writes an info message with cyan info icon to stderr (UI channel).
@@ -241,9 +250,10 @@ func Info(text string) error {
 	if err != nil {
 		return err
 	}
-	// Use formatter to get colored info message, then write via terminal
-	formatted := f.Info(text) + newline
-	return f.terminal.Write(formatted)
+	// Delegate to Toast with themed icon and styled text
+	icon := "ℹ"
+	styledText := f.styles.Info.Render(text)
+	return Toast(icon, styledText)
 }
 
 // Infof writes a formatted info message with cyan info icon to stderr (UI channel).
@@ -254,9 +264,11 @@ func Infof(format string, a ...interface{}) error {
 	if err != nil {
 		return err
 	}
-	// Use formatter to get colored info message, then write via terminal
-	formatted := f.Infof(format, a...) + newline
-	return f.terminal.Write(formatted)
+	// Delegate to Toastf with themed icon and styled text
+	icon := "ℹ"
+	message := fmt.Sprintf(format, a...)
+	styledText := f.styles.Info.Render(message)
+	return Toast(icon, styledText)
 }
 
 // Write writes plain text to stderr (UI channel) without icons or automatic styling.

@@ -66,7 +66,7 @@ func TestRegistry_AddTool(t *testing.T) {
 		registry := NewRegistry(mgr1, mgr2)
 		err := registry.AddTool(ctx, "terraform", "1.13.4")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to update some files")
+		assert.Contains(t, err.Error(), "update failed")
 		assert.Contains(t, err.Error(), "manager2")
 	})
 
@@ -139,7 +139,7 @@ func TestRegistry_RemoveTool(t *testing.T) {
 		registry := NewRegistry(mgr1, mgr2)
 		err := registry.RemoveTool(ctx, "terraform", "1.13.4")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to update some files")
+		assert.Contains(t, err.Error(), "update failed")
 	})
 }
 
@@ -194,7 +194,7 @@ func TestRegistry_SetDefault(t *testing.T) {
 		registry := NewRegistry(mgr)
 		err := registry.SetDefault(ctx, "terraform", "1.13.4")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to update some files")
+		assert.Contains(t, err.Error(), "update failed")
 	})
 }
 

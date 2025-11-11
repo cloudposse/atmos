@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -61,14 +60,6 @@ func TestNewDefaultClient(t *testing.T) {
 }
 
 func TestGetGitHubTokenFromEnv(t *testing.T) {
-	// Save original values
-	originalAtmosToken := os.Getenv("ATMOS_GITHUB_TOKEN")
-	originalGitHubToken := os.Getenv("GITHUB_TOKEN")
-	defer func() {
-		os.Setenv("ATMOS_GITHUB_TOKEN", originalAtmosToken)
-		os.Setenv("GITHUB_TOKEN", originalGitHubToken)
-	}()
-
 	tests := []struct {
 		name        string
 		atmosToken  string

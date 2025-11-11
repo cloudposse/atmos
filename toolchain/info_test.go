@@ -538,7 +538,7 @@ func TestInfoCommand_EdgeCases(t *testing.T) {
 			Type:      "github_release",
 			RepoOwner: "test",
 			RepoName:  "tool-with-overrides",
-			Overrides: []Override{
+			Overrides: []registry.Override{
 				{GOOS: "darwin", GOARCH: "arm64", Asset: "tool-darwin-arm64"},
 				{GOOS: "linux", GOARCH: "amd64", Asset: "tool-linux-amd64"},
 			},
@@ -574,6 +574,7 @@ func TestInfoCommand_EdgeCases(t *testing.T) {
 
 // TestInfoExec_YAMLOutput tests InfoExec with YAML output format.
 func TestInfoExec_YAMLOutput(t *testing.T) {
+	setupTestIO(t)
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 
 	// Test with terraform (known tool in local config)
@@ -583,6 +584,7 @@ func TestInfoExec_YAMLOutput(t *testing.T) {
 
 // TestInfoExec_TableOutput tests InfoExec with table output format.
 func TestInfoExec_TableOutput(t *testing.T) {
+	setupTestIO(t)
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 
 	// Test with terraform (known tool in local config)
@@ -592,6 +594,7 @@ func TestInfoExec_TableOutput(t *testing.T) {
 
 // TestInfoExec_InvalidTool tests InfoExec with an invalid tool name.
 func TestInfoExec_InvalidTool(t *testing.T) {
+	setupTestIO(t)
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 
 	// Test with non-existent tool
@@ -602,6 +605,7 @@ func TestInfoExec_InvalidTool(t *testing.T) {
 
 // TestInfoExec_CanonicalOrgRepo tests InfoExec with canonical org/repo format.
 func TestInfoExec_CanonicalOrgRepo(t *testing.T) {
+	setupTestIO(t)
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 
 	// Test with canonical org/repo format
@@ -611,6 +615,7 @@ func TestInfoExec_CanonicalOrgRepo(t *testing.T) {
 
 // TestInfoExec_GitHubReleaseTool tests InfoExec with a GitHub release tool.
 func TestInfoExec_GitHubReleaseTool(t *testing.T) {
+	setupTestIO(t)
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 
 	// Test with opentofu (GitHub release type)

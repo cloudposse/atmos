@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -75,6 +76,7 @@ func New() *LockFile {
 		Metadata: LockFileMetadata{
 			GeneratedAt:     time.Now().UTC().Format(time.RFC3339),
 			AtmosVersion:    version.Version,
+			Platform:        runtime.GOOS + "_" + runtime.GOARCH,
 			LockFileVersion: 1,
 		},
 	}
@@ -102,7 +104,11 @@ func Load(filePath string) (*LockFile, error) {
 	return &lockFile, nil
 }
 
-// Save writes the lock file to disk.
+// Save writes the lock file to disk, updating metadata fields and creating parent directories if needed.
+// The function updates GeneratedAt, AtmosVersion, and Platform fields in the lockfile metadata to reflect
+// the current environment. It creates the parent directory structure if it doesn't exist (with 0o755 permissions)
+// and writes the lockfile with 0o644 permissions. Returns an error if the lockfile is nil, marshaling fails,
+// directory creation fails, or file writing fails.
 func Save(filePath string, lockFile *LockFile) error {
 	defer perf.Track(nil, "lockfile.Save")()
 
@@ -113,6 +119,7 @@ func Save(filePath string, lockFile *LockFile) error {
 	// Update metadata
 	lockFile.Metadata.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
 	lockFile.Metadata.AtmosVersion = version.Version
+	lockFile.Metadata.Platform = runtime.GOOS + "_" + runtime.GOARCH
 
 	data, err := yaml.Marshal(lockFile)
 	if err != nil {
@@ -168,7 +175,12 @@ func (lf *LockFile) RemoveTool(tool string) {
 	delete(lf.Tools, tool)
 }
 
-// Verify verifies the integrity of the lock file.
+// Verify verifies the integrity and validity of the lock file at the specified path.
+// It loads the lockfile from disk and performs comprehensive validation including:
+// version field checks, metadata validation, and per-tool validation (version presence,
+// platform entries existence, and platform-specific URL/checksum requirements).
+// Returns nil if the lockfile is valid, or an error describing the validation failure
+// (e.g., missing required fields, nil entries, empty values).
 func Verify(filePath string) error {
 	defer perf.Track(nil, "lockfile.Verify")()
 

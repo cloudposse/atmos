@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,6 +37,9 @@ func TestToolchainGetCommand(t *testing.T) {
 // setupToolchainTest creates a test environment with tool-versions and tools config files.
 func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 	t.Helper()
+
+	// Clean toolchainCmd state before each test to prevent pollution.
+	cleanToolchainCmdState(t)
 
 	// Initialize I/O context and formatter for testing.
 	ioCtx, err := iolib.NewContext()
@@ -398,4 +403,61 @@ func TestSetAtmosConfig(t *testing.T) {
 	assert.NotPanics(t, func() {
 		SetAtmosConfig(atmosCfg)
 	}, "SetAtmosConfig should not panic")
+}
+
+// cleanToolchainCmdState resets all toolchainCmd flags and subcommand flags to prevent test pollution.
+// This follows the same pattern as cmd.NewTestKit but for the toolchain command hierarchy.
+func cleanToolchainCmdState(t *testing.T) {
+	t.Helper()
+
+	// Snapshot current flag states.
+	type flagSnapshot struct {
+		value   string
+		changed bool
+	}
+	snapshot := make(map[string]flagSnapshot)
+
+	// Capture state of all flags (persistent and local) in toolchainCmd and subcommands.
+	var captureFlags func(*cobra.Command)
+	captureFlags = func(cmd *cobra.Command) {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			snapshot[f.Name] = flagSnapshot{
+				value:   f.Value.String(),
+				changed: f.Changed,
+			}
+		})
+		cmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+			snapshot[f.Name] = flagSnapshot{
+				value:   f.Value.String(),
+				changed: f.Changed,
+			}
+		})
+		for _, child := range cmd.Commands() {
+			captureFlags(child)
+		}
+	}
+	captureFlags(toolchainCmd)
+
+	// Register cleanup to restore flag states after test.
+	t.Cleanup(func() {
+		var restoreFlags func(*cobra.Command)
+		restoreFlags = func(cmd *cobra.Command) {
+			cmd.Flags().VisitAll(func(f *pflag.Flag) {
+				if snap, ok := snapshot[f.Name]; ok {
+					_ = f.Value.Set(snap.value)
+					f.Changed = snap.changed
+				}
+			})
+			cmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+				if snap, ok := snapshot[f.Name]; ok {
+					_ = f.Value.Set(snap.value)
+					f.Changed = snap.changed
+				}
+			})
+			for _, child := range cmd.Commands() {
+				restoreFlags(child)
+			}
+		}
+		restoreFlags(toolchainCmd)
+	})
 }

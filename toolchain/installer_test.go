@@ -945,8 +945,6 @@ func TestExtractRawBinary(t *testing.T) {
 	// Create a temporary directory for testing
 	tempDir := t.TempDir()
 
-	installer := NewInstaller()
-
 	// Create a mock raw binary file
 	rawBinaryPath := filepath.Join(tempDir, "test-binary")
 	rawBinaryContent := []byte("#!/bin/bash\necho 'test binary'")
@@ -958,7 +956,7 @@ func TestExtractRawBinary(t *testing.T) {
 	destPath := filepath.Join(tempDir, "extracted-binary")
 
 	// Test raw binary extraction (copyFile)
-	if err := installer.copyFile(rawBinaryPath, destPath); err != nil {
+	if err := copyFile(rawBinaryPath, destPath); err != nil {
 		t.Fatalf("copyFile failed: %v", err)
 	}
 
@@ -1043,9 +1041,8 @@ func TestExtractAndInstallWithRawBinary(t *testing.T) {
 		RepoName: "atmos",
 		Type:     "http",
 	}
-	di, _ := os.Getwd()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: di}})
-	t.Log("tempDir", di)
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir}})
+	t.Log("tempDir", tempDir)
 	// Test extractAndInstall with raw binary
 	binaryPath, err := installer.extractAndInstall(tool, rawBinaryPath, "1.0.0")
 	if err != nil {

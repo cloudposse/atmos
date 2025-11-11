@@ -117,14 +117,28 @@ func parseToolConfig(owner, repo string, config map[string]any) (*registry.Tool,
 	}
 	tool.Type = toolType
 
-	// Parse URL/asset template (required).
-	url, ok := config["url"].(string)
-	if !ok || url == "" {
-		return nil, fmt.Errorf("%w: 'url' field is required and must be a string", ErrMissingRequiredField)
+	// Parse URL/asset template (required) - depends on type.
+	switch toolType {
+	case "http":
+		u, ok := config["url"].(string)
+		if !ok || u == "" {
+			return nil, fmt.Errorf("%w: 'url' is required for type=http", ErrMissingRequiredField)
+		}
+		tool.URL = u
+		tool.Asset = u
+	case "github_release":
+		// For github_release, prefer 'asset' field, but fall back to 'url' for backward compatibility
+		if a, ok := config["asset"].(string); ok && a != "" {
+			tool.Asset = a
+		} else if u, ok := config["url"].(string); ok && u != "" {
+			tool.URL = u
+			tool.Asset = u
+		} else {
+			return nil, fmt.Errorf("%w: 'asset' or 'url' is required for type=github_release", ErrMissingRequiredField)
+		}
+	default:
+		return nil, fmt.Errorf("%w: unsupported type %q", ErrInvalidToolConfig, toolType)
 	}
-	tool.URL = url
-	// Asset is used for template rendering in BuildAssetURL for both types.
-	tool.Asset = url
 
 	// Parse optional fields.
 	if format, ok := config["format"].(string); ok {
