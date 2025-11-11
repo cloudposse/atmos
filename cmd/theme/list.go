@@ -3,7 +3,6 @@ package theme
 import (
 	_ "embed"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -76,16 +75,12 @@ func executeThemeList(cmd *cobra.Command, args []string) error {
 	// 2. Check ATMOS_THEME env var
 	// 3. Check THEME env var
 	// 4. Default to "atmos"
-	//
-	// Note: We use os.Getenv() directly for ATMOS_THEME and THEME because they are
-	// global configuration variables (not command-specific flags). They control theme
-	// resolution across all commands, so binding them to Viper would be redundant.
 	activeTheme := ""
 	if atmosConfigPtr != nil && atmosConfigPtr.Settings.Terminal.Theme != "" {
 		activeTheme = atmosConfigPtr.Settings.Terminal.Theme
-	} else if envTheme := os.Getenv("ATMOS_THEME"); envTheme != "" {
+	} else if envTheme := v.GetString("ATMOS_THEME"); envTheme != "" {
 		activeTheme = envTheme
-	} else if envTheme := os.Getenv("THEME"); envTheme != "" {
+	} else if envTheme := v.GetString("THEME"); envTheme != "" {
 		activeTheme = envTheme
 	} else {
 		// Default to "atmos" theme (same as pkg/ui/theme/styles.go:getActiveThemeName)

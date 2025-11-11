@@ -2,10 +2,12 @@ package theme
 
 import (
 	_ "embed"
+	"errors"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -67,6 +69,16 @@ func executeThemeShow(cmd *cobra.Command, args []string) error {
 	})
 
 	if result.Error != nil {
+		// Check if it's a theme not found error and enrich it.
+		if errors.Is(result.Error, theme.ErrThemeNotFound) {
+			return errUtils.Build(errUtils.ErrThemeNotFound).
+				WithHintf("Theme `%s` not found", opts.ThemeName).
+				WithHintf("Run `atmos list themes` to see all available themes").
+				WithHint("Browse themes at https://atmos.tools/cli/commands/theme/browse").
+				WithExitCode(2).
+				Err()
+		}
+		// Pass through other errors.
 		return result.Error
 	}
 
