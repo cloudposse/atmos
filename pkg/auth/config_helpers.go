@@ -19,8 +19,17 @@ func CopyGlobalAuthConfig(globalAuth *schema.AuthConfig) *schema.AuthConfig {
 	}
 
 	config := &schema.AuthConfig{
-		Logs:    globalAuth.Logs,
-		Keyring: globalAuth.Keyring,
+		Logs: globalAuth.Logs,
+		Keyring: schema.KeyringConfig{
+			Type: globalAuth.Keyring.Type,
+		},
+	}
+
+	if globalAuth.Keyring.Spec != nil {
+		config.Keyring.Spec = make(map[string]any, len(globalAuth.Keyring.Spec))
+		for k, v := range globalAuth.Keyring.Spec {
+			config.Keyring.Spec[k] = v
+		}
 	}
 
 	if globalAuth.Providers != nil {

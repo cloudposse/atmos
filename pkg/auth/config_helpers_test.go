@@ -59,6 +59,25 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 				assert.Len(t, result.IdentityCaseMap, 1)
 			},
 		},
+		{
+			name: "deep copies Keyring.Spec map",
+			globalAuth: &schema.AuthConfig{
+				Keyring: schema.KeyringConfig{
+					Type: "file",
+					Spec: map[string]interface{}{
+						"path":     "/tmp/keyring",
+						"password": "secret",
+					},
+				},
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig) {
+				// Verify Spec was copied.
+				assert.NotNil(t, result.Keyring.Spec)
+				assert.Len(t, result.Keyring.Spec, 2)
+				assert.Equal(t, "/tmp/keyring", result.Keyring.Spec["path"])
+				assert.Equal(t, "secret", result.Keyring.Spec["password"])
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -67,6 +86,46 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 			tt.verify(t, result)
 		})
 	}
+}
+
+func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
+	// Test that modifying the copy doesn't mutate the original.
+	original := &schema.AuthConfig{
+		Keyring: schema.KeyringConfig{
+			Type: "file",
+			Spec: map[string]interface{}{
+				"path": "/original/path",
+			},
+		},
+		IdentityCaseMap: map[string]string{
+			"original": "Original",
+		},
+	}
+
+	// Create a copy.
+	copy := CopyGlobalAuthConfig(original)
+
+	// Modify the copy.
+	copy.Keyring.Spec["path"] = "/modified/path"
+	copy.Keyring.Spec["new_key"] = "new_value"
+	copy.IdentityCaseMap["original"] = "Modified"
+	copy.IdentityCaseMap["new"] = "New"
+
+	// Verify original is unchanged.
+	assert.Equal(t, "/original/path", original.Keyring.Spec["path"])
+	assert.Len(t, original.Keyring.Spec, 1)
+	assert.NotContains(t, original.Keyring.Spec, "new_key")
+	assert.Equal(t, "Original", original.IdentityCaseMap["original"])
+	assert.Len(t, original.IdentityCaseMap, 1)
+	assert.NotContains(t, original.IdentityCaseMap, "new")
+
+	// Verify copy has the modifications.
+	assert.Equal(t, "/modified/path", copy.Keyring.Spec["path"])
+	assert.Equal(t, "new_value", copy.Keyring.Spec["new_key"])
+	assert.Len(t, copy.Keyring.Spec, 2)
+	assert.Equal(t, "Modified", copy.IdentityCaseMap["original"])
+	assert.Equal(t, "New", copy.IdentityCaseMap["new"])
+	assert.Len(t, copy.IdentityCaseMap, 2)
 }
 
 func TestMergeComponentAuthFromConfig(t *testing.T) {
