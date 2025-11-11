@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/project/config"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
@@ -234,25 +235,53 @@ func executeScaffoldGenerate(
 	dryRun bool,
 	templateVars map[string]interface{},
 ) error {
-	// Convert to absolute path if provided
-	if targetDir != "" {
-		var err error
-		targetDir, err = filepath.Abs(targetDir)
-		if err != nil {
-			return errUtils.Build(errUtils.ErrResolveTargetDirectory).
-				WithExplanationf("Cannot resolve target directory path: `%s`", targetDir).
-				WithHint("Ensure the path is valid").
-				WithHint("Check that the parent directory exists and is accessible").
-				WithContext("target_dir", targetDir).
-				WithExitCode(2).
-				Err()
-		}
+	// Convert to absolute path
+	absTargetDir, err := resolveTargetDirectory(targetDir)
+	if err != nil {
+		return err
 	}
 
+	// Load all available templates
+	configs, scaffoldUI, err := loadScaffoldTemplates()
+	if err != nil {
+		return err
+	}
+
+	// Select template (interactive or by name)
+	selectedConfig, err := selectTemplate(templateName, configs, scaffoldUI)
+	if err != nil {
+		return err
+	}
+
+	// Execute template generation
+	return executeTemplateGeneration(selectedConfig, absTargetDir, force, dryRun, templateVars, scaffoldUI)
+}
+
+// resolveTargetDirectory converts target directory to absolute path.
+func resolveTargetDirectory(targetDir string) (string, error) {
+	if targetDir == "" {
+		return "", nil
+	}
+
+	absPath, err := filepath.Abs(targetDir)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrResolveTargetDirectory).
+			WithExplanationf("Cannot resolve target directory path: `%s`", targetDir).
+			WithHint("Ensure the path is valid").
+			WithHint("Check that the parent directory exists and is accessible").
+			WithContext("target_dir", targetDir).
+			WithExitCode(2).
+			Err()
+	}
+	return absPath, nil
+}
+
+// loadScaffoldTemplates loads all available scaffold templates from embedded and atmos.yaml.
+func loadScaffoldTemplates() (map[string]templates.Configuration, *generatorUI.InitUI, error) {
 	// Create generator context
 	genCtx, err := setup.NewGeneratorContext()
 	if err != nil {
-		return errUtils.Build(errUtils.ErrCreateGeneratorContext).
+		return nil, nil, errUtils.Build(errUtils.ErrCreateGeneratorContext).
 			WithExplanation("Failed to initialize generator context").
 			WithHint("Check terminal capabilities and I/O permissions").
 			WithHint("Try running with `ATMOS_LOGS_LEVEL=Debug` for more details").
@@ -260,12 +289,10 @@ func executeScaffoldGenerate(
 			Err()
 	}
 
-	scaffoldUI := genCtx.UI
-
-	// Load embedded templates first
+	// Load embedded templates
 	configs, err := templates.GetAvailableConfigurations()
 	if err != nil {
-		return errUtils.Build(errUtils.ErrLoadScaffoldTemplates).
+		return nil, nil, errUtils.Build(errUtils.ErrLoadScaffoldTemplates).
 			WithExplanation("Failed to load available scaffold templates").
 			WithHint("Run `atmos scaffold list` to see available templates").
 			WithHint("Check that embedded templates are included in the binary").
@@ -274,7 +301,16 @@ func executeScaffoldGenerate(
 			Err()
 	}
 
-	// Load and merge scaffold templates from atmos.yaml
+	// Merge with configured templates from atmos.yaml
+	if err := mergeConfiguredTemplates(configs); err != nil {
+		return nil, nil, err
+	}
+
+	return configs, genCtx.UI, nil
+}
+
+// mergeConfiguredTemplates merges scaffold templates from atmos.yaml into the configs map.
+func mergeConfiguredTemplates(configs map[string]templates.Configuration) error {
 	scaffoldSection, err := config.ReadAtmosScaffoldSection(".")
 	if err != nil {
 		return errUtils.Build(errUtils.ErrReadScaffoldConfig).
@@ -287,84 +323,128 @@ func executeScaffoldGenerate(
 			Err()
 	}
 
-	// Merge configured templates (they take precedence over embedded)
-	if templatesData, ok := scaffoldSection["templates"]; ok {
-		if templatesMap, ok := templatesData.(map[string]interface{}); ok {
-			for templateName, templateData := range templatesMap {
-				// Convert atmos.yaml scaffold template to Configuration
-				config, err := convertScaffoldTemplateToConfiguration(templateName, templateData)
-				if err != nil {
-					// Log error but continue with other templates
-					_ = atmosui.Warning(fmt.Sprintf("Failed to load scaffold template '%s': %v", templateName, err))
-					continue
-				}
-				// Configured templates override embedded templates
-				configs[templateName] = config
-			}
-		}
+	templatesData, ok := scaffoldSection["templates"]
+	if !ok {
+		return nil // No templates configured, that's fine
 	}
 
-	// Handle template selection
-	var selectedConfig templates.Configuration
-	if templateName == "" {
-		// Interactive template selection
-		selectedName, err := scaffoldUI.PromptForTemplate("scaffold", configs)
+	templatesMap, ok := templatesData.(map[string]interface{})
+	if !ok {
+		return nil // Invalid format, skip silently
+	}
+
+	for templateName, templateData := range templatesMap {
+		cfg, err := convertScaffoldTemplateToConfiguration(templateName, templateData)
 		if err != nil {
-			return errUtils.Build(errUtils.ErrPromptFailed).
-				WithExplanation("Interactive template selection failed").
-				WithHint("Interactive prompts require a TTY (terminal)").
-				WithHint("Use non-interactive mode: `atmos scaffold generate <template> <target>`").
-				WithHint("Or set `ATMOS_FORCE_TTY=true` if running in a compatible environment").
-				WithContext("mode", "interactive").
-				WithExitCode(1).
-				Err()
+			// Log error but continue with other templates
+			_ = atmosui.Warning(fmt.Sprintf("Failed to load scaffold template '%s': %v", templateName, err))
+			continue
 		}
-		selectedConfig = configs[selectedName]
-	} else {
-		// Use specified template
-		config, exists := configs[templateName]
-		if !exists {
-			// Get list of available templates for better error message
-			availableTemplates := make([]string, 0, len(configs))
-			for name := range configs {
-				availableTemplates = append(availableTemplates, name)
-			}
-			return errUtils.Build(errUtils.ErrScaffoldNotFound).
-				WithExplanationf("Scaffold template `%s` not found", templateName).
-				WithHint("Run `atmos scaffold list` to see available templates").
-				WithHint("Check the `scaffold.templates` section in your `atmos.yaml`").
-				WithHint("Verify the template name is spelled correctly").
-				WithContext("template", templateName).
-				WithContext("available_templates", strings.Join(availableTemplates, ", ")).
-				WithExitCode(2).
-				Err()
-		}
-		selectedConfig = config
+		// Configured templates override embedded templates
+		configs[templateName] = cfg
 	}
 
-	// Handle empty target directory based on mode
+	return nil
+}
+
+// selectTemplate selects a template either interactively or by name.
+func selectTemplate(
+	templateName string,
+	configs map[string]templates.Configuration,
+	scaffoldUI *generatorUI.InitUI,
+) (templates.Configuration, error) {
+	if templateName == "" {
+		return selectTemplateInteractive(configs, scaffoldUI)
+	}
+	return selectTemplateByName(templateName, configs)
+}
+
+// selectTemplateInteractive prompts the user to select a template.
+func selectTemplateInteractive(
+	configs map[string]templates.Configuration,
+	scaffoldUI *generatorUI.InitUI,
+) (templates.Configuration, error) {
+	selectedName, err := scaffoldUI.PromptForTemplate("scaffold", configs)
+	if err != nil {
+		return templates.Configuration{}, errUtils.Build(errUtils.ErrPromptFailed).
+			WithExplanation("Interactive template selection failed").
+			WithHint("Interactive prompts require a TTY (terminal)").
+			WithHint("Use non-interactive mode: `atmos scaffold generate <template> <target>`").
+			WithHint("Or set `ATMOS_FORCE_TTY=true` if running in a compatible environment").
+			WithContext("mode", "interactive").
+			WithExitCode(1).
+			Err()
+	}
+	return configs[selectedName], nil
+}
+
+// selectTemplateByName selects a template by name from available configs.
+func selectTemplateByName(
+	templateName string,
+	configs map[string]templates.Configuration,
+) (templates.Configuration, error) {
+	cfg, exists := configs[templateName]
+	if !exists {
+		availableTemplates := make([]string, 0, len(configs))
+		for name := range configs {
+			availableTemplates = append(availableTemplates, name)
+		}
+		return templates.Configuration{}, errUtils.Build(errUtils.ErrScaffoldNotFound).
+			WithExplanationf("Scaffold template `%s` not found", templateName).
+			WithHint("Run `atmos scaffold list` to see available templates").
+			WithHint("Check the `scaffold.templates` section in your `atmos.yaml`").
+			WithHint("Verify the template name is spelled correctly").
+			WithContext("template", templateName).
+			WithContext("available_templates", strings.Join(availableTemplates, ", ")).
+			WithExitCode(2).
+			Err()
+	}
+	return cfg, nil
+}
+
+// executeTemplateGeneration executes the template generation with the selected configuration.
+func executeTemplateGeneration(
+	selectedConfig templates.Configuration,
+	targetDir string,
+	force bool,
+	dryRun bool,
+	templateVars map[string]interface{},
+	scaffoldUI *generatorUI.InitUI,
+) error {
 	update := false       // Scaffold typically doesn't use update mode like init does
 	useDefaults := dryRun // If dry-run, we want to use defaults and not prompt
 
 	if targetDir == "" {
-		// Check if we can prompt (not in dry-run mode which is headless)
-		if !dryRun {
-			// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory
-			return scaffoldUI.ExecuteWithInteractiveFlow(selectedConfig, "", force, update, useDefaults, templateVars)
-		} else {
-			// Dry-run mode or other headless modes: target directory is required
-			return errUtils.Build(errUtils.ErrTargetDirRequired).
-				WithExplanation("Target directory is required when using `--dry-run` flag").
-				WithHint("Specify target directory: `atmos scaffold generate <template> <target>`").
-				WithHint("Or remove `--dry-run` flag to use interactive mode").
-				WithContext("flag", "dry-run").
-				WithExitCode(2).
-				Err()
-		}
+		return executeTemplateWithoutTargetDir(selectedConfig, force, update, useDefaults, dryRun, templateVars, scaffoldUI)
 	}
 
 	// Target directory provided, use normal Execute
 	return scaffoldUI.Execute(selectedConfig, targetDir, force, update, useDefaults, templateVars)
+}
+
+// executeTemplateWithoutTargetDir handles template execution when no target directory is provided.
+func executeTemplateWithoutTargetDir(
+	selectedConfig templates.Configuration,
+	force bool,
+	update bool,
+	useDefaults bool,
+	dryRun bool,
+	templateVars map[string]interface{},
+	scaffoldUI *generatorUI.InitUI,
+) error {
+	if !dryRun {
+		// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory
+		return scaffoldUI.ExecuteWithInteractiveFlow(selectedConfig, "", force, update, useDefaults, templateVars)
+	}
+
+	// Dry-run mode: target directory is required
+	return errUtils.Build(errUtils.ErrTargetDirRequired).
+		WithExplanation("Target directory is required when using `--dry-run` flag").
+		WithHint("Specify target directory: `atmos scaffold generate <template> <target>`").
+		WithHint("Or remove `--dry-run` flag to use interactive mode").
+		WithContext("flag", "dry-run").
+		WithExitCode(2).
+		Err()
 }
 
 // executeScaffoldList lists all available scaffold templates configured in atmos.yaml.
@@ -437,55 +517,66 @@ func executeValidateScaffold(
 	ctx context.Context,
 	path string,
 ) error {
-	// Determine what to validate
-	var scaffoldPaths []string
-
-	if path != "" {
-		// Validate specific path
-		paths, err := findScaffoldFiles(path)
-		if err != nil {
-			return errors.Join(errUtils.ErrScaffoldValidation, err)
-		}
-		scaffoldPaths = paths
-	} else {
-		// Validate all scaffolds in current directory
-		paths, err := findScaffoldFiles(".")
-		if err != nil {
-			return errors.Join(errUtils.ErrScaffoldValidation, err)
-		}
-		scaffoldPaths = paths
+	// Find scaffold files to validate
+	scaffoldPaths, err := determineScaffoldPathsToValidate(path)
+	if err != nil {
+		return err
 	}
 
 	if len(scaffoldPaths) == 0 {
-		if err := atmosui.Info("No scaffold.yaml files found to validate"); err != nil {
-			return err
-		}
-		return nil
+		return atmosui.Info("No scaffold.yaml files found to validate")
 	}
 
-	// Validate each scaffold file
-	validCount := 0
-	errorCount := 0
+	// Validate all scaffold files
+	validCount, errorCount, err := validateAllScaffoldFiles(scaffoldPaths)
+	if err != nil {
+		return err
+	}
 
+	// Print summary and return result
+	return printValidationSummary(validCount, errorCount)
+}
+
+// determineScaffoldPathsToValidate finds scaffold files based on the provided path.
+func determineScaffoldPathsToValidate(path string) ([]string, error) {
+	searchPath := path
+	if searchPath == "" {
+		searchPath = "."
+	}
+
+	paths, err := findScaffoldFiles(searchPath)
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrScaffoldValidation, err)
+	}
+
+	return paths, nil
+}
+
+// validateAllScaffoldFiles validates each scaffold file and returns counts.
+func validateAllScaffoldFiles(scaffoldPaths []string) (validCount int, errorCount int, err error) {
 	for _, scaffoldPath := range scaffoldPaths {
-		if err := atmosui.Infof("Validating %s", scaffoldPath); err != nil {
-			return err
+		if uiErr := atmosui.Infof("Validating %s", scaffoldPath); uiErr != nil {
+			return 0, 0, uiErr
 		}
 
-		if err := validateScaffoldFile(scaffoldPath); err != nil {
-			if writeErr := atmosui.Errorf("%s: %v", scaffoldPath, err); writeErr != nil {
-				return writeErr
+		if validationErr := validateScaffoldFile(scaffoldPath); validationErr != nil {
+			if writeErr := atmosui.Errorf("%s: %v", scaffoldPath, validationErr); writeErr != nil {
+				return 0, 0, writeErr
 			}
 			errorCount++
 		} else {
-			if err := atmosui.Successf("%s: valid", scaffoldPath); err != nil {
-				return err
+			if writeErr := atmosui.Successf("%s: valid", scaffoldPath); writeErr != nil {
+				return 0, 0, writeErr
 			}
 			validCount++
 		}
 	}
 
-	// Print summary
+	return validCount, errorCount, nil
+}
+
+// printValidationSummary prints the validation summary and returns an error if validation failed.
+func printValidationSummary(validCount int, errorCount int) error {
 	if err := atmosui.Writeln(""); err != nil {
 		return err
 	}
@@ -495,6 +586,7 @@ func executeValidateScaffold(
 	if err := atmosui.Successf("Valid files: %d", validCount); err != nil {
 		return err
 	}
+
 	if errorCount > 0 {
 		if err := atmosui.Errorf("Invalid files: %d", errorCount); err != nil {
 			return err
@@ -510,10 +602,7 @@ func executeValidateScaffold(
 			Err()
 	}
 
-	if err := atmosui.Success("All scaffold files are valid"); err != nil {
-		return err
-	}
-	return nil
+	return atmosui.Success("All scaffold files are valid")
 }
 
 // findScaffoldFiles finds scaffold.yaml files in the given path.
@@ -533,39 +622,48 @@ func findScaffoldFiles(path string) ([]string, error) {
 	}
 
 	if !info.IsDir() {
-		// Single file - check if it's scaffold.yaml
-		if strings.HasSuffix(path, "scaffold.yaml") || strings.HasSuffix(path, "scaffold.yml") {
-			scaffoldPaths = append(scaffoldPaths, path)
-		} else {
-			return nil, errUtils.Build(errUtils.ErrInvalidScaffoldFile).
-				WithExplanationf("File must be named `scaffold.yaml` or `scaffold.yml`: `%s`", path).
-				WithHint("Rename the file to `scaffold.yaml`").
-				WithContext("path", path).
-				WithExitCode(2).
-				Err()
-		}
-	} else {
-		// Directory - look for scaffold.yaml files recursively
-		err := filepath.Walk(path, func(walkPath string, walkInfo os.FileInfo, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
+		return validateSingleScaffoldFile(path, scaffoldPaths)
+	}
 
-			if !walkInfo.IsDir() && (walkInfo.Name() == "scaffold.yaml" || walkInfo.Name() == "scaffold.yml") {
-				scaffoldPaths = append(scaffoldPaths, walkPath)
-			}
+	return findScaffoldFilesInDirectory(path, scaffoldPaths)
+}
 
-			return nil
-		})
-		if err != nil {
-			return nil, errUtils.Build(errUtils.ErrScaffoldDirectoryRead).
-				WithExplanationf("Cannot read directory: `%s`", path).
-				WithHint("Check directory permissions").
-				WithHint("Verify the path is a valid directory").
-				WithContext("path", path).
-				WithExitCode(2).
-				Err()
+// validateSingleScaffoldFile validates a single scaffold.yaml file.
+func validateSingleScaffoldFile(path string, scaffoldPaths []string) ([]string, error) {
+	if strings.HasSuffix(path, "scaffold.yaml") || strings.HasSuffix(path, "scaffold.yml") {
+		scaffoldPaths = append(scaffoldPaths, path)
+		return scaffoldPaths, nil
+	}
+
+	return nil, errUtils.Build(errUtils.ErrInvalidScaffoldFile).
+		WithExplanationf("File must be named `scaffold.yaml` or `scaffold.yml`: `%s`", path).
+		WithHint("Rename the file to `scaffold.yaml`").
+		WithContext("path", path).
+		WithExitCode(2).
+		Err()
+}
+
+// findScaffoldFilesInDirectory recursively finds scaffold.yaml files in a directory.
+func findScaffoldFilesInDirectory(path string, scaffoldPaths []string) ([]string, error) {
+	err := filepath.Walk(path, func(walkPath string, walkInfo os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
+
+		if !walkInfo.IsDir() && (walkInfo.Name() == "scaffold.yaml" || walkInfo.Name() == "scaffold.yml") {
+			scaffoldPaths = append(scaffoldPaths, walkPath)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, errUtils.Build(errUtils.ErrScaffoldDirectoryRead).
+			WithExplanationf("Cannot read directory: `%s`", path).
+			WithHint("Check directory permissions").
+			WithHint("Verify the path is a valid directory").
+			WithContext("path", path).
+			WithExitCode(2).
+			Err()
 	}
 
 	return scaffoldPaths, nil
