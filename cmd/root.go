@@ -567,7 +567,7 @@ func Execute() error {
 	version.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
 
-	utils.InitializeMarkdown(atmosConfig)
+	utils.InitializeMarkdown(&atmosConfig)
 	errUtils.InitializeMarkdown(atmosConfig)
 
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {

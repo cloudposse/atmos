@@ -93,8 +93,8 @@ func PrintfMarkdownToTUI(format string, a ...interface{}) {
 }
 
 // InitializeMarkdown initializes a new Markdown renderer.
-func InitializeMarkdown(atmosConfig schema.AtmosConfiguration) {
-	defer perf.Track(&atmosConfig, "utils.InitializeMarkdown")()
+func InitializeMarkdown(atmosConfig *schema.AtmosConfiguration) {
+	defer perf.Track(atmosConfig, "utils.InitializeMarkdown")()
 
 	var err error
 	render, err = markdown.NewTerminalMarkdownRenderer(atmosConfig)
