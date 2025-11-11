@@ -2,69 +2,70 @@ package merge
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
-
-	"github.com/sergi/go-diff/diffmatchpatch"
 )
 
-// ThreeWayMerger handles 3-way merging of text files
+// ThreeWayMerger handles 3-way merging with automatic file type detection.
 type ThreeWayMerger struct {
-	thresholdPercent int // Percentage threshold (0-100)
+	thresholdPercent int // Percentage threshold (0-100) for change detection
 }
 
-// NewThreeWayMerger creates a new 3-way merger with the specified percentage threshold
+// NewThreeWayMerger creates a new 3-way merger with the specified percentage threshold.
 func NewThreeWayMerger(thresholdPercent int) *ThreeWayMerger {
 	return &ThreeWayMerger{
 		thresholdPercent: thresholdPercent,
 	}
 }
 
-// Merge performs a 3-way merge between existing and new content
-func (m *ThreeWayMerger) Merge(existingContent, newContent, fileName string) (string, error) {
-	// Use diffmatchpatch to compute the diff between existing and new content
-	dmp := diffmatchpatch.New()
-	diffs := dmp.DiffMain(existingContent, newContent, true)
+// Merge performs a 3-way merge with automatic file type detection.
+// Parameters:
+//   - base: The original content (common ancestor)
+//   - ours: The user's version (with their changes)
+//   - theirs: The template's version (with template updates)
+//   - fileName: The file name (used for type detection)
+//
+// The merger automatically selects the appropriate strategy:
+//   - YAML files (.yaml, .yml): Structure-aware YAML merge with comment preservation
+//   - All other files: Text-based diff3 merge
+//
+// Returns the merged content or an error if conflicts exceed threshold.
+func (m *ThreeWayMerger) Merge(base, ours, theirs, fileName string) (*MergeResult, error) {
+	// Detect file type based on extension
+	ext := strings.ToLower(filepath.Ext(fileName))
 
-	// Calculate the number of changed bytes (not chunks)
-	changedBytes := 0
-	for _, diff := range diffs {
-		if diff.Type != diffmatchpatch.DiffEqual {
-			changedBytes += len(diff.Text)
-		}
+	if ext == ".yaml" || ext == ".yml" {
+		// Use YAML-aware merge for YAML files
+		merger := NewYAMLMerger(m.thresholdPercent)
+		return merger.Merge(base, ours, theirs)
 	}
 
-	// Calculate dynamic threshold based on content size
-	// Use the larger of existing or new content to determine reasonable threshold
-	maxContentSize := len(existingContent)
-	if len(newContent) > maxContentSize {
-		maxContentSize = len(newContent)
-	}
-
-	// Calculate percentage of changes based on changed bytes
-	changePercentage := 0
-	if maxContentSize > 0 {
-		changePercentage = int(float64(changedBytes) / float64(maxContentSize) * 100.0)
-	}
-
-	// Use the configured threshold percentage, or default to 50% if not set
-	thresholdPercent := m.thresholdPercent
-	if thresholdPercent == 0 {
-		thresholdPercent = 50 // Default 50% threshold
-	}
-
-	// If the change percentage exceeds the threshold, refuse to merge
-	if changePercentage > thresholdPercent {
-		return "", fmt.Errorf("too many changes detected (%d%% changes, threshold: %d%%). Use --force to overwrite or manually merge", changePercentage, thresholdPercent)
-	}
-
-	// Apply the diff to create a merged result
-	mergedContent := dmp.DiffText2(diffs)
-
-	// Check for conflicts by looking for diff markers
-	if strings.Contains(mergedContent, "<<<<<<<") || strings.Contains(mergedContent, "=======") || strings.Contains(mergedContent, ">>>>>>>") {
-		// There are conflicts - return error so user can handle them manually
-		return "", fmt.Errorf("merge conflicts detected in %s. Please resolve conflicts manually or use --force to overwrite", fileName)
-	}
-
-	return mergedContent, nil
+	// Use text-based merge for all other files
+	merger := NewTextMerger(m.thresholdPercent)
+	return merger.Merge(base, ours, theirs)
 }
+
+// MergeWithStrategy allows explicit strategy selection, bypassing auto-detection.
+// This is useful when the file extension doesn't accurately represent the content type.
+func (m *ThreeWayMerger) MergeWithStrategy(base, ours, theirs string, strategy MergeStrategy) (*MergeResult, error) {
+	switch strategy {
+	case StrategyYAML:
+		merger := NewYAMLMerger(m.thresholdPercent)
+		return merger.Merge(base, ours, theirs)
+	case StrategyText:
+		merger := NewTextMerger(m.thresholdPercent)
+		return merger.Merge(base, ours, theirs)
+	default:
+		return nil, fmt.Errorf("unknown merge strategy: %v", strategy)
+	}
+}
+
+// MergeStrategy represents the merge algorithm to use.
+type MergeStrategy int
+
+const (
+	// StrategyText uses text-based diff3 merge.
+	StrategyText MergeStrategy = iota
+	// StrategyYAML uses structure-aware YAML merge.
+	StrategyYAML
+)

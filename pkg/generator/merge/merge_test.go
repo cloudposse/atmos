@@ -5,187 +5,448 @@ import (
 	"testing"
 )
 
-func TestNewThreeWayMerger(t *testing.T) {
-	merger := NewThreeWayMerger(25)
-	if merger.thresholdPercent != 25 {
-		t.Errorf("Expected thresholdPercent to be 25, got %d", merger.thresholdPercent)
+func TestThreeWayMerger_AutoDetection(t *testing.T) {
+	tests := []struct {
+		name     string
+		fileName string
+		base     string
+		ours     string
+		theirs   string
+		want     string
+		wantErr  bool
+	}{
+		{
+			name:     "detects YAML file with .yaml extension",
+			fileName: "config.yaml",
+			base: `settings:
+  enabled: true
+`,
+			ours: `settings:
+  enabled: true
+  timeout: 30
+`,
+			theirs: `settings:
+  enabled: true
+  retries: 3
+`,
+			// Note: YAML merger preserves "ours" key ordering
+			want: `settings:
+  enabled: true
+  timeout: 30
+  retries: 3
+`,
+			wantErr: false,
+		},
+		{
+			name:     "detects YAML file with .yml extension",
+			fileName: "config.yml",
+			base: `version: 1
+`,
+			ours: `version: 2
+`,
+			theirs: `version: 2
+`,
+			want: `version: 2
+`,
+			wantErr: false,
+		},
+		{
+			name:     "uses text merge for .txt files",
+			fileName: "readme.txt",
+			base: `Line 1
+Line 2
+Line 3
+`,
+			ours: `Line 1 modified
+Line 2
+Line 3
+`,
+			theirs: `Line 1
+Line 2
+Line 3 modified
+`,
+			want: `Line 1 modified
+Line 2
+Line 3 modified
+`,
+			wantErr: false,
+		},
+		{
+			name:     "uses text merge for .go files (clean merge)",
+			fileName: "main.go",
+			base: `package main
+
+func main() {
+	println("Hello")
+}
+`,
+			ours: `package main
+
+func init() {
+	setup()
+}
+
+func main() {
+	println("Hello")
+}
+`,
+			theirs: `package main
+
+func main() {
+	println("Hello")
+	println("World")
+}
+`,
+			want: `package main
+
+func init() {
+	setup()
+}
+
+func main() {
+	println("Hello")
+	println("World")
+}
+`,
+			wantErr: false,
+		},
+		{
+			name:     "uses text merge for files without extension",
+			fileName: "Dockerfile",
+			base: `FROM golang:1.21
+WORKDIR /app
+`,
+			ours: `FROM golang:1.22
+WORKDIR /app
+`,
+			theirs: `FROM golang:1.21
+WORKDIR /app
+COPY . .
+`,
+			want: `FROM golang:1.22
+WORKDIR /app
+COPY . .
+`,
+			wantErr: false,
+		},
+		{
+			name:     "case insensitive extension detection",
+			fileName: "config.YAML",
+			base: `key: value
+`,
+			ours: `key: modified
+`,
+			theirs: `key: modified
+`,
+			want: `key: modified
+`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewThreeWayMerger(100) // High threshold for auto-detection tests
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs, tt.fileName)
+
+			if tt.wantErr && err == nil {
+				t.Errorf("Expected error, got nil")
+				return
+			}
+
+			if !tt.wantErr && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if err == nil {
+				// Normalize whitespace for comparison
+				got := strings.TrimSpace(result.Content)
+				want := strings.TrimSpace(tt.want)
+
+				if got != want {
+					t.Errorf("Merge result mismatch\nGot:\n%s\n\nWant:\n%s", got, want)
+				}
+			}
+		})
 	}
 }
 
-func TestMerge_SimpleChanges(t *testing.T) {
-	merger := NewThreeWayMerger(30) // Increased threshold for byte-based calculation
-
-	existing := "line1\nline2\nline3"
-	newContent := "line1\nline2\nline3\nline4"
-
-	result, err := merger.Merge(existing, newContent, "test.txt")
-	if err != nil {
-		t.Fatalf("Expected no error for simple changes, got: %v", err)
+func TestThreeWayMerger_MergeWithStrategy(t *testing.T) {
+	tests := []struct {
+		name     string
+		strategy MergeStrategy
+		base     string
+		ours     string
+		theirs   string
+		want     string
+		wantErr  bool
+	}{
+		{
+			name:     "explicit YAML strategy",
+			strategy: StrategyYAML,
+			base: `config:
+  feature_a: true
+`,
+			ours: `config:
+  feature_a: true
+  feature_b: true
+`,
+			theirs: `config:
+  feature_a: true
+  feature_c: true
+`,
+			want: `config:
+  feature_a: true
+  feature_b: true
+  feature_c: true
+`,
+			wantErr: false,
+		},
+		{
+			name:     "explicit text strategy",
+			strategy: StrategyText,
+			base: `Line 1
+Line 2
+Line 3
+Line 4
+Line 5
+`,
+			ours: `Line 1
+Line 2 modified by user
+Line 3
+Line 4
+Line 5
+`,
+			theirs: `Line 1
+Line 2
+Line 3
+Line 4
+Line 5 modified by template
+`,
+			want: `Line 1
+Line 2 modified by user
+Line 3
+Line 4
+Line 5 modified by template
+`,
+			wantErr: false,
+		},
 	}
 
-	expected := "line1\nline2\nline3\nline4"
-	if result != expected {
-		t.Errorf("Expected %q, got %q", expected, result)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewThreeWayMerger(100) // High threshold for strategy tests
+			result, err := merger.MergeWithStrategy(tt.base, tt.ours, tt.theirs, tt.strategy)
+
+			if tt.wantErr && err == nil {
+				t.Errorf("Expected error, got nil")
+				return
+			}
+
+			if !tt.wantErr && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if err == nil {
+				got := strings.TrimSpace(result.Content)
+				want := strings.TrimSpace(tt.want)
+
+				if got != want {
+					t.Errorf("Merge result mismatch\nGot:\n%s\n\nWant:\n%s", got, want)
+				}
+			}
+		})
 	}
 }
 
-func TestMerge_NoChanges(t *testing.T) {
-	merger := NewThreeWayMerger(10)
-
-	content := "line1\nline2\nline3"
-
-	result, err := merger.Merge(content, content, "test.txt")
-	if err != nil {
-		t.Fatalf("Expected no error for identical content, got: %v", err)
-	}
-
-	if result != content {
-		t.Errorf("Expected %q, got %q", content, result)
-	}
-}
-
-func TestMerge_TooManyChanges(t *testing.T) {
-	merger := NewThreeWayMerger(5) // 5% threshold
-
-	existing := strings.Repeat("line1\n", 100)
-	newContent := strings.Repeat("line2\n", 100)
-
-	_, err := merger.Merge(existing, newContent, "test.txt")
-	if err == nil {
-		t.Fatal("Expected error for too many changes")
-	}
-
-	if !strings.Contains(err.Error(), "too many changes detected") {
-		t.Errorf("Expected error about too many changes, got: %v", err)
-	}
-
-	if !strings.Contains(err.Error(), "%") {
-		t.Errorf("Expected percentage in error message, got: %v", err)
-	}
-}
-
-func TestMerge_WithConflicts(t *testing.T) {
-	merger := NewThreeWayMerger(100) // High threshold to allow diff calculation
-
-	existing := "line1\nline2\nline3"
-	newContent := "line1\n<<<<<<< HEAD\nline2\n=======\nline2b\n>>>>>>> branch\nline3"
-
-	// Since the merge package now returns an error for conflicts instead of resolving them
-	_, err := merger.Merge(existing, newContent, "test.txt")
-	if err == nil {
-		t.Fatal("Expected error for merge conflicts, got none")
-	}
-
-	if !strings.Contains(err.Error(), "merge conflicts detected") {
-		t.Errorf("Expected error about merge conflicts, got: %v", err)
-	}
-}
-
-func TestMerge_YAMLExample(t *testing.T) {
-	merger := NewThreeWayMerger(60) // Increased threshold for byte-based calculation
-
-	existing := `# Custom configuration
-base_path: "."
-components:
+func TestThreeWayMerger_RealWorldScenarios(t *testing.T) {
+	tests := []struct {
+		name     string
+		fileName string
+		base     string
+		ours     string
+		theirs   string
+		want     string
+		wantErr  bool
+	}{
+		{
+			name:     "atmos.yaml: user changes path, template adds features",
+			fileName: "atmos.yaml",
+			base: `components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+`,
+			ours: `components:
+  terraform:
+    base_path: "infrastructure/terraform"
+    apply_auto_approve: false
+`,
+			theirs: `components:
   terraform:
     base_path: "components/terraform"
     apply_auto_approve: false
     deploy_run_init: true
-    vars:
-      enabled: true
-      custom_setting: true`
-
-	newContent := `# Atmos CLI Configuration
-# https://atmos.tools/cli/configuration
-base_path: "."
-components:
+`,
+			// Note: YAML merger preserves "ours" key ordering
+			want: `components:
   terraform:
-    base_path: "components/terraform"
+    base_path: "infrastructure/terraform"
     apply_auto_approve: false
     deploy_run_init: true
-    init_run_reconfigure: true
-    auto_generate_backend_file: true
-    plan:
-      skip_planfile: false
-  helmfile:
-    base_path: "components/helmfile"`
-
-	result, err := merger.Merge(existing, newContent, "atmos.yaml")
-	if err != nil {
-		t.Fatalf("Expected no error for YAML merge, got: %v", err)
-	}
-
-	// Should contain both old and new content (the merge algorithm is complex)
-	if !strings.Contains(result, "base_path:") {
-		t.Error("Expected to contain base_path configuration")
-	}
-
-	// Should add new template content
-	if !strings.Contains(result, "init_run_reconfigure: true") {
-		t.Error("Expected to add new template content")
-	}
+`,
+			wantErr: false,
+		},
+		{
+			name:     "Terraform file: user changes value, template adds resource",
+			fileName: "main.tf",
+			base: `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+`,
+			ours: `resource "aws_vpc" "main" {
+  cidr_block = "10.1.0.0/16"
+}
+`,
+			theirs: `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
 }
 
-func TestMerge_ComplexYAMLConflict(t *testing.T) {
-	merger := NewThreeWayMerger(5) // Low threshold to trigger rejection
+resource "aws_subnet" "public" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = "10.0.1.0/24"
+}
+`,
+			want: `resource "aws_vpc" "main" {
+  cidr_block = "10.1.0.0/16"
+}
 
-	existing := strings.Repeat(`# Custom configuration
-base_path: "."
-components:
+resource "aws_subnet" "public" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = "10.0.1.0/24"
+}
+`,
+			wantErr: false,
+		},
+		{
+			name:     "stack config YAML: user adds vars, template adds settings",
+			fileName: "stacks/prod.yaml",
+			base: `components:
   terraform:
-    base_path: "components/terraform"
-    apply_auto_approve: false
-    deploy_run_init: true
-    vars:
-      enabled: true
-      custom_setting: true
-`, 5)
-
-	newContent := strings.Repeat(`# Atmos CLI Configuration
-base_path: "."
-components:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+`,
+			ours: `components:
   terraform:
-    base_path: "components/terraform"
-    apply_auto_approve: true
-    deploy_run_init: false
-    init_run_reconfigure: true
-    auto_generate_backend_file: true
-`, 5)
-
-	_, err := merger.Merge(existing, newContent, "atmos.yaml")
-	if err == nil {
-		t.Fatal("Expected error for complex YAML changes")
+    vpc:
+      vars:
+        cidr_block: "10.1.0.0/16"
+        enable_dns: true
+`,
+			theirs: `components:
+  terraform:
+    vpc:
+      settings:
+        depends_on:
+          - networking/config
+      vars:
+        cidr_block: "10.0.0.0/16"
+`,
+			want: `components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.1.0.0/16"
+        enable_dns: true
+      settings:
+        depends_on:
+          - networking/config
+`,
+			wantErr: false,
+		},
 	}
 
-	if !strings.Contains(err.Error(), "too many changes detected") {
-		t.Errorf("Expected error about too many changes, got: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewThreeWayMerger(100) // High threshold for real-world scenarios
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs, tt.fileName)
+
+			if tt.wantErr && err == nil {
+				t.Errorf("Expected error, got nil")
+				return
+			}
+
+			if !tt.wantErr && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if err == nil {
+				got := strings.TrimSpace(result.Content)
+				want := strings.TrimSpace(tt.want)
+
+				if got != want {
+					t.Errorf("Merge result mismatch\nGot:\n%s\n\nWant:\n%s", got, want)
+				}
+			}
+		})
 	}
 }
 
-func BenchmarkMerge_Simple(b *testing.B) {
-	merger := NewThreeWayMerger(10)
-	existing := "line1\nline2\nline3"
-	newContent := "line1\nline2\nline3\nline4"
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := merger.Merge(existing, newContent, "test.txt")
-		if err != nil {
-			b.Fatalf("Unexpected error: %v", err)
-		}
+func TestThreeWayMerger_ConflictHandling(t *testing.T) {
+	tests := []struct {
+		name      string
+		fileName  string
+		base      string
+		ours      string
+		theirs    string
+		threshold int
+		wantErr   bool
+	}{
+		{
+			name:     "YAML conflict: both modify same value",
+			fileName: "config.yaml",
+			base: `timeout: 30
+`,
+			ours: `timeout: 60
+`,
+			theirs: `timeout: 45
+`,
+			threshold: 100, // High threshold to allow conflict
+			wantErr:   false,
+		},
+		{
+			name:     "text conflict: both modify same line",
+			fileName: "file.txt",
+			base:     "original line\n",
+			ours:     "user version\n",
+			theirs:   "template version\n",
+			threshold: 100,
+			wantErr:   false, // High threshold allows conflict
+		},
 	}
-}
 
-func BenchmarkMerge_Complex(b *testing.B) {
-	merger := NewThreeWayMerger(100)
-	existing := strings.Repeat("line1\nline2\nline3\n", 100)
-	newContent := strings.Repeat("line1\nline2\nline3\nline4\n", 100)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewThreeWayMerger(tt.threshold)
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs, tt.fileName)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := merger.Merge(existing, newContent, "test.txt")
-		if err != nil {
-			b.Fatalf("Unexpected error: %v", err)
-		}
+			if tt.wantErr && err == nil {
+				t.Errorf("Expected error, got nil")
+				return
+			}
+
+			if !tt.wantErr && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if err == nil && result.HasConflicts {
+				t.Logf("Merge completed with %d conflicts (within threshold)", result.ConflictCount)
+			}
+		})
 	}
 }
