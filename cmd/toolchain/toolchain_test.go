@@ -85,9 +85,9 @@ func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			VersionsFile:    toolVersionsPath,
-			InstallPath:     toolsDir,
-			FilePath: toolsConfigPath,
+			VersionsFile: toolVersionsPath,
+			InstallPath:  toolsDir,
+			FilePath:     toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -172,9 +172,9 @@ func TestToolchainCleanCommand(t *testing.T) {
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			VersionsFile:    toolVersionsPath,
-			InstallPath:     toolsDirPath,
-			FilePath: toolsConfigPath,
+			VersionsFile: toolVersionsPath,
+			InstallPath:  toolsDirPath,
+			FilePath:     toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -224,9 +224,9 @@ func TestToolchainPathCommand(t *testing.T) {
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			VersionsFile:    toolVersionsPath,
-			InstallPath:     toolsDirPath,
-			FilePath: toolsConfigPath,
+			VersionsFile: toolVersionsPath,
+			InstallPath:  toolsDirPath,
+			FilePath:     toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -275,9 +275,9 @@ func TestToolchainWhichCommand(t *testing.T) {
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			VersionsFile:    toolVersionsPath,
-			InstallPath:     toolsDirPath,
-			FilePath: toolsConfigPath,
+			VersionsFile: toolVersionsPath,
+			InstallPath:  toolsDirPath,
+			FilePath:     toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -319,9 +319,9 @@ func TestToolchainSetCommand(t *testing.T) {
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			VersionsFile:    toolVersionsPath,
-			InstallPath:     toolsDirPath,
-			FilePath: toolsConfigPath,
+			VersionsFile: toolVersionsPath,
+			InstallPath:  toolsDirPath,
+			FilePath:     toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -375,9 +375,9 @@ func TestToolchainUninstallCommand(t *testing.T) {
 	// Initialize the toolchain package config.
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			VersionsFile:    toolVersionsPath,
-			InstallPath:     toolsDirPath,
-			FilePath: toolsConfigPath,
+			VersionsFile: toolVersionsPath,
+			InstallPath:  toolsDirPath,
+			FilePath:     toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -396,9 +396,9 @@ func TestSetAtmosConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
-			VersionsFile:    filepath.Join(tempDir, ".tool-versions"),
-			InstallPath:     filepath.Join(tempDir, ".tools"),
-			FilePath: filepath.Join(tempDir, "tools.yaml"),
+			VersionsFile: filepath.Join(tempDir, ".tool-versions"),
+			InstallPath:  filepath.Join(tempDir, ".tools"),
+			FilePath:     filepath.Join(tempDir, "tools.yaml"),
 		},
 	}
 
@@ -433,7 +433,7 @@ func TestToolchainPersistentPreRunPreservesConfig(t *testing.T) {
 			VersionsFile:    filepath.Join(tempDir, ".tool-versions"),
 			InstallPath:     filepath.Join(tempDir, ".tools"),
 			ToolsDir:        filepath.Join(tempDir, ".tools"),
-			FilePath: filepath.Join(tempDir, "tools.yaml"),
+			FilePath:        filepath.Join(tempDir, "tools.yaml"),
 			UseToolVersions: true, // Important field that should be preserved.
 			UseLockFile:     true, // Important field that should be preserved.
 			Registries: []schema.ToolchainRegistry{
