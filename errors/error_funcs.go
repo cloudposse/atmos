@@ -72,23 +72,36 @@ func CheckErrorAndPrint(err error, title string, suggestion string) {
 }
 
 // CheckErrorPrintAndExit prints an error message and exits with exit code 1.
+// Special case: ExitCodeError{Code: 0} exits successfully without printing (used for version command).
 func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 	if err == nil {
 		return
 	}
 
-	CheckErrorAndPrint(err, title, suggestion)
-
-	// Check for ExitCodeError (from ShellRunner preserving interp.ExitStatus)
+	// Check for ExitCodeError first (from ShellRunner preserving interp.ExitStatus)
 	var exitCodeErr ExitCodeError
 	if errors.As(err, &exitCodeErr) {
+		// Special case: exit code 0 means successful completion - don't print error
+		// This allows commands like 'version' to display output and exit successfully
+		// without using os.Exit() directly (which is untestable).
+		if exitCodeErr.Code == 0 {
+			Exit(0)
+			return
+		}
+		// Non-zero exit codes: print error and exit with that code
+		CheckErrorAndPrint(err, title, suggestion)
 		Exit(exitCodeErr.Code)
+		return
 	}
+
+	// Print error message for all other error types
+	CheckErrorAndPrint(err, title, suggestion)
 
 	// Find the executed command's exit code from the error
 	var exitError *exec.ExitError
 	if errors.As(err, &exitError) {
 		Exit(exitError.ExitCode())
+		return
 	}
 
 	// TODO: Refactor so that we only call `os.Exit` in `main()` or `init()` functions.

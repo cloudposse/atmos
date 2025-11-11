@@ -218,13 +218,16 @@ var RootCmd = &cobra.Command{
 		}
 
 		// Check for --version flag (uses same code path as version command).
+		// Use ExitCodeError{Code: 0} to signal successful completion without deep exit.
 		if cmd.Flags().Changed("version") {
 			if versionFlag, err := cmd.Flags().GetBool("version"); err == nil && versionFlag {
 				versionErr := e.NewVersionExec(&tmpConfig).Execute(false, "")
 				if versionErr != nil {
 					errUtils.CheckErrorPrintAndExit(versionErr, "", "")
 				}
-				errUtils.OsExit(0)
+				// Use ExitCodeError{Code: 0} to exit cleanly without os.Exit() (untestable).
+				// This follows the existing pattern for preserving exit codes.
+				errUtils.CheckErrorPrintAndExit(errUtils.ExitCodeError{Code: 0}, "", "")
 				return
 			}
 		}
@@ -584,7 +587,9 @@ func Execute() error {
 
 	var err error
 	// If CLI configuration was found, process its custom commands and command aliases.
-	if initErr == nil {
+	// Skip processing for version command to ensure it always works, even if aliases
+	// reference commands that don't exist in this version of Atmos.
+	if initErr == nil && !isVersionCommand() {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 		if err != nil {
 			return err

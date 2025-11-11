@@ -469,11 +469,13 @@ var (
 	ErrIdentityLogout       = errors.New("identity logout failed")
 	ErrIdentityNotInConfig  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig  = errors.New("provider not found in configuration")
-	ErrInvalidLogoutOption  = errors.New("invalid logout option")
+	ErrInvalidLogoutOption = errors.New("invalid logout option")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.
+// When Code is 0, it indicates successful completion that should exit cleanly without printing errors.
+// This avoids deep exits (os.Exit) which are untestable.
 type ExitCodeError struct {
 	Code int
 }
