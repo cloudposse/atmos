@@ -1,8 +1,7 @@
 package setup
 
 import (
-	"fmt"
-
+	errUtils "github.com/cloudposse/atmos/errors"
 	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/terminal"
@@ -21,7 +20,13 @@ func NewGeneratorContext() (*GeneratorContext, error) {
 	// Create I/O context
 	ioCtx, err := iolib.NewContext()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create I/O context: %w", err)
+		return nil, errUtils.Build(errUtils.ErrCreateIOContext).
+			WithExplanation("Failed to create I/O context").
+			WithHint("Check terminal capabilities and permissions").
+			WithHint("Ensure stdout/stderr are accessible").
+			WithHint("Try running with `ATMOS_LOGS_LEVEL=Debug` for more details").
+			WithExitCode(1).
+			Err()
 	}
 
 	// Create terminal writer for I/O

@@ -306,7 +306,7 @@ prompts:
 prompts: []
 `,
 			expectError:  true,
-			errorContain: "name is required",
+			errorContain: "scaffold name is required",
 		},
 		{
 			name: "invalid YAML",
@@ -314,7 +314,7 @@ prompts: []
 invalid: [unclosed
 `,
 			expectError:  true,
-			errorContain: "failed to parse",
+			errorContain: "failed to parse scaffold YAML",
 		},
 		{
 			name: "prompt without name",
@@ -324,7 +324,7 @@ prompts:
     description: Test
 `,
 			expectError:  true,
-			errorContain: "name is required",
+			errorContain: "invalid prompt configuration",
 		},
 		{
 			name: "prompt without type",
@@ -334,7 +334,7 @@ prompts:
     description: Test
 `,
 			expectError:  true,
-			errorContain: "type is required",
+			errorContain: "invalid prompt configuration",
 		},
 		{
 			name: "prompt with invalid type",
@@ -345,7 +345,7 @@ prompts:
     description: Test
 `,
 			expectError:  true,
-			errorContain: "invalid type",
+			errorContain: "invalid prompt configuration",
 		},
 		{
 			name: "valid prompt types",
