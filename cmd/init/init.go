@@ -53,6 +53,8 @@ If no target directory is specified, you will be prompted for one.`,
 		// Get flag values with proper precedence: flag > env > config > default
 		force := v.GetBool("force")
 		interactive := v.GetBool("interactive")
+		update := v.GetBool("update")
+		baseRef := v.GetString("base-ref")
 
 		// Parse string map from --set flags
 		templateValuesMap := flags.ParseStringMap(v, "set")
@@ -69,6 +71,8 @@ If no target directory is specified, you will be prompted for one.`,
 			target,
 			interactive,
 			force,
+			update,
+			baseRef,
 			templateValues,
 		)
 	},
@@ -79,10 +83,14 @@ func init() {
 	initParser = flags.NewStandardParser(
 		flags.WithBoolFlag("force", "f", false, "Overwrite existing files"),
 		flags.WithBoolFlag("interactive", "i", true, "Interactive mode for template selection and configuration"),
+		flags.WithBoolFlag("update", "u", false, "Update existing project from template (preserves customizations via 3-way merge)"),
 		flags.WithStringMapFlag("set", "", map[string]string{}, "Set template values (can be used multiple times: --set key=value)"),
+		flags.WithStringFlag("base-ref", "", "main", "Git reference to use as base for future updates (branch, tag, or commit hash)"),
 		flags.WithEnvVars("force", "ATMOS_INIT_FORCE"),
 		flags.WithEnvVars("interactive", "ATMOS_INIT_INTERACTIVE"),
+		flags.WithEnvVars("update", "ATMOS_INIT_UPDATE"),
 		flags.WithEnvVars("set", "ATMOS_INIT_SET"),
+		flags.WithEnvVars("base-ref", "ATMOS_INIT_BASE_REF"),
 	)
 
 	// Register flags with command
@@ -137,6 +145,8 @@ func executeInit(
 	targetDir string,
 	interactive bool,
 	force bool,
+	update bool,
+	baseRef string,
 	templateVars map[string]interface{},
 ) error {
 	// Convert to absolute path if provided
@@ -189,7 +199,7 @@ func executeInit(
 	if targetDir == "" {
 		if interactive {
 			// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory
-			return initUI.ExecuteWithInteractiveFlow(selectedConfig, "", force, false, !interactive, templateVars)
+			return initUI.ExecuteWithInteractiveFlowAndBaseRef(selectedConfig, "", force, update, !interactive, baseRef, templateVars)
 		} else {
 			// Non-interactive mode: target directory is required
 			return fmt.Errorf("%w: target directory is required in non-interactive mode", errUtils.ErrInitialization)
@@ -197,5 +207,5 @@ func executeInit(
 	}
 
 	// Target directory provided, use normal Execute
-	return initUI.Execute(selectedConfig, targetDir, force, false, !interactive, templateVars)
+	return initUI.ExecuteWithBaseRef(selectedConfig, targetDir, force, update, !interactive, baseRef, templateVars)
 }
