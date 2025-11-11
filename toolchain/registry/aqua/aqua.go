@@ -28,6 +28,7 @@ const (
 	versionPrefix               = "v"
 	defaultFileWritePermissions = 0o644
 	defaultMkdirPermissions     = 0o755
+	githubPerPage               = 100 // Maximum results per page
 )
 
 // init registers the Aqua registry as the default registry.
@@ -424,94 +425,115 @@ func (ar *AquaRegistry) BuildAssetURL(tool *registry.Tool, version string) (stri
 	return url, nil
 }
 
-// GetLatestVersion fetches the latest non-prerelease version from GitHub releases.
+// GetLatestVersion fetches the latest non-prerelease, non-draft version from GitHub releases.
+// Implements pagination to handle repos with many releases.
 func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 	defer perf.Track(nil, "aqua.AquaRegistry.GetLatestVersion")()
 
-	// GitHub API endpoint for releases
-	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases", ar.githubBaseURL, owner, repo)
+	// GitHub API endpoint for releases with pagination.
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d", ar.githubBaseURL, owner, repo, githubPerPage)
 
-	resp, err := ar.get(apiURL)
-	if err != nil {
-		return "", fmt.Errorf("%w: failed to fetch releases from GitHub: %w", registry.ErrHTTPRequest, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%w: GitHub API returned status %d", registry.ErrHTTPRequest, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, err)
-	}
-
-	// Parse the JSON response to find the latest non-prerelease version
-	var releases []struct {
-		TagName    string `json:"tag_name"`
-		Prerelease bool   `json:"prerelease"`
-	}
-
-	if err := json.Unmarshal(body, &releases); err != nil {
-		return "", fmt.Errorf("%w: failed to parse releases JSON: %w", registry.ErrRegistryParse, err)
-	}
-
-	// Find the first non-prerelease release
-	for _, release := range releases {
-		if !release.Prerelease {
-			// Remove 'v' prefix if present
-			version := strings.TrimPrefix(release.TagName, versionPrefix)
-			return version, nil
+	// Iterate through pages until we find a non-prerelease, non-draft release.
+	for apiURL != "" {
+		resp, err := ar.get(apiURL)
+		if err != nil {
+			return "", fmt.Errorf("%w: failed to fetch releases from GitHub: %w", registry.ErrHTTPRequest, err)
 		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return "", fmt.Errorf("%w: GitHub API returned status %d", registry.ErrHTTPRequest, resp.StatusCode)
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return "", fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, err)
+		}
+
+		// Parse the JSON response to find the latest non-prerelease, non-draft version.
+		var releases []struct {
+			TagName    string `json:"tag_name"`
+			Prerelease bool   `json:"prerelease"`
+			Draft      bool   `json:"draft"`
+		}
+
+		if err := json.Unmarshal(body, &releases); err != nil {
+			return "", fmt.Errorf("%w: failed to parse releases JSON: %w", registry.ErrRegistryParse, err)
+		}
+
+		// Find the first non-prerelease, non-draft release in this page.
+		for _, release := range releases {
+			if !release.Prerelease && !release.Draft {
+				// Remove 'v' prefix if present.
+				version := strings.TrimPrefix(release.TagName, versionPrefix)
+				return version, nil
+			}
+		}
+
+		// Check if there's a next page.
+		linkHeader := resp.Header.Get("Link")
+		apiURL = parseNextLink(linkHeader)
 	}
 
-	return "", fmt.Errorf("%w: no non-prerelease versions found for %s/%s", registry.ErrNoVersionsFound, owner, repo)
+	return "", fmt.Errorf("%w: no non-prerelease, non-draft versions found for %s/%s", registry.ErrNoVersionsFound, owner, repo)
 }
 
-// GetAvailableVersions fetches all available versions from GitHub releases.
+// GetAvailableVersions fetches all available non-prerelease, non-draft versions from GitHub releases.
+// Implements pagination to handle repos with many releases.
 func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, error) {
 	defer perf.Track(nil, "aqua.AquaRegistry.GetAvailableVersions")()
 
-	// GitHub API endpoint for releases
-	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases", ar.githubBaseURL, owner, repo)
+	// GitHub API endpoint for releases with pagination.
+	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d", ar.githubBaseURL, owner, repo, githubPerPage)
 
-	resp, err := ar.get(apiURL)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to fetch releases from GitHub: %w", registry.ErrHTTPRequest, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: GitHub API returned status %d", registry.ErrHTTPRequest, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, err)
-	}
-
-	// Parse the JSON response
-	var releases []struct {
-		TagName    string `json:"tag_name"`
-		Prerelease bool   `json:"prerelease"`
-	}
-
-	if err := json.Unmarshal(body, &releases); err != nil {
-		return nil, fmt.Errorf("%w: failed to parse releases JSON: %w", registry.ErrRegistryParse, err)
-	}
-
-	// Extract all non-prerelease versions
 	var versions []string
-	for _, release := range releases {
-		if !release.Prerelease {
-			// Remove 'v' prefix if present
-			version := strings.TrimPrefix(release.TagName, versionPrefix)
-			versions = append(versions, version)
+
+	// Iterate through all pages to collect all releases.
+	for apiURL != "" {
+		resp, err := ar.get(apiURL)
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to fetch releases from GitHub: %w", registry.ErrHTTPRequest, err)
 		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("%w: GitHub API returned status %d", registry.ErrHTTPRequest, resp.StatusCode)
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		linkHeader := resp.Header.Get("Link")
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, err)
+		}
+
+		// Parse the JSON response.
+		var releases []struct {
+			TagName    string `json:"tag_name"`
+			Prerelease bool   `json:"prerelease"`
+			Draft      bool   `json:"draft"`
+		}
+
+		if err := json.Unmarshal(body, &releases); err != nil {
+			return nil, fmt.Errorf("%w: failed to parse releases JSON: %w", registry.ErrRegistryParse, err)
+		}
+
+		// Extract all non-prerelease, non-draft versions from this page.
+		for _, release := range releases {
+			if !release.Prerelease && !release.Draft {
+				// Remove 'v' prefix if present.
+				version := strings.TrimPrefix(release.TagName, versionPrefix)
+				versions = append(versions, version)
+			}
+		}
+
+		// Check if there's a next page.
+		apiURL = parseNextLink(linkHeader)
 	}
 
 	if len(versions) == 0 {
-		return nil, fmt.Errorf("%w: no non-prerelease versions found for %s/%s", registry.ErrNoVersionsFound, owner, repo)
+		return nil, fmt.Errorf("%w: no non-prerelease, non-draft versions found for %s/%s", registry.ErrNoVersionsFound, owner, repo)
 	}
 
 	return versions, nil
@@ -543,6 +565,25 @@ func getArch() string {
 	default:
 		return "amd64"
 	}
+}
+
+// parseNextLink extracts the next page URL from GitHub API Link header.
+// Example Link header: <https://api.github.com/repos/foo/bar/releases?page=2>; rel="next", <https://api.github.com/repos/foo/bar/releases?page=5>; rel="last"
+func parseNextLink(linkHeader string) string {
+	// Split by comma to get individual links.
+	links := strings.Split(linkHeader, ",")
+	for _, link := range links {
+		// Check if this is the "next" rel.
+		if strings.Contains(link, `rel="next"`) {
+			// Extract URL from <URL>
+			start := strings.Index(link, "<")
+			end := strings.Index(link, ">")
+			if start >= 0 && end > start {
+				return link[start+1 : end]
+			}
+		}
+	}
+	return ""
 }
 
 // Search searches for tools matching the query string.

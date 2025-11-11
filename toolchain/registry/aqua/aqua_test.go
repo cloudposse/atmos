@@ -419,11 +419,13 @@ func TestAquaRegistry_GetLatestVersion(t *testing.T) {
 	releases := []struct {
 		TagName    string `json:"tag_name"`
 		Prerelease bool   `json:"prerelease"`
+		Draft      bool   `json:"draft"`
 	}{
-		{TagName: "v2.0.0-beta", Prerelease: true},
-		{TagName: "v1.5.0", Prerelease: false},
-		{TagName: "v1.4.0", Prerelease: false},
-		{TagName: "v1.3.0-beta", Prerelease: true},
+		{TagName: "v2.0.0-beta", Prerelease: true, Draft: false},
+		{TagName: "v1.6.0", Prerelease: false, Draft: true}, // Draft release - should be skipped
+		{TagName: "v1.5.0", Prerelease: false, Draft: false},
+		{TagName: "v1.4.0", Prerelease: false, Draft: false},
+		{TagName: "v1.3.0-beta", Prerelease: true, Draft: false},
 	}
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -437,7 +439,7 @@ func TestAquaRegistry_GetLatestVersion(t *testing.T) {
 
 	version, err := ar.GetLatestVersion("test", "tool")
 	require.NoError(t, err)
-	assert.Equal(t, "1.5.0", version) // Deterministic assertion
+	assert.Equal(t, "1.5.0", version) // Should skip draft v1.6.0 and prerelease v2.0.0-beta
 }
 
 func TestAquaRegistry_GetLatestVersion_NoReleases(t *testing.T) {
@@ -461,11 +463,13 @@ func TestAquaRegistry_GetAvailableVersions(t *testing.T) {
 	releases := []struct {
 		TagName    string `json:"tag_name"`
 		Prerelease bool   `json:"prerelease"`
+		Draft      bool   `json:"draft"`
 	}{
-		{TagName: "v2.0.0-beta", Prerelease: true},
-		{TagName: "v1.5.0", Prerelease: false},
-		{TagName: "v1.4.0", Prerelease: false},
-		{TagName: "v1.3.0", Prerelease: false},
+		{TagName: "v2.0.0-beta", Prerelease: true, Draft: false},
+		{TagName: "v1.6.0", Prerelease: false, Draft: true}, // Draft release - should be skipped
+		{TagName: "v1.5.0", Prerelease: false, Draft: false},
+		{TagName: "v1.4.0", Prerelease: false, Draft: false},
+		{TagName: "v1.3.0", Prerelease: false, Draft: false},
 	}
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -479,7 +483,7 @@ func TestAquaRegistry_GetAvailableVersions(t *testing.T) {
 
 	versions, err := ar.GetAvailableVersions("test", "tool")
 	require.NoError(t, err)
-	require.Len(t, versions, 3) // Only non-prerelease versions
+	require.Len(t, versions, 3) // Only non-prerelease, non-draft versions
 	assert.Equal(t, "1.5.0", versions[0])
 	assert.Equal(t, "1.4.0", versions[1])
 	assert.Equal(t, "1.3.0", versions[2])
@@ -488,6 +492,142 @@ func TestAquaRegistry_GetAvailableVersions(t *testing.T) {
 	for _, version := range versions {
 		assert.NotEmpty(t, version)
 		assert.False(t, strings.HasPrefix(version, versionPrefix))
+	}
+}
+
+func TestAquaRegistry_GetLatestVersion_WithPagination(t *testing.T) {
+	// Mock GitHub API server with pagination
+	page1Releases := []struct {
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
+		Draft      bool   `json:"draft"`
+	}{
+		{TagName: "v2.0.0-beta", Prerelease: true, Draft: false},
+		{TagName: "v1.9.0", Prerelease: false, Draft: true}, // Draft on page 1
+	}
+
+	page2Releases := []struct {
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
+		Draft      bool   `json:"draft"`
+	}{
+		{TagName: "v1.8.0", Prerelease: false, Draft: false}, // Should find this
+		{TagName: "v1.7.0", Prerelease: false, Draft: false},
+	}
+
+	requestCount := 0
+	var ts *httptest.Server
+	ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		requestCount++
+		if requestCount == 1 {
+			// First request - check per_page parameter
+			perPage := r.URL.Query().Get("per_page")
+			assert.Equal(t, "100", perPage, "first request should include per_page=100")
+
+			// First page - add Link header for pagination
+			w.Header().Set("Link", `<`+ts.URL+`/repos/test/tool/releases?page=2>; rel="next"`)
+			json.NewEncoder(w).Encode(page1Releases)
+		} else {
+			// Second page - no Link header (last page)
+			json.NewEncoder(w).Encode(page2Releases)
+		}
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
+
+	version, err := ar.GetLatestVersion("test", "tool")
+	require.NoError(t, err)
+	assert.Equal(t, "1.8.0", version) // Should find v1.8.0 on page 2
+	assert.Equal(t, 2, requestCount, "should have made 2 requests for pagination")
+}
+
+func TestAquaRegistry_GetAvailableVersions_WithPagination(t *testing.T) {
+	// Mock GitHub API server with pagination
+	page1Releases := []struct {
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
+		Draft      bool   `json:"draft"`
+	}{
+		{TagName: "v2.0.0", Prerelease: false, Draft: false},
+		{TagName: "v1.9.0", Prerelease: false, Draft: true}, // Draft - skip
+	}
+
+	page2Releases := []struct {
+		TagName    string `json:"tag_name"`
+		Prerelease bool   `json:"prerelease"`
+		Draft      bool   `json:"draft"`
+	}{
+		{TagName: "v1.8.0", Prerelease: false, Draft: false},
+		{TagName: "v1.7.0-beta", Prerelease: true, Draft: false}, // Prerelease - skip
+	}
+
+	requestCount := 0
+	var ts *httptest.Server
+	ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		requestCount++
+		if requestCount == 1 {
+			// First request - check per_page parameter
+			perPage := r.URL.Query().Get("per_page")
+			assert.Equal(t, "100", perPage, "first request should include per_page=100")
+
+			// First page - add Link header for pagination
+			w.Header().Set("Link", `<`+ts.URL+`/repos/test/tool/releases?page=2>; rel="next"`)
+			json.NewEncoder(w).Encode(page1Releases)
+		} else {
+			// Second page - no Link header (last page)
+			json.NewEncoder(w).Encode(page2Releases)
+		}
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
+
+	versions, err := ar.GetAvailableVersions("test", "tool")
+	require.NoError(t, err)
+	require.Len(t, versions, 2) // Only v2.0.0 and v1.8.0
+	assert.Equal(t, "2.0.0", versions[0])
+	assert.Equal(t, "1.8.0", versions[1])
+	assert.Equal(t, 2, requestCount, "should have made 2 requests for pagination")
+}
+
+func TestParseNextLink(t *testing.T) {
+	tests := []struct {
+		name       string
+		linkHeader string
+		expected   string
+	}{
+		{
+			name:       "valid next link",
+			linkHeader: `<https://api.github.com/repos/foo/bar/releases?page=2>; rel="next", <https://api.github.com/repos/foo/bar/releases?page=5>; rel="last"`,
+			expected:   "https://api.github.com/repos/foo/bar/releases?page=2",
+		},
+		{
+			name:       "no next link",
+			linkHeader: `<https://api.github.com/repos/foo/bar/releases?page=1>; rel="prev", <https://api.github.com/repos/foo/bar/releases?page=5>; rel="last"`,
+			expected:   "",
+		},
+		{
+			name:       "empty link header",
+			linkHeader: "",
+			expected:   "",
+		},
+		{
+			name:       "only next link",
+			linkHeader: `<https://api.github.com/repos/foo/bar/releases?page=3>; rel="next"`,
+			expected:   "https://api.github.com/repos/foo/bar/releases?page=3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseNextLink(tt.linkHeader)
+			assert.Equal(t, tt.expected, result)
+		})
 	}
 }
 
