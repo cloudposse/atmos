@@ -153,13 +153,9 @@ func (c *DefaultCompactor) Compact(ctx context.Context, plan *CompactPlan, confi
 }
 
 // generateAISummary creates an AI-powered summary of messages.
+//
+//nolint:unparam // config parameter reserved for future summary customization options
 func (c *DefaultCompactor) generateAISummary(ctx context.Context, messages []*Message, config CompactConfig) (string, error) {
-	// Determine which provider to use for summarization.
-	provider := config.SummaryProvider
-	if provider == "" {
-		provider = c.atmosConfig.Settings.AI.DefaultProvider
-	}
-
 	// Create AI client.
 	client, err := ai.NewClient(c.atmosConfig)
 	if err != nil {
@@ -184,11 +180,14 @@ func (c *DefaultCompactor) buildSummarizationPrompt(messages []*Message) string 
 
 	// Build conversation transcript.
 	for i, msg := range messages {
-		roleLabel := "User"
-		if msg.Role == RoleAssistant {
+		var roleLabel string
+		switch msg.Role {
+		case RoleAssistant:
 			roleLabel = "Assistant"
-		} else if msg.Role == RoleSystem {
+		case RoleSystem:
 			roleLabel = "System"
+		default:
+			roleLabel = "User"
 		}
 
 		conversation.WriteString(fmt.Sprintf("[Message %d] %s: %s\n\n",

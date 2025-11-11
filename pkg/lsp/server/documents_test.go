@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strconv"
 	"sync"
 	"testing"
 
@@ -260,7 +261,7 @@ func TestDocumentManager_ConcurrentOpen(t *testing.T) {
 	for i := 0; i < count; i++ {
 		go func(index int) {
 			defer wg.Done()
-			uri := protocol.DocumentUri("file:///test" + string(rune('0'+index)) + ".yaml")
+			uri := "file:///test" + strconv.Itoa(index) + ".yaml"
 			dm.Open(uri, "yaml", 1, "content")
 		}(i)
 	}
@@ -287,7 +288,7 @@ func TestDocumentManager_ConcurrentUpdate(t *testing.T) {
 	for i := 0; i < count; i++ {
 		go func(index int) {
 			defer wg.Done()
-			dm.Update(uri, int32(index), "content"+string(rune('0'+index)))
+			dm.Update(uri, int32(index), "content"+strconv.Itoa(index))
 		}(i)
 	}
 
@@ -305,7 +306,7 @@ func TestDocumentManager_ConcurrentClose(t *testing.T) {
 
 	// Open multiple documents.
 	for i := 0; i < 100; i++ {
-		uri := protocol.DocumentUri("file:///test" + string(rune('0'+i)) + ".yaml")
+		uri := "file:///test" + strconv.Itoa(i) + ".yaml"
 		dm.Open(uri, "yaml", 1, "content")
 	}
 
@@ -316,7 +317,7 @@ func TestDocumentManager_ConcurrentClose(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		go func(index int) {
 			defer wg.Done()
-			uri := protocol.DocumentUri("file:///test" + string(rune('0'+index)) + ".yaml")
+			uri := "file:///test" + strconv.Itoa(index) + ".yaml"
 			dm.Close(uri)
 		}(i)
 	}
@@ -333,7 +334,7 @@ func TestDocumentManager_ConcurrentGetAll(t *testing.T) {
 
 	// Open some documents.
 	for i := 0; i < 10; i++ {
-		uri := protocol.DocumentUri("file:///test" + string(rune('0'+i)) + ".yaml")
+		uri := "file:///test" + strconv.Itoa(i) + ".yaml"
 		dm.Open(uri, "yaml", 1, "content")
 	}
 
@@ -363,6 +364,7 @@ func TestDocumentManager_ConcurrentMixedOperations(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		go func(index int) {
 			defer wg.Done()
+			_ = index // Capture loop variable to avoid closure issue.
 			uri := protocol.DocumentUri("file:///test.yaml")
 			dm.Open(uri, "yaml", 1, "content")
 		}(i)

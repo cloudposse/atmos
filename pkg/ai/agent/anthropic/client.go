@@ -28,13 +28,13 @@ type SimpleClient struct {
 
 // SimpleAIConfig holds basic configuration for the AI client.
 type SimpleAIConfig struct {
-	Enabled             bool
-	Model               string
-	APIKeyEnv           string
-	MaxTokens           int
-	CacheEnabled        bool
-	CacheSystemPrompt   bool
-	CacheProjectMemory  bool
+	Enabled            bool
+	Model              string
+	APIKeyEnv          string
+	MaxTokens          int
+	CacheEnabled       bool
+	CacheSystemPrompt  bool
+	CacheProjectMemory bool
 }
 
 // NewSimpleClient creates a new simple AI client from Atmos configuration.
@@ -68,13 +68,13 @@ func NewSimpleClient(atmosConfig *schema.AtmosConfiguration) (*SimpleClient, err
 func extractSimpleAIConfig(atmosConfig *schema.AtmosConfiguration) *SimpleAIConfig {
 	// Set defaults.
 	config := &SimpleAIConfig{
-		Enabled:             false,
-		Model:               "claude-sonnet-4-20250514",
-		APIKeyEnv:           "ANTHROPIC_API_KEY",
-		MaxTokens:           DefaultMaxTokens,
-		CacheEnabled:        true,  // Enable caching by default
-		CacheSystemPrompt:   true,  // Cache system prompt by default
-		CacheProjectMemory:  true,  // Cache project memory by default
+		Enabled:            false,
+		Model:              "claude-sonnet-4-20250514",
+		APIKeyEnv:          "ANTHROPIC_API_KEY",
+		MaxTokens:          DefaultMaxTokens,
+		CacheEnabled:       true, // Enable caching by default
+		CacheSystemPrompt:  true, // Cache system prompt by default
+		CacheProjectMemory: true, // Cache project memory by default
 	}
 
 	// Check if AI is enabled.
@@ -376,7 +376,8 @@ func (c *SimpleClient) buildSystemPrompt(systemPrompt string, enableCache bool) 
 func (c *SimpleClient) buildSystemPrompts(prompts []struct {
 	content string
 	cache   bool
-}) []anthropic.TextBlockParam {
+},
+) []anthropic.TextBlockParam {
 	result := make([]anthropic.TextBlockParam, 0, len(prompts))
 
 	for _, prompt := range prompts {

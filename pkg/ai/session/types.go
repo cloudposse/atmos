@@ -102,10 +102,10 @@ type CompactResult struct {
 
 // CompactStatus represents the status of a compaction operation.
 type CompactStatus struct {
-	Stage          string // "starting", "summarizing", "completed", "failed"
-	MessageCount   int    // Number of messages being compacted
-	EstimatedSavings int  // Estimated token savings
-	Error          error  // Error if failed
+	Stage            string // "starting", "summarizing", "completed", "failed"
+	MessageCount     int    // Number of messages being compacted
+	EstimatedSavings int    // Estimated token savings
+	Error            error  // Error if failed
 }
 
 // CompactStatusCallback is called when compaction status changes.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/user"
 	"strings"
 	"time"
 
@@ -18,7 +19,7 @@ func (m *Manager) ExportSession(ctx context.Context, sessionID string, outputPat
 	// Get session.
 	session, err := m.storage.GetSession(ctx, sessionID)
 	if err != nil {
-		return fmt.Errorf("%w: failed to get session: %v", errUtils.ErrAISessionNotFound, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrAISessionNotFound, err)
 	}
 
 	// Get all messages (limit 0 = no limit).
@@ -54,7 +55,7 @@ func (m *Manager) ExportSessionByName(ctx context.Context, sessionName string, o
 	// Get session by name.
 	session, err := m.storage.GetSessionByName(ctx, m.projectPath, sessionName)
 	if err != nil {
-		return fmt.Errorf("%w: failed to get session: %v", errUtils.ErrAISessionNotFound, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrAISessionNotFound, err)
 	}
 
 	return m.ExportSession(ctx, session.ID, outputPath, opts)
@@ -113,8 +114,8 @@ func (m *Manager) buildCheckpoint(session *Session, messages []*Message, opts Ex
 	}
 
 	// Get current user for exported_by field.
-	if user := os.Getenv("USER"); user != "" {
-		checkpoint.ExportedBy = user
+	if currentUser, err := user.Current(); err == nil {
+		checkpoint.ExportedBy = currentUser.Username
 	}
 
 	return checkpoint
@@ -124,11 +125,8 @@ func (m *Manager) buildCheckpoint(session *Session, messages []*Message, opts Ex
 func (m *Manager) extractContext() *CheckpointContext {
 	context := &CheckpointContext{}
 
-	// Try to load project memory (ATMOS.md).
-	if m.atmosConfig != nil && m.atmosConfig.Settings.AI.Memory.Enabled {
-		// TODO: Load ATMOS.md content from memory manager.
-		// For now, leave empty - will be enhanced in future.
-	}
+	// TODO: Load ATMOS.md content from memory manager when memory is enabled.
+	// For now, this is a placeholder for future enhancement.
 
 	// Get working directory.
 	if wd, err := os.Getwd(); err == nil {

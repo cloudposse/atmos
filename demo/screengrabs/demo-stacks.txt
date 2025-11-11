@@ -44,6 +44,9 @@ atmos terraform generate varfile --help
 atmos terraform generate varfiles --help
 atmos terraform shell --help
 atmos terraform workspace --help
+atmos theme --help
+atmos theme list --help
+atmos theme show --help
 atmos validate --help
 atmos validate component --help
 atmos validate stacks --help

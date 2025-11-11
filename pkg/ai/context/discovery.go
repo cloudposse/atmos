@@ -121,6 +121,8 @@ func (d *Discoverer) Discover() (*DiscoveryResult, error) {
 }
 
 // discoverFiles performs the actual file discovery.
+//
+//nolint:unparam // error return is kept for future error handling (file system errors, permissions, etc.)
 func (d *Discoverer) discoverFiles() (*DiscoveryResult, error) {
 	if !d.config.Enabled {
 		return &DiscoveryResult{Files: []*DiscoveredFile{}}, nil

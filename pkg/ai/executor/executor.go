@@ -124,10 +124,10 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *
 	if e.atmosConfig != nil && e.atmosConfig.Settings.AI.Memory.Enabled {
 		// Try to load project memory for caching benefits.
 		memConfig := &memory.Config{
-			Enabled:         e.atmosConfig.Settings.AI.Memory.Enabled,
-			FilePath:        e.atmosConfig.Settings.AI.Memory.FilePath,
-			AutoUpdate:      e.atmosConfig.Settings.AI.Memory.AutoUpdate,
-			CreateIfMiss:    e.atmosConfig.Settings.AI.Memory.CreateIfMiss,
+			Enabled:      e.atmosConfig.Settings.AI.Memory.Enabled,
+			FilePath:     e.atmosConfig.Settings.AI.Memory.FilePath,
+			AutoUpdate:   e.atmosConfig.Settings.AI.Memory.AutoUpdate,
+			CreateIfMiss: e.atmosConfig.Settings.AI.Memory.CreateIfMiss,
 		}
 		memoryMgr := memory.NewManager(e.atmosConfig.BasePath, memConfig)
 		if memoryMgr != nil {
@@ -256,10 +256,10 @@ func formatToolResults(results []formatter.ToolCallResult) string {
 	for i, result := range results {
 		text += fmt.Sprintf("Tool %d: %s\n", i+1, result.Tool)
 		if result.Success {
-			text += fmt.Sprintf("Status: ✅ Success\n")
+			text += "Status: ✅ Success\n"
 			text += fmt.Sprintf("Result: %v\n", result.Result)
 		} else {
-			text += fmt.Sprintf("Status: ❌ Failed\n")
+			text += "Status: ❌ Failed\n"
 			text += fmt.Sprintf("Error: %s\n", result.Error)
 		}
 		text += "\n"

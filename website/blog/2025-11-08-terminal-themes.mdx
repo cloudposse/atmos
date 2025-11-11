@@ -1,0 +1,64 @@
+---
+slug: terminal-themes
+title: "Customize Your Terminal with Atmos Themes"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now includes 350+ terminal themes to customize your CLI experience. Choose from popular themes like Dracula, Solarized, or GitHub Dark, or browse the complete collection to find one that matches your style.
+
+<!--truncate-->
+
+## What Are Themes?
+
+Themes control the colors, styles, and visual presentation of Atmos terminal output. They affect markdown rendering, table formatting, syntax highlighting, and status messages to provide a consistent look across all commands.
+
+## Browse Available Themes
+
+View the complete collection of themes in the [theme gallery](/cli/commands/theme/browse). The gallery includes a visual preview of each theme's color palette and supports search by name, type (dark/light), or author.
+
+## Using Themes
+
+List all available themes:
+
+```bash
+atmos theme list
+```
+
+Preview a specific theme:
+
+```bash
+atmos theme show dracula
+```
+
+## Configure Your Theme
+
+Set a theme in your `atmos.yaml`:
+
+```yaml
+settings:
+  terminal:
+    theme: dracula
+```
+
+Or use an environment variable:
+
+```bash
+export ATMOS_THEME=dracula
+atmos terraform plan
+```
+
+## Recommended Themes
+
+The gallery highlights recommended themes that work well across different terminal environments. These themes have been tested for readability and accessibility.
+
+## Learn More
+
+- [Browse themes](/cli/commands/theme/browse) - Visual gallery with search
+- [Theme commands](/cli/commands/theme/usage) - Complete command reference
+- [Configuration](/cli/commands/theme/usage#configuration) - Theme settings and options
+
+## Get Involved
+
+- [GitHub Pull Request](https://github.com/cloudposse/atmos/pull/1766)
+- Share your feedback in the [Atmos Community Slack](https://cloudposse.com/slack)

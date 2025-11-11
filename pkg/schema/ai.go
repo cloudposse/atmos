@@ -27,15 +27,15 @@ type AIProviderConfig struct {
 	Model     string           `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`
 	ApiKeyEnv string           `yaml:"api_key_env,omitempty" json:"api_key_env,omitempty" mapstructure:"api_key_env"`
 	MaxTokens int              `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty" mapstructure:"max_tokens"`
-	BaseURL   string           `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"`  // For Ollama or custom endpoints
-	Cache     *AICacheSettings `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache,squash"` // Token caching settings
+	BaseURL   string           `yaml:"base_url,omitempty" json:"base_url,omitempty" mapstructure:"base_url"` // For Ollama or custom endpoints
+	Cache     *AICacheSettings `yaml:"cache,omitempty" json:"cache,omitempty" mapstructure:"cache,squash"`   // Token caching settings
 }
 
 // AICacheSettings contains token caching configuration.
 type AICacheSettings struct {
-	Enabled             bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`                                           // Enable token caching
-	CacheSystemPrompt   bool `yaml:"cache_system_prompt,omitempty" json:"cache_system_prompt,omitempty" mapstructure:"cache_system_prompt"`    // Cache system prompt (Anthropic only)
-	CacheProjectMemory  bool `yaml:"cache_project_memory,omitempty" json:"cache_project_memory,omitempty" mapstructure:"cache_project_memory"` // Cache ATMOS.md content (Anthropic only)
+	Enabled            bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`                                        // Enable token caching
+	CacheSystemPrompt  bool `yaml:"cache_system_prompt,omitempty" json:"cache_system_prompt,omitempty" mapstructure:"cache_system_prompt"`    // Cache system prompt (Anthropic only)
+	CacheProjectMemory bool `yaml:"cache_project_memory,omitempty" json:"cache_project_memory,omitempty" mapstructure:"cache_project_memory"` // Cache ATMOS.md content (Anthropic only)
 }
 
 // AISessionSettings contains session management configuration.
@@ -94,14 +94,14 @@ type AIWebSearchSettings struct {
 
 // AIContextSettings contains automatic context discovery configuration.
 type AIContextSettings struct {
-	Enabled         bool     `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`                                  // Enable automatic context loading
-	AutoInclude     []string `yaml:"auto_include,omitempty" json:"auto_include,omitempty" mapstructure:"auto_include"`                   // Glob patterns for files to auto-include
-	Exclude         []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`                                  // Glob patterns for files to exclude
-	MaxFiles        int      `yaml:"max_files,omitempty" json:"max_files,omitempty" mapstructure:"max_files"`                            // Maximum number of files to include (default: 100)
-	MaxSizeMB       int      `yaml:"max_size_mb,omitempty" json:"max_size_mb,omitempty" mapstructure:"max_size_mb"`                      // Maximum total size in MB (default: 10)
-	FollowGitignore bool     `yaml:"follow_gitignore,omitempty" json:"follow_gitignore,omitempty" mapstructure:"follow_gitignore"`       // Respect .gitignore files (default: true)
-	ShowFiles       bool     `yaml:"show_files,omitempty" json:"show_files,omitempty" mapstructure:"show_files"`                         // Show list of included files in UI (default: false)
-	CacheEnabled    bool     `yaml:"cache_enabled,omitempty" json:"cache_enabled,omitempty" mapstructure:"cache_enabled"`                // Cache discovered files (default: true)
+	Enabled         bool     `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`                               // Enable automatic context loading
+	AutoInclude     []string `yaml:"auto_include,omitempty" json:"auto_include,omitempty" mapstructure:"auto_include"`                // Glob patterns for files to auto-include
+	Exclude         []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`                               // Glob patterns for files to exclude
+	MaxFiles        int      `yaml:"max_files,omitempty" json:"max_files,omitempty" mapstructure:"max_files"`                         // Maximum number of files to include (default: 100)
+	MaxSizeMB       int      `yaml:"max_size_mb,omitempty" json:"max_size_mb,omitempty" mapstructure:"max_size_mb"`                   // Maximum total size in MB (default: 10)
+	FollowGitignore bool     `yaml:"follow_gitignore,omitempty" json:"follow_gitignore,omitempty" mapstructure:"follow_gitignore"`    // Respect .gitignore files (default: true)
+	ShowFiles       bool     `yaml:"show_files,omitempty" json:"show_files,omitempty" mapstructure:"show_files"`                      // Show list of included files in UI (default: false)
+	CacheEnabled    bool     `yaml:"cache_enabled,omitempty" json:"cache_enabled,omitempty" mapstructure:"cache_enabled"`             // Cache discovered files (default: true)
 	CacheTTL        int      `yaml:"cache_ttl_seconds,omitempty" json:"cache_ttl_seconds,omitempty" mapstructure:"cache_ttl_seconds"` // Cache TTL in seconds (default: 300)
 }
 

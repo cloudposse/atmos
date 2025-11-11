@@ -9,10 +9,10 @@ import (
 
 	"github.com/spf13/viper"
 
-	aiContext "github.com/cloudposse/atmos/pkg/ai/context"
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/schema"
+	aiContext "github.com/cloudposse/atmos/pkg/ai/context"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (

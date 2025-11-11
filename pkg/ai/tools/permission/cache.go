@@ -51,7 +51,7 @@ func NewPermissionCache(basePath string) (*PermissionCache, error) {
 	}
 
 	// Create directory if it doesn't exist.
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
@@ -203,7 +203,7 @@ func (c *PermissionCache) save() error {
 		return fmt.Errorf("failed to marshal cache: %w", err)
 	}
 
-	if err := os.WriteFile(c.filePath, data, 0644); err != nil {
+	if err := os.WriteFile(c.filePath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}
 

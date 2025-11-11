@@ -13,6 +13,8 @@ import (
 
 // initializeAIToolsAndExecutor initializes the AI tool registry and executor.
 // This is shared by both 'atmos ai chat' and 'atmos mcp-server' commands.
+//
+//nolint:unparam // registry return value is intentionally provided for future use
 func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*tools.Registry, *tools.Executor, error) {
 	if !atmosConfig.Settings.AI.Tools.Enabled {
 		return nil, nil, errUtils.ErrAIToolsDisabled

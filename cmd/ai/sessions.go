@@ -18,6 +18,7 @@ const (
 	hoursPerDay  = 24
 	daysPerWeek  = 7
 	daysPerMonth = 30
+	contextFlag  = "context"
 )
 
 // aiSessionsCmd represents the ai sessions command.
@@ -126,14 +127,14 @@ func init() {
 	// Add flags for export command.
 	sessionsExportCmd.Flags().StringP("output", "o", "", "Output file path (required)")
 	sessionsExportCmd.Flags().StringP("format", "f", "", "Output format: json, yaml, markdown (auto-detected from file extension if not specified)")
-	sessionsExportCmd.Flags().Bool("context", false, "Include project context (ATMOS.md, files accessed)")
+	sessionsExportCmd.Flags().Bool(contextFlag, false, "Include project context (ATMOS.md, files accessed)")
 	sessionsExportCmd.Flags().Bool("metadata", true, "Include session metadata")
 	_ = sessionsExportCmd.MarkFlagRequired("output")
 
 	// Add flags for import command.
 	sessionsImportCmd.Flags().StringP("name", "n", "", "Name for the imported session (uses checkpoint name if not specified)")
 	sessionsImportCmd.Flags().Bool("overwrite", false, "Overwrite existing session with the same name")
-	sessionsImportCmd.Flags().Bool("context", true, "Include project context from checkpoint")
+	sessionsImportCmd.Flags().Bool(contextFlag, true, "Include project context from checkpoint")
 }
 
 // initSessionManager initializes and validates session management.
@@ -309,7 +310,7 @@ func exportSessionCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get format flag: %w", err)
 	}
 
-	includeContext, err := cmd.Flags().GetBool("context")
+	includeContext, err := cmd.Flags().GetBool(contextFlag)
 	if err != nil {
 		return fmt.Errorf("failed to get context flag: %w", err)
 	}
@@ -359,7 +360,7 @@ func importSessionCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get overwrite flag: %w", err)
 	}
 
-	includeContext, err := cmd.Flags().GetBool("context")
+	includeContext, err := cmd.Flags().GetBool(contextFlag)
 	if err != nil {
 		return fmt.Errorf("failed to get context flag: %w", err)
 	}

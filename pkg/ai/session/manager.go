@@ -21,12 +21,12 @@ const (
 
 // Manager handles session lifecycle and operations.
 type Manager struct {
-	storage          Storage
-	projectPath      string
-	maxSessions      int
-	compactor        Compactor
-	atmosConfig      *schema.AtmosConfiguration
-	compactCallback  CompactStatusCallback
+	storage         Storage
+	projectPath     string
+	maxSessions     int
+	compactor       Compactor
+	atmosConfig     *schema.AtmosConfiguration
+	compactCallback CompactStatusCallback
 }
 
 // NewManager creates a new session manager.

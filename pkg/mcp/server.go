@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -21,6 +22,8 @@ type Server struct {
 
 // NewServer creates a new MCP server using the official SDK.
 func NewServer(adapter *Adapter) *Server {
+	defer perf.Track(nil, "mcp.NewServer")()
+
 	// Create SDK server with Atmos implementation details.
 	sdk := mcpsdk.NewServer(&mcpsdk.Implementation{
 		Name:    "atmos-mcp-server",
@@ -125,11 +128,15 @@ func (s *Server) handleToolCall(ctx context.Context, name string, arguments map[
 
 // SDK returns the underlying SDK server instance.
 func (s *Server) SDK() *mcpsdk.Server {
+	defer perf.Track(nil, "mcp.Server.SDK")()
+
 	return s.sdk
 }
 
 // ServerInfo returns the server implementation information.
 func (s *Server) ServerInfo() mcpsdk.Implementation {
+	defer perf.Track(nil, "mcp.Server.ServerInfo")()
+
 	return mcpsdk.Implementation{
 		Name:    "atmos-mcp-server",
 		Version: version.Version,
@@ -199,6 +206,8 @@ func mapParamTypeToJSONSchema(paramType tools.ParamType) string {
 
 // Run starts the server with the given transport.
 func (s *Server) Run(ctx context.Context, transport mcpsdk.Transport) error {
+	defer perf.Track(nil, "mcp.Server.Run")()
+
 	log.Info("MCP server started (using official SDK)")
 	return s.sdk.Run(ctx, transport)
 }

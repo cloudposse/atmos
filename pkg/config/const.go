@@ -8,6 +8,15 @@ const (
 	SystemDirConfigFilePath = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar    = "LOCALAPPDATA"
 
+	// Config file names for local configuration detection.
+	AtmosConfigFileName    = "atmos.yaml"
+	DotAtmosConfigFileName = ".atmos.yaml"
+
+	// Config directory names for local configuration detection.
+	AtmosConfigDirName            = ".atmos"
+	AtmosDefaultImportsDirName    = "atmos.d"
+	DotAtmosDefaultImportsDirName = ".atmos.d"
+
 	// GlobalOptionsFlag is a custom flag to specify helmfile `GLOBAL OPTIONS`
 	// https://github.com/roboll/helmfile#cli-reference
 	GlobalOptionsFlag = "--global-options"
@@ -122,6 +131,7 @@ const (
 	StackStr     = "stack"
 
 	// Auth flags.
+	IdentityFlagName          = "identity" // Flag name without prefix.
 	IdentityFlag              = "--identity"
 	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
 	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).

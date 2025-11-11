@@ -620,7 +620,8 @@ func checkPreconditions(t *testing.T, preconditions []string) {
 
 	// Map of precondition names to their check functions
 	preconditionChecks := map[string]func(*testing.T){
-		"github_token": RequireOCIAuthentication,
+		"github_token":    RequireOCIAuthentication,
+		"aws_credentials": RequireAWSCredentials,
 	}
 
 	// Check each precondition
@@ -805,6 +806,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// Also set an environment variable to exclude the repository's .atmos.d
 	// This is needed for tests that change to parent directories
 	tc.Env["TEST_EXCLUDE_ATMOS_D"] = repoRoot
+
+	// Disable git root base path discovery in tests.
+	// Tests expect BasePath to be "." by default, not the repository root.
+	tc.Env["ATMOS_GIT_ROOT_BASEPATH"] = "false"
 
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
