@@ -77,17 +77,20 @@ builder := errUtils.Build(errUtils.ErrComponentNotFound)
 ```
 
 #### `WithHint(hint string) *ErrorBuilder`
-Adds a user-facing hint (displayed with 💡 emoji).
+Adds a user-facing hint (displayed with 💡 emoji). **Supports markdown formatting** for emphasis, code blocks, and lists.
 
 ```go
 builder.WithHint("Check that the component path is correct")
+builder.WithHint("Run `atmos list components` to see available options")  // Markdown code formatting
+builder.WithHint("Verify the **component** configuration in atmos.yaml")  // Markdown bold
 ```
 
 #### `WithHintf(format string, args ...interface{}) *ErrorBuilder`
-Adds a formatted hint. **Prefer this over `WithHint(fmt.Sprintf(...))`** (enforced by linter).
+Adds a formatted hint. **Prefer this over `WithHint(fmt.Sprintf(...))`** (enforced by linter). **Supports markdown formatting**.
 
 ```go
-builder.WithHintf("Run 'atmos list components -s %s' to see available components", stack)
+builder.WithHintf("Run `atmos list components -s %s` to see available components", stack)
+builder.WithHintf("Component **%s** not found in stack **%s**", component, stack)
 ```
 
 #### `WithContext(key string, value interface{}) *ErrorBuilder`
@@ -113,10 +116,11 @@ builder.WithExitCode(2)  // Usage/configuration errors
 - `2`: Usage/configuration error
 
 #### `WithExplanation(explanation string) *ErrorBuilder`
-Adds detailed explanation (displayed in dedicated section).
+Adds detailed explanation (displayed in dedicated section). **Supports markdown formatting** for emphasis, code blocks, and lists.
 
 ```go
 builder.WithExplanation("Abstract components cannot be provisioned directly. They serve as templates for concrete components.")
+builder.WithExplanation("Components must be defined in the `components/terraform/` directory and referenced in stack configurations.")
 ```
 
 #### `Err() error`
@@ -139,15 +143,16 @@ return builder.Err()
 - Specific configuration to check
 - Direct next steps to resolve the issue
 - Used when users need to know what to DO
+- **Supports markdown** - Use backticks for commands, bold for emphasis
 
 **Example:**
 ```go
-// ✅ GOOD: Clear separation of explanation and action
+// ✅ GOOD: Clear separation of explanation and action with markdown formatting
 err := errUtils.Build(errUtils.ErrAbstractComponent).
     WithExplanation("Abstract components cannot be provisioned directly. They serve as templates for concrete components to inherit from, defining shared configuration and settings.").
-    WithHintf("Component '%s' is marked as abstract", component).
+    WithHintf("Component `%s` is marked as **abstract**", component).
     WithHint("Use a concrete component that inherits from this abstract component").
-    WithHint("Remove 'metadata.type: abstract' to make this component concrete").
+    WithHint("Remove `metadata.type: abstract` to make this component concrete").
     WithContext("component", component).
     Err()
 
@@ -325,6 +330,7 @@ When reviewing or creating error messages, ensure:
 - [ ] **Sentinel error exists** in `errors/errors.go`
 - [ ] **Hints are actionable** - User knows what concrete steps to take
 - [ ] **Explanations are educational** - User understands WHY the problem occurred
+- [ ] **Markdown formatting used** - Commands in backticks, emphasis with bold
 - [ ] **No redundancy** - Each method (hint/explanation/context/exitcode) adds NEW info
 - [ ] **Context adds debugging value** - Don't repeat what's in hints, add WHERE and HOW
 - [ ] **Exit code only when non-default** - Omit `WithExitCode(1)`, be explicit for 0 or 2
@@ -338,9 +344,9 @@ When reviewing or creating error messages, ensure:
 
 ```go
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found in stack '%s'", component, stack).
-    WithHint("Run 'atmos list components -s %s' to see available components", stack).
-    WithHint("Verify the component path in your atmos.yaml configuration").
+    WithHintf("Component `%s` not found in stack `%s`", component, stack).
+    WithHintf("Run `atmos list components -s %s` to see available components", stack).
+    WithHint("Verify the component path in your **atmos.yaml** configuration").
     WithContext("component", component).
     WithContext("stack", stack).
     WithContext("path", searchPath).
@@ -352,9 +358,9 @@ err := errUtils.Build(errUtils.ErrComponentNotFound).
 
 ```go
 err := errUtils.Build(errUtils.ErrInvalidConfig).
-    WithHintf("Invalid configuration in %s", configFile).
+    WithHintf("Invalid configuration in `%s`", configFile).
     WithHint("Check the syntax and structure of your configuration file").
-    WithHint("Run 'atmos validate config' to verify your configuration").
+    WithHintf("Run `atmos validate config` to verify your configuration").
     WithContext("file", configFile).
     WithContext("line", lineNumber).
     WithExitCode(2).
@@ -365,22 +371,21 @@ err := errUtils.Build(errUtils.ErrInvalidConfig).
 
 ```go
 err := errUtils.Build(errUtils.ErrValidationFailed).
-    WithHintf("%d validation errors found", len(errors)).
+    WithHintf("**%d** validation errors found", len(errors)).
     WithHint("Review the validation errors above and fix the issues").
-    WithHint("Run 'atmos validate stacks' to re-validate after fixes").
+    WithHintf("Run `atmos validate stacks` to re-validate after fixes").
     WithContext("stack", stack).
     WithContext("error_count", len(errors)).
-    WithExitCode(1).
-    Err()
+    Err()  // Exit code 1 is default - omit WithExitCode
 ```
 
 ### File Not Found
 
 ```go
 err := errUtils.Build(errUtils.ErrFileNotFound).
-    WithHintf("File '%s' not found", filePath).
+    WithHintf("File `%s` not found", filePath).
     WithHint("Check that the file exists at the specified path").
-    WithHintf("Verify the '%s' configuration in atmos.yaml", configKey).
+    WithHintf("Verify the `%s` configuration in **atmos.yaml**", configKey).
     WithContext("file", filePath).
     WithContext("working_dir", workingDir).
     WithExitCode(2).
