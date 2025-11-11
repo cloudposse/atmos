@@ -5,9 +5,9 @@
 
 ## Executive Summary
 
-This PRD addresses a critical gap in Atmos authentication where YAML functions (`!terraform.state`, `!terraform.output`) cannot access authenticated AWS credentials when using the `--identity` flag with terraform commands. While `describe` commands were fixed in PR #1742, terraform execution commands (`plan`, `apply`, destroy, etc.) lack authentication infrastructure, preventing teams from using cross-component data lookup in production multi-account AWS environments.
+This PRD defines the expected behavior for Atmos authentication when using YAML functions (`!terraform.state`, `!terraform.output`) with Terraform commands executed under the `--identity` flag. YAML functions should be able to seamlessly access authenticated AWS credentials in all Terraform command contexts, including plan, apply, and destroy. This ensures consistent cross-component data lookups across production multi-account AWS environments.
 
-The solution threads AuthManager through the terraform command execution pipeline, enabling YAML functions to access authenticated credentials for reading Terraform state from S3 and other cloud resources. This maintains backward compatibility while enabling critical functionality for multi-account AWS environments requiring role assumption.
+To achieve this, the design extends the AuthManager throughout the Terraform command execution pipeline, enabling YAML functions to retrieve authenticated credentials for reading Terraform state from S3 and interacting with other cloud resources. The implementation maintains backward compatibility while ensuring full support for role assumption and authenticated data resolution in multi-account setups.
 
 ## 1. Problem Statement
 

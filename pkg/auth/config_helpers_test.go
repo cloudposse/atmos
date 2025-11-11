@@ -188,6 +188,76 @@ func TestMergeComponentAuthFromConfig(t *testing.T) {
 	}
 }
 
+func TestMergeComponentAuthFromConfig_NilGlobalAuth(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
+		},
+	}
+
+	tests := []struct {
+		name            string
+		globalAuth      *schema.AuthConfig
+		componentConfig map[string]any
+		verify          func(*testing.T, *schema.AuthConfig, error)
+	}{
+		{
+			name:       "nil global auth with component identities",
+			globalAuth: nil,
+			componentConfig: map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"identities": map[string]any{
+						"ComponentIdentity": map[string]any{
+							"kind": "aws/assume-role",
+						},
+					},
+				},
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Len(t, result.Identities, 1)
+				assert.Contains(t, result.Identities, "ComponentIdentity")
+				// IdentityCaseMap should be built for component identities.
+				assert.NotNil(t, result.IdentityCaseMap)
+				assert.Contains(t, result.IdentityCaseMap, "componentidentity")
+				assert.Equal(t, "ComponentIdentity", result.IdentityCaseMap["componentidentity"])
+			},
+		},
+		{
+			name: "empty global auth with component identities",
+			globalAuth: &schema.AuthConfig{
+				Identities:      map[string]schema.Identity{},
+				IdentityCaseMap: nil,
+			},
+			componentConfig: map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"identities": map[string]any{
+						"ComponentIdentity": map[string]any{
+							"kind": "aws/assume-role",
+						},
+					},
+				},
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Len(t, result.Identities, 1)
+				// IdentityCaseMap should be built even when global config has nil map.
+				assert.NotNil(t, result.IdentityCaseMap)
+				assert.Contains(t, result.IdentityCaseMap, "componentidentity")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := MergeComponentAuthFromConfig(tt.globalAuth, tt.componentConfig, atmosConfig, cfg.AuthSectionName)
+			tt.verify(t, result, err)
+		})
+	}
+}
+
 func TestAuthConfigToMap(t *testing.T) {
 	tests := []struct {
 		name       string

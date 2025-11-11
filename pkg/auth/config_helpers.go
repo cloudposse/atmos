@@ -92,8 +92,12 @@ func MergeComponentAuthConfig(
 	// IdentityCaseMap is runtime metadata that gets lost during map conversion
 	// because it has mapstructure:"-" tag. We need to rebuild it from the merged result
 	// to ensure case-insensitive lookups work for all identities (global + component).
-	if globalAuthConfig.IdentityCaseMap != nil {
-		finalAuthConfig.IdentityCaseMap = globalAuthConfig.IdentityCaseMap
+	if globalAuthConfig != nil && globalAuthConfig.IdentityCaseMap != nil {
+		// Create a copy to avoid mutating the caller's state.
+		finalAuthConfig.IdentityCaseMap = make(map[string]string, len(globalAuthConfig.IdentityCaseMap))
+		for k, v := range globalAuthConfig.IdentityCaseMap {
+			finalAuthConfig.IdentityCaseMap[k] = v
+		}
 	}
 	if finalAuthConfig.IdentityCaseMap == nil {
 		finalAuthConfig.IdentityCaseMap = make(map[string]string, len(finalAuthConfig.Identities))
