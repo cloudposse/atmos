@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // GenerationMetadata tracks what was generated from a template.
@@ -49,6 +51,8 @@ type MetadataStorage struct {
 // For init: .atmos/init/metadata.yaml
 // For scaffold: .atmos/scaffold/metadata.yaml
 func NewMetadataStorage(metadataPath string) *MetadataStorage {
+	defer perf.Track(nil, "storage.NewMetadataStorage")()
+
 	return &MetadataStorage{
 		metadataPath: metadataPath,
 	}
@@ -57,6 +61,8 @@ func NewMetadataStorage(metadataPath string) *MetadataStorage {
 // Load reads the generation metadata from disk.
 // Returns nil if the file doesn't exist (first generation).
 func (s *MetadataStorage) Load() (*GenerationMetadata, error) {
+	defer perf.Track(nil, "storage.MetadataStorage.Load")()
+
 	// Check if file exists
 	if _, err := os.Stat(s.metadataPath); os.IsNotExist(err) {
 		return nil, nil // No metadata yet - this is OK
@@ -78,6 +84,8 @@ func (s *MetadataStorage) Load() (*GenerationMetadata, error) {
 // Save writes the generation metadata to disk.
 // Creates parent directories if they don't exist.
 func (s *MetadataStorage) Save(metadata *GenerationMetadata) error {
+	defer perf.Track(nil, "storage.MetadataStorage.Save")()
+
 	// Ensure parent directory exists
 	dir := filepath.Dir(s.metadataPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -100,17 +108,23 @@ func (s *MetadataStorage) Save(metadata *GenerationMetadata) error {
 
 // Exists checks if the metadata file exists.
 func (s *MetadataStorage) Exists() bool {
+	defer perf.Track(nil, "storage.MetadataStorage.Exists")()
+
 	_, err := os.Stat(s.metadataPath)
 	return err == nil
 }
 
 // GetMetadataPath returns the path to the metadata file.
 func (s *MetadataStorage) GetMetadataPath() string {
+	defer perf.Track(nil, "storage.MetadataStorage.GetMetadataPath")()
+
 	return s.metadataPath
 }
 
 // NewInitMetadata creates generation metadata for an init command.
 func NewInitMetadata(templateName, templateVersion, templateSource, baseRef string, variables map[string]string) *GenerationMetadata {
+	defer perf.Track(nil, "storage.NewInitMetadata")()
+
 	return &GenerationMetadata{
 		Version: 1,
 		Command: "atmos init",
@@ -129,6 +143,8 @@ func NewInitMetadata(templateName, templateVersion, templateSource, baseRef stri
 
 // NewScaffoldMetadata creates generation metadata for a scaffold command.
 func NewScaffoldMetadata(templateName, templateVersion, templateSource, baseRef string, variables map[string]string) *GenerationMetadata {
+	defer perf.Track(nil, "storage.NewScaffoldMetadata")()
+
 	return &GenerationMetadata{
 		Version: 1,
 		Command: "atmos scaffold generate",
@@ -147,6 +163,8 @@ func NewScaffoldMetadata(templateName, templateVersion, templateSource, baseRef 
 
 // AddFile adds a generated file to the metadata.
 func (m *GenerationMetadata) AddFile(path, templatePath, checksum string) {
+	defer perf.Track(nil, "storage.GenerationMetadata.AddFile")()
+
 	m.Files = append(m.Files, GeneratedFile{
 		Path:         path,
 		TemplatePath: templatePath,
@@ -155,18 +173,26 @@ func (m *GenerationMetadata) AddFile(path, templatePath, checksum string) {
 }
 
 // GetFile retrieves metadata for a specific file by path.
-func (m *GenerationMetadata) GetFile(path string) *GeneratedFile {
+// Returns a copy of the GeneratedFile to avoid returning pointers into the
+// Files slice that could become stale if the slice is later reallocated.
+// Returns (file, true) if found, (zero-value, false) if not found.
+func (m *GenerationMetadata) GetFile(path string) (GeneratedFile, bool) {
+	defer perf.Track(nil, "storage.GenerationMetadata.GetFile")()
+
 	for i := range m.Files {
 		if m.Files[i].Path == path {
-			return &m.Files[i]
+			return m.Files[i], true
 		}
 	}
-	return nil
+	return GeneratedFile{}, false
 }
 
 // IsFileGenerated checks if a file was generated from the template.
 func (m *GenerationMetadata) IsFileGenerated(path string) bool {
-	return m.GetFile(path) != nil
+	defer perf.Track(nil, "storage.GenerationMetadata.IsFileGenerated")()
+
+	_, found := m.GetFile(path)
+	return found
 }
 
 // determineStorageType infers the storage type from the base ref.
