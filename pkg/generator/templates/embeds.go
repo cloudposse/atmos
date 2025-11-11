@@ -167,14 +167,16 @@ func stripTemplateMagicComment(content string) string {
 		trimmed := strings.TrimSpace(line)
 		// Skip lines that contain only the magic comment
 		if templateMagicCommentPattern.MatchString(trimmed) {
-			// Check if the line is ONLY the magic comment (possibly with comment markers)
-			// If it's a standalone comment line, skip it entirely
-			cleaned := templateMagicCommentPattern.ReplaceAllString(trimmed, "")
+			// Remove the magic comment from the original line (not just the trimmed copy)
+			cleaned := templateMagicCommentPattern.ReplaceAllString(line, "")
 			cleaned = strings.TrimSpace(cleaned)
 			// If nothing remains after removing the magic comment, skip this line
 			if cleaned == "" || cleaned == "//" || cleaned == "#" || cleaned == "/*" || cleaned == "*/" || cleaned == "<!--" || cleaned == "-->" {
 				continue
 			}
+			// Append the cleaned line (with magic comment stripped)
+			filtered = append(filtered, cleaned)
+			continue
 		}
 		filtered = append(filtered, line)
 	}

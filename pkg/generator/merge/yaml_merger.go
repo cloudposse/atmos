@@ -173,6 +173,19 @@ func (m *YAMLMerger) mergeDocuments(base, ours, theirs *yaml.Node, path string, 
 
 // mergeMappings merges mapping (object) nodes with key-level intelligence.
 func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, conflicts *conflictTracker) (*yaml.Node, error) {
+	// Detect mapping vs non-mapping kind mismatches before building key maps.
+	// If any of base/ours/theirs is not a MappingNode while another is,
+	// the user or template changed the node type - record a conflict and return the user's node.
+	baseIsMapping := base.Kind == yaml.MappingNode
+	oursIsMapping := ours.Kind == yaml.MappingNode
+	theirsIsMapping := theirs.Kind == yaml.MappingNode
+
+	// If there's a kind mismatch, record conflict and preserve user's choice.
+	if !baseIsMapping || !oursIsMapping || !theirsIsMapping {
+		conflicts.addConflict(path)
+		return ours, nil
+	}
+
 	result := &yaml.Node{
 		Kind:        yaml.MappingNode,
 		Tag:         ours.Tag,
