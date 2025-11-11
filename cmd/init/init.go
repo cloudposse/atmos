@@ -2,7 +2,6 @@ package init
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -154,14 +153,25 @@ func executeInit(
 		var err error
 		targetDir, err = filepath.Abs(targetDir)
 		if err != nil {
-			return fmt.Errorf("%w: failed to resolve target directory: %w", errUtils.ErrInitialization, err)
+			return errUtils.Build(errUtils.ErrResolveTargetDirectory).
+				WithExplanationf("Cannot resolve target directory path: `%s`", targetDir).
+				WithHint("Ensure the path is valid").
+				WithHint("Check that the parent directory exists and is accessible").
+				WithContext("target_dir", targetDir).
+				WithExitCode(2).
+				Err()
 		}
 	}
 
 	// Create generator context
 	genCtx, err := setup.NewGeneratorContext()
 	if err != nil {
-		return fmt.Errorf("failed to create generator context: %w", err)
+		return errUtils.Build(errUtils.ErrCreateGeneratorContext).
+			WithExplanation("Failed to initialize generator context").
+			WithHint("Check terminal capabilities and I/O permissions").
+			WithHint("Try running with `ATMOS_LOGS_LEVEL=Debug` for more details").
+			WithExitCode(1).
+			Err()
 	}
 
 	initUI := genCtx.UI
@@ -169,7 +179,12 @@ func executeInit(
 	// Get available template configurations
 	configs, err := templates.GetAvailableConfigurations()
 	if err != nil {
-		return fmt.Errorf("%w: failed to get available configurations: %w", errUtils.ErrInitialization, err)
+		return errUtils.Build(errUtils.ErrLoadInitTemplates).
+			WithExplanation("Failed to load available init templates").
+			WithHint("Check that embedded templates are included in the binary").
+			WithHint("Try rebuilding Atmos: `make build`").
+			WithExitCode(1).
+			Err()
 	}
 
 	// Handle template selection
@@ -177,20 +192,40 @@ func executeInit(
 	if templateName == "" {
 		// Check if interactive mode is disabled
 		if !interactive {
-			return fmt.Errorf("%w: template name must be provided in non-interactive mode", errUtils.ErrInitialization)
+			return errUtils.Build(errUtils.ErrTemplateNameRequired).
+				WithExplanation("Template name is required in non-interactive mode").
+				WithHint("Specify template name: `atmos init <template>`").
+				WithHint("Or use interactive mode: `atmos init --interactive`").
+				WithHint("Available templates: `simple`, `atmos`").
+				WithExitCode(2).
+				Err()
 		}
 
 		// Interactive template selection
 		selectedName, err := initUI.PromptForTemplate("embeds", configs)
 		if err != nil {
-			return fmt.Errorf("%w: failed to prompt for template: %w", errUtils.ErrInitialization, err)
+			return errUtils.Build(errUtils.ErrPromptFailed).
+				WithExplanation("Interactive template selection failed").
+				WithHint("Interactive prompts require a TTY (terminal)").
+				WithHint("Use non-interactive mode: `atmos init <template> <target>`").
+				WithHint("Or set `ATMOS_FORCE_TTY=true` if running in a compatible environment").
+				WithContext("mode", "interactive").
+				WithExitCode(1).
+				Err()
 		}
 		selectedConfig = configs[selectedName]
 	} else {
 		// Use specified template
 		config, exists := configs[templateName]
 		if !exists {
-			return fmt.Errorf("%w: template '%s' not found", errUtils.ErrScaffoldNotFound, templateName)
+			return errUtils.Build(errUtils.ErrScaffoldNotFound).
+				WithExplanationf("Template `%s` not found", templateName).
+				WithHint("Available templates: `simple`, `atmos`").
+				WithHint("Use interactive mode to browse: `atmos init`").
+				WithContext("template", templateName).
+				WithContext("available_templates", "simple, atmos").
+				WithExitCode(2).
+				Err()
 		}
 		selectedConfig = config
 	}
@@ -202,7 +237,12 @@ func executeInit(
 			return initUI.ExecuteWithInteractiveFlowAndBaseRef(selectedConfig, "", force, update, !interactive, baseRef, templateVars)
 		} else {
 			// Non-interactive mode: target directory is required
-			return fmt.Errorf("%w: target directory is required in non-interactive mode", errUtils.ErrInitialization)
+			return errUtils.Build(errUtils.ErrTargetDirRequired).
+				WithExplanation("Target directory is required in non-interactive mode").
+				WithHint("Specify target directory: `atmos init <template> <target>`").
+				WithHint("Or use interactive mode: `atmos init --interactive`").
+				WithExitCode(2).
+				Err()
 		}
 	}
 
