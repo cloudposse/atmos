@@ -49,7 +49,7 @@ type MetadataStorage struct {
 
 // NewMetadataStorage creates a new metadata storage for the given metadata file path.
 // For init: .atmos/init/metadata.yaml
-// For scaffold: .atmos/scaffold/metadata.yaml
+// For scaffold: .atmos/scaffold/metadata.yaml.
 func NewMetadataStorage(metadataPath string) *MetadataStorage {
 	defer perf.Track(nil, "storage.NewMetadataStorage")()
 

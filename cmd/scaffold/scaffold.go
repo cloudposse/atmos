@@ -255,7 +255,7 @@ func executeScaffoldGenerate(
 				config, err := convertScaffoldTemplateToConfiguration(templateName, templateData)
 				if err != nil {
 					// Log error but continue with other templates
-					atmosui.Warning(fmt.Sprintf("Failed to load scaffold template '%s': %v", templateName, err))
+					_ = atmosui.Warning(fmt.Sprintf("Failed to load scaffold template '%s': %v", templateName, err))
 					continue
 				}
 				// Configured templates override embedded templates
