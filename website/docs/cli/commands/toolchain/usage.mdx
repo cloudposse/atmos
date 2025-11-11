@@ -181,41 +181,53 @@ toolchain:
   # Directory where tools are installed
   tools_dir: ".tools"
 
-  # Tool configuration file for aliases
-  tools_config_file: "tools.yaml"
+  # Tool name aliases for convenient CLI usage
+  aliases:
+    # HashiCorp tools
+    terraform: hashicorp/terraform
+    tf: hashicorp/terraform
+    packer: hashicorp/packer
+    vault: hashicorp/vault
+    consul: hashicorp/consul
+
+    # OpenTofu
+    opentofu: opentofu/opentofu
+    tofu: opentofu/opentofu
+
+    # Kubernetes tools
+    kubectl: kubernetes-sigs/kubectl
+    helm: helm/helm
+    k9s: derailed/k9s
+
+    # Terraform ecosystem
+    tflint: terraform-linters/tflint
+    tfsec: aquasecurity/tfsec
+    terragrunt: gruntwork-io/terragrunt
+
+    # AWS tools
+    aws: aws/aws-cli
+    awscli: aws/aws-cli
 ```
 
 ### Tool Aliases
 
-Define convenient aliases in `tools.yaml`:
+Aliases provide convenient shorthand names for tools. Instead of typing the full `owner/repo` format, you can define shorter aliases in your `atmos.yaml`:
 
-<File title="tools.yaml">
+<File title="atmos.yaml">
 ```yaml
-aliases:
-  # HashiCorp tools
-  terraform: hashicorp/terraform
-  packer: hashicorp/packer
-  vault: hashicorp/vault
-  consul: hashicorp/consul
-
-  # OpenTofu
-  opentofu: opentofu/opentofu
-
-  # Kubernetes tools
-  kubectl: kubernetes-sigs/kubectl
-  helm: helm/helm
-  k9s: derailed/k9s
-
-  # Terraform ecosystem
-  tflint: terraform-linters/tflint
-  tfsec: aquasecurity/tfsec
-  terragrunt: gruntwork-io/terragrunt
-
-  # AWS tools
-  aws: aws/aws-cli
-  awscli: aws/aws-cli
+toolchain:
+  aliases:
+    terraform: hashicorp/terraform
+    tf: hashicorp/terraform  # Multiple aliases can point to same tool
+    tofu: opentofu/opentofu
 ```
 </File>
+
+**How aliases work:**
+- Aliases are resolved before registry lookups
+- Multiple aliases can point to the same tool
+- Works with all registry types (Aqua, inline, custom)
+- Use aliases with any toolchain command: `atmos toolchain install tf`
 
 ### Version File
 

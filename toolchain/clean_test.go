@@ -113,9 +113,9 @@ func TestCleanToolsAndCaches(t *testing.T) {
 				return toolsDir, cacheDir, tempCacheDir
 			},
 			expectedError: false,
-			expectedOutput: `✓ Deleted **3** files/directories from %s
-✓ Deleted **2** files from %s cache
-✓ Deleted **1** files from %s cache
+			expectedOutput: `✓ Deleted 3 files/directories from %s
+✓ Deleted 2 files from %s cache
+✓ Deleted 1 files from %s cache
 `,
 		},
 		{
@@ -127,7 +127,7 @@ func TestCleanToolsAndCaches(t *testing.T) {
 					filepath.Join(base, "nonexistent-temp-cache")
 			},
 			expectedError: false,
-			expectedOutput: `✓ Deleted **0** files/directories from %s
+			expectedOutput: `✓ Deleted 0 files/directories from %s
 `,
 		},
 		{
@@ -149,7 +149,7 @@ func TestCleanToolsAndCaches(t *testing.T) {
 				return toolsDir, cacheDir, tempCacheDir
 			},
 			expectedError: false,
-			expectedOutput: `✓ Deleted **0** files/directories from %s
+			expectedOutput: `✓ Deleted 0 files/directories from %s
 `,
 		},
 		{
@@ -214,8 +214,8 @@ func TestCleanToolsAndCaches(t *testing.T) {
 			expectedError: false,
 			expectedOutput: `Warning: failed to count files in %s: permission denied
 Warning: failed to delete %s: permission denied
-✓ Deleted **1** files/directories from %s
-✓ Deleted **1** files from %s cache
+✓ Deleted 1 files/directories from %s
+✓ Deleted 1 files from %s cache
 `,
 		},
 	}

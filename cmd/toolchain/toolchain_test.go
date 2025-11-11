@@ -87,7 +87,7 @@ func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 		Toolchain: schema.Toolchain{
 			VersionsFile:    toolVersionsPath,
 			InstallPath:     toolsDir,
-			ToolsConfigFile: toolsConfigPath,
+			FilePath: toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -174,7 +174,7 @@ func TestToolchainCleanCommand(t *testing.T) {
 		Toolchain: schema.Toolchain{
 			VersionsFile:    toolVersionsPath,
 			InstallPath:     toolsDirPath,
-			ToolsConfigFile: toolsConfigPath,
+			FilePath: toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -226,7 +226,7 @@ func TestToolchainPathCommand(t *testing.T) {
 		Toolchain: schema.Toolchain{
 			VersionsFile:    toolVersionsPath,
 			InstallPath:     toolsDirPath,
-			ToolsConfigFile: toolsConfigPath,
+			FilePath: toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -277,7 +277,7 @@ func TestToolchainWhichCommand(t *testing.T) {
 		Toolchain: schema.Toolchain{
 			VersionsFile:    toolVersionsPath,
 			InstallPath:     toolsDirPath,
-			ToolsConfigFile: toolsConfigPath,
+			FilePath: toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -321,7 +321,7 @@ func TestToolchainSetCommand(t *testing.T) {
 		Toolchain: schema.Toolchain{
 			VersionsFile:    toolVersionsPath,
 			InstallPath:     toolsDirPath,
-			ToolsConfigFile: toolsConfigPath,
+			FilePath: toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -377,7 +377,7 @@ func TestToolchainUninstallCommand(t *testing.T) {
 		Toolchain: schema.Toolchain{
 			VersionsFile:    toolVersionsPath,
 			InstallPath:     toolsDirPath,
-			ToolsConfigFile: toolsConfigPath,
+			FilePath: toolsConfigPath,
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -398,7 +398,7 @@ func TestSetAtmosConfig(t *testing.T) {
 		Toolchain: schema.Toolchain{
 			VersionsFile:    filepath.Join(tempDir, ".tool-versions"),
 			InstallPath:     filepath.Join(tempDir, ".tools"),
-			ToolsConfigFile: filepath.Join(tempDir, "tools.yaml"),
+			FilePath: filepath.Join(tempDir, "tools.yaml"),
 		},
 	}
 
@@ -433,7 +433,7 @@ func TestToolchainPersistentPreRunPreservesConfig(t *testing.T) {
 			VersionsFile:    filepath.Join(tempDir, ".tool-versions"),
 			InstallPath:     filepath.Join(tempDir, ".tools"),
 			ToolsDir:        filepath.Join(tempDir, ".tools"),
-			ToolsConfigFile: filepath.Join(tempDir, "tools.yaml"),
+			FilePath: filepath.Join(tempDir, "tools.yaml"),
 			UseToolVersions: true, // Important field that should be preserved.
 			UseLockFile:     true, // Important field that should be preserved.
 			Registries: []schema.ToolchainRegistry{
@@ -474,7 +474,7 @@ func TestToolchainPersistentPreRunPreservesConfig(t *testing.T) {
 	assert.Equal(t, filepath.Join(tempDir, ".tool-versions"), configAfter.Toolchain.VersionsFile)
 	assert.Equal(t, filepath.Join(tempDir, ".tools"), configAfter.Toolchain.InstallPath)
 	assert.Equal(t, filepath.Join(tempDir, ".tools"), configAfter.Toolchain.ToolsDir)
-	assert.Equal(t, filepath.Join(tempDir, "tools.yaml"), configAfter.Toolchain.ToolsConfigFile)
+	assert.Equal(t, filepath.Join(tempDir, "tools.yaml"), configAfter.Toolchain.FilePath)
 }
 
 // testKit wraps testing.T and provides automatic RootCmd state cleanup.

@@ -166,7 +166,7 @@ func addToolToVersionsInternal(filePath, tool, version string, asDefault bool) e
 	// Check if this would create a duplicate with an aliased version
 	if wouldCreateDuplicate(toolVersions, tool, version, resolver) {
 		// Skip adding this entry as it would create a duplicate
-		return ErrToolAlreadyExists
+		return nil
 	}
 
 	// Add or update the tool

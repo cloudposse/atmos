@@ -68,8 +68,8 @@ Infrastructure-as-Code teams need to:
 ├─────────────────────────────────────────────────────────────────┤
 │  Registry Layer                                                  │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │ Local Config │  │ Aqua Registry│  │ GitHub API   │          │
-│  │ (tools.yaml) │  │ (Remote)     │  │ (Fallback)   │          │
+│  │ Aliases      │  │ Aqua Registry│  │ GitHub API   │          │
+│  │ (atmos.yaml) │  │ (Remote)     │  │ (Fallback)   │          │
 │  └──────────────┘  └──────────────┘  └──────────────┘          │
 ├─────────────────────────────────────────────────────────────────┤
 │  Storage Layer                                                   │
@@ -86,7 +86,6 @@ Infrastructure-as-Code teams need to:
 ```
 project/
 ├── .tool-versions              # asdf-compatible version declarations
-├── tools.yaml                  # Local tool configurations and aliases
 ├── .tools/                     # Installed binaries
 │   └── owner/
 │       └── repo/
@@ -95,7 +94,7 @@ project/
 │           ├── 1.1.0/
 │           │   └── binary
 │           └── latest          # Pointer to default version
-├── atmos.yaml                  # Main Atmos config
+├── atmos.yaml                  # Main Atmos config (includes toolchain.aliases)
 └── stacks/
     └── catalog/
         └── terraform/
@@ -133,45 +132,38 @@ All commands implemented in `cmd/toolchain/`:
 Implemented in `toolchain/aqua_registry.go`:
 - Queries Aqua registry at `https://raw.githubusercontent.com/aquaproj/aqua-registry/refs/heads/main/pkgs`
 - Falls back to multiple registry paths for common tools
-- Supports local `tools.yaml` overrides (takes precedence)
 - Caches registry metadata in temp directory
 
 **Limitation**: Registry URLs are hard-coded, not configurable
 
-#### 3. Local Configuration System
+#### 3. Alias Resolution
 
-Implemented in `toolchain/local_config.go`:
+Implemented in `toolchain/installer.go` (`DefaultToolResolver`):
 
-**tools.yaml Structure**:
+Aliases are configured in `atmos.yaml` under `toolchain.aliases`:
+
 ```yaml
-# Tool name aliases for CLI convenience
-aliases:
-  terraform: hashicorp/terraform
-  opentofu: opentofu/opentofu
-  helm: helm/helm
-
-# Custom tool definitions (override Aqua registry)
-tools:
-  cloudposse/atmos:
-    type: github_release
-    repo_owner: cloudposse
-    repo_name: atmos
-    binary_name: atmos
-    version_constraints:
-      - constraint: ">= 1.0.0"
-        asset: atmos_{{trimV .Version}}_{{.OS}}_{{.Arch}}
-        format: raw
-      - constraint: ">= 1.0.0"
-        asset: atmos_{{trimV .Version}}_{{.OS}}_{{.Arch}}.gz
-        format: gzip
+# atmos.yaml
+toolchain:
+  aliases:
+    terraform: hashicorp/terraform
+    tf: hashicorp/terraform
+    opentofu: opentofu/opentofu
+    tofu: opentofu/opentofu
+    helm: helm/helm
 ```
 
 **Features**:
-- Alias resolution (e.g., `terraform` → `hashicorp/terraform`)
-- Custom tool definitions
-- Version constraints with semver matching
-- Asset template rendering with Go templates
-- Multiple format support (raw, gzip, tar.gz, zip)
+- Simple name-to-owner/repo mappings
+- Resolved before registry lookups
+- Works with all registry types (Aqua, inline, custom)
+- Multiple aliases can point to same tool
+
+**Resolution Order**:
+1. Check if tool name is an alias in `atmos.yaml`
+2. If aliased, replace with owner/repo value
+3. If already in owner/repo format, use directly
+4. Otherwise, search Aqua registry
 
 #### 4. .tool-versions File Support
 
@@ -195,9 +187,9 @@ helm 3.12.0
 Implemented in `toolchain/installer.go`:
 
 **Resolution Chain**:
-1. Check `.tool-versions` for pinned version
-2. Check `tools.yaml` for local configuration
-3. Query Aqua registry for tool metadata
+1. Check if tool name is an alias in `atmos.yaml`
+2. Check `.tool-versions` for pinned version
+3. Query configured registries (Aqua, inline, custom) for tool metadata
 4. Fall back to GitHub API for version discovery
 
 **Installation**:

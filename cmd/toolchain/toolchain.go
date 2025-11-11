@@ -70,7 +70,6 @@ var toolchainCmd = &cobra.Command{
 		atmosCfg.Toolchain.VersionsFile = v.GetString("toolchain.tool-versions")
 		atmosCfg.Toolchain.InstallPath = v.GetString("toolchain.path")
 		atmosCfg.Toolchain.ToolsDir = v.GetString("toolchain.path")
-		atmosCfg.Toolchain.ToolsConfigFile = v.GetString("toolchain.tools-config")
 
 		// Update the toolchain package's config (no-op if we got it from there).
 		toolchainpkg.SetAtmosConfig(atmosCfg)
@@ -89,11 +88,9 @@ func init() {
 		flags.WithStringFlag("github-token", "", "", "GitHub token for authenticated requests"),
 		flags.WithStringFlag("tool-versions", "", ".tool-versions", "Path to tool-versions file"),
 		flags.WithStringFlag("toolchain-path", "", ".tools", "Directory to store installed tools"),
-		flags.WithStringFlag("tools-config", "", "tools.yaml", "Path to tools configuration file"),
 		flags.WithEnvVars("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"),
 		flags.WithEnvVars("tool-versions", "ATMOS_TOOL_VERSIONS"),
 		flags.WithEnvVars("toolchain-path", "ATMOS_TOOLCHAIN_PATH"),
-		flags.WithEnvVars("tools-config", "ATMOS_TOOLS_CONFIG"),
 	)
 
 	// Register persistent flags (inherited by all subcommands).
@@ -114,9 +111,6 @@ func init() {
 		panic(err)
 	}
 	if err := v.BindPFlag("toolchain.path", toolchainCmd.PersistentFlags().Lookup("toolchain-path")); err != nil {
-		panic(err)
-	}
-	if err := v.BindPFlag("toolchain.tools-config", toolchainCmd.PersistentFlags().Lookup("tools-config")); err != nil {
 		panic(err)
 	}
 

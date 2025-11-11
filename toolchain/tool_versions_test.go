@@ -1,7 +1,6 @@
 package toolchain
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -224,15 +223,11 @@ func TestGetAllVersions(t *testing.T) {
 	}
 }
 
-// setupToolchainTestEnv sets up the test environment with HOME, ATMOS_TOOLCHAIN_PATH, and tools.yaml.
+// setupToolchainTestEnv sets up the test environment with HOME and ATMOS_TOOLCHAIN_PATH.
 func setupToolchainTestEnv(t *testing.T, tempDir string) {
 	t.Helper()
 	t.Setenv("HOME", tempDir)
 	t.Setenv("ATMOS_TOOLCHAIN_PATH", tempDir)
-	toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
-	err := os.WriteFile(toolsConfigPath, []byte("aliases:\n  terraform: hashicorp/terraform\n"), 0o644)
-	require.NoError(t, err)
-	t.Setenv("ATMOS_TOOLS_CONFIG_FILE", toolsConfigPath)
 }
 
 func TestAddToolToVersionsAsDefault(t *testing.T) {

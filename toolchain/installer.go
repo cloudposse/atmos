@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/xdg"
 	"github.com/cloudposse/atmos/toolchain/registry"
@@ -44,13 +45,31 @@ type ToolResolver interface {
 	Resolve(toolName string) (owner, repo string, err error)
 }
 
-// DefaultToolResolver implements ToolResolver using the existing logic.
-type DefaultToolResolver struct{}
+// DefaultToolResolver implements ToolResolver using configured aliases and registry search.
+type DefaultToolResolver struct {
+	atmosConfig *schema.AtmosConfiguration
+}
 
 func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 	defer perf.Track(nil, "toolchain.DefaultToolResolver.Resolve")()
 
-	// Try to find the tool in the Aqua registry
+	// Step 1: Check if this is an alias in atmos.yaml.
+	// If atmosConfig is available and has aliases configured, resolve the alias first.
+	if d.atmosConfig != nil && len(d.atmosConfig.Toolchain.Aliases) > 0 {
+		if aliasedName, found := d.atmosConfig.Toolchain.Aliases[toolName]; found {
+			toolName = aliasedName
+		}
+	}
+
+	// Step 2: If already in owner/repo format, parse and return.
+	if strings.Contains(toolName, "/") {
+		parts := strings.Split(toolName, "/")
+		if len(parts) == 2 {
+			return parts[0], parts[1], nil
+		}
+	}
+
+	// Step 3: Try to find the tool in the Aqua registry.
 	owner, repo, err := searchRegistryForTool(toolName)
 	if err == nil {
 		return owner, repo, nil
@@ -98,11 +117,14 @@ func NewInstallerWithResolver(resolver ToolResolver) *Installer {
 	}
 }
 
-// NewInstaller uses the default resolver.
+// NewInstaller uses the default resolver with alias support from atmosConfig.
 func NewInstaller() *Installer {
 	defer perf.Track(nil, "toolchain.NewInstaller")()
 
-	return NewInstallerWithResolver(&DefaultToolResolver{})
+	// Get the current atmos config to support alias resolution.
+	return NewInstallerWithResolver(&DefaultToolResolver{
+		atmosConfig: GetAtmosConfig(),
+	})
 }
 
 // Install installs a tool from the registry.

@@ -152,10 +152,17 @@ func parsePagerFlag(cmd *cobra.Command, v *viper.Viper) global.PagerSelector {
 		return global.NewPagerSelector(value, true)
 	}
 
+	// Check if value is set via environment variable or other Viper source.
+	// We check v.IsSet() to catch env vars, but config values in atmos.yaml
+	// are handled separately by the pager package.
+	if v.IsSet(pagerFlagName) {
+		value := v.GetString(pagerFlagName)
+		if value != "" {
+			return global.NewPagerSelector(value, true)
+		}
+	}
+
 	// Pager flag not explicitly set - return as not provided.
-	// Note: We deliberately do NOT check v.IsSet() for config values here.
-	// The pager should be disabled by default unless explicitly enabled via CLI flag.
-	// Config values in atmos.yaml are handled separately by the pager package.
 	return global.NewPagerSelector("", false)
 }
 

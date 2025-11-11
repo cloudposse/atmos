@@ -14,7 +14,6 @@ import (
 var (
 	DefaultToolVersionsFilePath = ".tool-versions"
 	DefaultInstallPath          = ".tools"
-	DefaultToolsConfigFile      = "tools.yaml"
 )
 
 var atmosConfig *schema.AtmosConfiguration
@@ -42,16 +41,6 @@ func GetToolVersionsFilePath() string {
 		return DefaultToolVersionsFilePath
 	}
 	return atmosConfig.Toolchain.VersionsFile
-}
-
-// GetToolsConfigFilePath returns the path to the tools.yaml config file.
-func GetToolsConfigFilePath() string {
-	defer perf.Track(nil, "toolchain.GetToolsConfigFilePath")()
-
-	if atmosConfig == nil || atmosConfig.Toolchain.ToolsConfigFile == "" {
-		return DefaultToolsConfigFile
-	}
-	return atmosConfig.Toolchain.ToolsConfigFile
 }
 
 // GetInstallPath returns the path where tools are installed.
