@@ -58,8 +58,8 @@ Use the error builder for creating rich, user-friendly errors:
 import errUtils "github.com/cloudposse/atmos/errors"
 
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found in stack '%s'", component, stack).
-    WithHint("Run 'atmos list components -s %s' to see available components", stack).
+    WithHintf("Component `%s` not found in stack `%s`", component, stack).
+    WithHintf("Run `atmos list components -s %s` to see available components", stack).
     WithContext("component", component).
     WithContext("stack", stack).
     WithContext("path", componentPath).
@@ -158,7 +158,7 @@ err := errUtils.Build(errUtils.ErrAbstractComponent).
 
 // ❌ BAD: Mixing explanation and action in hints
 err := errUtils.Build(errUtils.ErrAbstractComponent).
-    WithHintf("Component '%s' is abstract and abstract components are templates that can't be provisioned", component).
+    WithHintf("Component `%s` is `abstract` and abstract components are templates that can't be provisioned", component).
     WithHint("Abstract components define shared configuration for inheritance").
     Err()
 ```
@@ -211,8 +211,8 @@ ErrError = errors.New("error occurred")
 ```go
 // ✅ GOOD: Specific, with actionable hints
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found in stack '%s'", component, stack).
-    WithHint("Run 'atmos list components -s %s' to see available components", stack).
+    WithHintf("Component `%s` not found in stack `%s`", component, stack).
+    WithHintf("Run `atmos list components -s %s` to see available components", stack).
     WithHint("Verify the component path in your atmos.yaml configuration").
     WithContext("component", component).
     WithContext("stack", stack).
@@ -228,10 +228,10 @@ return errUtils.ErrComponentNotFound
 
 ```go
 err := errUtils.Build(errUtils.ErrWorkflowNotFound).
-    WithHintf("Workflow file '%s' not found", workflowFile).
-    WithHint("Run 'atmos list workflows' to see available workflows").
+    WithHintf("Workflow file `%s` not found", workflowFile).
+    WithHintf("Run `atmos list workflows` to see available workflows").
     WithHint("Check that the workflow file exists in the configured workflows directory").
-    WithHint("Verify the 'workflows' path in your atmos.yaml configuration").
+    WithHintf("Verify the `workflows` path in your `atmos.yaml` configuration").
     WithContext("workflow", workflowName).
     WithContext("file", workflowFile).
     WithContext("workflows_dir", workflowsDir).
@@ -276,7 +276,7 @@ Don't repeat information that's already in the hint or explanation. Each builder
 ```go
 // ❌ BAD: Redundant context repeating hint information
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found in stack '%s'", component, stack).
+    WithHintf("Component `%s` not found in stack `%s`", component, stack).
     WithContext("component", component).  // Redundant: already in hint
     WithContext("stack", stack).          // Redundant: already in hint
     WithContext("error", "component not found").  // Redundant: this is the sentinel
@@ -284,7 +284,7 @@ err := errUtils.Build(errUtils.ErrComponentNotFound).
 
 // ✅ GOOD: Context adds NEW debugging information
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found in stack '%s'", component, stack).
+    WithHintf("Component `%s` not found in stack `%s`", component, stack).
     WithContext("search_path", searchPath).      // NEW: where we looked
     WithContext("available_components", count).  // NEW: how many exist
     WithContext("config_file", configFile).      // NEW: configuration source
@@ -426,7 +426,7 @@ return errUtils.ErrComponentNotFound
 
 // CORRECT: Add actionable hints
 return errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHint("Run 'atmos list components' to see available components").
+    WithHintf("Run `atmos list components` to see available components").
     Err()
 ```
 
@@ -434,10 +434,10 @@ return errUtils.Build(errUtils.ErrComponentNotFound).
 
 ```go
 // WRONG: Triggers linter warning
-builder.WithHint(fmt.Sprintf("Component '%s' not found", component))
+builder.WithHint(fmt.Sprintf("Component `%s` not found", component))
 
 // CORRECT: Use WithHintf
-builder.WithHintf("Component '%s' not found", component)
+builder.WithHintf("Component `%s` not found", component)
 ```
 
 ### ❌ Too Much in Hint, Not Enough in Context
@@ -445,14 +445,14 @@ builder.WithHintf("Component '%s' not found", component)
 ```go
 // WRONG: All details in hint, nothing in context
 return errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found in stack '%s' at path '%s'",
+    WithHintf("Component `%s` not found in stack `%s` at path `%s`",
         component, stack, path).
     Err()
 
 // CORRECT: Brief hint, details in context
 return errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found", component).
-    WithHint("Run 'atmos list components' to see available components").
+    WithHintf("Component `%s` not found", component).
+    WithHintf("Run `atmos list components` to see available components").
     WithContext("component", component).
     WithContext("stack", stack).
     WithContext("path", path).
@@ -464,8 +464,8 @@ return errUtils.Build(errUtils.ErrComponentNotFound).
 ```go
 // WRONG: Repeating same information in multiple places
 return errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found in stack '%s'", component, stack).
-    WithExplanation("The component 'vpc' was not found in the stack 'prod/us-east-1'").  // Redundant
+    WithHintf("Component `%s` not found in stack `%s`", component, stack).
+    WithExplanation("The component `vpc` was not found in the stack `prod/us-east-1`").  // Redundant
     WithContext("component", component).  // Redundant: already in hint
     WithContext("stack", stack).          // Redundant: already in hint
     WithContext("message", "component not found").  // Redundant: that's the sentinel
@@ -474,9 +474,9 @@ return errUtils.Build(errUtils.ErrComponentNotFound).
 
 // CORRECT: Each method adds unique information
 return errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found in stack '%s'", component, stack).
+    WithHintf("Component `%s` not found in stack `%s`", component, stack).
     WithExplanation("Components must be defined in the configured components directory and registered in stack configurations.").  // Educational context
-    WithHint("Run 'atmos list components -s %s' to see available components", stack).  // Actionable step
+    WithHintf("Run `atmos list components -s %s` to see available components", stack).  // Actionable step
     WithContext("search_path", searchPath).      // Where we looked (not in hint)
     WithContext("components_dir", componentsDir). // Configuration details (not in hint)
     WithExitCode(2).  // Non-default exit code
@@ -495,8 +495,8 @@ func TestComponentNotFoundError(t *testing.T) {
     stack := "prod/us-east-1"
 
     err := errUtils.Build(errUtils.ErrComponentNotFound).
-        WithHintf("Component '%s' not found in stack '%s'", component, stack).
-        WithHint("Run 'atmos list components' to see available components").
+        WithHintf("Component `%s` not found in stack `%s`", component, stack).
+        WithHintf("Run `atmos list components` to see available components").
         WithContext("component", component).
         WithContext("stack", stack).
         WithExitCode(2).
@@ -510,7 +510,7 @@ func TestComponentNotFoundError(t *testing.T) {
     assert.Equal(t, 2, exitCode)
 
     // Check error message
-    assert.Contains(t, err.Error(), "Component 'vpc' not found")
+    assert.Contains(t, err.Error(), "Component `vpc` not found")
 
     // Check formatted output (with verbose mode and color enabled)
     config := errUtils.FormatterConfig{
@@ -534,7 +534,7 @@ When Sentry is enabled, errors are automatically reported with:
 ```go
 // This error will be reported to Sentry with full context
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found", component).
+    WithHintf("Component `%s` not found", component).
     WithContext("component", component).  // → Sentry tag: atmos.component
     WithContext("stack", stack).          // → Sentry tag: atmos.stack
     WithExitCode(2).                      // → Sentry tag: atmos.exit_code
