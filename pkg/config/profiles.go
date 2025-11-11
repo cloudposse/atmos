@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -97,13 +98,25 @@ func findProfileDirectory(profileName string, locations []ProfileLocation) (stri
 		}
 	}
 
-	// Build list of searched paths for error message.
+	// Build list of searched paths and location types for error message.
 	var searchedPaths []string
+	var locationTypes []string
 	for _, loc := range locations {
 		searchedPaths = append(searchedPaths, filepath.Join(loc.Path, profileName))
+		locationTypes = append(locationTypes, loc.Type)
 	}
 
-	return "", "", fmt.Errorf("%w: '%s' (searched: %s)", errUtils.ErrProfileNotFound, profileName, strings.Join(searchedPaths, ", "))
+	return "", "", errUtils.Build(errUtils.ErrProfileNotFound).
+		WithExplanationf("Profile `%s` not found in any configured location", profileName).
+		WithExplanationf("Searched in: `%s`", strings.Join(searchedPaths, ", ")).
+		WithHint("Run `atmos profile list` to see all available profiles").
+		WithHint("Create the profile directory in one of the search locations").
+		WithHintf("To create: `mkdir -p <location>/profiles/%s`", profileName).
+		WithContext("profile", profileName).
+		WithContext("searched_paths", strings.Join(searchedPaths, ", ")).
+		WithContext("location_types", strings.Join(locationTypes, ", ")).
+		WithExitCode(2).
+		Err()
 }
 
 // listAvailableProfiles returns all profiles found across all locations.
@@ -141,10 +154,28 @@ func loadProfileFiles(v *viper.Viper, profileDir string, profileName string) err
 	// Validate directory exists.
 	info, err := os.Stat(profileDir)
 	if err != nil {
-		return fmt.Errorf("%w: profile '%s' directory does not exist: %s (run 'atmos profile list' to see available profiles)", errUtils.ErrProfileDirNotExist, profileName, profileDir)
+		return errUtils.Build(errUtils.ErrProfileDirNotExist).
+			WithExplanationf("Profile `%s` directory does not exist", profileName).
+			WithExplanationf("Expected path: `%s`", profileDir).
+			WithHint("Run `atmos profile list` to see available profiles").
+			WithHintf("Create directory: `mkdir -p %s`", profileDir).
+			WithContext("profile", profileName).
+			WithContext("path", profileDir).
+			WithContext("error", err.Error()).
+			WithExitCode(2).
+			Err()
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("%w: profile '%s' path is not a directory: %s", errUtils.ErrProfileDirNotExist, profileName, profileDir)
+		return errUtils.Build(errUtils.ErrProfileDirNotExist).
+			WithExplanationf("Profile `%s` path exists but is not a directory", profileName).
+			WithExplanationf("Found a file at: `%s`", profileDir).
+			WithHint("Remove the file and create a directory instead").
+			WithHintf("Run: `rm %s && mkdir -p %s`", profileDir, profileDir).
+			WithContext("profile", profileName).
+			WithContext("path", profileDir).
+			WithContext("type", "file").
+			WithExitCode(2).
+			Err()
 	}
 
 	// Use shared loading function (see .scratch/profiles-loading-refactor.md).
@@ -170,7 +201,16 @@ func loadProfiles(v *viper.Viper, profileNames []string, atmosConfig *schema.Atm
 	// Discover profile locations.
 	locations, err := discoverProfileLocations(atmosConfig)
 	if err != nil {
-		return fmt.Errorf("%w: %s (check profiles.base_path in atmos.yaml)", errUtils.ErrProfileDiscovery, err)
+		return errUtils.Build(errUtils.ErrProfileDiscovery).
+			WithExplanationf("Failed to discover profile locations: `%s`", err).
+			WithExplanation("The system could not determine where to look for profiles").
+			WithHint("Verify `profiles.base_path` in `atmos.yaml` exists and is accessible").
+			WithHint("Check `XDG_CONFIG_HOME` environment variable if using XDG locations").
+			WithHint("Run `atmos describe config` to view current configuration").
+			WithContext("base_path", atmosConfig.Profiles.BasePath).
+			WithContext("config_dir", atmosConfig.CliConfigPath).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Load each profile in order (left-to-right).
@@ -178,15 +218,31 @@ func loadProfiles(v *viper.Viper, profileNames []string, atmosConfig *schema.Atm
 		// Find profile directory.
 		profileDir, locType, err := findProfileDirectory(profileName, locations)
 		if err != nil {
-			// Add list of available profiles to error.
-			available, _ := listAvailableProfiles(locations)
-			var availableNames []string
-			for name := range available {
-				availableNames = append(availableNames, name)
-			}
-			sort.Strings(availableNames)
+			// Check if this is a profile not found error.
+			if errors.Is(err, errUtils.ErrProfileNotFound) {
+				// Add list of available profiles to help user.
+				available, _ := listAvailableProfiles(locations)
+				var availableNames []string
+				for name := range available {
+					availableNames = append(availableNames, name)
+				}
+				sort.Strings(availableNames)
 
-			return fmt.Errorf("%w (available profiles: %s - run 'atmos profile list' for details)", err, strings.Join(availableNames, ", "))
+				return errUtils.Build(errUtils.ErrProfileNotFound).
+					WithExplanationf("Profile `%s` does not exist in any configured location", profileName).
+					WithExplanationf("Available profiles are: `%s`", strings.Join(availableNames, ", ")).
+					WithHint("Check the spelling of the profile name").
+					WithHint("Run `atmos profile list` for detailed information about each profile").
+					WithHint("Verify the profile directory exists if you expect to see it").
+					WithContext("profile", profileName).
+					WithContext("requested_profiles", strings.Join(profileNames, ", ")).
+					WithContext("available_count", fmt.Sprintf("%d", len(availableNames))).
+					WithExitCode(2).
+					Err()
+			}
+
+			// For other errors, preserve original error chain.
+			return err
 		}
 
 		log.Info("Loading profile",
