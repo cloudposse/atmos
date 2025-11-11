@@ -383,7 +383,22 @@ func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 		log.SetOutput(output)
 	}
 	if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		// Enrich the error with proper formatting for user-facing output.
+		// The error from ParseLogLevel has format: "sentinel\nexplanation"
+		// Extract the explanation text (everything after the first newline).
+		errMsg := err.Error()
+		parts := strings.SplitN(errMsg, "\n", 2)
+		explanation := ""
+		if len(parts) > 1 {
+			explanation = parts[1]
+		}
+
+		// Build enriched error from the wrapped error, adding the explanation as a detail.
+		// This ensures the formatter can extract both the sentinel message and the explanation.
+		enrichedErr := errUtils.Build(log.ErrInvalidLogLevel).
+			WithExplanation(explanation).
+			Err()
+		errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
 	}
 	log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
 }
@@ -585,6 +600,44 @@ func applyProfileTypeFlag(config *profiler.Config, cmd *cobra.Command) error {
 	return nil
 }
 
+// handleConfigInitError processes config initialization errors and enriches them for display.
+// Returns nil if the error can be ignored (e.g., for version command), or an enriched error.
+func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration) error {
+	if isVersionCommand() {
+		// Version command should always work, even with invalid config.
+		log.Debug("Warning: CLI configuration error (continuing for version command)", "error", initErr)
+		return nil
+	}
+
+	if errors.Is(initErr, cfg.NotFound) {
+		// Config not found is acceptable for some commands.
+		return nil
+	}
+
+	// For invalid log level errors, enrich with explanation and markdown formatting.
+	if errors.Is(initErr, log.ErrInvalidLogLevel) {
+		// Extract explanation from error message (format: "sentinel\nexplanation").
+		errMsg := initErr.Error()
+		parts := strings.SplitN(errMsg, "\n", 2)
+		explanation := ""
+		if len(parts) > 1 {
+			explanation = parts[1]
+		}
+
+		// Initialize markdown renderer even with partial config for error formatting.
+		// This is safe because atmosConfig struct exists even if validation failed.
+		errUtils.InitializeMarkdown(atmosConfig)
+
+		// Build enriched error with explanation.
+		return errUtils.Build(log.ErrInvalidLogLevel).
+			WithExplanation(explanation).
+			Err()
+	}
+
+	// Return other errors as-is.
+	return initErr
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the RootCmd.
 func Execute() error {
@@ -599,12 +652,9 @@ func Execute() error {
 	themeCmd.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
-		if isVersionCommand() {
-			// Version command should always work, even with invalid config
-			log.Debug("Warning: CLI configuration error (continuing for version command)", "error", initErr)
-		} else if !errors.Is(initErr, cfg.NotFound) {
-			// For other commands, only return error if it's not just "not found"
-			return initErr
+		// Handle config initialization errors based on command context.
+		if err := handleConfigInitError(initErr, &atmosConfig); err != nil {
+			return err
 		}
 	}
 
