@@ -44,9 +44,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
+          BASE_REF="${{ github.event.pull_request.base.sha }}"
+          HEAD_REF="${{ github.event.pull_request.head.sha }}"
 
-          # Get all files added in this PR (not just the latest commit)
-          NEW_BLOG_FILES=$(gh pr diff $PR_NUMBER --name-only | grep -E '^website/blog/.*\.(md|mdx)$' | grep -v 'tags.yml' || true)
+          # Use git diff directly instead of gh pr diff to avoid API limitations
+          # GitHub's diff API has a limit of ~300 files or ~3000 lines, which fails on large PRs
+          # git diff works locally without these limitations
+          echo "Checking for blog post files between $BASE_REF and $HEAD_REF"
+          NEW_BLOG_FILES=$(git diff --name-only "$BASE_REF" "$HEAD_REF" | grep -E '^website/blog/.*\.(md|mdx)$' | grep -v 'tags.yml' || true)
 
           if [ -z "$NEW_BLOG_FILES" ]; then
             echo "has_changelog=false" >> $GITHUB_OUTPUT
@@ -93,9 +98,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
+          BASE_REF="${{ github.event.pull_request.base.sha }}"
+          HEAD_REF="${{ github.event.pull_request.head.sha }}"
 
-          # Get list of blog files added
-          BLOG_FILES=$(gh pr diff $PR_NUMBER --name-only | grep -E '^website/blog/.*\.(md|mdx)$' | grep -v 'tags.yml' || true)
+          # Get list of blog files added (using git diff to avoid API limitations)
+          BLOG_FILES=$(git diff --name-only "$BASE_REF" "$HEAD_REF" | grep -E '^website/blog/.*\.(md|mdx)$' | grep -v 'tags.yml' || true)
 
           # Find existing comment (warning or success)
           EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- changelog-check -->")) | .id' | head -1)
