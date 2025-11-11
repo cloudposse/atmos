@@ -119,16 +119,16 @@ builder.WithExitCode(2)  // Usage/configuration errors
 Adds detailed explanation (displayed in dedicated section). **Supports markdown formatting** for emphasis, code blocks, and lists.
 
 ```go
-builder.WithExplanation("Abstract components cannot be provisioned directly. They serve as templates for concrete components.")
-builder.WithExplanation("Components must be defined in the `components/terraform/` directory and referenced in stack configurations.")
+builder.WithExplanation("Abstract components serve as reusable templates that define shared configuration. They cannot be provisioned directly and must be inherited by concrete components to be instantiated.")
+builder.WithExplanation("Components must be defined in the `components/terraform/` directory and explicitly referenced in stack configurations. Atmos uses this convention to organize and discover components across your infrastructure.")
 ```
 
 #### `WithExplanationf(format string, args ...interface{}) *ErrorBuilder`
 Adds a formatted explanation. **Prefer this over `WithExplanation(fmt.Sprintf(...))`** (enforced by linter).
 
 ```go
-builder.WithExplanationf("Component `%s` is marked as abstract in stack `%s`", component, stack)
-builder.WithExplanationf("The %s backend requires %d configuration parameters", backendType, paramCount)
+builder.WithExplanationf("Component `%s` is marked as abstract, which means it serves as a template that must be inherited by concrete components to be provisioned. Abstract components define shared configuration but cannot be instantiated directly.", component)
+builder.WithExplanationf("The `%s` backend requires %d configuration parameters to establish a connection. Without these parameters, Atmos cannot initialize the backend state storage.", backendType, paramCount)
 ```
 
 #### `Err() error`
@@ -188,17 +188,17 @@ err := errUtils.Build(errUtils.ErrThemeNotFound).
     WithHintf("Run `atmos list themes` to see all available themes").  // Correct: WHAT TO DO
     Err()
 
-// ✅ GOOD: Clear separation of explanation and action
+// ✅ GOOD: Clear separation of explanation and action with educational content
 err := errUtils.Build(errUtils.ErrAbstractComponent).
-    WithExplanation("Abstract components cannot be provisioned directly. They serve as templates for concrete components to inherit from, defining shared configuration and settings.").  // WHAT HAPPENED (why it failed)
-    WithHint("Use a concrete component that inherits from this abstract component").  // WHAT TO DO
-    WithHint("Remove `metadata.type: abstract` to make this component concrete").  // WHAT TO DO
+    WithExplanationf("Component `%s` is marked as abstract, which means it serves as a reusable template that defines shared configuration. Abstract components cannot be provisioned directly—they must be inherited by concrete components to be instantiated in your infrastructure.", component).  // WHAT HAPPENED (educational: explains the concept)
+    WithHint("Create a concrete component that inherits from this abstract component using `metadata.inherits`").  // WHAT TO DO
+    WithHint("Alternatively, remove `metadata.type: abstract` to convert this into a concrete component").  // WHAT TO DO (alternative approach)
     WithContext("component", component).
     Err()
 
-// ❌ BAD: Mixing explanation and action in hints
+// ❌ BAD: Mixing explanation and action in hints, missing educational value
 err := errUtils.Build(errUtils.ErrAbstractComponent).
-    WithHintf("Component `%s` is `abstract` and abstract components are templates that can't be provisioned", component).  // Mixing WHAT HAPPENED with explanation
+    WithHintf("Component `%s` is `abstract` and abstract components are templates that can't be provisioned", component).  // Mixing WHAT HAPPENED with explanation, not educational
     WithHint("Abstract components define shared configuration for inheritance").  // This is explanation, not action
     Err()
 ```
