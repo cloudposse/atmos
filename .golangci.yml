@@ -109,8 +109,18 @@ linters:
           msg: Use `t.Skipf("<reason>")` with a descriptive reason; do not use `t.Skip`/`t.SkipNow`
         - pattern: ^path\.Join$
           msg: Use `filepath.Join` for OS-appropriate path separators instead of `path.Join` (which always uses forward slashes)
+        - pattern: 'WithHint\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*?,\s*fmt\.Sprintf'
+          msg: Use `WithHintf()` instead of `WithHint(err, fmt.Sprintf(...))` for formatted hint messages
         - pattern: term\.IsTerminal\(
           msg: Use `term.IsTTYSupportForStdout()`, `term.IsTTYSupportForStderr()`, or `term.IsTTYSupportForStdin()` instead of `term.IsTerminal()` for consistent and mockable TTY detection
+        - pattern: 'fmt\.Errorf\("(?:[^"%]|%[^w])*"\s*\)'
+          msg: "Use static sentinel errors from errors/errors.go instead of dynamic errors; wrap with fmt.Errorf(\"%w: context\", ErrSentinel) if context needed"
+        - pattern: 'errors\.New\(fmt\.Sprintf'
+          msg: "Use static sentinel errors from errors/errors.go instead of errors.New(fmt.Sprintf(...)); use fmt.Errorf(\"%w: ...\", ErrSentinel) for context"
+        - pattern: 'github\.com/pkg/errors'
+          msg: "Do not use deprecated github.com/pkg/errors; use static sentinel errors from errors/errors.go instead"
+        - pattern: '\bpkgerrors\.'
+          msg: "Do not use deprecated pkg/errors; use static sentinel errors from errors/errors.go instead"
         - pattern: github\.com/golang/mock
           msg: Use `go.uber.org/mock` instead of archived `github.com/golang/mock`
         - pattern: github\.com/mitchellh/go-homedir
