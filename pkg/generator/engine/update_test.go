@@ -177,3 +177,126 @@ func TestProcessorWithoutGitStorage(t *testing.T) {
 	// In legacy mode, uses template as base
 	assert.Contains(t, string(mergedContent), "version", "Should have version field")
 }
+
+// TestProcessorWithGitStorage_TemplateFile tests merging with template processing (IsTemplate=true)
+func TestProcessorWithGitStorage_TemplateFile(t *testing.T) {
+	// Create a temporary directory for our git repo
+	tmpDir, err := os.MkdirTemp("", "processor-git-template-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// Initialize git repository
+	repo, err := git.PlainInit(tmpDir, false)
+	require.NoError(t, err)
+
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+
+	// Create initial file and commit (this is the "base")
+	initialContent := "# Config\nversion: 1.0\n"
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	err = os.WriteFile(configPath, []byte(initialContent), 0o644)
+	require.NoError(t, err)
+
+	_, err = worktree.Add("config.yaml")
+	require.NoError(t, err)
+
+	_, err = worktree.Commit("Initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test",
+			Email: "test@example.com",
+		},
+	})
+	require.NoError(t, err)
+
+	// User modifies the file (adds custom section)
+	userContent := "# Config\nversion: 1.0\ncustom: user-value\n"
+	err = os.WriteFile(configPath, []byte(userContent), 0o644)
+	require.NoError(t, err)
+
+	// Create processor and setup git storage
+	processor := NewProcessor()
+	err = processor.SetupGitStorage(tmpDir, "HEAD")
+	require.NoError(t, err)
+
+	// Template file with IsTemplate=true
+	// Using simple Go template syntax that doesn't require variables
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "# Config\nversion: 2.0\nfeature: enabled\n",
+		IsTemplate:  true, // This will trigger template processing code path
+		Permissions: 0o644,
+	}
+
+	// Process file in update mode
+	err = processor.ProcessFile(templateFile, tmpDir, false, true, nil, nil)
+	require.NoError(t, err)
+
+	// Read result
+	mergedContent, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	merged := string(mergedContent)
+
+	// Verify merge results
+	assert.Contains(t, merged, "version: 2.0", "Should have new version from template")
+	assert.Contains(t, merged, "custom: user-value", "Should preserve user's custom value")
+	assert.Contains(t, merged, "feature: enabled", "Should have new feature from template")
+}
+
+// TestProcessorWithGitStorage_MergeConflict tests conflict detection
+func TestProcessorWithGitStorage_MergeConflict(t *testing.T) {
+	// Create a temporary directory for our git repo
+	tmpDir, err := os.MkdirTemp("", "processor-git-conflict-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// Initialize git repository
+	repo, err := git.PlainInit(tmpDir, false)
+	require.NoError(t, err)
+
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+
+	// Create initial file and commit (this is the "base")
+	initialContent := "setting: original\n"
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	err = os.WriteFile(configPath, []byte(initialContent), 0o644)
+	require.NoError(t, err)
+
+	_, err = worktree.Add("config.yaml")
+	require.NoError(t, err)
+
+	_, err = worktree.Commit("Initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Test",
+			Email: "test@example.com",
+		},
+	})
+	require.NoError(t, err)
+
+	// User modifies the same setting
+	userContent := "setting: user-change\n"
+	err = os.WriteFile(configPath, []byte(userContent), 0o644)
+	require.NoError(t, err)
+
+	// Create processor and setup git storage
+	processor := NewProcessor()
+	err = processor.SetupGitStorage(tmpDir, "HEAD")
+	require.NoError(t, err)
+
+	// Template also modifies the same setting (conflict!)
+	templateFile := File{
+		Path:        "config.yaml",
+		Content:     "setting: template-change\n",
+		IsTemplate:  false,
+		Permissions: 0o644,
+	}
+
+	// Process file in update mode - should detect conflict
+	err = processor.ProcessFile(templateFile, tmpDir, false, true, nil, nil)
+
+	// Should error due to conflict
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "conflicts", "Error should mention conflicts")
+}
