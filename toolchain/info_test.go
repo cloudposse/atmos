@@ -520,7 +520,7 @@ func TestInfoCommand_EdgeCases(t *testing.T) {
 			Type:      "github_release",
 			RepoOwner: "test",
 			RepoName:  "tool-with-files",
-			Files: []File{
+			Files: []registry.File{
 				{Name: "binary", Src: "tool"},
 				{Name: "config", Src: "config.yaml"},
 			},
