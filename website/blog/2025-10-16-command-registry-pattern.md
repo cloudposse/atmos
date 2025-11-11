@@ -1,7 +1,8 @@
 ---
 slug: introducing-command-registry-pattern
 title: "Introducing the Command Registry Pattern: Toward Pluggable Commands"
-authors: [atmos]
+sidebar_label: "Command Registry Pattern"
+authors: [osterman]
 tags: [contributors, atmos-core, refactoring]
 date: 2025-10-16
 ---
