@@ -768,3 +768,88 @@ func TestYAMLMerger_PreservesTagsAndStyle(t *testing.T) {
 		})
 	}
 }
+
+func TestYAMLMerger_PreservesLineComments(t *testing.T) {
+	tests := []struct {
+		name         string
+		base         string
+		ours         string
+		theirs       string
+		wantContain  []string
+		wantNotContain []string
+	}{
+		{
+			name: "preserves line comment when user changes value",
+			base: `foo: original
+`,
+			ours: `foo: bar # this comment too?
+`,
+			theirs: `foo: original
+`,
+			wantContain: []string{
+				"foo: bar",
+				"# this comment too?",
+			},
+		},
+		{
+			name: "template's new value wins (may not have user's comment)",
+			base: `port: 8080
+`,
+			ours: `port: 8080  # user's port comment
+`,
+			theirs: `port: 9090
+`,
+			wantContain: []string{
+				"port: 9090",
+			},
+			wantNotContain: []string{
+				"# user's port comment", // Lost because template changed value
+			},
+		},
+		{
+			name: "preserves multiple line comments on user changes",
+			base: `config:
+  enabled: true
+  timeout: 30
+`,
+			ours: `config:
+  enabled: false  # user disabled
+  timeout: 60  # user increased
+`,
+			theirs: `config:
+  enabled: true
+  timeout: 30
+`,
+			wantContain: []string{
+				"enabled: false",
+				"# user disabled",
+				"timeout: 60",
+				"# user increased",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewYAMLMerger(50)
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			for _, want := range tt.wantContain {
+				if !strings.Contains(result.Content, want) {
+					t.Errorf("Expected result to contain %q\nGot:\n%s", want, result.Content)
+				}
+			}
+
+			for _, dontWant := range tt.wantNotContain {
+				if strings.Contains(result.Content, dontWant) {
+					t.Errorf("Expected result NOT to contain %q\nGot:\n%s", dontWant, result.Content)
+				}
+			}
+
+			t.Logf("Result:\n%s", result.Content)
+		})
+	}
+}
