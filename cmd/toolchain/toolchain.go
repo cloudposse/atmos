@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	toolchainpkg "github.com/cloudposse/atmos/toolchain"
@@ -132,18 +133,25 @@ func init() {
 // ToolchainCommandProvider implements the CommandProvider interface.
 type ToolchainCommandProvider struct{}
 
-// GetCommand returns the toolchain command.
+// GetCommand returns the root toolchain command (*cobra.Command) for registration with the command registry.
+// This command serves as the parent for all toolchain subcommands (add, install, list, etc.).
 func (t *ToolchainCommandProvider) GetCommand() *cobra.Command {
+	defer perf.Track(nil, "ToolchainCommandProvider.GetCommand")()
+
 	return toolchainCmd
 }
 
-// GetName returns the command name.
+// GetName returns the unique command name ("toolchain") used for command registration and identification.
 func (t *ToolchainCommandProvider) GetName() string {
+	defer perf.Track(nil, "ToolchainCommandProvider.GetName")()
+
 	return "toolchain"
 }
 
-// GetGroup returns the command group for help organization.
+// GetGroup returns the command group identifier ("Toolchain Commands") used for organizing commands in help output.
 func (t *ToolchainCommandProvider) GetGroup() string {
+	defer perf.Track(nil, "ToolchainCommandProvider.GetGroup")()
+
 	return "Toolchain Commands"
 }
 

@@ -38,6 +38,9 @@ func TestToolchainGetCommand(t *testing.T) {
 func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 	t.Helper()
 
+	// Initialize test kit to auto-clean RootCmd state.
+	_ = newTestKit(t)
+
 	// Clean toolchainCmd state before each test to prevent pollution.
 	cleanToolchainCmdState(t)
 
@@ -405,8 +408,74 @@ func TestSetAtmosConfig(t *testing.T) {
 	}, "SetAtmosConfig should not panic")
 }
 
+// testKit wraps testing.T and provides automatic RootCmd state cleanup.
+type testKit struct {
+	*testing.T
+}
+
+// newTestKit creates a testKit that automatically registers RootCmd state cleanup.
+// This follows the same pattern as cmd.NewTestKit for the toolchain package.
+func newTestKit(t *testing.T) *testKit {
+	t.Helper()
+
+	// Clean RootCmd state and register cleanup for restoration.
+	cleanRootCmdState(t)
+
+	return &testKit{T: t}
+}
+
 // cleanToolchainCmdState resets all toolchainCmd flags and subcommand flags to prevent test pollution.
 // This follows the same pattern as cmd.NewTestKit but for the toolchain command hierarchy.
+// cleanRootCmdState cleans RootCmd state by accessing it via toolchainCmd.Parent().
+func cleanRootCmdState(t *testing.T) {
+	t.Helper()
+
+	rootCmd := toolchainCmd.Parent()
+	if rootCmd == nil {
+		return // Not attached to parent, nothing to clean.
+	}
+
+	// Snapshot current flag states.
+	type flagSnapshot struct {
+		value   string
+		changed bool
+	}
+	snapshot := make(map[string]flagSnapshot)
+
+	// Capture state of all flags in RootCmd.
+	rootCmd.Flags().VisitAll(func(f *pflag.Flag) {
+		snapshot[f.Name] = flagSnapshot{
+			value:   f.Value.String(),
+			changed: f.Changed,
+		}
+	})
+	rootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+		snapshot[f.Name] = flagSnapshot{
+			value:   f.Value.String(),
+			changed: f.Changed,
+		}
+	})
+
+	// Reset args on RootCmd.
+	rootCmd.SetArgs([]string{})
+
+	// Register cleanup to restore flag states after test.
+	t.Cleanup(func() {
+		rootCmd.Flags().VisitAll(func(f *pflag.Flag) {
+			if snap, ok := snapshot[f.Name]; ok {
+				_ = f.Value.Set(snap.value)
+				f.Changed = snap.changed
+			}
+		})
+		rootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+			if snap, ok := snapshot[f.Name]; ok {
+				_ = f.Value.Set(snap.value)
+				f.Changed = snap.changed
+			}
+		})
+	})
+}
+
 func cleanToolchainCmdState(t *testing.T) {
 	t.Helper()
 

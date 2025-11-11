@@ -324,7 +324,7 @@ metadata:
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrInvalidLockFile))
+	require.True(t, errors.Is(err, ErrInvalidLockFile))
 }
 
 func TestVerify_MissingToolVersion(t *testing.T) {
@@ -344,7 +344,7 @@ func TestVerify_MissingToolVersion(t *testing.T) {
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrToolMissingVersion))
+	require.True(t, errors.Is(err, ErrToolMissingVersion))
 }
 
 func TestVerify_NoPlatforms(t *testing.T) {
@@ -361,7 +361,7 @@ func TestVerify_NoPlatforms(t *testing.T) {
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrToolNoPlatforms))
+	require.True(t, errors.Is(err, ErrToolNoPlatforms))
 }
 
 func TestVerify_MissingPlatformURL(t *testing.T) {
@@ -381,7 +381,7 @@ func TestVerify_MissingPlatformURL(t *testing.T) {
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrPlatformNoURL))
+	require.True(t, errors.Is(err, ErrPlatformNoURL))
 }
 
 func TestVerify_MissingPlatformChecksum(t *testing.T) {
@@ -401,7 +401,7 @@ func TestVerify_MissingPlatformChecksum(t *testing.T) {
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrPlatformNoChecksum))
+	require.True(t, errors.Is(err, ErrPlatformNoChecksum))
 }
 
 func TestVerify_NilPlatformEntry(t *testing.T) {

@@ -99,9 +99,9 @@ toolchain:
 - `{{.Version}}` - Tool version
 - `{{trimV .Version}}` - Version without 'v' prefix
 - `{{.RepoOwner}}` / `{{.RepoName}}` - Repository info
-- `{{.Format}}` - Archive format
+- `{{.Format}}` - Archive format.
 
-See `inline-registry-example.yaml` for complete example.
+See [inline-registry-example.yaml](./inline-registry-example.yaml) for a complete example.
 
 #### Future Registry Types
 

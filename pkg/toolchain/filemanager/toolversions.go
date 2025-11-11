@@ -2,6 +2,7 @@ package filemanager
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -54,10 +55,19 @@ func (m *ToolVersionsFileManager) AddTool(ctx context.Context, tool, version str
 		opt(cfg)
 	}
 
+	var err error
 	if cfg.AsDefault {
-		return toolchain.AddToolToVersionsAsDefault(m.filePath, tool, version)
+		err = toolchain.AddToolToVersionsAsDefault(m.filePath, tool, version)
+		if err != nil {
+			return fmt.Errorf("AddTool %s@%s: %w", tool, version, err)
+		}
+	} else {
+		err = toolchain.AddToolToVersions(m.filePath, tool, version)
+		if err != nil {
+			return fmt.Errorf("AddTool %s@%s: %w", tool, version, err)
+		}
 	}
-	return toolchain.AddToolToVersions(m.filePath, tool, version)
+	return nil
 }
 
 // RemoveTool removes a tool version.
@@ -68,7 +78,11 @@ func (m *ToolVersionsFileManager) RemoveTool(ctx context.Context, tool, version 
 		return nil
 	}
 
-	return toolchain.RemoveToolFromVersions(m.filePath, tool, version)
+	err := toolchain.RemoveToolFromVersions(m.filePath, tool, version)
+	if err != nil {
+		return fmt.Errorf("RemoveTool %s@%s: %w", tool, version, err)
+	}
+	return nil
 }
 
 // SetDefault sets a tool version as default.
@@ -79,7 +93,11 @@ func (m *ToolVersionsFileManager) SetDefault(ctx context.Context, tool, version 
 		return nil
 	}
 
-	return toolchain.AddToolToVersionsAsDefault(m.filePath, tool, version)
+	err := toolchain.AddToolToVersionsAsDefault(m.filePath, tool, version)
+	if err != nil {
+		return fmt.Errorf("SetDefault %s@%s: %w", tool, version, err)
+	}
+	return nil
 }
 
 // GetTools returns all tools managed by this file.
@@ -92,7 +110,7 @@ func (m *ToolVersionsFileManager) GetTools(ctx context.Context) (map[string][]st
 
 	tv, err := toolchain.LoadToolVersions(m.filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GetTools: failed to load %s: %w", m.filePath, err)
 	}
 	return tv.Tools, nil
 }
