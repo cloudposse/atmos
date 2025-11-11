@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Configuration represents a template configuration loaded from the embedded filesystem.
@@ -65,6 +66,8 @@ type File struct {
 // The function returns an error only when the templates directory itself cannot be read.
 // Individual template loading errors are silently skipped to allow partial success.
 func GetAvailableConfigurations() (map[string]Configuration, error) {
+	defer perf.Track(nil, "templates.GetAvailableConfigurations")()
+
 	configs := make(map[string]Configuration)
 
 	// Read templates directory
@@ -211,67 +214,94 @@ func readTemplateFiles(templatePath string) ([]File, error) {
 		// Use path.Join (forward slashes) not filepath.Join for embed.FS.
 		filePath := path.Join(templatePath, entry.Name()) //nolint:forbidigo // embed.FS always uses forward slashes
 
+		var entryFiles []File
+		var err error
+
 		if entry.IsDir() {
-			// Add directory entry
-			files = append(files, File{
-				Path:        strings.TrimPrefix(filePath, templatePath+"/"),
-				Content:     "",
-				IsDirectory: true,
-				IsTemplate:  false,
-				Permissions: 0o755,
-			})
-
-			// Recursively read directory contents
-			subFiles, err := readTemplateFiles(filePath)
-			if err != nil {
-				return nil, err
-			}
-
-			// Prepend directory path to sub-files
-			for _, subFile := range subFiles {
-				// Use path.Join (forward slashes) for consistency in File.Path.
-				subFile.Path = path.Join(entry.Name(), subFile.Path) //nolint:forbidigo // embed.FS always uses forward slashes
-				files = append(files, subFile)
-			}
+			entryFiles, err = processDirectoryEntry(templatePath, filePath, entry.Name())
 		} else {
-			// Read file content
-			content, err := generator.Templates.ReadFile(filePath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read file '%s': %w", filePath, err)
-			}
-
-			contentStr := string(content)
-
-			// Determine if file is a template using multiple detection methods:
-			// 1. Files with .tmpl extension are always treated as templates
-			// 2. Files with atmos:template magic comment in first 10 lines
-			//
-			// This avoids false positives from files that incidentally contain "{{"
-			// (e.g., JSON, code examples, documentation) while allowing explicit
-			// template marking via magic comments.
-			isTemplate := strings.HasSuffix(entry.Name(), ".tmpl") || hasTemplateMagicComment(contentStr, 10)
-
-			// Strip the magic comment from the content if present
-			// This ensures it doesn't appear in generated output
-			if hasTemplateMagicComment(contentStr, 10) {
-				contentStr = stripTemplateMagicComment(contentStr)
-			}
-
-			files = append(files, File{
-				Path:        strings.TrimPrefix(filePath, templatePath+"/"),
-				Content:     contentStr,
-				IsDirectory: false,
-				IsTemplate:  isTemplate,
-				Permissions: 0o644,
-			})
+			entryFiles, err = processFileEntry(templatePath, filePath, entry.Name())
 		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		files = append(files, entryFiles...)
 	}
 
 	return files, nil
 }
 
+// processDirectoryEntry processes a directory entry and returns all files within it.
+func processDirectoryEntry(templatePath, filePath, entryName string) ([]File, error) {
+	var files []File
+
+	// Add directory entry
+	files = append(files, File{
+		Path:        strings.TrimPrefix(filePath, templatePath+"/"),
+		Content:     "",
+		IsDirectory: true,
+		IsTemplate:  false,
+		Permissions: 0o755,
+	})
+
+	// Recursively read directory contents
+	subFiles, err := readTemplateFiles(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prepend directory path to sub-files
+	for _, subFile := range subFiles {
+		// Use path.Join (forward slashes) for consistency in File.Path.
+		subFile.Path = path.Join(entryName, subFile.Path) //nolint:forbidigo // embed.FS always uses forward slashes
+		files = append(files, subFile)
+	}
+
+	return files, nil
+}
+
+// processFileEntry processes a file entry and returns the file with its content.
+func processFileEntry(templatePath, filePath, entryName string) ([]File, error) {
+	// Read file content
+	content, err := generator.Templates.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file '%s': %w", filePath, err)
+	}
+
+	contentStr := string(content)
+
+	// Determine if file is a template using multiple detection methods:
+	// 1. Files with .tmpl extension are always treated as templates
+	// 2. Files with atmos:template magic comment in first 10 lines
+	//
+	// This avoids false positives from files that incidentally contain "{{"
+	// (e.g., JSON, code examples, documentation) while allowing explicit
+	// template marking via magic comments.
+	isTemplate := strings.HasSuffix(entryName, ".tmpl") || hasTemplateMagicComment(contentStr, 10)
+
+	// Strip the magic comment from the content if present
+	// This ensures it doesn't appear in generated output
+	if hasTemplateMagicComment(contentStr, 10) {
+		contentStr = stripTemplateMagicComment(contentStr)
+	}
+
+	file := File{
+		Path:        strings.TrimPrefix(filePath, templatePath+"/"),
+		Content:     contentStr,
+		IsDirectory: false,
+		IsTemplate:  isTemplate,
+		Permissions: 0o644,
+	}
+
+	return []File{file}, nil
+}
+
 // HasScaffoldConfig checks if the configuration has a scaffold.yaml file.
 func HasScaffoldConfig(files []File) bool {
+	defer perf.Track(nil, "templates.HasScaffoldConfig")()
+
 	for _, file := range files {
 		if file.Path == "scaffold.yaml" && !file.IsDirectory {
 			return true
