@@ -220,7 +220,7 @@ func processLocalImport(basePath string, importPath, tempDir string, currentDept
 		importPath = filepath.Join(basePath, importPath)
 	}
 	if !strings.HasPrefix(filepath.Clean(importPath), filepath.Clean(basePath)) {
-		log.Warn("Import path is outside of base directory",
+		log.Trace("Import path is outside of base directory",
 			"importPath", importPath,
 			"basePath", basePath,
 		)

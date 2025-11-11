@@ -189,6 +189,8 @@ var (
 	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
 	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
 	ErrMerge                         = errors.New("merge error")
+	ErrEncode                        = errors.New("encoding error")
+	ErrDecode                        = errors.New("decoding error")
 
 	// Stack processing errors.
 	ErrStackManifestFileNotFound              = errors.New("stack manifest file not found")
