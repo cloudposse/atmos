@@ -89,7 +89,7 @@ tests:
       ATMOS_LOGS_LEVEL: "Info"
     expect:
       stdout:
-        - '\{.*"version":\s*".*".*"os":\s*".*".*"arch":\s*".*".*\}'
+        - '(?s)\{.*"version":\s*".*".*"os":\s*".*".*"arch":\s*".*".*\}'
       stderr:
         - ".*"
       exit_code: 0
