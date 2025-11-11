@@ -25,9 +25,10 @@ You are an expert in designing helpful, friendly, and actionable error messages 
 
 1. **User-Centric**: Errors should help users solve problems, not just report them
 2. **Actionable**: Every error should suggest concrete next steps
-3. **Context-Rich**: Provide relevant information about what went wrong and where
-4. **Progressive Disclosure**: Show basic info by default, full details with `--verbose`
-5. **Consistent**: Follow Atmos error patterns and conventions
+3. **Context-Rich (Without Redundancy)**: Provide relevant information about what went wrong and where, but don't repeat yourself
+4. **Don't Add Noise**: Each builder method (WithHint, WithExplanation, WithContext, WithExitCode) should add NEW information - not duplicate what's already stated
+5. **Progressive Disclosure**: Show basic info by default, full details with `--verbose`
+6. **Consistent**: Follow Atmos error patterns and conventions
 
 ## Error Handling System Overview
 
@@ -123,6 +124,38 @@ Finalizes the error builder and returns the constructed error.
 
 ```go
 return builder.Err()
+```
+
+### When to Use WithExplanation vs WithHint
+
+**WithExplanation**: For DETAILED background information and WHY something failed
+- Educational content about concepts or limitations
+- Technical details about what went wrong
+- Background context that explains the situation
+- Used when users need to understand the problem before they can fix it
+
+**WithHint**: For ACTIONABLE steps users should take
+- Concrete commands to run
+- Specific configuration to check
+- Direct next steps to resolve the issue
+- Used when users need to know what to DO
+
+**Example:**
+```go
+// ✅ GOOD: Clear separation of explanation and action
+err := errUtils.Build(errUtils.ErrAbstractComponent).
+    WithExplanation("Abstract components cannot be provisioned directly. They serve as templates for concrete components to inherit from, defining shared configuration and settings.").
+    WithHintf("Component '%s' is marked as abstract", component).
+    WithHint("Use a concrete component that inherits from this abstract component").
+    WithHint("Remove 'metadata.type: abstract' to make this component concrete").
+    WithContext("component", component).
+    Err()
+
+// ❌ BAD: Mixing explanation and action in hints
+err := errUtils.Build(errUtils.ErrAbstractComponent).
+    WithHintf("Component '%s' is abstract and abstract components are templates that can't be provisioned", component).
+    WithHint("Abstract components define shared configuration for inheritance").
+    Err()
 ```
 
 ### Wrapping Errors
@@ -232,29 +265,69 @@ Output with `--verbose`:
 ┗━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
 
-### 5. Choose Appropriate Exit Codes
+**⚠️ Avoid Redundancy:**
+Don't repeat information that's already in the hint or explanation. Each builder method should add NEW information.
 
 ```go
-// Configuration/usage errors: exit code 2
-err := errUtils.Build(errUtils.ErrInvalidConfig).
-    WithHint("Check your atmos.yaml configuration").
-    WithExitCode(2).
+// ❌ BAD: Redundant context repeating hint information
+err := errUtils.Build(errUtils.ErrComponentNotFound).
+    WithHintf("Component '%s' not found in stack '%s'", component, stack).
+    WithContext("component", component).  // Redundant: already in hint
+    WithContext("stack", stack).          // Redundant: already in hint
+    WithContext("error", "component not found").  // Redundant: this is the sentinel
     Err()
 
-// Runtime errors: exit code 1 (default)
+// ✅ GOOD: Context adds NEW debugging information
+err := errUtils.Build(errUtils.ErrComponentNotFound).
+    WithHintf("Component '%s' not found in stack '%s'", component, stack).
+    WithContext("search_path", searchPath).      // NEW: where we looked
+    WithContext("available_components", count).  // NEW: how many exist
+    WithContext("config_file", configFile).      // NEW: configuration source
+    Err()
+```
+
+**Principle:** Each method call (WithHint, WithExplanation, WithContext, WithExitCode) should add distinct, non-overlapping information. If you find yourself repeating the same values in multiple places, the information probably belongs in only one place.
+
+### 5. Choose Appropriate Exit Codes (When Needed)
+
+**Exit code 1 is the default** - only specify `WithExitCode()` when you need something different.
+
+```go
+// Runtime/execution errors: Use default exit code 1 (omit WithExitCode)
 err := errUtils.Build(errUtils.ErrExecutionFailed).
     WithHint("Check the logs for more details").
-    Err()  // Exit code defaults to 1
+    Err()  // Exit code defaults to 1 - no need to specify
+
+// Configuration/usage errors: Explicitly use exit code 2
+err := errUtils.Build(errUtils.ErrInvalidConfig).
+    WithHint("Check your atmos.yaml configuration").
+    WithExitCode(2).  // Explicitly set for config/usage errors
+    Err()
+
+// Success: exit code 0 (rarely used in error builder)
+err := errUtils.Build(errUtils.ErrNoChanges).
+    WithHint("No changes detected - infrastructure is up to date").
+    WithExitCode(0).  // Explicitly set for informational "errors"
+    Err()
 ```
+
+**When to use WithExitCode:**
+- **Exit code 2**: Configuration or usage errors (invalid flags, missing config, bad syntax)
+- **Exit code 0**: Informational "errors" that aren't really failures
+- **Omit for exit code 1**: Most runtime errors (network failures, command execution failures, etc.)
+
+**Rationale:** Don't add noise with `.WithExitCode(1)` when it's the default. Be explicit only when you're deviating from the default behavior.
 
 ## Error Review Checklist
 
 When reviewing or creating error messages, ensure:
 
 - [ ] **Sentinel error exists** in `errors/errors.go`
-- [ ] **Hints are actionable** - User knows what to do next
-- [ ] **Context is included** - Relevant details for debugging
-- [ ] **Exit code is appropriate** - 2 for config/usage, 1 for runtime
+- [ ] **Hints are actionable** - User knows what concrete steps to take
+- [ ] **Explanations are educational** - User understands WHY the problem occurred
+- [ ] **No redundancy** - Each method (hint/explanation/context/exitcode) adds NEW info
+- [ ] **Context adds debugging value** - Don't repeat what's in hints, add WHERE and HOW
+- [ ] **Exit code only when non-default** - Omit `WithExitCode(1)`, be explicit for 0 or 2
 - [ ] **Formatting is consistent** - Uses `WithHintf()` not `WithHint(fmt.Sprintf())`
 - [ ] **Error is wrapped properly** - Uses `errors.Join()` or `fmt.Errorf("%w: ...", ...)`
 - [ ] **Checking uses `errors.Is()`** - Not string comparison
@@ -380,6 +453,32 @@ return errUtils.Build(errUtils.ErrComponentNotFound).
     WithContext("path", path).
     Err()
 ```
+
+### ❌ Redundant Information Across Methods
+
+```go
+// WRONG: Repeating same information in multiple places
+return errUtils.Build(errUtils.ErrComponentNotFound).
+    WithHintf("Component '%s' not found in stack '%s'", component, stack).
+    WithExplanation("The component 'vpc' was not found in the stack 'prod/us-east-1'").  // Redundant
+    WithContext("component", component).  // Redundant: already in hint
+    WithContext("stack", stack).          // Redundant: already in hint
+    WithContext("message", "component not found").  // Redundant: that's the sentinel
+    WithExitCode(1).  // Redundant: that's the default
+    Err()
+
+// CORRECT: Each method adds unique information
+return errUtils.Build(errUtils.ErrComponentNotFound).
+    WithHintf("Component '%s' not found in stack '%s'", component, stack).
+    WithExplanation("Components must be defined in the configured components directory and registered in stack configurations.").  // Educational context
+    WithHint("Run 'atmos list components -s %s' to see available components", stack).  // Actionable step
+    WithContext("search_path", searchPath).      // Where we looked (not in hint)
+    WithContext("components_dir", componentsDir). // Configuration details (not in hint)
+    WithExitCode(2).  // Non-default exit code
+    Err()
+```
+
+**Key Principle:** Before adding any method call, ask: "Does this add NEW information that isn't already captured?" If not, don't add it.
 
 ## Testing Error Messages
 
