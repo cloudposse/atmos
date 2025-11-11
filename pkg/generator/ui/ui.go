@@ -134,11 +134,16 @@ func (ui *InitUI) flushOutput() {
 
 // Execute runs the initialization process with UI
 func (ui *InitUI) Execute(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, cmdTemplateValues map[string]interface{}) error {
-	return ui.ExecuteWithDelimiters(embedsConfig, targetPath, force, update, useDefaults, cmdTemplateValues, []string{"{{", "}}"})
+	return ui.ExecuteWithBaseRef(embedsConfig, targetPath, force, update, useDefaults, "", cmdTemplateValues)
+}
+
+// ExecuteWithBaseRef runs the initialization process with UI and specified base ref
+func (ui *InitUI) ExecuteWithBaseRef(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}) error {
+	return ui.ExecuteWithDelimiters(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues, []string{"{{", "}}"})
 }
 
 // ExecuteWithDelimiters runs the initialization process with UI and custom delimiters
-func (ui *InitUI) ExecuteWithDelimiters(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, cmdTemplateValues map[string]interface{}, delimiters []string) error {
+func (ui *InitUI) ExecuteWithDelimiters(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}, delimiters []string) error {
 	// Defensive validation: target directory cannot be empty
 	if targetPath == "" {
 		return fmt.Errorf("internal error: target directory cannot be empty - use ExecuteWithInteractiveFlow for prompting")
@@ -149,11 +154,18 @@ func (ui *InitUI) ExecuteWithDelimiters(embedsConfig tmpl.Configuration, targetP
 		return err
 	}
 
+	// Setup git storage for update mode
+	if update && baseRef != "" {
+		if err := ui.processor.SetupGitStorage(targetPath, baseRef); err != nil {
+			return fmt.Errorf("failed to setup git storage: %w", err)
+		}
+	}
+
 	ui.writeOutput("Generating %s in %s\n\n", embedsConfig.Name, targetPath)
 
 	// Check if this configuration has a scaffold.yaml file (project schema)
 	if tmpl.HasScaffoldConfig(embedsConfig.Files) {
-		return ui.executeWithSetup(embedsConfig, targetPath, force, update, useDefaults, cmdTemplateValues, delimiters)
+		return ui.executeWithSetup(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues, delimiters)
 	}
 
 	// For templates without scaffold.yaml, use command-line values if provided
@@ -171,6 +183,17 @@ func (ui *InitUI) ExecuteWithInteractiveFlow(
 	embedsConfig tmpl.Configuration,
 	targetPath string,
 	force, update, useDefaults bool,
+	cmdTemplateValues map[string]interface{},
+) error {
+	return ui.ExecuteWithInteractiveFlowAndBaseRef(embedsConfig, targetPath, force, update, useDefaults, "", cmdTemplateValues)
+}
+
+// ExecuteWithInteractiveFlowAndBaseRef provides a unified flow with base ref support
+func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRef(
+	embedsConfig tmpl.Configuration,
+	targetPath string,
+	force, update, useDefaults bool,
+	baseRef string,
 	cmdTemplateValues map[string]interface{},
 ) error {
 	// If no target path was provided (interactive mode), prompt for it after setup
@@ -226,7 +249,7 @@ func (ui *InitUI) ExecuteWithInteractiveFlow(
 	}
 
 	// Now execute with the determined target path
-	return ui.Execute(embedsConfig, targetPath, force, update, useDefaults, cmdTemplateValues)
+	return ui.ExecuteWithBaseRef(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues)
 }
 
 // promptForTargetDirectoryWithValues prompts for target directory with evaluated template values
@@ -483,7 +506,7 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 }
 
 // executeWithSetup handles any scaffold configuration with interactive prompts
-func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, cmdTemplateValues map[string]interface{}, delimiters []string) error {
+func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}, delimiters []string) error {
 	// Find the scaffold.yaml file in the configuration
 	var scaffoldConfigFile *tmpl.File
 	for i := range embedsConfig.Files {
@@ -514,8 +537,8 @@ func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath s
 		return fmt.Errorf("failed to run setup form: %w", err)
 	}
 
-	// Save the user values with template ID
-	if err := config.SaveUserConfig(targetPath, embedsConfig.TemplateID, mergedValues); err != nil {
+	// Save the user values with template ID and base ref
+	if err := config.SaveUserConfigWithBaseRef(targetPath, embedsConfig.TemplateID, baseRef, mergedValues); err != nil {
 		return fmt.Errorf("failed to save user values: %w", err)
 	}
 
