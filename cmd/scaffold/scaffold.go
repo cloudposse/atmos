@@ -50,13 +50,15 @@ func validateSetFlag(entry string) error {
 
 // parseSetFlag parses a --set flag entry in the format "key=value".
 // Returns the key and value, or an error if the entry is malformed.
+// Both key and value have leading/trailing whitespace trimmed.
+// This behavior matches flags.parseKeyValuePair for consistency.
 func parseSetFlag(entry string) (key string, value string, err error) {
 	if err := validateSetFlag(entry); err != nil {
 		return "", "", err
 	}
 
 	parts := strings.SplitN(entry, "=", 2)
-	return strings.TrimSpace(parts[0]), parts[1], nil
+	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
 }
 
 // ScaffoldConfig represents a scaffold configuration.
