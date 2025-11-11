@@ -77,20 +77,18 @@ func TestDevcontainerAliases(t *testing.T) {
 	assert.Contains(t, shellCmd.Short, "alias for", "shell should be an alias command")
 }
 
-func TestVersionWorksWithInvalidAliases(t *testing.T) {
-	// This test verifies that 'atmos version' works even when aliases reference
-	// commands that don't exist (e.g., 'shell' alias referencing 'devcontainer'
-	// in older Atmos versions that don't have devcontainer support).
-	//
-	// The fix in cmd/root.go Execute() function skips alias processing when
-	// isVersionCommand() returns true, ensuring version always works.
+func TestVersionCommandSkipsAliasProcessing(t *testing.T) {
+	// This test verifies that version commands are properly detected to skip alias processing.
+	// In cmd/root.go Execute(), isVersionCommand() guards alias processing to ensure
+	// 'atmos version' works even when aliases reference commands that don't exist
+	// (e.g., 'shell' alias referencing 'devcontainer' in older Atmos versions that
+	// don't have devcontainer support).
 	//
 	// Note: We can't directly execute the version command in tests because it
-	// calls os.Exit(0), which would terminate the test. Instead, we verify the
-	// fix is in place by checking that isVersionCommand() is used to guard
-	// alias processing in Execute().
+	// calls os.Exit(0), which would terminate the test. Instead, we verify that
+	// isVersionCommand() correctly identifies version commands that should skip
+	// alias processing.
 
-	// Verify isVersionCommand() correctly identifies version commands.
 	originalArgs := os.Args
 	defer func() { os.Args = originalArgs }()
 
@@ -110,7 +108,7 @@ func TestVersionWorksWithInvalidAliases(t *testing.T) {
 			os.Args = tc.args
 			result := isVersionCommand()
 			assert.Equal(t, tc.expected, result,
-				"isVersionCommand() should return %v for args %v", tc.expected, tc.args)
+				"isVersionCommand() should return %v for args %v to properly skip/process aliases", tc.expected, tc.args)
 		})
 	}
 }

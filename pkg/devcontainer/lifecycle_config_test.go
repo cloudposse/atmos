@@ -158,7 +158,9 @@ func TestPrintSettings(t *testing.T) {
 			_, _ = io.Copy(&buf, r)
 
 			output := buf.String()
-			if tt.expectedContains != "" {
+			if tt.expectedContains == "" {
+				assert.Empty(t, output)
+			} else {
 				assert.Contains(t, output, tt.expectedContains)
 			}
 		})
