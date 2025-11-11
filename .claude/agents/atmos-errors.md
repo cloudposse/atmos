@@ -132,34 +132,66 @@ return builder.Err()
 
 ### When to Use WithExplanation vs WithHint
 
+**CRITICAL DISTINCTION:**
+
+**Hints = WHAT TO DO** (actionable steps)
+- Commands to run
+- Configuration to check
+- Where to look for information
+- How to fix the problem
+
+**Explanations = WHAT HAPPENED** (background information)
+- Why the error occurred
+- What the concepts mean
+- How the system works
+- Why something is not allowed
+
+**Never put "what happened" in hints - that's what explanations are for.**
+
+---
+
 **WithExplanation**: For DETAILED background information and WHY something failed
 - Educational content about concepts or limitations
 - Technical details about what went wrong
 - Background context that explains the situation
 - Used when users need to understand the problem before they can fix it
+- **This is WHAT HAPPENED, not what to do**
 
 **WithHint**: For ACTIONABLE steps users should take
 - Concrete commands to run
 - Specific configuration to check
 - Direct next steps to resolve the issue
 - Used when users need to know what to DO
+- **This is WHAT TO DO, not what happened**
 - **Supports markdown** - Use backticks for commands, files, variables, and technical terms
 
 **Example:**
 ```go
-// ✅ GOOD: Clear separation of explanation and action with markdown formatting
+// ✅ GOOD: Hints are WHAT TO DO, explanation is WHAT HAPPENED
+err := errUtils.Build(errUtils.ErrThemeNotFound).
+    WithHintf("Run `atmos list themes` to see all available themes").  // WHAT TO DO
+    WithHint("Browse themes at https://atmos.tools/cli/commands/theme/browse").  // WHAT TO DO
+    WithExitCode(2).
+    Err()
+
+// ❌ BAD: Putting "what happened" in hints
+err := errUtils.Build(errUtils.ErrThemeNotFound).
+    WithHintf("Theme `%s` not found", themeName).  // WRONG: This is WHAT HAPPENED, not what to do
+    WithHintf("Run `atmos list themes` to see all available themes").  // Correct: WHAT TO DO
+    Err()
+
+// ✅ GOOD: Clear separation of explanation and action
 err := errUtils.Build(errUtils.ErrAbstractComponent).
-    WithExplanation("Abstract components cannot be provisioned directly. They serve as templates for concrete components to inherit from, defining shared configuration and settings.").
-    WithHintf("Component `%s` is marked as `abstract`", component).
-    WithHint("Use a concrete component that inherits from this abstract component").
-    WithHint("Remove `metadata.type: abstract` to make this component concrete").
+    WithExplanation("Abstract components cannot be provisioned directly. They serve as templates for concrete components to inherit from, defining shared configuration and settings.").  // WHAT HAPPENED (why it failed)
+    WithHint("Use a concrete component that inherits from this abstract component").  // WHAT TO DO
+    WithHint("Remove `metadata.type: abstract` to make this component concrete").  // WHAT TO DO
     WithContext("component", component).
     Err()
 
 // ❌ BAD: Mixing explanation and action in hints
 err := errUtils.Build(errUtils.ErrAbstractComponent).
-    WithHintf("Component `%s` is `abstract` and abstract components are templates that can't be provisioned", component).
-    WithHint("Abstract components define shared configuration for inheritance").
+    WithHintf("Component `%s` is `abstract` and abstract components are templates that can't be provisioned", component).  // Mixing WHAT HAPPENED with explanation
+    WithHint("Abstract components define shared configuration for inheritance").  // This is explanation, not action
     Err()
 ```
 
@@ -427,6 +459,28 @@ return errUtils.ErrComponentNotFound
 // CORRECT: Add actionable hints
 return errUtils.Build(errUtils.ErrComponentNotFound).
     WithHintf("Run `atmos list components` to see available components").
+    Err()
+```
+
+### ❌ Putting "What Happened" in Hints
+
+```go
+// WRONG: Hints should be WHAT TO DO, not WHAT HAPPENED
+return errUtils.Build(errUtils.ErrThemeNotFound).
+    WithHintf("Theme `%s` not found", themeName).  // This is what happened (explanation)
+    WithHintf("Run `atmos list themes` to see available themes").  // This is what to do (correct)
+    Err()
+
+// CORRECT: Only actionable steps in hints
+return errUtils.Build(errUtils.ErrThemeNotFound).
+    WithHintf("Run `atmos list themes` to see available themes").  // What to do
+    WithHint("Browse themes at https://atmos.tools/cli/commands/theme/browse").  // What to do
+    Err()
+
+// CORRECT: Use explanation for "what happened" if needed
+return errUtils.Build(errUtils.ErrThemeNotFound).
+    WithExplanation("The requested theme is not available in the theme registry.").  // What happened
+    WithHintf("Run `atmos list themes` to see available themes").  // What to do
     Err()
 ```
 
