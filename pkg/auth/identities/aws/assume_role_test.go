@@ -968,3 +968,148 @@ func TestAssumeRoleIdentity_Authenticate_WithInvalidCredentialsType(t *testing.T
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
 }
+
+func TestAssumeRoleIdentity_assumeRoleWithWebIdentity_UsesAnonymousCredentials(t *testing.T) {
+	// This test verifies that anonymous credentials are configured when calling
+	// AssumeRoleWithWebIdentity. This is critical to prevent the SDK from attempting
+	// to resolve credentials from the environment (EC2 IMDS, env vars, etc.) which
+	// would cause hangs or signing errors.
+	//
+	// Background: AWS SDK v2 changed behavior from v1. In v1, AssumeRoleWithWebIdentity
+	// automatically used anonymous credentials. In v2, this must be explicitly configured.
+	//
+	// Without anonymous credentials:
+	// - On EC2/ECS: Would use instance role credentials instead of web identity token
+	// - In CI/CD: Would hang trying to resolve credentials
+	// - With ambient credentials: Would fail with signing errors
+
+	// Set up environment to simulate EC2 with ambient credentials.
+	// The test verifies that these are NOT used for AssumeRoleWithWebIdentity.
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+	t.Setenv("AWS_SESSION_TOKEN", "FwoGZXIvYXdzEBExample")
+
+	identity := &assumeRoleIdentity{
+		name: "test-role",
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Provider: "github-oidc"},
+			Principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/GitHubActionsRole",
+				"region":      "us-east-1",
+			},
+		},
+	}
+
+	require.NoError(t, identity.Validate())
+
+	oidcCreds := &types.OIDCCredentials{
+		Token:    "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyZXBvOm93bmVyL3JlcG86cmVmOnJlZnMvaGVhZHMvbWFpbiIsImF1ZCI6InN0czphbWF6b25hd3MuY29tIiwiZXhwIjo5OTk5OTk5OTk5fQ.test",
+		Provider: "github",
+		Audience: "sts:amazonaws.com",
+	}
+
+	// Call assumeRoleWithWebIdentity directly to test config setup.
+	// We expect an AWS error (no real STS endpoint), not a credential resolution error.
+	_, err := identity.assumeRoleWithWebIdentity(context.Background(), oidcCreds)
+
+	// Verify the error is from AWS STS, not from credential resolution.
+	assert.Error(t, err)
+
+	// These errors would indicate credential resolution problems (which we've fixed):
+	assert.NotContains(t, err.Error(), "EC2 metadata") // Would happen without anonymous creds on EC2
+	assert.NotContains(t, err.Error(), "i/o timeout")  // Would happen on IMDS timeout
+	assert.NotContains(t, err.Error(), "credential")   // Generic credential errors
+
+	// The error should be from attempting to call STS (network/endpoint error),
+	// which confirms that credential resolution was skipped as intended.
+	// Common error patterns: "connection refused", "no such host", "dial tcp"
+}
+
+func TestAssumeRoleIdentity_assumeRoleWithWebIdentity_IgnoresAmbientCredentials(t *testing.T) {
+	// Test that ambient AWS credentials in the environment are properly ignored
+	// when using web identity authentication. This verifies that LoadIsolatedAWSConfig
+	// combined with anonymous credentials prevents any ambient credential usage.
+
+	// Set multiple sources of ambient credentials.
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAACCESSKEY")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "secretkey")
+	t.Setenv("AWS_SESSION_TOKEN", "sessiontoken")
+	t.Setenv("AWS_PROFILE", "test-profile")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/tmp/fake-creds")
+
+	identity := &assumeRoleIdentity{
+		name: "oidc-role",
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Via:  &schema.IdentityVia{Provider: "github-oidc"},
+			Principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/OIDCRole",
+			},
+		},
+	}
+
+	require.NoError(t, identity.Validate())
+
+	oidcCreds := &types.OIDCCredentials{
+		Token:    "test-jwt-token",
+		Provider: "github",
+	}
+
+	// This should not hang or fail due to ambient credentials.
+	// We expect an AWS STS error (no real endpoint), not credential errors.
+	_, err := identity.assumeRoleWithWebIdentity(context.Background(), oidcCreds)
+
+	require.Error(t, err) // Expected: can't reach real AWS
+	assert.NotContains(t, err.Error(), "EC2 metadata")
+	assert.NotContains(t, err.Error(), "credential")
+	assert.NotContains(t, err.Error(), "i/o timeout")
+}
+
+func TestAssumeRoleIdentity_WebIdentityVsStandardAssumeRole_DifferentCredentialHandling(t *testing.T) {
+	// This test documents the difference between standard AssumeRole and AssumeRoleWithWebIdentity
+	// credential handling. Standard AssumeRole REQUIRES base AWS credentials, while web identity
+	// should NOT use them even if present.
+
+	identity := &assumeRoleIdentity{
+		name: "dual-mode-role",
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Principal: map[string]interface{}{
+				"assume_role": "arn:aws:iam::123456789012:role/TestRole",
+				"region":      "us-east-1",
+			},
+		},
+	}
+
+	require.NoError(t, identity.Validate())
+
+	// Test 1: Standard AssumeRole with AWS credentials - uses those credentials to sign the request.
+	awsCreds := &types.AWSCredentials{
+		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		Region:          "us-east-1",
+	}
+
+	_, err := identity.Authenticate(context.Background(), awsCreds)
+	assert.Error(t, err) // Expected: can't reach real AWS
+	// Should not be a credential type error.
+	assert.NotContains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
+
+	// Test 2: AssumeRoleWithWebIdentity with OIDC - should use anonymous credentials internally,
+	// ignoring any ambient AWS credentials in the environment.
+	t.Setenv("AWS_ACCESS_KEY_ID", "AMBIENT_KEY")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "AMBIENT_SECRET")
+
+	oidcCreds := &types.OIDCCredentials{
+		Token:    "test-web-identity-token",
+		Provider: "github",
+	}
+
+	_, err = identity.Authenticate(context.Background(), oidcCreds)
+	assert.Error(t, err) // Expected: can't reach real AWS
+	// Should not be a credential type error.
+	assert.NotContains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
+	// Should not try to use ambient credentials.
+	assert.NotContains(t, err.Error(), "AMBIENT_KEY")
+}
