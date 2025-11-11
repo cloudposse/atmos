@@ -155,10 +155,13 @@
       "logging": false
     },
     "ai": {
-      "sessions": {},
+      "sessions": {
+        "auto_compact": {}
+      },
       "tools": {},
       "memory": {},
-      "web_search": {}
+      "web_search": {},
+      "context": {}
     },
     "lsp": {}
   },

@@ -7,7 +7,9 @@
 
 ## Explanation
 
-The workflow manifest stacks/workflows/test-invalid.yaml must be a map with the
-top-level workflows: key.
+The workflow manifest
+/absolute/path/to/external/src/github.
+com/cloudposse/atmos/tests/fixtures/scenarios/workflows/stacks/workflows/test-
+invalid.yaml must be a map with the top-level workflows: key.
 
 

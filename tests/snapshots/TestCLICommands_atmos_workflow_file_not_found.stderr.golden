@@ -7,6 +7,10 @@
 
 ## Explanation
 
-The workflow manifest file stacks/workflows/dne.yaml does not exist.
+The workflow manifest file
+/absolute/path/to/external/src/github.
+com/cloudposse/atmos/tests/fixtures/scenarios/workflows/stacks/workflows/dne.
+yaml
+does not exist.
 
 

@@ -26,6 +26,8 @@ The following command failed to execute:
 
 To resume the workflow from this step, run:
 
- atmos workflow fail -f test --from-step step1
+ atmos workflow fail -f Users/andriyknysh/Documents/Projects/Go/src/github.
+com/cloudposse/atmos/tests/fixtures/scenarios/workflows/stacks/workflows/test --
+from-step step1
 
 
