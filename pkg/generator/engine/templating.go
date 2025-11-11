@@ -9,10 +9,12 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/go-git/go-git/v5"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
 
 	"github.com/cloudposse/atmos/pkg/generator/merge"
+	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
@@ -43,7 +45,9 @@ func (e *FileSkippedError) Error() string {
 // It provides template rendering with Gomplate and Sprig functions,
 // file path templating, and intelligent file merging capabilities.
 type Processor struct {
-	merger *merge.ThreeWayMerger
+	merger      *merge.ThreeWayMerger
+	gitStorage  *storage.GitBaseStorage
+	targetPath  string // Target directory for file generation
 }
 
 // NewProcessor creates a new template processor with default settings.
@@ -61,6 +65,37 @@ func NewProcessor() *Processor {
 // allows more extensive changes during merges.
 func (p *Processor) SetMaxChanges(thresholdPercent int) {
 	p.merger = merge.NewThreeWayMerger(thresholdPercent)
+}
+
+// SetupGitStorage initializes git-based storage for 3-way merges.
+// The targetPath is used to find the git repository and resolve relative file paths.
+// The baseRef specifies which git reference to use as the base for merges (e.g., "main", "v1.0.0").
+//
+// Returns an error if:
+//   - targetPath is not in a git repository
+//   - baseRef cannot be resolved
+func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
+	p.targetPath = targetPath
+
+	// Open git repository at target path
+	repo, err := git.PlainOpenWithOptions(targetPath, &git.PlainOpenOptions{
+		DetectDotGit:          true,
+		EnableDotGitCommonDir: true,
+	})
+	if err != nil {
+		// Not in a git repo - this is OK, just means we can't use git-based merging
+		return nil
+	}
+
+	// Create git storage with base ref
+	p.gitStorage = storage.NewGitBaseStorage(repo, baseRef)
+
+	// Validate that base ref exists
+	if err := p.gitStorage.ValidateBaseRef(); err != nil {
+		return fmt.Errorf("invalid base ref: %w", err)
+	}
+
+	return nil
 }
 
 // ProcessTemplate processes Go templates in file content
@@ -118,9 +153,14 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 	return result.String(), nil
 }
 
-// Merge performs a 3-way merge using the internal merger
-func (p *Processor) Merge(existingContent, newContent, fileName string) (string, error) {
-	return p.merger.Merge(existingContent, newContent, fileName)
+// Merge performs a 3-way merge using the internal merger.
+// Parameters:
+//   - base: The original template content (before any processing)
+//   - ours: The user's current version (what exists on disk)
+//   - theirs: The new template content (after processing)
+//   - fileName: The file name for merge strategy detection
+func (p *Processor) Merge(base, ours, theirs, fileName string) (*merge.MergeResult, error) {
+	return p.merger.Merge(base, ours, theirs, fileName)
 }
 
 // ProcessFile processes a file with templating support, handling path rendering,
@@ -296,15 +336,41 @@ func (p *Processor) processFileContent(file File, targetPath string, scaffoldCon
 	return processedContent, nil
 }
 
-// mergeFile attempts a 3-way merge for existing files
+// mergeFile attempts a 3-way merge for existing files.
 func (p *Processor) mergeFile(existingPath string, file File, targetPath string) error {
-	// Read existing file content
+	// Read existing file content (user's version - "ours")
 	existingContent, err := os.ReadFile(existingPath)
 	if err != nil {
 		return fmt.Errorf("failed to read existing file: %w", err)
 	}
 
-	// Process new content with default delimiters
+	// Determine base content for 3-way merge
+	var baseContent string
+	if p.gitStorage != nil {
+		// Try to load base content from git
+		relativePath, err := filepath.Rel(p.targetPath, existingPath)
+		if err != nil {
+			relativePath = file.Path // Fallback to template path
+		}
+
+		gitBase, found, err := p.gitStorage.LoadBase(relativePath)
+		if err != nil {
+			// Git error - fall back to template content as base
+			baseContent = file.Content
+		} else if found {
+			// Use git version as base
+			baseContent = gitBase
+		} else {
+			// File doesn't exist in base ref
+			// This is a user-added file - skip merge, don't touch it
+			return nil
+		}
+	} else {
+		// No git storage - use template content as base (legacy behavior)
+		baseContent = file.Content
+	}
+
+	// Process new template content to get "theirs" version
 	newContent := file.Content
 	if file.IsTemplate {
 		processedContent, err := p.ProcessTemplateWithDelimiters(newContent, targetPath, nil, nil, []string{"{{", "}}"})
@@ -314,14 +380,22 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 		newContent = processedContent
 	}
 
-	// Perform 3-way merge using the merge package
-	mergedContent, err := p.merger.Merge(string(existingContent), newContent, file.Path)
+	// Perform 3-way merge
+	// - base: original version from git (or template if no git)
+	// - ours: user's current version (existingContent)
+	// - theirs: new template version (newContent after processing)
+	result, err := p.merger.Merge(baseContent, string(existingContent), newContent, file.Path)
 	if err != nil {
 		return fmt.Errorf("failed to perform 3-way merge: %w", err)
 	}
 
+	// Check for conflicts
+	if result.HasConflicts {
+		return fmt.Errorf("merge has %d conflicts in file %s - manual resolution required", result.ConflictCount, file.Path)
+	}
+
 	// Write merged content
-	if err := os.WriteFile(existingPath, []byte(mergedContent), file.Permissions); err != nil {
+	if err := os.WriteFile(existingPath, []byte(result.Content), file.Permissions); err != nil {
 		return fmt.Errorf("failed to write merged file: %w", err)
 	}
 

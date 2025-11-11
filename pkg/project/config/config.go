@@ -135,6 +135,11 @@ func SaveUserValues(scaffoldPath string, values map[string]interface{}) error {
 
 // SaveUserConfig saves user configuration with template ID and values
 func SaveUserConfig(scaffoldPath string, templateID string, values map[string]interface{}) error {
+	return SaveUserConfigWithBaseRef(scaffoldPath, templateID, "", values)
+}
+
+// SaveUserConfigWithBaseRef saves user configuration with template ID, base ref, and values
+func SaveUserConfigWithBaseRef(scaffoldPath string, templateID string, baseRef string, values map[string]interface{}) error {
 	// Create .atmos directory path
 	atmosDir := filepath.Join(scaffoldPath, ScaffoldConfigDir)
 	valuesPath := filepath.Join(atmosDir, ScaffoldConfigFileName)
@@ -151,6 +156,9 @@ func SaveUserConfig(scaffoldPath string, templateID string, values map[string]in
 
 	// Set the values in Viper
 	v.Set("template_id", templateID)
+	if baseRef != "" {
+		v.Set("base_ref", baseRef)
+	}
 	v.Set("values", values)
 
 	// Write the config file
@@ -159,6 +167,31 @@ func SaveUserConfig(scaffoldPath string, templateID string, values map[string]in
 	}
 
 	return nil
+}
+
+// LoadUserConfig loads user configuration from .atmos/scaffold.yaml
+func LoadUserConfig(scaffoldPath string) (*UserConfig, error) {
+	atmosDir := filepath.Join(scaffoldPath, ScaffoldConfigDir)
+	valuesPath := filepath.Join(atmosDir, ScaffoldConfigFileName)
+
+	// Check if file exists
+	if _, err := os.Stat(valuesPath); os.IsNotExist(err) {
+		return nil, nil // No config file yet - this is OK
+	}
+
+	// Read the file
+	data, err := os.ReadFile(valuesPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read user config: %w", err)
+	}
+
+	// Parse YAML
+	var config UserConfig
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse user config: %w", err)
+	}
+
+	return &config, nil
 }
 
 // DeepMerge merges scaffold configuration defaults with user values
@@ -548,5 +581,6 @@ func HasUserConfig(scaffoldPath string) bool {
 // UserConfig represents the user's configuration with template metadata and values
 type UserConfig struct {
 	TemplateID string                 `yaml:"template_id"`
+	BaseRef    string                 `yaml:"base_ref,omitempty"`
 	Values     map[string]interface{} `yaml:"values"`
 }
