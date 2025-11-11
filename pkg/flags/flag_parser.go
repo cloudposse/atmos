@@ -209,6 +209,8 @@ func (pc *ParsedConfig) GetArgsForTool() []string {
 //   - normalized: The normalized flag (e.g., "--identity=value")
 //   - wasNormalized: True if normalization occurred, false otherwise
 func NormalizeShorthandWithEquals(cmd *cobra.Command, arg string) (normalized string, wasNormalized bool) {
+	defer perf.Track(nil, "flags.NormalizeShorthandWithEquals")()
+
 	// Only process single-dash flags with = syntax.
 	if !strings.HasPrefix(arg, "-") || strings.HasPrefix(arg, "--") {
 		return arg, false

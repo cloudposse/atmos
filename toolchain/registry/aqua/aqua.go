@@ -61,6 +61,8 @@ type RegistryOption func(*AquaRegistry)
 
 // WithGitHubBaseURL sets the GitHub API base URL (primarily for testing).
 func WithGitHubBaseURL(url string) RegistryOption {
+	defer perf.Track(nil, "aqua.WithGitHubBaseURL")()
+
 	return func(ar *AquaRegistry) {
 		ar.githubBaseURL = url
 	}
