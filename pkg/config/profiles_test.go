@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -218,11 +219,12 @@ settings:
 	require.NoError(t, os.WriteFile(filepath.Join(profileDir, "settings.yaml"), []byte(settingsYAML), 0o644))
 
 	tests := []struct {
-		name           string
-		profileDir     string
-		profileName    string
-		expectError    bool
-		expectedErrMsg string
+		name                string
+		profileDir          string
+		profileName         string
+		expectError         bool
+		expectedErrMsg      string
+		expectedErrSentinel error
 	}{
 		{
 			name:        "successful profile loading",
@@ -238,11 +240,12 @@ settings:
 			expectedErrMsg: "does not exist",
 		},
 		{
-			name:           "profile path is not a directory",
-			profileDir:     filepath.Join(profileDir, "auth.yaml"), // Point to file instead of directory
-			profileName:    "invalid",
-			expectError:    true,
-			expectedErrMsg: "not a directory",
+			name:        "profile path is not a directory",
+			profileDir:  filepath.Join(profileDir, "auth.yaml"), // Point to file instead of directory
+			profileName: "invalid",
+			expectError: true,
+			// Use error sentinel check instead of string matching.
+			expectedErrSentinel: errUtils.ErrProfileDirNotExist,
 		},
 	}
 
@@ -255,7 +258,11 @@ settings:
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedErrMsg)
+				if tt.expectedErrSentinel != nil {
+					assert.ErrorIs(t, err, tt.expectedErrSentinel)
+				} else if tt.expectedErrMsg != "" {
+					assert.Contains(t, err.Error(), tt.expectedErrMsg)
+				}
 			} else {
 				require.NoError(t, err)
 
