@@ -924,7 +924,7 @@ func (i *Installer) getBinaryPath(owner, repo, version, binaryName string) strin
 			}
 			entryPath := filepath.Join(versionDir, entry.Name())
 			info, err := os.Stat(entryPath)
-			if err == nil && info.Mode()&0111 != 0 {
+			if err == nil && info.Mode()&0o111 != 0 {
 				// Found an executable.
 				return entryPath
 			}

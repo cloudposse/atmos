@@ -246,15 +246,15 @@ type ChecksumConfig struct {
 
 // VersionOverride represents version-specific overrides for Aqua packages.
 type VersionOverride struct {
-	VersionConstraint     string         `yaml:"version_constraint"`
-	Asset                 string         `yaml:"asset"`
-	Format                string         `yaml:"format"`
-	Rosetta2              bool           `yaml:"rosetta2"`
-	WindowsArmEmulation   bool           `yaml:"windows_arm_emulation"`
-	SupportedEnvs         []string       `yaml:"supported_envs"`
-	Checksum              ChecksumConfig `yaml:"checksum"`
-	Files                 []File         `yaml:"files"`
-	Replacements          map[string]string `yaml:"replacements"`
+	VersionConstraint   string            `yaml:"version_constraint"`
+	Asset               string            `yaml:"asset"`
+	Format              string            `yaml:"format"`
+	Rosetta2            bool              `yaml:"rosetta2"`
+	WindowsArmEmulation bool              `yaml:"windows_arm_emulation"`
+	SupportedEnvs       []string          `yaml:"supported_envs"`
+	Checksum            ChecksumConfig    `yaml:"checksum"`
+	Files               []File            `yaml:"files"`
+	Replacements        map[string]string `yaml:"replacements"`
 }
 
 // AquaRegistryFile represents the structure of an Aqua registry YAML file (uses 'packages' key).

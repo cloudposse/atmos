@@ -121,7 +121,7 @@ func TestGetEvaluatedToolYAML(t *testing.T) {
 }
 
 func TestFormatToolInfoAsTable(t *testing.T) {
-// 	t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
+	// t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
 }
 
 func TestInfoCommand_CompleteToolConfiguration(t *testing.T) {
@@ -189,7 +189,7 @@ func TestInfoCommand_YAMLOutputFormat(t *testing.T) {
 }
 
 func TestInfoCommand_TableOutputFormat(t *testing.T) {
-// 	t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
+	// t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
 }
 
 func TestInfoCommand_NonExistentTool(t *testing.T) {
@@ -219,7 +219,7 @@ func TestInfoCommand_InvalidOutputFormat(t *testing.T) {
 }
 
 func TestInfoCommand_LocalConfigTools(t *testing.T) {
-// 	t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
+	// 	t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
 	// Test info command with tools from local config (tools.yaml)
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 	installer := NewInstaller()
@@ -285,17 +285,17 @@ func TestInfoCommand_LocalConfigTools(t *testing.T) {
 			assert.Contains(t, yamlData, "repo_name: "+tc.expectedRepo)
 
 			// Test table output
-// 			table := formatToolInfoAsTable(toolContext{Name: tc.toolName, Owner: owner, Repo: repo, Tool: tool, Version: "1.0.0", Installer: installer})
-// 			assert.Contains(t, table, "Tool")
-// 			assert.Contains(t, table, tc.toolName)
-// 			assert.Contains(t, table, "Type")
-// 			assert.Contains(t, table, tc.expectedType)
+			// 			table := formatToolInfoAsTable(toolContext{Name: tc.toolName, Owner: owner, Repo: repo, Tool: tool, Version: "1.0.0", Installer: installer})
+			// 			assert.Contains(t, table, "Tool")
+			// 			assert.Contains(t, table, tc.toolName)
+			// 			assert.Contains(t, table, "Type")
+			// 			assert.Contains(t, table, tc.expectedType)
 		})
 	}
 }
 
 func TestInfoCommand_AquaRegistryTools(t *testing.T) {
-// 	t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
+	// 	t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
 	// Test info command with tools from Aqua registry (not in local config)
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 	installer := NewInstaller()
@@ -345,16 +345,16 @@ func TestInfoCommand_AquaRegistryTools(t *testing.T) {
 				assert.Contains(t, yamlData, "repo_name: "+tc.expectedRepo)
 
 				// Test table output
-// 				table := formatToolInfoAsTable(toolContext{Name: tc.toolName, Owner: owner, Repo: repo, Tool: tool, Version: "latest", Installer: installer})
-// 				assert.Contains(t, table, "Tool")
-// 				assert.Contains(t, table, tc.toolName)
+				// 				table := formatToolInfoAsTable(toolContext{Name: tc.toolName, Owner: owner, Repo: repo, Tool: tool, Version: "latest", Installer: installer})
+				// 				assert.Contains(t, table, "Tool")
+				// 				assert.Contains(t, table, tc.toolName)
 			}
 		})
 	}
 }
 
 func TestInfoCommand_VersionConstraints(t *testing.T) {
-// 	t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
+	// 	t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
 	// Test info command with tools that have version constraints
 	installer := NewInstaller()
 
@@ -377,13 +377,13 @@ func TestInfoCommand_VersionConstraints(t *testing.T) {
 	assert.Contains(t, yamlData, "type: github_release")
 
 	// Test table output with version constraints
-// 	table := formatToolInfoAsTable(toolContext{Name: "opentofu", Owner: owner, Repo: repo, Tool: tool, Version: "1.10.0", Installer: installer})
-// 	assert.Contains(t, table, "Version")
-// 	assert.Contains(t, table, "1.10.0")
+	// 	table := formatToolInfoAsTable(toolContext{Name: "opentofu", Owner: owner, Repo: repo, Tool: tool, Version: "1.10.0", Installer: installer})
+	// 	assert.Contains(t, table, "Version")
+	// 	assert.Contains(t, table, "1.10.0")
 }
 
 func TestInfoCommand_DifferentToolTypes(t *testing.T) {
-// 	t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
+	// 	t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
 	// Test info command with different tool types
 	installer := NewInstaller()
 
@@ -422,52 +422,52 @@ func TestInfoCommand_DifferentToolTypes(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Contains(t, yamlData, "type: "+tc.expectedType)
 
-// 			table := formatToolInfoAsTable(toolContext{Name: tc.toolName, Owner: owner, Repo: repo, Tool: tool, Version: "1.0.0", Installer: installer})
-// 			assert.Contains(t, table, "Type")
-// 			assert.Contains(t, table, tc.expectedType)
+			// 			table := formatToolInfoAsTable(toolContext{Name: tc.toolName, Owner: owner, Repo: repo, Tool: tool, Version: "1.0.0", Installer: installer})
+			// 			assert.Contains(t, table, "Type")
+			// 			assert.Contains(t, table, tc.expectedType)
 		})
 	}
 }
 
 func TestInfoCommand_EdgeCases(t *testing.T) {
-// 	t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
+	// 	t.Skip("TODO: Update test for new table-based UI rendering (formatToolInfoAsTable function was removed)")
 	// Test edge cases for info command
 	installer := NewInstaller()
 
 	t.Run("tool with files", func(t *testing.T) {
 		// Test tool with files configuration
-// 		tool := &registry.Tool{
-// 			Type:      "github_release",
-// 			RepoOwner: "test",
-// 			RepoName:  "tool-with-files",
-// 			Files: []registry.File{
-// 				{Name: "binary", Src: "tool"},
-// 				{Name: "config", Src: "config.yaml"},
-// 			},
-// 		}
+		// 		tool := &registry.Tool{
+		// 			Type:      "github_release",
+		// 			RepoOwner: "test",
+		// 			RepoName:  "tool-with-files",
+		// 			Files: []registry.File{
+		// 				{Name: "binary", Src: "tool"},
+		// 				{Name: "config", Src: "config.yaml"},
+		// 			},
+		// 		}
 
-// 		table := formatToolInfoAsTable(toolContext{Name: "test-tool", Owner: "test", Repo: "tool-with-files", Tool: tool, Version: "1.0.0", Installer: installer})
-// 		assert.Contains(t, table, "File")
-// 		assert.Contains(t, table, "tool -> binary")
-// 		assert.Contains(t, table, "config.yaml -> config")
+		// 		table := formatToolInfoAsTable(toolContext{Name: "test-tool", Owner: "test", Repo: "tool-with-files", Tool: tool, Version: "1.0.0", Installer: installer})
+		// 		assert.Contains(t, table, "File")
+		// 		assert.Contains(t, table, "tool -> binary")
+		// 		assert.Contains(t, table, "config.yaml -> config")
 	})
 
 	t.Run("tool with overrides", func(t *testing.T) {
 		// Test tool with platform overrides
-// 		tool := &registry.Tool{
-// 			Type:      "github_release",
-// 			RepoOwner: "test",
-// 			RepoName:  "tool-with-overrides",
-// 			Overrides: []registry.Override{
-// 				{GOOS: "darwin", GOARCH: "arm64", Asset: "tool-darwin-arm64"},
-// 				{GOOS: "linux", GOARCH: "amd64", Asset: "tool-linux-amd64"},
-// 			},
-// 		}
+		// 		tool := &registry.Tool{
+		// 			Type:      "github_release",
+		// 			RepoOwner: "test",
+		// 			RepoName:  "tool-with-overrides",
+		// 			Overrides: []registry.Override{
+		// 				{GOOS: "darwin", GOARCH: "arm64", Asset: "tool-darwin-arm64"},
+		// 				{GOOS: "linux", GOARCH: "amd64", Asset: "tool-linux-amd64"},
+		// 			},
+		// 		}
 
-// 		table := formatToolInfoAsTable(toolContext{Name: "test-tool", Owner: "test", Repo: "tool-with-overrides", Tool: tool, Version: "1.0.0", Installer: installer})
-// 		assert.Contains(t, table, "Override")
-// 		assert.Contains(t, table, "darwin/arm64")
-// 		assert.Contains(t, table, "linux/amd64")
+		// 		table := formatToolInfoAsTable(toolContext{Name: "test-tool", Owner: "test", Repo: "tool-with-overrides", Tool: tool, Version: "1.0.0", Installer: installer})
+		// 		assert.Contains(t, table, "Override")
+		// 		assert.Contains(t, table, "darwin/arm64")
+		// 		assert.Contains(t, table, "linux/amd64")
 	})
 
 	t.Run("tool with empty fields", func(t *testing.T) {
@@ -484,11 +484,11 @@ func TestInfoCommand_EdgeCases(t *testing.T) {
 		assert.Contains(t, yamlData, "repo_owner: test")
 		assert.Contains(t, yamlData, "repo_name: minimal-tool")
 
-// 		table := formatToolInfoAsTable(toolContext{Name: "minimal-tool", Owner: "test", Repo: "minimal-tool", Tool: tool, Version: "1.0.0", Installer: installer})
-// 		assert.Contains(t, table, "Tool")
-// 		assert.Contains(t, table, "minimal-tool")
-// 		assert.Contains(t, table, "Type")
-// 		assert.Contains(t, table, "http")
+		// 		table := formatToolInfoAsTable(toolContext{Name: "minimal-tool", Owner: "test", Repo: "minimal-tool", Tool: tool, Version: "1.0.0", Installer: installer})
+		// 		assert.Contains(t, table, "Tool")
+		// 		assert.Contains(t, table, "minimal-tool")
+		// 		assert.Contains(t, table, "Type")
+		// 		assert.Contains(t, table, "http")
 	})
 }
 

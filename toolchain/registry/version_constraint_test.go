@@ -10,12 +10,12 @@ import (
 // Test the version override application logic.
 func TestApplyVersionOverride(t *testing.T) {
 	tests := []struct {
-		name             string
-		tool             *Tool
-		version          string
-		expectedAsset    string
-		expectedFormat   string
-		expectOverride   bool
+		name           string
+		tool           *Tool
+		version        string
+		expectedAsset  string
+		expectedFormat string
+		expectOverride bool
 	}{
 		{
 			name: "simple true constraint matches",
@@ -30,10 +30,10 @@ func TestApplyVersionOverride(t *testing.T) {
 					},
 				},
 			},
-			version:          "1.2.3",
-			expectedAsset:    "override-asset",
-			expectedFormat:   "zip",
-			expectOverride:   true,
+			version:        "1.2.3",
+			expectedAsset:  "override-asset",
+			expectedFormat: "zip",
+			expectOverride: true,
 		},
 		{
 			name: "exact version match",
@@ -48,10 +48,10 @@ func TestApplyVersionOverride(t *testing.T) {
 					},
 				},
 			},
-			version:          "v1.2.3",
-			expectedAsset:    "exact-match-asset",
-			expectedFormat:   "raw",
-			expectOverride:   true,
+			version:        "v1.2.3",
+			expectedAsset:  "exact-match-asset",
+			expectedFormat: "raw",
+			expectOverride: true,
 		},
 		{
 			name: "exact version no match keeps defaults",
@@ -66,10 +66,10 @@ func TestApplyVersionOverride(t *testing.T) {
 					},
 				},
 			},
-			version:          "v1.2.4",
-			expectedAsset:    "default-asset",
-			expectedFormat:   "tar.gz",
-			expectOverride:   false,
+			version:        "v1.2.4",
+			expectedAsset:  "default-asset",
+			expectedFormat: "tar.gz",
+			expectOverride: false,
 		},
 		{
 			name: "semver constraint matches",
@@ -84,10 +84,10 @@ func TestApplyVersionOverride(t *testing.T) {
 					},
 				},
 			},
-			version:          "1.5.0",
-			expectedAsset:    "new-format-asset",
-			expectedFormat:   "zip",
-			expectOverride:   true,
+			version:        "1.5.0",
+			expectedAsset:  "new-format-asset",
+			expectedFormat: "zip",
+			expectOverride: true,
 		},
 		{
 			name: "first matching override wins",
@@ -107,10 +107,10 @@ func TestApplyVersionOverride(t *testing.T) {
 					},
 				},
 			},
-			version:          "1.2.0",
-			expectedAsset:    "old-format",
-			expectedFormat:   "zip",
-			expectOverride:   true,
+			version:        "1.2.0",
+			expectedAsset:  "old-format",
+			expectedFormat: "zip",
+			expectOverride: true,
 		},
 		{
 			name: "catch-all after specific constraint",
@@ -130,10 +130,10 @@ func TestApplyVersionOverride(t *testing.T) {
 					},
 				},
 			},
-			version:          "2.0.0",
-			expectedAsset:    "catch-all",
-			expectedFormat:   "tar.gz",
-			expectOverride:   true,
+			version:        "2.0.0",
+			expectedAsset:  "catch-all",
+			expectedFormat: "tar.gz",
+			expectOverride: true,
 		},
 		{
 			name: "partial override only changes asset",
@@ -148,10 +148,10 @@ func TestApplyVersionOverride(t *testing.T) {
 					},
 				},
 			},
-			version:          "1.2.3",
-			expectedAsset:    "override-asset",
-			expectedFormat:   "tar.gz", // Should keep original
-			expectOverride:   true,
+			version:        "1.2.3",
+			expectedAsset:  "override-asset",
+			expectedFormat: "tar.gz", // Should keep original
+			expectOverride: true,
 		},
 		{
 			name: "no overrides uses defaults",
@@ -160,10 +160,10 @@ func TestApplyVersionOverride(t *testing.T) {
 				Format:           "tar.gz",
 				VersionOverrides: []VersionOverride{},
 			},
-			version:          "1.2.3",
-			expectedAsset:    "default-asset",
-			expectedFormat:   "tar.gz",
-			expectOverride:   false,
+			version:        "1.2.3",
+			expectedAsset:  "default-asset",
+			expectedFormat: "tar.gz",
+			expectOverride: false,
 		},
 	}
 

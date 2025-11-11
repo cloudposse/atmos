@@ -319,8 +319,8 @@ func displayVersionsWithMetadata(versions []versionItem, installedVersions []str
 	}
 
 	// Styling to match atmos version list exactly.
-	installedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))      // Green for installed.
-	configuredStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))      // Gray for configured.
+	installedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Green for installed.
+	configuredStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray for configured.
 	emptyIndicator := " "
 	const tableBorderPadding = 8 // Account for column padding.
 
