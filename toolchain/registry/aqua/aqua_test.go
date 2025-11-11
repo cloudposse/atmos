@@ -404,7 +404,7 @@ func TestAquaRegistry_BuildAssetURL_InvalidTemplate(t *testing.T) {
 	// The template engine might not fail on missing fields, so we'll just check the result
 	// If it doesn't fail, the URL should contain the literal text
 	if err != nil {
-		assert.Contains(t, err.Error(), "failed to execute asset template")
+		assert.ErrorIs(t, err, registry.ErrNoAssetTemplate)
 	} else {
 		assert.Contains(t, url, "<no value>")
 	}
@@ -453,7 +453,7 @@ func TestAquaRegistry_GetLatestVersion_NoReleases(t *testing.T) {
 	version, err := ar.GetLatestVersion("test", "tool")
 	assert.Error(t, err)
 	assert.Empty(t, version)
-	assert.True(t, strings.Contains(err.Error(), "no non-prerelease versions found"), "got: "+err.Error())
+	assert.ErrorIs(t, err, registry.ErrNoVersionsFound)
 }
 
 func TestAquaRegistry_GetAvailableVersions(t *testing.T) {
