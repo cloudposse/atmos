@@ -81,14 +81,29 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelector {
 	defer perf.Track(nil, "flags.parseIdentityFlag")()
 
+	// Check local flags, inherited flags, and persistent flags.
+	// The identity flag is registered as a persistent flag on RootCmd.
+	// - On RootCmd: appears in PersistentFlags()
+	// - On subcommands: appears in InheritedFlags() (inherited from RootCmd)
 	flag := cmd.Flags().Lookup(identityFlagName)
 	if flag == nil {
-		// Identity flag not registered on this command.
+		flag = cmd.InheritedFlags().Lookup(identityFlagName)
+	}
+	if flag == nil {
+		flag = cmd.PersistentFlags().Lookup(identityFlagName)
+	}
+	if flag == nil {
+		// Identity flag not registered on this command or its parents.
 		return global.NewIdentitySelector("", false)
 	}
 
 	// Check if flag was explicitly set on command line.
-	if cmd.Flags().Changed(identityFlagName) {
+	// Check all flag sets because cmd.Flags().Changed() doesn't check persistent flags on root.
+	changed := cmd.Flags().Changed(identityFlagName) ||
+		cmd.InheritedFlags().Changed(identityFlagName) ||
+		cmd.PersistentFlags().Changed(identityFlagName)
+
+	if changed {
 		value := v.GetString(identityFlagName)
 		return global.NewIdentitySelector(value, true)
 	}
@@ -110,24 +125,37 @@ func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelect
 func parsePagerFlag(cmd *cobra.Command, v *viper.Viper) global.PagerSelector {
 	defer perf.Track(nil, "flags.parsePagerFlag")()
 
+	// Check local flags, inherited flags, and persistent flags.
+	// The pager flag is registered as a persistent flag on RootCmd.
+	// - On RootCmd: appears in PersistentFlags()
+	// - On subcommands: appears in InheritedFlags() (inherited from RootCmd)
 	flag := cmd.Flags().Lookup(pagerFlagName)
 	if flag == nil {
-		// Pager flag not registered on this command.
+		flag = cmd.InheritedFlags().Lookup(pagerFlagName)
+	}
+	if flag == nil {
+		flag = cmd.PersistentFlags().Lookup(pagerFlagName)
+	}
+	if flag == nil {
+		// Pager flag not registered on this command or its parents.
 		return global.NewPagerSelector("", false)
 	}
 
 	// Check if flag was explicitly set on command line.
-	if cmd.Flags().Changed(pagerFlagName) {
+	// Check all flag sets because cmd.Flags().Changed() doesn't check persistent flags on root.
+	changed := cmd.Flags().Changed(pagerFlagName) ||
+		cmd.InheritedFlags().Changed(pagerFlagName) ||
+		cmd.PersistentFlags().Changed(pagerFlagName)
+
+	if changed {
 		value := v.GetString(pagerFlagName)
 		return global.NewPagerSelector(value, true)
 	}
 
-	// Fall back to env/config via Viper.
-	if v.IsSet(pagerFlagName) {
-		value := v.GetString(pagerFlagName)
-		return global.NewPagerSelector(value, true)
-	}
-
+	// Pager flag not explicitly set - return as not provided.
+	// Note: We deliberately do NOT check v.IsSet() for config values here.
+	// The pager should be disabled by default unless explicitly enabled via CLI flag.
+	// Config values in atmos.yaml are handled separately by the pager package.
 	return global.NewPagerSelector("", false)
 }
 

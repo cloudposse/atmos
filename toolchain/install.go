@@ -172,7 +172,7 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 		if showProgressBar && p != nil {
 			p.Send(installDoneMsg{})
 			time.Sleep(50 * time.Millisecond)
-			_ = ui.Toastf("📦", "Using latest version: %s", latestVersion)
+			_ = ui.Toastf("📦", "Using latest version `%s`", latestVersion)
 			// Restart spinner with updated message.
 			message := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
 			p = runBubbleTeaSpinner(message)

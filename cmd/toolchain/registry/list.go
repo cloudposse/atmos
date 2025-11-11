@@ -207,7 +207,15 @@ func listRegistryTools(ctx context.Context, registryName string, opts *ListOptio
 		total := meta.ToolCount
 
 		// Show info toast before pager content.
-		_ = ui.Infof("Showing %d-%d of %d tools from registry '%s' (%s)", start, end, total, registryName, meta.Type)
+		var message string
+		if end == total {
+			// Showing all tools.
+			message = fmt.Sprintf("Showing **%d tools** from registry `%s` (%s)", total, registryName, meta.Type)
+		} else {
+			// Showing a subset.
+			message = fmt.Sprintf("Showing **%d-%d** of **%d tools** from registry `%s` (%s)", start, end, total, registryName, meta.Type)
+		}
+		_ = ui.Infof(message)
 		_ = ui.Writef("Source: %s\n\n", meta.Source)
 
 		// Get table content.
@@ -363,11 +371,13 @@ func buildToolsTable(tools []*toolchainregistry.Tool) string {
 	}
 
 	// Create and configure table.
+	// Height = number of data rows + 1 for header row.
+	tableHeight := len(tableRows) + 1
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(tableRows),
 		table.WithFocused(false),
-		table.WithHeight(len(tableRows)),
+		table.WithHeight(tableHeight),
 	)
 
 	// Apply theme styles.

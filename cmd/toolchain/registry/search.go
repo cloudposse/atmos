@@ -146,7 +146,8 @@ Try:
 		return data.WriteYAML(results)
 	case "table":
 		// Display results with info toast.
-		_ = ui.Infof("Found %d tools matching '%s':\n", len(results), query)
+		message := fmt.Sprintf("Found **%d tools** matching `%s`:", len(results), query)
+		_ = ui.Infof(message)
 		displaySearchResults(results)
 
 		// Show helpful hints after table.
@@ -281,11 +282,13 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 	}
 
 	// Create and configure table.
+	// Height = number of data rows + 1 for header row.
+	tableHeight := len(tableRows) + 1
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(tableRows),
 		table.WithFocused(false),
-		table.WithHeight(len(tableRows)),
+		table.WithHeight(tableHeight),
 	)
 
 	// Apply theme styles.
