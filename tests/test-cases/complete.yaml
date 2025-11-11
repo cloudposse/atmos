@@ -12,7 +12,8 @@ tests:
     expect:
       diff: []
       stderr:
-        - 'ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion\? current=11, max=10'
+        - 'ATMOS_SHLVL exceeds maximum allowed depth. Infinite recursion\?'
+        - 'current=11, max=10'
         - 'subcommand exited with code 1'
       exit_code: 1
   - name: atmos workflow pla --file workflow1
@@ -44,5 +45,6 @@ tests:
     expect:
       diff: []
       stderr:
-        - "command has no steps or subcommands configured"
+        - "# Invalid Command"
+        - "\\*\\*Error:\\*\\* The atmos invalidCommand command has no steps or subcommands"
       exit_code: 1

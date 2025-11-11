@@ -156,6 +156,9 @@ func (b *GlobalOptionsBuilder) registerSystemFlags(defaults *global.Flags) {
 	b.options = append(b.options, WithStringFlag("redirect-stderr", "", defaults.RedirectStderr, "File descriptor to redirect stderr to. Errors can be redirected to any file or any standard file descriptor (including '/dev/null')"))
 	b.options = append(b.options, WithEnvVars("redirect-stderr", "ATMOS_REDIRECT_STDERR"))
 
+	// Verbose flag for error formatting.
+	b.WithVerbose()
+
 	b.options = append(b.options, WithBoolFlag("version", "", defaults.Version, "Display the Atmos CLI version"))
 	b.options = append(b.options, WithEnvVars("version", "ATMOS_VERSION"))
 }

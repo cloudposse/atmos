@@ -1,6 +1,6 @@
 
 
-Validate all files against the project's EditorConfig rules                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+Validate all files against the project's EditorConfig rules
 
 Usage:
 
@@ -127,7 +127,11 @@ Global Flags:
                                      standard file descriptor (including
                                      '/dev/null')
 
+    -v, --verbose                    Enable verbose error output with full
+                                     context, stack traces, and detailed
+                                     information (default false)
 
-Use atmos validate editorconfig --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+
+Use atmos validate editorconfig --help for more information about a command.
 
 

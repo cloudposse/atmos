@@ -55,6 +55,13 @@
     "file": "/dev/stderr",
     "level": "Info"
   },
+  "errors": {
+    "format": {},
+    "sentry": {
+      "enabled": false,
+      "dsn": ""
+    }
+  },
   "integrations": {
     "atlantis": {}
   },

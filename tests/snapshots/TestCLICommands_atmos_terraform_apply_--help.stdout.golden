@@ -1,6 +1,6 @@
 
 
-Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+Apply the changes required to reach the desired state of the configuration. This will prompt for confirmation before making changes.
 
 Usage:
 
@@ -186,11 +186,15 @@ Global Flags:
                                       password-encrypted PEM block: atmos
                                       terraform  --affected
                                       --ssh-key <path_to_ssh_key>
-                                      --ssh-key-password 
+                                      --ssh-key-password
 
     -s, --stack string                The stack flag specifies the environment
                                       or configuration set for deployment in
                                       Atmos CLI.
+
+    -v, --verbose                     Enable verbose error output with full
+                                      context, stack traces, and detailed
+                                      information (default false)
 
         --version                     Display the Atmos CLI version
 
@@ -201,11 +205,11 @@ Global Flags:
 
 Examples:
 
-– Apply changes to a terraform component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-  $ atmos terraform apply <component-name> -s <stack-name>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+– Apply changes to a terraform component
+
+  $ atmos terraform apply <component-name> -s <stack-name>
 
 
-Use atmos terraform apply --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+Use atmos terraform apply --help for more information about a command.
 
 

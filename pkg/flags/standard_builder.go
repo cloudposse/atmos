@@ -466,11 +466,11 @@ func (b *StandardOptionsBuilder) WithCloneTargetRef() *StandardOptionsBuilder {
 	return b
 }
 
-// WithVerbose adds the verbose flag (deprecated).
+// WithVerbose adds the verbose flag.
 func (b *StandardOptionsBuilder) WithVerbose() *StandardOptionsBuilder {
 	defer perf.Track(nil, "flags.StandardOptionsBuilder.WithVerbose")()
 
-	b.options = append(b.options, WithBoolFlag("verbose", "", false, "Deprecated. Use --logs-level=Debug"))
+	b.options = append(b.options, WithBoolFlag("verbose", "v", false, "Enable verbose error output with full context, stack traces, and detailed information"))
 	b.options = append(b.options, WithEnvVars("verbose", "ATMOS_VERBOSE"))
 	return b
 }
