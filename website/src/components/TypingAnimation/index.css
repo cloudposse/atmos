@@ -1,0 +1,38 @@
+.typing-animation {
+  display: inline-flex;
+  align-items: baseline;
+  position: relative;
+  min-height: 1.2em;
+  line-height: 1.2;
+}
+
+.typing-text {
+  display: inline-block;
+  min-width: 0.5em;
+  min-height: 1em;
+  line-height: inherit;
+}
+
+.typing-cursor {
+  display: inline-block;
+  width: 3px;
+  height: 1em;
+  background-color: currentColor;
+  margin-left: 2px;
+  animation: blink 1s infinite;
+  vertical-align: middle;
+}
+
+@keyframes blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+/* Ensure cursor is visible with gradient text */
+html[data-theme='dark'] .hero h1 .typing-cursor {
+  background-color: rgba(255, 255, 255, 0.8);
+}

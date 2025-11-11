@@ -24,7 +24,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.21
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.4
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.90.0
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.66.4
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.67.0
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.1
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.5
 	github.com/aws/aws-sdk-go-v2/service/sts v1.39.1
@@ -93,7 +93,7 @@ require (
 	github.com/zclconf/go-cty v1.17.0
 	go.uber.org/mock v0.6.0
 	go.yaml.in/yaml/v3 v3.0.4
-	golang.org/x/oauth2 v0.32.0
+	golang.org/x/oauth2 v0.33.0
 	golang.org/x/term v0.36.0
 	golang.org/x/text v0.30.0
 	google.golang.org/api v0.255.0
