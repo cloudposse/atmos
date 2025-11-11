@@ -53,8 +53,7 @@ func (v versionExec) Execute(checkFlag bool, format string) error {
 	v.printMessage("")
 	err := v.printStyledText("ATMOS")
 	if err != nil {
-		//nolint:revive // deep-exit: log.Fatal is appropriate here for version display errors
-		log.Fatal(err)
+		return fmt.Errorf("failed to display styled text: %w", err)
 	}
 
 	atmosIcon := "\U0001F47D"

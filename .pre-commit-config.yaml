@@ -58,7 +58,7 @@ repos:
       - id: end-of-file-fixer
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)
       - id: check-yaml
-        exclude: ^(vendor/)
+        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)
         args: [--allow-multiple-documents, --unsafe]
       - id: check-added-large-files
         args: [--maxkb=500]

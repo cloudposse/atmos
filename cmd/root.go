@@ -204,6 +204,9 @@ var RootCmd = &cobra.Command{
 				if !isHelpRequested {
 					log.Warn(err.Error())
 				}
+			} else if isVersionCommand() {
+				// Version command should always work, even with invalid config
+				log.Debug("Warning: CLI configuration error (continuing for version command)", "error", err)
 			} else {
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 			}
@@ -565,16 +568,20 @@ func Execute() error {
 	version.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
 
-	utils.InitializeMarkdown(atmosConfig)
-	errUtils.InitializeMarkdown(atmosConfig)
-
-	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
+	if initErr != nil {
 		if isVersionCommand() {
-			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
-		} else {
+			// Version command should always work, even with invalid config
+			log.Debug("Warning: CLI configuration error (continuing for version command)", "error", initErr)
+		} else if !errors.Is(initErr, cfg.NotFound) {
+			// For other commands, only return error if it's not just "not found"
 			return initErr
 		}
 	}
+
+	// Initialize markdown renderers after error check
+	// This prevents deep exits in InitializeMarkdown when config is invalid
+	utils.InitializeMarkdown(atmosConfig)
+	errUtils.InitializeMarkdown(atmosConfig)
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
 	setupLogger(&atmosConfig)

@@ -1,0 +1,167 @@
+# yaml-language-server: $schema=schema.json
+# Tests for version command with invalid atmos configuration
+# Version command should always succeed regardless of config validity
+tests:
+  - name: "version with invalid YAML syntax"
+    enabled: true
+    snapshot: false
+    description: "Verify version command succeeds even with malformed atmos.yaml (unclosed brackets, invalid indentation)"
+    workdir: "fixtures/scenarios/invalid-config-yaml"
+    command: "atmos"
+    args:
+      - "version"
+    env:
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        # Should show debug warning about config, but not fail
+        - ".*"
+      exit_code: 0
+
+  - name: "version with invalid command aliases"
+    enabled: true
+    snapshot: false
+    description: "Verify version command succeeds even with invalid command aliases (non-existent commands, circular references)"
+    workdir: "fixtures/scenarios/invalid-config-aliases"
+    command: "atmos"
+    args:
+      - "version"
+    env:
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        # May show warnings about invalid aliases but should not fail
+        - ".*"
+      exit_code: 0
+
+  - name: "version with invalid config schema"
+    enabled: true
+    snapshot: false
+    description: "Verify version command succeeds even with invalid config schema (wrong types, invalid values)"
+    workdir: "fixtures/scenarios/invalid-config-schema"
+    command: "atmos"
+    args:
+      - "version"
+    env:
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        # May show warnings about invalid schema but should not fail
+        - ".*"
+      exit_code: 0
+
+  - name: "version --check with invalid YAML syntax"
+    enabled: true
+    snapshot: false
+    description: "Verify version --check succeeds even with malformed atmos.yaml"
+    workdir: "fixtures/scenarios/invalid-config-yaml"
+    command: "atmos"
+    args:
+      - "version"
+      - "--check"
+    env:
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        # Should work and may show update available or latest version message
+        - ".*"
+      exit_code: 0
+
+  - name: "version --format json with invalid config"
+    enabled: true
+    snapshot: false
+    description: "Verify version JSON output succeeds even with invalid config"
+    workdir: "fixtures/scenarios/invalid-config-aliases"
+    command: "atmos"
+    args:
+      - "version"
+      - "--format"
+      - "json"
+    env:
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      stdout:
+        - '\{.*"version":\s*".*".*"os":\s*".*".*"arch":\s*".*".*\}'
+      stderr:
+        - ".*"
+      exit_code: 0
+
+  - name: "version --format yaml with invalid config"
+    enabled: true
+    snapshot: false
+    description: "Verify version YAML output succeeds even with invalid config"
+    workdir: "fixtures/scenarios/invalid-config-schema"
+    command: "atmos"
+    args:
+      - "version"
+      - "--format"
+      - "yaml"
+    env:
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      stdout:
+        - 'version:\s+.*'
+        - 'os:\s+[a-z]+'
+        - 'arch:\s+[a-z0-9]+'
+      stderr:
+        - ".*"
+      exit_code: 0
+
+  - name: "atmos --version with invalid YAML syntax"
+    enabled: true
+    snapshot: false
+    description: "Verify --version flag succeeds even with malformed atmos.yaml"
+    workdir: "fixtures/scenarios/invalid-config-yaml"
+    command: "atmos"
+    args:
+      - "--version"
+    env:
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        - ".*"
+      exit_code: 0
+
+  - name: "atmos --version with invalid command aliases"
+    enabled: true
+    snapshot: false
+    description: "Verify --version flag succeeds even with invalid command aliases"
+    workdir: "fixtures/scenarios/invalid-config-aliases"
+    command: "atmos"
+    args:
+      - "--version"
+    env:
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        - ".*"
+      exit_code: 0
+
+  - name: "atmos --version with invalid config schema"
+    enabled: true
+    snapshot: false
+    description: "Verify --version flag succeeds even with invalid config schema"
+    workdir: "fixtures/scenarios/invalid-config-schema"
+    command: "atmos"
+    args:
+      - "--version"
+    env:
+      ATMOS_LOGS_LEVEL: "Info"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      stderr:
+        - ".*"
+      exit_code: 0
