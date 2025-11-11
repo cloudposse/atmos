@@ -28,7 +28,7 @@ func TestProcessorWithGitStorage(t *testing.T) {
 	// Create initial file and commit (this is the "base")
 	initialContent := "# Config\nversion: 1.0\nname: test\n"
 	configPath := filepath.Join(tmpDir, "config.yaml")
-	err = os.WriteFile(configPath, []byte(initialContent), 0644)
+	err = os.WriteFile(configPath, []byte(initialContent), 0o644)
 	require.NoError(t, err)
 
 	_, err = worktree.Add("config.yaml")
@@ -44,7 +44,7 @@ func TestProcessorWithGitStorage(t *testing.T) {
 
 	// User modifies the file (adds custom section)
 	userContent := "# Config\nversion: 1.0\nname: test\n\n# User's custom section\ncustom: value\n"
-	err = os.WriteFile(configPath, []byte(userContent), 0644)
+	err = os.WriteFile(configPath, []byte(userContent), 0o644)
 	require.NoError(t, err)
 
 	// Create processor and setup git storage
@@ -57,7 +57,7 @@ func TestProcessorWithGitStorage(t *testing.T) {
 		Path:        "config.yaml",
 		Content:     "# Config\nversion: 2.0\nname: test\n\n# New feature from template\nfeature: enabled\n",
 		IsTemplate:  false,
-		Permissions: 0644,
+		Permissions: 0o644,
 	}
 
 	// Process file in update mode
@@ -93,7 +93,7 @@ func TestProcessorWithGitStorage_UserAddedFile(t *testing.T) {
 
 	// Create and commit a README file (this exists in base)
 	readmePath := filepath.Join(tmpDir, "README.md")
-	err = os.WriteFile(readmePath, []byte("# Project\n"), 0644)
+	err = os.WriteFile(readmePath, []byte("# Project\n"), 0o644)
 	require.NoError(t, err)
 
 	_, err = worktree.Add("README.md")
@@ -110,7 +110,7 @@ func TestProcessorWithGitStorage_UserAddedFile(t *testing.T) {
 	// User adds a custom file (NOT in git base)
 	customPath := filepath.Join(tmpDir, "custom.yaml")
 	customContent := "# User's custom file\ncustom: true\n"
-	err = os.WriteFile(customPath, []byte(customContent), 0644)
+	err = os.WriteFile(customPath, []byte(customContent), 0o644)
 	require.NoError(t, err)
 
 	// Create processor and setup git storage
@@ -123,7 +123,7 @@ func TestProcessorWithGitStorage_UserAddedFile(t *testing.T) {
 		Path:        "custom.yaml",
 		Content:     "# Template file\ntemplate: value\n",
 		IsTemplate:  false,
-		Permissions: 0644,
+		Permissions: 0o644,
 	}
 
 	// Process file in update mode
@@ -149,7 +149,7 @@ func TestProcessorWithoutGitStorage(t *testing.T) {
 
 	// Create existing file
 	configPath := filepath.Join(tmpDir, "config.yaml")
-	err = os.WriteFile(configPath, []byte("version: 1.0\n"), 0644)
+	err = os.WriteFile(configPath, []byte("version: 1.0\n"), 0o644)
 	require.NoError(t, err)
 
 	// Create processor (git storage setup will silently fail, that's OK)
@@ -163,7 +163,7 @@ func TestProcessorWithoutGitStorage(t *testing.T) {
 		Path:        "config.yaml",
 		Content:     "version: 2.0\n",
 		IsTemplate:  false,
-		Permissions: 0644,
+		Permissions: 0o644,
 	}
 
 	// Process file in update mode (will use template as base, legacy behavior)

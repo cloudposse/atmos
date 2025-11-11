@@ -42,10 +42,10 @@ func createCommit(t *testing.T, repo *git.Repository, repoPath string, message s
 		fullPath := filepath.Join(repoPath, path)
 		dir := filepath.Dir(fullPath)
 
-		err := os.MkdirAll(dir, 0755)
+		err := os.MkdirAll(dir, 0o755)
 		require.NoError(t, err)
 
-		err = os.WriteFile(fullPath, []byte(content), 0644)
+		err = os.WriteFile(fullPath, []byte(content), 0o644)
 		require.NoError(t, err)
 
 		_, err = worktree.Add(path)
