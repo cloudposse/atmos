@@ -1,6 +1,6 @@
 
 
-Display information about Atmos, its features, and benefits.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+Display information about Atmos, its features, and benefits.
 
 Usage:
 
@@ -95,17 +95,21 @@ Global Flags:
                                      standard file descriptor (including
                                      '/dev/null')
 
+    -v, --verbose                    Enable verbose error output with full
+                                     context, stack traces, and detailed
+                                     information (default false)
+
         --version                    Display the Atmos CLI version
 
 
 Examples:
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-• Learn about atmos                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-  $ atmos about                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+
+• Learn about atmos
+
+  $ atmos about
 
 
-Use atmos about --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+Use atmos about --help for more information about a command.
 
 

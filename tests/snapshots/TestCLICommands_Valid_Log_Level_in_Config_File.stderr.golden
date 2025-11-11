@@ -4,17 +4,20 @@
  TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found"
  TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found"
  DEBU  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+ TRCE  Git root base path disabled via ATMOS_GIT_ROOT_BASEPATH=false
  DEBU  Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
  TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found"
  TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found"
  TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found"
  TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found"
  DEBU  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+ TRCE  Git root base path disabled via ATMOS_GIT_ROOT_BASEPATH=false
  DEBU  Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
  TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found"
  TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found"
  TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found"
  TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found"
  DEBU  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+ TRCE  Git root base path disabled via ATMOS_GIT_ROOT_BASEPATH=false
  DEBU  Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
  DEBU  Telemetry event enqueued

@@ -216,6 +216,13 @@
                   "type": "boolean",
                   "description": "Strip trailing whitespace from each line before snapshot comparison. Useful for lipgloss table padding that varies by platform/terminal width.",
                   "default": false
+                },
+                "sanitize": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Custom sanitization rules for test output. Map of regex patterns to replacement strings. Applied after standard sanitization for test-specific one-off cases that don't need global sanitization."
                 }
               },
               "required": ["exit_code"],

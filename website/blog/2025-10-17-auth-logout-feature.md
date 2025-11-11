@@ -1,7 +1,8 @@
 ---
 slug: introducing-auth-logout
 title: "Introducing atmos auth logout: Secure Credential Cleanup"
-authors: [atmos]
+sidebar_label: "Introducing atmos auth logout"
+authors: [osterman]
 tags: [feature, authentication, security]
 ---
 

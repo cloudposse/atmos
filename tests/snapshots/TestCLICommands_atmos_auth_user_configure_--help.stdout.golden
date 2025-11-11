@@ -1,6 +1,6 @@
 
 
-Configure static AWS user credentials (stored securely in keyring)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+Configure static AWS user credentials (stored securely in keyring)
 
 Usage:
 
@@ -94,9 +94,13 @@ Global Flags:
                                      standard file descriptor (including
                                      '/dev/null')
 
+    -v, --verbose                    Enable verbose error output with full
+                                     context, stack traces, and detailed
+                                     information (default false)
+
         --version                    Display the Atmos CLI version
 
 
-Use atmos auth user configure --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
+Use atmos auth user configure --help for more information about a command.
 
 

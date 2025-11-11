@@ -1,6 +1,6 @@
 
 
-Execute a command with the authenticated identity's environment variables set. Use -- to separate Atmos flags from the command's native arguments.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+Execute a command with the authenticated identity's environment variables set. Use -- to separate Atmos flags from the command's native arguments.
 
 Usage:
 
@@ -94,16 +94,20 @@ Global Flags:
                                      standard file descriptor (including
                                      '/dev/null')
 
+    -v, --verbose                    Enable verbose error output with full
+                                     context, stack traces, and detailed
+                                     information (default false)
+
         --version                    Display the Atmos CLI version
 
 
 Examples:
 
-# Run terraform with the authenticated identity                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-atmos auth exec -- terraform plan -var-file=env.tfvars                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+# Run terraform with the authenticated identity
+
+atmos auth exec -- terraform plan -var-file=env.tfvars
 
 
-Use atmos auth exec --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+Use atmos auth exec --help for more information about a command.
 
 
