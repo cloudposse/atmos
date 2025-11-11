@@ -9,7 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
-// TestShouldSkipFile tests the ShouldSkipFile function directly
+// TestShouldSkipFile tests the ShouldSkipFile function directly.
 func TestShouldSkipFile(t *testing.T) {
 	processor := NewProcessor()
 
@@ -70,7 +70,7 @@ func TestShouldSkipFile(t *testing.T) {
 	}
 }
 
-// TestProcessTemplate tests basic template processing
+// TestProcessTemplate tests basic template processing.
 func TestProcessTemplate(t *testing.T) {
 	processor := NewProcessor()
 
@@ -88,7 +88,7 @@ func TestProcessTemplate(t *testing.T) {
 	}
 }
 
-// TestProcessTemplateWithRichConfig tests template processing with rich configuration
+// TestProcessTemplateWithRichConfig tests template processing with rich configuration.
 func TestProcessTemplateWithRichConfig(t *testing.T) {
 	processor := NewProcessor()
 
@@ -150,7 +150,7 @@ func TestProcessTemplateWithRichConfig(t *testing.T) {
 	}
 }
 
-// TestTemplateFilenameProcessing tests that file paths with templates are processed correctly
+// TestTemplateFilenameProcessing tests that file paths with templates are processed correctly.
 func TestTemplateFilenameProcessing(t *testing.T) {
 	processor := NewProcessor()
 	tempDir := t.TempDir()
@@ -231,7 +231,7 @@ func TestTemplateFilenameProcessing(t *testing.T) {
 	}
 }
 
-// TestProcessTemplateErrorHandling tests error handling in template processing
+// TestProcessTemplateErrorHandling tests error handling in template processing.
 func TestProcessTemplateErrorHandling(t *testing.T) {
 	processor := NewProcessor()
 
@@ -281,7 +281,7 @@ func TestProcessTemplateErrorHandling(t *testing.T) {
 	}
 }
 
-// TestProcessTemplateWithDifferentDataTypes tests template processing with various data types
+// TestProcessTemplateWithDifferentDataTypes tests template processing with various data types.
 func TestProcessTemplateWithDifferentDataTypes(t *testing.T) {
 	processor := NewProcessor()
 
@@ -308,7 +308,7 @@ func TestProcessTemplateWithDifferentDataTypes(t *testing.T) {
 	}
 }
 
-// TestProcessTemplateWithGomplateFunctions tests various gomplate functions
+// TestProcessTemplateWithGomplateFunctions tests various gomplate functions.
 func TestProcessTemplateWithGomplateFunctions(t *testing.T) {
 	processor := NewProcessor()
 
@@ -405,7 +405,7 @@ func TestProcessTemplateWithGomplateFunctions(t *testing.T) {
 	}
 }
 
-// TestProcessTemplateWithRichProjectTemplate tests a more complex project template
+// TestProcessTemplateWithRichProjectTemplate tests a more complex project template.
 func TestProcessTemplateWithRichProjectTemplate(t *testing.T) {
 	processor := NewProcessor()
 
@@ -484,7 +484,7 @@ func TestProcessTemplateWithRichProjectTemplate(t *testing.T) {
 	}
 }
 
-// TestProcessFile tests the ProcessFile method
+// TestProcessFile tests the ProcessFile method.
 func TestProcessFile_NewFile(t *testing.T) {
 	processor := NewProcessor()
 	tempDir := t.TempDir()
@@ -518,7 +518,7 @@ func TestProcessFile_NewFile(t *testing.T) {
 	}
 }
 
-// TestProcessFile_ExistingFile_NoFlags tests ProcessFile with existing file and no flags
+// TestProcessFile_ExistingFile_NoFlags tests ProcessFile with existing file and no flags.
 func TestProcessFile_ExistingFile_NoFlags(t *testing.T) {
 	processor := NewProcessor()
 	tempDir := t.TempDir()

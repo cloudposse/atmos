@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestProcessorWithGitStorage tests the full update workflow with git storage
+// TestProcessorWithGitStorage tests the full update workflow with git storage.
 func TestProcessorWithGitStorage(t *testing.T) {
 	// Create a temporary directory for our git repo
 	tmpDir, err := os.MkdirTemp("", "processor-git-test-*")
@@ -78,7 +78,7 @@ func TestProcessorWithGitStorage(t *testing.T) {
 	assert.Contains(t, merged, "feature: enabled", "Should have new feature from template")
 }
 
-// TestProcessorWithGitStorage_UserAddedFile tests that user-added files are not touched
+// TestProcessorWithGitStorage_UserAddedFile tests that user-added files are not touched.
 func TestProcessorWithGitStorage_UserAddedFile(t *testing.T) {
 	// Create a temporary directory for our git repo
 	tmpDir, err := os.MkdirTemp("", "processor-git-test-*")
@@ -141,7 +141,7 @@ func TestProcessorWithGitStorage_UserAddedFile(t *testing.T) {
 	assert.NotContains(t, string(resultContent), "template: value", "Should not contain template content")
 }
 
-// TestProcessorWithoutGitStorage tests fallback behavior when not in a git repo
+// TestProcessorWithoutGitStorage tests fallback behavior when not in a git repo.
 func TestProcessorWithoutGitStorage(t *testing.T) {
 	// Create a temporary directory (NOT a git repo)
 	tmpDir, err := os.MkdirTemp("", "processor-nogit-test-*")
@@ -179,7 +179,7 @@ func TestProcessorWithoutGitStorage(t *testing.T) {
 	assert.Contains(t, string(mergedContent), "version", "Should have version field")
 }
 
-// TestProcessorWithGitStorage_TemplateFile tests merging with template processing (IsTemplate=true)
+// TestProcessorWithGitStorage_TemplateFile tests merging with template processing (IsTemplate=true).
 func TestProcessorWithGitStorage_TemplateFile(t *testing.T) {
 	// Create a temporary directory for our git repo
 	tmpDir, err := os.MkdirTemp("", "processor-git-template-test-*")
@@ -245,7 +245,7 @@ func TestProcessorWithGitStorage_TemplateFile(t *testing.T) {
 	assert.Contains(t, merged, "feature: enabled", "Should have new feature from template")
 }
 
-// TestProcessorWithGitStorage_MergeConflict tests conflict detection
+// TestProcessorWithGitStorage_MergeConflict tests conflict detection.
 func TestProcessorWithGitStorage_MergeConflict(t *testing.T) {
 	// Create a temporary directory for our git repo
 	tmpDir, err := os.MkdirTemp("", "processor-git-conflict-test-*")

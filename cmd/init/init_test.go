@@ -254,7 +254,8 @@ func TestExecuteInit_FlagParsing(t *testing.T) {
 			v := viper.New()
 
 			// Build args - note we can't actually execute because we need template files
-			args := append(tt.flags, "simple", t.TempDir())
+			args := tt.flags
+			args = append(args, "simple", t.TempDir())
 			initCmd.SetArgs(args)
 
 			// Parse flags only
