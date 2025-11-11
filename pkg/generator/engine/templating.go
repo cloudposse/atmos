@@ -16,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
@@ -39,6 +40,8 @@ type FileSkippedError struct {
 
 // Error returns a formatted error message indicating the file was skipped.
 func (e *FileSkippedError) Error() string {
+	defer perf.Track(nil, "engine.FileSkippedError.Error")()
+
 	return fmt.Sprintf("file skipped: %s (rendered as: %s)", e.Path, e.RenderedPath)
 }
 
@@ -55,6 +58,8 @@ type Processor struct {
 // The processor is initialized with a 50% threshold for 3-way merges,
 // meaning merges will be rejected if more than 50% of lines would change.
 func NewProcessor() *Processor {
+	defer perf.Track(nil, "engine.NewProcessor")()
+
 	return &Processor{
 		merger: merge.NewThreeWayMerger(50), // Default 50% threshold
 	}
@@ -65,6 +70,8 @@ func NewProcessor() *Processor {
 // a lower value (e.g., 30) is more conservative, while a higher value (e.g., 80)
 // allows more extensive changes during merges.
 func (p *Processor) SetMaxChanges(thresholdPercent int) {
+	defer perf.Track(nil, "engine.Processor.SetMaxChanges")()
+
 	p.merger = merge.NewThreeWayMerger(thresholdPercent)
 }
 
@@ -76,6 +83,8 @@ func (p *Processor) SetMaxChanges(thresholdPercent int) {
 //   - targetPath is not in a git repository
 //   - baseRef cannot be resolved
 func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
+	defer perf.Track(nil, "engine.Processor.SetupGitStorage")()
+
 	p.targetPath = targetPath
 
 	// Open git repository at target path
@@ -109,11 +118,15 @@ func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
 
 // ProcessTemplate processes Go templates in file content.
 func (p *Processor) ProcessTemplate(content string, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}) (string, error) {
+	defer perf.Track(nil, "engine.Processor.ProcessTemplate")()
+
 	return p.ProcessTemplateWithDelimiters(content, targetPath, scaffoldConfig, userValues, []string{"{{", "}}"})
 }
 
 // ProcessTemplateWithDelimiters processes Go templates in file content with custom delimiters.
 func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) (string, error) {
+	defer perf.Track(nil, "engine.Processor.ProcessTemplateWithDelimiters")()
+
 	// Create template data with rich configuration
 	templateData := map[string]interface{}{
 		"TemplateName":        filepath.Base(targetPath),
@@ -183,6 +196,8 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 //   - theirs: The new template content (after processing)
 //   - fileName: The file name for merge strategy detection
 func (p *Processor) Merge(base, ours, theirs, fileName string) (*merge.MergeResult, error) {
+	defer perf.Track(nil, "engine.Processor.Merge")()
+
 	return p.merger.Merge(base, ours, theirs, fileName)
 }
 
@@ -239,26 +254,58 @@ func extractDelimiters(scaffoldConfig interface{}) []string {
 		return delimiters
 	}
 
-	// Try *config.ScaffoldConfig first (pointer)
+	// Try different config types in order of preference
+	if extracted := tryExtractFromPointerConfig(scaffoldConfig); extracted != nil {
+		return extracted
+	}
+	if extracted := tryExtractFromValueConfig(scaffoldConfig); extracted != nil {
+		return extracted
+	}
+	if extracted := tryExtractFromMapConfig(scaffoldConfig); extracted != nil {
+		return extracted
+	}
+
+	return delimiters
+}
+
+// tryExtractFromPointerConfig tries to extract delimiters from *config.ScaffoldConfig.
+func tryExtractFromPointerConfig(scaffoldConfig interface{}) []string {
 	if cfg, ok := scaffoldConfig.(*config.ScaffoldConfig); ok {
 		if len(cfg.Delimiters) == 2 {
 			return []string{cfg.Delimiters[0], cfg.Delimiters[1]}
 		}
-	} else if cfg, ok := scaffoldConfig.(config.ScaffoldConfig); ok {
-		// Try config.ScaffoldConfig (value)
+	}
+	return nil
+}
+
+// tryExtractFromValueConfig tries to extract delimiters from config.ScaffoldConfig (value).
+func tryExtractFromValueConfig(scaffoldConfig interface{}) []string {
+	if cfg, ok := scaffoldConfig.(config.ScaffoldConfig); ok {
 		if len(cfg.Delimiters) == 2 {
 			return []string{cfg.Delimiters[0], cfg.Delimiters[1]}
 		}
-	} else if scaffoldConfigMap, ok := scaffoldConfig.(map[string]interface{}); ok {
-		// Fallback to map handling for backwards compatibility
-		if delims, exists := scaffoldConfigMap["delimiters"]; exists {
-			if delimsSlice, ok := delims.([]interface{}); ok && len(delimsSlice) == 2 {
-				return []string{delimsSlice[0].(string), delimsSlice[1].(string)}
-			}
-		}
+	}
+	return nil
+}
+
+// tryExtractFromMapConfig tries to extract delimiters from map[string]interface{} (backwards compatibility).
+func tryExtractFromMapConfig(scaffoldConfig interface{}) []string {
+	scaffoldConfigMap, ok := scaffoldConfig.(map[string]interface{})
+	if !ok {
+		return nil
 	}
 
-	return delimiters
+	delims, exists := scaffoldConfigMap["delimiters"]
+	if !exists {
+		return nil
+	}
+
+	delimsSlice, ok := delims.([]interface{})
+	if !ok || len(delimsSlice) != 2 {
+		return nil
+	}
+
+	return []string{delimsSlice[0].(string), delimsSlice[1].(string)}
 }
 
 // processFilePath processes the file path as a template and returns the rendered path.
@@ -426,29 +473,12 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 	}
 
 	// Determine base content for 3-way merge
-	var baseContent string
-	if p.gitStorage != nil {
-		// Try to load base content from git
-		relativePath, err := filepath.Rel(p.targetPath, existingPath)
-		if err != nil {
-			relativePath = file.Path // Fallback to template path
-		}
-
-		gitBase, found, err := p.gitStorage.LoadBase(relativePath)
-		if err != nil {
-			// Git error - fall back to template content as base
-			baseContent = file.Content
-		} else if found {
-			// Use git version as base
-			baseContent = gitBase
-		} else {
-			// File doesn't exist in base ref
-			// This is a user-added file - skip merge, don't touch it
-			return nil
-		}
-	} else {
-		// No git storage - use template content as base (legacy behavior)
-		baseContent = file.Content
+	baseContent, shouldSkip, err := p.determineBaseContent(file, existingPath)
+	if err != nil {
+		return err
+	}
+	if shouldSkip {
+		return nil
 	}
 
 	// Process new template content to get "theirs" version
@@ -512,6 +542,36 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 	return nil
 }
 
+// determineBaseContent determines the base content for 3-way merge.
+// Returns (baseContent, shouldSkip, error).
+// shouldSkip is true when the file is user-added and should not be merged.
+func (p *Processor) determineBaseContent(file File, existingPath string) (string, bool, error) {
+	if p.gitStorage == nil {
+		// No git storage - use template content as base (legacy behavior)
+		return file.Content, false, nil
+	}
+
+	// Try to load base content from git
+	relativePath, err := filepath.Rel(p.targetPath, existingPath)
+	if err != nil {
+		relativePath = file.Path // Fallback to template path
+	}
+
+	gitBase, found, err := p.gitStorage.LoadBase(relativePath)
+	switch {
+	case err != nil:
+		// Git error - fall back to template content as base
+		return file.Content, false, nil
+	case found:
+		// Use git version as base
+		return gitBase, false, nil
+	default:
+		// File doesn't exist in base ref
+		// This is a user-added file - skip merge, don't touch it
+		return "", true, nil
+	}
+}
+
 // ShouldSkipFile determines if a file should be skipped based on its rendered path.
 //
 // Files are skipped in the following cases:
@@ -522,6 +582,8 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 // This is useful for conditional file generation where template variables
 // may evaluate to empty or false values, indicating the file should not be created.
 func (p *Processor) ShouldSkipFile(renderedPath string) bool {
+	defer perf.Track(nil, "engine.Processor.ShouldSkipFile")()
+
 	// Skip if the path is empty, "false", "null", or "<no value>"
 	if renderedPath == "" || renderedPath == "false" || renderedPath == "null" || renderedPath == "<no value>" {
 		return true
@@ -551,11 +613,15 @@ func (p *Processor) ShouldSkipFile(renderedPath string) bool {
 
 // ContainsUnprocessedTemplates checks if the given content contains unprocessed template syntax.
 func (p *Processor) ContainsUnprocessedTemplates(content string) bool {
+	defer perf.Track(nil, "engine.Processor.ContainsUnprocessedTemplates")()
+
 	return strings.Contains(content, "{{") && strings.Contains(content, "}}")
 }
 
 // ContainsUnprocessedTemplatesWithDelimiters checks if the given content contains unprocessed template syntax with custom delimiters.
 func (p *Processor) ContainsUnprocessedTemplatesWithDelimiters(content string, delimiters []string) bool {
+	defer perf.Track(nil, "engine.Processor.ContainsUnprocessedTemplatesWithDelimiters")()
+
 	if len(delimiters) != 2 {
 		// Fall back to default delimiters if invalid
 		return p.ContainsUnprocessedTemplates(content)
@@ -565,6 +631,8 @@ func (p *Processor) ContainsUnprocessedTemplatesWithDelimiters(content string, d
 
 // ValidateNoUnprocessedTemplates validates that the processed content doesn't contain unprocessed template syntax.
 func (p *Processor) ValidateNoUnprocessedTemplates(content string) error {
+	defer perf.Track(nil, "engine.Processor.ValidateNoUnprocessedTemplates")()
+
 	if p.ContainsUnprocessedTemplates(content) {
 		return fmt.Errorf("generated content contains unprocessed template syntax: %s", truncateString(content, 200))
 	}
@@ -573,6 +641,8 @@ func (p *Processor) ValidateNoUnprocessedTemplates(content string) error {
 
 // ValidateNoUnprocessedTemplatesWithDelimiters validates that the processed content doesn't contain unprocessed template syntax with custom delimiters.
 func (p *Processor) ValidateNoUnprocessedTemplatesWithDelimiters(content string, delimiters []string) error {
+	defer perf.Track(nil, "engine.Processor.ValidateNoUnprocessedTemplatesWithDelimiters")()
+
 	if p.ContainsUnprocessedTemplatesWithDelimiters(content, delimiters) {
 		return fmt.Errorf("generated content contains unprocessed template syntax with delimiters %v: %s", delimiters, truncateString(content, 200))
 	}
