@@ -45,9 +45,9 @@ func (e *FileSkippedError) Error() string {
 // It provides template rendering with Gomplate and Sprig functions,
 // file path templating, and intelligent file merging capabilities.
 type Processor struct {
-	merger      *merge.ThreeWayMerger
-	gitStorage  *storage.GitBaseStorage
-	targetPath  string // Target directory for file generation
+	merger     *merge.ThreeWayMerger
+	gitStorage *storage.GitBaseStorage
+	targetPath string // Target directory for file generation
 }
 
 // NewProcessor creates a new template processor with default settings.

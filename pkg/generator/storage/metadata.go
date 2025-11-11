@@ -16,14 +16,14 @@ import (
 // This is different from scaffold.yaml which defines the template itself.
 // This metadata tracks what was actually generated from that template.
 type GenerationMetadata struct {
-	Version     int                `yaml:"version"`            // Metadata format version
-	Command     string             `yaml:"command"`            // "atmos init" or "atmos scaffold generate"
-	Template    TemplateInfo       `yaml:"template"`           // Which template was used
-	BaseRef     string             `yaml:"base_ref,omitempty"` // Git ref used as base (if git-based)
-	GeneratedAt time.Time          `yaml:"generated_at"`       // When generated
-	Variables   map[string]string  `yaml:"variables"`          // Template variables used
-	Files       []GeneratedFile    `yaml:"files"`              // Files that were generated
-	StorageType string             `yaml:"storage_type"`       // "git" or "file"
+	Version     int               `yaml:"version"`            // Metadata format version
+	Command     string            `yaml:"command"`            // "atmos init" or "atmos scaffold generate"
+	Template    TemplateInfo      `yaml:"template"`           // Which template was used
+	BaseRef     string            `yaml:"base_ref,omitempty"` // Git ref used as base (if git-based)
+	GeneratedAt time.Time         `yaml:"generated_at"`       // When generated
+	Variables   map[string]string `yaml:"variables"`          // Template variables used
+	Files       []GeneratedFile   `yaml:"files"`              // Files that were generated
+	StorageType string            `yaml:"storage_type"`       // "git" or "file"
 }
 
 // TemplateInfo describes which template was used.
@@ -80,7 +80,7 @@ func (s *MetadataStorage) Load() (*GenerationMetadata, error) {
 func (s *MetadataStorage) Save(metadata *GenerationMetadata) error {
 	// Ensure parent directory exists
 	dir := filepath.Dir(s.metadataPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create metadata directory %s: %w", dir, err)
 	}
 
@@ -91,7 +91,7 @@ func (s *MetadataStorage) Save(metadata *GenerationMetadata) error {
 	}
 
 	// Write to file
-	if err := os.WriteFile(s.metadataPath, data, 0644); err != nil {
+	if err := os.WriteFile(s.metadataPath, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write metadata file %s: %w", s.metadataPath, err)
 	}
 

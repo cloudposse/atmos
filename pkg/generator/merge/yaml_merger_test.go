@@ -368,7 +368,6 @@ key: value
 		t.Run(tt.name, func(t *testing.T) {
 			merger := NewYAMLMerger(50)
 			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
-
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return
@@ -551,7 +550,6 @@ func TestYAMLMerger_RealWorldScenarios(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			merger := NewYAMLMerger(50)
 			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
-
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return
@@ -622,7 +620,6 @@ func TestYAMLMerger_KeyDeletion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			merger := NewYAMLMerger(50)
 			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
-
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return
