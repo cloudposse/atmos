@@ -123,7 +123,7 @@ The version command has special handling in `cmd/root.go` to bypass configuratio
 }
 ```
 
-#### In `Execute()` function (lines 568-581):
+#### In `Execute()` function (lines 571-586):
 ```go
 if initErr != nil {
     if isVersionCommand() {
@@ -134,12 +134,19 @@ if initErr != nil {
     }
 }
 
-// Initialize markdown renderers AFTER error check
-utils.InitializeMarkdown(atmosConfig)
-errUtils.InitializeMarkdown(atmosConfig)
+// Initialize markdown renderers only if config loaded successfully
+// This prevents deep exits in InitializeMarkdown when config is invalid
+if initErr == nil {
+    utils.InitializeMarkdown(atmosConfig)
+    errUtils.InitializeMarkdown(atmosConfig)
+}
 ```
 
-**Key Design Decision:** `InitializeMarkdown()` must be called **after** the version command check, because it calls `CheckErrorPrintAndExit()` on invalid configs (a deep exit that would prevent version from running).
+**Key Design Decision:** `InitializeMarkdown()` is called **after** the version command check AND **only when initErr == nil**. This double-guard ensures:
+1. Version command check happens first (allows version to run with invalid config)
+2. Markdown renderers are skipped entirely when config is invalid (prevents deep exit in `CheckErrorPrintAndExit()`)
+
+Without the `if initErr == nil` guard, `InitializeMarkdown()` would be called for version command even with invalid config, triggering deep exits and defeating the purpose of the version command bypass.
 
 ### Version Check Cache
 
@@ -277,13 +284,27 @@ Located in `tests/test-cases/version-invalid-config.yaml`:
 
 ### Why Version Must Always Work
 
+**Version is a diagnostic command.** Users run it first when troubleshooting. Therefore, it must work even when everything else is broken.
+
 The version command is often the **first command users run** when:
 - Installing Atmos for the first time
 - Troubleshooting configuration issues
 - Filing bug reports
 - Verifying compatibility with documentation
+- Debugging unexpected behavior
+- Checking if an upgrade is needed
+- Confirming Atmos is installed correctly
 
 If version fails due to configuration errors, users have no reliable diagnostic tool. This creates a bootstrapping problem: they can't fix their config because they can't determine what version they're running or access help resources.
+
+**Unlike other commands, version CANNOT depend on valid configuration.** It must be resilient to:
+- Invalid YAML syntax
+- Invalid command aliases
+- Invalid config schema
+- Missing config files
+- Corrupted config state
+
+This resilience makes version the foundation of the diagnostic workflow. When users report issues, the first question is always "what version are you running?" - and version must be able to answer that question regardless of system state.
 
 ### Why Version Checks Use Cache
 
