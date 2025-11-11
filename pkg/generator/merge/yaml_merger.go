@@ -19,16 +19,17 @@ import (
 //   - pkg/generator/merge: Performs git-style 3-way merges for template updates with conflict detection
 //
 // Key differences:
-//   1. Level of operation: mergo works on Go data structures; this works on YAML nodes
-//   2. Merge strategy: mergo does 2-way merges; this does 3-way merges (base, ours, theirs)
-//   3. Conflict detection: mergo overwrites; this detects and reports conflicts
-//   4. Preservation: mergo doesn't preserve YAML formatting; this preserves comments and anchors
-//   5. Use case: mergo for config inheritance; this for updating user-modified files from templates
+//  1. Level of operation: mergo works on Go data structures; this works on YAML nodes
+//  2. Merge strategy: mergo does 2-way merges; this does 3-way merges (base, ours, theirs)
+//  3. Conflict detection: mergo overwrites; this detects and reports conflicts
+//  4. Preservation: mergo doesn't preserve YAML formatting; this preserves comments and anchors
+//  5. Use case: mergo for config inheritance; this for updating user-modified files from templates
 //
 // Example: When a user runs "atmos init --update", this merger compares:
 //   - base: the original template file (from git history)
 //   - ours: the user's modified version (current working directory)
 //   - theirs: the new template version (from updated template)
+//
 // It intelligently merges changes, preserving user customizations while incorporating template updates.
 type YAMLMerger struct {
 	thresholdPercent int // Percentage threshold (0-100) for change detection

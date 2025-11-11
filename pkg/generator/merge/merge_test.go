@@ -398,14 +398,14 @@ resource "aws_subnet" "public" {
 
 func TestThreeWayMerger_ConflictHandling(t *testing.T) {
 	tests := []struct {
-		name      string
-		fileName  string
-		base      string
-		ours      string
-		theirs    string
-		threshold int
-		wantErr   bool
-		wantConflicts bool
+		name              string
+		fileName          string
+		base              string
+		ours              string
+		theirs            string
+		threshold         int
+		wantErr           bool
+		wantConflicts     bool
 		wantConflictCount int
 	}{
 		{
@@ -417,20 +417,20 @@ func TestThreeWayMerger_ConflictHandling(t *testing.T) {
 `,
 			theirs: `timeout: 45
 `,
-			threshold: 100, // High threshold to allow conflict
-			wantErr:   false,
-			wantConflicts: true,
+			threshold:         100, // High threshold to allow conflict
+			wantErr:           false,
+			wantConflicts:     true,
 			wantConflictCount: 1,
 		},
 		{
-			name:      "text conflict: both modify same line",
-			fileName:  "file.txt",
-			base:      "original line\n",
-			ours:      "user version\n",
-			theirs:    "template version\n",
-			threshold: 100,
-			wantErr:   false, // High threshold allows conflict
-			wantConflicts: true,
+			name:              "text conflict: both modify same line",
+			fileName:          "file.txt",
+			base:              "original line\n",
+			ours:              "user version\n",
+			theirs:            "template version\n",
+			threshold:         100,
+			wantErr:           false, // High threshold allows conflict
+			wantConflicts:     true,
 			wantConflictCount: 1,
 		},
 	}
