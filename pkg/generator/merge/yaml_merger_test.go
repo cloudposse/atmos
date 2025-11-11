@@ -666,12 +666,12 @@ func TestYAMLMerger_KeyDeletion(t *testing.T) {
 
 func TestYAMLMerger_PreservesTagsAndStyle(t *testing.T) {
 	tests := []struct {
-		name     string
-		base     string
-		ours     string
-		theirs   string
-		wantTag  string
-		wantStr  string
+		name    string
+		base    string
+		ours    string
+		theirs  string
+		wantTag string
+		wantStr string
 	}{
 		{
 			name: "preserves explicit !!str tag when user changes value",
@@ -771,11 +771,11 @@ func TestYAMLMerger_PreservesTagsAndStyle(t *testing.T) {
 
 func TestYAMLMerger_PreservesLineComments(t *testing.T) {
 	tests := []struct {
-		name         string
-		base         string
-		ours         string
-		theirs       string
-		wantContain  []string
+		name           string
+		base           string
+		ours           string
+		theirs         string
+		wantContain    []string
 		wantNotContain []string
 	}{
 		{
