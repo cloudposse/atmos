@@ -13,9 +13,9 @@ import (
 	cp "github.com/otiai10/copy"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
@@ -46,6 +46,26 @@ func (f fakeDirEntry) Name() string               { return f.name }
 func (f fakeDirEntry) IsDir() bool                { return false }
 func (f fakeDirEntry) Type() os.FileMode          { return 0 }
 func (f fakeDirEntry) Info() (os.FileInfo, error) { return nil, f.err }
+
+// mockGlobMatcher is a test double for filesystem.GlobMatcher.
+type mockGlobMatcher struct {
+	getGlobMatchesFn func(pattern string) ([]string, error)
+	pathMatchFn      func(pattern, name string) (bool, error)
+}
+
+func (m *mockGlobMatcher) GetGlobMatches(pattern string) ([]string, error) {
+	if m.getGlobMatchesFn != nil {
+		return m.getGlobMatchesFn(pattern)
+	}
+	return nil, errors.New("mock GetGlobMatches not implemented")
+}
+
+func (m *mockGlobMatcher) PathMatch(pattern, name string) (bool, error) {
+	if m.pathMatchFn != nil {
+		return m.pathMatchFn(pattern, name)
+	}
+	return false, errors.New("mock PathMatch not implemented")
+}
 
 // TestCopyFile verifies that copyFile correctly copies file contents and preserves permissions.
 func TestCopyFile(t *testing.T) {
@@ -552,22 +572,23 @@ func TestCopyFile_FailChmod(t *testing.T) {
 	}
 }
 
-// TestGetMatchesForPattern_GlobError forces u.GetGlobMatches to return an error.
+// TestGetMatchesForPattern_GlobError tests that glob errors are properly propagated.
 func TestGetMatchesForPattern_GlobError(t *testing.T) {
-	t.Skip("Skipping gomonkey test - mocks u.GetGlobMatches which is no longer called after FileCopier refactor. TODO: Update test to use dependency injection or remove.")
-
-	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	// Create a FileCopier with a mock glob that returns an error.
+	mockGlob := &mockGlobMatcher{
+		getGlobMatchesFn: func(pattern string) ([]string, error) {
+			return nil, errSimulatedGlobError
+		},
 	}
-
-	patches := gomonkey.ApplyFunc(u.GetGlobMatches, func(pattern string) ([]string, error) {
-		return nil, errSimulatedGlobError
-	})
-	defer patches.Reset()
+	fc := NewFileCopier(
+		filesystem.NewOSFileSystem(),
+		mockGlob,
+		filesystem.NewOSIOCopier(),
+	)
 
 	srcDir := "/dummy/src"
 	pattern := "*.txt"
-	_, err := getMatchesForPattern(srcDir, pattern)
+	_, err := fc.getMatchesForPattern(srcDir, pattern)
 	if err == nil || !strings.Contains(err.Error(), "simulated glob error") {
 		t.Errorf("Expected simulated glob error, got %v", err)
 	}
@@ -722,20 +743,21 @@ func TestCopyToTargetWithPatterns_UseCpCopy(t *testing.T) {
 // TestGetMatchesForPattern_ShallowNoMatches tests a shallow pattern (ending with "/*" but not "/**")
 // when no matches are found, expecting an empty result.
 func TestGetMatchesForPattern_ShallowNoMatches(t *testing.T) {
-	t.Skip("Skipping gomonkey test - mocks u.GetGlobMatches which is no longer called after FileCopier refactor. TODO: Update test to use dependency injection or remove.")
-
-	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	// Create a FileCopier with a mock glob that returns empty results.
+	mockGlob := &mockGlobMatcher{
+		getGlobMatchesFn: func(pattern string) ([]string, error) {
+			return []string{}, nil
+		},
 	}
-
-	patches := gomonkey.ApplyFunc(u.GetGlobMatches, func(pattern string) ([]string, error) {
-		return []string{}, nil
-	})
-	defer patches.Reset()
+	fc := NewFileCopier(
+		filesystem.NewOSFileSystem(),
+		mockGlob,
+		filesystem.NewOSIOCopier(),
+	)
 
 	srcDir := "/dummy/src"
 	pattern := "dummy/*" // Shallow pattern without recursive "**"
-	matches, err := getMatchesForPattern(srcDir, pattern)
+	matches, err := fc.getMatchesForPattern(srcDir, pattern)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -866,20 +888,21 @@ func TestShouldSkipPrefixEntry_NoExclusion(t *testing.T) {
 
 // TestGetMatchesForPattern_RecursiveNoMatch tests recursive pattern with no matches.
 func TestGetMatchesForPattern_RecursiveNoMatch(t *testing.T) {
-	t.Skip("Skipping gomonkey test - mocks u.GetGlobMatches which is no longer called after FileCopier refactor. TODO: Update test to use dependency injection or remove.")
-
-	if runtime.GOARCH == "arm64" {
-		t.Skip("Skipping gomonkey test on ARM64 due to memory protection issues: https://github.com/agiledragon/gomonkey/issues/146")
+	// Create a FileCopier with a mock glob that returns empty results.
+	mockGlob := &mockGlobMatcher{
+		getGlobMatchesFn: func(pattern string) ([]string, error) {
+			return []string{}, nil
+		},
 	}
-
-	patches := gomonkey.ApplyFunc(u.GetGlobMatches, func(pattern string) ([]string, error) {
-		return []string{}, nil
-	})
-	defer patches.Reset()
+	fc := NewFileCopier(
+		filesystem.NewOSFileSystem(),
+		mockGlob,
+		filesystem.NewOSIOCopier(),
+	)
 
 	srcDir := "/dummy/src"
 	pattern := "dir/*/**"
-	matches, err := getMatchesForPattern(srcDir, pattern)
+	matches, err := fc.getMatchesForPattern(srcDir, pattern)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
