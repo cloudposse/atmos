@@ -4,6 +4,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
@@ -17,6 +18,8 @@ type GeneratorContext struct {
 // NewGeneratorContext creates a new generator context with I/O and terminal setup.
 // This helper reduces boilerplate in init and scaffold commands.
 func NewGeneratorContext() (*GeneratorContext, error) {
+	defer perf.Track(nil, "setup.NewGeneratorContext")()
+
 	// Create I/O context
 	ioCtx, err := iolib.NewContext()
 	if err != nil {
