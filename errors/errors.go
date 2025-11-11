@@ -490,6 +490,12 @@ var (
 	ErrCommandNotFound               = errors.New("command not found")
 	ErrCommandFailed                 = errors.New("command execution failed")
 
+	// Auth validation errors - specific sentinel errors for configuration validation.
+	ErrMissingPrincipal     = errors.New("principal is required")
+	ErrMissingAssumeRole    = errors.New("assume_role is required in principal")
+	ErrMissingPermissionSet = errors.New("permission set name is required in principal")
+	ErrMissingAccountSpec   = errors.New("account specification is required in principal")
+
 	ErrInvalidSubcommand = errors.New("invalid subcommand")
 	ErrSubcommandFailed  = errors.New("subcommand failed")
 

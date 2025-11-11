@@ -327,14 +327,19 @@ func (i *assumeRoleIdentity) toAWSCredentialsFromWebIdentity(result *sts.AssumeR
 // Validate validates the identity configuration.
 func (i *assumeRoleIdentity) Validate() error {
 	if i.config.Principal == nil {
-		return fmt.Errorf("%w: principal is required", errUtils.ErrInvalidIdentityConfig)
+		return errUtils.Build(errUtils.ErrMissingPrincipal).
+			WithHintf("Identity '%s' requires principal configuration", i.name).
+			WithHint("Add 'principal' field with 'assume_role' to the identity configuration").
+			WithContext("identity", i.name).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Check role ARN in principal or spec (backward compatibility).
 	var roleArn string
 	var ok bool
 	if roleArn, ok = i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
-		return errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+		return errUtils.Build(errUtils.ErrMissingAssumeRole).
 			WithHintf("Missing 'assume_role' configuration for identity '%s'", i.name).
 			WithHint("Add 'assume_role' field to the identity's principal configuration").
 			WithHint("Example: principal: { assume_role: 'arn:aws:iam::123456789012:role/MyRole' }").
