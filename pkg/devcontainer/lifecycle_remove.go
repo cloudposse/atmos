@@ -3,7 +3,6 @@ package devcontainer
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -27,13 +26,29 @@ func (m *Manager) Remove(atmosConfig *schema.AtmosConfiguration, name, instance 
 
 	_, settings, err := m.configLoader.LoadConfig(atmosConfig, name)
 	if err != nil {
-		return err
+		return errUtils.Build(err).
+			WithExplanationf("Failed to load devcontainer configuration for `%s`", name).
+			WithHintf("Verify that the devcontainer is defined in `atmos.yaml` under `components.devcontainer.%s`", name).
+			WithHint("Run `atmos devcontainer list` to see all available devcontainers").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
+			WithContext("devcontainer_name", name).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Initialize container runtime.
 	runtime, err := m.runtimeDetector.DetectRuntime(settings.Runtime)
 	if err != nil {
-		return fmt.Errorf("%w: failed to initialize container runtime: %w", errUtils.ErrContainerRuntimeOperation, err)
+		return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+			WithExplanation("Failed to detect or initialize container runtime").
+			WithHint("Ensure Docker or Podman is installed and running").
+			WithHint("Run `docker info` or `podman info` to verify the runtime is accessible").
+			WithHint("See Docker installation: https://docs.docker.com/get-docker/").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
+			WithContext("devcontainer_name", name).
+			WithContext("runtime", settings.Runtime).
+			WithExitCode(3).
+			Err()
 	}
 
 	ctx := context.Background()
@@ -41,7 +56,15 @@ func (m *Manager) Remove(atmosConfig *schema.AtmosConfiguration, name, instance 
 	// Generate container name.
 	containerName, err := GenerateContainerName(name, instance)
 	if err != nil {
-		return err
+		return errUtils.Build(err).
+			WithExplanationf("Failed to generate valid container name from devcontainer `%s` and instance `%s`", name, instance).
+			WithHint("Container names must be lowercase alphanumeric with hyphens only").
+			WithHint("Ensure the devcontainer name and instance follow naming conventions").
+			WithHint("See Docker naming: https://docs.docker.com/engine/reference/commandline/create/#name").
+			WithContext("devcontainer_name", name).
+			WithContext("instance", instance).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Check if container exists.
@@ -51,21 +74,45 @@ func (m *Manager) Remove(atmosConfig *schema.AtmosConfiguration, name, instance 
 		if errors.Is(err, errUtils.ErrContainerNotFound) {
 			return nil
 		}
-		return fmt.Errorf("%w: failed to inspect container: %w", errUtils.ErrContainerRuntimeOperation, err)
+		return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+			WithExplanationf("Failed to inspect container `%s`", containerName).
+			WithHint("Check that the container runtime daemon is running").
+			WithHint("Run `docker ps -a` or `podman ps -a` to see all containers").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
+			WithContext("devcontainer_name", name).
+			WithContext("container_name", containerName).
+			WithContext("runtime", settings.Runtime).
+			WithExitCode(3).
+			Err()
 	}
 
 	// Stop container if running and force=false.
 	if isContainerRunning(containerInfo.Status) && !force {
-		return fmt.Errorf("%w: %s, use --force to remove", errUtils.ErrContainerRunning, containerName)
+		return errUtils.Build(errUtils.ErrContainerRunning).
+			WithExplanationf("Container `%s` is currently running", containerName).
+			WithHintf("Stop the container first with `atmos devcontainer stop %s`", name).
+			WithHint("Or use `--force` flag to stop and remove in one step").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
+			WithContext("devcontainer_name", name).
+			WithContext("container_name", containerName).
+			WithContext("container_status", containerInfo.Status).
+			WithExitCode(1).
+			Err()
 	}
 
 	// Stop if running.
 	if isContainerRunning(containerInfo.Status) {
 		if err := stopContainerIfRunning(ctx, runtime, containerInfo); err != nil {
-			return err
+			return errUtils.Build(err).
+				WithContext("devcontainer_name", name).
+				WithContext("container_name", containerName).
+				Err()
 		}
 	}
 
 	// Remove the container.
-	return removeContainer(ctx, runtime, containerInfo, containerName)
+	return errUtils.Build(removeContainer(ctx, runtime, containerInfo, containerName)).
+		WithContext("devcontainer_name", name).
+		WithContext("container_name", containerName).
+		Err()
 }

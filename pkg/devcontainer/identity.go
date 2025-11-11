@@ -33,7 +33,14 @@ func injectIdentityEnvironment(ctx context.Context, config *Config, identityName
 	// 1. Load Atmos configuration.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return fmt.Errorf("failed to load atmos config: %w", err)
+		return errUtils.Build(err).
+			WithExplanation("Failed to load Atmos configuration while injecting identity").
+			WithHint("Verify that `atmos.yaml` exists and is properly configured").
+			WithHint("Run `atmos version` to check Atmos configuration validity").
+			WithHint("See Atmos docs: https://atmos.tools/cli/configuration/").
+			WithContext("identity_name", identityName).
+			WithExitCode(2).
+			Err()
 	}
 
 	// 2. Create auth manager.
@@ -41,13 +48,29 @@ func injectIdentityEnvironment(ctx context.Context, config *Config, identityName
 	validator := validation.NewValidator()
 	authManager, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create auth manager: %w", err)
+		return errUtils.Build(err).
+			WithExplanation("Failed to initialize authentication manager").
+			WithHint("Verify that auth configuration is valid in `atmos.yaml`").
+			WithHint("Check that required auth providers are properly configured").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/auth/").
+			WithContext("identity_name", identityName).
+			WithExitCode(2).
+			Err()
 	}
 
 	// 3. Authenticate identity (provider-agnostic!)
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf("%w: failed to authenticate identity '%s': %w", errUtils.ErrAuthenticationFailed, identityName, err)
+		return errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithExplanationf("Failed to authenticate identity `%s`", identityName).
+			WithHintf("Verify that the identity `%s` is configured in `atmos.yaml`", identityName).
+			WithHint("Run `atmos auth identity list` to see available identities").
+			WithHint("Use `atmos auth identity configure` to set up the identity").
+			WithHint("Check that required credentials are present and valid").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/auth/auth-identity-configure/").
+			WithContext("identity_name", identityName).
+			WithExitCode(1).
+			Err()
 	}
 
 	// 4. Get environment variables from authenticated identity.
@@ -65,7 +88,9 @@ func injectIdentityEnvironment(ctx context.Context, config *Config, identityName
 
 	// 6. Convert credential paths to container mounts (provider-agnostic!).
 	if err := addCredentialMounts(config, whoami.Paths); err != nil {
-		return err
+		return errUtils.Build(err).
+			WithContext("identity_name", identityName).
+			Err()
 	}
 
 	// 7. Inject environment variables into container config.
@@ -94,8 +119,17 @@ func addCredentialMounts(config *Config, paths []types.Path) error {
 		// Check if path exists if required.
 		if credPath.Required {
 			if _, err := os.Stat(expandedPath); err != nil {
-				return fmt.Errorf("required credential path %s (%s) does not exist: %w",
-					expandedPath, credPath.Purpose, err)
+				return errUtils.Build(err).
+					WithExplanationf("Required credential path `%s` does not exist", expandedPath).
+					WithHintf("The identity requires this credential file/directory: %s", credPath.Purpose).
+					WithHint("Ensure the required credentials are present before starting the devcontainer").
+					WithHint("Check the identity configuration for required credential paths").
+					WithHint("See Atmos docs: https://atmos.tools/cli/commands/auth/auth-identity-configure/").
+					WithContext("credential_path", expandedPath).
+					WithContext("purpose", credPath.Purpose).
+					WithContext("required", "true").
+					WithExitCode(1).
+					Err()
 			}
 		} else if _, err := os.Stat(expandedPath); err != nil {
 			// Optional path doesn't exist, skip it.

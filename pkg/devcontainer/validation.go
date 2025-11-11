@@ -1,7 +1,6 @@
 package devcontainer
 
 import (
-	"fmt"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -16,7 +15,28 @@ func ValidateNotImported(importPath string) error {
 	// Check if the import path contains devcontainer configuration
 	// This would indicate someone is trying to import a devcontainer as a component dependency
 	if containsDevcontainerConfig(importPath) {
-		return fmt.Errorf("%w: devcontainers cannot be used as component dependencies (path: %s)", errUtils.ErrInvalidDevcontainerConfig, importPath)
+		return errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
+			WithExplanation("Devcontainers cannot be used as component dependencies").
+			WithExplanationf("Import path `%s` contains devcontainer configuration", importPath).
+			WithHint("Devcontainers are workspace-level development environments, not component dependencies").
+			WithHint("Remove the devcontainer import from your component configuration").
+			WithHint("Define devcontainers in the top-level `components.devcontainer` section of `atmos.yaml`").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
+			WithExample(`Correct usage:
+# atmos.yaml
+components:
+  devcontainer:
+    my-dev:  # Define devcontainer here
+      spec:
+        image: golang:latest
+
+  terraform:
+    vpc:
+      # Don't import devcontainer here
+      # imports: ...`).
+			WithContext("import_path", importPath).
+			WithExitCode(2).
+			Err()
 	}
 
 	return nil

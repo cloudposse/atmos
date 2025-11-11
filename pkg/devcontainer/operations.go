@@ -37,16 +37,26 @@ func runWithSpinner(progressMsg, completedMsg string, operation func() error) er
 func createAndStartNewContainer(params *containerParams) error {
 	// Build image if build configuration is specified.
 	if err := buildImageIfNeeded(params.ctx, params.runtime, params.config, params.name); err != nil {
-		return err
+		return errUtils.Build(err).
+			WithContext("devcontainer_name", params.name).
+			WithContext("container_name", params.containerName).
+			Err()
 	}
 
 	containerID, err := createContainer(params)
 	if err != nil {
-		return err
+		return errUtils.Build(err).
+			WithContext("devcontainer_name", params.name).
+			WithContext("container_name", params.containerName).
+			Err()
 	}
 
 	if err := startContainer(params.ctx, params.runtime, containerID, params.containerName); err != nil {
-		return err
+		return errUtils.Build(err).
+			WithContext("devcontainer_name", params.name).
+			WithContext("container_name", params.containerName).
+			WithContext("container_id", containerID).
+			Err()
 	}
 
 	// Display container information.
@@ -64,10 +74,16 @@ func stopAndRemoveContainer(ctx context.Context, runtime container.Runtime, cont
 	}
 
 	if err := stopContainerIfRunning(ctx, runtime, containerInfo); err != nil {
-		return err
+		return errUtils.Build(err).
+			WithContext("container_name", containerName).
+			WithContext("container_id", containerInfo.ID).
+			Err()
 	}
 
-	return removeContainer(ctx, runtime, containerInfo, containerName)
+	return errUtils.Build(removeContainer(ctx, runtime, containerInfo, containerName)).
+		WithContext("container_name", containerName).
+		WithContext("container_id", containerInfo.ID).
+		Err()
 }
 
 // stopContainerIfRunning stops a container if it's running.
@@ -81,7 +97,16 @@ func stopContainerIfRunning(ctx context.Context, runtime container.Runtime, cont
 		fmt.Sprintf("Stopped container %s", containerInfo.Name),
 		func() error {
 			if err := runtime.Stop(ctx, containerInfo.ID, defaultContainerStopTimeout); err != nil {
-				return fmt.Errorf("%w: failed to stop container: %w", errUtils.ErrContainerRuntimeOperation, err)
+				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithExplanationf("Failed to stop container `%s` (ID: %s)", containerInfo.Name, containerInfo.ID).
+					WithHint("Check that the container runtime daemon is running").
+					WithHintf("Run `docker inspect %s` or `podman inspect %s` to see container state", containerInfo.Name, containerInfo.Name).
+					WithHint("The container may be stuck or require a forced removal").
+					WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
+					WithContext("container_name", containerInfo.Name).
+					WithContext("container_id", containerInfo.ID).
+					WithExitCode(3).
+					Err()
 			}
 			return nil
 		})
@@ -94,7 +119,16 @@ func removeContainer(ctx context.Context, runtime container.Runtime, containerIn
 		fmt.Sprintf("Removed container %s", containerName),
 		func() error {
 			if err := runtime.Remove(ctx, containerInfo.ID, true); err != nil {
-				return fmt.Errorf("%w: failed to remove container: %w", errUtils.ErrContainerRuntimeOperation, err)
+				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithExplanationf("Failed to remove container `%s` (ID: %s)", containerName, containerInfo.ID).
+					WithHint("Check that the container runtime daemon is running").
+					WithHintf("Run `docker inspect %s` or `podman inspect %s` to see container state", containerName, containerName).
+					WithHint("If the container is running, stop it first with `atmos devcontainer stop`").
+					WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
+					WithContext("container_name", containerName).
+					WithContext("container_id", containerInfo.ID).
+					WithExitCode(3).
+					Err()
 			}
 			return nil
 		})
@@ -111,7 +145,16 @@ func pullImageIfNeeded(ctx context.Context, runtime container.Runtime, image str
 		fmt.Sprintf("Pulled image %s", image),
 		func() error {
 			if err := runtime.Pull(ctx, image); err != nil {
-				return fmt.Errorf("%w: failed to pull image: %w", errUtils.ErrContainerRuntimeOperation, err)
+				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithExplanationf("Failed to pull container image `%s`", image).
+					WithHintf("Verify that the image name `%s` is correct and accessible", image).
+					WithHint("Check that you have network connectivity and proper registry credentials").
+					WithHint("If using a private registry, ensure you are logged in with `docker login` or `podman login`").
+					WithHint("See Docker Hub: https://hub.docker.com/").
+					WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
+					WithContext("image", image).
+					WithExitCode(3).
+					Err()
 			}
 			return nil
 		})
@@ -129,7 +172,18 @@ func createContainer(params *containerParams) (string, error) {
 
 			id, err := params.runtime.Create(params.ctx, createConfig)
 			if err != nil {
-				return fmt.Errorf("%w: failed to create container: %w", errUtils.ErrContainerRuntimeOperation, err)
+				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithExplanationf("Failed to create container `%s`", params.containerName).
+					WithHintf("Verify that the image `%s` exists or can be pulled", params.config.Image).
+					WithHint("Check that the container runtime daemon is running").
+					WithHint("Run `docker images` or `podman images` to see available images").
+					WithHint("See DevContainer spec: https://containers.dev/implementors/json_reference/").
+					WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
+					WithContext("container_name", params.containerName).
+					WithContext("devcontainer_name", params.name).
+					WithContext("image", params.config.Image).
+					WithExitCode(3).
+					Err()
 			}
 			containerID = id
 			return nil
@@ -145,7 +199,17 @@ func startContainer(ctx context.Context, runtime container.Runtime, containerID,
 		fmt.Sprintf("Started container %s", containerName),
 		func() error {
 			if err := runtime.Start(ctx, containerID); err != nil {
-				return fmt.Errorf("%w: failed to start container: %w", errUtils.ErrContainerRuntimeOperation, err)
+				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithExplanationf("Failed to start container `%s` (ID: %s)", containerName, containerID).
+					WithHint("Check that the container runtime daemon is running").
+					WithHintf("Run `docker inspect %s` or `podman inspect %s` to see container details", containerName, containerName).
+					WithHint("The container may have configuration issues preventing startup").
+					WithHintf("Check container logs with `docker logs %s` or `podman logs %s`", containerName, containerName).
+					WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
+					WithContext("container_name", containerName).
+					WithContext("container_id", containerID).
+					WithExitCode(3).
+					Err()
 			}
 			return nil
 		})
@@ -181,7 +245,29 @@ func buildImageIfNeeded(ctx context.Context, runtime container.Runtime, config *
 			}
 
 			if err := runtime.Build(ctx, buildConfig); err != nil {
-				return fmt.Errorf("%w: failed to build image: %w", errUtils.ErrContainerRuntimeOperation, err)
+				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithExplanationf("Failed to build container image `%s` from Dockerfile", imageName).
+					WithHintf("Verify that the Dockerfile exists at `%s`", config.Build.Dockerfile).
+					WithHintf("Verify that the build context path `%s` is correct", config.Build.Context).
+					WithHint("Check that the container runtime daemon is running").
+					WithHint("Review the Dockerfile for syntax errors or invalid instructions").
+					WithHint("See DevContainer build spec: https://containers.dev/implementors/json_reference/#build-properties").
+					WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
+					WithExample(`components:
+  devcontainer:
+    my-dev:
+      spec:
+        build:
+          context: .
+          dockerfile: Dockerfile
+          args:
+            VARIANT: "1.24"`).
+					WithContext("devcontainer_name", devcontainerName).
+					WithContext("image_name", imageName).
+					WithContext("dockerfile", config.Build.Dockerfile).
+					WithContext("context", config.Build.Context).
+					WithExitCode(3).
+					Err()
 			}
 
 			// Update config to use the built image name.

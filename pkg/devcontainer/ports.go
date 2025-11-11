@@ -24,7 +24,10 @@ func ParsePorts(forwardPorts []interface{}, portsAttributes map[string]PortAttri
 	for _, port := range forwardPorts {
 		binding, err := parsePort(port, portsAttributes)
 		if err != nil {
-			return nil, err
+			return nil, errUtils.Build(err).
+				WithHint("Verify port configuration in `atmos.yaml`").
+				WithHint("See DevContainer spec: https://containers.dev/implementors/json_reference/#general-properties").
+				Err()
 		}
 		bindings = append(bindings, binding)
 	}
@@ -51,7 +54,17 @@ func parsePort(port interface{}, portsAttributes map[string]PortAttributes) (con
 		return parsePortString(v, portsAttributes)
 
 	default:
-		return container.PortBinding{}, fmt.Errorf("%w: invalid port type %T", errUtils.ErrInvalidDevcontainerConfig, port)
+		return container.PortBinding{}, errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
+			WithExplanationf("Invalid port type: %T (expected int or string)", port).
+			WithHint("Ports must be specified as integers (e.g., `8080`) or strings (e.g., `\"3000:3000\"`)").
+			WithHint("See DevContainer spec: https://containers.dev/implementors/json_reference/#general-properties").
+			WithExample(`Valid port configurations:
+  forwardPorts:
+    - 8080           # Integer port
+    - "3000:3000"    # String mapping
+    - 5432           # Integer port`).
+			WithExitCode(2).
+			Err()
 	}
 }
 
@@ -63,38 +76,74 @@ func parsePortString(portStr string, portsAttributes map[string]PortAttributes) 
 
 	switch len(parts) {
 	case 1:
-		// Simple port: "8080" -> 8080:8080
-		port, err := strconv.Atoi(parts[0])
-		if err != nil {
-			return container.PortBinding{}, fmt.Errorf("%w: invalid port number '%s': %w", errUtils.ErrInvalidDevcontainerConfig, parts[0], err)
-		}
-		protocol := getProtocol(parts[0], portsAttributes)
-		return container.PortBinding{
-			ContainerPort: port,
-			HostPort:      port,
-			Protocol:      protocol,
-		}, nil
-
+		return parseSinglePort(parts[0], portsAttributes)
 	case 2:
-		// Explicit mapping: "3000:3000"
-		hostPort, err := strconv.Atoi(parts[0])
-		if err != nil {
-			return container.PortBinding{}, fmt.Errorf("%w: invalid host port '%s': %w", errUtils.ErrInvalidDevcontainerConfig, parts[0], err)
-		}
-		containerPort, err := strconv.Atoi(parts[1])
-		if err != nil {
-			return container.PortBinding{}, fmt.Errorf("%w: invalid container port '%s': %w", errUtils.ErrInvalidDevcontainerConfig, parts[1], err)
-		}
-		protocol := getProtocol(parts[1], portsAttributes)
-		return container.PortBinding{
-			ContainerPort: containerPort,
-			HostPort:      hostPort,
-			Protocol:      protocol,
-		}, nil
-
+		return parsePortMapping(parts[0], parts[1], portStr, portsAttributes)
 	default:
-		return container.PortBinding{}, fmt.Errorf("%w: invalid port format '%s'", errUtils.ErrInvalidDevcontainerConfig, portStr)
+		return container.PortBinding{}, buildInvalidPortFormatError(portStr)
 	}
+}
+
+// parseSinglePort parses a single port number.
+func parseSinglePort(portStr string, portsAttributes map[string]PortAttributes) (container.PortBinding, error) {
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return container.PortBinding{}, errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
+			WithExplanationf("Invalid port number `%s`", portStr).
+			WithHint("Port must be a valid integer between 1 and 65535").
+			WithHint("See DevContainer spec: https://containers.dev/implementors/json_reference/#general-properties").
+			WithContext("port_string", portStr).
+			WithExitCode(2).
+			Err()
+	}
+	protocol := getProtocol(portStr, portsAttributes)
+	return container.PortBinding{ContainerPort: port, HostPort: port, Protocol: protocol}, nil
+}
+
+// parsePortMapping parses a host:container port mapping.
+func parsePortMapping(hostStr, containerStr, fullStr string, portsAttributes map[string]PortAttributes) (container.PortBinding, error) {
+	hostPort, err := strconv.Atoi(hostStr)
+	if err != nil {
+		return container.PortBinding{}, errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
+			WithExplanationf("Invalid host port `%s` in port mapping `%s`", hostStr, fullStr).
+			WithHint("Host port must be a valid integer between 1 and 65535").
+			WithHint("Format should be `host:container` (e.g., `\"8080:3000\"`)").
+			WithHint("See DevContainer spec: https://containers.dev/implementors/json_reference/#general-properties").
+			WithContext("port_string", fullStr).
+			WithContext("host_port", hostStr).
+			WithExitCode(2).
+			Err()
+	}
+	containerPort, err := strconv.Atoi(containerStr)
+	if err != nil {
+		return container.PortBinding{}, errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
+			WithExplanationf("Invalid container port `%s` in port mapping `%s`", containerStr, fullStr).
+			WithHint("Container port must be a valid integer between 1 and 65535").
+			WithHint("Format should be `host:container` (e.g., `\"8080:3000\"`)").
+			WithHint("See DevContainer spec: https://containers.dev/implementors/json_reference/#general-properties").
+			WithContext("port_string", fullStr).
+			WithContext("container_port", containerStr).
+			WithExitCode(2).
+			Err()
+	}
+	protocol := getProtocol(containerStr, portsAttributes)
+	return container.PortBinding{ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, nil
+}
+
+// buildInvalidPortFormatError creates an error for invalid port format.
+func buildInvalidPortFormatError(portStr string) error {
+	return errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
+		WithExplanationf("Invalid port format `%s`", portStr).
+		WithHint("Port format must be either a single port (e.g., `\"8080\"`) or a host:container mapping (e.g., `\"8080:3000\"`)").
+		WithHint("See DevContainer spec: https://containers.dev/implementors/json_reference/#general-properties").
+		WithExample(`Valid port formats:
+  forwardPorts:
+    - 8080           # Maps 8080:8080
+    - "3000:3000"    # Maps 3000:3000
+    - "8080:80"      # Maps host 8080 to container 80`).
+		WithContext("port_string", portStr).
+		WithExitCode(2).
+		Err()
 }
 
 // getProtocol gets the protocol for a port from portsAttributes, defaults to "tcp".

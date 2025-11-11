@@ -58,7 +58,20 @@ func GenerateContainerName(name, instance string) (string, error) {
 	defer perf.Track(nil, "devcontainer.GenerateContainerName")()
 
 	if err := ValidateName(name); err != nil {
-		return "", fmt.Errorf("%w: invalid devcontainer name: %w", errUtils.ErrInvalidDevcontainerConfig, err)
+		return "", errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
+			WithExplanationf("Invalid devcontainer name `%s`", name).
+			WithHint("Devcontainer names must start with alphanumeric and contain only alphanumeric, hyphens, and underscores").
+			WithHintf("Maximum length is %d characters", maxNameLength).
+			WithHint("Update the devcontainer name in `atmos.yaml`").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
+			WithExample(`components:
+  devcontainer:
+    my-backend-api:  # Valid: alphanumeric and hyphens
+      spec:
+        image: golang:latest`).
+			WithContext("devcontainer_name", name).
+			WithExitCode(2).
+			Err()
 	}
 
 	if instance == "" {
@@ -66,15 +79,35 @@ func GenerateContainerName(name, instance string) (string, error) {
 	}
 
 	if err := ValidateName(instance); err != nil {
-		return "", fmt.Errorf("%w: invalid instance name: %w", errUtils.ErrInvalidDevcontainerConfig, err)
+		return "", errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
+			WithExplanationf("Invalid instance name `%s`", instance).
+			WithHint("Instance names must start with alphanumeric and contain only alphanumeric, hyphens, and underscores").
+			WithHintf("Maximum length is %d characters", maxNameLength).
+			WithHint("Use valid instance names like `default`, `test-1`, `prod`, etc.").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
+			WithContext("devcontainer_name", name).
+			WithContext("instance", instance).
+			WithExitCode(2).
+			Err()
 	}
 
 	containerName := fmt.Sprintf("%s.%s.%s", ContainerPrefix, name, instance)
 
 	// Validate total container name length (Docker/Podman limit is 253, but 63 for DNS compatibility).
 	if len(containerName) > maxNameLength {
-		return "", fmt.Errorf("%w: container name '%s' exceeds %d characters (name: %d chars, instance: %d chars, prefix: %d chars)",
-			errUtils.ErrDevcontainerNameTooLong, containerName, maxNameLength, len(name), len(instance), len(ContainerPrefix)+2)
+		return "", errUtils.Build(errUtils.ErrDevcontainerNameTooLong).
+			WithExplanationf("Container name `%s` exceeds %d characters", containerName, maxNameLength).
+			WithHintf("Name uses %d chars, instance uses %d chars, prefix uses %d chars", len(name), len(instance), len(ContainerPrefix)+2).
+			WithHint("Use shorter devcontainer or instance names").
+			WithHint("Consider abbreviating the devcontainer name or using a shorter instance identifier").
+			WithHint("See Docker naming constraints: https://docs.docker.com/engine/reference/commandline/create/#name").
+			WithContext("devcontainer_name", name).
+			WithContext("instance", instance).
+			WithContext("container_name", containerName).
+			WithContext("total_length", fmt.Sprintf("%d", len(containerName))).
+			WithContext("max_length", fmt.Sprintf("%d", maxNameLength)).
+			WithExitCode(2).
+			Err()
 	}
 
 	return containerName, nil
@@ -130,15 +163,46 @@ func ValidateName(name string) error {
 	defer perf.Track(nil, "devcontainer.ValidateName")()
 
 	if name == "" {
-		return errUtils.ErrDevcontainerNameEmpty
+		return errUtils.Build(errUtils.ErrDevcontainerNameEmpty).
+			WithExplanation("Devcontainer or instance name cannot be empty").
+			WithHint("Provide a valid name in `atmos.yaml` configuration").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
+			WithExitCode(2).
+			Err()
 	}
 
 	if !namePattern.MatchString(name) {
-		return fmt.Errorf("%w: '%s' must start with alphanumeric and contain only alphanumeric, hyphens, and underscores", errUtils.ErrDevcontainerNameInvalid, name)
+		return errUtils.Build(errUtils.ErrDevcontainerNameInvalid).
+			WithExplanationf("Name `%s` contains invalid characters or format", name).
+			WithHint("Names must start with alphanumeric character").
+			WithHint("Names can only contain alphanumeric characters, hyphens, and underscores").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
+			WithExample(`Valid names:
+  - backend-api
+  - my_service
+  - app1
+  - test-env_2
+
+Invalid names:
+  - -backend  (starts with hyphen)
+  - api.service  (contains dot)
+  - my service  (contains space)`).
+			WithContext("name", name).
+			WithExitCode(2).
+			Err()
 	}
 
 	if len(name) > maxNameLength {
-		return fmt.Errorf("%w: '%s' exceeds %d characters", errUtils.ErrDevcontainerNameTooLong, name, maxNameLength)
+		return errUtils.Build(errUtils.ErrDevcontainerNameTooLong).
+			WithExplanationf("Name `%s` exceeds maximum length of %d characters", name, maxNameLength).
+			WithHintf("Current length: %d characters", len(name)).
+			WithHint("Use a shorter name or abbreviation").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
+			WithContext("name", name).
+			WithContext("length", fmt.Sprintf("%d", len(name))).
+			WithContext("max_length", fmt.Sprintf("%d", maxNameLength)).
+			WithExitCode(2).
+			Err()
 	}
 
 	return nil
