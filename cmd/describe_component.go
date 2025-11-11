@@ -74,19 +74,27 @@ var describeComponentCmd = &cobra.Command{
 
 		component := args[0]
 
+		// Determine if we need path resolution.
+		// Only resolve as a filesystem path if the argument explicitly indicates a path.
+		// Otherwise, treat it as a component name (even if it contains slashes).
+		needsPathResolution := comp.IsExplicitComponentPath(component)
+
 		// Load atmos configuration to get auth config.
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
 			ComponentFromArg: component,
 			Stack:            stack,
 		}, false)
 		if err != nil {
+			// If config loading failed and we're trying to resolve a path,
+			// try to give a more specific error about the path.
+			if needsPathResolution {
+				// Try to determine if the path is outside component directories.
+				// Since we don't have config, we can't determine base paths,
+				// so we just indicate that path resolution requires valid config.
+				return fmt.Errorf("path resolution requires valid Atmos configuration: %w", err)
+			}
 			return errors.Join(errUtils.ErrFailedToInitConfig, err)
 		}
-
-		// Determine if we need path resolution.
-		// Only resolve as a filesystem path if the argument explicitly indicates a path.
-		// Otherwise, treat it as a component name (even if it contains slashes).
-		needsPathResolution := comp.IsExplicitComponentPath(component)
 
 		// Resolve path-based component arguments to component names
 		if needsPathResolution {

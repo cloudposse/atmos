@@ -1468,7 +1468,7 @@ sources:
         atmos_component_description: Infra/Vpc component provisioned in the stack "tenant1-ue2-dev"
         atmos_manifest: orgs/cp/tenant1/dev/us-east-2
         atmos_stack: tenant1-ue2-dev
-        provisioned_by_user: erik
+        provisioned_by_user: user
         region: us-east-2
         spacelift_stack: <no value>
         terraform_component: infra/vpc
@@ -1484,7 +1484,7 @@ sources:
             atmos_component_description: Infra/Vpc component provisioned in the stack "tenant1-ue2-dev"
             atmos_manifest: orgs/cp/tenant1/dev/us-east-2
             atmos_stack: tenant1-ue2-dev
-            provisioned_by_user: erik
+            provisioned_by_user: user
             region: us-east-2
             spacelift_stack: <no value>
             terraform_component: infra/vpc
@@ -1523,7 +1523,7 @@ vars:
     atmos_component_description: Infra/Vpc component provisioned in the stack "tenant1-ue2-dev"
     atmos_manifest: orgs/cp/tenant1/dev/us-east-2
     atmos_stack: tenant1-ue2-dev
-    provisioned_by_user: erik
+    provisioned_by_user: user
     region: us-east-2
     spacelift_stack: <no value>
     terraform_component: infra/vpc

@@ -193,7 +193,8 @@ tests:
       - "--stack"
       - "tenant1-ue2-dev"
     expect:
-      diff: []
+      diff:
+        - "provisioned_by_user"
       exit_code: 0
 
   - name: describe component with relative path
@@ -212,7 +213,8 @@ tests:
       - "--stack"
       - "tenant1-ue2-dev"
     expect:
-      diff: []
+      diff:
+        - "provisioned_by_user"
       exit_code: 0
 
   - name: describe component with nested component path
@@ -222,7 +224,7 @@ tests:
     workdir: "fixtures/scenarios/complete/components/terraform/infra/vpc"
     command: "atmos"
     env:
-      ATMOS_CLI_CONFIG_PATH: "../../../../.."
+      ATMOS_CLI_CONFIG_PATH: "../../../.."
     args:
       - "describe"
       - "component"

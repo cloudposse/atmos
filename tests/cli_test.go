@@ -419,6 +419,18 @@ func sanitizeOutput(output string) (string, error) {
 	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
 	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
 
+	// 15. Normalize basePathAbsolute values in config output.
+	// This field shows the absolute path to the repo, which varies by environment.
+	// Replace with the normalized path placeholder for consistency.
+	basePathAbsoluteRegex := regexp.MustCompile(`(?m)^basePathAbsolute: /absolute/path/to/repo.*$`)
+	result = basePathAbsoluteRegex.ReplaceAllString(result, "basePathAbsolute: /absolute/path/to/repo")
+
+	// 16. Normalize provisioned_by_user values in component output.
+	// This field shows the current username, which varies by environment (erik, runner, etc.).
+	// Replace with a generic placeholder.
+	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
+	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
+
 	return result, nil
 }
 

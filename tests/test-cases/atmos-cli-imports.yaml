@@ -17,6 +17,7 @@ tests:
       exit_code: 0
       diff:
         - "github_token"
+        - "basePathAbsolute"
   - name: atmos_describe_configuration
     snapshot: true
     enabled: true
@@ -34,3 +35,4 @@ tests:
       exit_code: 0
       diff:
         - "github_token"
+        - "basePathAbsolute"

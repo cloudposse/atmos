@@ -1,6 +1,6 @@
 atlantis_project: tenant1-ue2-dev-top-level-component1
 atmos_cli_config:
-  base_path: .
+  base_path: ../..
   components:
     terraform:
       base_path: components/terraform
@@ -986,7 +986,7 @@ sources:
         atmos_component_description: Top-Level-Component1 component provisioned in the stack "tenant1-ue2-dev"
         atmos_manifest: orgs/cp/tenant1/dev/us-east-2
         atmos_stack: tenant1-ue2-dev
-        provisioned_by_user: erik
+        provisioned_by_user: user
         region: us-east-2
         spacelift_stack: <no value>
         terraform_component: top-level-component1
@@ -1002,7 +1002,7 @@ sources:
             atmos_component_description: Top-Level-Component1 component provisioned in the stack "tenant1-ue2-dev"
             atmos_manifest: orgs/cp/tenant1/dev/us-east-2
             atmos_stack: tenant1-ue2-dev
-            provisioned_by_user: erik
+            provisioned_by_user: user
             region: us-east-2
             spacelift_stack: <no value>
             terraform_component: top-level-component1
@@ -1032,7 +1032,7 @@ vars:
     atmos_component_description: Top-Level-Component1 component provisioned in the stack "tenant1-ue2-dev"
     atmos_manifest: orgs/cp/tenant1/dev/us-east-2
     atmos_stack: tenant1-ue2-dev
-    provisioned_by_user: erik
+    provisioned_by_user: user
     region: us-east-2
     spacelift_stack: <no value>
     terraform_component: top-level-component1
