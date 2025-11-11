@@ -123,6 +123,14 @@ builder.WithExplanation("Abstract components cannot be provisioned directly. The
 builder.WithExplanation("Components must be defined in the `components/terraform/` directory and referenced in stack configurations.")
 ```
 
+#### `WithExplanationf(format string, args ...interface{}) *ErrorBuilder`
+Adds a formatted explanation. **Prefer this over `WithExplanation(fmt.Sprintf(...))`** (enforced by linter).
+
+```go
+builder.WithExplanationf("Component `%s` is marked as abstract in stack `%s`", component, stack)
+builder.WithExplanationf("The %s backend requires %d configuration parameters", backendType, paramCount)
+```
+
 #### `Err() error`
 Finalizes the error builder and returns the constructed error.
 
@@ -360,13 +368,13 @@ err := errUtils.Build(errUtils.ErrNoChanges).
 When reviewing or creating error messages, ensure:
 
 - [ ] **Sentinel error exists** in `errors/errors.go`
-- [ ] **Hints are actionable** - User knows what concrete steps to take
-- [ ] **Explanations are educational** - User understands WHY the problem occurred
+- [ ] **Hints are WHAT TO DO** - No "what happened" in hints, only actionable steps
+- [ ] **Explanations are WHAT HAPPENED** - Educational content about why it failed
 - [ ] **Markdown formatting used** - Commands, files, variables, and technical terms in backticks
 - [ ] **No redundancy** - Each method (hint/explanation/context/exitcode) adds NEW info
 - [ ] **Context adds debugging value** - Don't repeat what's in hints, add WHERE and HOW
 - [ ] **Exit code only when non-default** - Omit `WithExitCode(1)`, be explicit for 0 or 2
-- [ ] **Formatting is consistent** - Uses `WithHintf()` not `WithHint(fmt.Sprintf())`
+- [ ] **No fmt.Sprintf with builder methods** - Use `WithHintf()` not `WithHint(fmt.Sprintf())`, `WithExplanationf()` not `WithExplanation(fmt.Sprintf())`
 - [ ] **Error is wrapped properly** - Uses `errors.Join()` or `fmt.Errorf("%w: ...", ...)`
 - [ ] **Checking uses `errors.Is()`** - Not string comparison
 
@@ -484,15 +492,33 @@ return errUtils.Build(errUtils.ErrThemeNotFound).
     Err()
 ```
 
-### ❌ fmt.Sprintf in WithHint
+### ❌ fmt.Sprintf with Builder Methods
+
+All builder methods have formatted variants - never use `fmt.Sprintf` with builder methods.
 
 ```go
-// WRONG: Triggers linter warning
+// WRONG: Using fmt.Sprintf with WithHint (triggers linter warning)
 builder.WithHint(fmt.Sprintf("Component `%s` not found", component))
 
 // CORRECT: Use WithHintf
 builder.WithHintf("Component `%s` not found", component)
+
+// WRONG: Using fmt.Sprintf with WithExplanation
+builder.WithExplanation(fmt.Sprintf("The component `%s` is marked as abstract", component))
+
+// CORRECT: Use WithExplanationf
+builder.WithExplanationf("The component `%s` is marked as abstract", component)
+
+// WRONG: Using fmt.Sprintf with WithContext (though less common)
+builder.WithContext("message", fmt.Sprintf("failed to load %s", filename))
+
+// CORRECT: Context values are automatically formatted, or use string concatenation if needed
+builder.WithContext("failed_file", filename)
 ```
+
+**Available formatted methods:**
+- `WithHintf(format string, args ...interface{})` - Instead of `WithHint(fmt.Sprintf(...))`
+- `WithExplanationf(format string, args ...interface{})` - Instead of `WithExplanation(fmt.Sprintf(...))`
 
 ### ❌ Too Much in Hint, Not Enough in Context
 
