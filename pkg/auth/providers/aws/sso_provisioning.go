@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -39,7 +40,13 @@ func (p *ssoProvider) ProvisionIdentities(ctx context.Context, creds authTypes.I
 	// Extract SSO access token from credentials.
 	awsCreds, ok := creds.(*authTypes.AWSCredentials)
 	if !ok {
-		return nil, fmt.Errorf("%w: invalid credentials type for SSO provisioning", errUtils.ErrAuthenticationFailed)
+		return nil, errUtils.Build(errUtils.ErrSSOProvisioningFailed).
+			WithHintf("Invalid credentials type for SSO identity provisioning").
+			WithHint("Ensure the provider successfully authenticated before provisioning identities").
+			WithHint("Check your AWS SSO configuration in atmos.yaml").
+			WithContext("provider", p.name).
+			WithExitCode(1).
+			Err()
 	}
 
 	// Create SSO client if not injected (for testing).
@@ -61,7 +68,16 @@ func (p *ssoProvider) provisionIdentitiesWithClient(ctx context.Context, ssoClie
 	// List all accounts accessible to this user.
 	accounts, err := p.listAccountsWithClient(ctx, ssoClient, accessToken)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to list SSO accounts: %w", errUtils.ErrAuthenticationFailed, err)
+		return nil, errUtils.Build(errUtils.ErrSSOAccountListFailed).
+			WithHintf("Failed to list AWS SSO accounts for identity provisioning").
+			WithHint("Verify your AWS SSO session is still active with 'aws sso login'").
+			WithHint("Ensure your SSO user has permissions to list accounts").
+			WithHintf("Check that the SSO start URL '%s' is correct", p.startURL).
+			WithContext("provider", p.name).
+			WithContext("start_url", p.startURL).
+			WithContext("region", p.region).
+			WithExitCode(1).
+			Err()
 	}
 
 	log.Debug("Listed SSO accounts", "count", len(accounts))
@@ -141,7 +157,7 @@ func (p *ssoProvider) listAccountsWithClient(ctx context.Context, ssoClient ssoC
 			NextToken:   nextToken,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to list accounts: %w", err)
+			return nil, errors.Join(errUtils.ErrSSOAccountListFailed, err)
 		}
 
 		accounts = append(accounts, output.AccountList...)
@@ -169,7 +185,7 @@ func (p *ssoProvider) listAccountRolesWithClient(ctx context.Context, ssoClient 
 			NextToken:   nextToken,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to list roles for account %s: %w", accountID, err)
+			return nil, errors.Join(errUtils.ErrSSORoleListFailed, fmt.Errorf("account %s: %w", accountID, err))
 		}
 
 		roles = append(roles, output.RoleList...)

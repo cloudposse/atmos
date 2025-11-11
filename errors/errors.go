@@ -459,6 +459,15 @@ var (
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
 	ErrUserAborted                  = errors.New("user aborted")
 
+	// AWS SSO specific errors.
+	ErrSSOSessionExpired      = errors.New("aws sso session expired")
+	ErrSSODeviceAuthFailed    = errors.New("aws sso device authorization failed")
+	ErrSSOTokenCreationFailed = errors.New("aws sso token creation failed")
+	ErrSSOAccountListFailed   = errors.New("failed to list aws sso accounts")
+	ErrSSORoleListFailed      = errors.New("failed to list aws sso roles")
+	ErrSSOProvisioningFailed  = errors.New("aws sso identity provisioning failed")
+	ErrSSOInvalidToken        = errors.New("invalid aws sso token")
+
 	// Auth manager and identity/provider resolution errors (centralized sentinels).
 	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")
 	ErrNoCredentialsFound            = errors.New("no credentials found for identity")

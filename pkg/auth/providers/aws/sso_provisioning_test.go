@@ -85,7 +85,8 @@ func TestSSOProvider_ProvisionIdentities_InvalidCredentialsType(t *testing.T) {
 	result, err := provider.ProvisionIdentities(context.Background(), invalidCreds)
 	assert.Error(t, err)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "invalid credentials type")
+	// Check for the correct static error sentinel.
+	assert.Contains(t, err.Error(), "aws sso identity provisioning failed")
 }
 
 func TestListAccounts_Pagination(t *testing.T) {
@@ -299,7 +300,7 @@ func TestListAccounts_ErrorHandling(t *testing.T) {
 	accounts, err := provider.listAccountsWithClient(context.Background(), mockClient, "test-token")
 	assert.Error(t, err)
 	assert.Nil(t, accounts)
-	assert.Contains(t, err.Error(), "failed to list accounts")
+	assert.Contains(t, err.Error(), "failed to list aws sso accounts")
 }
 
 // TestListAccounts_Pagination tests pagination in listAccounts.
@@ -348,7 +349,7 @@ func TestListAccountRoles_ErrorHandling(t *testing.T) {
 	roles, err := provider.listAccountRolesWithClient(context.Background(), mockClient, "test-token", "123456789012")
 	assert.Error(t, err)
 	assert.Nil(t, roles)
-	assert.Contains(t, err.Error(), "failed to list roles for account")
+	assert.Contains(t, err.Error(), "failed to list aws sso roles")
 }
 
 // TestListAccountRoles_Pagination tests pagination in listAccountRoles.
