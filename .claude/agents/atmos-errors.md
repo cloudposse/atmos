@@ -81,8 +81,8 @@ Adds a user-facing hint (displayed with 💡 emoji). **Supports markdown formatt
 
 ```go
 builder.WithHint("Check that the component path is correct")
-builder.WithHint("Run `atmos list components` to see available options")  // Markdown code formatting
-builder.WithHint("Verify the **component** configuration in atmos.yaml")  // Markdown bold
+builder.WithHint("Run `atmos list components` to see available options")  // Commands in backticks
+builder.WithHint("Verify the component configuration in `atmos.yaml`")    // Files/keywords in backticks
 ```
 
 #### `WithHintf(format string, args ...interface{}) *ErrorBuilder`
@@ -90,7 +90,7 @@ Adds a formatted hint. **Prefer this over `WithHint(fmt.Sprintf(...))`** (enforc
 
 ```go
 builder.WithHintf("Run `atmos list components -s %s` to see available components", stack)
-builder.WithHintf("Component **%s** not found in stack **%s**", component, stack)
+builder.WithHintf("Component `%s` not found in stack `%s`", component, stack)  // Variables in backticks
 ```
 
 #### `WithContext(key string, value interface{}) *ErrorBuilder`
@@ -143,14 +143,14 @@ return builder.Err()
 - Specific configuration to check
 - Direct next steps to resolve the issue
 - Used when users need to know what to DO
-- **Supports markdown** - Use backticks for commands, bold for emphasis
+- **Supports markdown** - Use backticks for commands, files, variables, and technical terms
 
 **Example:**
 ```go
 // ✅ GOOD: Clear separation of explanation and action with markdown formatting
 err := errUtils.Build(errUtils.ErrAbstractComponent).
     WithExplanation("Abstract components cannot be provisioned directly. They serve as templates for concrete components to inherit from, defining shared configuration and settings.").
-    WithHintf("Component `%s` is marked as **abstract**", component).
+    WithHintf("Component `%s` is marked as `abstract`", component).
     WithHint("Use a concrete component that inherits from this abstract component").
     WithHint("Remove `metadata.type: abstract` to make this component concrete").
     WithContext("component", component).
@@ -330,7 +330,7 @@ When reviewing or creating error messages, ensure:
 - [ ] **Sentinel error exists** in `errors/errors.go`
 - [ ] **Hints are actionable** - User knows what concrete steps to take
 - [ ] **Explanations are educational** - User understands WHY the problem occurred
-- [ ] **Markdown formatting used** - Commands in backticks, emphasis with bold
+- [ ] **Markdown formatting used** - Commands, files, variables, and technical terms in backticks
 - [ ] **No redundancy** - Each method (hint/explanation/context/exitcode) adds NEW info
 - [ ] **Context adds debugging value** - Don't repeat what's in hints, add WHERE and HOW
 - [ ] **Exit code only when non-default** - Omit `WithExitCode(1)`, be explicit for 0 or 2
@@ -346,7 +346,7 @@ When reviewing or creating error messages, ensure:
 err := errUtils.Build(errUtils.ErrComponentNotFound).
     WithHintf("Component `%s` not found in stack `%s`", component, stack).
     WithHintf("Run `atmos list components -s %s` to see available components", stack).
-    WithHint("Verify the component path in your **atmos.yaml** configuration").
+    WithHint("Verify the component path in your `atmos.yaml` configuration").
     WithContext("component", component).
     WithContext("stack", stack).
     WithContext("path", searchPath).
@@ -371,7 +371,7 @@ err := errUtils.Build(errUtils.ErrInvalidConfig).
 
 ```go
 err := errUtils.Build(errUtils.ErrValidationFailed).
-    WithHintf("**%d** validation errors found", len(errors)).
+    WithHintf("%d validation errors found", len(errors)).
     WithHint("Review the validation errors above and fix the issues").
     WithHintf("Run `atmos validate stacks` to re-validate after fixes").
     WithContext("stack", stack).
@@ -385,7 +385,7 @@ err := errUtils.Build(errUtils.ErrValidationFailed).
 err := errUtils.Build(errUtils.ErrFileNotFound).
     WithHintf("File `%s` not found", filePath).
     WithHint("Check that the file exists at the specified path").
-    WithHintf("Verify the `%s` configuration in **atmos.yaml**", configKey).
+    WithHintf("Verify the `%s` configuration in `atmos.yaml`", configKey).
     WithContext("file", filePath).
     WithContext("working_dir", workingDir).
     WithExitCode(2).
