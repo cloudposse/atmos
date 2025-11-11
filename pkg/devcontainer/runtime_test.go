@@ -82,6 +82,8 @@ func TestToCreateConfig(t *testing.T) {
 				assert.Equal(t, "devcontainer", cc.Labels[LabelType])
 				assert.Equal(t, "test", cc.Labels[LabelDevcontainerName])
 				assert.Equal(t, "default", cc.Labels[LabelDevcontainerInstance])
+				// TERM should be set to default when not provided.
+				assert.Equal(t, "xterm-256color", cc.Env["TERM"])
 			},
 		},
 		{
@@ -108,6 +110,8 @@ func TestToCreateConfig(t *testing.T) {
 				require.NotNil(t, cc.Env)
 				assert.Equal(t, "development", cc.Env["NODE_ENV"])
 				assert.Equal(t, "true", cc.Env["DEBUG"])
+				// TERM should be set to default when not provided.
+				assert.Equal(t, "xterm-256color", cc.Env["TERM"])
 			},
 		},
 		{
@@ -125,6 +129,46 @@ func TestToCreateConfig(t *testing.T) {
 				assert.True(t, cc.Privileged)
 				assert.Equal(t, []string{"SYS_PTRACE", "NET_ADMIN"}, cc.CapAdd)
 				assert.Equal(t, []string{"seccomp=unconfined"}, cc.SecurityOpt)
+			},
+		},
+		{
+			name: "config with explicit TERM environment variable",
+			config: &Config{
+				Image:           "ubuntu:22.04",
+				WorkspaceFolder: "/workspace",
+				ContainerEnv: map[string]string{
+					"TERM": "tmux-256color",
+					"LANG": "en_US.UTF-8",
+				},
+			},
+			containerName:    "atmos-devcontainer-ubuntu-default",
+			devcontainerName: "ubuntu",
+			instance:         "default",
+			assertFunc: func(t *testing.T, cc *container.CreateConfig) {
+				require.NotNil(t, cc.Env)
+				// Explicit TERM should be preserved.
+				assert.Equal(t, "tmux-256color", cc.Env["TERM"])
+				assert.Equal(t, "en_US.UTF-8", cc.Env["LANG"])
+			},
+		},
+		{
+			name: "config with empty TERM gets default",
+			config: &Config{
+				Image:           "ubuntu:22.04",
+				WorkspaceFolder: "/workspace",
+				ContainerEnv: map[string]string{
+					"TERM": "",
+					"USER": "testuser",
+				},
+			},
+			containerName:    "atmos-devcontainer-ubuntu-default",
+			devcontainerName: "ubuntu",
+			instance:         "default",
+			assertFunc: func(t *testing.T, cc *container.CreateConfig) {
+				require.NotNil(t, cc.Env)
+				// Empty TERM should be replaced with default.
+				assert.Equal(t, "xterm-256color", cc.Env["TERM"])
+				assert.Equal(t, "testuser", cc.Env["USER"])
 			},
 		},
 	}
@@ -634,6 +678,191 @@ func TestParseMountPart(t *testing.T) {
 			mount := tt.initial
 			parseMountPart(tt.part, &mount)
 			assert.Equal(t, tt.expected, mount)
+		})
+	}
+}
+
+func TestExpandContainerEnv(t *testing.T) {
+	// Set up test environment variables.
+	t.Setenv("TERM", "tmux-256color")
+	t.Setenv("USER", "testuser")
+	t.Setenv("PATH", "/usr/local/bin:/usr/bin")
+
+	tests := []struct {
+		name     string
+		input    map[string]string
+		cwd      string
+		expected map[string]string
+	}{
+		{
+			name:     "nil input returns nil",
+			input:    nil,
+			cwd:      "/workspace",
+			expected: nil,
+		},
+		{
+			name:     "empty map returns empty map",
+			input:    map[string]string{},
+			cwd:      "/workspace",
+			expected: map[string]string{},
+		},
+		{
+			name: "expands localEnv:TERM",
+			input: map[string]string{
+				"TERM": "${localEnv:TERM}",
+				"FOO":  "bar",
+			},
+			cwd: "/workspace",
+			expected: map[string]string{
+				"TERM": "tmux-256color",
+				"FOO":  "bar",
+			},
+		},
+		{
+			name: "expands multiple localEnv variables",
+			input: map[string]string{
+				"TERM":    "${localEnv:TERM}",
+				"USER":    "${localEnv:USER}",
+				"PATH":    "${localEnv:PATH}",
+				"LITERAL": "unchanged",
+			},
+			cwd: "/workspace",
+			expected: map[string]string{
+				"TERM":    "tmux-256color",
+				"USER":    "testuser",
+				"PATH":    "/usr/local/bin:/usr/bin",
+				"LITERAL": "unchanged",
+			},
+		},
+		{
+			name: "expands localWorkspaceFolder",
+			input: map[string]string{
+				"WORKSPACE": "${localWorkspaceFolder}",
+				"CONFIG":    "${localWorkspaceFolder}/config",
+			},
+			cwd: "/project",
+			expected: map[string]string{
+				"WORKSPACE": "/project",
+				"CONFIG":    "/project/config",
+			},
+		},
+		{
+			name: "nonexistent env var expands to empty string",
+			input: map[string]string{
+				"MISSING": "${localEnv:NONEXISTENT_VAR}",
+			},
+			cwd: "/workspace",
+			expected: map[string]string{
+				"MISSING": "",
+			},
+		},
+		{
+			name: "mixed expansion types",
+			input: map[string]string{
+				"TERM":     "${localEnv:TERM}",
+				"WORKDIR":  "${localWorkspaceFolder}",
+				"COMBINED": "${localEnv:USER}:${localWorkspaceFolder}",
+			},
+			cwd: "/home/dev",
+			expected: map[string]string{
+				"TERM":     "tmux-256color",
+				"WORKDIR":  "/home/dev",
+				"COMBINED": "testuser:/home/dev",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := expandContainerEnv(tt.input, tt.cwd)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestEnsureTermEnvironment(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]string
+		expected map[string]string
+	}{
+		{
+			name:  "nil environment gets default TERM",
+			input: nil,
+			expected: map[string]string{
+				"TERM": "xterm-256color",
+			},
+		},
+		{
+			name:  "empty environment gets default TERM",
+			input: map[string]string{},
+			expected: map[string]string{
+				"TERM": "xterm-256color",
+			},
+		},
+		{
+			name: "empty TERM value gets default",
+			input: map[string]string{
+				"TERM": "",
+				"FOO":  "bar",
+			},
+			expected: map[string]string{
+				"TERM": "xterm-256color",
+				"FOO":  "bar",
+			},
+		},
+		{
+			name: "existing TERM is preserved",
+			input: map[string]string{
+				"TERM": "screen-256color",
+				"FOO":  "bar",
+			},
+			expected: map[string]string{
+				"TERM": "screen-256color",
+				"FOO":  "bar",
+			},
+		},
+		{
+			name: "TERM from localEnv expansion is preserved",
+			input: map[string]string{
+				"TERM": "xterm-kitty",
+				"USER": "testuser",
+			},
+			expected: map[string]string{
+				"TERM": "xterm-kitty",
+				"USER": "testuser",
+			},
+		},
+		{
+			name: "other env vars without TERM get default",
+			input: map[string]string{
+				"PATH":    "/usr/bin:/bin",
+				"NODE_ENV": "development",
+			},
+			expected: map[string]string{
+				"TERM":    "xterm-256color",
+				"PATH":    "/usr/bin:/bin",
+				"NODE_ENV": "development",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ensureTermEnvironment(tt.input)
+			assert.Equal(t, tt.expected, result)
+
+			// Verify original map is not mutated.
+			if tt.input != nil {
+				if origTerm, exists := tt.input["TERM"]; exists && origTerm == "" {
+					// Empty string should still be empty in original.
+					assert.Equal(t, "", tt.input["TERM"], "Original map should not be mutated")
+				} else if !exists {
+					// If TERM didn't exist, it still shouldn't exist in original.
+					_, stillNotExists := tt.input["TERM"]
+					assert.False(t, stillNotExists, "Original map should not be mutated")
+				}
+			}
 		})
 	}
 }

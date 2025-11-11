@@ -18,7 +18,8 @@
   },
 
   "containerEnv": {
-    "ATMOS_BASE_PATH": "/workspace"
+    "ATMOS_BASE_PATH": "/workspace",
+    "TERM": "${localEnv:TERM}"
   },
 
   "remoteUser": "root",

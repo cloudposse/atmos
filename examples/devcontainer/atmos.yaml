@@ -49,6 +49,7 @@ components:
             protocol: "http"
         containerEnv:
           TF_PLUGIN_CACHE_DIR: "/root/.terraform.d/plugin-cache"
+          TERM: "${localEnv:TERM}"
         remoteUser: "root"
 
     # Python development environment

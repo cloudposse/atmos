@@ -43,11 +43,17 @@ func ToCreateConfig(config *Config, containerName, devcontainerName, instance st
 
 	cwd := getCurrentWorkingDirectory()
 
+	// Expand environment variable values (e.g., ${localEnv:TERM}).
+	env := expandContainerEnv(config.ContainerEnv, cwd)
+
+	// Ensure TERM environment variable is set with a sensible default.
+	env = ensureTermEnvironment(env)
+
 	createConfig := &container.CreateConfig{
 		Name:            containerName,
 		Image:           config.Image,
 		WorkspaceFolder: config.WorkspaceFolder,
-		Env:             config.ContainerEnv,
+		Env:             env,
 		User:            config.RemoteUser,
 		Labels:          createDevcontainerLabels(devcontainerName, instance, cwd),
 		RunArgs:         config.RunArgs,
@@ -225,4 +231,42 @@ func expandDevcontainerVars(s, workspaceFolder string) string {
 	}
 
 	return s
+}
+
+// expandContainerEnv expands devcontainer variables in environment values.
+// This allows using ${localEnv:VAR} and ${localWorkspaceFolder} in containerEnv.
+func expandContainerEnv(containerEnv map[string]string, cwd string) map[string]string {
+	defer perf.Track(nil, "devcontainer.expandContainerEnv")()
+
+	if containerEnv == nil {
+		return nil
+	}
+
+	expanded := make(map[string]string, len(containerEnv))
+	for k, v := range containerEnv {
+		expanded[k] = expandDevcontainerVars(v, cwd)
+	}
+
+	return expanded
+}
+
+// ensureTermEnvironment ensures TERM environment variable is set with a sensible default.
+// If TERM is not set in the container environment, it defaults to "xterm-256color".
+// This provides a reasonable terminal experience even when the host TERM is not available.
+func ensureTermEnvironment(containerEnv map[string]string) map[string]string {
+	defer perf.Track(nil, "devcontainer.ensureTermEnvironment")()
+
+	// Create a copy to avoid mutating the original.
+	env := make(map[string]string, len(containerEnv)+1)
+	for k, v := range containerEnv {
+		env[k] = v
+	}
+
+	// Check if TERM is already set and has a non-empty value.
+	if term, exists := env["TERM"]; !exists || term == "" {
+		// Default to xterm-256color for reasonable terminal capabilities.
+		env["TERM"] = "xterm-256color"
+	}
+
+	return env
 }
