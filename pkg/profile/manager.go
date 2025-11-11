@@ -82,7 +82,15 @@ func (m *DefaultProfileManager) ListProfiles(atmosConfig *schema.AtmosConfigurat
 
 	locations, err := m.GetProfileLocations(atmosConfig)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrProfileDiscovery, err)
+		return nil, errUtils.Build(errUtils.ErrProfileDiscovery).
+			WithExplanationf("Failed to get profile locations: `%s`", err).
+			WithExplanation("Could not determine where to search for profiles").
+			WithHint("Check `atmos.yaml` configuration for `profiles.base_path`").
+			WithHint("Verify filesystem permissions for profile directories").
+			WithContext("config_dir", atmosConfig.CliConfigPath).
+			WithContext("base_path", atmosConfig.Profiles.BasePath).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Map to track profiles (key: profile name, value: ProfileInfo).
@@ -159,7 +167,16 @@ func (m *DefaultProfileManager) GetProfile(atmosConfig *schema.AtmosConfiguratio
 
 	locations, err := m.GetProfileLocations(atmosConfig)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrProfileDiscovery, err)
+		return nil, errUtils.Build(errUtils.ErrProfileDiscovery).
+			WithExplanationf("Failed to get profile locations: `%s`", err).
+			WithExplanation("Could not determine where to search for profiles").
+			WithHint("Check `atmos.yaml` configuration for `profiles.base_path`").
+			WithHint("Verify filesystem permissions for profile directories").
+			WithContext("config_dir", atmosConfig.CliConfigPath).
+			WithContext("base_path", atmosConfig.Profiles.BasePath).
+			WithContext("profile", profileName).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Sort by precedence (lower number = higher precedence).
