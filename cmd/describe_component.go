@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -91,7 +90,15 @@ var describeComponentCmd = &cobra.Command{
 				// Try to determine if the path is outside component directories.
 				// Since we don't have config, we can't determine base paths,
 				// so we just indicate that path resolution requires valid config.
-				return fmt.Errorf("path resolution requires valid Atmos configuration: %w", err)
+				pathErr := errUtils.Build(errUtils.ErrPathResolutionFailed).
+					WithHintf("Failed to initialize config for path: `%s`\n\nPath resolution requires valid Atmos configuration", component).
+					WithHint("Verify `atmos.yaml` exists in your repository root or `.atmos/` directory\nRun `atmos describe config` to validate your configuration").
+					WithContext("component_arg", component).
+					WithContext("stack", stack).
+					WithContext("config_error", err.Error()).
+					WithExitCode(2).
+					Err()
+				return pathErr
 			}
 			return errors.Join(errUtils.ErrFailedToInitConfig, err)
 		}
@@ -103,7 +110,15 @@ var describeComponentCmd = &cobra.Command{
 			// Stack validation will happen later in ExecuteDescribeComponent.
 			componentInfo, err := u.ExtractComponentInfoFromPath(&atmosConfig, component)
 			if err != nil {
-				return fmt.Errorf("path resolution failed: %w", err)
+				pathErr := errUtils.Build(errUtils.ErrPathResolutionFailed).
+					WithHintf("Failed to resolve component from path: `%s`", component).
+					WithHint("Ensure the path is within configured component directories\nRun `atmos describe config` to see component base paths").
+					WithContext("path", component).
+					WithContext("stack", stack).
+					WithContext("error", err.Error()).
+					WithExitCode(2).
+					Err()
+				return pathErr
 			}
 			component = componentInfo.FullComponent
 		}

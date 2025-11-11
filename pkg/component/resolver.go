@@ -68,12 +68,17 @@ func (r *Resolver) ResolveComponentFromPath(
 
 	// 2. Verify component type matches.
 	if componentInfo.ComponentType != expectedComponentType {
-		return "", fmt.Errorf(
-			"%w: path resolves to %s component but command expects %s component",
-			errUtils.ErrComponentTypeMismatch,
-			componentInfo.ComponentType,
-			expectedComponentType,
-		)
+		err := errUtils.Build(errUtils.ErrComponentTypeMismatch).
+			WithHintf("Path resolves to `%s` component but command expects `%s` component\nYou ran: `atmos %s <command> %s`\nThe path points to: `%s` component",
+				componentInfo.ComponentType, expectedComponentType, expectedComponentType, path, componentInfo.ComponentType).
+			WithHint("Run the correct command for this component type").
+			WithContext("path", path).
+			WithContext("resolved_type", componentInfo.ComponentType).
+			WithContext("expected_type", expectedComponentType).
+			WithContext("component", componentInfo.FullComponent).
+			WithExitCode(2).
+			Err()
+		return "", err
 	}
 
 	// 3. If stack is specified, validate component exists in stack and get actual stack key.
@@ -173,12 +178,17 @@ func (r *Resolver) ResolveComponentFromPathWithoutValidation(
 
 	// 2. Verify component type matches.
 	if componentInfo.ComponentType != expectedComponentType {
-		return "", fmt.Errorf(
-			"%w: path resolves to %s component but command expects %s component",
-			errUtils.ErrComponentTypeMismatch,
-			componentInfo.ComponentType,
-			expectedComponentType,
-		)
+		err := errUtils.Build(errUtils.ErrComponentTypeMismatch).
+			WithHintf("Path resolves to `%s` component but command expects `%s` component\nYou ran: `atmos %s <command> %s`\nThe path points to: `%s` component",
+				componentInfo.ComponentType, expectedComponentType, expectedComponentType, path, componentInfo.ComponentType).
+			WithHint("Run the correct command for this component type").
+			WithContext("path", path).
+			WithContext("resolved_type", componentInfo.ComponentType).
+			WithContext("expected_type", expectedComponentType).
+			WithContext("component", componentInfo.FullComponent).
+			WithExitCode(2).
+			Err()
+		return "", err
 	}
 
 	log.Debug("Successfully resolved component from path (without validation)",
@@ -209,13 +219,28 @@ func (r *Resolver) validateComponentInStack(
 	// Load all stacks using the injected stack loader.
 	stacksMap, _, err := r.stackLoader.FindStacksMap(atmosConfig, false)
 	if err != nil {
-		return "", fmt.Errorf("failed to load stacks: %w", err)
+		loadErr := errUtils.Build(errUtils.ErrStackNotFound).
+			WithHintf("Failed to load stack configurations: %s\n\nPath-based component resolution requires valid stack configuration", err.Error()).
+			WithHint("Run `atmos describe config` to see stack configuration paths\nVerify your stack manifests are in the configured stacks directory").
+			WithContext("stack", stack).
+			WithContext("component", componentName).
+			WithContext("underlying_error", err.Error()).
+			WithExitCode(2).
+			Err()
+		return "", loadErr
 	}
 
 	// Check if stack exists.
 	stackConfig, ok := stacksMap[stack]
 	if !ok {
-		return "", fmt.Errorf("stack '%s' not found", stack)
+		notFoundErr := errUtils.Build(errUtils.ErrStackNotFound).
+			WithHintf("Stack `%s` not found", stack).
+			WithHint("Run `atmos list stacks` to see all available stacks\nVerify the stack name matches your stack manifest files").
+			WithContext("stack", stack).
+			WithContext("component", componentName).
+			WithExitCode(2).
+			Err()
+		return "", notFoundErr
 	}
 
 	// Extract components section.
@@ -290,24 +315,38 @@ func (r *Resolver) validateComponentInStack(
 
 	// Handle results.
 	if len(matches) == 0 {
-		return "", fmt.Errorf(
-			"%w: component '%s' not found in stack '%s' (type: %s)",
-			errUtils.ErrComponentNotInStack,
-			componentName,
-			stack,
-			componentType,
-		)
+		err := errUtils.Build(errUtils.ErrComponentNotInStack).
+			WithHintf("Component `%s` not found in stack `%s`", componentName, stack).
+			WithHintf("Run `atmos list stacks --component %s` to see stacks containing this component\nRun `atmos list components --stack %s` to see components in this stack",
+				componentName, stack).
+			WithContext("component", componentName).
+			WithContext("stack", stack).
+			WithContext("component_type", componentType).
+			WithExitCode(2).
+			Err()
+		return "", err
 	}
 
 	if len(matches) > 1 {
-		return "", fmt.Errorf(
-			"%w: path resolves to '%s' which is referenced by multiple components in stack '%s': %v. "+
-				"Please use the exact component name instead of a path",
-			errUtils.ErrAmbiguousComponentPath,
-			componentName,
-			stack,
-			matches,
-		)
+		matchesStr := ""
+		for i, match := range matches {
+			if i > 0 {
+				matchesStr += ", "
+			}
+			matchesStr += match
+		}
+		err := errUtils.Build(errUtils.ErrAmbiguousComponentPath).
+			WithHintf("Path resolves to `%s` which is referenced by multiple components in stack `%s`\nMatching components: %s",
+				componentName, stack, matchesStr).
+			WithHintf("Use the exact component name instead of a path\nExample: `atmos %s <command> %s --stack %s`",
+				componentType, matches[0], stack).
+			WithContext("path_component", componentName).
+			WithContext("stack", stack).
+			WithContext("matches", matchesStr).
+			WithContext("match_count", fmt.Sprintf("%d", len(matches))).
+			WithExitCode(2).
+			Err()
+		return "", err
 	}
 
 	// Exactly one match found.

@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"errors"
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -39,7 +36,13 @@ var validateComponentCmd = &cobra.Command{
 				}
 
 				if stack == "" {
-					return errors.New("--stack flag is required when using path-based component resolution")
+					stackErr := errUtils.Build(errUtils.ErrMissingStack).
+						WithHintf("The `--stack` flag is required when using path-based component resolution\n\nPath-based resolution needs to validate the component exists in a stack").
+						WithHintf("Usage: `atmos validate component %s --stack <stack-name>`", component).
+						WithContext("component_path", component).
+						WithExitCode(2).
+						Err()
+					return stackErr
 				}
 
 				// Load atmos configuration
@@ -56,7 +59,15 @@ var validateComponentCmd = &cobra.Command{
 				// happens later in ExecuteValidateComponentCmd after stacks are loaded.
 				componentInfo, err := u.ExtractComponentInfoFromPath(&atmosConfig, component)
 				if err != nil {
-					return fmt.Errorf("path resolution failed: %w", err)
+					pathErr := errUtils.Build(errUtils.ErrPathResolutionFailed).
+						WithHintf("Failed to resolve component from path: `%s`", component).
+						WithHint("Ensure the path is within configured component directories\nRun `atmos describe config` to see component base paths").
+						WithContext("path", component).
+						WithContext("stack", stack).
+						WithContext("error", err.Error()).
+						WithExitCode(2).
+						Err()
+					return pathErr
 				}
 
 				// Replace the argument with the resolved component name

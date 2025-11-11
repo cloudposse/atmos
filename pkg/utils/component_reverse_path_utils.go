@@ -58,7 +58,16 @@ func ExtractComponentInfoFromPath(
 	}
 
 	// None of the component types matched.
-	return nil, fmt.Errorf("%w: %s", errUtils.ErrPathNotInComponentDir, absPath)
+	err = errUtils.Build(errUtils.ErrPathNotInComponentDir).
+		WithHintf("Path `%s` is not within any configured component directories\n\nConfigured component base paths:\n  - Terraform: `%s`\n  - Helmfile: `%s`",
+			absPath, atmosConfig.Components.Terraform.BasePath, atmosConfig.Components.Helmfile.BasePath).
+		WithHint("Run `atmos describe config` to see configured component base paths\nEnsure you're in a component directory under one of the base paths above").
+		WithContext("path", absPath).
+		WithContext("terraform_base", atmosConfig.Components.Terraform.BasePath).
+		WithContext("helmfile_base", atmosConfig.Components.Helmfile.BasePath).
+		WithExitCode(2).
+		Err()
+	return nil, err
 }
 
 // normalizePathForResolution converts a path to absolute, clean, and symlink-resolved form.
@@ -67,7 +76,13 @@ func normalizePathForResolution(path string) (string, error) {
 	if path == "." {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return "", fmt.Errorf("failed to get current directory: %w", err)
+			pathErr := errUtils.Build(errUtils.ErrPathResolutionFailed).
+				WithHintf("Failed to determine current working directory: %s", err.Error()).
+				WithHint("Verify you have read permissions in the current directory\nTry providing an absolute path instead of `.`").
+				WithContext("original_error", err.Error()).
+				WithExitCode(1).
+				Err()
+			return "", pathErr
 		}
 		path = cwd
 	}
@@ -76,7 +91,14 @@ func normalizePathForResolution(path string) (string, error) {
 	if !filepath.IsAbs(path) {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
-			return "", fmt.Errorf("failed to resolve absolute path: %w", err)
+			pathErr := errUtils.Build(errUtils.ErrPathResolutionFailed).
+				WithHintf("Failed to resolve absolute path for: `%s`\n%s", path, err.Error()).
+				WithHint("Verify the path is valid and accessible").
+				WithContext("path", path).
+				WithContext("original_error", err.Error()).
+				WithExitCode(1).
+				Err()
+			return "", pathErr
 		}
 		path = absPath
 	}
@@ -143,7 +165,16 @@ func tryExtractComponentType(
 
 	// If relPath is ".", the path IS the base path (not allowed).
 	if relPath == "." {
-		return nil, fmt.Errorf("%w", errUtils.ErrPathIsComponentBase)
+		baseErr := errUtils.Build(errUtils.ErrPathIsComponentBase).
+			WithHintf("Cannot resolve component: path points to component base directory\nPath: `%s`\nComponent base: `%s`", absPath, basePath).
+			WithHintf("Navigate into a specific component directory\nExample: `cd %s/vpc && atmos %s plan . --stack <stack>`",
+				filepath.Base(basePath), componentType).
+			WithContext("path", absPath).
+			WithContext("base_path", basePath).
+			WithContext("component_type", componentType).
+			WithExitCode(2).
+			Err()
+		return nil, baseErr
 	}
 
 	// Split the relative path into parts.
@@ -158,7 +189,16 @@ func tryExtractComponentType(
 	}
 
 	if len(nonEmptyParts) == 0 {
-		return nil, fmt.Errorf("%w", errUtils.ErrPathIsComponentBase)
+		baseErr := errUtils.Build(errUtils.ErrPathIsComponentBase).
+			WithHintf("Cannot resolve component: path points to component base directory\nPath: `%s`\nComponent base: `%s`", absPath, basePath).
+			WithHintf("Navigate into a specific component directory\nExample: `cd %s/vpc && atmos %s plan . --stack <stack>`",
+				filepath.Base(basePath), componentType).
+			WithContext("path", absPath).
+			WithContext("base_path", basePath).
+			WithContext("component_type", componentType).
+			WithExitCode(2).
+			Err()
+		return nil, baseErr
 	}
 
 	// Determine folder prefix and component name.
