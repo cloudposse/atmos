@@ -69,10 +69,29 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Get component-specific auth config and merge with global auth config.
 	// This allows components to define their own auth identities and defaults in stack configurations.
-	// The merged config is used for authentication to support component-level defaults.
-	mergedAuthConfig, err := GetComponentAuthConfig(&atmosConfig, info.Stack, info.ComponentFromArg)
-	if err != nil {
-		return err
+	// Start with global config.
+	mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
+
+	// If stack and component are specified, get component config and merge auth section.
+	if info.Stack != "" && info.ComponentFromArg != "" {
+		// Get component configuration from stack.
+		// Use nil AuthManager and disable functions to avoid circular dependency.
+		componentConfig, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			Component:            info.ComponentFromArg,
+			Stack:                info.Stack,
+			ProcessTemplates:     false,
+			ProcessYamlFunctions: false, // Critical: avoid circular dependency with YAML functions that need auth.
+			Skip:                 nil,
+			AuthManager:          nil, // Critical: no AuthManager yet, we're determining which identity to use.
+		})
+		if err == nil {
+			// Merge component-specific auth with global auth.
+			mergedAuthConfig, err = auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, &atmosConfig, cfg.AuthSectionName)
+			if err != nil {
+				return err
+			}
+		}
+		// If error getting component config, continue with global auth config.
 	}
 
 	// Create and authenticate AuthManager from --identity flag if specified.

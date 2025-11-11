@@ -173,6 +173,8 @@ var (
 	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
 	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
 	ErrMerge                         = errors.New("merge error")
+	ErrEncode                        = errors.New("encoding error")
+	ErrDecode                        = errors.New("decoding error")
 
 	// Stack processing errors.
 	ErrInvalidStackManifest                   = errors.New("invalid stack manifest")
@@ -184,9 +186,6 @@ var (
 	ErrInvalidComponentProviders              = errors.New("invalid component providers section")
 	ErrInvalidComponentHooks                  = errors.New("invalid component hooks section")
 	ErrInvalidComponentAuth                   = errors.New("invalid component auth section")
-	ErrMergeComponentAuth                     = errors.New("failed to merge component auth config")
-	ErrConvertComponentAuth                   = errors.New("failed to convert component auth config")
-	ErrDecodeComponentAuth                    = errors.New("failed to decode component auth config")
 	ErrInvalidComponentMetadata               = errors.New("invalid component metadata section")
 	ErrInvalidComponentBackendType            = errors.New("invalid component backend_type attribute")
 	ErrInvalidComponentBackend                = errors.New("invalid component backend section")

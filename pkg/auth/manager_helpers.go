@@ -62,6 +62,73 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig) (string, error) {
 	return defaultIdentity, nil
 }
 
+// shouldDisableAuth checks if authentication is explicitly disabled.
+func shouldDisableAuth(identityName string) bool {
+	return identityName == cfg.IdentityFlagDisabledValue
+}
+
+// isAuthConfigured checks if auth configuration is present and has identities.
+func isAuthConfigured(authConfig *schema.AuthConfig) bool {
+	return authConfig != nil && len(authConfig.Identities) > 0
+}
+
+// resolveIdentityName resolves the final identity name to use for authentication.
+// Returns empty string if no authentication should be performed.
+// Returns error if identity resolution fails.
+func resolveIdentityName(identityName string, authConfig *schema.AuthConfig) (string, error) {
+	// If identity already specified (not empty, not disabled), use it as-is.
+	if identityName != "" && identityName != cfg.IdentityFlagDisabledValue {
+		return identityName, nil
+	}
+
+	// If no auth configured, return empty (no authentication).
+	if !isAuthConfigured(authConfig) {
+		return "", nil
+	}
+
+	// Try to auto-detect default identity.
+	defaultIdentity, err := autoDetectDefaultIdentity(authConfig)
+	if err != nil {
+		return "", err
+	}
+
+	return defaultIdentity, nil
+}
+
+// createAuthManagerInstance creates a new AuthManager instance with the given configuration.
+func createAuthManagerInstance(authConfig *schema.AuthConfig) (AuthManager, error) {
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{},
+	}
+
+	credStore := credentials.NewCredentialStore()
+	validator := validation.NewValidator()
+	authManager, err := NewAuthManager(authConfig, credStore, validator, authStackInfo)
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+	}
+
+	return authManager, nil
+}
+
+// authenticateWithIdentity authenticates using the provided identity name.
+// Handles interactive selection if identity matches selectValue.
+func authenticateWithIdentity(authManager AuthManager, identityName string, selectValue string) error {
+	// Handle interactive selection if identity matches the select value.
+	forceSelect := identityName == selectValue
+	if forceSelect {
+		selectedIdentity, err := authManager.GetDefaultIdentity(forceSelect)
+		if err != nil {
+			return err
+		}
+		identityName = selectedIdentity
+	}
+
+	// Authenticate to populate AuthContext with credentials.
+	_, err := authManager.Authenticate(context.Background(), identityName)
+	return err
+}
+
 // CreateAndAuthenticateManager creates and authenticates an AuthManager from an identity name.
 // If identityName is empty, attempts to auto-detect a default identity from configuration.
 // Returns nil AuthManager only if no identity is specified AND no default identity is configured,
@@ -104,8 +171,6 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig) (string, error) {
 //   - AuthManager with populated AuthContext after successful authentication
 //   - nil if authentication disabled, no identity specified, or no default identity configured (in CI mode)
 //   - error if authentication fails or auth is not configured when identity is specified
-//
-//nolint:revive // Complexity is acceptable for authentication logic with auto-detection, validation, and error handling
 func CreateAndAuthenticateManager(
 	identityName string,
 	authConfig *schema.AuthConfig,
@@ -113,71 +178,37 @@ func CreateAndAuthenticateManager(
 ) (AuthManager, error) {
 	log.Debug("CreateAndAuthenticateManager called", "identityName", identityName, "hasAuthConfig", authConfig != nil)
 
-	// Check if authentication is explicitly disabled via --identity=off/false/no/0.
-	// This allows users to use external identity mechanisms (e.g., Leapp).
-	if identityName == cfg.IdentityFlagDisabledValue {
+	// Check if authentication is explicitly disabled.
+	if shouldDisableAuth(identityName) {
 		log.Debug("Authentication explicitly disabled")
 		return nil, nil
 	}
 
-	// Auto-detect default identity if no identity name provided.
-	if identityName == "" {
-		log.Debug("No identity name provided, attempting auto-detection")
-		// Return nil if auth is not configured at all (backward compatible).
-		if authConfig == nil || len(authConfig.Identities) == 0 {
-			return nil, nil
-		}
-
-		// Try to find default identity from configuration.
-		// If multiple defaults exist or no defaults exist, will prompt in interactive mode.
-		// Interactive mode is detected automatically inside autoDetectDefaultIdentity.
-		defaultIdentity, err := autoDetectDefaultIdentity(authConfig)
-		if err != nil {
-			return nil, err
-		}
-
-		// If still no identity after auto-detection, return nil (no authentication).
-		// This only happens in non-interactive mode when no defaults are configured.
-		if defaultIdentity == "" {
-			return nil, nil
-		}
-
-		// Found or selected default identity - use it for authentication.
-		identityName = defaultIdentity
+	// Resolve the identity name to use (may auto-detect or return empty).
+	resolvedIdentity, err := resolveIdentityName(identityName, authConfig)
+	if err != nil {
+		return nil, err
 	}
 
-	// Check if auth is configured when identity is provided (either explicitly or auto-detected).
-	if authConfig == nil || len(authConfig.Identities) == 0 {
+	// If no identity resolved, return nil (no authentication).
+	if resolvedIdentity == "" {
+		log.Debug("No identity resolved, returning nil")
+		return nil, nil
+	}
+
+	// Validate auth is configured when we have an identity to use.
+	if !isAuthConfigured(authConfig) {
 		return nil, fmt.Errorf("%w: authentication requires at least one identity configured in atmos.yaml", errUtils.ErrAuthNotConfigured)
 	}
 
-	// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
-	// This enables YAML template functions to access authenticated credentials.
-	authStackInfo := &schema.ConfigAndStacksInfo{
-		AuthContext: &schema.AuthContext{},
-	}
-
-	credStore := credentials.NewCredentialStore()
-	validator := validation.NewValidator()
-	authManager, err := NewAuthManager(authConfig, credStore, validator, authStackInfo)
+	// Create AuthManager instance.
+	authManager, err := createAuthManagerInstance(authConfig)
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+		return nil, err
 	}
 
-	// Handle interactive selection if identity matches the select value.
-	forceSelect := identityName == selectValue
-	if forceSelect {
-		identityName, err = authManager.GetDefaultIdentity(forceSelect)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Authenticate to populate AuthContext with credentials.
-	// This is critical for YAML functions like !terraform.state and !terraform.output
-	// to access cloud resources with the proper credentials.
-	_, err = authManager.Authenticate(context.Background(), identityName)
-	if err != nil {
+	// Authenticate with the resolved identity.
+	if err := authenticateWithIdentity(authManager, resolvedIdentity, selectValue); err != nil {
 		return nil, err
 	}
 
