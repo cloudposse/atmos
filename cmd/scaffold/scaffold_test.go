@@ -646,6 +646,13 @@ func TestScaffoldGenerateCmd_SetFlagParsing(t *testing.T) {
 			expectedValue: "value",
 			expectError:   false,
 		},
+		{
+			name:          "value with leading/trailing spaces trimmed",
+			input:         "key= value with spaces ",
+			expectedKey:   "key",
+			expectedValue: "value with spaces",
+			expectError:   false,
+		},
 	}
 
 	for _, tt := range tests {
