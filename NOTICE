@@ -193,6 +193,18 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/cockroachdb/apd/blob/v3.2.1/LICENSE
 
+  - github.com/cockroachdb/errors
+    License: Apache-2.0
+    URL: https://github.com/cockroachdb/errors/blob/v1.12.0/LICENSE
+
+  - github.com/cockroachdb/logtags
+    License: Apache-2.0
+    URL: https://github.com/cockroachdb/logtags/blob/21c54148d20b/LICENSE
+
+  - github.com/cockroachdb/redact
+    License: Apache-2.0
+    URL: https://github.com/cockroachdb/redact/blob/v1.1.5/LICENSE
+
   - github.com/containerd/containerd/v2
     License: Apache-2.0
     URL: https://github.com/containerd/containerd/blob/v2.1.5/LICENSE
@@ -606,7 +618,7 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: https://github.com/gofrs/flock/blob/v0.13.0/LICENSE
 
-  - github.com/gogo/protobuf/proto
+  - github.com/gogo/protobuf
     License: BSD-3-Clause
     URL: https://github.com/gogo/protobuf/blob/v1.3.2/LICENSE
 
@@ -689,6 +701,10 @@ BSD LICENSED DEPENDENCIES
   - github.com/redis/go-redis/v9
     License: BSD-2-Clause
     URL: https://github.com/redis/go-redis/blob/v9.12.1/LICENSE
+
+  - github.com/rogpeppe/go-internal/fmtsort
+    License: BSD-3-Clause
+    URL: https://github.com/rogpeppe/go-internal/blob/v1.14.1/LICENSE
 
   - github.com/spf13/pflag
     License: BSD-3-Clause
@@ -1188,6 +1204,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/gabriel-vasile/mimetype/blob/v1.4.10/LICENSE
 
+  - github.com/getsentry/sentry-go
+    License: MIT
+    URL: https://github.com/getsentry/sentry-go/blob/v0.27.0/LICENSE
+
   - github.com/go-logfmt/logfmt
     License: MIT
     URL: https://github.com/go-logfmt/logfmt/blob/v0.6.0/LICENSE
@@ -1331,6 +1351,14 @@ MIT LICENSED DEPENDENCIES
   - github.com/klauspost/pgzip
     License: MIT
     URL: https://github.com/klauspost/pgzip/blob/v1.2.6/LICENSE
+
+  - github.com/kr/pretty
+    License: MIT
+    URL: https://github.com/kr/pretty/blob/v0.3.1/License
+
+  - github.com/kr/text
+    License: MIT
+    URL: https://github.com/kr/text/blob/v0.2.0/License
 
   - github.com/lestrrat-go/blackmagic
     License: MIT
