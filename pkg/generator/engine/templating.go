@@ -107,12 +107,12 @@ func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
 	return nil
 }
 
-// ProcessTemplate processes Go templates in file content
+// ProcessTemplate processes Go templates in file content.
 func (p *Processor) ProcessTemplate(content string, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}) (string, error) {
 	return p.ProcessTemplateWithDelimiters(content, targetPath, scaffoldConfig, userValues, []string{"{{", "}}"})
 }
 
-// ProcessTemplateWithDelimiters processes Go templates in file content with custom delimiters
+// ProcessTemplateWithDelimiters processes Go templates in file content with custom delimiters.
 func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) (string, error) {
 	// Create template data with rich configuration
 	templateData := map[string]interface{}{
@@ -549,12 +549,12 @@ func (p *Processor) ShouldSkipFile(renderedPath string) bool {
 	return false
 }
 
-// ContainsUnprocessedTemplates checks if the given content contains unprocessed template syntax
+// ContainsUnprocessedTemplates checks if the given content contains unprocessed template syntax.
 func (p *Processor) ContainsUnprocessedTemplates(content string) bool {
 	return strings.Contains(content, "{{") && strings.Contains(content, "}}")
 }
 
-// ContainsUnprocessedTemplatesWithDelimiters checks if the given content contains unprocessed template syntax with custom delimiters
+// ContainsUnprocessedTemplatesWithDelimiters checks if the given content contains unprocessed template syntax with custom delimiters.
 func (p *Processor) ContainsUnprocessedTemplatesWithDelimiters(content string, delimiters []string) bool {
 	if len(delimiters) != 2 {
 		// Fall back to default delimiters if invalid
@@ -563,7 +563,7 @@ func (p *Processor) ContainsUnprocessedTemplatesWithDelimiters(content string, d
 	return strings.Contains(content, delimiters[0]) && strings.Contains(content, delimiters[1])
 }
 
-// ValidateNoUnprocessedTemplates validates that the processed content doesn't contain unprocessed template syntax
+// ValidateNoUnprocessedTemplates validates that the processed content doesn't contain unprocessed template syntax.
 func (p *Processor) ValidateNoUnprocessedTemplates(content string) error {
 	if p.ContainsUnprocessedTemplates(content) {
 		return fmt.Errorf("generated content contains unprocessed template syntax: %s", truncateString(content, 200))
@@ -571,7 +571,7 @@ func (p *Processor) ValidateNoUnprocessedTemplates(content string) error {
 	return nil
 }
 
-// ValidateNoUnprocessedTemplatesWithDelimiters validates that the processed content doesn't contain unprocessed template syntax with custom delimiters
+// ValidateNoUnprocessedTemplatesWithDelimiters validates that the processed content doesn't contain unprocessed template syntax with custom delimiters.
 func (p *Processor) ValidateNoUnprocessedTemplatesWithDelimiters(content string, delimiters []string) error {
 	if p.ContainsUnprocessedTemplatesWithDelimiters(content, delimiters) {
 		return fmt.Errorf("generated content contains unprocessed template syntax with delimiters %v: %s", delimiters, truncateString(content, 200))
@@ -579,7 +579,7 @@ func (p *Processor) ValidateNoUnprocessedTemplatesWithDelimiters(content string,
 	return nil
 }
 
-// truncateString truncates a string to the specified length and adds "..." if truncated
+// truncateString truncates a string to the specified length and adds "..." if truncated.
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

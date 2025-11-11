@@ -24,7 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/types"
 )
 
-// Color constants for consistent styling using lipgloss named colors
+// Color constants for consistent styling using lipgloss named colors.
 const (
 	ColorWhite  = "White"
 	ColorBlack  = "Black"
@@ -34,13 +34,13 @@ const (
 	ColorPurple = "Magenta"
 )
 
-// ScaffoldConfigFileName is the name of the scaffold configuration file
+// ScaffoldConfigFileName is the name of the scaffold configuration file.
 const ScaffoldConfigFileName = "scaffold.yaml"
 
-// ScaffoldConfigDir is the directory name for user scaffold configuration
+// ScaffoldConfigDir is the directory name for user scaffold configuration.
 const ScaffoldConfigDir = ".atmos"
 
-// ScaffoldConfig represents the configuration for a scaffold template
+// ScaffoldConfig represents the configuration for a scaffold template.
 type ScaffoldConfig struct {
 	Name        string                     `yaml:"name"`
 	Description string                     `yaml:"description"`
@@ -50,7 +50,7 @@ type ScaffoldConfig struct {
 	Delimiters  []string                   `yaml:"delimiters"`
 }
 
-// FieldDefinition represents a single field in the configuration
+// FieldDefinition represents a single field in the configuration.
 type FieldDefinition struct {
 	Key         string      `yaml:"key"`
 	Type        string      `yaml:"type"`
@@ -63,10 +63,10 @@ type FieldDefinition struct {
 }
 
 // Config represents the user's configuration values
-// This is now a generic map to support dynamic fields from scaffold.yaml
+// This is now a generic map to support dynamic fields from scaffold.yaml.
 type Config map[string]interface{}
 
-// LoadScaffoldConfigFromContent loads scaffold configuration from YAML content
+// LoadScaffoldConfigFromContent loads scaffold configuration from YAML content.
 func LoadScaffoldConfigFromContent(content string) (*ScaffoldConfig, error) {
 	var scaffoldConfig ScaffoldConfig
 	if err := yaml.Unmarshal([]byte(content), &scaffoldConfig); err != nil {
@@ -76,7 +76,7 @@ func LoadScaffoldConfigFromContent(content string) (*ScaffoldConfig, error) {
 	return &scaffoldConfig, nil
 }
 
-// LoadScaffoldConfigFromFile loads scaffold configuration schema from a file
+// LoadScaffoldConfigFromFile loads scaffold configuration schema from a file.
 func LoadScaffoldConfigFromFile(configPath string) (*ScaffoldConfig, error) {
 	// Create a new Viper instance for this specific config file
 	v := viper.New()
@@ -97,7 +97,7 @@ func LoadScaffoldConfigFromFile(configPath string) (*ScaffoldConfig, error) {
 	return &scaffoldConfig, nil
 }
 
-// LoadUserValues loads user values from a scaffold template directory
+// LoadUserValues loads user values from a scaffold template directory.
 func LoadUserValues(scaffoldPath string) (map[string]interface{}, error) {
 	// Create .atmos directory path
 	atmosDir := filepath.Join(scaffoldPath, ScaffoldConfigDir)
@@ -127,18 +127,18 @@ func LoadUserValues(scaffoldPath string) (map[string]interface{}, error) {
 	return userConfig.Values, nil
 }
 
-// SaveUserValues saves user values to a scaffold template directory
+// SaveUserValues saves user values to a scaffold template directory.
 func SaveUserValues(scaffoldPath string, values map[string]interface{}) error {
 	// Always save with new format structure, even if template_id is empty
 	return SaveUserConfig(scaffoldPath, "", values)
 }
 
-// SaveUserConfig saves user configuration with template ID and values
+// SaveUserConfig saves user configuration with template ID and values.
 func SaveUserConfig(scaffoldPath string, templateID string, values map[string]interface{}) error {
 	return SaveUserConfigWithBaseRef(scaffoldPath, templateID, "", values)
 }
 
-// SaveUserConfigWithBaseRef saves user configuration with template ID, base ref, and values
+// SaveUserConfigWithBaseRef saves user configuration with template ID, base ref, and values.
 func SaveUserConfigWithBaseRef(scaffoldPath string, templateID string, baseRef string, values map[string]interface{}) error {
 	// Create .atmos directory path
 	atmosDir := filepath.Join(scaffoldPath, ScaffoldConfigDir)
@@ -169,7 +169,7 @@ func SaveUserConfigWithBaseRef(scaffoldPath string, templateID string, baseRef s
 	return nil
 }
 
-// LoadUserConfig loads user configuration from .atmos/scaffold.yaml
+// LoadUserConfig loads user configuration from .atmos/scaffold.yaml.
 func LoadUserConfig(scaffoldPath string) (*UserConfig, error) {
 	atmosDir := filepath.Join(scaffoldPath, ScaffoldConfigDir)
 	valuesPath := filepath.Join(atmosDir, ScaffoldConfigFileName)
@@ -194,7 +194,7 @@ func LoadUserConfig(scaffoldPath string) (*UserConfig, error) {
 	return &config, nil
 }
 
-// DeepMerge merges scaffold configuration defaults with user values
+// DeepMerge merges scaffold configuration defaults with user values.
 func DeepMerge(scaffoldConfig *ScaffoldConfig, userValues map[string]interface{}) map[string]interface{} {
 	merged := make(map[string]interface{})
 
@@ -211,7 +211,7 @@ func DeepMerge(scaffoldConfig *ScaffoldConfig, userValues map[string]interface{}
 	return merged
 }
 
-// GetConfigPath returns the path where the config file should be stored
+// GetConfigPath returns the path where the config file should be stored.
 func GetConfigPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -350,7 +350,7 @@ func extractFormValues(userValues map[string]interface{}, valueGetters map[strin
 }
 
 // createField creates a huh field based on the field definition
-// It returns the field and a function to get the updated value
+// It returns the field and a function to get the updated value.
 func createField(key string, field FieldDefinition, values map[string]interface{}) (huh.Field, func() interface{}) {
 	// Get current value or default
 	currentValue := values[key]
@@ -468,7 +468,7 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 	}
 }
 
-// GetConfigurationSummary returns the configuration values as table data
+// GetConfigurationSummary returns the configuration values as table data.
 func GetConfigurationSummary(scaffoldConfig *ScaffoldConfig, mergedValues map[string]interface{}, valueSources map[string]string) ([][]string, []string) {
 	// Prepare table rows
 	var rows [][]string
@@ -501,7 +501,7 @@ func GetConfigurationSummary(scaffoldConfig *ScaffoldConfig, mergedValues map[st
 	return rows, header
 }
 
-// ReadScaffoldConfig reads the scaffold configuration from atmos.yaml
+// ReadScaffoldConfig reads the scaffold configuration from atmos.yaml.
 func ReadScaffoldConfig(targetPath string) (map[string]interface{}, error) {
 	configPath := filepath.Join(targetPath, "atmos.yaml")
 
@@ -561,7 +561,7 @@ func ReadAtmosScaffoldSection(targetPath string) (map[string]interface{}, error)
 	return scaffoldMap, nil
 }
 
-// HasScaffoldConfig checks if a configuration contains a scaffold.yaml file
+// HasScaffoldConfig checks if a configuration contains a scaffold.yaml file.
 func HasScaffoldConfig(files []types.File) bool {
 	for _, file := range files {
 		if file.Path == ScaffoldConfigFileName {
@@ -571,14 +571,14 @@ func HasScaffoldConfig(files []types.File) bool {
 	return false
 }
 
-// HasUserConfig checks if a scaffold template directory has user configuration
+// HasUserConfig checks if a scaffold template directory has user configuration.
 func HasUserConfig(scaffoldPath string) bool {
 	userConfigPath := filepath.Join(scaffoldPath, ScaffoldConfigDir, ScaffoldConfigFileName)
 	_, err := os.Stat(userConfigPath)
 	return err == nil
 }
 
-// UserConfig represents the user's configuration with template metadata and values
+// UserConfig represents the user's configuration with template metadata and values.
 type UserConfig struct {
 	TemplateID string                 `yaml:"template_id"`
 	BaseRef    string                 `yaml:"base_ref,omitempty"`

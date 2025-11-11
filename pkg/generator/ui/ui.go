@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,7 +25,7 @@ import (
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 )
 
-// truncateString truncates a string to the specified length and adds "..." if truncated
+// truncateString truncates a string to the specified length and adds "..." if truncated.
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
@@ -32,7 +33,7 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-// spinnerModel wraps the spinner for tea.Model compatibility
+// spinnerModel wraps the spinner for tea.Model compatibility.
 type spinnerModel struct {
 	spinner spinner.Model
 	message string
@@ -64,7 +65,7 @@ func (m spinnerModel) View() string {
 	return fmt.Sprintf("\r%s %s", m.spinner.View(), m.message)
 }
 
-// InitUI handles the user interface for the init command
+// InitUI handles the user interface for the init command.
 type InitUI struct {
 	checkmark    string
 	xMark        string
@@ -77,7 +78,7 @@ type InitUI struct {
 	term         terminal.Terminal
 }
 
-// NewInitUI creates a new InitUI instance
+// NewInitUI creates a new InitUI instance.
 func NewInitUI(ioCtx iolib.Context, term terminal.Terminal) *InitUI {
 	return &InitUI{
 		checkmark:    "✓",
@@ -92,12 +93,12 @@ func NewInitUI(ioCtx iolib.Context, term terminal.Terminal) *InitUI {
 	}
 }
 
-// SetThreshold sets the threshold for merge operations
+// SetThreshold sets the threshold for merge operations.
 func (ui *InitUI) SetThreshold(thresholdPercent int) {
 	ui.processor.SetMaxChanges(thresholdPercent)
 }
 
-// GetTerminalWidth returns the current terminal width with a fallback
+// GetTerminalWidth returns the current terminal width with a fallback.
 func (ui *InitUI) GetTerminalWidth() int {
 	width := ui.term.Width(terminal.Stdout)
 	if width == 0 {
@@ -106,12 +107,12 @@ func (ui *InitUI) GetTerminalWidth() int {
 	return width
 }
 
-// writeOutput writes to the output buffer instead of using fmt.Printf
+// writeOutput writes to the output buffer instead of using fmt.Printf.
 func (ui *InitUI) writeOutput(format string, args ...interface{}) {
 	ui.output.WriteString(fmt.Sprintf(format, args...))
 }
 
-// colorSource returns a colored string for the given source value
+// colorSource returns a colored string for the given source value.
 func (ui *InitUI) colorSource(source string) string {
 	switch source {
 	case "scaffold":
@@ -132,17 +133,17 @@ func (ui *InitUI) flushOutput() {
 	ui.output.Reset()
 }
 
-// Execute runs the initialization process with UI
+// Execute runs the initialization process with UI.
 func (ui *InitUI) Execute(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, cmdTemplateValues map[string]interface{}) error {
 	return ui.ExecuteWithBaseRef(embedsConfig, targetPath, force, update, useDefaults, "", cmdTemplateValues)
 }
 
-// ExecuteWithBaseRef runs the initialization process with UI and specified base ref
+// ExecuteWithBaseRef runs the initialization process with UI and specified base ref.
 func (ui *InitUI) ExecuteWithBaseRef(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}) error {
 	return ui.ExecuteWithDelimiters(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues, []string{"{{", "}}"})
 }
 
-// ExecuteWithDelimiters runs the initialization process with UI and custom delimiters
+// ExecuteWithDelimiters runs the initialization process with UI and custom delimiters.
 func (ui *InitUI) ExecuteWithDelimiters(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}, delimiters []string) error {
 	// Defensive validation: target directory cannot be empty
 	if targetPath == "" {
@@ -178,7 +179,7 @@ func (ui *InitUI) ExecuteWithDelimiters(embedsConfig tmpl.Configuration, targetP
 }
 
 // ExecuteWithInteractiveFlow provides a unified flow for both init and scaffold commands
-// This ensures both commands have identical behavior - the only difference is the source of templates
+// This ensures both commands have identical behavior - the only difference is the source of templates.
 func (ui *InitUI) ExecuteWithInteractiveFlow(
 	embedsConfig tmpl.Configuration,
 	targetPath string,
@@ -188,7 +189,7 @@ func (ui *InitUI) ExecuteWithInteractiveFlow(
 	return ui.ExecuteWithInteractiveFlowAndBaseRef(embedsConfig, targetPath, force, update, useDefaults, "", cmdTemplateValues)
 }
 
-// ExecuteWithInteractiveFlowAndBaseRef provides a unified flow with base ref support
+// ExecuteWithInteractiveFlowAndBaseRef provides a unified flow with base ref support.
 func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRef(
 	embedsConfig tmpl.Configuration,
 	targetPath string,
@@ -252,7 +253,7 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRef(
 	return ui.ExecuteWithBaseRef(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues)
 }
 
-// promptForTargetDirectoryWithValues prompts for target directory with evaluated template values
+// promptForTargetDirectoryWithValues prompts for target directory with evaluated template values.
 func (ui *InitUI) promptForTargetDirectoryWithValues(config tmpl.Configuration, mergedValues map[string]interface{}) (string, error) {
 	// Generate suggested directory name based on template and values
 	suggestedDir := ui.generateSuggestedDirectoryWithValues(config, mergedValues)
@@ -288,7 +289,7 @@ func (ui *InitUI) promptForTargetDirectoryWithValues(config tmpl.Configuration, 
 	return targetPath, nil
 }
 
-// generateSuggestedDirectoryWithValues generates a suggested directory name using template values
+// generateSuggestedDirectoryWithValues generates a suggested directory name using template values.
 func (ui *InitUI) generateSuggestedDirectoryWithValues(config tmpl.Configuration, mergedValues map[string]interface{}) string {
 	// If we have merged values, try to use them for a better suggestion
 	if mergedValues != nil {
@@ -304,7 +305,7 @@ func (ui *InitUI) generateSuggestedDirectoryWithValues(config tmpl.Configuration
 	return "./" + filepath.Base(config.Name)
 }
 
-// executeWithCommandValues processes files using command-line template values
+// executeWithCommandValues processes files using command-line template values.
 func (ui *InitUI) executeWithCommandValues(embedsConfig tmpl.Configuration, targetPath string, force, update bool, cmdTemplateValues map[string]interface{}) error {
 	// For now, use the existing processFile method but this should be refactored
 	// to use the templating processor properly
@@ -324,7 +325,8 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig tmpl.Configuration, targ
 		// Display result using proper UI output
 		if err != nil {
 			// Check if this is a FileSkippedError
-			if skipErr, ok := err.(*engine.FileSkippedError); ok {
+			skipErr := &engine.FileSkippedError{}
+			if errors.As(err, &skipErr) {
 				// File was intentionally skipped
 				ui.writeOutput("  %s %s %s\n",
 					ui.grayStyle.Render("•"),
@@ -369,7 +371,7 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig tmpl.Configuration, targ
 	return nil
 }
 
-// executeWithUserConfig processes files using user configuration
+// executeWithUserConfig processes files using user configuration.
 func (ui *InitUI) executeWithUserConfig(embedsConfig tmpl.Configuration, targetPath string, force, update bool, userConfig *config.Config) error {
 	// For now, use the existing processFileWithConfig method but this should be refactored
 	// to use the templating processor properly
@@ -396,7 +398,8 @@ func (ui *InitUI) executeWithUserConfig(embedsConfig tmpl.Configuration, targetP
 		// Display result using proper UI output
 		if err != nil {
 			// Check if this is a FileSkippedError
-			if skipErr, ok := err.(*engine.FileSkippedError); ok {
+			skipErr := &engine.FileSkippedError{}
+			if errors.As(err, &skipErr) {
 				// File was intentionally skipped
 				ui.writeOutput("  %s %s %s\n",
 					ui.grayStyle.Render("•"),
@@ -442,7 +445,7 @@ func (ui *InitUI) executeWithUserConfig(embedsConfig tmpl.Configuration, targetP
 }
 
 // RunSetupForm runs the interactive setup form to collect configuration values
-// This method can be used by both init and scaffold commands
+// This method can be used by both init and scaffold commands.
 func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath string, useDefaults bool, cmdTemplateValues map[string]interface{}) (map[string]interface{}, map[string]string, error) {
 	// Load existing user values from the scaffold template directory
 	userValues, err := config.LoadUserValues(targetPath)
@@ -505,7 +508,7 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 	return mergedValues, valueSources, nil
 }
 
-// executeWithSetup handles any scaffold configuration with interactive prompts
+// executeWithSetup handles any scaffold configuration with interactive prompts.
 func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}, delimiters []string) error {
 	// Find the scaffold.yaml file in the configuration
 	var scaffoldConfigFile *tmpl.File
@@ -592,7 +595,8 @@ func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath s
 		// Display result using proper UI output
 		if err != nil {
 			// Check if this is a FileSkippedError
-			if skipErr, ok := err.(*engine.FileSkippedError); ok {
+			skipErr := &engine.FileSkippedError{}
+			if errors.As(err, &skipErr) {
 				// File was intentionally skipped
 				ui.writeOutput("  %s %s %s\n",
 					ui.grayStyle.Render("•"),
@@ -657,7 +661,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath s
 	return nil
 }
 
-// renderMarkdown renders markdown content using glamour
+// renderMarkdown renders markdown content using glamour.
 func (ui *InitUI) renderMarkdown(markdownContent string) error {
 	// Create glamour renderer with dynamic terminal width
 	renderer, err := glamour.NewTermRenderer(
@@ -686,7 +690,7 @@ func (ui *InitUI) renderMarkdown(markdownContent string) error {
 	return nil
 }
 
-// renderREADME renders the README content using glamour
+// renderREADME renders the README content using glamour.
 func (ui *InitUI) renderREADME(readmeContent string, targetPath string) error {
 	// Process README template with default delimiters
 	processedContent, err := ui.processor.ProcessTemplateWithDelimiters(readmeContent, targetPath, nil, nil, []string{"{{", "}}"})
@@ -815,7 +819,7 @@ func (ui *InitUI) displayConfigurationTable(header []string, rows [][]string) {
 	ui.writeOutput("\n")
 }
 
-// DisplayTemplateTable displays template data in a formatted table
+// DisplayTemplateTable displays template data in a formatted table.
 func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 	// Get terminal width
 	width := ui.term.Width(terminal.Stdout)
@@ -920,7 +924,7 @@ func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 }
 
 // PromptForTemplate prompts the user to select a template from available options
-// This works for both init (embeds) and scaffold (local/remote) templates
+// This works for both init (embeds) and scaffold (local/remote) templates.
 func (ui *InitUI) PromptForTemplate(templateType string, templates interface{}) (string, error) {
 	var options []huh.Option[string]
 	var templateNames []string
@@ -1013,7 +1017,7 @@ func (ui *InitUI) PromptForTemplate(templateType string, templates interface{}) 
 }
 
 // PromptForTargetDirectory prompts the user for the target directory with evaluated template values
-// This works for both init and scaffold commands
+// This works for both init and scaffold commands.
 func (ui *InitUI) PromptForTargetDirectory(templateInfo interface{}, mergedValues map[string]interface{}) (string, error) {
 	// Generate suggested directory name based on template and values
 	suggestedDir := ui.generateSuggestedDirectoryWithTemplateInfo(templateInfo, mergedValues)
@@ -1049,7 +1053,7 @@ func (ui *InitUI) PromptForTargetDirectory(templateInfo interface{}, mergedValue
 	return targetPath, nil
 }
 
-// generateSuggestedDirectoryWithTemplateInfo generates a suggested directory name using template info and values
+// generateSuggestedDirectoryWithTemplateInfo generates a suggested directory name using template info and values.
 func (ui *InitUI) generateSuggestedDirectoryWithTemplateInfo(templateInfo interface{}, mergedValues map[string]interface{}) string {
 	// If we have merged values, try to use them for a better suggestion
 	if mergedValues != nil {
@@ -1075,7 +1079,7 @@ func (ui *InitUI) generateSuggestedDirectoryWithTemplateInfo(templateInfo interf
 	return "./new-project"
 }
 
-// DisplayScaffoldTemplateTable displays scaffold templates in a table format
+// DisplayScaffoldTemplateTable displays scaffold templates in a table format.
 func (ui *InitUI) DisplayScaffoldTemplateTable(templatesMap map[string]interface{}) {
 	// Extract template data for table display
 	var rows [][]string
