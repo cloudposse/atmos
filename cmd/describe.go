@@ -20,13 +20,12 @@ func init() {
 	// when processing YAML template functions (!terraform.state, !terraform.output).
 	// By default, all describe commands execute YAML functions and Go templates unless
 	// disabled with --process-functions=false or --process-templates=false flags.
-	describeCmd.PersistentFlags().StringP("identity", "i", "", "Specify the identity to authenticate to before describing. Use without value to interactively select.")
-
-	// Set NoOptDefVal to enable optional flag value for interactive identity selection.
-	// When --identity is used without a value, it will receive IdentityFlagSelectValue.
-	if identityFlag := describeCmd.PersistentFlags().Lookup("identity"); identityFlag != nil {
-		identityFlag.NoOptDefVal = IdentityFlagSelectValue
-	}
+	//
+	// NOTE: NoOptDefVal is NOT used here to avoid Cobra parsing issues with commands
+	// that have positional arguments. When NoOptDefVal is set and a space-separated value
+	// is used (--identity value), Cobra misinterprets the value as a subcommand/positional arg.
+	// Users should use --identity=select or similar for interactive selection.
+	describeCmd.PersistentFlags().StringP("identity", "i", "", "Specify the identity to authenticate with before describing")
 
 	// Register shell completion for identity flag.
 	AddIdentityCompletion(describeCmd)

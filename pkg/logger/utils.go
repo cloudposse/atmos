@@ -3,7 +3,6 @@ package logger
 import (
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 )
 
@@ -67,7 +66,10 @@ func ConvertLogLevel(level LogLevel) Level {
 	case LogLevelError:
 		return ErrorLevel
 	case LogLevelOff:
-		return Level(math.MaxInt32)
+		// Disable logging by setting level above FatalLevel.
+		// charmbracelet/log only recognizes defined Level constants, so we use FatalLevel + 1
+		// instead of math.MaxInt32 which would not work correctly.
+		return FatalLevel + 1
 	default:
 		return InfoLevel
 	}

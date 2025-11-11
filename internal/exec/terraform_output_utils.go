@@ -464,18 +464,32 @@ func execTerraformOutput(
 
 		outputProcessed = lo.MapEntries(outputMeta, func(k string, v tfexec.OutputMeta) (string, any) {
 			s := string(v.Value)
+
+			// Log summary to avoid multiline value formatting issues with concurrent writes.
+			valueSummary := s
+			if strings.Contains(s, "\n") {
+				lineCount := strings.Count(s, "\n") + 1
+				valueSummary = fmt.Sprintf("<multiline: %d lines, %d bytes>", lineCount, len(s))
+			} else if len(s) > 100 {
+				valueSummary = s[:100] + "..."
+			}
 			log.Debug("Converting variable from JSON to Go data type",
 				"variable", k,
-				"value", s,
+				"value_summary", valueSummary,
 			)
 
 			d, err2 := u.ConvertFromJSON(s)
 
 			if err2 != nil {
-				log.Error("failed to convert output", "output", s, "error", err2)
+				log.Error("failed to convert output", "output", valueSummary, "error", err2)
 				return k, nil
 			} else {
-				log.Debug("Converted the variable from JSON to Go data type", "key", k, "value", s, "result", d)
+				// Log result summary for multiline values.
+				resultSummary := fmt.Sprintf("%v", d)
+				if strings.Contains(resultSummary, "\n") || len(resultSummary) > 100 {
+					resultSummary = fmt.Sprintf("<%T>", d)
+				}
+				log.Debug("Converted the variable from JSON to Go data type", "key", k, "result_summary", resultSummary)
 			}
 
 			return k, d
@@ -539,8 +553,12 @@ func GetTerraformOutput(
 
 	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
 
+	// Use simple log message in debug/trace mode to avoid concurrent stderr writes with logger.
+	// Spinners write to stderr in a separate goroutine, causing misaligned log output.
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		// Initialize spinner
+		log.Debug(message, "output", output, "component", component, "stack", stack)
+	} else {
+		// Initialize spinner for normal (non-debug) mode
 		p := NewSpinner(message)
 		spinnerDone := make(chan struct{})
 		// Run spinner in a goroutine

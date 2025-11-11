@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -34,6 +35,7 @@ func ProcessComponentConfig(
 	stacksMap map[string]any,
 	componentType string,
 	component string,
+	authManager auth.AuthManager,
 ) error {
 	defer perf.Track(nil, "exec.ProcessComponentConfig")()
 
@@ -165,6 +167,14 @@ func ProcessComponentConfig(
 
 	if command != "" {
 		configAndStacksInfo.Command = command
+	}
+
+	// Populate AuthContext from AuthManager if provided (from --identity flag).
+	if authManager != nil {
+		managerStackInfo := authManager.GetStackInfo()
+		if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+			configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+		}
 	}
 
 	return nil
@@ -302,6 +312,7 @@ func ProcessStacks(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	authManager auth.AuthManager,
 ) (schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStacks")()
 
@@ -346,6 +357,7 @@ func ProcessStacks(
 			stacksMap,
 			configAndStacksInfo.ComponentType,
 			configAndStacksInfo.ComponentFromArg,
+			authManager,
 		)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -379,6 +391,7 @@ func ProcessStacks(
 				stacksMap,
 				configAndStacksInfo.ComponentType,
 				configAndStacksInfo.ComponentFromArg,
+				authManager,
 			)
 			if err != nil {
 				continue

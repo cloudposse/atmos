@@ -218,14 +218,15 @@ func registerLoggingFlags(registry *FlagRegistry) {
 func registerAuthenticationFlags(registry *FlagRegistry) {
 	defer perf.Track(nil, "flags.registerAuthenticationFlags")()
 
-	// Identity flag (special NoOptDefVal handling).
+	// Identity flag with NoOptDefVal for interactive selection.
+	// NoOptDefVal enables the pattern: --identity (interactive), --identity value (explicit).
 	registry.Register(&StringFlag{
 		Name:        identityFlagName,
 		Shorthand:   "i",
 		Default:     "",
 		Description: "Identity to use for authentication (use without value to select interactively)",
-		NoOptDefVal: cfg.IdentityFlagSelectValue,
 		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
+		NoOptDefVal: cfg.IdentityFlagSelectValue, // "__SELECT__"
 	})
 
 	// Pager flag (special NoOptDefVal handling).

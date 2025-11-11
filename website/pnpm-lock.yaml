@@ -95,6 +95,9 @@ importers:
       react-hubspot-form:
         specifier: ^1.3.7
         version: 1.3.7(react@18.3.1)
+      react-icons:
+        specifier: ^5.5.0
+        version: 5.5.0(react@18.3.1)
       react-image-gallery:
         specifier: ^1.3.0
         version: 1.4.0(react@18.3.1)
@@ -4816,6 +4819,11 @@ packages:
 
   react-hubspot-form@1.3.7:
     resolution: {integrity: sha512-gDeqIt23QlDfF7ci+jKAOKd2C4Ek4Nih+wzx+cttkvD1SdxsuL/mb+BylRiy7RjMS+4KAtQ3Jl7Iot1agJIUjQ==}
+
+  react-icons@5.5.0:
+    resolution: {integrity: sha512-MEFcXdkP3dLo8uumGI5xN3lDFNsRtrjbOEKDLD7yv76v4wpnEq2Lt2qeHaQOr34I/wPN3s3+N08WkQ+CW37Xiw==}
+    peerDependencies:
+      react: '*'
 
   react-image-gallery@1.4.0:
     resolution: {integrity: sha512-m7xLq7+g6/xh+BhVMAxvRU0132sNcEFglYsVsgthrnItl9VtLE7MuVvVWD9pvzcI+WBP5+p9HvnRwIiyhPkBDg==}
@@ -11908,6 +11916,10 @@ snapshots:
       styled-jsx: 2.2.7(react@18.3.1)
     transitivePeerDependencies:
       - react
+
+  react-icons@5.5.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
 
   react-image-gallery@1.4.0(react@18.3.1):
     dependencies:

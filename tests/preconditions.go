@@ -84,6 +84,32 @@ func RequireAWSProfile(t *testing.T, profileName string) {
 	}
 }
 
+// RequireAWSCredentials checks if AWS credentials are available through any standard method.
+// It uses the AWS SDK to validate that credentials can be loaded from environment variables,
+// shared credentials file, EC2 instance metadata, or any other credential source.
+func RequireAWSCredentials(t *testing.T) {
+	t.Helper()
+
+	if !ShouldCheckPreconditions() {
+		return
+	}
+
+	// Try to load the AWS config using the default credential chain
+	ctx := context.Background()
+	cfgOpts := []func(*config.LoadOptions) error{}
+	cfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
+	if err != nil {
+		t.Skipf("AWS credentials not available: %v. Configure AWS credentials or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true", err)
+	}
+
+	// Loading the config succeeds even without credentials, so we need to actually
+	// try to retrieve credentials to verify they exist
+	_, err = cfg.Credentials.Retrieve(ctx)
+	if err != nil {
+		t.Skipf("AWS credentials not available: %v. Configure AWS credentials or set ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true", err)
+	}
+}
+
 // RequireAzureCredentials checks if Azure credentials appear to be configured.
 // This function looks for common Azure credential sources:
 // - Environment variables (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)
