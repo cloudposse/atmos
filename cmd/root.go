@@ -221,10 +221,22 @@ var RootCmd = &cobra.Command{
 					log.Warn(err.Error())
 				}
 			} else if isVersionCommand() {
-				// Version command should always work, even with invalid config
-				log.Debug("Warning: CLI configuration error (continuing for version command)", "error", err)
+				// Version command should always work, even with invalid config.
+				// Log config error but allow version command to proceed.
+				enrichedErr := errUtils.Build(err).
+					WithHint("The version command works even with invalid configuration").
+					WithHint("Fix the configuration error to use other commands").
+					WithContext("command", "version").
+					Err()
+				log.Debug("CLI configuration error (continuing for version command)", "error", enrichedErr)
 			} else {
-				errUtils.CheckErrorPrintAndExit(err, "", "")
+				// Enrich config errors with helpful context.
+				enrichedErr := errUtils.Build(err).
+					WithHint("Verify your atmos.yaml syntax and configuration").
+					WithHint("Run 'atmos version' to check if Atmos is working").
+					WithExitCode(2). // Config/usage error
+					Err()
+				errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
 			}
 		}
 
