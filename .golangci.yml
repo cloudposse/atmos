@@ -125,10 +125,8 @@ linters:
         # pkg/flags/ infrastructure is fully implemented - these patterns are now banned outside pkg/flags/.
         - pattern: viper\.BindEnv\(
           msg: NEVER call viper.BindEnv() directly - use pkg/flags/ unified flag parser (consult flag-handler agent)
-          exclude: ['pkg/flags/', '_test\.go$']
         - pattern: viper\.BindPFlag\(
           msg: NEVER call viper.BindPFlag() directly - use pkg/flags/ unified flag parser (consult flag-handler agent)
-          exclude: ['pkg/flags/', '_test\.go$']
       exclude-godoc-examples: false
       analyze-types: true
     funlen:
@@ -289,6 +287,15 @@ linters:
           - err113
         path: ".*"
         source: 'errors\.Join\(.*errUtils\..*fmt\.Errorf'
+      # Allow viper.BindEnv and viper.BindPFlag in pkg/flags/ and test files
+      - linters:
+          - forbidigo
+        path: ^pkg/flags/
+        text: "viper\\.BindEnv|viper\\.BindPFlag"
+      - linters:
+          - forbidigo
+        path: _test\.go$
+        text: "viper\\.BindEnv|viper\\.BindPFlag"
     paths:
       - experiments/.*
       - third_party$
