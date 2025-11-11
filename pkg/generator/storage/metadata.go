@@ -128,14 +128,14 @@ func NewInitMetadata(templateName, templateVersion, baseRef string, variables ma
 }
 
 // NewScaffoldMetadata creates generation metadata for a scaffold command.
-func NewScaffoldMetadata(templateName, templateVersion, baseRef string, variables map[string]string) *GenerationMetadata {
+func NewScaffoldMetadata(templateName, templateVersion, templateSource, baseRef string, variables map[string]string) *GenerationMetadata {
 	return &GenerationMetadata{
 		Version: 1,
 		Command: "atmos scaffold generate",
 		Template: TemplateInfo{
 			Name:    templateName,
 			Version: templateVersion,
-			Source:  "embedded",
+			Source:  templateSource,
 		},
 		BaseRef:     baseRef,
 		GeneratedAt: time.Now(),
