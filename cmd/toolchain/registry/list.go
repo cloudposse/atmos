@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
@@ -109,7 +110,7 @@ func listRegistryTools(ctx context.Context, registryName string) error {
 	listLimit := v.GetInt("limit")
 	listOffset := v.GetInt("offset")
 	listSort := v.GetString("sort")
-	listFormat := v.GetString("format")
+	listFormat := strings.ToLower(v.GetString("format"))
 
 	// Validate format flag.
 	switch listFormat {

@@ -3,6 +3,7 @@ package registry
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -47,6 +48,26 @@ func TestListCommand_FormatFlagValidation(t *testing.T) {
 			expectError: true,
 			errorMsg:    "format must be one of: table, json, yaml",
 		},
+		{
+			name:        "uppercase JSON is valid after normalization",
+			format:      "JSON",
+			expectError: false,
+		},
+		{
+			name:        "uppercase YAML is valid after normalization",
+			format:      "YAML",
+			expectError: false,
+		},
+		{
+			name:        "uppercase TABLE is valid after normalization",
+			format:      "TABLE",
+			expectError: false,
+		},
+		{
+			name:        "mixed case Table is valid after normalization",
+			format:      "Table",
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -59,7 +80,7 @@ func TestListCommand_FormatFlagValidation(t *testing.T) {
 			v.Set("sort", "name")
 
 			// Test format validation logic.
-			listFormat := v.GetString("format")
+			listFormat := strings.ToLower(v.GetString("format"))
 			var err error
 
 			// Validate format (same logic as in listRegistryTools).

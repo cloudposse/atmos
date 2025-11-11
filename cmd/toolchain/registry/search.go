@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
@@ -84,7 +85,7 @@ func executeSearchCommand(cmd *cobra.Command, args []string) error {
 	searchRegistry := v.GetString("registry")
 	searchInstalledOnly := v.GetBool("installed-only")
 	searchAvailableOnly := v.GetBool("available-only")
-	searchFormat := v.GetString("format")
+	searchFormat := strings.ToLower(v.GetString("format"))
 
 	// Validate format flag.
 	switch searchFormat {
