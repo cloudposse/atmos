@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -200,8 +201,24 @@ func (m *DefaultProfileManager) GetProfile(atmosConfig *schema.AtmosConfiguratio
 		}, nil
 	}
 
-	// Profile not found.
-	return nil, fmt.Errorf("%w: '%s'", errUtils.ErrProfileNotFound, profileName)
+	// Profile not found - build helpful error with search paths.
+	var searchedPaths []string
+	for _, loc := range locations {
+		if loc.Exists {
+			searchedPaths = append(searchedPaths, filepath.Join(loc.Path, profileName))
+		}
+	}
+
+	return nil, errUtils.Build(errUtils.ErrProfileNotFound).
+		WithExplanationf("Profile `%s` was not found in any configured location", profileName).
+		WithExplanationf("Searched in: `%s`", strings.Join(searchedPaths, ", ")).
+		WithHint("Run `atmos profile list` to see all available profiles").
+		WithHint("Check `profiles.base_path` in `atmos.yaml` if using custom location").
+		WithContext("profile", profileName).
+		WithContext("searched_paths", strings.Join(searchedPaths, ", ")).
+		WithContext("locations_checked", fmt.Sprintf("%d", len(locations))).
+		WithExitCode(2).
+		Err()
 }
 
 // listProfileFiles returns all YAML files in a profile directory.
