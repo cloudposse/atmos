@@ -72,6 +72,7 @@ type Expectation struct {
 	Timeout                  string                    `yaml:"timeout"`                    // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
 	Valid                    []string                  `yaml:"valid"`                      // Format validations: "yaml", "json"
 	IgnoreTrailingWhitespace bool                      `yaml:"ignore_trailing_whitespace"` // Strip trailing whitespace before snapshot comparison
+	Sanitize                 map[string]string         `yaml:"sanitize"`                   // Custom sanitization rules (regex pattern -> replacement)
 }
 type TestCase struct {
 	Name          string            `yaml:"name"`          // Name of the test
@@ -290,6 +291,35 @@ func collapseExtraSlashes(s string) string {
 	return regexp.MustCompile(`/+`).ReplaceAllString(s, "/")
 }
 
+// sanitizeOption is a functional option for customizing output sanitization.
+type sanitizeOption func(*sanitizeConfig)
+
+// sanitizeConfig holds configuration for sanitization.
+type sanitizeConfig struct {
+	customReplacements map[string]string // pattern -> replacement (applied as regexp.ReplaceAllString)
+}
+
+// WithCustomReplacements adds custom pattern replacements to the sanitization process.
+// The patterns are treated as regular expressions and applied after all standard sanitization steps.
+// This is useful for one-off cases specific to certain tests that don't need global sanitization.
+//
+// Example:
+//
+//	sanitizeOutput(output, WithCustomReplacements(map[string]string{
+//	    `session-[0-9]+`: "session-12345",
+//	    `temp_[a-z]+`:    "temp_xyz",
+//	}))
+func WithCustomReplacements(replacements map[string]string) sanitizeOption {
+	return func(c *sanitizeConfig) {
+		if c.customReplacements == nil {
+			c.customReplacements = make(map[string]string)
+		}
+		for pattern, replacement := range replacements {
+			c.customReplacements[pattern] = replacement
+		}
+	}
+}
+
 // sanitizeOutput replaces occurrences of the repository's absolute path in the output
 // with the placeholder "/absolute/path/to/repo". It first normalizes both the repository root
 // and the output to use forward slashes, ensuring that the replacement works reliably.
@@ -300,7 +330,14 @@ func collapseExtraSlashes(s string) string {
 //	   --> /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
 //	/home/runner/work/atmos/atmos/examples/demo-stacks/stacks/deploy/**/*
 //	   --> /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
-func sanitizeOutput(output string) (string, error) {
+//
+// Custom replacements can be provided via WithCustomReplacements option for test-specific sanitization.
+func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
+	// Apply options to configuration.
+	config := &sanitizeConfig{}
+	for _, opt := range opts {
+		opt(config)
+	}
 	// 1. Get the repository root.
 	repoRoot, err := findGitRepoRoot(startingDir)
 	if err != nil {
@@ -393,27 +430,37 @@ func sanitizeOutput(output string) (string, error) {
 	debugTimestampRegex := regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
 	result = debugTimestampRegex.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
 
-	// 11. Normalize external absolute paths to avoid environment-specific paths in snapshots.
+	// 11. Apply custom replacements if provided.
+	// These are test-specific patterns that don't need to be part of the global sanitization.
+	for pattern, replacement := range config.customReplacements {
+		customRegex, err := regexp.Compile(pattern)
+		if err != nil {
+			return "", fmt.Errorf("failed to compile custom replacement pattern %q: %w", pattern, err)
+		}
+		result = customRegex.ReplaceAllString(result, replacement)
+	}
+
+	// 12. Normalize external absolute paths to avoid environment-specific paths in snapshots.
 	// Replace common absolute path prefixes with generic placeholders.
 	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
 	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
 	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
 	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
 
-	// 12. Normalize "Last Updated" timestamps in auth whoami output.
+	// 13. Normalize "Last Updated" timestamps in auth whoami output.
 	// These appear as "Last Updated  2025-10-28 13:10:27 CDT" in table output.
 	// Replace with a fixed timestamp to avoid snapshot mismatches.
 	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
 	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
 
-	// 13. Normalize credential expiration durations in auth list output.
+	// 14. Normalize credential expiration durations in auth list output.
 	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
 	// The duration changes every minute, so normalize to "1h 0m" like other duration normalizations.
 	// Matches patterns like "650202h14m", "650194h", "1h30m", "45m", etc. at the end of identity lines.
 	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h(?:\d+m)?\b`)
 	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
 
-	// 14. Normalize credential_store values in error messages.
+	// 15. Normalize credential_store values in error messages.
 	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
 	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
 	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
@@ -1477,11 +1524,16 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Sanitize outputs and fail the test if sanitization fails.
 	var err error
-	stdoutOutput, err = sanitizeOutput(stdoutOutput)
+	var sanitizeOpts []sanitizeOption
+	if len(tc.Expect.Sanitize) > 0 {
+		sanitizeOpts = append(sanitizeOpts, WithCustomReplacements(tc.Expect.Sanitize))
+	}
+
+	stdoutOutput, err = sanitizeOutput(stdoutOutput, sanitizeOpts...)
 	if err != nil {
 		t.Fatalf("failed to sanitize stdout output: %v", err)
 	}
-	stderrOutput, err = sanitizeOutput(stderrOutput)
+	stderrOutput, err = sanitizeOutput(stderrOutput, sanitizeOpts...)
 	if err != nil {
 		t.Fatalf("failed to sanitize stderr output: %v", err)
 	}

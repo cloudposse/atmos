@@ -107,4 +107,5 @@ performance-optimization/
 
 # Scratch/temporary analysis files
 .scratch/
+TEST_FAILURE_ANALYSIS.md
 scratch/

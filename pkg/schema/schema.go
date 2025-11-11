@@ -30,6 +30,7 @@ type AtmosConfiguration struct {
 	Stacks                        Stacks             `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
 	Workflows                     Workflows          `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
 	Logs                          Logs               `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+	Errors                        ErrorsConfig       `yaml:"errors,omitempty" json:"errors,omitempty" mapstructure:"errors"`
 	Commands                      []Command          `yaml:"commands,omitempty" json:"commands,omitempty" mapstructure:"commands"`
 	CommandAliases                CommandAliases     `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
 	Integrations                  Integrations       `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
@@ -441,6 +442,29 @@ type Workflows struct {
 type Logs struct {
 	File  string `yaml:"file" json:"file" mapstructure:"file"`
 	Level string `yaml:"level" json:"level" mapstructure:"level"`
+}
+
+// ErrorsConfig contains configuration for error handling.
+type ErrorsConfig struct {
+	Format ErrorFormatConfig `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
+	Sentry SentryConfig      `yaml:"sentry,omitempty" json:"sentry,omitempty" mapstructure:"sentry"`
+}
+
+// ErrorFormatConfig contains formatting options for errors.
+type ErrorFormatConfig struct {
+	Verbose bool `yaml:"verbose,omitempty" json:"verbose,omitempty" mapstructure:"verbose"`
+}
+
+// SentryConfig contains Sentry error reporting configuration.
+type SentryConfig struct {
+	Enabled             bool              `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	DSN                 string            `yaml:"dsn" json:"dsn" mapstructure:"dsn"`
+	Environment         string            `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
+	Release             string            `yaml:"release,omitempty" json:"release,omitempty" mapstructure:"release"`
+	SampleRate          float64           `yaml:"sample_rate,omitempty" json:"sample_rate,omitempty" mapstructure:"sample_rate"`
+	Debug               bool              `yaml:"debug,omitempty" json:"debug,omitempty" mapstructure:"debug"`
+	Tags                map[string]string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
+	CaptureStackContext bool              `yaml:"capture_stack_context,omitempty" json:"capture_stack_context,omitempty" mapstructure:"capture_stack_context"`
 }
 
 type Context struct {

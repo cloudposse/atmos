@@ -58,6 +58,8 @@ const (
 	logFileMode = 0o644
 	// DefaultTopFunctionsMax is the default number of top functions to display in performance summary.
 	defaultTopFunctionsMax = 50
+	// VerboseFlagName is the name of the verbose flag.
+	verboseFlagName = "verbose"
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -169,6 +171,20 @@ var RootCmd = &cobra.Command{
 	// Individual commands that need to pass through flags (terraform, helmfile, packer)
 	// set FParseErrWhitelist{UnknownFlags: true} explicitly.
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// Set verbose flag for error formatting before any command execution or fatal exits.
+		if cmd.Flags().Changed(verboseFlagName) {
+			// CLI flag explicitly set - use it.
+			verbose, flagErr := cmd.Flags().GetBool(verboseFlagName)
+			if flagErr != nil {
+				errUtils.CheckErrorPrintAndExit(flagErr, "", "")
+			}
+			errUtils.SetVerboseFlag(verbose)
+		} else if viper.IsSet(verboseFlagName) {
+			// CLI flag not set - check environment variable via Viper.
+			verbose := viper.GetBool(verboseFlagName)
+			errUtils.SetVerboseFlag(verbose)
+		}
+
 		// Determine if the command is a help command or if the help flag is set.
 		isHelpCommand := cmd.Name() == "help"
 		helpFlag := cmd.Flags().Changed("help")
@@ -571,8 +587,8 @@ func Execute() error {
 	version.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
 
-	utils.InitializeMarkdown(atmosConfig)
-	errUtils.InitializeMarkdown(atmosConfig)
+	utils.InitializeMarkdown(&atmosConfig)
+	errUtils.InitializeMarkdown(&atmosConfig)
 
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
 		if isVersionCommand() {
@@ -740,6 +756,10 @@ func init() {
 	// Special handling for version flag: clear DefValue for cleaner --help output.
 	if versionFlag := RootCmd.PersistentFlags().Lookup("version"); versionFlag != nil {
 		versionFlag.DefValue = ""
+	}
+	// Bind verbose flag to environment variable.
+	if err := viper.BindEnv(verboseFlagName, "ATMOS_VERBOSE"); err != nil {
+		log.Error("Failed to bind ATMOS_VERBOSE environment variable", "error", err)
 	}
 
 	// Bind environment variables for GitHub authentication.
