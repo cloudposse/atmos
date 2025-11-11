@@ -17,7 +17,8 @@ tests:
       exit_code: 0
       diff:
         - "github_token"
-        - "basePathAbsolute"
+      sanitize:
+        "basePathAbsolute: .+": "basePathAbsolute: /absolute/path/to/repo"
   - name: atmos_describe_configuration
     snapshot: true
     enabled: true
@@ -35,4 +36,5 @@ tests:
       exit_code: 0
       diff:
         - "github_token"
-        - "basePathAbsolute"
+      sanitize:
+        "basePathAbsolute: .+": "basePathAbsolute: /absolute/path/to/repo"

@@ -193,8 +193,9 @@ tests:
       - "--stack"
       - "tenant1-ue2-dev"
     expect:
-      diff:
-        - "provisioned_by_user"
+      diff: []
+      sanitize:
+        "provisioned_by_user: [^\\s]+": "provisioned_by_user: user"
       exit_code: 0
 
   - name: describe component with relative path
@@ -213,8 +214,9 @@ tests:
       - "--stack"
       - "tenant1-ue2-dev"
     expect:
-      diff:
-        - "provisioned_by_user"
+      diff: []
+      sanitize:
+        "provisioned_by_user: [^\\s]+": "provisioned_by_user: user"
       exit_code: 0
 
   - name: describe component with nested component path
