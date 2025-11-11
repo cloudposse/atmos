@@ -488,6 +488,24 @@ The `settings` section configures Atmos global settings.
   </dd>
 </dl>
 
+## Error Handling
+
+Configure error formatting and Sentry integration for monitoring failures across your organization.
+
+See [Error Handling & Monitoring](/cli/configuration/errors) for complete documentation.
+
+<File title="atmos.yaml">
+```yaml
+errors:
+  format:
+    verbose: false  # Show detailed stack traces
+  sentry:
+    enabled: true
+    dsn: "https://your-key@sentry.io/project-id"
+    environment: "production"
+```
+</File>
+
 ## Workflows
 
 <File title="atmos.yaml">

@@ -323,6 +323,99 @@ This normalization happens automatically in:
 
 See `tests/cli_snapshot_test.go` for comprehensive tests of this behavior.
 
+### Custom Output Sanitization
+
+The test framework automatically sanitizes test output to ensure consistent snapshots across different environments. Standard sanitization includes:
+
+- Repository absolute paths → `/absolute/path/to/repo/`
+- Request IDs → `<REDACTED>`
+- Timestamps → normalized values
+- PostHog tokens → `phc_TEST_TOKEN_PLACEHOLDER`
+- Temporary file paths → normalized paths
+
+For **test-specific sanitization** that doesn't need to be global, use the `sanitize` field in your test's `expect` section. This accepts a map of regex patterns to replacement strings.
+
+#### When to Use Custom Sanitization
+
+Use the `sanitize` field for one-off cases that are specific to individual tests:
+
+- Session IDs, request IDs, or transaction IDs that vary between runs
+- Build timestamps or version numbers in output
+- User-specific identifiers (emails, usernames)
+- Random tokens or UUIDs generated during test execution
+- Environment-specific values that don't fit global patterns
+
+**Don't use it for:**
+- Values that should be sanitized globally (add to `sanitizeOutput()` function instead)
+- Values that appear across many tests (add to standard sanitization)
+
+#### Example: Sanitizing Session IDs and Timestamps
+
+```yaml
+tests:
+  - name: deploy with session tracking
+    enabled: true
+    workdir: "fixtures/scenarios/complete/"
+    command: "atmos"
+    args: ["terraform", "plan", "component", "-s", "stack"]
+    snapshot: true
+    expect:
+      exit_code: 0
+      stdout:
+        - "Session session-12345 started"
+        - "Build build-2025-01-01-0000 deployed"
+      # Custom sanitization for this test only
+      sanitize:
+        "session-[0-9]+": "session-12345"              # Normalize session IDs
+        "build-\\d{4}-\\d{2}-\\d{2}-\\d+": "build-2025-01-01-0000"  # Normalize build IDs
+```
+
+#### Example: Sanitizing User-Specific Output
+
+```yaml
+tests:
+  - name: user authentication flow
+    enabled: true
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args: ["auth", "login"]
+    snapshot: true
+    expect:
+      exit_code: 0
+      stdout:
+        - "User user@example.com logged in"
+        - "Token: token-REDACTED"
+      # Sanitize user-specific details
+      sanitize:
+        "[a-z.]+@[a-z.]+\\.[a-z]+": "user@example.com"  # Normalize email addresses
+        "token-[a-zA-Z0-9]+": "token-REDACTED"          # Redact tokens
+```
+
+#### How It Works
+
+1. **Standard sanitization runs first** - All global patterns (paths, request IDs, etc.) are applied
+2. **Custom sanitization runs second** - Your test-specific patterns are applied
+3. **Patterns are regular expressions** - Use Go regex syntax (see [regexp package](https://pkg.go.dev/regexp/syntax))
+4. **Invalid patterns cause test failures** - Helpful error messages indicate which pattern failed
+
+#### Tips for Regex Patterns
+
+- **Escape special characters**: Use `\\d` for digits, `\\s` for whitespace
+- **Use character classes**: `[0-9]+` for numbers, `[a-zA-Z]+` for letters
+- **Escape dollar signs in replacements**: Use `$$` to include a literal `$` in the replacement string
+- **Test your patterns**: Run tests with `-v` flag to see sanitization in action
+
+#### Debugging Sanitization
+
+If your snapshots aren't matching, check:
+
+1. Run test with `-v` to see actual vs expected output
+2. Verify your regex pattern is correct (test at [regex101.com](https://regex101.com/))
+3. Check if pattern is already handled by standard sanitization
+4. Regenerate snapshot: `go test ./tests -run 'TestName' -regenerate-snapshots`
+
+See `tests/cli_sanitize_test.go` for comprehensive examples of sanitization patterns.
+
 ### Example Configuration
 
 We support an explicit type `!not` on the `expect.stdout` and `expect.stderr` sections (not on `expect.diff`)
@@ -362,4 +455,7 @@ tests:
       stderr:                                 # Expected output to stderr;
         - "^$"                                # Expect no output
       exit_code: 0                            # Expected exit code
+      sanitize:                               # Optional: Custom sanitization rules (pattern -> replacement)
+        "session-[0-9]+": "session-12345"    # Replace session IDs with fixed value
+        "temp_[a-z0-9]+": "temp_xyz"          # Replace temp identifiers
 ```

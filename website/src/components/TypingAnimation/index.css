@@ -15,12 +15,30 @@
 
 .typing-cursor {
   display: inline-block;
-  width: 3px;
-  height: 1em;
-  background-color: currentColor;
-  margin-left: 2px;
-  animation: blink 1s infinite;
-  vertical-align: middle;
+  margin-left: 3px;
+  animation: blink 0.8s ease-in-out infinite;
+  font-weight: 400;
+  font-size: 0.9em;
+  line-height: 1;
+  vertical-align: baseline;
+  position: relative;
+  transform: scaleX(0.153);
+}
+
+.typing-cursor::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 180%;
+  height: 140%;
+  background: currentColor;
+  opacity: 0;
+  border-radius: 30%;
+  filter: blur(4px);
+  animation: pulse 0.8s ease-in-out infinite;
+  z-index: -1;
 }
 
 @keyframes blink {
@@ -32,7 +50,22 @@
   }
 }
 
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+  50% {
+    opacity: 0.08;
+    transform: translate(-50%, -50%) scale(1.02);
+  }
+}
+
 /* Ensure cursor is visible with gradient text */
+.hero h1 .typing-cursor {
+  color: rgba(26, 29, 35, 0.3);
+}
+
 html[data-theme='dark'] .hero h1 .typing-cursor {
-  background-color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.3);
 }

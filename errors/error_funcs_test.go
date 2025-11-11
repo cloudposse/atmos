@@ -289,7 +289,7 @@ func TestInitializeMarkdown(t *testing.T) {
 	t.Run("valid configuration", func(t *testing.T) {
 		logBuf.Reset()
 		atmosConfig := schema.AtmosConfiguration{}
-		InitializeMarkdown(atmosConfig)
+		InitializeMarkdown(&atmosConfig)
 
 		// Should initialize without error
 		assert.NotContains(t, logBuf.String(), "failed to initialize Markdown renderer")
