@@ -127,7 +127,7 @@ func ExecuteTerraformGeneratePlanfile(
 		return err
 	}
 
-	*info, err = ProcessStacks(&atmosConfig, *info, true, options.ProcessTemplates, options.ProcessYamlFunctions, options.Skip)
+	*info, err = ProcessStacks(&atmosConfig, *info, true, options.ProcessTemplates, options.ProcessYamlFunctions, options.Skip, nil)
 	if err != nil {
 		return err
 	}

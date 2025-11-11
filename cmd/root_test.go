@@ -162,7 +162,7 @@ func TestSetupLogger_TraceLevel(t *testing.T) {
 				},
 			}
 
-			setupLogger(cfg)
+			SetupLogger(cfg)
 			assert.Equal(t, tt.expectedLevel, log.GetLevel(),
 				"Expected level %v for config %q", tt.expectedLevel, tt.configLevel)
 		})
@@ -228,7 +228,7 @@ func TestSetupLogger_TraceVisibility(t *testing.T) {
 					Terminal: schema.Terminal{},
 				},
 			}
-			setupLogger(cfg)
+			SetupLogger(cfg)
 
 			// Test trace visibility.
 			buf.Reset()
@@ -281,7 +281,7 @@ func TestSetupLogger_TraceLevelFromEnvironment(t *testing.T) {
 			Terminal: schema.Terminal{},
 		},
 	}
-	setupLogger(cfg)
+	SetupLogger(cfg)
 
 	assert.Equal(t, log.TraceLevel, log.GetLevel(),
 		"Should set trace level from environment variable")
@@ -309,10 +309,10 @@ func TestSetupLogger_NoColorWithTraceLevel(t *testing.T) {
 	}
 
 	// Mock the IsColorEnabled to return false.
-	// Since we can't easily mock it, we'll just test that setupLogger doesn't panic.
+	// Since we can't easily mock it, we'll just test that SetupLogger doesn't panic.
 	assert.NotPanics(t, func() {
-		setupLogger(cfg)
-	}, "setupLogger should not panic with trace level and no color")
+		SetupLogger(cfg)
+	}, "SetupLogger should not panic with trace level and no color")
 
 	assert.Equal(t, log.TraceLevel, log.GetLevel(),
 		"Trace level should be set even with no color")

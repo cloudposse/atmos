@@ -4,6 +4,11 @@
  * work well for content-centric websites.
  */
 
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
 /* No custom width constraints - let Docusaurus handle responsive layout */
 
 /* Accessibility: Visually hidden but available to screen readers */
