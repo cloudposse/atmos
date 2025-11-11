@@ -101,13 +101,13 @@ func ExecuteValidateComponent(
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = cfg.TerraformComponentType
-	configAndStacksInfo, err := ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
+	configAndStacksInfo, err := ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 	if err != nil {
 		configAndStacksInfo.ComponentType = cfg.HelmfileComponentType
-		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
+		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 		if err != nil {
 			configAndStacksInfo.ComponentType = cfg.PackerComponentType
-			configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
+			configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 			if err != nil {
 				return false, err
 			}

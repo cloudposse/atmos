@@ -229,6 +229,50 @@ If `base_path` is provided, `components.terraform.base_path`, `components.helmfi
 base_path: "."
 ```
 
+### Git Root Discovery
+
+When using the default configuration and no local `atmos.yaml` exists in the current directory, Atmos automatically discovers the git repository root and uses it as the base path. This enables running Atmos from any subdirectory, just like Git.
+
+**How it works:**
+
+When you run Atmos from a subdirectory:
+1. Atmos checks if a local configuration exists in the current directory
+2. If no local configuration is found, it detects the git repository root
+3. The repository root is used as `base_path` automatically
+
+**Local configuration always takes precedence.** If any of these exist in the current directory, git root discovery is skipped:
+- `atmos.yaml` - Main config file
+- `.atmos.yaml` - Hidden config file
+- `.atmos/` - Config directory
+- `.atmos.d/` - Default imports directory
+- `atmos.d/` - Alternate imports directory
+
+**Example:**
+
+```bash
+# Repository structure:
+# /repo/
+#   atmos.yaml
+#   components/terraform/vpc/
+#     main.tf
+
+# Works from any subdirectory
+cd /repo/components/terraform/vpc
+atmos terraform plan vpc -s prod  # Automatically uses /repo as base_path
+```
+
+**Disabling git root discovery:**
+
+For testing or if you prefer explicit configuration, disable with an environment variable:
+
+```bash
+export ATMOS_GIT_ROOT_BASEPATH=false
+```
+
+:::tip
+This feature mirrors Git's behavior of finding the repository root from any subdirectory. You no longer need to `cd` back to the repository root to run Atmos commands.
+:::
+
 ### Windows Path Handling
 
 When configuring paths in `atmos.yaml` on Windows, there are important considerations for how YAML interprets backslashes:
@@ -443,6 +487,24 @@ The `settings` section configures Atmos global settings.
     </dl>
   </dd>
 </dl>
+
+## Error Handling
+
+Configure error formatting and Sentry integration for monitoring failures across your organization.
+
+See [Error Handling & Monitoring](/cli/configuration/errors) for complete documentation.
+
+<File title="atmos.yaml">
+```yaml
+errors:
+  format:
+    verbose: false  # Show detailed stack traces
+  sentry:
+    enabled: true
+    dsn: "https://your-key@sentry.io/project-id"
+    environment: "production"
+```
+</File>
 
 ## Workflows
 
