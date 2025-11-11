@@ -1,0 +1,320 @@
+---
+slug: helpful-errors
+title: "Better Error Messages: Helpful Hints, Rich Context, and Enterprise Error Tracking"
+authors: [osterman]
+tags: [enhancement, feature]
+date: 2025-11-08
+---
+
+We've completely rebuilt Atmos error handling from the ground up to provide **helpful hints**, **rich context**, and **enterprise-grade error tracking**. When something goes wrong, you now get actionable guidance instead of cryptic messages, and enterprises can track and analyze errors across their entire infrastructure stack.
+
+<!--truncate-->
+
+## The Problem: Errors That Don't Help
+
+Traditional CLI error messages tell you *what* went wrong, but not *how* to fix it:
+
+```
+Error: invalid workflow manifest
+```
+
+What's invalid? What should it look like? Where do I find documentation? You're left to guess, search documentation, or dig through source code.
+
+For platform teams managing hundreds of components across multiple environments, this friction adds up:
+
+- **Time wasted debugging** - Engineers spend hours tracking down configuration issues
+- **Context switching** - Jumping between error messages, documentation, and source code
+- **Repeated mistakes** - Without clear guidance, teams make the same errors repeatedly
+- **No visibility** - No way to track error patterns across teams or identify systemic issues
+
+## What We Built
+
+### 1. Helpful Hints That Guide You
+
+Errors now include **actionable hints** that tell you exactly how to fix the problem:
+
+**Before:**
+```
+Error: Vendoring is not configured
+```
+
+**After:**
+```
+# Error
+
+**Error:** Vendoring is not configured
+
+## Hints
+
+💡 Add a vendor section to your atmos.yaml configuration
+💡 https://atmos.tools/core-concepts/vendor
+```
+
+Every error can include:
+- **Step-by-step guidance** - Exact commands or configuration changes needed
+- **Documentation links** - Direct links to relevant docs
+- **Common solutions** - Hints based on frequent causes
+
+### 2. Rich Contextual Information
+
+Errors now include **full context** about what you were trying to do:
+
+```
+# Workflow Error
+
+**Error:** invalid from-step flag
+
+## Explanation
+
+The --from-step flag was set to dne, but this step does not exist in workflow pass.
+
+### Available steps:
+
+• step1
+• step2
+• deploy-production
+
+## Context
+
+• Workflow: pass
+• File: stacks/workflows/deploy.yaml
+• Component: vpc
+• Stack: prod-us-east-1
+```
+
+This context helps you understand:
+- **What triggered the error** - Component, stack, workflow
+- **What was expected** - Valid options and alternatives
+- **Where to look** - Exact file paths and line numbers
+- **What's available** - List of valid choices
+
+### 3. Structured, Readable Format
+
+All errors use **markdown formatting** for better readability:
+
+- **Headers** organize information hierarchically
+- **Bold text** highlights key details
+- **Lists** make options scannable
+- **Code blocks** show exact syntax
+- **Links** connect to documentation
+
+The formatting automatically adapts to your terminal:
+- **Rich TTY** - Full markdown rendering with colors and styles
+- **Basic TTY** - Plain text with minimal formatting
+- **Piped output** - Clean text for logs and processing
+
+### 4. Enterprise Error Tracking with Sentry
+
+For organizations running Atmos at scale, we've integrated **Sentry** for centralized error tracking and analysis.
+
+Configure once in `atmos.yaml`:
+
+```yaml
+errors:
+  sentry:
+    enabled: true
+    dsn: "https://your-sentry-dsn@sentry.io/project"
+    environment: "production"
+
+    # Custom tags for filtering and grouping
+    tags:
+      team: "platform"
+      service: "atmos"
+```
+
+**What you get:**
+
+- **Centralized error tracking** - All Atmos failures in one place
+- **Rich context** - Component, stack, workflow, and exit codes automatically attached
+- **Error aggregation** - Group similar errors, track trends, identify patterns
+- **Team visibility** - See which components/stacks fail most often
+- **Actionable alerts** - Get notified when critical operations fail
+
+Sentry captures **command failures only**—errors that cause Atmos to exit with a non-zero exit code. This includes configuration errors, missing components, validation failures, and workflow failures. Every error includes hints (as breadcrumbs), context tags, and full stack traces for debugging.
+
+### 5. Developer-Friendly Error Building
+
+For Atmos contributors, creating helpful errors is now simple:
+
+```go
+import errUtils "github.com/cloudposse/atmos/errors"
+
+// Build rich errors with hints and context
+err := errUtils.Build(errUtils.ErrInvalidWorkflow).
+    WithHint("Add a vendor section to your atmos.yaml").
+    WithHintf("See %s for examples", docsURL).
+    WithContext("workflow", workflowName).
+    WithContext("file", filepath).
+    WithExitCode(1).
+    Err()
+```
+
+Benefits:
+- **Consistent format** - All errors look and feel the same
+- **Easy to enhance** - Add hints and context without reformatting
+- **Type-safe** - Static error definitions prevent typos
+- **Testable** - Mock and verify error messages in tests
+
+## Real-World Impact
+
+### Faster Troubleshooting
+
+**Before:**
+```
+Error: command execution failed
+Exit code: 1
+```
+Time to resolution: 30+ minutes (searching docs, trial and error)
+
+**After:**
+```
+# Workflow Error
+
+**Error:** workflow step execution failed
+
+## Explanation
+
+The following command failed to execute:
+atmos terraform plan vpc -s prod
+
+## Hints
+
+💡 To resume the workflow from this step, run:
+   atmos workflow deploy -f prod --from-step deploy-vpc
+
+💡 Check component configuration in stacks/prod.yaml
+
+## Context
+
+• Workflow: deploy
+• Step: deploy-vpc
+• Component: vpc
+• Stack: prod-us-east-1
+• Exit Code: 1
+```
+Time to resolution: 2-3 minutes (clear guidance + exact command to retry)
+
+### Enterprise Visibility
+
+Platform teams can now:
+
+1. **Track error patterns** - "70% of errors are missing AWS credentials"
+2. **Identify problem areas** - "Component X fails validation in 3 different stacks"
+3. **Measure improvement** - "Error rate decreased 40% after documentation update"
+4. **Support teams proactively** - "Team Y has 10x more errors than average"
+
+### Better Developer Experience
+
+Contributors can:
+
+1. **Add helpful errors easily** - Use error builder pattern
+2. **Test error messages** - Verify hints and formatting
+3. **Maintain consistency** - All errors follow the same pattern
+4. **Iterate quickly** - Update hints without changing error handling
+
+## Configuration
+
+### Basic Setup (Better Error Messages)
+
+Zero configuration required! Better error formatting works automatically.
+
+### Advanced Setup (Sentry Integration)
+
+Add to your `atmos.yaml`:
+
+```yaml
+errors:
+  # Control error display
+  format:
+    verbose: false  # Show full stack traces (default: false)
+
+  # Sentry integration
+  sentry:
+    enabled: true
+    dsn: "${ATMOS_SENTRY_DSN}"
+    environment: "${ATMOS_ENV}"
+
+    # Sample rate: 1.0 = 100%, 0.5 = 50% (default: 1.0)
+    sample_rate: 1.0
+
+    # Include code context in stack traces (default: true)
+    capture_stack_context: true
+
+    # Custom tags for filtering and grouping
+    tags:
+      team: "platform"
+      region: "us-east-1"
+```
+
+### Environment Variables
+
+```bash
+# Override config file settings
+export ATMOS_SENTRY_DSN="https://..."
+export ATMOS_VERBOSE="true"
+```
+
+## Migration Guide
+
+### For Users
+
+**No changes required!** Your existing Atmos workflows continue to work. You'll automatically see:
+- Better formatted error messages
+- Helpful hints where applicable
+- Richer context in error output
+
+### For Atmos Contributors
+
+Update error handling to use the new builder pattern:
+
+**Before:**
+```go
+return fmt.Errorf("workflow %s not found", name)
+```
+
+**After:**
+```go
+return errUtils.Build(errUtils.ErrWorkflowNotFound).
+    WithContext("workflow", name).
+    WithHintf("Available workflows: %s", strings.Join(available, ", ")).
+    Err()
+```
+
+See `docs/errors.md` for the complete developer guide.
+
+## Why This Matters
+
+Infrastructure as Code is complex. When managing hundreds of components across multiple environments, every minute spent debugging is time not spent delivering value.
+
+By providing **helpful hints**, **rich context**, and **enterprise error tracking**, we're:
+
+1. **Reducing time to resolution** - Fix issues in minutes instead of hours
+2. **Improving team productivity** - Less context switching, more building
+3. **Enabling data-driven improvements** - Track and fix systemic issues
+4. **Creating better software** - Consistent, helpful error messages across Atmos
+
+This is infrastructure we wish we'd had years ago. Now it's built into Atmos by default.
+
+## What's Next
+
+We're continuing to improve error handling:
+
+- **More helpful hints** - Adding guidance to more errors across Atmos
+- **Enhanced context** - Automatically include more relevant information with each error
+
+## Get Involved
+
+We'd love your feedback:
+
+- **Try it out** - Upgrade to the latest Atmos and see the new errors
+- **Add hints** - Contribute helpful hints to errors you encounter
+- **Share analytics** - Tell us what error tracking insights are most valuable
+- **Report issues** - Let us know if any errors need better messages
+
+See the [Error Handling Documentation](/cli/configuration/errors) for complete details.
+
+---
+
+**Want enterprise error tracking?** Configure Sentry in your `atmos.yaml` today.
+
+**Have ideas for better error messages?** Open an issue or PR - we'd love to hear from you!
