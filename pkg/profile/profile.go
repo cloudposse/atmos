@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -41,5 +42,7 @@ type DefaultProfileManager struct{}
 
 // NewProfileManager creates a new DefaultProfileManager.
 func NewProfileManager() ProfileManager {
+	defer perf.Track(nil, "profile.NewProfileManager")()
+
 	return &DefaultProfileManager{}
 }
