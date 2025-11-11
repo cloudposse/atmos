@@ -139,9 +139,9 @@ func TestStripTemplateMagicComment(t *testing.T) {
 			expected: "# regular comment\ntest\nmore",
 		},
 		{
-			name:     "magic comment not alone on line (preserved)",
+			name:     "magic comment not alone on line (stripped)",
 			content:  "some text // atmos:template\ntest",
-			expected: "some text // atmos:template\ntest",
+			expected: "some text\ntest",
 		},
 		{
 			name:     "empty content",
@@ -162,6 +162,21 @@ func TestStripTemplateMagicComment(t *testing.T) {
 			name:     "yaml with magic comment",
 			content:  "---\n# atmos:template\nkey: value\nkey2: value2",
 			expected: "---\nkey: value\nkey2: value2",
+		},
+		{
+			name:     "yaml with inline magic comment",
+			content:  "---\nkey: value # atmos:template\nkey2: value2",
+			expected: "---\nkey: value\nkey2: value2",
+		},
+		{
+			name:     "multiple inline magic comments",
+			content:  "line1 // atmos:template\nline2\nline3 # atmos:template",
+			expected: "line1\nline2\nline3",
+		},
+		{
+			name:     "inline magic comment with only comment marker remaining",
+			content:  "// atmos:template\ntest",
+			expected: "test",
 		},
 	}
 

@@ -221,8 +221,10 @@ func TestTemplateFilenameProcessing(t *testing.T) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
-				if result != tc.expectedPath {
-					t.Errorf("Expected path %s, got %s", tc.expectedPath, result)
+				// Normalize both paths to use platform-specific separators
+				normalizedResult := filepath.FromSlash(result)
+				if normalizedResult != tc.expectedPath {
+					t.Errorf("Expected path %s, got %s", tc.expectedPath, normalizedResult)
 				}
 			}
 		})
