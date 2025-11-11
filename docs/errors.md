@@ -150,10 +150,10 @@ workflows:
 Adds PII-safe structured context for programmatic access and error reporting.
 
 Context is:
-- **Displayed in verbose mode** as a styled table (`--verbose` flag or `ATMOS_VERBOSE=1`)
+- **Displayed only in verbose mode** as a markdown table (`--verbose` flag or `ATMOS_VERBOSE=1`)
 - **Sent to Sentry** automatically via `BuildSentryReport()`
 - **Programmatically accessible** via `errors.GetSafeDetails(err)`
-- **Included in verbose output** via `%+v` formatting
+- **Not shown in normal mode** - keeps output clean and focused
 
 ```go
 err := errUtils.Build(baseErr).
@@ -213,8 +213,36 @@ fmt.Fprint(os.Stderr, formatted)
 
 ### Structured Markdown Output
 
-Errors are formatted as structured markdown with hierarchical sections:
+Errors are formatted as structured markdown with hierarchical sections.
 
+**Normal Mode (default):**
+```text
+# Error
+
+workflow file not found
+
+## Explanation
+
+The workflow manifest file `stacks/workflows/dne.yaml` does not exist.
+
+## Example
+
+```bash
+# Verify the workflow file exists
+ls -la stacks/workflows/
+
+# Check your atmos.yaml for workflow paths configuration
+cat atmos.yaml | grep -A5 workflows
+```
+
+## Hints
+
+💡 Use `atmos list workflows` to see available workflows
+💡 Verify the workflow file exists at: stacks/workflows/dne.yaml
+💡 Check `workflows.base_path` in `atmos.yaml`: stacks/workflows
+```
+
+**Verbose Mode (`--verbose` flag):**
 ```text
 # Error
 
@@ -249,7 +277,11 @@ cat atmos.yaml | grep -A5 workflows
 
 ## Stack Trace
 
-(shown in verbose mode only)
+github.com/cloudposse/atmos/internal/exec.ExecuteWorkflow
+    /path/to/atmos/internal/exec/workflow.go:123
+main.main
+    /path/to/atmos/cmd/atmos/main.go:45
+...
 ```
 
 **Section Order:**
@@ -257,14 +289,34 @@ cat atmos.yaml | grep -A5 workflows
 2. **## Explanation** - Detailed description (from `WithExplanation()`)
 3. **## Example** - Code/config examples (from `WithExample()` or `WithExampleFile()`)
 4. **## Hints** - Actionable suggestions (from `WithHint()`)
-5. **## Context** - Key-value debugging info (from `WithContext()`)
-6. **## Stack Trace** - Full stack trace (verbose mode only)
+5. **## Context** - Key-value debugging info (from `WithContext()`) - **verbose mode only**
+6. **## Stack Trace** - Full stack trace - **verbose mode only**
 
 Sections are conditionally rendered - they only appear if data is available.
 
+### Verbose Mode
+
+The `--verbose` flag (or `ATMOS_VERBOSE=1`) controls additional debugging output:
+
+- **Normal mode** (`--verbose=false`, default): Shows error message, explanation, examples, and hints
+- **Verbose mode** (`--verbose=true`): Shows everything above **PLUS** context table and full stack trace
+
+```bash
+# Normal mode - clean, user-friendly output
+atmos terraform plan
+
+# Verbose mode - includes context and stack traces for debugging
+atmos terraform plan --verbose
+
+# Via environment variable
+ATMOS_VERBOSE=1 atmos terraform plan
+```
+
+Context is always sent to Sentry regardless of verbose mode, but only displayed in the terminal when `--verbose` is enabled.
+
 ### Configuration Options
 
-- **Verbose**: `false` (default) shows compact errors with context table, `true` shows full stack traces
+- **Verbose**: `false` (default) shows compact errors, `true` shows full stack traces and context
 - **MaxLineLength**: `80` (default) wraps long error messages
 
 ### Terminal Color Control

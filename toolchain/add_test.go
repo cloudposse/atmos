@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -74,7 +75,7 @@ func TestAddCommand_InvalidTool(t *testing.T) {
 	})
 	err := AddToolVersion("nonexistent-tool", "1.0.0")
 	require.Error(t, err, "Should fail when adding invalid tool")
-	assert.ErrorIs(t, err, ErrToolNotFound)
+	assert.ErrorIs(t, err, errUtils.ErrToolNotInRegistry)
 
 	// Verify the tool was NOT added to the file
 	toolVersions, err := LoadToolVersions(toolVersionsFile)
@@ -93,7 +94,7 @@ func TestAddCommand_InvalidToolWithCanonicalName(t *testing.T) {
 	// Test adding an invalid tool using canonical name
 	err := AddToolVersion("nonexistent/package", "1.0.0")
 	require.Error(t, err, "Should fail when adding invalid tool with canonical name")
-	assert.ErrorIs(t, err, ErrToolNotFound)
+	assert.ErrorIs(t, err, errUtils.ErrToolNotInRegistry)
 
 	// Verify the tool was NOT added to the file
 	toolVersions, err := LoadToolVersions(toolVersionsFile)
@@ -207,7 +208,7 @@ func TestAddCommand_EdgeCases(t *testing.T) {
 			tool:          "",
 			version:       "1.0.0",
 			expectError:   true,
-			expectedError: ErrToolNotFound,
+			expectedError: errUtils.ErrToolNotInRegistry,
 		},
 		{
 			name:          "empty version",

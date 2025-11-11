@@ -21,6 +21,7 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -74,7 +75,13 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 	if err == nil {
 		return owner, repo, nil
 	}
-	return "", "", fmt.Errorf("%w: '%s' not found in Aqua registry", ErrToolNotFound, toolName)
+	return "", "", errUtils.Build(errUtils.ErrToolNotInRegistry).
+		WithExplanationf("Tool `%s` not found in Aqua registry", toolName).
+		WithHint("Use full format: `owner/repo` (e.g., `hashicorp/terraform`)").
+		WithHint("Run `atmos toolchain registry search` to browse available tools").
+		WithContext("tool", toolName).
+		WithExitCode(2).
+		Err()
 }
 
 // Installer handles the installation of CLI binaries.
@@ -134,7 +141,7 @@ func (i *Installer) Install(owner, repo, version string) (string, error) {
 	// Get tool from registry
 	tool, err := i.findTool(owner, repo, version)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrToolNotFound, err)
+		return "", err // Error already enriched in findTool
 	}
 	return i.installFromTool(tool, version)
 }
@@ -176,7 +183,22 @@ func (i *Installer) findTool(owner, repo, version string) (*registry.Tool, error
 		}
 	}
 
-	return nil, fmt.Errorf("%w: %s/%s@%s not found in any registry", ErrToolNotFound, owner, repo, version)
+	// Build list of registry names for context
+	registryNames := make([]string, len(i.registries))
+	for idx, reg := range i.registries {
+		registryNames[idx] = reg
+	}
+
+	return nil, errUtils.Build(errUtils.ErrToolNotInRegistry).
+		WithExplanationf("Tool `%s/%s@%s` was not found in any configured registry. "+
+			"Atmos searches registries in priority order: Atmos registry → Aqua registry → custom registries.", owner, repo, version).
+		WithHint("Run `atmos toolchain registry search` to browse available tools").
+		WithHint("Verify network connectivity to registries").
+		WithHint("Check registry configuration in `atmos.yaml`").
+		WithContext("tool", fmt.Sprintf("%s/%s@%s", owner, repo, version)).
+		WithContext("registries_searched", strings.Join(registryNames, ", ")).
+		WithExitCode(2).
+		Err()
 }
 
 // searchRegistry searches a specific registry for a tool.
@@ -296,12 +318,29 @@ func (i *Installer) buildAssetURL(tool *registry.Tool, version string) (string, 
 
 		tmpl, err := template.New("asset").Funcs(funcMap).Parse(tool.Asset)
 		if err != nil {
-			return "", fmt.Errorf("%w: failed to parse asset template: %w", ErrNoAssetTemplate, err)
+			return "", errUtils.Build(errUtils.ErrAssetTemplateInvalid).
+				WithExplanationf("Asset template for `%s/%s` contains invalid Go template syntax", tool.RepoOwner, tool.RepoName).
+				WithExample("# Valid asset template:\nasset: \"https://releases.example.com/{{.RepoName}}/v{{.Version}}/{{.RepoName}}_{{.OS}}_{{.Arch}}.tar.gz\"").
+				WithHint("Check the tool definition in the registry for syntax errors").
+				WithHint("Verify template variables: {{.Version}}, {{.OS}}, {{.Arch}}, {{.RepoOwner}}, {{.RepoName}}").
+				WithContext("tool", fmt.Sprintf("%s/%s", tool.RepoOwner, tool.RepoName)).
+				WithContext("template", tool.Asset).
+				WithContext("parse_error", err.Error()).
+				WithExitCode(2).
+				Err()
 		}
 
 		var url strings.Builder
 		if err := tmpl.Execute(&url, data); err != nil {
-			return "", fmt.Errorf("%w: failed to execute asset template: %w", ErrNoAssetTemplate, err)
+			return "", errUtils.Build(errUtils.ErrAssetTemplateInvalid).
+				WithExplanationf("Asset template for `%s/%s` failed to execute", tool.RepoOwner, tool.RepoName).
+				WithHint("Template executed but produced invalid output").
+				WithHint("Check template logic and variable availability").
+				WithContext("tool", fmt.Sprintf("%s/%s", tool.RepoOwner, tool.RepoName)).
+				WithContext("template", tool.Asset).
+				WithContext("execution_error", err.Error()).
+				WithExitCode(2).
+				Err()
 		}
 
 		return url.String(), nil
@@ -358,12 +397,27 @@ func (i *Installer) buildAssetURL(tool *registry.Tool, version string) (string, 
 
 		tmpl, err := template.New("asset").Funcs(funcMap).Parse(assetTemplate)
 		if err != nil {
-			return "", fmt.Errorf("%w: failed to parse asset template: %w", ErrNoAssetTemplate, err)
+			return "", errUtils.Build(errUtils.ErrAssetTemplateInvalid).
+				WithExplanationf("Asset template for `%s/%s` contains invalid Go template syntax", tool.RepoOwner, tool.RepoName).
+				WithExample("# Valid asset template:\nasset: \"{{.RepoName}}_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz\"").
+				WithHint("Check the tool definition in the registry for syntax errors").
+				WithContext("tool", fmt.Sprintf("%s/%s", tool.RepoOwner, tool.RepoName)).
+				WithContext("template", assetTemplate).
+				WithContext("parse_error", err.Error()).
+				WithExitCode(2).
+				Err()
 		}
 
 		var assetName strings.Builder
 		if err := tmpl.Execute(&assetName, data); err != nil {
-			return "", fmt.Errorf("%w: failed to execute asset template: %w", ErrNoAssetTemplate, err)
+			return "", errUtils.Build(errUtils.ErrAssetTemplateInvalid).
+				WithExplanationf("Asset template for `%s/%s` failed to execute", tool.RepoOwner, tool.RepoName).
+				WithHint("Template executed but produced invalid output").
+				WithContext("tool", fmt.Sprintf("%s/%s", tool.RepoOwner, tool.RepoName)).
+				WithContext("template", assetTemplate).
+				WithContext("execution_error", err.Error()).
+				WithExitCode(2).
+				Err()
 		}
 
 		// Construct the full GitHub release URL
@@ -408,15 +462,39 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to download asset: %w", ErrHTTPRequest, err)
+		return "", errUtils.Build(errUtils.ErrDownloadFailed).
+			WithExplanationf("Failed to download asset from `%s`", url).
+			WithHint("Check your internet connection").
+			WithHint("Verify GitHub access: `curl -I https://api.github.com`").
+			WithHint("If behind proxy, ensure `HTTPS_PROXY` environment variable is set").
+			WithContext("url", url).
+			WithContext("error", err.Error()).
+			WithExitCode(1).
+			Err()
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		builder := errUtils.Build(errUtils.ErrDownloadFailed).
+			WithExplanationf("Download failed with HTTP %d", resp.StatusCode).
+			WithContext("url", url).
+			WithContext("status_code", resp.StatusCode).
+			WithExitCode(1)
+
 		if resp.StatusCode == http.StatusNotFound {
-			return "", fmt.Errorf("%w: failed to download asset: %w", ErrHTTPRequest, ErrHTTP404)
+			builder.
+				WithHint("Asset not found - check tool name and version are correct").
+				WithHint("Try without `v` prefix: `@1.5.0` instead of `@v1.5.0`")
+		} else if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+			builder.
+				WithHint("GitHub API rate limit exceeded or authentication required").
+				WithHint("Set `GITHUB_TOKEN` environment variable to increase rate limits").
+				WithHint("Get token at: https://github.com/settings/tokens")
+		} else {
+			builder.WithHint("Check GitHub status: https://www.githubstatus.com")
 		}
-		return "", fmt.Errorf("%w: failed to download asset: HTTP %d", ErrHTTPRequest, resp.StatusCode)
+
+		return "", builder.Err()
 	}
 
 	// Read response body into memory.

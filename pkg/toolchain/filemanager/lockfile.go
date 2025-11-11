@@ -3,11 +3,11 @@ package filemanager
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain/lockfile"
@@ -119,8 +119,16 @@ func (m *LockFileManager) RemoveTool(ctx context.Context, tool, version string) 
 
 	// If caller specified a version, verify it matches.
 	if version != "" && existingTool.Version != version {
-		return fmt.Errorf("refusing to remove tool '%s': lockfile has version '%s' but removal requested version '%s'",
-			tool, existingTool.Version, version)
+		return errUtils.Build(errUtils.ErrLockfileVersionMismatch).
+			WithExplanationf("Cannot remove tool `%s`: lockfile version does not match requested version", tool).
+			WithHint("Update the lockfile or specify the correct version").
+			WithHint("Run `atmos toolchain list` to see installed versions").
+			WithContext("tool", tool).
+			WithContext("lockfile_version", existingTool.Version).
+			WithContext("requested_version", version).
+			WithContext("lockfile", m.filePath).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Remove the tool entry.

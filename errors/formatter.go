@@ -57,7 +57,7 @@ func DefaultFormatterConfig() FormatterConfig {
 
 // formatContextTable creates a styled 2-column table for error context.
 // Context is extracted from cockroachdb/errors safe details and displayed
-// as key-value pairs in verbose mode.
+// as key-value pairs only in verbose mode.
 func formatContextTable(err error, useColor bool) string {
 	details := errors.GetSafeDetails(err)
 	if len(details.SafeDetails) == 0 {
@@ -178,8 +178,10 @@ func buildMarkdownSections(err error, config FormatterConfig, useColor bool) str
 	// Section 4.5: Command Output (for ExecError with stderr).
 	addCommandOutputSection(&md, err)
 
-	// Section 5: Context.
-	addContextSection(&md, err, useColor)
+	// Section 5: Context (verbose mode only).
+	if config.Verbose {
+		addContextSection(&md, err, useColor)
+	}
 
 	// Section 6: Stack trace (verbose mode only).
 	if config.Verbose {
@@ -335,7 +337,7 @@ func addCommandOutputSection(md *strings.Builder, err error) {
 	}
 }
 
-// addContextSection adds the context section if context exists.
+// addContextSection adds the context section if context exists (shown only in verbose mode).
 func addContextSection(md *strings.Builder, err error, useColor bool) {
 	// Context is rendered as a markdown table, so we use formatContextForMarkdown.
 	// The useColor parameter is available for future use if we need color-aware context rendering.

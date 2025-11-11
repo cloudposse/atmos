@@ -11,6 +11,7 @@ import (
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -65,7 +66,15 @@ func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Ins
 		actualVersion, err := installer.ReadLatestFile(owner, repo)
 		if err != nil {
 			// If the latest file does not exist, return error (test expects this)
-			return fmt.Errorf("%w: tool %s/%s@latest is not installed (no latest file found)", ErrToolNotFound, owner, repo)
+			latestFilePath := filepath.Join(installer.binDir, owner, repo, "latest")
+			return errUtils.Build(errUtils.ErrLatestFileNotFound).
+				WithExplanationf("Tool `%s/%s@latest` is not installed", owner, repo).
+				WithHint("Install with `atmos toolchain install "+repo+"@latest`").
+				WithHint("Or install specific version: `atmos toolchain install "+repo+"@1.5.0`").
+				WithContext("tool", fmt.Sprintf("%s/%s", owner, repo)).
+				WithContext("latest_file", latestFilePath).
+				WithExitCode(2).
+				Err()
 		}
 		version = actualVersion
 		// Check if the versioned binary exists
@@ -123,7 +132,15 @@ func RunUninstall(toolSpec string) error {
 		actualVersion, err := installer.ReadLatestFile(owner, repo)
 		if err != nil {
 			// If the latest file does not exist, return error (test expects this)
-			return fmt.Errorf("%w: tool %s/%s@latest is not installed (no latest file found)", ErrToolNotFound, owner, repo)
+			latestFilePath := filepath.Join(installer.binDir, owner, repo, "latest")
+			return errUtils.Build(errUtils.ErrLatestFileNotFound).
+				WithExplanationf("Tool `%s/%s@latest` is not installed", owner, repo).
+				WithHint("Install with `atmos toolchain install "+repo+"@latest`").
+				WithHint("Or install specific version: `atmos toolchain install "+repo+"@1.5.0`").
+				WithContext("tool", fmt.Sprintf("%s/%s", owner, repo)).
+				WithContext("latest_file", latestFilePath).
+				WithExitCode(2).
+				Err()
 		}
 		version = actualVersion
 		// Check if the versioned binary exists

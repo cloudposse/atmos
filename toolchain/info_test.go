@@ -3,6 +3,7 @@ package toolchain
 import (
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/toolchain/registry"
 	"github.com/stretchr/testify/assert"
@@ -199,7 +200,7 @@ func TestInfoCommand_NonExistentTool(t *testing.T) {
 	// Test with a non-existent tool
 	_, err := installer.findTool("nonexistent", "tool", "1.0.0")
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrToolNotFound)
+	assert.ErrorIs(t, err, errUtils.ErrToolNotInRegistry)
 }
 
 func TestInfoCommand_InvalidOutputFormat(t *testing.T) {
@@ -520,7 +521,7 @@ func TestInfoExec_InvalidTool(t *testing.T) {
 	// Test with non-existent tool
 	err := InfoExec("nonexistent-tool-xyz", "table")
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrToolNotFound)
+	assert.ErrorIs(t, err, errUtils.ErrToolNotInRegistry)
 }
 
 // TestInfoExec_CanonicalOrgRepo tests InfoExec with canonical org/repo format.

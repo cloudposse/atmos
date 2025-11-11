@@ -10,6 +10,7 @@ import (
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -95,18 +96,39 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 		// Try to look up version in .tool-versions or fallback to alias/latest.
 		toolVersions, err := LoadToolVersions(DefaultToolVersionsFilePath)
 		if err != nil {
-			return fmt.Errorf("invalid tool specification: %s. Expected format: owner/repo@version or tool@version, and failed to load .tool-versions: %w", toolSpec, err)
+			return errUtils.Build(errUtils.ErrInvalidToolSpec).
+				WithExplanationf("Invalid tool specification: `%s`", toolSpec).
+				WithHint("Use format: `owner/repo@version` (e.g., `hashicorp/terraform@1.5.0`)").
+				WithHint("Or use alias: `terraform@1.5.0` (requires `.tool-versions` or registry alias)").
+				WithHint("File `.tool-versions` could not be loaded").
+				WithContext("tool_spec", toolSpec).
+				WithContext("tool_versions_file", DefaultToolVersionsFilePath).
+				WithContext("error", err.Error()).
+				WithExitCode(2).
+				Err()
 		}
 		installer := NewInstaller()
 		resolvedKey, foundVersion, found, usedLatest := LookupToolVersionOrLatest(tool, toolVersions, installer.resolver)
 		if !found && !usedLatest {
-			return fmt.Errorf("%w: %s. Expected format: owner/repo@version or tool@version, and tool not found in .tool-versions or as an alias", ErrInvalidToolSpec, toolSpec)
+			return errUtils.Build(errUtils.ErrInvalidToolSpec).
+				WithExplanationf("Invalid tool specification: `%s`", toolSpec).
+				WithHint("Use format: `owner/repo@version` (e.g., `hashicorp/terraform@1.5.0`)").
+				WithHint("Or add tool to `.tool-versions` file").
+				WithContext("tool_spec", toolSpec).
+				WithExitCode(2).
+				Err()
 		}
 		tool = resolvedKey
 		version = foundVersion
 	}
 	if tool == "" || version == "" {
-		return fmt.Errorf("%w: %s. Expected format: owner/repo@version or tool@version", ErrInvalidToolSpec, toolSpec)
+		return errUtils.Build(errUtils.ErrInvalidToolSpec).
+			WithExplanationf("Invalid tool specification: `%s`", toolSpec).
+			WithHint("Use format: `owner/repo@version` (e.g., `hashicorp/terraform@1.5.0`)").
+			WithHint("Or use alias: `terraform@1.5.0`").
+			WithContext("tool_spec", toolSpec).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Use the enhanced parseToolSpec to handle both owner/repo and tool name formats.

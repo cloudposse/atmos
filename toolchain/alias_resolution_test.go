@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -73,9 +74,8 @@ func TestDefaultToolResolver_AliasResolution(t *testing.T) {
 			aliases: map[string]string{
 				"terraform": "hashicorp/terraform",
 			},
-			toolName:   "nonexistent",
-			wantErr:    true,
-			errMessage: "not found in Aqua registry",
+			toolName: "nonexistent",
+			wantErr:  true,
 		},
 		{
 			name:      "nil aliases map - should handle gracefully",
@@ -102,9 +102,7 @@ func TestDefaultToolResolver_AliasResolution(t *testing.T) {
 
 			if tt.wantErr {
 				require.Error(t, err)
-				if tt.errMessage != "" {
-					assert.Contains(t, err.Error(), tt.errMessage)
-				}
+				assert.ErrorIs(t, err, errUtils.ErrToolNotInRegistry)
 				return
 			}
 
@@ -148,7 +146,7 @@ func TestDefaultToolResolver_AliasChaining(t *testing.T) {
 	// Since "mymedium" is just a name (not owner/repo), it will try Aqua registry and fail.
 	_, _, err := resolver.Resolve("myshort")
 	require.Error(t, err, "myshort resolves to 'mymedium' which is not owner/repo, should fail registry lookup")
-	assert.Contains(t, err.Error(), "not found in Aqua registry")
+	assert.ErrorIs(t, err, errUtils.ErrToolNotInRegistry)
 
 	// But "mymedium" should resolve properly to owner/repo.
 	owner, repo, err := resolver.Resolve("mymedium")

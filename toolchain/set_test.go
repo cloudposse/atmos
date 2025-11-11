@@ -13,7 +13,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
+
 	tea "github.com/charmbracelet/bubbletea"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1778,7 +1780,7 @@ func TestSetToolVersion_WithInvalidTool(t *testing.T) {
 	// Test with an invalid tool name (not in registry or local config)
 	err = SetToolVersion("nonexistent-tool-xyz-invalid", "1.0.0", 3)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrToolNotFound)
+	assert.ErrorIs(t, err, errUtils.ErrToolNotInRegistry)
 }
 
 // TestSetToolVersion_WithCanonicalFormat tests SetToolVersion with org/repo format.

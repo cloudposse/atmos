@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -121,7 +122,7 @@ func TestUninstallCleansUpLatestFile_Missing(t *testing.T) {
 	cmd.SetArgs([]string{"hashicorp/terraform@latest"})
 	err = runUninstallWithInstaller(cmd, []string{"hashicorp/terraform@latest"}, installer)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no latest file found")
+	assert.ErrorIs(t, err, errUtils.ErrLatestFileNotFound)
 
 	// latest file should still not exist
 	_, statErr := os.Stat(latestFile)
