@@ -203,9 +203,9 @@ html[data-theme="light"] .hero--full-height::before {
   flex-direction: column;
   justify-content: flex-start;
   align-items: center;
-  padding: 0 2rem 4rem 2rem;
+  padding: 0 0 4rem 0;
   width: 100%;
-  max-width: 1400px;
+  max-width: 1600px;
   margin: -20vh auto 0 auto;
   position: relative;
   z-index: 1;
@@ -215,7 +215,7 @@ html[data-theme="light"] .hero--full-height::before {
   text-align: center;
   max-width: 800px;
   margin: 0 auto 2rem auto;
-  padding: 2rem;
+  padding: 2rem 1rem;
   width: 100%;
   opacity: 0;
   transition: opacity 0.6s ease-out;
@@ -257,14 +257,14 @@ html[data-theme="dark"] .hero-demo-intro p {
   width: 100%;
   max-width: 1600px;
   margin: 0 auto;
-  padding: 0 2rem;
+  padding: 0;
   display: flex;
   justify-content: center;
 }
 
 .hero-demo img.screenshot {
   width: 100%;
-  min-height: 500px;
+  max-width: 70%;
   height: auto;
   object-fit: contain;
   box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
@@ -506,6 +506,7 @@ html[data-theme="dark"] .feature-card h3 {
   line-height: 1.5;
   color: #4a5568;
   margin: 0;
+  text-align: left;
 }
 
 html[data-theme="dark"] .feature-card p {

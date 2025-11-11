@@ -64,7 +64,7 @@ export default function TypingAnimation({
       <span className="typing-text">
         {currentText || '\u200B'}
       </span>
-      <span className="typing-cursor" />
+      <span className="typing-cursor">█</span>
     </span>
   );
 }
