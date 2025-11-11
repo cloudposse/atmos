@@ -210,7 +210,7 @@ func displayToolsTable(tools []*toolchainregistry.Tool) {
 	t.SetStyles(s)
 
 	// Print table.
-	fmt.Println(t.View())
+	_ = data.Writeln(t.View())
 }
 
 // ListCommandProvider implements the CommandProvider interface.

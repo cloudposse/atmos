@@ -201,7 +201,7 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 	t.SetStyles(s)
 
 	// Print table.
-	fmt.Println(t.View())
+	_ = data.Writeln(t.View())
 }
 
 // SearchCommandProvider implements the CommandProvider interface.

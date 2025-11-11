@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"text/template"
 	"time"
@@ -677,20 +678,14 @@ func (ar *AquaRegistry) calculateRelevanceScore(tool *registry.Tool, queryLower 
 
 // sortResults sorts scored tools by score (descending) then alphabetically.
 func sortResults(results []scoredTool) {
-	// Simple bubble sort for small result sets.
-	for i := 0; i < len(results); i++ {
-		for j := i + 1; j < len(results); j++ {
-			// Sort by score descending.
-			if results[j].score > results[i].score {
-				results[i], results[j] = results[j], results[i]
-			} else if results[j].score == results[i].score {
-				// For equal scores, sort alphabetically by repo name.
-				if results[j].tool.RepoName < results[i].tool.RepoName {
-					results[i], results[j] = results[j], results[i]
-				}
-			}
+	sort.Slice(results, func(i, j int) bool {
+		// Sort by score descending.
+		if results[i].score != results[j].score {
+			return results[i].score > results[j].score
 		}
-	}
+		// For equal scores, sort alphabetically by repo name.
+		return results[i].tool.RepoName < results[j].tool.RepoName
+	})
 }
 
 // ListAll returns all tools available in the Aqua registry.
@@ -824,13 +819,9 @@ func (ar *AquaRegistry) parseIndexYAML(data []byte) ([]*registry.Tool, error) {
 
 // sortToolsByName sorts tools alphabetically by repo name.
 func sortToolsByName(tools []*registry.Tool) {
-	for i := 0; i < len(tools); i++ {
-		for j := i + 1; j < len(tools); j++ {
-			if tools[j].RepoName < tools[i].RepoName {
-				tools[i], tools[j] = tools[j], tools[i]
-			}
-		}
-	}
+	sort.Slice(tools, func(i, j int) bool {
+		return tools[i].RepoName < tools[j].RepoName
+	})
 }
 
 // GetMetadata returns metadata about the Aqua registry.
