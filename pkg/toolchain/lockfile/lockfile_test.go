@@ -1,6 +1,7 @@
 package lockfile
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -103,7 +104,7 @@ func TestSave_NilLockFile(t *testing.T) {
 
 	err := Save(tmpFile, nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "lock file is nil")
+	assert.True(t, errors.Is(err, ErrLockFileNil))
 }
 
 func TestSave_UpdatesMetadata(t *testing.T) {
@@ -174,7 +175,7 @@ metadata:
 
 	_, err = Load(tmpFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid lock file: missing version")
+	assert.True(t, errors.Is(err, ErrInvalidLockFile))
 }
 
 func TestGetOrCreateTool_CreateNew(t *testing.T) {
@@ -299,7 +300,7 @@ metadata:
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid lock file")
+	assert.True(t, errors.Is(err, ErrInvalidLockFile))
 }
 
 func TestVerify_InvalidMetadataVersion(t *testing.T) {
@@ -323,7 +324,7 @@ metadata:
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "metadata version is 0")
+	assert.True(t, errors.Is(err, ErrInvalidLockFile))
 }
 
 func TestVerify_MissingToolVersion(t *testing.T) {
@@ -343,7 +344,7 @@ func TestVerify_MissingToolVersion(t *testing.T) {
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "tool missing version")
+	assert.True(t, errors.Is(err, ErrToolMissingVersion))
 }
 
 func TestVerify_NoPlatforms(t *testing.T) {
@@ -360,7 +361,7 @@ func TestVerify_NoPlatforms(t *testing.T) {
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "has no platform entries")
+	assert.True(t, errors.Is(err, ErrToolNoPlatforms))
 }
 
 func TestVerify_MissingPlatformURL(t *testing.T) {
@@ -380,7 +381,7 @@ func TestVerify_MissingPlatformURL(t *testing.T) {
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "platform entry missing URL")
+	assert.True(t, errors.Is(err, ErrPlatformNoURL))
 }
 
 func TestVerify_MissingPlatformChecksum(t *testing.T) {
@@ -400,7 +401,24 @@ func TestVerify_MissingPlatformChecksum(t *testing.T) {
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "platform entry missing checksum")
+	assert.True(t, errors.Is(err, ErrPlatformNoChecksum))
+}
+
+func TestVerify_NilPlatformEntry(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "nil-platform.yaml")
+
+	lf := New()
+	tool := lf.GetOrCreateTool("hashicorp/terraform")
+	tool.Version = "1.13.4"
+	tool.Platforms["darwin_arm64"] = nil // Nil platform entry
+
+	err := Save(tmpFile, lf)
+	require.NoError(t, err)
+
+	err = Verify(tmpFile)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nil platform entry: hashicorp/terraform/darwin_arm64")
 }
 
 func TestVerify_FileNotFound(t *testing.T) {

@@ -202,6 +202,10 @@ func Verify(filePath string) error {
 		}
 
 		for platform, entry := range tool.Platforms {
+			// Guard against nil platform entries.
+			if entry == nil {
+				return fmt.Errorf("nil platform entry: %s/%s", toolName, platform)
+			}
 			if entry.URL == "" {
 				return fmt.Errorf("%w: %s/%s", ErrPlatformNoURL, toolName, platform)
 			}
