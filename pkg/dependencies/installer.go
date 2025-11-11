@@ -68,9 +68,9 @@ func (i *Installer) isToolInstalled(tool string, version string) bool {
 	defer perf.Track(i.atmosConfig, "dependencies.Installer.isToolInstalled")()
 
 	// Get tools directory
-	toolsDir := i.atmosConfig.Toolchain.InstallPath
-	if toolsDir == "" {
-		toolsDir = ".tools"
+	toolsDir := ".tools"
+	if i.atmosConfig != nil && i.atmosConfig.Toolchain.InstallPath != "" {
+		toolsDir = i.atmosConfig.Toolchain.InstallPath
 	}
 
 	// Resolve tool to owner/repo

@@ -111,7 +111,7 @@ func processIncludeTagInternal(
 
 // isRemoteURL checks if the path is a remote URL.
 func isRemoteURL(path string) bool {
-	remoteProtocols := []string{"http://", "https://", "s3://", "gcs://", "git://", "oci://", "scp://", "sftp://"}
+	remoteProtocols := []string{"http://", "https://", "s3://", "gcs://", "git://", "oci://", "scp://", "sftp://", "github://"}
 	for _, protocol := range remoteProtocols {
 		if strings.HasPrefix(path, protocol) {
 			return true
