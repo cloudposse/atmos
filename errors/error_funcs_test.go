@@ -166,7 +166,6 @@ func TestCheckErrorPrintAndExit_ExitCodeZero(t *testing.T) {
 	cmd.Stderr = &stderr
 
 	err = cmd.Run()
-
 	// ExitCodeError{Code: 0} should exit with code 0 (success)
 	if err != nil {
 		t.Errorf("Expected successful exit (code 0), got error: %v", err)

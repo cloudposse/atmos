@@ -469,7 +469,7 @@ var (
 	ErrIdentityLogout       = errors.New("identity logout failed")
 	ErrIdentityNotInConfig  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig  = errors.New("provider not found in configuration")
-	ErrInvalidLogoutOption = errors.New("invalid logout option")
+	ErrInvalidLogoutOption  = errors.New("invalid logout option")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

@@ -836,12 +836,12 @@ func TestEnsureTermEnvironment(t *testing.T) {
 		{
 			name: "other env vars without TERM get default",
 			input: map[string]string{
-				"PATH":    "/usr/bin:/bin",
+				"PATH":     "/usr/bin:/bin",
 				"NODE_ENV": "development",
 			},
 			expected: map[string]string{
-				"TERM":    "xterm-256color",
-				"PATH":    "/usr/bin:/bin",
+				"TERM":     "xterm-256color",
+				"PATH":     "/usr/bin:/bin",
 				"NODE_ENV": "development",
 			},
 		},
