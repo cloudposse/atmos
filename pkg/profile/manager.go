@@ -246,7 +246,15 @@ func listProfileFiles(profilePath string) ([]string, error) {
 	searchPattern := filepath.Join(profilePath, "**", "*")
 	foundPaths, err := config.SearchAtmosConfig(searchPattern)
 	if err != nil {
-		return nil, err
+		return nil, errUtils.Build(errUtils.ErrProfileLoad).
+			WithExplanationf("Failed to search for configuration files in profile: `%s`", err).
+			WithExplanation("Could not read profile directory or find YAML files").
+			WithHint("Check filesystem permissions on profile directory").
+			WithHint("Verify profile directory contains valid YAML files").
+			WithContext("profile_path", profilePath).
+			WithContext("search_pattern", searchPattern).
+			WithExitCode(1).
+			Err()
 	}
 
 	// Convert absolute paths to relative paths from profile directory.
@@ -267,7 +275,15 @@ func listProfileFiles(profilePath string) ([]string, error) {
 func loadProfileMetadata(atmosYamlPath string) (*schema.ConfigMetadata, error) {
 	data, err := os.ReadFile(atmosYamlPath)
 	if err != nil {
-		return nil, err
+		return nil, errUtils.Build(errUtils.ErrProfileLoad).
+			WithExplanationf("Failed to read profile metadata file: `%s`", err).
+			WithExplanation("Could not access the `atmos.yaml` file in profile directory").
+			WithHint("Check file permissions on `atmos.yaml`").
+			WithHint("Verify the file exists and is readable").
+			WithContext("file", atmosYamlPath).
+			WithContext("error", err.Error()).
+			WithExitCode(1).
+			Err()
 	}
 
 	var config struct {
@@ -275,7 +291,16 @@ func loadProfileMetadata(atmosYamlPath string) (*schema.ConfigMetadata, error) {
 	}
 
 	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, err
+		return nil, errUtils.Build(errUtils.ErrProfileInvalidMetadata).
+			WithExplanationf("Invalid YAML syntax in profile metadata: `%s`", err).
+			WithExplanation("The `metadata` section in `atmos.yaml` contains syntax errors").
+			WithHint("Check `metadata` section in `atmos.yaml` for syntax errors").
+			WithHint("Metadata should contain: `name`, `description`, `version`, `tags`, `deprecated`").
+			WithHint("Validate YAML syntax using an online validator").
+			WithContext("file", atmosYamlPath).
+			WithContext("error", err.Error()).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Only return metadata if at least one field is set.
