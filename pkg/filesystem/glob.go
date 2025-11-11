@@ -52,6 +52,16 @@ func GetGlobMatches(pattern string) ([]string, error) {
 
 	pattern = filepath.ToSlash(pattern)
 	base, cleanPattern := doublestar.SplitPattern(pattern)
+
+	// Check if base directory exists before attempting glob.
+	// os.DirFS will panic if the directory doesn't exist.
+	if _, err := os.Stat(base); err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("%w: '%s' ('%s' + '%s')", errUtils.ErrFailedToFindImport, pattern, base, cleanPattern)
+		}
+		return nil, err
+	}
+
 	f := os.DirFS(base)
 
 	matches, err := doublestar.Glob(f, cleanPattern)
@@ -59,8 +69,10 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		return nil, err
 	}
 
+	// doublestar.Glob returns nil on some platforms and []string{} on others when no matches.
+	// Treat both as empty results - not an error.
 	if matches == nil {
-		return nil, fmt.Errorf("%w: '%s' ('%s' + '%s')", errUtils.ErrFailedToFindImport, pattern, base, cleanPattern)
+		matches = []string{}
 	}
 
 	var fullMatches []string
