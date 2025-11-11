@@ -419,11 +419,11 @@ func TestThreeWayMerger_ConflictHandling(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:     "text conflict: both modify same line",
-			fileName: "file.txt",
-			base:     "original line\n",
-			ours:     "user version\n",
-			theirs:   "template version\n",
+			name:      "text conflict: both modify same line",
+			fileName:  "file.txt",
+			base:      "original line\n",
+			ours:      "user version\n",
+			theirs:    "template version\n",
 			threshold: 100,
 			wantErr:   false, // High threshold allows conflict
 		},
