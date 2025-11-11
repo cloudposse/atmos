@@ -82,7 +82,16 @@ func executeProfileListCommand(cmd *cobra.Command, args []string) error {
 	// List all profiles.
 	profiles, err := manager.ListProfiles(&atmosConfig)
 	if err != nil {
-		return fmt.Errorf("%w: failed to list profiles: %s", errUtils.ErrProfileDiscovery, err)
+		return errUtils.Build(errUtils.ErrProfileDiscovery).
+			WithExplanationf("Failed to discover profiles: `%s`", err).
+			WithExplanation("Could not read profile directories or determine profile locations").
+			WithHint("Check `profiles.base_path` configuration in `atmos.yaml`").
+			WithHint("Verify profile directories exist and are accessible").
+			WithHint("Run `atmos describe config` to view profile configuration").
+			WithContext("config_path", atmosConfig.CliConfigPath).
+			WithContext("base_path", atmosConfig.Profiles.BasePath).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Render output based on format.
@@ -95,7 +104,16 @@ func executeProfileListCommand(cmd *cobra.Command, args []string) error {
 	case "table":
 		output, err = profileList.RenderTable(profiles)
 	default:
-		return fmt.Errorf("%w: unsupported format '%s' (supported: table, json, yaml)", errUtils.ErrInvalidFormat, format)
+		return errUtils.Build(errUtils.ErrInvalidFormat).
+			WithExplanationf("The format `%s` is not supported for this command", format).
+			WithExplanation("Only `table`, `json`, and `yaml` formats are available").
+			WithHint("Use `--format table`, `--format json`, or `--format yaml`").
+			WithHint("Example: `atmos profile list --format table`").
+			WithContext("format", format).
+			WithContext("command", "profile list").
+			WithContext("supported_formats", "table, json, yaml").
+			WithExitCode(2).
+			Err()
 	}
 
 	if err != nil {
@@ -111,7 +129,15 @@ func executeProfileListCommand(cmd *cobra.Command, args []string) error {
 func renderProfilesJSON(profiles []profile.ProfileInfo) (string, error) {
 	data, err := json.MarshalIndent(profiles, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to marshal profiles to JSON: %s", errUtils.ErrOutputFormat, err)
+		return "", errUtils.Build(errUtils.ErrOutputFormat).
+			WithExplanationf("Failed to generate JSON output: `%s`", err).
+			WithExplanation("This is likely an internal error").
+			WithHint("Try using `--format yaml` or `--format table` as a workaround").
+			WithHint("Please report this issue if it persists").
+			WithContext("format", "json").
+			WithContext("error", err.Error()).
+			WithExitCode(1).
+			Err()
 	}
 	return string(data) + "\n", nil
 }
@@ -120,7 +146,15 @@ func renderProfilesJSON(profiles []profile.ProfileInfo) (string, error) {
 func renderProfilesYAML(profiles []profile.ProfileInfo) (string, error) {
 	data, err := yaml.Marshal(profiles)
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to marshal profiles to YAML: %s", errUtils.ErrOutputFormat, err)
+		return "", errUtils.Build(errUtils.ErrOutputFormat).
+			WithExplanationf("Failed to generate YAML output: `%s`", err).
+			WithExplanation("This is likely an internal error").
+			WithHint("Try using `--format json` or `--format table` as a workaround").
+			WithHint("Please report this issue if it persists").
+			WithContext("format", "yaml").
+			WithContext("error", err.Error()).
+			WithExitCode(1).
+			Err()
 	}
 	return string(data), nil
 }
