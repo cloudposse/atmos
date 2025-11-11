@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -82,6 +84,16 @@ func executeSearchCommand(cmd *cobra.Command, args []string) error {
 	searchRegistry := v.GetString("registry")
 	searchInstalledOnly := v.GetBool("installed-only")
 	searchAvailableOnly := v.GetBool("available-only")
+	searchFormat := v.GetString("format")
+
+	// Validate format flag.
+	switch searchFormat {
+	case "table", "json", "yaml":
+		// Valid formats.
+	default:
+		return fmt.Errorf("%w: format must be one of: table, json, yaml (got: %s)",
+			errUtils.ErrInvalidFlag, searchFormat)
+	}
 
 	// Create registry based on flag or use default.
 	var reg toolchainregistry.ToolRegistry
@@ -124,17 +136,27 @@ Try:
 		return nil
 	}
 
-	// Display results.
-	_ = ui.MarkdownMessagef("**Found %d tools matching '%s':**\n\n", len(results), query)
-	displaySearchResults(results)
+	// Output based on format.
+	switch searchFormat {
+	case "json":
+		return data.WriteJSON(results)
+	case "yaml":
+		return data.WriteYAML(results)
+	case "table":
+		// Display results.
+		_ = ui.MarkdownMessagef("**Found %d tools matching '%s':**\n\n", len(results), query)
+		displaySearchResults(results)
 
-	footer := `
+		footer := `
 Use 'atmos toolchain info <tool>' for details
 Use 'atmos toolchain install <tool>@<version>' to install
 `
-	_ = ui.Write(footer)
-
-	return nil
+		_ = ui.Write(footer)
+		return nil
+	default:
+		// Should never reach here due to validation above.
+		return fmt.Errorf("%w: unsupported format: %s", errUtils.ErrInvalidFlag, searchFormat)
+	}
 }
 
 func displaySearchResults(tools []*toolchainregistry.Tool) {
