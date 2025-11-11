@@ -145,8 +145,8 @@ Try:
 	case "yaml":
 		return data.WriteYAML(results)
 	case "table":
-		// Display results.
-		_ = ui.Writef("Found %d tools matching '%s':\n\n", len(results), query)
+		// Display results with info toast.
+		_ = ui.Infof("Found %d tools matching '%s':\n", len(results), query)
 		displaySearchResults(results)
 
 		// Show helpful hints after table.
