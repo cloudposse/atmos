@@ -437,6 +437,89 @@ err := errUtils.Build(errUtils.ErrComponentNotFound).
     Err()
 ```
 
+## Usage Examples for Error Messages
+
+When creating errors with complex usage examples (especially for format or syntax errors), you can embed example content using `WithExampleFile()` or `WithExample()`.
+
+### When to Include Examples
+
+Include usage examples when:
+- Error is about invalid format/syntax (e.g., `--format json` vs `--format xml`)
+- Error is about missing or malformed configuration
+- Multiple correct usage patterns exist
+- User needs to see concrete examples to understand the fix
+
+### Example Format Guidelines
+
+Examples should follow markdown format with clear sections and code blocks:
+
+```markdown
+## Valid Version Format Examples
+
+### JSON Format
+\```bash
+atmos version --format json
+\```
+
+Output:
+\```json
+{
+  "version": "1.96.0",
+  "os": "darwin",
+  "arch": "arm64"
+}
+\```
+
+### YAML Format
+\```bash
+atmos version --format yaml
+\```
+
+Output:
+\```yaml
+version: 1.96.0
+os: darwin
+arch: arm64
+\```
+```
+
+### Where to Store Examples
+
+**IMPORTANT: Examples are embedded inline, NOT stored in separate files.**
+
+```go
+//go:embed examples/version_format_example.md
+var versionFormatExample string
+
+// Use in error:
+return errUtils.Build(errUtils.ErrVersionFormatInvalid).
+    WithExplanationf("The format '%s' is not supported", format).
+    WithExampleFile(versionFormatExample).  // Embedded content
+    WithHint("Use --format json for JSON output").
+    WithHint("Use --format yaml for YAML output").
+    WithContext("format", format).
+    WithExitCode(2).
+    Err()
+```
+
+**Example file location:**
+- Store in `internal/exec/examples/` when used in `internal/exec/` code
+- Store in `cmd/examples/` when used in `cmd/` code
+- Use descriptive names: `version_format_example.md`, `workflow_syntax_example.md`
+
+**Note:** This is different from CLI command usage files which go in `cmd/markdown/atmos_*_usage.md` and are displayed via `--help`.
+
+### Inline Examples for Simple Cases
+
+For simple examples, use `WithExample()` directly:
+
+```go
+return errUtils.Build(errUtils.ErrInvalidFormat).
+    WithExample("```yaml\nworkflows:\n  deploy:\n    steps:\n      - command: terraform apply\n```").
+    WithHint("Check your workflow syntax").
+    Err()
+```
+
 ## Documentation References
 
 - **Developer Guide**: `docs/errors.md` - Complete API reference
