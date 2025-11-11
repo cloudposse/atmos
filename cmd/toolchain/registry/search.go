@@ -111,9 +111,9 @@ func executeSearchCommand(cmd *cobra.Command, args []string) error {
 		reg = toolchain.NewAquaRegistry()
 	}
 
-	// Search for tools.
+	// Search for all matching tools (no limit on search itself).
 	opts := []toolchainregistry.SearchOption{
-		toolchainregistry.WithLimit(searchLimit),
+		toolchainregistry.WithLimit(0), // 0 = no limit, get all matches
 	}
 	if searchInstalledOnly {
 		opts = append(opts, toolchainregistry.WithInstalledOnly(true))
@@ -138,17 +138,33 @@ Try:
 		return nil
 	}
 
+	// Store total count before limiting display.
+	totalMatches := len(results)
+
+	// Apply display limit.
+	displayResults := results
+	if totalMatches > searchLimit {
+		displayResults = results[:searchLimit]
+	}
+
 	// Output based on format.
 	switch searchFormat {
 	case "json":
-		return data.WriteJSON(results)
+		return data.WriteJSON(displayResults)
 	case "yaml":
-		return data.WriteYAML(results)
+		return data.WriteYAML(displayResults)
 	case "table":
-		// Display results with info toast.
-		message := fmt.Sprintf("Found **%d tools** matching `%s`:", len(results), query)
+		// Display results with info toast showing range vs total.
+		var message string
+		if totalMatches <= searchLimit {
+			// Showing all results.
+			message = fmt.Sprintf("Found **%d tools** matching `%s`:", totalMatches, query)
+		} else {
+			// Showing subset of results.
+			message = fmt.Sprintf("Showing **%d** of **%d tools** matching `%s`:", len(displayResults), totalMatches, query)
+		}
 		_ = ui.Infof(message)
-		displaySearchResults(results)
+		displaySearchResults(displayResults)
 
 		// Show helpful hints after table.
 		_ = ui.Writeln("")
