@@ -164,6 +164,7 @@ Try:
 			message = fmt.Sprintf("Showing **%d** of **%d tools** matching `%s`:", len(displayResults), totalMatches, query)
 		}
 		_ = ui.Infof(message)
+		_ = ui.Writeln("") // Blank line after toast
 		displaySearchResults(displayResults)
 
 		// Show helpful hints after table.
@@ -201,7 +202,7 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 
 	// Build row data with installation status.
 	var rows []searchRow
-	statusWidth := 2 // For dot character.
+	statusWidth := 1 // For single dot character.
 	toolNameWidth := len("TOOL")
 	typeWidth := len("TYPE")
 	registryWidth := len("REGISTRY")
@@ -273,7 +274,8 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 	// Add padding.
 	const columnPaddingPerSide = 2
 	const totalColumnPadding = columnPaddingPerSide * 2
-	statusWidth += totalColumnPadding
+	const statusPadding = 2 // Minimal padding for status column (1 char + 1 space on right)
+	statusWidth += statusPadding
 	toolNameWidth += totalColumnPadding
 	typeWidth += totalColumnPadding
 	registryWidth += totalColumnPadding

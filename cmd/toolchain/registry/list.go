@@ -260,7 +260,7 @@ func buildToolsTable(tools []*toolchainregistry.Tool) string {
 
 	// Build row data with installation status.
 	var rows []toolRow
-	statusWidth := 2 // For dot character.
+	statusWidth := 1 // For single dot character.
 	ownerWidth := len("OWNER")
 	repoWidth := len("REPO")
 	typeWidth := len("TYPE")
@@ -329,10 +329,11 @@ func buildToolsTable(tools []*toolchainregistry.Tool) string {
 	}
 
 	// Add padding.
+	const statusPadding = 2 // Minimal padding for status column (1 char + 1 space on right)
 	ownerWidth += totalColumnPadding
 	repoWidth += totalColumnPadding
 	typeWidth += totalColumnPadding
-	statusWidth += totalColumnPadding
+	statusWidth += statusPadding
 
 	// Calculate total width needed.
 	totalNeededWidth := statusWidth + ownerWidth + repoWidth + typeWidth
