@@ -231,3 +231,116 @@ func TestToolVersionsFileManager_Name(t *testing.T) {
 
 	assert.Equal(t, "tool-versions", mgr.Name())
 }
+
+func TestToolVersionsFileManager_AddTool_ErrorWrapping(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Use a directory as the file path to force an error
+	tmpFile := filepath.Join(tmpDir, "subdir")
+	err := os.Mkdir(tmpFile, 0o755)
+	require.NoError(t, err)
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseToolVersions: true,
+			VersionsFile:    tmpFile, // This is a directory, should fail
+		},
+	}
+
+	mgr := NewToolVersionsFileManager(config)
+	ctx := context.Background()
+
+	// Try to add tool - should fail with wrapped error
+	err = mgr.AddTool(ctx, "terraform", "1.13.4")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "AddTool terraform@1.13.4")
+}
+
+func TestToolVersionsFileManager_AddTool_AsDefault_ErrorWrapping(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Use a directory as the file path to force an error
+	tmpFile := filepath.Join(tmpDir, "subdir")
+	err := os.Mkdir(tmpFile, 0o755)
+	require.NoError(t, err)
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseToolVersions: true,
+			VersionsFile:    tmpFile, // This is a directory, should fail
+		},
+	}
+
+	mgr := NewToolVersionsFileManager(config)
+	ctx := context.Background()
+
+	// Try to add tool as default - should fail with wrapped error
+	err = mgr.AddTool(ctx, "terraform", "1.13.4", WithAsDefault())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "AddTool terraform@1.13.4")
+}
+
+func TestToolVersionsFileManager_RemoveTool_ErrorWrapping(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Use a directory as the file path to force an error
+	tmpFile := filepath.Join(tmpDir, "subdir")
+	err := os.Mkdir(tmpFile, 0o755)
+	require.NoError(t, err)
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseToolVersions: true,
+			VersionsFile:    tmpFile, // This is a directory, should fail
+		},
+	}
+
+	mgr := NewToolVersionsFileManager(config)
+	ctx := context.Background()
+
+	// Try to remove tool - should fail with wrapped error
+	err = mgr.RemoveTool(ctx, "terraform", "1.13.4")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "RemoveTool terraform@1.13.4")
+}
+
+func TestToolVersionsFileManager_SetDefault_ErrorWrapping(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Use a directory as the file path to force an error
+	tmpFile := filepath.Join(tmpDir, "subdir")
+	err := os.Mkdir(tmpFile, 0o755)
+	require.NoError(t, err)
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseToolVersions: true,
+			VersionsFile:    tmpFile, // This is a directory, should fail
+		},
+	}
+
+	mgr := NewToolVersionsFileManager(config)
+	ctx := context.Background()
+
+	// Try to set default - should fail with wrapped error
+	err = mgr.SetDefault(ctx, "terraform", "1.13.4")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "SetDefault terraform@1.13.4")
+}
+
+func TestToolVersionsFileManager_GetTools_ErrorWrapping(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "nonexistent", ".tool-versions")
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseToolVersions: true,
+			VersionsFile:    tmpFile, // File doesn't exist
+		},
+	}
+
+	mgr := NewToolVersionsFileManager(config)
+	ctx := context.Background()
+
+	// Try to get tools - should fail with wrapped error
+	_, err := mgr.GetTools(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "GetTools: failed to load")
+	assert.Contains(t, err.Error(), tmpFile)
+}
