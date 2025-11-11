@@ -272,3 +272,74 @@ func TestRegistry_EmptyRegistry(t *testing.T) {
 	err = registry.VerifyAll(ctx)
 	assert.NoError(t, err)
 }
+
+func TestRegistry_ErrorWrapping(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx := context.Background()
+
+	t.Run("AddTool wraps errors with ErrUpdateFailed", func(t *testing.T) {
+		mgr := NewMockFileManager(ctrl)
+		expectedErr := errors.New("underlying error")
+
+		mgr.EXPECT().Enabled().Return(true)
+		mgr.EXPECT().AddTool(ctx, "terraform", "1.13.4").Return(expectedErr)
+		mgr.EXPECT().Name().Return("manager1")
+
+		registry := NewRegistry(mgr)
+		err := registry.AddTool(ctx, "terraform", "1.13.4")
+
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, ErrUpdateFailed), "error should wrap ErrUpdateFailed")
+		assert.Contains(t, err.Error(), "manager1")
+	})
+
+	t.Run("RemoveTool wraps errors with ErrUpdateFailed", func(t *testing.T) {
+		mgr := NewMockFileManager(ctrl)
+		expectedErr := errors.New("underlying error")
+
+		mgr.EXPECT().Enabled().Return(true)
+		mgr.EXPECT().RemoveTool(ctx, "terraform", "1.13.4").Return(expectedErr)
+		mgr.EXPECT().Name().Return("manager1")
+
+		registry := NewRegistry(mgr)
+		err := registry.RemoveTool(ctx, "terraform", "1.13.4")
+
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, ErrUpdateFailed), "error should wrap ErrUpdateFailed")
+		assert.Contains(t, err.Error(), "manager1")
+	})
+
+	t.Run("SetDefault wraps errors with ErrUpdateFailed", func(t *testing.T) {
+		mgr := NewMockFileManager(ctrl)
+		expectedErr := errors.New("underlying error")
+
+		mgr.EXPECT().Enabled().Return(true)
+		mgr.EXPECT().SetDefault(ctx, "terraform", "1.13.4").Return(expectedErr)
+		mgr.EXPECT().Name().Return("manager1")
+
+		registry := NewRegistry(mgr)
+		err := registry.SetDefault(ctx, "terraform", "1.13.4")
+
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, ErrUpdateFailed), "error should wrap ErrUpdateFailed")
+		assert.Contains(t, err.Error(), "manager1")
+	})
+
+	t.Run("VerifyAll wraps errors with ErrVerificationFailed", func(t *testing.T) {
+		mgr := NewMockFileManager(ctrl)
+		expectedErr := errors.New("underlying error")
+
+		mgr.EXPECT().Enabled().Return(true)
+		mgr.EXPECT().Verify(ctx).Return(expectedErr)
+		mgr.EXPECT().Name().Return("manager1")
+
+		registry := NewRegistry(mgr)
+		err := registry.VerifyAll(ctx)
+
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, ErrVerificationFailed), "error should wrap ErrVerificationFailed")
+		assert.Contains(t, err.Error(), "manager1")
+	})
+}

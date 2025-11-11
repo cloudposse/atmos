@@ -35,13 +35,16 @@ var (
 func GetGlobMatches(pattern string) ([]string, error) {
 	defer perf.Track(nil, "filesystem.GetGlobMatches")()
 
-	existingMatches, found := getGlobMatchesSyncMap.Load(pattern)
+	// Normalize pattern for cache lookup to ensure consistent keys across platforms.
+	normalizedPattern := filepath.ToSlash(pattern)
+
+	existingMatches, found := getGlobMatchesSyncMap.Load(normalizedPattern)
 	if found && existingMatches != nil {
 		// Assert to []string and return a cloned copy so callers can't mutate cached data.
 		cached, ok := existingMatches.([]string)
 		if !ok {
 			// If assertion fails, invalidate cache and fall through to recompute.
-			getGlobMatchesSyncMap.Delete(pattern)
+			getGlobMatchesSyncMap.Delete(normalizedPattern)
 		} else {
 			// Return a clone to prevent callers from mutating the cached slice.
 			result := make([]string, len(cached))
@@ -50,14 +53,13 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		}
 	}
 
-	pattern = filepath.ToSlash(pattern)
-	base, cleanPattern := doublestar.SplitPattern(pattern)
+	base, cleanPattern := doublestar.SplitPattern(normalizedPattern)
 
 	// Check if base directory exists before attempting glob.
 	// os.DirFS will panic if the directory doesn't exist.
 	if _, err := os.Stat(base); err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("%w: '%s' ('%s' + '%s')", errUtils.ErrFailedToFindImport, pattern, base, cleanPattern)
+			return nil, fmt.Errorf("%w: '%s' ('%s' + '%s')", errUtils.ErrFailedToFindImport, normalizedPattern, base, cleanPattern)
 		}
 		return nil, err
 	}
@@ -84,7 +86,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	// This prevents callers from mutating cached data and preserves empty results.
 	cachedCopy := make([]string, len(fullMatches))
 	copy(cachedCopy, fullMatches)
-	getGlobMatchesSyncMap.Store(pattern, cachedCopy)
+	getGlobMatchesSyncMap.Store(normalizedPattern, cachedCopy)
 
 	return fullMatches, nil
 }

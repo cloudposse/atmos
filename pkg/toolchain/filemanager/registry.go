@@ -43,7 +43,7 @@ func (r *Registry) AddTool(ctx context.Context, tool, version string, opts ...Ad
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("%w: %v", ErrUpdateFailed, errors.Join(errs...))
+		return fmt.Errorf("%w: %w", ErrUpdateFailed, errors.Join(errs...))
 	}
 
 	return nil
@@ -68,7 +68,7 @@ func (r *Registry) RemoveTool(ctx context.Context, tool, version string) error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("%w: %v", ErrUpdateFailed, errors.Join(errs...))
+		return fmt.Errorf("%w: %w", ErrUpdateFailed, errors.Join(errs...))
 	}
 
 	return nil
@@ -93,7 +93,7 @@ func (r *Registry) SetDefault(ctx context.Context, tool, version string) error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("%w: %v", ErrUpdateFailed, errors.Join(errs...))
+		return fmt.Errorf("%w: %w", ErrUpdateFailed, errors.Join(errs...))
 	}
 
 	return nil
@@ -116,7 +116,7 @@ func (r *Registry) VerifyAll(ctx context.Context) error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("%w: %v", ErrVerificationFailed, errors.Join(errs...))
+		return fmt.Errorf("%w: %w", ErrVerificationFailed, errors.Join(errs...))
 	}
 
 	return nil
