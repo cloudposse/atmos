@@ -18,8 +18,10 @@ var installCmd = &cobra.Command{
 
 The tool should be specified in the format: owner/repo@version
 `,
-	Args: cobra.MaximumNArgs(1),
-	RunE: runInstall,
+	Args:          cobra.MaximumNArgs(1),
+	RunE:          runInstall,
+	SilenceUsage:  true, // Don't show usage on error.
+	SilenceErrors: true, // Don't show errors twice.
 }
 
 func init() {

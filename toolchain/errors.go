@@ -31,4 +31,7 @@ var (
 
 	// ErrFileOperation indicates a file operation failed.
 	ErrFileOperation = registry.ErrFileOperation
+
+	// ErrToolAlreadyExists indicates the tool version already exists in .tool-versions.
+	ErrToolAlreadyExists = registry.ErrToolAlreadyExists
 )

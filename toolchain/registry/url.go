@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"gopkg.in/yaml.v3"
 
 	httpClient "github.com/cloudposse/atmos/pkg/http"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -105,8 +107,12 @@ func (ur *URLRegistry) GetToolWithVersion(owner, repo, version string) (*Tool, e
 	// Set the version.
 	tool.Version = version
 
-	// TODO: Implement version override resolution similar to Aqua.
-	// For now, just return the tool with the version set.
+	// Apply version overrides if present.
+	if len(tool.VersionOverrides) > 0 {
+		if err := applyVersionOverride(tool, version); err != nil {
+			log.Warn("Failed to apply version override", "error", err, "owner", owner, "repo", repo, "version", version)
+		}
+	}
 
 	return tool, nil
 }
@@ -166,12 +172,13 @@ func (ur *URLRegistry) fetchFromURL(url string) (*Tool, error) {
 	// Convert first package to Tool.
 	pkg := registryFile.Packages[0]
 	tool := &Tool{
-		Name:      pkg.RepoName,
-		Type:      pkg.Type,
-		RepoOwner: pkg.RepoOwner,
-		RepoName:  pkg.RepoName,
-		URL:       pkg.URL,
-		Format:    pkg.Format,
+		Name:             pkg.RepoName,
+		Type:             pkg.Type,
+		RepoOwner:        pkg.RepoOwner,
+		RepoName:         pkg.RepoName,
+		URL:              pkg.URL,
+		Format:           pkg.Format,
+		VersionOverrides: pkg.VersionOverrides,
 	}
 
 	// Handle github_release vs http type.
@@ -228,12 +235,13 @@ func (ur *URLRegistry) loadIndex() error {
 	// Cache all packages from the index.
 	for _, pkg := range indexFile.Packages {
 		tool := &Tool{
-			Name:      pkg.RepoName,
-			Type:      pkg.Type,
-			RepoOwner: pkg.RepoOwner,
-			RepoName:  pkg.RepoName,
-			URL:       pkg.URL,
-			Format:    pkg.Format,
+			Name:             pkg.RepoName,
+			Type:             pkg.Type,
+			RepoOwner:        pkg.RepoOwner,
+			RepoName:         pkg.RepoName,
+			URL:              pkg.URL,
+			Format:           pkg.Format,
+			VersionOverrides: pkg.VersionOverrides,
 		}
 
 		// Handle github_release vs http type.
@@ -283,4 +291,96 @@ func (ur *URLRegistry) GetMetadata(ctx context.Context) (*RegistryMetadata, erro
 		Priority:  0,
 		ToolCount: 0, // Unknown for URL registries
 	}, nil
+}
+
+// applyVersionOverride applies version-specific overrides to the tool.
+// It evaluates version constraints and applies the first matching override.
+// Aqua uses expressions like:
+//   - `Version == "v0.0.1"` - Exact version match
+//   - `semver("<= 0.0.16")` - Semver constraint
+//   - `"true"` - Catch-all (matches any version)
+func applyVersionOverride(tool *Tool, version string) error {
+	defer perf.Track(nil, "registry.applyVersionOverride")()
+
+	for _, override := range tool.VersionOverrides {
+		matches, err := evaluateVersionConstraint(override.VersionConstraint, version)
+		if err != nil {
+			log.Debug("Failed to evaluate version constraint", "constraint", override.VersionConstraint, "version", version, "error", err)
+			continue
+		}
+
+		if matches {
+			// Apply the override fields to the tool.
+			if override.Asset != "" {
+				tool.Asset = override.Asset
+			}
+			if override.Format != "" {
+				tool.Format = override.Format
+			}
+			if len(override.Files) > 0 {
+				tool.Files = override.Files
+			}
+			if len(override.Replacements) > 0 {
+				tool.Replacements = override.Replacements
+			}
+
+			log.Debug("Applied version override", "version", version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format)
+			return nil
+		}
+	}
+
+	// No matching override found - this is not an error.
+	log.Debug("No matching version override", "version", version, "overrides_count", len(tool.VersionOverrides))
+	return nil
+}
+
+// evaluateVersionConstraint evaluates an Aqua version constraint expression.
+// Supports:
+//   - `"true"` - Always matches
+//   - `"false"` - Never matches
+//   - `Version == "v1.2.3"` - Exact version match
+//   - `semver(">= 1.2.3")` - Semver constraint
+func evaluateVersionConstraint(constraint, version string) (bool, error) {
+	defer perf.Track(nil, "registry.evaluateVersionConstraint")()
+
+	// Trim whitespace.
+	constraint = strings.TrimSpace(constraint)
+
+	// Handle literal true/false.
+	if constraint == "true" || constraint == `"true"` {
+		return true, nil
+	}
+	if constraint == "false" || constraint == `"false"` {
+		return false, nil
+	}
+
+	// Handle exact version match: Version == "v1.2.3"
+	if strings.HasPrefix(constraint, "Version ==") {
+		expectedVersion := strings.TrimSpace(strings.TrimPrefix(constraint, "Version =="))
+		expectedVersion = strings.Trim(expectedVersion, `"`)
+		return version == expectedVersion, nil
+	}
+
+	// Handle semver constraint: semver(">= 1.2.3")
+	if strings.HasPrefix(constraint, "semver(") && strings.HasSuffix(constraint, ")") {
+		semverConstraint := strings.TrimPrefix(constraint, "semver(")
+		semverConstraint = strings.TrimSuffix(semverConstraint, ")")
+		semverConstraint = strings.Trim(semverConstraint, `"`)
+
+		// Parse the version (handle both "v1.2.3" and "1.2.3").
+		v, err := semver.NewVersion(version)
+		if err != nil {
+			return false, fmt.Errorf("invalid version %q: %w", version, err)
+		}
+
+		// Parse the constraint.
+		c, err := semver.NewConstraint(semverConstraint)
+		if err != nil {
+			return false, fmt.Errorf("invalid semver constraint %q: %w", semverConstraint, err)
+		}
+
+		return c.Check(v), nil
+	}
+
+	return false, fmt.Errorf("unsupported version constraint format: %q", constraint)
 }

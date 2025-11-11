@@ -3,15 +3,16 @@ package toolchain
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // Bubble Tea spinner model.
@@ -24,7 +25,8 @@ type spinnerModel struct {
 func initialSpinnerModel(message string) *spinnerModel {
 	s := bspinner.New()
 	s.Spinner = bspinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	styles := theme.GetCurrentStyles()
+	s.Style = styles.Spinner
 	return &spinnerModel{
 		spinner: s,
 		message: message,
@@ -114,18 +116,8 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 		return fmt.Errorf("%w: %s. Expected format: owner/repo or tool name", ErrInvalidToolSpec, tool)
 	}
 
-	// Handle "latest" keyword.
-	isLatest := false
-	if version == "latest" {
-		registry := NewAquaRegistry()
-		latestVersion, err := registry.GetLatestVersion(owner, repo)
-		if err != nil {
-			return fmt.Errorf("failed to get latest version for %s/%s: %w", owner, repo, err)
-		}
-		_ = ui.Toastf("📦", "Using latest version: %s", latestVersion)
-		version = latestVersion
-		isLatest = true
-	}
+	// Handle "latest" keyword - pass it to InstallSingleTool which will resolve it.
+	isLatest := version == "latest"
 
 	err = InstallSingleTool(owner, repo, version, isLatest, true)
 	if err != nil {
@@ -151,6 +143,7 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 
 	installer := NewInstaller()
 
+	// Start spinner immediately before any potentially slow operations.
 	var p *tea.Program
 	if showProgressBar {
 		message := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
@@ -161,12 +154,45 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 		}()
 	}
 
-	// Perform installation.
-	binaryPath, err := installer.Install(owner, repo, version)
-	if err != nil {
+	// Resolve "latest" version if needed (network call - can be slow).
+	if isLatest && version == "latest" {
+		registry := NewAquaRegistry()
+		latestVersion, err := registry.GetLatestVersion(owner, repo)
+		if err != nil {
+			// Stop spinner before showing error.
+			if showProgressBar && p != nil {
+				p.Send(installDoneMsg{})
+				time.Sleep(100 * time.Millisecond)
+			}
+			return fmt.Errorf("failed to get latest version for %s/%s: %w", owner, repo, err)
+		}
+		// Update version to the resolved latest version.
+		version = latestVersion
+		// Update spinner message to show actual version.
 		if showProgressBar && p != nil {
 			p.Send(installDoneMsg{})
+			time.Sleep(50 * time.Millisecond)
+			_ = ui.Toastf("📦", "Using latest version: %s", latestVersion)
+			// Restart spinner with updated message.
+			message := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
+			p = runBubbleTeaSpinner(message)
+			go func() {
+				_, _ = p.Run()
+			}()
 		}
+	}
+
+	// Perform installation.
+	binaryPath, err := installer.Install(owner, repo, version)
+
+	// Stop spinner before printing any output.
+	if showProgressBar && p != nil {
+		p.Send(installDoneMsg{})
+		// Small delay to ensure spinner is cleared before printing output.
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if err != nil {
 		if showProgressBar {
 			_ = ui.Errorf("Install failed %s/%s@%s: %v", owner, repo, version, err)
 		}
@@ -180,15 +206,16 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 		}
 	}
 	if showProgressBar {
-		_ = ui.Successf("Installed %s/%s@%s to %s", owner, repo, version, binaryPath)
-	}
-	if showProgressBar && p != nil {
-		p.Send(installDoneMsg{})
-		// Small delay to ensure spinner is cleared.
-		time.Sleep(100 * time.Millisecond)
+		// Calculate directory size for the installed version.
+		versionDir := filepath.Dir(binaryPath)
+		sizeStr := ""
+		if dirSize, err := calculateDirectorySize(versionDir); err == nil {
+			sizeStr = fmt.Sprintf(" (%s)", formatBytes(dirSize))
+		}
+		_ = ui.Successf("Installed `%s/%s@%s` to `%s`%s", owner, repo, version, binaryPath, sizeStr)
 	}
 	if err := AddToolToVersions(DefaultToolVersionsFilePath, repo, version); err == nil && showProgressBar {
-		_ = ui.Successf("Registered %s %s in .tool-versions", repo, version)
+		_ = ui.Successf("Registered `%s %s` in `.tool-versions`", repo, version)
 	}
 	return nil
 }
@@ -209,7 +236,8 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 
 	spinner := bspinner.New()
 	spinner.Spinner = bspinner.Dot
-	spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	styles := theme.GetCurrentStyles()
+	spinner.Style = styles.Spinner
 	progressBar := progress.New(progress.WithDefaultGradient())
 
 	var installedCount, failedCount, alreadyInstalledCount int
@@ -276,9 +304,9 @@ func showProgress(
 ) {
 	switch state.result {
 	case "skipped":
-		_ = ui.Successf("Skipped %s/%s@%s (already installed)", tool.owner, tool.repo, tool.version)
+		_ = ui.Successf("Skipped `%s/%s@%s` (already installed)", tool.owner, tool.repo, tool.version)
 	case "installed":
-		_ = ui.Successf("Installed %s/%s@%s", tool.owner, tool.repo, tool.version)
+		_ = ui.Successf("Installed `%s/%s@%s`", tool.owner, tool.repo, tool.version)
 	case "failed":
 		_ = ui.Errorf("Install failed %s/%s@%s: %v", tool.owner, tool.repo, tool.version, state.err)
 	}
@@ -302,9 +330,9 @@ func printSummary(installed, failed, skipped, total int) {
 	case total == 0:
 		_ = ui.Success("No tools to install")
 	case failed == 0 && skipped == 0:
-		_ = ui.Successf("Installed %d tools", installed)
+		_ = ui.Successf("Installed **%d** tools", installed)
 	case failed == 0 && skipped > 0:
-		_ = ui.Successf("Installed %d tools, skipped %d", installed, skipped)
+		_ = ui.Successf("Installed **%d** tools, skipped **%d**", installed, skipped)
 	case failed > 0 && skipped == 0:
 		_ = ui.Errorf("Installed %d tools, failed %d", installed, failed)
 	default:

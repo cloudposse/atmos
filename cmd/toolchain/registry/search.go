@@ -145,14 +145,13 @@ Try:
 		return data.WriteYAML(results)
 	case "table":
 		// Display results.
-		_ = ui.MarkdownMessagef("**Found %d tools matching '%s':**\n\n", len(results), query)
+		_ = ui.Writef("Found %d tools matching '%s':\n\n", len(results), query)
 		displaySearchResults(results)
 
-		footer := `
-Use 'atmos toolchain info <tool>' for details
-Use 'atmos toolchain install <tool>@<version>' to install
-`
-		_ = ui.Write(footer)
+		// Show helpful hints after table.
+		_ = ui.Writeln("")
+		_ = ui.Hintf("Use `atmos toolchain info <tool>` for details")
+		_ = ui.Hintf("Use `atmos toolchain install <tool>@<version>` to install")
 		return nil
 	default:
 		// Should never reach here due to validation above.

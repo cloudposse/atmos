@@ -183,7 +183,7 @@ func TestGetBinaryPath(t *testing.T) {
 	installer := NewInstaller()
 	installer.binDir = t.TempDir()
 
-	path := installer.getBinaryPath("suzuki-shunsuke", "github-comment", "v6.3.4")
+	path := installer.getBinaryPath("suzuki-shunsuke", "github-comment", "v6.3.4", "")
 	expected := filepath.Join(installer.binDir, "suzuki-shunsuke", "github-comment", "v6.3.4", "github-comment")
 
 	if path != expected {

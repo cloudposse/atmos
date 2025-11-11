@@ -41,10 +41,11 @@ func init() {
 
 // AquaRegistry represents the Aqua registry structure.
 type AquaRegistry struct {
-	client        httpClient.Client
-	cache         *RegistryCache
-	cacheStore    cache.Store
-	githubBaseURL string
+	client          httpClient.Client
+	cache           *RegistryCache
+	cacheStore      cache.Store
+	githubBaseURL   string
+	lastSearchTotal int // Total number of search results before pagination.
 }
 
 // RegistryCache handles caching of registry files.
@@ -229,19 +230,19 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*r
 		RepoName:  pkgDef.RepoName,
 	}
 
-	// Find the appropriate version override using semver constraint
-	v, err := semver.NewVersion(version)
-	if err != nil {
-		return nil, fmt.Errorf("invalid version: %w", err)
-	}
-
+	// Find the appropriate version override using Aqua constraint evaluation.
+	// Aqua supports complex constraints like:
+	// - Version == "v1.2.3"
+	// - semver(">= 1.2.3")
+	// - "true" (catch-all)
 	selectedIdx := -1
 	for i, override := range pkgDef.VersionOverrides {
-		c, err := semver.NewConstraint(override.VersionConstraint)
+		matches, err := evaluateVersionConstraint(override.VersionConstraint, version)
 		if err != nil {
+			log.Debug("Failed to evaluate version constraint", "constraint", override.VersionConstraint, "version", version, "error", err)
 			continue // skip invalid constraints
 		}
-		if c.Check(v) {
+		if matches {
 			selectedIdx = i
 			break // use the first matching override
 		}
@@ -258,6 +259,9 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*r
 		if len(override.Files) > 0 {
 			tool.Name = override.Files[0].Name
 		}
+		log.Debug("Applied version override", "version", version, "constraint", pkgDef.VersionOverrides[selectedIdx].VersionConstraint, "asset", tool.Asset, "format", tool.Format)
+	} else {
+		log.Debug("No matching version override", "version", version, "overrides_count", len(pkgDef.VersionOverrides))
 	}
 
 	return tool, nil
@@ -601,24 +605,33 @@ func (ar *AquaRegistry) Search(ctx context.Context, query string, opts ...regist
 	}
 
 	// Get all tools from registry.
+	listStart := time.Now()
 	allTools, err := ar.ListAll(ctx, registry.WithListLimit(0)) // 0 = no limit
 	if err != nil {
 		return nil, err
 	}
+	log.Debug("ListAll took", "duration", time.Since(listStart), "tools", len(allTools))
 
 	// Filter and score results.
 	var results []scoredTool
 	queryLower := strings.ToLower(query)
 
+	scoreStart := time.Now()
 	for _, tool := range allTools {
 		score := ar.calculateRelevanceScore(tool, queryLower)
 		if score > 0 {
 			results = append(results, scoredTool{tool: tool, score: score})
 		}
 	}
+	log.Debug("Scoring took", "duration", time.Since(scoreStart), "matches", len(results))
 
 	// Sort by score (highest first), then alphabetically.
+	sortStart := time.Now()
 	sortResults(results)
+	log.Debug("Sort took", "duration", time.Since(sortStart))
+
+	// Store total count in metadata for pagination display.
+	ar.lastSearchTotal = len(results)
 
 	// Apply offset and limit.
 	start := config.Offset
@@ -688,6 +701,12 @@ func sortResults(results []scoredTool) {
 	})
 }
 
+// GetLastSearchTotal returns the total number of search results before pagination.
+// This is set by the most recent Search() call.
+func (ar *AquaRegistry) GetLastSearchTotal() int {
+	return ar.lastSearchTotal
+}
+
 // ListAll returns all tools available in the Aqua registry.
 func (ar *AquaRegistry) ListAll(ctx context.Context, opts ...registry.ListOption) ([]*registry.Tool, error) {
 	defer perf.Track(nil, "aqua.AquaRegistry.ListAll")()
@@ -736,9 +755,13 @@ func (ar *AquaRegistry) fetchRegistryIndex(ctx context.Context) ([]*registry.Too
 	const cacheTTL = 24 * time.Hour
 
 	// Try to get from cache first.
+	start := time.Now()
 	if cachedData, err := ar.cacheStore.Get(ctx, cacheKey); err == nil {
+		log.Debug("Cache read took", "duration", time.Since(start))
 		// Cache hit - parse and return.
+		parseStart := time.Now()
 		tools, err := ar.parseIndexYAML(cachedData)
+		log.Debug("Parse took", "duration", time.Since(parseStart), "tools", len(tools))
 		if err == nil {
 			log.Debug("Using cached registry index", "tool_count", len(tools))
 			return tools, nil
@@ -796,6 +819,8 @@ func (ar *AquaRegistry) parseIndexYAML(data []byte) ([]*registry.Tool, error) {
 			Type      string `yaml:"type"`
 			RepoOwner string `yaml:"repo_owner"`
 			RepoName  string `yaml:"repo_name"`
+			Name      string `yaml:"name"` // Used by http and some go_install types.
+			Path      string `yaml:"path"` // Used by go_install types (Go module path).
 		} `yaml:"packages"`
 	}
 
@@ -806,9 +831,58 @@ func (ar *AquaRegistry) parseIndexYAML(data []byte) ([]*registry.Tool, error) {
 	// Convert to Tool objects.
 	tools := make([]*registry.Tool, 0, len(index.Packages))
 	for _, pkg := range index.Packages {
+		// Skip entries without a type - these are invalid package definitions.
+		// In Aqua registry YAML, some entries may start with "- name:" followed by
+		// "type:", which YAML parsers may treat as separate entries.
+		if pkg.Type == "" {
+			continue
+		}
+
+		owner := pkg.RepoOwner
+		repo := pkg.RepoName
+
+		// For packages with name field but no repo_owner/repo_name, parse the name field.
+		// Format is usually "owner/repo" or "owner/repo/binary" (for http and some go_install types).
+		if pkg.Name != "" && owner == "" && repo == "" {
+			parts := strings.SplitN(pkg.Name, "/", 3)
+			if len(parts) >= 2 {
+				owner = parts[0]
+				repo = parts[1]
+				// For go_install with multiple binaries (e.g., "owner/repo/binary"),
+				// we still use owner/repo as the identifier.
+			} else if len(parts) == 1 {
+				// If name doesn't contain '/', use it as repo name.
+				repo = pkg.Name
+			}
+		}
+
+		// For go_install packages with only a path field (e.g., "golang.org/x/perf/cmd/benchstat"),
+		// extract owner/repo from the Go module path.
+		if pkg.Type == "go_install" && pkg.Path != "" && owner == "" && repo == "" {
+			// Parse Go module path: "golang.org/x/perf/cmd/benchstat" -> owner: "golang", repo: "x"
+			// Or "github.com/owner/repo/..." -> owner: "owner", repo: "repo"
+			parts := strings.Split(pkg.Path, "/")
+			if len(parts) >= 3 {
+				// Handle special cases like golang.org/x/...
+				if parts[0] == "golang.org" && len(parts) >= 2 {
+					owner = "golang"
+					repo = parts[1] // e.g., "x" from "golang.org/x/..."
+				} else if parts[0] == "github.com" && len(parts) >= 3 {
+					owner = parts[1]
+					repo = parts[2]
+				} else {
+					// For other paths, use first part as owner, second as repo
+					owner = parts[0]
+					if len(parts) > 1 {
+						repo = parts[1]
+					}
+				}
+			}
+		}
+
 		tools = append(tools, &registry.Tool{
-			RepoOwner: pkg.RepoOwner,
-			RepoName:  pkg.RepoName,
+			RepoOwner: owner,
+			RepoName:  repo,
 			Type:      pkg.Type,
 			Registry:  "aqua-public",
 		})
@@ -842,4 +916,55 @@ func (ar *AquaRegistry) GetMetadata(ctx context.Context) (*registry.RegistryMeta
 		ToolCount:   len(tools),
 		LastUpdated: time.Now(), // TODO: Fetch actual last updated from GitHub API
 	}, nil
+}
+
+// evaluateVersionConstraint evaluates an Aqua version constraint expression.
+// Supports:
+//   - `"true"` - Always matches
+//   - `"false"` - Never matches
+//   - `Version == "v1.2.3"` - Exact version match
+//   - `semver(">= 1.2.3")` - Semver constraint
+func evaluateVersionConstraint(constraint, version string) (bool, error) {
+	defer perf.Track(nil, "aqua.evaluateVersionConstraint")()
+
+	// Trim whitespace.
+	constraint = strings.TrimSpace(constraint)
+
+	// Handle literal true/false.
+	if constraint == "true" || constraint == `"true"` {
+		return true, nil
+	}
+	if constraint == "false" || constraint == `"false"` {
+		return false, nil
+	}
+
+	// Handle exact version match: Version == "v1.2.3"
+	if strings.HasPrefix(constraint, "Version ==") {
+		expectedVersion := strings.TrimSpace(strings.TrimPrefix(constraint, "Version =="))
+		expectedVersion = strings.Trim(expectedVersion, `"`)
+		return version == expectedVersion, nil
+	}
+
+	// Handle semver constraint: semver(">= 1.2.3")
+	if strings.HasPrefix(constraint, "semver(") && strings.HasSuffix(constraint, ")") {
+		semverConstraint := strings.TrimPrefix(constraint, "semver(")
+		semverConstraint = strings.TrimSuffix(semverConstraint, ")")
+		semverConstraint = strings.Trim(semverConstraint, `"`)
+
+		// Parse the version (handle both "v1.2.3" and "1.2.3").
+		v, err := semver.NewVersion(version)
+		if err != nil {
+			return false, fmt.Errorf("invalid version %q: %w", version, err)
+		}
+
+		// Parse the constraint.
+		c, err := semver.NewConstraint(semverConstraint)
+		if err != nil {
+			return false, fmt.Errorf("invalid semver constraint %q: %w", semverConstraint, err)
+		}
+
+		return c.Check(v), nil
+	}
+
+	return false, fmt.Errorf("unsupported version constraint format: %q", constraint)
 }

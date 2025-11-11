@@ -104,6 +104,20 @@ We support the core Aqua registry features needed for infrastructure tooling whi
 
 ## Quick Start
 
+### Discover Tools
+
+```bash
+# Search for tools across registries
+atmos toolchain search terraform
+atmos toolchain search kubernetes
+
+# Browse all available tools in a registry
+atmos toolchain registry list aqua
+
+# Get information about a specific tool
+atmos toolchain info terraform
+```
+
 ### Install Tools
 
 ```bash
@@ -292,6 +306,22 @@ The token provides:
 
   <dt>`aliases`</dt>
   <dd>List all configured tool aliases</dd>
+
+  <dt>`get [tool]`</dt>
+  <dd>Get version information for a tool from .tool-versions file</dd>
+</dl>
+
+### Registry Commands
+
+<dl>
+  <dt>`registry list [registry-name]`</dt>
+  <dd>List all configured registries or tools in a specific registry</dd>
+
+  <dt>`registry search <query>`</dt>
+  <dd>Search for tools across all configured registries</dd>
+
+  <dt>`search <query>`</dt>
+  <dd>Alias to `registry search` for convenient tool discovery</dd>
 </dl>
 
 ## Use Cases

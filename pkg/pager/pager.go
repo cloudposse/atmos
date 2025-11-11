@@ -5,7 +5,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/data"
 )
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
@@ -37,12 +39,12 @@ func New() PageCreator {
 
 func (p *pageCreator) Run(title, content string) error {
 	if !(p.enablePager) || !p.isTTYSupportForStdout() {
-		fmt.Print(content)
+		writeContent(content)
 		return nil
 	}
-	// Count visible lines (taking word wrapping into account)
+	// Count visible lines (taking word wrapping into account).
 	contentFits := p.contentFitsTerminal(content)
-	// If content exceeds terminal height, use pager
+	// If content exceeds terminal height, use pager.
 	if !contentFits {
 		if _, err := p.newTeaProgram(
 			&model{
@@ -56,7 +58,20 @@ func (p *pageCreator) Run(title, content string) error {
 			return err
 		}
 	} else {
-		fmt.Print(content)
+		writeContent(content)
 	}
 	return nil
+}
+
+// writeContent attempts to use data.Write() for proper stream routing,
+// but falls back to fmt.Print if the data writer isn't initialized (e.g., in tests).
+func writeContent(content string) {
+	defer func() {
+		if r := recover(); r != nil {
+			// If data.Write() panics (not initialized), fall back to fmt.Print.
+			fmt.Print(content)
+		}
+	}()
+	// Try to use data.Write() for proper stream routing.
+	_ = data.Write(content)
 }

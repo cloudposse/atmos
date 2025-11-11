@@ -45,6 +45,9 @@ var (
 
 	// ErrRegistryConfiguration indicates the registry configuration is invalid.
 	ErrRegistryConfiguration = errors.New("invalid registry configuration")
+
+	// ErrToolAlreadyExists indicates the tool version already exists in .tool-versions.
+	ErrToolAlreadyExists = errors.New("tool already exists")
 )
 
 // ToolRegistry defines the interface for tool metadata registries.
@@ -172,20 +175,21 @@ func WithSort(sort string) ListOption {
 
 // Tool represents a single tool in the registry.
 type Tool struct {
-	Name         string            `yaml:"name"`
-	Registry     string            `yaml:"registry"`
-	Version      string            `yaml:"version"`
-	Type         string            `yaml:"type"`
-	RepoOwner    string            `yaml:"repo_owner"`
-	RepoName     string            `yaml:"repo_name"`
-	Asset        string            `yaml:"asset"`
-	URL          string            `yaml:"url"`
-	Format       string            `yaml:"format"`
-	Files        []File            `yaml:"files"`
-	Overrides    []Override        `yaml:"overrides"`
-	SupportedIf  *SupportedIf      `yaml:"supported_if"`
-	Replacements map[string]string `yaml:"replacements"`
-	BinaryName   string            `yaml:"binary_name"`
+	Name             string            `yaml:"name"`
+	Registry         string            `yaml:"registry"`
+	Version          string            `yaml:"version"`
+	Type             string            `yaml:"type"`
+	RepoOwner        string            `yaml:"repo_owner"`
+	RepoName         string            `yaml:"repo_name"`
+	Asset            string            `yaml:"asset"`
+	URL              string            `yaml:"url"`
+	Format           string            `yaml:"format"`
+	Files            []File            `yaml:"files"`
+	Overrides        []Override        `yaml:"overrides"`
+	VersionOverrides []VersionOverride `yaml:"version_overrides"`
+	SupportedIf      *SupportedIf      `yaml:"supported_if"`
+	Replacements     map[string]string `yaml:"replacements"`
+	BinaryName       string            `yaml:"binary_name"`
 }
 
 // File represents a file to be extracted from the archive.
@@ -220,6 +224,8 @@ type AquaPackage struct {
 	Type       string `yaml:"type"`
 	RepoOwner  string `yaml:"repo_owner"`
 	RepoName   string `yaml:"repo_name"`
+	Name       string `yaml:"name"` // Used by http and some go_install types.
+	Path       string `yaml:"path"` // Used by go_install types (Go module path).
 	URL        string `yaml:"url"`
 	Format     string `yaml:"format"`
 	BinaryName string `yaml:"binary_name"`
@@ -240,8 +246,15 @@ type ChecksumConfig struct {
 
 // VersionOverride represents version-specific overrides for Aqua packages.
 type VersionOverride struct {
-	VersionConstraint string `yaml:"version_constraint"`
-	Rosetta2          bool   `yaml:"rosetta2"`
+	VersionConstraint     string         `yaml:"version_constraint"`
+	Asset                 string         `yaml:"asset"`
+	Format                string         `yaml:"format"`
+	Rosetta2              bool           `yaml:"rosetta2"`
+	WindowsArmEmulation   bool           `yaml:"windows_arm_emulation"`
+	SupportedEnvs         []string       `yaml:"supported_envs"`
+	Checksum              ChecksumConfig `yaml:"checksum"`
+	Files                 []File         `yaml:"files"`
+	Replacements          map[string]string `yaml:"replacements"`
 }
 
 // AquaRegistryFile represents the structure of an Aqua registry YAML file (uses 'packages' key).

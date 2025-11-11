@@ -26,7 +26,7 @@ func (f *fakeInstaller) Resolve(tool string) (string, string, error) {
 	return f.resolveOwner, f.resolveRepo, f.resolveErr
 }
 
-func (f *fakeInstaller) FindBinaryPath(owner, repo, version string) (string, error) {
+func (f *fakeInstaller) FindBinaryPath(owner, repo, version string, binaryName ...string) (string, error) {
 	return f.binaryPath, f.binaryErr
 }
 

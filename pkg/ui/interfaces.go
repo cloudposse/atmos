@@ -37,6 +37,8 @@ type Formatter interface {
 	Errorf(format string, a ...interface{}) string   // Returns "✗ {formatted}" in red
 	Info(text string) string                         // Returns "ℹ {text}" in cyan
 	Infof(format string, a ...interface{}) string    // Returns "ℹ {formatted}" in cyan
+	Hint(text string) string                         // Returns "💡 {text}" in muted color
+	Hintf(format string, a ...interface{}) string    // Returns "💡 {formatted}" in muted color
 	Muted(text string) string                        // Returns muted text (gray, no icon)
 
 	// Text formatting - returns styled strings

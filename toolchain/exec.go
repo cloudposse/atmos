@@ -29,7 +29,7 @@ var execFunc = func(binaryPath string, args []string, env []string) error {
 
 // ToolRunner defines the interface for running and resolving tools (for real and mock installers).
 type ToolRunner interface {
-	FindBinaryPath(owner, repo, version string) (string, error)
+	FindBinaryPath(owner, repo, version string, binaryName ...string) (string, error)
 	GetResolver() ToolResolver
 	CreateLatestFile(owner, repo, version string) error
 	ReadLatestFile(owner, repo string) (string, error)

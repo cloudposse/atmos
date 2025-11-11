@@ -27,9 +27,12 @@ Results are sorted by relevance score.`,
 			return err
 		}
 
-		// Forward args and execute through Cobra to ensure proper flag parsing and PreRun execution.
-		searchCmd.SetArgs(args)
-		return searchCmd.ExecuteContext(cmd.Context())
+		// Execute the search command's RunE directly with our args.
+		// This ensures we use the current command context which has had
+		// its parent's PersistentPreRun already executed (initializing IO context).
+		// We need to set the args on our command so the search RunE can access them.
+		cmd.SetArgs(args)
+		return searchCmd.RunE(cmd, args)
 	},
 }
 

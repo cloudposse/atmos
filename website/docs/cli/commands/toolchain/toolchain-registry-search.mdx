@@ -1,0 +1,326 @@
+---
+title: atmos toolchain registry search
+sidebar_label: registry search
+sidebar_class_name: command
+id: registry-search
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Search for tools across all configured registries. Find CLI tools by name, owner, or description, and see installation status at a glance.
+</Intro>
+
+<Screengrab title="atmos toolchain registry search --help" slug="atmos-toolchain-registry-search--help" />
+
+## Usage
+
+```shell
+atmos toolchain registry search <query>
+```
+
+Searches for tools matching the query string across all configured registries. The query is matched against:
+- Tool owner (organization/user)
+- Repository name
+- Tool description
+
+Results are sorted by relevance score, with exact matches appearing first.
+
+## Examples
+
+### Basic Search
+
+```shell
+# Search for Terraform-related tools
+atmos toolchain registry search terraform
+
+# Search for Kubernetes tools
+atmos toolchain registry search kubernetes
+
+# Search for AWS CLI tools
+atmos toolchain registry search aws
+```
+
+Output shows matching tools with installation status indicators:
+```
+Found 15 tools matching 'terraform':
+
+  ┌───┬──────────────┬────────────┬───────────────┐
+  │   │ OWNER        │ REPO       │ TYPE          │
+  ├───┼──────────────┼────────────┼───────────────┤
+  │ ● │ hashicorp    │ terraform  │ github_release│
+  │ ● │ opentofu     │ opentofu   │ github_release│
+  │   │ gruntwork-io │ terragrunt │ github_release│
+  └───┴──────────────┴────────────┴───────────────┘
+```
+
+### Limit Results
+
+```shell
+# Show only top 10 results
+atmos toolchain registry search terraform --limit 10
+
+# Show only top 5 results
+atmos toolchain registry search kubectl --limit 5
+```
+
+### Filter by Installation Status
+
+```shell
+# Show only installed tools matching query
+atmos toolchain registry search terraform --installed-only
+
+# Show only available (not installed) tools
+atmos toolchain registry search kubernetes --available-only
+```
+
+### Search Specific Registry
+
+```shell
+# Search only in Aqua registry
+atmos toolchain registry search terraform --registry aqua
+
+# When custom registries are configured
+atmos toolchain registry search internal-tool --registry corporate
+```
+
+### Output Formats
+
+```shell
+# JSON output for scripting
+atmos toolchain registry search terraform --format json
+
+# YAML output
+atmos toolchain registry search kubectl --format yaml
+
+# Table output (default)
+atmos toolchain registry search helm --format table
+```
+
+## Arguments
+
+<dl>
+    <dt>`query` <em>(required)</em></dt>
+    <dd>
+        Search query string to match against tool owner, repository name, and description.
+
+        Examples: `terraform`, `kubernetes`, `aws`, `helm`, `docker`
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--limit` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of results to display. Default: `20`
+
+        Use lower limits for focused results, higher limits for comprehensive searches.
+
+        Environment variable: `ATMOS_TOOLCHAIN_LIMIT`
+    </dd>
+
+    <dt>`--registry` <em>(optional)</em></dt>
+    <dd>
+        Search only in the specified registry. If omitted, searches all configured registries.
+
+        Supported values:
+        - `aqua` or `aqua-public` - Official Aqua registry
+        - Custom registry names from `atmos.yaml` configuration
+
+        Environment variable: `ATMOS_TOOLCHAIN_REGISTRY`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format. Options: `table`, `json`, `yaml`. Default: `table`
+
+        - `table` - Human-readable table with status indicators
+        - `json` - Machine-readable JSON array
+        - `yaml` - Machine-readable YAML array
+
+        Environment variable: `ATMOS_TOOLCHAIN_FORMAT`
+    </dd>
+
+    <dt>`--installed-only` <em>(optional)</em></dt>
+    <dd>
+        Show only tools that are already installed. Useful for finding installed tools by keyword.
+
+        Cannot be combined with `--available-only`.
+
+        Environment variable: `ATMOS_TOOLCHAIN_INSTALLED_ONLY`
+    </dd>
+
+    <dt>`--available-only` <em>(optional)</em></dt>
+    <dd>
+        Show only tools that are not installed. Useful for discovering new tools to add.
+
+        Cannot be combined with `--installed-only`.
+
+        Environment variable: `ATMOS_TOOLCHAIN_AVAILABLE_ONLY`
+    </dd>
+</dl>
+
+## Installation Status Indicators
+
+The table output shows visual indicators for each tool's status:
+
+| Indicator | Meaning | Example |
+|-----------|---------|---------|
+| Green dot (●) | Tool is installed and ready to use | `● hashicorp terraform` |
+| Gray dot (●) | Tool is in `.tool-versions` but not installed yet | `● opentofu opentofu` |
+| No indicator | Tool is available but not configured | `kubernetes-sigs kubectl` |
+
+To install a tool from search results:
+
+```shell
+# Install specific version
+atmos toolchain install <owner/repo>@<version>
+
+# Add to .tool-versions and install
+atmos toolchain add <owner/repo>@<version>
+```
+
+## Search Behavior
+
+### Query Matching
+
+The search matches the query against multiple fields:
+
+1. **Owner** (organization/user name) - e.g., `hashicorp`, `kubernetes-sigs`
+2. **Repository name** - e.g., `terraform`, `kubectl`, `helm`
+3. **Description** - Tool description text
+
+### Relevance Scoring
+
+Results are sorted by relevance:
+- Exact matches in repository name appear first
+- Owner matches appear next
+- Description matches appear last
+- Within each category, results are alphabetized
+
+### Case Insensitive
+
+Searches are case-insensitive:
+```shell
+# These all return the same results
+atmos toolchain registry search Terraform
+atmos toolchain registry search terraform
+atmos toolchain registry search TERRAFORM
+```
+
+## Use Cases
+
+### Discover Infrastructure Tools
+
+Find tools for your infrastructure workflows:
+
+```shell
+# Find all Terraform-related tools
+atmos toolchain registry search terraform
+
+# Find Kubernetes tools
+atmos toolchain registry search k8s
+
+# Find AWS tools
+atmos toolchain registry search aws-cli
+```
+
+### Check What's Installed
+
+Find specific tools you've already installed:
+
+```shell
+# Show only installed tools matching query
+atmos toolchain registry search terraform --installed-only
+```
+
+### Find New Tools to Add
+
+Discover available tools you haven't installed yet:
+
+```shell
+# Show only available tools
+atmos toolchain registry search security --available-only
+
+# Limit to top 10 most relevant
+atmos toolchain registry search linter --available-only --limit 10
+```
+
+### Export Search Results
+
+Generate machine-readable output for scripts:
+
+```shell
+# Export as JSON
+atmos toolchain registry search terraform --format json > terraform-tools.json
+
+# Export as YAML
+atmos toolchain registry search kubectl --format yaml > kubectl-tools.yaml
+
+# Use with jq for filtering
+atmos toolchain registry search terraform --format json | jq '.[].repo_name'
+```
+
+### Quick Install Workflow
+
+Find and install tools in one workflow:
+
+```shell
+# Search for tool
+atmos toolchain registry search tflint
+
+# Install latest version
+atmos toolchain install terraform-linters/tflint@latest
+
+# Or install specific version
+atmos toolchain install terraform-linters/tflint@0.44.1
+```
+
+## Examples by Category
+
+### HashiCorp Tools
+
+```shell
+atmos toolchain registry search hashicorp
+```
+
+Finds: terraform, packer, vault, consul, nomad, etc.
+
+### Kubernetes Ecosystem
+
+```shell
+atmos toolchain registry search kubernetes
+```
+
+Finds: kubectl, helm, k9s, kustomize, kubeconform, etc.
+
+### Security & Scanning
+
+```shell
+atmos toolchain registry search security
+```
+
+Finds: tfsec, trivy, checkov, gitleaks, etc.
+
+### AWS Tools
+
+```shell
+atmos toolchain registry search aws
+```
+
+Finds: aws-cli, awscli, aws-vault, granted, etc.
+
+## Related Commands
+
+- [`atmos toolchain search`](/cli/commands/toolchain/toolchain-search) - Convenient alias to this command
+- [`atmos toolchain registry list`](/cli/commands/toolchain/toolchain-registry-list) - Browse all tools in a registry
+- [`atmos toolchain install`](/cli/commands/toolchain/toolchain-install) - Install tools from search results
+- [`atmos toolchain info`](/cli/commands/toolchain/toolchain-info) - View detailed tool information
+
+## Related Documentation
+
+- [Toolchain Registry Overview](/cli/commands/toolchain/toolchain-registry) - Registry concepts and configuration
+- [Toolchain Overview](/cli/commands/toolchain/usage) - Complete toolchain documentation
+- [Aqua Registry](https://github.com/aquaproj/aqua-registry) - Browse the official registry online

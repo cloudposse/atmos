@@ -1,19 +1,24 @@
 package registry
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/flags/global"
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -22,13 +27,35 @@ import (
 )
 
 const (
-	defaultListLimit = 50
-	columnWidthOwner = 20
-	columnWidthRepo  = 25
-	columnWidthType  = 15
+	defaultListLimit     = 50
+	minColumnWidthOwner  = 8   // Minimum width for OWNER column.
+	minColumnWidthRepo   = 8   // Minimum width for REPO column.
+	minColumnWidthType   = 8   // Minimum width for TYPE column.
+	defaultTerminalWidth = 120 // Fallback if terminal width cannot be detected.
+	columnPaddingPerSide = 2   // Padding on each side of column content.
+	totalColumnPadding   = columnPaddingPerSide * 2
 )
 
+// toolRow represents a single row in the tools table.
+type toolRow struct {
+	status      string
+	owner       string
+	repo        string
+	toolType    string
+	isInstalled bool
+	isInConfig  bool
+}
+
 var listParser *flags.StandardParser
+
+// ListOptions contains parsed flags for the registry list command.
+type ListOptions struct {
+	global.Flags // Embed global flags (includes Pager).
+	Limit        int
+	Offset       int
+	Format       string
+	Sort         string
+}
 
 // listCmd represents the 'toolchain registry list' command.
 var listCmd = &cobra.Command{
@@ -80,9 +107,38 @@ func executeListCommand(cmd *cobra.Command, args []string) error {
 		return listConfiguredRegistries(ctx)
 	}
 
+	// Parse options.
+	opts, err := parseListOptions(cmd, v, args)
+	if err != nil {
+		return err
+	}
+
 	// List tools from specific registry.
 	registryName := args[0]
-	return listRegistryTools(ctx, registryName)
+	return listRegistryTools(ctx, registryName, opts)
+}
+
+func parseListOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*ListOptions, error) {
+	defer perf.Track(nil, "registry.parseListOptions")()
+
+	format := strings.ToLower(v.GetString("format"))
+
+	// Validate format flag.
+	switch format {
+	case "table", "json", "yaml":
+		// Valid formats.
+	default:
+		return nil, fmt.Errorf("%w: format must be one of: table, json, yaml (got: %s)",
+			errUtils.ErrInvalidFlag, format)
+	}
+
+	return &ListOptions{
+		Flags:  flags.ParseGlobalFlags(cmd, v),
+		Limit:  v.GetInt("limit"),
+		Offset: v.GetInt("offset"),
+		Format: format,
+		Sort:   v.GetString("sort"),
+	}, nil
 }
 
 func listConfiguredRegistries(_ context.Context) error {
@@ -90,36 +146,23 @@ func listConfiguredRegistries(_ context.Context) error {
 
 	// For MVP, show placeholder message.
 	// TODO: Load registries from atmos.yaml configuration.
-	message := `**Configured registries:**
+	message := `**Available registries:**
 
-Registry configuration from atmos.yaml:
+Default built-in registries:
   - aqua-public (aqua, priority: 10)
 
-Use 'atmos toolchain registry list <name>' to see tools in a registry
+Use 'atmos toolchain registry list aqua' to see tools in the Aqua registry.
 `
 	_ = ui.MarkdownMessage(message)
 
 	return nil
 }
 
-func listRegistryTools(ctx context.Context, registryName string) error {
+func listRegistryTools(ctx context.Context, registryName string, opts *ListOptions) error {
 	defer perf.Track(nil, "registry.listRegistryTools")()
 
-	// Get flag values from Viper.
-	v := viper.GetViper()
-	listLimit := v.GetInt("limit")
-	listOffset := v.GetInt("offset")
-	listSort := v.GetString("sort")
-	listFormat := strings.ToLower(v.GetString("format"))
-
-	// Validate format flag.
-	switch listFormat {
-	case "table", "json", "yaml":
-		// Valid formats.
-	default:
-		return fmt.Errorf("%w: format must be one of: table, json, yaml (got: %s)",
-			errUtils.ErrInvalidFlag, listFormat)
-	}
+	// Use pager with proper PagerSelector.
+	pagerEnabled := opts.Pager.IsEnabled()
 
 	// Create registry based on name.
 	// For MVP, only support aqua-public.
@@ -133,9 +176,9 @@ func listRegistryTools(ctx context.Context, registryName string) error {
 
 	// Get tools from registry.
 	tools, err := reg.ListAll(ctx,
-		toolchainregistry.WithListLimit(listLimit),
-		toolchainregistry.WithListOffset(listOffset),
-		toolchainregistry.WithSort(listSort),
+		toolchainregistry.WithListLimit(opts.Limit),
+		toolchainregistry.WithListOffset(opts.Offset),
+		toolchainregistry.WithSort(opts.Sort),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to list tools: %w", err)
@@ -147,55 +190,189 @@ func listRegistryTools(ctx context.Context, registryName string) error {
 	}
 
 	// Output based on format.
-	switch listFormat {
+	switch opts.Format {
 	case "json":
 		return data.WriteJSON(tools)
 	case "yaml":
 		return data.WriteYAML(tools)
 	case "table":
-		// Get metadata for header.
+		// Get metadata for total count.
 		meta, err := reg.GetMetadata(ctx)
-		if err == nil {
-			header := fmt.Sprintf("**Tools in registry '%s'** (showing %d):\n\nType: %s\nSource: %s\n\n",
-				registryName, len(tools), meta.Type, meta.Source)
-			_ = ui.MarkdownMessage(header)
+		if err != nil {
+			return fmt.Errorf("failed to get registry metadata: %w", err)
 		}
 
-		// Display as table.
-		displayToolsTable(tools)
+		// Calculate range being displayed.
+		start := opts.Offset + 1
+		end := opts.Offset + len(tools)
+		total := meta.ToolCount
+
+		// Build header and table output.
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "Showing %d-%d of %d tools from registry '%s' (%s)\n", start, end, total, registryName, meta.Type)
+		fmt.Fprintf(&buf, "Source: %s\n\n", meta.Source)
+
+		// Get table content.
+		tableContent := buildToolsTable(tools)
+		buf.WriteString(tableContent)
+
+		// Add footer with helpful commands.
+		buf.WriteString("\n")
+
+		// Use pager if enabled, otherwise print directly.
+		pageCreator := pager.NewWithAtmosConfig(pagerEnabled)
+		title := fmt.Sprintf("Registry '%s' Tools", registryName)
+		if err := pageCreator.Run(title, buf.String()); err != nil {
+			return fmt.Errorf("failed to display output: %w", err)
+		}
+
+		// Show helpful hints after pager closes (so they're visible).
+		_ = ui.Hintf("Use `atmos toolchain info <tool>` for details")
+		_ = ui.Hintf("Use `atmos toolchain install <tool>@<version>` to install")
+
 		return nil
 	default:
-		// Should never reach here due to validation above.
-		return fmt.Errorf("%w: unsupported format: %s", errUtils.ErrInvalidFlag, listFormat)
+		// Should never reach here due to validation in parseListOptions.
+		return fmt.Errorf("%w: unsupported format: %s", errUtils.ErrInvalidFlag, opts.Format)
 	}
 }
 
-func displayToolsTable(tools []*toolchainregistry.Tool) {
-	defer perf.Track(nil, "registry.displayToolsTable")()
+func buildToolsTable(tools []*toolchainregistry.Tool) string {
+	defer perf.Track(nil, "registry.buildToolsTable")()
 
-	// Create table columns.
-	columns := []table.Column{
-		{Title: "OWNER", Width: columnWidthOwner},
-		{Title: "REPO", Width: columnWidthRepo},
-		{Title: "TYPE", Width: columnWidthType},
+	// Get terminal width.
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width == 0 {
+		width = defaultTerminalWidth
 	}
 
-	// Convert tools to table rows.
-	var rows []table.Row
+	// Load tool versions to check installation status.
+	installer := toolchain.NewInstaller()
+	toolVersionsFile := toolchain.GetToolVersionsFilePath()
+	toolVersions, err := toolchain.LoadToolVersions(toolVersionsFile)
+	if err != nil && !os.IsNotExist(err) {
+		// If there's an error other than file not found, log it but continue.
+		ui.Warningf("Could not load .tool-versions: %v", err)
+	}
+
+	// Build row data with installation status.
+	var rows []toolRow
+	statusWidth := 2 // For dot character.
+	ownerWidth := len("OWNER")
+	repoWidth := len("REPO")
+	typeWidth := len("TYPE")
+
+	// Check each tool's installation and configuration status.
 	for _, tool := range tools {
-		rows = append(rows, table.Row{
-			tool.RepoOwner,
-			tool.RepoName,
-			tool.Type,
+		row := toolRow{
+			owner:    tool.RepoOwner,
+			repo:     tool.RepoName,
+			toolType: tool.Type,
+		}
+
+		// Check if tool is in configuration.
+		if toolVersions != nil && toolVersions.Tools != nil {
+			// Check both full name and repo name as alias.
+			fullName := tool.RepoOwner + "/" + tool.RepoName
+			_, foundFull := toolVersions.Tools[fullName]
+			_, foundRepo := toolVersions.Tools[tool.RepoName]
+			row.isInConfig = foundFull || foundRepo
+
+			// Check if installed (only if in config).
+			if row.isInConfig {
+				// Get the version from tool-versions.
+				var version string
+				if foundFull {
+					versions := toolVersions.Tools[fullName]
+					if len(versions) > 0 {
+						version = versions[0]
+					}
+				} else if foundRepo {
+					versions := toolVersions.Tools[tool.RepoName]
+					if len(versions) > 0 {
+						version = versions[0]
+					}
+				}
+
+				// Check if binary exists.
+				if version != "" {
+					_, err := installer.FindBinaryPath(tool.RepoOwner, tool.RepoName, version, tool.BinaryName)
+					row.isInstalled = err == nil
+				}
+			}
+		}
+
+		// Set status indicator.
+		if row.isInstalled {
+			row.status = "●" // Green dot (will be colored later).
+		} else if row.isInConfig {
+			row.status = "●" // Gray dot (will be colored later).
+		} else {
+			row.status = " " // No indicator.
+		}
+
+		// Update column widths.
+		if len(tool.RepoOwner) > ownerWidth {
+			ownerWidth = len(tool.RepoOwner)
+		}
+		if len(tool.RepoName) > repoWidth {
+			repoWidth = len(tool.RepoName)
+		}
+		if len(tool.Type) > typeWidth {
+			typeWidth = len(tool.Type)
+		}
+
+		rows = append(rows, row)
+	}
+
+	// Add padding.
+	ownerWidth += totalColumnPadding
+	repoWidth += totalColumnPadding
+	typeWidth += totalColumnPadding
+	statusWidth += totalColumnPadding
+
+	// Calculate total width needed.
+	totalNeededWidth := statusWidth + ownerWidth + repoWidth + typeWidth
+
+	// If screen is narrow, truncate columns proportionally.
+	if totalNeededWidth > width {
+		excess := totalNeededWidth - width
+
+		// Truncate proportionally, but keep minimums.
+		ownerReduce := min(excess*3/10, ownerWidth-minColumnWidthOwner)
+		repoReduce := min(excess*5/10, repoWidth-minColumnWidthRepo)
+		typeReduce := min(excess*2/10, typeWidth-minColumnWidthType)
+
+		ownerWidth -= ownerReduce
+		repoWidth -= repoReduce
+		typeWidth -= typeReduce
+	}
+
+	// Create table columns with calculated widths.
+	columns := []table.Column{
+		{Title: " ", Width: statusWidth}, // Status column.
+		{Title: "OWNER", Width: ownerWidth},
+		{Title: "REPO", Width: repoWidth},
+		{Title: "TYPE", Width: typeWidth},
+	}
+
+	// Convert rows to table format.
+	var tableRows []table.Row
+	for _, row := range rows {
+		tableRows = append(tableRows, table.Row{
+			row.status,
+			row.owner,
+			row.repo,
+			row.toolType,
 		})
 	}
 
 	// Create and configure table.
 	t := table.New(
 		table.WithColumns(columns),
-		table.WithRows(rows),
+		table.WithRows(tableRows),
 		table.WithFocused(false),
-		table.WithHeight(len(rows)),
+		table.WithHeight(len(tableRows)),
 	)
 
 	// Apply theme styles.
@@ -205,12 +382,64 @@ func displayToolsTable(tools []*toolchainregistry.Tool) {
 		BorderForeground(lipgloss.Color(theme.ColorBorder)).
 		BorderBottom(true).
 		Bold(true)
+	s.Cell = s.Cell.PaddingLeft(1).PaddingRight(1)
 	s.Selected = s.Cell
 
 	t.SetStyles(s)
 
-	// Print table.
-	_ = data.Writeln(t.View())
+	// Render table and apply conditional styling.
+	return renderListTableWithConditionalStyling(t.View(), rows)
+}
+
+// renderListTableWithConditionalStyling applies color to status indicators and dims non-installed rows.
+func renderListTableWithConditionalStyling(tableView string, rows []toolRow) string {
+	lines := strings.Split(tableView, "\n")
+
+	// Define styles.
+	greenDot := lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Green for installed.
+	grayDot := lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Gray for in config but not installed.
+	grayRow := lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Gray for entire uninstalled row.
+
+	// Apply conditional styling to each row.
+	for i, line := range lines {
+		if i == 0 || i == 1 {
+			// Header and border lines - keep as is.
+			continue
+		}
+
+		// Skip empty lines.
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		// Map line to row data (adjust index for header and border).
+		rowIndex := i - 2
+		if rowIndex >= 0 && rowIndex < len(rows) {
+			rowData := rows[rowIndex]
+
+			// Color the status dot and apply row styling.
+			if rowData.isInstalled {
+				// Replace the dot with a green dot.
+				line = strings.Replace(line, "●", greenDot.Render("●"), 1)
+			} else if rowData.isInConfig {
+				// Replace the dot with a gray dot and gray the entire row.
+				line = strings.Replace(line, "●", grayDot.Render("●"), 1)
+				line = grayRow.Render(line)
+			}
+
+			lines[i] = line
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// min returns the smaller of two integers.
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // ListCommandProvider implements the CommandProvider interface.

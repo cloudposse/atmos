@@ -57,7 +57,7 @@ func findBinaryPath(toolNameFull string) (string, error) {
 		return "", fmt.Errorf("failed to resolve tool '%s': %w", toolName, err)
 	}
 
-	binaryPath := installer.getBinaryPath(owner, repo, version)
+	binaryPath := installer.getBinaryPath(owner, repo, version, "")
 
 	// Check if the binary exists
 	if _, err := os.Stat(binaryPath); err != nil {

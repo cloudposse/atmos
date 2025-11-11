@@ -9,7 +9,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/progress"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -70,7 +69,7 @@ func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Ins
 		}
 		version = actualVersion
 		// Check if the versioned binary exists
-		binaryPath := installer.getBinaryPath(owner, repo, version)
+		binaryPath := installer.getBinaryPath(owner, repo, version, "")
 		if _, statErr := os.Stat(binaryPath); os.IsNotExist(statErr) {
 			// Binary does not exist, but latest file does: delete latest file and return success
 			_ = os.Remove(filepath.Join(installer.binDir, owner, repo, "latest"))
@@ -128,7 +127,7 @@ func RunUninstall(toolSpec string) error {
 		}
 		version = actualVersion
 		// Check if the versioned binary exists
-		binaryPath := installer.getBinaryPath(owner, repo, version)
+		binaryPath := installer.getBinaryPath(owner, repo, version, "")
 		if _, statErr := os.Stat(binaryPath); os.IsNotExist(statErr) {
 			// Binary does not exist, but latest file does: delete latest file and return success
 			_ = os.Remove(filepath.Join(installer.binDir, owner, repo, "latest"))
@@ -239,7 +238,8 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 
 	spinner := bspinner.New()
 	spinner.Spinner = bspinner.Dot
-	spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	styles := theme.GetCurrentStyles()
+	spinner.Style = styles.Spinner
 	progressBar := progress.New(progress.WithDefaultGradient())
 
 	// Collect installed tools

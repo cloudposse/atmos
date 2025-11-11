@@ -63,33 +63,40 @@ func getFormatter() (*formatter, error) {
 
 // Toast writes a toast notification with a custom icon and message to stderr (UI channel).
 // This is the primary pattern for toast-style notifications with flexible icon support.
-// Flow: ui.Toast() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// Supports simple inline markdown for bold (**text**) and code (`text`).
+// Flow: ui.Toast() → inline markdown render → terminal.Write() → io.Write(UIStream) → masking → stderr.
 //
 // Parameters:
 //   - icon: Custom icon/emoji (e.g., "📦", "🔧", "✓", or use theme.Styles.Checkmark.String())
-//   - message: The message text
+//   - message: The message text (may contain **bold** or `code`)
 //
 // Example usage:
 //
 //	ui.Toast("📦", "Using latest version: 1.2.3")
 //	ui.Toast("🔧", "Tool not installed")
 //	ui.Toast(theme.Styles.Checkmark.String(), "Deployment complete")
+//	ui.Toast("ℹ", "Found **20** tools matching `terraform`")
 func Toast(icon, message string) error {
 	f, err := getFormatter()
 	if err != nil {
 		return err
 	}
-	formatted := fmt.Sprintf("%s %s", icon, message) + newline
+
+	// Render inline markdown (bold and code) if present.
+	rendered := f.renderInlineMarkdown(message)
+
+	formatted := fmt.Sprintf("%s %s", icon, rendered) + newline
 	return f.terminal.Write(formatted)
 }
 
 // Toastf writes a formatted toast notification with a custom icon to stderr (UI channel).
 // This is the primary pattern for formatted toast-style notifications with flexible icon support.
-// Flow: ui.Toastf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// Supports simple inline markdown for bold (**text**) and code (`text`).
+// Flow: ui.Toastf() → inline markdown render → terminal.Write() → io.Write(UIStream) → masking → stderr.
 //
 // Parameters:
 //   - icon: Custom icon/emoji (e.g., "📦", "🔧", "✓", or use theme.Styles.Checkmark.String())
-//   - format: Printf-style format string
+//   - format: Printf-style format string (may contain **bold** or `code`)
 //   - a: Format arguments
 //
 // Example usage:
@@ -97,6 +104,7 @@ func Toast(icon, message string) error {
 //	ui.Toastf("📦", "Using latest version: %s", version)
 //	ui.Toastf("🔧", "Tool %s is not installed", toolName)
 //	ui.Toastf(theme.Styles.Checkmark.String(), "Installed %s/%s@%s", owner, repo, version)
+//	ui.Toastf("ℹ", "Showing **%d-%d** of **%d** tools matching `%s`:", 1, 20, 125, "cli")
 func Toastf(icon, format string, a ...interface{}) error {
 	message := fmt.Sprintf(format, a...)
 	return Toast(icon, message)
@@ -163,10 +171,9 @@ func Success(text string) error {
 	if err != nil {
 		return err
 	}
-	// Delegate to Toast with themed icon and styled text
-	icon := "✓"
-	styledText := f.styles.Success.Render(text)
-	return Toast(icon, styledText)
+	// Style only the checkmark, not the text
+	styledIcon := f.styles.Success.Render("✓")
+	return Toast(styledIcon, text)
 }
 
 // Successf writes a formatted success message with green checkmark to stderr (UI channel).
@@ -177,11 +184,10 @@ func Successf(format string, a ...interface{}) error {
 	if err != nil {
 		return err
 	}
-	// Delegate to Toastf with themed icon and styled text
-	icon := "✓"
+	// Style only the checkmark, not the text
+	styledIcon := f.styles.Success.Render("✓")
 	message := fmt.Sprintf(format, a...)
-	styledText := f.styles.Success.Render(message)
-	return Toast(icon, styledText)
+	return Toast(styledIcon, message)
 }
 
 // Error writes an error message with red X to stderr (UI channel).
@@ -192,10 +198,9 @@ func Error(text string) error {
 	if err != nil {
 		return err
 	}
-	// Delegate to Toast with themed icon and styled text
-	icon := "✗"
-	styledText := f.styles.Error.Render(text)
-	return Toast(icon, styledText)
+	// Style only the icon, not the text
+	styledIcon := f.styles.Error.Render("✗")
+	return Toast(styledIcon, text)
 }
 
 // Errorf writes a formatted error message with red X to stderr (UI channel).
@@ -206,11 +211,10 @@ func Errorf(format string, a ...interface{}) error {
 	if err != nil {
 		return err
 	}
-	// Delegate to Toastf with themed icon and styled text
-	icon := "✗"
+	// Style only the icon, not the text
+	styledIcon := f.styles.Error.Render("✗")
 	message := fmt.Sprintf(format, a...)
-	styledText := f.styles.Error.Render(message)
-	return Toast(icon, styledText)
+	return Toast(styledIcon, message)
 }
 
 // Warning writes a warning message with yellow warning sign to stderr (UI channel).
@@ -221,10 +225,9 @@ func Warning(text string) error {
 	if err != nil {
 		return err
 	}
-	// Delegate to Toast with themed icon and styled text
-	icon := "⚠"
-	styledText := f.styles.Warning.Render(text)
-	return Toast(icon, styledText)
+	// Style only the icon, not the text
+	styledIcon := f.styles.Warning.Render("⚠")
+	return Toast(styledIcon, text)
 }
 
 // Warningf writes a formatted warning message with yellow warning sign to stderr (UI channel).
@@ -235,11 +238,10 @@ func Warningf(format string, a ...interface{}) error {
 	if err != nil {
 		return err
 	}
-	// Delegate to Toastf with themed icon and styled text
-	icon := "⚠"
+	// Style only the icon, not the text
+	styledIcon := f.styles.Warning.Render("⚠")
 	message := fmt.Sprintf(format, a...)
-	styledText := f.styles.Warning.Render(message)
-	return Toast(icon, styledText)
+	return Toast(styledIcon, message)
 }
 
 // Info writes an info message with cyan info icon to stderr (UI channel).
@@ -250,25 +252,61 @@ func Info(text string) error {
 	if err != nil {
 		return err
 	}
-	// Delegate to Toast with themed icon and styled text
-	icon := "ℹ"
-	styledText := f.styles.Info.Render(text)
-	return Toast(icon, styledText)
+	// Style only the icon, not the text
+	styledIcon := f.styles.Info.Render("ℹ")
+	return Toast(styledIcon, text)
 }
 
 // Infof writes a formatted info message with cyan info icon to stderr (UI channel).
 // This is a convenience wrapper around Toastf() with themed info icon and color.
+// Supports inline markdown for bold (**text**) and code (`text`).
 // Flow: ui.Infof() → ui.Toastf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Infof(format string, a ...interface{}) error {
 	f, err := getFormatter()
 	if err != nil {
 		return err
 	}
-	// Delegate to Toastf with themed icon and styled text
-	icon := "ℹ"
+	// Style only the icon, not the text
+	styledIcon := f.styles.Info.Render("ℹ")
 	message := fmt.Sprintf(format, a...)
-	styledText := f.styles.Info.Render(message)
+	return Toast(styledIcon, message)
+}
+
+// Hint writes a hint/tip message with lightbulb icon to stderr (UI channel).
+// This is a convenience wrapper around Toast() for helpful tips and suggestions.
+// Flow: ui.Hint() → ui.Toast() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Hint(text string) error {
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
+	// Delegate to Toast with lightbulb icon and muted text
+	icon := "💡"
+	styledText := f.styles.Muted.Render(text)
 	return Toast(icon, styledText)
+}
+
+// Hintf writes a formatted hint/tip message with lightbulb icon to stderr (UI channel).
+// This is a convenience wrapper around Toast() for helpful tips and suggestions.
+// Supports inline markdown for bold (**text**) and code (`text`).
+// Flow: ui.Hintf() → inline markdown render → apply muted color → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Hintf(format string, a ...interface{}) error {
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
+
+	message := fmt.Sprintf(format, a...)
+
+	// Render inline markdown first.
+	rendered := f.renderInlineMarkdown(message)
+
+	// Then apply muted color to the result.
+	styledText := f.styles.Muted.Render(rendered)
+
+	// Write with icon (no further markdown processing).
+	formatted := fmt.Sprintf("💡 %s", styledText) + newline
+	return f.terminal.Write(formatted)
 }
 
 // Write writes plain text to stderr (UI channel) without icons or automatic styling.
@@ -379,6 +417,14 @@ func (f *formatter) Infof(format string, a ...interface{}) string {
 	return f.Info(fmt.Sprintf(format, a...))
 }
 
+func (f *formatter) Hint(text string) string {
+	return f.StatusMessage("💡", &f.styles.Muted, text)
+}
+
+func (f *formatter) Hintf(format string, a ...interface{}) string {
+	return f.Hint(fmt.Sprintf(format, a...))
+}
+
 func (f *formatter) Muted(text string) string {
 	if !f.SupportsColor() {
 		return text
@@ -462,4 +508,65 @@ func (f *formatter) Markdown(content string) (string, error) {
 	}
 
 	return strings.Join(lines, "\n"), nil
+}
+
+// renderInlineMarkdown renders simple inline markdown (**bold** and `code`) using lipgloss.
+// This is designed for single-line toast messages where full markdown rendering is overkill.
+// Falls back to plain text if no color support.
+func (f *formatter) renderInlineMarkdown(text string) string {
+	// If no color support, strip markdown and return plain text.
+	if !f.SupportsColor() {
+		// Strip **bold**.
+		text = strings.ReplaceAll(text, "**", "")
+		// Strip `code`.
+		text = strings.ReplaceAll(text, "`", "")
+		return text
+	}
+
+	// Process **bold** markers.
+	boldStyle := lipgloss.NewStyle().Bold(true)
+	result := text
+
+	// Replace **text** with bold styling.
+	for {
+		start := strings.Index(result, "**")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(result[start+2:], "**")
+		if end == -1 {
+			break
+		}
+		end += start + 2
+
+		// Extract the text between markers.
+		boldText := result[start+2 : end]
+		styledText := boldStyle.Render(boldText)
+
+		// Replace in result.
+		result = result[:start] + styledText + result[end+2:]
+	}
+
+	// Process `code` markers.
+	codeStyle := f.styles.Help.Code
+	for {
+		start := strings.Index(result, "`")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(result[start+1:], "`")
+		if end == -1 {
+			break
+		}
+		end += start + 1
+
+		// Extract the text between markers.
+		codeText := result[start+1 : end]
+		styledText := codeStyle.Render(codeText)
+
+		// Replace in result.
+		result = result[:start] + styledText + result[end+1:]
+	}
+
+	return result
 }

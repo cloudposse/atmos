@@ -165,8 +165,8 @@ func TestListConfiguredRegistries(t *testing.T) {
 	assert.NoError(t, err, "listConfiguredRegistries should not return error")
 }
 
-// TestDisplayToolsTable tests displayToolsTable function with various inputs.
-func TestDisplayToolsTable(t *testing.T) {
+// TestBuildToolsTable tests buildToolsTable function with various inputs.
+func TestBuildToolsTable(t *testing.T) {
 	tests := []struct {
 		name  string
 		tools []*toolchainregistry.Tool
@@ -206,8 +206,8 @@ func TestDisplayToolsTable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// This function just outputs UI - test that it doesn't panic.
 			assert.NotPanics(t, func() {
-				displayToolsTable(tt.tools)
-			}, "displayToolsTable should not panic")
+				buildToolsTable(tt.tools)
+			}, "buildToolsTable should not panic")
 		})
 	}
 }

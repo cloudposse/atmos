@@ -148,7 +148,7 @@ func (i *Installer) findTool(owner, repo, version string) (*registry.Tool, error
 
 	// Search through all registries
 	for _, registry := range i.registries {
-		tool, err := i.searchRegistry(registry, owner, repo)
+		tool, err := i.searchRegistry(registry, owner, repo, version)
 		if err == nil {
 			return tool, nil
 		}
@@ -158,12 +158,13 @@ func (i *Installer) findTool(owner, repo, version string) (*registry.Tool, error
 }
 
 // searchRegistry searches a specific registry for a tool.
-func (i *Installer) searchRegistry(registry, owner, repo string) (*registry.Tool, error) {
+// version is required to apply version-specific overrides from the registry.
+func (i *Installer) searchRegistry(registry, owner, repo, version string) (*registry.Tool, error) {
 	// Try to fetch from Aqua registry for remote registries
 	if strings.HasPrefix(registry, "http") {
 		// Use the Aqua registry implementation
 		ar := NewAquaRegistry()
-		tool, err := ar.GetTool(owner, repo)
+		tool, err := ar.GetToolWithVersion(owner, repo, version)
 		if err != nil {
 			return nil, err
 		}
@@ -245,12 +246,14 @@ func (i *Installer) buildAssetURL(tool *registry.Tool, version string) (string, 
 			Arch      string
 			RepoOwner string
 			RepoName  string
+			Format    string
 		}{
 			Version:   versionForAsset,
 			OS:        runtime.GOOS,
 			Arch:      runtime.GOARCH,
 			RepoOwner: tool.RepoOwner,
 			RepoName:  tool.RepoName,
+			Format:    tool.Format,
 		}
 
 		// Register custom template functions
@@ -305,12 +308,14 @@ func (i *Installer) buildAssetURL(tool *registry.Tool, version string) (string, 
 			Arch      string
 			RepoOwner string
 			RepoName  string
+			Format    string
 		}{
 			Version:   versionForAsset,
 			OS:        runtime.GOOS,
 			Arch:      runtime.GOARCH,
 			RepoOwner: tool.RepoOwner,
 			RepoName:  tool.RepoName,
+			Format:    tool.Format,
 		}
 
 		// Register custom template functions
@@ -431,7 +436,7 @@ func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, versio
 	if buildErr != nil {
 		return "", fmt.Errorf("%w: %w", ErrInvalidToolSpec, buildErr)
 	}
-	log.Warn("Asset 404, trying fallback version", "original", assetURL, "fallback", fallbackURL)
+	log.Debug("Asset 404, trying fallback version", "original", assetURL, "fallback", fallbackURL)
 	assetPath, err = i.downloadAsset(fallbackURL)
 	if err == nil {
 		return assetPath, nil
@@ -897,11 +902,37 @@ func (i *Installer) copyFile(src, dst string) error {
 }
 
 // getBinaryPath returns the path to a specific version of a binary.
-func (i *Installer) getBinaryPath(owner, repo, version string) string {
-	// Determine the binary name (use repo name as default)
-	binaryName := repo
+// If binaryName is provided and non-empty, it will be used directly.
+// Otherwise, it will search the version directory for an executable file,
+// falling back to using the repo name as the binary name.
+func (i *Installer) getBinaryPath(owner, repo, version, binaryName string) string {
+	versionDir := filepath.Join(i.binDir, owner, repo, version)
 
-	return filepath.Join(i.binDir, owner, repo, version, binaryName)
+	// If binary name is explicitly provided, use it directly.
+	if binaryName != "" {
+		return filepath.Join(versionDir, binaryName)
+	}
+
+	// Try to find the actual binary in the version directory.
+	// Some tools have different binary names than the repo name (e.g., opentofu -> tofu).
+	entries, err := os.ReadDir(versionDir)
+	if err == nil && len(entries) > 0 {
+		// Look for an executable file.
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			entryPath := filepath.Join(versionDir, entry.Name())
+			info, err := os.Stat(entryPath)
+			if err == nil && info.Mode()&0111 != 0 {
+				// Found an executable.
+				return entryPath
+			}
+		}
+	}
+
+	// Fallback: use repo name as binary name.
+	return filepath.Join(versionDir, repo)
 }
 
 // Uninstall removes a previously installed tool.
@@ -948,7 +979,8 @@ func (i *Installer) Uninstall(owner, repo, version string) error {
 }
 
 // FindBinaryPath searches for a binary with the given owner, repo, and version.
-func (i *Installer) FindBinaryPath(owner, repo, version string) (string, error) {
+// The binaryName parameter is optional - pass empty string to auto-detect.
+func (i *Installer) FindBinaryPath(owner, repo, version string, binaryName ...string) (string, error) {
 	defer perf.Track(nil, "toolchain.installBinaryFromGitHub")()
 
 	// Handle "latest" keyword
@@ -960,17 +992,26 @@ func (i *Installer) FindBinaryPath(owner, repo, version string) (string, error) 
 		version = actualVersion
 	}
 
+	// Extract binary name from variadic parameter.
+	name := ""
+	if len(binaryName) > 0 && binaryName[0] != "" {
+		name = binaryName[0]
+	}
+
 	// Try the expected path first (binDir/owner/repo/version/binaryName)
-	expectedPath := i.getBinaryPath(owner, repo, version)
+	expectedPath := i.getBinaryPath(owner, repo, version, name)
 	if _, err := os.Stat(expectedPath); err == nil {
 		return expectedPath, nil
 	}
 
 	// Try the alternative path structure (binDir/version/binaryName) that was used in some installations
-	// Determine the binary name (use repo name as default)
-	binaryName := repo
+	// Determine the binary name (use repo name as default if not provided)
+	fallbackName := repo
+	if name != "" {
+		fallbackName = name
+	}
 
-	alternativePath := filepath.Join(i.binDir, version, binaryName)
+	alternativePath := filepath.Join(i.binDir, version, fallbackName)
 	if _, err := os.Stat(alternativePath); err == nil {
 		return alternativePath, nil
 	}
@@ -1029,6 +1070,7 @@ func searchRegistryForTool(toolName string) (string, string, error) {
 	commonPaths := []string{
 		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/%s/%s/registry.yaml", toolName, toolName),
 		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/hashicorp/%s/registry.yaml", toolName),
+		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/cloudposse/%s/registry.yaml", toolName),
 		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/kubernetes/kubernetes/%s/registry.yaml", toolName),
 		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/helm/%s/registry.yaml", toolName),
 		fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/opentofu/%s/registry.yaml", toolName),

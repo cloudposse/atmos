@@ -1,0 +1,243 @@
+---
+title: atmos toolchain registry list
+sidebar_label: registry list
+sidebar_class_name: command
+id: registry-list
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+List all configured registries or browse all tools available in a specific registry. View installation status, registry metadata, and discover new tools for your infrastructure workflows.
+</Intro>
+
+<Screengrab title="atmos toolchain registry list --help" slug="atmos-toolchain-registry-list--help" />
+
+## Usage
+
+### List All Registries
+
+```shell
+atmos toolchain registry list
+```
+
+Shows all configured registries with their names, types, and tool counts.
+
+### List Tools in a Registry
+
+```shell
+atmos toolchain registry list <registry-name>
+```
+
+Displays all tools available in the specified registry with installation status indicators.
+
+## Examples
+
+### List Configured Registries
+
+```shell
+atmos toolchain registry list
+```
+
+Output:
+```
+Available registries:
+
+Default built-in registries:
+  - aqua-public (aqua, priority: 10)
+
+Use 'atmos toolchain registry list aqua' to see tools in the Aqua registry.
+```
+
+### Browse Aqua Registry Tools
+
+```shell
+atmos toolchain registry list aqua
+```
+
+Shows a paginated table of all tools in the Aqua registry with installation status:
+- Green dot (●) = Tool is installed
+- Gray dot (●) = Tool is in `.tool-versions` but not installed
+- No indicator = Tool is available but not configured
+
+### List with Pagination
+
+```shell
+# Show first 20 tools
+atmos toolchain registry list aqua --limit 20
+
+# Skip first 50 tools, show next 25
+atmos toolchain registry list aqua --offset 50 --limit 25
+```
+
+### Output as JSON or YAML
+
+```shell
+# JSON output for scripting
+atmos toolchain registry list aqua --format json
+
+# YAML output
+atmos toolchain registry list aqua --format yaml
+```
+
+### Sort Results
+
+```shell
+# Sort by name (default)
+atmos toolchain registry list aqua --sort name
+
+# Sort by date (if supported by registry)
+atmos toolchain registry list aqua --sort date
+
+# Sort by popularity (if supported by registry)
+atmos toolchain registry list aqua --sort popularity
+```
+
+## Arguments
+
+<dl>
+    <dt>`registry-name` <em>(optional)</em></dt>
+    <dd>
+        Name of the registry to list tools from. If omitted, lists all configured registries.
+
+        Supported values:
+        - `aqua` or `aqua-public` - Official Aqua registry
+        - Custom registry names from `atmos.yaml` configuration
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--limit` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of tools to display. Default: `50`
+
+        Environment variable: `ATMOS_TOOLCHAIN_LIMIT`
+    </dd>
+
+    <dt>`--offset` <em>(optional)</em></dt>
+    <dd>
+        Skip first N tools (for pagination). Default: `0`
+
+        Environment variable: `ATMOS_TOOLCHAIN_OFFSET`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format. Options: `table`, `json`, `yaml`. Default: `table`
+
+        Environment variable: `ATMOS_TOOLCHAIN_FORMAT`
+    </dd>
+
+    <dt>`--sort` <em>(optional)</em></dt>
+    <dd>
+        Sort order. Options: `name`, `date`, `popularity`. Default: `name`
+
+        Environment variable: `ATMOS_TOOLCHAIN_SORT`
+    </dd>
+
+    <dt>`--pager` / `--no-pager` <em>(optional)</em></dt>
+    <dd>
+        Enable or disable pagination using a pager (less-like viewer). When enabled, long output is displayed in a scrollable interface.
+
+        Default: enabled for table output, disabled for JSON/YAML
+    </dd>
+</dl>
+
+## Installation Status Indicators
+
+The table output shows visual indicators for each tool's status:
+
+| Indicator | Meaning | Example |
+|-----------|---------|---------|
+| Green dot (●) | Tool is installed and ready to use | `● hashicorp terraform` |
+| Gray dot (●) | Tool is in `.tool-versions` but not installed yet | `● opentofu opentofu` |
+| No indicator | Tool is available but not configured | `kubernetes-sigs kubectl` |
+
+To install a tool shown in the list:
+
+```shell
+# Install specific version
+atmos toolchain install <owner/repo>@<version>
+
+# Add to .tool-versions and install
+atmos toolchain add <owner/repo>@<version>
+```
+
+## Use Cases
+
+### Explore Available Tools
+
+Browse the Aqua registry to discover infrastructure tools:
+
+```shell
+atmos toolchain registry list aqua --limit 100
+```
+
+Scroll through 1,000+ tools including terraform, kubectl, helm, aws-cli, and more.
+
+### Check What's Installed
+
+See which registry tools you already have installed:
+
+```shell
+atmos toolchain registry list aqua | grep "●"
+```
+
+Green dots indicate installed tools, gray dots show tools in your config.
+
+### Export Tool List for CI/CD
+
+Generate a machine-readable list of available tools:
+
+```shell
+atmos toolchain registry list aqua --format json > available-tools.json
+```
+
+Use this in scripts to validate tool availability or generate reports.
+
+### Paginate Through Results
+
+Work with large registries using pagination:
+
+```shell
+# View tools 1-50
+atmos toolchain registry list aqua --limit 50
+
+# View tools 51-100
+atmos toolchain registry list aqua --offset 50 --limit 50
+
+# View tools 101-150
+atmos toolchain registry list aqua --offset 100 --limit 50
+```
+
+## Registry Metadata
+
+When listing tools from a registry, the command displays helpful metadata:
+
+```
+Showing 1-50 of 1,234 tools from registry 'aqua-public' (aqua)
+Source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+```
+
+This includes:
+- **Range** - Which tools are currently displayed (e.g., 1-50 of 1,234)
+- **Total count** - Total number of tools in the registry
+- **Registry name** - The registry being queried
+- **Registry type** - Type of registry (aqua, custom, etc.)
+- **Source** - Where the registry data comes from
+
+## Related Commands
+
+- [`atmos toolchain registry search`](/cli/commands/toolchain/toolchain-registry-search) - Search for specific tools
+- [`atmos toolchain install`](/cli/commands/toolchain/toolchain-install) - Install tools from registry
+- [`atmos toolchain info`](/cli/commands/toolchain/toolchain-info) - View detailed tool information
+- [`atmos toolchain list`](/cli/commands/toolchain/toolchain-list) - List installed tools
+
+## Related Documentation
+
+- [Toolchain Registry Overview](/cli/commands/toolchain/toolchain-registry) - Registry concepts and configuration
+- [Custom Registries](/cli/commands/toolchain/usage#custom-registries) - Configure multiple registries
+- [Aqua Registry](https://github.com/aquaproj/aqua-registry) - Browse the official Aqua registry online

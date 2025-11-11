@@ -138,7 +138,7 @@ func TestWhichCommand_ToolConfiguredAndInstalled(t *testing.T) {
 	// The which command uses NewInstaller() which has binDir = filepath.Join(GetInstallPath(), "bin")
 	// So we need to create the binary in ./.tools/bin/hashicorp/terraform/1.11.4/terraform
 	installer := NewInstaller()
-	binaryPath := installer.getBinaryPath("hashicorp", "terraform", "1.11.4")
+	binaryPath := installer.getBinaryPath("hashicorp", "terraform", "1.11.4", "")
 	err = os.MkdirAll(filepath.Dir(binaryPath), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = os.WriteFile(binaryPath, []byte("mock terraform"), defaultMkdirPermissions)
@@ -182,7 +182,7 @@ func TestWhichCommand_CanonicalName(t *testing.T) {
 
 	// Create mock installed binary
 	installer := NewInstaller()
-	binaryPath := installer.getBinaryPath("hashicorp", "terraform", "1.5.7")
+	binaryPath := installer.getBinaryPath("hashicorp", "terraform", "1.5.7", "")
 	err = os.MkdirAll(filepath.Dir(binaryPath), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = os.WriteFile(binaryPath, []byte("mock terraform"), defaultMkdirPermissions)
@@ -211,7 +211,7 @@ func TestWhichCommand_WithVersionSpecifier(t *testing.T) {
 
 	// Create mock installed binary for specific version
 	installer := NewInstaller()
-	binaryPath := installer.getBinaryPath("hashicorp", "terraform", "1.5.7")
+	binaryPath := installer.getBinaryPath("hashicorp", "terraform", "1.5.7", "")
 	err = os.MkdirAll(filepath.Dir(binaryPath), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = os.WriteFile(binaryPath, []byte("mock terraform"), defaultMkdirPermissions)

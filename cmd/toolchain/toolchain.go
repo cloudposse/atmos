@@ -50,18 +50,29 @@ var toolchainCmd = &cobra.Command{
 			return err
 		}
 
-		// Initialize the toolchain package with the Atmos configuration.
-		// This ensures that the toolchain package has access to the configuration.
-		atmosCfg := &schema.AtmosConfiguration{
-			Toolchain: schema.Toolchain{
-				VersionsFile:    v.GetString("toolchain.tool-versions"),
-				InstallPath:     v.GetString("toolchain.tools-dir"),
-				ToolsDir:        v.GetString("toolchain.tools-dir"),
-				ToolsConfigFile: v.GetString("toolchain.tools-config"),
-			},
+		// Update the toolchain configuration with flag/env overrides only.
+		// Get the existing config (set by root.go Execute()) to preserve all settings.
+		atmosCfg := toolchainpkg.GetAtmosConfig()
+		if atmosCfg == nil {
+			// Fallback: create new config if not initialized (shouldn't happen in normal flow).
+			atmosCfg = &schema.AtmosConfiguration{}
 		}
 
-		// Call the toolchain package's SetAtmosConfig.
+		// Apply overrides for fields that were explicitly set via CLI flags or environment variables.
+		// This preserves important config like UseToolVersions, UseLockFile, and Registries
+		// from atmos.yaml that was already loaded in root.go Execute().
+		//
+		// We apply values from viper (which has precedence: flag > env > config > default)
+		// unconditionally because:
+		// 1. The config from root.go already has values from atmos.yaml
+		// 2. If viper returns a different value, it's because of a flag or env var override
+		// 3. If viper returns the same value, we're just setting it to itself (no-op)
+		atmosCfg.Toolchain.VersionsFile = v.GetString("toolchain.tool-versions")
+		atmosCfg.Toolchain.InstallPath = v.GetString("toolchain.path")
+		atmosCfg.Toolchain.ToolsDir = v.GetString("toolchain.path")
+		atmosCfg.Toolchain.ToolsConfigFile = v.GetString("toolchain.tools-config")
+
+		// Update the toolchain package's config (no-op if we got it from there).
 		toolchainpkg.SetAtmosConfig(atmosCfg)
 
 		return nil
@@ -77,11 +88,11 @@ func init() {
 	toolchainParser = flags.NewStandardParser(
 		flags.WithStringFlag("github-token", "", "", "GitHub token for authenticated requests"),
 		flags.WithStringFlag("tool-versions", "", ".tool-versions", "Path to tool-versions file"),
-		flags.WithStringFlag("tools-dir", "", ".tools", "Directory to store installed tools"),
+		flags.WithStringFlag("toolchain-path", "", ".tools", "Directory to store installed tools"),
 		flags.WithStringFlag("tools-config", "", "tools.yaml", "Path to tools configuration file"),
 		flags.WithEnvVars("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"),
 		flags.WithEnvVars("tool-versions", "ATMOS_TOOL_VERSIONS"),
-		flags.WithEnvVars("tools-dir", "ATMOS_TOOLS_DIR"),
+		flags.WithEnvVars("toolchain-path", "ATMOS_TOOLCHAIN_PATH"),
 		flags.WithEnvVars("tools-config", "ATMOS_TOOLS_CONFIG"),
 	)
 
@@ -102,7 +113,7 @@ func init() {
 	if err := v.BindPFlag("toolchain.tool-versions", toolchainCmd.PersistentFlags().Lookup("tool-versions")); err != nil {
 		panic(err)
 	}
-	if err := v.BindPFlag("toolchain.tools-dir", toolchainCmd.PersistentFlags().Lookup("tools-dir")); err != nil {
+	if err := v.BindPFlag("toolchain.path", toolchainCmd.PersistentFlags().Lookup("toolchain-path")); err != nil {
 		panic(err)
 	}
 	if err := v.BindPFlag("toolchain.tools-config", toolchainCmd.PersistentFlags().Lookup("tools-config")); err != nil {
@@ -112,6 +123,8 @@ func init() {
 	// Add all subcommands.
 	toolchainCmd.AddCommand(addCmd)
 	toolchainCmd.AddCommand(cleanCmd)
+	toolchainCmd.AddCommand(duCmd)
+	toolchainCmd.AddCommand(envCmd)
 	toolchainCmd.AddCommand(execCmd)
 	toolchainCmd.AddCommand(getCmd)
 	toolchainCmd.AddCommand(infoCmd)

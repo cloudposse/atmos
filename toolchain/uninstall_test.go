@@ -24,7 +24,7 @@ func TestUninstallCleansUpLatestFile_Present(t *testing.T) {
 		actualVersion := "1.9.8"
 
 		// Simulate install: create versioned binary and latest file
-		binaryPath := installer.getBinaryPath(owner, repo, actualVersion)
+		binaryPath := installer.getBinaryPath(owner, repo, actualVersion, "")
 		versionDir := filepath.Dir(binaryPath)
 		err := os.MkdirAll(versionDir, defaultMkdirPermissions)
 		require.NoError(t, err)
@@ -153,20 +153,20 @@ func TestUninstallWithNoArgs(t *testing.T) {
 	installer.binDir = tempDir
 
 	// Create terraform binaries
-	terraformPath1 := installer.getBinaryPath("hashicorp", "terraform", "1.11.4")
+	terraformPath1 := installer.getBinaryPath("hashicorp", "terraform", "1.11.4", "")
 	err = os.MkdirAll(filepath.Dir(terraformPath1), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = os.WriteFile(terraformPath1, []byte("mock terraform 1.11.4"), defaultMkdirPermissions)
 	require.NoError(t, err)
 
-	terraformPath2 := installer.getBinaryPath("hashicorp", "terraform", "1.9.8")
+	terraformPath2 := installer.getBinaryPath("hashicorp", "terraform", "1.9.8", "")
 	err = os.MkdirAll(filepath.Dir(terraformPath2), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = os.WriteFile(terraformPath2, []byte("mock terraform 1.9.8"), defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	// Create helm binary
-	helmPath := installer.getBinaryPath("helm", "helm", "3.17.4")
+	helmPath := installer.getBinaryPath("helm", "helm", "3.17.4", "")
 	err = os.MkdirAll(filepath.Dir(helmPath), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = os.WriteFile(helmPath, []byte("mock helm 3.17.4"), defaultMkdirPermissions)
@@ -216,14 +216,14 @@ func TestRunUninstallWithNoArgs(t *testing.T) {
 	installer.binDir = tempDir
 
 	// Create terraform binary
-	terraformPath := installer.getBinaryPath("hashicorp", "terraform", "1.11.4")
+	terraformPath := installer.getBinaryPath("hashicorp", "terraform", "1.11.4", "")
 	err = os.MkdirAll(filepath.Dir(terraformPath), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = os.WriteFile(terraformPath, []byte("mock terraform 1.11.4"), defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	// Create helm binary
-	helmPath := installer.getBinaryPath("helm", "helm", "3.17.4")
+	helmPath := installer.getBinaryPath("helm", "helm", "3.17.4", "")
 	err = os.MkdirAll(filepath.Dir(helmPath), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = os.WriteFile(helmPath, []byte("mock helm 3.17.4"), defaultMkdirPermissions)

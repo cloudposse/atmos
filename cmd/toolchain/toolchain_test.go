@@ -69,16 +69,16 @@ func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 
 	// Save previous viper settings for cleanup
 	prevToolVersions := viper.Get("toolchain.tool-versions")
-	prevToolsDir := viper.Get("toolchain.tools-dir")
+	prevToolsDir := viper.Get("toolchain.path")
 	prevToolsConfig := viper.Get("toolchain.tools-config")
 
 	viper.Set("toolchain.tool-versions", toolVersionsPath)
-	viper.Set("toolchain.tools-dir", toolsDir)
+	viper.Set("toolchain.path", toolsDir)
 	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	t.Cleanup(func() {
 		viper.Set("toolchain.tool-versions", prevToolVersions)
-		viper.Set("toolchain.tools-dir", prevToolsDir)
+		viper.Set("toolchain.path", prevToolsDir)
 		viper.Set("toolchain.tools-config", prevToolsConfig)
 	})
 
@@ -134,7 +134,7 @@ func TestToolchainCommandsWithoutToolVersionsFile(t *testing.T) {
 
 	// Set paths to non-existent files via Viper.
 	viper.Set("toolchain.tool-versions", filepath.Join(tempDir, ".tool-versions"))
-	viper.Set("toolchain.tools-dir", filepath.Join(tempDir, ".tools"))
+	viper.Set("toolchain.path", filepath.Join(tempDir, ".tools"))
 	viper.Set("toolchain.tools-config", filepath.Join(tempDir, "tools.yaml"))
 
 	// Test that list command handles missing file gracefully.
@@ -166,7 +166,7 @@ func TestToolchainCleanCommand(t *testing.T) {
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
 	toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
 	viper.Set("toolchain.tool-versions", toolVersionsPath)
-	viper.Set("toolchain.tools-dir", toolsDirPath)
+	viper.Set("toolchain.path", toolsDirPath)
 	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
@@ -218,7 +218,7 @@ func TestToolchainPathCommand(t *testing.T) {
 
 	// Set the flags.
 	viper.Set("toolchain.tool-versions", toolVersionsPath)
-	viper.Set("toolchain.tools-dir", toolsDirPath)
+	viper.Set("toolchain.path", toolsDirPath)
 	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
@@ -269,7 +269,7 @@ func TestToolchainWhichCommand(t *testing.T) {
 
 	// Set the flags.
 	viper.Set("toolchain.tool-versions", toolVersionsPath)
-	viper.Set("toolchain.tools-dir", toolsDirPath)
+	viper.Set("toolchain.path", toolsDirPath)
 	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
@@ -313,7 +313,7 @@ func TestToolchainSetCommand(t *testing.T) {
 	// Set the flags.
 	toolsDirPath := filepath.Join(tempDir, ".tools")
 	viper.Set("toolchain.tool-versions", toolVersionsPath)
-	viper.Set("toolchain.tools-dir", toolsDirPath)
+	viper.Set("toolchain.path", toolsDirPath)
 	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
@@ -369,7 +369,7 @@ func TestToolchainUninstallCommand(t *testing.T) {
 
 	// Set the flags.
 	viper.Set("toolchain.tool-versions", toolVersionsPath)
-	viper.Set("toolchain.tools-dir", toolsDirPath)
+	viper.Set("toolchain.path", toolsDirPath)
 	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
@@ -406,6 +406,75 @@ func TestSetAtmosConfig(t *testing.T) {
 	assert.NotPanics(t, func() {
 		SetAtmosConfig(atmosCfg)
 	}, "SetAtmosConfig should not panic")
+}
+
+// TestToolchainPersistentPreRunPreservesConfig verifies that PersistentPreRunE
+// preserves important config fields like UseToolVersions, UseLockFile, and Registries
+// when applying flag/env overrides (regression test for CodeRabbit issue).
+func TestToolchainPersistentPreRunPreservesConfig(t *testing.T) {
+	// Initialize test kit to auto-clean RootCmd state.
+	_ = newTestKit(t)
+
+	// Clean toolchainCmd state before test.
+	cleanToolchainCmdState(t)
+
+	// Initialize I/O context and formatter for testing.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "Failed to create I/O context")
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	// Create a full config with UseToolVersions and other important fields set.
+	fullConfig := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile:    filepath.Join(tempDir, ".tool-versions"),
+			InstallPath:     filepath.Join(tempDir, ".tools"),
+			ToolsDir:        filepath.Join(tempDir, ".tools"),
+			ToolsConfigFile: filepath.Join(tempDir, "tools.yaml"),
+			UseToolVersions: true, // Important field that should be preserved.
+			UseLockFile:     true, // Important field that should be preserved.
+			Registries: []schema.ToolchainRegistry{
+				{
+					Name:     "test-registry",
+					Type:     "aqua",
+					Source:   "https://example.com/registry.yaml",
+					Priority: 100,
+				},
+			},
+		},
+	}
+
+	// Set the config in the toolchain package (simulating root.go Execute()).
+	toolchainpkg.SetAtmosConfig(fullConfig)
+
+	// Set up viper with flag values.
+	v := viper.GetViper()
+	v.Set("toolchain.tool-versions", filepath.Join(tempDir, ".tool-versions"))
+	v.Set("toolchain.path", filepath.Join(tempDir, ".tools"))
+	v.Set("toolchain.tools-config", filepath.Join(tempDir, "tools.yaml"))
+
+	// Run PersistentPreRunE.
+	err = toolchainCmd.PersistentPreRunE(toolchainCmd, []string{})
+	require.NoError(t, err, "PersistentPreRunE should not return error")
+
+	// Verify the config after PersistentPreRunE.
+	configAfter := toolchainpkg.GetAtmosConfig()
+	require.NotNil(t, configAfter, "Config should not be nil after PersistentPreRunE")
+
+	// Verify that important fields are preserved.
+	assert.True(t, configAfter.Toolchain.UseToolVersions, "UseToolVersions should be preserved")
+	assert.True(t, configAfter.Toolchain.UseLockFile, "UseLockFile should be preserved")
+	assert.Len(t, configAfter.Toolchain.Registries, 1, "Registries should be preserved")
+	assert.Equal(t, "test-registry", configAfter.Toolchain.Registries[0].Name, "Registry details should be preserved")
+
+	// Verify that the path fields were updated (these can be overridden by flags/env).
+	assert.Equal(t, filepath.Join(tempDir, ".tool-versions"), configAfter.Toolchain.VersionsFile)
+	assert.Equal(t, filepath.Join(tempDir, ".tools"), configAfter.Toolchain.InstallPath)
+	assert.Equal(t, filepath.Join(tempDir, ".tools"), configAfter.Toolchain.ToolsDir)
+	assert.Equal(t, filepath.Join(tempDir, "tools.yaml"), configAfter.Toolchain.ToolsConfigFile)
 }
 
 // testKit wraps testing.T and provides automatic RootCmd state cleanup.
