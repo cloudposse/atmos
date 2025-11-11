@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
 
@@ -87,11 +88,22 @@ func MergeComponentAuthConfig(
 		return nil, fmt.Errorf("%w: auth config map to struct: %w", errUtils.ErrDecode, err)
 	}
 
-	// Preserve IdentityCaseMap from global config.
+	// Rebuild IdentityCaseMap to include both global and component identities.
 	// IdentityCaseMap is runtime metadata that gets lost during map conversion
-	// because it has mapstructure:"-" tag. We need to preserve it from the global config.
+	// because it has mapstructure:"-" tag. We need to rebuild it from the merged result
+	// to ensure case-insensitive lookups work for all identities (global + component).
 	if globalAuthConfig.IdentityCaseMap != nil {
 		finalAuthConfig.IdentityCaseMap = globalAuthConfig.IdentityCaseMap
+	}
+	if finalAuthConfig.IdentityCaseMap == nil {
+		finalAuthConfig.IdentityCaseMap = make(map[string]string, len(finalAuthConfig.Identities))
+	}
+	// Add entries for all identities in the merged result.
+	for name := range finalAuthConfig.Identities {
+		lowered := strings.ToLower(name)
+		if _, ok := finalAuthConfig.IdentityCaseMap[lowered]; !ok {
+			finalAuthConfig.IdentityCaseMap[lowered] = name
+		}
 	}
 
 	return &finalAuthConfig, nil

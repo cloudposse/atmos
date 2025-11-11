@@ -83,6 +83,9 @@ func TestMergeComponentAuthFromConfig(t *testing.T) {
 				Default: true,
 			},
 		},
+		IdentityCaseMap: map[string]string{
+			"global-identity": "global-identity",
+		},
 	}
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -134,6 +137,45 @@ func TestMergeComponentAuthFromConfig(t *testing.T) {
 				assert.Len(t, result.Identities, 2)
 				assert.Contains(t, result.Identities, "global-identity")
 				assert.Contains(t, result.Identities, "component-identity")
+			},
+		},
+		{
+			name: "component identity added to IdentityCaseMap",
+			componentConfig: map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"identities": map[string]any{
+						"ComponentIdentity": map[string]any{
+							"kind": "aws/assume-role",
+						},
+					},
+				},
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, result.IdentityCaseMap)
+				assert.Contains(t, result.IdentityCaseMap, "componentidentity")
+				assert.Equal(t, "ComponentIdentity", result.IdentityCaseMap["componentidentity"])
+				// Global identity should still be present.
+				assert.Contains(t, result.IdentityCaseMap, "global-identity")
+			},
+		},
+		{
+			name: "mixed-case component identity lookups work",
+			componentConfig: map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"identities": map[string]any{
+						"MyComponentIdentity": map[string]any{
+							"kind": "aws/assume-role",
+						},
+					},
+				},
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, result.IdentityCaseMap)
+				// Case-insensitive lookup should work.
+				assert.Contains(t, result.IdentityCaseMap, "mycomponentidentity")
+				assert.Equal(t, "MyComponentIdentity", result.IdentityCaseMap["mycomponentidentity"])
 			},
 		},
 	}
