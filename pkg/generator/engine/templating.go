@@ -13,6 +13,7 @@ import (
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/hairyhenderson/gomplate/v3/data"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/project/config"
@@ -92,7 +93,15 @@ func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
 
 	// Validate that base ref exists
 	if err := p.gitStorage.ValidateBaseRef(); err != nil {
-		return fmt.Errorf("invalid base ref: %w", err)
+		return errUtils.Build(errUtils.ErrInvalidBaseRef).
+			WithExplanationf("Invalid git base reference: `%s`", baseRef).
+			WithHint("Ensure the git reference exists (branch, tag, or commit hash)").
+			WithHint("Run `git branch -a` to see available branches").
+			WithHint("Run `git tag` to see available tags").
+			WithContext("base_ref", baseRef).
+			WithContext("target_path", targetPath).
+			WithExitCode(2).
+			Err()
 	}
 
 	return nil
@@ -140,14 +149,28 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 	// Parse and execute template with custom delimiters
 	tmpl, err := template.New("init").Delims(delimiters[0], delimiters[1]).Funcs(funcs).Parse(content)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
+		return "", errUtils.Build(errUtils.ErrTemplateExecution).
+			WithExplanation("Failed to parse template syntax").
+			WithHint("Check for syntax errors in template expressions").
+			WithHint("Verify delimiters match your configuration").
+			WithHint("Common issues: unclosed `{{`, mismatched quotes, invalid function calls").
+			WithContext("content_preview", truncateString(content, 300)).
+			WithExitCode(1).
+			Err()
 	}
 
 	var result strings.Builder
 	if err := tmpl.Execute(&result, templateData); err != nil {
 		// Add detailed debugging information for template execution errors
-		return "", fmt.Errorf("failed to execute template: %w\nTemplate data: %+v\nTemplate content preview: %s",
-			err, templateData, truncateString(content, 300))
+		return "", errUtils.Build(errUtils.ErrTemplateExecution).
+			WithExplanation("Failed to execute template").
+			WithHint("Check that all referenced variables are defined").
+			WithHint("Verify template functions are valid").
+			WithHint("Use `--set key=value` to provide missing variables").
+			WithContext("template_data", fmt.Sprintf("%+v", templateData)).
+			WithContext("content_preview", truncateString(content, 300)).
+			WithExitCode(1).
+			Err()
 	}
 
 	return result.String(), nil
@@ -246,7 +269,14 @@ func (p *Processor) processFilePath(filePath, targetPath string, scaffoldConfig 
 
 	renderedPath, err := p.ProcessTemplateWithDelimiters(filePath, targetPath, scaffoldConfig, userValues, delimiters)
 	if err != nil {
-		return "", fmt.Errorf("failed to process file path template %s: %w", filePath, err)
+		return "", errUtils.Build(errUtils.ErrTemplateExecution).
+			WithExplanationf("Failed to process file path template: `%s`", filePath).
+			WithHint("Check template syntax in the file path").
+			WithHint("Verify all variables used in the path are defined").
+			WithContext("file_path", filePath).
+			WithContext("user_values", fmt.Sprintf("%+v", userValues)).
+			WithExitCode(1).
+			Err()
 	}
 
 	return renderedPath, nil
@@ -256,7 +286,14 @@ func (p *Processor) processFilePath(filePath, targetPath string, scaffoldConfig 
 func ensureDirectory(fullPath string) error {
 	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+		return errUtils.Build(errUtils.ErrDirectoryCreation).
+			WithExplanationf("Failed to create directory: `%s`", dir).
+			WithHint("Check directory permissions").
+			WithHint("Verify the parent directory is writable").
+			WithContext("directory", dir).
+			WithContext("full_path", fullPath).
+			WithExitCode(2).
+			Err()
 	}
 	return nil
 }
@@ -271,14 +308,28 @@ func fileExists(path string) bool {
 func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, force, update bool, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) error {
 	// Check flags
 	if !force && !update {
-		return fmt.Errorf("file already exists: %s (use --force to overwrite or --update to merge)", file.Path)
+		return errUtils.Build(errUtils.ErrFileExists).
+			WithExplanationf("File already exists: `%s`", file.Path).
+			WithHint("Use `--force` to overwrite the existing file").
+			WithHint("Use `--update` to merge changes with the existing file").
+			WithHint("Or remove the file manually before running").
+			WithContext("file_path", file.Path).
+			WithContext("absolute_path", fullPath).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Handle update mode (3-way merge)
 	if update {
 		processedContent, err := p.ProcessTemplateWithDelimiters(file.Content, targetPath, scaffoldConfig, userValues, delimiters)
 		if err != nil {
-			return fmt.Errorf("failed to process template for file %s: %w", file.Path, err)
+			return errUtils.Build(errUtils.ErrTemplateExecution).
+				WithExplanationf("Failed to process template for file: `%s`", file.Path).
+				WithHint("Check template syntax in the file content").
+				WithHint("Verify all variables are defined").
+				WithContext("file_path", file.Path).
+				WithExitCode(1).
+				Err()
 		}
 
 		// Create a temporary file with processed content for merging
@@ -286,7 +337,7 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 		tempFile.Content = processedContent
 
 		if err := p.mergeFile(fullPath, tempFile, targetPath); err != nil {
-			return fmt.Errorf("failed to merge file %s: %w", file.Path, err)
+			return err // Error already formatted by mergeFile
 		}
 		return nil
 	}
@@ -305,7 +356,16 @@ func (p *Processor) writeNewFile(file File, fullPath, targetPath string, scaffol
 
 	// Write file
 	if err := os.WriteFile(fullPath, []byte(content), file.Permissions); err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
+		return errUtils.Build(errUtils.ErrFileWrite).
+			WithExplanationf("Failed to write file: `%s`", fullPath).
+			WithHint("Check directory permissions").
+			WithHint("Verify sufficient disk space").
+			WithHint("Ensure the path is not a directory").
+			WithContext("file_path", file.Path).
+			WithContext("absolute_path", fullPath).
+			WithContext("permissions", fmt.Sprintf("%o", file.Permissions)).
+			WithExitCode(2).
+			Err()
 	}
 
 	return nil
@@ -322,15 +382,30 @@ func (p *Processor) processFileContent(file File, targetPath string, scaffoldCon
 
 	processedContent, err := p.ProcessTemplateWithDelimiters(content, targetPath, scaffoldConfig, userValues, delimiters)
 	if err != nil {
-		return "", fmt.Errorf("failed to process template for file %s: %w\nTemplate content preview: %s\nUser values: %+v",
-			file.Path, err,
-			truncateString(content, 200),
-			userValues)
+		return "", errUtils.Build(errUtils.ErrTemplateExecution).
+			WithExplanationf("Failed to process template for file: `%s`", file.Path).
+			WithHint("Check template syntax in the file content").
+			WithHint("Verify all variables are defined").
+			WithHint("Use `--set key=value` to provide missing variables").
+			WithContext("file_path", file.Path).
+			WithContext("content_preview", truncateString(content, 200)).
+			WithContext("user_values", fmt.Sprintf("%+v", userValues)).
+			WithExitCode(1).
+			Err()
 	}
 
 	// Validate that the processed content contains no unprocessed templates
 	if err := p.ValidateNoUnprocessedTemplatesWithDelimiters(processedContent, delimiters); err != nil {
-		return "", fmt.Errorf("generated file %s contains unprocessed template syntax: %w", file.Path, err)
+		return "", errUtils.Build(errUtils.ErrUnprocessedTemplate).
+			WithExplanationf("Generated file `%s` contains unprocessed template syntax", file.Path).
+			WithHint("Check that all template variables are provided").
+			WithHint("Verify template delimiters match your configuration").
+			WithHint("Use `--set key=value` to provide missing variables").
+			WithExample("```bash\natmos scaffold generate my-template ./target --set project_name=myapp\n```").
+			WithContext("file_path", file.Path).
+			WithContext("content_preview", truncateString(processedContent, 200)).
+			WithExitCode(2).
+			Err()
 	}
 
 	return processedContent, nil
@@ -341,7 +416,13 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 	// Read existing file content (user's version - "ours")
 	existingContent, err := os.ReadFile(existingPath)
 	if err != nil {
-		return fmt.Errorf("failed to read existing file: %w", err)
+		return errUtils.Build(errUtils.ErrReadFile).
+			WithExplanationf("Failed to read existing file: `%s`", existingPath).
+			WithHint("Check file permissions").
+			WithHint("Verify the file exists").
+			WithContext("file_path", existingPath).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Determine base content for 3-way merge
@@ -375,7 +456,13 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 	if file.IsTemplate {
 		processedContent, err := p.ProcessTemplateWithDelimiters(newContent, targetPath, nil, nil, []string{"{{", "}}"})
 		if err != nil {
-			return fmt.Errorf("failed to process template: %w", err)
+			return errUtils.Build(errUtils.ErrTemplateExecution).
+				WithExplanationf("Failed to process template during merge: `%s`", file.Path).
+				WithHint("Check template syntax").
+				WithHint("Verify all variables are defined").
+				WithContext("file_path", file.Path).
+				WithExitCode(1).
+				Err()
 		}
 		newContent = processedContent
 	}
@@ -386,17 +473,40 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 	// - theirs: new template version (newContent after processing)
 	result, err := p.merger.Merge(baseContent, string(existingContent), newContent, file.Path)
 	if err != nil {
-		return fmt.Errorf("failed to perform 3-way merge: %w", err)
+		return errUtils.Build(errUtils.ErrThreeWayMerge).
+			WithExplanationf("Failed to perform 3-way merge for file: `%s`", file.Path).
+			WithHint("The changes may be too extensive for automatic merging").
+			WithHint("Try using `--force` to overwrite instead").
+			WithHint("Or manually merge the changes").
+			WithContext("file_path", file.Path).
+			WithExitCode(1).
+			Err()
 	}
 
 	// Check for conflicts
 	if result.HasConflicts {
-		return fmt.Errorf("merge has %d conflicts in file %s - manual resolution required", result.ConflictCount, file.Path)
+		return errUtils.Build(errUtils.ErrMergeConflict).
+			WithExplanationf("Merge resulted in **%d conflict(s)** in file: `%s`", result.ConflictCount, file.Path).
+			WithHint("Open the file and look for conflict markers: `<<<<<<<`, `=======`, `>>>>>>>`").
+			WithHint("Resolve conflicts manually and re-run the command").
+			WithHint("Or use `--force` to overwrite the file completely").
+			WithContext("file_path", file.Path).
+			WithContext("conflict_count", result.ConflictCount).
+			WithContext("absolute_path", existingPath).
+			WithExitCode(1).
+			Err()
 	}
 
 	// Write merged content
 	if err := os.WriteFile(existingPath, []byte(result.Content), file.Permissions); err != nil {
-		return fmt.Errorf("failed to write merged file: %w", err)
+		return errUtils.Build(errUtils.ErrFileWrite).
+			WithExplanationf("Failed to write merged file: `%s`", existingPath).
+			WithHint("Check directory permissions").
+			WithHint("Verify sufficient disk space").
+			WithContext("file_path", file.Path).
+			WithContext("absolute_path", existingPath).
+			WithExitCode(2).
+			Err()
 	}
 
 	return nil

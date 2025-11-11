@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator"
 )
 
@@ -71,7 +72,14 @@ func GetAvailableConfigurations() (map[string]Configuration, error) {
 	templatesDir := "templates"
 	entries, err := generator.Templates.ReadDir(templatesDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read templates directory: %w", err)
+		return nil, errUtils.Build(errUtils.ErrReadTemplatesDirectory).
+			WithExplanation("Failed to read embedded templates directory").
+			WithHint("Embedded templates may be missing from the binary").
+			WithHint("Try rebuilding Atmos: `make build`").
+			WithHint("Check that templates are properly embedded with `go:embed`").
+			WithContext("templates_dir", templatesDir).
+			WithExitCode(1).
+			Err()
 	}
 
 	for _, entry := range entries {
@@ -95,7 +103,13 @@ func loadConfiguration(templatePath string) (*Configuration, error) {
 	// Read all files in the template directory
 	files, err := readTemplateFiles(templatePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read template files: %w", err)
+		return nil, errUtils.Build(errUtils.ErrReadTemplateFiles).
+			WithExplanationf("Cannot read template directory: `%s`", templatePath).
+			WithHint("Template may be corrupted or missing files").
+			WithHint("Try rebuilding Atmos: `make build`").
+			WithContext("template_path", templatePath).
+			WithExitCode(1).
+			Err()
 	}
 
 	// Find README if it exists

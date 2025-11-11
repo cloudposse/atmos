@@ -137,7 +137,7 @@ func TestExecuteInit_ArgumentParsing(t *testing.T) {
 				return ""
 			},
 			expectError:  true,
-			errorContain: "template name must be provided",
+			errorContain: "template name required",
 		},
 		{
 			name: "template without target non-interactive fails",
@@ -147,7 +147,7 @@ func TestExecuteInit_ArgumentParsing(t *testing.T) {
 				return ""
 			},
 			expectError:  true,
-			errorContain: "target directory is required",
+			errorContain: "target directory required",
 		},
 		{
 			name: "invalid template name",
@@ -498,7 +498,7 @@ func TestExecuteInit_ValidatesRequiredArgs(t *testing.T) {
 			targetDir:    "",
 			interactive:  false,
 			expectError:  true,
-			errorContain: "template name must be provided",
+			errorContain: "template name required",
 		},
 		{
 			name:         "non-interactive requires target dir",
@@ -506,7 +506,7 @@ func TestExecuteInit_ValidatesRequiredArgs(t *testing.T) {
 			targetDir:    "",
 			interactive:  false,
 			expectError:  true,
-			errorContain: "target directory is required",
+			errorContain: "target directory required",
 		},
 		{
 			name:         "interactive allows empty template and target",
