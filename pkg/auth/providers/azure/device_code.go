@@ -213,6 +213,27 @@ func (p *deviceCodeProvider) acquireTokenByDeviceCode(ctx context.Context, clien
 	return m.token, m.expiresOn, nil
 }
 
+// findAccountForTenant finds the account that matches the configured tenant ID.
+// Returns the matching account or an error if no match is found.
+func (p *deviceCodeProvider) findAccountForTenant(accounts []public.Account) (public.Account, error) {
+	if len(accounts) == 0 {
+		return public.Account{}, fmt.Errorf("no accounts found in cache")
+	}
+
+	// Try to find account matching the tenant ID.
+	for _, account := range accounts {
+		// Match by tenant ID in the home account ID (format: objectId.tenantId).
+		if account.Realm == p.tenantID {
+			log.Debug("Found account matching tenant ID",
+				"username", account.PreferredUsername,
+				"tenantID", p.tenantID)
+			return account, nil
+		}
+	}
+
+	return public.Account{}, fmt.Errorf("no account found for tenant %s", p.tenantID)
+}
+
 // displayDeviceCodePrompt displays the device code and verification URL to the user.
 func displayDeviceCodePrompt(userCode, verificationURL string) {
 	log.Debug("Displaying Azure authentication prompt",
@@ -266,46 +287,56 @@ func (p *deviceCodeProvider) Authenticate(ctx context.Context) (authTypes.ICrede
 
 	// If we have cached accounts, try silent token acquisition.
 	if len(accounts) > 0 {
-		log.Debug("Found cached account, attempting silent token acquisition", "account", accounts[0].PreferredUsername)
-
-		// Try to get management token silently.
-		result, err := client.AcquireTokenSilent(ctx,
-			[]string{"https://management.azure.com/.default"},
-			public.WithSilentAccount(accounts[0]),
-		)
-		if err == nil {
-			accessToken = result.AccessToken
-			expiresOn = result.ExpiresOn
-			log.Debug("Successfully acquired management token silently", "expiresOn", expiresOn)
-
-			// Try to get Graph token silently.
-			graphResult, err := client.AcquireTokenSilent(ctx,
-				[]string{"https://graph.microsoft.com/.default"},
-				public.WithSilentAccount(accounts[0]),
-			)
-			if err == nil {
-				graphToken = graphResult.AccessToken
-				graphExpiresOn = graphResult.ExpiresOn
-				log.Debug("Successfully acquired Graph token silently", "expiresOn", graphExpiresOn)
-			} else {
-				log.Debug("Failed to get Graph token silently, will skip", "error", err)
-			}
-
-			// Try to get KeyVault token silently.
-			kvResult, err := client.AcquireTokenSilent(ctx,
-				[]string{"https://vault.azure.net/.default"},
-				public.WithSilentAccount(accounts[0]),
-			)
-			if err == nil {
-				keyVaultToken = kvResult.AccessToken
-				keyVaultExpiresOn = kvResult.ExpiresOn
-				log.Debug("Successfully acquired KeyVault token silently", "expiresOn", keyVaultExpiresOn)
-			} else {
-				log.Debug("Failed to get KeyVault token silently, will skip", "error", err)
-			}
+		// Find the account that matches our configured tenant ID.
+		account, err := p.findAccountForTenant(accounts)
+		if err != nil {
+			log.Debug("No matching account found for tenant, will proceed with device code flow",
+				"tenantID", p.tenantID,
+				"error", err)
 		} else {
-			log.Debug("Silent token acquisition failed, will proceed with device code flow", "error", err)
-			accessToken = "" // Reset to trigger device code flow.
+			log.Debug("Found cached account, attempting silent token acquisition",
+				"account", account.PreferredUsername,
+				"tenantID", p.tenantID)
+
+			// Try to get management token silently.
+			result, err := client.AcquireTokenSilent(ctx,
+				[]string{"https://management.azure.com/.default"},
+				public.WithSilentAccount(account),
+			)
+			if err == nil {
+				accessToken = result.AccessToken
+				expiresOn = result.ExpiresOn
+				log.Debug("Successfully acquired management token silently", "expiresOn", expiresOn)
+
+				// Try to get Graph token silently.
+				graphResult, err := client.AcquireTokenSilent(ctx,
+					[]string{"https://graph.microsoft.com/.default"},
+					public.WithSilentAccount(account),
+				)
+				if err == nil {
+					graphToken = graphResult.AccessToken
+					graphExpiresOn = graphResult.ExpiresOn
+					log.Debug("Successfully acquired Graph token silently", "expiresOn", graphExpiresOn)
+				} else {
+					log.Debug("Failed to get Graph token silently, will skip", "error", err)
+				}
+
+				// Try to get KeyVault token silently.
+				kvResult, err := client.AcquireTokenSilent(ctx,
+					[]string{"https://vault.azure.net/.default"},
+					public.WithSilentAccount(account),
+				)
+				if err == nil {
+					keyVaultToken = kvResult.AccessToken
+					keyVaultExpiresOn = kvResult.ExpiresOn
+					log.Debug("Successfully acquired KeyVault token silently", "expiresOn", keyVaultExpiresOn)
+				} else {
+					log.Debug("Failed to get KeyVault token silently, will skip", "error", err)
+				}
+			} else {
+				log.Debug("Silent token acquisition failed, will proceed with device code flow", "error", err)
+				accessToken = "" // Reset to trigger device code flow.
+			}
 		}
 	}
 
@@ -336,36 +367,44 @@ func (p *deviceCodeProvider) Authenticate(ctx context.Context) (authTypes.ICrede
 		if err != nil || len(accounts) == 0 {
 			log.Debug("Failed to get authenticated account, will skip Graph and KeyVault tokens", "error", err)
 		} else {
-			// Request Graph API token for azuread provider (silently, using refresh token).
-			log.Debug("Requesting Graph API token for azuread provider")
-			graphResult, err := client.AcquireTokenSilent(ctx,
-				[]string{"https://graph.microsoft.com/.default"},
-				public.WithSilentAccount(accounts[0]),
-			)
+			// Find the account that matches our tenant ID.
+			account, err := p.findAccountForTenant(accounts)
 			if err != nil {
-				log.Debug("Failed to get Graph API token, azuread provider may not work", "error", err)
+				log.Debug("No matching account found after device code authentication, will skip Graph and KeyVault tokens",
+					"tenantID", p.tenantID,
+					"error", err)
 			} else {
-				graphToken = graphResult.AccessToken
-				graphExpiresOn = graphResult.ExpiresOn
-				log.Debug("Successfully obtained Graph API token",
-					"expiresOn", graphExpiresOn,
-					"tokenLength", len(graphToken))
-			}
+				// Request Graph API token for azuread provider (silently, using refresh token).
+				log.Debug("Requesting Graph API token for azuread provider")
+				graphResult, err := client.AcquireTokenSilent(ctx,
+					[]string{"https://graph.microsoft.com/.default"},
+					public.WithSilentAccount(account),
+				)
+				if err != nil {
+					log.Debug("Failed to get Graph API token, azuread provider may not work", "error", err)
+				} else {
+					graphToken = graphResult.AccessToken
+					graphExpiresOn = graphResult.ExpiresOn
+					log.Debug("Successfully obtained Graph API token",
+						"expiresOn", graphExpiresOn,
+						"tokenLength", len(graphToken))
+				}
 
-			// Request KeyVault token for azurerm provider KeyVault operations (silently).
-			log.Debug("Requesting KeyVault token for azurerm provider")
-			kvResult, err := client.AcquireTokenSilent(ctx,
-				[]string{"https://vault.azure.net/.default"},
-				public.WithSilentAccount(accounts[0]),
-			)
-			if err != nil {
-				log.Debug("Failed to get KeyVault token, KeyVault operations may not work", "error", err)
-			} else {
-				keyVaultToken = kvResult.AccessToken
-				keyVaultExpiresOn = kvResult.ExpiresOn
-				log.Debug("Successfully obtained KeyVault token",
-					"expiresOn", keyVaultExpiresOn,
-					"tokenLength", len(keyVaultToken))
+				// Request KeyVault token for azurerm provider KeyVault operations (silently).
+				log.Debug("Requesting KeyVault token for azurerm provider")
+				kvResult, err := client.AcquireTokenSilent(ctx,
+					[]string{"https://vault.azure.net/.default"},
+					public.WithSilentAccount(account),
+				)
+				if err != nil {
+					log.Debug("Failed to get KeyVault token, KeyVault operations may not work", "error", err)
+				} else {
+					keyVaultToken = kvResult.AccessToken
+					keyVaultExpiresOn = kvResult.ExpiresOn
+					log.Debug("Successfully obtained KeyVault token",
+						"expiresOn", keyVaultExpiresOn,
+						"tokenLength", len(keyVaultToken))
+				}
 			}
 		}
 	}
