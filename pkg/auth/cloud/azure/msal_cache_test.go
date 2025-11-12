@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	msalcache "github.com/AzureAD/microsoft-authentication-library-for-go/apps/cache"
@@ -108,10 +109,12 @@ func TestMSALCache_Export(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, testData, writtenData)
 
-	// Verify file permissions.
-	info, err := os.Stat(cachePath)
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "Cache file should have 0600 permissions")
+	// Verify file permissions (Unix only - Windows uses different permission model).
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(cachePath)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "Cache file should have 0600 permissions")
+	}
 }
 
 func TestMSALCache_ReplaceWithCancellation(t *testing.T) {
