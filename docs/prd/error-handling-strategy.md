@@ -30,6 +30,53 @@ Go 1.13 introduced significant improvements to error handling:
 
 ### Error Handling Patterns
 
+#### Pattern 0: ErrorBuilder with Sentinel Errors (MANDATORY for User-Facing Errors)
+
+**This is THE primary pattern for all user-facing errors in Atmos.**
+
+Atmos uses CockroachDB's `errors.Mark()` to attach sentinel errors to error chains, enabling `errors.Is()` checks to work through multiple layers of wrapping. The ErrorBuilder provides a fluent API that automatically handles sentinel marking.
+
+**Two supported patterns:**
+
+```go
+// Pattern A: Sentinel as base error (auto-marked)
+err := errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+    WithExplanation("Failed to start container").
+    WithHint("Check Docker is running").
+    WithContext("container", containerName).
+    WithExitCode(3).
+    Err()
+
+// errors.Is(err, ErrContainerRuntimeOperation) ✅ true (auto-marked)
+
+// Pattern B: Wrap actual error + explicit sentinel
+err := errUtils.Build(actualError).
+    WithSentinel(errUtils.ErrContainerRuntimeOperation).
+    WithHint("Check Docker is running").
+    Err()
+
+// errors.Is(err, ErrContainerRuntimeOperation) ✅ true (explicitly marked)
+// errors.Is(err, actualError) ✅ true (both preserved)
+```
+
+**Testing errors (MANDATORY):**
+```go
+// ✅ CORRECT: Always use errors.Is() in tests
+assert.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+
+// ❌ WRONG: Never use string matching - breaks with wrapping
+assert.Contains(t, err.Error(), "container runtime")
+```
+
+**Why ErrorBuilder + Sentinel Errors?**
+1. **Type-safe error checking**: `errors.Is()` works across wrapped errors
+2. **Prevents typos**: Compile-time checking vs runtime string matching
+3. **Testable**: Clear, predictable error assertions with `assert.ErrorIs()`
+4. **Maintainable**: Errors centralized in `errors/errors.go`
+5. **User-friendly**: Rich context with explanations, hints, and examples
+
+See [Error Handling Guide](../errors.md) for complete ErrorBuilder API documentation.
+
 #### Pattern 1: Combining Multiple Errors
 When you have two or more error values to combine, use `errors.Join`:
 
@@ -121,7 +168,10 @@ issues:
 ## Implementation Guidelines
 
 ### Do's
-- ✅ Always use static errors defined in `errors/errors.go`
+- ✅ **ALWAYS use ErrorBuilder for user-facing errors** (see Pattern 0)
+- ✅ **ALWAYS use `errors.Is()` for error checking** - never string matching
+- ✅ **ALWAYS use sentinel errors** defined in `errors/errors.go`
+- ✅ **ALWAYS use `assert.ErrorIs()` in tests** - never `assert.Contains(err.Error(), ...)`
 - ✅ Use `errors.Join` when combining multiple error values
 - ✅ Use `fmt.Errorf` with `%w` when adding string context
 - ✅ Preserve error chains for `errors.Is()` and `errors.As()`
@@ -129,8 +179,10 @@ issues:
 - ✅ Log squelched errors at Trace level (see Squelched Error Handling below)
 
 ### Don'ts
+- ❌ **NEVER use string-based error checking** (`assert.Contains(err.Error(), ...)`)
+- ❌ **NEVER use string matching** (`if err.Error() == "..."` or `strings.Contains(err.Error(), ...)`)
+- ❌ **NEVER create dynamic errors** with `errors.New()` (except for static sentinel definitions)
 - ❌ Never use multiple `%w` verbs in a single `fmt.Errorf`
-- ❌ Avoid creating dynamic errors with `errors.New()` (except for static definitions)
 - ❌ Don't use `fmt.Errorf` without `%w` unless converting a string to an error
 - ❌ Don't lose error context by converting errors to strings unnecessarily
 - ❌ Never squelch errors silently with `_ = ...` - always log at Trace level

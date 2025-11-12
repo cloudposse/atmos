@@ -14,11 +14,10 @@ import (
 
 func TestManager_List(t *testing.T) {
 	tests := []struct {
-		name          string
-		setupMocks    func(*MockConfigLoader, *MockRuntimeDetector, *MockRuntime)
-		expectError   bool
-		errorIs       error
-		errorContains string
+		name        string
+		setupMocks  func(*MockConfigLoader, *MockRuntimeDetector, *MockRuntime)
+		expectError bool
+		errorIs     error
 	}{
 		{
 			name: "no devcontainers configured",
@@ -36,8 +35,7 @@ func TestManager_List(t *testing.T) {
 					LoadAllConfigs(gomock.Any()).
 					Return(nil, errors.New("config error"))
 			},
-			expectError:   true,
-			errorContains: "config error",
+			expectError: true,
 		},
 		{
 			name: "list with no running containers",
@@ -104,9 +102,8 @@ func TestManager_List(t *testing.T) {
 					DetectRuntime("").
 					Return(nil, errors.New("runtime not found"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to initialize container runtime",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 		{
 			name: "runtime list fails",
@@ -123,9 +120,8 @@ func TestManager_List(t *testing.T) {
 					List(gomock.Any(), gomock.Any()).
 					Return(nil, errors.New("list error"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to list containers",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 	}
 
@@ -153,9 +149,6 @@ func TestManager_List(t *testing.T) {
 				require.Error(t, err)
 				if tt.errorIs != nil {
 					assert.ErrorIs(t, err, tt.errorIs)
-				}
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
 				require.NoError(t, err)

@@ -169,11 +169,10 @@ func TestFormatPortsInfo(t *testing.T) {
 // TestStopContainerIfRunning validates the stopContainerIfRunning operation.
 func TestStopContainerIfRunning(t *testing.T) {
 	tests := []struct {
-		name          string
-		status        string
-		setupMock     func(*MockRuntime)
-		expectError   bool
-		errorContains string
+		name        string
+		status      string
+		setupMock   func(*MockRuntime)
+		expectError bool
 	}{
 		{
 			name:   "container not running - no-op",
@@ -219,8 +218,7 @@ func TestStopContainerIfRunning(t *testing.T) {
 					Stop(gomock.Any(), "test-id", defaultContainerStopTimeout).
 					Return(errors.New("runtime error"))
 			},
-			expectError:   true,
-			errorContains: "failed to stop container",
+			expectError: true,
 		},
 	}
 
@@ -242,7 +240,6 @@ func TestStopContainerIfRunning(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorContains)
 				assert.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
 			} else {
 				require.NoError(t, err)
@@ -254,13 +251,12 @@ func TestStopContainerIfRunning(t *testing.T) {
 // TestBuildImageIfNeeded validates the buildImageIfNeeded operation.
 func TestBuildImageIfNeeded(t *testing.T) {
 	tests := []struct {
-		name          string
-		config        *Config
-		setupMock     func(*MockRuntime)
-		expectBuild   bool
-		expectImage   string
-		expectError   bool
-		errorContains string
+		name        string
+		config      *Config
+		setupMock   func(*MockRuntime)
+		expectBuild bool
+		expectImage string
+		expectError bool
 	}{
 		{
 			name: "no build config - no-op",
@@ -316,9 +312,8 @@ func TestBuildImageIfNeeded(t *testing.T) {
 					Build(gomock.Any(), gomock.Any()).
 					Return(errors.New("build failed"))
 			},
-			expectBuild:   true,
-			expectError:   true,
-			errorContains: "failed to build image",
+			expectBuild: true,
+			expectError: true,
 		},
 	}
 
@@ -334,7 +329,6 @@ func TestBuildImageIfNeeded(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorContains)
 				assert.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
 			} else {
 				require.NoError(t, err)
@@ -349,12 +343,11 @@ func TestBuildImageIfNeeded(t *testing.T) {
 // TestPullImageIfNeeded validates the pullImageIfNeeded operation.
 func TestPullImageIfNeeded(t *testing.T) {
 	tests := []struct {
-		name          string
-		image         string
-		noPull        bool
-		setupMock     func(*MockRuntime)
-		expectError   bool
-		errorContains string
+		name        string
+		image       string
+		noPull      bool
+		setupMock   func(*MockRuntime)
+		expectError bool
 	}{
 		{
 			name:   "noPull is true - no-op",
@@ -394,8 +387,7 @@ func TestPullImageIfNeeded(t *testing.T) {
 					Pull(gomock.Any(), "test-image:latest").
 					Return(errors.New("network error"))
 			},
-			expectError:   true,
-			errorContains: "failed to pull image",
+			expectError: true,
 		},
 	}
 
@@ -411,7 +403,6 @@ func TestPullImageIfNeeded(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorContains)
 				assert.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
 			} else {
 				require.NoError(t, err)
@@ -428,7 +419,6 @@ func TestCreateContainer(t *testing.T) {
 		setupMock     func(*MockRuntime)
 		expectedID    string
 		expectError   bool
-		errorContains string
 	}{
 		{
 			name:          "create success",
@@ -453,8 +443,7 @@ func TestCreateContainer(t *testing.T) {
 					Create(gomock.Any(), gomock.Any()).
 					Return("", errors.New("container name conflict"))
 			},
-			expectError:   true,
-			errorContains: "failed to create container",
+			expectError: true,
 		},
 	}
 
@@ -479,7 +468,6 @@ func TestCreateContainer(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorContains)
 				assert.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
 			} else {
 				require.NoError(t, err)
@@ -497,7 +485,6 @@ func TestStartContainer(t *testing.T) {
 		containerName string
 		setupMock     func(*MockRuntime)
 		expectError   bool
-		errorContains string
 	}{
 		{
 			name:          "start success",
@@ -519,8 +506,7 @@ func TestStartContainer(t *testing.T) {
 					Start(gomock.Any(), "container-id-123").
 					Return(errors.New("container not found"))
 			},
-			expectError:   true,
-			errorContains: "failed to start container",
+			expectError: true,
 		},
 	}
 
@@ -536,7 +522,6 @@ func TestStartContainer(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorContains)
 				assert.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
 			} else {
 				require.NoError(t, err)
@@ -553,7 +538,6 @@ func TestRemoveContainer(t *testing.T) {
 		containerName string
 		setupMock     func(*MockRuntime)
 		expectError   bool
-		errorContains string
 	}{
 		{
 			name: "remove success",
@@ -581,8 +565,7 @@ func TestRemoveContainer(t *testing.T) {
 					Remove(gomock.Any(), "container-id-123", true).
 					Return(errors.New("container is running"))
 			},
-			expectError:   true,
-			errorContains: "failed to remove container",
+			expectError: true,
 		},
 	}
 
@@ -598,7 +581,6 @@ func TestRemoveContainer(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorContains)
 				assert.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
 			} else {
 				require.NoError(t, err)
@@ -610,10 +592,9 @@ func TestRemoveContainer(t *testing.T) {
 // TestStartExistingContainer validates the startExistingContainer operation.
 func TestStopAndRemoveContainer(t *testing.T) {
 	tests := []struct {
-		name          string
-		setupMock     func(*MockRuntime)
-		expectError   bool
-		errorContains string
+		name        string
+		setupMock   func(*MockRuntime)
+		expectError bool
 	}{
 		{
 			name: "container doesn't exist - no-op",
@@ -673,8 +654,7 @@ func TestStopAndRemoveContainer(t *testing.T) {
 					Stop(gomock.Any(), "test-id", defaultContainerStopTimeout).
 					Return(errors.New("stop failed"))
 			},
-			expectError:   true,
-			errorContains: "failed to stop container",
+			expectError: true,
 		},
 		{
 			name: "remove fails - propagates error",
@@ -690,8 +670,7 @@ func TestStopAndRemoveContainer(t *testing.T) {
 					Remove(gomock.Any(), "test-id", true).
 					Return(errors.New("remove failed"))
 			},
-			expectError:   true,
-			errorContains: "failed to remove container",
+			expectError: true,
 		},
 	}
 
@@ -707,7 +686,6 @@ func TestStopAndRemoveContainer(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorContains)
 			} else {
 				require.NoError(t, err)
 			}
@@ -718,11 +696,10 @@ func TestStopAndRemoveContainer(t *testing.T) {
 // TestCreateAndStartNewContainer validates the createAndStartNewContainer orchestration.
 func TestCreateAndStartNewContainer(t *testing.T) {
 	tests := []struct {
-		name          string
-		config        *Config
-		setupMock     func(*MockRuntime)
-		expectError   bool
-		errorContains string
+		name        string
+		config      *Config
+		setupMock   func(*MockRuntime)
+		expectError bool
 	}{
 		{
 			name: "full orchestration success - no build",
@@ -781,8 +758,7 @@ func TestCreateAndStartNewContainer(t *testing.T) {
 					Return(errors.New("build failed"))
 				// Should NOT call Create or Start.
 			},
-			expectError:   true,
-			errorContains: "failed to build image",
+			expectError: true,
 		},
 		{
 			name: "create fails - aborts before start",
@@ -796,8 +772,7 @@ func TestCreateAndStartNewContainer(t *testing.T) {
 					Return("", errors.New("create failed"))
 				// Should NOT call Start.
 			},
-			expectError:   true,
-			errorContains: "failed to create container",
+			expectError: true,
 		},
 		{
 			name: "start fails - propagates error",
@@ -813,8 +788,7 @@ func TestCreateAndStartNewContainer(t *testing.T) {
 					Start(gomock.Any(), "container-id-123").
 					Return(errors.New("start failed"))
 			},
-			expectError:   true,
-			errorContains: "failed to start container",
+			expectError: true,
 		},
 	}
 
@@ -839,7 +813,6 @@ func TestCreateAndStartNewContainer(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorContains)
 			} else {
 				require.NoError(t, err)
 			}

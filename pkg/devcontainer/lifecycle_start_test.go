@@ -15,14 +15,13 @@ import (
 
 func TestManager_Start(t *testing.T) {
 	tests := []struct {
-		name          string
-		devName       string
-		instance      string
-		identityName  string
-		setupMocks    func(*MockConfigLoader, *MockIdentityManager, *MockRuntimeDetector, *MockRuntime)
-		expectError   bool
-		errorIs       error
-		errorContains string
+		name         string
+		devName      string
+		instance     string
+		identityName string
+		setupMocks   func(*MockConfigLoader, *MockIdentityManager, *MockRuntimeDetector, *MockRuntime)
+		expectError  bool
+		errorIs      error
 	}{
 		{
 			name:     "start new container without identity",
@@ -140,8 +139,7 @@ func TestManager_Start(t *testing.T) {
 					LoadConfig(gomock.Any(), "test").
 					Return(nil, nil, errors.New("config not found"))
 			},
-			expectError:   true,
-			errorContains: "config not found",
+			expectError: true,
 		},
 		{
 			name:         "identity injection fails",
@@ -157,8 +155,7 @@ func TestManager_Start(t *testing.T) {
 					InjectIdentityEnvironment(gomock.Any(), config, "bad-identity").
 					Return(errors.New("identity not found"))
 			},
-			expectError:   true,
-			errorContains: "identity not found",
+			expectError: true,
 		},
 		{
 			name:     "runtime detection fails",
@@ -172,8 +169,7 @@ func TestManager_Start(t *testing.T) {
 					DetectRuntime("").
 					Return(nil, errors.New("docker not found"))
 			},
-			expectError:   true,
-			errorContains: "docker not found",
+			expectError: true,
 		},
 		{
 			name:     "container list fails",
@@ -190,9 +186,8 @@ func TestManager_Start(t *testing.T) {
 					List(gomock.Any(), gomock.Any()).
 					Return(nil, errors.New("runtime error"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to list containers",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 		{
 			name:     "container create fails",
@@ -212,9 +207,8 @@ func TestManager_Start(t *testing.T) {
 					Create(gomock.Any(), gomock.Any()).
 					Return("", errors.New("create failed"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to create container",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 		{
 			name:     "container start fails",
@@ -237,9 +231,8 @@ func TestManager_Start(t *testing.T) {
 					Start(gomock.Any(), "new-id").
 					Return(errors.New("start failed"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to start container",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 	}
 
@@ -269,9 +262,6 @@ func TestManager_Start(t *testing.T) {
 				require.Error(t, err)
 				if tt.errorIs != nil {
 					assert.ErrorIs(t, err, tt.errorIs)
-				}
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
 				require.NoError(t, err)

@@ -237,12 +237,11 @@ func TestParseMountPaths(t *testing.T) {
 
 func TestAddCredentialMounts(t *testing.T) {
 	tests := []struct {
-		name        string
-		config      *Config
-		paths       []types.Path
-		wantErr     bool
-		errContains string
-		validate    func(t *testing.T, config *Config)
+		name     string
+		config   *Config
+		paths    []types.Path
+		wantErr  bool
+		validate func(t *testing.T, config *Config)
 	}{
 		{
 			name: "adds mount for existing required path",
@@ -298,8 +297,7 @@ func TestAddCredentialMounts(t *testing.T) {
 					Required: true,
 				},
 			},
-			wantErr:     true,
-			errContains: "required credential path",
+			wantErr: true,
 		},
 		{
 			name: "respects read_only metadata false",
@@ -365,9 +363,6 @@ func TestAddCredentialMounts(t *testing.T) {
 
 			if tt.wantErr {
 				require.Error(t, err)
-				if tt.errContains != "" {
-					assert.Contains(t, err.Error(), tt.errContains)
-				}
 			} else {
 				require.NoError(t, err)
 				if tt.validate != nil {

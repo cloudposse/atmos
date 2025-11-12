@@ -404,3 +404,39 @@ func TestErrorBuilder_MixedHintsAndExamples(t *testing.T) {
 	assert.Equal(t, "Example code", examples[0])
 	assert.Equal(t, "Another example", examples[1])
 }
+
+func TestErrorBuilder_SentinelMarking(t *testing.T) {
+	t.Run("automatically marks sentinel when used as base error", func(t *testing.T) {
+		err := Build(ErrContainerRuntimeOperation).
+			WithExplanation("Failed to start container").
+			WithHint("Check Docker is running").
+			Err()
+
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
+	})
+
+	t.Run("marks sentinel when using WithSentinel", func(t *testing.T) {
+		baseErr := errors.New("connection refused")
+
+		err := Build(baseErr).
+			WithSentinel(ErrContainerRuntimeOperation).
+			WithHint("Check Docker is running").
+			Err()
+
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
+		assert.True(t, errors.Is(err, baseErr))
+	})
+
+	t.Run("supports multiple sentinels", func(t *testing.T) {
+		err := Build(errors.New("base error")).
+			WithSentinel(ErrContainerRuntimeOperation).
+			WithSentinel(ErrDevcontainerNotFound).
+			Err()
+
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
+		assert.True(t, errors.Is(err, ErrDevcontainerNotFound))
+	})
+}

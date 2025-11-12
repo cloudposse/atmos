@@ -203,11 +203,45 @@ Add `defer perf.Track(atmosConfig, "pkg.FuncName")()` + blank line to all public
 Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 
 ### Error Handling (MANDATORY)
-- Wrap with static errors from `errors/errors.go`
+
+**PRIMARY PATTERN: ErrorBuilder with Sentinel Errors**
+
+ALL user-facing errors MUST use ErrorBuilder with sentinel errors from `errors/errors.go`:
+
+```go
+// Pattern 1: Sentinel as base (auto-marked for errors.Is)
+err := errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+    WithExplanation("Failed to start container").
+    WithHint("Check Docker is running").
+    WithContext("container", containerName).
+    Err()
+
+// Pattern 2: Wrap actual error + explicit sentinel
+err := errUtils.Build(actualError).
+    WithSentinel(errUtils.ErrContainerRuntimeOperation).
+    Err()
+```
+
+**Testing (MANDATORY):**
+```go
+// ✅ CORRECT: Always use errors.Is()
+assert.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+
+// ❌ WRONG: Never string matching
+assert.Contains(t, err.Error(), "...")  // FORBIDDEN
+```
+
+**Rules:**
+- ✅ ALWAYS use `errors.Is()` for checking, NEVER string comparison
+- ✅ ALWAYS use `assert.ErrorIs()` in tests, NEVER `assert.Contains(err.Error(), ...)`
+- ✅ ALWAYS use sentinel errors from `errors/errors.go`
+- ❌ NEVER create dynamic errors: `errors.New("msg")`
+- ❌ NEVER string matching: `err.Error() == "..."` or `strings.Contains(err.Error(), ...)`
+
+**Legacy patterns (internal/non-user-facing only):**
 - `errors.Join` for multiple errors, `fmt.Errorf("%w", err)` for chains
-- Use `errors.Is()` for checking, NEVER string comparison
-- Error builder: `errUtils.Build(err).WithHint().WithContext().WithExitCode().Err()`
-- See `docs/errors.md` for complete guide
+
+See `docs/errors.md` for complete ErrorBuilder API guide
 
 ### Testing Strategy (MANDATORY)
 - **Prefer unit tests with mocks** over integration tests

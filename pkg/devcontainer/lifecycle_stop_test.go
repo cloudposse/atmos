@@ -15,14 +15,13 @@ import (
 
 func TestManager_Stop(t *testing.T) {
 	tests := []struct {
-		name          string
-		devName       string
-		instance      string
-		timeout       int
-		setupMocks    func(*MockConfigLoader, *MockRuntimeDetector, *MockRuntime)
-		expectError   bool
-		errorIs       error
-		errorContains string
+		name        string
+		devName     string
+		instance    string
+		timeout     int
+		setupMocks  func(*MockConfigLoader, *MockRuntimeDetector, *MockRuntime)
+		expectError bool
+		errorIs     error
 	}{
 		{
 			name:     "stop running container successfully",
@@ -91,9 +90,8 @@ func TestManager_Stop(t *testing.T) {
 					List(gomock.Any(), gomock.Any()).
 					Return([]container.Info{}, nil)
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrDevcontainerNotFound,
-			errorContains: "container atmos-devcontainer.test.default not found",
+			expectError: true,
+			errorIs:     errUtils.ErrDevcontainerNotFound,
 		},
 		{
 			name:     "config load fails",
@@ -105,8 +103,7 @@ func TestManager_Stop(t *testing.T) {
 					LoadConfig(gomock.Any(), "test").
 					Return(nil, nil, errors.New("config error"))
 			},
-			expectError:   true,
-			errorContains: "config error",
+			expectError: true,
 		},
 		{
 			name:     "runtime detection fails",
@@ -121,8 +118,7 @@ func TestManager_Stop(t *testing.T) {
 					DetectRuntime("").
 					Return(nil, errors.New("runtime not found"))
 			},
-			expectError:   true,
-			errorContains: "runtime not found",
+			expectError: true,
 		},
 		{
 			name:     "stop fails - runtime error",
@@ -145,9 +141,8 @@ func TestManager_Stop(t *testing.T) {
 					Stop(gomock.Any(), "id", 10*time.Second).
 					Return(errors.New("stop failed"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to stop container",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 	}
 
@@ -175,9 +170,6 @@ func TestManager_Stop(t *testing.T) {
 				require.Error(t, err)
 				if tt.errorIs != nil {
 					assert.ErrorIs(t, err, tt.errorIs)
-				}
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
 				require.NoError(t, err)

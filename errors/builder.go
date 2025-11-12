@@ -10,16 +10,30 @@ import (
 
 // ErrorBuilder provides a fluent API for constructing enriched errors.
 type ErrorBuilder struct {
-	err      error
-	title    *string
-	hints    []string
-	context  map[string]interface{}
-	exitCode *int
+	err       error
+	title     *string
+	hints     []string
+	context   map[string]interface{}
+	exitCode  *int
+	sentinels []error // Sentinel errors to mark with errors.Mark()
 }
 
 // Build creates a new ErrorBuilder from a base error.
+// If the error is a sentinel error (simple errors.New() with no wrapping),
+// it will be automatically marked as a sentinel for errors.Is() checks.
 func Build(err error) *ErrorBuilder {
-	return &ErrorBuilder{err: err}
+	builder := &ErrorBuilder{err: err}
+
+	// If this looks like a sentinel error (simple error with no cause),
+	// automatically mark it as a sentinel for errors.Is() checks.
+	if err != nil && errors.UnwrapOnce(err) == nil {
+		// This is a leaf error (no wrapped cause), likely a sentinel.
+		// Check if it's one of our package-level sentinels by comparing the error text.
+		// We'll mark it automatically so errors.Is() works.
+		builder.sentinels = append(builder.sentinels, err)
+	}
+
+	return builder
 }
 
 // WithHint adds a user-facing hint to the error.
@@ -87,6 +101,14 @@ func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 	return b
 }
 
+// WithSentinel marks the error with a sentinel error for errors.Is() checks.
+// This uses errors.Mark() to attach the sentinel to the error chain.
+// Multiple sentinels can be added and all will be marked.
+func (b *ErrorBuilder) WithSentinel(sentinel error) *ErrorBuilder {
+	b.sentinels = append(b.sentinels, sentinel)
+	return b
+}
+
 // Err finalizes and returns the enriched error.
 func (b *ErrorBuilder) Err() error {
 	if b.err == nil {
@@ -124,6 +146,12 @@ func (b *ErrorBuilder) Err() error {
 		}
 
 		err = errors.WithSafeDetails(err, strings.Join(formatParts, " "), safeValues...)
+	}
+
+	// Mark with sentinel errors for errors.Is() checks.
+	// This must be done AFTER all other wrapping to ensure sentinels are at the top level.
+	for _, sentinel := range b.sentinels {
+		err = errors.Mark(err, sentinel)
 	}
 
 	// Add exit code if specified.

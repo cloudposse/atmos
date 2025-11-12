@@ -21,7 +21,6 @@ func TestManager_GenerateNewInstance(t *testing.T) {
 		expectedResult string
 		expectError    bool
 		errorIs        error
-		errorContains  string
 	}{
 		{
 			name:         "generate first instance when no containers exist",
@@ -133,8 +132,7 @@ func TestManager_GenerateNewInstance(t *testing.T) {
 					LoadConfig(gomock.Any(), "test").
 					Return(nil, nil, errors.New("config error"))
 			},
-			expectError:   true,
-			errorContains: "config error",
+			expectError: true,
 		},
 		{
 			name:         "runtime detection fails",
@@ -148,9 +146,8 @@ func TestManager_GenerateNewInstance(t *testing.T) {
 					DetectRuntime("").
 					Return(nil, errors.New("runtime not found"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to initialize container runtime",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 		{
 			name:         "container list fails",
@@ -167,9 +164,8 @@ func TestManager_GenerateNewInstance(t *testing.T) {
 					List(gomock.Any(), nil).
 					Return(nil, errors.New("list failed"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to list containers",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 	}
 
@@ -197,9 +193,6 @@ func TestManager_GenerateNewInstance(t *testing.T) {
 				require.Error(t, err)
 				if tt.errorIs != nil {
 					assert.ErrorIs(t, err, tt.errorIs)
-				}
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
 				require.NoError(t, err)

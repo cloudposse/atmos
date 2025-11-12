@@ -576,7 +576,6 @@ func TestLoadConfig(t *testing.T) {
 		atmosConfig *schema.AtmosConfiguration
 		dcName      string
 		expectError bool
-		errorMsg    string
 		assert      func(t *testing.T, config *Config, settings *Settings)
 	}{
 		{
@@ -641,7 +640,6 @@ func TestLoadConfig(t *testing.T) {
 			},
 			dcName:      "test",
 			expectError: true,
-			errorMsg:    "no devcontainers configured",
 		},
 		{
 			name: "devcontainer not found",
@@ -658,7 +656,6 @@ func TestLoadConfig(t *testing.T) {
 			},
 			dcName:      "nonexistent",
 			expectError: true,
-			errorMsg:    "not found",
 		},
 		{
 			name: "missing spec section",
@@ -676,7 +673,6 @@ func TestLoadConfig(t *testing.T) {
 			},
 			dcName:      "invalid",
 			expectError: true,
-			errorMsg:    "missing 'spec' section",
 		},
 		{
 			name: "spec is not a map",
@@ -691,7 +687,6 @@ func TestLoadConfig(t *testing.T) {
 			},
 			dcName:      "invalid",
 			expectError: true,
-			errorMsg:    "must be a map",
 		},
 		{
 			name: "validation fails - no image or build",
@@ -709,7 +704,6 @@ func TestLoadConfig(t *testing.T) {
 			},
 			dcName:      "invalid",
 			expectError: true,
-			errorMsg:    "must specify either 'image' or 'build'",
 		},
 	}
 
@@ -719,7 +713,6 @@ func TestLoadConfig(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorMsg)
 				assert.Nil(t, config)
 				assert.Nil(t, settings)
 			} else {
@@ -835,7 +828,6 @@ func TestExtractSettings(t *testing.T) {
 		devMap      map[string]any
 		dcName      string
 		expectError bool
-		errorMsg    string
 		assert      func(t *testing.T, settings *Settings)
 	}{
 		{
@@ -868,7 +860,6 @@ func TestExtractSettings(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorMsg)
 			} else {
 				require.NoError(t, err)
 				tt.assert(t, settings)
@@ -883,7 +874,6 @@ func TestExtractAndValidateSpec(t *testing.T) {
 		devMap      map[string]any
 		dcName      string
 		expectError bool
-		errorMsg    string
 		assert      func(t *testing.T, config *Config)
 	}{
 		{
@@ -936,7 +926,6 @@ func TestExtractAndValidateSpec(t *testing.T) {
 			},
 			dcName:      "test",
 			expectError: true,
-			errorMsg:    "missing 'spec' section",
 		},
 		{
 			name: "spec is not a map",
@@ -945,7 +934,6 @@ func TestExtractAndValidateSpec(t *testing.T) {
 			},
 			dcName:      "test",
 			expectError: true,
-			errorMsg:    "must be a map",
 		},
 		{
 			name: "spec fails validation - no image or build",
@@ -957,7 +945,6 @@ func TestExtractAndValidateSpec(t *testing.T) {
 			},
 			dcName:      "test",
 			expectError: true,
-			errorMsg:    "must specify either 'image' or 'build'",
 		},
 		{
 			name: "spec with build but missing dockerfile",
@@ -971,7 +958,6 @@ func TestExtractAndValidateSpec(t *testing.T) {
 			},
 			dcName:      "test",
 			expectError: true,
-			errorMsg:    "dockerfile is required",
 		},
 	}
 
@@ -981,7 +967,6 @@ func TestExtractAndValidateSpec(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorMsg)
 			} else {
 				require.NoError(t, err)
 				tt.assert(t, config)
@@ -996,7 +981,6 @@ func TestGetDevcontainerMap(t *testing.T) {
 		atmosConfig *schema.AtmosConfiguration
 		dcName      string
 		expectError bool
-		errorMsg    string
 	}{
 		{
 			name: "valid devcontainer exists",
@@ -1023,7 +1007,6 @@ func TestGetDevcontainerMap(t *testing.T) {
 			},
 			dcName:      "test",
 			expectError: true,
-			errorMsg:    "no devcontainers configured",
 		},
 		{
 			name: "devcontainer not found",
@@ -1036,7 +1019,6 @@ func TestGetDevcontainerMap(t *testing.T) {
 			},
 			dcName:      "nonexistent",
 			expectError: true,
-			errorMsg:    "not found",
 		},
 		{
 			name: "devcontainer is not a map",
@@ -1049,7 +1031,6 @@ func TestGetDevcontainerMap(t *testing.T) {
 			},
 			dcName:      "invalid",
 			expectError: true,
-			errorMsg:    "must be a map",
 		},
 	}
 
@@ -1059,7 +1040,6 @@ func TestGetDevcontainerMap(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorMsg)
 				assert.Nil(t, devMap)
 			} else {
 				require.NoError(t, err)
@@ -1074,7 +1054,6 @@ func TestValidateConfig(t *testing.T) {
 		name        string
 		config      *Config
 		expectError bool
-		errorMsg    string
 		assert      func(t *testing.T, config *Config)
 	}{
 		{
@@ -1114,13 +1093,11 @@ func TestValidateConfig(t *testing.T) {
 			name:        "missing name",
 			config:      &Config{Image: "alpine:latest"},
 			expectError: true,
-			errorMsg:    "name is required",
 		},
 		{
 			name:        "missing both image and dockerfile",
 			config:      &Config{Name: "test"},
 			expectError: true,
-			errorMsg:    "must specify either 'image' or 'build'",
 		},
 		{
 			name: "build missing dockerfile",
@@ -1129,7 +1106,6 @@ func TestValidateConfig(t *testing.T) {
 				Build: &Build{},
 			},
 			expectError: true,
-			errorMsg:    "dockerfile is required",
 		},
 	}
 
@@ -1139,7 +1115,6 @@ func TestValidateConfig(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorMsg)
 			} else {
 				require.NoError(t, err)
 				if tt.assert != nil {

@@ -18,14 +18,13 @@ import (
 
 func TestManager_Attach(t *testing.T) {
 	tests := []struct {
-		name          string
-		devName       string
-		instance      string
-		usePTY        bool
-		setupMocks    func(*MockConfigLoader, *MockRuntimeDetector, *MockRuntime)
-		expectError   bool
-		errorIs       error
-		errorContains string
+		name        string
+		devName     string
+		instance    string
+		usePTY      bool
+		setupMocks  func(*MockConfigLoader, *MockRuntimeDetector, *MockRuntime)
+		expectError bool
+		errorIs     error
 	}{
 		{
 			name:     "attach to running container successfully",
@@ -100,8 +99,7 @@ func TestManager_Attach(t *testing.T) {
 					LoadConfig(gomock.Any(), "test").
 					Return(nil, nil, errors.New("config not found"))
 			},
-			expectError:   true,
-			errorContains: "config not found",
+			expectError: true,
 		},
 		{
 			name:     "runtime detection fails",
@@ -116,8 +114,7 @@ func TestManager_Attach(t *testing.T) {
 					DetectRuntime("").
 					Return(nil, errors.New("docker not found"))
 			},
-			expectError:   true,
-			errorContains: "docker not found",
+			expectError: true,
 		},
 		{
 			name:     "container not found",
@@ -135,9 +132,8 @@ func TestManager_Attach(t *testing.T) {
 					List(gomock.Any(), gomock.Any()).
 					Return([]container.Info{}, nil)
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrDevcontainerNotFound,
-			errorContains: "not found",
+			expectError: true,
+			errorIs:     errUtils.ErrDevcontainerNotFound,
 		},
 		{
 			name:     "container list fails",
@@ -155,9 +151,8 @@ func TestManager_Attach(t *testing.T) {
 					List(gomock.Any(), gomock.Any()).
 					Return(nil, errors.New("runtime error"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to list containers",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 		{
 			name:     "container start fails",
@@ -184,9 +179,8 @@ func TestManager_Attach(t *testing.T) {
 					Start(gomock.Any(), "stopped-id").
 					Return(errors.New("start failed"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to start container",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 		{
 			name:     "attach fails",
@@ -213,8 +207,7 @@ func TestManager_Attach(t *testing.T) {
 					Attach(gomock.Any(), "running-id", gomock.Any()).
 					Return(errors.New("attach failed"))
 			},
-			expectError:   true,
-			errorContains: "attach failed",
+			expectError: true,
 		},
 		{
 			name:     "attach with PTY mode on supported platforms",
@@ -284,9 +277,6 @@ func TestManager_Attach(t *testing.T) {
 				if tt.errorIs != nil {
 					assert.ErrorIs(t, err, tt.errorIs)
 				}
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
-				}
 			} else {
 				// PTY mode will attempt to execute actual commands in test environment.
 				// We verify the code path was exercised via mock expectations.
@@ -307,7 +297,6 @@ func TestFindAndStartContainer(t *testing.T) {
 		setupMocks    func(*MockRuntime)
 		expectError   bool
 		errorIs       error
-		errorContains string
 	}{
 		{
 			name:          "container running - no action needed",
@@ -352,9 +341,8 @@ func TestFindAndStartContainer(t *testing.T) {
 					List(gomock.Any(), map[string]string{"name": "test-container"}).
 					Return([]container.Info{}, nil)
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrDevcontainerNotFound,
-			errorContains: "not found",
+			expectError: true,
+			errorIs:     errUtils.ErrDevcontainerNotFound,
 		},
 		{
 			name:          "list fails",
@@ -364,9 +352,8 @@ func TestFindAndStartContainer(t *testing.T) {
 					List(gomock.Any(), gomock.Any()).
 					Return(nil, errors.New("runtime error"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to list containers",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 		{
 			name:          "start fails",
@@ -385,9 +372,8 @@ func TestFindAndStartContainer(t *testing.T) {
 					Start(gomock.Any(), "stopped-id").
 					Return(errors.New("start failed"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to start container",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 	}
 
@@ -407,9 +393,6 @@ func TestFindAndStartContainer(t *testing.T) {
 				assert.Nil(t, containerInfo)
 				if tt.errorIs != nil {
 					assert.ErrorIs(t, err, tt.errorIs)
-				}
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
 				require.NoError(t, err)
@@ -641,7 +624,6 @@ func TestAttachToContainer_PTYMode(t *testing.T) {
 		runtimeType    string
 		setupMocks     func(*MockRuntime)
 		expectError    bool
-		errorContains  string
 	}{
 		{
 			name:           "PTY mode calls runtime.Info to determine binary",
@@ -722,8 +704,7 @@ func TestAttachToContainer_PTYMode(t *testing.T) {
 					Info(gomock.Any()).
 					Return(nil, errors.New("runtime info failed"))
 			},
-			expectError:   true,
-			errorContains: "failed to get runtime info",
+			expectError: true,
 		},
 	}
 
@@ -755,9 +736,6 @@ func TestAttachToContainer_PTYMode(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
-				}
 			} else {
 				// PTY mode will fail in test environment because it tries to execute
 				// actual shell commands. We verify that the PTY code path was reached

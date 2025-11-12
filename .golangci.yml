@@ -123,6 +123,10 @@ linters:
           msg: "Do not use deprecated github.com/pkg/errors; use static sentinel errors from errors/errors.go instead"
         - pattern: '\bpkgerrors\.'
           msg: "Do not use deprecated pkg/errors; use static sentinel errors from errors/errors.go instead"
+        - pattern: 'assert\.Contains\(.*,\s*err\.Error\('
+          msg: "NEVER use string matching on errors; use assert.ErrorIs(err, sentinel) to check sentinel errors from errors/errors.go"
+        - pattern: 'strings\.Contains\(err\.Error\('
+          msg: "NEVER use string matching on errors; use errors.Is(err, sentinel) to check sentinel errors from errors/errors.go"
         - pattern: github\.com/golang/mock
           msg: Use `go.uber.org/mock` instead of archived `github.com/golang/mock`
         - pattern: github\.com/mitchellh/go-homedir

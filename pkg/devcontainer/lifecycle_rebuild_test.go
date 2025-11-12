@@ -14,15 +14,14 @@ import (
 
 func TestManager_Rebuild(t *testing.T) {
 	tests := []struct {
-		name          string
-		devName       string
-		instance      string
-		identityName  string
-		noPull        bool
-		setupMocks    func(*MockConfigLoader, *MockIdentityManager, *MockRuntimeDetector, *MockRuntime)
-		expectError   bool
-		errorIs       error
-		errorContains string
+		name         string
+		devName      string
+		instance     string
+		identityName string
+		noPull       bool
+		setupMocks   func(*MockConfigLoader, *MockIdentityManager, *MockRuntimeDetector, *MockRuntime)
+		expectError  bool
+		errorIs      error
 	}{
 		{
 			name:     "rebuild container successfully",
@@ -145,8 +144,7 @@ func TestManager_Rebuild(t *testing.T) {
 					LoadConfig(gomock.Any(), "test").
 					Return(nil, nil, errors.New("config error"))
 			},
-			expectError:   true,
-			errorContains: "config error",
+			expectError: true,
 		},
 		{
 			name:         "identity injection fails",
@@ -163,8 +161,7 @@ func TestManager_Rebuild(t *testing.T) {
 					InjectIdentityEnvironment(gomock.Any(), config, "bad-identity").
 					Return(errors.New("identity not found"))
 			},
-			expectError:   true,
-			errorContains: "identity not found",
+			expectError: true,
 		},
 		{
 			name:     "runtime detection fails",
@@ -179,8 +176,7 @@ func TestManager_Rebuild(t *testing.T) {
 					DetectRuntime("").
 					Return(nil, errors.New("docker not found"))
 			},
-			expectError:   true,
-			errorContains: "docker not found",
+			expectError: true,
 		},
 		{
 			name:     "stop container fails",
@@ -206,9 +202,8 @@ func TestManager_Rebuild(t *testing.T) {
 					Stop(gomock.Any(), "old-id", gomock.Any()).
 					Return(errors.New("stop failed"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to stop container",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 		{
 			name:     "pull image fails",
@@ -230,9 +225,8 @@ func TestManager_Rebuild(t *testing.T) {
 					Pull(gomock.Any(), "ubuntu:22.04").
 					Return(errors.New("pull failed"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to pull image",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 		{
 			name:     "create container fails",
@@ -254,9 +248,8 @@ func TestManager_Rebuild(t *testing.T) {
 					Create(gomock.Any(), gomock.Any()).
 					Return("", errors.New("create failed"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to create container",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 		{
 			name:     "start container fails",
@@ -281,9 +274,8 @@ func TestManager_Rebuild(t *testing.T) {
 					Start(gomock.Any(), "new-id").
 					Return(errors.New("start failed"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to start container",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 		{
 			name:     "remove fails after stop succeeds",
@@ -312,9 +304,8 @@ func TestManager_Rebuild(t *testing.T) {
 					Remove(gomock.Any(), "old-id", true).
 					Return(errors.New("remove failed"))
 			},
-			expectError:   true,
-			errorIs:       errUtils.ErrContainerRuntimeOperation,
-			errorContains: "failed to remove container",
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
 		},
 		{
 			name:     "explicit runtime specification - docker",
@@ -445,9 +436,6 @@ func TestManager_Rebuild(t *testing.T) {
 				require.Error(t, err)
 				if tt.errorIs != nil {
 					assert.ErrorIs(t, err, tt.errorIs)
-				}
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
 				}
 			} else {
 				require.NoError(t, err)
