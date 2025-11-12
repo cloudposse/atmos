@@ -98,6 +98,11 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 			return atmosConfig, err
 		}
 
+		// Copy the already-computed CLI config directory into tempConfig.
+		// This ensures relative profile paths resolve against the actual CLI config directory
+		// rather than the current working directory.
+		tempConfig.CliConfigPath = atmosConfig.CliConfigPath
+
 		// Load each profile in order (left-to-right precedence).
 		if err := loadProfiles(v, configAndStacksInfo.ProfilesFromArg, &tempConfig); err != nil {
 			return atmosConfig, err
