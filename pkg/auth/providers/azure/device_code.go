@@ -6,8 +6,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -114,7 +112,7 @@ func (p *deviceCodeProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 
 // createMSALClient creates a MSAL public client with persistent token cache.
 // The cache is stored in ~/.azure/msal_token_cache.json for Azure CLI compatibility.
-func (p *deviceCodeProvider) createMSALClient(ctx context.Context) (public.Client, error) {
+func (p *deviceCodeProvider) createMSALClient() (public.Client, error) {
 	// Create MSAL cache for token persistence.
 	msalCache, err := azureCloud.NewMSALCache("")
 	if err != nil {
@@ -139,126 +137,242 @@ func (p *deviceCodeProvider) createMSALClient(ctx context.Context) (public.Clien
 	return client, nil
 }
 
-// Authenticate performs Azure device code authentication.
+// acquireTokenByDeviceCode performs device code authentication flow using MSAL.
+// It displays the device code to the user and waits for authentication to complete.
+func (p *deviceCodeProvider) acquireTokenByDeviceCode(ctx context.Context, client public.Client, scopes []string) (string, time.Time, error) {
+	// Create a context with timeout.
+	authCtx, cancel := context.WithTimeout(ctx, deviceCodeTimeout)
+	defer cancel()
+
+	// Start device code flow.
+	deviceCode, err := client.AcquireTokenByDeviceCode(authCtx, scopes)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("%w: failed to start device code flow: %w", errUtils.ErrAuthenticationFailed, err)
+	}
+
+	// Display device code to user.
+	displayDeviceCodePrompt(deviceCode.Result.UserCode, deviceCode.Result.VerificationURL)
+
+	// If not a TTY or in CI, use simple polling without spinner.
+	if !isTTY() || telemetry.IsCI() {
+		result, err := deviceCode.AuthenticationResult(authCtx)
+		if err != nil {
+			return "", time.Time{}, fmt.Errorf("%w: device code authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
+		}
+		return result.AccessToken, result.ExpiresOn, nil
+	}
+
+	// Use spinner for interactive terminals.
+	resultCh := make(chan struct {
+		token     string
+		expiresOn time.Time
+		err       error
+	}, 1)
+
+	// Start authentication in background.
+	go func() {
+		result, err := deviceCode.AuthenticationResult(authCtx)
+		if err != nil {
+			resultCh <- struct {
+				token     string
+				expiresOn time.Time
+				err       error
+			}{"", time.Time{}, err}
+			return
+		}
+		resultCh <- struct {
+			token     string
+			expiresOn time.Time
+			err       error
+		}{result.AccessToken, result.ExpiresOn, nil}
+	}()
+
+	// Run spinner.
+	model := newSpinnerModel()
+	prog := tea.NewProgram(model, tea.WithOutput(os.Stderr))
+
+	go func() {
+		result := <-resultCh
+		prog.Send(authCompleteMsg{
+			token:     result.token,
+			expiresOn: result.expiresOn,
+			err:       result.err,
+		})
+	}()
+
+	finalModel, err := prog.Run()
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("%w: failed to run spinner: %w", errUtils.ErrAuthenticationFailed, err)
+	}
+
+	m := finalModel.(spinnerModel)
+	if m.authErr != nil {
+		return "", time.Time{}, m.authErr
+	}
+
+	return m.token, m.expiresOn, nil
+}
+
+// displayDeviceCodePrompt displays the device code and verification URL to the user.
+func displayDeviceCodePrompt(userCode, verificationURL string) {
+	log.Debug("Displaying Azure authentication prompt",
+		"url", verificationURL,
+		"code", userCode,
+		"isCI", telemetry.IsCI(),
+	)
+
+	// Check if we have a TTY for fancy output.
+	if isTTY() && !telemetry.IsCI() {
+		displayVerificationDialog(userCode, verificationURL)
+	} else {
+		// Fallback to simple text output for non-TTY or CI environments.
+		displayVerificationPlainText(userCode, verificationURL)
+	}
+
+	// Open browser if not in CI.
+	// Azure supports pre-filling the code with ?otc=CODE parameter.
+	if !telemetry.IsCI() && verificationURL != "" {
+		urlToOpen := fmt.Sprintf("%s?otc=%s", verificationURL, userCode)
+		if err := utils.OpenUrl(urlToOpen); err != nil {
+			log.Debug("Failed to open browser automatically", "error", err)
+		} else {
+			log.Debug("Browser opened successfully", "url", urlToOpen)
+		}
+	}
+	log.Debug("Finished displaying device code prompt, waiting for user authentication")
+}
+
+// Authenticate performs Azure device code authentication using MSAL.
+// This implementation uses MSAL directly to enable refresh token persistence,
+// making it a true drop-in replacement for `az login`.
 func (p *deviceCodeProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
 	defer perf.Track(nil, "azure.deviceCodeProvider.Authenticate")()
 
-	// Check for cached token first to avoid unnecessary device authorization.
-	cachedToken, cachedExpiry, cachedGraphToken, cachedGraphExpiry, err := p.loadCachedToken()
+	// Create MSAL client with persistent cache.
+	// This client automatically manages token caching and refresh tokens.
+	client, err := p.createMSALClient()
 	if err != nil {
-		log.Debug("Error loading cached token, will proceed with device authorization", "error", err)
+		return nil, fmt.Errorf("%w: failed to create MSAL client: %w", errUtils.ErrAuthenticationFailed, err)
 	}
-	if cachedToken != "" {
-		log.Debug("Using cached Azure device code token", "expiresAt", cachedExpiry)
 
-		// Update Azure CLI files even when using cached credentials.
-		// This ensures Terraform providers can always find the credentials.
-		// Note: KeyVault tokens are obtained fresh each time, not cached in device code cache.
-		if err := p.updateAzureCLICache(cachedToken, cachedExpiry, cachedGraphToken, cachedGraphExpiry, "", time.Time{}); err != nil {
-			log.Debug("Failed to update Azure CLI cache from cached credentials", "error", err)
+	// Try silent authentication first (uses cached tokens/refresh tokens).
+	accounts, err := client.Accounts(ctx)
+	if err != nil {
+		log.Debug("Failed to get cached accounts, will proceed with device code flow", "error", err)
+	}
+
+	var accessToken, graphToken, keyVaultToken string
+	var expiresOn, graphExpiresOn, keyVaultExpiresOn time.Time
+
+	// If we have cached accounts, try silent token acquisition.
+	if len(accounts) > 0 {
+		log.Debug("Found cached account, attempting silent token acquisition", "account", accounts[0].PreferredUsername)
+
+		// Try to get management token silently.
+		result, err := client.AcquireTokenSilent(ctx,
+			[]string{"https://management.azure.com/.default"},
+			public.WithSilentAccount(accounts[0]),
+		)
+		if err == nil {
+			accessToken = result.AccessToken
+			expiresOn = result.ExpiresOn
+			log.Debug("Successfully acquired management token silently", "expiresOn", expiresOn)
+
+			// Try to get Graph token silently.
+			graphResult, err := client.AcquireTokenSilent(ctx,
+				[]string{"https://graph.microsoft.com/.default"},
+				public.WithSilentAccount(accounts[0]),
+			)
+			if err == nil {
+				graphToken = graphResult.AccessToken
+				graphExpiresOn = graphResult.ExpiresOn
+				log.Debug("Successfully acquired Graph token silently", "expiresOn", graphExpiresOn)
+			} else {
+				log.Debug("Failed to get Graph token silently, will skip", "error", err)
+			}
+
+			// Try to get KeyVault token silently.
+			kvResult, err := client.AcquireTokenSilent(ctx,
+				[]string{"https://vault.azure.net/.default"},
+				public.WithSilentAccount(accounts[0]),
+			)
+			if err == nil {
+				keyVaultToken = kvResult.AccessToken
+				keyVaultExpiresOn = kvResult.ExpiresOn
+				log.Debug("Successfully acquired KeyVault token silently", "expiresOn", keyVaultExpiresOn)
+			} else {
+				log.Debug("Failed to get KeyVault token silently, will skip", "error", err)
+			}
+		} else {
+			log.Debug("Silent token acquisition failed, will proceed with device code flow", "error", err)
+			accessToken = "" // Reset to trigger device code flow.
+		}
+	}
+
+	// If silent acquisition failed or no cached account, use device code flow.
+	if accessToken == "" {
+		// Check if we're in a headless environment - device code flow requires user interaction.
+		if !isInteractive() {
+			return nil, fmt.Errorf("%w: Azure device code flow requires an interactive terminal (no TTY detected). Use managed identity or service principal authentication in headless environments", errUtils.ErrAuthenticationFailed)
 		}
 
-		creds := &authTypes.AzureCredentials{
-			AccessToken:    cachedToken,
-			TokenType:      "Bearer",
-			Expiration:     cachedExpiry.Format(time.RFC3339),
-			TenantID:       p.tenantID,
-			SubscriptionID: p.subscriptionID,
-			Location:       p.location,
+		log.Debug("Starting Azure device code authentication",
+			"provider", p.name,
+			"tenant", p.tenantID,
+			"clientID", p.clientID,
+		)
+
+		// Start device code flow for management scope.
+		accessToken, expiresOn, err = p.acquireTokenByDeviceCode(ctx, client,
+			[]string{"https://management.azure.com/.default"})
+		if err != nil {
+			return nil, err
 		}
 
-		// Add Graph API token if available from cache.
-		if cachedGraphToken != "" {
-			creds.GraphAPIToken = cachedGraphToken
-			creds.GraphAPIExpiration = cachedGraphExpiry.Format(time.RFC3339)
+		log.Debug("Authentication successful", "expiration", expiresOn)
+
+		// Get the authenticated account for subsequent silent acquisitions.
+		accounts, err = client.Accounts(ctx)
+		if err != nil || len(accounts) == 0 {
+			log.Debug("Failed to get authenticated account, will skip Graph and KeyVault tokens", "error", err)
+		} else {
+			// Request Graph API token for azuread provider (silently, using refresh token).
+			log.Debug("Requesting Graph API token for azuread provider")
+			graphResult, err := client.AcquireTokenSilent(ctx,
+				[]string{"https://graph.microsoft.com/.default"},
+				public.WithSilentAccount(accounts[0]),
+			)
+			if err != nil {
+				log.Debug("Failed to get Graph API token, azuread provider may not work", "error", err)
+			} else {
+				graphToken = graphResult.AccessToken
+				graphExpiresOn = graphResult.ExpiresOn
+				log.Debug("Successfully obtained Graph API token",
+					"expiresOn", graphExpiresOn,
+					"tokenLength", len(graphToken))
+			}
+
+			// Request KeyVault token for azurerm provider KeyVault operations (silently).
+			log.Debug("Requesting KeyVault token for azurerm provider")
+			kvResult, err := client.AcquireTokenSilent(ctx,
+				[]string{"https://vault.azure.net/.default"},
+				public.WithSilentAccount(accounts[0]),
+			)
+			if err != nil {
+				log.Debug("Failed to get KeyVault token, KeyVault operations may not work", "error", err)
+			} else {
+				keyVaultToken = kvResult.AccessToken
+				keyVaultExpiresOn = kvResult.ExpiresOn
+				log.Debug("Successfully obtained KeyVault token",
+					"expiresOn", keyVaultExpiresOn,
+					"tokenLength", len(keyVaultToken))
+			}
 		}
-
-		return creds, nil
-	}
-
-	// No valid cached token, proceed with device authorization flow.
-
-	// Check if we're in a headless environment - device code flow requires user interaction.
-	if !isInteractive() {
-		return nil, fmt.Errorf("%w: Azure device code flow requires an interactive terminal (no TTY detected). Use managed identity or service principal authentication in headless environments", errUtils.ErrAuthenticationFailed)
-	}
-
-	log.Debug("Starting Azure device code authentication",
-		"provider", p.name,
-		"tenant", p.tenantID,
-		"clientID", p.clientID,
-	)
-
-	// Create device code credential with user prompt callback.
-	var userCode string
-	var verificationURL string
-
-	cred, err := azidentity.NewDeviceCodeCredential(&azidentity.DeviceCodeCredentialOptions{
-		TenantID: p.tenantID,
-		ClientID: p.clientID,
-		UserPrompt: func(ctx context.Context, msg azidentity.DeviceCodeMessage) error {
-			userCode = msg.UserCode
-			verificationURL = msg.VerificationURL
-			p.promptDeviceAuth(msg)
-			return nil
-		},
-		ClientOptions: policy.ClientOptions{
-			Telemetry: policy.TelemetryOptions{
-				ApplicationID: "atmos-auth",
-			},
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create Azure device code credential: %w", errUtils.ErrAuthenticationFailed, err)
-	}
-
-	// Get token with spinner (if TTY).
-	accessToken, expiresOn, err := p.getTokenWithSpinner(ctx, cred, userCode, verificationURL)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Debug("Authentication successful", "expiration", expiresOn)
-
-	// Request Graph API token for azuread provider.
-	// We do this after device code authentication completes, using the same credential.
-	log.Debug("Requesting Graph API token for azuread provider")
-	graphToken, graphExpiresOn, err := p.getGraphAPIToken(ctx, cred)
-	if err != nil {
-		log.Debug("Failed to get Graph API token, azuread provider may not work", "error", err)
-		// Non-fatal - azurerm backend will still work.
-		// Set empty values for Graph API token.
-		graphToken = ""
-		graphExpiresOn = time.Time{}
-	} else {
-		log.Debug("Successfully obtained Graph API token",
-			"expiresOn", graphExpiresOn,
-			"tokenLength", len(graphToken))
-	}
-
-	// Request KeyVault token for azurerm provider KeyVault operations.
-	// We do this after device code authentication completes, using the same credential.
-	log.Debug("Requesting KeyVault token for azurerm provider")
-	keyVaultToken, keyVaultExpiresOn, err := p.getKeyVaultToken(ctx, cred)
-	if err != nil {
-		log.Debug("Failed to get KeyVault token, KeyVault operations may not work", "error", err)
-		// Non-fatal - other operations will still work.
-		// Set empty values for KeyVault token.
-		keyVaultToken = ""
-		keyVaultExpiresOn = time.Time{}
-	} else {
-		log.Debug("Successfully obtained KeyVault token",
-			"expiresOn", keyVaultExpiresOn,
-			"tokenLength", len(keyVaultToken))
-	}
-
-	// Save all tokens to cache for future use (non-fatal if fails).
-	if err := p.saveCachedToken(accessToken, "Bearer", expiresOn, graphToken, graphExpiresOn); err != nil {
-		log.Debug("Failed to cache Azure device code token", "error", err)
 	}
 
 	// Update Azure CLI token cache so Terraform can use it automatically.
 	// This makes Atmos auth work exactly like `az login`.
+	// Note: MSAL already persisted tokens (including refresh tokens) to ~/.azure/msal_token_cache.json.
 	if err := p.updateAzureCLICache(accessToken, expiresOn, graphToken, graphExpiresOn, keyVaultToken, keyVaultExpiresOn); err != nil {
 		log.Debug("Failed to update Azure CLI token cache", "error", err)
 	}
@@ -295,36 +409,6 @@ func (p *deviceCodeProvider) Authenticate(ctx context.Context) (authTypes.ICrede
 	}
 
 	return creds, nil
-}
-
-// promptDeviceAuth displays user code and verification URI.
-func (p *deviceCodeProvider) promptDeviceAuth(msg azidentity.DeviceCodeMessage) {
-	log.Debug("Displaying Azure authentication prompt",
-		"url", msg.VerificationURL,
-		"code", msg.UserCode,
-		"isCI", telemetry.IsCI(),
-	)
-
-	// Check if we have a TTY for fancy output.
-	if isTTY() && !telemetry.IsCI() {
-		displayVerificationDialog(msg.UserCode, msg.VerificationURL)
-	} else {
-		// Fallback to simple text output for non-TTY or CI environments.
-		displayVerificationPlainText(msg.UserCode, msg.VerificationURL)
-	}
-
-	// Open browser if not in CI.
-	// Use verification_uri_complete if available, otherwise build URL with code parameter.
-	if !telemetry.IsCI() && msg.VerificationURL != "" {
-		// Azure supports pre-filling the code with ?otc=CODE parameter.
-		urlToOpen := fmt.Sprintf("%s?otc=%s", msg.VerificationURL, msg.UserCode)
-		if err := utils.OpenUrl(urlToOpen); err != nil {
-			log.Debug("Failed to open browser automatically", "error", err)
-		} else {
-			log.Debug("Browser opened successfully", "url", urlToOpen)
-		}
-	}
-	log.Debug("Finished promptDeviceAuth, starting polling")
 }
 
 // isTTY checks if stderr is a terminal.
@@ -373,113 +457,6 @@ func displayVerificationPlainText(code, url string) {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Please open the URL above and enter the verification code to authenticate.")
 	fmt.Fprintln(os.Stderr, "")
-}
-
-// getTokenWithSpinner polls for the access token with a spinner UI.
-func (p *deviceCodeProvider) getTokenWithSpinner(ctx context.Context, cred *azidentity.DeviceCodeCredential, userCode, verificationURL string) (string, time.Time, error) {
-	// Create a context with timeout.
-	authCtx, cancel := context.WithTimeout(ctx, deviceCodeTimeout)
-	defer cancel()
-
-	// If not a TTY or in CI, use simple polling without spinner.
-	if !isTTY() || telemetry.IsCI() {
-		return p.pollForAccessToken(authCtx, cred)
-	}
-
-	// Use spinner for interactive terminals.
-	resultCh := make(chan struct {
-		token     string
-		expiresOn time.Time
-		err       error
-	}, 1)
-
-	// Start authentication in background.
-	go func() {
-		token, expiresOn, err := p.pollForAccessToken(authCtx, cred)
-		resultCh <- struct {
-			token     string
-			expiresOn time.Time
-			err       error
-		}{token, expiresOn, err}
-	}()
-
-	// Run spinner.
-	model := newSpinnerModel()
-	prog := tea.NewProgram(model, tea.WithOutput(os.Stderr))
-
-	go func() {
-		result := <-resultCh
-		prog.Send(authCompleteMsg{
-			token:     result.token,
-			expiresOn: result.expiresOn,
-			err:       result.err,
-		})
-	}()
-
-	finalModel, err := prog.Run()
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("%w: failed to run spinner: %w", errUtils.ErrAuthenticationFailed, err)
-	}
-
-	m := finalModel.(spinnerModel)
-	if m.authErr != nil {
-		return "", time.Time{}, m.authErr
-	}
-
-	return m.token, m.expiresOn, nil
-}
-
-// pollForAccessToken polls Azure for the access token.
-func (p *deviceCodeProvider) pollForAccessToken(ctx context.Context, cred *azidentity.DeviceCodeCredential) (string, time.Time, error) {
-	log.Debug("Polling for Azure access token")
-
-	// Request token with Azure Resource Manager scope.
-	// This gives us access to manage Azure resources.
-	token, err := cred.GetToken(ctx, policy.TokenRequestOptions{
-		Scopes: []string{"https://management.azure.com/.default"},
-	})
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("%w: failed to get Azure access token: %w", errUtils.ErrAuthenticationFailed, err)
-	}
-
-	log.Debug("Successfully obtained Azure access token", "expiresOn", token.ExpiresOn)
-	return token.Token, token.ExpiresOn, nil
-}
-
-// getGraphAPIToken requests a Graph API token for azuread provider.
-// This is called after device code authentication completes.
-func (p *deviceCodeProvider) getGraphAPIToken(ctx context.Context, cred *azidentity.DeviceCodeCredential) (string, time.Time, error) {
-	log.Debug("Requesting Graph API token for azuread provider")
-
-	// Request token with Microsoft Graph API scope.
-	// This gives us access to Azure AD operations.
-	token, err := cred.GetToken(ctx, policy.TokenRequestOptions{
-		Scopes: []string{"https://graph.microsoft.com/.default"},
-	})
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("failed to get Graph API token: %w", err)
-	}
-
-	log.Debug("Successfully obtained Graph API token", "expiresOn", token.ExpiresOn)
-	return token.Token, token.ExpiresOn, nil
-}
-
-// getKeyVaultToken requests a KeyVault token for azurerm provider KeyVault operations.
-// This is called after device code authentication completes.
-func (p *deviceCodeProvider) getKeyVaultToken(ctx context.Context, cred *azidentity.DeviceCodeCredential) (string, time.Time, error) {
-	log.Debug("Requesting KeyVault token for azurerm provider")
-
-	// Request token with Azure KeyVault scope.
-	// This gives us access to KeyVault operations.
-	token, err := cred.GetToken(ctx, policy.TokenRequestOptions{
-		Scopes: []string{"https://vault.azure.net/.default"},
-	})
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("failed to get KeyVault token: %w", err)
-	}
-
-	log.Debug("Successfully obtained KeyVault token", "expiresOn", token.ExpiresOn)
-	return token.Token, token.ExpiresOn, nil
 }
 
 // Validate validates the provider configuration.
