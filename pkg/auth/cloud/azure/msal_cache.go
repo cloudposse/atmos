@@ -29,7 +29,7 @@ func NewMSALCache(cachePath string) (cache.ExportReplace, error) {
 
 	// Ensure cache directory exists.
 	cacheDir := filepath.Dir(cachePath)
-	if err := os.MkdirAll(cacheDir, 0700); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
@@ -79,7 +79,7 @@ func (c *msalCache) Export(ctx context.Context, m cache.Marshaler, hints cache.E
 	}
 
 	// Write to disk with secure permissions.
-	if err := os.WriteFile(c.cachePath, data, 0600); err != nil {
+	if err := os.WriteFile(c.cachePath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write MSAL cache: %w", err)
 	}
 

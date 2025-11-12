@@ -72,7 +72,7 @@ func TestMSALCache_ReplaceExisting(t *testing.T) {
 	cachePath := filepath.Join(tempDir, "msal_cache.json")
 
 	testData := []byte(`{"AccessToken": {}, "Account": {}}`)
-	err := os.WriteFile(cachePath, testData, 0600)
+	err := os.WriteFile(cachePath, testData, 0o600)
 	require.NoError(t, err)
 
 	cache, err := NewMSALCache(cachePath)
@@ -111,7 +111,7 @@ func TestMSALCache_Export(t *testing.T) {
 	// Verify file permissions.
 	info, err := os.Stat(cachePath)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0600), info.Mode().Perm(), "Cache file should have 0600 permissions")
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "Cache file should have 0600 permissions")
 }
 
 func TestMSALCache_ReplaceWithCancellation(t *testing.T) {
