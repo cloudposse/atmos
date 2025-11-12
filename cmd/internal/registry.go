@@ -136,7 +136,7 @@ func RegisterAll(root *cobra.Command) error {
 			//
 			// Key delegation mechanisms:
 			// - Args: Enforces the same argument validation as the source
-			// - RunE: Executes the source command's logic
+			// - Run/RunE: Executes the source command's logic (copy whichever is non-nil)
 			// - FParseErrWhitelist: Allows the same flag parsing behavior
 			// - ValidArgsFunction: Provides the same shell completion
 			aliasCmd := &cobra.Command{
@@ -145,6 +145,7 @@ func RegisterAll(root *cobra.Command) error {
 				Long:               alias.Long,
 				Example:            alias.Example,
 				Args:               sourceCmd.Args,
+				Run:                sourceCmd.Run,
 				RunE:               sourceCmd.RunE,
 				FParseErrWhitelist: sourceCmd.FParseErrWhitelist,
 				ValidArgsFunction:  sourceCmd.ValidArgsFunction,

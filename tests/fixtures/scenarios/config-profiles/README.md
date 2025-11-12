@@ -4,7 +4,7 @@ This fixture provides a minimal test environment for profile-related functionali
 
 ## Structure
 
-```
+```yaml
 config-profiles/
 ├── atmos.yaml           # Base configuration
 └── profiles/            # Profile directories
@@ -27,4 +27,4 @@ config-profiles/
 
 ## Usage
 
-Tests should use `t.Chdir("fixtures/scenarios/config-profiles")` to switch to this directory.
+Tests should use "fixtures/scenarios/config-profiles" to switch to this directory.

@@ -50,6 +50,8 @@ func init() {
 
 // profileFormatFlagCompletion provides shell completion for the format flag.
 func profileFormatFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "profile.profileFormatFlagCompletion")()
+
 	return []string{"table", "json", "yaml"}, cobra.ShellCompDirectiveNoFileComp
 }
 
@@ -91,6 +93,8 @@ func executeProfileListCommand(cmd *cobra.Command, args []string) error {
 
 // renderProfilesJSON renders profiles as JSON.
 func renderProfilesJSON(profiles []profile.ProfileInfo) (string, error) {
+	defer perf.Track(nil, "profile.renderProfilesJSON")()
+
 	data, err := json.MarshalIndent(profiles, "", "  ")
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrOutputFormat).
@@ -108,6 +112,8 @@ func renderProfilesJSON(profiles []profile.ProfileInfo) (string, error) {
 
 // renderProfilesYAML renders profiles as YAML.
 func renderProfilesYAML(profiles []profile.ProfileInfo) (string, error) {
+	defer perf.Track(nil, "profile.renderProfilesYAML")()
+
 	data, err := yaml.Marshal(profiles)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrOutputFormat).
@@ -139,6 +145,8 @@ func buildProfileDiscoveryError(err error, atmosConfig *schema.AtmosConfiguratio
 
 // renderProfileListOutput renders profiles in the requested format.
 func renderProfileListOutput(profiles []profile.ProfileInfo, format string) (string, error) {
+	defer perf.Track(nil, "profile.renderProfileListOutput")()
+
 	var output string
 	var err error
 
