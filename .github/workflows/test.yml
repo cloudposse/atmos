@@ -166,7 +166,7 @@ jobs:
 
       - name: Install helm-diff plugin
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        run: helm plugin install https://github.com/databus23/helm-diff
+        run: helm plugin install https://github.com/databus23/helm-diff --verify=false
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -368,7 +368,7 @@ jobs:
         run: sudo apt-get -y install kubectl helmfile helm
 
       - name: Install helm-diff plugin
-        run: helm plugin install https://github.com/databus23/helm-diff
+        run: helm plugin install https://github.com/databus23/helm-diff --verify=false
 
       - name: Write a default AWS profile to the AWS config file
         run: |
