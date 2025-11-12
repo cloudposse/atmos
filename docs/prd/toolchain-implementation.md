@@ -685,18 +685,20 @@ toolchain:
 
 #### 5. Offline Mode / Full Binary Caching
 
-**Status**: 🟡 **Partial** (downloads cached in temp, not permanent)
+**Status**: 🟡 **Partial** (registry metadata persists, binaries installed to XDG data directory)
 
 **Current**:
-- Registry metadata cached in `${XDG_CACHE_HOME}/atmos-toolchain` (fallback: `~/.cache/atmos-toolchain`, replacing the old `/tmp/tools-cache/`)
-- Downloaded archives cached temporarily
-- Cache cleared on system restart
+- Registry metadata persisted in `${XDG_CACHE_HOME}/atmos/toolchain` (fallback: `~/.cache/atmos/toolchain`)
+- Downloaded archives cached temporarily during installation, then removed
+- Binaries installed to `${XDG_DATA_HOME}/atmos/toolchain` (fallback: `~/.local/share/atmos/toolchain`) and persist until manual removal
+- Falls back to `.tools/` in current directory only if XDG data directory cannot be created
+- No automatic cache cleanup on system restart
 
 **Needed**:
-- Persistent cache in `${XDG_CACHE_HOME}/atmos-toolchain` (fallback: `~/.cache/atmos-toolchain`)
-- Offline mode flag to skip network requests
-- Cache expiration policies
-- Cache size limits
+- Offline mode flag to skip network requests and use only cached data
+- Cache expiration policies for registry metadata
+- Cache size limits with automatic cleanup
+- Optional persistent binary archive caching for true offline operation
 
 ---
 
