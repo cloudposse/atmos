@@ -77,7 +77,7 @@ tests:
     expect:
       diff: []
       stderr:
-        - "path is not within Atmos component directories"
+        - "Missing Configuration"
       exit_code: 1
 
   - name: terraform plan with path but component not in stack
@@ -118,8 +118,8 @@ tests:
     expect:
       diff: []
       stderr:
-        - "must specify a component directory"
-      exit_code: 1
+        - "failed to resolve component from path"
+      exit_code: 2
 
   # Component type mismatch tests
   - name: helmfile command with terraform component path
@@ -252,7 +252,7 @@ tests:
     expect:
       diff: []
       stderr:
-        - "path is not within Atmos component directories"
+        - "Missing Configuration"
       exit_code: 1
 
   - name: describe component with component name (backward compatibility)
