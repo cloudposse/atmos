@@ -204,7 +204,9 @@ func init() {
 	scaffoldGenerateParser.RegisterFlags(scaffoldGenerateCmd)
 
 	// Bind to Viper for precedence handling
-	_ = scaffoldGenerateParser.BindToViper(viper.GetViper())
+	if err := scaffoldGenerateParser.BindToViper(viper.GetViper()); err != nil {
+		log.Debug("Failed to bind scaffold flags to Viper", "error", err)
+	}
 
 	// Add subcommands to scaffold parent
 	scaffoldCmd.AddCommand(scaffoldGenerateCmd)

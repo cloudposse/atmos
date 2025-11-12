@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 var initParser *flags.StandardParser
@@ -96,7 +97,9 @@ func init() {
 	initParser.RegisterFlags(initCmd)
 
 	// Bind to Viper for precedence handling
-	_ = initParser.BindToViper(viper.GetViper())
+	if err := initParser.BindToViper(viper.GetViper()); err != nil {
+		log.Debug("Failed to bind init flags to Viper", "error", err)
+	}
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
