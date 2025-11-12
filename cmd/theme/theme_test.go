@@ -797,11 +797,12 @@ func TestThemeListEnvVarFallback(t *testing.T) {
 		viper.Reset()
 		defer viper.Reset()
 
-		// Bind ATMOS_THEME env var to Viper
-		_ = viper.BindEnv("ATMOS_THEME")
-
 		// Set ATMOS_THEME via environment - this should hit line 81-82
 		t.Setenv("ATMOS_THEME", "dracula")
+
+		// Bind ATMOS_THEME env var to Viper and enable automatic env reading
+		_ = viper.BindEnv("ATMOS_THEME")
+		viper.AutomaticEnv()
 
 		// Execute
 		err := executeThemeList(themeListCmd, []string{})
@@ -818,11 +819,12 @@ func TestThemeListEnvVarFallback(t *testing.T) {
 		viper.Reset()
 		defer viper.Reset()
 
-		// Bind THEME env var to Viper (not ATMOS_THEME)
-		_ = viper.BindEnv("THEME")
-
 		// Set only THEME via environment (not ATMOS_THEME) - this should hit line 83-84
 		t.Setenv("THEME", "nord")
+
+		// Bind THEME env var to Viper (not ATMOS_THEME) and enable automatic env reading
+		_ = viper.BindEnv("THEME")
+		viper.AutomaticEnv()
 
 		// Execute
 		err := executeThemeList(themeListCmd, []string{})
@@ -858,13 +860,14 @@ func TestThemeListEnvVarFallback(t *testing.T) {
 		viper.Reset()
 		defer viper.Reset()
 
-		// Bind both env vars
-		_ = viper.BindEnv("ATMOS_THEME")
-		_ = viper.BindEnv("THEME")
-
 		// Set ATMOS_THEME to empty string (should skip to THEME check)
 		t.Setenv("ATMOS_THEME", "")
 		t.Setenv("THEME", "github")
+
+		// Bind both env vars and enable automatic env reading
+		_ = viper.BindEnv("ATMOS_THEME")
+		_ = viper.BindEnv("THEME")
+		viper.AutomaticEnv()
 
 		// Execute - should use THEME since ATMOS_THEME is empty
 		err := executeThemeList(themeListCmd, []string{})
