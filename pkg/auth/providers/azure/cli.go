@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -234,8 +235,8 @@ func parseAzureCLITime(expiresOn string) (time.Time, error) {
 
 	// Try parsing as Unix timestamp (seconds since epoch).
 	// Example: "1730991739"
-	if timestamp, err := time.Parse("0123456789", expiresOn); err == nil {
-		return time.Unix(timestamp.Unix(), 0), nil
+	if parsedSeconds, err := strconv.ParseInt(expiresOn, 10, 64); err == nil {
+		return time.Unix(parsedSeconds, 0), nil
 	}
 
 	return time.Time{}, fmt.Errorf("unable to parse time %q: tried RFC3339, local time formats, and Unix timestamp", expiresOn)

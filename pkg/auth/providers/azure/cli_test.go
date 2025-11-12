@@ -499,6 +499,11 @@ func TestParseAzureCLITime(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:        "Unix timestamp",
+			input:       "1730991739",
+			expectError: false,
+		},
+		{
 			name:        "empty string",
 			input:       "",
 			expectError: true,
