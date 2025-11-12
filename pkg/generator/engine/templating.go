@@ -305,7 +305,17 @@ func tryExtractFromMapConfig(scaffoldConfig interface{}) []string {
 		return nil
 	}
 
-	return []string{delimsSlice[0].(string), delimsSlice[1].(string)}
+	// Safely assert each element to string
+	leftDelim, ok := delimsSlice[0].(string)
+	if !ok {
+		return nil
+	}
+	rightDelim, ok := delimsSlice[1].(string)
+	if !ok {
+		return nil
+	}
+
+	return []string{leftDelim, rightDelim}
 }
 
 // processFilePath processes the file path as a template and returns the rendered path.
