@@ -498,7 +498,8 @@ func displayVerificationPlainText(code, url string) {
 	fmt.Fprintln(os.Stderr, "")
 }
 
-// Validate validates the provider configuration.
+// Validate checks the provider configuration and returns an error if required fields
+// (tenant_id, client_id) are missing or invalid.
 func (p *deviceCodeProvider) Validate() error {
 	if p.tenantID == "" {
 		return fmt.Errorf("%w: tenant_id is required", errUtils.ErrInvalidProviderConfig)
@@ -509,7 +510,8 @@ func (p *deviceCodeProvider) Validate() error {
 	return nil
 }
 
-// Environment returns environment variables for this provider.
+// Environment returns Azure-specific environment variables for this provider,
+// including AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, and AZURE_LOCATION if configured.
 func (p *deviceCodeProvider) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 	if p.tenantID != "" {
@@ -524,10 +526,12 @@ func (p *deviceCodeProvider) Environment() (map[string]string, error) {
 	return env, nil
 }
 
-// PrepareEnvironment prepares environment variables for external processes.
+// PrepareEnvironment prepares environment variables for external processes (Terraform, etc.)
+// by merging provider configuration with the base environment and setting Azure-specific variables
+// (ARM_TENANT_ID, ARM_SUBSCRIPTION_ID, ARM_USE_OIDC). Returns the prepared environment map and error.
+// Note: access token is set later by SetEnvironmentVariables which loads from credential store.
 func (p *deviceCodeProvider) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	// Use shared Azure environment preparation.
-	// Note: access token is set later by SetEnvironmentVariables which loads from credential store.
 	return azureCloud.PrepareEnvironment(
 		environ,
 		p.subscriptionID,
@@ -538,13 +542,15 @@ func (p *deviceCodeProvider) PrepareEnvironment(ctx context.Context, environ map
 	), nil
 }
 
-// Logout removes cached device code tokens.
+// Logout removes cached device code tokens from disk by deleting the MSAL token cache file.
+// Returns an error if the cache deletion fails.
 func (p *deviceCodeProvider) Logout(ctx context.Context) error {
 	log.Debug("Logout Azure device code provider", "provider", p.name)
 	return p.deleteCachedToken()
 }
 
-// GetFilesDisplayPath returns the display path for credential files.
+// GetFilesDisplayPath returns the user-facing display path for credential files
+// stored by this provider (e.g., "~/.azure/atmos/provider-name").
 func (p *deviceCodeProvider) GetFilesDisplayPath() string {
 	return "~/.azure/atmos/" + p.name
 }
