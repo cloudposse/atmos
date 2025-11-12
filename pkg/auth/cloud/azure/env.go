@@ -42,7 +42,6 @@ var problematicAzureEnvVars = []string{
 	"ARM_USE_OIDC",
 }
 
-
 // PrepareEnvironment configures environment variables for Azure SDK when using Atmos auth.
 //
 // This function:
