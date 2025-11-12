@@ -104,7 +104,7 @@ func (m *LockFileManager) RemoveTool(ctx context.Context, tool, version string) 
 	lock, err := lockfile.Load(m.filePath)
 	if err != nil {
 		// Treat missing file as no-op.
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
 		return err
@@ -149,7 +149,7 @@ func (m *LockFileManager) SetDefault(ctx context.Context, tool, version string) 
 }
 
 // GetTools returns all tools managed by the lock file as a map of tool names to version slices.
-// Each tool can have multiple versions listed, with the first being the default/active version.
+// Each tool maps to a single version (represented as a one-element slice).
 func (m *LockFileManager) GetTools(ctx context.Context) (map[string][]string, error) {
 	defer perf.Track(nil, "filemanager.LockFileManager.GetTools")()
 

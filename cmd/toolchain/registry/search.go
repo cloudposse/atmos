@@ -155,15 +155,13 @@ Try:
 		return data.WriteYAML(displayResults)
 	case "table":
 		// Display results with info toast showing range vs total.
-		var message string
 		if totalMatches <= searchLimit {
 			// Showing all results.
-			message = fmt.Sprintf("Found **%d tools** matching `%s`:", totalMatches, query)
+			_ = ui.Infof("Found **%d tools** matching `%s`:", totalMatches, query)
 		} else {
 			// Showing subset of results.
-			message = fmt.Sprintf("Showing **%d** of **%d tools** matching `%s`:", len(displayResults), totalMatches, query)
+			_ = ui.Infof("Showing **%d** of **%d tools** matching `%s`:", len(displayResults), totalMatches, query)
 		}
-		_ = ui.Infof(message)
 		_ = ui.Writeln("") // Blank line after toast
 		displaySearchResults(displayResults)
 
@@ -323,7 +321,7 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 
 	// Render table and apply conditional styling.
 	styled := renderSearchTableWithConditionalStyling(t.View(), rows)
-	_ = data.Writeln(styled)
+	ui.Writeln(styled)
 }
 
 // renderSearchTableWithConditionalStyling applies color to status indicators and dims non-installed rows.
@@ -369,7 +367,7 @@ func renderSearchTableWithConditionalStyling(tableView string, rows []searchRow)
 	return strings.Join(lines, "\n")
 }
 
-// SearchCommandProvider implements the CommandProvider interface.
+// SearchCommandProvider implements the CommandProvider interface for the 'toolchain registry search' command, wiring the search subcommand into the CLI framework with its associated flags and behaviors.
 type SearchCommandProvider struct{}
 
 func (s *SearchCommandProvider) GetCommand() *cobra.Command {
@@ -396,7 +394,7 @@ func (s *SearchCommandProvider) GetCompatibilityFlags() map[string]compat.Compat
 	return nil
 }
 
-// GetSearchParser returns the search command's parser for use by aliases.
+// GetSearchParser returns the search command's parser for use by aliases and other commands that need access to search-specific flag definitions.
 func GetSearchParser() *flags.StandardParser {
 	return searchParser
 }

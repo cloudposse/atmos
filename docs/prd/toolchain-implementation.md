@@ -56,7 +56,7 @@ Infrastructure-as-Code teams need to:
 
 ### Core Components
 
-```
+```ascii
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Atmos CLI                                │
 ├─────────────────────────────────────────────────────────────────┤
@@ -83,7 +83,7 @@ Infrastructure-as-Code teams need to:
 
 ### File Structure
 
-```
+```text
 project/
 ├── .tool-versions              # asdf-compatible version declarations
 ├── .tools/                     # Installed binaries
@@ -132,7 +132,7 @@ All commands implemented in `cmd/toolchain/`:
 Implemented in `toolchain/aqua_registry.go`:
 - Queries Aqua registry at `https://raw.githubusercontent.com/aquaproj/aqua-registry/refs/heads/main/pkgs`
 - Falls back to multiple registry paths for common tools
-- Caches registry metadata in temp directory
+- Caches registry metadata in `${XDG_CACHE_HOME}/atmos-toolchain` (fallback: `~/.cache/atmos-toolchain`, replacing the old `/tmp/tools-cache/`)
 
 **Limitation**: Registry URLs are hard-coded, not configurable
 
@@ -170,7 +170,7 @@ toolchain:
 Implemented in `toolchain/tool_versions.go`:
 
 **asdf-compatible format**:
-```
+```text
 terraform 1.13.1 1.11.4
 opentofu 1.10.0
 helm 3.12.0
@@ -470,7 +470,7 @@ components:
 
 #### Component Execution (terraform/helmfile/packer commands)
 
-```
+```text
 atmos terraform plan vpc -s prod/us-east-1
   ↓
 1. Load stack configuration (with imports and inheritance)
@@ -484,7 +484,7 @@ atmos terraform plan vpc -s prod/us-east-1
 
 #### Workflow Execution
 
-```
+```text
 atmos workflow deploy-infra -s prod/us-east-1
   ↓
 1. Load workflow configuration
@@ -496,7 +496,7 @@ atmos workflow deploy-infra -s prod/us-east-1
 
 #### Custom Command Execution
 
-```
+```text
 atmos deploy prod/us-east-1
   ↓
 1. Load custom command configuration
@@ -559,7 +559,8 @@ commands:
 
 ### Implementation Phases
 
-**Phase 1: Stack Dependencies** (Highest Priority)
+#### Phase 1: Stack Dependencies (Highest Priority)
+
 - [ ] Update stack schema to support top-level `dependencies.tools`
 - [ ] Implement inheritance logic for tool dependencies
 - [ ] Add constraint validation (SemVer)
@@ -567,18 +568,21 @@ commands:
 - [ ] Auto-install missing tools before execution
 - [ ] Tests: Stack inheritance, constraint validation, auto-install
 
-**Phase 2: Workflow Dependencies**
+#### Phase 2: Workflow Dependencies
+
 - [ ] Update workflow schema for `dependencies.tools`
 - [ ] Merge workflow and stack tool dependencies
 - [ ] Tool installation before workflow execution
 - [ ] Tests: Workflow tool dependencies
 
-**Phase 3: Custom Command Dependencies**
+#### Phase 3: Custom Command Dependencies
+
 - [ ] Update custom command schema for `dependencies.tools`
 - [ ] Tool installation before command execution
 - [ ] Tests: Custom command tool dependencies
 
-**Phase 4: Component Catalog Support** (Optional)
+#### Phase 4: Component Catalog Support (Optional)
+
 - [ ] Support `dependencies.tools` in component.yaml files
 - [ ] Merge component.yaml dependencies with stack dependencies
 - [ ] Tests: Component-level tool requirements
@@ -684,12 +688,12 @@ toolchain:
 **Status**: 🟡 **Partial** (downloads cached in temp, not permanent)
 
 **Current**:
-- Registry metadata cached in `/tmp/tools-cache/`
+- Registry metadata cached in `${XDG_CACHE_HOME}/atmos-toolchain` (fallback: `~/.cache/atmos-toolchain`, replacing the old `/tmp/tools-cache/`)
 - Downloaded archives cached temporarily
 - Cache cleared on system restart
 
 **Needed**:
-- Persistent cache in `~/.cache/atmos-toolchain/`
+- Persistent cache in `${XDG_CACHE_HOME}/atmos-toolchain` (fallback: `~/.cache/atmos-toolchain`)
 - Offline mode flag to skip network requests
 - Cache expiration policies
 - Cache size limits
@@ -1016,7 +1020,7 @@ settings:
 - Downloaded binary trust
 
 **Recommendation**: Enabled by default, with clear messaging:
-```
+```text
 ⚠️  Switching to Atmos v1.5.7 (required by .tool-versions)
     Installing cloudposse/atmos@1.5.7...
     ✓ Installed to .tools/cloudposse/atmos/1.5.7/

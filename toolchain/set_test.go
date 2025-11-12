@@ -1033,42 +1033,6 @@ func TestVersionListModelViewFocusStates(t *testing.T) {
 }
 
 // // Test interaction between list and viewport updates
-// func TestListViewportInteraction(t *testing.T) {
-// 	items := []list.Item{
-// 		versionItem{version: "1.0.0", title: "V1", releaseNotes: "Notes for v1"},
-// 		versionItem{version: "2.0.0", title: "V2", releaseNotes: "Notes for v2"},
-// 		versionItem{version: "3.0.0", title: "V3", releaseNotes: "Notes for v3"},
-// 	}
-
-// 	l := list.New(items, newCustomDelegate(), 50, 15)
-// 	vp := viewport.New(50, 10)
-
-// 	m := versionListModel{
-// 		list:             l,
-// 		viewport:         vp,
-// 		focused:          "list",
-// 		currentItemIndex: -1,
-// 	}
-
-// 	// Simulate list navigation and check viewport updates
-// 	// First, set up the window size
-// 	m, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 20}).(versionListModel)
-
-// 	// Navigate through the list and check that viewport content updates
-// 	originalContent := m.viewport.View()
-
-// 	// Move down in list (simulate arrow key)
-// 	listMsg := tea.KeyMsg{Type: tea.KeyDown}
-// 	m, _ = m.Update(listMsg).(versionListModel)
-
-// 	// The viewport content should potentially change based on selection
-// 	newContent := m.viewport.View()
-
-// 	// Content might be the same or different depending on the selection change
-// 	// The important thing is that it doesn't crash
-// 	_ = originalContent
-// 	_ = newContent
-// }
 
 // First, let's create interfaces that can be mocked.
 type ToolInstaller interface {

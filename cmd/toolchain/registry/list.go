@@ -48,7 +48,7 @@ type toolRow struct {
 
 var listParser *flags.StandardParser
 
-// ListOptions contains parsed flags for the registry list command.
+// ListOptions contains parsed flags for the registry list command, including embedded global flags such as pager settings and display options (limit, offset, format, sort).
 type ListOptions struct {
 	global.Flags // Embed global flags (includes Pager).
 	Limit        int
@@ -208,15 +208,13 @@ func listRegistryTools(ctx context.Context, registryName string, opts *ListOptio
 		total := meta.ToolCount
 
 		// Show info toast before pager content.
-		var message string
 		if end == total {
 			// Showing all tools.
-			message = fmt.Sprintf("Showing **%d tools** from registry `%s` (%s)", total, registryName, meta.Type)
+			_ = ui.Infof("Showing **%d tools** from registry `%s` (%s)", total, registryName, meta.Type)
 		} else {
 			// Showing a subset.
-			message = fmt.Sprintf("Showing **%d-%d** of **%d tools** from registry `%s` (%s)", start, end, total, registryName, meta.Type)
+			_ = ui.Infof("Showing **%d-%d** of **%d tools** from registry `%s` (%s)", start, end, total, registryName, meta.Type)
 		}
-		_ = ui.Infof(message)
 		_ = ui.Writef("Source: %s\n\n", meta.Source)
 
 		// Get table content.
@@ -449,7 +447,7 @@ func min(a, b int) int {
 	return b
 }
 
-// ListCommandProvider implements the CommandProvider interface.
+// ListCommandProvider implements the CommandProvider interface for the 'toolchain registry list' command, wiring the list subcommand into the CLI framework with its associated flags and behaviors.
 type ListCommandProvider struct{}
 
 func (l *ListCommandProvider) GetCommand() *cobra.Command {

@@ -238,6 +238,7 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 	}
 	if err := AddToolToVersions(DefaultToolVersionsFilePath, repo, version); err == nil && showProgressBar {
 		_ = ui.Successf("Registered `%s %s` in `.tool-versions`", repo, version)
+		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
 	}
 	return nil
 }
@@ -353,8 +354,10 @@ func printSummary(installed, failed, skipped, total int) {
 		_ = ui.Success("No tools to install")
 	case failed == 0 && skipped == 0:
 		_ = ui.Successf("Installed **%d** tools", installed)
+		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
 	case failed == 0 && skipped > 0:
 		_ = ui.Successf("Installed **%d** tools, skipped **%d**", installed, skipped)
+		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
 	case failed > 0 && skipped == 0:
 		_ = ui.Errorf("Installed %d tools, failed %d", installed, failed)
 	default:
