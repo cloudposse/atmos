@@ -1,9 +1,13 @@
 import React from 'react';
+import { motion, MotionConfig } from 'framer-motion';
 import Layout from '@theme/Layout';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Link from '@docusaurus/Link';
-import useBaseUrl from '@docusaurus/useBaseUrl'
 import Screengrab from '@site/src/components/Screengrab'
+import TypingAnimation from '@site/src/components/TypingAnimation'
+import LazyDemo from '@site/src/components/LazyDemo'
+import ScrollFadeIn from '@site/src/components/ScrollFadeIn'
+import { RiLockLine, RiBox3Line, RiFlashlightLine, RiStackLine } from 'react-icons/ri';
 import '../css/landing-page.css';
 
 function Home() {
@@ -11,21 +15,98 @@ function Home() {
   const {siteConfig = {}} = context;
 
   return (
-    <div className="landing-page">
-      <Layout title={`Hello from ${siteConfig.title}`} description="Manage Environments Easily in Terraform, OpenTofu, Packer using Atmos">
-        <header className="hero hero--full-height">
-          <div className="intro">
-            <h1>Manage Environments Easily<br/>in Terraform, OpenTofu, Packer</h1>
+    <MotionConfig reducedMotion="user">
+      <div className="landing-page">
+        <Layout title={`Hello from ${siteConfig.title}`} description="Atmos: Sanity for the Modern Platform Engineer - An IaC Framework that unifies your toolchain">
+          <header className="hero hero--full-height">
+            <div className="intro">
+              <p className="hero__eyebrow">Infrastructure as Code Framework</p>
+              <h1>
+                One Tool to Orchestrate{' '}
+                <span className="typing-container" aria-hidden="true">
+                  <TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile']} />
+                </span>
+                <span className="visually-hidden">Terraform, OpenTofu, Packer, Helmfile</span>
+              </h1>
+            <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>
+            <div className="hero__cta">
+              <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
+              <Link to="/introduction" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
+            </div>
           </div>
-          <img src={useBaseUrl('/img/demo.gif')} alt="Product Screenshot" className="screenshot" />
-          <div className="hero__cta">
-            <Link to="/quick-start/" className="button button--lg button--primary"><p>Try the Quick Start</p></Link>
-            <Link to="/introduction" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
-          </div>
-          <h3>Use a Modern <strong className="underline">Composable Framework</strong> for Terraform, OpenTofu, Packer and Helmfile backed by YAML</h3>
         </header>
+        <section className="hero-demo">
+          <motion.div
+            className="hero-demo-intro"
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ amount: 0.8 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+          >
+            <h2>See Atmos in Action</h2>
+            <p>Watch how Atmos simplifies infrastructure orchestration with an intuitive workflow</p>
+          </motion.div>
+          <LazyDemo />
+        </section>
         <main>
-          <h2 className="section">Simplify complex architectures with <strong className="atmos__text">DRY configuration</strong></h2>
+          <section className="features-grid">
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0, ease: "easeOut" }}
+            >
+              <div className="feature-card">
+                <div className="feature-header">
+                  <div className="feature-icon"><RiLockLine /></div>
+                  <h3>Unified Authentication</h3>
+                </div>
+                <p>Replace a dozen auth tools with one consistent identity layer</p>
+              </div>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
+            >
+              <div className="feature-card">
+                <div className="feature-header">
+                  <div className="feature-icon"><RiBox3Line /></div>
+                  <h3>Built-in Vendoring</h3>
+                </div>
+                <p>Purpose-built engine for Terraform and all your dependencies</p>
+              </div>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
+            >
+              <div className="feature-card">
+                <div className="feature-header">
+                  <div className="feature-icon"><RiFlashlightLine /></div>
+                  <h3>Workflow Automation</h3>
+                </div>
+                <p>Native task runner with built-in identity and context</p>
+              </div>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
+              transition={{ duration: 0.5, delay: 0.3, ease: "easeOut" }}
+            >
+              <div className="feature-card">
+                <div className="feature-header">
+                  <div className="feature-icon"><RiStackLine /></div>
+                  <h3>Smart Scaffolding</h3>
+                </div>
+                <p>Configuration inheritance and composable stacks that scale</p>
+              </div>
+            </motion.div>
+          </section>
           <section className="alternate-section section--image-right">
             <Screengrab title="Start your Project" command="# here's an example of what your folder structure will like..." slug="demo-stacks/start-your-project" />
             <div className="section__description">
@@ -65,11 +146,12 @@ function Home() {
             <h2>What are you waiting for? <strong className="atmos__text">It's FREE and Open Source</strong></h2>
             <h3><strong className="underline">Your team can succeed</strong> with Terraform/OpenTofu and Packer today.</h3>
             <section className="cta-section">
-              <Link to="/quick-start/" className="button button--lg button--primary"><p>Try the Quick Start</p></Link>
+              <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
             </section>
         </footer>
       </Layout>
     </div>
+    </MotionConfig>
   );
 }
 

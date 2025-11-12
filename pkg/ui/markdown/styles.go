@@ -91,7 +91,7 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 
 const newline = "\n"
 
-// This only returns the built-in default style configuration.
+// getBuiltinDefaultStyle returns the built-in default style configuration.
 func getBuiltinDefaultStyle() ([]byte, error) {
 	style := ansi.StyleConfig{
 		Document: ansi.StyleBlock{

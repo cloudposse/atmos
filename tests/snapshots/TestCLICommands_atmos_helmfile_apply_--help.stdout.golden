@@ -1,8 +1,8 @@
 
 
-This command reconciles the actual state of Helm releases in the cluster with the desired state defined in your configurations by applying the necessary changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-Example usage: atmos helmfile apply echo-server -s tenant1-ue2-dev atmos helmfile apply echo-server -s tenant1-ue2-dev --redirect-stderr /dev/stdout                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+This command reconciles the actual state of Helm releases in the cluster with the desired state defined in your configurations by applying the necessary changes.
+
+Example usage: atmos helmfile apply echo-server -s tenant1-ue2-dev atmos helmfile apply echo-server -s tenant1-ue2-dev --redirect-stderr /dev/stdout
 
 Usage:
 
@@ -97,6 +97,10 @@ Global Flags:
                                      or configuration set for deployment in
                                      Atmos CLI.
 
+    -v, --verbose                    Enable verbose error output with full
+                                     context, stack traces, and detailed
+                                     information (default false)
+
         --version                    Display the Atmos CLI version
 
         --                           Use double dashes to separate
@@ -104,6 +108,6 @@ Global Flags:
                                      arguments and flags for the command.
 
 
-Use atmos helmfile apply --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+Use atmos helmfile apply --help for more information about a command.
 
 
