@@ -96,7 +96,7 @@ func TestYAMLEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := verifyYAMLFormat(t, tt.input)
+			result := validateYAMLFormatSilent(tt.input)
 			if result != tt.shouldPass {
 				t.Errorf("%s: expected %v but got %v", tt.desc, tt.shouldPass, result)
 			}
@@ -207,7 +207,7 @@ func TestJSONEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := verifyJSONFormat(t, tt.input)
+			result := validateJSONFormatSilent(tt.input)
 			if result != tt.shouldPass {
 				t.Errorf("%s: expected %v but got %v", tt.desc, tt.shouldPass, result)
 			}
@@ -237,9 +237,9 @@ func TestValidationWithEmptyAndWhitespace(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var result bool
 			if tt.format == "yaml" {
-				result = verifyYAMLFormat(t, tt.input)
+				result = validateYAMLFormatSilent(tt.input)
 			} else {
-				result = verifyJSONFormat(t, tt.input)
+				result = validateJSONFormatSilent(tt.input)
 			}
 
 			if result != tt.shouldPass {
@@ -261,7 +261,7 @@ func TestPreviewTruncation(t *testing.T) {
 		input := strings.Join(lines, "\n")
 
 		// This should use all 10 lines in preview
-		result := verifyYAMLFormat(t, input)
+		result := validateYAMLFormatSilent(input)
 		if !result {
 			t.Error("Valid YAML should pass")
 		}
@@ -270,7 +270,7 @@ func TestPreviewTruncation(t *testing.T) {
 	// Test with fewer than 10 lines
 	t.Run("YAML preview with few lines", func(t *testing.T) {
 		input := "line1\nline2\nline3"
-		result := verifyYAMLFormat(t, input)
+		result := validateYAMLFormatSilent(input)
 		if !result {
 			t.Error("Valid YAML should pass")
 		}
@@ -280,7 +280,7 @@ func TestPreviewTruncation(t *testing.T) {
 	t.Run("YAML preview length truncation", func(t *testing.T) {
 		// Create a very long single line that will be truncated
 		longLine := strings.Repeat("a", 600)
-		result := verifyYAMLFormat(t, longLine)
+		result := validateYAMLFormatSilent(longLine)
 		if !result {
 			t.Error("Long string should be valid YAML")
 		}
@@ -319,7 +319,7 @@ func TestJSONSyntaxErrorContext(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// We expect these to fail and report context
-			result := verifyJSONFormat(t, tt.input)
+			result := validateJSONFormatSilent(tt.input)
 			if result {
 				t.Error("Invalid JSON should fail validation")
 			}
@@ -370,7 +370,7 @@ func TestFormatValidationCombinations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := verifyFormatValidation(t, tt.input, tt.formats)
+			result := validateFormatValidationSilent(tt.input, tt.formats)
 			if result != tt.shouldPass {
 				t.Errorf("Expected %v for formats %v", tt.shouldPass, tt.formats)
 			}

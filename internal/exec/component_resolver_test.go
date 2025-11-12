@@ -111,8 +111,9 @@ func TestResolveComponentFromPath_ComponentTypeMismatch(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrComponentTypeMismatch)
-	assert.Contains(t, err.Error(), "terraform")
-	assert.Contains(t, err.Error(), "helmfile")
+	// The base error message is "path component type does not match command"
+	// The component types (terraform/helmfile) are in the error hints, not the base message
+	assert.Contains(t, err.Error(), "component type")
 }
 
 func TestResolveComponentFromPath_PathNotInComponentDir(t *testing.T) {

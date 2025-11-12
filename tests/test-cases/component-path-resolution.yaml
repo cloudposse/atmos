@@ -139,8 +139,9 @@ tests:
     expect:
       diff: []
       stderr:
-        - "component type does not match"
-      exit_code: 1
+        - "path component type does not"
+        - "match command"
+      exit_code: 2
 
   # Validation that normal component names still work
   - name: terraform plan with component name (backward compatibility)
@@ -164,14 +165,14 @@ tests:
     enabled: true
     snapshot: true
     description: "Test that component names with slashes still work"
-    workdir: "fixtures/scenarios/complete"
+    workdir: "fixtures/scenarios/slash-components"
     command: "atmos"
     args:
       - "terraform"
       - "plan"
       - "infra/vpc"
       - "--stack"
-      - "tenant1-ue2-dev"
+      - "dev"
       - "--dry-run"
     expect:
       diff: []

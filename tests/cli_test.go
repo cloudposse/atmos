@@ -1303,6 +1303,27 @@ func verifyFormatValidation(t *testing.T, output string, formats []string) bool 
 	return true
 }
 
+// validateFormatValidationSilent checks format validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateFormatValidationSilent(output string, formats []string) bool {
+	for _, format := range formats {
+		switch format {
+		case "json":
+			if !validateJSONFormatSilent(output) {
+				return false
+			}
+		case "yaml":
+			if !validateYAMLFormatSilent(output) {
+				return false
+			}
+		default:
+			// Unknown format - return false without logging
+			return false
+		}
+	}
+	return true
+}
+
 func verifyYAMLFormat(t *testing.T, output string) bool {
 	var data interface{}
 	err := yaml.Unmarshal([]byte(output), &data)
@@ -1318,6 +1339,14 @@ func verifyYAMLFormat(t *testing.T, output string) bool {
 		return false
 	}
 	return true
+}
+
+// validateYAMLFormatSilent checks YAML validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateYAMLFormatSilent(output string) bool {
+	var data interface{}
+	err := yaml.Unmarshal([]byte(output), &data)
+	return err == nil
 }
 
 func verifyJSONFormat(t *testing.T, output string) bool {
@@ -1337,6 +1366,14 @@ func verifyJSONFormat(t *testing.T, output string) bool {
 		return false
 	}
 	return true
+}
+
+// validateJSONFormatSilent checks JSON validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateJSONFormatSilent(output string) bool {
+	var data interface{}
+	err := json.Unmarshal([]byte(output), &data)
+	return err == nil
 }
 
 func min(a, b int) int {

@@ -74,7 +74,7 @@ stacks:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Run validation directly and check result
-			validationPassed := verifyYAMLFormat(t, tt.input)
+			validationPassed := validateYAMLFormatSilent(tt.input)
 
 			if validationPassed != tt.shouldPass {
 				t.Errorf("YAML validation returned %v, expected %v", validationPassed, tt.shouldPass)
@@ -170,7 +170,7 @@ func TestVerifyJSONFormatUnit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			validationPassed := verifyJSONFormat(t, tt.input)
+			validationPassed := validateJSONFormatSilent(tt.input)
 
 			if validationPassed != tt.shouldPass {
 				t.Errorf("JSON validation returned %v, expected %v", validationPassed, tt.shouldPass)
@@ -233,7 +233,7 @@ func TestVerifyFormatValidationUnit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := verifyFormatValidation(t, tt.input, tt.formats)
+			result := validateFormatValidationSilent(tt.input, tt.formats)
 
 			if result != tt.shouldPass {
 				t.Errorf("verifyFormatValidation() = %v, expected %v", result, tt.shouldPass)
@@ -280,7 +280,7 @@ func TestValidationErrorContext(t *testing.T) {
 	// Test YAML error preview
 	t.Run("YAML error shows preview", func(t *testing.T) {
 		longYAML := strings.Repeat("key: value\n", 20) + "  bad: indentation"
-		result := verifyYAMLFormat(t, longYAML)
+		result := validateYAMLFormatSilent(longYAML)
 
 		if result {
 			t.Error("Expected YAML validation to fail for bad indentation")
@@ -291,7 +291,7 @@ func TestValidationErrorContext(t *testing.T) {
 	// Test JSON error shows offset
 	t.Run("JSON error shows offset context", func(t *testing.T) {
 		jsonWithError := `{"valid": "start", "bad": unterminated}`
-		result := verifyJSONFormat(t, jsonWithError)
+		result := validateJSONFormatSilent(jsonWithError)
 
 		if result {
 			t.Error("Expected JSON validation to fail for unterminated value")
@@ -310,7 +310,7 @@ func TestLargeInputValidation(t *testing.T) {
 		}
 		largeJSON := "[" + strings.Join(items, ",") + "]"
 
-		result := verifyJSONFormat(t, largeJSON)
+		result := validateJSONFormatSilent(largeJSON)
 		if !result {
 			t.Error("Failed to validate large valid JSON array")
 		}
@@ -324,7 +324,7 @@ func TestLargeInputValidation(t *testing.T) {
 			sb.WriteString("  - item\n")
 		}
 
-		result := verifyYAMLFormat(t, sb.String())
+		result := validateYAMLFormatSilent(sb.String())
 		if !result {
 			t.Error("Failed to validate large valid YAML list")
 		}
@@ -334,7 +334,7 @@ func TestLargeInputValidation(t *testing.T) {
 	t.Run("Large invalid input preview truncation", func(t *testing.T) {
 		// Create a large string that's invalid JSON
 		largeInvalid := strings.Repeat("not json ", 1000)
-		result := verifyJSONFormat(t, largeInvalid)
+		result := validateJSONFormatSilent(largeInvalid)
 
 		if result {
 			t.Error("Expected validation to fail for large invalid input")

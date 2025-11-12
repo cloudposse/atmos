@@ -1,13 +1,2 @@
 
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-
-# Error
-
-**Error:** OPA policy violations detected
-
-## Explanation
-
-In 'dev', only 2 Availability Zones are allowed VPC name must be a valid string
-from 2 to 20 alphanumeric chars
-
-
