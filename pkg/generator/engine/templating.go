@@ -382,6 +382,8 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 		// Create a temporary file with processed content for merging
 		tempFile := file
 		tempFile.Content = processedContent
+		// Clear the IsTemplate flag so mergeFile doesn't re-process the already-rendered content
+		tempFile.IsTemplate = false
 
 		if err := p.mergeFile(fullPath, tempFile, targetPath); err != nil {
 			return err // Error already formatted by mergeFile
