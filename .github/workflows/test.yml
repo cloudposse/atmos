@@ -165,7 +165,7 @@ jobs:
           helm-plugins: ""
 
       - name: Install helm-diff plugin
-        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        if: ${{ matrix.flavor.target != 'windows' }}
         run: helm plugin install https://github.com/databus23/helm-diff --verify=false
 
       - name: Check atmos.exe integrity

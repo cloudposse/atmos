@@ -81,7 +81,7 @@ func executeProfileListCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Render output based on format.
-	output, err := renderProfileListOutput(profiles, format)
+	output, err := renderProfileListOutput(&atmosConfig, profiles, format)
 	if err != nil {
 		return err
 	}
@@ -144,8 +144,8 @@ func buildProfileDiscoveryError(err error, atmosConfig *schema.AtmosConfiguratio
 }
 
 // renderProfileListOutput renders profiles in the requested format.
-func renderProfileListOutput(profiles []profile.ProfileInfo, format string) (string, error) {
-	defer perf.Track(nil, "profile.renderProfileListOutput")()
+func renderProfileListOutput(atmosConfig *schema.AtmosConfiguration, profiles []profile.ProfileInfo, format string) (string, error) {
+	defer perf.Track(atmosConfig, "profile.renderProfileListOutput")()
 
 	var output string
 	var err error

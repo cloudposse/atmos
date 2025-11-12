@@ -27,4 +27,4 @@ config-profiles/
 
 ## Usage
 
-Tests should use "fixtures/scenarios/config-profiles" to switch to this directory.
+Tests should use “fixtures/scenarios/config-profiles” to switch to this directory.
