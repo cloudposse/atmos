@@ -20,10 +20,23 @@ type Writer interface {
 }
 
 // dataWriter is the default implementation that uses the data package.
+// Falls back to fmt.Print if data package isn't initialized.
 type dataWriter struct{}
 
 // Write writes content using the data package.
-func (d *dataWriter) Write(content string) error {
+// If data package isn't initialized (panics), falls back to fmt.Print.
+func (d *dataWriter) Write(content string) (err error) {
+	// Use recover to catch panic from data.Write() when not initialized.
+	defer func() {
+		if r := recover(); r != nil {
+			// Data package not initialized, use fallback.
+			log.Debug("data package not initialized, using fmt.Print fallback")
+			fmt.Print(content)
+			err = nil
+		}
+	}()
+
+	// Try to use data.Write() - will panic if not initialized.
 	return data.Write(content)
 }
 
