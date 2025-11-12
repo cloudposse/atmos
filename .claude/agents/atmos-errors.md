@@ -98,18 +98,21 @@ err := errUtils.Build(errUtils.ErrAbstractComponent).
 
 ### Wrapping Errors
 
-**Combining multiple errors:**
+**Single error with context (PREFERRED):**
 ```go
-// ✅ CORRECT: Use errors.Join (unlimited errors, no formatting)
-return errors.Join(errUtils.ErrFailedToProcess, underlyingErr)
-```
-
-**Adding string context:**
-```go
-// ✅ CORRECT: Use fmt.Errorf with %w for formatted context
+// ✅ BEST: Preserves order, adds context
 return fmt.Errorf("%w: failed to load component %s in stack %s",
     errUtils.ErrComponentLoad, component, stack)
 ```
+
+**Multiple independent errors:**
+```go
+// ⚠️ USE WITH CAUTION: errors.Join does NOT preserve order
+return errors.Join(errUtils.ErrValidationFailed, err1, err2)
+// Order may be: [err1, ErrValidationFailed, err2] or any permutation
+```
+
+**Why order matters:** Error chains are unwrapped sequentially. If you need `errors.Is()` to find your sentinel first, use `fmt.Errorf` with single `%w`, not `errors.Join`.
 
 ### Checking Errors
 
@@ -208,16 +211,21 @@ err := errUtils.Build(errUtils.ErrInvalidConfig).
 ```
 
 **Preserving subprocess exit codes:**
-When wrapping errors from child processes (terraform, helmfile, etc), `GetExitCode()` automatically extracts exit codes from `exec.ExitError`. Don't override with `WithExitCode()` unless you need to change the code.
+`GetExitCode()` automatically extracts exit codes from `exec.ExitError`. Don't override with `WithExitCode()`.
 
 ```go
 // ✅ CORRECT: Preserve terraform exit code
-err := errors.Join(errUtils.ErrTerraformFailed, execErr)  // exec.ExitError preserved
+return fmt.Errorf("%w: %w", errUtils.ErrTerraformFailed, execErr)
+// exec.ExitError preserved, order guaranteed
 
 // ❌ WRONG: Overrides terraform's exit code
-err := errUtils.Build(errUtils.ErrTerraformFailed).
-    WithExitCode(1).  // Loses terraform's actual exit code
+return errUtils.Build(errUtils.ErrTerraformFailed).
+    WithExitCode(1).  // Loses actual exit code
     Err()
+
+// ⚠️ AVOID: errors.Join doesn't preserve order
+return errors.Join(errUtils.ErrTerraformFailed, execErr)
+// May not find exec.ExitError reliably
 ```
 
 ## Error Review Checklist
@@ -232,7 +240,8 @@ When reviewing or creating error messages, ensure:
 - [ ] **Context adds debugging value** - Don't repeat what's in hints, add WHERE and HOW
 - [ ] **Exit code only when non-default** - Omit `WithExitCode(1)`, be explicit for 0 or 2
 - [ ] **No fmt.Sprintf with builder methods** - Use `WithHintf()` not `WithHint(fmt.Sprintf())`, `WithExplanationf()` not `WithExplanation(fmt.Sprintf())`
-- [ ] **Error is wrapped properly** - Uses `errors.Join()` or `fmt.Errorf("%w: ...", ...)`
+- [ ] **Error wrapping preserves order** - Prefer `fmt.Errorf("%w")` over `errors.Join()` when order matters
+- [ ] **Subprocess exit codes preserved** - Don't use `WithExitCode()` when wrapping `exec.ExitError`
 - [ ] **Checking uses `errors.Is()`** - Not string comparison
 
 ## Common Patterns
