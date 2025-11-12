@@ -207,6 +207,19 @@ err := errUtils.Build(errUtils.ErrInvalidConfig).
     WithExitCode(2).Err()
 ```
 
+**Preserving subprocess exit codes:**
+When wrapping errors from child processes (terraform, helmfile, etc), `GetExitCode()` automatically extracts exit codes from `exec.ExitError`. Don't override with `WithExitCode()` unless you need to change the code.
+
+```go
+// ✅ CORRECT: Preserve terraform exit code
+err := errors.Join(errUtils.ErrTerraformFailed, execErr)  // exec.ExitError preserved
+
+// ❌ WRONG: Overrides terraform's exit code
+err := errUtils.Build(errUtils.ErrTerraformFailed).
+    WithExitCode(1).  // Loses terraform's actual exit code
+    Err()
+```
+
 ## Error Review Checklist
 
 When reviewing or creating error messages, ensure:
