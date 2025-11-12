@@ -1,4 +1,4 @@
-package cmd
+package profile
 
 import (
 	_ "embed"
@@ -17,24 +17,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+//go:embed markdown/atmos_profile_list_long.md
+var profileListLongMarkdown string
+
 //go:embed markdown/atmos_profile_list_usage.md
 var profileListUsageMarkdown string
 
 // profileListCmd lists available configuration profiles.
 var profileListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List available configuration profiles",
-	Long: `List all configured profiles across all locations with their details.
-
-Profiles are discovered from multiple locations in precedence order:
-1. Configurable (profiles.base_path in atmos.yaml)
-2. Project-hidden (.atmos/profiles/)
-3. XDG user (~/.config/atmos/profiles/ or $XDG_CONFIG_HOME/atmos/profiles/)
-4. Project (profiles/)
-
-Supports multiple output formats:
-- **table** (default): tabular view with profile details
-- **json**/**yaml**: structured data for programmatic access`,
+	Use:                "list",
+	Short:              "List available configuration profiles",
+	Long:               profileListLongMarkdown,
 	Example:            profileListUsageMarkdown,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	ValidArgsFunction:  cobra.NoFileCompletions,
@@ -42,7 +35,7 @@ Supports multiple output formats:
 }
 
 func init() {
-	defer perf.Track(nil, "cmd.init.profileListCmd")()
+	defer perf.Track(nil, "profile.init.profileListCmd")()
 
 	// Format flag.
 	profileListCmd.Flags().StringP("format", "f", "table", "Output format: table, json, yaml")
@@ -62,7 +55,7 @@ func profileFormatFlagCompletion(cmd *cobra.Command, args []string, toComplete s
 
 // executeProfileListCommand handles the profile list command execution.
 func executeProfileListCommand(cmd *cobra.Command, args []string) error {
-	defer perf.Track(nil, "cmd.executeProfileListCommand")()
+	defer perf.Track(nil, "profile.executeProfileListCommand")()
 
 	// Get format flag.
 	format, err := cmd.Flags().GetString("format")
@@ -82,40 +75,11 @@ func executeProfileListCommand(cmd *cobra.Command, args []string) error {
 	// List all profiles.
 	profiles, err := manager.ListProfiles(&atmosConfig)
 	if err != nil {
-		return errUtils.Build(errUtils.ErrProfileDiscovery).
-			WithExplanationf("Failed to discover profiles: `%s`", err).
-			WithExplanation("Could not read profile directories or determine profile locations").
-			WithHint("Check `profiles.base_path` configuration in `atmos.yaml`").
-			WithHint("Verify profile directories exist and are accessible").
-			WithHint("Run `atmos describe config` to view profile configuration").
-			WithContext("config_path", atmosConfig.CliConfigPath).
-			WithContext("base_path", atmosConfig.Profiles.BasePath).
-			WithExitCode(2).
-			Err()
+		return buildProfileDiscoveryError(err, &atmosConfig)
 	}
 
 	// Render output based on format.
-	var output string
-	switch format {
-	case "json":
-		output, err = renderProfilesJSON(profiles)
-	case "yaml":
-		output, err = renderProfilesYAML(profiles)
-	case "table":
-		output, err = profileList.RenderTable(profiles)
-	default:
-		return errUtils.Build(errUtils.ErrInvalidFormat).
-			WithExplanationf("The format `%s` is not supported for this command", format).
-			WithExplanation("Only `table`, `json`, and `yaml` formats are available").
-			WithHint("Use `--format table`, `--format json`, or `--format yaml`").
-			WithHint("Example: `atmos profile list --format table`").
-			WithContext("format", format).
-			WithContext("command", "profile list").
-			WithContext("supported_formats", "table, json, yaml").
-			WithExitCode(2).
-			Err()
-	}
-
+	output, err := renderProfileListOutput(profiles, format)
 	if err != nil {
 		return err
 	}
@@ -157,4 +121,46 @@ func renderProfilesYAML(profiles []profile.ProfileInfo) (string, error) {
 			Err()
 	}
 	return string(data), nil
+}
+
+// buildProfileDiscoveryError creates a detailed error for profile discovery failures.
+func buildProfileDiscoveryError(err error, atmosConfig *schema.AtmosConfiguration) error {
+	return errUtils.Build(errUtils.ErrProfileDiscovery).
+		WithExplanationf("Failed to discover profiles: `%s`", err).
+		WithExplanation("Could not read profile directories or determine profile locations").
+		WithHint("Check `profiles.base_path` configuration in `atmos.yaml`").
+		WithHint("Verify profile directories exist and are accessible").
+		WithHint("Run `atmos describe config` to view profile configuration").
+		WithContext("config_path", atmosConfig.CliConfigPath).
+		WithContext("base_path", atmosConfig.Profiles.BasePath).
+		WithExitCode(2).
+		Err()
+}
+
+// renderProfileListOutput renders profiles in the requested format.
+func renderProfileListOutput(profiles []profile.ProfileInfo, format string) (string, error) {
+	var output string
+	var err error
+
+	switch format {
+	case "json":
+		output, err = renderProfilesJSON(profiles)
+	case "yaml":
+		output, err = renderProfilesYAML(profiles)
+	case "table":
+		output, err = profileList.RenderTable(profiles)
+	default:
+		return "", errUtils.Build(errUtils.ErrInvalidFormat).
+			WithExplanationf("The format `%s` is not supported for this command", format).
+			WithExplanation("Only `table`, `json`, and `yaml` formats are available").
+			WithHint("Use `--format table`, `--format json`, or `--format yaml`").
+			WithHint("Example: `atmos profile list --format table`").
+			WithContext("format", format).
+			WithContext("command", "profile list").
+			WithContext("supported_formats", "table, json, yaml").
+			WithExitCode(2).
+			Err()
+	}
+
+	return output, err
 }

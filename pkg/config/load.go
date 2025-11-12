@@ -564,7 +564,7 @@ func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, sourc
 	// Find all config files using existing search infrastructure.
 	foundPaths, err := SearchAtmosConfig(searchPattern)
 	if err != nil {
-		return fmt.Errorf("%w: failed to search for configuration files in %s: %s", errUtils.ErrParseFile, source, err)
+		return fmt.Errorf("%w: failed to search for configuration files in %s: %w", errUtils.ErrParseFile, source, err)
 	}
 
 	// No files found is not an error - just means directory is empty.
@@ -576,7 +576,7 @@ func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, sourc
 	// Load and merge each file.
 	for _, filePath := range foundPaths {
 		if err := mergeConfigFile(filePath, dst); err != nil {
-			return fmt.Errorf("%w: failed to load configuration file from %s: %s: %s", errUtils.ErrParseFile, source, filePath, err)
+			return fmt.Errorf("%w: failed to load configuration file from %s: %s: %w", errUtils.ErrParseFile, source, filePath, err)
 		}
 
 		log.Trace("Loaded configuration file", "path", filePath, "source", source)

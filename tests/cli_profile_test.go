@@ -23,7 +23,7 @@ func TestProfileListCommand(t *testing.T) {
 	}
 
 	t.Run("profile list with profiles returns table output", func(t *testing.T) {
-		t.Chdir("../examples/config-profiles")
+		t.Chdir("fixtures/scenarios/config-profiles")
 
 		cmd := atmosRunner.Command("profile", "list")
 
@@ -39,7 +39,7 @@ func TestProfileListCommand(t *testing.T) {
 		// Should show PROFILES header.
 		assert.Contains(t, output, "PROFILES", "Should show PROFILES header")
 
-		// Should show the profiles from examples/config-profiles.
+		// Should show the profiles from test fixture.
 		assert.Contains(t, output, "developer", "Should list developer profile")
 		assert.Contains(t, output, "ci", "Should list ci profile")
 
@@ -72,7 +72,7 @@ func TestProfileListCommand(t *testing.T) {
 	})
 
 	t.Run("profile list json format", func(t *testing.T) {
-		t.Chdir("../examples/config-profiles")
+		t.Chdir("fixtures/scenarios/config-profiles")
 
 		cmd := atmosRunner.Command("profile", "list", "--format", "json")
 
@@ -104,7 +104,7 @@ func TestProfileListCommand(t *testing.T) {
 	})
 
 	t.Run("profile list yaml format", func(t *testing.T) {
-		t.Chdir("../examples/config-profiles")
+		t.Chdir("fixtures/scenarios/config-profiles")
 
 		cmd := atmosRunner.Command("profile", "list", "--format", "yaml")
 
@@ -124,7 +124,7 @@ func TestProfileListCommand(t *testing.T) {
 	})
 
 	t.Run("atmos list profiles alias works", func(t *testing.T) {
-		t.Chdir("../examples/config-profiles")
+		t.Chdir("fixtures/scenarios/config-profiles")
 
 		cmd := atmosRunner.Command("list", "profiles")
 
@@ -157,7 +157,7 @@ func TestProfileShowCommand(t *testing.T) {
 	}
 
 	t.Run("profile show with existing profile", func(t *testing.T) {
-		t.Chdir("../examples/config-profiles")
+		t.Chdir("fixtures/scenarios/config-profiles")
 
 		cmd := atmosRunner.Command("profile", "show", "developer")
 
@@ -191,7 +191,7 @@ func TestProfileShowCommand(t *testing.T) {
 	})
 
 	t.Run("profile show with non-existent profile", func(t *testing.T) {
-		t.Chdir("../examples/config-profiles")
+		t.Chdir("fixtures/scenarios/config-profiles")
 
 		cmd := atmosRunner.Command("profile", "show", "nonexistent")
 
@@ -213,7 +213,7 @@ func TestProfileShowCommand(t *testing.T) {
 	})
 
 	t.Run("profile show json format", func(t *testing.T) {
-		t.Chdir("../examples/config-profiles")
+		t.Chdir("fixtures/scenarios/config-profiles")
 
 		cmd := atmosRunner.Command("profile", "show", "developer", "--format", "json")
 
@@ -244,7 +244,7 @@ func TestProfileShowCommand(t *testing.T) {
 	})
 
 	t.Run("profile show yaml format", func(t *testing.T) {
-		t.Chdir("../examples/config-profiles")
+		t.Chdir("fixtures/scenarios/config-profiles")
 
 		cmd := atmosRunner.Command("profile", "show", "ci", "--format", "yaml")
 
@@ -277,7 +277,7 @@ func TestProfileFlagIntegration(t *testing.T) {
 	}
 
 	t.Run("profile flag is accepted without error", func(t *testing.T) {
-		t.Chdir("../examples/config-profiles")
+		t.Chdir("fixtures/scenarios/config-profiles")
 
 		// Profile flag should be accepted (profile loading is tested separately).
 		cmd := atmosRunner.Command("profile", "list", "--profile", "developer")
@@ -292,7 +292,7 @@ func TestProfileFlagIntegration(t *testing.T) {
 	})
 
 	t.Run("multiple profiles flag syntax works", func(t *testing.T) {
-		t.Chdir("../examples/config-profiles")
+		t.Chdir("fixtures/scenarios/config-profiles")
 
 		// Multiple profiles should be accepted.
 		cmd := atmosRunner.Command("profile", "list", "--profile", "ci", "--profile", "developer")

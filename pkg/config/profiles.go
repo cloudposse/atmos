@@ -25,10 +25,10 @@ type ProfileLocation struct {
 
 // discoverProfileLocations returns all possible profile locations in precedence order.
 // Precedence (highest to lowest):
-// 1. Configurable (profiles.base_path in atmos.yaml)
-// 2. Project-local hidden (.atmos/profiles/)
-// 3. XDG user profiles ($XDG_CONFIG_HOME/atmos/profiles/)
-// 4. Project-local non-hidden (profiles/)
+// 1. Configurable (profiles.base_path in atmos.yaml).
+// 2. Project-local hidden (.atmos/profiles/).
+// 3. XDG user profiles ($XDG_CONFIG_HOME/atmos/profiles/).
+// 4. Project-local non-hidden (profiles/).
 func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) ([]ProfileLocation, error) {
 	var locations []ProfileLocation
 

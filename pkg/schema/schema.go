@@ -45,7 +45,7 @@ type ConfigMetadata struct {
 	// Tags are labels for filtering and organization.
 	Tags []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
 
-	// Deprecated indicates if this configuration should no longer be used.
+	// Deprecated: indicates if this configuration should no longer be used.
 	Deprecated bool `yaml:"deprecated,omitempty" json:"deprecated,omitempty" mapstructure:"deprecated"`
 }
 

@@ -1,4 +1,4 @@
-package cmd
+package profile
 
 import (
 	_ "embed"
@@ -18,24 +18,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+//go:embed markdown/atmos_profile_show_long.md
+var profileShowLongMarkdown string
+
 //go:embed markdown/atmos_profile_show_usage.md
 var profileShowUsageMarkdown string
 
 // profileShowCmd shows detailed information about a specific profile.
 var profileShowCmd = &cobra.Command{
-	Use:   "show <profile-name>",
-	Short: "Show detailed information about a profile",
-	Long: `Show detailed information about a specific configuration profile.
-
-Displays:
-- Profile location and type
-- Metadata (name, description, version, tags)
-- List of configuration files
-- Usage instructions
-
-Supports multiple output formats:
-- **text** (default): human-readable formatted output
-- **json**/**yaml**: structured data for programmatic access`,
+	Use:                "show <profile-name>",
+	Short:              "Show detailed information about a profile",
+	Long:               profileShowLongMarkdown,
 	Example:            profileShowUsageMarkdown,
 	Args:               cobra.ExactArgs(1),
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
@@ -44,7 +37,7 @@ Supports multiple output formats:
 }
 
 func init() {
-	defer perf.Track(nil, "cmd.init.profileShowCmd")()
+	defer perf.Track(nil, "profile.init.profileShowCmd")()
 
 	// Format flag.
 	profileShowCmd.Flags().StringP("format", "f", "text", "Output format: text, json, yaml")
@@ -59,14 +52,14 @@ func init() {
 
 // profileShowFormatFlagCompletion provides shell completion for the format flag.
 func profileShowFormatFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	defer perf.Track(nil, "cmd.profileShowFormatFlagCompletion")()
+	defer perf.Track(nil, "profile.profileShowFormatFlagCompletion")()
 
 	return []string{"text", "json", "yaml"}, cobra.ShellCompDirectiveNoFileComp
 }
 
 // profileNameCompletion provides shell completion for profile names.
 func profileNameCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	defer perf.Track(nil, "cmd.profileNameCompletion")()
+	defer perf.Track(nil, "profile.profileNameCompletion")()
 
 	// Don't complete if we already have a profile name.
 	if len(args) > 0 {
@@ -94,7 +87,7 @@ func profileNameCompletion(cmd *cobra.Command, args []string, toComplete string)
 
 // executeProfileShowCommand handles the profile show command execution.
 func executeProfileShowCommand(cmd *cobra.Command, args []string) error {
-	defer perf.Track(nil, "cmd.executeProfileShowCommand")()
+	defer perf.Track(nil, "profile.executeProfileShowCommand")()
 
 	profileName := args[0]
 
@@ -110,51 +103,14 @@ func executeProfileShowCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Create profile manager.
-	manager := profile.NewProfileManager()
-
 	// Get profile details.
-	profileInfo, err := manager.GetProfile(&atmosConfig, profileName)
+	profileInfo, err := getProfileInfo(&atmosConfig, profileName)
 	if err != nil {
-		// Only add "not found" hint if this is specifically a ProfileNotFound error.
-		if errors.Is(err, errUtils.ErrProfileNotFound) {
-			return errUtils.Build(errUtils.ErrProfileNotFound).
-				WithExplanationf("Profile `%s` does not exist in any configured location", profileName).
-				WithExplanation("The profile directory was not found in any of the search locations").
-				WithHint("Run `atmos profile list` to see all available profiles").
-				WithHint("Check the spelling of the profile name").
-				WithHint("Verify `profiles.base_path` in `atmos.yaml` if using custom location").
-				WithContext("profile", profileName).
-				WithContext("command", "profile show").
-				WithExitCode(2).
-				Err()
-		}
-		// Return other errors unchanged to preserve their context.
 		return err
 	}
 
-	// Render output based on format.
-	var output string
-	switch format {
-	case "json":
-		output, err = renderProfileJSON(profileInfo)
-	case "yaml":
-		output, err = renderProfileYAML(profileInfo)
-	case "text":
-		output, err = profileShow.RenderProfile(profileInfo)
-	default:
-		return errUtils.Build(errUtils.ErrInvalidFormat).
-			WithExplanationf("The format `%s` is not supported for this command", format).
-			WithExplanation("Only `text`, `json`, and `yaml` formats are available").
-			WithHint("Use `--format text`, `--format json`, or `--format yaml`").
-			WithHint("Example: `atmos profile show dev --format text`").
-			WithContext("format", format).
-			WithContext("command", "profile show").
-			WithContext("supported_formats", "text, json, yaml").
-			WithExitCode(2).
-			Err()
-	}
-
+	// Render and print output.
+	output, err := renderProfileOutput(profileInfo, format)
 	if err != nil {
 		return err
 	}
@@ -164,9 +120,69 @@ func executeProfileShowCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// getProfileInfo retrieves profile information with enhanced error handling.
+func getProfileInfo(atmosConfig *schema.AtmosConfiguration, profileName string) (*profile.ProfileInfo, error) {
+	defer perf.Track(nil, "profile.getProfileInfo")()
+
+	manager := profile.NewProfileManager()
+	profileInfo, err := manager.GetProfile(atmosConfig, profileName)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrProfileNotFound) {
+			return nil, buildProfileNotFoundError(profileName)
+		}
+		return nil, err
+	}
+
+	return profileInfo, nil
+}
+
+// buildProfileNotFoundError creates a detailed error for profile not found scenarios.
+func buildProfileNotFoundError(profileName string) error {
+	return errUtils.Build(errUtils.ErrProfileNotFound).
+		WithExplanationf("Profile `%s` does not exist in any configured location", profileName).
+		WithExplanation("The profile directory was not found in any of the search locations").
+		WithHint("Run `atmos profile list` to see all available profiles").
+		WithHint("Check the spelling of the profile name").
+		WithHint("Verify `profiles.base_path` in `atmos.yaml` if using custom location").
+		WithContext("profile", profileName).
+		WithContext("command", "profile show").
+		WithExitCode(2).
+		Err()
+}
+
+// renderProfileOutput renders profile information in the specified format.
+func renderProfileOutput(profileInfo *profile.ProfileInfo, format string) (string, error) {
+	defer perf.Track(nil, "profile.renderProfileOutput")()
+
+	switch format {
+	case "json":
+		return renderProfileJSON(profileInfo)
+	case "yaml":
+		return renderProfileYAML(profileInfo)
+	case "text":
+		return profileShow.RenderProfile(profileInfo)
+	default:
+		return "", buildInvalidFormatError(format)
+	}
+}
+
+// buildInvalidFormatError creates a detailed error for invalid format scenarios.
+func buildInvalidFormatError(format string) error {
+	return errUtils.Build(errUtils.ErrInvalidFormat).
+		WithExplanationf("The format `%s` is not supported for this command", format).
+		WithExplanation("Only `text`, `json`, and `yaml` formats are available").
+		WithHint("Use `--format text`, `--format json`, or `--format yaml`").
+		WithHint("Example: `atmos profile show dev --format text`").
+		WithContext("format", format).
+		WithContext("command", "profile show").
+		WithContext("supported_formats", "text, json, yaml").
+		WithExitCode(2).
+		Err()
+}
+
 // renderProfileJSON renders a profile as JSON.
 func renderProfileJSON(p *profile.ProfileInfo) (string, error) {
-	defer perf.Track(nil, "cmd.renderProfileJSON")()
+	defer perf.Track(nil, "profile.renderProfileJSON")()
 
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
@@ -185,7 +201,7 @@ func renderProfileJSON(p *profile.ProfileInfo) (string, error) {
 
 // renderProfileYAML renders a profile as YAML.
 func renderProfileYAML(p *profile.ProfileInfo) (string, error) {
-	defer perf.Track(nil, "cmd.renderProfileYAML")()
+	defer perf.Track(nil, "profile.renderProfileYAML")()
 
 	data, err := yaml.Marshal(p)
 	if err != nil {

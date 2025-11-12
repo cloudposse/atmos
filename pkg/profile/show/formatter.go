@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/profile"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -48,41 +49,7 @@ func RenderProfile(p *profile.ProfileInfo) (string, error) {
 
 	// Metadata (if available).
 	if p.Metadata != nil {
-		output.WriteString(headerStyle.Render("METADATA"))
-		output.WriteString(newline)
-		output.WriteString(newline)
-
-		if p.Metadata.Name != "" {
-			output.WriteString(labelStyle.Render("Name:        "))
-			output.WriteString(p.Metadata.Name)
-			output.WriteString(newline)
-		}
-
-		if p.Metadata.Description != "" {
-			output.WriteString(labelStyle.Render("Description: "))
-			output.WriteString(p.Metadata.Description)
-			output.WriteString(newline)
-		}
-
-		if p.Metadata.Version != "" {
-			output.WriteString(labelStyle.Render("Version:     "))
-			output.WriteString(p.Metadata.Version)
-			output.WriteString(newline)
-		}
-
-		if len(p.Metadata.Tags) > 0 {
-			output.WriteString(labelStyle.Render("Tags:        "))
-			output.WriteString(strings.Join(p.Metadata.Tags, ", "))
-			output.WriteString(newline)
-		}
-
-		if p.Metadata.Deprecated {
-			output.WriteString(labelStyle.Render("Status:      "))
-			output.WriteString(styles.Warning.Render("DEPRECATED"))
-			output.WriteString(newline)
-		}
-
-		output.WriteString(newline)
+		renderMetadata(&output, p.Metadata, &headerStyle, &labelStyle, styles)
 	}
 
 	// Files.
@@ -114,4 +81,43 @@ func RenderProfile(p *profile.ProfileInfo) (string, error) {
 	output.WriteString(newline)
 
 	return output.String(), nil
+}
+
+// renderMetadata renders profile metadata to the output builder.
+func renderMetadata(output *strings.Builder, metadata *schema.ConfigMetadata, headerStyle *lipgloss.Style, labelStyle *lipgloss.Style, styles *theme.StyleSet) {
+	output.WriteString(headerStyle.Render("METADATA"))
+	output.WriteString(newline)
+	output.WriteString(newline)
+
+	if metadata.Name != "" {
+		output.WriteString(labelStyle.Render("Name:        "))
+		output.WriteString(metadata.Name)
+		output.WriteString(newline)
+	}
+
+	if metadata.Description != "" {
+		output.WriteString(labelStyle.Render("Description: "))
+		output.WriteString(metadata.Description)
+		output.WriteString(newline)
+	}
+
+	if metadata.Version != "" {
+		output.WriteString(labelStyle.Render("Version:     "))
+		output.WriteString(metadata.Version)
+		output.WriteString(newline)
+	}
+
+	if len(metadata.Tags) > 0 {
+		output.WriteString(labelStyle.Render("Tags:        "))
+		output.WriteString(strings.Join(metadata.Tags, ", "))
+		output.WriteString(newline)
+	}
+
+	if metadata.Deprecated {
+		output.WriteString(labelStyle.Render("Status:      "))
+		output.WriteString(styles.Warning.Render("DEPRECATED"))
+		output.WriteString(newline)
+	}
+
+	output.WriteString(newline)
 }
