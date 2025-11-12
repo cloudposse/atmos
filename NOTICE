@@ -389,10 +389,6 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/prometheus/common/blob/v0.66.1/LICENSE
 
-  - github.com/prometheus/procfs
-    License: Apache-2.0
-    URL: https://github.com/prometheus/procfs/blob/v0.17.0/LICENSE
-
   - github.com/santhosh-tekuri/jsonschema/v5
     License: Apache-2.0
     URL: https://github.com/santhosh-tekuri/jsonschema/blob/v5.3.1/LICENSE
@@ -605,14 +601,6 @@ BSD LICENSED DEPENDENCIES
   - github.com/go-jose/go-jose/v4/json
     License: BSD-3-Clause
     URL: https://github.com/go-jose/go-jose/blob/v4.1.2/json/LICENSE
-
-  - github.com/godbus/dbus
-    License: BSD-2-Clause
-    URL: https://github.com/godbus/dbus/blob/v4.1.0/LICENSE
-
-  - github.com/godbus/dbus/v5
-    License: BSD-2-Clause
-    URL: https://github.com/godbus/dbus/blob/v5.1.0/LICENSE
 
   - github.com/gofrs/flock
     License: BSD-3-Clause
@@ -936,6 +924,14 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
 MIT LICENSED DEPENDENCIES
 
+  - al.essio.dev/pkg/shellescape
+    License: MIT
+    URL: https://github.com/alessio/shellescape/blob/v1.5.1/LICENSE
+
+  - github.com/99designs/go-keychain
+    License: MIT
+    URL: https://github.com/99designs/go-keychain/blob/8e49817e8af4/LICENSE
+
   - github.com/99designs/keyring
     License: MIT
     URL: https://github.com/99designs/keyring/blob/v1.2.2/LICENSE
@@ -1247,10 +1243,6 @@ MIT LICENSED DEPENDENCIES
   - github.com/gookit/color
     License: MIT
     URL: https://github.com/gookit/color/blob/v1.5.4/LICENSE
-
-  - github.com/gsterjov/go-libsecret
-    License: MIT
-    URL: https://github.com/gsterjov/go-libsecret/blob/a6f4afe4910c/LICENSE
 
   - github.com/hairyhenderson/go-fsimpl
     License: MIT
