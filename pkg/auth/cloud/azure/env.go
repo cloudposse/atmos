@@ -42,32 +42,20 @@ var problematicAzureEnvVars = []string{
 	"ARM_USE_OIDC",
 }
 
-// conflictingCloudEnvVars lists environment variables from other cloud providers
-// that should be cleared when using Azure authentication to avoid conflicts.
-var conflictingCloudEnvVars = []string{
-	// AWS credentials.
-	"AWS_ACCESS_KEY_ID",
-	"AWS_SECRET_ACCESS_KEY",
-	"AWS_SESSION_TOKEN",
-	"AWS_PROFILE",
-
-	// GCP credentials.
-	"GOOGLE_APPLICATION_CREDENTIALS",
-	"GOOGLE_CLOUD_PROJECT",
-	"GCLOUD_PROJECT",
-}
 
 // PrepareEnvironment configures environment variables for Azure SDK when using Atmos auth.
 //
 // This function:
-//  1. Clears conflicting cloud provider env vars (AWS, GCP)
-//  2. Clears direct Azure credential env vars to prevent conflicts
-//  3. Sets AZURE_SUBSCRIPTION_ID, AZURE_TENANT_ID, AZURE_LOCATION
-//  4. Sets ARM_* variables for Terraform provider compatibility
-//  5. Sets ARM_USE_CLI=true to enable Azure CLI authentication
+//  1. Clears direct Azure credential env vars to prevent conflicts with Atmos-managed credentials
+//  2. Sets AZURE_SUBSCRIPTION_ID, AZURE_TENANT_ID, AZURE_LOCATION
+//  3. Sets ARM_* variables for Terraform provider compatibility
+//  4. Sets ARM_USE_CLI=true to enable Azure CLI authentication
 //
 // This matches how 'az login' works - Atmos updates the MSAL cache and Azure profile,
 // then Terraform providers automatically detect and use those credentials via ARM_USE_CLI.
+//
+// Note: Other cloud provider credentials (AWS, GCP) are NOT cleared to support multi-cloud
+// scenarios such as using S3 backend for Terraform state while deploying to Azure.
 //
 // Returns a NEW map with modifications - does not mutate the input.
 //
@@ -95,17 +83,9 @@ func PrepareEnvironment(environ map[string]string, subscriptionID, tenantID, loc
 		result[k] = v
 	}
 
-	// Clear conflicting cloud provider environment variables.
-	// When using Azure authentication, AWS/GCP variables can cause confusion.
-	for _, key := range conflictingCloudEnvVars {
-		if _, exists := result[key]; exists {
-			log.Debug("Clearing conflicting cloud provider environment variable", "key", key)
-			delete(result, key)
-		}
-	}
-
 	// Clear problematic Azure credential environment variables.
 	// These would override Atmos-managed credentials.
+	// Note: We do NOT clear AWS/GCP credentials to support multi-cloud scenarios.
 	for _, key := range problematicAzureEnvVars {
 		if _, exists := result[key]; exists {
 			log.Debug("Clearing Azure credential environment variable", "key", key)

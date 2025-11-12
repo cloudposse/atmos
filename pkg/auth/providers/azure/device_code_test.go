@@ -361,7 +361,7 @@ func TestDeviceCodeProvider_PrepareEnvironment(t *testing.T) {
 			},
 		},
 		{
-			name: "clears conflicting Azure credential environment variables",
+			name: "clears conflicting Azure credentials but preserves other cloud credentials",
 			provider: &deviceCodeProvider{
 				tenantID:       "tenant-123",
 				subscriptionID: "sub-456",
@@ -377,12 +377,14 @@ func TestDeviceCodeProvider_PrepareEnvironment(t *testing.T) {
 				"HOME":                           "/home/user",
 			},
 			expectedContains: map[string]string{
-				"HOME":                  "/home/user",
-				"AZURE_SUBSCRIPTION_ID": "sub-456",
-				"ARM_SUBSCRIPTION_ID":   "sub-456",
-				"AZURE_TENANT_ID":       "tenant-123",
-				"ARM_TENANT_ID":         "tenant-123",
-				"ARM_USE_CLI":           "true",
+				"HOME":                           "/home/user",
+				"AZURE_SUBSCRIPTION_ID":          "sub-456",
+				"ARM_SUBSCRIPTION_ID":            "sub-456",
+				"AZURE_TENANT_ID":                "tenant-123",
+				"ARM_TENANT_ID":                  "tenant-123",
+				"ARM_USE_CLI":                    "true",
+				"AWS_ACCESS_KEY_ID":              "AKIAIOSFODNN7EXAMPLE",
+				"GOOGLE_APPLICATION_CREDENTIALS": "/path/to/gcp/creds.json",
 			},
 			expectedMissing: []string{
 				"AZURE_CLIENT_ID",
@@ -390,8 +392,6 @@ func TestDeviceCodeProvider_PrepareEnvironment(t *testing.T) {
 				"AZURE_CLIENT_CERTIFICATE_PATH",
 				"ARM_CLIENT_ID",
 				"ARM_CLIENT_SECRET",
-				"AWS_ACCESS_KEY_ID",
-				"GOOGLE_APPLICATION_CREDENTIALS",
 			},
 		},
 	}
