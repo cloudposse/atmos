@@ -788,23 +788,20 @@ func TestThemeListEnvVarFallback(t *testing.T) {
 	ui.InitFormatter(ioCtx)
 
 	t.Run("falls back to ATMOS_THEME env var when config empty", func(t *testing.T) {
-		// Setup
+		// Setup - nil config so atmosConfigPtr check fails
 		oldAtmosConfig := atmosConfigPtr
 		defer func() { atmosConfigPtr = oldAtmosConfig }()
-		atmosConfigPtr = &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				Terminal: schema.Terminal{
-					Theme: "", // Empty
-				},
-			},
-		}
+		atmosConfigPtr = nil
 
 		// Reset viper
 		viper.Reset()
 		defer viper.Reset()
 
-		// Set ATMOS_THEME
-		viper.Set("ATMOS_THEME", "dracula")
+		// Bind ATMOS_THEME env var to Viper
+		_ = viper.BindEnv("ATMOS_THEME")
+
+		// Set ATMOS_THEME via environment - this should hit line 81-82
+		t.Setenv("ATMOS_THEME", "dracula")
 
 		// Execute
 		err := executeThemeList(themeListCmd, []string{})
@@ -812,25 +809,64 @@ func TestThemeListEnvVarFallback(t *testing.T) {
 	})
 
 	t.Run("falls back to THEME env var when ATMOS_THEME not set", func(t *testing.T) {
-		// Setup
+		// Setup - nil config so atmosConfigPtr check fails
 		oldAtmosConfig := atmosConfigPtr
 		defer func() { atmosConfigPtr = oldAtmosConfig }()
-		atmosConfigPtr = &schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				Terminal: schema.Terminal{
-					Theme: "", // Empty
-				},
-			},
-		}
+		atmosConfigPtr = nil
 
 		// Reset viper
 		viper.Reset()
 		defer viper.Reset()
 
-		// Set only THEME (not ATMOS_THEME)
-		viper.Set("THEME", "nord")
+		// Bind THEME env var to Viper (not ATMOS_THEME)
+		_ = viper.BindEnv("THEME")
+
+		// Set only THEME via environment (not ATMOS_THEME) - this should hit line 83-84
+		t.Setenv("THEME", "nord")
 
 		// Execute
+		err := executeThemeList(themeListCmd, []string{})
+		require.NoError(t, err)
+	})
+
+	t.Run("uses default atmos theme when no config or env vars", func(t *testing.T) {
+		// Setup - nil config
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = nil
+
+		// Reset viper - no env vars set
+		viper.Reset()
+		defer viper.Reset()
+
+		// Explicitly ensure no ATMOS_THEME or THEME env vars - this should hit the else path on line 85
+		_ = viper.BindEnv("ATMOS_THEME")
+		_ = viper.BindEnv("THEME")
+
+		// Execute - should default to "atmos"
+		err := executeThemeList(themeListCmd, []string{})
+		require.NoError(t, err)
+	})
+
+	t.Run("handles empty ATMOS_THEME and falls back to THEME", func(t *testing.T) {
+		// Setup - nil config
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = nil
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// Bind both env vars
+		_ = viper.BindEnv("ATMOS_THEME")
+		_ = viper.BindEnv("THEME")
+
+		// Set ATMOS_THEME to empty string (should skip to THEME check)
+		t.Setenv("ATMOS_THEME", "")
+		t.Setenv("THEME", "github")
+
+		// Execute - should use THEME since ATMOS_THEME is empty
 		err := executeThemeList(themeListCmd, []string{})
 		require.NoError(t, err)
 	})
