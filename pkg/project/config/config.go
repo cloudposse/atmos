@@ -162,8 +162,17 @@ func SaveUserConfigWithBaseRef(scaffoldPath string, templateID string, baseRef s
 	v.Set("values", values)
 
 	// Write the config file
-	if err := v.WriteConfig(); err != nil {
-		return fmt.Errorf("failed to write user config: %w", err)
+	// Check if the config file exists and use appropriate write method
+	if _, err := os.Stat(valuesPath); os.IsNotExist(err) {
+		// File doesn't exist, use WriteConfigAs to create it
+		if err := v.WriteConfigAs(valuesPath); err != nil {
+			return fmt.Errorf("failed to write user config: %w", err)
+		}
+	} else {
+		// File exists, use WriteConfig to update it
+		if err := v.WriteConfig(); err != nil {
+			return fmt.Errorf("failed to write user config: %w", err)
+		}
 	}
 
 	return nil
