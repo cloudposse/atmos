@@ -57,7 +57,7 @@ type Provider interface {
 	GetFilesDisplayPath() string
 }
 
-// Provisioner is an optional interface that providers can implement.
+// Provisioner is an optional interface that providers can implement
 // to auto-provision identities from external sources (e.g., AWS SSO permission sets).
 // Provisioning is run after successful provider authentication and is non-fatal.
 type Provisioner interface {

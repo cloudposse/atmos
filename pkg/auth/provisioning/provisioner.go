@@ -14,7 +14,7 @@ type ICredentials interface {
 	GetExpiration() (*time.Time, error)
 }
 
-// Provisioner is an optional interface that auth providers can implement.
+// Provisioner is an optional interface that auth providers can implement
 // to auto-provision identities from external sources.
 type Provisioner interface {
 	// ProvisionIdentities provisions identities from the external source.

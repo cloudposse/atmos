@@ -19,6 +19,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 //go:embed atmos.yaml
@@ -576,28 +577,23 @@ func mergeImports(dst *viper.Viper) error {
 }
 
 // injectProvisionedIdentityImports adds provisioned identity files to the import list.
-// Provisioned identities are written to XDG cache during authentication and should be.
+// Provisioned identities are written to XDG cache during authentication and should be
 // imported BEFORE manual configuration to allow manual config to override.
 func injectProvisionedIdentityImports(src *schema.AtmosConfiguration) error {
 	// Check if there are any auth providers configured.
-	if src.Auth.Providers == nil || len(src.Auth.Providers) == 0 {
+	if len(src.Auth.Providers) == 0 {
 		return nil
 	}
 
 	// Get XDG cache directory for provisioned identities.
-	// This matches the logic in pkg/auth/provisioning/writer.go:getDefaultCacheDir().
-	// TODO: Refactor both this and provisioning/writer.go to use pkg/xdg.GetXDGCacheDir().
-	cacheHome := os.Getenv("XDG_CACHE_HOME")
-	if cacheHome == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get user home directory: %w", err)
-		}
-		cacheHome = filepath.Join(homeDir, ".cache")
+	// Uses ATMOS_XDG_CACHE_HOME or XDG_CACHE_HOME if set, otherwise ~/.cache/atmos/auth.
+	// Note: xdg.GetXDGCacheDir already prepends "atmos/" to the path.
+	const authSubDir = "auth"
+	const authDirPerms = 0o700
+	baseProvisioningDir, err := xdg.GetXDGCacheDir(authSubDir, authDirPerms)
+	if err != nil {
+		return fmt.Errorf("failed to get provisioning cache directory: %w", err)
 	}
-
-	// Use constants from provisioning package to maintain consistency.
-	baseProvisioningDir := filepath.Join(cacheHome, provisioning.DefaultCacheDir)
 
 	// Collect provisioned identity files for each provider.
 	var provisionedImports []string

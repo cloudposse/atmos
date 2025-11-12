@@ -374,15 +374,7 @@ func TestGetDefaultCacheDir_XDG(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Set XDG_CACHE_HOME.
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer func() {
-		if originalXDG != "" {
-			os.Setenv("XDG_CACHE_HOME", originalXDG)
-		} else {
-			os.Unsetenv("XDG_CACHE_HOME")
-		}
-	}()
-	os.Setenv("XDG_CACHE_HOME", tempDir)
+	t.Setenv("XDG_CACHE_HOME", tempDir)
 
 	// Get cache dir.
 	cacheDir, err := getDefaultCacheDir()

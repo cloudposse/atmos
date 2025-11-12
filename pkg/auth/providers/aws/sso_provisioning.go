@@ -82,7 +82,32 @@ func (p *ssoProvider) provisionIdentitiesWithClient(ctx context.Context, ssoClie
 
 	log.Debug("Listed SSO accounts", "count", len(accounts))
 
-	// For each account, list available roles.
+	// Process all accounts and collect identities.
+	identities, roleCount := p.processAccountsForProvisioning(ctx, ssoClient, accessToken, accounts)
+
+	log.Debug("Provisioned SSO identities", "provider", p.name, "accounts", len(accounts), "roles", roleCount, "identities", len(identities))
+
+	return &provisioning.Result{
+		Identities:    identities,
+		Provider:      p.name,
+		ProvisionedAt: time.Now(),
+		Metadata: provisioning.Metadata{
+			Source: "aws-sso",
+			Counts: &provisioning.Counts{
+				Accounts:   len(accounts),
+				Roles:      roleCount,
+				Identities: len(identities),
+			},
+			Extra: map[string]interface{}{
+				"start_url": p.startURL,
+				"region":    p.region,
+			},
+		},
+	}, nil
+}
+
+// processAccountsForProvisioning processes accounts to create identities from their roles.
+func (p *ssoProvider) processAccountsForProvisioning(ctx context.Context, ssoClient ssoClient, accessToken string, accounts []ssotypes.AccountInfo) (map[string]*schema.Identity, int) {
 	identities := make(map[string]*schema.Identity)
 	roleCount := 0
 
@@ -123,25 +148,7 @@ func (p *ssoProvider) provisionIdentitiesWithClient(ctx context.Context, ssoClie
 		}
 	}
 
-	log.Debug("Provisioned SSO identities", "provider", p.name, "accounts", len(accounts), "roles", roleCount, "identities", len(identities))
-
-	return &provisioning.Result{
-		Identities:    identities,
-		Provider:      p.name,
-		ProvisionedAt: time.Now(),
-		Metadata: provisioning.Metadata{
-			Source: "aws-sso",
-			Counts: &provisioning.Counts{
-				Accounts:   len(accounts),
-				Roles:      roleCount,
-				Identities: len(identities),
-			},
-			Extra: map[string]interface{}{
-				"start_url": p.startURL,
-				"region":    p.region,
-			},
-		},
-	}, nil
+	return identities, roleCount
 }
 
 // listAccountsWithClient is a testable version that accepts a client interface.

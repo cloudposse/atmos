@@ -10,14 +10,23 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
 	// DefaultCacheDir is the default cache directory relative to XDG_CACHE_HOME.
 	DefaultCacheDir = "atmos/auth"
 
+	// AuthSubDir is the subdirectory under XDG cache for auth-related files.
+	// Note: xdg.GetXDGCacheDir prepends "atmos/" automatically.
+	authSubDir = "auth"
+
 	// ProvisionedFileName is the filename for provisioned identities.
 	ProvisionedFileName = "provisioned-identities.yaml"
+
+	// Directory and file permissions.
+	provisionedDirPerms  = 0o700 // User read/write/execute only.
+	provisionedFilePerms = 0o600 // User read/write only.
 )
 
 // Writer handles writing provisioned identities to disk.
@@ -54,7 +63,7 @@ func (w *Writer) Write(result *Result) (string, error) {
 
 	// Create provider-specific cache directory.
 	providerDir := filepath.Join(w.CacheDir, result.Provider)
-	if err := os.MkdirAll(providerDir, 0o700); err != nil {
+	if err := os.MkdirAll(providerDir, provisionedDirPerms); err != nil {
 		return "", fmt.Errorf("%w: failed to create cache directory %s: %w", errUtils.ErrInvalidAuthConfig, providerDir, err)
 	}
 
@@ -69,7 +78,7 @@ func (w *Writer) Write(result *Result) (string, error) {
 
 	// Write to file.
 	filePath := filepath.Join(providerDir, ProvisionedFileName)
-	if err := os.WriteFile(filePath, data, 0o600); err != nil {
+	if err := os.WriteFile(filePath, data, provisionedFilePerms); err != nil {
 		return "", fmt.Errorf("%w: failed to write provisioned identities to %s: %w", errUtils.ErrParseFile, filePath, err)
 	}
 
@@ -109,20 +118,12 @@ func buildConfig(result *Result) map[string]interface{} {
 }
 
 // getDefaultCacheDir returns the default cache directory.
-// Uses XDG_CACHE_HOME if set, otherwise ~/.cache/atmos/auth.
+// Uses ATMOS_XDG_CACHE_HOME or XDG_CACHE_HOME if set, otherwise ~/.cache/atmos/auth.
 func getDefaultCacheDir() (string, error) {
 	defer perf.Track(nil, "provisioning.getDefaultCacheDir")()
 
-	cacheHome := os.Getenv("XDG_CACHE_HOME")
-	if cacheHome == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("failed to get user home directory: %w", err)
-		}
-		cacheHome = filepath.Join(homeDir, ".cache")
-	}
-
-	return filepath.Join(cacheHome, DefaultCacheDir), nil
+	// Note: xdg.GetXDGCacheDir already prepends "atmos/" to the path.
+	return xdg.GetXDGCacheDir(authSubDir, provisionedDirPerms)
 }
 
 // GetProvisionedIdentitiesPath returns the path to the provisioned identities file for a provider.

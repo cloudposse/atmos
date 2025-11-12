@@ -5,7 +5,7 @@ import (
 )
 
 // ProvisioningResult is an alias for provisioning.Result.
-// This allows the manager to use types.ProvisioningResult while the actual.
+// This allows the manager to use types.ProvisioningResult while the actual
 // implementation lives in pkg/auth/provisioning.
 type ProvisioningResult = provisioning.Result
 
