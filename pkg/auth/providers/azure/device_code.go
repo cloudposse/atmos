@@ -8,6 +8,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -109,6 +110,33 @@ func (p *deviceCodeProvider) Name() string {
 // PreAuthenticate is a no-op for device code provider.
 func (p *deviceCodeProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 	return nil
+}
+
+// createMSALClient creates a MSAL public client with persistent token cache.
+// The cache is stored in ~/.azure/msal_token_cache.json for Azure CLI compatibility.
+func (p *deviceCodeProvider) createMSALClient(ctx context.Context) (public.Client, error) {
+	// Create MSAL cache for token persistence.
+	msalCache, err := azureCloud.NewMSALCache("")
+	if err != nil {
+		return public.Client{}, fmt.Errorf("failed to create MSAL cache: %w", err)
+	}
+
+	// Create MSAL public client with cache.
+	// This client will automatically persist refresh tokens.
+	client, err := public.New(
+		p.clientID,
+		public.WithAuthority(fmt.Sprintf("https://login.microsoftonline.com/%s", p.tenantID)),
+		public.WithCache(msalCache),
+	)
+	if err != nil {
+		return public.Client{}, fmt.Errorf("failed to create MSAL client: %w", err)
+	}
+
+	log.Debug("Created MSAL client",
+		"clientID", p.clientID,
+		"tenantID", p.tenantID)
+
+	return client, nil
 }
 
 // Authenticate performs Azure device code authentication.
