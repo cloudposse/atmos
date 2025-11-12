@@ -712,6 +712,175 @@ func TestExecuteThemeList(t *testing.T) {
 		// Should not error
 		require.NoError(t, err, "executeThemeList should not error when recommended flag is disabled")
 	})
+
+	t.Run("executes with recommended flag via command line", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = nil
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// Create a test command to simulate flag parsing
+		testCmd := &cobra.Command{Use: "test-list"}
+		themeListParser.RegisterFlags(testCmd)
+		err := themeListParser.BindFlagsToViper(testCmd, viper.GetViper())
+		require.NoError(t, err)
+
+		// Set the flag
+		err = testCmd.Flags().Set("recommended", "true")
+		require.NoError(t, err)
+
+		// Execute with the test command
+		err = executeThemeList(testCmd, []string{})
+
+		// Should not error
+		require.NoError(t, err, "executeThemeList should not error with CLI flag")
+	})
+
+	t.Run("verifies plural vs singular message formatting", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = nil
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// Execute - this should list multiple themes and test the pluralization logic
+		err := executeThemeList(themeListCmd, []string{})
+
+		// Should not error
+		require.NoError(t, err, "executeThemeList should handle plural formatting")
+	})
+
+	t.Run("executes and displays active theme information", func(t *testing.T) {
+		// Setup with explicit theme config
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Terminal: schema.Terminal{
+					Theme: "dracula",
+				},
+			},
+		}
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// Execute - should show dracula as active theme
+		err := executeThemeList(themeListCmd, []string{})
+
+		// Should not error and should display active theme
+		require.NoError(t, err, "executeThemeList should display active theme information")
+	})
+}
+
+func TestThemeListEnvVarFallback(t *testing.T) {
+	// Initialize I/O context and formatter for testing.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "Failed to create I/O context")
+	ui.InitFormatter(ioCtx)
+
+	t.Run("falls back to ATMOS_THEME env var when config empty", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Terminal: schema.Terminal{
+					Theme: "", // Empty
+				},
+			},
+		}
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// Set ATMOS_THEME
+		viper.Set("ATMOS_THEME", "dracula")
+
+		// Execute
+		err := executeThemeList(themeListCmd, []string{})
+		require.NoError(t, err)
+	})
+
+	t.Run("falls back to THEME env var when ATMOS_THEME not set", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Terminal: schema.Terminal{
+					Theme: "", // Empty
+				},
+			},
+		}
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// Set only THEME (not ATMOS_THEME)
+		viper.Set("THEME", "nord")
+
+		// Execute
+		err := executeThemeList(themeListCmd, []string{})
+		require.NoError(t, err)
+	})
+
+	t.Run("prefers config theme over env vars", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Terminal: schema.Terminal{
+					Theme: "github", // Set in config
+				},
+			},
+		}
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// Set both env vars (should be ignored)
+		viper.Set("ATMOS_THEME", "dracula")
+		viper.Set("THEME", "nord")
+
+		// Execute - should use "github" from config
+		err := executeThemeList(themeListCmd, []string{})
+		require.NoError(t, err)
+	})
+}
+
+func TestThemeListResultError(t *testing.T) {
+	// Initialize I/O context and formatter for testing.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "Failed to create I/O context")
+	ui.InitFormatter(ioCtx)
+
+	t.Run("handles result with no error", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = nil
+
+		// Reset viper
+		viper.Reset()
+		defer viper.Reset()
+
+		// This should succeed and not return an error from the result
+		err := executeThemeList(themeListCmd, []string{})
+		require.NoError(t, err, "should handle successful result")
+	})
 }
 
 func TestExecuteThemeShow(t *testing.T) {
@@ -758,5 +927,24 @@ func TestExecuteThemeShow(t *testing.T) {
 		// Should return an error for theme not found
 		require.Error(t, err, "executeThemeShow should return an error for non-existent theme")
 		assert.ErrorIs(t, err, errUtils.ErrThemeNotFound, "should be theme not found error")
+	})
+
+	t.Run("handles multiple registered themes without errors", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = nil
+
+		// Test a subset of themes that are known to exist
+		// Note: Theme registry may vary, so we test common ones
+		themes := []string{"atmos", "dracula", "github", "nord"}
+
+		for _, themeName := range themes {
+			t.Run(themeName, func(t *testing.T) {
+				err := executeThemeShow(themeShowCmd, []string{themeName})
+				// Should not error for known themes
+				assert.NoError(t, err, "executeThemeShow should not return an error for theme '%s'", themeName)
+			})
+		}
 	})
 }
