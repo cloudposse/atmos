@@ -1,9 +1,9 @@
 package exec
 
 import (
-	"errors"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
@@ -38,6 +38,8 @@ func TestVersionExec_Execute_PrintStyledTextError(t *testing.T) {
 
 	mockExec := NewMockVersionExecutor(ctrl)
 
+	// Mock printMessage for the initial empty line call.
+	mockExec.EXPECT().PrintMessage("").Times(1)
 	// Mock printStyledText to return an error.
 	expectedError := errors.New("styled text error")
 	mockExec.EXPECT().PrintStyledText("ATMOS").Return(expectedError)
@@ -357,8 +359,9 @@ func TestDisplayVersionInFormat_ErrorContexts(t *testing.T) {
 	err = v.displayVersionInFormat(false, "xml")
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrVersionFormatInvalid)
-	// Error should contain the invalid format in context.
-	assert.Contains(t, err.Error(), "xml")
+
+	// Verify context contains the invalid format.
+	assert.True(t, errUtils.HasContext(err, "format", "xml"), "Expected error context to contain format=xml")
 }
 
 // TestVersionStruct tests the Version struct serialization.
