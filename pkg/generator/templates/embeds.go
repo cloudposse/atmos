@@ -186,12 +186,15 @@ func stripTemplateMagicComment(content string) string {
 		if templateMagicCommentPattern.MatchString(trimmed) {
 			// Remove the magic comment from the original line (not just the trimmed copy)
 			cleaned := templateMagicCommentPattern.ReplaceAllString(line, "")
-			cleaned = strings.TrimSpace(cleaned)
+			// Create a trimmed copy for emptiness checks
+			trimmedCleaned := strings.TrimSpace(cleaned)
 			// If nothing remains after removing the magic comment, skip this line
-			if cleaned == "" || cleaned == "//" || cleaned == "#" || cleaned == "/*" || cleaned == "*/" || cleaned == "<!--" || cleaned == "-->" {
+			if trimmedCleaned == "" || trimmedCleaned == "//" || trimmedCleaned == "#" || trimmedCleaned == "/*" || trimmedCleaned == "*/" || trimmedCleaned == "<!--" || trimmedCleaned == "-->" {
 				continue
 			}
-			// Append the cleaned line (with magic comment stripped)
+			// Preserve leading indentation but remove trailing whitespace after magic comment removal
+			cleaned = strings.TrimRight(cleaned, " \t")
+			// Append the cleaned line with leading indentation preserved
 			filtered = append(filtered, cleaned)
 			continue
 		}
