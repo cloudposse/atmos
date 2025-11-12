@@ -461,3 +461,72 @@ func TestCLIProvider_Logout(t *testing.T) {
 	err := provider.Logout(ctx)
 	assert.NoError(t, err)
 }
+
+func TestParseAzureCLITime(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expectError bool
+	}{
+		{
+			name:        "RFC3339 with Z timezone",
+			input:       "2025-11-07T14:22:19Z",
+			expectError: false,
+		},
+		{
+			name:        "RFC3339 with +00:00 timezone",
+			input:       "2025-11-07T14:22:19+00:00",
+			expectError: false,
+		},
+		{
+			name:        "RFC3339 with offset timezone",
+			input:       "2025-11-07T14:22:19-08:00",
+			expectError: false,
+		},
+		{
+			name:        "local time with microseconds",
+			input:       "2025-11-07 14:22:19.123456",
+			expectError: false,
+		},
+		{
+			name:        "local time with nanoseconds",
+			input:       "2025-11-07 14:22:19.123456789",
+			expectError: false,
+		},
+		{
+			name:        "local time without fractional seconds",
+			input:       "2025-11-07 14:22:19",
+			expectError: false,
+		},
+		{
+			name:        "empty string",
+			input:       "",
+			expectError: true,
+		},
+		{
+			name:        "invalid format",
+			input:       "not-a-time",
+			expectError: true,
+		},
+		{
+			name:        "invalid date",
+			input:       "2025-13-45 25:99:99",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseAzureCLITime(tt.input)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.True(t, result.IsZero(), "Expected zero time on error")
+				return
+			}
+
+			require.NoError(t, err)
+			assert.False(t, result.IsZero(), "Expected non-zero time on success")
+		})
+	}
+}

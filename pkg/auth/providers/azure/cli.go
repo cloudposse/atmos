@@ -123,10 +123,14 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		return nil, fmt.Errorf("%w: failed to parse Azure CLI token response: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	// Parse expiration time (Azure CLI returns ISO 8601 format).
-	expiresOn, err := time.Parse(time.RFC3339, tokenResp.ExpiresOn)
+	// Parse expiration time.
+	// Azure CLI can return time in multiple formats:
+	// - Local time: "2025-11-07 14:22:19.123456"
+	// - RFC3339: "2025-11-07T14:22:19Z"
+	// - Unix timestamp (seconds): "1730991739"
+	expiresOn, err := parseAzureCLITime(tokenResp.ExpiresOn)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to parse Azure CLI token expiration: %w", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: failed to parse Azure CLI token expiration %q: %w", errUtils.ErrInvalidAuthConfig, tokenResp.ExpiresOn, err)
 	}
 
 	// Use subscription from response if not configured.
@@ -200,4 +204,39 @@ func (p *cliProvider) Logout(ctx context.Context) error {
 // GetFilesDisplayPath returns empty string (no files managed by this provider).
 func (p *cliProvider) GetFilesDisplayPath() string {
 	return "" // CLI provider doesn't manage files.
+}
+
+// parseAzureCLITime parses Azure CLI token expiration time.
+// Azure CLI can return time in multiple formats depending on version and OS.
+func parseAzureCLITime(expiresOn string) (time.Time, error) {
+	if expiresOn == "" {
+		return time.Time{}, fmt.Errorf("expiration time is empty")
+	}
+
+	// Try parsing as RFC3339 (ISO 8601) format first.
+	// Example: "2025-11-07T14:22:19Z" or "2025-11-07T14:22:19+00:00"
+	if t, err := time.Parse(time.RFC3339, expiresOn); err == nil {
+		return t, nil
+	}
+
+	// Try parsing as local time format (Azure CLI default on some systems).
+	// Example: "2025-11-07 14:22:19.123456"
+	layouts := []string{
+		"2006-01-02 15:04:05.999999",    // With microseconds
+		"2006-01-02 15:04:05.999999999", // With nanoseconds
+		"2006-01-02 15:04:05",           // Without fractional seconds
+	}
+	for _, layout := range layouts {
+		if t, err := time.ParseInLocation(layout, expiresOn, time.Local); err == nil {
+			return t, nil
+		}
+	}
+
+	// Try parsing as Unix timestamp (seconds since epoch).
+	// Example: "1730991739"
+	if timestamp, err := time.Parse("0123456789", expiresOn); err == nil {
+		return time.Unix(timestamp.Unix(), 0), nil
+	}
+
+	return time.Time{}, fmt.Errorf("unable to parse time %q: tried RFC3339, local time formats, and Unix timestamp", expiresOn)
 }
