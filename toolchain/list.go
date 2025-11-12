@@ -17,6 +17,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+const (
+	installedIndicator   = "✓" // Checkmark character for installed status
+	uninstalledIndicator = "✗" // X mark character for uninstalled status
+)
+
 // Table row data structure.
 type toolRow struct {
 	alias       string
@@ -106,12 +111,12 @@ func RunList() error {
 		}
 
 		// Build row data
-		status := "✗"
+		status := uninstalledIndicator
 		installDate := "N/A"
 		size := "N/A"
 
 		if isInstalled {
-			status = "✓"
+			status = installedIndicator
 			if fileInfo, err := os.Stat(binaryPath); err == nil {
 				size = formatFileSize(fileInfo.Size())
 				installDate = fileInfo.ModTime().Format("2006-01-02 15:04")
@@ -148,12 +153,12 @@ func RunList() error {
 				log.Debug("Found binary path", "path", binaryPath, "tool", toolName, "version", version)
 			}
 
-			status := "✗"
+			status := uninstalledIndicator
 			installDate := "N/A"
 			size := "N/A"
 
 			if isInstalled {
-				status = "✓"
+				status = installedIndicator
 				if fileInfo, err := os.Stat(binaryPath); err == nil {
 					size = formatFileSize(fileInfo.Size())
 					installDate = fileInfo.ModTime().Format("2006-01-02 15:04")
