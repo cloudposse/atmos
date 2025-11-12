@@ -383,22 +383,17 @@ func TestGetDefaultCacheDir_XDG(t *testing.T) {
 }
 
 func TestGetDefaultCacheDir_Fallback(t *testing.T) {
-	// Test fallback to ~/.cache when XDG_CACHE_HOME not set.
-	// Clear XDG_CACHE_HOME.
-	originalXDG := os.Getenv("XDG_CACHE_HOME")
-	defer func() {
-		if originalXDG != "" {
-			os.Setenv("XDG_CACHE_HOME", originalXDG)
-		}
-	}()
-	os.Unsetenv("XDG_CACHE_HOME")
+	// Test fallback to default cache directory when XDG_CACHE_HOME not set.
+	// Clear XDG_CACHE_HOME and ATMOS_XDG_CACHE_HOME.
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("ATMOS_XDG_CACHE_HOME", "")
 
 	// Get cache dir.
 	cacheDir, err := getDefaultCacheDir()
 	require.NoError(t, err)
 
-	// Should contain .cache/atmos/auth.
-	assert.Contains(t, cacheDir, ".cache")
-	assert.Contains(t, cacheDir, "atmos")
-	assert.Contains(t, cacheDir, "auth")
+	// Should contain cache/atmos/auth (platform-agnostic check).
+	// On Unix: ~/.cache/atmos/auth
+	// On Windows: %LOCALAPPDATA%\cache\atmos\auth
+	assert.Contains(t, cacheDir, filepath.Join("cache", "atmos", "auth"))
 }
