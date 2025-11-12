@@ -115,6 +115,10 @@ func ExecuteWorkflow(
 		}
 	}
 
+	// Create base environment with updated PATH for workflow steps.
+	// Steps will either use this directly (no identity) or merge it with auth credentials (with identity).
+	baseWorkflowEnv := []string{fmt.Sprintf("PATH=%s", os.Getenv("PATH"))}
+
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err := u.PrintAsYAMLToFileDescriptor(&atmosConfig, workflowDefinition)
 		if err != nil {
@@ -206,16 +210,16 @@ func ExecuteWorkflow(
 			}
 
 			// Prepare shell environment with authentication credentials.
-			// Start with current OS environment and let PrepareShellEnvironment configure auth.
-			stepEnv, err = authManager.PrepareShellEnvironment(ctx, stepIdentity, os.Environ())
+			// Start with base workflow environment (includes updated PATH) and let PrepareShellEnvironment configure auth.
+			stepEnv, err = authManager.PrepareShellEnvironment(ctx, stepIdentity, append(os.Environ(), baseWorkflowEnv...))
 			if err != nil {
 				return fmt.Errorf("failed to prepare shell environment for identity %q in step %q: %w", stepIdentity, step.Name, err)
 			}
 
 			log.Debug("Prepared environment with identity", "identity", stepIdentity, "step", step.Name)
 		} else {
-			// No identity specified, use empty environment (subprocess inherits from parent).
-			stepEnv = []string{}
+			// No identity specified, use base workflow environment with updated PATH.
+			stepEnv = baseWorkflowEnv
 		}
 
 		var err error
