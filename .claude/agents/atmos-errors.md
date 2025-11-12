@@ -142,29 +142,29 @@ ErrError = errors.New("error occurred")
 ### 2. Add Formatted Context with Hints
 
 ```go
-// ✅ GOOD: Specific, with actionable hints
+// ✅ GOOD: Only actionable hints
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component `%s` not found in stack `%s`", component, stack).
     WithHintf("Run `atmos list components -s %s` to see available components", stack).
-    WithHint("Verify the component path in your atmos.yaml configuration").
+    WithHint("Verify component path in `atmos.yaml`").
     WithContext("component", component).
     WithContext("stack", stack).
     WithContext("search_path", searchPath).
     WithExitCode(2).
     Err()
 
-// ❌ BAD: No hints, no context
-return errUtils.ErrComponentNotFound
+// ❌ BAD: "What happened" in hints
+return errUtils.Build(errUtils.ErrComponentNotFound).
+    WithHintf("Component `%s` not found in stack `%s`", component, stack).  // WRONG
+    Err()
 ```
 
 ### 3. Provide Multiple Hints for Complex Issues
 
 ```go
 err := errUtils.Build(errUtils.ErrWorkflowNotFound).
-    WithHintf("Workflow file `%s` not found", workflowFile).
     WithHintf("Run `atmos list workflows` to see available workflows").
-    WithHint("Check that the workflow file exists in the configured workflows directory").
-    WithHintf("Verify the `workflows` path in your `atmos.yaml` configuration").
+    WithHint("Check workflow file exists in configured workflows directory").
+    WithHintf("Verify `workflows` path in `atmos.yaml`").
     WithContext("workflow", workflowName).
     WithContext("file", workflowFile).
     WithContext("workflows_dir", workflowsDir).
@@ -228,12 +228,11 @@ When reviewing or creating error messages, ensure:
 
 ```go
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component `%s` not found in stack `%s`", component, stack).
     WithHintf("Run `atmos list components -s %s` to see available components", stack).
-    WithHint("Verify the component path in your `atmos.yaml` configuration").
+    WithHint("Verify component path in `atmos.yaml`").
     WithContext("component", component).
     WithContext("stack", stack).
-    WithContext("path", searchPath).
+    WithContext("search_path", searchPath).
     WithExitCode(2).
     Err()
 ```
@@ -242,9 +241,8 @@ err := errUtils.Build(errUtils.ErrComponentNotFound).
 
 ```go
 err := errUtils.Build(errUtils.ErrInvalidConfig).
-    WithHintf("Invalid configuration in `%s`", configFile).
-    WithHint("Check the syntax and structure of your configuration file").
-    WithHintf("Run `atmos validate config` to verify your configuration").
+    WithHint("Check syntax and structure of configuration file").
+    WithHintf("Run `atmos validate config` to verify").
     WithContext("file", configFile).
     WithContext("line", lineNumber).
     WithExitCode(2).
@@ -255,21 +253,19 @@ err := errUtils.Build(errUtils.ErrInvalidConfig).
 
 ```go
 err := errUtils.Build(errUtils.ErrValidationFailed).
-    WithHintf("%d validation errors found", len(errors)).
-    WithHint("Review the validation errors above and fix the issues").
-    WithHintf("Run `atmos validate stacks` to re-validate after fixes").
+    WithHint("Review validation errors above and fix issues").
+    WithHintf("Run `atmos validate stacks` to re-validate").
     WithContext("stack", stack).
     WithContext("error_count", len(errors)).
-    Err()  // Exit code 1 is default - omit WithExitCode
+    Err()
 ```
 
 ### File Not Found
 
 ```go
 err := errUtils.Build(errUtils.ErrFileNotFound).
-    WithHintf("File `%s` not found", filePath).
-    WithHint("Check that the file exists at the specified path").
-    WithHintf("Verify the `%s` configuration in `atmos.yaml`", configKey).
+    WithHint("Check file exists at specified path").
+    WithHintf("Verify `%s` configuration in `atmos.yaml`", configKey).
     WithContext("file", filePath).
     WithContext("working_dir", workingDir).
     WithExitCode(2).
@@ -305,12 +301,12 @@ if errors.Is(err, errUtils.ErrComponentNotFound) {
 ### ❌ Missing Hints
 
 ```go
-// WRONG: No guidance for user
+// WRONG: No actionable guidance
 return errUtils.ErrComponentNotFound
 
-// CORRECT: Add actionable hints
+// CORRECT: Actionable hints only
 return errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Run `atmos list components` to see available components").
+    WithHintf("Run `atmos list components -s %s`", stack).
     Err()
 ```
 
@@ -367,19 +363,18 @@ builder.WithContext("failed_file", filename)
 ### ❌ Too Much in Hint, Not Enough in Context
 
 ```go
-// WRONG: All details in hint, nothing in context
+// WRONG: Explanatory details in hints
 return errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component `%s` not found in stack `%s` at path `%s`",
-        component, stack, path).
+    WithHintf("Component `%s` not found at `%s`", component, path).
     Err()
 
-// CORRECT: Brief hint, details in context
+// CORRECT: Actions in hints, details in context
 return errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component `%s` not found", component).
-    WithHintf("Run `atmos list components` to see available components").
+    WithHintf("Run `atmos list components -s %s`", stack).
+    WithHint("Verify component path in `atmos.yaml`").
     WithContext("component", component).
     WithContext("stack", stack).
-    WithContext("path", path).
+    WithContext("search_path", path).
     Err()
 ```
 
