@@ -250,9 +250,9 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 
 		// Set status indicator.
 		if row.isInstalled {
-			row.status = "●" // Green dot (will be colored later).
+			row.status = statusIndicator // Green dot (will be colored later).
 		} else if row.isInConfig {
-			row.status = "●" // Gray dot (will be colored later).
+			row.status = statusIndicator // Gray dot (will be colored later).
 		} else {
 			row.status = " " // No indicator.
 		}
@@ -355,10 +355,10 @@ func renderSearchTableWithConditionalStyling(tableView string, rows []searchRow)
 			// Color the status dot and apply row styling.
 			if rowData.isInstalled {
 				// Replace the dot with a green dot.
-				line = strings.Replace(line, "●", greenDot.Render("●"), 1)
+				line = strings.Replace(line, statusIndicator, greenDot.Render(statusIndicator), 1)
 			} else if rowData.isInConfig {
 				// Replace the dot with a gray dot and gray the entire row.
-				line = strings.Replace(line, "●", grayDot.Render("●"), 1)
+				line = strings.Replace(line, statusIndicator, grayDot.Render(statusIndicator), 1)
 				line = grayRow.Render(line)
 			}
 
