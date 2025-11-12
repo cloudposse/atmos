@@ -51,8 +51,8 @@ Use the error builder for creating rich, user-friendly errors:
 import errUtils "github.com/cloudposse/atmos/errors"
 
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component `%s` not found in stack `%s`", component, stack).
     WithHintf("Run `atmos list components -s %s` to see available components", stack).
+    WithHint("Verify component path in `atmos.yaml`").
     WithContext("component", component).
     WithContext("stack", stack).
     WithContext("path", componentPath).
@@ -177,18 +177,18 @@ err := errUtils.Build(errUtils.ErrWorkflowNotFound).
 Context shows as table in `--verbose` mode. **Add NEW info only** - don't repeat what's in hints.
 
 ```go
-// ❌ BAD: Redundant
+// ❌ BAD: Redundant context
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component `%s` in stack `%s` not found", component, stack).
-    WithContext("component", component).  // Already in hint
-    WithContext("stack", stack).          // Already in hint
+    WithHintf("Run `atmos list components -s %s`", stack).
+    WithContext("component", component).
+    WithContext("stack", stack).  // Redundant: stack already in hint
     Err()
 
 // ✅ GOOD: Context adds new debugging details
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component `%s` in stack `%s` not found", component, stack).
-    WithContext("search_path", searchPath).
-    WithContext("available_count", count).
+    WithHintf("Run `atmos list components -s %s`", stack).
+    WithContext("search_path", searchPath).  // NEW info
+    WithContext("available_count", count).   // NEW info
     Err()
 ```
 
@@ -334,26 +334,20 @@ return errUtils.Build(errUtils.ErrThemeNotFound).
 
 ### ❌ fmt.Sprintf with Builder Methods
 
-All builder methods have formatted variants - never use `fmt.Sprintf` with builder methods.
+All builder methods have formatted variants - never use `fmt.Sprintf`.
 
 ```go
-// WRONG: Using fmt.Sprintf with WithHint (triggers linter warning)
-builder.WithHint(fmt.Sprintf("Component `%s` not found", component))
+// WRONG: Using fmt.Sprintf with WithHint
+builder.WithHint(fmt.Sprintf("Run `atmos list components -s %s`", stack))
 
 // CORRECT: Use WithHintf
-builder.WithHintf("Component `%s` not found", component)
+builder.WithHintf("Run `atmos list components -s %s`", stack)
 
 // WRONG: Using fmt.Sprintf with WithExplanation
-builder.WithExplanation(fmt.Sprintf("The component `%s` is marked as abstract", component))
+builder.WithExplanation(fmt.Sprintf("Component `%s` is abstract", component))
 
 // CORRECT: Use WithExplanationf
-builder.WithExplanationf("The component `%s` is marked as abstract", component)
-
-// WRONG: Using fmt.Sprintf with WithContext (though less common)
-builder.WithContext("message", fmt.Sprintf("failed to load %s", filename))
-
-// CORRECT: Context values are automatically formatted, or use string concatenation if needed
-builder.WithContext("failed_file", filename)
+builder.WithExplanationf("Component `%s` is abstract", component)
 ```
 
 **Available formatted methods:**
@@ -381,20 +375,19 @@ return errUtils.Build(errUtils.ErrComponentNotFound).
 ### ❌ Redundant Information
 
 ```go
-// WRONG: Repeating information
+// WRONG: Repeating information + "what happened" in hints
 return errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component `%s` in `%s` not found", component, stack).
+    WithHintf("Component `%s` not found in `%s`", component, stack).  // Explanatory
     WithContext("component", component).  // Redundant
     WithContext("stack", stack).          // Redundant
-    WithExitCode(1).  // Default
     Err()
 
-// CORRECT: Each method adds unique info
+// CORRECT: Actions in hints, unique info in context
 return errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component `%s` in `%s` not found", component, stack).
-    WithHintf("Run `atmos list components -s %s`", stack).
-    WithContext("search_path", searchPath).
-    WithContext("components_dir", componentsDir).
+    WithHintf("Run `atmos list components -s %s`", stack).  // Actionable
+    WithHint("Verify component path in `atmos.yaml`").      // Actionable
+    WithContext("search_path", searchPath).   // NEW info
+    WithContext("components_dir", componentsDir).  // NEW info
     WithExitCode(2).
     Err()
 ```
