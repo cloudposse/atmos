@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -743,5 +744,19 @@ func TestExecuteThemeShow(t *testing.T) {
 
 		// Should not error if theme exists
 		require.NoError(t, err, "executeThemeShow should not return an error for valid theme 'dracula'")
+	})
+
+	t.Run("returns error for non-existent theme", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = nil
+
+		// Execute with a non-existent theme name
+		err := executeThemeShow(themeShowCmd, []string{"nonexistent-theme-that-does-not-exist"})
+
+		// Should return an error for theme not found
+		require.Error(t, err, "executeThemeShow should return an error for non-existent theme")
+		assert.ErrorIs(t, err, errUtils.ErrThemeNotFound, "should be theme not found error")
 	})
 }
