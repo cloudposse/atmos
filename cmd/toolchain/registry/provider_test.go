@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -161,7 +162,7 @@ func TestGetRegistryCommand(t *testing.T) {
 // TestListConfiguredRegistries tests listConfiguredRegistries function.
 func TestListConfiguredRegistries(t *testing.T) {
 	// This function just outputs a message - test that it doesn't error.
-	err := listConfiguredRegistries(nil)
+	err := listConfiguredRegistries(context.Background())
 	assert.NoError(t, err, "listConfiguredRegistries should not return error")
 }
 

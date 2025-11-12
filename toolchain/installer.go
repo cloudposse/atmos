@@ -185,9 +185,7 @@ func (i *Installer) findTool(owner, repo, version string) (*registry.Tool, error
 
 	// Build list of registry names for context
 	registryNames := make([]string, len(i.registries))
-	for idx, reg := range i.registries {
-		registryNames[idx] = reg
-	}
+	copy(registryNames, i.registries)
 
 	return nil, errUtils.Build(errUtils.ErrToolNotInRegistry).
 		WithExplanationf("Tool `%s/%s@%s` was not found in any configured registry. "+

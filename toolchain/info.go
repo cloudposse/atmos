@@ -311,7 +311,7 @@ func displayVersionsTable(versions []string, defaultVersion string, terminalWidt
 
 // displayVersionsWithMetadata displays versions with full GitHub release metadata in table format.
 // Matches the look and feel of `atmos version list` exactly.
-func displayVersionsWithMetadata(versions []versionItem, installedVersions []string, configuredVersions []string, terminalWidth int) {
+func displayVersionsWithMetadata(versions []versionItem, installedVersions []string, configuredVersions []string, _ int) {
 	defer perf.Track(nil, "toolchain.displayVersionsWithMetadata")()
 
 	if len(versions) == 0 {

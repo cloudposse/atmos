@@ -118,7 +118,7 @@ func executeListCommand(cmd *cobra.Command, args []string) error {
 	return listRegistryTools(ctx, registryName, opts)
 }
 
-func parseListOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*ListOptions, error) {
+func parseListOptions(cmd *cobra.Command, v *viper.Viper, _ []string) (*ListOptions, error) {
 	defer perf.Track(nil, "registry.parseListOptions")()
 
 	format := strings.ToLower(v.GetString("format"))

@@ -70,7 +70,7 @@ func RunExecCommand(installer ToolRunner, args []string) error {
 
 // ensureToolInstalled checks if the binary exists, otherwise installs it.
 // The installer parameter is injected for better testability.
-func ensureToolInstalled(installer ToolRunner, tool string) (string, error) {
+func ensureToolInstalled(_ ToolRunner, tool string) (string, error) {
 	binaryPath, err := findBinaryPath(tool)
 	if err == nil && binaryPath != "" {
 		if _, statErr := os.Stat(binaryPath); !os.IsNotExist(statErr) {

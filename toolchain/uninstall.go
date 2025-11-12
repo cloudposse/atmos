@@ -30,11 +30,12 @@ const (
 )
 
 // Refactored runUninstall to accept an optional installer parameter for testability.
-func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Installer) error {
+func runUninstallWithInstaller(_ *cobra.Command, args []string, installer *Installer) error {
 	// If no arguments, uninstall from tool-versions file
 	if len(args) == 0 {
 		return uninstallFromToolVersions(GetToolVersionsFilePath(), installer)
 	}
+
 	toolSpec := args[0]
 	tool, version, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
@@ -47,53 +48,15 @@ func runUninstallWithInstaller(cmd *cobra.Command, args []string, installer *Ins
 	if installer == nil {
 		installer = NewInstaller()
 	}
-	owner, repo, err := installer.parseToolSpec(tool)
-	if err != nil {
-		// For uninstall operations, be more lenient with tool names
-		// If the tool resolver fails, assume the tool name is the repo name
-		// and use a default owner (the tool name itself)
-		owner = tool
-		repo = tool
-	}
+
+	owner, repo := parseToolSpecLenient(installer, tool)
 
 	// If no version specified, uninstall all versions of this tool
 	if version == "" {
 		return uninstallAllVersionsOfTool(installer, owner, repo)
 	}
 
-	if version == "latest" {
-		// Resolve actual version from latest file
-		actualVersion, err := installer.ReadLatestFile(owner, repo)
-		if err != nil {
-			// If the latest file does not exist, return error (test expects this)
-			latestFilePath := filepath.Join(installer.binDir, owner, repo, "latest")
-			return errUtils.Build(errUtils.ErrLatestFileNotFound).
-				WithExplanationf("Tool `%s/%s@latest` is not installed", owner, repo).
-				WithHint("Install with `atmos toolchain install "+repo+"@latest`").
-				WithHint("Or install specific version: `atmos toolchain install "+repo+"@1.5.0`").
-				WithContext("tool", fmt.Sprintf("%s/%s", owner, repo)).
-				WithContext("latest_file", latestFilePath).
-				WithExitCode(2).
-				Err()
-		}
-		version = actualVersion
-		// Check if the versioned binary exists
-		binaryPath := installer.getBinaryPath(owner, repo, version, "")
-		if _, statErr := os.Stat(binaryPath); os.IsNotExist(statErr) {
-			// Binary does not exist, but latest file does: delete latest file and return success
-			_ = os.Remove(filepath.Join(installer.binDir, owner, repo, "latest"))
-			_ = os.Remove(filepath.Join(installer.binDir, owner, repo)) // will only remove if empty
-			return nil
-		} else {
-			// Both binary and latest file exist: uninstall binary, delete latest file, return nil
-			err = uninstallSingleTool(installer, owner, repo, version, true)
-			_ = os.Remove(filepath.Join(installer.binDir, owner, repo, "latest"))
-			_ = os.Remove(filepath.Join(installer.binDir, owner, repo)) // will only remove if empty
-			return err
-		}
-	}
-
-	return uninstallSingleTool(installer, owner, repo, version, true)
+	return uninstallToolVersion(installer, owner, repo, version)
 }
 
 // RunUninstall removes tools by spec (owner/repo, tool, or ).
@@ -105,6 +68,7 @@ func RunUninstall(toolSpec string) error {
 	if len(toolSpec) == 0 {
 		return uninstallFromToolVersions(GetToolVersionsFilePath(), installer)
 	}
+
 	tool, version, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
 		return err
@@ -113,6 +77,18 @@ func RunUninstall(toolSpec string) error {
 		return fmt.Errorf("%w: %s. Expected format: owner/repo@version or tool@version", ErrInvalidToolSpec, toolSpec)
 	}
 
+	owner, repo := parseToolSpecLenient(installer, tool)
+
+	// If no version specified, uninstall all versions of this tool
+	if version == "" {
+		return uninstallAllVersionsOfTool(installer, owner, repo)
+	}
+
+	return uninstallToolVersion(installer, owner, repo, version)
+}
+
+// parseToolSpecLenient parses a tool spec with lenient fallback for uninstall operations.
+func parseToolSpecLenient(installer *Installer, tool string) (owner, repo string) {
 	owner, repo, err := installer.parseToolSpec(tool)
 	if err != nil {
 		// For uninstall operations, be more lenient with tool names
@@ -121,45 +97,52 @@ func RunUninstall(toolSpec string) error {
 		owner = tool
 		repo = tool
 	}
+	return owner, repo
+}
 
-	// If no version specified, uninstall all versions of this tool
-	if version == "" {
-		return uninstallAllVersionsOfTool(installer, owner, repo)
+// uninstallToolVersion handles uninstalling a specific version including "latest" resolution.
+func uninstallToolVersion(installer *Installer, owner, repo, version string) error {
+	if version != "latest" {
+		return uninstallSingleTool(installer, owner, repo, version, true)
 	}
 
-	if version == "latest" {
-		// Resolve actual version from latest file
-		actualVersion, err := installer.ReadLatestFile(owner, repo)
-		if err != nil {
-			// If the latest file does not exist, return error (test expects this)
-			latestFilePath := filepath.Join(installer.binDir, owner, repo, "latest")
-			return errUtils.Build(errUtils.ErrLatestFileNotFound).
-				WithExplanationf("Tool `%s/%s@latest` is not installed", owner, repo).
-				WithHint("Install with `atmos toolchain install "+repo+"@latest`").
-				WithHint("Or install specific version: `atmos toolchain install "+repo+"@1.5.0`").
-				WithContext("tool", fmt.Sprintf("%s/%s", owner, repo)).
-				WithContext("latest_file", latestFilePath).
-				WithExitCode(2).
-				Err()
-		}
-		version = actualVersion
-		// Check if the versioned binary exists
-		binaryPath := installer.getBinaryPath(owner, repo, version, "")
-		if _, statErr := os.Stat(binaryPath); os.IsNotExist(statErr) {
-			// Binary does not exist, but latest file does: delete latest file and return success
-			_ = os.Remove(filepath.Join(installer.binDir, owner, repo, "latest"))
-			_ = os.Remove(filepath.Join(installer.binDir, owner, repo)) // will only remove if empty
-			return nil
-		} else {
-			// Both binary and latest file exist: uninstall binary, delete latest file, return nil
-			err = uninstallSingleTool(installer, owner, repo, version, true)
-			_ = os.Remove(filepath.Join(installer.binDir, owner, repo, "latest"))
-			_ = os.Remove(filepath.Join(installer.binDir, owner, repo)) // will only remove if empty
-			return err
-		}
+	// Resolve actual version from latest file
+	actualVersion, err := installer.ReadLatestFile(owner, repo)
+	if err != nil {
+		// If the latest file does not exist, return error (test expects this)
+		latestFilePath := filepath.Join(installer.binDir, owner, repo, "latest")
+		return errUtils.Build(errUtils.ErrLatestFileNotFound).
+			WithExplanationf("Tool `%s/%s@latest` is not installed", owner, repo).
+			WithHint("Install with `atmos toolchain install "+repo+"@latest`").
+			WithHint("Or install specific version: `atmos toolchain install "+repo+"@1.5.0`").
+			WithContext("tool", fmt.Sprintf("%s/%s", owner, repo)).
+			WithContext("latest_file", latestFilePath).
+			WithExitCode(2).
+			Err()
 	}
 
-	return uninstallSingleTool(installer, owner, repo, version, true)
+	return uninstallLatestVersion(installer, owner, repo, actualVersion)
+}
+
+// uninstallLatestVersion uninstalls the "latest" version and cleans up the latest file.
+func uninstallLatestVersion(installer *Installer, owner, repo, version string) error {
+	// Check if the versioned binary exists
+	binaryPath := installer.getBinaryPath(owner, repo, version, "")
+	latestFilePath := filepath.Join(installer.binDir, owner, repo, "latest")
+	toolDir := filepath.Join(installer.binDir, owner, repo)
+
+	if _, statErr := os.Stat(binaryPath); os.IsNotExist(statErr) {
+		// Binary does not exist, but latest file does: delete latest file and return success
+		_ = os.Remove(latestFilePath)
+		_ = os.Remove(toolDir) // will only remove if empty
+		return nil
+	}
+
+	// Both binary and latest file exist: uninstall binary, delete latest file, return nil
+	err := uninstallSingleTool(installer, owner, repo, version, true)
+	_ = os.Remove(latestFilePath)
+	_ = os.Remove(toolDir) // will only remove if empty
+	return err
 }
 
 // Keep the original runUninstall for CLI usage.
@@ -172,66 +155,81 @@ func uninstallSingleTool(installer *Installer, owner, repo, version string, show
 	// Check if the tool is actually installed first
 	_, err := installer.FindBinaryPath(owner, repo, version)
 	if err != nil {
-		// If the binary is not found, treat as success (idempotent delete)
-		if errors.Is(err, ErrToolNotFound) || os.IsNotExist(err) {
-			if showProgressBar {
-				printStatusLine(fmt.Sprintf("%s %s/%s@%s not installed", theme.Styles.Checkmark, owner, repo, version))
-			}
-			return nil
-		}
-		return err
+		return handleToolNotFound(owner, repo, version, err, showProgressBar)
 	}
 
 	if showProgressBar {
-		spinner := bspinner.New()
-		progressBar := progress.New(progress.WithDefaultGradient())
-		percent := 0.0
-
-		// Show progress for finding tool
-		percent = progressFindingTool
-		bar := progressBar.ViewAs(percent)
-		printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
-		spinner, _ = spinner.Update(bspinner.TickMsg{})
-		time.Sleep(100 * time.Millisecond)
-
-		// Show progress for removing
-		percent = progressRemoving
-		bar = progressBar.ViewAs(percent)
-		printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
-		spinner.Update(bspinner.TickMsg{})
-		time.Sleep(100 * time.Millisecond)
+		showUninstallProgress()
 	}
 
 	// Perform uninstallation
 	err = installer.Uninstall(owner, repo, version)
 	if err != nil {
-		// If the binary is already gone, treat as success
-		if errors.Is(err, ErrToolNotFound) || os.IsNotExist(err) {
-			if showProgressBar {
-				printStatusLine(fmt.Sprintf("%s %s/%s@%s not installed", theme.Styles.Checkmark, owner, repo, version))
-			}
-			return nil
-		}
-		if showProgressBar {
-			printStatusLine(fmt.Sprintf("%s %s/%s@%s failed to uninstall: %v", theme.Styles.XMark, owner, repo, version, err))
-		}
-		return err
+		return handleUninstallError(owner, repo, version, err, showProgressBar)
 	}
 
-	// Show completion
 	if showProgressBar {
-		percent := 1.0
-		progressBar := progress.New(progress.WithDefaultGradient())
-		spinner := bspinner.New()
-		bar := progressBar.ViewAs(percent)
-		printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
-		time.Sleep(100 * time.Millisecond)
-		// Clear the line before printing the summary
-		resetLine()
-		printStatusLine(fmt.Sprintf("%s %s/%s@%s uninstalled", theme.Styles.Checkmark, owner, repo, version))
+		showUninstallCompletion(owner, repo, version)
 	}
 
 	return nil
+}
+
+// handleToolNotFound handles the case when a tool is not found during uninstall.
+func handleToolNotFound(owner, repo, version string, err error, showProgressBar bool) error {
+	// If the binary is not found, treat as success (idempotent delete)
+	if errors.Is(err, ErrToolNotFound) || os.IsNotExist(err) {
+		if showProgressBar {
+			printStatusLine(fmt.Sprintf("%s %s/%s@%s not installed", theme.Styles.Checkmark, owner, repo, version))
+		}
+		return nil
+	}
+	return err
+}
+
+// showUninstallProgress displays progress indicators during uninstall.
+func showUninstallProgress() {
+	spinner := bspinner.New()
+	progressBar := progress.New(progress.WithDefaultGradient())
+
+	// Show progress for finding tool
+	bar := progressBar.ViewAs(progressFindingTool)
+	printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
+	spinner, _ = spinner.Update(bspinner.TickMsg{})
+	time.Sleep(100 * time.Millisecond)
+
+	// Show progress for removing
+	bar = progressBar.ViewAs(progressRemoving)
+	printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
+	spinner.Update(bspinner.TickMsg{})
+	time.Sleep(100 * time.Millisecond)
+}
+
+// handleUninstallError handles errors during the uninstall operation.
+func handleUninstallError(owner, repo, version string, err error, showProgressBar bool) error {
+	// If the binary is already gone, treat as success
+	if errors.Is(err, ErrToolNotFound) || os.IsNotExist(err) {
+		if showProgressBar {
+			printStatusLine(fmt.Sprintf("%s %s/%s@%s not installed", theme.Styles.Checkmark, owner, repo, version))
+		}
+		return nil
+	}
+	if showProgressBar {
+		printStatusLine(fmt.Sprintf("%s %s/%s@%s failed to uninstall: %v", theme.Styles.XMark, owner, repo, version, err))
+	}
+	return err
+}
+
+// showUninstallCompletion displays completion message after successful uninstall.
+func showUninstallCompletion(owner, repo, version string) {
+	progressBar := progress.New(progress.WithDefaultGradient())
+	spinner := bspinner.New()
+	bar := progressBar.ViewAs(1.0)
+	printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
+	time.Sleep(100 * time.Millisecond)
+	// Clear the line before printing the summary
+	resetLine()
+	printStatusLine(fmt.Sprintf("%s %s/%s@%s uninstalled", theme.Styles.Checkmark, owner, repo, version))
 }
 
 // Update uninstallFromToolVersions to accept an optional installer.

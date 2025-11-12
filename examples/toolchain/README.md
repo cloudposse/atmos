@@ -101,7 +101,7 @@ toolchain:
 - `{{.RepoOwner}}` / `{{.RepoName}}` - Repository info
 - `{{.Format}}` - Archive format.
 
-See [inline-registry-example.yaml](./inline-registry-example.yaml) for a complete example.
+See [atmos.yaml](./atmos.yaml) for a complete example showing inline registry combined with other registry types.
 
 #### Future Registry Types
 

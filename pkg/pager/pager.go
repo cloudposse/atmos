@@ -8,15 +8,32 @@ import (
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/data"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
+// Writer is an interface for writing content to the data stream.
+// This allows for dependency injection and testing without relying on the global data package state.
+type Writer interface {
+	Write(content string) error
+}
+
+// dataWriter is the default implementation that uses the data package.
+type dataWriter struct{}
+
+// Write writes content using the data package.
+func (d *dataWriter) Write(content string) error {
+	return data.Write(content)
+}
+
 type PageCreator interface {
 	Run(title, content string) error
 }
 
 type pageCreator struct {
 	enablePager           bool
+	writer                Writer
 	newTeaProgram         func(model tea.Model, opts ...tea.ProgramOption) *tea.Program
 	contentFitsTerminal   func(content string) bool
 	isTTYSupportForStdout func() bool
@@ -31,6 +48,7 @@ func NewWithAtmosConfig(enablePager bool) PageCreator {
 func New() PageCreator {
 	return &pageCreator{
 		enablePager:           false,
+		writer:                &dataWriter{},
 		newTeaProgram:         tea.NewProgram,
 		contentFitsTerminal:   ContentFitsTerminal,
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
@@ -39,8 +57,7 @@ func New() PageCreator {
 
 func (p *pageCreator) Run(title, content string) error {
 	if !(p.enablePager) || !p.isTTYSupportForStdout() {
-		writeContent(content)
-		return nil
+		return p.writeContent(content)
 	}
 	// Count visible lines (taking word wrapping into account).
 	contentFits := p.contentFitsTerminal(content)
@@ -58,20 +75,26 @@ func (p *pageCreator) Run(title, content string) error {
 			return err
 		}
 	} else {
-		writeContent(content)
+		return p.writeContent(content)
 	}
 	return nil
 }
 
-// writeContent attempts to use data.Write() for proper stream routing,
-// but falls back to fmt.Print if the data writer isn't initialized (e.g., in tests).
-func writeContent(content string) {
-	defer func() {
-		if r := recover(); r != nil {
-			// If data.Write() panics (not initialized), fall back to fmt.Print.
-			fmt.Print(content)
-		}
-	}()
-	// Try to use data.Write() for proper stream routing.
-	_ = data.Write(content)
+// writeContent writes content to the configured writer.
+// If the writer is nil, it falls back to fmt.Print and logs a warning.
+// Returns any error from the writer.
+func (p *pageCreator) writeContent(content string) error {
+	if p.writer == nil {
+		// Fallback for nil writer (shouldn't happen in production, but safe for tests).
+		log.Warn("pager writer is nil, falling back to fmt.Print")
+		fmt.Print(content)
+		return nil
+	}
+
+	// Write content and return any error.
+	if err := p.writer.Write(content); err != nil {
+		return fmt.Errorf("failed to write content: %w", err)
+	}
+
+	return nil
 }

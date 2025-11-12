@@ -39,7 +39,7 @@ func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 	t.Helper()
 
 	// Initialize test kit to auto-clean RootCmd state.
-	_ = newTestKit(t)
+	newTestKit(t)
 
 	// Clean toolchainCmd state before each test to prevent pollution.
 	cleanToolchainCmdState(t)
@@ -413,7 +413,7 @@ func TestSetAtmosConfig(t *testing.T) {
 // when applying flag/env overrides (regression test for CodeRabbit issue).
 func TestToolchainPersistentPreRunPreservesConfig(t *testing.T) {
 	// Initialize test kit to auto-clean RootCmd state.
-	_ = newTestKit(t)
+	newTestKit(t)
 
 	// Clean toolchainCmd state before test.
 	cleanToolchainCmdState(t)
@@ -477,20 +477,13 @@ func TestToolchainPersistentPreRunPreservesConfig(t *testing.T) {
 	assert.Equal(t, filepath.Join(tempDir, "tools.yaml"), configAfter.Toolchain.FilePath)
 }
 
-// testKit wraps testing.T and provides automatic RootCmd state cleanup.
-type testKit struct {
-	*testing.T
-}
-
-// newTestKit creates a testKit that automatically registers RootCmd state cleanup.
+// newTestKit sets up test environment with automatic RootCmd state cleanup.
 // This follows the same pattern as cmd.NewTestKit for the toolchain package.
-func newTestKit(t *testing.T) *testKit {
+func newTestKit(t *testing.T) {
 	t.Helper()
 
 	// Clean RootCmd state and register cleanup for restoration.
 	cleanRootCmdState(t)
-
-	return &testKit{T: t}
 }
 
 // cleanToolchainCmdState resets all toolchainCmd flags and subcommand flags to prevent test pollution.
