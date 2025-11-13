@@ -98,7 +98,6 @@ func TestThemeListCommand(t *testing.T) {
 
 	t.Run("parser is initialized", func(t *testing.T) {
 		assert.NotNil(t, themeListParser, "parser should be initialized")
-		assert.NotNil(t, themeListParser, "parser should be initialized")
 	})
 
 	t.Run("accepts no arguments", func(t *testing.T) {
