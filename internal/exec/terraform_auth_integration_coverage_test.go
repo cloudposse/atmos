@@ -1,11 +1,9 @@
 package exec
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -13,16 +11,8 @@ import (
 // TestResolveAuthManagerForNestedComponent_Integration tests auth resolution
 // using actual component configurations from test fixtures.
 func TestResolveAuthManagerForNestedComponent_Integration(t *testing.T) {
-	// Save current directory and change to test fixture
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, os.Chdir(originalDir))
-	}()
-
 	fixtureDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
-	err = os.Chdir(fixtureDir)
-	require.NoError(t, err)
+	t.Chdir(fixtureDir)
 
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -65,16 +55,8 @@ func TestResolveAuthManagerForNestedComponent_Integration(t *testing.T) {
 
 // TestGetTerraformState_StaticBackend tests GetTerraformState with static remote state backend.
 func TestGetTerraformState_StaticBackend(t *testing.T) {
-	// Save current directory and change to test fixture
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, os.Chdir(originalDir))
-	}()
-
 	fixtureDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
-	err = os.Chdir(fixtureDir)
-	require.NoError(t, err)
+	t.Chdir(fixtureDir)
 
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -102,16 +84,8 @@ func TestGetTerraformState_StaticBackend(t *testing.T) {
 
 // TestGetTerraformOutput_Integration tests GetTerraformOutput with real component configurations.
 func TestGetTerraformOutput_Integration(t *testing.T) {
-	// Save current directory and change to test fixture
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, os.Chdir(originalDir))
-	}()
-
 	fixtureDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
-	err = os.Chdir(fixtureDir)
-	require.NoError(t, err)
+	t.Chdir(fixtureDir)
 
 	atmosConfig := &schema.AtmosConfiguration{}
 
