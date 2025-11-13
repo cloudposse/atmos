@@ -278,6 +278,11 @@ func executeScaffoldGenerate(
 		return err
 	}
 
+	// If dry-run mode, render preview and return without writing files
+	if dryRun {
+		return renderDryRunPreview(&selectedConfig, absTargetDir, templateVars)
+	}
+
 	// Execute template generation
 	return executeTemplateGeneration(selectedConfig, absTargetDir, force, dryRun, templateVars, scaffoldUI)
 }
@@ -445,6 +450,119 @@ func executeTemplateGeneration(
 
 	// Target directory provided, use normal Execute
 	return scaffoldUI.Execute(selectedConfig, targetDir, force, update, useDefaults, templateVars)
+}
+
+// renderDryRunPreview renders a preview of template files without writing to disk.
+func renderDryRunPreview(
+	selectedConfig *templates.Configuration,
+	targetDir string,
+	templateVars map[string]interface{},
+) error {
+	if err := renderDryRunHeader(selectedConfig, targetDir); err != nil {
+		return err
+	}
+
+	mergedValues, err := loadDryRunValues(selectedConfig, templateVars)
+	if err != nil {
+		return err
+	}
+
+	return renderDryRunFileList(selectedConfig, targetDir, mergedValues)
+}
+
+// renderDryRunHeader renders the header information for dry-run mode.
+func renderDryRunHeader(selectedConfig *templates.Configuration, targetDir string) error {
+	if err := atmosui.Info("Dry-run mode: No files will be written"); err != nil {
+		return err
+	}
+	if err := atmosui.Writef("\nTemplate: %s\n", selectedConfig.Name); err != nil {
+		return err
+	}
+	if selectedConfig.Description != "" {
+		if err := atmosui.Writef("Description: %s\n", selectedConfig.Description); err != nil {
+			return err
+		}
+	}
+	return atmosui.Writef("Target directory: %s\n\n", targetDir)
+}
+
+// loadDryRunValues loads configuration values for dry-run preview using defaults.
+func loadDryRunValues(selectedConfig *templates.Configuration, templateVars map[string]interface{}) (map[string]interface{}, error) {
+	mergedValues := templateVars
+	if !templates.HasScaffoldConfig(selectedConfig.Files) {
+		return mergedValues, nil
+	}
+
+	scaffoldConfigFile := findScaffoldConfigFile(selectedConfig.Files)
+	if scaffoldConfigFile == nil {
+		return mergedValues, nil
+	}
+
+	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load scaffold configuration: %w", err)
+	}
+
+	// Merge with defaults from scaffold config
+	for key := range scaffoldConfig.Fields {
+		field := scaffoldConfig.Fields[key]
+		if _, exists := mergedValues[key]; !exists && field.Default != nil {
+			mergedValues[key] = field.Default
+		}
+	}
+
+	return mergedValues, nil
+}
+
+// findScaffoldConfigFile finds the scaffold.yaml file in the configuration files.
+func findScaffoldConfigFile(files []templates.File) *templates.File {
+	for i := range files {
+		if files[i].Path == config.ScaffoldConfigFileName {
+			return &files[i]
+		}
+	}
+	return nil
+}
+
+// renderDryRunFileList renders the list of files that would be generated.
+func renderDryRunFileList(selectedConfig *templates.Configuration, targetDir string, mergedValues map[string]interface{}) error {
+	if err := atmosui.Write("Files that would be generated:\n\n"); err != nil {
+		return err
+	}
+
+	for _, file := range selectedConfig.Files {
+		if file.Path == config.ScaffoldConfigFileName {
+			continue
+		}
+
+		renderedPath := renderFilePath(file.Path, mergedValues)
+		if err := printFilePath(targetDir, renderedPath); err != nil {
+			return err
+		}
+	}
+
+	return atmosui.Writef("\nTotal: %d files would be generated\n", len(selectedConfig.Files)-1) // -1 for scaffold.yaml.
+}
+
+// renderFilePath applies simple variable substitution to a file path.
+func renderFilePath(path string, values map[string]interface{}) string {
+	renderedPath := path
+	for key, val := range values {
+		placeholder := fmt.Sprintf("{{.%s}}", key)
+		if valStr, ok := val.(string); ok {
+			renderedPath = strings.ReplaceAll(renderedPath, placeholder, valStr)
+		}
+	}
+	return renderedPath
+}
+
+// printFilePath prints a file path with proper formatting.
+func printFilePath(targetDir, renderedPath string) error {
+	if targetDir != "" {
+		fullPath := filepath.Join(targetDir, renderedPath)
+		return atmosui.Writef("  • %s\n", fullPath)
+	}
+	return atmosui.Writef("  • %s\n", renderedPath)
 }
 
 // executeTemplateWithoutTargetDir handles template execution when no target directory is provided.
