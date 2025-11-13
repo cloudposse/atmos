@@ -70,7 +70,7 @@ func (m *Manager) Stop(atmosConfig *schema.AtmosConfiguration, name, instance st
 			WithCause(err).
 			WithExplanationf("Failed to list containers with name `%s`", containerName).
 			WithHint("Verify that the container runtime is accessible and running").
-			WithHint("Run `docker ps -a` or `podman ps -a` to check container status").
+			WithHintf("Run `atmos devcontainer list` to check devcontainer status").
 			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
 			WithContext("devcontainer_name", name).
 			WithContext("container_name", containerName).
@@ -113,7 +113,7 @@ func (m *Manager) Stop(atmosConfig *schema.AtmosConfiguration, name, instance st
 					WithExplanationf("Failed to stop container `%s` (ID: %s)", containerName, container.ID).
 					WithHintf("The container may be stuck or the timeout (%d seconds) may be too short", timeout).
 					WithHint("Check that the container runtime daemon is running").
-					WithHintf("Run `docker inspect %s` or `podman inspect %s` to see container state", containerName, containerName).
+					WithHintf("Run `atmos devcontainer logs %s` to check container logs", name).
 					WithHint("Try increasing the timeout with `--timeout` flag").
 					WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
 					WithContext("container_name", containerName).

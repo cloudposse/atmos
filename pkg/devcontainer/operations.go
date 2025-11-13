@@ -101,7 +101,7 @@ func stopContainerIfRunning(ctx context.Context, runtime container.Runtime, cont
 					WithCause(err).
 					WithExplanationf("Failed to stop container `%s` (ID: %s)", containerInfo.Name, containerInfo.ID).
 					WithHint("Check that the container runtime daemon is running").
-					WithHintf("Run `docker inspect %s` or `podman inspect %s` to see container state", containerInfo.Name, containerInfo.Name).
+					WithHintf("Run `atmos devcontainer logs %s` to check container logs", extractDevcontainerName(containerInfo.Name)).
 					WithHint("The container may be stuck or require a forced removal").
 					WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
 					WithContext("container_name", containerInfo.Name).
@@ -124,7 +124,7 @@ func removeContainer(ctx context.Context, runtime container.Runtime, containerIn
 					WithCause(err).
 					WithExplanationf("Failed to remove container `%s` (ID: %s)", containerName, containerInfo.ID).
 					WithHint("Check that the container runtime daemon is running").
-					WithHintf("Run `docker inspect %s` or `podman inspect %s` to see container state", containerName, containerName).
+					WithHintf("Run `atmos devcontainer logs %s` to check container logs", extractDevcontainerName(containerName)).
 					WithHint("If the container is running, stop it first with `atmos devcontainer stop`").
 					WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
 					WithContext("container_name", containerName).
@@ -208,9 +208,9 @@ func startContainer(ctx context.Context, runtime container.Runtime, containerID,
 					WithExplanationf("Failed to start container `%s` (ID: %s)", containerName, containerID).
 					WithHint("If the container already exists, use `--replace` flag to remove and recreate it").
 					WithHint("Check that the container runtime daemon is running").
-					WithHintf("Run `docker inspect %s` or `podman inspect %s` to see container details", containerName, containerName).
+					WithHintf("Run `atmos devcontainer config %s` to see devcontainer configuration", extractDevcontainerName(containerName)).
 					WithHint("The container may have configuration issues preventing startup").
-					WithHintf("Check container logs with `docker logs %s` or `podman logs %s`", containerName, containerName).
+					WithHintf("Check container logs with `atmos devcontainer logs %s`", extractDevcontainerName(containerName)).
 					WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
 					WithContext("container_name", containerName).
 					WithContext("container_id", containerID).
@@ -343,4 +343,25 @@ func formatPortsInfo(forwardPorts []interface{}) string {
 		return fmt.Sprintf("Ports: %s", strings.Join(ports, ", "))
 	}
 	return ""
+}
+
+// extractDevcontainerName extracts the devcontainer name from a full container name.
+// Container names follow the format: atmos-devcontainer.<name>.<instance>[-<suffix>].
+// For example: "atmos-devcontainer.geodesic.default-2" returns "geodesic".
+func extractDevcontainerName(containerName string) string {
+	// Remove "atmos-devcontainer." prefix.
+	const prefix = "atmos-devcontainer."
+	if !strings.HasPrefix(containerName, prefix) {
+		return containerName
+	}
+
+	remainder := strings.TrimPrefix(containerName, prefix)
+
+	// Split by "." to get name part.
+	parts := strings.Split(remainder, ".")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+
+	return containerName
 }

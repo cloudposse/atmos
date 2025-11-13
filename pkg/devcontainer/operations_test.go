@@ -14,9 +14,6 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-// Use the generated mock in this package.
-type mockRuntime = MockRuntime
-
 // TestIsContainerRunning validates the isContainerRunning status checking logic.
 // This is a critical decision point used throughout devcontainer lifecycle management
 // to determine whether containers need to be started, stopped, or are already in the
@@ -888,6 +885,63 @@ func TestRunWithSpinner(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
+		})
+	}
+}
+
+// TestExtractDevcontainerName validates the extractDevcontainerName helper function.
+func TestExtractDevcontainerName(t *testing.T) {
+	tests := []struct {
+		name          string
+		containerName string
+		expected      string
+	}{
+		{
+			name:          "standard format with default instance",
+			containerName: "atmos-devcontainer.geodesic.default",
+			expected:      "geodesic",
+		},
+		{
+			name:          "standard format with custom instance",
+			containerName: "atmos-devcontainer.terraform.project-a",
+			expected:      "terraform",
+		},
+		{
+			name:          "format with suffix",
+			containerName: "atmos-devcontainer.geodesic.default-2",
+			expected:      "geodesic",
+		},
+		{
+			name:          "format with multiple dots",
+			containerName: "atmos-devcontainer.my-dev.instance-1",
+			expected:      "my-dev",
+		},
+		{
+			name:          "no prefix - returns as is",
+			containerName: "geodesic.default",
+			expected:      "geodesic.default",
+		},
+		{
+			name:          "empty string",
+			containerName: "",
+			expected:      "",
+		},
+		{
+			name:          "only prefix",
+			containerName: "atmos-devcontainer.",
+			expected:      "",
+		},
+		{
+			name:          "prefix with single name",
+			containerName: "atmos-devcontainer.test",
+			expected:      "test",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractDevcontainerName(tt.containerName)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
