@@ -40,6 +40,7 @@ func (m *Manager) Remove(atmosConfig *schema.AtmosConfiguration, name, instance 
 	runtime, err := m.runtimeDetector.DetectRuntime(settings.Runtime)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+			WithCause(err).
 			WithExplanation("Failed to detect or initialize container runtime").
 			WithHint("Ensure Docker or Podman is installed and running").
 			WithHint("Run `docker info` or `podman info` to verify the runtime is accessible").
@@ -75,6 +76,7 @@ func (m *Manager) Remove(atmosConfig *schema.AtmosConfiguration, name, instance 
 			return nil
 		}
 		return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+			WithCause(err).
 			WithExplanationf("Failed to inspect container `%s`", containerName).
 			WithHint("Check that the container runtime daemon is running").
 			WithHint("Run `docker ps -a` or `podman ps -a` to see all containers").

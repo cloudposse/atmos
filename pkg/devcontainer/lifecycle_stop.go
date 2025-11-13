@@ -67,6 +67,7 @@ func (m *Manager) Stop(atmosConfig *schema.AtmosConfiguration, name, instance st
 	containers, err := runtime.List(ctx, filters)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+			WithCause(err).
 			WithExplanationf("Failed to list containers with name `%s`", containerName).
 			WithHint("Verify that the container runtime is accessible and running").
 			WithHint("Run `docker ps -a` or `podman ps -a` to check container status").
@@ -108,6 +109,7 @@ func (m *Manager) Stop(atmosConfig *schema.AtmosConfiguration, name, instance st
 			stopTimeout := time.Duration(timeout) * time.Second
 			if err := runtime.Stop(ctx, container.ID, stopTimeout); err != nil {
 				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithCause(err).
 					WithExplanationf("Failed to stop container `%s` (ID: %s)", containerName, container.ID).
 					WithHintf("The container may be stuck or the timeout (%d seconds) may be too short", timeout).
 					WithHint("Check that the container runtime daemon is running").

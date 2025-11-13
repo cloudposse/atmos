@@ -10,6 +10,9 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -114,4 +117,29 @@ func devcontainerNameCompletion(cmd *cobra.Command, args []string, toComplete st
 	}
 
 	return devcontainers, cobra.ShellCompDirectiveNoFileComp
+}
+
+// isAuthConfigured checks if authentication is configured in atmos.yaml.
+func isAuthConfigured(authConfig *schema.AuthConfig) bool {
+	return authConfig != nil && len(authConfig.Identities) > 0
+}
+
+// createUnauthenticatedAuthManager creates an auth manager without authenticating.
+// This is used to access GetDefaultIdentity() for interactive selection.
+func createUnauthenticatedAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{},
+	}
+
+	credStore := credentials.NewCredentialStore()
+	validator := validation.NewValidator()
+	authManager, err := auth.NewAuthManager(authConfig, credStore, validator, authStackInfo)
+	if err != nil {
+		return nil, errUtils.Build(errUtils.ErrFailedToInitializeAuthManager).
+			WithExplanation("Failed to create authentication manager").
+			WithContext("error", err.Error()).
+			Err()
+	}
+
+	return authManager, nil
 }

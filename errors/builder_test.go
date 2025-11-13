@@ -440,3 +440,56 @@ func TestErrorBuilder_SentinelMarking(t *testing.T) {
 		assert.True(t, errors.Is(err, ErrDevcontainerNotFound))
 	})
 }
+
+func TestErrorBuilder_WithCause(t *testing.T) {
+	t.Run("wraps sentinel with cause error", func(t *testing.T) {
+		causeErr := errors.New("container already running")
+
+		err := Build(ErrContainerRuntimeOperation).
+			WithCause(causeErr).
+			WithExplanation("Failed to start container").
+			Err()
+
+		assert.Error(t, err)
+		// Both sentinel and cause should be in the error chain.
+		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
+		assert.True(t, errors.Is(err, causeErr))
+		// Error message should include the cause.
+		assert.Contains(t, err.Error(), "container already running")
+	})
+
+	t.Run("preserves cause error message", func(t *testing.T) {
+		causeErr := errors.New("docker daemon not running")
+
+		err := Build(ErrContainerRuntimeOperation).
+			WithCause(causeErr).
+			Err()
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "docker daemon not running")
+	})
+
+	t.Run("handles nil cause gracefully", func(t *testing.T) {
+		err := Build(ErrContainerRuntimeOperation).
+			WithCause(nil).
+			WithExplanation("Operation failed").
+			Err()
+
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
+	})
+
+	t.Run("works with stdlib errors.Is in tests", func(t *testing.T) {
+		// This test verifies WithCause works with stdlib errors package.
+		// This is critical because our test files use stdlib errors, not cockroachdb.
+		causeErr := errors.New("connection refused")
+
+		err := Build(ErrContainerRuntimeOperation).
+			WithCause(causeErr).
+			Err()
+
+		// Using stdlib errors.Is, not cockroachdb.
+		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
+		assert.True(t, errors.Is(err, causeErr))
+	})
+}

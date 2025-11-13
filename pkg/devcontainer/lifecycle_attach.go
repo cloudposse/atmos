@@ -87,6 +87,7 @@ func findAndStartContainer(ctx context.Context, runtime container.Runtime, conta
 	containers, err := runtime.List(ctx, filters)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+			WithCause(err).
 			WithExplanationf("Failed to list containers with name `%s`", containerName).
 			WithHint("Verify that the container runtime is accessible and running").
 			WithHint("Run `docker ps -a` or `podman ps -a` to check container status").
@@ -127,7 +128,9 @@ func startContainerForAttach(ctx context.Context, runtime container.Runtime, con
 		func() error {
 			if err := runtime.Start(ctx, containerInfo.ID); err != nil {
 				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithCause(err).
 					WithExplanationf("Failed to start container `%s` (ID: %s) before attaching", containerName, containerInfo.ID).
+					WithHint("If the container has issues, use `atmos devcontainer start --replace` to recreate it").
 					WithHint("Check that the container runtime daemon is running").
 					WithHintf("Run `docker inspect %s` or `podman inspect %s` to see container details", containerName, containerName).
 					WithHint("Try removing and recreating the container with `atmos devcontainer remove` and `atmos devcontainer start`").

@@ -5,6 +5,8 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -45,6 +47,34 @@ Use --identity to launch the container with Atmos-managed credentials.`,
 			return err
 		}
 
+		// Handle identity selection if __SELECT__ sentinel value is used.
+		// This happens when user passes --identity without a value.
+		if opts.Identity == cfg.IdentityFlagSelectValue || opts.Identity == "" {
+			// If user explicitly requested selection but auth is not configured, show helpful error.
+			if opts.Identity == cfg.IdentityFlagSelectValue && !isAuthConfigured(&atmosConfigPtr.Auth) {
+				return errUtils.Build(errUtils.ErrAuthNotConfigured).
+					WithExplanation("Authentication requires at least one identity configured in atmos.yaml").
+					WithHint("Configure authentication in atmos.yaml under the 'auth' section").
+					WithHint("See Atmos docs: https://atmos.tools/cli/commands/auth/auth-identity-configure/").
+					Err()
+			}
+
+			// If auth is configured, create manager to access GetDefaultIdentity.
+			if isAuthConfigured(&atmosConfigPtr.Auth) {
+				authMgr, err := createUnauthenticatedAuthManager(&atmosConfigPtr.Auth)
+				if err != nil {
+					return err
+				}
+				// forceSelect=true when user explicitly used --identity flag without value.
+				forceSelect := opts.Identity == cfg.IdentityFlagSelectValue
+				selectedIdentity, err := authMgr.GetDefaultIdentity(forceSelect)
+				if err != nil {
+					return err
+				}
+				opts.Identity = selectedIdentity
+			}
+		}
+
 		mgr := devcontainer.NewManager()
 		name := args[0]
 		if err := mgr.Start(atmosConfigPtr, name, opts.Instance, opts.Identity); err != nil {
@@ -76,10 +106,9 @@ func init() {
 	startParser = flags.NewStandardParser(
 		flags.WithStringFlag("instance", "", "default", "Instance name for this devcontainer"),
 		flags.WithBoolFlag("attach", "", false, "Attach to the container after starting"),
-		flags.WithStringFlag("identity", "i", "", "Authenticate with specified identity"),
+		flags.WithIdentityFlag(),
 		flags.WithEnvVars("instance", "ATMOS_DEVCONTAINER_INSTANCE"),
 		flags.WithEnvVars("attach", "ATMOS_DEVCONTAINER_ATTACH"),
-		flags.WithEnvVars("identity", "ATMOS_DEVCONTAINER_IDENTITY"),
 	)
 
 	// Register flags using the standard RegisterFlags method.

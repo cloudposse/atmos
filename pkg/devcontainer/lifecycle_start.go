@@ -82,6 +82,7 @@ func (m *Manager) Start(atmosConfig *schema.AtmosConfiguration, name, instance, 
 	containers, err := runtime.List(ctx, filters)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+			WithCause(err).
 			WithExplanationf("Failed to list containers with name `%s`", containerName).
 			WithHint("Verify that the container runtime is accessible and running").
 			WithHint("Run `docker ps -a` or `podman ps -a` to check container status").
@@ -121,7 +122,9 @@ func startExistingContainer(ctx context.Context, runtime container.Runtime, cont
 		func() error {
 			if err := runtime.Start(ctx, containerInfo.ID); err != nil {
 				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithCause(err).
 					WithExplanationf("Failed to start existing container `%s` (ID: %s)", containerName, containerInfo.ID).
+					WithHint("If the container has issues, use `--replace` flag to remove and recreate it").
 					WithHint("Check that the container runtime daemon is running").
 					WithHintf("Run `docker inspect %s` or `podman inspect %s` to see container details", containerName, containerName).
 					WithHint("Try removing and recreating the container with `atmos devcontainer remove` and `atmos devcontainer start`").

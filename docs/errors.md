@@ -11,17 +11,19 @@ Use the ErrorBuilder for all user-facing errors:
 ```go
 import errUtils "github.com/cloudposse/atmos/errors"
 
-// Pattern 1: Sentinel as base error (auto-marked)
-err := errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+// PREFERRED: Sentinel with underlying cause (stdlib compatible)
+err := runtime.Start(ctx, containerID) // returns "container already running"
+return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+    WithCause(err).
     WithExplanation("Failed to start container").
     WithHint("Check Docker is running").
     WithContext("container", containerName).
     WithExitCode(3).
     Err()
 
-// Pattern 2: Wrap actual error + explicit sentinel
-err := errUtils.Build(actualError).
-    WithSentinel(errUtils.ErrContainerRuntimeOperation).
+// ALSO VALID: Sentinel as base (when no underlying error)
+err := errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+    WithExplanation("Failed to start container").
     WithHint("Check Docker is running").
     Err()
 ```
@@ -182,9 +184,61 @@ builder.
     WithContext("region", "us-east-1")
 ```
 
+### WithCause(cause error) *ErrorBuilder
+
+**PREFERRED METHOD** - Wraps the sentinel with an underlying cause error, preserving the original error message while allowing `errors.Is()` to match the sentinel.
+
+This is the recommended pattern for wrapping errors from external libraries (Docker, Podman, AWS SDK, etc.) because it:
+- ✅ Works with stdlib `errors.Is()` (no need for cockroachdb/errors in tests)
+- ✅ Preserves the actual error message from the underlying system
+- ✅ Allows `errors.Is()` checks for both the sentinel and the cause
+- ✅ Clean, fluent API
+
+```go
+// Runtime returns: "Error: container already started"
+err := runtime.Start(ctx, containerID)
+if err != nil {
+    return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+        WithCause(err).  // Preserves "container already started"
+        WithExplanation("Failed to start container").
+        WithHint("Use --replace flag to recreate the container").
+        Err()
+}
+
+// Both checks work:
+errors.Is(result, errUtils.ErrContainerRuntimeOperation)  // ✅ true
+errors.Is(result, err)                                     // ✅ true
+// Message includes: "container already started"
+```
+
+**When to use WithCause:**
+- Wrapping errors from Docker/Podman runtime operations
+- Wrapping errors from AWS SDK, Terraform, external commands
+- Any case where you want to preserve the underlying error message
+- When your tests use stdlib `errors.Is()` (most of our codebase)
+
 ### WithSentinel(sentinel error) *ErrorBuilder
 
-Marks the error with a sentinel error for `errors.Is()` checks. Multiple sentinels can be added.
+Marks the error with a sentinel error for `errors.Is()` checks using CockroachDB's `errors.Mark()`. Multiple sentinels can be added.
+
+**⚠️ IMPORTANT:** `WithSentinel()` requires using `cockroachdb/errors.Is()` in tests, NOT stdlib `errors.Is()`. This is because `errors.Mark()` is a CockroachDB-specific feature.
+
+**When to use WithSentinel:**
+- ONLY when you need to mark an error with multiple sentinels
+- ONLY in code that already imports `cockroachdb/errors`
+- **For most cases, prefer `WithCause()` instead**
+
+**Plan B Option:**
+If you need stdlib compatibility and cannot use `WithCause()`, you can manually wrap errors:
+```go
+// Manually wrap sentinel with cause using stdlib fmt.Errorf
+wrapped := fmt.Errorf("%w: %w", errUtils.ErrContainerRuntimeOperation, actualErr)
+return errUtils.Build(wrapped).
+    WithExplanation("Failed to start container").
+    Err()
+```
+
+However, `WithCause()` is preferred as it makes the pattern explicit and part of the ErrorBuilder API.
 
 ```go
 builder.WithSentinel(errUtils.ErrContainerRuntimeOperation)

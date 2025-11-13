@@ -98,6 +98,7 @@ func stopContainerIfRunning(ctx context.Context, runtime container.Runtime, cont
 		func() error {
 			if err := runtime.Stop(ctx, containerInfo.ID, defaultContainerStopTimeout); err != nil {
 				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithCause(err).
 					WithExplanationf("Failed to stop container `%s` (ID: %s)", containerInfo.Name, containerInfo.ID).
 					WithHint("Check that the container runtime daemon is running").
 					WithHintf("Run `docker inspect %s` or `podman inspect %s` to see container state", containerInfo.Name, containerInfo.Name).
@@ -120,6 +121,7 @@ func removeContainer(ctx context.Context, runtime container.Runtime, containerIn
 		func() error {
 			if err := runtime.Remove(ctx, containerInfo.ID, true); err != nil {
 				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithCause(err).
 					WithExplanationf("Failed to remove container `%s` (ID: %s)", containerName, containerInfo.ID).
 					WithHint("Check that the container runtime daemon is running").
 					WithHintf("Run `docker inspect %s` or `podman inspect %s` to see container state", containerName, containerName).
@@ -146,6 +148,7 @@ func pullImageIfNeeded(ctx context.Context, runtime container.Runtime, image str
 		func() error {
 			if err := runtime.Pull(ctx, image); err != nil {
 				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithCause(err).
 					WithExplanationf("Failed to pull container image `%s`", image).
 					WithHintf("Verify that the image name `%s` is correct and accessible", image).
 					WithHint("Check that you have network connectivity and proper registry credentials").
@@ -173,6 +176,7 @@ func createContainer(params *containerParams) (string, error) {
 			id, err := params.runtime.Create(params.ctx, createConfig)
 			if err != nil {
 				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithCause(err).
 					WithExplanationf("Failed to create container `%s`", params.containerName).
 					WithHintf("Verify that the image `%s` exists or can be pulled", params.config.Image).
 					WithHint("Check that the container runtime daemon is running").
@@ -200,7 +204,9 @@ func startContainer(ctx context.Context, runtime container.Runtime, containerID,
 		func() error {
 			if err := runtime.Start(ctx, containerID); err != nil {
 				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithCause(err).
 					WithExplanationf("Failed to start container `%s` (ID: %s)", containerName, containerID).
+					WithHint("If the container already exists, use `--replace` flag to remove and recreate it").
 					WithHint("Check that the container runtime daemon is running").
 					WithHintf("Run `docker inspect %s` or `podman inspect %s` to see container details", containerName, containerName).
 					WithHint("The container may have configuration issues preventing startup").
@@ -246,6 +252,7 @@ func buildImageIfNeeded(ctx context.Context, runtime container.Runtime, config *
 
 			if err := runtime.Build(ctx, buildConfig); err != nil {
 				return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+					WithCause(err).
 					WithExplanationf("Failed to build container image `%s` from Dockerfile", imageName).
 					WithHintf("Verify that the Dockerfile exists at `%s`", config.Build.Dockerfile).
 					WithHintf("Verify that the build context path `%s` is correct", config.Build.Context).

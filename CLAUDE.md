@@ -262,16 +262,19 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 ALL user-facing errors MUST use ErrorBuilder with sentinel errors from `errors/errors.go`:
 
 ```go
-// Pattern 1: Sentinel as base (auto-marked for errors.Is)
-err := errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+// PREFERRED: Sentinel with underlying cause (preserves actual error message)
+err := runtime.Start(ctx, containerID) // returns "container already running"
+return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+    WithCause(err).  // Preserves Docker/Podman error message
     WithExplanation("Failed to start container").
     WithHint("Check Docker is running").
     WithContext("container", containerName).
     Err()
 
-// Pattern 2: Wrap actual error + explicit sentinel
-err := errUtils.Build(actualError).
-    WithSentinel(errUtils.ErrContainerRuntimeOperation).
+// ALSO VALID: Sentinel as base (when no underlying error to preserve)
+err := errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+    WithExplanation("Container runtime not configured").
+    WithHint("Check atmos.yaml configuration").
     Err()
 ```
 

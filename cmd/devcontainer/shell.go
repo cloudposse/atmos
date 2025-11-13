@@ -5,6 +5,8 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -68,6 +70,34 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 		opts, err := parseShellOptions(cmd, v, args)
 		if err != nil {
 			return err
+		}
+
+		// Handle identity selection if __SELECT__ sentinel value is used.
+		// This happens when user passes --identity without a value.
+		if opts.Identity == cfg.IdentityFlagSelectValue || opts.Identity == "" {
+			// If user explicitly requested selection but auth is not configured, show helpful error.
+			if opts.Identity == cfg.IdentityFlagSelectValue && !isAuthConfigured(&atmosConfigPtr.Auth) {
+				return errUtils.Build(errUtils.ErrAuthNotConfigured).
+					WithExplanation("Authentication requires at least one identity configured in atmos.yaml").
+					WithHint("Configure authentication in atmos.yaml under the 'auth' section").
+					WithHint("See Atmos docs: https://atmos.tools/cli/commands/auth/auth-identity-configure/").
+					Err()
+			}
+
+			// If auth is configured, create manager to access GetDefaultIdentity.
+			if isAuthConfigured(&atmosConfigPtr.Auth) {
+				authMgr, err := createUnauthenticatedAuthManager(&atmosConfigPtr.Auth)
+				if err != nil {
+					return err
+				}
+				// forceSelect=true when user explicitly used --identity flag without value.
+				forceSelect := opts.Identity == cfg.IdentityFlagSelectValue
+				selectedIdentity, err := authMgr.GetDefaultIdentity(forceSelect)
+				if err != nil {
+					return err
+				}
+				opts.Identity = selectedIdentity
+			}
 		}
 
 		// Get devcontainer name from args or prompt user.
@@ -151,14 +181,13 @@ func init() {
 	// Create parser with shell-specific flags using functional options.
 	shellParser = flags.NewStandardParser(
 		flags.WithStringFlag("instance", "", "default", "Instance name for this devcontainer"),
-		flags.WithStringFlag("identity", "i", "", "Authenticate with specified identity"),
+		flags.WithIdentityFlag(),
 		flags.WithBoolFlag("pty", "", false, "Experimental: Use PTY mode with masking support (not available on Windows)"),
 		flags.WithBoolFlag("new", "", false, "Create a new instance with auto-generated name"),
 		flags.WithBoolFlag("replace", "", false, "Destroy and recreate the current instance"),
 		flags.WithBoolFlag("rm", "", false, "Automatically remove the container when the shell exits"),
 		flags.WithBoolFlag("no-pull", "", false, "Skip pulling the image when using --replace (use cached image)"),
 		flags.WithEnvVars("instance", "ATMOS_DEVCONTAINER_INSTANCE"),
-		flags.WithEnvVars("identity", "ATMOS_DEVCONTAINER_IDENTITY"),
 		flags.WithEnvVars("pty", "ATMOS_DEVCONTAINER_PTY"),
 		flags.WithEnvVars("new", "ATMOS_DEVCONTAINER_NEW"),
 		flags.WithEnvVars("replace", "ATMOS_DEVCONTAINER_REPLACE"),

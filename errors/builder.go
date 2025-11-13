@@ -101,9 +101,37 @@ func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 	return b
 }
 
+// WithCause wraps the builder's error with an underlying cause error.
+// This preserves the original error message while allowing errors.Is() to match the sentinel.
+// The resulting error will match both the sentinel (passed to Build) and the cause.
+//
+// Example:
+//
+//	err := runtime.Start(ctx, containerID) // returns "container already running"
+//	return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+//	    WithCause(err).
+//	    WithExplanation("Failed to start container").
+//	    Err()
+//
+// This creates an error chain where:
+//   - errors.Is(result, ErrContainerRuntimeOperation) returns true
+//   - errors.Is(result, err) returns true
+//   - Error message includes "container already running"
+func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
+	if cause != nil {
+		// Wrap sentinel with the actual cause using double %w.
+		// This ensures both errors are in the chain for errors.Is() checks.
+		b.err = fmt.Errorf("%w: %w", b.err, cause)
+	}
+	return b
+}
+
 // WithSentinel marks the error with a sentinel error for errors.Is() checks.
 // This uses errors.Mark() to attach the sentinel to the error chain.
 // Multiple sentinels can be added and all will be marked.
+//
+// NOTE: WithSentinel requires cockroachdb/errors.Is() in tests, not stdlib errors.Is().
+// For stdlib compatibility, prefer WithCause() instead. See docs/errors.md for details.
 func (b *ErrorBuilder) WithSentinel(sentinel error) *ErrorBuilder {
 	b.sentinels = append(b.sentinels, sentinel)
 	return b
