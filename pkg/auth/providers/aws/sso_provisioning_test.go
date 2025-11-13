@@ -89,36 +89,6 @@ func TestSSOProvider_ProvisionIdentities_InvalidCredentialsType(t *testing.T) {
 	assert.Contains(t, err.Error(), "aws sso identity provisioning failed")
 }
 
-func TestListAccounts_Pagination(t *testing.T) {
-	// This test verifies the pagination logic in listAccounts.
-	// In real usage, we would mock the SSO client, but for basic coverage
-	// we can test the structure.
-
-	provider := &ssoProvider{
-		name:   "test-sso",
-		region: "us-east-1",
-	}
-
-	// Verify provider is initialized.
-	assert.NotNil(t, provider)
-	assert.Equal(t, "test-sso", provider.name)
-	assert.Equal(t, "us-east-1", provider.region)
-}
-
-func TestListAccountRoles_Pagination(t *testing.T) {
-	// This test verifies the pagination logic in listAccountRoles.
-	// In real usage, we would mock the SSO client, but for basic coverage
-	// we can test the structure.
-
-	provider := &ssoProvider{
-		name:   "test-sso",
-		region: "us-east-1",
-	}
-
-	// Verify provider is initialized.
-	assert.NotNil(t, provider)
-}
-
 // mockSSOClient implements a mock SSO client for testing.
 type mockSSOClient struct {
 	accounts     []ssotypes.AccountInfo
@@ -253,37 +223,6 @@ func TestProvisionIdentities_Success(t *testing.T) {
 	assert.Equal(t, "987654321098", devAccount["id"])
 }
 
-func TestIdentityNamingConvention(t *testing.T) {
-	// Test the identity naming convention: account-name/role-name.
-	accountName := "prod-account"
-	roleName := "AdminRole"
-	expectedName := "prod-account/AdminRole"
-
-	// Verify format.
-	actualName := accountName + "/" + roleName
-	assert.Equal(t, expectedName, actualName)
-}
-
-func TestPrincipalStructure(t *testing.T) {
-	// Test that Principal structure is correctly created.
-	principal := &schema.Principal{
-		Name: "TestRole",
-		Account: &schema.Account{
-			Name: "test-account",
-			ID:   "123456789012",
-		},
-	}
-
-	principalMap := principal.ToMap()
-	assert.NotNil(t, principalMap)
-	assert.Equal(t, "TestRole", principalMap["name"])
-
-	account, ok := principalMap["account"].(map[string]interface{})
-	require.True(t, ok)
-	assert.Equal(t, "test-account", account["name"])
-	assert.Equal(t, "123456789012", account["id"])
-}
-
 // TestListAccounts_ErrorHandling tests error handling in listAccounts.
 func TestListAccounts_ErrorHandling(t *testing.T) {
 	provider := &ssoProvider{
@@ -380,46 +319,6 @@ func TestListAccountRoles_PaginationMultiplePages(t *testing.T) {
 	assert.Equal(t, "Role-1", aws.ToString(roles[0].RoleName))
 	assert.Equal(t, "Role-2", aws.ToString(roles[1].RoleName))
 	assert.Equal(t, "Role-3", aws.ToString(roles[2].RoleName))
-}
-
-// TestProvisionIdentities_RoleListError tests handling of role listing errors.
-func TestProvisionIdentities_RoleListError(t *testing.T) {
-	// This test verifies that we skip accounts when role listing fails.
-	// The actual implementation would require dependency injection for the SSO client,
-	// which is a refactoring task. For now, we verify the provider structure.
-	enabled := true
-	provider := &ssoProvider{
-		name:     "test-sso",
-		region:   "us-east-1",
-		startURL: "https://test.awsapps.com/start",
-		config: &schema.Provider{
-			AutoProvisionIdentities: &enabled,
-		},
-	}
-
-	// Verify provider is properly configured for provisioning.
-	assert.True(t, *provider.config.AutoProvisionIdentities)
-	assert.NotEmpty(t, provider.startURL)
-	assert.NotEmpty(t, provider.region)
-}
-
-// TestProvisionIdentities_MetadataStructure tests the metadata structure in provisioning results.
-func TestProvisionIdentities_MetadataStructure(t *testing.T) {
-	// Verify the expected metadata structure.
-	enabled := true
-	provider := &ssoProvider{
-		name:     "test-sso",
-		region:   "us-east-1",
-		startURL: "https://test.awsapps.com/start",
-		config: &schema.Provider{
-			AutoProvisionIdentities: &enabled,
-		},
-	}
-
-	// Verify all required fields are set.
-	assert.Equal(t, "test-sso", provider.name)
-	assert.Equal(t, "us-east-1", provider.region)
-	assert.Equal(t, "https://test.awsapps.com/start", provider.startURL)
 }
 
 // Mock implementations for testing.

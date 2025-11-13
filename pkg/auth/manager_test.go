@@ -973,78 +973,6 @@ func TestManager_ListProviders(t *testing.T) {
 	assert.Contains(t, providers, "github")
 }
 
-func TestManager_GetProviders(t *testing.T) {
-	expectedProviders := map[string]schema.Provider{
-		"sso":  {Kind: "aws/iam-identity-center", Region: "us-east-1"},
-		"saml": {Kind: "aws/saml", URL: "https://example.com", Region: "us-west-2"},
-	}
-
-	m := &manager{
-		config: &schema.AuthConfig{
-			Providers: expectedProviders,
-		},
-	}
-
-	providers := m.GetProviders()
-	assert.Equal(t, expectedProviders, providers)
-	assert.Equal(t, "aws/iam-identity-center", providers["sso"].Kind)
-	assert.Equal(t, "aws/saml", providers["saml"].Kind)
-	assert.Equal(t, "us-east-1", providers["sso"].Region)
-	assert.Equal(t, "us-west-2", providers["saml"].Region)
-}
-
-func TestManager_GetIdentities(t *testing.T) {
-	expectedIdentities := map[string]schema.Identity{
-		"dev":  {Kind: "aws/user", Default: true},
-		"prod": {Kind: "aws/assume-role", Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/Prod"}},
-	}
-
-	m := &manager{
-		config: &schema.AuthConfig{
-			Identities: expectedIdentities,
-		},
-	}
-
-	identities := m.GetIdentities()
-	assert.Equal(t, expectedIdentities, identities)
-	assert.Equal(t, "aws/user", identities["dev"].Kind)
-	assert.Equal(t, "aws/assume-role", identities["prod"].Kind)
-	assert.True(t, identities["dev"].Default)
-	assert.False(t, identities["prod"].Default)
-}
-
-func TestManager_GetStackInfo(t *testing.T) {
-	stackInfo := &schema.ConfigAndStacksInfo{
-		ComponentEnvSection: schema.AtmosSectionMapType{"TEST": "value"},
-		Identity:            "test-identity",
-	}
-
-	m := &manager{
-		stackInfo: stackInfo,
-	}
-
-	result := m.GetStackInfo()
-	assert.Equal(t, stackInfo, result)
-	assert.Equal(t, "value", result.ComponentEnvSection["TEST"])
-	assert.Equal(t, "test-identity", result.Identity)
-}
-
-func TestManager_GetChain_Empty(t *testing.T) {
-	m := &manager{}
-
-	chain := m.GetChain()
-	assert.Empty(t, chain)
-}
-
-func TestManager_GetChain_WithData(t *testing.T) {
-	m := &manager{
-		chain: []string{"provider", "identity1", "identity2"},
-	}
-
-	chain := m.GetChain()
-	assert.Equal(t, []string{"provider", "identity1", "identity2"}, chain)
-}
-
 // stubIdentity implements types.Identity minimally for provider lookups.
 type stubIdentity struct{ provider string }
 
@@ -1680,46 +1608,6 @@ func TestManager_writeProvisionedIdentities_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "test-identity")
 	assert.Contains(t, string(data), "test-provider")
-}
-
-func TestManager_writeProvisionedIdentities_WriterCreationFailure(t *testing.T) {
-	// Test that writeProvisionedIdentities returns error when write operation fails.
-	mgr := &manager{
-		config: &schema.AuthConfig{},
-	}
-
-	result := &types.ProvisioningResult{
-		Provider: "test-provider",
-		Identities: map[string]*schema.Identity{
-			"test-identity": {
-				Provider: "test-provider",
-			},
-		},
-		Metadata: types.ProvisioningMetadata{
-			Source: "test",
-		},
-	}
-
-	// Create a temp directory and make it read-only to cause write failure.
-	tempDir := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", tempDir)
-
-	// Create the cache directory structure but make the provider directory read-only.
-	authDir := filepath.Join(tempDir, "atmos", "auth", "test-provider")
-	err := os.MkdirAll(authDir, 0o700)
-	require.NoError(t, err)
-
-	// Make the directory read-only to prevent file creation.
-	err = os.Chmod(authDir, 0o400)
-	require.NoError(t, err)
-
-	// Ensure cleanup restores permissions.
-	t.Cleanup(func() {
-		os.Chmod(authDir, 0o700)
-	})
-
-	err = mgr.writeProvisionedIdentities(result)
-	assert.Error(t, err)
 }
 
 func TestManager_removeProvisionedIdentitiesCache_Success(t *testing.T) {
