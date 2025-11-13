@@ -35,6 +35,22 @@ func TestToolchainGetCommand(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// resetViperWithToolchainBindings resets Viper to a clean state and re-establishes
+// flag bindings for toolchain commands. This ensures test isolation by preventing
+// Viper key pollution between tests.
+func resetViperWithToolchainBindings(t *testing.T) {
+	t.Helper()
+
+	// Reset Viper to clean state (clears all keys and settings).
+	viper.Reset()
+
+	// Re-bind toolchain flags to the fresh Viper instance.
+	// These bindings were originally established in init() but are lost after Reset().
+	v := viper.GetViper()
+	require.NoError(t, v.BindPFlag("toolchain.tool-versions", toolchainCmd.PersistentFlags().Lookup("tool-versions")))
+	require.NoError(t, v.BindPFlag("toolchain.path", toolchainCmd.PersistentFlags().Lookup("toolchain-path")))
+}
+
 // setupToolchainTest creates a test environment with tool-versions and tools config files.
 func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 	t.Helper()
@@ -44,6 +60,9 @@ func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 
 	// Clean toolchainCmd state before each test to prevent pollution.
 	cleanToolchainCmdState(t)
+
+	// Reset Viper and re-bind flags for test isolation.
+	resetViperWithToolchainBindings(t)
 
 	// Initialize I/O context and formatter for testing.
 	ioCtx, err := iolib.NewContext()
@@ -174,6 +193,9 @@ func TestToolchainCleanCommand(t *testing.T) {
 	newTestKit(t)
 	cleanToolchainCmdState(t)
 
+	// Reset Viper and re-bind flags for test isolation.
+	resetViperWithToolchainBindings(t)
+
 	// Initialize I/O context and formatter for testing.
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err, "Failed to create I/O context")
@@ -225,6 +247,9 @@ func TestToolchainPathCommand(t *testing.T) {
 	// Initialize test kit for automatic state cleanup.
 	newTestKit(t)
 	cleanToolchainCmdState(t)
+
+	// Reset Viper and re-bind flags for test isolation.
+	resetViperWithToolchainBindings(t)
 
 	// Initialize I/O context and formatter for testing.
 	ioCtx, err := iolib.NewContext()
@@ -290,6 +315,9 @@ func TestToolchainWhichCommand(t *testing.T) {
 	newTestKit(t)
 	cleanToolchainCmdState(t)
 
+	// Reset Viper and re-bind flags for test isolation.
+	resetViperWithToolchainBindings(t)
+
 	// Initialize I/O context and formatter for testing.
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err, "Failed to create I/O context")
@@ -353,6 +381,9 @@ func TestToolchainSetCommand(t *testing.T) {
 	newTestKit(t)
 	cleanToolchainCmdState(t)
 
+	// Reset Viper and re-bind flags for test isolation.
+	resetViperWithToolchainBindings(t)
+
 	// Initialize I/O context and formatter for testing.
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err, "Failed to create I/O context")
@@ -413,6 +444,9 @@ func TestToolchainUninstallCommand(t *testing.T) {
 	// Initialize test kit for automatic state cleanup.
 	newTestKit(t)
 	cleanToolchainCmdState(t)
+
+	// Reset Viper and re-bind flags for test isolation.
+	resetViperWithToolchainBindings(t)
 
 	// Initialize I/O context and formatter for testing.
 	ioCtx, err := iolib.NewContext()
