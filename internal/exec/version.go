@@ -1,6 +1,7 @@
 package exec
 
 import (
+	_ "embed"
 	"fmt"
 	"runtime"
 	"strings"
@@ -18,30 +19,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
-const versionFormatExample = `- Display version in JSON format
-
-` + "```" + `
-$ atmos version --format json
-` + "```" + `
-
-- Display version in YAML format
-
-` + "```" + `
-$ atmos version --format yaml
-` + "```" + `
-
-- Pipe JSON output to jq
-
-` + "```" + `
-$ atmos version --format json | jq -r .version
-` + "```" + `
-
-- Check for updates and display in JSON
-
-` + "```" + `
-$ atmos version --check --format json
-` + "```" + `
-`
+//go:embed examples/version_format.md
+var versionFormatExample string
 
 type versionExec struct {
 	atmosConfig                               *schema.AtmosConfiguration

@@ -453,33 +453,34 @@ Include usage examples when:
 
 **IMPORTANT: Examples should be succinct commands only, NO output.**
 
-Examples should follow this specific format - bullet points with commands in code blocks:
+Examples should be stored in markdown files and embedded using go:embed:
 
-```go
-const exampleUsage = `- Display version in JSON format
+```markdown
+# examples/version_format.md
 
-` + "```" + `
+- Display version in JSON format
+
+```bash
 $ atmos version --format json
-` + "```" + `
+```
 
 - Display version in YAML format
 
-` + "```" + `
+```bash
 $ atmos version --format yaml
-` + "```" + `
+```
 
 - Pipe JSON output to jq
 
-` + "```" + `
+```bash
 $ atmos version --format json | jq -r .version
-` + "```" + `
-`
+```
 ```
 
 **Format rules:**
 - Each example starts with `- Description` (bullet point)
 - Followed by blank line
-- Command in triple backticks (use string concatenation to build the backticks)
+- Command in triple backticks with `bash` language hint
 - Commands use `$` prompt
 - NO "Output:" sections
 - NO example output shown
@@ -487,23 +488,15 @@ $ atmos version --format json | jq -r .version
 
 ### Where to Store Examples
 
-**IMPORTANT: Examples are inline constants, NOT separate files.**
+**IMPORTANT: Use go:embed for multi-line examples.**
 
-Define examples as const strings in the same file where they're used:
+Create markdown files and embed them:
 
 ```go
-const versionFormatExample = `- Display version in JSON format
+// internal/exec/version.go
 
-` + "```" + `
-$ atmos version --format json
-` + "```" + `
-
-- Display version in YAML format
-
-` + "```" + `
-$ atmos version --format yaml
-` + "```" + `
-`
+//go:embed examples/version_format.md
+var versionFormatExample string
 
 // Use in error:
 return errUtils.Build(errUtils.ErrVersionFormatInvalid).
@@ -516,11 +509,20 @@ return errUtils.Build(errUtils.ErrVersionFormatInvalid).
     Err()
 ```
 
-**Why inline constants:**
-- Keeps examples close to the code that uses them
-- No need for separate files or go:embed directives
-- Easier to maintain and update
-- Clear what format is expected
+**File structure:**
+```
+internal/exec/
+├── version.go
+└── examples/
+    ├── version_format.md
+    └── other_examples.md
+```
+
+**Why go:embed:**
+- Clean, readable markdown files (not escaped strings)
+- Proper syntax highlighting in editors
+- Easy to edit without string concatenation hell
+- No escaped backticks or quotes
 
 **Note:** This is different from CLI command usage files which go in `cmd/markdown/atmos_*_usage.md` and are displayed via `--help`.
 
