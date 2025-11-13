@@ -246,9 +246,193 @@ atmos terraform plan component -s stack --identity=off
 
 ## Component-Level Auth Configuration
 
-Component-level auth configuration works identically to `!terraform.output`. Components can define their own auth configuration that overrides global settings.
+Components can define their own `auth:` section that overrides global authentication settings. This is particularly powerful in nested function scenarios where different components may require different credentials.
 
-See [terraform-output-yaml-func-authentication-flow.md](./terraform-output-yaml-func-authentication-flow.md#component-level-auth-configuration) for detailed examples and use cases.
+### How Component-Level Auth Override Works
+
+When evaluating nested `!terraform.state` functions, Atmos checks each component's configuration for an `auth:` section:
+
+1. **Component has `auth:` section** → Merges with global auth and creates component-specific AuthManager
+2. **Component has no `auth:` section** → Inherits parent's AuthManager
+
+This enables each nesting level to optionally override authentication while defaulting to the parent's credentials.
+
+### Example: Multi-Account Nested Functions
+
+```yaml
+# Global auth configuration
+auth:
+  identities:
+    dev-account:
+      default: true
+      kind: aws/permission-set
+      via:
+        provider: aws-sso
+        account: "111111111111"
+        permission_set: "DevAccess"
+
+# Component 1: Uses global auth (dev account)
+components:
+  terraform:
+    app/frontend:
+      vars:
+        # Reads from app/backend which is in a different account
+        backend_url: !terraform.state app/backend api_endpoint
+
+# Component 2: Overrides auth for prod account access
+components:
+  terraform:
+    app/backend:
+      auth:
+        identities:
+          prod-account:
+            default: true
+            kind: aws/permission-set
+            via:
+              provider: aws-sso
+              account: "222222222222"
+              permission_set: "ProdReadOnly"
+      vars:
+        # This component's state is in prod account
+        database_endpoint: !terraform.state database/postgres endpoint
+```
+
+**Authentication flow:**
+1. `app/frontend` evaluated with dev-account credentials (global default)
+2. Encounters `!terraform.state app/backend` → checks for `auth:` section
+3. Finds `auth:` section in `app/backend` → creates new AuthManager with prod-account credentials
+4. `app/backend` config evaluated with prod-account credentials
+5. Nested `!terraform.state database/postgres` inherits prod-account credentials from parent
+
+### Use Cases for Component-Level Auth
+
+#### Use Case 1: Cross-Account State Reading
+
+```yaml
+# Security component in security account needs to read from multiple accounts
+components:
+  terraform:
+    security/scanner:
+      auth:
+        identities:
+          security-admin:
+            default: true
+            kind: aws/permission-set
+            via:
+              provider: aws-sso
+              account: "999999999999"
+              permission_set: "SecurityAdmin"
+      vars:
+        dev_vpc_id: !terraform.state vpc dev-stack vpc_id
+        prod_vpc_id: !terraform.state vpc prod-stack vpc_id
+```
+
+#### Use Case 2: Different Credentials per Environment
+
+```yaml
+# Production component requires elevated permissions
+components:
+  terraform:
+    database/postgres:
+      metadata:
+        type: real
+      auth:
+        identities:
+          prod-dba:
+            default: true
+            kind: aws/permission-set
+            via:
+              provider: aws-sso
+              account: "333333333333"
+              permission_set: "DatabaseAdmin"
+      vars:
+        backup_bucket_arn: !terraform.state s3/backups bucket_arn
+```
+
+### Component-Level Auth Resolution Algorithm
+
+**File:** `internal/exec/terraform_nested_auth_helper.go`
+
+The `resolveAuthManagerForNestedComponent()` function implements this logic:
+
+```go
+func resolveAuthManagerForNestedComponent(
+    atmosConfig *schema.AtmosConfiguration,
+    component string,
+    stack string,
+    parentAuthManager auth.AuthManager,
+) (auth.AuthManager, error) {
+    // 1. Get component config WITHOUT processing templates/functions
+    //    (avoids circular dependency)
+    componentConfig, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+        Component:            component,
+        Stack:                stack,
+        ProcessTemplates:     false,
+        ProcessYamlFunctions: false,
+        AuthManager:          nil,
+    })
+
+    // 2. Check for auth section in component config
+    authSection, hasAuthSection := componentConfig[cfg.AuthSectionName].(map[string]any)
+    if !hasAuthSection || authSection == nil {
+        // No auth config → inherit parent
+        return parentAuthManager, nil
+    }
+
+    // 3. Merge component auth with global auth
+    mergedAuthConfig, err := auth.MergeComponentAuthFromConfig(
+        &atmosConfig.Auth,
+        componentConfig,
+        atmosConfig,
+        cfg.AuthSectionName,
+    )
+
+    // 4. Create and authenticate new AuthManager with merged config
+    componentAuthManager, err := auth.CreateAndAuthenticateManager(
+        "",
+        mergedAuthConfig,
+        cfg.IdentityFlagSelectValue,
+    )
+
+    return componentAuthManager, nil
+}
+```
+
+### Best Practices for Component-Level Auth
+
+1. **Minimize Auth Overrides**
+   - Use component-level auth only when necessary
+   - Prefer global defaults for simplicity
+   - Document why specific components need different credentials
+
+2. **Test Cross-Account Access**
+   - Verify IAM permissions for cross-account state reading
+   - Test nested function resolution with component-level auth
+   - Use `atmos describe component` to verify auth resolution
+
+3. **Cache Considerations**
+   - Each component-specific AuthManager creates a new authentication session
+   - State reads are still cached per-component to avoid redundant S3 calls
+   - Authentication is performed once per unique component auth configuration
+
+4. **Debug Component-Level Auth**
+   ```bash
+   # Enable debug logging to see auth resolution
+   ATMOS_LOGS_LEVEL=Debug atmos describe component my-component -s stack
+   ```
+
+   Look for log lines like:
+   ```
+   Component has auth config, creating component-specific AuthManager
+   Created component-specific AuthManager identityChain=[prod-dba]
+   ```
+
+### Limitations and Considerations
+
+- **Single top-level identity** - When using `--identity` flag, it applies at the top level only
+- **Nested overrides respected** - Component-level auth in nested components is still respected
+- **No re-prompting** - Interactive identity selection happens once at the top level
+- **Transitive permissions** - Top-level identity must have permissions for initial component, nested components use their own auth
 
 ## How Credentials Flow
 

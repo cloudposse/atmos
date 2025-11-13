@@ -599,6 +599,103 @@ func TestNestedTerraformStateAuthContextPropagation(t *testing.T) {
 4. ✅ All existing tests pass
 5. ✅ New tests cover nested authentication scenarios
 
+## Additional Feature: Component-Level Auth Override in Nested Functions
+
+As part of the fix implementation, support for component-level authentication override in nested function evaluations was added. This allows each component in a nested chain to optionally define its own `auth:` configuration, enabling cross-account and cross-permission scenarios.
+
+### Feature Overview
+
+When evaluating nested `!terraform.state` or `!terraform.output` functions, Atmos now checks each component's configuration for an `auth:` section:
+
+1. **Component has `auth:` section** → Merges with global auth and creates component-specific AuthManager
+2. **Component has no `auth:` section** → Inherits parent's AuthManager
+
+### Implementation
+
+**File:** `internal/exec/terraform_nested_auth_helper.go` (NEW)
+
+Created `resolveAuthManagerForNestedComponent()` function that:
+
+1. Gets component config WITHOUT processing templates/functions (avoids circular dependency)
+2. Checks if component has `auth:` section defined
+3. If yes: merges component auth with global auth and creates component-specific AuthManager
+4. If no: returns parent AuthManager (inheritance)
+
+**Updated Functions:**
+- `GetTerraformState()` in `terraform_state_utils.go` - calls resolver before `ExecuteDescribeComponent()`
+- `GetTerraformOutput()` in `terraform_output_utils.go` - same logic for consistency
+
+### Use Case Example
+
+```yaml
+# Global auth configuration
+auth:
+  identities:
+    dev-account:
+      default: true
+      kind: aws/permission-set
+      via:
+        provider: aws-sso
+        account: "111111111111"
+        permission_set: "DevAccess"
+
+# Component 1: Uses global auth (dev account)
+components:
+  terraform:
+    app/frontend:
+      vars:
+        # Reads from app/backend which is in a different account
+        backend_url: !terraform.state app/backend api_endpoint
+
+# Component 2: Overrides auth for prod account access
+components:
+  terraform:
+    app/backend:
+      auth:
+        identities:
+          prod-account:
+            default: true
+            kind: aws/permission-set
+            via:
+              provider: aws-sso
+              account: "222222222222"
+              permission_set: "ProdReadOnly"
+      vars:
+        # This component's state is in prod account
+        database_endpoint: !terraform.state database/postgres endpoint
+```
+
+**Authentication flow:**
+1. `app/frontend` evaluated with dev-account credentials (global default)
+2. Encounters `!terraform.state app/backend` → checks for `auth:` section
+3. Finds `auth:` section in `app/backend` → creates new AuthManager with prod-account credentials
+4. `app/backend` config evaluated with prod-account credentials
+5. Nested `!terraform.state database/postgres` inherits prod-account credentials from parent
+
+### Testing
+
+Created comprehensive test suite in `describe_component_auth_override_test.go` with:
+
+- `TestComponentLevelAuthOverride` - Verifies basic auth override functionality
+- `TestResolveAuthManagerForNestedComponent` - Tests resolver with/without parent AuthManager
+- `TestAuthOverrideInNestedChain` - Documents auth behavior in nested chains
+- `TestAuthOverrideErrorHandling` - Verifies graceful error handling
+
+All tests pass successfully (10 tests total for nested auth scenarios).
+
+### Benefits
+
+1. **Cross-Account State Reading** - Components in different AWS accounts can be referenced in nested functions
+2. **Granular Permission Control** - Each component can specify required permission level
+3. **Inheritance by Default** - Components without `auth:` section automatically inherit parent credentials
+4. **No Breaking Changes** - Existing configurations work without modification
+
+### Documentation
+
+Updated authentication flow documentation:
+- `docs/terraform-state-yaml-func-authentication-flow.md` - Added "Component-Level Auth Override" section
+- `docs/terraform-output-yaml-func-authentication-flow.md` - Added "Component-Level Auth Override in Nested Functions" section
+
 ## Related Issues
 
 - PR #1769: Fixed authentication for YAML functions with `--identity` flag

@@ -573,17 +573,32 @@ func GetTerraformOutput(
 	// Use the provided authManager directly if available.
 	// Otherwise, create an AuthManager wrapper from authContext to pass credentials to ExecuteDescribeComponent.
 	// This enables YAML functions within the component config to access remote resources.
-	var authMgr auth.AuthManager
+	var parentAuthMgr auth.AuthManager
 	if authManager != nil {
 		// Use the provided authManager (cast from 'any' to auth.AuthManager)
 		var ok bool
-		authMgr, ok = authManager.(auth.AuthManager)
+		parentAuthMgr, ok = authManager.(auth.AuthManager)
 		if !ok {
 			return nil, false, fmt.Errorf("%w: expected auth.AuthManager", errUtils.ErrInvalidAuthManagerType)
 		}
 	} else if authContext != nil {
 		// Fallback: create wrapper from authContext
-		authMgr = newAuthContextWrapper(authContext)
+		parentAuthMgr = newAuthContextWrapper(authContext)
+	}
+
+	// Resolve AuthManager for this nested component.
+	// Checks if component has auth config defined:
+	//   - If yes: creates component-specific AuthManager with merged auth config
+	//   - If no: uses parent AuthManager (inherits authentication)
+	// This enables each nested level to optionally override auth settings.
+	resolvedAuthMgr, err := resolveAuthManagerForNestedComponent(atmosConfig, component, stack, parentAuthMgr)
+	if err != nil {
+		log.Warn("Failed to resolve auth for nested component, using parent AuthManager",
+			"component", component,
+			"stack", stack,
+			"error", err,
+		)
+		resolvedAuthMgr = parentAuthMgr
 	}
 
 	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
@@ -592,7 +607,7 @@ func GetTerraformOutput(
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
 		Skip:                 nil,
-		AuthManager:          authMgr,
+		AuthManager:          resolvedAuthMgr, // Use resolved AuthManager (may be component-specific or inherited)
 	})
 	if err != nil {
 		u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.XMark, message)
