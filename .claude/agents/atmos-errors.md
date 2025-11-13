@@ -451,50 +451,64 @@ Include usage examples when:
 
 ### Example Format Guidelines
 
-Examples should follow markdown format with clear sections and code blocks:
+**IMPORTANT: Examples should be succinct commands only, NO output.**
 
-```markdown
-## Valid Version Format Examples
+Examples should follow this specific format - bullet points with commands in code blocks:
 
-### JSON Format
-\```bash
-atmos version --format json
-\```
+```go
+const exampleUsage = `- Display version in JSON format
 
-Output:
-\```json
-{
-  "version": "1.96.0",
-  "os": "darwin",
-  "arch": "arm64"
-}
-\```
+` + "```" + `
+$ atmos version --format json
+` + "```" + `
 
-### YAML Format
-\```bash
-atmos version --format yaml
-\```
+- Display version in YAML format
 
-Output:
-\```yaml
-version: 1.96.0
-os: darwin
-arch: arm64
-\```
+` + "```" + `
+$ atmos version --format yaml
+` + "```" + `
+
+- Pipe JSON output to jq
+
+` + "```" + `
+$ atmos version --format json | jq -r .version
+` + "```" + `
+`
 ```
+
+**Format rules:**
+- Each example starts with `- Description` (bullet point)
+- Followed by blank line
+- Command in triple backticks (use string concatenation to build the backticks)
+- Commands use `$` prompt
+- NO "Output:" sections
+- NO example output shown
+- Keep it succinct - just show the commands
 
 ### Where to Store Examples
 
-**IMPORTANT: Examples are embedded inline, NOT stored in separate files.**
+**IMPORTANT: Examples are inline constants, NOT separate files.**
+
+Define examples as const strings in the same file where they're used:
 
 ```go
-//go:embed examples/version_format_example.md
-var versionFormatExample string
+const versionFormatExample = `- Display version in JSON format
+
+` + "```" + `
+$ atmos version --format json
+` + "```" + `
+
+- Display version in YAML format
+
+` + "```" + `
+$ atmos version --format yaml
+` + "```" + `
+`
 
 // Use in error:
 return errUtils.Build(errUtils.ErrVersionFormatInvalid).
-    WithExplanationf("The format '%s' is not supported", format).
-    WithExampleFile(versionFormatExample).  // Embedded content
+    WithExplanationf("The format '%s' is not supported for version output", format).
+    WithExample(versionFormatExample).
     WithHint("Use --format json for JSON output").
     WithHint("Use --format yaml for YAML output").
     WithContext("format", format).
@@ -502,10 +516,11 @@ return errUtils.Build(errUtils.ErrVersionFormatInvalid).
     Err()
 ```
 
-**Example file location:**
-- Store in `internal/exec/examples/` when used in `internal/exec/` code
-- Store in `cmd/examples/` when used in `cmd/` code
-- Use descriptive names: `version_format_example.md`, `workflow_syntax_example.md`
+**Why inline constants:**
+- Keeps examples close to the code that uses them
+- No need for separate files or go:embed directives
+- Easier to maintain and update
+- Clear what format is expected
 
 **Note:** This is different from CLI command usage files which go in `cmd/markdown/atmos_*_usage.md` and are displayed via `--help`.
 
