@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -1665,8 +1666,194 @@ func TestManager_writeProvisionedIdentities_Success(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", tempDir)
 
 	err := mgr.writeProvisionedIdentities(result)
-	// May fail if provisioning writer can't be created, but should not panic.
-	if err != nil {
-		assert.Error(t, err)
+	require.NoError(t, err)
+
+	// Verify the file was created.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	expectedPath := writer.GetProvisionedIdentitiesPath("test-provider")
+	assert.FileExists(t, expectedPath)
+
+	// Verify file contains expected content.
+	data, err := os.ReadFile(expectedPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "test-identity")
+	assert.Contains(t, string(data), "test-provider")
+}
+
+func TestManager_writeProvisionedIdentities_WriterCreationFailure(t *testing.T) {
+	// Test that writeProvisionedIdentities returns error when write operation fails.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
 	}
+
+	result := &types.ProvisioningResult{
+		Provider: "test-provider",
+		Identities: map[string]*schema.Identity{
+			"test-identity": {
+				Provider: "test-provider",
+			},
+		},
+		Metadata: types.ProvisioningMetadata{
+			Source: "test",
+		},
+	}
+
+	// Create a temp directory and make it read-only to cause write failure.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Create the cache directory structure but make the provider directory read-only.
+	authDir := filepath.Join(tempDir, "atmos", "auth", "test-provider")
+	err := os.MkdirAll(authDir, 0o700)
+	require.NoError(t, err)
+
+	// Make the directory read-only to prevent file creation.
+	err = os.Chmod(authDir, 0o400)
+	require.NoError(t, err)
+
+	// Ensure cleanup restores permissions.
+	t.Cleanup(func() {
+		os.Chmod(authDir, 0o700)
+	})
+
+	err = mgr.writeProvisionedIdentities(result)
+	assert.Error(t, err)
+}
+
+func TestManager_removeProvisionedIdentitiesCache_Success(t *testing.T) {
+	// Test successful removal of provisioned identities cache.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	// Create a temp directory for the cache.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Create a provisioning result and write it to cache first.
+	result := &types.ProvisioningResult{
+		Provider: "test-provider",
+		Identities: map[string]*schema.Identity{
+			"test-identity": {
+				Provider: "test-provider",
+			},
+		},
+		Metadata: types.ProvisioningMetadata{
+			Source: "test",
+			Counts: &types.ProvisioningCounts{
+				Accounts:   1,
+				Roles:      1,
+				Identities: 1,
+			},
+		},
+	}
+
+	err := mgr.writeProvisionedIdentities(result)
+	require.NoError(t, err)
+
+	// Verify the file was created.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	expectedPath := writer.GetProvisionedIdentitiesPath("test-provider")
+	assert.FileExists(t, expectedPath)
+
+	// Remove the cache.
+	err = mgr.removeProvisionedIdentitiesCache("test-provider")
+	require.NoError(t, err)
+
+	// Verify the file was removed.
+	assert.NoFileExists(t, expectedPath)
+}
+
+func TestManager_removeProvisionedIdentitiesCache_FileDoesNotExist(t *testing.T) {
+	// Test that removeProvisionedIdentitiesCache handles non-existent files gracefully.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	// Create a temp directory for the cache.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Try to remove a cache that doesn't exist - should succeed (no-op).
+	err := mgr.removeProvisionedIdentitiesCache("nonexistent-provider")
+	// The Remove method should handle this gracefully.
+	assert.NoError(t, err)
+}
+
+func TestManager_removeProvisionedIdentitiesCache_WriterCreationFailure(t *testing.T) {
+	// Test that removeProvisionedIdentitiesCache returns error when writer creation fails.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	// Set XDG_CACHE_HOME to an unwritable path.
+	// Create a directory and make it read-only to prevent subdirectory creation.
+	tempDir := t.TempDir()
+	readOnlyDir := filepath.Join(tempDir, "readonly")
+	err := os.Mkdir(readOnlyDir, 0o400) // Read-only directory.
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		os.Chmod(readOnlyDir, 0o700)
+	})
+
+	t.Setenv("XDG_CACHE_HOME", readOnlyDir)
+
+	err = mgr.removeProvisionedIdentitiesCache("test-provider")
+	assert.Error(t, err)
+}
+
+func TestManager_provisionIdentities_SuccessPath(t *testing.T) {
+	// Test successful provisioning and caching of identities.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provisioner := &mockProvisioner{
+		testProvider: testProvider{name: "test-provider"},
+		provisionResult: &types.ProvisioningResult{
+			Provider: "test-provider",
+			Identities: map[string]*schema.Identity{
+				"test-identity-1": {
+					Provider: "test-provider",
+				},
+				"test-identity-2": {
+					Provider: "test-provider",
+				},
+			},
+			Metadata: types.ProvisioningMetadata{
+				Source: "test",
+				Counts: &types.ProvisioningCounts{
+					Accounts:   2,
+					Roles:      5,
+					Identities: 2,
+				},
+			},
+		},
+	}
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should successfully provision and cache identities.
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provisioner, creds)
+	})
+
+	// Verify the cache file was created.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	expectedPath := writer.GetProvisionedIdentitiesPath("test-provider")
+	assert.FileExists(t, expectedPath)
 }

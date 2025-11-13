@@ -368,8 +368,13 @@ func (p *ssoProvider) PrepareEnvironment(_ context.Context, environ map[string]s
 	defer perf.Track(nil, "aws.ssoProvider.PrepareEnvironment")()
 
 	// SSO provider doesn't write credential files itself - that's done by identities.
-	// Just return the environment unchanged.
-	return environ, nil
+	// Create a copy to avoid modifying the input map.
+	result := make(map[string]string, len(environ))
+	for k, v := range environ {
+		result[k] = v
+	}
+
+	return result, nil
 }
 
 // Note: SSO caching is now handled at the manager level to prevent duplicate entries.
