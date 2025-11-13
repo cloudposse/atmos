@@ -95,6 +95,24 @@ func TestAzureCredentials_Validate(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrAuthenticationFailed), "Should return ErrAuthenticationFailed")
 }
 
+func TestAzureCredentials_Validate_EmptySubscriptionID(t *testing.T) {
+	// Test that Validate fails fast when subscription ID is empty.
+	c := &AzureCredentials{
+		AccessToken: "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IkZTaW11RnJGTm9DMHNKWEdtdjEzbk5aY2VEYyIsImtpZCI6IkZTaW11RnJGTm9DMHNKWEdtdjEzbk5aY2VEYyJ9.EXAMPLE",
+		TokenType:   "Bearer",
+		TenantID:    "12345678-1234-1234-1234-123456789012",
+		// SubscriptionID is intentionally empty.
+	}
+
+	ctx := context.Background()
+	_, err := c.Validate(ctx)
+
+	// Should return configuration error without making Azure API call.
+	assert.Error(t, err, "Validate should fail with empty subscription ID")
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig), "Should return ErrInvalidAuthConfig")
+	assert.Contains(t, err.Error(), "subscription ID is required", "Error message should mention subscription ID")
+}
+
 func TestAzureCredentials_Validate_WithExpiration(t *testing.T) {
 	// Test that expiration is returned when available.
 	now := time.Now().UTC()

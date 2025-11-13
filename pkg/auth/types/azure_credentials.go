@@ -67,6 +67,11 @@ func (c *AzureCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
 // Validate validates Azure credentials by calling Azure Resource Manager API.
 // Returns validation info including subscription name, tenant ID, and expiration.
 func (c *AzureCredentials) Validate(ctx context.Context) (*ValidationInfo, error) {
+	// Check if subscription ID is provided.
+	if c.SubscriptionID == "" {
+		return nil, fmt.Errorf("%w: subscription ID is required", errUtils.ErrInvalidAuthConfig)
+	}
+
 	// Create a token credential from the access token.
 	tokenCred := &staticTokenCredential{
 		token: azcore.AccessToken{
