@@ -99,6 +99,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// This enables YAML template functions like !terraform.state to use authenticated credentials.
 	authManager, err := auth.CreateAndAuthenticateManager(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue)
 	if err != nil {
+		// Special case: If user aborted (Ctrl+C), exit immediately without showing error.
+		if errors.Is(err, errUtils.ErrUserAborted) {
+			errUtils.Exit(errUtils.ExitCodeSIGINT)
+		}
 		return err
 	}
 
