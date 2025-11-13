@@ -199,7 +199,11 @@ func TestSSOProvider_PrepareEnvironment_NoOp(t *testing.T) {
 	environ := map[string]string{"TEST": "value"}
 	result, err := provider.PrepareEnvironment(context.Background(), environ)
 	assert.NoError(t, err)
-	assert.Equal(t, environ, result)
+
+	// Verify original environment is preserved.
+	assert.Equal(t, "value", result["TEST"])
+	// Verify AWS_REGION is injected from provider config.
+	assert.Equal(t, "us-east-1", result["AWS_REGION"])
 }
 
 func TestSSOProvider_Validate_MissingStartURL(t *testing.T) {

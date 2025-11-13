@@ -886,8 +886,9 @@ func TestSSOProvider_PrepareEnvironment(t *testing.T) {
 	assert.Equal(t, "another_value", resultEnv["ANOTHER_VAR"])
 	assert.Equal(t, "existing_profile", resultEnv["AWS_PROFILE"])
 
-	// SSO provider's PrepareEnvironment returns environment unchanged (content-wise).
+	// SSO provider's PrepareEnvironment injects AWS_REGION from provider config.
 	// It doesn't inject AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE, etc.
 	// Those are handled by identities (like permission-set) that use the SSO provider.
-	assert.Equal(t, inputEnv, resultEnv)
+	assert.Equal(t, testRegion, resultEnv["AWS_REGION"], "AWS_REGION should be set from provider config")
+	assert.NotEmpty(t, resultEnv["AWS_REGION"], "AWS_REGION should not be empty")
 }

@@ -363,14 +363,23 @@ func (p *ssoProvider) Environment() (map[string]string, error) {
 // PrepareEnvironment prepares environment variables for external processes.
 // For SSO providers, this method is typically not called directly since SSO providers
 // authenticate to get identity credentials, which then have their own PrepareEnvironment.
-// However, we implement it for interface compliance.
+// However, we implement it for interface compliance and inject AWS_REGION.
 func (p *ssoProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "aws.ssoProvider.PrepareEnvironment")()
 
-	// SSO provider doesn't write credential files itself - that's done by identities.
 	// Create a copy to avoid modifying the input map.
 	result := make(map[string]string, len(environ))
 	for k, v := range environ {
+		result[k] = v
+	}
+
+	// Inject provider-specific environment variables (AWS_REGION).
+	// SSO provider doesn't write credential files itself - that's done by identities.
+	providerEnv, err := p.Environment()
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range providerEnv {
 		result[k] = v
 	}
 
