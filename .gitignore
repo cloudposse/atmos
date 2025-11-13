@@ -108,3 +108,5 @@ performance-optimization/
 .scratch/
 TEST_FAILURE_ANALYSIS.md
 scratch/
+COVERAGE_SUMMARY.md
+TESTABILITY_CHANGES_SUMMARY.md
