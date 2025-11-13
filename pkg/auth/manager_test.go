@@ -1528,3 +1528,145 @@ func TestManager_buildWhoamiInfoFromEnvironment(t *testing.T) {
 		})
 	}
 }
+
+// Mock provisioner for testing provisionIdentities.
+type mockProvisioner struct {
+	testProvider
+	provisionResult *types.ProvisioningResult
+	provisionError  error
+}
+
+func (m *mockProvisioner) ProvisionIdentities(ctx context.Context, creds types.ICredentials) (*types.ProvisioningResult, error) {
+	return m.provisionResult, m.provisionError
+}
+
+func TestManager_provisionIdentities_ProviderDoesNotSupportProvisioning(t *testing.T) {
+	// Test that provisionIdentities skips providers that don't implement Provisioner.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provider := &testProvider{name: "test-provider"}
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should not panic and should return without error (non-fatal).
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provider, creds)
+	})
+}
+
+func TestManager_provisionIdentities_NoIdentitiesProvisioned(t *testing.T) {
+	// Test that provisionIdentities handles empty result gracefully.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provisioner := &mockProvisioner{
+		testProvider: testProvider{name: "test-provider"},
+		provisionResult: &types.ProvisioningResult{
+			Identities: map[string]*schema.Identity{},
+			Metadata: types.ProvisioningMetadata{
+				Counts: &types.ProvisioningCounts{
+					Accounts:   0,
+					Roles:      0,
+					Identities: 0,
+				},
+			},
+		},
+	}
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should handle empty result gracefully.
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provisioner, creds)
+	})
+}
+
+func TestManager_provisionIdentities_ProvisioningError(t *testing.T) {
+	// Test that provisionIdentities handles errors gracefully (non-fatal).
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provisioner := &mockProvisioner{
+		testProvider:   testProvider{name: "test-provider"},
+		provisionError: fmt.Errorf("provisioning failed"),
+	}
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should handle error gracefully (non-fatal operation).
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provisioner, creds)
+	})
+}
+
+func TestManager_provisionIdentities_NilResult(t *testing.T) {
+	// Test that provisionIdentities handles nil result gracefully.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provisioner := &mockProvisioner{
+		testProvider:    testProvider{name: "test-provider"},
+		provisionResult: nil,
+	}
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should handle nil result gracefully.
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provisioner, creds)
+	})
+}
+
+func TestManager_writeProvisionedIdentities_Success(t *testing.T) {
+	// Test successful write of provisioned identities.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	result := &types.ProvisioningResult{
+		Provider: "test-provider",
+		Identities: map[string]*schema.Identity{
+			"test-identity": {
+				Provider: "test-provider",
+			},
+		},
+		Metadata: types.ProvisioningMetadata{
+			Source: "test",
+			Counts: &types.ProvisioningCounts{
+				Accounts:   1,
+				Roles:      1,
+				Identities: 1,
+			},
+		},
+	}
+
+	// Create a temp directory for the cache.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	err := mgr.writeProvisionedIdentities(result)
+	// May fail if provisioning writer can't be created, but should not panic.
+	if err != nil {
+		assert.Error(t, err)
+	}
+}

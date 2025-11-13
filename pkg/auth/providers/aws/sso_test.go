@@ -811,3 +811,65 @@ func TestIsInteractive(t *testing.T) {
 func stringPtr(s string) *string {
 	return &s
 }
+
+func TestNewSSOProvider_InvalidProviderKind(t *testing.T) {
+	// Test that NewSSOProvider rejects non-SSO provider kinds.
+	config := &schema.Provider{
+		Kind:     "aws/static",
+		Region:   testRegion,
+		StartURL: testStartURL,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, config)
+	assert.Error(t, err)
+	assert.Nil(t, provider)
+	assert.Contains(t, err.Error(), "invalid provider kind for SSO provider")
+}
+
+func TestNewSSOProvider_MissingStartURL(t *testing.T) {
+	// Test that NewSSOProvider requires start_url.
+	config := &schema.Provider{
+		Kind:   testSSOKind,
+		Region: testRegion,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, config)
+	assert.Error(t, err)
+	assert.Nil(t, provider)
+	assert.Contains(t, err.Error(), "start_url is required")
+}
+
+func TestNewSSOProvider_MissingRegion(t *testing.T) {
+	// Test that NewSSOProvider requires region.
+	config := &schema.Provider{
+		Kind:     testSSOKind,
+		StartURL: testStartURL,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, config)
+	assert.Error(t, err)
+	assert.Nil(t, provider)
+	assert.Contains(t, err.Error(), "region is required")
+}
+
+func TestSSOProvider_PrepareEnvironment(t *testing.T) {
+	// Test PrepareEnvironment method.
+	config := &schema.Provider{
+		Kind:     testSSOKind,
+		Region:   testRegion,
+		StartURL: testStartURL,
+	}
+
+	provider, err := NewSSOProvider(testProviderName, config)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	inputEnv := map[string]string{
+		"TEST_VAR": "test_value",
+	}
+
+	resultEnv, err := provider.PrepareEnvironment(ctx, inputEnv)
+	assert.NoError(t, err)
+	assert.Equal(t, inputEnv, resultEnv)
+	assert.Equal(t, "test_value", resultEnv["TEST_VAR"])
+}
