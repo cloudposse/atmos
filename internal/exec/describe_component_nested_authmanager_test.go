@@ -291,3 +291,186 @@ func TestNestedAuthManagerWithNilAuthContext(t *testing.T) {
 	require.NoError(t, err, "Should handle nil AuthContext in nested scenarios")
 	require.NotNil(t, componentSection)
 }
+
+// setupNestedAuthTest creates a mock AuthManager and sets up the test directory.
+// Returns the mock controller and AuthManager for use in nested auth tests.
+func setupNestedAuthTest(t *testing.T, profile, region string) (*gomock.Controller, types.AuthManager) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+
+	parentAuthContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			Profile: profile,
+			Region:  region,
+		},
+	}
+
+	parentStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: parentAuthContext,
+		Stack:       "test",
+	}
+
+	mockAuthManager := types.NewMockAuthManager(ctrl)
+	mockAuthManager.EXPECT().
+		GetStackInfo().
+		Return(parentStackInfo).
+		AnyTimes()
+
+	workDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
+	t.Chdir(workDir)
+
+	return ctrl, mockAuthManager
+}
+
+// TestNestedAuthManagerScenario2_AuthOverrideAtMiddleLevel verifies that
+// a component in the middle of a nested chain can override authentication.
+//
+// Nesting structure:
+//
+//	Level 1: auth-override-level1 (no auth override, uses parent)
+//	  └─ !terraform.state auth-override-level2 ... (triggers level2 evaluation)
+//	Level 2: auth-override-level2 (HAS auth override → account 222222222222)
+//	  └─ !terraform.state auth-override-level3 ... (triggers level3 evaluation)
+//	Level 3: auth-override-level3 (no auth override, inherits from level2)
+//
+// Expected Behavior:
+//   - Level 1 uses parent AuthManager
+//   - Level 2 creates new AuthManager with account 222222222222
+//   - Level 3 inherits Level 2's AuthManager
+//   - No IMDS timeout errors at any level.
+func TestNestedAuthManagerScenario2_AuthOverrideAtMiddleLevel(t *testing.T) {
+	ctrl, mockAuthManager := setupNestedAuthTest(t, "parent-profile", "us-east-1")
+	defer ctrl.Finish()
+
+	componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            "auth-override-level1",
+		Stack:                "test",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          mockAuthManager,
+	})
+
+	require.NoError(t, err, "Should succeed with auth override in middle level")
+	require.NotNil(t, componentSection)
+
+	vars, ok := componentSection["vars"].(map[string]any)
+	require.True(t, ok, "Should have vars section")
+	assert.Contains(t, vars, "api_endpoint", "Should have api_endpoint from nested level2")
+	assert.Contains(t, vars, "api_database", "Should have api_database from doubly-nested level3")
+}
+
+// TestNestedAuthManagerScenario3_MultipleAuthOverrides verifies that
+// multiple components in a chain can each have their own auth overrides.
+//
+// Nesting structure:
+//
+//	Level 1: multi-auth-level1 (auth override → account 444444444444)
+//	  └─ !terraform.state multi-auth-level2 ... (triggers level2 evaluation)
+//	Level 2: multi-auth-level2 (auth override → account 333333333333)
+//	  └─ !terraform.state multi-auth-level3 ... (triggers level3 evaluation)
+//	Level 3: multi-auth-level3 (no auth override, inherits from level2)
+//
+// Expected Behavior:
+//   - Level 1 uses account 444444444444 (AccountCAccess)
+//   - Level 2 uses account 333333333333 (AccountBAccess) - its own override
+//   - Level 3 uses account 333333333333 (inherited from Level 2)
+//   - Each level with auth config creates its own AuthManager.
+func TestNestedAuthManagerScenario3_MultipleAuthOverrides(t *testing.T) {
+	ctrl, mockAuthManager := setupNestedAuthTest(t, "global-profile", "us-east-1")
+	defer ctrl.Finish()
+
+	componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            "multi-auth-level1",
+		Stack:                "test",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          mockAuthManager,
+	})
+
+	require.NoError(t, err, "Should succeed with multiple auth overrides")
+	require.NotNil(t, componentSection)
+
+	vars, ok := componentSection["vars"].(map[string]any)
+	require.True(t, ok, "Should have vars section")
+	assert.Contains(t, vars, "vpc_reference", "Should have vpc_reference from level2")
+	assert.Contains(t, vars, "shared_reference", "Should have shared_reference from level3")
+}
+
+// TestNestedAuthManagerScenario4_MixedInheritance verifies that in the same
+// top-level component, some nested components can override auth while others inherit.
+//
+// Nesting structure:
+//
+//	mixed-top-level (no auth override, uses parent auth)
+//	  ├─ !terraform.state mixed-inherit-component ... (inherits parent auth)
+//	  └─ !terraform.state mixed-override-component ... (uses its own auth)
+//	      └─ !terraform.state mixed-inherit-component ... (inherits mixed-override's auth)
+//
+// Expected Behavior:
+//   - mixed-top-level uses parent AuthManager
+//   - mixed-inherit-component inherits parent AuthManager when called directly
+//   - mixed-override-component uses account 555555555555 (its own auth)
+//   - When mixed-override calls mixed-inherit, it inherits account 555555555555.
+func TestNestedAuthManagerScenario4_MixedInheritance(t *testing.T) {
+	ctrl, mockAuthManager := setupNestedAuthTest(t, "parent-profile", "us-west-2")
+	defer ctrl.Finish()
+
+	componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            "mixed-top-level",
+		Stack:                "test",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          mockAuthManager,
+	})
+
+	require.NoError(t, err, "Should succeed with mixed auth inheritance")
+	require.NotNil(t, componentSection)
+
+	vars, ok := componentSection["vars"].(map[string]any)
+	require.True(t, ok, "Should have vars section")
+	assert.Contains(t, vars, "value_from_inherit", "Should have value from inherit component")
+	assert.Contains(t, vars, "value_from_override", "Should have value from override component")
+}
+
+// TestNestedAuthManagerScenario5_DeepNesting verifies authentication in
+// 4-level deep nesting with auth overrides at non-adjacent levels.
+//
+// Nesting structure:
+//
+//	Level 1: deep-level1 (auth override → account 777777777777)
+//	  └─ !terraform.state deep-level2 ... (triggers level2 evaluation)
+//	Level 2: deep-level2 (no auth override, inherits from level1)
+//	  └─ !terraform.state deep-level3 ... (triggers level3 evaluation)
+//	Level 3: deep-level3 (auth override → account 666666666666)
+//	  └─ !terraform.state deep-level4 ... (triggers level4 evaluation)
+//	Level 4: deep-level4 (no auth override, inherits from level3)
+//
+// Expected Behavior:
+//   - Level 1 uses account 777777777777 (Level1Access)
+//   - Level 2 inherits account 777777777777 from Level 1
+//   - Level 3 switches to account 666666666666 (Level3Access) - its own override
+//   - Level 4 inherits account 666666666666 from Level 3.
+func TestNestedAuthManagerScenario5_DeepNesting(t *testing.T) {
+	ctrl, mockAuthManager := setupNestedAuthTest(t, "global-profile", "us-east-1")
+	defer ctrl.Finish()
+
+	componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            "deep-level1",
+		Stack:                "test",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          mockAuthManager,
+	})
+
+	require.NoError(t, err, "Should succeed with 4-level deep nesting and multiple auth overrides")
+	require.NotNil(t, componentSection)
+
+	vars, ok := componentSection["vars"].(map[string]any)
+	require.True(t, ok, "Should have vars section")
+	assert.Contains(t, vars, "final_data", "Should have final_data from 4-level deep nesting")
+}
