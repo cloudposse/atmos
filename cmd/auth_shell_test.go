@@ -10,6 +10,8 @@ import (
 )
 
 func TestAuthShellCmd_FlagParsing(t *testing.T) {
+	_ = NewTestKit(t)
+
 	tests := []struct {
 		name          string
 		args          []string
@@ -54,6 +56,8 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
 			// Set up test fixture with auth configuration for each subtest.
 			testDir := "../tests/fixtures/scenarios/atmos-auth"
 			t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
@@ -82,6 +86,8 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 }
 
 func TestAuthShellCmd_CommandStructure(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Test that the real authShellCmd has the expected structure.
 	assert.Equal(t, "shell", authShellCmd.Use)
 	assert.True(t, authShellCmd.DisableFlagParsing, "DisableFlagParsing should be true to allow pass-through of shell arguments")
@@ -100,6 +106,8 @@ func TestAuthShellCmd_CommandStructure(t *testing.T) {
 }
 
 func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Set up test fixture.
 	testDir := "../tests/fixtures/scenarios/atmos-auth"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
@@ -117,6 +125,8 @@ func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
 }
 
 func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Test that the command handles nil environment variables gracefully.
 	// This tests the path where envVars is nil and gets initialized to empty map.
 	testDir := "../tests/fixtures/scenarios/atmos-auth"
@@ -137,6 +147,8 @@ func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
 }
 
 func TestAuthShellCmd_HelpRequest(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Test that the command handles help request arguments.
 	// When DisableFlagParsing is true, Cobra doesn't add the help flag automatically,
 	// so handleHelpRequest in cmd/helpers.go handles --help and -h manually.
@@ -153,6 +165,8 @@ func TestAuthShellCmd_HelpRequest(t *testing.T) {
 }
 
 func TestAuthShellCmd_ShellEnvironmentBinding(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Test that SHELL and ATMOS_SHELL environment variables are bound.
 	// This verifies the init() function's viper bindings work correctly.
 	testShell := "/bin/test-shell"
@@ -169,6 +183,8 @@ func TestAuthShellCmd_ShellEnvironmentBinding(t *testing.T) {
 }
 
 func TestAuthShellCmd_WithMockProvider(t *testing.T) {
+	_ = NewTestKit(t)
+
 	if testing.Short() {
 		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
 	}
@@ -211,6 +227,8 @@ func TestAuthShellCmd_WithMockProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
 			// Set up mock auth provider fixture for each subtest.
 			testDir := "../tests/fixtures/scenarios/atmos-auth-mock"
 			t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
@@ -234,6 +252,8 @@ func TestAuthShellCmd_WithMockProvider(t *testing.T) {
 }
 
 func TestAuthShellCmd_MockProviderEnvironmentVariables(t *testing.T) {
+	_ = NewTestKit(t)
+
 	if testing.Short() {
 		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
 	}
