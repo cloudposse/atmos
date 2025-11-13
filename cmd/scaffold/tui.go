@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	atmosui "github.com/cloudposse/atmos/pkg/ui"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
-	errUtils "github.com/cloudposse/atmos/errors"
+	atmosui "github.com/cloudposse/atmos/pkg/ui"
 )
 
 // ProductionUI implements ScaffoldUI using real UI components.
