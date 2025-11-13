@@ -1,0 +1,52 @@
+# Test stack for verifying nested AuthManager propagation through !terraform.state functions.
+# This fixture tests that AuthManager and AuthContext propagate correctly through
+# multiple levels of nested component evaluations.
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    # Level 3: Base component (no nested functions)
+    level3-component:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        subnet_id: "subnet-level3-12345"
+        cidr_block: "10.0.3.0/24"
+      backend:
+        local:
+          path: "level3/terraform.tfstate"
+
+    # Level 2: References level3-component via !terraform.state
+    level2-component:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        # Nested function: triggers evaluation of level3-component
+        level3_subnet_id: !terraform.state level3-component test subnet_id
+        level3_cidr: !terraform.state level3-component test cidr_block
+        vpc_id: "vpc-level2-67890"
+      backend:
+        local:
+          path: "level2/terraform.tfstate"
+
+    # Level 1: References level2-component via !terraform.state
+    level1-component:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        # Nested function: triggers evaluation of level2-component
+        # which in turn triggers evaluation of level3-component
+        level2_vpc_id: !terraform.state level2-component test vpc_id
+        level2_subnet: !terraform.state level2-component test level3_subnet_id
+        app_name: "test-app"
+      backend:
+        local:
+          path: "level1/terraform.tfstate"
