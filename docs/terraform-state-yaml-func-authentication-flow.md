@@ -71,6 +71,150 @@ GetTerraformState()
   └─ Extracts and returns attribute value
 ```
 
+## Nested Function Authentication
+
+### What Are Nested Functions?
+
+Nested functions occur when a component's configuration contains `!terraform.state` (or `!terraform.output`) functions that reference other components, which themselves also contain `!terraform.state` or `!terraform.output` functions in their configurations.
+
+**Example:**
+
+```yaml
+# Component 1: tgw/routes (being deployed)
+components:
+  terraform:
+    tgw/routes:
+      vars:
+        transit_gateway_route_tables:
+          - routes:
+              # Level 1: This references tgw/attachment
+              - attachment_id: !terraform.state tgw/attachment transit_gateway_vpc_attachment_id
+
+# Component 2: tgw/attachment (referenced by tgw/routes)
+components:
+  terraform:
+    tgw/attachment:
+      vars:
+        # Level 2: This also has !terraform.state functions
+        transit_gateway_id: !terraform.state tgw/hub core-use2-network transit_gateway_id
+```
+
+When Atmos evaluates the Level 1 function, it needs to read the `tgw/attachment` component configuration. When that configuration is processed, it encounters the Level 2 function, which must also be evaluated with proper authentication.
+
+### How Authentication Propagates
+
+Atmos propagates authentication through nested function evaluations using the `AuthManager`:
+
+```text
+Level 1: atmos terraform apply tgw/routes -s core-use2-network
+  ├─ Creates AuthManager with core-network/terraform identity
+  ├─ Stores AuthManager in configAndStacksInfo.AuthManager
+  ├─ Populates configAndStacksInfo.AuthContext from AuthManager
+  └─ Evaluates component configuration
+      ↓
+Level 2: !terraform.state tgw/attachment transit_gateway_vpc_attachment_id
+  ├─ Extracts authContext and authManager from stackInfo
+  ├─ Calls GetTerraformState(authContext, authManager)
+  └─ ExecuteDescribeComponent(AuthManager: authManager) ✅ Passes AuthManager!
+      ↓
+Level 3: Processing tgw/attachment component config
+  ├─ AuthManager propagated from Level 2
+  ├─ Populates stackInfo.AuthContext from AuthManager
+  └─ Evaluates nested !terraform.state functions
+      ↓
+Level 4: !terraform.state tgw/hub core-use2-network transit_gateway_id
+  ├─ Extracts authContext from stackInfo ✅ AuthContext available!
+  ├─ Creates AWS SDK config with authenticated credentials
+  └─ Successfully reads state from S3
+```
+
+**Key Points:**
+
+1. **AuthManager is stored** in `configAndStacksInfo.AuthManager` at the top level
+2. **AuthManager is passed** through `GetTerraformState()` to `ExecuteDescribeComponent()`
+3. **AuthContext is populated** at each level from the AuthManager
+4. **All nested levels** use the same authenticated session
+
+This ensures that deeply nested component configurations can access remote state without requiring separate authentication at each level.
+
+### Common Nested Function Scenarios
+
+#### Scenario 1: Transit Gateway Hub-Spoke Architecture
+
+```yaml
+# Hub account manages routes, needs attachment IDs from spokes
+tgw/routes:
+  vars:
+    routes:
+      - attachment_id: !terraform.state tgw/attachment spoke-stack transit_gateway_vpc_attachment_id
+```
+
+The hub account's `tgw/routes` component reads state from spoke accounts' `tgw/attachment` components.
+
+#### Scenario 2: Service Mesh Configuration
+
+```yaml
+# API gateway reads endpoints from multiple services
+api-gateway:
+  vars:
+    backends:
+      - url: !terraform.state service-a alb_dns_name
+      - url: !terraform.state service-b alb_dns_name
+      - url: !terraform.state service-c alb_dns_name
+```
+
+Each service component may itself have `!terraform.state` functions for VPC configuration.
+
+#### Scenario 3: Networking with Dependencies
+
+```yaml
+# Application component needs VPC details
+app:
+  vars:
+    vpc_id: !terraform.state vpc vpc_id
+    subnet_ids: !terraform.state vpc private_subnet_ids
+
+# VPC component references shared services
+vpc:
+  vars:
+    dns_servers: !terraform.state shared-services dns_server_ips
+    nat_gateway_id: !terraform.state shared-services nat_gateway_id
+```
+
+The `app` component triggers evaluation of `vpc` component config, which in turn evaluates `shared-services` component config.
+
+### Authentication Behavior for Nested Functions
+
+All nested function evaluations inherit the same AuthManager and credentials from the top-level command execution. This means:
+
+- **Single authentication session** - All nested components use the same authenticated identity
+- **Consistent credentials** - No need to re-authenticate at each nesting level
+- **Transitive permissions** - The identity must have access to all resources across nested components
+
+If different components require different credentials, use component-level auth configuration to specify different default identities. Note that during a single command execution, all nested evaluations will use the top-level credentials.
+
+### Best Practices for Nested Functions
+
+1. **Use Same Account When Possible**
+   - Nested functions work best when all components are in the same AWS account
+   - Cross-account scenarios may require additional IAM configuration
+
+2. **Configure Adequate Permissions**
+   - Ensure the identity has access to all state buckets it needs to read
+   - Include transitive dependencies (if A reads B, and B reads C, identity needs access to both B and C state buckets)
+
+3. **Test Nested Configurations**
+   - Use `atmos describe component` to test nested function resolution
+   - Enable debug logging to verify authentication at each level
+
+4. **Document Dependencies**
+   - Document which components reference others via `!terraform.state`
+   - Use `settings.depends_on` to declare explicit dependencies
+
+5. **Cache Optimization**
+   - Nested function results are cached to avoid redundant state reads
+   - Cache is per-component per-stack combination
+
 ## Identity Resolution
 
 Identity resolution works identically to `!terraform.output`. See the [terraform-output-yaml-func-authentication-flow.md](./terraform-output-yaml-func-authentication-flow.md#identity-resolution) document for complete details.

@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -26,6 +27,7 @@ var terraformStateCache = sync.Map{}
 //   - output: Output variable key to retrieve
 //   - skipCache: Flag to bypass cache lookup
 //   - authContext: Optional auth context containing Atmos-managed credentials
+//   - authManager: Optional auth manager for nested operations that need authentication
 //
 // Returns the output value or nil if the component is not provisioned.
 func GetTerraformState(
@@ -36,6 +38,7 @@ func GetTerraformState(
 	output string,
 	skipCache bool,
 	authContext *schema.AuthContext,
+	authManager any,
 ) (any, error) {
 	defer perf.Track(atmosConfig, "exec.GetTerraformState")()
 
@@ -60,13 +63,23 @@ func GetTerraformState(
 		}
 	}
 
+	// Cast authManager from 'any' to auth.AuthManager if provided.
+	var authMgr auth.AuthManager
+	if authManager != nil {
+		var ok bool
+		authMgr, ok = authManager.(auth.AuthManager)
+		if !ok {
+			return nil, fmt.Errorf("%w: expected auth.AuthManager", errUtils.ErrInvalidAuthManagerType)
+		}
+	}
+
 	componentSections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
 		Skip:                 nil,
-		AuthManager:          nil,
+		AuthManager:          authMgr,
 	})
 	if err != nil {
 		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)

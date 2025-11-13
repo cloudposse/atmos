@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	auth_types "github.com/cloudposse/atmos/pkg/auth/types"
@@ -520,6 +521,7 @@ func execTerraformOutput(
 //   - output: Output variable key to retrieve
 //   - skipCache: Flag to bypass cache lookup
 //   - authContext: Authentication context for credential access (may be nil)
+//   - authManager: Optional auth manager for nested operations that need authentication
 //
 // Returns:
 //   - value: The output value (may be nil if the output exists but has a null value)
@@ -532,6 +534,7 @@ func GetTerraformOutput(
 	output string,
 	skipCache bool,
 	authContext *schema.AuthContext,
+	authManager any,
 ) (any, bool, error) {
 	defer perf.Track(atmosConfig, "exec.GetTerraformOutput")()
 
@@ -567,10 +570,19 @@ func GetTerraformOutput(
 		defer StopSpinner(p, spinnerDone)
 	}
 
-	// Create an AuthManager wrapper from authContext to pass credentials to ExecuteDescribeComponent.
+	// Use the provided authManager directly if available.
+	// Otherwise, create an AuthManager wrapper from authContext to pass credentials to ExecuteDescribeComponent.
 	// This enables YAML functions within the component config to access remote resources.
 	var authMgr auth.AuthManager
-	if authContext != nil {
+	if authManager != nil {
+		// Use the provided authManager (cast from 'any' to auth.AuthManager)
+		var ok bool
+		authMgr, ok = authManager.(auth.AuthManager)
+		if !ok {
+			return nil, false, fmt.Errorf("%w: expected auth.AuthManager", errUtils.ErrInvalidAuthManagerType)
+		}
+	} else if authContext != nil {
+		// Fallback: create wrapper from authContext
 		authMgr = newAuthContextWrapper(authContext)
 	}
 

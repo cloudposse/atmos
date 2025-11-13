@@ -115,6 +115,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
+	// Store AuthManager in configAndStacksInfo for nested operations.
+	// This enables nested YAML functions (e.g., !terraform.state within component configs)
+	// to access the same authenticated session without re-prompting for credentials.
+	info.AuthManager = authManager
+
 	if shouldProcessStacks {
 		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
 		if err != nil {

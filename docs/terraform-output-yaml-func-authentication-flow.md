@@ -67,6 +67,189 @@ execTerraformOutput()
   └─ tf.Output() - Returns output values
 ```
 
+## Nested Function Authentication
+
+### What Are Nested Functions?
+
+Nested functions occur when a component's configuration contains `!terraform.output` (or `!terraform.state`) functions that reference other components, which themselves also contain `!terraform.output` or `!terraform.state` functions in their configurations.
+
+**Example:**
+
+```yaml
+# Component 1: api-gateway (being deployed)
+components:
+  terraform:
+    api-gateway:
+      vars:
+        backends:
+          # Level 1: This references backend-service
+          - endpoint: !terraform.output backend-service alb_dns_name
+
+# Component 2: backend-service (referenced by api-gateway)
+components:
+  terraform:
+    backend-service:
+      vars:
+        # Level 2: This also has !terraform.output functions
+        vpc_id: !terraform.output vpc vpc_id
+        subnet_ids: !terraform.output vpc private_subnet_ids
+```
+
+When Atmos evaluates the Level 1 function, it needs to read the `backend-service` component configuration to execute `terraform output`. When that configuration is processed, it encounters the Level 2 functions, which must also be evaluated with proper authentication.
+
+### How Authentication Propagates
+
+Atmos propagates authentication through nested function evaluations using the `AuthManager`:
+
+```text
+Level 1: atmos terraform apply api-gateway -s production
+  ├─ Creates AuthManager with prod-deploy identity
+  ├─ Stores AuthManager in configAndStacksInfo.AuthManager
+  ├─ Populates configAndStacksInfo.AuthContext from AuthManager
+  └─ Evaluates component configuration
+      ↓
+Level 2: !terraform.output backend-service alb_dns_name
+  ├─ Extracts authContext and authManager from stackInfo
+  ├─ Calls GetTerraformOutput(authContext, authManager)
+  └─ ExecuteDescribeComponent(AuthManager: authManager) ✅ Passes AuthManager!
+      ↓
+Level 3: Processing backend-service component config
+  ├─ AuthManager propagated from Level 2
+  ├─ Populates stackInfo.AuthContext from AuthManager
+  └─ Evaluates nested !terraform.output functions
+      ↓
+Level 4: !terraform.output vpc vpc_id
+  ├─ Extracts authContext from stackInfo ✅ AuthContext available!
+  ├─ Converts AuthContext to environment variables
+  ├─ Executes terraform output with authenticated credentials
+  └─ Successfully retrieves output value
+```
+
+**Key Points:**
+
+1. **AuthManager is stored** in `configAndStacksInfo.AuthManager` at the top level
+2. **AuthManager is passed** through `GetTerraformOutput()` to `ExecuteDescribeComponent()`
+3. **AuthContext is populated** at each level from the AuthManager
+4. **All nested levels** use the same authenticated session
+
+This ensures that deeply nested component configurations can execute `terraform output` with proper credentials without requiring separate authentication at each level.
+
+### Common Nested Function Scenarios
+
+#### Scenario 1: Microservices Architecture
+
+```yaml
+# API Gateway aggregates endpoints from multiple services
+api-gateway:
+  vars:
+    service_endpoints:
+      auth: !terraform.output auth-service endpoint_url
+      users: !terraform.output users-service endpoint_url
+      orders: !terraform.output orders-service endpoint_url
+```
+
+Each service component may have `!terraform.output` functions reading VPC, database, or cache configurations.
+
+#### Scenario 2: Infrastructure Layering
+
+```yaml
+# Application tier references platform tier
+app-component:
+  vars:
+    database_url: !terraform.output database connection_string
+    cache_endpoint: !terraform.output redis endpoint
+
+# Platform tier references network tier
+database:
+  vars:
+    subnet_ids: !terraform.output vpc database_subnet_ids
+    security_group_id: !terraform.output vpc database_sg_id
+```
+
+The `app-component` evaluation triggers `database` evaluation, which triggers `vpc` evaluation.
+
+#### Scenario 3: Multi-Region Deployments
+
+```yaml
+# Global load balancer references regional backends
+global-lb:
+  vars:
+    backends:
+      - endpoint: !terraform.output app us-east-1 lb_dns_name
+      - endpoint: !terraform.output app us-west-2 lb_dns_name
+      - endpoint: !terraform.output app eu-west-1 lb_dns_name
+```
+
+Each regional `app` component may have nested `!terraform.output` functions for regional resources.
+
+### Authentication Behavior for Nested Functions
+
+All nested function evaluations inherit the same AuthManager and credentials from the top-level command execution. This means:
+
+- **Single authentication session** - All nested components use the same authenticated identity
+- **Consistent credentials** - Environment variables set once and used by all nested terraform executions
+- **Transitive permissions** - The identity must have access to all resources across nested components
+
+If different components require different credentials, use component-level auth configuration to specify different default identities. Note that during a single command execution, all nested evaluations will use the top-level credentials.
+
+### Performance Considerations
+
+When using nested `!terraform.output` functions:
+
+- Each `!terraform.output` spawns a terraform process (init + output)
+- Consider using `!terraform.state` when possible (faster, no subprocess)
+- Cache results are shared across nested evaluations
+- Deep nesting (Level 4+) can impact performance
+- Consider flattening dependencies for complex scenarios
+
+### Best Practices for Nested Functions
+
+1. **Prefer !terraform.state for Speed**
+   - Use `!terraform.state` instead of `!terraform.output` when possible
+   - Faster execution (no subprocess, no terraform init)
+   - Same authentication propagation behavior
+
+2. **Configure Adequate Permissions**
+   - Ensure the identity has access to all resources needed across nested components
+   - Include transitive dependencies (if A calls B, and B calls C, identity needs permissions for all)
+
+3. **Test Nested Configurations**
+   - Use `atmos describe component` to test nested function resolution
+   - Enable debug logging to verify authentication at each level:
+     ```bash
+     atmos terraform plan component -s stack --logs-level=Debug
+     ```
+
+4. **Document Dependencies**
+   - Document which components reference others via `!terraform.output`
+   - Use `settings.depends_on` to declare explicit dependencies
+   - This helps with deployment ordering and troubleshooting
+
+5. **Cache Optimization**
+   - Nested function results are cached to avoid redundant terraform executions
+   - Cache is per-component per-stack combination
+   - Use `skipCache: false` (default) for better performance
+
+### Mixing !terraform.state and !terraform.output
+
+You can mix both function types in nested scenarios:
+
+```yaml
+# Component using both function types
+my-component:
+  vars:
+    # Fast state read (no subprocess)
+    vpc_id: !terraform.state vpc vpc_id
+
+    # Formatted output (uses terraform binary)
+    formatted_config: !terraform.output config-service json_config
+```
+
+**Authentication works the same way** for both function types when nested:
+- Both receive `AuthManager` from parent context
+- Both populate `AuthContext` for their own nested calls
+- Mixed nesting works seamlessly (state can call output, output can call state)
+
 ## Identity Resolution
 
 ### Explicit Identity
