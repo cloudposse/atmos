@@ -100,6 +100,59 @@ func (f *FileSystemLoader) Load(path string) (*Component, error) { ... }
 //go:generate go run go.uber.org/mock/mockgen@latest -source=loader.go -destination=mock_loader_test.go
 ```
 
+### Service-Oriented Architecture (MANDATORY)
+
+For complex domains with multiple operations and concerns (like devcontainer, store, auth), use Service-Oriented Architecture with provider interfaces:
+
+**Pattern:**
+1. **One Service struct** per domain (not one-off structs per operation)
+2. **Provider interfaces** for classes of problems (ConfigProvider, RuntimeProvider, UIProvider)
+3. **Default implementations** wrapping existing code
+4. **Mock implementations** for testing
+5. **Dependency injection** for testability
+
+**Example (devcontainer domain):**
+```go
+// Service coordinates all devcontainer operations
+type Service struct {
+    config   ConfigProvider    // ALL config operations
+    runtime  RuntimeProvider   // ALL runtime operations
+    ui       UIProvider        // ALL UI operations
+}
+
+// Provider interfaces for classes of problems
+type ConfigProvider interface {
+    LoadAtmosConfig() (*schema.AtmosConfiguration, error)
+    ListDevcontainers(config *schema.AtmosConfiguration) ([]string, error)
+}
+
+type RuntimeProvider interface {
+    Start(ctx context.Context, name string, opts StartOptions) error
+    Stop(ctx context.Context, name string, timeout int) error
+    Attach(ctx context.Context, name string, opts AttachOptions) error
+}
+
+type UIProvider interface {
+    IsInteractive() bool
+    Prompt(message string, options []string) (string, error)
+}
+
+// Commands use service, not individual helpers
+service := NewService()
+service.Start(ctx, name, opts)
+```
+
+**Benefits:**
+- Reusable across all commands in domain
+- Clear separation of concerns (config/runtime/UI)
+- Easy to test with mock providers
+- Extensible (new provider = new implementation)
+- Avoids one-off struct proliferation
+
+**See:** `docs/prd/devcontainer-service-architecture.md` for complete implementation guide.
+
+**Existing examples:** `pkg/store/` (multi-provider store), `pkg/auth/` (authentication providers), `pkg/container/` (Docker/Podman abstraction)
+
 ### Options Pattern (MANDATORY)
 Use functional options pattern for configuration instead of many parameters. Provides defaults and extensibility without breaking changes.
 

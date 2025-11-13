@@ -1,12 +1,16 @@
 package theme
 
 import (
+	"bytes"
+	stdio "io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestThemeCommand(t *testing.T) {
@@ -100,7 +104,7 @@ func TestThemeShowCommand(t *testing.T) {
 	})
 
 	t.Run("requires exactly one argument", func(t *testing.T) {
-		// Validate Args is set to ExactArgs(1)
+		// Validate Args is set to ExactArgs(1).
 		err := themeShowCmd.Args(themeShowCmd, []string{})
 		assert.Error(t, err, "show command should require exactly one argument")
 
@@ -110,4 +114,127 @@ func TestThemeShowCommand(t *testing.T) {
 		err = themeShowCmd.Args(themeShowCmd, []string{"dracula", "extra"})
 		assert.Error(t, err, "show command should reject more than one argument")
 	})
+}
+
+// testStreams is a simple streams implementation for testing.
+type testStreams struct {
+	stdin  stdio.Reader
+	stdout stdio.Writer
+	stderr stdio.Writer
+}
+
+func (ts *testStreams) Input() stdio.Reader     { return ts.stdin }
+func (ts *testStreams) Output() stdio.Writer    { return ts.stdout }
+func (ts *testStreams) Error() stdio.Writer     { return ts.stderr }
+func (ts *testStreams) RawOutput() stdio.Writer { return ts.stdout }
+func (ts *testStreams) RawError() stdio.Writer  { return ts.stderr }
+
+// setupTestUI creates test I/O context and initializes UI formatter.
+//
+//nolint:unparam // stdout may be used in future tests
+func setupTestUI(t *testing.T) (stdout, stderr *bytes.Buffer, cleanup func()) {
+	t.Helper()
+	stdout = &bytes.Buffer{}
+	stderr = &bytes.Buffer{}
+	streams := &testStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: stdout,
+		stderr: stderr,
+	}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	if err != nil {
+		t.Fatalf("failed to create I/O context: %v", err)
+	}
+
+	// Initialize UI formatter.
+	ui.InitFormatter(ioCtx)
+
+	// Return cleanup function (no-op since we're in test).
+	cleanup = func() {}
+
+	return stdout, stderr, cleanup
+}
+
+func TestExecuteThemeList(t *testing.T) {
+	tests := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		args        []string
+		expectError bool
+	}{
+		{
+			name:        "execute with nil atmosConfig",
+			atmosConfig: nil,
+			args:        []string{},
+			expectError: false, // Should succeed (activeTheme will be empty)
+		},
+		{
+			name: "execute with configured theme",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						Theme: "dracula",
+					},
+				},
+			},
+			args:        []string{},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Initialize UI formatter.
+			_, _, cleanup := setupTestUI(t)
+			defer cleanup()
+
+			// Set atmosConfig for the command.
+			SetAtmosConfig(tt.atmosConfig)
+
+			// Execute the command.
+			err := executeThemeList(themeListCmd, tt.args)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestExecuteThemeShow(t *testing.T) {
+	tests := []struct {
+		name        string
+		themeName   string
+		expectError bool
+	}{
+		{
+			name:        "show valid theme",
+			themeName:   "Dracula",
+			expectError: false,
+		},
+		{
+			name:        "show invalid theme",
+			themeName:   "NonExistentTheme",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Initialize UI formatter.
+			_, _, cleanup := setupTestUI(t)
+			defer cleanup()
+
+			// Execute the command.
+			err := executeThemeShow(themeShowCmd, []string{tt.themeName})
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }

@@ -249,3 +249,43 @@ func TestPromptForDevcontainer_Sorting(t *testing.T) {
 		assert.Equal(t, expected, devcontainers)
 	})
 }
+
+func TestSetAtmosConfig(t *testing.T) {
+	t.Run("sets config successfully", func(t *testing.T) {
+		config := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Devcontainer: map[string]interface{}{
+					"test": map[string]interface{}{},
+				},
+			},
+		}
+
+		SetAtmosConfig(config)
+		assert.Equal(t, config, atmosConfigPtr)
+	})
+
+	t.Run("handles nil config", func(t *testing.T) {
+		SetAtmosConfig(nil)
+		assert.Nil(t, atmosConfigPtr)
+	})
+}
+
+func TestDevcontainerCommandProvider(t *testing.T) {
+	provider := &DevcontainerCommandProvider{}
+
+	t.Run("GetCommand returns devcontainer command", func(t *testing.T) {
+		cmd := provider.GetCommand()
+		assert.NotNil(t, cmd)
+		assert.Equal(t, "devcontainer", cmd.Use)
+	})
+
+	t.Run("GetName returns correct name", func(t *testing.T) {
+		name := provider.GetName()
+		assert.Equal(t, "devcontainer", name)
+	})
+
+	t.Run("GetGroup returns correct group", func(t *testing.T) {
+		group := provider.GetGroup()
+		assert.Equal(t, "Workflow Commands", group)
+	})
+}
