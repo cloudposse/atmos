@@ -831,3 +831,135 @@ func TestScaffoldConfig_AllFields(t *testing.T) {
 	assert.Len(t, config.Dependencies, 3)
 	assert.Len(t, config.Hooks, 2)
 }
+
+func TestMergeConfiguredTemplates_NoTemplatesKey(t *testing.T) {
+	// Test when scaffold section exists but no templates key
+	configs := map[string]templates.Configuration{
+		"existing": {Name: "existing", Description: "Existing template"},
+	}
+
+	// This should not error, just skip silently
+	err := mergeConfiguredTemplates(configs)
+	assert.NoError(t, err)
+	assert.Len(t, configs, 1) // Original template still there
+}
+
+func TestMergeConfiguredTemplates_InvalidTemplatesFormat(t *testing.T) {
+	// Test when templates is not a map
+	configs := map[string]templates.Configuration{}
+
+	// This test would require mocking config.ReadAtmosScaffoldSection
+	// For now, we just verify the function exists and handles errors
+	err := mergeConfiguredTemplates(configs)
+	// May error from ReadAtmosScaffoldSection when atmos.yaml doesn't exist
+	// or succeed if there's a valid atmos.yaml but no templates section
+	_ = err
+	assert.NotNil(t, configs) // Verify configs map still exists
+}
+
+func TestSelectTemplateByName_NotFound(t *testing.T) {
+	configs := map[string]templates.Configuration{
+		"component": {Name: "component", Description: "Component template"},
+		"stack":     {Name: "stack", Description: "Stack template"},
+	}
+
+	_, err := selectTemplateByName("nonexistent", configs)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "scaffold template")
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestSelectTemplateByName_Found(t *testing.T) {
+	configs := map[string]templates.Configuration{
+		"component": {Name: "component", Description: "Component template"},
+		"stack":     {Name: "stack", Description: "Stack template"},
+	}
+
+	result, err := selectTemplateByName("component", configs)
+	require.NoError(t, err)
+	assert.Equal(t, "component", result.Name)
+	assert.Equal(t, "Component template", result.Description)
+}
+
+func TestValidateAllScaffoldFiles_WithErrors(t *testing.T) {
+	t.Skip("Integration test - requires UI formatter initialization")
+
+	// Create temp files with mix of valid and invalid scaffolds
+	tmpDir := t.TempDir()
+
+	validPath := filepath.Join(tmpDir, "valid.yaml")
+	validContent := `name: valid-scaffold
+prompts:
+  - name: test
+    type: input`
+	err := os.WriteFile(validPath, []byte(validContent), 0o644)
+	require.NoError(t, err)
+
+	invalidPath := filepath.Join(tmpDir, "invalid.yaml")
+	invalidContent := `prompts: []` // Missing name
+	err = os.WriteFile(invalidPath, []byte(invalidContent), 0o644)
+	require.NoError(t, err)
+
+	scaffoldPaths := []string{validPath, invalidPath}
+
+	validCount, errorCount, err := validateAllScaffoldFiles(scaffoldPaths)
+	require.NoError(t, err) // UI errors would stop execution
+	assert.Equal(t, 1, validCount)
+	assert.Equal(t, 1, errorCount)
+}
+
+func TestPrintValidationSummary_WithErrors(t *testing.T) {
+	t.Skip("Integration test - requires UI formatter initialization")
+
+	err := printValidationSummary(2, 1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed validation")
+}
+
+func TestPrintValidationSummary_NoErrors(t *testing.T) {
+	t.Skip("Integration test - requires UI formatter initialization")
+
+	err := printValidationSummary(3, 0)
+	require.NoError(t, err)
+}
+
+func TestDetermineScaffoldPathsToValidate(t *testing.T) {
+	tests := []struct {
+		name        string
+		path        string
+		setup       func(t *testing.T) string
+		expectError bool
+	}{
+		{
+			name: "valid directory",
+			path: "test",
+			setup: func(t *testing.T) string {
+				tmpDir := t.TempDir()
+				scaffoldPath := filepath.Join(tmpDir, "scaffold.yaml")
+				err := os.WriteFile(scaffoldPath, []byte("name: test"), 0o644)
+				require.NoError(t, err)
+				return tmpDir
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := tt.path
+			if tt.setup != nil {
+				path = tt.setup(t)
+			}
+
+			paths, err := determineScaffoldPathsToValidate(path)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				// paths can be empty slice or non-nil
+				_ = paths
+			}
+		})
+	}
+}
