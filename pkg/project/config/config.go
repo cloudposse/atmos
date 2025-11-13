@@ -50,7 +50,7 @@ type ScaffoldConfig struct {
 	Delimiters  []string                   `yaml:"delimiters"`
 }
 
-// FieldDefinition represents a single field in the configuration.
+// FieldDefinition represents a single configurable field in a project scaffold configuration, defining its key, type, label, description, validation rules and default value.
 type FieldDefinition struct {
 	Key         string      `yaml:"key"`
 	Type        string      `yaml:"type"`
@@ -62,8 +62,7 @@ type FieldDefinition struct {
 	Placeholder string      `yaml:"placeholder"`
 }
 
-// Config represents the user's configuration values
-// This is now a generic map to support dynamic fields from scaffold.yaml.
+// Config represents the user's configuration values as a generic map to support dynamic fields from scaffold.yaml.
 type Config map[string]interface{}
 
 // LoadScaffoldConfigFromContent loads scaffold configuration from YAML content.
@@ -76,7 +75,7 @@ func LoadScaffoldConfigFromContent(content string) (*ScaffoldConfig, error) {
 	return &scaffoldConfig, nil
 }
 
-// LoadScaffoldConfigFromFile loads scaffold configuration schema from a file.
+// LoadScaffoldConfigFromFile loads scaffold configuration schema from the specified YAML file using Viper, returning a pointer to ScaffoldConfig and an error on read or unmarshal failures.
 func LoadScaffoldConfigFromFile(configPath string) (*ScaffoldConfig, error) {
 	// Create a new Viper instance for this specific config file
 	v := viper.New()
@@ -178,7 +177,7 @@ func SaveUserConfigWithBaseRef(scaffoldPath string, templateID string, baseRef s
 	return nil
 }
 
-// LoadUserConfig loads user configuration from .atmos/scaffold.yaml.
+// LoadUserConfig loads user configuration from .atmos/scaffold.yaml within the specified scaffoldPath, returning a pointer to UserConfig and an error; returns nil, nil if the config file does not exist.
 func LoadUserConfig(scaffoldPath string) (*UserConfig, error) {
 	atmosDir := filepath.Join(scaffoldPath, ScaffoldConfigDir)
 	valuesPath := filepath.Join(atmosDir, ScaffoldConfigFileName)
@@ -579,7 +578,7 @@ func HasScaffoldConfig(files []types.File) bool {
 	return false
 }
 
-// HasUserConfig checks if a scaffold template directory has user configuration.
+// HasUserConfig checks if a scaffold template directory at the specified scaffoldPath contains a user configuration file, returning true if the file exists.
 func HasUserConfig(scaffoldPath string) bool {
 	userConfigPath := filepath.Join(scaffoldPath, ScaffoldConfigDir, ScaffoldConfigFileName)
 	_, err := os.Stat(userConfigPath)

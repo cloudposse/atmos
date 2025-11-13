@@ -401,8 +401,8 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 		return nil
 	}
 
-	// force flag is set, allow overwrite by returning nil (caller will write)
-	return nil
+	// force flag is set, overwrite by calling writeNewFile
+	return p.writeNewFile(file, fullPath, targetPath, scaffoldConfig, userValues, delimiters)
 }
 
 // writeNewFile processes the file content and writes it to disk.
