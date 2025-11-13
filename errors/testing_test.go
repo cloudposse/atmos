@@ -66,6 +66,33 @@ func TestHasContext(t *testing.T) {
 			value:    "xml",
 			expected: false,
 		},
+		{
+			name: "false positive - similar key prefix",
+			err: Build(errors.New("test error")).
+				WithContext("myformat", "xml").
+				Err(),
+			key:      "format",
+			value:    "xml",
+			expected: false,
+		},
+		{
+			name: "false positive - similar value prefix",
+			err: Build(errors.New("test error")).
+				WithContext("format", "xml2").
+				Err(),
+			key:      "format",
+			value:    "xml",
+			expected: false,
+		},
+		{
+			name: "false positive - value contains search",
+			err: Build(errors.New("test error")).
+				WithContext("format", "xml_extended").
+				Err(),
+			key:      "format",
+			value:    "xml",
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {

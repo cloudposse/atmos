@@ -46,13 +46,18 @@ func HasContext(err error, key, value string) bool {
 	// Traverse the entire error chain to find safe details.
 	allDetails := errors.GetAllSafeDetails(err)
 
-	// Look for "key=value" in any of the safe details.
-	expectedPair := key + "=" + value
+	// Parse each SafeDetails entry into key-value pairs.
+	// Format is "key1=value1 key2=value2".
 	for _, payload := range allDetails {
 		for _, detail := range payload.SafeDetails {
 			detailStr := detail
-			if strings.Contains(detailStr, expectedPair) {
-				return true
+			pairs := strings.Split(detailStr, " ")
+			for _, pair := range pairs {
+				// Split on first '=' to handle values with '=' in them.
+				parts := strings.SplitN(pair, "=", 2)
+				if len(parts) == 2 && parts[0] == key && parts[1] == value {
+					return true
+				}
 			}
 		}
 	}
