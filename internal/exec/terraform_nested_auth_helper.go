@@ -121,7 +121,7 @@ func getComponentConfigForAuthResolution(component, stack string) (map[string]an
 		AuthManager:          nil, // Critical: no AuthManager yet, we're determining auth for this component
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get component config for auth resolution", errUtils.ErrDescribeComponent)
+		return nil, fmt.Errorf("%w: failed to get component config for auth resolution: %w", errUtils.ErrDescribeComponent, err)
 	}
 	return componentConfig, nil
 }
@@ -147,7 +147,7 @@ func createComponentAuthManager(
 			logKeyStack, stack,
 			"error", err,
 		)
-		return parentAuthManager, fmt.Errorf("%w: failed to merge component auth config", errUtils.ErrAuthManager)
+		return parentAuthManager, fmt.Errorf("%w: failed to merge component auth config: %w", errUtils.ErrAuthManager, err)
 	}
 
 	// Create and authenticate new AuthManager with merged config.
@@ -166,7 +166,7 @@ func createComponentAuthManager(
 			logKeyStack, stack,
 			"error", err,
 		)
-		return parentAuthManager, fmt.Errorf("%w: failed to create component-specific AuthManager", errUtils.ErrAuthConsole)
+		return parentAuthManager, fmt.Errorf("%w: failed to create component-specific AuthManager: %w", errUtils.ErrAuthConsole, err)
 	}
 
 	// Successfully created component-specific AuthManager.
