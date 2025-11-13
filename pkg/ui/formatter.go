@@ -299,7 +299,7 @@ func Hint(text string) error {
 // Hintf writes a formatted hint/tip message with lightbulb icon to stderr (UI channel).
 // This is a convenience wrapper around Toast() for helpful tips and suggestions.
 // Supports inline markdown for bold (**text**) and code (`text`).
-// Flow: ui.Hintf() → inline markdown render → apply muted color → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// Flow: ui.Hintf() → inline markdown render with base style → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Hintf(format string, a ...interface{}) error {
 	f, err := getFormatter()
 	if err != nil {
@@ -308,14 +308,12 @@ func Hintf(format string, a ...interface{}) error {
 
 	message := fmt.Sprintf(format, a...)
 
-	// Render inline markdown first.
-	rendered := f.renderInlineMarkdown(message)
-
-	// Then apply muted color to the result.
-	styledText := f.styles.Muted.Render(rendered)
+	// Render inline markdown with muted base style.
+	// This ensures the muted color is preserved through inline styling.
+	rendered := f.renderInlineMarkdownWithBase(message, &f.styles.Muted)
 
 	// Write with icon (no further markdown processing).
-	formatted := fmt.Sprintf("💡 %s", styledText) + newline
+	formatted := fmt.Sprintf("💡 %s", rendered) + newline
 	return f.terminal.Write(formatted)
 }
 
@@ -524,6 +522,13 @@ func (f *formatter) Markdown(content string) (string, error) {
 // This is designed for single-line toast messages where full markdown rendering is overkill.
 // Falls back to plain text if no color support.
 func (f *formatter) renderInlineMarkdown(text string) string {
+	return f.renderInlineMarkdownWithBase(text, nil)
+}
+
+// renderInlineMarkdownWithBase renders inline markdown while preserving a base style.
+// The base style is reapplied after each inline fragment to maintain consistent coloring.
+// This solves the issue where lipgloss reset codes cancel outer styling.
+func (f *formatter) renderInlineMarkdownWithBase(text string, baseStyle *lipgloss.Style) string {
 	// If no color support, strip markdown and return plain text.
 	if !f.SupportsColor() {
 		// Strip **bold**.
@@ -535,6 +540,10 @@ func (f *formatter) renderInlineMarkdown(text string) string {
 
 	// Process **bold** markers.
 	boldStyle := lipgloss.NewStyle().Bold(true)
+	if baseStyle != nil {
+		// Inherit base style and add bold.
+		boldStyle = baseStyle.Bold(true)
+	}
 	result := text
 
 	// Replace **text** with bold styling.
@@ -559,6 +568,10 @@ func (f *formatter) renderInlineMarkdown(text string) string {
 
 	// Process `code` markers.
 	codeStyle := f.styles.Help.Code
+	if baseStyle != nil {
+		// Inherit base style properties and overlay code style.
+		codeStyle = baseStyle.Inherit(f.styles.Help.Code)
+	}
 	for {
 		start := strings.Index(result, "`")
 		if start == -1 {
