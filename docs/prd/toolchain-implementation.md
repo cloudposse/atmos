@@ -132,7 +132,7 @@ All commands implemented in `cmd/toolchain/`:
 Implemented in `toolchain/aqua_registry.go`:
 - Queries Aqua registry at `https://raw.githubusercontent.com/aquaproj/aqua-registry/refs/heads/main/pkgs`
 - Falls back to multiple registry paths for common tools
-- Caches registry metadata in `${XDG_CACHE_HOME}/atmos-toolchain` (fallback: `~/.cache/atmos-toolchain`, replacing the old `/tmp/tools-cache/`)
+- Caches registry metadata in `${XDG_CACHE_HOME}/atmos/toolchain` (fallback: `~/.cache/atmos/toolchain`, replacing the old `/tmp/tools-cache/`)
 
 **Limitation**: Registry URLs are hard-coded, not configurable
 
@@ -688,7 +688,7 @@ toolchain:
 **Status**: 🟡 **Partial** (registry metadata persists, binaries installed to XDG data directory)
 
 **Current**:
-- Registry metadata persisted in `${XDG_CACHE_HOME}/atmos/toolchain` (fallback: `~/.cache/atmos/toolchain`)
+- Registry metadata persisted in `${XDG_CACHE_HOME}/atmos/toolchain` (fallback: `~/.cache/atmos/toolchain`, replacing the old `/tmp/tools-cache/`)
 - Downloaded archives cached temporarily during installation, then removed
 - Binaries installed to `${XDG_DATA_HOME}/atmos/toolchain` (fallback: `~/.local/share/atmos/toolchain`) and persist until manual removal
 - Falls back to `.tools/` in current directory only if XDG data directory cannot be created

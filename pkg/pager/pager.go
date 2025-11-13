@@ -8,10 +8,28 @@ import (
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
+// maskContent applies the native io package masking to content.
+// This is used as a fallback when the data package is not available.
+// It leverages the centralized masking infrastructure from pkg/io.
+func maskContent(content string) string {
+	// Try to get the global I/O context for its masker.
+	ioCtx := iolib.GetContext()
+	if ioCtx == nil {
+		// If context is not initialized, return content unmasked.
+		// This shouldn't happen in production since io.Initialize() is called in root.go.
+		log.Debug("io context not initialized, content will not be masked")
+		return content
+	}
+
+	// Use the native masker.
+	return ioCtx.Masker().Mask(content)
+}
 
 // Writer is an interface for writing content to the data stream.
 // This allows for dependency injection and testing without relying on the global data package state.
@@ -24,14 +42,15 @@ type Writer interface {
 type dataWriter struct{}
 
 // Write writes content using the data package.
-// If data package isn't initialized (panics), falls back to fmt.Print.
+// If data package isn't initialized (panics), falls back to fmt.Print with masking.
 func (d *dataWriter) Write(content string) (err error) {
 	// Use recover to catch panic from data.Write() when not initialized.
 	defer func() {
 		if r := recover(); r != nil {
-			// Data package not initialized, use fallback.
+			// Data package not initialized, use fallback with native masking.
 			log.Debug("data package not initialized, using fmt.Print fallback")
-			fmt.Print(content)
+			maskedContent := maskContent(content)
+			fmt.Print(maskedContent)
 			err = nil
 		}
 	}()
@@ -94,13 +113,14 @@ func (p *pageCreator) Run(title, content string) error {
 }
 
 // writeContent writes content to the configured writer.
-// If the writer is nil, it falls back to fmt.Print and logs a warning.
+// If the writer is nil, it falls back to fmt.Print with masking and logs a warning.
 // Returns any error from the writer.
 func (p *pageCreator) writeContent(content string) error {
 	if p.writer == nil {
 		// Fallback for nil writer (shouldn't happen in production, but safe for tests).
 		log.Warn("pager writer is nil, falling back to fmt.Print")
-		fmt.Print(content)
+		maskedContent := maskContent(content)
+		fmt.Print(maskedContent)
 		return nil
 	}
 

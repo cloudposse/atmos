@@ -83,6 +83,9 @@ func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 	})
 
 	// Initialize the toolchain package config.
+	// Save previous config for cleanup.
+	prevAtmosConfig := toolchainpkg.GetAtmosConfig()
+
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			VersionsFile: toolVersionsPath,
@@ -91,6 +94,11 @@ func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
+
+	// Restore the original config after the test.
+	t.Cleanup(func() {
+		toolchainpkg.SetAtmosConfig(prevAtmosConfig)
+	})
 
 	return toolVersionsPath
 }
