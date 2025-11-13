@@ -977,7 +977,8 @@ func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete strin
 	if len(args) == 0 {
 		// Check if user is typing a path
 		// Enable directory completion for paths
-		if toComplete == "." || strings.Contains(toComplete, string(filepath.Separator)) {
+		// Check for both platform-specific separator and forward slash (works on all platforms)
+		if toComplete == "." || strings.Contains(toComplete, string(filepath.Separator)) || strings.Contains(toComplete, "/") {
 			log.Trace("Enabling directory completion for path input", "toComplete", toComplete)
 			return nil, cobra.ShellCompDirectiveFilterDirs
 		}
