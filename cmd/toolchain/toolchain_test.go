@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -65,22 +66,12 @@ func setupToolchainTest(t *testing.T, toolVersionsContent string) string {
 	require.NoError(t, err)
 
 	// Set the paths via Viper.
+	// Cleanup handled automatically by cleanRootCmdState.
 	toolsDir := filepath.Join(tempDir, ".tools")
-
-	// Save previous viper settings for cleanup
-	prevToolVersions := viper.Get("toolchain.tool-versions")
-	prevToolsDir := viper.Get("toolchain.path")
-	prevToolsConfig := viper.Get("toolchain.tools-config")
 
 	viper.Set("toolchain.tool-versions", toolVersionsPath)
 	viper.Set("toolchain.path", toolsDir)
 	viper.Set("toolchain.tools-config", toolsConfigPath)
-
-	t.Cleanup(func() {
-		viper.Set("toolchain.tool-versions", prevToolVersions)
-		viper.Set("toolchain.path", prevToolsDir)
-		viper.Set("toolchain.tools-config", prevToolsConfig)
-	})
 
 	// Initialize the toolchain package config.
 	// Save previous config for cleanup.
@@ -130,6 +121,10 @@ func TestToolchainRemoveCommand(t *testing.T) {
 }
 
 func TestToolchainCommandsWithoutToolVersionsFile(t *testing.T) {
+	// Initialize test kit for automatic state cleanup.
+	newTestKit(t)
+	cleanToolchainCmdState(t)
+
 	// Initialize I/O context and formatter for testing.
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err, "Failed to create I/O context")
@@ -141,9 +136,31 @@ func TestToolchainCommandsWithoutToolVersionsFile(t *testing.T) {
 	t.Setenv("HOME", tempDir)
 
 	// Set paths to non-existent files via Viper.
-	viper.Set("toolchain.tool-versions", filepath.Join(tempDir, ".tool-versions"))
-	viper.Set("toolchain.path", filepath.Join(tempDir, ".tools"))
-	viper.Set("toolchain.tools-config", filepath.Join(tempDir, "tools.yaml"))
+	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
+	toolsDir := filepath.Join(tempDir, ".tools")
+	toolsConfigPath := filepath.Join(tempDir, "tools.yaml")
+
+	viper.Set("toolchain.tool-versions", toolVersionsPath)
+	viper.Set("toolchain.path", toolsDir)
+	viper.Set("toolchain.tools-config", toolsConfigPath)
+
+	// Initialize the toolchain package config to ensure GetAtmosConfig() returns valid state.
+	// Save previous config for cleanup.
+	prevAtmosConfig := toolchainpkg.GetAtmosConfig()
+
+	atmosCfg := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: toolVersionsPath,
+			InstallPath:  toolsDir,
+			FilePath:     toolsConfigPath,
+		},
+	}
+	toolchainpkg.SetAtmosConfig(atmosCfg)
+
+	// Restore the original config after the test.
+	t.Cleanup(func() {
+		toolchainpkg.SetAtmosConfig(prevAtmosConfig)
+	})
 
 	// Test that list command handles missing file gracefully.
 	err = listCmd.RunE(listCmd, []string{})
@@ -153,6 +170,10 @@ func TestToolchainCommandsWithoutToolVersionsFile(t *testing.T) {
 }
 
 func TestToolchainCleanCommand(t *testing.T) {
+	// Initialize test kit for automatic state cleanup.
+	newTestKit(t)
+	cleanToolchainCmdState(t)
+
 	// Initialize I/O context and formatter for testing.
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err, "Failed to create I/O context")
@@ -178,6 +199,9 @@ func TestToolchainCleanCommand(t *testing.T) {
 	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
+	// Save previous config for cleanup.
+	prevAtmosConfig := toolchainpkg.GetAtmosConfig()
+
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			VersionsFile: toolVersionsPath,
@@ -187,12 +211,21 @@ func TestToolchainCleanCommand(t *testing.T) {
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
 
+	// Restore the original config after the test.
+	t.Cleanup(func() {
+		toolchainpkg.SetAtmosConfig(prevAtmosConfig)
+	})
+
 	// Test the clean command runs without error.
 	err = cleanCmd.RunE(cleanCmd, []string{})
 	assert.NoError(t, err)
 }
 
 func TestToolchainPathCommand(t *testing.T) {
+	// Initialize test kit for automatic state cleanup.
+	newTestKit(t)
+	cleanToolchainCmdState(t)
+
 	// Initialize I/O context and formatter for testing.
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err, "Failed to create I/O context")
@@ -230,6 +263,9 @@ func TestToolchainPathCommand(t *testing.T) {
 	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
+	// Save previous config for cleanup.
+	prevAtmosConfig := toolchainpkg.GetAtmosConfig()
+
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			VersionsFile: toolVersionsPath,
@@ -239,12 +275,21 @@ func TestToolchainPathCommand(t *testing.T) {
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
 
+	// Restore the original config after the test.
+	t.Cleanup(func() {
+		toolchainpkg.SetAtmosConfig(prevAtmosConfig)
+	})
+
 	// Test the path command runs without error.
 	err = pathCmd.RunE(pathCmd, []string{})
 	assert.NoError(t, err)
 }
 
 func TestToolchainWhichCommand(t *testing.T) {
+	// Initialize test kit for automatic state cleanup.
+	newTestKit(t)
+	cleanToolchainCmdState(t)
+
 	// Initialize I/O context and formatter for testing.
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err, "Failed to create I/O context")
@@ -281,6 +326,9 @@ func TestToolchainWhichCommand(t *testing.T) {
 	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
+	// Save previous config for cleanup.
+	prevAtmosConfig := toolchainpkg.GetAtmosConfig()
+
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			VersionsFile: toolVersionsPath,
@@ -290,12 +338,21 @@ func TestToolchainWhichCommand(t *testing.T) {
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
 
+	// Restore the original config after the test.
+	t.Cleanup(func() {
+		toolchainpkg.SetAtmosConfig(prevAtmosConfig)
+	})
+
 	// Test the which command runs without error.
 	err = whichCmd.RunE(whichCmd, []string{"terraform"})
 	assert.NoError(t, err)
 }
 
 func TestToolchainSetCommand(t *testing.T) {
+	// Initialize test kit for automatic state cleanup.
+	newTestKit(t)
+	cleanToolchainCmdState(t)
+
 	// Initialize I/O context and formatter for testing.
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err, "Failed to create I/O context")
@@ -325,6 +382,9 @@ func TestToolchainSetCommand(t *testing.T) {
 	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
+	// Save previous config for cleanup.
+	prevAtmosConfig := toolchainpkg.GetAtmosConfig()
+
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			VersionsFile: toolVersionsPath,
@@ -333,6 +393,11 @@ func TestToolchainSetCommand(t *testing.T) {
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
+
+	// Restore the original config after the test.
+	t.Cleanup(func() {
+		toolchainpkg.SetAtmosConfig(prevAtmosConfig)
+	})
 
 	// Test the set command runs without error.
 	err = setCmd.RunE(setCmd, []string{"terraform", "1.5.7"})
@@ -345,6 +410,10 @@ func TestToolchainSetCommand(t *testing.T) {
 }
 
 func TestToolchainUninstallCommand(t *testing.T) {
+	// Initialize test kit for automatic state cleanup.
+	newTestKit(t)
+	cleanToolchainCmdState(t)
+
 	// Initialize I/O context and formatter for testing.
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err, "Failed to create I/O context")
@@ -381,6 +450,9 @@ func TestToolchainUninstallCommand(t *testing.T) {
 	viper.Set("toolchain.tools-config", toolsConfigPath)
 
 	// Initialize the toolchain package config.
+	// Save previous config for cleanup.
+	prevAtmosConfig := toolchainpkg.GetAtmosConfig()
+
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
 			VersionsFile: toolVersionsPath,
@@ -389,6 +461,11 @@ func TestToolchainUninstallCommand(t *testing.T) {
 		},
 	}
 	toolchainpkg.SetAtmosConfig(atmosCfg)
+
+	// Restore the original config after the test.
+	t.Cleanup(func() {
+		toolchainpkg.SetAtmosConfig(prevAtmosConfig)
+	})
 
 	// Test the uninstall command runs without error.
 	err = uninstallCmd.RunE(uninstallCmd, []string{"terraform@1.5.7"})
@@ -496,7 +573,7 @@ func newTestKit(t *testing.T) {
 
 // cleanToolchainCmdState resets all toolchainCmd flags and subcommand flags to prevent test pollution.
 // This follows the same pattern as cmd.NewTestKit but for the toolchain command hierarchy.
-// cleanRootCmdState cleans RootCmd state by accessing it via toolchainCmd.Parent().
+// cleanRootCmdState cleans RootCmd and Viper state by accessing it via toolchainCmd.Parent().
 func cleanRootCmdState(t *testing.T) {
 	t.Helper()
 
@@ -526,11 +603,30 @@ func cleanRootCmdState(t *testing.T) {
 		}
 	})
 
+	// Snapshot os std streams.
+	osStdout := os.Stdout
+	osStderr := os.Stderr
+	osStdin := os.Stdin
+
 	// Reset args on RootCmd.
 	rootCmd.SetArgs([]string{})
 
-	// Register cleanup to restore flag states after test.
+	// Register cleanup to restore flag, Viper, and I/O states after test.
 	t.Cleanup(func() {
+		// Reset global I/O and UI state BEFORE restoring os std streams.
+		// This ensures cached I/O contexts are cleared while tests may still have
+		// modified stdout/stderr, preventing the next test from inheriting stale stream references.
+		iolib.Reset()
+		data.Reset()
+		ui.Reset()
+		homedir.Reset()
+
+		// Restore os std streams.
+		os.Stdout = osStdout
+		os.Stderr = osStderr
+		os.Stdin = osStdin
+
+		// Restore flags.
 		rootCmd.Flags().VisitAll(func(f *pflag.Flag) {
 			if snap, ok := snapshot[f.Name]; ok {
 				_ = f.Value.Set(snap.value)

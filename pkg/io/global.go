@@ -239,3 +239,17 @@ func GetContext() Context {
 	}
 	return globalContext
 }
+
+// Reset clears the global I/O context and resets the initialization state.
+// This is primarily used in tests to ensure clean state between test executions.
+// The next call to Initialize() will pick up the current os.Stdout/os.Stderr values.
+func Reset() {
+	globalContext = nil
+	initOnce = sync.Once{}
+	initErr = nil
+	// DO NOT set Data/UI to os.Stdout/os.Stderr here - that would capture
+	// whatever stdout/stderr happen to be at Reset() time (e.g., a test pipe).
+	// Instead, leave them unmodified so Initialize() will set them correctly
+	// based on the CURRENT os.Stdout/os.Stderr when Initialize() runs.
+	// Initialize() is called automatically by PersistentPreRun in each test.
+}

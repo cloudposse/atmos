@@ -48,6 +48,16 @@ func InitFormatter(ioCtx io.Context) {
 	Format = globalFormatter // Also expose for advanced use
 }
 
+// Reset clears the global formatter and I/O context.
+// This is primarily used in tests to ensure clean state between test executions.
+func Reset() {
+	formatterMu.Lock()
+	defer formatterMu.Unlock()
+	globalIO = nil
+	globalFormatter = nil
+	Format = nil
+}
+
 // getFormatter returns the global formatter instance.
 // Returns error if not initialized instead of panicking.
 func getFormatter() (*formatter, error) {
