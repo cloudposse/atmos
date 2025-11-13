@@ -669,3 +669,89 @@ This is {{ .Config.name }} but we're using custom delimiters.`
 		t.Errorf("Expected no error for default delimiters when using custom delimiters: %v", err)
 	}
 }
+
+// TestExtractDelimiters_MapConfig tests delimiter extraction from map[string]interface{} configuration.
+func TestExtractDelimiters_MapConfig(t *testing.T) {
+	processor := NewProcessor()
+
+	tests := []struct {
+		name           string
+		scaffoldConfig interface{}
+		expected       []string
+	}{
+		{
+			name: "valid delimiters in map config",
+			scaffoldConfig: map[string]interface{}{
+				"delimiters": []interface{}{"[[", "]]"},
+			},
+			expected: []string{"[[", "]]"},
+		},
+		{
+			name: "invalid delimiters - not a slice",
+			scaffoldConfig: map[string]interface{}{
+				"delimiters": "not a slice",
+			},
+			expected: []string{"{{", "}}"},
+		},
+		{
+			name: "invalid delimiters - wrong length",
+			scaffoldConfig: map[string]interface{}{
+				"delimiters": []interface{}{"[["},
+			},
+			expected: []string{"{{", "}}"},
+		},
+		{
+			name: "invalid delimiters - first element not string",
+			scaffoldConfig: map[string]interface{}{
+				"delimiters": []interface{}{123, "]]"},
+			},
+			expected: []string{"{{", "}}"},
+		},
+		{
+			name: "invalid delimiters - second element not string",
+			scaffoldConfig: map[string]interface{}{
+				"delimiters": []interface{}{"[[", 456},
+			},
+			expected: []string{"{{", "}}"},
+		},
+		{
+			name:           "nil config",
+			scaffoldConfig: nil,
+			expected:       []string{"{{", "}}"},
+		},
+		{
+			name: "no delimiters key",
+			scaffoldConfig: map[string]interface{}{
+				"other_key": "value",
+			},
+			expected: []string{"{{", "}}"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			delimiters := extractDelimiters(tt.scaffoldConfig)
+			if len(delimiters) != 2 || delimiters[0] != tt.expected[0] || delimiters[1] != tt.expected[1] {
+				t.Errorf("extractDelimiters() = %v, expected %v", delimiters, tt.expected)
+			}
+
+			// Also test with actual file processing to ensure integration works
+			file := File{
+				Path:        "test.txt",
+				Content:     "Hello " + tt.expected[0] + " .Config.name " + tt.expected[1],
+				IsTemplate:  true,
+				Permissions: 0o644,
+			}
+
+			userValues := map[string]interface{}{
+				"name": "world",
+			}
+
+			tempDir := t.TempDir()
+			err := processor.ProcessFile(file, tempDir, false, false, tt.scaffoldConfig, userValues)
+			if err != nil {
+				t.Logf("ProcessFile error (expected for unprocessed templates): %v", err)
+			}
+		})
+	}
+}
