@@ -389,10 +389,12 @@ func TestParseStartOptions(t *testing.T) {
 			viperSettings: map[string]interface{}{
 				"instance": "default",
 				"attach":   false,
+				"identity": "",
 			},
 			expectedOptions: &StartOptions{
 				Instance: "default",
 				Attach:   false,
+				Identity: "",
 			},
 		},
 		{
@@ -400,10 +402,12 @@ func TestParseStartOptions(t *testing.T) {
 			viperSettings: map[string]interface{}{
 				"instance": "test-instance",
 				"attach":   true,
+				"identity": "",
 			},
 			expectedOptions: &StartOptions{
 				Instance: "test-instance",
 				Attach:   true,
+				Identity: "",
 			},
 		},
 		{
@@ -411,10 +415,25 @@ func TestParseStartOptions(t *testing.T) {
 			viperSettings: map[string]interface{}{
 				"instance": "background-container",
 				"attach":   false,
+				"identity": "",
 			},
 			expectedOptions: &StartOptions{
 				Instance: "background-container",
 				Attach:   false,
+				Identity: "",
+			},
+		},
+		{
+			name: "with identity authentication",
+			viperSettings: map[string]interface{}{
+				"instance": "auth-container",
+				"attach":   true,
+				"identity": "user@example.com",
+			},
+			expectedOptions: &StartOptions{
+				Instance: "auth-container",
+				Attach:   true,
+				Identity: "user@example.com",
 			},
 		},
 	}
@@ -437,6 +456,7 @@ func TestParseStartOptions(t *testing.T) {
 			// Verify parsed options.
 			assert.Equal(t, tt.expectedOptions.Instance, opts.Instance)
 			assert.Equal(t, tt.expectedOptions.Attach, opts.Attach)
+			assert.Equal(t, tt.expectedOptions.Identity, opts.Identity)
 		})
 	}
 }
@@ -452,10 +472,12 @@ func TestParseStopOptions(t *testing.T) {
 			viperSettings: map[string]interface{}{
 				"instance": "default",
 				"timeout":  10,
+				"rm":       false,
 			},
 			expectedOptions: &StopOptions{
 				Instance: "default",
 				Timeout:  10,
+				Rm:       false,
 			},
 		},
 		{
@@ -463,10 +485,12 @@ func TestParseStopOptions(t *testing.T) {
 			viperSettings: map[string]interface{}{
 				"instance": "test-instance",
 				"timeout":  30,
+				"rm":       false,
 			},
 			expectedOptions: &StopOptions{
 				Instance: "test-instance",
 				Timeout:  30,
+				Rm:       false,
 			},
 		},
 		{
@@ -474,10 +498,12 @@ func TestParseStopOptions(t *testing.T) {
 			viperSettings: map[string]interface{}{
 				"instance": "immediate-stop",
 				"timeout":  0,
+				"rm":       false,
 			},
 			expectedOptions: &StopOptions{
 				Instance: "immediate-stop",
 				Timeout:  0,
+				Rm:       false,
 			},
 		},
 		{
@@ -485,10 +511,25 @@ func TestParseStopOptions(t *testing.T) {
 			viperSettings: map[string]interface{}{
 				"instance": "graceful-shutdown",
 				"timeout":  120,
+				"rm":       false,
 			},
 			expectedOptions: &StopOptions{
 				Instance: "graceful-shutdown",
 				Timeout:  120,
+				Rm:       false,
+			},
+		},
+		{
+			name: "with auto-remove",
+			viperSettings: map[string]interface{}{
+				"instance": "ephemeral",
+				"timeout":  10,
+				"rm":       true,
+			},
+			expectedOptions: &StopOptions{
+				Instance: "ephemeral",
+				Timeout:  10,
+				Rm:       true,
 			},
 		},
 	}
@@ -511,6 +552,7 @@ func TestParseStopOptions(t *testing.T) {
 			// Verify parsed options.
 			assert.Equal(t, tt.expectedOptions.Instance, opts.Instance)
 			assert.Equal(t, tt.expectedOptions.Timeout, opts.Timeout)
+			assert.Equal(t, tt.expectedOptions.Rm, opts.Rm)
 		})
 	}
 }
@@ -529,6 +571,8 @@ func TestParseShellOptions(t *testing.T) {
 				"pty":      false,
 				"new":      false,
 				"replace":  false,
+				"rm":       false,
+				"no-pull":  false,
 			},
 			expectedOptions: &ShellOptions{
 				Instance: "default",
@@ -536,6 +580,8 @@ func TestParseShellOptions(t *testing.T) {
 				UsePTY:   false,
 				New:      false,
 				Replace:  false,
+				Rm:       false,
+				NoPull:   false,
 			},
 		},
 		{
@@ -546,6 +592,8 @@ func TestParseShellOptions(t *testing.T) {
 				"pty":      true,
 				"new":      false,
 				"replace":  false,
+				"rm":       false,
+				"no-pull":  false,
 			},
 			expectedOptions: &ShellOptions{
 				Instance: "test-instance",
@@ -553,6 +601,8 @@ func TestParseShellOptions(t *testing.T) {
 				UsePTY:   true,
 				New:      false,
 				Replace:  false,
+				Rm:       false,
+				NoPull:   false,
 			},
 		},
 		{
@@ -563,6 +613,8 @@ func TestParseShellOptions(t *testing.T) {
 				"pty":      false,
 				"new":      true,
 				"replace":  false,
+				"rm":       false,
+				"no-pull":  false,
 			},
 			expectedOptions: &ShellOptions{
 				Instance: "prod-instance",
@@ -570,6 +622,8 @@ func TestParseShellOptions(t *testing.T) {
 				UsePTY:   false,
 				New:      true,
 				Replace:  false,
+				Rm:       false,
+				NoPull:   false,
 			},
 		},
 		{
@@ -580,6 +634,8 @@ func TestParseShellOptions(t *testing.T) {
 				"pty":      true,
 				"new":      false,
 				"replace":  true,
+				"rm":       false,
+				"no-pull":  false,
 			},
 			expectedOptions: &ShellOptions{
 				Instance: "staging",
@@ -587,6 +643,29 @@ func TestParseShellOptions(t *testing.T) {
 				UsePTY:   true,
 				New:      false,
 				Replace:  true,
+				Rm:       false,
+				NoPull:   false,
+			},
+		},
+		{
+			name: "with auto-remove and no-pull",
+			viperSettings: map[string]interface{}{
+				"instance": "ephemeral",
+				"identity": "",
+				"pty":      false,
+				"new":      true,
+				"replace":  false,
+				"rm":       true,
+				"no-pull":  true,
+			},
+			expectedOptions: &ShellOptions{
+				Instance: "ephemeral",
+				Identity: "",
+				UsePTY:   false,
+				New:      true,
+				Replace:  false,
+				Rm:       true,
+				NoPull:   true,
 			},
 		},
 	}
@@ -612,6 +691,8 @@ func TestParseShellOptions(t *testing.T) {
 			assert.Equal(t, tt.expectedOptions.UsePTY, opts.UsePTY)
 			assert.Equal(t, tt.expectedOptions.New, opts.New)
 			assert.Equal(t, tt.expectedOptions.Replace, opts.Replace)
+			assert.Equal(t, tt.expectedOptions.Rm, opts.Rm)
+			assert.Equal(t, tt.expectedOptions.NoPull, opts.NoPull)
 		})
 	}
 }

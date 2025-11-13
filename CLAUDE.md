@@ -257,7 +257,7 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 
 ### Error Handling (MANDATORY)
 
-**PRIMARY PATTERN: ErrorBuilder with Sentinel Errors**
+#### PRIMARY PATTERN: ErrorBuilder with Sentinel Errors
 
 ALL user-facing errors MUST use ErrorBuilder with sentinel errors from `errors/errors.go`:
 

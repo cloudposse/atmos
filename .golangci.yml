@@ -324,7 +324,13 @@ severity:
       severity: warning
     - linters:
         - gosec
-      text: "G204.*docker|G204.*podman"
+      text: "G204"
+      path: "pkg/container/.*\\.go$"
+      severity: warning
+    - linters:
+        - gosec
+      text: "G204"
+      path: "pkg/devcontainer/.*\\.go$"
       severity: warning
 formatters:
   enable:

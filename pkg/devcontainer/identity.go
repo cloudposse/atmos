@@ -14,16 +14,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // injectIdentityEnvironment injects authenticated identity environment variables into container config.
 // This is provider-agnostic - it works with AWS, Azure, GitHub, GCP, or any auth provider.
 func injectIdentityEnvironment(ctx context.Context, config *Config, identityName string) error {
-	defer func() {
-		// Use nil for atmosConfig since we're in a utility function.
-		// perf.Track(nil, "devcontainer.injectIdentityEnvironment")()
-	}()
+	defer perf.Track(nil, "devcontainer.injectIdentityEnvironment")()
 
 	if identityName == "" {
 		// No identity specified - skip injection.
