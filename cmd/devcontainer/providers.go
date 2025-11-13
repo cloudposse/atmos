@@ -60,7 +60,7 @@ type DockerRuntimeProvider struct {
 // NewDockerRuntimeProvider creates a new Docker runtime provider.
 func NewDockerRuntimeProvider() *DockerRuntimeProvider {
 	return &DockerRuntimeProvider{
-		manager: devcontainer.NewManager(nil),
+		manager: devcontainer.NewManager(),
 	}
 }
 
@@ -73,46 +73,23 @@ func (d *DockerRuntimeProvider) ListRunning(ctx context.Context) ([]ContainerInf
 }
 
 // Start starts a devcontainer.
-func (d *DockerRuntimeProvider) Start(ctx context.Context, name string, opts StartOptions) error {
-	// Delegate to pkg/devcontainer
-	// Note: This needs atmosConfig, which should come from the service
-	// For now, load it here. In production, service would pass it.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		return err
-	}
-
-	return d.manager.Start(&atmosConfig, name, opts.Instance, "")
+func (d *DockerRuntimeProvider) Start(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts StartOptions) error {
+	return d.manager.Start(atmosConfig, name, opts.Instance, "")
 }
 
 // Stop stops a running devcontainer.
-func (d *DockerRuntimeProvider) Stop(ctx context.Context, name string, timeout int) error {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		return err
-	}
-
-	return d.manager.Stop(&atmosConfig, name, "", timeout)
+func (d *DockerRuntimeProvider) Stop(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, timeout int) error {
+	return d.manager.Stop(atmosConfig, name, "", timeout)
 }
 
 // Attach attaches to a running devcontainer.
-func (d *DockerRuntimeProvider) Attach(ctx context.Context, name string, opts AttachOptions) error {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		return err
-	}
-
-	return d.manager.Attach(&atmosConfig, name, opts.Instance, opts.UsePTY)
+func (d *DockerRuntimeProvider) Attach(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts AttachOptions) error {
+	return d.manager.Attach(atmosConfig, name, opts.Instance, opts.UsePTY)
 }
 
 // Exec executes a command in a running devcontainer.
-func (d *DockerRuntimeProvider) Exec(ctx context.Context, name string, cmd []string, opts ExecOptions) error {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		return err
-	}
-
-	return d.manager.Exec(&atmosConfig, devcontainer.ExecParams{
+func (d *DockerRuntimeProvider) Exec(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, cmd []string, opts ExecOptions) error {
+	return d.manager.Exec(atmosConfig, devcontainer.ExecParams{
 		Name:        name,
 		Instance:    opts.Instance,
 		Interactive: opts.Interactive,
@@ -122,36 +99,21 @@ func (d *DockerRuntimeProvider) Exec(ctx context.Context, name string, cmd []str
 }
 
 // Logs retrieves logs from a devcontainer.
-func (d *DockerRuntimeProvider) Logs(ctx context.Context, name string, opts LogsOptions) (io.ReadCloser, error) {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		return nil, err
-	}
-
+func (d *DockerRuntimeProvider) Logs(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts LogsOptions) (io.ReadCloser, error) {
 	// pkg/devcontainer.Logs writes directly to UI, doesn't return io.ReadCloser.
 	// For now, return nil. This would need refactoring in pkg/devcontainer.
-	err = d.manager.Logs(&atmosConfig, name, opts.Instance, opts.Follow, opts.Tail)
+	err := d.manager.Logs(atmosConfig, name, opts.Instance, opts.Follow, opts.Tail)
 	return nil, err
 }
 
 // Remove removes a devcontainer.
-func (d *DockerRuntimeProvider) Remove(ctx context.Context, name string, force bool) error {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		return err
-	}
-
-	return d.manager.Remove(&atmosConfig, name, "", force)
+func (d *DockerRuntimeProvider) Remove(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, force bool) error {
+	return d.manager.Remove(atmosConfig, name, "", force)
 }
 
 // Rebuild rebuilds a devcontainer.
-func (d *DockerRuntimeProvider) Rebuild(ctx context.Context, name string, opts RebuildOptions) error {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		return err
-	}
-
-	return d.manager.Rebuild(&atmosConfig, name, opts.Instance, opts.Identity, opts.NoPull)
+func (d *DockerRuntimeProvider) Rebuild(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts RebuildOptions) error {
+	return d.manager.Rebuild(atmosConfig, name, opts.Instance, opts.Identity, opts.NoPull)
 }
 
 // DefaultUIProvider uses terminal for UI operations.

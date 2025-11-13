@@ -1,5 +1,7 @@
 package devcontainer
 
+//go:generate go run go.uber.org/mock/mockgen@latest -source=interfaces.go -destination=mock_interfaces_test.go -package=devcontainer
+
 import (
 	"context"
 	"io"
@@ -25,25 +27,25 @@ type RuntimeProvider interface {
 	ListRunning(ctx context.Context) ([]ContainerInfo, error)
 
 	// Start starts a devcontainer.
-	Start(ctx context.Context, name string, opts StartOptions) error
+	Start(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts StartOptions) error
 
 	// Stop stops a running devcontainer.
-	Stop(ctx context.Context, name string, timeout int) error
+	Stop(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, timeout int) error
 
 	// Attach attaches to a running devcontainer.
-	Attach(ctx context.Context, name string, opts AttachOptions) error
+	Attach(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts AttachOptions) error
 
 	// Exec executes a command in a running devcontainer.
-	Exec(ctx context.Context, name string, cmd []string, opts ExecOptions) error
+	Exec(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, cmd []string, opts ExecOptions) error
 
 	// Logs retrieves logs from a devcontainer.
-	Logs(ctx context.Context, name string, opts LogsOptions) (io.ReadCloser, error)
+	Logs(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts LogsOptions) (io.ReadCloser, error)
 
 	// Remove removes a devcontainer.
-	Remove(ctx context.Context, name string, force bool) error
+	Remove(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, force bool) error
 
 	// Rebuild rebuilds a devcontainer.
-	Rebuild(ctx context.Context, name string, opts RebuildOptions) error
+	Rebuild(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts RebuildOptions) error
 }
 
 // UIProvider handles user interaction.

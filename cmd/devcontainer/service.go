@@ -95,7 +95,7 @@ func (s *Service) ResolveDevcontainerName(ctx context.Context, args []string) (s
 
 // Attach attaches to a running devcontainer.
 func (s *Service) Attach(ctx context.Context, name string, opts AttachOptions) error {
-	return s.runtime.Attach(ctx, name, opts)
+	return s.runtime.Attach(ctx, s.atmosConfig, name, opts)
 }
 
 // Start starts a devcontainer.
@@ -107,13 +107,13 @@ func (s *Service) Start(ctx context.Context, name string, opts StartOptions) err
 	}
 
 	// Start via runtime.
-	if err := s.runtime.Start(ctx, name, opts); err != nil {
+	if err := s.runtime.Start(ctx, s.atmosConfig, name, opts); err != nil {
 		return err
 	}
 
 	// Optionally attach.
 	if opts.Attach {
-		return s.runtime.Attach(ctx, name, AttachOptions{
+		return s.runtime.Attach(ctx, s.atmosConfig, name, AttachOptions{
 			Instance: opts.Instance,
 		})
 	}
@@ -123,7 +123,7 @@ func (s *Service) Start(ctx context.Context, name string, opts StartOptions) err
 
 // Stop stops a running devcontainer.
 func (s *Service) Stop(ctx context.Context, name string, timeout int) error {
-	return s.runtime.Stop(ctx, name, timeout)
+	return s.runtime.Stop(ctx, s.atmosConfig, name, timeout)
 }
 
 // List lists all running devcontainers.
@@ -133,12 +133,12 @@ func (s *Service) List(ctx context.Context) ([]ContainerInfo, error) {
 
 // Exec executes a command in a running devcontainer.
 func (s *Service) Exec(ctx context.Context, name string, cmd []string, opts ExecOptions) error {
-	return s.runtime.Exec(ctx, name, cmd, opts)
+	return s.runtime.Exec(ctx, s.atmosConfig, name, cmd, opts)
 }
 
 // Logs retrieves logs from a devcontainer.
 func (s *Service) Logs(ctx context.Context, name string, opts LogsOptions) error {
-	logs, err := s.runtime.Logs(ctx, name, opts)
+	logs, err := s.runtime.Logs(ctx, s.atmosConfig, name, opts)
 	if err != nil {
 		return err
 	}
@@ -151,10 +151,10 @@ func (s *Service) Logs(ctx context.Context, name string, opts LogsOptions) error
 
 // Remove removes a devcontainer.
 func (s *Service) Remove(ctx context.Context, name string, force bool) error {
-	return s.runtime.Remove(ctx, name, force)
+	return s.runtime.Remove(ctx, s.atmosConfig, name, force)
 }
 
 // Rebuild rebuilds a devcontainer.
 func (s *Service) Rebuild(ctx context.Context, name string, opts RebuildOptions) error {
-	return s.runtime.Rebuild(ctx, name, opts)
+	return s.runtime.Rebuild(ctx, s.atmosConfig, name, opts)
 }

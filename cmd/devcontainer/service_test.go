@@ -49,34 +49,34 @@ type mockRuntimeProvider struct {
 	listError    error
 }
 
-func (m *mockRuntimeProvider) Start(ctx context.Context, name string, opts StartOptions) error {
+func (m *mockRuntimeProvider) Start(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts StartOptions) error {
 	return m.startError
 }
 
-func (m *mockRuntimeProvider) Attach(ctx context.Context, name string, opts AttachOptions) error {
+func (m *mockRuntimeProvider) Attach(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts AttachOptions) error {
 	return m.attachError
 }
 
-func (m *mockRuntimeProvider) Stop(ctx context.Context, name string, timeout int) error {
+func (m *mockRuntimeProvider) Stop(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, timeout int) error {
 	return m.stopError
 }
 
-func (m *mockRuntimeProvider) Exec(ctx context.Context, name string, cmd []string, opts ExecOptions) error {
+func (m *mockRuntimeProvider) Exec(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, cmd []string, opts ExecOptions) error {
 	return m.execError
 }
 
-func (m *mockRuntimeProvider) Logs(ctx context.Context, name string, opts LogsOptions) (io.ReadCloser, error) {
+func (m *mockRuntimeProvider) Logs(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts LogsOptions) (io.ReadCloser, error) {
 	if m.logsError != nil {
 		return nil, m.logsError
 	}
 	return io.NopCloser(nil), nil
 }
 
-func (m *mockRuntimeProvider) Remove(ctx context.Context, name string, force bool) error {
+func (m *mockRuntimeProvider) Remove(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, force bool) error {
 	return m.removeError
 }
 
-func (m *mockRuntimeProvider) Rebuild(ctx context.Context, name string, opts RebuildOptions) error {
+func (m *mockRuntimeProvider) Rebuild(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts RebuildOptions) error {
 	return m.rebuildError
 }
 
