@@ -162,6 +162,7 @@ jobs:
           helmfile-version: ${{ env.HELMFILE_VERSION }}
           helmfile-args: version
           helmfile-auto-init: "false"
+          helm-version: "v3.19.2"
           helm-plugins: ""
 
       - name: Install helm-diff plugin
