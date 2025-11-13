@@ -15,6 +15,27 @@ const (
 	logKeyStack     = "stack"
 )
 
+// hasDefaultIdentity checks if the auth section contains at least one identity with default: true.
+func hasDefaultIdentity(authSection map[string]any) bool {
+	identities, ok := authSection["identities"].(map[string]any)
+	if !ok || identities == nil {
+		return false
+	}
+
+	for _, identityConfig := range identities {
+		identityMap, ok := identityConfig.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		if defaultVal, ok := identityMap["default"].(bool); ok && defaultVal {
+			return true
+		}
+	}
+
+	return false
+}
+
 // resolveAuthManagerForNestedComponent determines which AuthManager to use for a nested component evaluation.
 //
 // Logic:
@@ -67,8 +88,20 @@ func resolveAuthManagerForNestedComponent(
 		return parentAuthManager, nil
 	}
 
-	// Component has auth config, merge and create new AuthManager.
-	log.Debug("Component has auth config, creating component-specific AuthManager",
+	// Check if component's auth config has a default identity.
+	// Only create component-specific AuthManager if there's a default identity.
+	// This prevents interactive selector from showing for component auth overrides.
+	hasDefault := hasDefaultIdentity(authSection)
+	if !hasDefault {
+		log.Debug("Component auth config has no default identity, inheriting parent AuthManager",
+			logKeyComponent, component,
+			logKeyStack, stack,
+		)
+		return parentAuthManager, nil
+	}
+
+	// Component has auth config with default identity, create component-specific AuthManager.
+	log.Debug("Component has auth config with default identity, creating component-specific AuthManager",
 		logKeyComponent, component,
 		logKeyStack, stack,
 	)
@@ -109,7 +142,7 @@ func createComponentAuthManager(
 		cfg.AuthSectionName,
 	)
 	if err != nil {
-		log.Warn("Failed to merge component auth config, using parent AuthManager",
+		log.Debug("Could not merge component auth config, using parent AuthManager",
 			logKeyComponent, component,
 			logKeyStack, stack,
 			"error", err,
@@ -118,14 +151,17 @@ func createComponentAuthManager(
 	}
 
 	// Create and authenticate new AuthManager with merged config.
-	// Pass empty identity to trigger auto-detection from merged config.
+	// Component has its own auth config, so use the component's default identity.
+	// Do NOT inherit parent's identity - component auth override means component uses its own identities.
+	// Pass a non-matching selectValue to prevent selector from triggering.
+	// When identityName is empty, it will auto-detect the default from component's auth config.
 	componentAuthManager, err := auth.CreateAndAuthenticateManager(
-		"",                          // Empty identity triggers auto-detection
-		mergedAuthConfig,            // Merged component + global auth
-		cfg.IdentityFlagSelectValue, // Off value for --identity flag
+		"",               // Empty identity triggers auto-detection from component's auth config
+		mergedAuthConfig, // Merged component + global auth
+		"__NO_SELECT__",  // Non-matching value prevents selector (since "" != "__NO_SELECT__")
 	)
 	if err != nil {
-		log.Warn("Failed to create component-specific AuthManager, using parent AuthManager",
+		log.Debug("Auth does not exist for the component, using parent AuthManager",
 			logKeyComponent, component,
 			logKeyStack, stack,
 			"error", err,

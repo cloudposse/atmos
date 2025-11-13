@@ -80,7 +80,7 @@ func GetTerraformState(
 	// This enables each nested level to optionally override auth settings.
 	resolvedAuthMgr, err := resolveAuthManagerForNestedComponent(atmosConfig, component, stack, parentAuthMgr)
 	if err != nil {
-		log.Warn("Failed to resolve auth for nested component, using parent AuthManager",
+		log.Debug("Auth does not exist for nested component, using parent AuthManager",
 			"component", component,
 			"stack", stack,
 			"error", err,
