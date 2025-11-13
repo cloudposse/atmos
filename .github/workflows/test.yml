@@ -159,14 +159,16 @@ jobs:
       - name: Install Helmfile
         uses: helmfile/helmfile-action@v2.0.5
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        env:
-          HELM_PLUGIN_SKIP_VERIFY: "true"
         with:
           helm-version: ${{ env.HELM_VERSION }}
           helmfile-version: ${{ env.HELMFILE_VERSION }}
           helmfile-args: version
           helmfile-auto-init: "false"
-          helm-plugins: https://github.com/databus23/helm-diff@v3.13.2
+          helm-plugins: ""
+
+      - name: Install helm-diff plugin
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: helm plugin install https://github.com/databus23/helm-diff
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -373,9 +375,7 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Install helm-diff plugin
-        env:
-          HELM_PLUGIN_SKIP_VERIFY: "true"
-        run: helm plugin install https://github.com/databus23/helm-diff --version v3.13.2
+        run: helm plugin install https://github.com/databus23/helm-diff
 
       - name: Write a default AWS profile to the AWS config file
         run: |
