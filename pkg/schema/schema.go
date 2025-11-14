@@ -664,6 +664,9 @@ type ConfigAndStacksInfo struct {
 // GetComponentEnvSection returns the component's env section map.
 // This implements the utils.EnvVarContext interface.
 func (c *ConfigAndStacksInfo) GetComponentEnvSection() map[string]any {
+	if c == nil {
+		return nil
+	}
 	return c.ComponentEnvSection
 }
 
