@@ -208,10 +208,6 @@ func TestPromptForDevcontainer_EdgeCases(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
-			} else {
-				// Can't test actual prompting without interactive terminal.
-				// This would require integration tests or mocking huh.Form.
-				t.Skip("Cannot test interactive prompt without TTY")
 			}
 		})
 	}
