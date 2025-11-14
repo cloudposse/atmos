@@ -51,3 +51,10 @@ workflows:
     stack: prod
     steps:
       - command: terraform plan idontexist
+
+  shell-with-path:
+    description: |
+      Run a shell command that requires PATH to be set.
+    steps:
+      - command: env | grep PATH
+        type: shell

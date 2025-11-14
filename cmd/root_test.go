@@ -69,7 +69,11 @@ func TestNoColorLog(t *testing.T) {
 	if strings.Contains(output, "\033[") {
 		t.Errorf("Expected no color in output, but got: %s", output)
 	}
-	t.Log(output, "output")
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("Command output: %s", output)
+		}
+	})
 }
 
 func TestInitFunction(t *testing.T) {
@@ -158,7 +162,7 @@ func TestSetupLogger_TraceLevel(t *testing.T) {
 				},
 			}
 
-			setupLogger(cfg)
+			SetupLogger(cfg)
 			assert.Equal(t, tt.expectedLevel, log.GetLevel(),
 				"Expected level %v for config %q", tt.expectedLevel, tt.configLevel)
 		})
@@ -224,7 +228,7 @@ func TestSetupLogger_TraceVisibility(t *testing.T) {
 					Terminal: schema.Terminal{},
 				},
 			}
-			setupLogger(cfg)
+			SetupLogger(cfg)
 
 			// Test trace visibility.
 			buf.Reset()
@@ -277,7 +281,7 @@ func TestSetupLogger_TraceLevelFromEnvironment(t *testing.T) {
 			Terminal: schema.Terminal{},
 		},
 	}
-	setupLogger(cfg)
+	SetupLogger(cfg)
 
 	assert.Equal(t, log.TraceLevel, log.GetLevel(),
 		"Should set trace level from environment variable")
@@ -305,10 +309,10 @@ func TestSetupLogger_NoColorWithTraceLevel(t *testing.T) {
 	}
 
 	// Mock the IsColorEnabled to return false.
-	// Since we can't easily mock it, we'll just test that setupLogger doesn't panic.
+	// Since we can't easily mock it, we'll just test that SetupLogger doesn't panic.
 	assert.NotPanics(t, func() {
-		setupLogger(cfg)
-	}, "setupLogger should not panic with trace level and no color")
+		SetupLogger(cfg)
+	}, "SetupLogger should not panic with trace level and no color")
 
 	assert.Equal(t, log.TraceLevel, log.GetLevel(),
 		"Trace level should be set even with no color")
@@ -465,10 +469,10 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		}()
 
 		// Set ATMOS_CLI_CONFIG_PATH to a test directory to avoid loading real config.
-		os.Setenv("ATMOS_CLI_CONFIG_PATH", "testdata/pager")
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", "testdata/pager")
 
 		// Set ATMOS_PAGER=false to explicitly disable the pager.
-		os.Setenv("ATMOS_PAGER", "false")
+		t.Setenv("ATMOS_PAGER", "false")
 
 		// Set os.Args so our custom Execute() function can parse them.
 		// This is required because Execute() needs to initialize atmosConfig from environment variables.
@@ -502,7 +506,7 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 
 		// Set ATMOS_PAGER=true to try to enable pager, but there's no TTY.
 		// The pager should detect no TTY and fall back to direct output.
-		os.Setenv("ATMOS_PAGER", "true")
+		t.Setenv("ATMOS_PAGER", "true")
 
 		// Set os.Args so our custom Execute() function can parse them.
 		os.Args = []string{"atmos", "--help"}
@@ -747,6 +751,106 @@ func TestNewFlagRenderLayout(t *testing.T) {
 			if layout.maxFlagWidth != tt.maxFlagWidth {
 				t.Errorf("newFlagRenderLayout() maxFlagWidth = %d, want %d", layout.maxFlagWidth, tt.maxFlagWidth)
 			}
+		})
+	}
+}
+
+// TestParseChdirFromArgs tests the parseChdirFromArgs function that manually parses --chdir or -C flags.
+// This function is critical for commands with DisableFlagParsing=true (terraform, helmfile, packer).
+func TestParseChdirFromArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected string
+	}{
+		{
+			name:     "--chdir with equals sign",
+			args:     []string{"atmos", "--chdir=/tmp/foo", "terraform", "plan"},
+			expected: "/tmp/foo",
+		},
+		{
+			name:     "--chdir with space",
+			args:     []string{"atmos", "--chdir", "/tmp/bar", "terraform", "plan"},
+			expected: "/tmp/bar",
+		},
+		{
+			name:     "-C with equals sign",
+			args:     []string{"atmos", "-C=/tmp/baz", "terraform", "plan"},
+			expected: "/tmp/baz",
+		},
+		{
+			name:     "-C with space",
+			args:     []string{"atmos", "-C", "/tmp/qux", "terraform", "plan"},
+			expected: "/tmp/qux",
+		},
+		{
+			name:     "-C concatenated (no space or equals)",
+			args:     []string{"atmos", "-C/tmp/concat", "terraform", "plan"},
+			expected: "/tmp/concat",
+		},
+		{
+			name:     "-C concatenated with relative path",
+			args:     []string{"atmos", "-C../foo", "terraform", "plan"},
+			expected: "../foo",
+		},
+		{
+			name:     "no chdir flag",
+			args:     []string{"atmos", "terraform", "plan"},
+			expected: "",
+		},
+		{
+			name:     "--chdir at end without value",
+			args:     []string{"atmos", "terraform", "plan", "--chdir"},
+			expected: "",
+		},
+		{
+			name:     "-C at end without value",
+			args:     []string{"atmos", "terraform", "plan", "-C"},
+			expected: "",
+		},
+		{
+			name:     "multiple --chdir flags (first wins)",
+			args:     []string{"atmos", "--chdir=/first", "--chdir=/second", "terraform", "plan"},
+			expected: "/first",
+		},
+		{
+			name:     "mixed -C and --chdir (first wins)",
+			args:     []string{"atmos", "-C/first", "--chdir=/second", "terraform", "plan"},
+			expected: "/first",
+		},
+		{
+			name:     "--chdir with tilde",
+			args:     []string{"atmos", "--chdir=~/mydir", "terraform", "plan"},
+			expected: "~/mydir",
+		},
+		{
+			name:     "empty args",
+			args:     []string{},
+			expected: "",
+		},
+		{
+			name:     "single arg",
+			args:     []string{"atmos"},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save and restore os.Args.
+			originalArgs := os.Args
+			defer func() { os.Args = originalArgs }()
+
+			// Set os.Args to the test args.
+			os.Args = tt.args
+
+			// Call the function.
+			result := parseChdirFromArgs()
+
+			// Verify.
+			assert.Equal(t, tt.expected, result,
+				"parseChdirFromArgs() with args %v should return %q, got %q",
+				tt.args, tt.expected, result)
 		})
 	}
 }

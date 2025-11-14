@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -9,7 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-var ErrInvalidAtmosYAMLFunction = fmt.Errorf("invalid Atmos YAML function")
+var ErrInvalidAtmosYAMLFunction = errors.New("invalid Atmos YAML function")
 
 func ProcessTagEnv(
 	input string,

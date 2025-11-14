@@ -24,6 +24,8 @@ type TerraformOutputGetter func(
 	component string,
 	output string,
 	skipCache bool,
+	authContext *schema.AuthContext,
+	authManager any,
 ) (any, bool, error)
 
 // Assert that StoreCommand implements Command interface.
@@ -78,7 +80,7 @@ func (c *StoreCommand) getOutputValue(value string) (string, any, error) {
 	if strings.Index(value, ".") == 0 {
 		var exists bool
 		var err error
-		outputValue, exists, err = c.outputGetter(c.atmosConfig, c.info.Stack, c.info.ComponentFromArg, outputKey, true)
+		outputValue, exists, err = c.outputGetter(c.atmosConfig, c.info.Stack, c.info.ComponentFromArg, outputKey, true, c.info.AuthContext, c.info.AuthManager)
 		// Handle errors from terraform output retrieval (SDK errors, network issues, etc.).
 		if err != nil {
 			return "", nil, fmt.Errorf("%w: failed to get terraform output for key %s: %w", errUtils.ErrNilTerraformOutput, outputKey, err)

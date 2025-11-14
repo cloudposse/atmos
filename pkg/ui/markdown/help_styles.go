@@ -13,6 +13,9 @@ import (
 
 // GetHelpStyle returns a markdown style configuration optimized for command help text.
 // This uses the Cloud Posse color scheme (grayscale + purple accent) with transparent backgrounds.
+//
+//nolint:funlen // Style configuration requires comprehensive field initialization.
+//revive:disable:function-length // Style configuration requires comprehensive field initialization.
 func GetHelpStyle() ([]byte, error) {
 	defer perf.Track(nil, "markdown.GetHelpStyle")()
 

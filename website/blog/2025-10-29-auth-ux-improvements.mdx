@@ -1,0 +1,90 @@
+---
+slug: auth-ux-improvements
+title: Authentication Experience Improvements
+authors: [atmos]
+tags: [atmos, enhancement, dx, auth]
+date: 2025-10-29
+---
+
+We've made several quality-of-life improvements to Atmos authentication commands, making identity management smoother and more intuitive.
+
+<!--truncate-->
+
+## Interactive Identity Selection for Terraform
+
+Terraform commands now support interactive identity selection when you use `--identity` without specifying a name:
+
+```bash
+# Interactive selector appears
+atmos terraform plan mycomponent -s mystack --identity
+
+# Or use the ATMOS_IDENTITY environment variable
+export ATMOS_IDENTITY=dev-admin
+atmos terraform plan mycomponent -s mystack
+```
+
+When both are set, the `--identity` flag takes precedence over the `ATMOS_IDENTITY` environment variable.
+
+This brings terraform commands up to parity with other auth commands (`auth shell`, `auth exec`, etc.) that already supported interactive selection. For more details on authentication flags and behavior, see the [CLI authentication documentation](/cli/commands/auth/usage).
+
+## Case-Insensitive Identity Names
+
+Identity names are now matched case-insensitively while preserving the original case from your `atmos.yaml` for display:
+
+```yaml
+auth:
+  identities:
+    Dev-Admin:  # Original case preserved
+      provider: aws-sso
+```
+
+```bash
+# All of these work and display "Dev-Admin"
+atmos auth login dev-admin
+atmos auth login DEV-ADMIN
+atmos auth whoami Dev-Admin
+```
+
+This makes the CLI more forgiving while maintaining visual consistency with your configuration.
+
+## Selective Identity Logout
+
+You can now log out of specific identities without affecting others that share the same provider:
+
+```bash
+# Clear only dev-admin cached credentials (keyring + files)
+atmos auth logout dev-admin
+
+# Other identities using the same provider remain authenticated
+atmos auth whoami prod-admin  # Still works
+```
+
+The `auth logout` command now offers three levels of cleanup:
+
+- **`atmos auth logout <identity>`** - Clear one identity's cached credentials (keyring + files)
+- **`atmos auth logout --provider <name>`** - Clear provider and all identities using it (keyring + files + provider directory)
+- **`atmos auth logout --all`** - Clear all identities AND providers (complete cleanup)
+
+**Bug fix**: We discovered and fixed a bug where `--all` was only logging out identities but leaving orphaned provider credentials. This has been corrected and is now covered by a dedicated test to prevent regression.
+
+Note: Your `atmos.yaml` configuration is never modified - logout only removes cached credentials.
+
+Each identity in `atmos auth list` now shows authentication status indicators:
+- ✓ Authenticated with valid credentials
+- ⚠ Authenticated but credentials expiring soon
+- ✗ Not authenticated or credentials expired
+
+## Legacy Path Warning (Once Per Session)
+
+If you're using the legacy `~/.aws/atmos/` credential path, Atmos will now show the migration warning only once per execution instead of repeatedly:
+
+```bash
+⚠ Using legacy credentials path: ~/.aws/atmos/aws-sso/credentials
+  Run 'atmos auth login' to migrate to XDG-compliant path: ~/.config/atmos/aws/aws-sso/credentials
+```
+
+This keeps the terminal output clean while still guiding you toward the recommended configuration.
+
+## Summary
+
+These improvements focus on polish and ergonomics—making authentication work the way you'd expect without getting in your way. Identity selection is more flexible, logout is more precise, and the overall experience is cleaner.

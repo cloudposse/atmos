@@ -47,6 +47,10 @@ developer-experience:
 # SECONDARY TAGS - For User Posts
 # Use these with feature/enhancement/bugfix tags:
 
+atmos:
+  label: Atmos
+  description: General Atmos features and functionality
+
 terraform:
   label: Terraform
   description: Terraform-specific features and functionality
@@ -71,6 +75,62 @@ cloud-architecture:
   label: Cloud Architecture
   description: Cloud architecture patterns and best practices (user-facing)
 
+authentication:
+  label: Authentication
+  description: Authentication and identity management features
+
+auth:
+  label: Auth
+  description: Authentication-related features (short form)
+
+atmos-auth:
+  label: Atmos Auth
+  description: Atmos authentication system features
+
+security:
+  label: Security
+  description: Security features and improvements
+
+providers:
+  label: Providers
+  description: Cloud provider integrations
+
+identities:
+  label: Identities
+  description: Identity and credential management
+
+cli:
+  label: CLI
+  description: Command-line interface features
+
+configuration:
+  label: Configuration
+  description: Configuration management features
+
+debugging:
+  label: Debugging
+  description: Debugging and troubleshooting features
+
+inheritance:
+  label: Inheritance
+  description: Configuration inheritance features
+
+dx:
+  label: Developer Experience
+  description: Developer experience improvements
+
+aws:
+  label: AWS
+  description: AWS-specific features and integrations
+
+keyring:
+  label: Keyring
+  description: Keyring and credential storage features
+
+productivity:
+  label: Productivity
+  description: Productivity and workflow efficiency features
+
 # GENERAL TAGS
 # Use these for special announcements:
 
@@ -81,3 +141,7 @@ announcements:
 breaking-changes:
   label: Breaking Changes
   description: Changes requiring user migration or configuration updates
+
+breaking-change:
+  label: Breaking Change
+  description: Breaking change requiring user migration (singular form)

@@ -57,7 +57,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		)
 	}
 
-	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil)
+	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -223,6 +223,12 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 	allArgsAndFlags = append(allArgsAndFlags, info.SubCommand)
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
+
+	// Convert ComponentEnvSection to ComponentEnvList.
+	// ComponentEnvSection is populated by auth hooks and stack config env sections.
+	for k, v := range info.ComponentEnvSection {
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("%s=%v", k, v))
+	}
 
 	// Prepare ENV vars.
 	envVars := append(info.ComponentEnvList, []string{

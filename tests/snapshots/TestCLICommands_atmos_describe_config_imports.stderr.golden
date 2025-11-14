@@ -1,9 +1,19 @@
-DEBU Set logs-level=debug logs-file=/dev/stderr
-DEBU processConfigImports resolved paths count=6
-DEBU processConfigImports resolved paths count=6
+ DEBU  Set logs-level=debug logs-file=/dev/stderr
+ DEBU  processConfigImports resolved paths count=6
+ DEBU  processConfigImports resolved paths count=6
+ DEBU  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
+ DEBU  processConfigImports resolved paths count=6
+ DEBU  processConfigImports resolved paths count=6
+ DEBU  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-DEBU processConfigImports resolved paths count=6
-DEBU processConfigImports resolved paths count=6
-DEBU processConfigImports resolved paths count=6
-DEBU Telemetry event enqueued
+ DEBU  processConfigImports resolved paths count=6
+ DEBU  processConfigImports resolved paths count=6
+ DEBU  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
+ DEBU  processConfigImports resolved paths count=6
+ DEBU  processConfigImports resolved paths count=6
+ DEBU  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
+ DEBU  processConfigImports resolved paths count=6
+ DEBU  processConfigImports resolved paths count=6
+ DEBU  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
+ DEBU  Telemetry event enqueued

@@ -1,8 +1,10 @@
 ---
 slug: introducing-atmos-auth
 title: "Introducing Atmos Auth: Native Cloud Authentication for Platform Teams"
-authors: [atmos]
+sidebar_label: "Introducing Atmos Auth"
+authors: [Benbentwo]
 tags: [feature, cloud-architecture]
+date: 2025-10-13
 ---
 
 We're introducing `atmos auth` - native cloud authentication built directly into Atmos. After years of solving the same authentication problems repeatedly across different tools and teams, we've built a solution that works whether you adopt the entire Atmos framework or just need better credential management.
@@ -155,7 +157,8 @@ eval $(atmos auth env)
 
 # Now use any AWS tool
 aws s3 ls
-terraform plan
+aws ecs list-clusters
+kubectl get pods
 ```
 
 ## What's Next

@@ -16,9 +16,22 @@ import (
 	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
 
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/schema"
 	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
 )
+
+// WriteJSON writes JSON to stdout (data channel).
+// This is a convenience wrapper around data.WriteJSON().
+func WriteJSON(v interface{}) error {
+	return data.WriteJSON(v)
+}
+
+// WriteYAML writes YAML to stdout (data channel).
+// This is a convenience wrapper around data.WriteYAML().
+func WriteYAML(v interface{}) error {
+	return data.WriteYAML(v)
+}
 
 // HighlightCode returns a syntax highlighted code for the specified language
 func HighlightCode(code string, language string, syntaxTheme string) (string, error) {

@@ -154,6 +154,28 @@ These flags are available for every Atmos command:
         - Useful for CI/CD environments or when piping output
         - Can also use `ATMOS_NO_COLOR` or `NO_COLOR` environment variables
         - The `NO_COLOR` env var follows the standard from https://no-color.org/
+        - **Takes highest precedence**: Overrides `--force-color`, `--color`, and all other color settings
+    </dd>
+
+    <dt>`--force-tty`</dt>
+    <dd>
+        Force TTY mode with sane defaults when terminal detection fails.
+        - Useful for screenshot generation and documentation
+        - Uses default terminal dimensions (width=120, height=40)
+        - Forces `IsTTY()` to return `true` even when not a TTY
+        - Can also use `ATMOS_FORCE_TTY` environment variable
+        - Example: `atmos terraform plan --force-tty --force-color | screenshot.sh`
+    </dd>
+
+    <dt>`--force-color`</dt>
+    <dd>
+        Force TrueColor output even when not a TTY.
+        - Useful for screenshot generation and documentation
+        - Forces 24-bit TrueColor profile regardless of terminal detection
+        - Overrides automatic color degradation
+        - Can also use `ATMOS_FORCE_COLOR` environment variable
+        - **Note**: The `NO_COLOR` environment variable or `--no-color` flag takes precedence and will disable color even when `--force-color` is set
+        - Example: `ATMOS_FORCE_COLOR=true atmos describe stacks | vhs record.tape`
     </dd>
 
     <dt>`--pager`</dt>
@@ -368,8 +390,29 @@ All global flags can be set using environment variables. The precedence order is
         Disable colored output (any non-empty value disables color).
         - `NO_COLOR` is a standard environment variable supported by many CLI tools (https://no-color.org/)
         - Maintained for portability across different systems and CI/CD environments
-        - Takes precedence over `ATMOS_COLOR`/`COLOR` settings
+        - **Highest precedence**: Takes precedence over `ATMOS_FORCE_COLOR`, `CLICOLOR_FORCE`, `ATMOS_COLOR`, and `COLOR` settings
+        - Overrides `--force-color` flag
         - Both `ATMOS_NO_COLOR` and `NO_COLOR` are fully supported
+    </dd>
+
+    <dt>`ATMOS_FORCE_TTY`</dt>
+    <dd>
+        Force TTY mode with sane defaults when terminal detection fails.
+        - Useful for screenshot generation and documentation
+        - Uses default terminal dimensions (width=120, height=40)
+        - Example: `ATMOS_FORCE_TTY=true atmos describe stacks`
+    </dd>
+
+    <dt>`ATMOS_FORCE_COLOR` / `CLICOLOR_FORCE`</dt>
+    <dd>
+        Force TrueColor output even when not a TTY.
+        - Both `ATMOS_FORCE_COLOR` and `CLICOLOR_FORCE` are equivalent and fully supported
+        - `CLICOLOR_FORCE` is a standard environment variable (https://bixense.com/clicolors/)
+        - Useful for screenshot generation and piping to color-aware tools
+        - Forces 24-bit TrueColor profile regardless of terminal detection
+        - **Note**: `NO_COLOR` environment variable takes precedence and will disable color even when this is set
+        - Example: `ATMOS_FORCE_COLOR=true atmos describe config | bat`
+        - Example: `CLICOLOR_FORCE=1 atmos terraform plan`
     </dd>
 
     <dt>`ATMOS_PAGER` / `PAGER`</dt>
@@ -393,6 +436,34 @@ All global flags can be set using environment variables. The precedence order is
 
     <dt>`ATMOS_PROFILE_TYPE`</dt>
     <dd>Set the profile type for file-based profiling (cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace)</dd>
+</dl>
+
+### XDG Base Directory Environment Variables
+
+<dl>
+    <dt>`ATMOS_XDG_CACHE_HOME` / `XDG_CACHE_HOME`</dt>
+    <dd>
+        Override the default XDG cache directory for Atmos.
+        - Default: `~/.cache` on Linux/Unix, `~/Library/Caches` on macOS, `%LOCALAPPDATA%` on Windows
+        - Used for: Cache files (`cache.yaml`)
+        - Example: `ATMOS_XDG_CACHE_HOME=/custom/cache atmos describe stacks`
+    </dd>
+
+    <dt>`ATMOS_XDG_DATA_HOME` / `XDG_DATA_HOME`</dt>
+    <dd>
+        Override the default XDG data directory for Atmos.
+        - Default: `~/.local/share` on Linux/Unix, `~/Library/Application Support` on macOS, `%LOCALAPPDATA%` on Windows
+        - Used for: File-based keyring storage
+        - Example: `ATMOS_XDG_DATA_HOME=/custom/data atmos auth login`
+    </dd>
+
+    <dt>`ATMOS_XDG_CONFIG_HOME` / `XDG_CONFIG_HOME`</dt>
+    <dd>
+        Override the default XDG config directory for Atmos.
+        - Default: `~/.config` on Linux/Unix, `~/Library/Application Support` on macOS, `%APPDATA%` on Windows
+        - Reserved for future use
+        - Example: `ATMOS_XDG_CONFIG_HOME=/custom/config`
+    </dd>
 </dl>
 
 ## Portability Notes

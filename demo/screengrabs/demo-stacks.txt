@@ -77,6 +77,9 @@ atmos terraform untaint --help
 atmos terraform validate --help
 atmos terraform version --help
 atmos terraform workspace --help
+atmos theme --help
+atmos theme list --help
+atmos theme show --help
 atmos validate --help
 atmos validate component --help
 atmos validate editorconfig --help
