@@ -1,0 +1,447 @@
+---
+title: Native Azure Authentication Support
+description: Authenticate to Azure using Atmos with device code flow, OIDC, and service principals - works identically to az login
+slug: azure-authentication-support
+authors: [jamengual]
+tags:
+  - feature
+  - azure
+  - authentication
+---
+
+We're thrilled to announce native Azure authentication support in Atmos! You can now authenticate to Azure using `atmos auth login` with device code flow, OIDC, and service principals - working identically to `az login` with full Terraform provider compatibility.
+
+<!--truncate-->
+
+## What's New
+
+Atmos now provides first-class Azure authentication with three authentication methods:
+
+- **Device Code Flow**: Browser-based authentication for interactive developer sessions
+- **OIDC**: Workload identity for GitHub Actions, GitLab CI, and Azure DevOps pipelines
+- **Service Principals**: Client credential authentication for automation and service accounts
+
+All authentication methods write credentials to the Azure CLI MSAL cache (`~/.azure/msal_token_cache.json`), ensuring 100% compatibility with Terraform's Azure providers: azurerm, azuread, and azapi.
+
+## Quick Start
+
+Configure Azure device code authentication in your `atmos.yaml`:
+
+```yaml
+auth:
+  providers:
+    azure-dev:
+      kind: azure/device-code
+      tenant_id: "12345678-1234-1234-1234-123456789012"
+      subscription_id: "87654321-4321-4321-4321-210987654321"
+      location: "eastus"
+
+  identities:
+    azure-dev-subscription:
+      default: true
+      kind: azure/subscription
+      via:
+        provider: azure-dev
+      principal:
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        location: "eastus"
+```
+
+Then authenticate:
+
+```bash
+atmos auth login
+```
+
+Atmos will:
+1. Display a device code and verification URL
+2. Open your browser to https://microsoft.com/devicelogin
+3. Prompt you to enter the code and sign in
+4. Cache credentials for all Azure providers
+
+Now you can use Terraform with Azure:
+
+```bash
+atmos terraform plan my-component -s my-stack
+atmos terraform apply my-component -s my-stack
+```
+
+## Why This Matters
+
+### Works Exactly Like `az login`
+
+Atmos Azure authentication is designed to work identically to `az login`. When you run `atmos auth login`, it:
+
+- Writes credentials to `~/.azure/msal_token_cache.json` (Azure CLI MSAL cache)
+- Updates `~/.azure/azureProfile.json` with subscription configuration
+- Sets `ARM_USE_CLI=true` for Terraform providers
+- Provides all three token scopes required for full Azure functionality:
+  - `https://management.azure.com/.default` (Azure Resource Manager)
+  - `https://graph.microsoft.com/.default` (Azure AD operations)
+  - `https://vault.azure.net/.default` (Azure KeyVault operations)
+
+This means your existing Terraform code works without any changes - Atmos authentication is a drop-in replacement for `az login`.
+
+### Full Terraform Provider Compatibility
+
+All three major Terraform Azure providers work seamlessly:
+
+**azurerm Provider** - Including KeyVault operations:
+```hcl
+provider "azurerm" {
+  features {}
+  # Atmos automatically sets ARM_USE_CLI=true
+}
+
+resource "azurerm_key_vault" "example" {
+  name     = "my-keyvault"
+  location = "eastus"
+  # KeyVault operations work because Atmos provides KeyVault token scope
+}
+```
+
+**azuread Provider** - For Azure Active Directory:
+```hcl
+provider "azuread" {
+  # Uses Graph API token from Atmos
+}
+
+resource "azuread_group" "example" {
+  display_name     = "My Group"
+  security_enabled = true
+}
+```
+
+**azapi Provider** - Alternative Azure management:
+```hcl
+provider "azapi" {
+  # Works with Atmos authentication out of the box
+}
+```
+
+### CI/CD with OIDC
+
+Use workload identity federation for passwordless authentication in pipelines:
+
+```yaml
+auth:
+  providers:
+    azure-ci:
+      kind: azure/oidc
+      tenant_id: "YOUR_TENANT_ID"
+      client_id: "YOUR_APP_CLIENT_ID"
+      subscription_id: "YOUR_SUBSCRIPTION_ID"
+
+  identities:
+    azure-prod-ci:
+      kind: azure/subscription
+      via:
+        provider: azure-ci
+      principal:
+        subscription_id: "YOUR_SUBSCRIPTION_ID"
+```
+
+**GitHub Actions Example:**
+```yaml
+name: Deploy Infrastructure
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write  # Required for OIDC
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Atmos
+        uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Authenticate to Azure
+        run: atmos auth login --identity azure-prod-ci
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy
+        run: atmos terraform apply my-component -s prod
+```
+
+### Service Principals for Automation
+
+Service principals provide non-interactive authentication for automated workflows, CI/CD pipelines, and scheduled jobs:
+
+```yaml
+auth:
+  providers:
+    azure-automation:
+      kind: azure/service-principal
+      tenant_id: "YOUR_TENANT_ID"
+      client_id: "YOUR_SERVICE_PRINCIPAL_CLIENT_ID"
+      subscription_id: "YOUR_SUBSCRIPTION_ID"
+      location: "eastus"
+
+  identities:
+    azure-automation-prod:
+      kind: azure/subscription
+      via:
+        provider: azure-automation
+      principal:
+        subscription_id: "YOUR_SUBSCRIPTION_ID"
+```
+
+**Create a service principal:**
+```bash
+# Create service principal and assign Contributor role
+az ad sp create-for-rbac \
+  --name "atmos-automation" \
+  --role Contributor \
+  --scopes /subscriptions/YOUR_SUBSCRIPTION_ID
+
+# Output includes:
+# {
+#   "appId": "YOUR_CLIENT_ID",
+#   "displayName": "atmos-automation",
+#   "password": "YOUR_CLIENT_SECRET",
+#   "tenant": "YOUR_TENANT_ID"
+# }
+```
+
+**Authenticate using environment variables:**
+```bash
+# Set credentials in environment
+export AZURE_CLIENT_ID="YOUR_CLIENT_ID"
+export AZURE_CLIENT_SECRET="YOUR_CLIENT_SECRET"
+export AZURE_TENANT_ID="YOUR_TENANT_ID"
+export AZURE_SUBSCRIPTION_ID="YOUR_SUBSCRIPTION_ID"
+
+# Authenticate
+atmos auth login --identity azure-automation-prod
+
+# Run Terraform
+atmos terraform apply my-component -s prod
+```
+
+**Common use cases:**
+- **Scheduled Jobs**: Cron jobs or Azure DevOps scheduled pipelines
+- **CI/CD Pipelines**: Jenkins, GitLab CI, CircleCI (when OIDC not available)
+- **Automation Scripts**: Python/Go scripts for infrastructure management
+- **Multi-tenant SaaS**: Isolated credentials per customer environment
+
+**Security best practices:**
+- Store `client_secret` in secure secret management (Azure Key Vault, HashiCorp Vault)
+- Use least-privilege RBAC roles (avoid Owner, prefer specific roles like Network Contributor)
+- Rotate credentials regularly (90-day rotation recommended)
+- Use certificate-based authentication for production (more secure than secrets)
+- Prefer OIDC over service principals when available (passwordless)
+
+## Multi-Subscription Workflows
+
+Work with multiple Azure subscriptions seamlessly:
+
+```yaml
+auth:
+  providers:
+    azure-main:
+      kind: azure/device-code
+      tenant_id: "YOUR_TENANT_ID"
+      subscription_id: "DEV_SUBSCRIPTION_ID"
+
+  identities:
+    azure-dev:
+      kind: azure/subscription
+      via:
+        provider: azure-main
+      principal:
+        subscription_id: "DEV_SUBSCRIPTION_ID"
+        location: "eastus"
+
+    azure-staging:
+      kind: azure/subscription
+      via:
+        provider: azure-main
+      principal:
+        subscription_id: "STAGING_SUBSCRIPTION_ID"
+        location: "westus"
+
+    azure-prod:
+      kind: azure/subscription
+      via:
+        provider: azure-main
+      principal:
+        subscription_id: "PROD_SUBSCRIPTION_ID"
+        location: "eastus2"
+```
+
+**Switch between subscriptions effortlessly:**
+```bash
+# Deploy to dev
+atmos terraform apply my-component -s dev --identity azure-dev
+
+# Deploy to staging
+atmos terraform apply my-component -s staging --identity azure-staging
+
+# Deploy to prod
+atmos terraform apply my-component -s prod --identity azure-prod
+```
+
+## Implementation Details
+
+### Complete Token Support
+
+One of the key challenges in implementing Azure authentication was ensuring we provide all the token scopes that `az login` provides. Many implementations only provide the Azure Resource Manager token, which breaks KeyVault operations.
+
+Atmos Azure authentication provides all three required token scopes:
+
+1. **Management Token** (`https://management.azure.com/.default`)
+   - Used by: azurerm, azapi providers
+   - Purpose: Azure Resource Manager operations (VMs, networks, storage, etc.)
+
+2. **Graph API Token** (`https://graph.microsoft.com/.default`)
+   - Used by: azuread provider
+   - Purpose: Azure Active Directory operations (users, groups, service principals)
+
+3. **KeyVault Token** (`https://vault.azure.net/.default`)
+   - Used by: azurerm provider for KeyVault operations
+   - Purpose: Azure KeyVault secrets, keys, and certificates management
+
+This comprehensive token support ensures that all Terraform resources work correctly, including KeyVault certificate contacts, secret management, and AD group operations.
+
+### MSAL Cache Compatibility
+
+Atmos writes credentials to the same MSAL cache format that the Azure CLI uses, with proper token entries for each scope:
+
+```json
+{
+  "AccessToken": {
+    "homeAccountId-login.microsoftonline.com-accesstoken-clientId-tenantId-https://management.azure.com/.default": {
+      "credential_type": "AccessToken",
+      "secret": "eyJ0eXAi...",
+      "home_account_id": "objectId.tenantId",
+      "environment": "login.microsoftonline.com",
+      "client_id": "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
+      "target": "https://management.azure.com/.default",
+      "token_type": "Bearer"
+    },
+    "homeAccountId-login.microsoftonline.com-accesstoken-clientId-tenantId-https://graph.microsoft.com/.default": {
+      ...
+    },
+    "homeAccountId-login.microsoftonline.com-accesstoken-clientId-tenantId-https://vault.azure.net/.default": {
+      ...
+    }
+  },
+  "Account": {
+    ...
+  }
+}
+```
+
+This ensures perfect compatibility with Terraform providers that read from the Azure CLI credential cache.
+
+## Migration from az login
+
+Already using `az login`? Atmos is a drop-in replacement:
+
+**Before:**
+```bash
+az login
+az account set --subscription "YOUR_SUBSCRIPTION_ID"
+terraform apply
+```
+
+**After:**
+```bash
+atmos auth login --identity azure-dev
+atmos terraform apply my-component -s my-stack
+```
+
+Both write to the same files, so your Terraform code needs zero changes.
+
+## Security Features
+
+### Secure Credential Storage
+
+- Credentials are cached in your system keyring (Keychain on macOS, Secret Service on Linux, Credential Manager on Windows)
+- Tokens are also written to Azure CLI MSAL cache for Terraform compatibility
+- Both storages are secured by your operating system
+
+### Token Expiration Handling
+
+- Azure tokens typically expire after 1 hour
+- Atmos automatically caches valid tokens and reuses them
+- Re-authenticate when expired: `atmos auth login`
+- Check status anytime: `atmos auth whoami`
+
+### Least Privilege Access
+
+Configure appropriate RBAC roles for your identities:
+
+```bash
+# Example: Grant Contributor role to a service principal
+az role assignment create \
+  --assignee YOUR_APP_CLIENT_ID \
+  --role Contributor \
+  --scope /subscriptions/YOUR_SUBSCRIPTION_ID
+```
+
+## Documentation
+
+We've created comprehensive documentation for Azure authentication:
+
+- **[Azure Authentication Guide](/cli/commands/auth/tutorials/azure-authentication)** - Complete tutorial covering all authentication methods
+- **[Auth Login Command](/cli/commands/auth/login)** - Updated with Azure examples
+- **[Auth Commands Reference](/cli/commands/auth/usage)** - All authentication commands
+
+## What's Next
+
+This is just the beginning of Azure support in Atmos. Future enhancements include:
+
+- Azure Managed Identity support
+- Azure Government Cloud support
+- Azure CLI credential migration tools
+- Enhanced Azure-specific debugging and logging
+
+## Try It Out
+
+Update to the latest version of Atmos and try Azure authentication:
+
+```bash
+# Configure Azure authentication in atmos.yaml
+# (See examples above)
+
+# Authenticate to Azure
+atmos auth login
+
+# Check your authentication status
+atmos auth whoami
+
+# Use with Terraform
+atmos terraform plan my-component -s my-stack
+
+# List all configured identities
+atmos auth list
+
+# Get environment variables for an identity
+atmos auth env --identity azure-dev
+
+# Spawn a shell with Azure credentials
+atmos auth shell azure-dev
+```
+
+We're excited to bring Azure authentication to Atmos and look forward to seeing how you use it in your multi-cloud infrastructure workflows!
+
+## Feedback
+
+Have feedback or issues? Please let us know:
+
+- [GitHub Issues](https://github.com/cloudposse/atmos/issues)
+- [Slack Community](https://slack.cloudposse.com)
+
+---
+
+Special thanks to the community for requesting Azure support and providing feedback during development!

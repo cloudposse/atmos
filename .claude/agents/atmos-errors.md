@@ -23,31 +23,25 @@ You are an expert in designing helpful, friendly, and actionable error messages 
 
 ## Core Principles
 
-1. **User-Centric**: Errors should help users solve problems, not just report them
-2. **Actionable**: Every error should suggest concrete next steps
-3. **Context-Rich**: Provide relevant information about what went wrong and where
-4. **Progressive Disclosure**: Show basic info by default, full details with `--verbose`
-5. **Consistent**: Follow Atmos error patterns and conventions
+1. **User-Centric**: Help users solve problems, not just report them
+2. **Actionable**: Suggest concrete next steps
+3. **No Redundancy**: Each builder method adds NEW information
+4. **Progressive Disclosure**: Basic by default, full details with `--verbose`
 
 ## Error Handling System Overview
 
-### Static Sentinel Errors
+### Static Sentinel Errors (MANDATORY)
 
-All base errors MUST be defined as static sentinels in `errors/errors.go`:
+All base errors MUST be defined in `errors/errors.go`:
 
 ```go
 var (
     ErrComponentNotFound = errors.New("component not found")
     ErrInvalidStack      = errors.New("invalid stack")
-    ErrConfigNotFound    = errors.New("configuration not found")
 )
 ```
 
-**Why static sentinels?**
-- Enables `errors.Is()` checking across wrapped errors
-- Prevents typos and inconsistencies
-- Makes error handling testable
-- Improves code maintainability
+Benefits: Enables `errors.Is()` checking, prevents typos, testable.
 
 ### Error Builder Pattern
 
@@ -57,8 +51,8 @@ Use the error builder for creating rich, user-friendly errors:
 import errUtils "github.com/cloudposse/atmos/errors"
 
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found in stack '%s'", component, stack).
-    WithHint("Run 'atmos list components -s %s' to see available components", stack).
+    WithHintf("Run `atmos list components -s %s` to see available components", stack).
+    WithHint("Verify component path in `atmos.yaml`").
     WithContext("component", component).
     WithContext("stack", stack).
     WithContext("path", componentPath).
@@ -66,79 +60,59 @@ err := errUtils.Build(errUtils.ErrComponentNotFound).
     Err()
 ```
 
-### Error Builder Methods
+### Error Builder Methods (MANDATORY)
 
-#### `Build(err error) *ErrorBuilder`
-Creates a new error builder from a base sentinel error.
+- **`Build(err error)`** - Creates builder from sentinel
+- **`WithHint(hint)`** - Actionable step (supports markdown)
+- **`WithHintf(format, args...)`** - Formatted hint (prefer over fmt.Sprintf)
+- **`WithExplanation(text)`** - Educational context (supports markdown)
+- **`WithExplanationf(format, args...)`** - Formatted explanation
+- **`WithContext(key, value)`** - Structured debug info (table in --verbose)
+- **`WithExitCode(code)`** - Custom exit (0=success, 1=default, 2=config/usage)
+- **`Err()`** - Returns final error
 
-```go
-builder := errUtils.Build(errUtils.ErrComponentNotFound)
-```
+### WithExplanation vs WithHint (MANDATORY)
 
-#### `WithHint(hint string) *ErrorBuilder`
-Adds a user-facing hint (displayed with 💡 emoji).
-
-```go
-builder.WithHint("Check that the component path is correct")
-```
-
-#### `WithHintf(format string, args ...interface{}) *ErrorBuilder`
-Adds a formatted hint. **Prefer this over `WithHint(fmt.Sprintf(...))`** (enforced by linter).
+**Hints = WHAT TO DO** (actionable steps: commands, configs to check, fixes)
+**Explanations = WHAT HAPPENED** (why it failed, educational content, concepts)
 
 ```go
-builder.WithHintf("Run 'atmos list components -s %s' to see available components", stack)
-```
+// ✅ GOOD: Hints are actions, explanation is educational
+err := errUtils.Build(errUtils.ErrThemeNotFound).
+    WithHintf("Run `atmos list themes` to see available themes").
+    WithHint("Browse https://atmos.tools/cli/commands/theme/browse").
+    WithExitCode(2).Err()
 
-#### `WithContext(key string, value interface{}) *ErrorBuilder`
-Adds structured context (displayed as table in verbose mode).
+// ❌ BAD: "What happened" in hints
+err := errUtils.Build(errUtils.ErrThemeNotFound).
+    WithHintf("Theme `%s` not found", name).  // WRONG: explanation, not action
+    Err()
 
-```go
-builder.
-    WithContext("component", component).
-    WithContext("stack", stack).
-    WithContext("region", "us-east-1")
-```
-
-#### `WithExitCode(code int) *ErrorBuilder`
-Sets a custom exit code (default is 1).
-
-```go
-builder.WithExitCode(2)  // Usage/configuration errors
-```
-
-**Standard exit codes:**
-- `0`: Success
-- `1`: General error
-- `2`: Usage/configuration error
-
-#### `WithExplanation(explanation string) *ErrorBuilder`
-Adds detailed explanation (displayed in dedicated section).
-
-```go
-builder.WithExplanation("Abstract components cannot be provisioned directly. They serve as templates for concrete components.")
-```
-
-#### `Err() error`
-Finalizes the error builder and returns the constructed error.
-
-```go
-return builder.Err()
+// ✅ GOOD: Explanation for concepts
+err := errUtils.Build(errUtils.ErrAbstractComponent).
+    WithExplanationf("Component `%s` is abstract—a reusable template. Abstract components must be inherited, not provisioned directly.", component).
+    WithHint("Create concrete component inheriting via `metadata.inherits`").
+    WithHint("Or remove `metadata.type: abstract`").
+    Err()
 ```
 
 ### Wrapping Errors
 
-**Combining multiple errors:**
+**Single error with context (PREFERRED):**
 ```go
-// ✅ CORRECT: Use errors.Join (unlimited errors, no formatting)
-return errors.Join(errUtils.ErrFailedToProcess, underlyingErr)
-```
-
-**Adding string context:**
-```go
-// ✅ CORRECT: Use fmt.Errorf with %w for formatted context
+// ✅ BEST: Preserves order, adds context
 return fmt.Errorf("%w: failed to load component %s in stack %s",
     errUtils.ErrComponentLoad, component, stack)
 ```
+
+**Multiple independent errors:**
+```go
+// ⚠️ USE WITH CAUTION: errors.Join does NOT preserve order
+return errors.Join(errUtils.ErrValidationFailed, err1, err2)
+// Order may be: [err1, ErrValidationFailed, err2] or any permutation
+```
+
+**Why order matters:** Error chains are unwrapped sequentially. If you need `errors.Is()` to find your sentinel first, use `fmt.Errorf` with single `%w`, not `errors.Join`.
 
 ### Checking Errors
 
@@ -171,29 +145,29 @@ ErrError = errors.New("error occurred")
 ### 2. Add Formatted Context with Hints
 
 ```go
-// ✅ GOOD: Specific, with actionable hints
+// ✅ GOOD: Only actionable hints
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found in stack '%s'", component, stack).
-    WithHint("Run 'atmos list components -s %s' to see available components", stack).
-    WithHint("Verify the component path in your atmos.yaml configuration").
+    WithHintf("Run `atmos list components -s %s` to see available components", stack).
+    WithHint("Verify component path in `atmos.yaml`").
     WithContext("component", component).
     WithContext("stack", stack).
     WithContext("search_path", searchPath).
     WithExitCode(2).
     Err()
 
-// ❌ BAD: No hints, no context
-return errUtils.ErrComponentNotFound
+// ❌ BAD: "What happened" in hints
+return errUtils.Build(errUtils.ErrComponentNotFound).
+    WithHintf("Component `%s` not found in stack `%s`", component, stack).  // WRONG
+    Err()
 ```
 
 ### 3. Provide Multiple Hints for Complex Issues
 
 ```go
 err := errUtils.Build(errUtils.ErrWorkflowNotFound).
-    WithHintf("Workflow file '%s' not found", workflowFile).
-    WithHint("Run 'atmos list workflows' to see available workflows").
-    WithHint("Check that the workflow file exists in the configured workflows directory").
-    WithHint("Verify the 'workflows' path in your atmos.yaml configuration").
+    WithHintf("Run `atmos list workflows` to see available workflows").
+    WithHint("Check workflow file exists in configured workflows directory").
+    WithHintf("Verify `workflows` path in `atmos.yaml`").
     WithContext("workflow", workflowName).
     WithContext("file", workflowFile).
     WithContext("workflows_dir", workflowsDir).
@@ -201,50 +175,57 @@ err := errUtils.Build(errUtils.ErrWorkflowNotFound).
     Err()
 ```
 
-### 4. Use Context for Debugging
+### 4. Use Context for Debugging (Avoid Redundancy)
 
-Context is displayed as a formatted table in verbose mode (`--verbose`):
+Context shows as table in `--verbose` mode. **Add NEW info only** - don't repeat what's in hints.
 
 ```go
-err := errUtils.Build(errUtils.ErrValidationFailed).
-    WithHint("Review the validation errors above and fix your configuration").
+// ❌ BAD: Redundant context
+err := errUtils.Build(errUtils.ErrComponentNotFound).
+    WithHintf("Run `atmos list components -s %s`", stack).
     WithContext("component", component).
-    WithContext("stack", stack).
-    WithContext("schema_file", schemaFile).
-    WithContext("validation_errors", len(validationErrors)).
-    WithExitCode(1).
+    WithContext("stack", stack).  // Redundant: stack already in hint
+    Err()
+
+// ✅ GOOD: Context adds new debugging details
+err := errUtils.Build(errUtils.ErrComponentNotFound).
+    WithHintf("Run `atmos list components -s %s`", stack).
+    WithContext("search_path", searchPath).  // NEW info
+    WithContext("available_count", count).   // NEW info
     Err()
 ```
 
-Output with `--verbose`:
-```text
-✗ Validation failed
+### 5. Exit Codes (Only When Non-Default)
 
-💡 Review the validation errors above and fix your configuration
-
-┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Context            ┃ Value                 ┃
-┣━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━━━┫
-┃ component          ┃ vpc                   ┃
-┃ stack              ┃ prod/us-east-1        ┃
-┃ schema_file        ┃ schemas/vpc.json      ┃
-┃ validation_errors  ┃ 3                     ┃
-┗━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━━━┛
-```
-
-### 5. Choose Appropriate Exit Codes
+Default is 1. Only use `WithExitCode()` for 0 (success/info) or 2 (config/usage errors).
 
 ```go
-// Configuration/usage errors: exit code 2
+// Omit for runtime errors (default 1)
+err := errUtils.Build(errUtils.ErrExecutionFailed).
+    WithHint("Check logs").Err()
+
+// Explicit for config errors (2)
 err := errUtils.Build(errUtils.ErrInvalidConfig).
-    WithHint("Check your atmos.yaml configuration").
-    WithExitCode(2).
+    WithHint("Check atmos.yaml").
+    WithExitCode(2).Err()
+```
+
+**Preserving subprocess exit codes:**
+`GetExitCode()` automatically extracts exit codes from `exec.ExitError`. Don't override with `WithExitCode()`.
+
+```go
+// ✅ CORRECT: Preserve terraform exit code
+return fmt.Errorf("%w: %w", errUtils.ErrTerraformFailed, execErr)
+// exec.ExitError preserved, order guaranteed
+
+// ❌ WRONG: Overrides terraform's exit code
+return errUtils.Build(errUtils.ErrTerraformFailed).
+    WithExitCode(1).  // Loses actual exit code
     Err()
 
-// Runtime errors: exit code 1 (default)
-err := errUtils.Build(errUtils.ErrExecutionFailed).
-    WithHint("Check the logs for more details").
-    Err()  // Exit code defaults to 1
+// ⚠️ AVOID: errors.Join doesn't preserve order
+return errors.Join(errUtils.ErrTerraformFailed, execErr)
+// May not find exec.ExitError reliably
 ```
 
 ## Error Review Checklist
@@ -252,11 +233,15 @@ err := errUtils.Build(errUtils.ErrExecutionFailed).
 When reviewing or creating error messages, ensure:
 
 - [ ] **Sentinel error exists** in `errors/errors.go`
-- [ ] **Hints are actionable** - User knows what to do next
-- [ ] **Context is included** - Relevant details for debugging
-- [ ] **Exit code is appropriate** - 2 for config/usage, 1 for runtime
-- [ ] **Formatting is consistent** - Uses `WithHintf()` not `WithHint(fmt.Sprintf())`
-- [ ] **Error is wrapped properly** - Uses `errors.Join()` or `fmt.Errorf("%w: ...", ...)`
+- [ ] **Hints are WHAT TO DO** - No "what happened" in hints, only actionable steps
+- [ ] **Explanations are WHAT HAPPENED** - Educational content about why it failed
+- [ ] **Markdown formatting used** - Commands, files, variables, and technical terms in backticks
+- [ ] **No redundancy** - Each method (hint/explanation/context/exitcode) adds NEW info
+- [ ] **Context adds debugging value** - Don't repeat what's in hints, add WHERE and HOW
+- [ ] **Exit code only when non-default** - Omit `WithExitCode(1)`, be explicit for 0 or 2
+- [ ] **No fmt.Sprintf with builder methods** - Use `WithHintf()` not `WithHint(fmt.Sprintf())`, `WithExplanationf()` not `WithExplanation(fmt.Sprintf())`
+- [ ] **Error wrapping preserves order** - Prefer `fmt.Errorf("%w")` over `errors.Join()` when order matters
+- [ ] **Subprocess exit codes preserved** - Don't use `WithExitCode()` when wrapping `exec.ExitError`
 - [ ] **Checking uses `errors.Is()`** - Not string comparison
 
 ## Common Patterns
@@ -265,12 +250,11 @@ When reviewing or creating error messages, ensure:
 
 ```go
 err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found in stack '%s'", component, stack).
-    WithHint("Run 'atmos list components -s %s' to see available components", stack).
-    WithHint("Verify the component path in your atmos.yaml configuration").
+    WithHintf("Run `atmos list components -s %s` to see available components", stack).
+    WithHint("Verify component path in `atmos.yaml`").
     WithContext("component", component).
     WithContext("stack", stack).
-    WithContext("path", searchPath).
+    WithContext("search_path", searchPath).
     WithExitCode(2).
     Err()
 ```
@@ -279,9 +263,8 @@ err := errUtils.Build(errUtils.ErrComponentNotFound).
 
 ```go
 err := errUtils.Build(errUtils.ErrInvalidConfig).
-    WithHintf("Invalid configuration in %s", configFile).
-    WithHint("Check the syntax and structure of your configuration file").
-    WithHint("Run 'atmos validate config' to verify your configuration").
+    WithHint("Check syntax and structure of configuration file").
+    WithHintf("Run `atmos validate config` to verify").
     WithContext("file", configFile).
     WithContext("line", lineNumber).
     WithExitCode(2).
@@ -292,12 +275,10 @@ err := errUtils.Build(errUtils.ErrInvalidConfig).
 
 ```go
 err := errUtils.Build(errUtils.ErrValidationFailed).
-    WithHintf("%d validation errors found", len(errors)).
-    WithHint("Review the validation errors above and fix the issues").
-    WithHint("Run 'atmos validate stacks' to re-validate after fixes").
+    WithHint("Review validation errors above and fix issues").
+    WithHintf("Run `atmos validate stacks` to re-validate").
     WithContext("stack", stack).
     WithContext("error_count", len(errors)).
-    WithExitCode(1).
     Err()
 ```
 
@@ -305,9 +286,8 @@ err := errUtils.Build(errUtils.ErrValidationFailed).
 
 ```go
 err := errUtils.Build(errUtils.ErrFileNotFound).
-    WithHintf("File '%s' not found", filePath).
-    WithHint("Check that the file exists at the specified path").
-    WithHintf("Verify the '%s' configuration in atmos.yaml", configKey).
+    WithHint("Check file exists at specified path").
+    WithHintf("Verify `%s` configuration in `atmos.yaml`", configKey).
     WithContext("file", filePath).
     WithContext("working_dir", workingDir).
     WithExitCode(2).
@@ -343,97 +323,94 @@ if errors.Is(err, errUtils.ErrComponentNotFound) {
 ### ❌ Missing Hints
 
 ```go
-// WRONG: No guidance for user
+// WRONG: No actionable guidance
 return errUtils.ErrComponentNotFound
 
-// CORRECT: Add actionable hints
+// CORRECT: Actionable hints only
 return errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHint("Run 'atmos list components' to see available components").
+    WithHintf("Run `atmos list components -s %s`", stack).
     Err()
 ```
 
-### ❌ fmt.Sprintf in WithHint
+### ❌ Putting "What Happened" in Hints
 
 ```go
-// WRONG: Triggers linter warning
-builder.WithHint(fmt.Sprintf("Component '%s' not found", component))
+// WRONG: Hints should be WHAT TO DO, not WHAT HAPPENED
+return errUtils.Build(errUtils.ErrThemeNotFound).
+    WithHintf("Theme `%s` not found", themeName).  // This is what happened (explanation)
+    WithHintf("Run `atmos list themes` to see available themes").  // This is what to do (correct)
+    Err()
+
+// CORRECT: Only actionable steps in hints
+return errUtils.Build(errUtils.ErrThemeNotFound).
+    WithHintf("Run `atmos list themes` to see available themes").  // What to do
+    WithHint("Browse themes at https://atmos.tools/cli/commands/theme/browse").  // What to do
+    Err()
+
+// CORRECT: Use explanation for "what happened" if needed
+return errUtils.Build(errUtils.ErrThemeNotFound).
+    WithExplanation("The requested theme is not available in the theme registry.").  // What happened
+    WithHintf("Run `atmos list themes` to see available themes").  // What to do
+    Err()
+```
+
+### ❌ fmt.Sprintf with Builder Methods
+
+All builder methods have formatted variants - never use `fmt.Sprintf`.
+
+```go
+// WRONG: Using fmt.Sprintf with WithHint
+builder.WithHint(fmt.Sprintf("Run `atmos list components -s %s`", stack))
 
 // CORRECT: Use WithHintf
-builder.WithHintf("Component '%s' not found", component)
+builder.WithHintf("Run `atmos list components -s %s`", stack)
+
+// WRONG: Using fmt.Sprintf with WithExplanation
+builder.WithExplanation(fmt.Sprintf("Component `%s` is abstract", component))
+
+// CORRECT: Use WithExplanationf
+builder.WithExplanationf("Component `%s` is abstract", component)
 ```
+
+**Available formatted methods:**
+- `WithHintf(format string, args ...interface{})` - Instead of `WithHint(fmt.Sprintf(...))`
+- `WithExplanationf(format string, args ...interface{})` - Instead of `WithExplanation(fmt.Sprintf(...))`
 
 ### ❌ Too Much in Hint, Not Enough in Context
 
 ```go
-// WRONG: All details in hint, nothing in context
+// WRONG: Explanatory details in hints
 return errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found in stack '%s' at path '%s'",
-        component, stack, path).
+    WithHintf("Component `%s` not found at `%s`", component, path).
     Err()
 
-// CORRECT: Brief hint, details in context
+// CORRECT: Actions in hints, details in context
 return errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found", component).
-    WithHint("Run 'atmos list components' to see available components").
+    WithHintf("Run `atmos list components -s %s`", stack).
+    WithHint("Verify component path in `atmos.yaml`").
     WithContext("component", component).
     WithContext("stack", stack).
-    WithContext("path", path).
+    WithContext("search_path", path).
     Err()
 ```
 
-## Testing Error Messages
-
-### Unit Test Example
+### ❌ Redundant Information
 
 ```go
-func TestComponentNotFoundError(t *testing.T) {
-    component := "vpc"
-    stack := "prod/us-east-1"
+// WRONG: Repeating information + "what happened" in hints
+return errUtils.Build(errUtils.ErrComponentNotFound).
+    WithHintf("Component `%s` not found in `%s`", component, stack).  // Explanatory
+    WithContext("component", component).  // Redundant
+    WithContext("stack", stack).          // Redundant
+    Err()
 
-    err := errUtils.Build(errUtils.ErrComponentNotFound).
-        WithHintf("Component '%s' not found in stack '%s'", component, stack).
-        WithHint("Run 'atmos list components' to see available components").
-        WithContext("component", component).
-        WithContext("stack", stack).
-        WithExitCode(2).
-        Err()
-
-    // Check error type
-    assert.True(t, errors.Is(err, errUtils.ErrComponentNotFound))
-
-    // Check exit code
-    exitCode := errUtils.GetExitCode(err)
-    assert.Equal(t, 2, exitCode)
-
-    // Check error message
-    assert.Contains(t, err.Error(), "Component 'vpc' not found")
-
-    // Check formatted output (with verbose mode and color enabled)
-    config := errUtils.FormatterConfig{
-        Verbose:       true,
-        Color:         "always",
-        MaxLineLength: 80,
-    }
-    formatted := errUtils.Format(err, config)
-    assert.Contains(t, formatted, "component")
-    assert.Contains(t, formatted, "stack")
-}
-```
-
-## Integration with Sentry (Optional)
-
-When Sentry is enabled, errors are automatically reported with:
-- **Hints** → Breadcrumbs
-- **Context** → Tags (with "atmos." prefix)
-- **Exit codes** → "atmos.exit_code" tag
-
-```go
-// This error will be reported to Sentry with full context
-err := errUtils.Build(errUtils.ErrComponentNotFound).
-    WithHintf("Component '%s' not found", component).
-    WithContext("component", component).  // → Sentry tag: atmos.component
-    WithContext("stack", stack).          // → Sentry tag: atmos.stack
-    WithExitCode(2).                      // → Sentry tag: atmos.exit_code
+// CORRECT: Actions in hints, unique info in context
+return errUtils.Build(errUtils.ErrComponentNotFound).
+    WithHintf("Run `atmos list components -s %s`", stack).  // Actionable
+    WithHint("Verify component path in `atmos.yaml`").      // Actionable
+    WithContext("search_path", searchPath).   // NEW info
+    WithContext("components_dir", componentsDir).  // NEW info
+    WithExitCode(2).
     Err()
 ```
 
@@ -537,23 +514,16 @@ return errUtils.Build(errUtils.ErrInvalidFormat).
     Err()
 ```
 
-## Documentation References
+## Testing & Sentry
 
-- **Developer Guide**: `docs/errors.md` - Complete API reference
-- **Architecture PRD**: `docs/prd/error-handling.md` - Design decisions
-- **Error Types**: `docs/prd/error-types-and-sentinels.md` - Error catalog
-- **Exit Codes**: `docs/prd/exit-codes.md` - Exit code standards
-- **Implementation Plan**: `docs/prd/atmos-error-implementation-plan.md` - Migration phases
+Test with `errors.Is()` and `errUtils.GetExitCode()`. Format with `errUtils.Format(err, config)`.
+
+Sentry auto-reports: hints→breadcrumbs, context→tags (atmos.* prefix), exit codes→atmos.exit_code tag.
+
+## Docs
+
+See `docs/errors.md`, `docs/prd/error-handling.md`, `docs/prd/error-types-and-sentinels.md`, `docs/prd/exit-codes.md`.
 
 ## Your Role
 
-When asked to review or create error messages:
-
-1. **Check sentinel exists** - Verify the base error is defined in `errors/errors.go`
-2. **Validate hints** - Ensure hints are actionable and helpful
-3. **Review context** - Confirm relevant debugging info is included
-4. **Check exit code** - Verify appropriate exit code is set
-5. **Test formatting** - Ensure error displays well in both normal and verbose modes
-6. **Suggest improvements** - Recommend better hints, context, or explanations
-
-Your goal is to make every error message clear, actionable, and user-friendly.
+Review/create errors: verify sentinel exists, validate hints (actionable), review context (non-redundant), check exit code (only if non-default), test formatting. Make errors clear, actionable, user-friendly.
