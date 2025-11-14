@@ -178,18 +178,26 @@ The `spec` field follows the [VS Code Dev Container specification](https://conta
 
 ## Output Masking
 
-Devcontainer commands are fully integrated with Atmos's automatic secret masking system. All output from containers—including command execution, logs, and interactive shell sessions—is automatically processed to redact sensitive data.
+Devcontainer commands support Atmos's automatic secret masking system with some limitations:
 
-**Key Features:**
-- **Enabled by default** - Secrets are automatically masked in all devcontainer output
-- **Works everywhere** - Applies to logs, exec output, and interactive shell sessions
-- **Configurable** - Control via `--mask` flag, `ATMOS_MASK` environment variable, or `atmos.yaml`
+**Masking Support:**
+- ✅ **`logs`** - Masking enabled by default
+- ✅ **`exec`** - Masking enabled by default for non-interactive commands
+- ⚠️ **`attach`/`shell`** - Masking **requires experimental `--pty` flag** (macOS/Linux only)
 
-**Example:**
+**Interactive Sessions:**
+
+Interactive TTY sessions (`attach`, `shell`) cannot mask output in standard mode due to TTY limitations. To enable masking in interactive sessions:
+
 ```bash
-# Temporarily disable masking for debugging
-atmos devcontainer logs geodesic --mask=false
+# Enable masking in interactive sessions (experimental, macOS/Linux only)
+atmos devcontainer attach geodesic --pty
+atmos devcontainer shell geodesic --pty
 ```
+
+:::warning
+The `--pty` flag is experimental and not available on Windows. Standard attach/shell mode works on all platforms but cannot mask output in interactive TTY sessions.
+:::
 
 For complete masking configuration (patterns, options, use cases), see the [Secret Masking Configuration](/cli/configuration/mask) documentation.
 
