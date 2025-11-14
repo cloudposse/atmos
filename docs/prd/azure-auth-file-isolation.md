@@ -278,6 +278,7 @@ import (
     "fmt"
     "os"
     "path/filepath"
+    "strings"
 
     "github.com/cloudposse/atmos/pkg/auth/types"
     "github.com/cloudposse/atmos/pkg/config/homedir"
@@ -433,7 +434,7 @@ func (m *AzureFileManager) CleanupAll() error {
 
     return nil
 }
-```text
+```
 
 #### 2. Azure Auth Context (`pkg/schema/schema.go`) - UPDATE EXISTING
 
