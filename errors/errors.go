@@ -57,6 +57,10 @@ var (
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 
+	// Theme-related errors.
+	ErrThemeNotFound = errors.New("theme not found")
+	ErrInvalidTheme  = errors.New("invalid theme")
+
 	// Authentication and TTY errors.
 	ErrAuthConsole            = errors.New("auth console operation failed")
 	ErrProviderNotSupported   = errors.New("provider does not support this operation")
