@@ -541,7 +541,7 @@ This is the architecturally correct solution because:
 9. Update existing mock-based tests to include `authManager` parameter
 
 ### Phase 4: Documentation
-11. Update `docs/terraform-state-yaml-func-authentication-flow.md`
+11. Update `docs/terraform-yaml-functions-authentication-flow.md`
 12. Add example to documentation showing nested function authentication
 
 ## Testing Strategy
@@ -693,8 +693,7 @@ All tests pass successfully (10 tests total for nested auth scenarios).
 ### Documentation
 
 Updated authentication flow documentation:
-- `docs/terraform-state-yaml-func-authentication-flow.md` - Added "Component-Level Auth Override" section
-- `docs/terraform-output-yaml-func-authentication-flow.md` - Added "Component-Level Auth Override in Nested Functions" section
+- `docs/terraform-yaml-functions-authentication-flow.md` - Comprehensive guide covering both `!terraform.state` and `!terraform.output` authentication, including nested functions and component-level auth overrides
 
 ## Related Issues
 
