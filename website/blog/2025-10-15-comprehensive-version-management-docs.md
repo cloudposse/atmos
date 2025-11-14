@@ -15,7 +15,7 @@ The new documentation provides a complete framework for understanding and implem
 
 ### 🎯 Clear Strategy Recommendations
 
-**[Component Pinning with Automation](/design-patterns/component-pinning-automation)** is now our recommended default pattern. This trunk-based approach:
+**[Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment)** is now our recommended default pattern. This trunk-based approach:
 
 - **Promotes convergence** across all environments through progressive rollout
 - **Simplifies operations** with no complex version tracking or branch management
@@ -97,7 +97,7 @@ Quick-reference tables help you understand trade-offs:
 
 ## Getting Started
 
-Start with the [Version Management overview](/design-patterns/version-management) to understand all available patterns, then dive into [Component Pinning with Automation](/design-patterns/component-pinning-automation) for our recommended default approach.
+Start with the [Version Management overview](/design-patterns/version-management) to understand all available patterns, then dive into [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment) for our recommended default approach.
 
 The documentation includes:
 - Real-world examples with complete configurations
