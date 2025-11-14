@@ -83,7 +83,7 @@ authentication in this order:
 
 Both functions follow the same authentication flow through the codebase:
 
-```text
+```plaintext
 Terraform Command Execution
   ↓
 ExecuteTerraform()
@@ -107,7 +107,7 @@ After this point, the paths diverge based on the function type:
 
 #### !terraform.state Path
 
-```text
+```plaintext
 GetTerraformState()
   ├─ Creates AWS SDK config from authContext:
   │   • Uses AWS_SHARED_CREDENTIALS_FILE
@@ -123,7 +123,7 @@ GetTerraformState()
 
 #### !terraform.output Path
 
-```text
+```plaintext
 execTerraformOutput()
   ├─ Generates backend.tf.json
   ├─ Converts AuthContext to environment variables:
@@ -173,7 +173,7 @@ authentication.
 
 Atmos propagates authentication through nested function evaluations using the `AuthManager`:
 
-```text
+```plaintext
 Level 1: atmos terraform apply api-gateway -s production
   ├─ Creates AuthManager with prod-deploy identity
   ├─ Stores AuthManager in configAndStacksInfo.AuthManager

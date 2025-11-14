@@ -84,14 +84,20 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			Skip:                 nil,
 			AuthManager:          nil, // Critical: no AuthManager yet, we're determining which identity to use.
 		})
-		if err == nil {
+		if err != nil {
+			// If component doesn't exist, exit immediately before attempting authentication.
+			// This prevents prompting for identity when the component is invalid.
+			if errors.Is(err, errUtils.ErrInvalidComponent) {
+				return err
+			}
+			// For other errors (e.g., permission issues), continue with global auth config.
+		} else {
 			// Merge component-specific auth with global auth.
 			mergedAuthConfig, err = auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, &atmosConfig, cfg.AuthSectionName)
 			if err != nil {
 				return err
 			}
 		}
-		// If error getting component config, continue with global auth config.
 	}
 
 	// Create and authenticate AuthManager from --identity flag if specified.

@@ -88,7 +88,7 @@ All `!terraform.state` functions should use the authenticated `core-network/terr
 
 ### Execution Flow
 
-```
+```plaintext
 1. User Command
    └─ atmos terraform apply tgw/routes -s core-use2-network
        └─ internal/exec/terraform.go:ExecuteTerraform()
@@ -513,7 +513,7 @@ The registry key `stack-component` works for the top-level component but fails f
 
 ## Recommended Solution
 
-**Option 1: Add AuthManager to ConfigAndStacksInfo**
+### Option 1: Add AuthManager to ConfigAndStacksInfo (Recommended)
 
 This is the architecturally correct solution because:
 
