@@ -1,0 +1,190 @@
+---
+title: Migrating from Geodesic Wrapper Script
+sidebar_label: Migrating from Geodesic
+sidebar_position: 10
+id: migrating-from-geodesic-wrapper
+description: Migrate from geodesic.sh wrapper script to atmos devcontainer commands.
+---
+
+> **Note**: `atmos devcontainer` requires minimum Atmos version `v2.0.0`
+
+This guide explains how to migrate from the legacy `geodesic.sh` wrapper script to the native `atmos devcontainer` commands.
+
+## Overview
+
+The Geodesic wrapper script (`geodesic.sh`) is being replaced by `atmos devcontainer` commands that provide:
+- Native Docker/Podman integration
+- Configuration in `atmos.yaml`
+- Standard dev container specification support
+- Consistent CLI experience across all Atmos commands
+
+## Migration Steps
+
+### 1. Add Devcontainer Configuration to atmos.yaml
+
+Add a `devcontainer` section under `components` in your `atmos.yaml`:
+
+```yaml
+components:
+  devcontainer:
+    geodesic:
+      spec: !include devcontainer.json
+```
+
+### 2. Create devcontainer.json
+
+Create a `devcontainer.json` file in your repository root with your Geodesic configuration:
+
+```json
+{
+  "name": "Geodesic",
+  "image": "cloudposse/geodesic:latest",
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspace",
+  "containerEnv": {
+    "ATMOS_BASE_PATH": "/workspace",
+    "TERM": "${localEnv:TERM}"
+  },
+  "remoteUser": "root",
+  "runArgs": [
+    "--hostname=geodesic"
+  ]
+}
+```
+
+### 3. Update Your Workflow
+
+Replace geodesic.sh commands with atmos equivalents:
+
+| Old Command | New Command |
+|------------|-------------|
+| `make run` (with `geodesic.sh`) | `atmos devcontainer shell geodesic` |
+| `geodesic.sh` | `atmos devcontainer shell geodesic` |
+| Starting container | `atmos devcontainer start geodesic` |
+| Attaching to running container | `atmos devcontainer attach geodesic` |
+| Stopping container | `atmos devcontainer stop geodesic` |
+
+### 4. (Optional) Add Shell Alias
+
+For convenience, add a shell alias to your `atmos.yaml`:
+
+```yaml
+aliases:
+  shell: "devcontainer shell geodesic"
+```
+
+Now you can use:
+```bash
+atmos shell  # Equivalent to: atmos devcontainer shell geodesic
+```
+
+### 5. Update Your Makefile (Optional)
+
+If you have a Makefile that launches Geodesic, update it:
+
+**Before:**
+```makefile
+run:
+	@./geodesic.sh
+```
+
+**After:**
+```makefile
+run:
+	@atmos devcontainer shell geodesic
+```
+
+## Configuration Reference
+
+### Basic Configuration
+
+```yaml
+components:
+  devcontainer:
+    geodesic:
+      spec:
+        image: "cloudposse/geodesic:latest"
+        workspaceFolder: "/workspace"
+```
+
+### Advanced Configuration
+
+```yaml
+components:
+  devcontainer:
+    geodesic:
+      settings:
+        runtime: podman  # Optional: docker, podman, or omit for auto-detect
+      spec:
+        image: "cloudposse/geodesic:latest"
+        workspaceFolder: "/workspace"
+        workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
+        containerEnv:
+          ATMOS_BASE_PATH: "/workspace"
+          ATMOS_IDENTITY: "acme-identity"  # For atmos auth integration
+        remoteUser: "root"
+        runArgs:
+          - "--hostname=geodesic"
+```
+
+## Integration with Atmos Auth
+
+If you're using `atmos auth`, ensure your devcontainer mounts the credentials:
+
+```json
+{
+  "mounts": [
+    "type=bind,source=${localEnv:HOME}/.config/atmos,target=/root/.config/atmos,readonly"
+  ],
+  "containerEnv": {
+    "ATMOS_IDENTITY": "acme-identity"
+  }
+}
+```
+
+See [Configuring Geodesic with Atmos Auth](/cli/commands/auth/tutorials/configuring-geodesic) for complete authentication setup.
+
+## Troubleshooting
+
+### Issue: "Command not found: atmos devcontainer"
+
+**Solution**: Upgrade to Atmos v2.0.0 or later:
+```bash
+atmos version  # Check current version
+```
+
+### Issue: Container doesn't start
+
+**Solution**: Verify your configuration with:
+```bash
+atmos validate devcontainer
+```
+
+### Issue: Workspace not mounted
+
+**Cause**: Incorrect `workspaceMount` configuration.
+
+**Solution**: Ensure the mount uses your actual repository path:
+```json
+{
+  "workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspace"
+}
+```
+
+## Next Steps
+
+- Review the [Devcontainer CLI Reference](/cli/commands/devcontainer/usage)
+- Learn about [multiple devcontainer configurations](/cli/commands/devcontainer/usage#multiple-devcontainers)
+- Explore the [complete examples](https://github.com/cloudposse/atmos/tree/main/examples/devcontainer)
+
+## Getting Help
+
+If you encounter issues:
+
+1. Check the [Devcontainer documentation](/cli/commands/devcontainer/usage)
+2. Review [examples](https://github.com/cloudposse/atmos/tree/main/examples/devcontainer)
+3. Join our [community Slack](https://slack.cloudposse.com/)
+
+---
+
+**Ready to migrate?** Start by adding the devcontainer configuration to your `atmos.yaml`, then test with `atmos devcontainer shell geodesic`.
