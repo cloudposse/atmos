@@ -202,20 +202,12 @@ func (r *Resolver) ResolveComponentFromPathWithoutValidation(
 
 // validateComponentInStack checks if a component exists in the specified stack configuration.
 // Returns the actual stack key (which may be an alias) that matched the component.
-func (r *Resolver) validateComponentInStack(
+// loadStackConfig loads and validates that a stack exists.
+func (r *Resolver) loadStackConfig(
 	atmosConfig *schema.AtmosConfiguration,
-	componentName string,
 	stack string,
-	componentType string,
-) (string, error) {
-	defer perf.Track(atmosConfig, "component.validateComponentInStack")()
-
-	log.Debug("Validating component exists in stack",
-		"component", componentName,
-		"stack", stack,
-		"type", componentType,
-	)
-
+	componentName string,
+) (map[string]any, error) {
 	// Load all stacks using the injected stack loader.
 	stacksMap, _, err := r.stackLoader.FindStacksMap(atmosConfig, false)
 	if err != nil {
@@ -227,7 +219,7 @@ func (r *Resolver) validateComponentInStack(
 			WithContext("underlying_error", err.Error()).
 			WithExitCode(2).
 			Err()
-		return "", loadErr
+		return nil, loadErr
 	}
 
 	// Check if stack exists.
@@ -240,29 +232,39 @@ func (r *Resolver) validateComponentInStack(
 			WithContext("component", componentName).
 			WithExitCode(2).
 			Err()
-		return "", notFoundErr
+		return nil, notFoundErr
 	}
 
-	// Extract components section.
+	// Validate stack configuration format.
 	stackConfigMap, ok := stackConfig.(map[string]any)
 	if !ok {
-		return "", fmt.Errorf("invalid stack configuration for '%s'", stack)
+		return nil, fmt.Errorf("invalid stack configuration for '%s'", stack)
 	}
 
+	return stackConfigMap, nil
+}
+
+// extractComponentsSection extracts the component type section from a stack configuration.
+func extractComponentsSection(
+	stackConfigMap map[string]any,
+	componentType string,
+	stack string,
+) (map[string]any, error) {
+	// Extract components section.
 	components, ok := stackConfigMap["components"]
 	if !ok {
-		return "", fmt.Errorf("%w: stack '%s' has no components section", errUtils.ErrComponentNotInStack, stack)
+		return nil, fmt.Errorf("%w: stack '%s' has no components section", errUtils.ErrComponentNotInStack, stack)
 	}
 
 	componentsMap, ok := components.(map[string]any)
 	if !ok {
-		return "", fmt.Errorf("%w: invalid components section in stack '%s'", errUtils.ErrComponentNotInStack, stack)
+		return nil, fmt.Errorf("%w: invalid components section in stack '%s'", errUtils.ErrComponentNotInStack, stack)
 	}
 
 	// Extract component type section (terraform/helmfile/packer).
 	typeComponents, ok := componentsMap[componentType]
 	if !ok {
-		return "", fmt.Errorf(
+		return nil, fmt.Errorf(
 			"%w: stack '%s' has no %s components",
 			errUtils.ErrComponentNotInStack,
 			stack,
@@ -272,7 +274,7 @@ func (r *Resolver) validateComponentInStack(
 
 	typeComponentsMap, ok := typeComponents.(map[string]any)
 	if !ok {
-		return "", fmt.Errorf(
+		return nil, fmt.Errorf(
 			"%w: invalid %s components section in stack '%s'",
 			errUtils.ErrComponentNotInStack,
 			componentType,
@@ -280,14 +282,18 @@ func (r *Resolver) validateComponentInStack(
 		)
 	}
 
+	return typeComponentsMap, nil
+}
+
+// findComponentMatches searches for a component by name, checking both direct keys and aliases.
+// Returns all matching stack keys to handle ambiguous cases.
+func findComponentMatches(
+	typeComponentsMap map[string]any,
+	componentName string,
+) []string {
 	// First check for direct key match.
 	if _, exists := typeComponentsMap[componentName]; exists {
-		log.Debug("Component validated successfully in stack (direct match)",
-			"component", componentName,
-			"stack", stack,
-			"type", componentType,
-		)
-		return componentName, nil
+		return []string{componentName}
 	}
 
 	// If no direct match, check for aliases via component or metadata.component fields.
@@ -313,7 +319,16 @@ func (r *Resolver) validateComponentInStack(
 		}
 	}
 
-	// Handle results.
+	return matches
+}
+
+// handleComponentMatches processes the match results and returns appropriate errors or the resolved component.
+func handleComponentMatches(
+	matches []string,
+	componentName string,
+	stack string,
+	componentType string,
+) (string, error) {
 	if len(matches) == 0 {
 		err := errUtils.Build(errUtils.ErrComponentNotInStack).
 			WithHintf("Component `%s` not found in stack `%s`", componentName, stack).
@@ -350,11 +365,59 @@ func (r *Resolver) validateComponentInStack(
 	}
 
 	// Exactly one match found.
-	log.Debug("Component validated successfully in stack (alias match)",
-		"path_component", componentName,
-		"stack_key", matches[0],
+	return matches[0], nil
+}
+
+func (r *Resolver) validateComponentInStack(
+	atmosConfig *schema.AtmosConfiguration,
+	componentName string,
+	stack string,
+	componentType string,
+) (string, error) {
+	defer perf.Track(atmosConfig, "component.validateComponentInStack")()
+
+	log.Debug("Validating component exists in stack",
+		"component", componentName,
 		"stack", stack,
 		"type", componentType,
 	)
-	return matches[0], nil
+
+	// Load and validate stack configuration.
+	stackConfigMap, err := r.loadStackConfig(atmosConfig, stack, componentName)
+	if err != nil {
+		return "", err
+	}
+
+	// Extract the component type section.
+	typeComponentsMap, err := extractComponentsSection(stackConfigMap, componentType, stack)
+	if err != nil {
+		return "", err
+	}
+
+	// Find all matching components.
+	matches := findComponentMatches(typeComponentsMap, componentName)
+
+	// Handle match results (none, one, or multiple).
+	resolvedComponent, err := handleComponentMatches(matches, componentName, stack, componentType)
+	if err != nil {
+		return "", err
+	}
+
+	// Log success.
+	if resolvedComponent == componentName {
+		log.Debug("Component validated successfully in stack (direct match)",
+			"component", componentName,
+			"stack", stack,
+			"type", componentType,
+		)
+	} else {
+		log.Debug("Component validated successfully in stack (alias match)",
+			"path_component", componentName,
+			"stack_key", resolvedComponent,
+			"stack", stack,
+			"type", componentType,
+		)
+	}
+
+	return resolvedComponent, nil
 }
