@@ -202,7 +202,8 @@ func (r *Resolver) ResolveComponentFromPathWithoutValidation(
 
 // validateComponentInStack checks if a component exists in the specified stack configuration.
 // Returns the actual stack key (which may be an alias) that matched the component.
-// loadStackConfig loads and validates that a stack exists.
+
+// LoadStackConfig loads and validates that a stack exists.
 func (r *Resolver) loadStackConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	stack string,
