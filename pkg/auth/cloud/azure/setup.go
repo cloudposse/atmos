@@ -305,35 +305,17 @@ func updateMSALCache(params *msalCacheUpdate) error {
 	}
 	accountSection[accountKey] = accountEntry
 
-	// Parse expiration time.
-	expiresAt, err := time.Parse(time.RFC3339, expiration)
-	if err != nil {
-		return fmt.Errorf("failed to parse expiration time: %w", err)
-	}
-
-	// Management API scope.
-	scope := "https://management.azure.com/.default https://management.azure.com/user_impersonation"
-	cacheKey := fmt.Sprintf("%s-%s-accesstoken-%s-%s-%s",
-		homeAccountID, environment, clientID, realm, scope)
-
-	cachedAt := time.Now().Unix()
-	expiresOn := expiresAt.Unix()
-
-	tokenEntry := map[string]interface{}{
-		"credential_type":     FieldAccessToken,
-		"secret":              accessToken,
-		"home_account_id":     homeAccountID,
-		"environment":         environment,
-		"client_id":           clientID,
-		"target":              scope,
-		"realm":               realm,
-		"token_type":          "Bearer",
-		"cached_at":           fmt.Sprintf(IntFormat, cachedAt),
-		"expires_on":          fmt.Sprintf(IntFormat, expiresOn),
-		"extended_expires_on": fmt.Sprintf(IntFormat, expiresOn),
-	}
-
-	accessTokenSection[cacheKey] = tokenEntry
+	// Add management API token entry.
+	addTokenToCache(accessTokenSection, &tokenCacheParams{
+		Token:         accessToken,
+		Expiration:    expiration,
+		Scope:         "https://management.azure.com/.default https://management.azure.com/user_impersonation",
+		HomeAccountID: homeAccountID,
+		Environment:   environment,
+		ClientID:      clientID,
+		Realm:         realm,
+		APIName:       "Management API",
+	})
 
 	// Add entry for Microsoft Graph API (used by azuread provider) if available.
 	if graphToken != "" {

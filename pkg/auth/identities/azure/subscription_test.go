@@ -574,3 +574,17 @@ func TestSubscriptionIdentity_PrincipalFieldTypes(t *testing.T) {
 	assert.Equal(t, "", identity.location, "Wrong type should be ignored")
 	assert.Equal(t, "", identity.resourceGroup, "Wrong type should be ignored")
 }
+
+// Note: PostAuthenticate, CredentialsExist, and LoadCredentials are not unit-testable
+// without refactoring production code for dependency injection. These functions call
+// azureCloud.NewAzureFileManager("") which defaults to using the home directory,
+// making it impossible to mock or redirect to a test directory without modifying
+// the production code.
+//
+// These functions are integration-level code that require either:
+// 1. Refactoring to inject the file manager dependency
+// 2. Integration tests with real filesystem access
+// 3. Accepting 0% coverage for these integration points
+//
+// This pattern matches the AWS authentication implementation, where similar
+// integration-level functions have 0% unit test coverage.

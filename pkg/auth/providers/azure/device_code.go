@@ -49,6 +49,30 @@ type deviceCodeProvider struct {
 	cacheStorage   CacheStorage
 }
 
+// extractDeviceCodeConfig extracts Azure config from provider spec.
+func extractDeviceCodeConfig(spec map[string]interface{}) (tenantID, subscriptionID, location, clientID string) {
+	clientID = defaultAzureClientID // Default value.
+
+	if spec == nil {
+		return tenantID, subscriptionID, location, clientID
+	}
+
+	if tid, ok := spec["tenant_id"].(string); ok {
+		tenantID = tid
+	}
+	if sid, ok := spec["subscription_id"].(string); ok {
+		subscriptionID = sid
+	}
+	if loc, ok := spec["location"].(string); ok {
+		location = loc
+	}
+	if cid, ok := spec["client_id"].(string); ok && cid != "" {
+		clientID = cid
+	}
+
+	return tenantID, subscriptionID, location, clientID
+}
+
 // NewDeviceCodeProvider creates a new Azure device code provider.
 func NewDeviceCodeProvider(name string, config *schema.Provider) (*deviceCodeProvider, error) {
 	if config == nil {
@@ -59,25 +83,7 @@ func NewDeviceCodeProvider(name string, config *schema.Provider) (*deviceCodePro
 	}
 
 	// Extract Azure-specific config from Spec.
-	tenantID := ""
-	subscriptionID := ""
-	location := ""
-	clientID := defaultAzureClientID
-
-	if config.Spec != nil {
-		if tid, ok := config.Spec["tenant_id"].(string); ok {
-			tenantID = tid
-		}
-		if sid, ok := config.Spec["subscription_id"].(string); ok {
-			subscriptionID = sid
-		}
-		if loc, ok := config.Spec["location"].(string); ok {
-			location = loc
-		}
-		if cid, ok := config.Spec["client_id"].(string); ok && cid != "" {
-			clientID = cid
-		}
-	}
+	tenantID, subscriptionID, location, clientID := extractDeviceCodeConfig(config.Spec)
 
 	// Tenant ID is required.
 	if tenantID == "" {
@@ -312,7 +318,7 @@ func (p *deviceCodeProvider) Authenticate(ctx context.Context) (authTypes.ICrede
 		log.Debug("Failed to update Azure CLI token cache", "error", err)
 	}
 
-	return p.createCredentials(tokens)
+	return p.createCredentials(&tokens)
 }
 
 // tokenAcquisitionResult holds tokens acquired from Azure.
@@ -422,13 +428,21 @@ func (p *deviceCodeProvider) acquireTokensViaDeviceCode(ctx context.Context, cli
 		return result, nil
 	}
 
+	// Acquire additional API tokens for azuread and azurerm providers.
+	p.acquireAdditionalTokens(ctx, client, accounts, &result)
+
+	return result, nil
+}
+
+// acquireAdditionalTokens acquires Graph and KeyVault tokens after device code authentication.
+func (p *deviceCodeProvider) acquireAdditionalTokens(ctx context.Context, client *public.Client, accounts []public.Account, result *tokenAcquisitionResult) {
 	// Find the account that matches our tenant ID.
 	account, err := p.findAccountForTenant(accounts)
 	if err != nil {
 		log.Debug("No matching account found after device code authentication, will skip Graph and KeyVault tokens",
 			azureCloud.LogFieldTenantID, p.tenantID,
 			"error", err)
-		return result, nil
+		return
 	}
 
 	// Request Graph API token for azuread provider (silently, using refresh token).
@@ -462,12 +476,10 @@ func (p *deviceCodeProvider) acquireTokensViaDeviceCode(ctx context.Context, cli
 			"expiresOn", result.keyVaultExpiresOn,
 			"tokenLength", len(result.keyVaultToken))
 	}
-
-	return result, nil
 }
 
 // createCredentials creates Azure credentials from acquired tokens.
-func (p *deviceCodeProvider) createCredentials(tokens tokenAcquisitionResult) (authTypes.ICredentials, error) {
+func (p *deviceCodeProvider) createCredentials(tokens *tokenAcquisitionResult) (authTypes.ICredentials, error) {
 	creds := &authTypes.AzureCredentials{
 		AccessToken:    tokens.accessToken,
 		TokenType:      "Bearer",

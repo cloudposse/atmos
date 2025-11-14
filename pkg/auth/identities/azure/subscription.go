@@ -17,7 +17,6 @@ import (
 type subscriptionIdentity struct {
 	name           string
 	config         *schema.Identity
-	manager        authTypes.AuthManager
 	subscriptionID string
 	resourceGroup  string
 	location       string
@@ -82,8 +81,8 @@ func (i *subscriptionIdentity) Authenticate(ctx context.Context, baseCreds authT
 	defer perf.Track(nil, "azure.subscriptionIdentity.Authenticate")()
 
 	log.Debug("Authenticating Azure subscription identity",
-		"identity", i.name,
-		"subscription", i.subscriptionID,
+		azureCloud.LogFieldIdentity, i.name,
+		azureCloud.LogFieldSubscription, i.subscriptionID,
 	)
 
 	// Verify base credentials are Azure credentials.
@@ -113,8 +112,8 @@ func (i *subscriptionIdentity) Authenticate(ctx context.Context, baseCreds authT
 	}
 
 	log.Debug("Successfully authenticated Azure subscription identity",
-		"identity", i.name,
-		"subscription", i.subscriptionID,
+		azureCloud.LogFieldIdentity, i.name,
+		azureCloud.LogFieldSubscription, i.subscriptionID,
 	)
 
 	return creds, nil
@@ -176,8 +175,8 @@ func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *aut
 	defer perf.Track(nil, "azure.subscriptionIdentity.PostAuthenticate")()
 
 	log.Debug("Post-authenticate for Azure subscription identity",
-		"identity", i.name,
-		"subscription", i.subscriptionID,
+		azureCloud.LogFieldIdentity, i.name,
+		azureCloud.LogFieldSubscription, i.subscriptionID,
 	)
 
 	// Setup Azure files (credentials.json).
@@ -214,8 +213,8 @@ func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *aut
 	}
 
 	log.Debug("Post-authenticate complete for Azure subscription identity",
-		"identity", i.name,
-		"subscription", i.subscriptionID,
+		azureCloud.LogFieldIdentity, i.name,
+		azureCloud.LogFieldSubscription, i.subscriptionID,
 	)
 
 	return nil
@@ -223,7 +222,7 @@ func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *aut
 
 // Logout removes identity-specific credential storage.
 func (i *subscriptionIdentity) Logout(ctx context.Context) error {
-	log.Debug("Logout Azure subscription identity", "identity", i.name)
+	log.Debug("Logout Azure subscription identity", azureCloud.LogFieldIdentity, i.name)
 	// Credentials are managed by keyring, files cleaned up by provider.
 	return nil
 }

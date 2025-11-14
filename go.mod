@@ -43,7 +43,7 @@ require (
 	github.com/editorconfig-checker/editorconfig-checker/v3 v3.4.1
 	github.com/elewis787/boa v0.1.3
 	github.com/fatih/color v1.18.0
-	github.com/getsentry/sentry-go v0.36.2
+	github.com/getsentry/sentry-go v0.37.0
 	github.com/go-git/go-git/v5 v5.16.3
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/gobwas/glob v0.2.3

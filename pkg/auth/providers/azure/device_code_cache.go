@@ -233,35 +233,8 @@ func (p *deviceCodeProvider) updateAzureCLICache(update tokenCacheUpdate) error 
 
 	msalCachePath := filepath.Join(home, ".azure", "msal_token_cache.json")
 
-	// Load existing cache or create new one.
-	var cache map[string]interface{}
-	data, err := os.ReadFile(msalCachePath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			log.Debug("Failed to read Azure CLI MSAL cache", "error", err)
-		}
-		// Create new cache structure.
-		cache = make(map[string]interface{})
-	} else {
-		if err := json.Unmarshal(data, &cache); err != nil {
-			log.Debug("Failed to parse Azure CLI MSAL cache", "error", err)
-			cache = make(map[string]interface{})
-		}
-	}
-
-	// Ensure AccessToken section exists.
-	accessTokenSection, ok := cache[azureCloud.FieldAccessToken].(map[string]interface{})
-	if !ok {
-		accessTokenSection = make(map[string]interface{})
-		cache[azureCloud.FieldAccessToken] = accessTokenSection
-	}
-
-	// Ensure Account section exists.
-	accountSection, ok := cache["Account"].(map[string]interface{})
-	if !ok {
-		accountSection = make(map[string]interface{})
-		cache["Account"] = accountSection
-	}
+	// Load and initialize cache structure.
+	cache, accessTokenSection, accountSection := p.loadAndInitializeCLICache(msalCachePath)
 
 	// Create common MSAL identifiers.
 	homeAccountID := fmt.Sprintf("%s.%s", userOID, p.tenantID)
@@ -364,6 +337,40 @@ func (p *deviceCodeProvider) updateAzureCLICache(update tokenCacheUpdate) error 
 	}
 
 	return nil
+}
+
+// loadAndInitializeCLICache loads MSAL cache and ensures required sections exist.
+func (p *deviceCodeProvider) loadAndInitializeCLICache(msalCachePath string) (cache, accessTokenSection, accountSection map[string]interface{}) {
+	// Load existing cache or create new one.
+	data, err := os.ReadFile(msalCachePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Debug("Failed to read Azure CLI MSAL cache", "error", err)
+		}
+		// Create new cache structure.
+		cache = make(map[string]interface{})
+	} else {
+		if err := json.Unmarshal(data, &cache); err != nil {
+			log.Debug("Failed to parse Azure CLI MSAL cache", "error", err)
+			cache = make(map[string]interface{})
+		}
+	}
+
+	// Ensure AccessToken section exists.
+	accessTokenSection, ok := cache[azureCloud.FieldAccessToken].(map[string]interface{})
+	if !ok {
+		accessTokenSection = make(map[string]interface{})
+		cache[azureCloud.FieldAccessToken] = accessTokenSection
+	}
+
+	// Ensure Account section exists.
+	accountSection, ok = cache["Account"].(map[string]interface{})
+	if !ok {
+		accountSection = make(map[string]interface{})
+		cache["Account"] = accountSection
+	}
+
+	return cache, accessTokenSection, accountSection
 }
 
 // msalTokenParams holds parameters for creating an MSAL token cache entry.

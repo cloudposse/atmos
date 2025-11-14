@@ -11,6 +11,33 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+// TestGetExpiration is a helper to test GetExpiration behavior for any credential type.
+// SetExpiration should set the Expiration field on the credential instance.
+func testGetExpiration(t *testing.T, cred ICredentials, setExpiration func(interface{}, string)) {
+	t.Helper()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	// Blank.
+	exp, err := cred.GetExpiration()
+	assert.NoError(t, err)
+	assert.Nil(t, exp)
+
+	// Valid.
+	setExpiration(cred, now.Add(30*time.Minute).Format(time.RFC3339))
+	exp, err = cred.GetExpiration()
+	assert.NoError(t, err)
+	if assert.NotNil(t, exp) {
+		assert.WithinDuration(t, now.Add(30*time.Minute), *exp, time.Second)
+	}
+
+	// Invalid.
+	setExpiration(cred, "bogus")
+	exp, err = cred.GetExpiration()
+	assert.Nil(t, exp)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
+}
+
 func TestAzureCredentials_IsExpired(t *testing.T) {
 	now := time.Now().UTC()
 
@@ -34,28 +61,9 @@ func TestAzureCredentials_IsExpired(t *testing.T) {
 }
 
 func TestAzureCredentials_GetExpiration(t *testing.T) {
-	now := time.Now().UTC().Truncate(time.Second)
-
-	// Blank.
-	c := &AzureCredentials{}
-	exp, err := c.GetExpiration()
-	assert.NoError(t, err)
-	assert.Nil(t, exp)
-
-	// Valid.
-	c.Expiration = now.Add(30 * time.Minute).Format(time.RFC3339)
-	exp, err = c.GetExpiration()
-	assert.NoError(t, err)
-	if assert.NotNil(t, exp) {
-		assert.WithinDuration(t, now.Add(30*time.Minute), *exp, time.Second)
-	}
-
-	// Invalid.
-	c.Expiration = "bogus"
-	exp, err = c.GetExpiration()
-	assert.Nil(t, exp)
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
+	testGetExpiration(t, &AzureCredentials{}, func(c interface{}, exp string) {
+		c.(*AzureCredentials).Expiration = exp
+	})
 }
 
 func TestAzureCredentials_BuildWhoamiInfo(t *testing.T) {
