@@ -2,6 +2,39 @@
 set -e
 export TERM=xterm-256color
 
+# Check for required dependencies
+MISSING_DEPS=()
+
+if ! command -v aha &> /dev/null; then
+    MISSING_DEPS+=("aha")
+fi
+
+if ! command -v atmos &> /dev/null; then
+    MISSING_DEPS+=("atmos")
+fi
+
+if [ ${#MISSING_DEPS[@]} -ne 0 ]; then
+    echo "ERROR: Missing required dependencies: ${MISSING_DEPS[*]}" >&2
+    echo "" >&2
+    echo "Please install the missing dependencies:" >&2
+    for dep in "${MISSING_DEPS[@]}"; do
+        case "$dep" in
+            aha)
+                echo "  - aha: Install with 'apt-get install aha' (Debian/Ubuntu) or 'brew install aha' (macOS)" >&2
+                echo "    See: https://github.com/theZiz/aha" >&2
+                ;;
+            atmos)
+                echo "  - atmos: Build with 'make build' from the repository root" >&2
+                echo "    Or install from: https://atmos.tools/install" >&2
+                ;;
+        esac
+    done
+    echo "" >&2
+    echo "Alternatively, use Docker to generate screengrabs:" >&2
+    echo "  make -C demo/screengrabs docker-all" >&2
+    exit 1
+fi
+
 # Force color output for screengrabs
 export ATMOS_FORCE_COLOR=true
 export FORCE_COLOR=1
