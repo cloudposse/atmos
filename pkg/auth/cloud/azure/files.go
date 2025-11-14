@@ -108,6 +108,10 @@ func (m *AzureFileManager) GetCredentialsPath(providerName string) string {
 func (m *AzureFileManager) WriteCredentials(providerName, identityName string, creds *types.AzureCredentials) error {
 	defer perf.Track(nil, "azure.WriteCredentials")()
 
+	if creds == nil {
+		return fmt.Errorf("%w: Azure credentials cannot be nil", ErrWriteCredentialsFile)
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

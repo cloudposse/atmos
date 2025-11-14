@@ -135,6 +135,13 @@ func TestAzureFileManager_WriteCredentials(t *testing.T) {
 			creds:        testCreds,
 			expectError:  false,
 		},
+		{
+			name:         "returns error for nil credentials",
+			providerName: "test-provider",
+			identityName: "test-identity",
+			creds:        nil,
+			expectError:  true,
+		},
 	}
 
 	for _, tt := range tests {
