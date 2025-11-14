@@ -435,12 +435,11 @@ func TestDeviceCodeProvider_Logout(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify token exists.
-	token, expiresAt, graphToken, graphExpiresAt, err := provider.loadCachedToken()
-	require.NoError(t, err)
-	assert.Equal(t, "test-token", token)
-	assert.False(t, expiresAt.IsZero())
-	assert.Equal(t, "graph-token", graphToken)
-	assert.False(t, graphExpiresAt.IsZero())
+	result := provider.loadCachedToken()
+	assert.Equal(t, "test-token", result.AccessToken)
+	assert.False(t, result.ExpiresAt.IsZero())
+	assert.Equal(t, "graph-token", result.GraphAPIToken)
+	assert.False(t, result.GraphAPIExpiresAt.IsZero())
 
 	// Logout should delete the token.
 	ctx := context.Background()
@@ -448,12 +447,11 @@ func TestDeviceCodeProvider_Logout(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify token was deleted.
-	token, expiresAt, graphToken, graphExpiresAt, err = provider.loadCachedToken()
-	require.NoError(t, err)
-	assert.Empty(t, token)
-	assert.True(t, expiresAt.IsZero())
-	assert.Empty(t, graphToken)
-	assert.True(t, graphExpiresAt.IsZero())
+	result = provider.loadCachedToken()
+	assert.Empty(t, result.AccessToken)
+	assert.True(t, result.ExpiresAt.IsZero())
+	assert.Empty(t, result.GraphAPIToken)
+	assert.True(t, result.GraphAPIExpiresAt.IsZero())
 }
 
 func TestDeviceCodeProvider_GetFilesDisplayPath(t *testing.T) {
@@ -504,7 +502,7 @@ func TestSpinnerModel(t *testing.T) {
 		updatedModel, cmd := model.Update(msg)
 		assert.NotNil(t, cmd)
 
-		m := updatedModel.(spinnerModel)
+		m := updatedModel.(*spinnerModel)
 		assert.True(t, m.quitting)
 		assert.Equal(t, "test-token", m.token)
 		assert.Equal(t, now, m.expiresOn)
@@ -524,7 +522,7 @@ func TestSpinnerModel(t *testing.T) {
 		updatedModel, cmd := model.Update(msg)
 		assert.NotNil(t, cmd)
 
-		m := updatedModel.(spinnerModel)
+		m := updatedModel.(*spinnerModel)
 		assert.True(t, m.quitting)
 		assert.Empty(t, m.token)
 		assert.ErrorIs(t, m.authErr, testErr)
@@ -538,7 +536,7 @@ func TestSpinnerModel(t *testing.T) {
 		updatedModel, cmd := model.Update(msg)
 		assert.NotNil(t, cmd)
 
-		m := updatedModel.(spinnerModel)
+		m := updatedModel.(*spinnerModel)
 		assert.True(t, m.quitting)
 		assert.Error(t, m.authErr)
 		assert.ErrorIs(t, m.authErr, errUtils.ErrAuthenticationFailed)

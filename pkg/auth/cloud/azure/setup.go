@@ -160,45 +160,13 @@ func SetEnvironmentVariables(authContext *schema.AuthContext, stackInfo *schema.
 		}
 	}
 
-	// Load credentials to get access token.
-	// Credentials are stored at ~/.azure/atmos/<provider>/credentials.json
-	// Extract provider name from the file path to load credentials.
-	var accessToken string
-	if azureAuth.CredentialsFile != "" {
-		fileManager, err := NewAzureFileManager("")
-		if err == nil {
-			// Extract provider name from credentials file path.
-			// Path format: ~/.azure/atmos/<provider>/credentials.json or /full/path/<provider>/credentials.json
-			providerName := filepath.Base(filepath.Dir(azureAuth.CredentialsFile))
-
-			if providerName != "" && providerName != "." {
-				creds, err := fileManager.LoadCredentials(providerName)
-				if err == nil && creds.AccessToken != "" {
-					accessToken = creds.AccessToken
-					log.Debug("Loaded access token from credentials file",
-						"credentials_file", azureAuth.CredentialsFile,
-						"provider", providerName,
-					)
-				} else if err != nil {
-					log.Debug("Failed to load credentials from file",
-						"error", err,
-						"credentials_file", azureAuth.CredentialsFile,
-						"provider", providerName,
-					)
-				}
-			}
-		}
-	}
-
 	// Use shared PrepareEnvironment helper to get properly configured environment.
-	environMap = PrepareEnvironment(
-		environMap,
-		azureAuth.SubscriptionID,
-		azureAuth.TenantID,
-		azureAuth.Location,
-		azureAuth.CredentialsFile,
-		accessToken,
-	)
+	environMap = PrepareEnvironment(PrepareEnvironmentConfig{
+		Environ:        environMap,
+		SubscriptionID: azureAuth.SubscriptionID,
+		TenantID:       azureAuth.TenantID,
+		Location:       azureAuth.Location,
+	})
 
 	// Replace ComponentEnvSection with prepared environment.
 	// IMPORTANT: We must completely replace, not merge, to ensure deleted keys stay deleted.
@@ -248,7 +216,17 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID stri
 	keyVaultExpiration := azureCreds.KeyVaultExpiration
 
 	// Update MSAL token cache with management, Graph API, and KeyVault tokens.
-	if err := updateMSALCache(home, azureCreds.AccessToken, azureCreds.Expiration, graphToken, graphExpiration, keyVaultToken, keyVaultExpiration, userOID, tenantID); err != nil {
+	if err := updateMSALCache(&msalCacheUpdate{
+		Home:               home,
+		AccessToken:        azureCreds.AccessToken,
+		Expiration:         azureCreds.Expiration,
+		GraphToken:         graphToken,
+		GraphExpiration:    graphExpiration,
+		KeyVaultToken:      keyVaultToken,
+		KeyVaultExpiration: keyVaultExpiration,
+		UserOID:            userOID,
+		TenantID:           tenantID,
+	}); err != nil {
 		log.Debug("Failed to update MSAL cache", "error", err)
 		// Continue to try azureProfile update.
 	}
@@ -262,29 +240,43 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID stri
 	return nil
 }
 
+// msalCacheUpdate holds parameters for updating MSAL cache.
+type msalCacheUpdate struct {
+	Home               string
+	AccessToken        string
+	Expiration         string
+	GraphToken         string
+	GraphExpiration    string
+	KeyVaultToken      string
+	KeyVaultExpiration string
+	UserOID            string
+	TenantID           string
+}
+
 // updateMSALCache updates the Azure CLI MSAL token cache.
-func updateMSALCache(home, accessToken, expiration, graphToken, graphExpiration, keyVaultToken, keyVaultExpiration, userOID, tenantID string) error {
+func updateMSALCache(params *msalCacheUpdate) error {
+	home := params.Home
+	accessToken := params.AccessToken
+	expiration := params.Expiration
+	graphToken := params.GraphToken
+	graphExpiration := params.GraphExpiration
+	keyVaultToken := params.KeyVaultToken
+	keyVaultExpiration := params.KeyVaultExpiration
+	userOID := params.UserOID
+	tenantID := params.TenantID
 	msalCachePath := filepath.Join(home, ".azure", "msal_token_cache.json")
 
 	// Load existing cache or create new one.
-	var cache map[string]interface{}
-	data, err := os.ReadFile(msalCachePath)
+	cache, err := loadMSALCache(msalCachePath)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read MSAL cache: %w", err)
-		}
-		cache = make(map[string]interface{})
-	} else {
-		if err := json.Unmarshal(data, &cache); err != nil {
-			return fmt.Errorf("failed to parse MSAL cache: %w", err)
-		}
+		return err
 	}
 
 	// Ensure AccessToken section exists.
-	accessTokenSection, ok := cache["AccessToken"].(map[string]interface{})
+	accessTokenSection, ok := cache[FieldAccessToken].(map[string]interface{})
 	if !ok {
 		accessTokenSection = make(map[string]interface{})
-		cache["AccessToken"] = accessTokenSection
+		cache[FieldAccessToken] = accessTokenSection
 	}
 
 	// Ensure Account section exists.
@@ -303,9 +295,9 @@ func updateMSALCache(home, accessToken, expiration, graphToken, graphExpiration,
 	// Add Account entry (required for azuread provider).
 	accountKey := fmt.Sprintf("%s-%s-%s", homeAccountID, environment, realm)
 	accountEntry := map[string]interface{}{
-		"home_account_id":  homeAccountID,
-		"environment":      environment,
-		"realm":            realm,
+		FieldHomeAccountID: homeAccountID,
+		FieldEnvironment:   environment,
+		FieldRealm:         realm,
 		"local_account_id": userOID,
 		"username":         extractUsernameOrFallback(accessToken),
 		"authority_type":   "MSSTS",
@@ -328,7 +320,7 @@ func updateMSALCache(home, accessToken, expiration, graphToken, graphExpiration,
 	expiresOn := expiresAt.Unix()
 
 	tokenEntry := map[string]interface{}{
-		"credential_type":     "AccessToken",
+		"credential_type":     FieldAccessToken,
 		"secret":              accessToken,
 		"home_account_id":     homeAccountID,
 		"environment":         environment,
@@ -336,79 +328,41 @@ func updateMSALCache(home, accessToken, expiration, graphToken, graphExpiration,
 		"target":              scope,
 		"realm":               realm,
 		"token_type":          "Bearer",
-		"cached_at":           fmt.Sprintf("%d", cachedAt),
-		"expires_on":          fmt.Sprintf("%d", expiresOn),
-		"extended_expires_on": fmt.Sprintf("%d", expiresOn),
+		"cached_at":           fmt.Sprintf(IntFormat, cachedAt),
+		"expires_on":          fmt.Sprintf(IntFormat, expiresOn),
+		"extended_expires_on": fmt.Sprintf(IntFormat, expiresOn),
 	}
 
 	accessTokenSection[cacheKey] = tokenEntry
 
 	// Add entry for Microsoft Graph API (used by azuread provider) if available.
 	if graphToken != "" {
-		graphScope := "https://graph.microsoft.com/.default"
-		graphCacheKey := fmt.Sprintf("%s-%s-accesstoken-%s-%s-%s",
-			homeAccountID, environment, clientID, realm, graphScope)
-
-		// Parse Graph API token expiration.
-		graphExpiresAt, err := time.Parse(time.RFC3339, graphExpiration)
-		if err != nil {
-			log.Debug("Failed to parse Graph API token expiration, skipping Graph token cache", "error", err)
-		} else {
-			graphCachedAt := time.Now().Unix()
-			graphExpiresOnUnix := graphExpiresAt.Unix()
-
-			graphTokenEntry := map[string]interface{}{
-				"credential_type":     "AccessToken",
-				"secret":              graphToken,
-				"home_account_id":     homeAccountID,
-				"environment":         environment,
-				"client_id":           clientID,
-				"target":              graphScope,
-				"realm":               realm,
-				"token_type":          "Bearer",
-				"cached_at":           fmt.Sprintf("%d", graphCachedAt),
-				"expires_on":          fmt.Sprintf("%d", graphExpiresOnUnix),
-				"extended_expires_on": fmt.Sprintf("%d", graphExpiresOnUnix),
-			}
-
-			accessTokenSection[graphCacheKey] = graphTokenEntry
-			log.Debug("Added Graph API token to MSAL cache", "key", graphCacheKey)
-		}
+		addTokenToCache(accessTokenSection, &tokenCacheParams{
+			Token:         graphToken,
+			Expiration:    graphExpiration,
+			Scope:         "https://graph.microsoft.com/.default",
+			HomeAccountID: homeAccountID,
+			Environment:   environment,
+			ClientID:      clientID,
+			Realm:         realm,
+			APIName:       "Graph API",
+		})
 	} else {
 		log.Debug("No Graph API token available, azuread provider may not work")
 	}
 
 	// Add entry for Azure KeyVault API (used by azurerm provider for KeyVault operations) if available.
 	if keyVaultToken != "" {
-		keyVaultScope := "https://vault.azure.net/.default"
-		keyVaultCacheKey := fmt.Sprintf("%s-%s-accesstoken-%s-%s-%s",
-			homeAccountID, environment, clientID, realm, keyVaultScope)
-
-		// Parse KeyVault token expiration.
-		keyVaultExpiresAt, err := time.Parse(time.RFC3339, keyVaultExpiration)
-		if err != nil {
-			log.Debug("Failed to parse KeyVault token expiration, skipping KeyVault token cache", "error", err)
-		} else {
-			keyVaultCachedAt := time.Now().Unix()
-			keyVaultExpiresOnUnix := keyVaultExpiresAt.Unix()
-
-			keyVaultTokenEntry := map[string]interface{}{
-				"credential_type":     "AccessToken",
-				"secret":              keyVaultToken,
-				"home_account_id":     homeAccountID,
-				"environment":         environment,
-				"client_id":           clientID,
-				"target":              keyVaultScope,
-				"realm":               realm,
-				"token_type":          "Bearer",
-				"cached_at":           fmt.Sprintf("%d", keyVaultCachedAt),
-				"expires_on":          fmt.Sprintf("%d", keyVaultExpiresOnUnix),
-				"extended_expires_on": fmt.Sprintf("%d", keyVaultExpiresOnUnix),
-			}
-
-			accessTokenSection[keyVaultCacheKey] = keyVaultTokenEntry
-			log.Debug("Added KeyVault API token to MSAL cache", "key", keyVaultCacheKey)
-		}
+		addTokenToCache(accessTokenSection, &tokenCacheParams{
+			Token:         keyVaultToken,
+			Expiration:    keyVaultExpiration,
+			Scope:         "https://vault.azure.net/.default",
+			HomeAccountID: homeAccountID,
+			Environment:   environment,
+			ClientID:      clientID,
+			Realm:         realm,
+			APIName:       "KeyVault API",
+		})
 	} else {
 		log.Debug("No KeyVault API token available, KeyVault operations may not work")
 	}
@@ -421,16 +375,79 @@ func updateMSALCache(home, accessToken, expiration, graphToken, graphExpiration,
 
 	// Ensure .azure directory exists.
 	azureDir := filepath.Join(home, ".azure")
-	if err := os.MkdirAll(azureDir, 0o700); err != nil {
+	if err := os.MkdirAll(azureDir, DirPermissions); err != nil {
 		return fmt.Errorf("failed to create .azure directory: %w", err)
 	}
 
-	if err := os.WriteFile(msalCachePath, updatedData, 0o600); err != nil {
+	if err := os.WriteFile(msalCachePath, updatedData, FilePermissions); err != nil {
 		return fmt.Errorf("failed to write MSAL cache: %w", err)
 	}
 
 	log.Debug("Updated Azure CLI MSAL token cache", "path", msalCachePath)
 	return nil
+}
+
+// loadMSALCache loads existing MSAL cache from file or creates a new empty cache.
+func loadMSALCache(msalCachePath string) (map[string]interface{}, error) {
+	data, err := os.ReadFile(msalCachePath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("failed to read MSAL cache: %w", err)
+		}
+		return make(map[string]interface{}), nil
+	}
+
+	var cache map[string]interface{}
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return nil, fmt.Errorf("failed to parse MSAL cache: %w", err)
+	}
+
+	return cache, nil
+}
+
+// tokenCacheParams holds parameters for adding a token to MSAL cache.
+type tokenCacheParams struct {
+	Token         string
+	Expiration    string
+	Scope         string
+	HomeAccountID string
+	Environment   string
+	ClientID      string
+	Realm         string
+	APIName       string
+}
+
+// addTokenToCache adds a token entry to the MSAL cache section.
+func addTokenToCache(accessTokenSection map[string]interface{}, params *tokenCacheParams) {
+	// Parse token expiration.
+	expiresAt, err := time.Parse(time.RFC3339, params.Expiration)
+	if err != nil {
+		log.Debug("Failed to parse "+params.APIName+" token expiration, skipping cache", "error", err)
+		return
+	}
+
+	cacheKey := fmt.Sprintf("%s-%s-accesstoken-%s-%s-%s",
+		params.HomeAccountID, params.Environment, params.ClientID, params.Realm, params.Scope)
+
+	cachedAt := time.Now().Unix()
+	expiresOn := expiresAt.Unix()
+
+	tokenEntry := map[string]interface{}{
+		"credential_type":     FieldAccessToken,
+		"secret":              params.Token,
+		"home_account_id":     params.HomeAccountID,
+		"environment":         params.Environment,
+		"client_id":           params.ClientID,
+		"target":              params.Scope,
+		"realm":               params.Realm,
+		"token_type":          "Bearer",
+		"cached_at":           fmt.Sprintf(IntFormat, cachedAt),
+		"expires_on":          fmt.Sprintf(IntFormat, expiresOn),
+		"extended_expires_on": fmt.Sprintf(IntFormat, expiresOn),
+	}
+
+	accessTokenSection[cacheKey] = tokenEntry
+	log.Debug("Added "+params.APIName+" token to MSAL cache", "key", cacheKey)
 }
 
 // updateAzureProfile updates the azureProfile.json file with the current subscription.
@@ -457,6 +474,26 @@ func updateAzureProfile(home, username, tenantID, subscriptionID string) error {
 		}
 	}
 
+	// Update subscriptions in profile.
+	profile["subscriptions"] = UpdateSubscriptionsInProfile(profile, username, tenantID, subscriptionID)
+
+	// Write updated profile.
+	updatedData, err := json.MarshalIndent(profile, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal Azure profile: %w", err)
+	}
+
+	if err := os.WriteFile(profilePath, updatedData, FilePermissions); err != nil {
+		return fmt.Errorf("failed to write Azure profile: %w", err)
+	}
+
+	log.Debug("Updated Azure profile", "path", profilePath, "subscription", subscriptionID)
+	return nil
+}
+
+// UpdateSubscriptionsInProfile updates the subscriptions array in an Azure profile.
+// It sets the specified subscription as default and marks all others as not default.
+func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tenantID, subscriptionID string) []interface{} {
 	// Get subscriptions array.
 	subscriptionsRaw, ok := profile["subscriptions"].([]interface{})
 	if !ok {
@@ -477,7 +514,7 @@ func updateAzureProfile(home, username, tenantID, subscriptionID string) error {
 			sub["tenantId"] = tenantID
 			sub["isDefault"] = true
 			sub["state"] = "Enabled"
-			sub["user"] = map[string]interface{}{
+			sub[FieldUser] = map[string]interface{}{
 				"name": username,
 				"type": "user",
 			}
@@ -500,7 +537,7 @@ func updateAzureProfile(home, username, tenantID, subscriptionID string) error {
 			"isDefault":       true,
 			"state":           "Enabled",
 			"environmentName": "AzureCloud",
-			"user": map[string]interface{}{
+			FieldUser: map[string]interface{}{
 				"name": username,
 				"type": "user",
 			},
@@ -508,20 +545,7 @@ func updateAzureProfile(home, username, tenantID, subscriptionID string) error {
 		subscriptionsRaw = append(subscriptionsRaw, newSub)
 	}
 
-	profile["subscriptions"] = subscriptionsRaw
-
-	// Write updated profile.
-	updatedData, err := json.MarshalIndent(profile, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal Azure profile: %w", err)
-	}
-
-	if err := os.WriteFile(profilePath, updatedData, 0o600); err != nil {
-		return fmt.Errorf("failed to write Azure profile: %w", err)
-	}
-
-	log.Debug("Updated Azure profile", "path", profilePath, "subscription", subscriptionID)
-	return nil
+	return subscriptionsRaw
 }
 
 // extractOIDFromToken extracts the user OID from a JWT token.
@@ -533,7 +557,7 @@ func extractOIDFromToken(token string) (string, error) {
 
 	oid, ok := claims["oid"].(string)
 	if !ok {
-		return "", fmt.Errorf("oid claim not found in token")
+		return "", errUtils.ErrAzureOIDClaimNotFound
 	}
 
 	return oid, nil
@@ -557,7 +581,7 @@ func extractUsernameFromToken(token string) (string, error) {
 		return email, nil
 	}
 
-	return "", fmt.Errorf("no username claim found in token")
+	return "", errUtils.ErrAzureUsernameClaimNotFound
 }
 
 // extractUsernameOrFallback extracts username from token or returns fallback.
@@ -573,7 +597,7 @@ func extractUsernameOrFallback(token string) string {
 func extractJWTClaims(token string) (map[string]interface{}, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid JWT format")
+		return nil, errUtils.ErrAzureInvalidJWTFormat
 	}
 
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
@@ -593,7 +617,7 @@ func extractJWTClaims(token string) (map[string]interface{}, error) {
 // Azure CLI sometimes writes JSON files with BOM which causes JSON parsing to fail.
 func stripBOM(data []byte) []byte {
 	// UTF-8 BOM is EF BB BF.
-	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
+	if len(data) >= 3 && data[0] == BomMarker && data[1] == BomSecondByte && data[2] == BomThirdByte {
 		return data[3:]
 	}
 	return data

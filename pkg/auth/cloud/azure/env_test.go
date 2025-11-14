@@ -174,14 +174,12 @@ func TestPrepareEnvironment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := PrepareEnvironment(
-				tt.inputEnv,
-				tt.subscriptionID,
-				tt.tenantID,
-				tt.location,
-				tt.credentialsFile,
-				tt.accessToken,
-			)
+			result := PrepareEnvironment(PrepareEnvironmentConfig{
+				Environ:        tt.inputEnv,
+				SubscriptionID: tt.subscriptionID,
+				TenantID:       tt.tenantID,
+				Location:       tt.location,
+			})
 
 			// Check that expected variables are present with correct values.
 			for key, expectedValue := range tt.expectedContains {
@@ -213,14 +211,12 @@ func TestPrepareEnvironment_DoesNotMutateInput(t *testing.T) {
 		expected[k] = v
 	}
 
-	_ = PrepareEnvironment(
-		original,
-		"sub-id",
-		"tenant-id",
-		"eastus",
-		"",
-		"",
-	)
+	_ = PrepareEnvironment(PrepareEnvironmentConfig{
+		Environ:        original,
+		SubscriptionID: "sub-id",
+		TenantID:       "tenant-id",
+		Location:       "eastus",
+	})
 
 	// Original should be unchanged.
 	assert.Equal(t, expected, original, "PrepareEnvironment should not mutate input map")

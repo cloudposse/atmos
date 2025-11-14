@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -30,6 +32,14 @@ type deviceCodeTokenCache struct {
 	Location          string    `json:"location,omitempty"`
 	GraphAPIToken     string    `json:"graphApiToken,omitempty"`
 	GraphAPIExpiresAt time.Time `json:"graphApiExpiresAt,omitempty"`
+}
+
+// cachedTokenResult holds the result of loading a cached token.
+type cachedTokenResult struct {
+	AccessToken       string
+	ExpiresAt         time.Time
+	GraphAPIToken     string
+	GraphAPIExpiresAt time.Time
 }
 
 // CacheStorage defines interface for token cache storage operations.
@@ -88,13 +98,14 @@ func (p *deviceCodeProvider) getTokenCachePath() (string, error) {
 }
 
 // loadCachedToken loads and validates a cached device code token.
-// Returns the management token, Graph API token, and their expirations if valid, or empty values if cache miss or expired.
-func (p *deviceCodeProvider) loadCachedToken() (string, time.Time, string, time.Time, error) {
+// Returns the cached token result or empty values if cache miss or expired.
+// Cache failures are treated as non-fatal and result in empty values being returned.
+func (p *deviceCodeProvider) loadCachedToken() cachedTokenResult {
 	tokenPath, err := p.getTokenCachePath()
 	if err != nil {
 		// If we can't get cache path, just skip caching.
 		log.Debug("Failed to get token cache path, skipping cache check", "error", err)
-		return "", time.Time{}, "", time.Time{}, nil
+		return cachedTokenResult{}
 	}
 
 	// Check if cache file exists.
@@ -102,33 +113,38 @@ func (p *deviceCodeProvider) loadCachedToken() (string, time.Time, string, time.
 	if err != nil {
 		if os.IsNotExist(err) {
 			log.Debug("No cached Azure device code token found", "path", tokenPath)
-			return "", time.Time{}, "", time.Time{}, nil
+			return cachedTokenResult{}
 		}
 		log.Debug("Failed to read cached token", "error", err)
-		return "", time.Time{}, "", time.Time{}, nil
+		return cachedTokenResult{}
 	}
 
 	// Parse cached token.
 	var cache deviceCodeTokenCache
 	if err := json.Unmarshal(data, &cache); err != nil {
 		log.Debug("Failed to parse cached token, will re-authenticate", "error", err)
-		return "", time.Time{}, "", time.Time{}, nil
+		return cachedTokenResult{}
 	}
 
 	// Validate token hasn't expired (with 5 minute buffer).
 	if time.Now().Add(5 * time.Minute).After(cache.ExpiresAt) {
 		log.Debug("Cached Azure device code token expired", "expiresAt", cache.ExpiresAt)
-		return "", time.Time{}, "", time.Time{}, nil
+		return cachedTokenResult{}
 	}
 
 	// Validate token matches current provider config.
 	if cache.TenantID != p.tenantID {
 		log.Debug("Cached token tenant mismatch", "cachedTenant", cache.TenantID, "configTenant", p.tenantID)
-		return "", time.Time{}, "", time.Time{}, nil
+		return cachedTokenResult{}
 	}
 
 	log.Debug("Using cached Azure device code token", "expiresAt", cache.ExpiresAt)
-	return cache.AccessToken, cache.ExpiresAt, cache.GraphAPIToken, cache.GraphAPIExpiresAt, nil
+	return cachedTokenResult{
+		AccessToken:       cache.AccessToken,
+		ExpiresAt:         cache.ExpiresAt,
+		GraphAPIToken:     cache.GraphAPIToken,
+		GraphAPIExpiresAt: cache.GraphAPIExpiresAt,
+	}
 }
 
 // saveCachedToken saves an Azure device code access token to the cache.
@@ -153,13 +169,11 @@ func (p *deviceCodeProvider) saveCachedToken(accessToken, tokenType string, expi
 
 	data, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {
-		log.Debug("Failed to marshal token cache", "error", err)
-		return nil // Non-fatal.
+		return fmt.Errorf("failed to marshal token cache: %w", err)
 	}
 
 	if err := p.cacheStorage.WriteFile(tokenPath, data, deviceCodeTokenCacheFilePerms); err != nil {
-		log.Debug("Failed to write token cache", "error", err)
-		return nil // Non-fatal.
+		return fmt.Errorf("failed to write token cache: %w", err)
 	}
 
 	log.Debug("Saved Azure device code token to cache", "path", tokenPath, "expiresAt", expiresAt)
@@ -170,8 +184,9 @@ func (p *deviceCodeProvider) saveCachedToken(accessToken, tokenType string, expi
 func (p *deviceCodeProvider) deleteCachedToken() error {
 	tokenPath, err := p.getTokenCachePath()
 	if err != nil {
-		// If we can't get cache path, nothing to delete.
-		return nil
+		// If we can't get cache path, log and return error.
+		log.Debug("Failed to get token cache path for deletion", "error", err)
+		return err
 	}
 
 	if err := p.cacheStorage.Remove(tokenPath); err != nil && !os.IsNotExist(err) {
@@ -183,24 +198,27 @@ func (p *deviceCodeProvider) deleteCachedToken() error {
 	return nil
 }
 
+// tokenCacheUpdate holds tokens and expiration times for updating Azure CLI MSAL cache.
+type tokenCacheUpdate struct {
+	AccessToken       string    // Management API access token (for azurerm backend/provider)
+	ExpiresAt         time.Time // Expiration time for management token
+	GraphToken        string    // Graph API access token (for azuread provider), empty string if not available
+	GraphExpiresAt    time.Time // Expiration time for graph token, zero value if not available
+	KeyVaultToken     string    // KeyVault API access token (for azurerm provider KeyVault operations), empty string if not available
+	KeyVaultExpiresAt time.Time // Expiration time for KeyVault token, zero value if not available
+}
+
 // updateAzureCLICache updates the Azure CLI MSAL token cache so Terraform can use it.
 // This makes `atmos auth login` work exactly like `az login`.
-// Parameters:
-//   - accessToken: Management API access token (for azurerm backend/provider).
-//   - expiresAt: Expiration time for management token.
-//   - graphToken: Graph API access token (for azuread provider), empty string if not available.
-//   - graphExpiresAt: Expiration time for graph token, zero value if not available.
-//   - keyVaultToken: KeyVault API access token (for azurerm provider KeyVault operations), empty string if not available.
-//   - keyVaultExpiresAt: Expiration time for KeyVault token, zero value if not available.
-func (p *deviceCodeProvider) updateAzureCLICache(accessToken string, expiresAt time.Time, graphToken string, graphExpiresAt time.Time, keyVaultToken string, keyVaultExpiresAt time.Time) error {
+func (p *deviceCodeProvider) updateAzureCLICache(update tokenCacheUpdate) error {
 	// Decode JWT to get user OID and username.
-	userOID, err := extractOIDFromToken(accessToken)
+	userOID, err := extractOIDFromToken(update.AccessToken)
 	if err != nil {
 		log.Debug("Failed to extract OID from token, skipping Azure CLI cache update", "error", err)
 		return nil // Non-fatal.
 	}
 
-	username, err := extractUsernameFromToken(accessToken)
+	username, err := extractUsernameFromToken(update.AccessToken)
 	if err != nil {
 		log.Debug("Failed to extract username from token, using fallback", "error", err)
 		username = "user@unknown" // Fallback username.
@@ -232,10 +250,10 @@ func (p *deviceCodeProvider) updateAzureCLICache(accessToken string, expiresAt t
 	}
 
 	// Ensure AccessToken section exists.
-	accessTokenSection, ok := cache["AccessToken"].(map[string]interface{})
+	accessTokenSection, ok := cache[azureCloud.FieldAccessToken].(map[string]interface{})
 	if !ok {
 		accessTokenSection = make(map[string]interface{})
-		cache["AccessToken"] = accessTokenSection
+		cache[azureCloud.FieldAccessToken] = accessTokenSection
 	}
 
 	// Ensure Account section exists.
@@ -255,97 +273,64 @@ func (p *deviceCodeProvider) updateAzureCLICache(accessToken string, expiresAt t
 	// The Account entry tells the provider which user/account is authenticated.
 	accountKey := fmt.Sprintf("%s-%s-%s", homeAccountID, environment, realm)
 	accountEntry := map[string]interface{}{
-		"home_account_id":  homeAccountID,
-		"environment":      environment,
-		"realm":            realm,
-		"local_account_id": userOID,
-		"username":         username,
-		"authority_type":   "MSSTS",
-		"account_source":   "device_code",
+		azureCloud.FieldHomeAccountID: homeAccountID,
+		azureCloud.FieldEnvironment:   environment,
+		azureCloud.FieldRealm:         realm,
+		"local_account_id":            userOID,
+		"username":                    username,
+		"authority_type":              "MSSTS",
+		"account_source":              "device_code",
 	}
 	accountSection[accountKey] = accountEntry
-	log.Debug("Added Account entry to MSAL cache", "key", accountKey, "username", username)
+	log.Debug("Added Account entry to MSAL cache", azureCloud.LogFieldKey, accountKey, "username", username)
 
 	// Management API scope (matches az login format).
 	scope := "https://management.azure.com/.default https://management.azure.com/user_impersonation"
 
-	cacheKey := fmt.Sprintf("%s-%s-accesstoken-%s-%s-%s",
-		homeAccountID, environment, clientID, realm, scope)
-
-	// Create token entry in MSAL format.
-	cachedAt := time.Now().Unix()
-	expiresOn := expiresAt.Unix()
-
-	tokenEntry := map[string]interface{}{
-		"credential_type":     "AccessToken",
-		"secret":              accessToken,
-		"home_account_id":     homeAccountID,
-		"environment":         environment,
-		"client_id":           clientID,
-		"target":              scope,
-		"realm":               realm,
-		"token_type":          "Bearer",
-		"cached_at":           fmt.Sprintf("%d", cachedAt),
-		"expires_on":          fmt.Sprintf("%d", expiresOn),
-		"extended_expires_on": fmt.Sprintf("%d", expiresOn),
-	}
-
+	// Create and add management token entry.
+	cacheKey, tokenEntry := createMSALTokenEntry(&msalTokenParams{
+		Token:         update.AccessToken,
+		ExpiresAt:     update.ExpiresAt,
+		Scope:         scope,
+		HomeAccountID: homeAccountID,
+		Environment:   environment,
+		ClientID:      clientID,
+		Realm:         realm,
+	})
 	accessTokenSection[cacheKey] = tokenEntry
 
 	// Add entry for Microsoft Graph API (used by azuread provider) if available.
-	if graphToken != "" {
+	if update.GraphToken != "" {
 		graphScope := "https://graph.microsoft.com/.default"
-		graphCacheKey := fmt.Sprintf("%s-%s-accesstoken-%s-%s-%s",
-			homeAccountID, environment, clientID, realm, graphScope)
-
-		graphCachedAt := time.Now().Unix()
-		graphExpiresOnUnix := graphExpiresAt.Unix()
-
-		graphTokenEntry := map[string]interface{}{
-			"credential_type":     "AccessToken",
-			"secret":              graphToken,
-			"home_account_id":     homeAccountID,
-			"environment":         environment,
-			"client_id":           clientID,
-			"target":              graphScope,
-			"realm":               realm,
-			"token_type":          "Bearer",
-			"cached_at":           fmt.Sprintf("%d", graphCachedAt),
-			"expires_on":          fmt.Sprintf("%d", graphExpiresOnUnix),
-			"extended_expires_on": fmt.Sprintf("%d", graphExpiresOnUnix),
-		}
-
+		graphCacheKey, graphTokenEntry := createMSALTokenEntry(&msalTokenParams{
+			Token:         update.GraphToken,
+			ExpiresAt:     update.GraphExpiresAt,
+			Scope:         graphScope,
+			HomeAccountID: homeAccountID,
+			Environment:   environment,
+			ClientID:      clientID,
+			Realm:         realm,
+		})
 		accessTokenSection[graphCacheKey] = graphTokenEntry
-		log.Debug("Added Graph API token to MSAL cache", "key", graphCacheKey)
+		log.Debug("Added Graph API token to MSAL cache", azureCloud.LogFieldKey, graphCacheKey)
 	} else {
 		log.Debug("No Graph API token available, azuread provider may not work")
 	}
 
 	// Add entry for Azure KeyVault API (used by azurerm provider for KeyVault operations) if available.
-	if keyVaultToken != "" {
+	if update.KeyVaultToken != "" {
 		keyVaultScope := "https://vault.azure.net/.default"
-		keyVaultCacheKey := fmt.Sprintf("%s-%s-accesstoken-%s-%s-%s",
-			homeAccountID, environment, clientID, realm, keyVaultScope)
-
-		keyVaultCachedAt := time.Now().Unix()
-		keyVaultExpiresOnUnix := keyVaultExpiresAt.Unix()
-
-		keyVaultTokenEntry := map[string]interface{}{
-			"credential_type":     "AccessToken",
-			"secret":              keyVaultToken,
-			"home_account_id":     homeAccountID,
-			"environment":         environment,
-			"client_id":           clientID,
-			"target":              keyVaultScope,
-			"realm":               realm,
-			"token_type":          "Bearer",
-			"cached_at":           fmt.Sprintf("%d", keyVaultCachedAt),
-			"expires_on":          fmt.Sprintf("%d", keyVaultExpiresOnUnix),
-			"extended_expires_on": fmt.Sprintf("%d", keyVaultExpiresOnUnix),
-		}
-
+		keyVaultCacheKey, keyVaultTokenEntry := createMSALTokenEntry(&msalTokenParams{
+			Token:         update.KeyVaultToken,
+			ExpiresAt:     update.KeyVaultExpiresAt,
+			Scope:         keyVaultScope,
+			HomeAccountID: homeAccountID,
+			Environment:   environment,
+			ClientID:      clientID,
+			Realm:         realm,
+		})
 		accessTokenSection[keyVaultCacheKey] = keyVaultTokenEntry
-		log.Debug("Added KeyVault API token to MSAL cache", "key", keyVaultCacheKey)
+		log.Debug("Added KeyVault API token to MSAL cache", azureCloud.LogFieldKey, keyVaultCacheKey)
 	} else {
 		log.Debug("No KeyVault API token available, KeyVault operations may not work")
 	}
@@ -359,17 +344,17 @@ func (p *deviceCodeProvider) updateAzureCLICache(accessToken string, expiresAt t
 
 	// Ensure .azure directory exists.
 	azureDir := filepath.Join(home, ".azure")
-	if err := os.MkdirAll(azureDir, 0o700); err != nil {
+	if err := os.MkdirAll(azureDir, azureCloud.DirPermissions); err != nil {
 		log.Debug("Failed to create .azure directory", "error", err)
 		return nil
 	}
 
-	if err := os.WriteFile(msalCachePath, updatedData, 0o600); err != nil {
+	if err := os.WriteFile(msalCachePath, updatedData, azureCloud.FilePermissions); err != nil {
 		log.Debug("Failed to write Azure CLI MSAL cache", "error", err)
 		return nil
 	}
 
-	log.Debug("Updated Azure CLI MSAL token cache", "path", msalCachePath, "key", cacheKey)
+	log.Debug("Updated Azure CLI MSAL token cache", "path", msalCachePath, azureCloud.LogFieldKey, cacheKey)
 
 	// Update azureProfile.json to set the correct default subscription.
 	// This is required for azuread and azapi providers to work.
@@ -381,6 +366,42 @@ func (p *deviceCodeProvider) updateAzureCLICache(accessToken string, expiresAt t
 	return nil
 }
 
+// msalTokenParams holds parameters for creating an MSAL token cache entry.
+type msalTokenParams struct {
+	Token         string
+	ExpiresAt     time.Time
+	Scope         string
+	HomeAccountID string
+	Environment   string
+	ClientID      string
+	Realm         string
+}
+
+// createMSALTokenEntry creates an MSAL token cache entry in Azure CLI format.
+func createMSALTokenEntry(params *msalTokenParams) (string, map[string]interface{}) {
+	cachedAt := time.Now().Unix()
+	expiresOn := params.ExpiresAt.Unix()
+
+	cacheKey := fmt.Sprintf("%s-%s-accesstoken-%s-%s-%s",
+		params.HomeAccountID, params.Environment, params.ClientID, params.Realm, params.Scope)
+
+	tokenEntry := map[string]interface{}{
+		"credential_type":             "AccessToken",
+		"secret":                      params.Token,
+		azureCloud.FieldHomeAccountID: params.HomeAccountID,
+		azureCloud.FieldEnvironment:   params.Environment,
+		"client_id":                   params.ClientID,
+		"target":                      params.Scope,
+		azureCloud.FieldRealm:         params.Realm,
+		"token_type":                  "Bearer",
+		"cached_at":                   fmt.Sprintf(azureCloud.IntFormat, cachedAt),
+		"expires_on":                  fmt.Sprintf(azureCloud.IntFormat, expiresOn),
+		"extended_expires_on":         fmt.Sprintf(azureCloud.IntFormat, expiresOn),
+	}
+
+	return cacheKey, tokenEntry
+}
+
 // extractOIDFromToken decodes a JWT token and extracts the user OID claim.
 func extractOIDFromToken(token string) (string, error) {
 	claims, err := extractJWTClaims(token)
@@ -390,7 +411,7 @@ func extractOIDFromToken(token string) (string, error) {
 
 	oid, ok := claims["oid"].(string)
 	if !ok {
-		return "", fmt.Errorf("oid claim not found in token")
+		return "", errUtils.ErrAzureOIDClaimNotFound
 	}
 
 	return oid, nil
@@ -414,7 +435,7 @@ func extractUsernameFromToken(token string) (string, error) {
 		return email, nil
 	}
 
-	return "", fmt.Errorf("no username claim found in token (tried upn, unique_name, email)")
+	return "", errUtils.ErrAzureUsernameClaimNotFound
 }
 
 // extractJWTClaims decodes a JWT token and returns the claims.
@@ -422,7 +443,7 @@ func extractJWTClaims(token string) (map[string]interface{}, error) {
 	// JWT has 3 parts separated by dots: header.payload.signature.
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid JWT format")
+		return nil, errUtils.ErrAzureInvalidJWTFormat
 	}
 
 	// Decode payload (second part).
@@ -463,60 +484,8 @@ func (p *deviceCodeProvider) updateAzureProfile(home, username string) error {
 		}
 	}
 
-	// Get subscriptions array.
-	subscriptionsRaw, ok := profile["subscriptions"].([]interface{})
-	if !ok {
-		subscriptionsRaw = []interface{}{}
-	}
-
-	// Find or create subscription entry.
-	var found bool
-	for i, subRaw := range subscriptionsRaw {
-		sub, ok := subRaw.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		subID, _ := sub["id"].(string)
-		if subID == p.subscriptionID {
-			// Update existing subscription.
-			sub["tenantId"] = p.tenantID
-			sub["isDefault"] = true
-			sub["state"] = "Enabled"
-			sub["user"] = map[string]interface{}{
-				"name": username,
-				"type": "user",
-			}
-			sub["environmentName"] = "AzureCloud"
-			subscriptionsRaw[i] = sub
-			found = true
-			log.Debug("Updated existing subscription in Azure profile", "subscription", p.subscriptionID)
-		} else {
-			// Mark other subscriptions as not default.
-			sub["isDefault"] = false
-			subscriptionsRaw[i] = sub
-		}
-	}
-
-	// Add new subscription if not found.
-	if !found && p.subscriptionID != "" {
-		newSub := map[string]interface{}{
-			"id":              p.subscriptionID,
-			"name":            p.subscriptionID, // We don't have the name, use ID.
-			"tenantId":        p.tenantID,
-			"isDefault":       true,
-			"state":           "Enabled",
-			"environmentName": "AzureCloud",
-			"user": map[string]interface{}{
-				"name": username,
-				"type": "user",
-			},
-		}
-		subscriptionsRaw = append(subscriptionsRaw, newSub)
-		log.Debug("Added new subscription to Azure profile", "subscription", p.subscriptionID)
-	}
-
-	profile["subscriptions"] = subscriptionsRaw
+	// Update subscriptions in profile.
+	profile["subscriptions"] = azureCloud.UpdateSubscriptionsInProfile(profile, username, p.tenantID, p.subscriptionID)
 
 	// Write updated profile.
 	updatedData, err := json.MarshalIndent(profile, "", "  ")
@@ -524,7 +493,7 @@ func (p *deviceCodeProvider) updateAzureProfile(home, username string) error {
 		return fmt.Errorf("failed to marshal Azure profile: %w", err)
 	}
 
-	if err := os.WriteFile(profilePath, updatedData, 0o600); err != nil {
+	if err := os.WriteFile(profilePath, updatedData, azureCloud.FilePermissions); err != nil {
 		return fmt.Errorf("failed to write Azure profile: %w", err)
 	}
 

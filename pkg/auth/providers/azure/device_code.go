@@ -132,14 +132,14 @@ func (p *deviceCodeProvider) createMSALClient() (public.Client, error) {
 
 	log.Debug("Created MSAL client",
 		"clientID", p.clientID,
-		"tenantID", p.tenantID)
+		azureCloud.LogFieldTenantID, p.tenantID)
 
 	return client, nil
 }
 
 // acquireTokenByDeviceCode performs device code authentication flow using MSAL.
 // It displays the device code to the user and waits for authentication to complete.
-func (p *deviceCodeProvider) acquireTokenByDeviceCode(ctx context.Context, client public.Client, scopes []string) (string, time.Time, error) {
+func (p *deviceCodeProvider) acquireTokenByDeviceCode(ctx context.Context, client *public.Client, scopes []string) (string, time.Time, error) {
 	// Create a context with timeout.
 	authCtx, cancel := context.WithTimeout(ctx, deviceCodeTimeout)
 	defer cancel()
@@ -163,6 +163,11 @@ func (p *deviceCodeProvider) acquireTokenByDeviceCode(ctx context.Context, clien
 	}
 
 	// Use spinner for interactive terminals.
+	return waitForAuthWithSpinner(authCtx, &deviceCode)
+}
+
+// waitForAuthWithSpinner waits for device code authentication with a spinner UI.
+func waitForAuthWithSpinner(authCtx context.Context, deviceCode *public.DeviceCode) (string, time.Time, error) {
 	resultCh := make(chan struct {
 		token     string
 		expiresOn time.Time
@@ -205,7 +210,7 @@ func (p *deviceCodeProvider) acquireTokenByDeviceCode(ctx context.Context, clien
 		return "", time.Time{}, fmt.Errorf("%w: failed to run spinner: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	m := finalModel.(spinnerModel)
+	m := finalModel.(*spinnerModel)
 	if m.authErr != nil {
 		return "", time.Time{}, m.authErr
 	}
@@ -217,21 +222,21 @@ func (p *deviceCodeProvider) acquireTokenByDeviceCode(ctx context.Context, clien
 // Returns the matching account or an error if no match is found.
 func (p *deviceCodeProvider) findAccountForTenant(accounts []public.Account) (public.Account, error) {
 	if len(accounts) == 0 {
-		return public.Account{}, fmt.Errorf("no accounts found in cache")
+		return public.Account{}, errUtils.ErrAzureNoAccountsInCache
 	}
 
 	// Try to find account matching the tenant ID.
-	for _, account := range accounts {
+	for i := range accounts {
 		// Match by tenant ID in the home account ID (format: objectId.tenantId).
-		if account.Realm == p.tenantID {
+		if accounts[i].Realm == p.tenantID {
 			log.Debug("Found account matching tenant ID",
-				"username", account.PreferredUsername,
-				"tenantID", p.tenantID)
-			return account, nil
+				"username", accounts[i].PreferredUsername,
+				azureCloud.LogFieldTenantID, p.tenantID)
+			return accounts[i], nil
 		}
 	}
 
-	return public.Account{}, fmt.Errorf("no account found for tenant %s", p.tenantID)
+	return public.Account{}, fmt.Errorf("%w: %s", errUtils.ErrAzureNoAccountForTenant, p.tenantID)
 }
 
 // displayDeviceCodePrompt displays the device code and verification URL to the user.
@@ -282,167 +287,214 @@ func (p *deviceCodeProvider) Authenticate(ctx context.Context) (authTypes.ICrede
 		log.Debug("Failed to get cached accounts, will proceed with device code flow", "error", err)
 	}
 
-	var accessToken, graphToken, keyVaultToken string
-	var expiresOn, graphExpiresOn, keyVaultExpiresOn time.Time
+	// Try silent token acquisition from cached account.
+	tokens := p.trySilentTokenAcquisition(ctx, &client, accounts)
 
-	// If we have cached accounts, try silent token acquisition.
-	if len(accounts) > 0 {
-		// Find the account that matches our configured tenant ID.
-		account, err := p.findAccountForTenant(accounts)
-		if err != nil {
-			log.Debug("No matching account found for tenant, will proceed with device code flow",
-				"tenantID", p.tenantID,
-				"error", err)
-		} else {
-			log.Debug("Found cached account, attempting silent token acquisition",
-				"account", account.PreferredUsername,
-				"tenantID", p.tenantID)
-
-			// Try to get management token silently.
-			result, err := client.AcquireTokenSilent(ctx,
-				[]string{"https://management.azure.com/.default"},
-				public.WithSilentAccount(account),
-			)
-			if err == nil {
-				accessToken = result.AccessToken
-				expiresOn = result.ExpiresOn
-				log.Debug("Successfully acquired management token silently", "expiresOn", expiresOn)
-
-				// Try to get Graph token silently.
-				graphResult, err := client.AcquireTokenSilent(ctx,
-					[]string{"https://graph.microsoft.com/.default"},
-					public.WithSilentAccount(account),
-				)
-				if err == nil {
-					graphToken = graphResult.AccessToken
-					graphExpiresOn = graphResult.ExpiresOn
-					log.Debug("Successfully acquired Graph token silently", "expiresOn", graphExpiresOn)
-				} else {
-					log.Debug("Failed to get Graph token silently, will skip", "error", err)
-				}
-
-				// Try to get KeyVault token silently.
-				kvResult, err := client.AcquireTokenSilent(ctx,
-					[]string{"https://vault.azure.net/.default"},
-					public.WithSilentAccount(account),
-				)
-				if err == nil {
-					keyVaultToken = kvResult.AccessToken
-					keyVaultExpiresOn = kvResult.ExpiresOn
-					log.Debug("Successfully acquired KeyVault token silently", "expiresOn", keyVaultExpiresOn)
-				} else {
-					log.Debug("Failed to get KeyVault token silently, will skip", "error", err)
-				}
-			} else {
-				log.Debug("Silent token acquisition failed, will proceed with device code flow", "error", err)
-				accessToken = "" // Reset to trigger device code flow.
-			}
-		}
-	}
-
-	// If silent acquisition failed or no cached account, use device code flow.
-	if accessToken == "" {
-		// Check if we're in a headless environment - device code flow requires user interaction.
-		if !isInteractive() {
-			return nil, fmt.Errorf("%w: Azure device code flow requires an interactive terminal (no TTY detected). Use managed identity or service principal authentication in headless environments", errUtils.ErrAuthenticationFailed)
-		}
-
-		log.Debug("Starting Azure device code authentication",
-			"provider", p.name,
-			"tenant", p.tenantID,
-			"clientID", p.clientID,
-		)
-
-		// Start device code flow for management scope.
-		accessToken, expiresOn, err = p.acquireTokenByDeviceCode(ctx, client,
-			[]string{"https://management.azure.com/.default"})
+	// If silent acquisition failed, use device code flow.
+	if tokens.accessToken == "" {
+		tokens, err = p.acquireTokensViaDeviceCode(ctx, &client)
 		if err != nil {
 			return nil, err
-		}
-
-		log.Debug("Authentication successful", "expiration", expiresOn)
-
-		// Get the authenticated account for subsequent silent acquisitions.
-		accounts, err = client.Accounts(ctx)
-		if err != nil || len(accounts) == 0 {
-			log.Debug("Failed to get authenticated account, will skip Graph and KeyVault tokens", "error", err)
-		} else {
-			// Find the account that matches our tenant ID.
-			account, err := p.findAccountForTenant(accounts)
-			if err != nil {
-				log.Debug("No matching account found after device code authentication, will skip Graph and KeyVault tokens",
-					"tenantID", p.tenantID,
-					"error", err)
-			} else {
-				// Request Graph API token for azuread provider (silently, using refresh token).
-				log.Debug("Requesting Graph API token for azuread provider")
-				graphResult, err := client.AcquireTokenSilent(ctx,
-					[]string{"https://graph.microsoft.com/.default"},
-					public.WithSilentAccount(account),
-				)
-				if err != nil {
-					log.Debug("Failed to get Graph API token, azuread provider may not work", "error", err)
-				} else {
-					graphToken = graphResult.AccessToken
-					graphExpiresOn = graphResult.ExpiresOn
-					log.Debug("Successfully obtained Graph API token",
-						"expiresOn", graphExpiresOn,
-						"tokenLength", len(graphToken))
-				}
-
-				// Request KeyVault token for azurerm provider KeyVault operations (silently).
-				log.Debug("Requesting KeyVault token for azurerm provider")
-				kvResult, err := client.AcquireTokenSilent(ctx,
-					[]string{"https://vault.azure.net/.default"},
-					public.WithSilentAccount(account),
-				)
-				if err != nil {
-					log.Debug("Failed to get KeyVault token, KeyVault operations may not work", "error", err)
-				} else {
-					keyVaultToken = kvResult.AccessToken
-					keyVaultExpiresOn = kvResult.ExpiresOn
-					log.Debug("Successfully obtained KeyVault token",
-						"expiresOn", keyVaultExpiresOn,
-						"tokenLength", len(keyVaultToken))
-				}
-			}
 		}
 	}
 
 	// Update Azure CLI token cache so Terraform can use it automatically.
 	// This makes Atmos auth work exactly like `az login`.
 	// Note: MSAL already persisted tokens (including refresh tokens) to ~/.azure/msal_token_cache.json.
-	if err := p.updateAzureCLICache(accessToken, expiresOn, graphToken, graphExpiresOn, keyVaultToken, keyVaultExpiresOn); err != nil {
+	if err := p.updateAzureCLICache(tokenCacheUpdate{
+		AccessToken:       tokens.accessToken,
+		ExpiresAt:         tokens.expiresOn,
+		GraphToken:        tokens.graphToken,
+		GraphExpiresAt:    tokens.graphExpiresOn,
+		KeyVaultToken:     tokens.keyVaultToken,
+		KeyVaultExpiresAt: tokens.keyVaultExpiresOn,
+	}); err != nil {
 		log.Debug("Failed to update Azure CLI token cache", "error", err)
 	}
 
+	return p.createCredentials(tokens)
+}
+
+// tokenAcquisitionResult holds tokens acquired from Azure.
+type tokenAcquisitionResult struct {
+	accessToken       string
+	graphToken        string
+	keyVaultToken     string
+	expiresOn         time.Time
+	graphExpiresOn    time.Time
+	keyVaultExpiresOn time.Time
+}
+
+// trySilentTokenAcquisition attempts to acquire tokens silently from cached account.
+func (p *deviceCodeProvider) trySilentTokenAcquisition(ctx context.Context, client *public.Client, accounts []public.Account) tokenAcquisitionResult {
+	result := tokenAcquisitionResult{}
+
+	if len(accounts) == 0 {
+		return result
+	}
+
+	// Find the account that matches our configured tenant ID.
+	account, err := p.findAccountForTenant(accounts)
+	if err != nil {
+		log.Debug("No matching account found for tenant, will proceed with device code flow",
+			azureCloud.LogFieldTenantID, p.tenantID,
+			"error", err)
+		return result
+	}
+
+	log.Debug("Found cached account, attempting silent token acquisition",
+		"account", account.PreferredUsername,
+		azureCloud.LogFieldTenantID, p.tenantID)
+
+	// Try to get management token silently.
+	mgmtResult, err := client.AcquireTokenSilent(ctx,
+		[]string{"https://management.azure.com/.default"},
+		public.WithSilentAccount(account),
+	)
+	if err != nil {
+		log.Debug("Silent token acquisition failed, will proceed with device code flow", "error", err)
+		return result
+	}
+
+	result.accessToken = mgmtResult.AccessToken
+	result.expiresOn = mgmtResult.ExpiresOn
+	log.Debug("Successfully acquired management token silently", "expiresOn", result.expiresOn)
+
+	// Try to get Graph token silently.
+	graphResult, err := client.AcquireTokenSilent(ctx,
+		[]string{"https://graph.microsoft.com/.default"},
+		public.WithSilentAccount(account),
+	)
+	if err == nil {
+		result.graphToken = graphResult.AccessToken
+		result.graphExpiresOn = graphResult.ExpiresOn
+		log.Debug("Successfully acquired Graph token silently", azureCloud.LogFieldExpiresOn, result.graphExpiresOn)
+	} else {
+		log.Debug("Failed to get Graph token silently, will skip", "error", err)
+	}
+
+	// Try to get KeyVault token silently.
+	kvResult, err := client.AcquireTokenSilent(ctx,
+		[]string{"https://vault.azure.net/.default"},
+		public.WithSilentAccount(account),
+	)
+	if err == nil {
+		result.keyVaultToken = kvResult.AccessToken
+		result.keyVaultExpiresOn = kvResult.ExpiresOn
+		log.Debug("Successfully acquired KeyVault token silently", "expiresOn", result.keyVaultExpiresOn)
+	} else {
+		log.Debug("Failed to get KeyVault token silently, will skip", "error", err)
+	}
+
+	return result
+}
+
+// acquireTokensViaDeviceCode performs device code flow and acquires additional tokens.
+func (p *deviceCodeProvider) acquireTokensViaDeviceCode(ctx context.Context, client *public.Client) (tokenAcquisitionResult, error) {
+	result := tokenAcquisitionResult{}
+
+	// Check if we're in a headless environment - device code flow requires user interaction.
+	if !isInteractive() {
+		return result, fmt.Errorf("%w: Azure device code flow requires an interactive terminal (no TTY detected). Use managed identity or service principal authentication in headless environments", errUtils.ErrAuthenticationFailed)
+	}
+
+	log.Debug("Starting Azure device code authentication",
+		"provider", p.name,
+		"tenant", p.tenantID,
+		"clientID", p.clientID,
+	)
+
+	// Start device code flow for management scope.
+	accessToken, expiresOn, err := p.acquireTokenByDeviceCode(ctx, client,
+		[]string{"https://management.azure.com/.default"})
+	if err != nil {
+		return result, err
+	}
+
+	result.accessToken = accessToken
+	result.expiresOn = expiresOn
+	log.Debug("Authentication successful", "expiration", expiresOn)
+
+	// Get the authenticated account for subsequent silent acquisitions.
+	accounts, err := client.Accounts(ctx)
+	if err != nil || len(accounts) == 0 {
+		log.Debug("Failed to get authenticated account, will skip Graph and KeyVault tokens", "error", err)
+		return result, nil
+	}
+
+	// Find the account that matches our tenant ID.
+	account, err := p.findAccountForTenant(accounts)
+	if err != nil {
+		log.Debug("No matching account found after device code authentication, will skip Graph and KeyVault tokens",
+			azureCloud.LogFieldTenantID, p.tenantID,
+			"error", err)
+		return result, nil
+	}
+
+	// Request Graph API token for azuread provider (silently, using refresh token).
+	log.Debug("Requesting Graph API token for azuread provider")
+	graphResult, err := client.AcquireTokenSilent(ctx,
+		[]string{"https://graph.microsoft.com/.default"},
+		public.WithSilentAccount(account),
+	)
+	if err != nil {
+		log.Debug("Failed to get Graph API token, azuread provider may not work", "error", err)
+	} else {
+		result.graphToken = graphResult.AccessToken
+		result.graphExpiresOn = graphResult.ExpiresOn
+		log.Debug("Successfully obtained Graph API token",
+			azureCloud.LogFieldExpiresOn, result.graphExpiresOn,
+			"tokenLength", len(result.graphToken))
+	}
+
+	// Request KeyVault token for azurerm provider KeyVault operations (silently).
+	log.Debug("Requesting KeyVault token for azurerm provider")
+	kvResult, err := client.AcquireTokenSilent(ctx,
+		[]string{"https://vault.azure.net/.default"},
+		public.WithSilentAccount(account),
+	)
+	if err != nil {
+		log.Debug("Failed to get KeyVault token, KeyVault operations may not work", "error", err)
+	} else {
+		result.keyVaultToken = kvResult.AccessToken
+		result.keyVaultExpiresOn = kvResult.ExpiresOn
+		log.Debug("Successfully obtained KeyVault token",
+			"expiresOn", result.keyVaultExpiresOn,
+			"tokenLength", len(result.keyVaultToken))
+	}
+
+	return result, nil
+}
+
+// createCredentials creates Azure credentials from acquired tokens.
+func (p *deviceCodeProvider) createCredentials(tokens tokenAcquisitionResult) (authTypes.ICredentials, error) {
 	creds := &authTypes.AzureCredentials{
-		AccessToken:    accessToken,
+		AccessToken:    tokens.accessToken,
 		TokenType:      "Bearer",
-		Expiration:     expiresOn.Format(time.RFC3339),
+		Expiration:     tokens.expiresOn.Format(time.RFC3339),
 		TenantID:       p.tenantID,
 		SubscriptionID: p.subscriptionID,
 		Location:       p.location,
 	}
 
 	// Add Graph API token if available.
-	if graphToken != "" {
-		creds.GraphAPIToken = graphToken
-		creds.GraphAPIExpiration = graphExpiresOn.Format(time.RFC3339)
+	if tokens.graphToken != "" {
+		creds.GraphAPIToken = tokens.graphToken
+		creds.GraphAPIExpiration = tokens.graphExpiresOn.Format(time.RFC3339)
 		log.Debug("Added Graph API token to credentials",
-			"graphTokenLength", len(graphToken),
-			"graphExpiration", graphExpiresOn.Format(time.RFC3339))
+			"graphTokenLength", len(tokens.graphToken),
+			"graphExpiration", tokens.graphExpiresOn.Format(time.RFC3339))
 	} else {
 		log.Debug("Graph API token is empty, not adding to credentials")
 	}
 
 	// Add KeyVault API token if available.
-	if keyVaultToken != "" {
-		creds.KeyVaultToken = keyVaultToken
-		creds.KeyVaultExpiration = keyVaultExpiresOn.Format(time.RFC3339)
+	if tokens.keyVaultToken != "" {
+		creds.KeyVaultToken = tokens.keyVaultToken
+		creds.KeyVaultExpiration = tokens.keyVaultExpiresOn.Format(time.RFC3339)
 		log.Debug("Added KeyVault API token to credentials",
-			"keyVaultTokenLength", len(keyVaultToken),
-			"keyVaultExpiration", keyVaultExpiresOn.Format(time.RFC3339))
+			"keyVaultTokenLength", len(tokens.keyVaultToken),
+			"keyVaultExpiration", tokens.keyVaultExpiresOn.Format(time.RFC3339))
 	} else {
 		log.Debug("KeyVault API token is empty, not adding to credentials")
 	}
@@ -532,14 +584,12 @@ func (p *deviceCodeProvider) Environment() (map[string]string, error) {
 // Note: access token is set later by SetEnvironmentVariables which loads from credential store.
 func (p *deviceCodeProvider) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	// Use shared Azure environment preparation.
-	return azureCloud.PrepareEnvironment(
-		environ,
-		p.subscriptionID,
-		p.tenantID,
-		p.location,
-		"", // Credentials file path set by identity.
-		"", // Access token loaded from credential store by SetEnvironmentVariables.
-	), nil
+	return azureCloud.PrepareEnvironment(azureCloud.PrepareEnvironmentConfig{
+		Environ:        environ,
+		SubscriptionID: p.subscriptionID,
+		TenantID:       p.tenantID,
+		Location:       p.location,
+	}), nil
 }
 
 // Logout removes cached device code tokens from disk by deleting the MSAL token cache file.
@@ -571,18 +621,18 @@ type spinnerModel struct {
 	quitting  bool
 }
 
-func newSpinnerModel() spinnerModel {
+func newSpinnerModel() *spinnerModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
-	return spinnerModel{spinner: s}
+	return &spinnerModel{spinner: s}
 }
 
-func (m spinnerModel) Init() tea.Cmd {
+func (m *spinnerModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
-func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case authCompleteMsg:
 		m.token = msg.token
@@ -607,7 +657,7 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m spinnerModel) View() string {
+func (m *spinnerModel) View() string {
 	if m.quitting {
 		if m.authErr != nil {
 			return ""

@@ -42,6 +42,14 @@ var problematicAzureEnvVars = []string{
 	"ARM_USE_OIDC",
 }
 
+// PrepareEnvironmentConfig holds configuration for Azure environment preparation.
+type PrepareEnvironmentConfig struct {
+	Environ        map[string]string // Current environment variables
+	SubscriptionID string            // Azure subscription ID
+	TenantID       string            // Azure tenant ID
+	Location       string            // Azure location/region (optional)
+}
+
 // PrepareEnvironment configures environment variables for Azure SDK when using Atmos auth.
 //
 // This function:
@@ -57,28 +65,18 @@ var problematicAzureEnvVars = []string{
 // scenarios such as using S3 backend for Terraform state while deploying to Azure.
 //
 // Returns a NEW map with modifications - does not mutate the input.
-//
-// Parameters:
-//   - environ: Current environment variables (map[string]string)
-//   - subscriptionID: Azure subscription ID
-//   - tenantID: Azure tenant ID
-//   - location: Azure location/region
-//   - credentialsFile: Path to Azure credentials file (unused, kept for compatibility)
-//   - accessToken: Azure access token (unused, kept for compatibility)
-func PrepareEnvironment(environ map[string]string, subscriptionID, tenantID, location, credentialsFile, accessToken string) map[string]string {
+func PrepareEnvironment(cfg PrepareEnvironmentConfig) map[string]string {
 	defer perf.Track(nil, "pkg/auth/cloud/azure.PrepareEnvironment")()
 
 	log.Debug("Preparing Azure environment for Atmos-managed credentials",
-		"subscription", subscriptionID,
-		"tenant", tenantID,
-		"location", location,
-		"credentials_file", credentialsFile,
-		"has_access_token", accessToken != "",
+		"subscription", cfg.SubscriptionID,
+		"tenant", cfg.TenantID,
+		"location", cfg.Location,
 	)
 
 	// Create a copy to avoid mutating the input.
-	result := make(map[string]string, len(environ)+10)
-	for k, v := range environ {
+	result := make(map[string]string, len(cfg.Environ)+10)
+	for k, v := range cfg.Environ {
 		result[k] = v
 	}
 
@@ -94,19 +92,19 @@ func PrepareEnvironment(environ map[string]string, subscriptionID, tenantID, loc
 
 	// Set Azure subscription and tenant for Terraform providers.
 	// These are required for azurerm, azuread, and azapi providers to work correctly.
-	if subscriptionID != "" {
-		result["AZURE_SUBSCRIPTION_ID"] = subscriptionID
-		result["ARM_SUBSCRIPTION_ID"] = subscriptionID
+	if cfg.SubscriptionID != "" {
+		result["AZURE_SUBSCRIPTION_ID"] = cfg.SubscriptionID
+		result["ARM_SUBSCRIPTION_ID"] = cfg.SubscriptionID
 	}
 
-	if tenantID != "" {
-		result["AZURE_TENANT_ID"] = tenantID
-		result["ARM_TENANT_ID"] = tenantID
+	if cfg.TenantID != "" {
+		result["AZURE_TENANT_ID"] = cfg.TenantID
+		result["ARM_TENANT_ID"] = cfg.TenantID
 	}
 
-	if location != "" {
-		result["AZURE_LOCATION"] = location
-		result["ARM_LOCATION"] = location
+	if cfg.Location != "" {
+		result["AZURE_LOCATION"] = cfg.Location
+		result["ARM_LOCATION"] = cfg.Location
 	}
 
 	// Always use Azure CLI authentication for Terraform providers.
@@ -118,8 +116,8 @@ func PrepareEnvironment(environ map[string]string, subscriptionID, tenantID, loc
 		"note", "Providers will use MSAL cache populated by Atmos")
 
 	log.Debug("Azure auth active - Terraform will use Azure CLI credentials from MSAL cache",
-		"subscription", subscriptionID,
-		"tenant", tenantID,
+		"subscription", cfg.SubscriptionID,
+		"tenant", cfg.TenantID,
 	)
 
 	return result

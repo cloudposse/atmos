@@ -462,6 +462,18 @@ func TestCLIProvider_Logout(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestCLIProvider_GetFilesDisplayPath(t *testing.T) {
+	provider := &cliProvider{
+		name:     "test-cli",
+		tenantID: "tenant-123",
+	}
+
+	// GetFilesDisplayPath should return empty string for CLI provider.
+	// CLI provider doesn't manage files - credentials are managed by az CLI.
+	path := provider.GetFilesDisplayPath()
+	assert.Equal(t, "", path, "CLI provider should not manage files")
+}
+
 func TestParseAzureCLITime(t *testing.T) {
 	tests := []struct {
 		name        string

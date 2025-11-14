@@ -100,28 +100,10 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		"tenant", p.tenantID,
 	)
 
-	// Build az command args.
-	args := []string{"account", "get-access-token", "--tenant", p.tenantID}
-	if p.subscriptionID != "" {
-		args = append(args, "--subscription", p.subscriptionID)
-	}
-	args = append(args, "--output", "json")
-
-	// Execute az command.
-	cmd := exec.CommandContext(ctx, "az", args...)
-	output, err := cmd.CombinedOutput()
+	// Execute az command and parse response.
+	tokenResp, err := p.executeAzCommand(ctx)
 	if err != nil {
-		outputStr := strings.TrimSpace(string(output))
-		if strings.Contains(outputStr, "az login") {
-			return nil, fmt.Errorf("%w: Azure CLI not logged in. Run 'az login' first: %s", errUtils.ErrAuthenticationFailed, outputStr)
-		}
-		return nil, fmt.Errorf("%w: failed to get Azure CLI access token: %s", errUtils.ErrAuthenticationFailed, outputStr)
-	}
-
-	// Parse response.
-	var tokenResp azureCliTokenResponse
-	if err := json.Unmarshal(output, &tokenResp); err != nil {
-		return nil, fmt.Errorf("%w: failed to parse Azure CLI token response: %w", errUtils.ErrAuthenticationFailed, err)
+		return nil, err
 	}
 
 	// Parse expiration time.
@@ -159,6 +141,35 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	return creds, nil
 }
 
+// executeAzCommand executes the az CLI command and returns the token response.
+func (p *cliProvider) executeAzCommand(ctx context.Context) (*azureCliTokenResponse, error) {
+	// Build az command args.
+	args := []string{"account", "get-access-token", "--tenant", p.tenantID}
+	if p.subscriptionID != "" {
+		args = append(args, "--subscription", p.subscriptionID)
+	}
+	args = append(args, "--output", "json")
+
+	// Execute az command.
+	cmd := exec.CommandContext(ctx, "az", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		outputStr := strings.TrimSpace(string(output))
+		if strings.Contains(outputStr, "az login") {
+			return nil, fmt.Errorf("%w: Azure CLI not logged in. Run 'az login' first: %s", errUtils.ErrAuthenticationFailed, outputStr)
+		}
+		return nil, fmt.Errorf("%w: failed to get Azure CLI access token: %s", errUtils.ErrAuthenticationFailed, outputStr)
+	}
+
+	// Parse response.
+	var tokenResp azureCliTokenResponse
+	if err := json.Unmarshal(output, &tokenResp); err != nil {
+		return nil, fmt.Errorf("%w: failed to parse Azure CLI token response: %w", errUtils.ErrAuthenticationFailed, err)
+	}
+
+	return &tokenResp, nil
+}
+
 // Validate validates the provider configuration.
 func (p *cliProvider) Validate() error {
 	if p.tenantID == "" {
@@ -186,14 +197,12 @@ func (p *cliProvider) Environment() (map[string]string, error) {
 func (p *cliProvider) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	// Use shared Azure environment preparation.
 	// Note: access token is set later by SetEnvironmentVariables which loads from credential store.
-	return azureCloud.PrepareEnvironment(
-		environ,
-		p.subscriptionID,
-		p.tenantID,
-		p.location,
-		"", // No credentials file for CLI provider.
-		"", // Access token loaded from credential store by SetEnvironmentVariables.
-	), nil
+	return azureCloud.PrepareEnvironment(azureCloud.PrepareEnvironmentConfig{
+		Environ:        environ,
+		SubscriptionID: p.subscriptionID,
+		TenantID:       p.tenantID,
+		Location:       p.location,
+	}), nil
 }
 
 // Logout is a no-op for Azure CLI provider (credentials are managed by az CLI).
@@ -211,7 +220,7 @@ func (p *cliProvider) GetFilesDisplayPath() string {
 // Azure CLI can return time in multiple formats depending on version and OS.
 func parseAzureCLITime(expiresOn string) (time.Time, error) {
 	if expiresOn == "" {
-		return time.Time{}, fmt.Errorf("expiration time is empty")
+		return time.Time{}, errUtils.ErrAzureExpirationTimeEmpty
 	}
 
 	// Try parsing as RFC3339 (ISO 8601) format first.
@@ -235,9 +244,9 @@ func parseAzureCLITime(expiresOn string) (time.Time, error) {
 
 	// Try parsing as Unix timestamp (seconds since epoch).
 	// Example: "1730991739"
-	if parsedSeconds, err := strconv.ParseInt(expiresOn, 10, 64); err == nil {
+	if parsedSeconds, err := strconv.ParseInt(expiresOn, azureCloud.StrconvDecimal, azureCloud.Int64BitSize); err == nil {
 		return time.Unix(parsedSeconds, 0), nil
 	}
 
-	return time.Time{}, fmt.Errorf("unable to parse time %q: tried RFC3339, local time formats, and Unix timestamp", expiresOn)
+	return time.Time{}, fmt.Errorf("%w: %q", errUtils.ErrAzureTimeParseFailure, expiresOn)
 }

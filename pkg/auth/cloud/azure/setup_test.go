@@ -17,6 +17,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// createTestJWT creates a test JWT token with the given payload claims.
+func createTestJWT(claims map[string]interface{}) string {
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"typ":"JWT"}`))
+	payloadJSON, _ := json.Marshal(claims)
+	payload := base64.RawURLEncoding.EncodeToString(payloadJSON)
+	return header + "." + payload + ".signature"
+}
+
 func TestSetupFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -443,22 +451,14 @@ func TestExtractOIDFromToken_Setup(t *testing.T) {
 		expectError bool
 	}{
 		{
-			name: "valid token with OID",
-			token: func() string {
-				header := base64.RawURLEncoding.EncodeToString([]byte(`{"typ":"JWT"}`))
-				payload := base64.RawURLEncoding.EncodeToString([]byte(`{"oid":"abc123-def456"}`))
-				return header + "." + payload + ".signature"
-			}(),
+			name:        "valid token with OID",
+			token:       createTestJWT(map[string]interface{}{"oid": "abc123-def456"}),
 			expectedOID: "abc123-def456",
 			expectError: false,
 		},
 		{
-			name: "token without OID claim",
-			token: func() string {
-				header := base64.RawURLEncoding.EncodeToString([]byte(`{"typ":"JWT"}`))
-				payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"user123"}`))
-				return header + "." + payload + ".signature"
-			}(),
+			name:        "token without OID claim",
+			token:       createTestJWT(map[string]interface{}{"sub": "user123"}),
 			expectError: true,
 		},
 	}
@@ -487,22 +487,14 @@ func TestExtractUsernameFromToken_Setup(t *testing.T) {
 		expectError      bool
 	}{
 		{
-			name: "token with upn claim",
-			token: func() string {
-				header := base64.RawURLEncoding.EncodeToString([]byte(`{"typ":"JWT"}`))
-				payload := base64.RawURLEncoding.EncodeToString([]byte(`{"upn":"user@example.com"}`))
-				return header + "." + payload + ".signature"
-			}(),
+			name:             "token with upn claim",
+			token:            createTestJWT(map[string]interface{}{"upn": "user@example.com"}),
 			expectedUsername: "user@example.com",
 			expectError:      false,
 		},
 		{
-			name: "token without username claims",
-			token: func() string {
-				header := base64.RawURLEncoding.EncodeToString([]byte(`{"typ":"JWT"}`))
-				payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"user123"}`))
-				return header + "." + payload + ".signature"
-			}(),
+			name:        "token without username claims",
+			token:       createTestJWT(map[string]interface{}{"sub": "user123"}),
 			expectError: true,
 		},
 	}
@@ -624,7 +616,17 @@ func TestUpdateMSALCache(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := updateMSALCache(tmpDir, accessToken, expiration, graphToken, graphExpiration, keyVaultToken, keyVaultExpiration, "user-oid-123", "tenant-123")
+			err := updateMSALCache(&msalCacheUpdate{
+				Home:               tmpDir,
+				AccessToken:        accessToken,
+				Expiration:         expiration,
+				GraphToken:         graphToken,
+				GraphExpiration:    graphExpiration,
+				KeyVaultToken:      keyVaultToken,
+				KeyVaultExpiration: keyVaultExpiration,
+				UserOID:            "user-oid-123",
+				TenantID:           "tenant-123",
+			})
 
 			if tt.expectError {
 				require.Error(t, err)

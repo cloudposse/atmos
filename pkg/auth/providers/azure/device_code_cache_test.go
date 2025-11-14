@@ -224,20 +224,18 @@ func TestDeviceCodeProvider_loadCachedToken(t *testing.T) {
 			cachePath := filepath.Join(mockStorage.xdgCacheDir, deviceCodeTokenCacheSubdir, provider.name, deviceCodeTokenCacheFilename)
 			tt.setupCache(mockStorage, cachePath)
 
-			token, expiresAt, graphToken, graphExpiresAt, err := provider.loadCachedToken()
-
-			require.NoError(t, err) // loadCachedToken never returns errors, just empty values.
+			result := provider.loadCachedToken()
 
 			if tt.shouldReturnToken {
-				assert.Equal(t, tt.expectedToken, token)
-				assert.False(t, expiresAt.IsZero())
-				assert.Equal(t, tt.expectedGraphToken, graphToken)
-				assert.False(t, graphExpiresAt.IsZero())
+				assert.Equal(t, tt.expectedToken, result.AccessToken)
+				assert.False(t, result.ExpiresAt.IsZero())
+				assert.Equal(t, tt.expectedGraphToken, result.GraphAPIToken)
+				assert.False(t, result.GraphAPIExpiresAt.IsZero())
 			} else {
-				assert.Empty(t, token)
-				assert.True(t, expiresAt.IsZero())
-				assert.Empty(t, graphToken)
-				assert.True(t, graphExpiresAt.IsZero())
+				assert.Empty(t, result.AccessToken)
+				assert.True(t, result.ExpiresAt.IsZero())
+				assert.Empty(t, result.GraphAPIToken)
+				assert.True(t, result.GraphAPIExpiresAt.IsZero())
 			}
 		})
 	}
@@ -726,7 +724,14 @@ func TestDeviceCodeProvider_updateAzureCLICache_Integration(t *testing.T) {
 		},
 	}
 
-	err := provider.updateAzureCLICache(accessToken, now.Add(1*time.Hour), graphToken, now.Add(2*time.Hour), keyVaultToken, now.Add(3*time.Hour))
+	err := provider.updateAzureCLICache(tokenCacheUpdate{
+		AccessToken:       accessToken,
+		ExpiresAt:         now.Add(1 * time.Hour),
+		GraphToken:        graphToken,
+		GraphExpiresAt:    now.Add(2 * time.Hour),
+		KeyVaultToken:     keyVaultToken,
+		KeyVaultExpiresAt: now.Add(3 * time.Hour),
+	})
 
 	// The function should succeed without errors in the sandboxed environment.
 	assert.NoError(t, err)

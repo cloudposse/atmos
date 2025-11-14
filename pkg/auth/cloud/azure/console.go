@@ -20,6 +20,43 @@ const (
 	AzureDefaultSessionDuration = 1 * time.Hour
 )
 
+// destinationPattern holds the URL pattern for a destination alias.
+type destinationPattern struct {
+	path                 string // URL path after base URL
+	requiresSubscription bool   // Whether this destination requires subscription_id
+}
+
+// azurePortalDestinations maps destination aliases to their URL patterns.
+var azurePortalDestinations = map[string]destinationPattern{
+	"resourcegroups":     {path: "/blade/HubsExtension/BrowseResourceGroups"},
+	"rg":                 {path: "/blade/HubsExtension/BrowseResourceGroups"},
+	"vm":                 {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Compute%2FVirtualMachines"},
+	"virtualmachines":    {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Compute%2FVirtualMachines"},
+	"storage":            {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Storage%2FStorageAccounts"},
+	"storageaccounts":    {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Storage%2FStorageAccounts"},
+	"network":            {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Network%2FVirtualNetworks"},
+	"vnet":               {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Network%2FVirtualNetworks"},
+	"virtualnetworks":    {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Network%2FVirtualNetworks"},
+	"cosmosdb":           {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.DocumentDb%2FDatabaseAccounts"},
+	"cosmos":             {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.DocumentDb%2FDatabaseAccounts"},
+	"sql":                {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Sql%2FServers"},
+	"sqldatabases":       {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Sql%2FServers"},
+	"keyvault":           {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.KeyVault%2FVaults"},
+	"kv":                 {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.KeyVault%2FVaults"},
+	"monitor":            {path: "/blade/Microsoft_Azure_Monitoring/AzureMonitoringBrowseBlade"},
+	"monitoring":         {path: "/blade/Microsoft_Azure_Monitoring/AzureMonitoringBrowseBlade"},
+	"aks":                {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.ContainerService%2FManagedClusters"},
+	"kubernetes":         {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.ContainerService%2FManagedClusters"},
+	"functions":          {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Web%2FSites/kind/functionapp"},
+	"functionapps":       {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Web%2FSites/kind/functionapp"},
+	"appservice":         {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Web%2FSites"},
+	"webapps":            {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Web%2FSites"},
+	"containers":         {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.ContainerInstance%2FContainerGroups"},
+	"containerinstances": {path: "/blade/HubsExtension/BrowseResource/resourceType/Microsoft.ContainerInstance%2FContainerGroups"},
+	"subscription":       {path: "/resource/subscriptions/%s/overview", requiresSubscription: true},
+	"sub":                {path: "/resource/subscriptions/%s/overview", requiresSubscription: true},
+}
+
 // ConsoleURLGenerator generates Azure Portal URLs with authentication context.
 type ConsoleURLGenerator struct{}
 
@@ -134,14 +171,9 @@ func resolveDestinationWithDefault(dest string, azureCreds *types.AzureCredentia
 //
 // All resolved URLs include tenant context for proper navigation.
 func ResolveDestination(dest string, azureCreds *types.AzureCredentials) (string, error) {
-	// Guard against nil credentials.
-	if azureCreds == nil {
-		return "", fmt.Errorf("%w: Azure credentials are required to resolve console destination", errUtils.ErrInvalidAuthConfig)
-	}
-
-	// Guard against missing tenant ID.
-	if azureCreds.TenantID == "" {
-		return "", fmt.Errorf("%w: tenant ID required to resolve console destination", errUtils.ErrInvalidAuthConfig)
+	// Validate credentials.
+	if err := validateDestinationCredentials(azureCreds); err != nil {
+		return "", err
 	}
 
 	if dest == "" || dest == "home" {
@@ -154,57 +186,36 @@ func ResolveDestination(dest string, azureCreds *types.AzureCredentials) (string
 		return dest, nil
 	}
 
-	// Resolve destination aliases.
-	tenantID := azureCreds.TenantID
-	subscriptionID := azureCreds.SubscriptionID
-
 	// Build base URL with tenant context.
-	baseURL := fmt.Sprintf("%s#@%s", AzurePortalURL, tenantID)
+	baseURL := fmt.Sprintf("%s#@%s", AzurePortalURL, azureCreds.TenantID)
 
-	switch dest {
-	case "subscription", "sub":
-		if subscriptionID == "" {
-			return "", fmt.Errorf("%w: subscription_id required for 'subscription' destination", errUtils.ErrInvalidAuthConfig)
-		}
-		return fmt.Sprintf("%s/resource/subscriptions/%s/overview", baseURL, subscriptionID), nil
-
-	case "resourcegroups", "rg":
-		return fmt.Sprintf("%s/blade/HubsExtension/BrowseResourceGroups", baseURL), nil
-
-	case "vm", "virtualmachines":
-		return fmt.Sprintf("%s/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Compute%%2FVirtualMachines", baseURL), nil
-
-	case "storage", "storageaccounts":
-		return fmt.Sprintf("%s/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Storage%%2FStorageAccounts", baseURL), nil
-
-	case "network", "vnet", "virtualnetworks":
-		return fmt.Sprintf("%s/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Network%%2FVirtualNetworks", baseURL), nil
-
-	case "cosmosdb", "cosmos":
-		return fmt.Sprintf("%s/blade/HubsExtension/BrowseResource/resourceType/Microsoft.DocumentDb%%2FDatabaseAccounts", baseURL), nil
-
-	case "sql", "sqldatabases":
-		return fmt.Sprintf("%s/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Sql%%2FServers", baseURL), nil
-
-	case "keyvault", "kv":
-		return fmt.Sprintf("%s/blade/HubsExtension/BrowseResource/resourceType/Microsoft.KeyVault%%2FVaults", baseURL), nil
-
-	case "monitor", "monitoring":
-		return fmt.Sprintf("%s/blade/Microsoft_Azure_Monitoring/AzureMonitoringBrowseBlade", baseURL), nil
-
-	case "aks", "kubernetes":
-		return fmt.Sprintf("%s/blade/HubsExtension/BrowseResource/resourceType/Microsoft.ContainerService%%2FManagedClusters", baseURL), nil
-
-	case "functions", "functionapps":
-		return fmt.Sprintf("%s/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Web%%2FSites/kind/functionapp", baseURL), nil
-
-	case "appservice", "webapps":
-		return fmt.Sprintf("%s/blade/HubsExtension/BrowseResource/resourceType/Microsoft.Web%%2FSites", baseURL), nil
-
-	case "containers", "containerinstances":
-		return fmt.Sprintf("%s/blade/HubsExtension/BrowseResource/resourceType/Microsoft.ContainerInstance%%2FContainerGroups", baseURL), nil
-
-	default:
+	// Look up destination pattern.
+	pattern, found := azurePortalDestinations[dest]
+	if !found {
 		return "", fmt.Errorf("%w: unsupported destination alias: %s", errUtils.ErrInvalidAuthConfig, dest)
 	}
+
+	// Check if subscription is required.
+	if pattern.requiresSubscription && azureCreds.SubscriptionID == "" {
+		return "", fmt.Errorf("%w: subscription_id required for '%s' destination", errUtils.ErrInvalidAuthConfig, dest)
+	}
+
+	// Build final URL.
+	if pattern.requiresSubscription {
+		return baseURL + fmt.Sprintf(pattern.path, azureCreds.SubscriptionID), nil
+	}
+	return baseURL + pattern.path, nil
+}
+
+// validateDestinationCredentials validates that credentials have required fields for destination resolution.
+func validateDestinationCredentials(azureCreds *types.AzureCredentials) error {
+	if azureCreds == nil {
+		return fmt.Errorf("%w: Azure credentials are required to resolve console destination", errUtils.ErrInvalidAuthConfig)
+	}
+
+	if azureCreds.TenantID == "" {
+		return fmt.Errorf("%w: tenant ID required to resolve console destination", errUtils.ErrInvalidAuthConfig)
+	}
+
+	return nil
 }
