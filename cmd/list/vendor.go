@@ -33,9 +33,10 @@ var vendorCmd = &cobra.Command{
 	Long:  "List all vendor configurations in a tabular way, including component and vendor manifests.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Skip stack validation for vendor.
 		if err := checkAtmosConfig(true); err != nil {
 			return err
-		} // Skip stack validation for vendor
+		}
 
 		// Parse flags using StandardParser with Viper precedence
 		v := viper.GetViper()
