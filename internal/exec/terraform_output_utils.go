@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	auth_types "github.com/cloudposse/atmos/pkg/auth/types"
@@ -270,7 +271,7 @@ func execTerraformOutput(
 				return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'backend' section", component, stack)
 			}
 
-			componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, terraformWorkspace)
+			componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, terraformWorkspace, authContext)
 			if err != nil {
 				return nil, err
 			}
@@ -291,7 +292,7 @@ func execTerraformOutput(
 
 			log.Debug("Writing provider overrides", "file", providerOverrideFileName)
 
-			providerOverrides := generateComponentProviderOverrides(providersSection)
+			providerOverrides := generateComponentProviderOverrides(providersSection, authContext)
 			err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
 			if err != nil {
 				return nil, err
@@ -520,6 +521,7 @@ func execTerraformOutput(
 //   - output: Output variable key to retrieve
 //   - skipCache: Flag to bypass cache lookup
 //   - authContext: Authentication context for credential access (may be nil)
+//   - authManager: Optional auth manager for nested operations that need authentication
 //
 // Returns:
 //   - value: The output value (may be nil if the output exists but has a null value)
@@ -532,6 +534,7 @@ func GetTerraformOutput(
 	output string,
 	skipCache bool,
 	authContext *schema.AuthContext,
+	authManager any,
 ) (any, bool, error) {
 	defer perf.Track(atmosConfig, "exec.GetTerraformOutput")()
 
@@ -567,11 +570,35 @@ func GetTerraformOutput(
 		defer StopSpinner(p, spinnerDone)
 	}
 
-	// Create an AuthManager wrapper from authContext to pass credentials to ExecuteDescribeComponent.
+	// Use the provided authManager directly if available.
+	// Otherwise, create an AuthManager wrapper from authContext to pass credentials to ExecuteDescribeComponent.
 	// This enables YAML functions within the component config to access remote resources.
-	var authMgr auth.AuthManager
-	if authContext != nil {
-		authMgr = newAuthContextWrapper(authContext)
+	var parentAuthMgr auth.AuthManager
+	if authManager != nil {
+		// Use the provided authManager (cast from 'any' to auth.AuthManager)
+		var ok bool
+		parentAuthMgr, ok = authManager.(auth.AuthManager)
+		if !ok {
+			return nil, false, fmt.Errorf("%w: expected auth.AuthManager", errUtils.ErrInvalidAuthManagerType)
+		}
+	} else if authContext != nil {
+		// Fallback: create wrapper from authContext
+		parentAuthMgr = newAuthContextWrapper(authContext)
+	}
+
+	// Resolve AuthManager for this nested component.
+	// Checks if component has auth config defined:
+	//   - If yes: creates component-specific AuthManager with merged auth config
+	//   - If no: uses parent AuthManager (inherits authentication)
+	// This enables each nested level to optionally override auth settings.
+	resolvedAuthMgr, err := resolveAuthManagerForNestedComponent(atmosConfig, component, stack, parentAuthMgr)
+	if err != nil {
+		log.Debug("Auth does not exist for nested component, using parent AuthManager",
+			"component", component,
+			"stack", stack,
+			"error", err,
+		)
+		resolvedAuthMgr = parentAuthMgr
 	}
 
 	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
@@ -580,7 +607,7 @@ func GetTerraformOutput(
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
 		Skip:                 nil,
-		AuthManager:          authMgr,
+		AuthManager:          resolvedAuthMgr, // Use resolved AuthManager (may be component-specific or inherited)
 	})
 	if err != nil {
 		u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.XMark, message)
