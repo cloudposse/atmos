@@ -415,30 +415,6 @@ func TestErrorBuilder_SentinelMarking(t *testing.T) {
 		assert.Error(t, err)
 		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
 	})
-
-	t.Run("marks sentinel when using WithSentinel", func(t *testing.T) {
-		baseErr := errors.New("connection refused")
-
-		err := Build(baseErr).
-			WithSentinel(ErrContainerRuntimeOperation).
-			WithHint("Check Docker is running").
-			Err()
-
-		assert.Error(t, err)
-		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
-		assert.True(t, errors.Is(err, baseErr))
-	})
-
-	t.Run("supports multiple sentinels", func(t *testing.T) {
-		err := Build(errors.New("base error")).
-			WithSentinel(ErrContainerRuntimeOperation).
-			WithSentinel(ErrDevcontainerNotFound).
-			Err()
-
-		assert.Error(t, err)
-		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
-		assert.True(t, errors.Is(err, ErrDevcontainerNotFound))
-	})
 }
 
 func TestErrorBuilder_WithCause(t *testing.T) {

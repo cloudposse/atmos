@@ -1,6 +1,7 @@
 package devcontainer
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -101,9 +102,9 @@ func (d *DockerRuntimeProvider) Exec(ctx context.Context, atmosConfig *schema.At
 // Logs retrieves logs from a devcontainer.
 func (d *DockerRuntimeProvider) Logs(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts LogsOptions) (io.ReadCloser, error) {
 	// pkg/devcontainer.Logs writes directly to UI, doesn't return io.ReadCloser.
-	// For now, return nil. This would need refactoring in pkg/devcontainer.
+	// For now, return no-op ReadCloser. This would need refactoring in pkg/devcontainer.
 	err := d.manager.Logs(atmosConfig, name, opts.Instance, opts.Follow, opts.Tail)
-	return nil, err
+	return io.NopCloser(bytes.NewReader(nil)), err
 }
 
 // Remove removes a devcontainer.

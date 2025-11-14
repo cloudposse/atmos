@@ -49,14 +49,14 @@ err := errUtils.Build(errUtils.ErrContainerRuntimeOperation).
 
 // errors.Is(err, ErrContainerRuntimeOperation) ✅ true (auto-marked)
 
-// Pattern B: Wrap actual error + explicit sentinel
-err := errUtils.Build(actualError).
-    WithSentinel(errUtils.ErrContainerRuntimeOperation).
+// Pattern B: Wrap sentinel with actual cause error
+err := errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+    WithCause(actualError).
     WithHint("Check Docker is running").
     Err()
 
-// errors.Is(err, ErrContainerRuntimeOperation) ✅ true (explicitly marked)
-// errors.Is(err, actualError) ✅ true (both preserved)
+// errors.Is(err, ErrContainerRuntimeOperation) ✅ true (sentinel)
+// errors.Is(err, actualError) ✅ true (cause preserved)
 ```
 
 **Testing errors (MANDATORY):**

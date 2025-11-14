@@ -126,17 +126,6 @@ func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 	return b
 }
 
-// WithSentinel marks the error with a sentinel error for errors.Is() checks.
-// This uses errors.Mark() to attach the sentinel to the error chain.
-// Multiple sentinels can be added and all will be marked.
-//
-// NOTE: WithSentinel requires cockroachdb/errors.Is() in tests, not stdlib errors.Is().
-// For stdlib compatibility, prefer WithCause() instead. See docs/errors.md for details.
-func (b *ErrorBuilder) WithSentinel(sentinel error) *ErrorBuilder {
-	b.sentinels = append(b.sentinels, sentinel)
-	return b
-}
-
 // Err finalizes and returns the enriched error.
 func (b *ErrorBuilder) Err() error {
 	if b.err == nil {

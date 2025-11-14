@@ -82,13 +82,13 @@ err := errUtils.Build(ErrContainerRuntimeOperation).
 
 // errors.Is(err, ErrContainerRuntimeOperation) ✅ true (auto-marked)
 
-// When you wrap another error, use WithSentinel()
-err := errUtils.Build(actualError).
-    WithSentinel(ErrContainerRuntimeOperation).
+// When you wrap another error, use WithCause()
+err := errUtils.Build(ErrContainerRuntimeOperation).
+    WithCause(actualError).
     Err()
 
-// errors.Is(err, ErrContainerRuntimeOperation) ✅ true (explicitly marked)
-// errors.Is(err, actualError) ✅ true (both preserved)
+// errors.Is(err, ErrContainerRuntimeOperation) ✅ true (sentinel)
+// errors.Is(err, actualError) ✅ true (cause preserved)
 ```
 
 ## ErrorBuilder API
@@ -217,38 +217,6 @@ errors.Is(result, err)                                     // ✅ true
 - Any case where you want to preserve the underlying error message
 - When your tests use stdlib `errors.Is()` (most of our codebase)
 
-### WithSentinel(sentinel error) *ErrorBuilder
-
-Marks the error with a sentinel error for `errors.Is()` checks using CockroachDB's `errors.Mark()`. Multiple sentinels can be added.
-
-**⚠️ IMPORTANT:** `WithSentinel()` requires using `cockroachdb/errors.Is()` in tests, NOT stdlib `errors.Is()`. This is because `errors.Mark()` is a CockroachDB-specific feature.
-
-**When to use WithSentinel:**
-- ONLY when you need to mark an error with multiple sentinels
-- ONLY in code that already imports `cockroachdb/errors`
-- **For most cases, prefer `WithCause()` instead**
-
-**Plan B Option:**
-If you need stdlib compatibility and cannot use `WithCause()`, you can manually wrap errors:
-```go
-// Manually wrap sentinel with cause using stdlib fmt.Errorf
-wrapped := fmt.Errorf("%w: %w", errUtils.ErrContainerRuntimeOperation, actualErr)
-return errUtils.Build(wrapped).
-    WithExplanation("Failed to start container").
-    Err()
-```
-
-However, `WithCause()` is preferred as it makes the pattern explicit and part of the ErrorBuilder API.
-
-```go
-builder.WithSentinel(errUtils.ErrContainerRuntimeOperation)
-
-// Multiple sentinels
-builder.
-    WithSentinel(errUtils.ErrContainerRuntimeOperation).
-    WithSentinel(errUtils.ErrDevcontainerNotFound)
-```
-
 ### WithExitCode(code int) *ErrorBuilder
 
 Sets a custom exit code (default is 1).
@@ -287,29 +255,17 @@ assert.Equal(t, "component not found", err.Error())
 if strings.Contains(err.Error(), "component") { ... }
 ```
 
-### Testing Multiple Sentinels
+### Testing Error Chains with WithCause
 
 ```go
-err := errUtils.Build(errors.New("base error")).
-    WithSentinel(errUtils.ErrContainerRuntimeOperation).
-    WithSentinel(errUtils.ErrDevcontainerNotFound).
+causeErr := errors.New("connection refused")
+err := errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+    WithCause(causeErr).
     Err()
 
+// Both sentinel and cause work
 assert.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
-assert.ErrorIs(t, err, errUtils.ErrDevcontainerNotFound)
-```
-
-### Testing Error Chains
-
-```go
-baseErr := errors.New("connection refused")
-err := errUtils.Build(baseErr).
-    WithSentinel(errUtils.ErrContainerRuntimeOperation).
-    Err()
-
-// Both sentinels and original error work
-assert.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
-assert.ErrorIs(t, err, baseErr)
+assert.ErrorIs(t, err, causeErr)
 ```
 
 ## Common Patterns
@@ -362,9 +318,9 @@ err := errUtils.Build(errUtils.ErrContainerRuntimeOperation).
 ### Wrapping External Errors
 
 ```go
-// Wrap third-party error with our sentinel
-err := errUtils.Build(externalErr).
-    WithSentinel(errUtils.ErrContainerRuntimeOperation).
+// Wrap sentinel with third-party error as cause
+err := errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+    WithCause(externalErr).
     WithExplanationf("Docker pull failed: %v", externalErr).
     WithHint("Check your internet connection").
     WithHintf("Try pulling manually: `docker pull %s`", image).
@@ -448,7 +404,7 @@ return errUtils.Build(errUtils.ErrDevcontainerNotFound).
 When converting code to use ErrorBuilder:
 
 - [ ] Replace string-based error creation with sentinel errors
-- [ ] Use `Build()` + `WithSentinel()` for wrapping external errors
+- [ ] Use `Build()` + `WithCause()` for wrapping external/library errors
 - [ ] Add `WithExplanation()` for technical details
 - [ ] Add `WithHint()` for actionable guidance
 - [ ] Add `WithContext()` for debugging information
