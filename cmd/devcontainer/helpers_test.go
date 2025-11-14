@@ -353,6 +353,18 @@ func TestCreateUnauthenticatedAuthManager(t *testing.T) {
 			// Empty identities map is valid - no error expected.
 			expectError: false,
 		},
+		{
+			name: "with identities configured",
+			authConfig: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"test-identity": {
+						Kind:    "mock",
+						Default: true,
+					},
+				},
+			},
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
