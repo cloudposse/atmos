@@ -129,6 +129,16 @@ func resolveDestinationWithDefault(dest string, azureCreds *types.AzureCredentia
 //
 // All resolved URLs include tenant context for proper navigation.
 func ResolveDestination(dest string, azureCreds *types.AzureCredentials) (string, error) {
+	// Guard against nil credentials.
+	if azureCreds == nil {
+		return "", fmt.Errorf("%w: Azure credentials are required to resolve console destination", errUtils.ErrInvalidAuthConfig)
+	}
+
+	// Guard against missing tenant ID.
+	if azureCreds.TenantID == "" {
+		return "", fmt.Errorf("%w: tenant ID required to resolve console destination", errUtils.ErrInvalidAuthConfig)
+	}
+
 	if dest == "" || dest == "home" {
 		// Tenant home page.
 		return fmt.Sprintf("%s#@%s", AzurePortalURL, azureCreds.TenantID), nil

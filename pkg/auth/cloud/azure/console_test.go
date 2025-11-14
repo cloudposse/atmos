@@ -406,3 +406,59 @@ func TestResolveDestination_SubscriptionWithoutID(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
 	assert.Contains(t, err.Error(), "subscription_id required")
 }
+
+func TestResolveDestination_NilCredentials(t *testing.T) {
+	// Test that ResolveDestination fails fast with nil credentials.
+	result, err := ResolveDestination("home", nil)
+	assert.Error(t, err, "ResolveDestination should fail with nil credentials")
+	assert.Empty(t, result)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig), "Should return ErrInvalidAuthConfig")
+	assert.Contains(t, err.Error(), "Azure credentials are required", "Error message should mention credentials")
+}
+
+func TestResolveDestination_EmptyTenantID(t *testing.T) {
+	// Test that ResolveDestination fails fast when tenant ID is empty.
+	creds := &types.AzureCredentials{
+		// TenantID is intentionally empty.
+		SubscriptionID: "sub-456",
+	}
+
+	result, err := ResolveDestination("home", creds)
+	assert.Error(t, err, "ResolveDestination should fail with empty tenant ID")
+	assert.Empty(t, result)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig), "Should return ErrInvalidAuthConfig")
+	assert.Contains(t, err.Error(), "tenant ID required", "Error message should mention tenant ID")
+}
+
+func TestResolveDestination_NilCredentialsWithAlias(t *testing.T) {
+	// Test that ResolveDestination fails for any destination when credentials are nil.
+	destinations := []string{"", "home", "subscription", "resourcegroups", "vm", "storage"}
+
+	for _, dest := range destinations {
+		t.Run(dest, func(t *testing.T) {
+			result, err := ResolveDestination(dest, nil)
+			assert.Error(t, err, "Should fail with nil credentials for destination: %s", dest)
+			assert.Empty(t, result)
+			assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
+		})
+	}
+}
+
+func TestResolveDestination_EmptyTenantIDWithAlias(t *testing.T) {
+	// Test that ResolveDestination fails for any destination when tenant ID is empty.
+	creds := &types.AzureCredentials{
+		SubscriptionID: "sub-456",
+		// TenantID is intentionally empty.
+	}
+
+	destinations := []string{"", "home", "resourcegroups", "vm", "storage"}
+
+	for _, dest := range destinations {
+		t.Run(dest, func(t *testing.T) {
+			result, err := ResolveDestination(dest, creds)
+			assert.Error(t, err, "Should fail with empty tenant ID for destination: %s", dest)
+			assert.Empty(t, result)
+			assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
+		})
+	}
+}
