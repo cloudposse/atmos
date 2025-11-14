@@ -123,6 +123,9 @@ var (
 	ErrMaskingContent = errors.New("failed to mask content")
 	ErrHeadLookup     = errors.New("HEAD not found")
 
+	// File operation errors.
+	ErrRefusingToDeleteSymlink = errors.New("refusing to delete symbolic link")
+
 	// Slice utility errors.
 	ErrNilInput         = errors.New("input must not be nil")
 	ErrNonStringElement = errors.New("element is not a string")
