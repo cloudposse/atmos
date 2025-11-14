@@ -49,11 +49,14 @@ export LESS=-X
 export ATMOS_PAGER=false
 
 # Determine the correct sed syntax based on the operating system
-if [ "$(uname)" = "Darwin" ]; then
-		SED="sed -i ''" # macOS requires '' for in-place editing
-else
-		SED="sed -i"    # Linux does not require ''
-fi
+# Function to call sed with proper in-place editing syntax
+function sed_inplace() {
+	if [ "$(uname)" = "Darwin" ]; then
+		sed -i '' "$@"  # macOS requires '' for in-place editing
+	else
+		sed -i "$@"     # Linux does not require ''
+	fi
+}
 
 function record() {
     local demo=$1
@@ -81,45 +84,45 @@ function record() {
     postprocess_html $output_html
     rm -f $output_ansi
     if [ -n "$CI" ]; then
-        $SED -e '1,1d' -e '$d' $output_html
+        sed_inplace -e '1,1d' -e '$d' $output_html
     fi
 }
 
 postprocess_ansi() {
   local file=$1
   # Remove terminal escape sequences (OSC, cursor position queries, etc.)
-  $SED -E 's/\^\[\]([0-9]+;[^\^]*)\^G//g' $file
-  $SED -E 's/\^\[(\[[0-9;]+R)//g' $file
+  sed_inplace -E 's/\^\[\]([0-9]+;[^\^]*)\^G//g' $file
+  sed_inplace -E 's/\^\[(\[[0-9;]+R)//g' $file
 
   # Remove noise and clean up the output
-  $SED '/- Finding latest version of/d' $file
-  $SED '/- Installed hashicorp/d' $file
-  $SED '/- Installing hashicorp/d' $file
-  $SED '/Terraform has created a lock file/d' $file
-  $SED '/Include this file in your version control repository/d' $file
-  $SED '/guarantee to make the same selections by default when/d' $file
-  $SED '/you run "terraform init" in the future/d' $file
-  $SED 's/Resource actions are indicated with the following symbols.*//' $file
-	$SED '/Workspace .* doesn.t exist./d' $file
-	$SED '/You can create this workspace with the .* subcommand/d' $file
-	$SED '/or include the .* flag with the .* subcommand./d' $file
+  sed_inplace '/- Finding latest version of/d' $file
+  sed_inplace '/- Installed hashicorp/d' $file
+  sed_inplace '/- Installing hashicorp/d' $file
+  sed_inplace '/Terraform has created a lock file/d' $file
+  sed_inplace '/Include this file in your version control repository/d' $file
+  sed_inplace '/guarantee to make the same selections by default when/d' $file
+  sed_inplace '/you run "terraform init" in the future/d' $file
+  sed_inplace 's/Resource actions are indicated with the following symbols.*//' $file
+	sed_inplace '/Workspace .* doesn.t exist./d' $file
+	sed_inplace '/You can create this workspace with the .* subcommand/d' $file
+	sed_inplace '/or include the .* flag with the .* subcommand./d' $file
 
-  $SED 's/^ *EOT/\n/g' $file
-  $SED 's/ *<<EOT/\n/g' $file
-  $SED 's/ *<<-EOT/\n/g' $file
-  $SED -E 's/\[id=[a-f0-9]+\]//g' $file
-  $SED -E 's/(\[id=http)/\n    \1/g' $file
+  sed_inplace 's/^ *EOT/\n/g' $file
+  sed_inplace 's/ *<<EOT/\n/g' $file
+  sed_inplace 's/ *<<-EOT/\n/g' $file
+  sed_inplace -E 's/\[id=[a-f0-9]+\]//g' $file
+  sed_inplace -E 's/(\[id=http)/\n    \1/g' $file
 }
 
 postprocess_html() {
   local file=$1
   # Replace blue colors with Atmos blue.
-  $SED 's/color:blue/color:#005f87/g' $file
-	$SED 's/color:#183691/color:#005f87/g' $file
+  sed_inplace 's/color:blue/color:#005f87/g' $file
+	sed_inplace 's/color:#183691/color:#005f87/g' $file
 
 	# Strip all background colors - they cause visibility issues.
 	# aha adds background-color to code blocks which makes text invisible when colors match.
-	$SED 's/background-color:[^;]*;//g' $file
+	sed_inplace 's/background-color:[^;]*;//g' $file
 }
 
 manifest=$1
