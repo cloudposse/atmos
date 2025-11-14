@@ -1,17 +1,21 @@
 ---
 slug: theme-commands-environment-variables
-title: "Theme Commands Now Support Environment Variables"
+title: "Theme Commands Migrated to StandardFlagParser"
 authors: [osterman]
-tags: [enhancement]
+tags: [contributors, atmos-core, refactoring]
 ---
 
-The `atmos theme list` command now supports environment variables with proper flag precedence handling.
+The theme commands have been migrated to use the modern `StandardFlagParser` infrastructure, bringing them in line with other Atmos commands.
 
 <!--truncate-->
 
+## For Atmos Contributors
+
+This change has **zero user impact** but improves internal code consistency. The theme commands now use the same flag parsing pattern as `terraform`, `helmfile`, and `packer` commands.
+
 ## What Changed
 
-The theme commands have been migrated to use the modern `StandardFlagParser` pattern, enabling environment variable support and consistent flag precedence across all Atmos commands.
+The theme commands have been migrated to use the `StandardFlagParser` pattern, enabling environment variable support and consistent flag precedence across all Atmos commands.
 
 ## Usage
 
