@@ -725,7 +725,7 @@ func TestDeviceCodeProvider_updateAzureCLICache_Integration(t *testing.T) {
 		},
 	}
 
-	err := provider.updateAzureCLICache(tokenCacheUpdate{
+	err := provider.updateAzureCLICache(&tokenCacheUpdate{
 		AccessToken:       accessToken,
 		ExpiresAt:         now.Add(1 * time.Hour),
 		GraphToken:        graphToken,
@@ -875,6 +875,57 @@ func TestLoadAndInitializeCLICache(t *testing.T) {
 			if tt.checkCache != nil {
 				tt.checkCache(t, cache, accessTokenSection, accountSection)
 			}
+		})
+	}
+}
+
+func TestStripBOM(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+		expected []byte
+	}{
+		{
+			name:     "data with UTF-8 BOM",
+			input:    []byte{0xEF, 0xBB, 0xBF, 'h', 'e', 'l', 'l', 'o'},
+			expected: []byte{'h', 'e', 'l', 'l', 'o'},
+		},
+		{
+			name:     "data without BOM",
+			input:    []byte{'h', 'e', 'l', 'l', 'o'},
+			expected: []byte{'h', 'e', 'l', 'l', 'o'},
+		},
+		{
+			name:     "empty data",
+			input:    []byte{},
+			expected: []byte{},
+		},
+		{
+			name:     "data shorter than BOM",
+			input:    []byte{0xEF, 0xBB},
+			expected: []byte{0xEF, 0xBB},
+		},
+		{
+			name:     "partial BOM match (first byte only)",
+			input:    []byte{0xEF, 0x00, 0x00, 'h', 'i'},
+			expected: []byte{0xEF, 0x00, 0x00, 'h', 'i'},
+		},
+		{
+			name:     "partial BOM match (first two bytes)",
+			input:    []byte{0xEF, 0xBB, 0x00, 'h', 'i'},
+			expected: []byte{0xEF, 0xBB, 0x00, 'h', 'i'},
+		},
+		{
+			name:     "JSON with BOM",
+			input:    []byte{0xEF, 0xBB, 0xBF, '{', '"', 'k', 'e', 'y', '"', ':', '"', 'v', 'a', 'l', 'u', 'e', '"', '}'},
+			expected: []byte{'{', '"', 'k', 'e', 'y', '"', ':', '"', 'v', 'a', 'l', 'u', 'e', '"', '}'},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripBOM(tt.input)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

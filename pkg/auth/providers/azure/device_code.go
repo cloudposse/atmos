@@ -3,14 +3,9 @@ package azure
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-isatty"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -19,9 +14,6 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -49,28 +41,38 @@ type deviceCodeProvider struct {
 	cacheStorage   CacheStorage
 }
 
+// deviceCodeConfig holds extracted Azure configuration from provider spec.
+type deviceCodeConfig struct {
+	TenantID       string
+	SubscriptionID string
+	Location       string
+	ClientID       string
+}
+
 // extractDeviceCodeConfig extracts Azure config from provider spec.
-func extractDeviceCodeConfig(spec map[string]interface{}) (tenantID, subscriptionID, location, clientID string) {
-	clientID = defaultAzureClientID // Default value.
+func extractDeviceCodeConfig(spec map[string]interface{}) deviceCodeConfig {
+	config := deviceCodeConfig{
+		ClientID: defaultAzureClientID, // Default value.
+	}
 
 	if spec == nil {
-		return tenantID, subscriptionID, location, clientID
+		return config
 	}
 
 	if tid, ok := spec["tenant_id"].(string); ok {
-		tenantID = tid
+		config.TenantID = tid
 	}
 	if sid, ok := spec["subscription_id"].(string); ok {
-		subscriptionID = sid
+		config.SubscriptionID = sid
 	}
 	if loc, ok := spec["location"].(string); ok {
-		location = loc
+		config.Location = loc
 	}
 	if cid, ok := spec["client_id"].(string); ok && cid != "" {
-		clientID = cid
+		config.ClientID = cid
 	}
 
-	return tenantID, subscriptionID, location, clientID
+	return config
 }
 
 // NewDeviceCodeProvider creates a new Azure device code provider.
@@ -83,20 +85,20 @@ func NewDeviceCodeProvider(name string, config *schema.Provider) (*deviceCodePro
 	}
 
 	// Extract Azure-specific config from Spec.
-	tenantID, subscriptionID, location, clientID := extractDeviceCodeConfig(config.Spec)
+	cfg := extractDeviceCodeConfig(config.Spec)
 
 	// Tenant ID is required.
-	if tenantID == "" {
+	if cfg.TenantID == "" {
 		return nil, fmt.Errorf("%w: tenant_id is required in spec for Azure device code provider", errUtils.ErrInvalidProviderConfig)
 	}
 
 	return &deviceCodeProvider{
 		name:           name,
 		config:         config,
-		tenantID:       tenantID,
-		subscriptionID: subscriptionID,
-		location:       location,
-		clientID:       clientID,
+		tenantID:       cfg.TenantID,
+		subscriptionID: cfg.SubscriptionID,
+		location:       cfg.Location,
+		clientID:       cfg.ClientID,
 		cacheStorage:   &defaultCacheStorage{},
 	}, nil
 }
@@ -159,8 +161,8 @@ func (p *deviceCodeProvider) acquireTokenByDeviceCode(ctx context.Context, clien
 	// Display device code to user.
 	displayDeviceCodePrompt(deviceCode.Result.UserCode, deviceCode.Result.VerificationURL)
 
-	// If not a TTY or in CI, use simple polling without spinner.
-	if !isTTY() || telemetry.IsCI() {
+	// If not a TTY (e.g., piped output or CI environment), use simple polling without spinner.
+	if !isTTY() {
 		result, err := deviceCode.AuthenticationResult(authCtx)
 		if err != nil {
 			return "", time.Time{}, fmt.Errorf("%w: device code authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
@@ -170,58 +172,6 @@ func (p *deviceCodeProvider) acquireTokenByDeviceCode(ctx context.Context, clien
 
 	// Use spinner for interactive terminals.
 	return waitForAuthWithSpinner(authCtx, &deviceCode)
-}
-
-// waitForAuthWithSpinner waits for device code authentication with a spinner UI.
-func waitForAuthWithSpinner(authCtx context.Context, deviceCode *public.DeviceCode) (string, time.Time, error) {
-	resultCh := make(chan struct {
-		token     string
-		expiresOn time.Time
-		err       error
-	}, 1)
-
-	// Start authentication in background.
-	go func() {
-		result, err := deviceCode.AuthenticationResult(authCtx)
-		if err != nil {
-			resultCh <- struct {
-				token     string
-				expiresOn time.Time
-				err       error
-			}{"", time.Time{}, err}
-			return
-		}
-		resultCh <- struct {
-			token     string
-			expiresOn time.Time
-			err       error
-		}{result.AccessToken, result.ExpiresOn, nil}
-	}()
-
-	// Run spinner.
-	model := newSpinnerModel()
-	prog := tea.NewProgram(model, tea.WithOutput(os.Stderr))
-
-	go func() {
-		result := <-resultCh
-		prog.Send(authCompleteMsg{
-			token:     result.token,
-			expiresOn: result.expiresOn,
-			err:       result.err,
-		})
-	}()
-
-	finalModel, err := prog.Run()
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("%w: failed to run spinner: %w", errUtils.ErrAuthenticationFailed, err)
-	}
-
-	m := finalModel.(*spinnerModel)
-	if m.authErr != nil {
-		return "", time.Time{}, m.authErr
-	}
-
-	return m.token, m.expiresOn, nil
 }
 
 // findAccountForTenant finds the account that matches the configured tenant ID.
@@ -243,35 +193,6 @@ func (p *deviceCodeProvider) findAccountForTenant(accounts []public.Account) (pu
 	}
 
 	return public.Account{}, fmt.Errorf("%w: %s", errUtils.ErrAzureNoAccountForTenant, p.tenantID)
-}
-
-// displayDeviceCodePrompt displays the device code and verification URL to the user.
-func displayDeviceCodePrompt(userCode, verificationURL string) {
-	log.Debug("Displaying Azure authentication prompt",
-		"url", verificationURL,
-		"code", userCode,
-		"isCI", telemetry.IsCI(),
-	)
-
-	// Check if we have a TTY for fancy output.
-	if isTTY() && !telemetry.IsCI() {
-		displayVerificationDialog(userCode, verificationURL)
-	} else {
-		// Fallback to simple text output for non-TTY or CI environments.
-		displayVerificationPlainText(userCode, verificationURL)
-	}
-
-	// Open browser if not in CI.
-	// Azure supports pre-filling the code with ?otc=CODE parameter.
-	if !telemetry.IsCI() && verificationURL != "" {
-		urlToOpen := fmt.Sprintf("%s?otc=%s", verificationURL, userCode)
-		if err := utils.OpenUrl(urlToOpen); err != nil {
-			log.Debug("Failed to open browser automatically", "error", err)
-		} else {
-			log.Debug("Browser opened successfully", "url", urlToOpen)
-		}
-	}
-	log.Debug("Finished displaying device code prompt, waiting for user authentication")
 }
 
 // Authenticate performs Azure device code authentication using MSAL.
@@ -307,7 +228,7 @@ func (p *deviceCodeProvider) Authenticate(ctx context.Context) (authTypes.ICrede
 	// Update Azure CLI token cache so Terraform can use it automatically.
 	// This makes Atmos auth work exactly like `az login`.
 	// Note: MSAL already persisted tokens (including refresh tokens) to ~/.azure/msal_token_cache.json.
-	if err := p.updateAzureCLICache(tokenCacheUpdate{
+	if err := p.updateAzureCLICache(&tokenCacheUpdate{
 		AccessToken:       tokens.accessToken,
 		ExpiresAt:         tokens.expiresOn,
 		GraphToken:        tokens.graphToken,
@@ -479,6 +400,9 @@ func (p *deviceCodeProvider) acquireAdditionalTokens(ctx context.Context, client
 }
 
 // createCredentials creates Azure credentials from acquired tokens.
+// Currently returns nil error but signature matches GetCredentials interface.
+//
+//nolint:unparam // error return required for future extensibility and interface compatibility
 func (p *deviceCodeProvider) createCredentials(tokens *tokenAcquisitionResult) (authTypes.ICredentials, error) {
 	creds := &authTypes.AzureCredentials{
 		AccessToken:    tokens.accessToken,
@@ -512,54 +436,6 @@ func (p *deviceCodeProvider) createCredentials(tokens *tokenAcquisitionResult) (
 	}
 
 	return creds, nil
-}
-
-// isTTY checks if stderr is a terminal.
-func isTTY() bool {
-	return isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
-}
-
-// displayVerificationDialog shows a styled dialog with the verification code.
-func displayVerificationDialog(code, url string) {
-	// Simpler, clearer output without complex borders.
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan))
-
-	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray))
-
-	codeStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorGreen)).
-		Background(lipgloss.Color("#1a1a1a")).
-		Padding(0, 2)
-
-	urlStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorBlue))
-
-	// Build simple, readable output.
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, titleStyle.Render("🔐 Azure Authentication Required"))
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "%s  %s\n", labelStyle.Render("Verification Code:"), codeStyle.Render(code))
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "%s  %s\n", labelStyle.Render("Verification URL:"), urlStyle.Render(url))
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, labelStyle.Render("Opening browser..."))
-	fmt.Fprintln(os.Stderr)
-}
-
-// displayVerificationPlainText shows plain text authentication prompt.
-func displayVerificationPlainText(code, url string) {
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "🔐 Azure Authentication Required")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintf(os.Stderr, "Verification Code: %s\n", code)
-	fmt.Fprintf(os.Stderr, "Verification URL:  %s\n", url)
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Please open the URL above and enter the verification code to authenticate.")
-	fmt.Fprintln(os.Stderr, "")
 }
 
 // Validate checks the provider configuration and returns an error if required fields
@@ -615,67 +491,4 @@ func (p *deviceCodeProvider) Logout(ctx context.Context) error {
 // stored by this provider (e.g., "~/.azure/atmos/provider-name").
 func (p *deviceCodeProvider) GetFilesDisplayPath() string {
 	return "~/.azure/atmos/" + p.name
-}
-
-// Spinner model for authentication polling.
-
-type authCompleteMsg struct {
-	token     string
-	expiresOn time.Time
-	err       error
-}
-
-type spinnerModel struct {
-	spinner   spinner.Model
-	token     string
-	expiresOn time.Time
-	authErr   error
-	quitting  bool
-}
-
-func newSpinnerModel() *spinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
-	return &spinnerModel{spinner: s}
-}
-
-func (m *spinnerModel) Init() tea.Cmd {
-	return m.spinner.Tick
-}
-
-func (m *spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case authCompleteMsg:
-		m.token = msg.token
-		m.expiresOn = msg.expiresOn
-		m.authErr = msg.err
-		m.quitting = true
-		return m, tea.Quit
-
-	case tea.KeyMsg:
-		if msg.Type == tea.KeyCtrlC {
-			m.quitting = true
-			m.authErr = fmt.Errorf("%w: authentication cancelled by user", errUtils.ErrAuthenticationFailed)
-			return m, tea.Quit
-		}
-
-	default:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-	}
-
-	return m, nil
-}
-
-func (m *spinnerModel) View() string {
-	if m.quitting {
-		if m.authErr != nil {
-			return ""
-		}
-		successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
-		return successStyle.Render("✓") + " Authentication successful!\n"
-	}
-	return m.spinner.View() + " Waiting for authentication...\n"
 }

@@ -44,8 +44,9 @@ var (
 	ErrRemoveProfile                 = errors.New("failed to remove profile")
 )
 
-// acquireFileLock attempts to acquire an exclusive file lock with timeout and retries.
-func acquireFileLock(lockPath string) (*flock.Flock, error) {
+// AcquireFileLock attempts to acquire an exclusive file lock with timeout and retries.
+// Exported for use by provider-side code (device_code_cache.go).
+func AcquireFileLock(lockPath string) (*flock.Flock, error) {
 	lock := flock.New(lockPath)
 	ctx, cancel := context.WithTimeout(context.Background(), fileLockTimeout)
 	defer cancel()
@@ -120,13 +121,13 @@ func (m *AzureFileManager) WriteCredentials(providerName, identityName string, c
 
 	// Acquire file lock.
 	lockPath := credPath + ".lock"
-	lock, err := acquireFileLock(lockPath)
+	lock, err := AcquireFileLock(lockPath)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Warn("Failed to unlock credentials file", "lock_file", lockPath, "error", unlockErr)
+			log.Debug("Failed to unlock credentials file", "lock_file", lockPath, "error", unlockErr)
 		}
 	}()
 
@@ -171,13 +172,13 @@ func (m *AzureFileManager) LoadCredentials(providerName string) (*types.AzureCre
 
 	// Acquire file lock for reading.
 	lockPath := credPath + ".lock"
-	lock, err := acquireFileLock(lockPath)
+	lock, err := AcquireFileLock(lockPath)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
 		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Warn("Failed to unlock credentials file", "lock_file", lockPath, "error", unlockErr)
+			log.Debug("Failed to unlock credentials file", "lock_file", lockPath, "error", unlockErr)
 		}
 	}()
 

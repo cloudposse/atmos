@@ -255,16 +255,7 @@ type msalCacheUpdate struct {
 
 // updateMSALCache updates the Azure CLI MSAL token cache.
 func updateMSALCache(params *msalCacheUpdate) error {
-	home := params.Home
-	accessToken := params.AccessToken
-	expiration := params.Expiration
-	graphToken := params.GraphToken
-	graphExpiration := params.GraphExpiration
-	keyVaultToken := params.KeyVaultToken
-	keyVaultExpiration := params.KeyVaultExpiration
-	userOID := params.UserOID
-	tenantID := params.TenantID
-	msalCachePath := filepath.Join(home, ".azure", "msal_token_cache.json")
+	msalCachePath := filepath.Join(params.Home, ".azure", "msal_token_cache.json")
 
 	// Load existing cache or create new one.
 	cache, err := loadMSALCache(msalCachePath)
@@ -272,6 +263,21 @@ func updateMSALCache(params *msalCacheUpdate) error {
 		return err
 	}
 
+	// Initialize cache sections and populate with tokens.
+	accessTokenSection, accountSection := initializeCacheSections(cache)
+	addAccountAndTokens(accessTokenSection, accountSection, params)
+
+	// Write updated cache.
+	updatedData, err := json.MarshalIndent(cache, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal MSAL cache: %w", err)
+	}
+
+	return writeMSALCacheToFile(msalCachePath, updatedData)
+}
+
+// initializeCacheSections ensures AccessToken and Account sections exist in cache.
+func initializeCacheSections(cache map[string]interface{}) (accessTokenSection, accountSection map[string]interface{}) {
 	// Ensure AccessToken section exists.
 	accessTokenSection, ok := cache[FieldAccessToken].(map[string]interface{})
 	if !ok {
@@ -280,93 +286,95 @@ func updateMSALCache(params *msalCacheUpdate) error {
 	}
 
 	// Ensure Account section exists.
-	accountSection, ok := cache["Account"].(map[string]interface{})
+	accountSection, ok = cache["Account"].(map[string]interface{})
 	if !ok {
 		accountSection = make(map[string]interface{})
 		cache["Account"] = accountSection
 	}
 
+	return accessTokenSection, accountSection
+}
+
+// msalIdentifiers holds common MSAL cache identifiers.
+type msalIdentifiers struct {
+	homeAccountID string
+	environment   string
+	clientID      string
+	realm         string
+}
+
+// addAccountAndTokens adds account entry and all tokens to MSAL cache.
+func addAccountAndTokens(accessTokenSection, accountSection map[string]interface{}, params *msalCacheUpdate) {
 	// Create common MSAL identifiers.
-	homeAccountID := fmt.Sprintf("%s.%s", userOID, tenantID)
-	environment := "login.microsoftonline.com"
-	clientID := "04b07795-8ddb-461a-bbee-02f9e1bf7b46" // Azure CLI public client.
-	realm := tenantID
+	ids := msalIdentifiers{
+		homeAccountID: fmt.Sprintf("%s.%s", params.UserOID, params.TenantID),
+		environment:   "login.microsoftonline.com",
+		clientID:      "04b07795-8ddb-461a-bbee-02f9e1bf7b46", // Azure CLI public client.
+		realm:         params.TenantID,
+	}
 
 	// Add Account entry (required for azuread provider).
-	accountKey := fmt.Sprintf("%s-%s-%s", homeAccountID, environment, realm)
+	accountKey := fmt.Sprintf("%s-%s-%s", ids.homeAccountID, ids.environment, ids.realm)
 	accountEntry := map[string]interface{}{
-		FieldHomeAccountID: homeAccountID,
-		FieldEnvironment:   environment,
-		FieldRealm:         realm,
-		"local_account_id": userOID,
-		"username":         extractUsernameOrFallback(accessToken),
+		FieldHomeAccountID: ids.homeAccountID,
+		FieldEnvironment:   ids.environment,
+		FieldRealm:         ids.realm,
+		"local_account_id": params.UserOID,
+		"username":         extractUsernameOrFallback(params.AccessToken),
 		"authority_type":   "MSSTS",
 		"account_source":   "device_code",
 	}
 	accountSection[accountKey] = accountEntry
 
-	// Add management API token entry.
+	// Add management API token.
 	addTokenToCache(accessTokenSection, &tokenCacheParams{
-		Token:         accessToken,
-		Expiration:    expiration,
+		Token:         params.AccessToken,
+		Expiration:    params.Expiration,
 		Scope:         "https://management.azure.com/.default https://management.azure.com/user_impersonation",
-		HomeAccountID: homeAccountID,
-		Environment:   environment,
-		ClientID:      clientID,
-		Realm:         realm,
+		HomeAccountID: ids.homeAccountID,
+		Environment:   ids.environment,
+		ClientID:      ids.clientID,
+		Realm:         ids.realm,
 		APIName:       "Management API",
 	})
 
-	// Add entry for Microsoft Graph API (used by azuread provider) if available.
-	if graphToken != "" {
+	// Add optional Graph and KeyVault tokens.
+	addOptionalTokens(accessTokenSection, params, ids)
+}
+
+// addOptionalTokens adds Graph and KeyVault tokens if available.
+func addOptionalTokens(accessTokenSection map[string]interface{}, params *msalCacheUpdate, ids msalIdentifiers) {
+	// Add Microsoft Graph API token if available.
+	if params.GraphToken != "" {
 		addTokenToCache(accessTokenSection, &tokenCacheParams{
-			Token:         graphToken,
-			Expiration:    graphExpiration,
+			Token:         params.GraphToken,
+			Expiration:    params.GraphExpiration,
 			Scope:         "https://graph.microsoft.com/.default",
-			HomeAccountID: homeAccountID,
-			Environment:   environment,
-			ClientID:      clientID,
-			Realm:         realm,
+			HomeAccountID: ids.homeAccountID,
+			Environment:   ids.environment,
+			ClientID:      ids.clientID,
+			Realm:         ids.realm,
 			APIName:       "Graph API",
 		})
 	} else {
 		log.Debug("No Graph API token available, azuread provider may not work")
 	}
 
-	// Add entry for Azure KeyVault API (used by azurerm provider for KeyVault operations) if available.
-	if keyVaultToken != "" {
+	// Add Azure KeyVault API token if available.
+	if params.KeyVaultToken != "" {
 		addTokenToCache(accessTokenSection, &tokenCacheParams{
-			Token:         keyVaultToken,
-			Expiration:    keyVaultExpiration,
+			Token:         params.KeyVaultToken,
+			Expiration:    params.KeyVaultExpiration,
 			Scope:         "https://vault.azure.net/.default",
-			HomeAccountID: homeAccountID,
-			Environment:   environment,
-			ClientID:      clientID,
-			Realm:         realm,
+			HomeAccountID: ids.homeAccountID,
+			Environment:   ids.environment,
+			ClientID:      ids.clientID,
+			Realm:         ids.realm,
 			APIName:       "KeyVault API",
 		})
 	} else {
 		log.Debug("No KeyVault API token available, KeyVault operations may not work")
 	}
-
-	// Write updated cache.
-	updatedData, err := json.MarshalIndent(cache, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal MSAL cache: %w", err)
-	}
-
-	// Ensure .azure directory exists.
-	azureDir := filepath.Join(home, ".azure")
-	if err := os.MkdirAll(azureDir, DirPermissions); err != nil {
-		return fmt.Errorf("failed to create .azure directory: %w", err)
-	}
-
-	if err := os.WriteFile(msalCachePath, updatedData, FilePermissions); err != nil {
-		return fmt.Errorf("failed to write MSAL cache: %w", err)
-	}
-
-	log.Debug("Updated Azure CLI MSAL token cache", "path", msalCachePath)
-	return nil
 }
 
 // loadMSALCache loads existing MSAL cache from file or creates a new empty cache.
@@ -385,6 +393,34 @@ func loadMSALCache(msalCachePath string) (map[string]interface{}, error) {
 	}
 
 	return cache, nil
+}
+
+// writeMSALCacheToFile writes MSAL cache data to file with locking.
+func writeMSALCacheToFile(msalCachePath string, data []byte) error {
+	// Ensure .azure directory exists.
+	azureDir := filepath.Dir(msalCachePath)
+	if err := os.MkdirAll(azureDir, DirPermissions); err != nil {
+		return fmt.Errorf("failed to create .azure directory: %w", err)
+	}
+
+	// Acquire file lock to prevent concurrent writes.
+	lockPath := msalCachePath + ".lock"
+	lock, err := AcquireFileLock(lockPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if unlockErr := lock.Unlock(); unlockErr != nil {
+			log.Debug("Failed to unlock MSAL cache file", "lock_file", lockPath, "error", unlockErr)
+		}
+	}()
+
+	if err := os.WriteFile(msalCachePath, data, FilePermissions); err != nil {
+		return fmt.Errorf("failed to write MSAL cache: %w", err)
+	}
+
+	log.Debug("Updated Azure CLI MSAL token cache", "path", msalCachePath)
+	return nil
 }
 
 // tokenCacheParams holds parameters for adding a token to MSAL cache.
@@ -464,6 +500,18 @@ func updateAzureProfile(home, username, tenantID, subscriptionID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal Azure profile: %w", err)
 	}
+
+	// Acquire file lock to prevent concurrent writes.
+	lockPath := profilePath + ".lock"
+	lock, err := AcquireFileLock(lockPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if unlockErr := lock.Unlock(); unlockErr != nil {
+			log.Debug("Failed to unlock Azure profile file", "lock_file", lockPath, "error", unlockErr)
+		}
+	}()
 
 	if err := os.WriteFile(profilePath, updatedData, FilePermissions); err != nil {
 		return fmt.Errorf("failed to write Azure profile: %w", err)

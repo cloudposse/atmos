@@ -210,21 +210,17 @@ type tokenCacheUpdate struct {
 
 // updateAzureCLICache updates the Azure CLI MSAL token cache so Terraform can use it.
 // This makes `atmos auth login` work exactly like `az login`.
-func (p *deviceCodeProvider) updateAzureCLICache(update tokenCacheUpdate) error {
-	// Decode JWT to get user OID and username.
-	userOID, err := extractOIDFromToken(update.AccessToken)
+//
+//nolint:unparam // Error return required for future extensibility and interface compatibility
+func (p *deviceCodeProvider) updateAzureCLICache(update *tokenCacheUpdate) error {
+	// Extract user info from token.
+	userOID, username, err := p.extractUserInfoFromToken(update.AccessToken)
 	if err != nil {
-		log.Debug("Failed to extract OID from token, skipping Azure CLI cache update", "error", err)
-		return nil // Non-fatal.
+		//nolint:nilerr // Cache update failures are logged but don't fail authentication
+		return nil // Non-fatal, already logged.
 	}
 
-	username, err := extractUsernameFromToken(update.AccessToken)
-	if err != nil {
-		log.Debug("Failed to extract username from token, using fallback", "error", err)
-		username = "user@unknown" // Fallback username.
-	}
-
-	// Azure CLI MSAL cache path.
+	// Get home directory and cache path.
 	home, err := os.UserHomeDir()
 	if err != nil {
 		log.Debug("Failed to get home directory", "error", err)
@@ -233,80 +229,9 @@ func (p *deviceCodeProvider) updateAzureCLICache(update tokenCacheUpdate) error 
 
 	msalCachePath := filepath.Join(home, ".azure", "msal_token_cache.json")
 
-	// Load and initialize cache structure.
+	// Load and populate cache.
 	cache, accessTokenSection, accountSection := p.loadAndInitializeCLICache(msalCachePath)
-
-	// Create common MSAL identifiers.
-	homeAccountID := fmt.Sprintf("%s.%s", userOID, p.tenantID)
-	environment := "login.microsoftonline.com"
-	clientID := "04b07795-8ddb-461a-bbee-02f9e1bf7b46" // Azure CLI public client.
-	realm := p.tenantID
-
-	// Add Account entry (required for azuread provider).
-	// The Account entry tells the provider which user/account is authenticated.
-	accountKey := fmt.Sprintf("%s-%s-%s", homeAccountID, environment, realm)
-	accountEntry := map[string]interface{}{
-		azureCloud.FieldHomeAccountID: homeAccountID,
-		azureCloud.FieldEnvironment:   environment,
-		azureCloud.FieldRealm:         realm,
-		"local_account_id":            userOID,
-		"username":                    username,
-		"authority_type":              "MSSTS",
-		"account_source":              "device_code",
-	}
-	accountSection[accountKey] = accountEntry
-	log.Debug("Added Account entry to MSAL cache", azureCloud.LogFieldKey, accountKey, "username", username)
-
-	// Management API scope (matches az login format).
-	scope := "https://management.azure.com/.default https://management.azure.com/user_impersonation"
-
-	// Create and add management token entry.
-	cacheKey, tokenEntry := createMSALTokenEntry(&msalTokenParams{
-		Token:         update.AccessToken,
-		ExpiresAt:     update.ExpiresAt,
-		Scope:         scope,
-		HomeAccountID: homeAccountID,
-		Environment:   environment,
-		ClientID:      clientID,
-		Realm:         realm,
-	})
-	accessTokenSection[cacheKey] = tokenEntry
-
-	// Add entry for Microsoft Graph API (used by azuread provider) if available.
-	if update.GraphToken != "" {
-		graphScope := "https://graph.microsoft.com/.default"
-		graphCacheKey, graphTokenEntry := createMSALTokenEntry(&msalTokenParams{
-			Token:         update.GraphToken,
-			ExpiresAt:     update.GraphExpiresAt,
-			Scope:         graphScope,
-			HomeAccountID: homeAccountID,
-			Environment:   environment,
-			ClientID:      clientID,
-			Realm:         realm,
-		})
-		accessTokenSection[graphCacheKey] = graphTokenEntry
-		log.Debug("Added Graph API token to MSAL cache", azureCloud.LogFieldKey, graphCacheKey)
-	} else {
-		log.Debug("No Graph API token available, azuread provider may not work")
-	}
-
-	// Add entry for Azure KeyVault API (used by azurerm provider for KeyVault operations) if available.
-	if update.KeyVaultToken != "" {
-		keyVaultScope := "https://vault.azure.net/.default"
-		keyVaultCacheKey, keyVaultTokenEntry := createMSALTokenEntry(&msalTokenParams{
-			Token:         update.KeyVaultToken,
-			ExpiresAt:     update.KeyVaultExpiresAt,
-			Scope:         keyVaultScope,
-			HomeAccountID: homeAccountID,
-			Environment:   environment,
-			ClientID:      clientID,
-			Realm:         realm,
-		})
-		accessTokenSection[keyVaultCacheKey] = keyVaultTokenEntry
-		log.Debug("Added KeyVault API token to MSAL cache", azureCloud.LogFieldKey, keyVaultCacheKey)
-	} else {
-		log.Debug("No KeyVault API token available, KeyVault operations may not work")
-	}
+	cacheKey := p.populateCLICacheWithTokens(accessTokenSection, accountSection, userOID, username, update)
 
 	// Write updated cache.
 	updatedData, err := json.MarshalIndent(cache, "", "  ")
@@ -315,28 +240,115 @@ func (p *deviceCodeProvider) updateAzureCLICache(update tokenCacheUpdate) error 
 		return nil
 	}
 
-	// Ensure .azure directory exists.
-	azureDir := filepath.Join(home, ".azure")
-	if err := os.MkdirAll(azureDir, azureCloud.DirPermissions); err != nil {
-		log.Debug("Failed to create .azure directory", "error", err)
-		return nil
-	}
-
-	if err := os.WriteFile(msalCachePath, updatedData, azureCloud.FilePermissions); err != nil {
-		log.Debug("Failed to write Azure CLI MSAL cache", "error", err)
+	if !writeCacheFileWithLocking(msalCachePath, updatedData, "MSAL cache") {
 		return nil
 	}
 
 	log.Debug("Updated Azure CLI MSAL token cache", "path", msalCachePath, azureCloud.LogFieldKey, cacheKey)
 
-	// Update azureProfile.json to set the correct default subscription.
-	// This is required for azuread and azapi providers to work.
+	// Update azureProfile.json.
 	if err := p.updateAzureProfile(home, username); err != nil {
 		log.Debug("Failed to update Azure profile", "error", err)
-		// Non-fatal - MSAL cache should be sufficient.
 	}
 
 	return nil
+}
+
+// extractUserInfoFromToken extracts OID and username from access token.
+func (p *deviceCodeProvider) extractUserInfoFromToken(accessToken string) (userOID, username string, err error) {
+	userOID, err = extractOIDFromToken(accessToken)
+	if err != nil {
+		log.Debug("Failed to extract OID from token, skipping Azure CLI cache update", "error", err)
+		return "", "", err
+	}
+
+	username, err = extractUsernameFromToken(accessToken)
+	if err != nil {
+		log.Debug("Failed to extract username from token, using fallback", "error", err)
+		username = "user@unknown" // Fallback username.
+	}
+
+	return userOID, username, nil
+}
+
+// msalIdentifiers holds common MSAL cache identifiers.
+type msalIdentifiers struct {
+	homeAccountID string
+	environment   string
+	clientID      string
+	realm         string
+}
+
+// populateCLICacheWithTokens adds account and tokens to CLI cache sections.
+func (p *deviceCodeProvider) populateCLICacheWithTokens(
+	accessTokenSection, accountSection map[string]interface{},
+	userOID, username string,
+	update *tokenCacheUpdate,
+) string {
+	// Create common MSAL identifiers.
+	ids := msalIdentifiers{
+		homeAccountID: fmt.Sprintf("%s.%s", userOID, p.tenantID),
+		environment:   "login.microsoftonline.com",
+		clientID:      "04b07795-8ddb-461a-bbee-02f9e1bf7b46", // Azure CLI public client.
+		realm:         p.tenantID,
+	}
+
+	// Add Account entry.
+	accountKey := fmt.Sprintf("%s-%s-%s", ids.homeAccountID, ids.environment, ids.realm)
+	accountEntry := map[string]interface{}{
+		azureCloud.FieldHomeAccountID: ids.homeAccountID,
+		azureCloud.FieldEnvironment:   ids.environment,
+		azureCloud.FieldRealm:         ids.realm,
+		"local_account_id":            userOID,
+		"username":                    username,
+		"authority_type":              "MSSTS",
+		"account_source":              "device_code",
+	}
+	accountSection[accountKey] = accountEntry
+	log.Debug("Added Account entry to MSAL cache", azureCloud.LogFieldKey, accountKey, "username", username)
+
+	// Add management API token.
+	scope := "https://management.azure.com/.default https://management.azure.com/user_impersonation"
+	cacheKey := addTokenToCLICache(accessTokenSection, update.AccessToken, update.ExpiresAt, scope, ids)
+
+	// Add Graph API and KeyVault tokens if available.
+	addOptionalCLITokens(accessTokenSection, update, ids)
+
+	return cacheKey
+}
+
+// addTokenToCLICache adds a single token to the CLI cache and returns the cache key.
+func addTokenToCLICache(accessTokenSection map[string]interface{}, token string, expiresAt time.Time, scope string, ids msalIdentifiers) string {
+	cacheKey, tokenEntry := createMSALTokenEntry(&msalTokenParams{
+		Token:         token,
+		ExpiresAt:     expiresAt,
+		Scope:         scope,
+		HomeAccountID: ids.homeAccountID,
+		Environment:   ids.environment,
+		ClientID:      ids.clientID,
+		Realm:         ids.realm,
+	})
+	accessTokenSection[cacheKey] = tokenEntry
+	return cacheKey
+}
+
+// addOptionalCLITokens adds Graph and KeyVault tokens to CLI cache if available.
+func addOptionalCLITokens(accessTokenSection map[string]interface{}, update *tokenCacheUpdate, ids msalIdentifiers) {
+	// Add Graph API token if available.
+	if update.GraphToken != "" {
+		graphKey := addTokenToCLICache(accessTokenSection, update.GraphToken, update.GraphExpiresAt, "https://graph.microsoft.com/.default", ids)
+		log.Debug("Added Graph API token to MSAL cache", azureCloud.LogFieldKey, graphKey)
+	} else {
+		log.Debug("No Graph API token available, azuread provider may not work")
+	}
+
+	// Add KeyVault API token if available.
+	if update.KeyVaultToken != "" {
+		kvKey := addTokenToCLICache(accessTokenSection, update.KeyVaultToken, update.KeyVaultExpiresAt, "https://vault.azure.net/.default", ids)
+		log.Debug("Added KeyVault API token to MSAL cache", azureCloud.LogFieldKey, kvKey)
+	} else {
+		log.Debug("No KeyVault API token available, KeyVault operations may not work")
+	}
 }
 
 // loadAndInitializeCLICache loads MSAL cache and ensures required sections exist.
@@ -486,6 +498,9 @@ func (p *deviceCodeProvider) updateAzureProfile(home, username string) error {
 			"subscriptions":  []interface{}{},
 		}
 	} else {
+		// Strip UTF-8 BOM if present (Azure CLI sometimes writes files with BOM).
+		data = stripBOM(data)
+
 		if err := json.Unmarshal(data, &profile); err != nil {
 			return fmt.Errorf("failed to parse Azure profile: %w", err)
 		}
@@ -500,10 +515,63 @@ func (p *deviceCodeProvider) updateAzureProfile(home, username string) error {
 		return fmt.Errorf("failed to marshal Azure profile: %w", err)
 	}
 
+	// Acquire file lock to prevent concurrent writes.
+	lockPath := profilePath + ".lock"
+	lock, err := azureCloud.AcquireFileLock(lockPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if unlockErr := lock.Unlock(); unlockErr != nil {
+			log.Debug("Failed to unlock Azure profile file", "lock_file", lockPath, "error", unlockErr)
+		}
+	}()
+
 	if err := os.WriteFile(profilePath, updatedData, azureCloud.FilePermissions); err != nil {
 		return fmt.Errorf("failed to write Azure profile: %w", err)
 	}
 
 	log.Debug("Updated Azure profile", "path", profilePath, "subscription", p.subscriptionID)
 	return nil
+}
+
+// writeCacheFileWithLocking writes cache data to file with directory creation and file locking.
+// Returns true on success, false on error (errors are logged but not returned).
+func writeCacheFileWithLocking(cachePath string, data []byte, cacheType string) bool {
+	// Ensure directory exists.
+	cacheDir := filepath.Dir(cachePath)
+	if err := os.MkdirAll(cacheDir, azureCloud.DirPermissions); err != nil {
+		log.Debug(fmt.Sprintf("Failed to create directory for %s", cacheType), "error", err)
+		return false
+	}
+
+	// Acquire file lock to prevent concurrent writes.
+	lockPath := cachePath + ".lock"
+	lock, err := azureCloud.AcquireFileLock(lockPath)
+	if err != nil {
+		log.Debug(fmt.Sprintf("Failed to acquire file lock for %s", cacheType), "error", err)
+		return false
+	}
+	defer func() {
+		if unlockErr := lock.Unlock(); unlockErr != nil {
+			log.Debug(fmt.Sprintf("Failed to unlock %s file", cacheType), "lock_file", lockPath, "error", unlockErr)
+		}
+	}()
+
+	if err := os.WriteFile(cachePath, data, azureCloud.FilePermissions); err != nil {
+		log.Debug(fmt.Sprintf("Failed to write %s", cacheType), "error", err)
+		return false
+	}
+
+	return true
+}
+
+// stripBOM removes UTF-8 BOM (Byte Order Mark) from the beginning of data.
+// Azure CLI sometimes writes JSON files with BOM which causes JSON parsing to fail.
+func stripBOM(data []byte) []byte {
+	// UTF-8 BOM is EF BB BF.
+	if len(data) >= 3 && data[0] == azureCloud.BomMarker && data[1] == azureCloud.BomSecondByte && data[2] == azureCloud.BomThirdByte {
+		return data[3:]
+	}
+	return data
 }

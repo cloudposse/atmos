@@ -45,6 +45,18 @@ func (c *msalCache) Replace(ctx context.Context, u cache.Unmarshaler, hints cach
 		return err
 	}
 
+	// Acquire file lock for reading to prevent race with concurrent writes.
+	lockPath := c.cachePath + ".lock"
+	lock, err := AcquireFileLock(lockPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if unlockErr := lock.Unlock(); unlockErr != nil {
+			log.Debug("Failed to unlock MSAL cache file", "lock_file", lockPath, "error", unlockErr)
+		}
+	}()
+
 	// Read cache file.
 	data, err := os.ReadFile(c.cachePath)
 	if err != nil {
@@ -77,6 +89,18 @@ func (c *msalCache) Export(ctx context.Context, m cache.Marshaler, hints cache.E
 	if err != nil {
 		return fmt.Errorf("failed to marshal MSAL cache: %w", err)
 	}
+
+	// Acquire file lock to prevent concurrent writes.
+	lockPath := c.cachePath + ".lock"
+	lock, err := AcquireFileLock(lockPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if unlockErr := lock.Unlock(); unlockErr != nil {
+			log.Debug("Failed to unlock MSAL cache file", "lock_file", lockPath, "error", unlockErr)
+		}
+	}()
 
 	// Write to disk with secure permissions.
 	if err := os.WriteFile(c.cachePath, data, FilePermissions); err != nil {
