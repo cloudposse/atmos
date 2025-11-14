@@ -92,8 +92,8 @@ atmos version --help
 atmos version list --help
 atmos version show --help
 atmos workflow --help
-tree
-tree -CAF --gitignore
+tree --charset=UTF-8
+tree -CAF --gitignore --charset=UTF-8
 scripts/demo-stacks/start-your-project.sh
 scripts/demo-stacks/write-your-components.sh
 scripts/demo-stacks/define-your-stacks.sh
