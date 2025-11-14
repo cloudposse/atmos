@@ -35,7 +35,7 @@ atmos devcontainer config geodesic
 ```
 
 Example output:
-```yaml
+```
 Runtime: podman
 
 Name: Geodesic
@@ -51,6 +51,13 @@ Mounts:
 Forward Ports:
   - 8080
   - 3000
+
+Environment Variables:
+  ATMOS_BASE_PATH: /workspace
+  ATMOS_IDENTITY: acme-identity
+
+Run Arguments:
+  - --hostname=geodesic
 
 Remote User: root
 ```
