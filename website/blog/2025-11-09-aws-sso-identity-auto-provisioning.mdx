@@ -19,9 +19,7 @@ Now, you authenticate once with `atmos auth login`, and Atmos automatically disc
 
 ## Why This Matters
 
-### Time to First Auth: &lt;2 Minutes
-
-The metric we care about most is **time to first auth**—the duration from cloning a repository to successfully authenticating and deploying infrastructure.
+### Faster Time to First Auth
 
 **Before auto-provisioning:**
 - Clone repository
@@ -29,7 +27,6 @@ The metric we care about most is **time to first auth**—the duration from clon
 - Query AWS SSO for available accounts and roles
 - Manually write 50+ identity entries in `atmos.yaml`
 - Test authentication with each identity
-- **Total time: 10+ minutes** (often much longer)
 
 **After auto-provisioning:**
 ```yaml
@@ -50,8 +47,6 @@ atmos auth login sso-prod
 atmos terraform plan --identity production/AdministratorAccess
 # Works immediately - no additional configuration
 ```
-
-**Total time: &lt;2 minutes**
 
 ### Developer Experience
 
@@ -92,25 +87,12 @@ This approach has several advantages:
 - **Standard format**: Provisioned files use the same YAML structure as manual config—you can view, edit, or copy them as needed
 - **Cache invalidation**: Delete the cache directory to force re-provisioning
 
-### Provider-Specific Implementation
+### Provider Support
 
-Not all providers support auto-provisioning. It's an **optional capability** that providers can implement via the `Provisioner` interface:
+Auto-provisioning is currently available for:
+- **AWS IAM Identity Center (SSO)**: Automatically discovers accounts and permission sets
 
-```go
-type Provisioner interface {
-    ProvisionIdentities(ctx context.Context, creds ICredentials) (*Result, error)
-}
-```
-
-Currently supported providers:
-- **AWS IAM Identity Center (SSO)**: Uses `ListAccounts` and `ListAccountRoles` APIs
-
-Planned support:
-- Okta (via SCIM or Okta API)
-- Azure AD (via Microsoft Graph)
-- Google Workspace (via Directory API)
-
-The provisioner architecture is extensible—new providers can be added without changing the core authentication system.
+Future provider support is planned for additional cloud platforms and identity providers.
 
 ## Configuration
 
@@ -223,20 +205,6 @@ atmos terraform plan --identity production/AdministratorAccess
 # Ready to deploy
 ```
 
-### 3. CI/CD Pipelines
-
-Pipelines can use OIDC authentication without hardcoding identity names:
-
-```yaml
-# GitHub Actions
-- name: Deploy to Production
-  run: |
-    atmos auth login sso-prod
-    atmos terraform apply --identity production/AdministratorAccess
-```
-
-The identity exists regardless of which engineer's permission set structure the pipeline mirrors.
-
 ## Implementation Details
 
 ### Non-Fatal Provisioning
@@ -263,66 +231,6 @@ Examples:
 - `dev-us-east-1/ReadOnly`
 
 This convention ensures unique names and makes it easy to understand which account and role each identity represents.
-
-### Provisioning Metadata
-
-Each provisioned identity file includes metadata:
-
-```yaml
-auth:
-  identities:
-    production/AdministratorAccess:
-      provider: sso-prod
-      principal:
-        name: AdministratorAccess
-        account:
-          name: production
-          id: "123456789012"
-
-  _metadata:
-    provisioned_at: "2025-11-09T12:00:00Z"
-    source: aws-sso
-    provider: sso-prod
-    counts:
-      accounts: 12
-      roles: 47
-      identities: 47
-```
-
-This metadata is useful for debugging and understanding what was provisioned.
-
-## Future Enhancements
-
-We're planning several enhancements to auto-provisioning:
-
-1. **Okta Support**: Auto-provision identities from Okta applications and roles
-2. **Azure AD Support**: Discover Azure subscriptions and roles via Microsoft Graph
-3. **Filtering**: Configure which accounts or roles to provision (e.g., only production accounts)
-4. **Custom Naming**: Override default naming convention for provisioned identities
-5. **Refresh Command**: `atmos auth refresh` to re-provision without re-authenticating
-
-## Migration Guide
-
-### Existing Manual Configurations
-
-If you already have manual identity configurations, auto-provisioning works alongside them:
-
-1. Enable `auto_provision_identities: true`
-2. Authenticate: `atmos auth login`
-3. Provisioned identities are added without affecting manual ones
-4. Gradually remove manual configurations if desired
-
-### Opt-Out
-
-Auto-provisioning is opt-in via the `auto_provision_identities` flag. To disable:
-
-```yaml
-auth:
-  providers:
-    sso-prod:
-      auto_provision_identities: false  # Explicit disable
-      # Or simply omit the flag (defaults to false)
-```
 
 ## Get Started
 
