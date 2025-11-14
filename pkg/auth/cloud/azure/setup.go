@@ -62,7 +62,7 @@ func SetAuthContext(params *SetAuthContextParams) error {
 	}
 
 	azureCreds, ok := params.Credentials.(*types.AzureCredentials)
-	if !ok {
+	if !ok || azureCreds == nil {
 		return nil // No Azure credentials to setup.
 	}
 

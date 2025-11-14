@@ -181,6 +181,20 @@ func TestSetAuthContext(t *testing.T) {
 			},
 		},
 		{
+			name: "typed-nil Azure credentials is no-op",
+			params: &SetAuthContextParams{
+				AuthContext:  &schema.AuthContext{},
+				ProviderName: "test-provider",
+				IdentityName: "test-identity",
+				Credentials:  (*types.AzureCredentials)(nil),
+				BasePath:     tmpDir,
+			},
+			expectError: false,
+			checkAuth: func(t *testing.T, authContext *schema.AuthContext) {
+				assert.Nil(t, authContext.Azure)
+			},
+		},
+		{
 			name: "expired credentials returns error",
 			params: &SetAuthContextParams{
 				AuthContext:  &schema.AuthContext{},
