@@ -533,41 +533,6 @@ Clearly document why and how you've diverged:
 - Target convergence: Q2 2024
 ```
 
-### 4. Test Vendored Components
-
-Maintain tests for vendored components:
-
-```bash
-# Test vendored components
-for component in components/terraform/*; do
-  echo "Testing $component..."
-  cd $component
-  terraform init
-  terraform validate
-  tflint
-  tfsec .
-  cd -
-done
-```
-
-### 5. Security Scanning
-
-Regularly scan vendored code:
-
-```bash
-# Security scanning workflow
-- name: Security Scan
-  run: |
-    # Scan for vulnerabilities
-    trivy fs components/terraform/
-
-    # Check for secrets
-    gitleaks detect --source=components/terraform/
-
-    # Terraform security
-    tfsec components/terraform/
-```
-
 ## Rollback Strategy
 
 Vendoring provides multiple rollback approaches:
