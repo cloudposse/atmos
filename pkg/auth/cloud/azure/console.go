@@ -73,6 +73,11 @@ func (g *ConsoleURLGenerator) GetConsoleURL(ctx context.Context, creds types.ICr
 
 // validateAzureCredentials validates and extracts Azure credentials from the interface.
 func validateAzureCredentials(creds types.ICredentials) (*types.AzureCredentials, error) {
+	// Check if credentials are nil.
+	if creds == nil {
+		return nil, fmt.Errorf("%w: credentials cannot be nil", errUtils.ErrInvalidAuthConfig)
+	}
+
 	azureCreds, ok := creds.(*types.AzureCredentials)
 	if !ok {
 		return nil, fmt.Errorf("%w: expected Azure credentials, got %T", errUtils.ErrInvalidAuthConfig, creds)
