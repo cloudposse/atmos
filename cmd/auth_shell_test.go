@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -56,8 +57,11 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up test fixture with auth configuration for each subtest.
-			testDir := "../tests/fixtures/scenarios/atmos-auth"
+			// CRITICAL: Must use absolute path, not relative path, because viper may resolve
+			// the path from a different working directory in CI vs locally.
+			testDir, err := filepath.Abs("../tests/fixtures/scenarios/atmos-auth")
+			require.NoError(t, err, "Failed to get absolute path to test fixture")
+
 			t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
 			t.Setenv("ATMOS_BASE_PATH", testDir)
 
@@ -69,7 +73,7 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 			testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
 			// Call the core business logic directly, bypassing handleHelpRequest and checkAtmosConfig.
-			err := executeAuthShellCommandCore(testCmd, tt.args)
+			err = executeAuthShellCommandCore(testCmd, tt.args)
 
 			if tt.expectedSentinelErr != nil {
 				require.Error(t, err, "Expected an error but got nil")
@@ -123,11 +127,11 @@ func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
 }
 
 func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
-	_ = NewTestKit(t)
-
 	// Test that the command handles nil environment variables gracefully.
 	// This tests the path where envVars is nil and gets initialized to empty map.
-	testDir := "../tests/fixtures/scenarios/atmos-auth"
+	testDir, err := filepath.Abs("../tests/fixtures/scenarios/atmos-auth")
+	require.NoError(t, err, "Failed to get absolute path to test fixture")
+
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
 	t.Setenv("ATMOS_BASE_PATH", testDir)
 
@@ -138,7 +142,7 @@ func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
 	testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
 	// This will fail at authentication but will exercise the env var initialization path.
-	err := executeAuthShellCommandCore(testCmd, []string{"--identity=test-user"})
+	err = executeAuthShellCommandCore(testCmd, []string{"--identity=test-user"})
 	// Should be an authentication error, not nil pointer errors.
 	require.Error(t, err, "Expected an error but got nil")
 	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed,
