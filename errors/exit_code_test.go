@@ -149,3 +149,24 @@ func TestWithExitCode_PreservesOriginalError(t *testing.T) {
 	// Error message should still be the original
 	assert.Contains(t, withCode.Error(), "original error")
 }
+
+// TestExitCodeSIGINT verifies that ExitCodeSIGINT constant has the correct POSIX value.
+// POSIX specifies that when a process is terminated by a signal, the exit code is 128 + signal_number.
+// SIGINT (Ctrl+C) is signal number 2, so the exit code should be 130 (128 + 2).
+func TestExitCodeSIGINT(t *testing.T) {
+	assert.Equal(t, 130, ExitCodeSIGINT, "ExitCodeSIGINT should be 130 (POSIX: 128 + SIGINT signal 2)")
+}
+
+// TestExitCodeSIGINT_UserAbort verifies that user abort errors exit with SIGINT code.
+// This is a regression test for the identity selector exit handling bug.
+func TestExitCodeSIGINT_UserAbort(t *testing.T) {
+	// When user presses Ctrl+C during identity selection, we should exit with ExitCodeSIGINT.
+	// This test documents the expected behavior.
+
+	// Verify that ErrUserAborted is defined
+	assert.NotNil(t, ErrUserAborted, "ErrUserAborted should be defined")
+
+	// Verify that WithExitCode can attach SIGINT code to user abort error
+	err := WithExitCode(ErrUserAborted, ExitCodeSIGINT)
+	assert.Equal(t, ExitCodeSIGINT, GetExitCode(err), "User abort should use SIGINT exit code")
+}

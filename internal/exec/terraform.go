@@ -85,14 +85,20 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			Skip:                 nil,
 			AuthManager:          nil, // Critical: no AuthManager yet, we're determining which identity to use.
 		})
-		if err == nil {
+		if err != nil {
+			// If component doesn't exist, exit immediately before attempting authentication.
+			// This prevents prompting for identity when the component is invalid.
+			if errors.Is(err, errUtils.ErrInvalidComponent) {
+				return err
+			}
+			// For other errors (e.g., permission issues), continue with global auth config.
+		} else {
 			// Merge component-specific auth with global auth.
 			mergedAuthConfig, err = auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, &atmosConfig, cfg.AuthSectionName)
 			if err != nil {
 				return err
 			}
 		}
-		// If error getting component config, continue with global auth config.
 	}
 
 	// Create and authenticate AuthManager from --identity flag if specified.
@@ -100,6 +106,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// This enables YAML template functions like !terraform.state to use authenticated credentials.
 	authManager, err := auth.CreateAndAuthenticateManager(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue)
 	if err != nil {
+		// Special case: If user aborted (Ctrl+C), exit immediately without showing error.
+		if errors.Is(err, errUtils.ErrUserAborted) {
+			errUtils.Exit(errUtils.ExitCodeSIGINT)
+		}
 		return err
 	}
 
@@ -115,6 +125,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			log.Debug("Stored authenticated identity for hooks", "identity", authenticatedIdentity)
 		}
 	}
+
+	// Store AuthManager in configAndStacksInfo for nested operations.
+	// This enables nested YAML functions (e.g., !terraform.state within component configs)
+	// to access the same authenticated session without re-prompting for credentials.
+	info.AuthManager = authManager
 
 	if shouldProcessStacks {
 		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)

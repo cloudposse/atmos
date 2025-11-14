@@ -58,10 +58,11 @@ var (
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 
 	// Authentication and TTY errors.
-	ErrAuthConsole          = errors.New("auth console operation failed")
-	ErrProviderNotSupported = errors.New("provider does not support this operation")
-	ErrUnknownServiceAlias  = errors.New("unknown service alias")
-	ErrTTYRequired          = errors.New("requires a TTY")
+	ErrAuthConsole            = errors.New("auth console operation failed")
+	ErrProviderNotSupported   = errors.New("provider does not support this operation")
+	ErrUnknownServiceAlias    = errors.New("unknown service alias")
+	ErrTTYRequired            = errors.New("requires a TTY")
+	ErrInvalidAuthManagerType = errors.New("invalid authManager type")
 
 	// Component and positional argument errors.
 	ErrComponentRequired     = errors.New("component is required")
