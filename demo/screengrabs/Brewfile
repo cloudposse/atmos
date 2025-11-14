@@ -1,0 +1,4 @@
+# Required dependencies for generating screengrabs
+
+# ANSI HTML Adapter - converts ANSI terminal output to HTML
+brew "aha"

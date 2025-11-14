@@ -20,8 +20,12 @@ if [ ${#MISSING_DEPS[@]} -ne 0 ]; then
     for dep in "${MISSING_DEPS[@]}"; do
         case "$dep" in
             aha)
-                echo "  - aha: Install with 'apt-get install aha' (Debian/Ubuntu) or 'brew install aha' (macOS)" >&2
-                echo "    See: https://github.com/theZiz/aha" >&2
+                if [ "$(uname)" = "Darwin" ]; then
+                    echo "  - aha: Run 'brew bundle' in demo/screengrabs directory" >&2
+                else
+                    echo "  - aha: Install with 'apt-get install aha' (Debian/Ubuntu)" >&2
+                    echo "    See: https://github.com/theZiz/aha" >&2
+                fi
                 ;;
             atmos)
                 echo "  - atmos: Build with 'make build' from the repository root" >&2
