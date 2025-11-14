@@ -116,10 +116,6 @@ See [Azure Authentication](/cli/commands/auth/tutorials/azure-authentication) fo
 
 ## AWS SSO (IAM Identity Center)
 
-### Device Authorization Flow
-
-When authenticating with AWS SSO, you will see a **verification code** displayed in the terminal. This is a device authorization user code (e.g., "WDDD-HRQV") that AWS generates for the device flow - **this is NOT an MFA token**. The code is displayed so you can visually verify it matches what AWS shows in the browser. Any MFA prompts will appear in the browser during authentication.
-
 ### IAM Permissions for Identity Provisioning
 
 When using automatic identity provisioning (`auto_provision_identities: true`), Atmos queries AWS Identity Center APIs during login to discover available permission sets across assigned accounts. This requires specific IAM permissions.
