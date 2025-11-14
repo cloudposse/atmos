@@ -1,13 +1,13 @@
 package pager
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
@@ -53,8 +53,7 @@ func isTTYAccessible() bool {
 func (p *pageCreator) Run(title, content string) error {
 	// Always print content directly if pager is disabled or no TTY support.
 	if !(p.enablePager) || !p.isTTYSupportForStdout() {
-		fmt.Print(content)
-		return nil
+		return data.Write(content)
 	}
 
 	// Check if /dev/tty is accessible before trying to use alternate screen.
@@ -64,8 +63,7 @@ func (p *pageCreator) Run(title, content string) error {
 		// /dev/tty not accessible, print directly without pager.
 		// This is an expected condition in non-interactive environments, not an error.
 		log.Trace("Pager disabled: /dev/tty not accessible")
-		fmt.Print(content)
-		return nil
+		return data.Write(content)
 	}
 
 	// Count visible lines (taking word wrapping into account)
@@ -73,8 +71,7 @@ func (p *pageCreator) Run(title, content string) error {
 
 	// If content fits in terminal, print it directly without pager.
 	if contentFits {
-		fmt.Print(content)
-		return nil
+		return data.Write(content)
 	}
 
 	// Content doesn't fit - use the pager with alternate screen.
@@ -91,8 +88,7 @@ func (p *pageCreator) Run(title, content string) error {
 		// Pager failed, fall back to direct print.
 		// This is a graceful fallback, not a critical error.
 		log.Trace("Pager failed, falling back to direct print", "error", pagerErr)
-		fmt.Print(content)
-		return nil
+		return data.Write(content)
 	}
 
 	return nil

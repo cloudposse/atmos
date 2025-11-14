@@ -6,6 +6,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
 func TestPageCreator_Run(t *testing.T) {
@@ -46,6 +49,13 @@ func TestPageCreator_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Initialize I/O context and data writer for tests.
+			ioCtx, err := iolib.NewContext()
+			if err != nil {
+				t.Fatalf("Failed to initialize I/O context: %v", err)
+			}
+			data.InitWriter(ioCtx)
+
 			// Track whether newTeaProgram was called and capture the model.
 			teaProgramCalled := false
 			var capturedModel *model
@@ -84,7 +94,7 @@ func TestPageCreator_Run(t *testing.T) {
 			}
 
 			// Execute the test
-			err := pc.Run(tt.title, tt.content)
+			err = pc.Run(tt.title, tt.content)
 
 			// Verify results
 			if tt.expectedError != nil {
