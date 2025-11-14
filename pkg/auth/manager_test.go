@@ -1678,20 +1678,15 @@ func TestManager_removeProvisionedIdentitiesCache_WriterCreationFailure(t *testi
 		config: &schema.AuthConfig{},
 	}
 
-	// Set XDG_CACHE_HOME to an unwritable path.
-	// Create a directory and make it read-only to prevent subdirectory creation.
+	// Set XDG_CACHE_HOME to a regular file (not a directory).
+	// This prevents NewProvisioningWriter from creating the required subdirectory,
+	// causing a deterministic failure on all platforms (Windows, macOS, Linux).
 	tempDir := t.TempDir()
-	readOnlyDir := filepath.Join(tempDir, "readonly")
-	err := os.Mkdir(readOnlyDir, 0o400) // Read-only directory.
-	require.NoError(t, err)
+	blocker := filepath.Join(tempDir, "xdg-cache-file")
+	require.NoError(t, os.WriteFile(blocker, []byte{}, 0o600))
+	t.Setenv("XDG_CACHE_HOME", blocker)
 
-	t.Cleanup(func() {
-		os.Chmod(readOnlyDir, 0o700)
-	})
-
-	t.Setenv("XDG_CACHE_HOME", readOnlyDir)
-
-	err = mgr.removeProvisionedIdentitiesCache("test-provider")
+	err := mgr.removeProvisionedIdentitiesCache("test-provider")
 	assert.Error(t, err)
 }
 

@@ -855,7 +855,7 @@ func TestNewSSOProvider_MissingRegion(t *testing.T) {
 func TestSSOProvider_PrepareEnvironment(t *testing.T) {
 	// Test PrepareEnvironment method.
 	// Note: SSO providers don't write credential files - that's done by identities.
-	// PrepareEnvironment just returns the environment unchanged for interface compliance.
+	// PrepareEnvironment injects AWS_REGION and returns a new map (not modifying input).
 	config := &schema.Provider{
 		Kind:     testSSOKind,
 		Region:   testRegion,
@@ -876,6 +876,9 @@ func TestSSOProvider_PrepareEnvironment(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify returned environment is a new map (not the same reference).
+	// Pointer comparison ensures we got a different map.
+	assert.NotSame(t, &inputEnv, &resultEnv, "PrepareEnvironment should return a new map, not the same reference")
+
 	// Modify the result to ensure input isn't affected.
 	resultEnv["NEW_KEY"] = "new_value"
 	assert.NotContains(t, inputEnv, "NEW_KEY", "Input map should not be modified")
