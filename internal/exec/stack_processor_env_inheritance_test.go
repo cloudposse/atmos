@@ -184,3 +184,60 @@ func TestEnvInheritance_ComponentType(t *testing.T) {
 	assert.Equal(t, "terraform-global", val,
 		"Terraform component should inherit terraform.env variables")
 }
+
+// TestEnvInheritance_EnvYAMLFunction verifies that the !env YAML function
+// can access OS environment variables (not from the env section).
+// Note: !env reads from OS environment, while env: section defines variables
+// passed to Terraform/Helmfile/Packer during execution.
+func TestEnvInheritance_EnvYAMLFunction(t *testing.T) {
+	// Set up test fixture path.
+	fixtureDir := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "env-inheritance")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", fixtureDir)
+	t.Setenv("ATMOS_BASE_PATH", fixtureDir)
+
+	// Set OS environment variables that !env will read.
+	// Note: These are separate from the env: section in stack manifests.
+	t.Setenv("FOO", "bar")
+	t.Setenv("TF_GLOBAL_VAR", "terraform-global")
+
+	// Load Atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err, "Failed to initialize CLI config")
+
+	// Process stacks with YAML function processing enabled.
+	stacks, err := ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil)
+	require.NoError(t, err, "Failed to process stacks")
+	require.NotNil(t, stacks, "Stacks should not be nil")
+
+	// Find the test-component-env-function component.
+	comp, stackName, found := findComponentInStacks(stacks, "test-component-env-function")
+	require.True(t, found, "Component test-component-env-function not found in any stack")
+	t.Logf("Found test-component-env-function in stack %s", stackName)
+
+	// Verify env section has the !env function results.
+	envSection, ok := comp["env"].(map[string]any)
+	require.True(t, ok, "Component should have an env section")
+	t.Logf("Env section: %v", envSection)
+
+	// BAZ should have the value of FOO from globals.yaml via !env.
+	bazVal, exists := envSection["BAZ"]
+	require.True(t, exists, "BAZ should exist in env section")
+	assert.Equal(t, "bar", bazVal,
+		"BAZ should have value 'bar' from !env FOO (FOO is defined in globals.yaml)")
+
+	// TF_VAR_FROM_GLOBAL should have the value of TF_GLOBAL_VAR via !env.
+	tfVarVal, exists := envSection["TF_VAR_FROM_GLOBAL"]
+	require.True(t, exists, "TF_VAR_FROM_GLOBAL should exist in env section")
+	assert.Equal(t, "terraform-global", tfVarVal,
+		"TF_VAR_FROM_GLOBAL should have value 'terraform-global' from !env TF_GLOBAL_VAR")
+
+	// Verify vars section also processed !env function.
+	varsSection, ok := comp["vars"].(map[string]any)
+	require.True(t, ok, "Component should have a vars section")
+	t.Logf("Vars section: %v", varsSection)
+
+	fooValue, exists := varsSection["foo_value"]
+	require.True(t, exists, "foo_value should exist in vars section")
+	assert.Equal(t, "bar", fooValue,
+		"foo_value should have value 'bar' from !env FOO")
+}

@@ -2,6 +2,7 @@
 env:
   GLOBAL_ENV_VAR: "global-value"
   GLOBAL_OVERRIDE_TEST: "from-global"
+  FOO: "bar"
 
 terraform:
   env:
