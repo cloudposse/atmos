@@ -15,10 +15,8 @@ components:
         stage: test
         foo: "test-value"
       backend:
-        s3:
-          bucket: "test-bucket"
-          key: "terraform.tfstate"
-          region: "us-east-1"
+        local:
+          path: "terraform.tfstate"
       settings:
         spacelift:
           workspace_enabled: false

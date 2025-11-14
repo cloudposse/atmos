@@ -617,7 +617,17 @@ type ConfigAndStacksInfo struct {
 	// AuthContext holds active authentication credentials for cloud providers.
 	// This is the SINGLE SOURCE OF TRUTH for auth credentials.
 	// ComponentEnvSection/ComponentEnvList are derived from this context.
-	AuthContext               *AuthContext
+	AuthContext *AuthContext
+	// AuthManager holds the authentication manager instance used to create AuthContext.
+	// This is needed for nested operations (e.g., nested !terraform.state functions)
+	// that require re-authentication or access to the original authentication chain.
+	//
+	// Type is 'any' to avoid circular dependency:
+	//   - Using auth.AuthManager would require importing pkg/auth
+	//   - pkg/auth already imports pkg/schema (for ConfigAndStacksInfo)
+	//   - This would create: schema → auth → schema (circular dependency error)
+	//   - Type assertions are used at usage sites to recover type safety
+	AuthManager               any
 	ComponentBackendType      string
 	AdditionalArgsAndFlags    []string
 	GlobalOptions             []string

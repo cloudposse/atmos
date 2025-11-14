@@ -1,0 +1,304 @@
+# Test stack for verifying nested AuthManager propagation and component-level auth override
+# through !terraform.state functions.
+#
+# This fixture tests:
+# 1. AuthManager and AuthContext propagate correctly through multiple levels
+# 2. Components can override auth configuration at any nesting level
+# 3. Components without auth config inherit parent's AuthManager
+# 4. Nested auth overrides work correctly in complex scenarios
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    # ============================================================================
+    # SCENARIO 1: Basic Nested Propagation (No Auth Overrides)
+    # ============================================================================
+
+    # Level 3: Base component (no nested functions, no auth override)
+    level3-component:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        subnet_id: "subnet-level3-12345"
+        cidr_block: "10.0.3.0/24"
+      backend:
+        local:
+          path: "level3/terraform.tfstate"
+
+    # Level 2: References level3-component (no auth override)
+    level2-component:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        # Nested function: triggers evaluation of level3-component
+        level3_subnet_id: !terraform.state level3-component test subnet_id
+        level3_cidr: !terraform.state level3-component test cidr_block
+        vpc_id: "vpc-level2-67890"
+      backend:
+        local:
+          path: "level2/terraform.tfstate"
+
+    # Level 1: References level2-component (no auth override)
+    # Uses global/parent auth for entire chain
+    level1-component:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        # Nested function: triggers evaluation of level2-component
+        # which in turn triggers evaluation of level3-component
+        level2_vpc_id: !terraform.state level2-component test vpc_id
+        level2_subnet: !terraform.state level2-component test level3_subnet_id
+        app_name: "test-app"
+      backend:
+        local:
+          path: "level1/terraform.tfstate"
+
+    # ============================================================================
+    # SCENARIO 2: Auth Override at Level 2 (Middle Level)
+    # ============================================================================
+
+    # Base component for auth override scenario
+    auth-override-level3:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        database_host: "db.example.com"
+        database_port: 5432
+      backend:
+        local:
+          path: "auth-override-level3/terraform.tfstate"
+
+    # Level 2 with auth override - uses different auth than parent
+    auth-override-level2:
+      metadata:
+        component: mock
+        type: real
+      # Component-level auth override
+      auth:
+        identities:
+          test-level2-identity:
+            default: true
+            kind: aws/permission-set
+            via:
+              provider: aws-sso
+              account: "222222222222"
+              permission_set: "Level2Access"
+      vars:
+        stage: test
+        # This nested function should use level2's auth, not parent's
+        database_config: !terraform.state auth-override-level3 test database_host
+        service_name: "api-service"
+      backend:
+        local:
+          path: "auth-override-level2/terraform.tfstate"
+
+    # Level 1 that triggers auth override at level 2
+    auth-override-level1:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        # This triggers level2, which has auth override
+        api_endpoint: !terraform.state auth-override-level2 test service_name
+        api_database: !terraform.state auth-override-level2 test database_config
+      backend:
+        local:
+          path: "auth-override-level1/terraform.tfstate"
+
+    # ============================================================================
+    # SCENARIO 3: Multiple Auth Overrides in Chain
+    # ============================================================================
+
+    # Base component (account A)
+    multi-auth-level3:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        shared_resource_id: "shared-12345"
+        region: "us-east-1"
+      backend:
+        local:
+          path: "multi-auth-level3/terraform.tfstate"
+
+    # Level 2 with auth override (account B)
+    multi-auth-level2:
+      metadata:
+        component: mock
+        type: real
+      auth:
+        identities:
+          account-b-identity:
+            default: true
+            kind: aws/permission-set
+            via:
+              provider: aws-sso
+              account: "333333333333"
+              permission_set: "AccountBAccess"
+      vars:
+        stage: test
+        # Uses account B auth to read from level3
+        shared_resource: !terraform.state multi-auth-level3 test shared_resource_id
+        vpc_id: "vpc-account-b"
+      backend:
+        local:
+          path: "multi-auth-level2/terraform.tfstate"
+
+    # Level 1 with different auth override (account C)
+    multi-auth-level1:
+      metadata:
+        component: mock
+        type: real
+      auth:
+        identities:
+          account-c-identity:
+            default: true
+            kind: aws/permission-set
+            via:
+              provider: aws-sso
+              account: "444444444444"
+              permission_set: "AccountCAccess"
+      vars:
+        stage: test
+        # Uses account C auth, but level2 will use its own (account B)
+        vpc_reference: !terraform.state multi-auth-level2 test vpc_id
+        shared_reference: !terraform.state multi-auth-level2 test shared_resource
+      backend:
+        local:
+          path: "multi-auth-level1/terraform.tfstate"
+
+    # ============================================================================
+    # SCENARIO 4: Selective Auth Override (Mixed Inheritance)
+    # ============================================================================
+
+    # Component that inherits parent auth (no override)
+    mixed-inherit-component:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        config_value: "inherited-auth-config"
+      backend:
+        local:
+          path: "mixed-inherit/terraform.tfstate"
+
+    # Component that overrides auth
+    mixed-override-component:
+      metadata:
+        component: mock
+        type: real
+      auth:
+        identities:
+          mixed-override-identity:
+            default: true
+            kind: aws/permission-set
+            via:
+              provider: aws-sso
+              account: "555555555555"
+              permission_set: "MixedAccess"
+      vars:
+        stage: test
+        # References component that inherits auth
+        inherited_value: !terraform.state mixed-inherit-component test config_value
+        override_value: "override-specific-value"
+      backend:
+        local:
+          path: "mixed-override/terraform.tfstate"
+
+    # Top-level component referencing both
+    mixed-top-level:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        # References inherit component (uses parent auth)
+        value_from_inherit: !terraform.state mixed-inherit-component test config_value
+        # References override component (uses its own auth)
+        value_from_override: !terraform.state mixed-override-component test override_value
+      backend:
+        local:
+          path: "mixed-top-level/terraform.tfstate"
+
+    # ============================================================================
+    # SCENARIO 5: Deep Nesting with Auth Override at Multiple Levels
+    # ============================================================================
+
+    # Level 4 (deepest) - no auth override
+    deep-level4:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        data_source: "primary-db"
+      backend:
+        local:
+          path: "deep-level4/terraform.tfstate"
+
+    # Level 3 - auth override
+    deep-level3:
+      metadata:
+        component: mock
+        type: real
+      auth:
+        identities:
+          deep-level3-identity:
+            default: true
+            kind: aws/permission-set
+            via:
+              provider: aws-sso
+              account: "666666666666"
+              permission_set: "Level3Access"
+      vars:
+        stage: test
+        data_ref: !terraform.state deep-level4 test data_source
+      backend:
+        local:
+          path: "deep-level3/terraform.tfstate"
+
+    # Level 2 - no auth override (inherits from level3)
+    deep-level2:
+      metadata:
+        component: mock
+        type: real
+      vars:
+        stage: test
+        nested_data: !terraform.state deep-level3 test data_ref
+      backend:
+        local:
+          path: "deep-level2/terraform.tfstate"
+
+    # Level 1 - auth override
+    deep-level1:
+      metadata:
+        component: mock
+        type: real
+      auth:
+        identities:
+          deep-level1-identity:
+            default: true
+            kind: aws/permission-set
+            via:
+              provider: aws-sso
+              account: "777777777777"
+              permission_set: "Level1Access"
+      vars:
+        stage: test
+        final_data: !terraform.state deep-level2 test nested_data
+      backend:
+        local:
+          path: "deep-level1/terraform.tfstate"
