@@ -378,16 +378,32 @@ func setupColorProfile(atmosConfig *schema.AtmosConfiguration) {
 	}
 }
 
-// setupColorProfileFromEnv checks ATMOS_FORCE_COLOR environment variable early.
+// setupColorProfileFromEnv checks ATMOS_FORCE_COLOR environment variable and --force-color flag early.
 // This is called during init() before Boa styles are created, ensuring Cobra help
 // text rendering respects the forced color profile.
 func setupColorProfileFromEnv() {
-	// Use viper to check environment variable to satisfy linter requirements.
+	// Check environment variable first.
 	v := viper.New()
 	v.SetEnvPrefix("ATMOS")
 	v.AutomaticEnv()
-	if v.GetBool("FORCE_COLOR") {
+	forceColor := v.GetBool("FORCE_COLOR")
+
+	// Also check --force-color CLI flag by manually parsing os.Args.
+	// This is needed because Cobra hasn't parsed flags yet during init().
+	if !forceColor {
+		for _, arg := range os.Args {
+			if arg == "--force-color" {
+				forceColor = true
+				break
+			}
+		}
+	}
+
+	if forceColor {
+		// Set both lipgloss profile AND CLICOLOR_FORCE environment variable.
+		// Lipgloss respects SetColorProfile(), but Boa (help renderer) checks CLICOLOR_FORCE.
 		lipgloss.SetColorProfile(termenv.TrueColor)
+		_ = os.Setenv("CLICOLOR_FORCE", "1")
 	}
 }
 
@@ -990,18 +1006,8 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 }
 
 func init() {
-	// Register built-in commands from the registry.
-	// This must happen BEFORE custom commands are processed in Execute().
-	// Commands register themselves via init() functions when their packages
-	// are imported with blank imports (e.g., _ "github.com/cloudposse/atmos/cmd/about").
-	if err := internal.RegisterAll(RootCmd); err != nil {
-		log.Error("Failed to register built-in commands", "error", err)
-	}
-
-	// Add the template function for wrapped flag usages.
-	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
-
 	// Register all global flags as persistent flags using builder pattern.
+	// IMPORTANT: This MUST happen BEFORE registering commands, so commands inherit the persistent flags.
 	// Global flags are registered as persistent so they're inherited by all subcommands.
 	// This provides:
 	//   - Single source of truth for defaults (NewGlobalFlags())
@@ -1013,6 +1019,17 @@ func init() {
 	if err := globalParser.BindToViper(viper.GetViper()); err != nil {
 		log.Error("Failed to bind global flags to viper", "error", err)
 	}
+
+	// Register built-in commands from the registry.
+	// This must happen AFTER persistent flags are registered so commands inherit them.
+	// Commands register themselves via init() functions when their packages
+	// are imported with blank imports (e.g., _ "github.com/cloudposse/atmos/cmd/about").
+	if err := internal.RegisterAll(RootCmd); err != nil {
+		log.Error("Failed to register built-in commands", "error", err)
+	}
+
+	// Add the template function for wrapped flag usages.
+	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
 	// Special handling for version flag: clear DefValue for cleaner --help output.
 	if versionFlag := RootCmd.PersistentFlags().Lookup("version"); versionFlag != nil {

@@ -21,6 +21,11 @@ import (
 	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
+const (
+	// AnsiRegularFont is the figurine font used for styled ASCII text.
+	AnsiRegularFont = "ANSI Regular.flf"
+)
+
 // WriteJSON writes JSON to stdout (data channel).
 // This is a convenience wrapper around data.WriteJSON().
 func WriteJSON(v interface{}) error {
@@ -45,10 +50,26 @@ func HighlightCode(code string, language string, syntaxTheme string) (string, er
 
 // PrintStyledText prints a styled text to the terminal.
 func PrintStyledText(text string) error {
-	// Check if the terminal supports colors.
-	// supportscolor automatically detects FORCE_COLOR, NO_COLOR, and other standard environment variables.
+	// Check NO_COLOR first (highest priority).
+	if os.Getenv("NO_COLOR") != "" { //nolint:forbidigo // Standard terminal env var
+		return nil
+	}
+
+	// Check --force-color flag (via Viper).
+	// This allows `atmos version --force-color` to work for screenshot generation.
+	if viper.GetBool("force-color") {
+		return figurine.Write(os.Stdout, text, AnsiRegularFont)
+	}
+
+	// Check standard CLICOLOR_FORCE and FORCE_COLOR env vars.
+	if os.Getenv("CLICOLOR_FORCE") != "" || os.Getenv("FORCE_COLOR") != "" { //nolint:forbidigo // Standard terminal env vars
+		return figurine.Write(os.Stdout, text, AnsiRegularFont)
+	}
+
+	// Fall back to automatic color detection.
+	// supportscolor automatically detects TTY and other standard environment variables.
 	if supportscolor.Stdout().SupportsColor {
-		return figurine.Write(os.Stdout, text, "ANSI Regular.flf")
+		return figurine.Write(os.Stdout, text, AnsiRegularFont)
 	}
 	return nil
 }
@@ -95,7 +116,7 @@ func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 	forceColor := isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
 	if supportscolor.Stdout().SupportsColor || forceColor {
 		// Write to the specified output writer, not os.Stdout
-		return figurine.Write(out, text, "ANSI Regular.flf")
+		return figurine.Write(out, text, AnsiRegularFont)
 	}
 	return nil
 }
