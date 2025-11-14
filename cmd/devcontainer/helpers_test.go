@@ -25,18 +25,14 @@ func TestListAvailableDevcontainers(t *testing.T) {
 		{
 			name: "nil devcontainer map",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: nil,
-				},
+				Devcontainer: nil,
 			},
 			expectError: true,
 		},
 		{
 			name: "empty devcontainer map",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]interface{}{},
-				},
+				Devcontainer: map[string]interface{}{},
 			},
 			expected:    nil, // Empty map returns nil slice, not empty slice
 			expectError: false,
@@ -44,10 +40,8 @@ func TestListAvailableDevcontainers(t *testing.T) {
 		{
 			name: "single devcontainer",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]interface{}{
-						"geodesic": map[string]interface{}{},
-					},
+				Devcontainer: map[string]interface{}{
+					"geodesic": map[string]interface{}{},
 				},
 			},
 			expected:    []string{"geodesic"},
@@ -56,12 +50,10 @@ func TestListAvailableDevcontainers(t *testing.T) {
 		{
 			name: "multiple devcontainers sorted alphabetically",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]interface{}{
-						"terraform": map[string]interface{}{},
-						"geodesic":  map[string]interface{}{},
-						"python":    map[string]interface{}{},
-					},
+				Devcontainer: map[string]interface{}{
+					"terraform": map[string]interface{}{},
+					"geodesic":  map[string]interface{}{},
+					"python":    map[string]interface{}{},
 				},
 			},
 			expected:    []string{"geodesic", "python", "terraform"},
@@ -232,12 +224,10 @@ func TestPromptForDevcontainer_Sorting(t *testing.T) {
 		// We test listAvailableDevcontainers which provides sorted output.
 		// The promptForDevcontainer receives pre-sorted list.
 		atmosConfig := &schema.AtmosConfiguration{
-			Components: schema.Components{
-				Devcontainer: map[string]interface{}{
-					"zulu":    map[string]interface{}{},
-					"alpha":   map[string]interface{}{},
-					"charlie": map[string]interface{}{},
-				},
+			Devcontainer: map[string]interface{}{
+				"zulu":    map[string]interface{}{},
+				"alpha":   map[string]interface{}{},
+				"charlie": map[string]interface{}{},
 			},
 		}
 
@@ -253,10 +243,8 @@ func TestPromptForDevcontainer_Sorting(t *testing.T) {
 func TestSetAtmosConfig(t *testing.T) {
 	t.Run("sets config successfully", func(t *testing.T) {
 		config := &schema.AtmosConfiguration{
-			Components: schema.Components{
-				Devcontainer: map[string]interface{}{
-					"test": map[string]interface{}{},
-				},
+			Devcontainer: map[string]interface{}{
+				"test": map[string]interface{}{},
 			},
 		}
 

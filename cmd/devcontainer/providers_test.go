@@ -50,9 +50,7 @@ func TestDefaultConfigProvider_ListDevcontainers(t *testing.T) {
 		{
 			name: "nil devcontainer config",
 			config: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: nil,
-				},
+				Devcontainer: nil,
 			},
 			expectedError: true,
 			errorSentinel: errUtils.ErrDevcontainerNotFound,
@@ -60,22 +58,18 @@ func TestDefaultConfigProvider_ListDevcontainers(t *testing.T) {
 		{
 			name: "empty devcontainer config",
 			config: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{},
-				},
+				Devcontainer: map[string]any{},
 			},
 			expectedError: false,
 		},
 		{
 			name: "multiple devcontainers sorted",
 			config: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"zulu":     map[string]any{},
-						"alpha":    map[string]any{},
-						"bravo":    map[string]any{},
-						"geodesic": map[string]any{},
-					},
+				Devcontainer: map[string]any{
+					"zulu":     map[string]any{},
+					"alpha":    map[string]any{},
+					"bravo":    map[string]any{},
+					"geodesic": map[string]any{},
 				},
 			},
 			expectedError: false,
@@ -120,11 +114,9 @@ func TestDefaultConfigProvider_GetDevcontainerConfig(t *testing.T) {
 		{
 			name: "get config for devcontainer",
 			config: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"geodesic": map[string]any{
-							"image": "cloudposse/geodesic",
-						},
+				Devcontainer: map[string]any{
+					"geodesic": map[string]any{
+						"image": "cloudposse/geodesic",
 					},
 				},
 			},
@@ -181,10 +173,8 @@ func TestDockerRuntimeProvider_Start(t *testing.T) {
 			devName: "geodesic",
 			opts:    StartOptions{Instance: "default"},
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"geodesic": map[string]any{},
-					},
+				Devcontainer: map[string]any{
+					"geodesic": map[string]any{},
 				},
 			},
 			// Note: This will fail because it tries to actually start a container.
