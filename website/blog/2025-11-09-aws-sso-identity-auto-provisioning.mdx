@@ -44,7 +44,7 @@ auth:
 atmos auth login sso-prod
 # ✓ Provisioned 47 identities across 12 accounts (2.3s)
 
-atmos terraform plan --identity production/AdministratorAccess
+atmos terraform plan --identity sandbox/PowerUserAccess
 # Works immediately - no additional configuration
 ```
 
@@ -120,9 +120,9 @@ atmos auth list
 # Authentication Configuration
 # └──sso-prod (aws/iam-identity-center)
 #    └──Identities
-#       ├──● production/AdministratorAccess (sso-prod) 11h58m
-#       ├──● production/PowerUserAccess (sso-prod) 11h58m
-#       ├──● staging/AdministratorAccess (sso-prod) 11h58m
+#       ├──● sandbox/PowerUserAccess (sso-prod) 11h58m
+#       ├──● staging/DeployerAccess (sso-prod) 11h58m
+#       ├──● production/DeployerAccess (sso-prod) 11h58m
 #       └──● dev/ReadOnly (sso-prod) 11h58m
 ```
 
@@ -144,7 +144,7 @@ auth:
 
   identities:
     # Override provisioned identity with custom session duration
-    production/AdministratorAccess:
+    production/DeployerAccess:
       session:
         duration: 12h  # Extend from default 1h
 ```
@@ -187,9 +187,9 @@ Organizations with many AWS accounts benefit immediately:
 # After: One login, 50+ identities available
 
 atmos auth login sso-prod
-atmos terraform plan --identity prod-us-east-1/PowerUser
-atmos terraform plan --identity prod-eu-west-1/Administrator
-atmos terraform plan --identity staging-us-west-2/ReadOnly
+atmos terraform plan --identity sandbox/PowerUserAccess
+atmos terraform plan --identity staging/DeployerAccess
+atmos terraform plan --identity dev/ReadOnly
 # All work without additional configuration
 ```
 
@@ -201,7 +201,7 @@ New team members can authenticate and deploy in minutes:
 git clone https://github.com/acme/infrastructure
 cd infrastructure
 atmos auth login sso-prod
-atmos terraform plan --identity production/AdministratorAccess
+atmos terraform plan --identity sandbox/PowerUserAccess
 # Ready to deploy
 ```
 
@@ -226,9 +226,9 @@ Provisioned identities use the naming convention:
 ```
 
 Examples:
-- `production/AdministratorAccess`
-- `staging/PowerUserAccess`
-- `dev-us-east-1/ReadOnly`
+- `sandbox/PowerUserAccess`
+- `staging/DeployerAccess`
+- `dev/ReadOnly`
 
 This convention ensures unique names and makes it easy to understand which account and role each identity represents.
 
@@ -254,7 +254,7 @@ Auto-provisioning is available in Atmos v2.x. To enable it:
 
 3. Use any available role:
    ```bash
-   atmos terraform plan --identity production/AdministratorAccess
+   atmos terraform plan --identity sandbox/PowerUserAccess
    ```
 
 For detailed configuration options, see the [Authentication Documentation](/cli/commands/auth/usage).
