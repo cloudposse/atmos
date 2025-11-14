@@ -1391,6 +1391,7 @@ When you find command-specific functions in `internal/exec/`:
    ```bash
    # Look for functions only called from one command
    git grep -l "ExecuteDevcontainerStart" | grep -v "_test.go"
+   # If git is not available (CI, detached HEAD), use: grep -r "ExecuteDevcontainerStart" . --include="*.go" | grep -v "_test.go"
    # If only cmd/devcontainer/ files import it → move to pkg/devcontainer/
    ```
 

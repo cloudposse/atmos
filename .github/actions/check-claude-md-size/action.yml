@@ -222,7 +222,7 @@ runs:
         MAX_SIZE="${{ steps.check.outputs.max_size }}"
         USAGE_PERCENT="${{ steps.check.outputs.usage_percent }}"
 
-        EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .id' | head -1)
+        EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .databaseId' | head -1)
 
         if [ -z "$EXISTING_COMMENT" ]; then
           echo "ℹ️ No existing comment to update"

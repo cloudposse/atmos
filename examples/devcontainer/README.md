@@ -34,8 +34,8 @@ atmos devcontainer start python --attach
 
 ```bash
 # Create multiple instances of the same devcontainer
-atmos devcontainer create default --instance alice --attach
-atmos devcontainer create default --instance bob --attach
+atmos devcontainer start default --instance alice --attach
+atmos devcontainer start default --instance bob --attach
 
 # List all running devcontainers
 atmos devcontainer list
@@ -126,10 +126,10 @@ portsAttributes:
 ## Commands
 
 ```bash
-# Create and attach
-atmos devcontainer create <name> --attach
+# Start and attach to devcontainer
+atmos devcontainer start <name> --attach
 
-# Start existing container
+# Start devcontainer without attaching
 atmos devcontainer start <name>
 
 # Stop running container

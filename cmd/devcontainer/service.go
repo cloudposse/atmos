@@ -142,7 +142,9 @@ func (s *Service) Logs(ctx context.Context, name string, opts LogsOptions) error
 	if err != nil {
 		return err
 	}
-	defer logs.Close()
+	if logs != nil {
+		defer logs.Close()
+	}
 
 	// Stream logs to output.
 	// Note: In production, this would handle follow mode, etc.

@@ -50,4 +50,4 @@ When given CodeRabbit feedback:
 - Follow all patterns from CLAUDE.md (mandatory architectural patterns, code conventions, etc.)
 - Never add `//nolint` comments without explicit user approval
 - Always compile after changes to catch errors early
-- Preserve existing functionality while addressing feedback
+- Preserve existing functionality while addressing feedback.
