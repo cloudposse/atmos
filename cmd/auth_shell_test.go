@@ -12,8 +12,6 @@ import (
 )
 
 func TestAuthShellCmd_FlagParsing(t *testing.T) {
-	_ = NewTestKit(t)
-
 	tests := []struct {
 		name                string
 		args                []string
@@ -58,8 +56,6 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_ = NewTestKit(t)
-
 			// Set up test fixture with auth configuration for each subtest.
 			testDir := "../tests/fixtures/scenarios/atmos-auth"
 			t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
