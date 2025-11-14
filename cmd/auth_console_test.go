@@ -462,11 +462,10 @@ func TestGetConsoleProvider(t *testing.T) {
 			wantErr:      false,
 		},
 		{
-			name:         "Azure OIDC returns not implemented error",
+			name:         "Azure OIDC returns console provider successfully",
 			providerKind: types.ProviderKindAzureOIDC,
 			identityName: "test-identity",
-			wantErr:      true,
-			errContains:  "Azure console access not yet implemented",
+			wantErr:      false,
 		},
 		{
 			name:         "GCP OIDC returns not implemented error",
