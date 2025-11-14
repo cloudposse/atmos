@@ -1210,7 +1210,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/getsentry/sentry-go
     License: MIT
-    URL: https://github.com/getsentry/sentry-go/blob/v0.36.2/LICENSE
+    URL: https://github.com/getsentry/sentry-go/blob/v0.37.0/LICENSE
 
   - github.com/go-logfmt/logfmt
     License: MIT
