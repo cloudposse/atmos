@@ -97,7 +97,7 @@ function record() {
     local command=$2
     local extension="${command##*.}" # if any...
     local demo_path=../../examples/$demo
-    local output_base_file=artifacts/$(echo "$command" | sed -E 's/ -/-/g' | sed -E 's/ +/-/g' | sed 's/---/--/g' | sed 's/scripts\///' | sed 's/\.sh$//')
+    local output_base_file=artifacts/$(echo "$command" | sed -E 's/ --charset=UTF-8//g' | sed -E 's/ -/-/g' | sed -E 's/ +/-/g' | sed 's/---/--/g' | sed 's/scripts\///' | sed 's/\.sh$//')
     local output_html=${output_base_file}.html
     local output_ansi=${output_base_file}.ansi
     local output_dir=$(dirname $output_base_file)
