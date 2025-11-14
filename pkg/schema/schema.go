@@ -564,8 +564,10 @@ type AuthContext struct {
 	// AWS holds AWS credentials if an AWS identity is active.
 	AWS *AWSAuthContext `json:"aws,omitempty" yaml:"aws,omitempty"`
 
+	// Azure holds Azure credentials if an Azure identity is active.
+	Azure *AzureAuthContext `json:"azure,omitempty" yaml:"azure,omitempty"`
+
 	// Future: Add other cloud providers as needed
-	// Azure *AzureAuthContext `json:"azure,omitempty" yaml:"azure,omitempty"`
 	// GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty"`
 	// GitHub *GitHubAuthContext `json:"github,omitempty" yaml:"github,omitempty"`
 }
@@ -587,6 +589,27 @@ type AWSAuthContext struct {
 
 	// Region is the AWS region (optional, may be empty if not specified in identity).
 	Region string `json:"region,omitempty" yaml:"region,omitempty"`
+}
+
+// AzureAuthContext holds Azure-specific authentication context.
+// This is populated by the Azure auth system and consumed by Azure SDK calls.
+type AzureAuthContext struct {
+	// CredentialsFile is the absolute path to the Azure credentials file managed by Atmos.
+	// Example: /home/user/.azure/atmos/azure-oidc/credentials.json
+	CredentialsFile string `json:"credentials_file" yaml:"credentials_file"`
+
+	// Profile is the Azure profile name to use from the credentials file.
+	// This corresponds to the identity name in Atmos auth config.
+	Profile string `json:"profile" yaml:"profile"`
+
+	// SubscriptionID is the Azure subscription ID.
+	SubscriptionID string `json:"subscription_id" yaml:"subscription_id"`
+
+	// TenantID is the Azure Active Directory tenant ID.
+	TenantID string `json:"tenant_id" yaml:"tenant_id"`
+
+	// Location is the Azure region/location (optional, e.g., "eastus").
+	Location string `json:"location,omitempty" yaml:"location,omitempty"`
 }
 
 type ConfigAndStacksInfo struct {
