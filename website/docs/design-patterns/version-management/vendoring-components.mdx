@@ -506,44 +506,7 @@ spec:
       # Modified: Added compliance tags, custom security groups
 ```
 
-### 2. Regular Update Cycles
-
-Schedule regular vendor updates:
-
-```yaml
-# .github/workflows/vendor-update.yml
-name: Vendor Update Check
-on:
-  schedule:
-    # Every Monday at 9 AM
-    - cron: '0 9 * * 1'
-  workflow_dispatch:
-
-jobs:
-  check-updates:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Setup Atmos
-        uses: cloudposse/github-action-atmos@v2
-      - name: Check for Vendor Updates
-        run: |
-          # Check vendor status
-          atmos vendor status
-
-      - name: Create Issue if Updates Available
-        run: |
-          # Create issue if updates are available
-          if atmos vendor status --check-updates; then
-            atmos vendor status --format=markdown > vendor-report.md
-            gh issue create \
-              --title "Vendor Updates Available: $(date +%Y-%m-%d)" \
-              --body-file vendor-report.md \
-              --label "vendor-update"
-          fi
-```
-
-### 3. Document Divergence
+### 2. Document Divergence
 
 Clearly document why and how you've diverged:
 
