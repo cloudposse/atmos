@@ -73,34 +73,46 @@ func TestObfuscateHomeDirInOutput(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		input    string
-		expected string
+		name              string
+		input             string
+		expected          string
+		shouldContainHome bool // true if the result is expected to contain homeDir (e.g., prefix cases)
 	}{
 		{
-			name:     "absolute path with home directory",
-			input:    filepath.Join(homeDir, "path", "to", "file"),
-			expected: filepath.Join("~", "path", "to", "file"),
+			name:              "absolute path with home directory",
+			input:             filepath.Join(homeDir, "path", "to", "file"),
+			expected:          filepath.Join("~", "path", "to", "file"),
+			shouldContainHome: false,
 		},
 		{
-			name:     "home directory only",
-			input:    homeDir,
-			expected: "~",
+			name:              "home directory only",
+			input:             homeDir,
+			expected:          "~",
+			shouldContainHome: false,
 		},
 		{
-			name:     "path without home directory",
-			input:    "/var/lib/atmos/vendor",
-			expected: "/var/lib/atmos/vendor",
+			name:              "path without home directory",
+			input:             "/var/lib/atmos/vendor",
+			expected:          "/var/lib/atmos/vendor",
+			shouldContainHome: false,
 		},
 		{
-			name:     "mixed content with home directory",
-			input:    "Component: vpc\nManifest: " + filepath.Join(homeDir, ".atmos", "vendor.yaml"),
-			expected: "Component: vpc\nManifest: " + filepath.Join("~", ".atmos", "vendor.yaml"),
+			name:              "mixed content with home directory",
+			input:             "Component: vpc\nManifest: " + filepath.Join(homeDir, ".atmos", "vendor.yaml"),
+			expected:          "Component: vpc\nManifest: " + filepath.Join("~", ".atmos", "vendor.yaml"),
+			shouldContainHome: false,
 		},
 		{
-			name:     "multiple occurrences of home directory",
-			input:    homeDir + "/path1 and " + homeDir + "/path2",
-			expected: "~/path1 and ~/path2",
+			name:              "multiple occurrences of home directory",
+			input:             homeDir + "/path1 and " + homeDir + "/path2",
+			expected:          "~/path1 and ~/path2",
+			shouldContainHome: false,
+		},
+		{
+			name:              "homeDir as prefix of another path should not be replaced",
+			input:             homeDir + "name/file",
+			expected:          homeDir + "name/file",
+			shouldContainHome: true, // We expect homeDir to remain in this case
 		},
 	}
 
@@ -111,8 +123,8 @@ func TestObfuscateHomeDirInOutput(t *testing.T) {
 				t.Errorf("obfuscateHomeDirInOutput() = %q, want %q", result, tt.expected)
 			}
 
-			// Verify home directory is not present in output.
-			if strings.Contains(result, homeDir) {
+			// Verify home directory is not present in output (unless it's expected to be there).
+			if !tt.shouldContainHome && strings.Contains(result, homeDir) {
 				t.Errorf("obfuscateHomeDirInOutput() still contains home directory: %q", result)
 			}
 		})

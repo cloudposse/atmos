@@ -109,10 +109,55 @@ func obfuscateHomeDirInOutput(output string) string {
 		return output
 	}
 
-	// Replace home directory with tilde at the start of paths.
-	// Handle both absolute paths and paths with path separator.
-	result := strings.ReplaceAll(output, homeDir+string(os.PathSeparator), "~"+string(os.PathSeparator))
-	result = strings.ReplaceAll(result, homeDir, "~")
+	// Replace home directory with tilde only at path boundaries.
+	// This prevents replacing homeDir when it's a prefix of another directory name.
+	// For example, if homeDir is "/home/user", we should not replace "/home/username".
+	sep := string(os.PathSeparator)
 
-	return result
+	// First replace homeDir followed by separator (e.g., "/home/user/file" -> "~/file").
+	result := strings.ReplaceAll(output, homeDir+sep, "~"+sep)
+
+	// Then replace homeDir at the end of string or followed by non-path characters.
+	// We need to handle cases like:
+	// - homeDir alone (e.g., "/home/user" -> "~")
+	// - homeDir followed by space, newline, or other delimiters (e.g., "/home/user\n" -> "~\n")
+	// But NOT homeDir as a prefix (e.g., "/home/username" should remain unchanged).
+	var builder strings.Builder
+	builder.Grow(len(result))
+
+	i := 0
+	for i < len(result) {
+		// Check if we have homeDir at current position.
+		if strings.HasPrefix(result[i:], homeDir) {
+			// Check if this is a boundary match (not followed by a path character).
+			// A boundary is: end of string, or followed by non-alphanumeric/non-dash/non-underscore.
+			nextPos := i + len(homeDir)
+			if nextPos >= len(result) {
+				// homeDir at end of string - replace it.
+				builder.WriteString("~")
+				i = nextPos
+			} else {
+				nextChar := result[nextPos]
+				// Check if next character is a path separator (already handled above) or alphanumeric/dash/underscore.
+				// If it's alphanumeric/dash/underscore, this is likely a prefix of another name - don't replace.
+				if (nextChar >= 'a' && nextChar <= 'z') ||
+					(nextChar >= 'A' && nextChar <= 'Z') ||
+					(nextChar >= '0' && nextChar <= '9') ||
+					nextChar == '-' || nextChar == '_' {
+					// This is a prefix - keep original.
+					builder.WriteString(homeDir)
+					i = nextPos
+				} else {
+					// This is a boundary - replace with ~.
+					builder.WriteString("~")
+					i = nextPos
+				}
+			}
+		} else {
+			builder.WriteByte(result[i])
+			i++
+		}
+	}
+
+	return builder.String()
 }
