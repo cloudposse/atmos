@@ -86,13 +86,15 @@ func processTagTerraformStateWithContext(
 		defer resolutionCtx.Pop(atmosConfig)
 	}
 
-	// Extract authContext from stackInfo if available.
+	// Extract authContext and authManager from stackInfo if available.
 	var authContext *schema.AuthContext
+	var authManager any
 	if stackInfo != nil {
 		authContext = stackInfo.AuthContext
+		authManager = stackInfo.AuthManager
 	}
 
-	value, err := stateGetter.GetState(atmosConfig, input, stack, component, output, false, authContext)
+	value, err := stateGetter.GetState(atmosConfig, input, stack, component, output, false, authContext, authManager)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 	return value
 }
