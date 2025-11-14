@@ -1,8 +1,10 @@
 ---
 slug: auth-tutorials-geodesic-leapp
 title: "New Guides for Atmos Auth: Leapp Migration and Geodesic Integration"
-authors: [atmos]
+sidebar_label: "Atmos Auth Guides"
+authors: [Benbentwo]
 tags: [feature, cloud-architecture]
+date: 2025-10-18
 ---
 
 We've published two comprehensive guides to help you adopt and integrate `atmos auth` into your workflows: migrating from Leapp and configuring Geodesic for seamless authentication.

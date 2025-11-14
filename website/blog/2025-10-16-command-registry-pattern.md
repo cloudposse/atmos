@@ -1,8 +1,10 @@
 ---
 slug: introducing-command-registry-pattern
 title: "Introducing the Command Registry Pattern: Toward Pluggable Commands"
-authors: [atmos]
+sidebar_label: "Command Registry Pattern"
+authors: [osterman]
 tags: [contributors, atmos-core, refactoring]
+date: 2025-10-16
 ---
 
 We're excited to announce the first step in a major architectural evolution for Atmos: the **Command Registry Pattern**. This foundational change will eventually enable **pluggable commands**, allowing the community to extend Atmos with custom command packages without modifying the core codebase.

@@ -19,6 +19,7 @@ var (
 	ErrUnknownPackageType                    = errors.New("unknown package type")
 	ErrLocalMixinURICannotBeEmpty            = errors.New("local mixin URI cannot be empty")
 	ErrLocalMixinInstallationNotImplemented  = errors.New("local mixin installation not implemented")
+	ErrNotImplemented                        = errors.New("not implemented")
 	ErrFailedToInitializeTUIModel            = errors.New("failed to initialize TUI model: verify terminal capabilities and permissions")
 	ErrSetTempDirPermissions                 = errors.New("failed to set temp directory permissions")
 	ErrCopyPackageToTarget                   = errors.New("failed to copy package to target")
@@ -27,6 +28,8 @@ var (
 	ErrValidPackage                          = errors.New("no valid installer package provided for")
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
 	ErrTUIRun                                = errors.New("failed to run TUI")
+	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
+	ErrIOContextNotInitialized               = errors.New("global I/O context is nil after initialization")
 	ErrNoFilesFound                          = errors.New("no files found in directory")
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
 	ErrSourceDirNotExist                     = errors.New("source directory does not exist")
@@ -35,27 +38,46 @@ var (
 	ErrWorkdirNotExist                       = errors.New("workdir does not exist")
 	ErrPathResolution                        = errors.New("failed to resolve absolute path")
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
+	ErrInvalidTemplateSettings               = errors.New("invalid template settings")
 	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
+	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
 	ErrCommandNil                            = errors.New("command cannot be nil")
 	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
 	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
 	ErrInvalidOffset                         = errors.New("offset must be >= 0")
+	ErrDuplicateFlagRegistration             = errors.New("duplicate flag registration")
 	ErrInvalidSinceDate                      = errors.New("invalid date format for --since")
 	ErrUnsupportedOutputFormat               = errors.New("unsupported output format")
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 
+	// Theme-related errors.
+	ErrThemeNotFound = errors.New("theme not found")
+	ErrInvalidTheme  = errors.New("invalid theme")
+
+	// Authentication and TTY errors.
+	ErrAuthConsole            = errors.New("auth console operation failed")
+	ErrProviderNotSupported   = errors.New("provider does not support this operation")
+	ErrUnknownServiceAlias    = errors.New("unknown service alias")
+	ErrTTYRequired            = errors.New("requires a TTY")
+	ErrInvalidAuthManagerType = errors.New("invalid authManager type")
+
+	// Component and positional argument errors.
+	ErrComponentRequired     = errors.New("component is required")
+	ErrInvalidPositionalArgs = errors.New("invalid positional arguments")
+	ErrWorkflowNameRequired  = errors.New("workflow name is required")
+
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
 
 	ErrInvalidTerraformFlagsWithAffectedFlag                 = errors.New("the `--affected` flag can't be used with the other multi-component (bulk operations) flags `--all`, `--query` and `--components`")
-	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the `component` argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
+	ErrInvalidTerraformComponentWithMultiComponentFlags      = errors.New("the component argument can't be used with the multi-component (bulk operations) flags `--affected`, `--all`, `--query` and `--components`")
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
@@ -64,10 +86,33 @@ var (
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
 	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
 	ErrProcessTerraformStateFile        = errors.New("error processing terraform state file")
+	ErrLoadAwsConfig                    = errors.New("failed to load AWS config")
+	ErrGetObjectFromS3                  = errors.New("failed to get object from S3")
+	ErrReadS3ObjectBody                 = errors.New("failed to read S3 object body")
+	ErrCreateGCSClient                  = errors.New("failed to create GCS client")
+	ErrGetObjectFromGCS                 = errors.New("failed to get object from GCS")
+	ErrReadGCSObjectBody                = errors.New("failed to read GCS object body")
+	ErrGCSBucketRequired                = errors.New("bucket is required for gcs backend")
+	ErrInvalidBackendConfig             = errors.New("invalid backend configuration")
 
-	ErrLoadAwsConfig    = errors.New("failed to load AWS config")
-	ErrGetObjectFromS3  = errors.New("failed to get object from S3")
-	ErrReadS3ObjectBody = errors.New("failed to read S3 object body")
+	// Azure Blob Storage specific errors.
+	ErrGetBlobFromAzure       = errors.New("failed to get blob from Azure Blob Storage")
+	ErrReadAzureBlobBody      = errors.New("failed to read Azure blob body")
+	ErrCreateAzureCredential  = errors.New("failed to create Azure credential")
+	ErrCreateAzureClient      = errors.New("failed to create Azure Blob Storage client")
+	ErrAzureContainerRequired = errors.New("container_name is required for azurerm backend")
+	ErrStorageAccountRequired = errors.New("storage_account_name is required for azurerm backend")
+	ErrAzurePermissionDenied  = errors.New("permission denied accessing Azure blob")
+
+	// Azure authentication errors.
+	ErrAzureOIDClaimNotFound      = errors.New("oid claim not found in token")
+	ErrAzureUsernameClaimNotFound = errors.New("no username claim found in token (tried upn, unique_name, email)")
+	ErrAzureInvalidJWTFormat      = errors.New("invalid JWT format")
+	ErrAzureExpirationTimeEmpty   = errors.New("expiration time is empty")
+	ErrAzureTimeParseFailure      = errors.New("unable to parse time: tried RFC3339, local time formats, and Unix timestamp")
+	ErrAzureNoAccountsInCache     = errors.New("no accounts found in cache")
+	ErrAzureNoAccountForTenant    = errors.New("no account found for tenant")
+	ErrBackendConfigRequired      = errors.New("backend configuration is required")
 
 	// Git-related errors.
 	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")
@@ -79,10 +124,17 @@ var (
 	ErrRemoveGitDir         = errors.New("failed to remove the .git directory in the destination directory during git update")
 	ErrUnexpectedGitOutput  = errors.New("unexpected 'git version' output")
 	ErrGitVersionMismatch   = errors.New("git version requirement not met")
+	ErrRemoteRepoNotGitRepo = errors.New("target remote repository is not a git repository")
 	ErrFailedToGetLocalRepo = errors.New("failed to get local repository")
 	ErrFailedToGetRepoInfo  = errors.New("failed to get repository info")
 	ErrLocalRepoFetch       = errors.New("local repo unavailable")
-	ErrHeadLookup           = errors.New("HEAD not found")
+
+	// I/O and output errors.
+	ErrBuildIOConfig  = errors.New("failed to build I/O config")
+	ErrUnknownStream  = errors.New("unknown I/O stream")
+	ErrWriteToStream  = errors.New("failed to write to stream")
+	ErrMaskingContent = errors.New("failed to mask content")
+	ErrHeadLookup     = errors.New("HEAD not found")
 
 	// Slice utility errors.
 	ErrNilInput         = errors.New("input must not be nil")
@@ -91,10 +143,17 @@ var (
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
+	// Flag validation errors.
+	ErrCompatibilityFlagMissingTarget = errors.New("compatibility flag references non-existent flag")
+	ErrInvalidFlagValue               = errors.New("invalid value for flag")
+
 	// File and URL handling errors.
 	ErrInvalidPagerCommand = errors.New("invalid pager command")
 	ErrEmptyURL            = errors.New("empty URL provided")
 	ErrFailedToFindImport  = errors.New("failed to find import")
+	ErrInvalidFilePath     = errors.New("invalid file path")
+	ErrRelPath             = errors.New("error determining relative path")
+	ErrHTTPRequestFailed   = errors.New("HTTP request failed")
 
 	// Config loading errors.
 	ErrAtmosDirConfigNotFound      = errors.New("atmos config directory not found")
@@ -102,37 +161,58 @@ var (
 	ErrMergeTempConfig             = errors.New("failed to merge temp config")
 	ErrPreprocessYAMLFunctions     = errors.New("failed to preprocess YAML functions")
 	ErrMergeEmbeddedConfig         = errors.New("failed to merge embedded config")
-	ErrExpectedDirOrPattern        = errors.New("--config-path expected directory found file")
+	ErrExpectedDirOrPattern        = errors.New("expected directory or pattern")
 	ErrFileNotFound                = errors.New("file not found")
 	ErrFileAccessDenied            = errors.New("file access denied")
-	ErrExpectedFile                = errors.New("--config expected file found directory")
+	ErrExpectedFile                = errors.New("expected file")
 	ErrAtmosArgConfigNotFound      = errors.New("atmos configuration not found")
-	ErrEmptyConfigPath             = errors.New("config path cannot be empty")
-	ErrEmptyConfigFile             = errors.New("config file path cannot be empty")
-	ErrAtmosFilesDirConfigNotFound = errors.New("`atmos.yaml` or `.atmos.yaml` configuration file not found in directory")
+	ErrEmptyConfigPath             = errors.New("config path is empty")
+	ErrEmptyConfigFile             = errors.New("config file path is empty")
+	ErrAtmosFilesDirConfigNotFound = errors.New("atmos configuration file not found in directory")
+	ErrAtmosConfigNotFound         = errors.New("atmos configuration file not found")
 
-	ErrMissingStack                       = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
-	ErrInvalidComponent                   = errors.New("invalid component")
-	ErrInvalidComponentMapType            = errors.New("invalid component map type")
-	ErrAbstractComponentCantBeProvisioned = errors.New("abstract component cannot be provisioned")
-	ErrLockedComponentCantBeProvisioned   = errors.New("locked component cannot be provisioned")
+	ErrMissingStack                               = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
+	ErrMissingComponent                           = errors.New("component is required")
+	ErrMissingComponentType                       = errors.New("component type is required")
+	ErrRequiredFlagNotProvided                    = errors.New("required flag not provided")
+	ErrRequiredFlagEmpty                          = errors.New("required flag cannot be empty")
+	ErrInvalidArguments                           = errors.New("invalid arguments")
+	ErrInvalidComponent                           = errors.New("invalid component")
+	ErrInvalidComponentMapType                    = errors.New("invalid component map type")
+	ErrAbstractComponentCantBeProvisioned         = errors.New("abstract component cannot be provisioned")
+	ErrLockedComponentCantBeProvisioned           = errors.New("locked component cannot be provisioned")
+	ErrSpaceliftAdminStackWorkspaceNotEnabled     = errors.New("spacelift admin stack does not have workspace enabled")
+	ErrSpaceliftAdminStackComponentNotProvisioned = errors.New("spacelift admin stack component cannot be provisioned")
 
 	// Terraform-specific errors.
-	ErrHTTPBackendWorkspaces       = errors.New("workspaces are not supported for the HTTP backend")
-	ErrInvalidTerraformComponent   = errors.New("invalid Terraform component")
-	ErrNoTty                       = errors.New("no TTY attached")
-	ErrFailedToLoadTerraformModule = errors.New("failed to load terraform module")
+	ErrHTTPBackendWorkspaces            = errors.New("workspaces are not supported for the HTTP backend")
+	ErrInvalidTerraformComponent        = errors.New("invalid Terraform component")
+	ErrNoTty                            = errors.New("no TTY attached")
+	ErrNoSuitableShell                  = errors.New("no suitable shell found")
+	ErrFailedToLoadTerraformModule      = errors.New("failed to load terraform module")
+	ErrNoJSONOutput                     = errors.New("no JSON output found in terraform show output")
+	ErrOriginalPlanFileRequired         = errors.New("original plan file is required")
+	ErrOriginalPlanFileNotExist         = errors.New("original plan file does not exist")
+	ErrNewPlanFileNotExist              = errors.New("new plan file does not exist")
+	ErrTerraformGenerateBackendArgument = errors.New("invalid arguments")
 
-	ErrMissingPackerTemplate = errors.New("packer template is required; it can be specified in the `settings.packer.template` section in the Atmos component manifest, or on the command line via the flag `--template <template>` (shorthand `-t`)")
+	ErrMissingPackerTemplate = errors.New("packer template is required")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
 
 	ErrAtmosConfigIsNil              = errors.New("atmos config is nil")
 	ErrFailedToInitializeAtmosConfig = errors.New("failed to initialize atmos config")
 	ErrInvalidListMergeStrategy      = errors.New("invalid list merge strategy")
 	ErrMerge                         = errors.New("merge error")
+	ErrEncode                        = errors.New("encoding error")
+	ErrDecode                        = errors.New("decoding error")
 
 	// Stack processing errors.
+	ErrStackManifestFileNotFound              = errors.New("stack manifest file not found")
 	ErrInvalidStackManifest                   = errors.New("invalid stack manifest")
+	ErrStackManifestSchemaValidation          = errors.New("stack manifest schema validation failed")
+	ErrStackImportSelf                        = errors.New("stack manifest imports itself")
+	ErrStackImportNotFound                    = errors.New("stack import not found")
+	ErrStackCircularInheritance               = errors.New("circular component inheritance detected")
 	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
 	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
 	ErrInvalidComponentVars                   = errors.New("invalid component vars section")
@@ -160,9 +240,45 @@ var (
 	ErrInvalidSpaceLiftSettings               = errors.New("invalid spacelift settings section")
 	ErrInvalidComponentMetadataInherits       = errors.New("invalid component metadata.inherits section")
 	ErrComponentNotDefined                    = errors.New("component not defined in any config files")
-	ErrInvalidTerraformBackend                = errors.New("invalid terraform.backend section")
-	ErrInvalidTerraformRemoteStateBackend     = errors.New("invalid terraform.remote_state_backend section")
-	ErrUnsupportedComponentType               = errors.New("unsupported component type. Valid types are 'terraform', 'helmfile', 'packer'")
+
+	// Component registry errors.
+	ErrComponentProviderNotFound          = errors.New("component provider not found")
+	ErrComponentProviderNil               = errors.New("component provider cannot be nil")
+	ErrComponentTypeEmpty                 = errors.New("component type is empty")
+	ErrComponentEmpty                     = errors.New("component is empty")
+	ErrStackEmpty                         = errors.New("stack is empty")
+	ErrComponentConfigInvalid             = errors.New("component configuration invalid")
+	ErrComponentListFailed                = errors.New("failed to list components")
+	ErrComponentValidationFailed          = errors.New("component validation failed")
+	ErrComponentExecutionFailed           = errors.New("component execution failed")
+	ErrComponentArtifactGeneration        = errors.New("component artifact generation failed")
+	ErrComponentProviderRegistration      = errors.New("failed to register component provider")
+	ErrInvalidTerraformBackend            = errors.New("invalid terraform.backend section")
+	ErrInvalidTerraformRemoteStateBackend = errors.New("invalid terraform.remote_state_backend section")
+	ErrUnsupportedComponentType           = errors.New("unsupported component type")
+
+	// List command errors.
+	ErrInvalidStackPattern         = errors.New("invalid stack pattern")
+	ErrEmptyTargetComponentName    = errors.New("target component name cannot be empty")
+	ErrComponentsSectionNotFound   = errors.New("components section not found in stack")
+	ErrComponentNotFoundInSections = errors.New("component not found in terraform or helmfile sections")
+	ErrQueryFailed                 = errors.New("query execution failed")
+	ErrTableTooWide                = errors.New("the table is too wide to display properly")
+	ErrGettingCommonFlags          = errors.New("error getting common flags")
+	ErrGettingAbstractFlag         = errors.New("error getting abstract flag")
+	ErrGettingVarsFlag             = errors.New("error getting vars flag")
+	ErrInitializingCLIConfig       = errors.New("error initializing CLI config")
+	ErrDescribingStacks            = errors.New("error describing stacks")
+	ErrComponentNameRequired       = errors.New("component name is required")
+
+	// Atlantis errors.
+	ErrAtlantisInvalidFlags          = errors.New("incompatible atlantis flags")
+	ErrAtlantisProjectTemplateNotDef = errors.New("atlantis project template is not defined")
+	ErrAtlantisConfigTemplateNotDef  = errors.New("atlantis config template is not defined")
+	ErrAtlantisConfigTemplateNotSpec = errors.New("atlantis config template is not specified")
+
+	// Validation errors.
+	ErrValidationFailed = errors.New("validation failed")
 
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")
@@ -246,7 +362,7 @@ var (
 	ErrAPIResponseError             = errors.New("API response error")
 
 	// Exec package errors.
-	ErrComponentAndStackRequired     = errors.New("both '--component' and '--stack' flags must be provided")
+	ErrComponentAndStackRequired     = errors.New("component and stack are both required")
 	ErrFailedToCreateAPIClient       = errors.New("failed to create API client")
 	ErrFailedToProcessArgs           = errors.New("failed to process command-line arguments")
 	ErrFailedToInitConfig            = errors.New("failed to initialize Atmos configuration")
@@ -259,8 +375,10 @@ var (
 	ErrInvalidOPAPolicy              = errors.New("invalid OPA policy")
 	ErrTerraformEnvCliVarJSON        = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
 	ErrWorkflowBasePathNotConfigured = errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
+	ErrWorkflowDirectoryDoesNotExist = errors.New("workflow directory does not exist")
 	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
 	ErrValidation                    = errors.New("validation failed")
+	ErrCUEValidationUnsupported      = errors.New("validation using CUE is not supported yet")
 
 	// List package errors.
 	ErrExecuteDescribeStacks     = errors.New("failed to execute describe stacks")
@@ -338,6 +456,7 @@ var (
 	ErrProfilerCreateFile      = errors.New("profiler: failed to create profile file")
 
 	// Auth package errors.
+	ErrAuthNotConfigured            = errors.New("authentication not configured in atmos.yaml")
 	ErrInvalidAuthConfig            = errors.New("invalid auth config")
 	ErrInvalidIdentityKind          = errors.New("invalid identity kind")
 	ErrInvalidIdentityConfig        = errors.New("invalid identity config")
@@ -350,7 +469,9 @@ var (
 	ErrAwsAuth                      = errors.New("aws auth error")
 	ErrAwsUserNotConfigured         = errors.New("aws user not configured")
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
+	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
+	ErrUserAborted                  = errors.New("user aborted")
 
 	// Auth manager and identity/provider resolution errors (centralized sentinels).
 	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")
@@ -362,12 +483,17 @@ var (
 	ErrInitializingCredentialStore   = errors.New("failed to initialize credential store")
 	ErrCircularDependency            = errors.New("circular dependency detected in identity chain")
 	ErrIdentityNotFound              = errors.New("identity not found")
+	ErrProviderNotFound              = errors.New("provider not found")
+	ErrMutuallyExclusiveFlags        = errors.New("mutually exclusive flags provided")
 	ErrNoDefaultIdentity             = errors.New("no default identity configured for authentication")
 	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
 	ErrNoIdentitiesAvailable         = errors.New("no identities available")
+	ErrIdentitySelectionRequiresTTY  = fmt.Errorf("interactive identity selection: %w", ErrTTYRequired)
+	ErrAuthenticationChainNotBuilt   = errors.New("authentication chain not built")
 	ErrInvalidStackConfig            = errors.New("invalid stack config")
 	ErrNoCommandSpecified            = errors.New("no command specified")
 	ErrCommandNotFound               = errors.New("command not found")
+	ErrCommandFailed                 = errors.New("command execution failed")
 
 	ErrInvalidSubcommand = errors.New("invalid subcommand")
 	ErrSubcommandFailed  = errors.New("subcommand failed")
@@ -383,6 +509,18 @@ var (
 	// Store and hook errors.
 	ErrNilTerraformOutput = errors.New("terraform output returned nil")
 	ErrNilStoreValue      = errors.New("cannot store nil value")
+
+	// Logout errors.
+	ErrLogoutFailed         = errors.New("logout failed")
+	ErrPartialLogout        = errors.New("partial logout")
+	ErrLogoutNotSupported   = errors.New("logout not supported for this provider")
+	ErrLogoutNotImplemented = errors.New("logout not implemented for this provider")
+	ErrKeyringDeletion      = errors.New("keyring deletion failed")
+	ErrProviderLogout       = errors.New("provider logout failed")
+	ErrIdentityLogout       = errors.New("identity logout failed")
+	ErrIdentityNotInConfig  = errors.New("identity not found in configuration")
+	ErrProviderNotInConfig  = errors.New("provider not found in configuration")
+	ErrInvalidLogoutOption  = errors.New("invalid logout option")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

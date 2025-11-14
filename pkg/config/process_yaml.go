@@ -136,7 +136,7 @@ func handleEnv(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	}
 	envValue = strings.TrimSpace(envValue)
 	if envValue == "" {
-		log.Warn(emptyValueWarning, functionKey, strFunc)
+		log.Debug(emptyValueWarning, functionKey, strFunc)
 	}
 	// Set the value in Viper .
 	v.Set(currentPath, envValue)
@@ -156,7 +156,7 @@ func handleExec(node *yaml.Node, v *viper.Viper, currentPath string) error {
 		// Set the value in Viper .
 		v.Set(currentPath, execValue)
 	} else {
-		log.Warn(emptyValueWarning, functionKey, strFunc)
+		log.Debug(emptyValueWarning, functionKey, strFunc)
 	}
 	node.Tag = "" // Avoid re-processing
 	return nil
@@ -182,7 +182,7 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 			)
 		}
 	} else {
-		log.Warn(emptyValueWarning, functionKey, strFunc)
+		log.Debug(emptyValueWarning, functionKey, strFunc)
 	}
 	node.Tag = "" // Avoid re-processing
 	return nil
@@ -198,7 +198,7 @@ func handleGitRoot(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	}
 	gitRootValue = strings.TrimSpace(gitRootValue)
 	if gitRootValue == "" {
-		log.Warn(emptyValueWarning, functionKey, strFunc)
+		log.Debug(emptyValueWarning, functionKey, strFunc)
 	}
 	// Set the value in Viper .
 	v.Set(currentPath, gitRootValue)

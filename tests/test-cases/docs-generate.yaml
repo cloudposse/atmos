@@ -69,4 +69,20 @@ tests:
           - "##Github_repo:## Inline override: testing inline merge"
           - "##License:## APACHE2"
           - "##Categories:## \\[.+\\]"
-     
+
+  - name: "atmos docs generate readme with UI output"
+    enabled: true
+    snapshot: true
+    description: "Verify docs generate shows checkmark on success"
+    workdir: "fixtures/scenarios/docs-generate/terraform/"
+    command: "atmos"
+    args:
+      - "docs"
+      - "generate"
+      - "readme"
+    expect:
+      exit_code: 0
+      stderr:
+        - "✓ Generated docs"
+      file_exists:
+        - "README.md"

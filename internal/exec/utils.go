@@ -15,11 +15,17 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+)
+
+const (
+	// TerraformConfigKey is the key used in componentInfo maps to store terraform configuration.
+	terraformConfigKey = "terraform_config"
 )
 
 // ProcessComponentConfig processes component config sections.
@@ -29,6 +35,7 @@ func ProcessComponentConfig(
 	stacksMap map[string]any,
 	componentType string,
 	component string,
+	authManager auth.AuthManager,
 ) error {
 	defer perf.Track(nil, "exec.ProcessComponentConfig")()
 
@@ -160,6 +167,14 @@ func ProcessComponentConfig(
 
 	if command != "" {
 		configAndStacksInfo.Command = command
+	}
+
+	// Populate AuthContext from AuthManager if provided (from --identity flag).
+	if authManager != nil {
+		managerStackInfo := authManager.GetStackInfo()
+		if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+			configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+		}
 	}
 
 	return nil
@@ -297,6 +312,7 @@ func ProcessStacks(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	authManager auth.AuthManager,
 ) (schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStacks")()
 
@@ -341,6 +357,7 @@ func ProcessStacks(
 			stacksMap,
 			configAndStacksInfo.ComponentType,
 			configAndStacksInfo.ComponentFromArg,
+			authManager,
 		)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -374,6 +391,7 @@ func ProcessStacks(
 				stacksMap,
 				configAndStacksInfo.ComponentType,
 				configAndStacksInfo.ComponentFromArg,
+				authManager,
 			)
 			if err != nil {
 				continue
@@ -545,7 +563,7 @@ func ProcessStacks(
 
 	// Process YAML functions in Atmos manifest sections.
 	if processYamlFunctions {
-		componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip)
+		componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip, &configAndStacksInfo)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -629,26 +647,47 @@ func ProcessStacks(
 		componentInfo[cfg.ComponentPathSectionName] = componentPath
 		terraformConfiguration, diags := tfconfig.LoadModule(componentPath)
 		if !diags.HasErrors() {
-			componentInfo["terraform_config"] = terraformConfiguration
+			componentInfo[terraformConfigKey] = terraformConfiguration
 		} else {
 			diagErr := diags.Err()
 
-			// Try structured error detection first (most robust).
-			isNotExist := errors.Is(diagErr, os.ErrNotExist) || errors.Is(diagErr, fs.ErrNotExist)
+			// Handle edge case where Err() returns nil despite HasErrors() being true.
+			if diagErr == nil {
+				componentInfo[terraformConfigKey] = nil
+			} else {
+				// Try structured error detection first (most robust).
+				isNotExist := errors.Is(diagErr, os.ErrNotExist) || errors.Is(diagErr, fs.ErrNotExist)
 
-			// Fallback to error message inspection for cases where tfconfig doesn't wrap errors properly.
-			// This handles missing subdirectory modules (e.g., ./modules/security-group referenced in main.tf
-			// but the directory doesn't exist). Such missing paths are valid in stack processing—components
-			// or their modules may be deleted or not yet created when tracking changes over time.
-			errMsg := diagErr.Error()
-			isNotExistString := strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "Failed to read directory")
+				// Fallback to error message inspection for cases where tfconfig doesn't wrap errors properly.
+				// This handles missing subdirectory modules (e.g., ./modules/security-group referenced in main.tf
+				// but the directory doesn't exist). Such missing paths are valid in stack processing—components
+				// or their modules may be deleted or not yet created when tracking changes over time.
+				errMsg := diagErr.Error()
+				isNotExistString := strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "Failed to read directory")
 
-			if !isNotExist && !isNotExistString {
-				// For other errors (syntax errors, permission issues, etc.), return error.
-				return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+				if !isNotExist && !isNotExistString {
+					// Check if this is an OpenTofu-specific feature that terraform-config-inspect doesn't support.
+					// Respect component-level command overrides for OpenTofu detection.
+					// Clone the config and apply the component override if present.
+					effectiveConfig := *atmosConfig
+					if configAndStacksInfo.Command != "" {
+						effectiveConfig.Components.Terraform.Command = configAndStacksInfo.Command
+					}
+
+					// For known OpenTofu features, skip validation. Otherwise, return the error.
+					if !IsOpenTofu(&effectiveConfig) || !isKnownOpenTofuFeature(diagErr) {
+						// For other errors (syntax errors, permission issues, etc.), return error.
+						return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+					}
+
+					// Skip validation for known OpenTofu-specific features.
+					log.Debug("Skipping terraform-config-inspect validation for OpenTofu-specific feature: " + errMsg)
+					componentInfo[terraformConfigKey] = nil
+					componentInfo["validation_skipped_opentofu"] = true
+				} else {
+					componentInfo[terraformConfigKey] = nil
+				}
 			}
-
-			componentInfo["terraform_config"] = nil
 		}
 	case cfg.HelmfileComponentType:
 		componentInfo[cfg.ComponentPathSectionName] = constructHelmfileComponentWorkingDir(atmosConfig, &configAndStacksInfo)
@@ -703,7 +742,7 @@ func ProcessStacks(
 }
 
 // generateComponentBackendConfig generates backend config for components.
-func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string) (map[string]any, error) {
+func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string, _ *schema.AuthContext) (map[string]any, error) {
 	// Generate backend config file for Terraform Cloud.
 	// https://developer.hashicorp.com/terraform/cli/cloud/settings
 	if backendType == "cloud" {
@@ -746,7 +785,7 @@ func generateComponentBackendConfig(backendType string, backendConfig map[string
 }
 
 // generateComponentProviderOverrides generates provider overrides for components.
-func generateComponentProviderOverrides(providerOverrides map[string]any) map[string]any {
+func generateComponentProviderOverrides(providerOverrides map[string]any, _ *schema.AuthContext) map[string]any {
 	return map[string]any{
 		"provider": providerOverrides,
 	}

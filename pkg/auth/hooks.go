@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	charm "github.com/charmbracelet/log"
 	"github.com/go-viper/mapstructure/v2"
@@ -11,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -41,6 +43,12 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 	log.SetPrefix("atmos-auth")
 	defer log.SetPrefix("")
 
+	// Check if authentication has been explicitly disabled BEFORE doing any auth setup.
+	if isAuthenticationDisabled(stackInfo.Identity) {
+		log.Debug("Authentication explicitly disabled, skipping identity authentication")
+		return nil
+	}
+
 	authConfig, err := decodeAuthConfigFromStack(stackInfo)
 	if err != nil {
 		return err
@@ -63,6 +71,7 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 	if err != nil {
 		return err
 	}
+
 	if err := authenticateAndWriteEnv(context.Background(), authManager, targetIdentityName, atmosConfig, stackInfo); err != nil {
 		return err
 	}
@@ -82,7 +91,8 @@ func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManage
 	if stackInfo.Identity != "" {
 		return stackInfo.Identity, nil
 	}
-	name, err := authManager.GetDefaultIdentity()
+	// Hooks don't have CLI flags, so never force selection here.
+	name, err := authManager.GetDefaultIdentity(false)
 	if err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrDefaultIdentity, hookOpTerraformPreHook, "failed to get default identity")
 		return "", errUtils.ErrDefaultIdentity
@@ -94,17 +104,57 @@ func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManage
 	return name, nil
 }
 
+// isAuthenticationDisabled checks if authentication has been explicitly disabled.
+func isAuthenticationDisabled(identityName string) bool {
+	return identityName == cfg.IdentityFlagDisabledValue
+}
+
 func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager, identityName string, atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
-	log.Info("Authenticating with identity", "identity", identityName)
+	log.Debug("Authenticating with identity", "identity", identityName)
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
 		return fmt.Errorf("failed to authenticate with identity %q: %w", identityName, err)
 	}
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
+
+	// Convert ComponentEnvSection to env list for PrepareShellEnvironment.
+	// This includes any component-specific env vars already set in the stack config.
+	baseEnvList := componentEnvSectionToList(stackInfo.ComponentEnvSection)
+
+	// Prepare shell environment with auth credentials.
+	// This configures file-based credentials (AWS_SHARED_CREDENTIALS_FILE, AWS_PROFILE, etc.).
+	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnvList)
+	if err != nil {
+		return fmt.Errorf("failed to prepare environment variables: %w", err)
+	}
+
+	// Convert back to ComponentEnvSection map for downstream processing.
+	if stackInfo.ComponentEnvSection == nil {
+		stackInfo.ComponentEnvSection = make(map[string]any)
+	}
+	for _, envVar := range envList {
+		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
+			key := envVar[:idx]
+			value := envVar[idx+1:]
+			stackInfo.ComponentEnvSection[key] = value
+		}
+	}
+
 	if err := utils.PrintAsYAMLToFileDescriptor(atmosConfig, stackInfo.ComponentEnvSection); err != nil {
 		return fmt.Errorf("failed to print component env section: %w", err)
 	}
 	return nil
+}
+
+// componentEnvSectionToList converts ComponentEnvSection map to environment variable list.
+func componentEnvSectionToList(envSection map[string]any) []string {
+	var envList []string
+	for k, v := range envSection {
+		if v != nil {
+			envList = append(envList, fmt.Sprintf("%s=%v", k, v))
+		}
+	}
+	return envList
 }
 
 func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndStacksInfo) (types.AuthManager, error) {
@@ -129,17 +179,31 @@ func getConfigLogLevels(atmosConfig *schema.AtmosConfiguration) (charm.Level, ch
 	if atmosConfig == nil {
 		return charm.InfoLevel, charm.InfoLevel
 	}
+	// Get the current atmos log level that was already set by setupLogger in root.go.
+	// This respects ATMOS_LOGS_LEVEL env var and --logs-level flag with case-insensitive parsing.
 	atmosLevel := log.GetLevel()
-	if atmosConfig.Logs.Level != "" {
-		if l, err := charm.ParseLevel(atmosConfig.Logs.Level); err == nil {
-			atmosLevel = l
-		}
-	}
+
 	// Determine auth log level (fallback to atmos level).
 	authLevel := atmosLevel
 	if atmosConfig.Auth.Logs.Level != "" {
-		if l, err := charm.ParseLevel(atmosConfig.Auth.Logs.Level); err == nil {
-			authLevel = l
+		// Parse the auth log level using Atmos' ParseLogLevel for case-insensitive parsing.
+		// This ensures "Warning", "warning", "WARN", "warn" all work correctly.
+		if atmosLogLevel, err := log.ParseLogLevel(atmosConfig.Auth.Logs.Level); err == nil {
+			// Convert Atmos LogLevel string to charm.Level.
+			switch atmosLogLevel {
+			case log.LogLevelTrace:
+				authLevel = log.TraceLevel
+			case log.LogLevelDebug:
+				authLevel = log.DebugLevel
+			case log.LogLevelInfo:
+				authLevel = log.InfoLevel
+			case log.LogLevelWarning:
+				authLevel = log.WarnLevel
+			case log.LogLevelError:
+				authLevel = log.ErrorLevel
+			case log.LogLevelOff:
+				authLevel = log.FatalLevel
+			}
 		}
 	}
 	return atmosLevel, authLevel

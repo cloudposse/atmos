@@ -53,7 +53,7 @@ func ExecutePacker(
 		)
 	}
 
-	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil)
+	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -182,6 +182,9 @@ func ExecutePacker(
 	allArgsAndFlags = append(allArgsAndFlags, []string{"-var-file", varFile}...)
 	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
 	allArgsAndFlags = append(allArgsAndFlags, template)
+
+	// Convert ComponentEnvSection to ComponentEnvList.
+	ConvertComponentEnvSectionToList(info)
 
 	// Prepare ENV vars.
 	envVars := append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))

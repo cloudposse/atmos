@@ -443,6 +443,9 @@ func PrintAsYAMLToFileDescriptor(atmosConfig *schema.AtmosConfiguration, data an
 		return err
 	}
 
+	// Log the YAML data.
+	// Note: This logs multiline YAML which will be formatted by the logger.
+	// For large data structures, this may produce verbose output.
 	log.Debug("PrintAsYAMLToFileDescriptor", "data", y)
 	return nil
 }

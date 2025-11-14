@@ -61,16 +61,18 @@ var (
 var logger *log.AtmosLogger
 
 type Expectation struct {
-	Stdout        []MatchPattern            `yaml:"stdout"`          // Expected stdout output (non-TTY mode)
-	Stderr        []MatchPattern            `yaml:"stderr"`          // Expected stderr output (non-TTY mode)
-	Tty           []MatchPattern            `yaml:"tty"`             // Expected TTY output (TTY mode - combined stdout+stderr)
-	ExitCode      int                       `yaml:"exit_code"`       // Expected exit code
-	FileExists    []string                  `yaml:"file_exists"`     // Files to validate
-	FileNotExists []string                  `yaml:"file_not_exists"` // Files that should not exist
-	FileContains  map[string][]MatchPattern `yaml:"file_contains"`   // File contents to validate (file to patterns map)
-	Diff          []string                  `yaml:"diff"`            // Acceptable differences in snapshot
-	Timeout       string                    `yaml:"timeout"`         // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
-	Valid         []string                  `yaml:"valid"`           // Format validations: "yaml", "json"
+	Stdout                   []MatchPattern            `yaml:"stdout"`                     // Expected stdout output (non-TTY mode)
+	Stderr                   []MatchPattern            `yaml:"stderr"`                     // Expected stderr output (non-TTY mode)
+	Tty                      []MatchPattern            `yaml:"tty"`                        // Expected TTY output (TTY mode - combined stdout+stderr)
+	ExitCode                 int                       `yaml:"exit_code"`                  // Expected exit code
+	FileExists               []string                  `yaml:"file_exists"`                // Files to validate
+	FileNotExists            []string                  `yaml:"file_not_exists"`            // Files that should not exist
+	FileContains             map[string][]MatchPattern `yaml:"file_contains"`              // File contents to validate (file to patterns map)
+	Diff                     []string                  `yaml:"diff"`                       // Acceptable differences in snapshot
+	Timeout                  string                    `yaml:"timeout"`                    // Maximum execution time as a string, e.g., "1s", "1m", "1h", or a number (seconds)
+	Valid                    []string                  `yaml:"valid"`                      // Format validations: "yaml", "json"
+	IgnoreTrailingWhitespace bool                      `yaml:"ignore_trailing_whitespace"` // Strip trailing whitespace before snapshot comparison
+	Sanitize                 map[string]string         `yaml:"sanitize"`                   // Custom sanitization rules (regex pattern -> replacement)
 }
 type TestCase struct {
 	Name          string            `yaml:"name"`          // Name of the test
@@ -234,10 +236,10 @@ func loadTestSuite(filePath string) (*TestSuite, error) {
 }
 
 func init() {
-	// Initialize with default settings.
+	// Initialize logger with default settings.
+	// Verbosity level will be configured in TestMain based on -v flag.
 	logger = log.New()
-	logger.SetOutput(os.Stdout)
-	logger.SetLevel(log.InfoLevel)
+	logger.SetOutput(os.Stderr)
 
 	// Ensure that Lipgloss uses terminal colors for tests
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -256,11 +258,8 @@ func init() {
 	// Add a custom style for key `err`
 	styles.Keys["err"] = lipgloss.NewStyle().Foreground(lipgloss.Color("204"))
 	styles.Values["err"] = lipgloss.NewStyle().Bold(true)
-	logger = log.New()
-	logger.SetOutput(os.Stderr)
 	logger.SetStyles(styles)
 	logger.SetColorProfile(termenv.TrueColor)
-	logger.Info("Smoke tests for atmos CLI starting")
 }
 
 // Determine if running in a CI environment.
@@ -292,6 +291,35 @@ func collapseExtraSlashes(s string) string {
 	return regexp.MustCompile(`/+`).ReplaceAllString(s, "/")
 }
 
+// sanitizeOption is a functional option for customizing output sanitization.
+type sanitizeOption func(*sanitizeConfig)
+
+// sanitizeConfig holds configuration for sanitization.
+type sanitizeConfig struct {
+	customReplacements map[string]string // pattern -> replacement (applied as regexp.ReplaceAllString)
+}
+
+// WithCustomReplacements adds custom pattern replacements to the sanitization process.
+// The patterns are treated as regular expressions and applied after all standard sanitization steps.
+// This is useful for one-off cases specific to certain tests that don't need global sanitization.
+//
+// Example:
+//
+//	sanitizeOutput(output, WithCustomReplacements(map[string]string{
+//	    `session-[0-9]+`: "session-12345",
+//	    `temp_[a-z]+`:    "temp_xyz",
+//	}))
+func WithCustomReplacements(replacements map[string]string) sanitizeOption {
+	return func(c *sanitizeConfig) {
+		if c.customReplacements == nil {
+			c.customReplacements = make(map[string]string)
+		}
+		for pattern, replacement := range replacements {
+			c.customReplacements[pattern] = replacement
+		}
+	}
+}
+
 // sanitizeOutput replaces occurrences of the repository's absolute path in the output
 // with the placeholder "/absolute/path/to/repo". It first normalizes both the repository root
 // and the output to use forward slashes, ensuring that the replacement works reliably.
@@ -302,7 +330,14 @@ func collapseExtraSlashes(s string) string {
 //	   --> /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
 //	/home/runner/work/atmos/atmos/examples/demo-stacks/stacks/deploy/**/*
 //	   --> /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*
-func sanitizeOutput(output string) (string, error) {
+//
+// Custom replacements can be provided via WithCustomReplacements option for test-specific sanitization.
+func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
+	// Apply options to configuration.
+	config := &sanitizeConfig{}
+	for _, opt := range opts {
+		opt(config)
+	}
 	// 1. Get the repository root.
 	repoRoot, err := findGitRepoRoot(startingDir)
 	if err != nil {
@@ -382,6 +417,55 @@ func sanitizeOutput(output string) (string, error) {
 	posthogTokenRegex := regexp.MustCompile(`phc_[a-zA-Z0-9_]+`)
 	result = posthogTokenRegex.ReplaceAllString(result, "phc_TEST_TOKEN_PLACEHOLDER")
 
+	// 9. Normalize expiration timestamps to avoid snapshot mismatches.
+	// Replace the relative duration part (e.g., "(59m 59s)", "expired") with a deterministic placeholder.
+	// This preserves the actual timestamp while normalizing the time-sensitive duration.
+	// Use "1h 0m" format which matches the actual formatDuration output for hour-based durations.
+	expiresRegex := regexp.MustCompile(`(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4})\s+\([^)]+\)`)
+	result = expiresRegex.ReplaceAllString(result, "$1 (1h 0m)")
+
+	// 10. Normalize debug log timestamps (Go time.Time string format).
+	// These appear in debug logs like: expiration="2025-10-26 23:04:36.236866 -0500 CDT m=+3600.098519710"
+	// Replace with a constant timestamp to avoid snapshot mismatches.
+	debugTimestampRegex := regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
+	result = debugTimestampRegex.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
+
+	// 11. Apply custom replacements if provided.
+	// These are test-specific patterns that don't need to be part of the global sanitization.
+	for pattern, replacement := range config.customReplacements {
+		customRegex, err := regexp.Compile(pattern)
+		if err != nil {
+			return "", fmt.Errorf("failed to compile custom replacement pattern %q: %w", pattern, err)
+		}
+		result = customRegex.ReplaceAllString(result, replacement)
+	}
+
+	// 12. Normalize external absolute paths to avoid environment-specific paths in snapshots.
+	// Replace common absolute path prefixes with generic placeholders.
+	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
+	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
+	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
+	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
+
+	// 13. Normalize "Last Updated" timestamps in auth whoami output.
+	// These appear as "Last Updated  2025-10-28 13:10:27 CDT" in table output.
+	// Replace with a fixed timestamp to avoid snapshot mismatches.
+	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
+	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
+
+	// 14. Normalize credential expiration durations in auth list output.
+	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
+	// The duration changes every minute, so normalize to "1h 0m" like other duration normalizations.
+	// Matches patterns like "650202h14m", "650194h", "1h30m", "45m", etc. at the end of identity lines.
+	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h(?:\d+m)?\b`)
+	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
+
+	// 15. Normalize credential_store values in error messages.
+	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
+	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
+	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
+	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
+
 	return result, nil
 }
 
@@ -401,6 +485,15 @@ func sanitizeTestName(name string) string {
 }
 
 // Drop any lines matched by the ignore patterns so they do not affect the comparison.
+// stripTrailingWhitespace removes trailing whitespace from each line.
+func stripTrailingWhitespace(input string) string {
+	lines := strings.Split(input, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.Join(lines, "\n")
+}
+
 func applyIgnorePatterns(input string, patterns []string) string {
 	lines := strings.Split(input, "\n") // Split input into lines
 	var filteredLines []string          // Store lines that don't match the patterns
@@ -509,6 +602,26 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 
 // Entry point for tests to parse flags and handle setup/teardown.
 func TestMain(m *testing.M) {
+	// Parse flags first to get -v status
+	flag.Parse()
+
+	// CRITICAL: Unset ATMOS_CHDIR to prevent tests from accessing non-test directories.
+	// This prevents tests from inadvertently reading real infrastructure configs (e.g., infra-live).
+	// Tests should only use their fixture directories, not the user's working environment.
+	os.Unsetenv("ATMOS_CHDIR")
+
+	// Configure logger verbosity based on test flags
+	switch {
+	case os.Getenv("ATMOS_TEST_DEBUG") != "":
+		logger.SetLevel(log.DebugLevel) // Show everything including debug
+	case testing.Verbose():
+		logger.SetLevel(log.InfoLevel) // Show info, warnings, and errors with -v flag
+	default:
+		logger.SetLevel(log.WarnLevel) // Only show warnings and errors by default
+	}
+
+	logger.Info("Smoke tests for atmos CLI starting")
+
 	// Declare err in the function's scope
 	var err error
 
@@ -534,7 +647,6 @@ func TestMain(m *testing.M) {
 	// Define the base directory for snapshots relative to startingDir
 	snapshotBaseDir = filepath.Join(startingDir, "snapshots")
 
-	flag.Parse()        // Parse command-line flags
 	exitCode := m.Run() // ALWAYS run tests so they can skip properly
 
 	// Clean up sandboxes.
@@ -555,7 +667,8 @@ func checkPreconditions(t *testing.T, preconditions []string) {
 
 	// Map of precondition names to their check functions
 	preconditionChecks := map[string]func(*testing.T){
-		"github_token": RequireOCIAuthentication,
+		"github_token":    RequireOCIAuthentication,
+		"aws_credentials": RequireAWSCredentials,
 	}
 
 	// Check each precondition
@@ -627,6 +740,15 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	t.Setenv("XDG_CACHE_HOME", xdgCacheHome)
 	// Reload XDG to pick up the new environment
 	xdg.Reload()
+
+	// Clear github_username environment variables for consistent snapshots.
+	// These are automatically bound to settings.github_username but cause
+	// environment-dependent output. Skip clearing only for vendor tests that need GitHub auth.
+	if !strings.Contains(tc.Name, "vendor") {
+		t.Setenv("ATMOS_GITHUB_USERNAME", "")
+		t.Setenv("GITHUB_ACTOR", "")
+		t.Setenv("GITHUB_USERNAME", "")
+	}
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
 		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
@@ -702,6 +824,18 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 				t.Fatalf("Failed to clean directory %q: %v", tc.Workdir, err)
 			}
 		}
+
+		// Set ATMOS_CLI_CONFIG_PATH to ensure test isolation.
+		// This forces Atmos to use the workdir's atmos.yaml instead of searching
+		// up the directory tree or using ~/.config/atmos/atmos.yaml.
+		atmosConfigPath := filepath.Join(absoluteWorkdir, "atmos.yaml")
+		if _, err := os.Stat(atmosConfigPath); err == nil {
+			if tc.Env == nil {
+				tc.Env = make(map[string]string)
+			}
+			tc.Env["ATMOS_CLI_CONFIG_PATH"] = absoluteWorkdir
+			logger.Debug("Setting ATMOS_CLI_CONFIG_PATH for test isolation", "path", absoluteWorkdir)
+		}
 	}
 
 	// Include the system PATH in the test environment
@@ -720,6 +854,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// This is needed for tests that change to parent directories
 	tc.Env["TEST_EXCLUDE_ATMOS_D"] = repoRoot
 
+	// Disable git root base path discovery in tests.
+	// Tests expect BasePath to be "." by default, not the repository root.
+	tc.Env["ATMOS_GIT_ROOT_BASEPATH"] = "false"
+
 	// Remove the cache file before running the test.
 	// This is to ensure that the test is not affected by the cache file.
 	err := removeCacheFile()
@@ -737,6 +875,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 	if _, exists := tc.Env["COLORTERM"]; !exists {
 		tc.Env["COLORTERM"] = "" // Explicitly empty to prevent truecolor (force 256-color)
+	}
+	if _, exists := tc.Env["COLUMNS"]; !exists {
+		tc.Env["COLUMNS"] = "80" // Force consistent terminal width for table rendering
 	}
 	// Set any environment variables defined in the test case using t.Setenv for proper isolation.
 	for key, value := range tc.Env {
@@ -796,6 +937,66 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 				break
 			}
 		}
+	}
+
+	// Filter out ATMOS_* environment variables that shouldn't be inherited from developer's shell.
+	// This ensures test reproducibility between local and CI environments.
+	// Only allow ATMOS_* vars explicitly set in tc.Env.
+	atmosVarsToFilter := []string{
+		"ATMOS_LOGS_LEVEL", // Can change log verbosity and affect snapshot output
+		"ATMOS_CHDIR",      // Can change working directory resolution
+		"ATMOS_LOGS_FILE",  // Can redirect logs to unexpected locations
+	}
+
+	for _, atmosVar := range atmosVarsToFilter {
+		// Skip if test explicitly sets this variable
+		if _, exists := tc.Env[atmosVar]; exists {
+			continue
+		}
+
+		// Remove from inherited environment
+		for i, env := range envVars {
+			if strings.HasPrefix(env, atmosVar+"=") {
+				envVars = append(envVars[:i], envVars[i+1:]...)
+				break
+			}
+		}
+	}
+
+	// Set up XDG directories in temp locations to ensure test isolation.
+	// This prevents tests from:
+	// 1. Reading user's telemetry acknowledgment state (causing inconsistent telemetry notices)
+	// 2. Writing to user's cache/config/data directories
+	// 3. Being affected by user's XDG environment settings
+	//
+	// Use the existing tempDir to ensure XDG paths share the same root directory.
+	// This preserves isolation and avoids bypass issues when tc.Env already contains XDG vars.
+	xdgTempDir := filepath.Join(tempDir, "xdg")
+	xdgVars := map[string]string{
+		"XDG_CACHE_HOME":        filepath.Join(xdgTempDir, "cache"),
+		"XDG_CONFIG_HOME":       filepath.Join(xdgTempDir, "config"),
+		"XDG_DATA_HOME":         filepath.Join(xdgTempDir, "data"),
+		"ATMOS_XDG_CACHE_HOME":  filepath.Join(xdgTempDir, "cache"),
+		"ATMOS_XDG_CONFIG_HOME": filepath.Join(xdgTempDir, "config"),
+		"ATMOS_XDG_DATA_HOME":   filepath.Join(xdgTempDir, "data"),
+	}
+
+	// Add XDG vars to environment unless test explicitly sets them.
+	for xdgVar, xdgPath := range xdgVars {
+		if _, exists := tc.Env[xdgVar]; exists {
+			continue // Test explicitly set this, don't override
+		}
+
+		// Remove any inherited XDG var first
+		for i, env := range envVars {
+			if strings.HasPrefix(env, xdgVar+"=") {
+				envVars = append(envVars[:i], envVars[i+1:]...)
+				break
+			}
+		}
+
+		// Add our isolated XDG var
+		envVars = append(envVars, fmt.Sprintf("%s=%s", xdgVar, xdgPath))
 	}
 
 	cmd.Env = envVars
@@ -1257,8 +1458,14 @@ func getSnapshotFilenames(testName string, isTty bool) (stdout, stderr, tty stri
 // verifyTTYSnapshot handles snapshot verification for TTY mode tests.
 func verifyTTYSnapshot(t *testing.T, tc *TestCase, ttyPath, combinedOutput string, regenerate bool) bool {
 	if regenerate {
+		// Strip trailing whitespace from output before saving snapshot if requested.
+		outputToSave := combinedOutput
+		if tc.Expect.IgnoreTrailingWhitespace {
+			outputToSave = stripTrailingWhitespace(combinedOutput)
+		}
+
 		t.Logf("Updating TTY snapshot at %q", ttyPath)
-		updateSnapshot(ttyPath, combinedOutput)
+		updateSnapshot(ttyPath, outputToSave)
 		return true
 	}
 
@@ -1270,6 +1477,12 @@ $ go test ./tests -run %q -regenerate-snapshots`, ttyPath, t.Name())
 
 	filteredActual := applyIgnorePatterns(combinedOutput, tc.Expect.Diff)
 	filteredExpected := applyIgnorePatterns(readSnapshot(t, ttyPath), tc.Expect.Diff)
+
+	// Strip trailing whitespace if requested.
+	if tc.Expect.IgnoreTrailingWhitespace {
+		filteredActual = stripTrailingWhitespace(filteredActual)
+		filteredExpected = stripTrailingWhitespace(filteredExpected)
+	}
 
 	if filteredExpected != filteredActual {
 		var diff string
@@ -1311,11 +1524,16 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Sanitize outputs and fail the test if sanitization fails.
 	var err error
-	stdoutOutput, err = sanitizeOutput(stdoutOutput)
+	var sanitizeOpts []sanitizeOption
+	if len(tc.Expect.Sanitize) > 0 {
+		sanitizeOpts = append(sanitizeOpts, WithCustomReplacements(tc.Expect.Sanitize))
+	}
+
+	stdoutOutput, err = sanitizeOutput(stdoutOutput, sanitizeOpts...)
 	if err != nil {
 		t.Fatalf("failed to sanitize stdout output: %v", err)
 	}
-	stderrOutput, err = sanitizeOutput(stderrOutput)
+	stderrOutput, err = sanitizeOutput(stderrOutput, sanitizeOpts...)
 	if err != nil {
 		t.Fatalf("failed to sanitize stderr output: %v", err)
 	}
@@ -1335,10 +1553,18 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 
 	// Non-TTY mode: separate stdout and stderr snapshots
 	if regenerate {
+		// Strip trailing whitespace from output before saving snapshot if requested.
+		stdoutToSave := stdoutOutput
+		stderrToSave := stderrOutput
+		if tc.Expect.IgnoreTrailingWhitespace {
+			stdoutToSave = stripTrailingWhitespace(stdoutOutput)
+			stderrToSave = stripTrailingWhitespace(stderrOutput)
+		}
+
 		t.Logf("Updating stdout snapshot at %q", stdoutPath)
-		updateSnapshot(stdoutPath, stdoutOutput)
+		updateSnapshot(stdoutPath, stdoutToSave)
 		t.Logf("Updating stderr snapshot at %q", stderrPath)
-		updateSnapshot(stderrPath, stderrOutput)
+		updateSnapshot(stderrPath, stderrToSave)
 		return true
 	}
 
@@ -1351,6 +1577,12 @@ $ go test ./tests -run %q -regenerate-snapshots`, stdoutPath, t.Name())
 
 	filteredStdoutActual := applyIgnorePatterns(stdoutOutput, tc.Expect.Diff)
 	filteredStdoutExpected := applyIgnorePatterns(readSnapshot(t, stdoutPath), tc.Expect.Diff)
+
+	// Strip trailing whitespace if requested.
+	if tc.Expect.IgnoreTrailingWhitespace {
+		filteredStdoutActual = stripTrailingWhitespace(filteredStdoutActual)
+		filteredStdoutExpected = stripTrailingWhitespace(filteredStdoutExpected)
+	}
 
 	if filteredStdoutExpected != filteredStdoutActual {
 		var diff string
@@ -1372,6 +1604,12 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 	}
 	filteredStderrActual := applyIgnorePatterns(stderrOutput, tc.Expect.Diff)
 	filteredStderrExpected := applyIgnorePatterns(readSnapshot(t, stderrPath), tc.Expect.Diff)
+
+	// Strip trailing whitespace if requested.
+	if tc.Expect.IgnoreTrailingWhitespace {
+		filteredStderrActual = stripTrailingWhitespace(filteredStderrActual)
+		filteredStderrExpected = stripTrailingWhitespace(filteredStderrExpected)
+	}
 
 	if filteredStderrExpected != filteredStderrActual {
 		var diff string
@@ -1418,7 +1656,7 @@ func cleanDirectory(t *testing.T, workdir string) error {
 		if statusEntry.Worktree == git.Untracked {
 			fullPath := filepath.Join(repoRoot, file)
 			if strings.HasPrefix(fullPath, workdir) {
-				t.Logf("Removing untracked file: %q\n", fullPath)
+				t.Logf("Removing untracked file: %q", fullPath)
 				if err := os.RemoveAll(fullPath); err != nil {
 					return fmt.Errorf("failed to remove %q: %w", fullPath, err)
 				}
@@ -1470,9 +1708,5 @@ expect:
 	err := yaml.Unmarshal([]byte(yamlData), &testCase)
 	if err != nil {
 		t.Fatalf("Failed to unmarshal YAML: %v", err)
-	}
-
-	for i, pattern := range testCase.Expect.Stdout {
-		t.Logf("Pattern %d: %+v", i, pattern)
 	}
 }

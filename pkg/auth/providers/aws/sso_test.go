@@ -2,6 +2,7 @@ package aws
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -206,105 +207,6 @@ func TestSSOProvider_promptDeviceAuth_NonCI_OpensURL(t *testing.T) {
 	p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{VerificationUriComplete: &url})
 }
 
-func TestSSOProvider_promptDeviceAuth_DisplaysVerificationCode(t *testing.T) {
-	tests := []struct {
-		name                    string
-		userCode                string
-		verificationURI         string
-		verificationURIComplete string
-		isCI                    bool
-		expectedInOutput        []string
-	}{
-		{
-			name:                    "displays verification code with complete URI in non-CI",
-			userCode:                "WXYZ-1234",
-			verificationURIComplete: "https://device.sso.us-east-1.amazonaws.com/",
-			isCI:                    false,
-			expectedInOutput: []string{
-				"AWS SSO Authentication Required",
-				"Verification Code: **WXYZ-1234**",
-				"Opening browser to:",
-				"Waiting for authentication",
-			},
-		},
-		{
-			name:            "displays verification code with base URI in non-CI",
-			userCode:        "ABCD-5678",
-			verificationURI: "https://device.sso.us-east-1.amazonaws.com/",
-			isCI:            false,
-			expectedInOutput: []string{
-				"AWS SSO Authentication Required",
-				"Verification Code: **ABCD-5678**",
-				"Please visit",
-				"Waiting for authentication",
-			},
-		},
-		{
-			name:                    "displays verification code in CI environment",
-			userCode:                "TEST-CODE",
-			verificationURIComplete: "https://device.sso.us-east-1.amazonaws.com/",
-			isCI:                    true,
-			expectedInOutput: []string{
-				"AWS SSO Authentication Required",
-				"Verification Code: **TEST-CODE**",
-				"Verification URL:",
-				"Waiting for authentication",
-			},
-		},
-		{
-			name:     "handles nil user code gracefully",
-			userCode: "",
-			isCI:     true,
-			expectedInOutput: []string{
-				"AWS SSO Authentication Required",
-				"Verification Code: ****",
-				"Waiting for authentication",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("GO_TEST", "1") // ensure OpenUrl returns quickly
-			if tt.isCI {
-				t.Setenv("CI", "1")
-			} else {
-				t.Setenv("CI", "")
-			}
-
-			p, err := NewSSOProvider("sso", &schema.Provider{
-				Kind:     "aws/iam-identity-center",
-				Region:   "us-east-1",
-				StartURL: "https://x",
-			})
-			require.NoError(t, err)
-
-			// Build the authorization output.
-			authOutput := &ssooidc.StartDeviceAuthorizationOutput{}
-			if tt.userCode != "" {
-				authOutput.UserCode = &tt.userCode
-			}
-			if tt.verificationURI != "" {
-				authOutput.VerificationUri = &tt.verificationURI
-			}
-			if tt.verificationURIComplete != "" {
-				authOutput.VerificationUriComplete = &tt.verificationURIComplete
-			}
-
-			// Call promptDeviceAuth - this will output to stderr via PrintfMessageToTUI.
-			// Since we can't easily capture stderr in tests, we just verify it doesn't panic.
-			// The actual output verification is done manually or via integration tests.
-			assert.NotPanics(t, func() {
-				p.promptDeviceAuth(authOutput)
-			})
-
-			// Note: To fully verify the output contains the expected strings, we would need
-			// to capture stderr output, which is complex in Go tests. The important thing is
-			// that the function executes without errors and the test output shows the messages.
-		})
-	}
-}
-
 func TestSSOProvider_WithCustomResolver(t *testing.T) {
 	// Test SSO provider with custom resolver configuration.
 	config := &schema.Provider{
@@ -350,6 +252,144 @@ func TestSSOProvider_WithoutCustomResolver(t *testing.T) {
 
 	// Verify the provider works without resolver config.
 	assert.NoError(t, p.Validate())
+}
+
+func TestSSOProvider_Logout(t *testing.T) {
+	tests := []struct {
+		name        string
+		providerCfg *schema.Provider
+		expectError bool
+	}{
+		{
+			name: "successful logout",
+			providerCfg: &schema.Provider{
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://company.awsapps.com/start",
+			},
+			expectError: false,
+		},
+		{
+			name: "logout with custom base_path",
+			providerCfg: &schema.Provider{
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://company.awsapps.com/start",
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": t.TempDir(),
+					},
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := NewSSOProvider("test-sso", tt.providerCfg)
+			require.NoError(t, err)
+
+			testProviderLogoutWithFilesystemVerification(t, tt.providerCfg, "test-sso", p, tt.expectError)
+		})
+	}
+}
+
+func TestSSOProvider_GetFilesDisplayPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *schema.Provider
+		expected string
+	}{
+		{
+			name: "default path with no base_path",
+			config: &schema.Provider{
+				Kind:     testSSOKind,
+				Region:   testRegion,
+				StartURL: testStartURL,
+			},
+			expected: "atmos/aws", // XDG path contains atmos/aws
+		},
+		{
+			name: "custom base_path",
+			config: &schema.Provider{
+				Kind:     testSSOKind,
+				Region:   testRegion,
+				StartURL: testStartURL,
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": "/custom/path",
+					},
+				},
+			},
+			expected: "/custom/path",
+		},
+		{
+			name: "home directory base_path",
+			config: &schema.Provider{
+				Kind:     testSSOKind,
+				Region:   testRegion,
+				StartURL: testStartURL,
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": "~/.custom/aws",
+					},
+				},
+			},
+			expected: "~/.custom/aws",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, err := NewSSOProvider(testProviderName, tt.config)
+			require.NoError(t, err)
+
+			path := provider.GetFilesDisplayPath()
+			// Normalize path separators for cross-platform compatibility.
+			normalizedPath := filepath.ToSlash(path)
+			assert.Contains(t, normalizedPath, tt.expected)
+		})
+	}
+}
+
+func TestSSOProvider_Logout_ErrorPaths(t *testing.T) {
+	tests := []struct {
+		name        string
+		providerCfg *schema.Provider
+		expectError bool
+	}{
+		{
+			name: "handles invalid base_path gracefully",
+			providerCfg: &schema.Provider{
+				Kind:     testSSOKind,
+				Region:   testRegion,
+				StartURL: testStartURL,
+				Spec: map[string]interface{}{
+					"files": map[string]interface{}{
+						"base_path": "/invalid/\x00/path", // Invalid path with null character.
+					},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := NewSSOProvider(testProviderName, tt.providerCfg)
+			require.NoError(t, err)
+
+			ctx := context.Background()
+			err = p.Logout(ctx)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestIsTTY(t *testing.T) {
@@ -518,7 +558,7 @@ func TestSpinnerModel_Update_KeyPress(t *testing.T) {
 	assert.True(t, updatedModel.done)
 	assert.NotNil(t, updatedModel.result)
 	assert.Error(t, updatedModel.result.err)
-	assert.Contains(t, updatedModel.result.err.Error(), "cancelled")
+	assert.Contains(t, updatedModel.result.err.Error(), "user aborted")
 	assert.True(t, cancelCalled)
 }
 

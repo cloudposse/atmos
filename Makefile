@@ -14,16 +14,13 @@ readme:
 	@echo "README.md generation temporarily disabled."
 	@exit 0
 
-get:
-	go get
-
 build: build-default
 
 version: version-default
 
 # The following will lint only files in git. `golangci-lint run --new-from-rev=HEAD` should do it,
 # but it's still including files not in git.
-lint: get lintroller custom-gcl
+lint: deps lintroller gomodcheck custom-gcl
 	./custom-gcl run --new-from-rev=origin/main
 
 # Build custom golangci-lint binary with lintroller plugin.
@@ -46,15 +43,26 @@ tools/lintroller/.lintroller: tools/lintroller/*.go tools/lintroller/cmd/lintrol
 	@chmod +x tools/lintroller/.lintroller
 	@test -x tools/lintroller/.lintroller || (echo "Error: Failed to make lintroller executable" && exit 1)
 
+# Check go.mod for replace/exclude directives that break go install.
+.PHONY: gomodcheck
+gomodcheck: tools/gomodcheck/.gomodcheck
+	@tools/gomodcheck/.gomodcheck go.mod
+
+tools/gomodcheck/.gomodcheck: tools/gomodcheck/*.go
+	@echo "Building gomodcheck..."
+	@cd tools/gomodcheck && go build -o .gomodcheck .
+	@chmod +x tools/gomodcheck/.gomodcheck
+	@test -x tools/gomodcheck/.gomodcheck || (echo "Error: Failed to make gomodcheck executable" && exit 1)
+
 build-linux: GOOS=linux
 build-linux: build-default
 
-build-default: get
+build-default: deps
 	@echo "Building atmos $(if $(GOOS),GOOS=$(GOOS)) $(if $(GOARCH),GOARCH=$(GOARCH))"
 	env $(if $(GOOS),GOOS=$(GOOS)) $(if $(GOARCH),GOARCH=$(GOARCH)) go build -o build/atmos -v -ldflags "-X 'github.com/cloudposse/atmos/pkg/version.Version=$(VERSION)'"
 
 build-windows: GOOS=windows
-build-windows: get
+build-windows: deps
 	@echo "Building atmos for $(GOOS) ($(GOARCH))"
 	go build -o build/atmos.exe -v -ldflags "-X github.com/cloudposse/atmos/pkg/version.Version=$(VERSION)"
 
@@ -75,12 +83,12 @@ version-windows: build-windows
 deps:
 	go mod download
 
-testacc: get
+testacc: deps
 	@echo "Running acceptance tests"
 	go test $(TEST) $(TESTARGS) -timeout 40m
 
 # Run tests with subprocess coverage collection (Go 1.20+)
-testacc-cover: get
+testacc-cover: deps
 	@scripts/collect-coverage.sh "$(TEST)" "$(TESTARGS)"
 
 # Run acceptance tests with coverage report
@@ -89,13 +97,20 @@ testacc-coverage: testacc-cover
 	@echo "Coverage report generated: coverage.html"
 
 # Run quick tests only (skip long-running tests >2 seconds)
-test-short: get
+test-short: deps
 	@echo "Running quick tests (skipping long-running tests)"
 	go test -short $(TEST) $(TESTARGS) -timeout 5m
 
 # Run quick tests with coverage
-test-short-cover: get
+test-short-cover: deps
 	@echo "Running quick tests with coverage (skipping long-running tests)"
 	@GOCOVERDIR=coverage go test -short -cover $(TEST) $(TESTARGS) -timeout 5m
 
-.PHONY: lint lintroller get build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover
+# Regenerate all mocks using go:generate directives
+generate-mocks:
+	@echo "Regenerating mocks using go:generate directives..."
+	@go generate ./pkg/auth/types/...
+	@go generate ./pkg/http/...
+	@echo "Mocks regenerated successfully"
+
+.PHONY: lint lintroller gomodcheck build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover generate-mocks

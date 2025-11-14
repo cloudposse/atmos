@@ -4,7 +4,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -550,6 +552,136 @@ func Test_getCliVars(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestProcessCommandLineArgs_IdentityFromEnvironmentVariable(t *testing.T) {
+	tests := []struct {
+		name           string
+		envValue       string
+		flagValue      string
+		args           []string
+		expectedResult string
+		description    string
+	}{
+		{
+			name:           "uses environment variable when flag not provided",
+			envValue:       "test-identity-from-env",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: "test-identity-from-env",
+			description:    "ATMOS_IDENTITY env var should be used when --identity flag is not provided",
+		},
+		{
+			name:           "flag takes precedence over environment variable",
+			envValue:       "test-identity-from-env",
+			flagValue:      "test-identity-from-flag",
+			args:           []string{"plan", "component", "--stack", "stack", "--identity", "test-identity-from-flag"},
+			expectedResult: "test-identity-from-flag",
+			description:    "--identity flag should override ATMOS_IDENTITY env var",
+		},
+		{
+			name:           "empty when neither flag nor env var provided",
+			envValue:       "",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: "",
+			description:    "Identity should be empty when neither flag nor env var is set",
+		},
+		{
+			name:           "uses environment variable with identity flag equals syntax",
+			envValue:       "test-identity-from-env",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: "test-identity-from-env",
+			description:    "ATMOS_IDENTITY should work regardless of flag syntax",
+		},
+		{
+			name:           "flag with equals syntax takes precedence",
+			envValue:       "test-identity-from-env",
+			flagValue:      "test-identity-from-flag-equals",
+			args:           []string{"plan", "component", "--stack", "stack", "--identity=test-identity-from-flag-equals"},
+			expectedResult: "test-identity-from-flag-equals",
+			description:    "--identity=value syntax should override ATMOS_IDENTITY env var",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up environment variable.
+			if tt.envValue != "" {
+				t.Setenv("ATMOS_IDENTITY", tt.envValue)
+			}
+
+			// Create a minimal cobra command for testing with required flags.
+			cmd := &cobra.Command{
+				Use: "terraform",
+			}
+			cmd.Flags().String("stack", "", "stack name")
+			cmd.Flags().String("identity", "", "identity name")
+			cmd.Flags().String("base-path", "", "base path")
+			cmd.Flags().StringSlice("config", []string{}, "config files")
+			cmd.Flags().StringSlice("config-path", []string{}, "config paths")
+
+			// Process the command-line arguments.
+			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})
+
+			// Verify results.
+			require.NoError(t, err, "ProcessCommandLineArgs should not return error")
+			assert.Equal(t, tt.expectedResult, result.Identity, tt.description)
+		})
+	}
+}
+
+// TestProcessCommandLineArgs_IdentityFlagParsing verifies that the --identity flag
+// is correctly parsed in both space-separated and equals syntax formats.
+func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		expectedResult string
+	}{
+		{
+			name:           "identity flag with space separator",
+			args:           []string{"plan", "component", "--stack", "stack", "--identity", "my-identity"},
+			expectedResult: "my-identity",
+		},
+		{
+			name:           "identity flag with equals syntax",
+			args:           []string{"plan", "component", "--stack", "stack", "--identity=my-identity"},
+			expectedResult: "my-identity",
+		},
+		{
+			name:           "identity flag with hyphenated name",
+			args:           []string{"plan", "component", "--stack", "stack", "--identity", "core-identity/managers"},
+			expectedResult: "core-identity/managers",
+		},
+		{
+			name:           "identity flag at different position",
+			args:           []string{"--identity", "early-identity", "plan", "component", "--stack", "stack"},
+			expectedResult: "early-identity",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a minimal cobra command for testing with required flags.
+			cmd := &cobra.Command{
+				Use: "terraform",
+			}
+			cmd.Flags().String("stack", "", "stack name")
+			cmd.Flags().String("identity", "", "identity name")
+			cmd.Flags().String("base-path", "", "base path")
+			cmd.Flags().StringSlice("config", []string{}, "config files")
+			cmd.Flags().StringSlice("config-path", []string{}, "config paths")
+
+			// Process the command-line arguments.
+			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})
+
+			// Verify results.
+			require.NoError(t, err, "ProcessCommandLineArgs should not return error")
+			assert.Equal(t, tt.expectedResult, result.Identity, "Identity should match expected value")
 		})
 	}
 }

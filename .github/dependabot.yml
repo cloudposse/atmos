@@ -12,6 +12,8 @@ updates:
   schedule:
     interval: weekly
     day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
   ignore:
     - dependency-name: "*"
       update-types: ["version-update:semver-major"]
@@ -30,6 +32,8 @@ updates:
   schedule:
     interval: weekly
     day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
   ignore:
     - dependency-name: "*"
       update-types: ["version-update:semver-major"]
@@ -48,6 +52,8 @@ updates:
   schedule:
     interval: weekly
     day: sunday
+  cooldown:
+    default-days: 14  # 2 weeks minimum age for all dependencies
   ignore:
     - dependency-name: "*"
       update-types: ["version-update:semver-major"]

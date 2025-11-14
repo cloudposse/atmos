@@ -1,8 +1,10 @@
 ---
 slug: version-list-show-commands
 title: "Browse and Explore Atmos Releases from Your Terminal"
-authors: [atmos]
+sidebar_label: "Browse Atmos Releases"
+authors: [osterman]
 tags: [feature, atmos-core]
+date: 2025-10-17
 ---
 
 We're introducing two new commands for exploring Atmos releases: `atmos version list` and `atmos version show`. Browse release history with date filtering, inspect artifacts, and keep your infrastructure tooling up-to-date—all from your terminal with beautiful formatted output.

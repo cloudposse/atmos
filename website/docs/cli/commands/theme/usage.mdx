@@ -1,0 +1,93 @@
+---
+title: atmos theme
+sidebar_label: theme
+sidebar_class_name: command
+description: "Manage terminal themes for Atmos CLI"
+---
+import Screengrab from '@site/src/components/Screengrab'
+import DocCardList from '@theme/DocCardList';
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Customize the look and feel of Atmos to make it your own. Configure and preview terminal themes that control the appearance of Atmos, including tables and markdown rendering.
+</Intro>
+
+<Screengrab title="atmos theme --help" slug="atmos-theme--help" />
+
+## Overview
+
+The `atmos theme` command allows you to customize the visual appearance of Atmos CLI output. Themes control:
+
+- **Color schemes** for tables, status messages, and command output
+- **Syntax highlighting** for code blocks and configuration examples
+- **Markdown rendering** styles for help text and documentation
+- **UI element styling** including borders, headers, and emphasis
+
+Atmos includes a curated collection of themes optimized for both dark and light terminal backgrounds, with several recommended themes tested for optimal readability and accessibility.
+
+## Subcommands
+
+<DocCardList />
+
+## Quick Start
+
+```shell
+# List all available themes
+atmos theme list
+
+# Show only recommended themes
+atmos theme list --recommended
+
+# Preview a specific theme
+atmos theme show dracula
+
+# Set a theme via environment variable
+ATMOS_THEME=dracula atmos terraform plan
+
+# Or configure permanently in atmos.yaml
+settings:
+  terminal:
+    theme: dracula
+```
+
+## Theme Configuration
+
+You can set a theme in two ways:
+
+### Environment Variable
+
+Set the `ATMOS_THEME` environment variable before running Atmos commands:
+
+```shell
+export ATMOS_THEME=dracula
+atmos terraform plan
+```
+
+This is useful for testing themes or switching themes temporarily.
+
+### Configuration File
+
+Add the theme to your `atmos.yaml` configuration:
+
+```yaml
+settings:
+  terminal:
+    theme: dracula
+```
+
+This makes the theme setting persistent across all Atmos commands.
+
+## Choosing a Theme
+
+**[Browse all available themes →](/cli/commands/theme/browse)**
+
+Browse our searchable theme gallery to explore all available themes with visual previews and color palettes.
+
+- **Dark terminals**: Use themes like `dracula`, `github-dark`, `monokai`, or `solarized-dark`
+- **Light terminals**: Use themes like `github-light`, `solarized-light`, or `vs`
+- **Recommended themes** (marked with ★): Have been tested for optimal readability with Atmos
+- **Preview before committing**: Use `atmos theme show <name>` to see how a theme looks
+
+## Related Commands
+
+- [`atmos list themes`](/cli/commands/list/themes) - Alternative command to list themes (shows recommended by default)
