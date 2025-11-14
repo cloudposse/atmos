@@ -13,6 +13,18 @@ if ! command -v atmos &> /dev/null; then
     MISSING_DEPS+=("atmos")
 fi
 
+if ! command -v bat &> /dev/null; then
+    MISSING_DEPS+=("bat")
+fi
+
+if ! command -v tree &> /dev/null; then
+    MISSING_DEPS+=("tree")
+fi
+
+if ! command -v terraform &> /dev/null; then
+    MISSING_DEPS+=("terraform")
+fi
+
 if [ ${#MISSING_DEPS[@]} -ne 0 ]; then
     echo "ERROR: Missing required dependencies: ${MISSING_DEPS[*]}" >&2
     echo "" >&2
@@ -30,6 +42,28 @@ if [ ${#MISSING_DEPS[@]} -ne 0 ]; then
             atmos)
                 echo "  - atmos: Build with 'make build' from the repository root" >&2
                 echo "    Or install from: https://atmos.tools/install" >&2
+                ;;
+            bat)
+                if [ "$(uname)" = "Darwin" ]; then
+                    echo "  - bat: Run 'brew bundle' in demo/screengrabs directory" >&2
+                else
+                    echo "  - bat: Install with 'apt-get install bat' (Debian/Ubuntu)" >&2
+                    echo "    See: https://github.com/sharkdp/bat" >&2
+                fi
+                ;;
+            tree)
+                if [ "$(uname)" = "Darwin" ]; then
+                    echo "  - tree: Run 'brew bundle' in demo/screengrabs directory" >&2
+                else
+                    echo "  - tree: Install with 'apt-get install tree' (Debian/Ubuntu)" >&2
+                fi
+                ;;
+            terraform)
+                if [ "$(uname)" = "Darwin" ]; then
+                    echo "  - terraform: Run 'brew bundle' in demo/screengrabs directory" >&2
+                else
+                    echo "  - terraform: Install from https://www.terraform.io/downloads" >&2
+                fi
                 ;;
         esac
     done
