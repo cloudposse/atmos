@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -735,4 +736,145 @@ func TestDeviceCodeProvider_updateAzureCLICache_Integration(t *testing.T) {
 
 	// The function should succeed without errors in the sandboxed environment.
 	assert.NoError(t, err)
+}
+
+func TestLoadAndInitializeCLICache(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name       string
+		setup      func(path string)
+		checkCache func(*testing.T, map[string]interface{}, map[string]interface{}, map[string]interface{})
+	}{
+		{
+			name: "load existing cache with all sections",
+			setup: func(path string) {
+				cache := map[string]interface{}{
+					azureCloud.FieldAccessToken: map[string]interface{}{
+						"key1": "token1",
+					},
+					"Account": map[string]interface{}{
+						"key2": "account2",
+					},
+				}
+				data, _ := json.Marshal(cache)
+				os.WriteFile(path, data, 0o600)
+			},
+			checkCache: func(t *testing.T, cache, accessTokenSection, accountSection map[string]interface{}) {
+				require.NotNil(t, cache)
+				require.NotNil(t, accessTokenSection)
+				require.NotNil(t, accountSection)
+				assert.Contains(t, accessTokenSection, "key1")
+				assert.Contains(t, accountSection, "key2")
+			},
+		},
+		{
+			name: "create new cache when file does not exist",
+			setup: func(path string) {
+				// Don't create file.
+			},
+			checkCache: func(t *testing.T, cache, accessTokenSection, accountSection map[string]interface{}) {
+				require.NotNil(t, cache)
+				require.NotNil(t, accessTokenSection)
+				require.NotNil(t, accountSection)
+				assert.Empty(t, accessTokenSection)
+				assert.Empty(t, accountSection)
+			},
+		},
+		{
+			name: "initialize missing AccessToken section",
+			setup: func(path string) {
+				cache := map[string]interface{}{
+					"Account": map[string]interface{}{
+						"key2": "account2",
+					},
+				}
+				data, _ := json.Marshal(cache)
+				os.WriteFile(path, data, 0o600)
+			},
+			checkCache: func(t *testing.T, cache, accessTokenSection, accountSection map[string]interface{}) {
+				require.NotNil(t, cache)
+				require.NotNil(t, accessTokenSection)
+				require.NotNil(t, accountSection)
+				assert.Empty(t, accessTokenSection)
+				assert.Contains(t, accountSection, "key2")
+				// Verify AccessToken section was added to cache.
+				assert.Contains(t, cache, azureCloud.FieldAccessToken)
+			},
+		},
+		{
+			name: "initialize missing Account section",
+			setup: func(path string) {
+				cache := map[string]interface{}{
+					azureCloud.FieldAccessToken: map[string]interface{}{
+						"key1": "token1",
+					},
+				}
+				data, _ := json.Marshal(cache)
+				os.WriteFile(path, data, 0o600)
+			},
+			checkCache: func(t *testing.T, cache, accessTokenSection, accountSection map[string]interface{}) {
+				require.NotNil(t, cache)
+				require.NotNil(t, accessTokenSection)
+				require.NotNil(t, accountSection)
+				assert.Contains(t, accessTokenSection, "key1")
+				assert.Empty(t, accountSection)
+				// Verify Account section was added to cache.
+				assert.Contains(t, cache, "Account")
+			},
+		},
+		{
+			name: "handle invalid JSON gracefully",
+			setup: func(path string) {
+				os.WriteFile(path, []byte("not valid json"), 0o600)
+			},
+			checkCache: func(t *testing.T, cache, accessTokenSection, accountSection map[string]interface{}) {
+				// Should create new empty cache on JSON parse error.
+				require.NotNil(t, cache)
+				require.NotNil(t, accessTokenSection)
+				require.NotNil(t, accountSection)
+				assert.Empty(t, accessTokenSection)
+				assert.Empty(t, accountSection)
+			},
+		},
+		{
+			name: "handle wrong type for sections",
+			setup: func(path string) {
+				cache := map[string]interface{}{
+					azureCloud.FieldAccessToken: "not a map",            // Wrong type.
+					"Account":                   []string{"also wrong"}, // Wrong type.
+				}
+				data, _ := json.Marshal(cache)
+				os.WriteFile(path, data, 0o600)
+			},
+			checkCache: func(t *testing.T, cache, accessTokenSection, accountSection map[string]interface{}) {
+				require.NotNil(t, cache)
+				require.NotNil(t, accessTokenSection)
+				require.NotNil(t, accountSection)
+				// Should create new sections when existing ones have wrong type.
+				assert.Empty(t, accessTokenSection)
+				assert.Empty(t, accountSection)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := &deviceCodeProvider{
+				name:     "test-provider",
+				tenantID: "tenant-123",
+			}
+
+			cachePath := filepath.Join(tmpDir, tt.name, "msal_token_cache.json")
+			os.MkdirAll(filepath.Dir(cachePath), 0o755)
+
+			tt.setup(cachePath)
+
+			cache, accessTokenSection, accountSection := provider.loadAndInitializeCLICache(cachePath)
+
+			if tt.checkCache != nil {
+				tt.checkCache(t, cache, accessTokenSection, accountSection)
+			}
+		})
+	}
 }

@@ -779,3 +779,94 @@ func TestUpdateAzureProfile(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadMSALCache(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name        string
+		setup       func(path string)
+		expectError bool
+		checkCache  func(*testing.T, map[string]interface{})
+	}{
+		{
+			name: "load existing valid cache",
+			setup: func(path string) {
+				cache := map[string]interface{}{
+					"AccessToken": map[string]interface{}{
+						"key1": "token1",
+					},
+					"Account": map[string]interface{}{
+						"key2": "account2",
+					},
+				}
+				data, _ := json.Marshal(cache)
+				os.WriteFile(path, data, 0o600)
+			},
+			expectError: false,
+			checkCache: func(t *testing.T, cache map[string]interface{}) {
+				require.NotNil(t, cache)
+				assert.Contains(t, cache, "AccessToken")
+				assert.Contains(t, cache, "Account")
+			},
+		},
+		{
+			name: "create new cache when file does not exist",
+			setup: func(path string) {
+				// Don't create file.
+			},
+			expectError: false,
+			checkCache: func(t *testing.T, cache map[string]interface{}) {
+				require.NotNil(t, cache)
+				assert.Empty(t, cache)
+			},
+		},
+		{
+			name: "return error on read failure",
+			setup: func(path string) {
+				// Create directory instead of file to trigger read error.
+				os.MkdirAll(path, 0o755)
+			},
+			expectError: true,
+		},
+		{
+			name: "return error on invalid JSON",
+			setup: func(path string) {
+				os.WriteFile(path, []byte("not valid json"), 0o600)
+			},
+			expectError: true,
+		},
+		{
+			name: "handle empty file",
+			setup: func(path string) {
+				os.WriteFile(path, []byte("{}"), 0o600)
+			},
+			expectError: false,
+			checkCache: func(t *testing.T, cache map[string]interface{}) {
+				require.NotNil(t, cache)
+				assert.Empty(t, cache)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cachePath := filepath.Join(tmpDir, tt.name, "msal_token_cache.json")
+			os.MkdirAll(filepath.Dir(cachePath), 0o755)
+
+			tt.setup(cachePath)
+
+			cache, err := loadMSALCache(cachePath)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			if tt.checkCache != nil {
+				tt.checkCache(t, cache)
+			}
+		})
+	}
+}

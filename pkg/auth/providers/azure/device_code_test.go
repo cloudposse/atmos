@@ -659,3 +659,100 @@ func TestDeviceCodeProvider_SpecFieldTypes(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractDeviceCodeConfig(t *testing.T) {
+	tests := []struct {
+		name             string
+		spec             map[string]interface{}
+		expectedTenantID string
+		expectedSubID    string
+		expectedLocation string
+		expectedClientID string
+	}{
+		{
+			name: "all fields present",
+			spec: map[string]interface{}{
+				"tenant_id":       "tenant-123",
+				"subscription_id": "sub-456",
+				"location":        "eastus",
+				"client_id":       "custom-client-id",
+			},
+			expectedTenantID: "tenant-123",
+			expectedSubID:    "sub-456",
+			expectedLocation: "eastus",
+			expectedClientID: "custom-client-id",
+		},
+		{
+			name: "only tenant_id",
+			spec: map[string]interface{}{
+				"tenant_id": "tenant-123",
+			},
+			expectedTenantID: "tenant-123",
+			expectedSubID:    "",
+			expectedLocation: "",
+			expectedClientID: defaultAzureClientID,
+		},
+		{
+			name:             "nil spec uses defaults",
+			spec:             nil,
+			expectedTenantID: "",
+			expectedSubID:    "",
+			expectedLocation: "",
+			expectedClientID: defaultAzureClientID,
+		},
+		{
+			name:             "empty spec uses defaults",
+			spec:             map[string]interface{}{},
+			expectedTenantID: "",
+			expectedSubID:    "",
+			expectedLocation: "",
+			expectedClientID: defaultAzureClientID,
+		},
+		{
+			name: "wrong types are ignored",
+			spec: map[string]interface{}{
+				"tenant_id":       123,     // Wrong type.
+				"subscription_id": true,    // Wrong type.
+				"location":        45.67,   // Wrong type.
+				"client_id":       []int{}, // Wrong type.
+			},
+			expectedTenantID: "",
+			expectedSubID:    "",
+			expectedLocation: "",
+			expectedClientID: defaultAzureClientID,
+		},
+		{
+			name: "empty client_id uses default",
+			spec: map[string]interface{}{
+				"tenant_id": "tenant-123",
+				"client_id": "", // Empty string should use default.
+			},
+			expectedTenantID: "tenant-123",
+			expectedSubID:    "",
+			expectedLocation: "",
+			expectedClientID: defaultAzureClientID,
+		},
+		{
+			name: "partial config",
+			spec: map[string]interface{}{
+				"tenant_id": "tenant-123",
+				"location":  "westus",
+			},
+			expectedTenantID: "tenant-123",
+			expectedSubID:    "",
+			expectedLocation: "westus",
+			expectedClientID: defaultAzureClientID,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tenantID, subscriptionID, location, clientID := extractDeviceCodeConfig(tt.spec)
+
+			assert.Equal(t, tt.expectedTenantID, tenantID, "tenant_id mismatch")
+			assert.Equal(t, tt.expectedSubID, subscriptionID, "subscription_id mismatch")
+			assert.Equal(t, tt.expectedLocation, location, "location mismatch")
+			assert.Equal(t, tt.expectedClientID, clientID, "client_id mismatch")
+		})
+	}
+}
