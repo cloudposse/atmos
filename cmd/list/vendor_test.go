@@ -6,16 +6,56 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-// TestListVendorCmd_WithoutStacks verifies that list vendor does not require stack configuration.
-// This test documents that the command uses InitCliConfig with processStacks=false.
-func TestListVendorCmd_WithoutStacks(t *testing.T) {
-	// This test documents that list vendor command does not process stacks
-	// by verifying InitCliConfig is called with processStacks=false in list_vendor.go:44
-	// and that checkAtmosConfig is called with WithStackValidation(false) in list_vendor.go:20
-	// No runtime test needed - this is enforced by code structure.
-	t.Log("list vendor command uses InitCliConfig with processStacks=false")
+// TestVendorOptions tests the VendorOptions structure.
+func TestVendorOptions(t *testing.T) {
+	testCases := []struct {
+		name              string
+		opts              *VendorOptions
+		expectedFormat    string
+		expectedStack     string
+		expectedDelimiter string
+	}{
+		{
+			name: "all options populated",
+			opts: &VendorOptions{
+				Format:    "json",
+				Stack:     "prod-*",
+				Delimiter: ",",
+			},
+			expectedFormat:    "json",
+			expectedStack:     "prod-*",
+			expectedDelimiter: ",",
+		},
+		{
+			name:              "empty options",
+			opts:              &VendorOptions{},
+			expectedFormat:    "",
+			expectedStack:     "",
+			expectedDelimiter: "",
+		},
+		{
+			name: "yaml format with stack filter",
+			opts: &VendorOptions{
+				Format: "yaml",
+				Stack:  "*-staging-*",
+			},
+			expectedFormat:    "yaml",
+			expectedStack:     "*-staging-*",
+			expectedDelimiter: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expectedFormat, tc.opts.Format)
+			assert.Equal(t, tc.expectedStack, tc.opts.Stack)
+			assert.Equal(t, tc.expectedDelimiter, tc.opts.Delimiter)
+		})
+	}
 }
 
 // TestObfuscateHomeDirInOutput verifies that home directory paths are properly obfuscated.
