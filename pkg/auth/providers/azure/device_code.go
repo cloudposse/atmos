@@ -162,7 +162,7 @@ func (p *deviceCodeProvider) acquireTokenByDeviceCode(ctx context.Context, clien
 	displayDeviceCodePrompt(deviceCode.Result.UserCode, deviceCode.Result.VerificationURL)
 
 	// If not a TTY (e.g., piped output or CI environment), use simple polling without spinner.
-	if !isTTY() {
+	if !isInteractive() {
 		result, err := deviceCode.AuthenticationResult(authCtx)
 		if err != nil {
 			return "", time.Time{}, fmt.Errorf("%w: device code authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
