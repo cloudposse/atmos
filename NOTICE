@@ -51,7 +51,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - cloud.google.com/go/storage
     License: Apache-2.0
-    URL: https://github.com/googleapis/google-cloud-go/blob/storage/v1.57.1/storage/LICENSE
+    URL: https://github.com/googleapis/google-cloud-go/blob/storage/v1.57.2/storage/LICENSE
 
   - cuelang.org/go
     License: Apache-2.0
