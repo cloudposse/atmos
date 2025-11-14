@@ -184,3 +184,144 @@ func TestListSettingsWithOptions_CustomQuery(t *testing.T) {
 	filterOpts := setupSettingsOptions(opts, "")
 	assert.Equal(t, ".terraform.backend", filterOpts.Query, "Should preserve custom query")
 }
+
+// TestLogNoSettingsFoundMessage tests the logNoSettingsFoundMessage function.
+func TestLogNoSettingsFoundMessage(t *testing.T) {
+	testCases := []struct {
+		name            string
+		componentFilter string
+	}{
+		{
+			name:            "with component filter",
+			componentFilter: "vpc",
+		},
+		{
+			name:            "without component filter",
+			componentFilter: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// This function only logs, so we just verify it doesn't panic
+			assert.NotPanics(t, func() {
+				logNoSettingsFoundMessage(tc.componentFilter)
+			})
+		})
+	}
+}
+
+// TestSetupSettingsOptions_AllCombinations tests various option combinations.
+func TestSetupSettingsOptions_AllCombinations(t *testing.T) {
+	testCases := []struct {
+		name               string
+		opts               *SettingsOptions
+		componentFilter    string
+		expectedComponent  string
+		expectedCompFilter string
+		expectedQuery      string
+		expectedAbstract   bool
+		expectedMaxColumns int
+		expectedFormat     string
+		expectedDelimiter  string
+		expectedStackPat   string
+	}{
+		{
+			name: "all options populated",
+			opts: &SettingsOptions{
+				Query:      ".terraform",
+				MaxColumns: 10,
+				Format:     "json",
+				Delimiter:  ",",
+				Stack:      "prod-*",
+			},
+			componentFilter:    "vpc",
+			expectedComponent:  "settings",
+			expectedCompFilter: "vpc",
+			expectedQuery:      ".terraform",
+			expectedAbstract:   false,
+			expectedMaxColumns: 10,
+			expectedFormat:     "json",
+			expectedDelimiter:  ",",
+			expectedStackPat:   "prod-*",
+		},
+		{
+			name:               "minimal options",
+			opts:               &SettingsOptions{},
+			componentFilter:    "",
+			expectedComponent:  "settings",
+			expectedCompFilter: "",
+			expectedQuery:      "",
+			expectedAbstract:   false,
+			expectedMaxColumns: 0,
+			expectedFormat:     "",
+			expectedDelimiter:  "",
+			expectedStackPat:   "",
+		},
+		{
+			name: "CSV format with custom delimiter",
+			opts: &SettingsOptions{
+				Format:    "csv",
+				Delimiter: ";",
+			},
+			componentFilter:    "app",
+			expectedComponent:  "settings",
+			expectedCompFilter: "app",
+			expectedQuery:      "",
+			expectedAbstract:   false,
+			expectedMaxColumns: 0,
+			expectedFormat:     "csv",
+			expectedDelimiter:  ";",
+			expectedStackPat:   "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			filterOpts := setupSettingsOptions(tc.opts, tc.componentFilter)
+
+			assert.Equal(t, tc.expectedComponent, filterOpts.Component)
+			assert.Equal(t, tc.expectedCompFilter, filterOpts.ComponentFilter)
+			assert.Equal(t, tc.expectedQuery, filterOpts.Query)
+			assert.Equal(t, tc.expectedAbstract, filterOpts.IncludeAbstract)
+			assert.Equal(t, tc.expectedMaxColumns, filterOpts.MaxColumns)
+			assert.Equal(t, tc.expectedFormat, filterOpts.FormatStr)
+			assert.Equal(t, tc.expectedDelimiter, filterOpts.Delimiter)
+			assert.Equal(t, tc.expectedStackPat, filterOpts.StackPattern)
+		})
+	}
+}
+
+// TestSettingsOptions_AllFields tests the SettingsOptions structure with all fields.
+func TestSettingsOptions_AllFields(t *testing.T) {
+	opts := &SettingsOptions{
+		Format:           "yaml",
+		MaxColumns:       15,
+		Delimiter:        "|",
+		Stack:            "*-staging-*",
+		Query:            ".metadata",
+		ProcessTemplates: false,
+		ProcessFunctions: true,
+	}
+
+	assert.Equal(t, "yaml", opts.Format)
+	assert.Equal(t, 15, opts.MaxColumns)
+	assert.Equal(t, "|", opts.Delimiter)
+	assert.Equal(t, "*-staging-*", opts.Stack)
+	assert.Equal(t, ".metadata", opts.Query)
+	assert.False(t, opts.ProcessTemplates)
+	assert.True(t, opts.ProcessFunctions)
+}
+
+// TestSettingsCmd_ArgsValidation tests argument validation.
+func TestSettingsCmd_ArgsValidation(t *testing.T) {
+	// Settings command accepts MaximumNArgs(1)
+	err := settingsCmd.Args(settingsCmd, []string{})
+	assert.NoError(t, err, "Should accept no arguments")
+
+	err = settingsCmd.Args(settingsCmd, []string{"component"})
+	assert.NoError(t, err, "Should accept one argument")
+
+	err = settingsCmd.Args(settingsCmd, []string{"component", "extra"})
+	assert.Error(t, err, "Should reject more than one argument")
+}

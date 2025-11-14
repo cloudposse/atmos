@@ -103,3 +103,68 @@ func TestListInstancesOptions_Upload(t *testing.T) {
 
 	assert.True(t, opts.Upload)
 }
+
+// TestInstancesOptions_AllCombinations tests various option combinations.
+func TestInstancesOptions_AllCombinations(t *testing.T) {
+	testCases := []struct {
+		name              string
+		opts              *InstancesOptions
+		expectedFormat    string
+		expectedMaxCols   int
+		expectedDelimiter string
+		expectedStack     string
+		expectedQuery     string
+		expectedUpload    bool
+	}{
+		{
+			name: "all options enabled",
+			opts: &InstancesOptions{
+				Format:     "yaml",
+				MaxColumns: 15,
+				Delimiter:  ";",
+				Stack:      "*-staging-*",
+				Query:      ".stack",
+				Upload:     true,
+			},
+			expectedFormat:    "yaml",
+			expectedMaxCols:   15,
+			expectedDelimiter: ";",
+			expectedStack:     "*-staging-*",
+			expectedQuery:     ".stack",
+			expectedUpload:    true,
+		},
+		{
+			name:              "minimal options",
+			opts:              &InstancesOptions{},
+			expectedFormat:    "",
+			expectedMaxCols:   0,
+			expectedDelimiter: "",
+			expectedStack:     "",
+			expectedQuery:     "",
+			expectedUpload:    false,
+		},
+		{
+			name: "upload only",
+			opts: &InstancesOptions{
+				Upload: true,
+			},
+			expectedFormat:    "",
+			expectedMaxCols:   0,
+			expectedDelimiter: "",
+			expectedStack:     "",
+			expectedQuery:     "",
+			expectedUpload:    true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expectedFormat, tc.opts.Format)
+			assert.Equal(t, tc.expectedMaxCols, tc.opts.MaxColumns)
+			assert.Equal(t, tc.expectedDelimiter, tc.opts.Delimiter)
+			assert.Equal(t, tc.expectedStack, tc.opts.Stack)
+			assert.Equal(t, tc.expectedQuery, tc.opts.Query)
+			assert.Equal(t, tc.expectedUpload, tc.opts.Upload)
+		})
+	}
+}

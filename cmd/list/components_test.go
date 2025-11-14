@@ -72,3 +72,49 @@ func TestListComponentsWithOptions_StackPattern(t *testing.T) {
 	// Test that the options are properly structured
 	assert.Equal(t, "prod-*", opts.Stack)
 }
+
+// TestComponentsOptions_AllPatterns tests various stack pattern combinations.
+func TestComponentsOptions_AllPatterns(t *testing.T) {
+	testCases := []struct {
+		name          string
+		opts          *ComponentsOptions
+		expectedStack string
+	}{
+		{
+			name:          "wildcard pattern at end",
+			opts:          &ComponentsOptions{Stack: "prod-*"},
+			expectedStack: "prod-*",
+		},
+		{
+			name:          "wildcard pattern at start",
+			opts:          &ComponentsOptions{Stack: "*-prod"},
+			expectedStack: "*-prod",
+		},
+		{
+			name:          "wildcard pattern in middle",
+			opts:          &ComponentsOptions{Stack: "prod-*-vpc"},
+			expectedStack: "prod-*-vpc",
+		},
+		{
+			name:          "multiple wildcard patterns",
+			opts:          &ComponentsOptions{Stack: "*-dev-*"},
+			expectedStack: "*-dev-*",
+		},
+		{
+			name:          "exact stack name",
+			opts:          &ComponentsOptions{Stack: "prod-us-east-1"},
+			expectedStack: "prod-us-east-1",
+		},
+		{
+			name:          "empty stack",
+			opts:          &ComponentsOptions{},
+			expectedStack: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expectedStack, tc.opts.Stack)
+		})
+	}
+}

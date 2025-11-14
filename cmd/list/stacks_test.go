@@ -72,3 +72,34 @@ func TestListStacksWithOptions_WithComponent(t *testing.T) {
 	// Test that the options are properly structured
 	assert.Equal(t, "vpc", opts.Component)
 }
+
+// TestStacksOptions tests the StacksOptions structure.
+func TestStacksOptions(t *testing.T) {
+	testCases := []struct {
+		name              string
+		opts              *StacksOptions
+		expectedComponent string
+	}{
+		{
+			name:              "with component",
+			opts:              &StacksOptions{Component: "database"},
+			expectedComponent: "database",
+		},
+		{
+			name:              "without component",
+			opts:              &StacksOptions{},
+			expectedComponent: "",
+		},
+		{
+			name:              "with complex component name",
+			opts:              &StacksOptions{Component: "my-vpc-component"},
+			expectedComponent: "my-vpc-component",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expectedComponent, tc.opts.Component)
+		})
+	}
+}

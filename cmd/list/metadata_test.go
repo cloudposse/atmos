@@ -168,3 +168,130 @@ func TestListMetadataWithOptions_CustomQuery(t *testing.T) {
 	filterOpts := setupMetadataOptions(opts, "")
 	assert.Equal(t, ".metadata.custom", filterOpts.Query, "Should preserve custom query")
 }
+
+// TestLogNoMetadataFoundMessage tests the logNoMetadataFoundMessage function.
+func TestLogNoMetadataFoundMessage(t *testing.T) {
+	testCases := []struct {
+		name            string
+		componentFilter string
+	}{
+		{
+			name:            "with component filter",
+			componentFilter: "vpc",
+		},
+		{
+			name:            "without component filter",
+			componentFilter: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// This function only logs, so we just verify it doesn't panic
+			assert.NotPanics(t, func() {
+				logNoMetadataFoundMessage(tc.componentFilter)
+			})
+		})
+	}
+}
+
+// TestSetupMetadataOptions_AllCombinations tests various option combinations.
+func TestSetupMetadataOptions_AllCombinations(t *testing.T) {
+	testCases := []struct {
+		name               string
+		opts               *MetadataOptions
+		componentFilter    string
+		expectedComponent  string
+		expectedCompFilter string
+		expectedQuery      string
+		expectedAbstract   bool
+		expectedMaxColumns int
+		expectedFormat     string
+		expectedDelimiter  string
+		expectedStackPat   string
+	}{
+		{
+			name: "all options with custom query",
+			opts: &MetadataOptions{
+				Query:      ".metadata.terraform",
+				MaxColumns: 8,
+				Format:     "csv",
+				Delimiter:  ",",
+				Stack:      "*-dev-*",
+			},
+			componentFilter:    "database",
+			expectedComponent:  l.KeyMetadata,
+			expectedCompFilter: "database",
+			expectedQuery:      ".metadata.terraform",
+			expectedAbstract:   false,
+			expectedMaxColumns: 8,
+			expectedFormat:     "csv",
+			expectedDelimiter:  ",",
+			expectedStackPat:   "*-dev-*",
+		},
+		{
+			name:               "empty query defaults to .metadata",
+			opts:               &MetadataOptions{},
+			componentFilter:    "",
+			expectedComponent:  l.KeyMetadata,
+			expectedCompFilter: "",
+			expectedQuery:      ".metadata",
+			expectedAbstract:   false,
+			expectedMaxColumns: 0,
+			expectedFormat:     "",
+			expectedDelimiter:  "",
+			expectedStackPat:   "",
+		},
+		{
+			name: "with component and default query",
+			opts: &MetadataOptions{
+				Query: "",
+			},
+			componentFilter:    "app",
+			expectedComponent:  l.KeyMetadata,
+			expectedCompFilter: "app",
+			expectedQuery:      ".metadata",
+			expectedAbstract:   false,
+			expectedMaxColumns: 0,
+			expectedFormat:     "",
+			expectedDelimiter:  "",
+			expectedStackPat:   "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			filterOpts := setupMetadataOptions(tc.opts, tc.componentFilter)
+
+			assert.Equal(t, tc.expectedComponent, filterOpts.Component)
+			assert.Equal(t, tc.expectedCompFilter, filterOpts.ComponentFilter)
+			assert.Equal(t, tc.expectedQuery, filterOpts.Query)
+			assert.Equal(t, tc.expectedAbstract, filterOpts.IncludeAbstract)
+			assert.Equal(t, tc.expectedMaxColumns, filterOpts.MaxColumns)
+			assert.Equal(t, tc.expectedFormat, filterOpts.FormatStr)
+			assert.Equal(t, tc.expectedDelimiter, filterOpts.Delimiter)
+			assert.Equal(t, tc.expectedStackPat, filterOpts.StackPattern)
+		})
+	}
+}
+
+// TestMetadataOptions_AllFields tests the MetadataOptions structure with all fields populated.
+func TestMetadataOptions_AllFields(t *testing.T) {
+	opts := &MetadataOptions{
+		Format:           "table",
+		MaxColumns:       20,
+		Delimiter:        ";",
+		Stack:            "prod-us-*",
+		Query:            ".metadata.atmos_version",
+		ProcessTemplates: false,
+		ProcessFunctions: false,
+	}
+
+	assert.Equal(t, "table", opts.Format)
+	assert.Equal(t, 20, opts.MaxColumns)
+	assert.Equal(t, ";", opts.Delimiter)
+	assert.Equal(t, "prod-us-*", opts.Stack)
+	assert.Equal(t, ".metadata.atmos_version", opts.Query)
+	assert.False(t, opts.ProcessTemplates)
+	assert.False(t, opts.ProcessFunctions)
+}
