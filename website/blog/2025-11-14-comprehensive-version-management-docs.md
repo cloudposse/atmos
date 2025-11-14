@@ -1,7 +1,7 @@
 ---
 slug: comprehensive-version-management-documentation
 title: "New Comprehensive Version Management Documentation"
-authors: [atmos]
+authors: [osterman]
 tags: [atmos, documentation, version-management, versioning, deployment-strategies]
 ---
 
