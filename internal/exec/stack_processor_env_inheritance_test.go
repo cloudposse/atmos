@@ -186,19 +186,14 @@ func TestEnvInheritance_ComponentType(t *testing.T) {
 }
 
 // TestEnvInheritance_EnvYAMLFunction verifies that the !env YAML function
-// can access OS environment variables (not from the env section).
-// Note: !env reads from OS environment, while env: section defines variables
-// passed to Terraform/Helmfile/Packer during execution.
+// reads from the stack manifest's env section first, then falls back to OS environment.
+// This test validates the bug fix where !env now checks component env sections
+// before checking OS environment variables.
 func TestEnvInheritance_EnvYAMLFunction(t *testing.T) {
 	// Set up test fixture path.
 	fixtureDir := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "env-inheritance")
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", fixtureDir)
 	t.Setenv("ATMOS_BASE_PATH", fixtureDir)
-
-	// Set OS environment variables that !env will read.
-	// Note: These are separate from the env: section in stack manifests.
-	t.Setenv("FOO", "bar")
-	t.Setenv("TF_GLOBAL_VAR", "terraform-global")
 
 	// Load Atmos configuration.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)

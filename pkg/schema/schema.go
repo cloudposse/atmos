@@ -661,6 +661,12 @@ type ConfigAndStacksInfo struct {
 	Identity                  string
 }
 
+// GetComponentEnvSection returns the component's env section map.
+// This implements the utils.EnvVarContext interface.
+func (c *ConfigAndStacksInfo) GetComponentEnvSection() map[string]any {
+	return c.ComponentEnvSection
+}
+
 type BackoffStrategy string
 
 // Backoff strategies constants.
