@@ -129,29 +129,14 @@ func obfuscateHomeDirInOutput(output string) string {
 	for i < len(result) {
 		// Check if we have homeDir at current position.
 		if strings.HasPrefix(result[i:], homeDir) {
-			// Check if this is a boundary match (not followed by a path character).
-			// A boundary is: end of string, or followed by non-alphanumeric/non-dash/non-underscore.
 			nextPos := i + len(homeDir)
-			if nextPos >= len(result) {
-				// homeDir at end of string - replace it.
+			if shouldReplaceHomeDir(result, nextPos) {
 				builder.WriteString("~")
 				i = nextPos
 			} else {
-				nextChar := result[nextPos]
-				// Check if next character is a path separator (already handled above) or alphanumeric/dash/underscore.
-				// If it's alphanumeric/dash/underscore, this is likely a prefix of another name - don't replace.
-				if (nextChar >= 'a' && nextChar <= 'z') ||
-					(nextChar >= 'A' && nextChar <= 'Z') ||
-					(nextChar >= '0' && nextChar <= '9') ||
-					nextChar == '-' || nextChar == '_' {
-					// This is a prefix - keep original.
-					builder.WriteString(homeDir)
-					i = nextPos
-				} else {
-					// This is a boundary - replace with ~.
-					builder.WriteString("~")
-					i = nextPos
-				}
+				// This is a prefix - keep original.
+				builder.WriteString(homeDir)
+				i = nextPos
 			}
 		} else {
 			builder.WriteByte(result[i])
@@ -160,4 +145,32 @@ func obfuscateHomeDirInOutput(output string) string {
 	}
 
 	return builder.String()
+}
+
+// shouldReplaceHomeDir checks if homeDir at the current position should be replaced with ~.
+// Returns true if at end of string or followed by non-path characters.
+// Returns false if followed by alphanumeric/dash/underscore (indicating a prefix).
+func shouldReplaceHomeDir(result string, nextPos int) bool {
+	// homeDir at end of string - replace it.
+	if nextPos >= len(result) {
+		return true
+	}
+
+	nextChar := result[nextPos]
+	// Check if next character is alphanumeric/dash/underscore.
+	// If so, this is likely a prefix of another name - don't replace.
+	if isPathChar(nextChar) {
+		return false
+	}
+
+	// This is a boundary - replace with ~.
+	return true
+}
+
+// isPathChar returns true if the character is typically part of a path component name.
+func isPathChar(c byte) bool {
+	return (c >= 'a' && c <= 'z') ||
+		(c >= 'A' && c <= 'Z') ||
+		(c >= '0' && c <= '9') ||
+		c == '-' || c == '_'
 }
