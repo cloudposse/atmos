@@ -1515,7 +1515,7 @@ The `devcontainer` command was successfully migrated from scattered `internal/ex
 - `cmd/devcontainer/stop.go` - Thin wrapper: `devcontainer.Stop(atmosConfigPtr, name, opts.Instance)`
 
 **Result:**
-- 2,342 lines of production code in `pkg/devcontainer/` (5,884 total including 3,542 lines of tests)
+- 3,149 lines of production code in `pkg/devcontainer/` (11,811 total including 8,662 lines of tests)
 - Commands are now simple wrappers (5-10 lines of actual logic)
 - Business logic can be imported by external tools or future plugins
 - No dependencies on `internal/exec/` for devcontainer functionality
