@@ -289,3 +289,83 @@ func TestDevcontainerCommandProvider(t *testing.T) {
 		assert.Equal(t, "Workflow Commands", group)
 	})
 }
+
+func TestIsAuthConfigured(t *testing.T) {
+	tests := []struct {
+		name       string
+		authConfig *schema.AuthConfig
+		expected   bool
+	}{
+		{
+			name:       "nil auth config",
+			authConfig: nil,
+			expected:   false,
+		},
+		{
+			name: "empty identities",
+			authConfig: &schema.AuthConfig{
+				Identities: nil,
+			},
+			expected: false,
+		},
+		{
+			name: "empty identities map",
+			authConfig: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{},
+			},
+			expected: false,
+		},
+		{
+			name: "has identities",
+			authConfig: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"default": {},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isAuthConfigured(tt.authConfig)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCreateUnauthenticatedAuthManager(t *testing.T) {
+	tests := []struct {
+		name        string
+		authConfig  *schema.AuthConfig
+		expectError bool
+	}{
+		{
+			name:        "nil auth config",
+			authConfig:  nil,
+			expectError: true,
+		},
+		{
+			name: "empty identities",
+			authConfig: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{},
+			},
+			// Empty identities map is valid - no error expected.
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			authManager, err := createUnauthenticatedAuthManager(tt.authConfig)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, authManager)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, authManager)
+			}
+		})
+	}
+}
