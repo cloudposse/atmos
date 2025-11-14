@@ -7,50 +7,52 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestAuthShellCmd_FlagParsing(t *testing.T) {
 	_ = NewTestKit(t)
 
 	tests := []struct {
-		name          string
-		args          []string
-		expectedError string
+		name                string
+		args                []string
+		expectedSentinelErr error // The specific sentinel error expected
 	}{
 		{
 			name: "no identity specified uses default",
 			args: []string{},
-			// This will fail with auth errors since we don't have real AWS SSO configured.
-			expectedError: "authentication failed",
+			// Fixture has test-admin as default. Will fail at authentication since we don't have real AWS SSO.
+			expectedSentinelErr: errUtils.ErrAuthenticationFailed,
 		},
 		{
-			name:          "nonexistent identity",
-			args:          []string{"--identity=nonexistent"},
-			expectedError: "identity not found",
+			name:                "nonexistent identity",
+			args:                []string{"--identity=nonexistent"},
+			expectedSentinelErr: errUtils.ErrIdentityNotFound,
 		},
 		{
 			name: "valid identity",
 			args: []string{"--identity=test-user"},
-			// This will fail with auth errors since we don't have real AWS credentials.
-			expectedError: "authentication failed",
+			// This will fail at authentication since we don't have real AWS credentials.
+			expectedSentinelErr: errUtils.ErrAuthenticationFailed,
 		},
 		{
 			name: "shell override flag",
 			args: []string{"--shell", "/bin/bash"},
-			// This will fail with auth errors since we don't have real AWS credentials.
-			expectedError: "authentication failed",
+			// Fixture has test-admin as default. Will fail at authentication since we don't have real AWS SSO.
+			expectedSentinelErr: errUtils.ErrAuthenticationFailed,
 		},
 		{
 			name: "shell args after double dash",
 			args: []string{"--", "-c", "echo test"},
-			// This will fail with auth errors since we don't have real AWS credentials.
-			expectedError: "authentication failed",
+			// Fixture has test-admin as default. Will fail at authentication since we don't have real AWS SSO.
+			expectedSentinelErr: errUtils.ErrAuthenticationFailed,
 		},
 		{
 			name: "identity with shell args",
 			args: []string{"--identity=test-user", "--", "-c", "env"},
-			// This will fail with auth errors since we don't have real AWS credentials.
-			expectedError: "authentication failed",
+			// This will fail at authentication since we don't have real AWS credentials.
+			expectedSentinelErr: errUtils.ErrAuthenticationFailed,
 		},
 	}
 
@@ -73,11 +75,11 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 			// Call the core business logic directly, bypassing handleHelpRequest and checkAtmosConfig.
 			err := executeAuthShellCommandCore(testCmd, tt.args)
 
-			if tt.expectedError != "" {
-				assert.Error(t, err)
-				if err != nil {
-					assert.Contains(t, err.Error(), tt.expectedError)
-				}
+			if tt.expectedSentinelErr != nil {
+				require.Error(t, err, "Expected an error but got nil")
+				assert.ErrorIs(t, err, tt.expectedSentinelErr,
+					"Expected error chain to contain %v, but got: %v",
+					tt.expectedSentinelErr, err)
 			} else {
 				assert.NoError(t, err)
 			}
@@ -141,9 +143,10 @@ func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
 
 	// This will fail at authentication but will exercise the env var initialization path.
 	err := executeAuthShellCommandCore(testCmd, []string{"--identity=test-user"})
-	assert.Error(t, err)
-	// Should contain authentication failed, not nil pointer errors.
-	assert.Contains(t, err.Error(), "authentication failed")
+	// Should be an authentication error, not nil pointer errors.
+	require.Error(t, err, "Expected an error but got nil")
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed,
+		"Expected ErrAuthenticationFailed, but got: %v", err)
 }
 
 func TestAuthShellCmd_HelpRequest(t *testing.T) {
