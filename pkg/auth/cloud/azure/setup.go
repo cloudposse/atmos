@@ -476,6 +476,10 @@ func addTokenToCache(accessTokenSection map[string]interface{}, params *tokenCac
 // updateAzureProfile updates the azureProfile.json file with the current subscription.
 func updateAzureProfile(home, username, tenantID, subscriptionID string) error {
 	profilePath := filepath.Join(home, ".azure", "azureProfile.json")
+	azureDir := filepath.Dir(profilePath)
+	if err := os.MkdirAll(azureDir, DirPermissions); err != nil {
+		return fmt.Errorf("failed to create .azure directory: %w", err)
+	}
 
 	// Load existing profile or create new one.
 	var profile map[string]interface{}
