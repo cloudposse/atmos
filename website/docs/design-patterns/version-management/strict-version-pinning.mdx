@@ -114,7 +114,7 @@ components:
         cidr_block: "10.0.0.0/16"
       settings:
         # CRITICAL: Don't include version in workspace_key_prefix
-        workspace_key_prefix: "prod/vpc"
+        workspace_key_prefix: "vpc"
 ```
 </File>
 
@@ -130,7 +130,7 @@ settings:
 
 # CORRECT - Stable across version changes
 settings:
-  workspace_key_prefix: "prod/vpc"
+  workspace_key_prefix: "vpc"
 ```
 :::
 

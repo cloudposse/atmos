@@ -117,7 +117,7 @@ components:
       metadata:
         component: vpc/prod  # Subscribe to VPC production track
       settings:
-        workspace_key_prefix: "prod/vpc"
+        workspace_key_prefix: "vpc"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.0.0.0/16"
@@ -126,7 +126,7 @@ components:
       metadata:
         component: rds/prod  # Subscribe to RDS production track
       settings:
-        workspace_key_prefix: "prod/rds"
+        workspace_key_prefix: "rds"
       vars:
         instance_class: "db.t3.large"
 ```
@@ -202,7 +202,7 @@ components:
       metadata:
         component: prod/vpc  # VPC from production track
       settings:
-        workspace_key_prefix: "prod/vpc"
+        workspace_key_prefix: "vpc"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.0.0.0/16"
@@ -211,7 +211,7 @@ components:
       metadata:
         component: prod/rds  # RDS from production track
       settings:
-        workspace_key_prefix: "prod/rds"
+        workspace_key_prefix: "rds"
       vars:
         instance_class: "db.t3.large"
 ```
