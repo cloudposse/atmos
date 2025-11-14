@@ -540,8 +540,9 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	return &clone, nil
 }
 
-// checkAtmosConfig checks Atmos config.
-func checkAtmosConfig(opts ...AtmosValidateOption) {
+// validateAtmosConfig checks the Atmos configuration and returns an error instead of exiting.
+// This makes the function testable by allowing errors to be handled by the caller.
+func validateAtmosConfig(opts ...AtmosValidateOption) error {
 	vCfg := &ValidateConfig{
 		CheckStack: true, // Default value true to check the stack
 	}
@@ -552,14 +553,34 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	if vCfg.CheckStack {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
-			printMessageForMissingAtmosConfig(atmosConfig)
-			errUtils.Exit(1)
+			// Return an error with context instead of printing and exiting
+			return errUtils.Build(errUtils.ErrStacksDirectoryDoesNotExist).
+				WithHintf("Stacks directory not found at %s", atmosConfig.StacksBaseAbsolutePath).
+				WithContext("base_path", atmosConfig.BasePath).
+				WithContext("stacks_base_path", atmosConfig.Stacks.BasePath).
+				Err()
 		}
+	}
+
+	return nil
+}
+
+// checkAtmosConfig checks Atmos config and exits on error.
+// This is the legacy wrapper that preserves existing behavior for backward compatibility.
+func checkAtmosConfig(opts ...AtmosValidateOption) {
+	err := validateAtmosConfig(opts...)
+	if err != nil {
+		// Try to load config for error display (may fail, that's OK)
+		atmosConfig, _ := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		printMessageForMissingAtmosConfig(atmosConfig)
+		errUtils.Exit(1)
 	}
 }
 
@@ -681,9 +702,12 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 }
 
 // getConfigAndStacksInfo processes the CLI config and stacks.
-func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
+// Returns error instead of calling os.Exit for better testability.
+func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
 	// Check Atmos configuration
-	checkAtmosConfig()
+	if err := validateAtmosConfig(); err != nil {
+		return schema.ConfigAndStacksInfo{}, err
+	}
 
 	var argsAfterDoubleDash []string
 	finalArgs := args
@@ -695,13 +719,15 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	}
 
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return schema.ConfigAndStacksInfo{}, err
+	}
 
 	// Resolve path-based component arguments to component names
 	if info.NeedsPathResolution && info.ComponentFromArg != "" {
 		atmosConfig, err := cfg.InitCliConfig(info, false)
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err), "", "")
+			return schema.ConfigAndStacksInfo{}, fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
 		}
 
 		// Extract component name from path without stack validation.
@@ -716,11 +742,10 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 			commandName, // Component type is the command name (terraform, helmfile, packer)
 		)
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(
-				fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err),
-				"",
-				"Hint: Make sure the path is within your component directories",
-			)
+			wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
+			return schema.ConfigAndStacksInfo{}, errUtils.Build(wrappedErr).
+				WithHint("Make sure the path is within your component directories").
+				Err()
 		}
 
 		log.Debug("Resolved component from path",
@@ -733,7 +758,7 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 		info.NeedsPathResolution = false // Mark as resolved
 	}
 
-	return info
+	return info, nil
 }
 
 // enableHeatmapIfRequested checks os.Args for --heatmap and --heatmap-mode flags.

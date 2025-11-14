@@ -77,7 +77,7 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Missing Configuration"
+        - "Error"
       exit_code: 1
 
   - name: terraform plan with path but component not in stack
@@ -253,7 +253,7 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Missing Configuration"
+        - "Error"
       exit_code: 1
 
   - name: describe component with component name (backward compatibility)

@@ -15,7 +15,10 @@ import (
 )
 
 func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
-	info := getConfigAndStacksInfo("terraform", cmd, append([]string{cmd.Name()}, args...))
+	info, err := getConfigAndStacksInfo("terraform", cmd, append([]string{cmd.Name()}, args...))
+	if err != nil {
+		return err
+	}
 
 	// Initialize the CLI config
 	atmosConfig, err := cfg.InitCliConfig(info, true)
@@ -32,7 +35,7 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 		log.Info("Running hooks", "event", event)
 		err := hooks.RunAll(event, &atmosConfig, &info, cmd, args)
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return err
 		}
 	}
 
@@ -40,11 +43,16 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 }
 
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
-	info := getConfigAndStacksInfo(cfg.TerraformComponentType, cmd, args)
+	info, err := getConfigAndStacksInfo(cfg.TerraformComponentType, cmd, args)
+	if err != nil {
+		return err
+	}
 
 	if info.NeedHelp {
 		err := actualCmd.Usage()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
 		return nil
 	}
 
