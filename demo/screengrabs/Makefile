@@ -27,7 +27,7 @@ docker-build:
 		ubuntu:22.04 bash -c ' \
 		set -e && \
 		apt-get update -qq && \
-		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq aha make wget tar && \
+		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq aha make wget tar tree && \
 		echo "Installing Go 1.25..." && \
 		wget -q https://go.dev/dl/go1.25.0.linux-arm64.tar.gz && \
 		tar -C /usr/local -xzf go1.25.0.linux-arm64.tar.gz && \
