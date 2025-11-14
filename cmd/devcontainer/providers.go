@@ -74,7 +74,7 @@ func (d *DockerRuntimeProvider) ListRunning(ctx context.Context) ([]ContainerInf
 
 // Start starts a devcontainer.
 func (d *DockerRuntimeProvider) Start(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts StartOptions) error {
-	return d.manager.Start(atmosConfig, name, opts.Instance, "")
+	return d.manager.Start(atmosConfig, name, opts.Instance, opts.Identity)
 }
 
 // Stop stops a running devcontainer.
