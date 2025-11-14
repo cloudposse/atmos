@@ -17,7 +17,9 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	markdown "github.com/cloudposse/atmos/pkg/ui/markdown"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -55,13 +57,22 @@ type writerConfig struct {
 }
 
 // helpStyles holds the styled text renderers for help output.
+// Uses theme-aware styles from theme.GetCurrentStyles().
 type helpStyles struct {
-	cyan       lipgloss.Style
-	green      lipgloss.Style
-	gray       lipgloss.Style
-	dimmedGray lipgloss.Style
-	lightGray  lipgloss.Style
-	darkGray   lipgloss.Style
+	heading     lipgloss.Style // Section headings (USAGE, FLAGS, etc.)
+	commandName lipgloss.Style // Command names in lists
+	commandDesc lipgloss.Style // Command descriptions
+	flagName    lipgloss.Style // Flag names
+	flagDesc    lipgloss.Style // Flag descriptions
+	muted       lipgloss.Style // Muted text (footer messages)
+}
+
+// helpRenderContext holds the rendering context for help output.
+type helpRenderContext struct {
+	writer      io.Writer
+	renderer    *lipgloss.Renderer
+	atmosConfig *schema.AtmosConfiguration
+	styles      *helpStyles
 }
 
 // parseBoolLikeForceColor parses a FORCE_COLOR-style environment variable value.
@@ -283,17 +294,21 @@ func configureWriter(cmd *cobra.Command, config colorConfig) writerConfig {
 	}
 }
 
-// createHelpStyles creates the color styles for help output.
+// createHelpStyles creates the color styles for help output using theme-aware colors.
 func createHelpStyles(renderer *lipgloss.Renderer) helpStyles {
 	defer perf.Track(nil, "cmd.createHelpStyles")()
 
+	// Get theme-aware styles.
+	themeStyles := theme.GetCurrentStyles()
+
+	// Apply renderer to theme styles so they use the correct color profile.
 	return helpStyles{
-		cyan:       renderer.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#00D7FF", Dark: "#00D7FF"}),
-		green:      renderer.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#0CB37F", Dark: "#0CB37F"}),
-		gray:       renderer.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#626262", Dark: "#626262"}),
-		dimmedGray: renderer.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#4A4A4A", Dark: "#4A4A4A"}),
-		lightGray:  renderer.NewStyle().Foreground(lipgloss.Color("#e7e5e4")),
-		darkGray:   renderer.NewStyle().Foreground(lipgloss.Color("#57534e")),
+		heading:     renderer.NewStyle().Foreground(themeStyles.Help.Heading.GetForeground()).Bold(true),
+		commandName: renderer.NewStyle().Foreground(themeStyles.Help.CommandName.GetForeground()).Bold(true),
+		commandDesc: renderer.NewStyle().Foreground(themeStyles.Help.CommandDesc.GetForeground()),
+		flagName:    renderer.NewStyle().Foreground(themeStyles.Help.FlagName.GetForeground()),
+		flagDesc:    renderer.NewStyle().Foreground(themeStyles.Help.FlagDesc.GetForeground()),
+		muted:       renderer.NewStyle().Foreground(themeStyles.Muted.GetForeground()),
 	}
 }
 
@@ -304,8 +319,8 @@ func printLogoAndVersion(w io.Writer, styles *helpStyles) {
 	fmt.Fprintln(w)
 	_ = tuiUtils.PrintStyledTextToSpecifiedOutput(w, "ATMOS")
 
-	versionText := styles.lightGray.Render(version.Version)
-	osArchText := styles.darkGray.Render(fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH))
+	versionText := styles.muted.Render(version.Version)
+	osArchText := styles.muted.Render(fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH))
 	versionInfo := fmt.Sprintf("👽 %s %s", versionText, osArchText)
 	fmt.Fprintln(w, versionInfo)
 	fmt.Fprintln(w)
@@ -315,20 +330,28 @@ func printLogoAndVersion(w io.Writer, styles *helpStyles) {
 func printDescription(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printDescription")()
 
-	if cmd.Long != "" {
-		fmt.Fprintln(w, styles.gray.Render(cmd.Long))
-		fmt.Fprintln(w)
-	} else if cmd.Short != "" {
-		fmt.Fprintln(w, styles.gray.Render(cmd.Short))
-		fmt.Fprintln(w)
+	var desc string
+	switch {
+	case cmd.Long != "":
+		desc = cmd.Long
+	case cmd.Short != "":
+		desc = cmd.Short
+	default:
+		return
 	}
+
+	// Use markdown rendering to respect terminal width and wrapping settings.
+	// This ensures long descriptions wrap properly based on screen width.
+	rendered := renderMarkdownDescription(desc)
+	fmt.Fprintln(w, styles.commandDesc.Render(rendered))
+	fmt.Fprintln(w)
 }
 
 // printUsageSection prints the usage section.
 func printUsageSection(w io.Writer, cmd *cobra.Command, renderer *lipgloss.Renderer, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printUsageSection")()
 
-	fmt.Fprintln(w, styles.cyan.Render("USAGE"))
+	fmt.Fprintln(w, styles.heading.Render("USAGE"))
 	fmt.Fprintln(w)
 	var usageContent strings.Builder
 	if cmd.Runnable() {
@@ -351,15 +374,30 @@ func printAliases(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printAliases")()
 
 	if len(cmd.Aliases) > 0 {
-		fmt.Fprintln(w, styles.cyan.Render("ALIASES"))
+		fmt.Fprintln(w, styles.heading.Render("ALIASES"))
 		fmt.Fprintln(w)
-		fmt.Fprintf(w, "  %s\n", styles.gray.Render(cmd.NameAndAliases()))
+		fmt.Fprintf(w, "  %s\n", styles.commandDesc.Render(cmd.NameAndAliases()))
 		fmt.Fprintln(w)
 	}
 }
 
+// renderMarkdownDescription renders a description string as Markdown using the UI formatter.
+// Uses the global ui.Format which has theme integration and automatic degradation.
+func renderMarkdownDescription(desc string) string {
+	if ui.Format == nil {
+		return desc
+	}
+
+	rendered, err := ui.Format.Markdown(desc)
+	if err != nil {
+		return desc
+	}
+
+	return strings.TrimSpace(rendered)
+}
+
 // printSubcommandAliases prints subcommand aliases.
-func printSubcommandAliases(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
+func printSubcommandAliases(ctx *helpRenderContext, cmd *cobra.Command) {
 	defer perf.Track(nil, "cmd.printSubcommandAliases")()
 
 	hasAliases := false
@@ -373,17 +411,21 @@ func printSubcommandAliases(w io.Writer, cmd *cobra.Command, styles *helpStyles)
 		return
 	}
 
-	fmt.Fprintln(w, styles.cyan.Render("SUBCOMMAND ALIASES"))
-	fmt.Fprintln(w)
+	fmt.Fprintln(ctx.writer, ctx.styles.heading.Render("SUBCOMMAND ALIASES"))
+	fmt.Fprintln(ctx.writer)
 	for _, c := range cmd.Commands() {
 		if !c.IsAvailableCommand() || len(c.Aliases) == 0 {
 			continue
 		}
-		name := styles.green.Render(fmt.Sprintf("%-15s", c.Aliases[0]))
-		desc := styles.gray.Render(fmt.Sprintf("Alias of \"%s %s\" command", cmd.Name(), c.Name()))
-		fmt.Fprintf(w, "      %s  %s\n", name, desc)
+		name := ctx.styles.commandName.Render(fmt.Sprintf("%-15s", c.Aliases[0]))
+
+		// Render description as Markdown (like command descriptions) with backticks instead of quotes.
+		desc := fmt.Sprintf("Alias of `%s %s` command", cmd.Name(), c.Name())
+		desc = renderMarkdownDescription(desc)
+
+		fmt.Fprintf(ctx.writer, "      %s  %s\n", name, desc)
 	}
-	fmt.Fprintln(w)
+	fmt.Fprintln(ctx.writer)
 }
 
 // printExamples prints command examples.
@@ -394,7 +436,7 @@ func printExamples(w io.Writer, cmd *cobra.Command, renderer *lipgloss.Renderer,
 		return
 	}
 
-	fmt.Fprintln(w, styles.cyan.Render("EXAMPLES"))
+	fmt.Fprintln(w, styles.heading.Render("EXAMPLES"))
 	fmt.Fprintln(w)
 
 	exampleText := strings.TrimSpace(cmd.Example)
@@ -438,34 +480,37 @@ func calculateMaxCommandWidth(commands []*cobra.Command) int {
 }
 
 // formatCommandLine formats a single command line with proper padding and styling.
-func formatCommandLine(w io.Writer, cmd *cobra.Command, maxWidth int, styles *helpStyles) {
+func formatCommandLine(ctx *helpRenderContext, cmd *cobra.Command, maxWidth int) {
 	cmdName := cmd.Name()
 	cmdTypePlain := ""
 	cmdTypeStyled := ""
 	if cmd.HasAvailableSubCommands() {
 		cmdTypePlain = " [command]"
-		cmdTypeStyled = " " + styles.dimmedGray.Render("[command]")
+		cmdTypeStyled = " " + ctx.styles.flagName.Render("[command]")
 	}
 
 	padding := maxWidth - len(cmdName) - len(cmdTypePlain)
 
-	fmt.Fprint(w, "      ")
-	fmt.Fprint(w, styles.green.Render(cmdName))
-	fmt.Fprint(w, cmdTypeStyled)
-	fmt.Fprint(w, strings.Repeat(" ", padding))
-	fmt.Fprintf(w, "  %s\n", styles.gray.Render(cmd.Short))
+	fmt.Fprint(ctx.writer, "      ")
+	fmt.Fprint(ctx.writer, ctx.styles.commandName.Render(cmdName))
+	fmt.Fprint(ctx.writer, cmdTypeStyled)
+	fmt.Fprint(ctx.writer, strings.Repeat(" ", padding))
+
+	// Render description as Markdown (like flags do).
+	desc := renderMarkdownDescription(cmd.Short)
+	fmt.Fprintf(ctx.writer, "  %s\n", desc)
 }
 
 // printAvailableCommands prints the list of available subcommands.
-func printAvailableCommands(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
+func printAvailableCommands(ctx *helpRenderContext, cmd *cobra.Command) {
 	defer perf.Track(nil, "cmd.printAvailableCommands")()
 
 	if !cmd.HasAvailableSubCommands() {
 		return
 	}
 
-	fmt.Fprintln(w, styles.cyan.Render("AVAILABLE COMMANDS"))
-	fmt.Fprintln(w)
+	fmt.Fprintln(ctx.writer, ctx.styles.heading.Render("AVAILABLE COMMANDS"))
+	fmt.Fprintln(ctx.writer)
 
 	maxCmdWidth := calculateMaxCommandWidth(cmd.Commands())
 
@@ -473,9 +518,9 @@ func printAvailableCommands(w io.Writer, cmd *cobra.Command, styles *helpStyles)
 		if !isCommandAvailable(c) {
 			continue
 		}
-		formatCommandLine(w, c, maxCmdWidth, styles)
+		formatCommandLine(ctx, c, maxCmdWidth)
 	}
-	fmt.Fprintln(w)
+	fmt.Fprintln(ctx.writer)
 }
 
 // printFlags prints command flags.
@@ -485,16 +530,16 @@ func printFlags(w io.Writer, cmd *cobra.Command, atmosConfig *schema.AtmosConfig
 	termWidth := getTerminalWidth()
 
 	if cmd.HasAvailableLocalFlags() {
-		fmt.Fprintln(w, styles.cyan.Render("FLAGS"))
+		fmt.Fprintln(w, styles.heading.Render("FLAGS"))
 		fmt.Fprintln(w)
-		renderFlags(w, cmd.LocalFlags(), styles.green, styles.dimmedGray, styles.gray, termWidth, atmosConfig)
+		renderFlags(w, cmd.LocalFlags(), styles.commandName, styles.flagName, styles.flagDesc, termWidth, atmosConfig)
 		fmt.Fprintln(w)
 	}
 
 	if cmd.HasAvailableInheritedFlags() {
-		fmt.Fprintln(w, styles.cyan.Render("GLOBAL FLAGS"))
+		fmt.Fprintln(w, styles.heading.Render("GLOBAL FLAGS"))
 		fmt.Fprintln(w)
-		renderFlags(w, cmd.InheritedFlags(), styles.green, styles.dimmedGray, styles.gray, termWidth, atmosConfig)
+		renderFlags(w, cmd.InheritedFlags(), styles.commandName, styles.flagName, styles.flagDesc, termWidth, atmosConfig)
 		fmt.Fprintln(w)
 	}
 }
@@ -517,22 +562,30 @@ func applyColoredHelpTemplate(cmd *cobra.Command) {
 	// Load Atmos configuration for markdown rendering.
 	atmosConfig, _ := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 
+	// Create help render context.
+	ctx := &helpRenderContext{
+		writer:      writerConf.writer,
+		renderer:    writerConf.renderer,
+		atmosConfig: &atmosConfig,
+		styles:      &styles,
+	}
+
 	// Set custom help function.
 	cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
-		printLogoAndVersion(writerConf.writer, &styles)
-		printDescription(writerConf.writer, c, &styles)
-		printUsageSection(writerConf.writer, c, writerConf.renderer, &styles)
-		printAliases(writerConf.writer, c, &styles)
-		printSubcommandAliases(writerConf.writer, c, &styles)
-		printExamples(writerConf.writer, c, writerConf.renderer, &styles)
-		printAvailableCommands(writerConf.writer, c, &styles)
-		printFlags(writerConf.writer, c, &atmosConfig, &styles)
-		printFooter(writerConf.writer, c, &atmosConfig, &styles)
+		printLogoAndVersion(ctx.writer, ctx.styles)
+		printDescription(ctx.writer, c, ctx.styles)
+		printUsageSection(ctx.writer, c, ctx.renderer, ctx.styles)
+		printAliases(ctx.writer, c, ctx.styles)
+		printSubcommandAliases(ctx, c)
+		printExamples(ctx.writer, c, ctx.renderer, ctx.styles)
+		printAvailableCommands(ctx, c)
+		printFlags(ctx.writer, c, ctx.atmosConfig, ctx.styles)
+		printFooter(ctx.writer, c, ctx.styles)
 	})
 }
 
 // printFooter prints the help footer message.
-func printFooter(w io.Writer, cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration, styles *helpStyles) {
+func printFooter(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
 	defer perf.Track(nil, "cmd.printFooter")()
 
 	if !cmd.HasAvailableSubCommands() {
@@ -540,12 +593,8 @@ func printFooter(w io.Writer, cmd *cobra.Command, atmosConfig *schema.AtmosConfi
 	}
 
 	usageMsg := fmt.Sprintf("Use `%s [command] --help` for more information about a command.", cmd.CommandPath())
-	mdRenderer, err := markdown.NewTerminalMarkdownRenderer(*atmosConfig)
-	if err == nil {
-		rendered, renderErr := mdRenderer.RenderWithoutWordWrap(usageMsg)
-		if renderErr == nil {
-			usageMsg = strings.TrimSpace(rendered)
-		}
-	}
-	fmt.Fprintf(w, "\n%s\n", styles.gray.Render(usageMsg))
+	// Use renderMarkdownDescription to respect terminal width and wrapping settings.
+	// This ensures the footer wraps properly based on screen width.
+	usageMsg = renderMarkdownDescription(usageMsg)
+	fmt.Fprintf(w, "\n%s\n", styles.muted.Render(usageMsg))
 }

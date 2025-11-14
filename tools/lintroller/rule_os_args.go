@@ -41,9 +41,11 @@ func (r *OsArgsInTestRule) Check(pass *analysis.Pass, file *ast.File) error {
 	// - Testing functions that directly read os.Args (flag parsers)
 	// - Subprocess testing using os.Args[0] for executable path
 	// - Testing heatmap flag detection
+	// - Testing Execute() function which reads os.Args
 	// All these use proper save/restore pattern for test isolation.
 	if strings.HasSuffix(normalized, "cmd/cmd_utils_test.go") ||
 		strings.HasSuffix(normalized, "cmd/terraform_test.go") ||
+		strings.HasSuffix(normalized, "cmd/root_test.go") ||
 		strings.HasSuffix(normalized, "errors/error_funcs_test.go") ||
 		strings.HasSuffix(normalized, "pkg/config/config_test.go") {
 		return nil

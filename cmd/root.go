@@ -1039,6 +1039,19 @@ func init() {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
+	// Initialize I/O context and global formatter early in init().
+	// This ensures I/O is available for help commands and other early operations.
+	// Note: Flags are not yet parsed at this point, so this uses default/env settings.
+	// PersistentPreRun will re-initialize with flag overrides if needed.
+	ioCtx, ioErr := iolib.NewContext()
+	if ioErr != nil {
+		log.Error("Failed to initialize I/O context", "error", ioErr)
+	} else {
+		ui.InitFormatter(ioCtx)
+		data.InitWriter(ioCtx)
+		data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
+	}
+
 	initCobraConfig()
 }
 
@@ -1119,17 +1132,20 @@ func initCobraConfig() {
 				var buf bytes.Buffer
 				command.SetOut(&buf)
 				applyColoredHelpTemplate(command)
+				_ = command.Help()
 				pager := pager.NewWithAtmosConfig(true)
 				_ = pager.Run("Atmos CLI Help", buf.String())
 			} else {
 				// Default: render help directly to stdout without pager.
 				applyColoredHelpTemplate(command)
+				_ = command.Help()
 			}
 		case isInteractiveHelp:
 			// Interactive 'atmos help' command - use pager if configured.
 			var buf bytes.Buffer
 			command.SetOut(&buf)
 			applyColoredHelpTemplate(command)
+			_ = command.Help()
 
 			// Check pager configuration from flag, env, or config.
 			pagerEnabled := atmosConfig.Settings.Terminal.IsPagerEnabled()
@@ -1152,6 +1168,7 @@ func initCobraConfig() {
 		default:
 			// Fallback for other cases.
 			applyColoredHelpTemplate(command)
+			_ = command.Help()
 		}
 
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
