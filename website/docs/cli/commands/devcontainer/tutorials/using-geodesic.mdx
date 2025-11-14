@@ -1,24 +1,24 @@
 ---
-title: Migrating from Geodesic Wrapper Script
-sidebar_label: Migrating from Geodesic
+title: Using Geodesic as a Devcontainer
+sidebar_label: Using Geodesic
 sidebar_position: 10
-id: migrating-from-geodesic-wrapper
-description: Migrate from geodesic.sh wrapper script to atmos devcontainer commands.
+id: using-geodesic
+description: Run Geodesic toolbox using atmos devcontainer commands.
 ---
 
 > **Note**: `atmos devcontainer` requires minimum Atmos version `v2.0.0`
 
-This guide explains how to migrate from the legacy `geodesic.sh` wrapper script to the native `atmos devcontainer` commands.
+This guide explains how to run [Geodesic](https://github.com/cloudposse/geodesic) using `atmos devcontainer` commands.
 
 ## Overview
 
-The Geodesic wrapper script (`geodesic.sh`) is being replaced by `atmos devcontainer` commands that provide:
+Run Geodesic as a devcontainer using `atmos devcontainer` commands, which provide:
 - Native Docker/Podman integration
 - Configuration in `atmos.yaml`
 - Standard dev container specification support
 - Consistent CLI experience across all Atmos commands
 
-## Migration Steps
+## Setup Steps
 
 ### 1. Add Devcontainer Configuration to atmos.yaml
 
@@ -52,17 +52,17 @@ Create a `devcontainer.json` file in your repository root with your Geodesic con
 }
 ```
 
-### 3. Update Your Workflow
+### 3. Use Geodesic Commands
 
-Replace geodesic.sh commands with atmos equivalents:
+Common commands for working with Geodesic:
 
-| Old Command | New Command |
-|------------|-------------|
-| `make run` (with `geodesic.sh`) | `atmos devcontainer shell geodesic` |
-| `geodesic.sh` | `atmos devcontainer shell geodesic` |
-| Starting container | `atmos devcontainer start geodesic` |
-| Attaching to running container | `atmos devcontainer attach geodesic` |
-| Stopping container | `atmos devcontainer stop geodesic` |
+| Command | Description |
+|---------|-------------|
+| `atmos devcontainer shell geodesic` | Start interactive shell in Geodesic |
+| `atmos devcontainer start geodesic` | Start Geodesic container (without attaching) |
+| `atmos devcontainer attach geodesic` | Attach to running Geodesic container |
+| `atmos devcontainer stop geodesic` | Stop Geodesic container |
+| `atmos devcontainer exec geodesic -- <cmd>` | Execute command in running container |
 
 ### 4. (Optional) Add Shell Alias
 
@@ -78,17 +78,10 @@ Now you can use:
 atmos shell  # Equivalent to: atmos devcontainer shell geodesic
 ```
 
-### 5. Update Your Makefile (Optional)
+### 5. (Optional) Add Makefile Shortcut
 
-If you have a Makefile that launches Geodesic, update it:
+For convenience, add a Makefile target:
 
-**Before:**
-```makefile
-run:
-	@./geodesic.sh
-```
-
-**After:**
 ```makefile
 run:
 	@atmos devcontainer shell geodesic
@@ -187,4 +180,4 @@ If you encounter issues:
 
 ---
 
-**Ready to migrate?** Start by adding the devcontainer configuration to your `atmos.yaml`, then test with `atmos devcontainer shell geodesic`.
+**Ready to get started?** Add the devcontainer configuration to your `atmos.yaml`, then launch with `atmos devcontainer shell geodesic`.
