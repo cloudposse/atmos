@@ -332,42 +332,6 @@ The pattern has significant trade-offs to consider:
 
 ## Security and Access Control
 
-### GitHub Environments
-
-Use GitHub Environments to manage deployments with proper access controls:
-
-<File title=".github/environments configuration">
-```yaml
-# GitHub Repository Settings → Environments
-environments:
-  development:
-    branches:
-      - channels/dev
-    reviewers: []
-    deployment_protection_rules:
-      - required_reviewers: 0
-
-  staging:
-    branches:
-      - channels/staging
-    reviewers:
-      - "@org/platform-team"
-    deployment_protection_rules:
-      - required_reviewers: 1
-      - wait_timer: 30  # minutes
-
-  production:
-    branches:
-      - channels/prod
-    reviewers:
-      - "@org/platform-leads"
-      - "@org/security-team"
-    deployment_protection_rules:
-      - required_reviewers: 2
-      - wait_timer: 60  # minutes
-```
-</File>
-
 ### OIDC Permissions by Branch
 
 Configure cloud provider permissions based on the branch being deployed:
