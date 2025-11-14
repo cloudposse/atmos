@@ -131,9 +131,15 @@ type WhoamiInfo struct {
 func (p *SAMLProvider) Paths() ([]types.Path, error) {
     basePath := awsCloud.GetFilesBasePath(&p.providerConfig)
 
+    // Use AWSFileManager to get correct provider-namespaced paths.
+    fileManager, err := awsCloud.NewAWSFileManager(basePath)
+    if err != nil {
+        return nil, err
+    }
+
     return []types.Path{
         {
-            Location: filepath.Join(basePath, "credentials"),
+            Location: fileManager.GetCredentialsPath(p.providerName),
             Type:     types.PathTypeFile,
             Required: true,
             Purpose:  "AWS credentials file",
@@ -142,7 +148,7 @@ func (p *SAMLProvider) Paths() ([]types.Path, error) {
             },
         },
         {
-            Location: filepath.Join(basePath, "config"),
+            Location: fileManager.GetConfigPath(p.providerName),
             Type:     types.PathTypeFile,
             Required: false, // Config file is optional
             Purpose:  "AWS config file",
