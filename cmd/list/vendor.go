@@ -2,11 +2,14 @@ package list
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
@@ -52,7 +55,9 @@ var vendorCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Println(output)
+		// Obfuscate home directory paths before printing.
+		obfuscatedOutput := obfuscateHomeDirInOutput(output)
+		fmt.Println(obfuscatedOutput)
 		return nil
 	},
 }
@@ -94,4 +99,19 @@ func listVendorWithOptions(opts *VendorOptions) (string, error) {
 	}
 
 	return l.FilterAndListVendor(&atmosConfig, options)
+}
+
+// obfuscateHomeDirInOutput replaces occurrences of the home directory with "~" to prevent leaking user paths.
+func obfuscateHomeDirInOutput(output string) string {
+	homeDir, err := homedir.Dir()
+	if err != nil || homeDir == "" {
+		return output
+	}
+
+	// Replace home directory with tilde at the start of paths.
+	// Handle both absolute paths and paths with path separator.
+	result := strings.ReplaceAll(output, homeDir+string(os.PathSeparator), "~"+string(os.PathSeparator))
+	result = strings.ReplaceAll(result, homeDir, "~")
+
+	return result
 }
