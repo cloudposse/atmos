@@ -102,11 +102,11 @@ Atmos supports both Docker and Podman as container runtimes:
 
 - **Auto-detection**: Atmos automatically detects the available runtime (Docker first, then Podman)
 - **Explicit selection**: Set `ATMOS_CONTAINER_RUNTIME=docker` or `ATMOS_CONTAINER_RUNTIME=podman`
-- **Per-devcontainer**: Configure runtime in `atmos.yaml` under `components.devcontainer.<name>.settings.runtime`
+- **Per-devcontainer**: Configure runtime in `atmos.yaml` under `devcontainer.<name>.settings.runtime`
 
 ## Configuration
 
-Devcontainers are configured in `atmos.yaml` under the `components.devcontainer` section:
+Devcontainers are configured in `atmos.yaml` under the `devcontainer` section:
 
 ```yaml
 components:

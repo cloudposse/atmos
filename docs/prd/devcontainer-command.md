@@ -89,6 +89,87 @@ We will support a **practical subset** of the devcontainer specification:
 
 ## Architecture
 
+### Architectural Decision: Top-Level Configuration
+
+**Decision:** Devcontainers are configured at the **top-level** of `atmos.yaml` under `devcontainer:`, not under `components.devcontainer:` or in stack configuration.
+
+#### Configuration Location Options Evaluated
+
+We evaluated three possible locations for devcontainer configuration:
+
+##### Option 1: Top-Level `devcontainer:` Section (SELECTED)
+
+```yaml
+devcontainer:
+  geodesic:
+    spec: !include devcontainer.json
+```
+
+**Pros:**
+- ✅ **Clear separation of concerns** - Development environments vs infrastructure components
+- ✅ **Not actually components** - Devcontainers are local dev tools, not cloud resources
+- ✅ **Different lifecycle** - Components are provisioned to cloud; devcontainers are local
+- ✅ **Simpler mental model** - More discoverable and intuitive for users
+- ✅ **Industry alignment** - Matches how VS Code and other tools treat devcontainers
+- ✅ **Global scope** - Devcontainers are typically used repository-wide, not per-stack
+- ✅ **No inheritance needed** - Unlike terraform/helmfile, devcontainers don't need stack-based overrides
+
+**Cons:**
+- ⚠️ **Additional top-level config** - Adds another section to atmos.yaml (minor)
+
+##### Option 2: Stack Configuration
+
+```yaml
+# stacks/dev.yaml
+devcontainer:
+  geodesic:
+    spec: ...
+```
+
+**Pros:**
+- ✅ **Stack-specific customization** - Different stacks could have different tooling
+- ✅ **Leverage inheritance** - Could use stack inheritance for shared config
+
+**Cons:**
+- ❌ **Massive overkill** - Devcontainers are local dev tools, not per-stack infrastructure
+- ❌ **Wrong abstraction** - Stacks represent deployment targets; devcontainers are dev tools
+- ❌ **Confusing UX** - Users would need stack when launching: `atmos devcontainer shell geodesic -s dev-stack`
+- ❌ **Against industry norms** - No other devcontainer tooling uses environment-based configuration
+- ❌ **Not deployment-related** - Devcontainers don't deploy to environments
+
+##### Option 3: Under `components.devcontainer:` (REJECTED - Original Implementation)
+
+```yaml
+components:
+  devcontainer:
+    geodesic:
+      spec: !include devcontainer.json
+```
+
+**Pros:**
+- ✅ **Reuses component machinery** - Leverages existing component loading/validation
+- ✅ **Namespace organization** - Groups component-like things together
+
+**Cons:**
+- ❌ **Conceptual mismatch** - Devcontainers aren't infrastructure components in Atmos's sense
+- ❌ **Misleading** - New users might think devcontainers are infrastructure components
+- ❌ **Pollutes component namespace** - `atmos list components` could show devcontainers mixed with terraform/helmfile
+- ❌ **Wrong categorization** - Components are **deployed resources**; devcontainers are **development tools**
+
+#### Final Decision
+
+**Selected: Option 1 - Top-Level `devcontainer:` Section**
+
+**Rationale:**
+1. **Devcontainers are development tools, not infrastructure components** - They run locally, not in cloud environments
+2. **Global scope matches usage** - Devcontainers are repository-wide development environments
+3. **Industry alignment** - Matches how VS Code (`.devcontainer/`) and other tools structure devcontainer config
+4. **Clear separation** - Development environment config vs infrastructure deployment config are fundamentally different
+5. **Better discoverability** - Users looking for devcontainer config won't expect it under `components:`
+6. **No release delay** - We want this right for v1.200.0, not needing to refactor later
+
+This decision treats devcontainers as first-class development environment configurations, separate from infrastructure components, which aligns with their actual purpose and usage patterns.
+
 ### Devcontainer Registry Pattern
 
 Devcontainers are **identified by name only** (not component/stack). The registry manages named devcontainer configurations:
@@ -145,48 +226,46 @@ type PodmanRuntime struct{}
 
 ### Configuration Schema
 
-Devcontainer configurations follow Atmos's **component pattern** and are defined in `atmos.yaml` under `components.devcontainer`. Each devcontainer has a unique name and is NOT tied to a specific component or stack.
+Devcontainers are configured at the **top-level** of `atmos.yaml` under `devcontainer:`. Each devcontainer has a unique name and is NOT tied to a specific component or stack.
 
 #### Schema Structure
 
 ```yaml
-components:
-  devcontainer:
-    <name>:
-      settings:
-        runtime: docker|podman  # Optional, auto-detects if not specified
-      spec:
-        # Devcontainer specification fields (supports !include with overrides)
+devcontainer:
+  <name>:
+    settings:
+      runtime: docker|podman  # Optional, auto-detects if not specified
+    spec:
+      # Devcontainer specification fields (supports !include with overrides)
 ```
 
 #### Option 1: Define Inline in atmos.yaml
 
 ```yaml
 # atmos.yaml
-components:
-  devcontainer:
-    # Named devcontainer "default" (replaces Geodesic)
-    default:
-      settings:
-        runtime: docker  # Optional: docker, podman, or omit for auto-detect
-      spec:
-        name: "Atmos Default"
-        image: "cloudposse/geodesic:latest"
-        workspaceFolder: "/workspace"
-        workspaceMount: "type=bind,source=${WORKSPACE},target=/workspace"
-        mounts:
-          - "type=bind,source=${HOME}/.aws,target=/root/.aws,readonly"
-        forwardPorts:
-          - 8080
-        containerEnv:
-          ATMOS_BASE_PATH: "/workspace"
-        remoteUser: "root"
+devcontainer:
+  # Named devcontainer "default" (replaces Geodesic)
+  default:
+    settings:
+      runtime: docker  # Optional: docker, podman, or omit for auto-detect
+    spec:
+      name: "Atmos Default"
+      image: "cloudposse/geodesic:latest"
+      workspaceFolder: "/workspace"
+      workspaceMount: "type=bind,source=${WORKSPACE},target=/workspace"
+      mounts:
+        - "type=bind,source=${HOME}/.aws,target=/root/.aws,readonly"
+      forwardPorts:
+        - 8080
+      containerEnv:
+        ATMOS_BASE_PATH: "/workspace"
+      remoteUser: "root"
 
-    # Named devcontainer "terraform" for Terraform work
-    terraform:
-      settings:
-        runtime: podman  # Use Podman instead of Docker
-      spec:
+  # Named devcontainer "terraform" for Terraform work
+  terraform:
+    settings:
+      runtime: podman  # Use Podman instead of Docker
+    spec:
         name: "Terraform Dev"
         image: "hashicorp/terraform:1.6"
         workspaceFolder: "/workspace"
@@ -203,36 +282,34 @@ Use the `!include` YAML function with YAML merge syntax (`<<:`) to import and ov
 
 ```yaml
 # atmos.yaml
-components:
-  devcontainer:
-    default:
-      settings:
-        runtime: docker
-      spec:
-        <<: !include .devcontainer/devcontainer.json
+devcontainer:
+  default:
+    settings:
+      runtime: docker
+    spec:
+      <<: !include .devcontainer/devcontainer.json
 
-    terraform:
-      settings:
-        runtime: podman
-      spec:
-        # Import base configuration and override specific fields
-        <<: !include .devcontainer/terraform.json
-        image: hashicorp/terraform:1.6  # Override image
-        forwardPorts: [8080, 3000]      # Override ports
-        containerEnv:
-          TF_PLUGIN_CACHE_DIR: "/root/.terraform.d/plugin-cache"
+  terraform:
+    settings:
+      runtime: podman
+    spec:
+      # Import base configuration and override specific fields
+      <<: !include .devcontainer/terraform.json
+      image: hashicorp/terraform:1.6  # Override image
+      forwardPorts: [8080, 3000]      # Override ports
+      containerEnv:
+        TF_PLUGIN_CACHE_DIR: "/root/.terraform.d/plugin-cache"
 ```
 
 #### Option 3: Simple Include (No Overrides)
 
 ```yaml
 # atmos.yaml
-components:
-  devcontainer:
-    default:
-      settings:
-        runtime: docker
-      spec: !include .devcontainer/devcontainer.json
+devcontainer:
+  default:
+    settings:
+      runtime: docker
+    spec: !include .devcontainer/devcontainer.json
 ```
 
 #### Unsupported Fields Handling
@@ -271,7 +348,7 @@ This allows **seamless compatibility with existing VS Code devcontainer.json fil
 The configuration loader (`pkg/devcontainer/config_loader.go`) will:
 
 1. **Load Atmos configuration** from `atmos.yaml`
-2. **Extract `components.devcontainer` section** (already processed by YAML parser with `!include`)
+2. **Extract `devcontainer` section** (already processed by YAML parser with `!include`)
 3. **Get specific devcontainer by name**
 4. **Extract settings (runtime) and spec**
 5. **Filter unsupported spec fields** and log at debug level
@@ -302,7 +379,7 @@ func LoadDevcontainerConfig(
     atmosConfig *schema.AtmosConfiguration,
     name string,
 ) (*DevcontainerConfig, *DevcontainerSettings, error) {
-    // 1. Get components.devcontainer section from atmos.yaml
+    // 1. Get devcontainer section from atmos.yaml
     // This is already processed by YAML parser with !include directives
     if atmosConfig.Components.Devcontainer == nil {
         return nil, nil, fmt.Errorf("%w: no devcontainers configured in atmos.yaml", errUtils.ErrDevcontainerNotFound)

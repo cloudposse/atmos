@@ -581,17 +581,15 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "valid devcontainer with settings",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"test-alpine": map[string]any{
-							"settings": map[string]any{
-								"runtime": "podman",
-							},
-							"spec": map[string]any{
-								"image":           "alpine:latest",
-								"workspacefolder": "/workspace",
-								"remoteuser":      "root",
-							},
+				Devcontainer: map[string]any{
+					"test-alpine": map[string]any{
+						"settings": map[string]any{
+							"runtime": "podman",
+						},
+						"spec": map[string]any{
+							"image":           "alpine:latest",
+							"workspacefolder": "/workspace",
+							"remoteuser":      "root",
 						},
 					},
 				},
@@ -610,13 +608,11 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "valid devcontainer without settings",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"test-ubuntu": map[string]any{
-							"spec": map[string]any{
-								"image":      "ubuntu:22.04",
-								"remoteuser": "vscode",
-							},
+				Devcontainer: map[string]any{
+					"test-ubuntu": map[string]any{
+						"spec": map[string]any{
+							"image":      "ubuntu:22.04",
+							"remoteuser": "vscode",
 						},
 					},
 				},
@@ -634,9 +630,7 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "no devcontainers configured",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: nil,
-				},
+				Devcontainer: nil,
 			},
 			dcName:      "test",
 			expectError: true,
@@ -644,12 +638,10 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "devcontainer not found",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"existing": map[string]any{
-							"spec": map[string]any{
-								"image": "alpine:latest",
-							},
+				Devcontainer: map[string]any{
+					"existing": map[string]any{
+						"spec": map[string]any{
+							"image": "alpine:latest",
 						},
 					},
 				},
@@ -660,14 +652,12 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "missing spec section",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"invalid": map[string]any{
-							"settings": map[string]any{
-								"runtime": "docker",
-							},
-							// Missing 'spec' section
+				Devcontainer: map[string]any{
+					"invalid": map[string]any{
+						"settings": map[string]any{
+							"runtime": "docker",
 						},
+						// Missing 'spec' section
 					},
 				},
 			},
@@ -677,11 +667,9 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "spec is not a map",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"invalid": map[string]any{
-							"spec": "not a map",
-						},
+				Devcontainer: map[string]any{
+					"invalid": map[string]any{
+						"spec": "not a map",
 					},
 				},
 			},
@@ -691,13 +679,11 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "validation fails - no image or build",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"invalid": map[string]any{
-							"spec": map[string]any{
-								"name": "test",
-								// Missing both image and build
-							},
+				Devcontainer: map[string]any{
+					"invalid": map[string]any{
+						"spec": map[string]any{
+							"name": "test",
+							// Missing both image and build
 						},
 					},
 				},
@@ -733,22 +719,20 @@ func TestLoadAllConfigs(t *testing.T) {
 		{
 			name: "multiple valid devcontainers",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"alpine": map[string]any{
-							"spec": map[string]any{
-								"image": "alpine:latest",
-							},
+				Devcontainer: map[string]any{
+					"alpine": map[string]any{
+						"spec": map[string]any{
+							"image": "alpine:latest",
 						},
-						"ubuntu": map[string]any{
-							"spec": map[string]any{
-								"image": "ubuntu:22.04",
-							},
+					},
+					"ubuntu": map[string]any{
+						"spec": map[string]any{
+							"image": "ubuntu:22.04",
 						},
-						"python": map[string]any{
-							"spec": map[string]any{
-								"image": "python:3.11",
-							},
+					},
+					"python": map[string]any{
+						"spec": map[string]any{
+							"image": "python:3.11",
 						},
 					},
 				},
@@ -767,9 +751,7 @@ func TestLoadAllConfigs(t *testing.T) {
 		{
 			name: "no devcontainers configured",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: nil,
-				},
+				Devcontainer: nil,
 			},
 			expectError: false,
 			assert: func(t *testing.T, configs map[string]*Config) {
@@ -779,9 +761,7 @@ func TestLoadAllConfigs(t *testing.T) {
 		{
 			name: "empty devcontainers map",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{},
-				},
+				Devcontainer: map[string]any{},
 			},
 			expectError: false,
 			assert: func(t *testing.T, configs map[string]*Config) {
@@ -791,16 +771,14 @@ func TestLoadAllConfigs(t *testing.T) {
 		{
 			name: "one valid one invalid",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"valid": map[string]any{
-							"spec": map[string]any{
-								"image": "alpine:latest",
-							},
+				Devcontainer: map[string]any{
+					"valid": map[string]any{
+						"spec": map[string]any{
+							"image": "alpine:latest",
 						},
-						"invalid": map[string]any{
-							// Missing spec section
-						},
+					},
+					"invalid": map[string]any{
+						// Missing spec section
 					},
 				},
 			},
@@ -985,12 +963,10 @@ func TestGetDevcontainerMap(t *testing.T) {
 		{
 			name: "valid devcontainer exists",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"test": map[string]any{
-							"spec": map[string]any{
-								"image": "alpine:latest",
-							},
+				Devcontainer: map[string]any{
+					"test": map[string]any{
+						"spec": map[string]any{
+							"image": "alpine:latest",
 						},
 					},
 				},
@@ -1001,9 +977,7 @@ func TestGetDevcontainerMap(t *testing.T) {
 		{
 			name: "no devcontainers configured",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: nil,
-				},
+				Devcontainer: nil,
 			},
 			dcName:      "test",
 			expectError: true,
@@ -1011,10 +985,8 @@ func TestGetDevcontainerMap(t *testing.T) {
 		{
 			name: "devcontainer not found",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"existing": map[string]any{},
-					},
+				Devcontainer: map[string]any{
+					"existing": map[string]any{},
 				},
 			},
 			dcName:      "nonexistent",
@@ -1023,10 +995,8 @@ func TestGetDevcontainerMap(t *testing.T) {
 		{
 			name: "devcontainer is not a map",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Devcontainer: map[string]any{
-						"invalid": "not a map",
-					},
+				Devcontainer: map[string]any{
+					"invalid": "not a map",
 				},
 			},
 			dcName:      "invalid",

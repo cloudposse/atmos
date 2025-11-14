@@ -19,12 +19,12 @@ import (
 
 // listAvailableDevcontainers returns a sorted list of all available devcontainer names.
 func listAvailableDevcontainers(atmosConfig *schema.AtmosConfiguration) ([]string, error) {
-	if atmosConfig == nil || atmosConfig.Components.Devcontainer == nil {
+	if atmosConfig == nil || atmosConfig.Devcontainer == nil {
 		return nil, fmt.Errorf("%w: no devcontainers configured", errUtils.ErrDevcontainerNotFound)
 	}
 
 	var names []string
-	for name := range atmosConfig.Components.Devcontainer {
+	for name := range atmosConfig.Devcontainer {
 		names = append(names, name)
 	}
 

@@ -30,12 +30,12 @@ func (d *DefaultConfigProvider) LoadAtmosConfig() (*schema.AtmosConfiguration, e
 
 // ListDevcontainers returns all configured devcontainer names, sorted.
 func (d *DefaultConfigProvider) ListDevcontainers(config *schema.AtmosConfiguration) ([]string, error) {
-	if config == nil || config.Components.Devcontainer == nil {
+	if config == nil || config.Devcontainer == nil {
 		return nil, fmt.Errorf("%w: no devcontainers configured", errUtils.ErrDevcontainerNotFound)
 	}
 
 	var names []string
-	for name := range config.Components.Devcontainer {
+	for name := range config.Devcontainer {
 		names = append(names, name)
 	}
 	sort.Strings(names)

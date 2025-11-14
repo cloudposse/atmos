@@ -20,55 +20,56 @@ components:
   helmfile:
     base_path: "components/helmfile"
 
-  # Devcontainer configurations follow the component pattern
-  devcontainer:
-    # Geodesic devcontainer (replaces geodesic.sh wrapper)
-    geodesic:
-      settings:
-        runtime: podman  # Optional: docker, podman, or omit for auto-detect
-      spec: !include devcontainer.json
+# Devcontainer configurations
+# These are development environment containers, not infrastructure components
+devcontainer:
+  # Geodesic devcontainer (replaces geodesic.sh wrapper)
+  geodesic:
+    settings:
+      runtime: podman  # Optional: docker, podman, or omit for auto-detect
+    spec: !include devcontainer.json
 
-    # Alternative: Define inline
-    terraform:
-      settings:
-        runtime: podman  # Use Podman for this devcontainer
-      spec:
-        name: "Terraform Dev"
-        image: "hashicorp/terraform:1.10"
-        workspaceFolder: "/workspace"
-        workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
-        mounts:
-          - "type=bind,source=${localEnv:HOME}/.aws,target=/root/.aws,readonly"
-          - "type=volume,source=terraform-cache,target=/root/.terraform.d"
-        forwardPorts:
-          - 8080
-          - 3000
-        portsAttributes:
-          "8080":
-            label: "Terraform UI"
-            protocol: "http"
-        containerEnv:
-          TF_PLUGIN_CACHE_DIR: "/root/.terraform.d/plugin-cache"
-          TERM: "${localEnv:TERM}"
-        remoteUser: "root"
+  # Alternative: Define inline
+  terraform:
+    settings:
+      runtime: podman  # Use Podman for this devcontainer
+    spec:
+      name: "Terraform Dev"
+      image: "hashicorp/terraform:1.10"
+      workspaceFolder: "/workspace"
+      workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
+      mounts:
+        - "type=bind,source=${localEnv:HOME}/.aws,target=/root/.aws,readonly"
+        - "type=volume,source=terraform-cache,target=/root/.terraform.d"
+      forwardPorts:
+        - 8080
+        - 3000
+      portsAttributes:
+        "8080":
+          label: "Terraform UI"
+          protocol: "http"
+      containerEnv:
+        TF_PLUGIN_CACHE_DIR: "/root/.terraform.d/plugin-cache"
+        TERM: "${localEnv:TERM}"
+      remoteUser: "root"
 
-    # Python development environment
-    python:
-      spec:
-        name: "Python 3.11 Dev"
-        image: "python:3.11-slim"
-        workspaceFolder: "/workspace"
-        workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
-        forwardPorts:
-          - 8000
-          - 8080
-        portsAttributes:
-          "8000":
-            label: "Django/Flask"
-            protocol: "http"
-        containerEnv:
-          PYTHONUNBUFFERED: "1"
-        remoteUser: "root"
+  # Python development environment
+  python:
+    spec:
+      name: "Python 3.11 Dev"
+      image: "python:3.11-slim"
+      workspaceFolder: "/workspace"
+      workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
+      forwardPorts:
+        - 8000
+        - 8080
+      portsAttributes:
+        "8000":
+          label: "Django/Flask"
+          protocol: "http"
+      containerEnv:
+        PYTHONUNBUFFERED: "1"
+      remoteUser: "root"
 
 stacks:
   base_path: "stacks"

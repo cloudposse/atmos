@@ -168,7 +168,7 @@ func toStringSlice(slice []any) []string {
 	return result
 }
 
-// LoadConfig loads a devcontainer configuration by name from atmos.yaml components.devcontainer section.
+// LoadConfig loads a devcontainer configuration by name from atmos.yaml devcontainer section.
 func LoadConfig(
 	atmosConfig *schema.AtmosConfiguration,
 	name string,
@@ -196,16 +196,16 @@ func LoadConfig(
 }
 
 func getDevcontainerMap(atmosConfig *schema.AtmosConfiguration, name string) (map[string]any, error) {
-	log.Debug("LoadConfig called", logKeyName, name, "devcontainer_nil", atmosConfig.Components.Devcontainer == nil)
+	log.Debug("LoadConfig called", logKeyName, name, "devcontainer_nil", atmosConfig.Devcontainer == nil)
 
-	if atmosConfig.Components.Devcontainer == nil {
-		log.Debug("No devcontainers configured in Components.Devcontainer")
+	if atmosConfig.Devcontainer == nil {
+		log.Debug("No devcontainers configured")
 		return nil, fmt.Errorf("%w: no devcontainers configured", errUtils.ErrDevcontainerNotFound)
 	}
 
-	log.Debug("Devcontainer field populated", "count", len(atmosConfig.Components.Devcontainer))
+	log.Debug("Devcontainer field populated", "count", len(atmosConfig.Devcontainer))
 
-	rawDevcontainer, exists := atmosConfig.Components.Devcontainer[name]
+	rawDevcontainer, exists := atmosConfig.Devcontainer[name]
 	if !exists {
 		return nil, fmt.Errorf("%w: devcontainer '%s' not found", errUtils.ErrDevcontainerNotFound, name)
 	}
@@ -277,16 +277,16 @@ func extractAndValidateSpec(devcontainerMap map[string]any, name string) (*Confi
 func LoadAllConfigs(atmosConfig *schema.AtmosConfiguration) (map[string]*Config, error) {
 	defer perf.Track(atmosConfig, "devcontainer.LoadAllConfigs")()
 
-	if atmosConfig.Components.Devcontainer == nil {
+	if atmosConfig.Devcontainer == nil {
 		log.Debug("Devcontainers field is nil in atmosConfig")
 		return map[string]*Config{}, nil
 	}
 
-	log.Debug("Loading devcontainer configs", "count", len(atmosConfig.Components.Devcontainer))
+	log.Debug("Loading devcontainer configs", "count", len(atmosConfig.Devcontainer))
 
 	configs := make(map[string]*Config)
 
-	for name := range atmosConfig.Components.Devcontainer {
+	for name := range atmosConfig.Devcontainer {
 		log.Debug("Loading devcontainer", logKeyName, name)
 		config, _, err := LoadConfig(atmosConfig, name)
 		if err != nil {

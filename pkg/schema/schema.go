@@ -63,6 +63,7 @@ type AtmosConfiguration struct {
 	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
 	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
+	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -375,10 +376,9 @@ type Packer struct {
 
 type Components struct {
 	// Built-in component types (legacy - will migrate to plugin model in future phases).
-	Terraform    Terraform      `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
-	Helmfile     Helmfile       `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
-	Packer       Packer         `yaml:"packer" json:"packer" mapstructure:"packer"`
-	Devcontainer map[string]any `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
+	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
+	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
+	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
 
 	// Dynamic plugin component types.
 	// Uses mapstructure:",remain" to capture all unmapped fields from the YAML/JSON.

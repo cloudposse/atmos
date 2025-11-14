@@ -207,12 +207,12 @@ func (h *HuhPrompter) Select(message string, options []string) (string, error) {
 type DefaultDevcontainerLister struct{}
 
 func (d *DefaultDevcontainerLister) List(config *schema.AtmosConfiguration) ([]string, error) {
-    if config == nil || config.Components.Devcontainer == nil {
+    if config == nil || config.Devcontainer == nil {
         return nil, fmt.Errorf("%w: no devcontainers configured", errUtils.ErrDevcontainerNotFound)
     }
 
     var names []string
-    for name := range config.Components.Devcontainer {
+    for name := range config.Devcontainer {
         names = append(names, name)
     }
 
