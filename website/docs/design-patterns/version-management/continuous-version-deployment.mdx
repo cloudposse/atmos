@@ -662,44 +662,6 @@ Define success criteria and cutover procedures before starting the divergence pe
 **Automate When Possible**:
 Even planned divergence can use automation—just with longer gates and explicit approval requirements.
 
-### Example: Database Upgrade
-
-A complete example of planned divergence for a PostgreSQL major version upgrade:
-
-<File title="components/terraform/database/v1/main.tf">
-```hcl
-# Stable PostgreSQL 13 - production pinned here
-resource "aws_db_instance" "main" {
-  engine         = "postgres"
-  engine_version = "13.11"
-  # Stable configuration
-}
-```
-</File>
-
-<File title="components/terraform/database/v2/main.tf">
-```hcl
-# PostgreSQL 15 - testing in dev/staging
-resource "aws_db_instance" "main" {
-  engine         = "postgres"
-  engine_version = "15.4"
-  # New features and optimizations
-}
-```
-</File>
-
-**Week 1-2**: Deploy v2 to dev, run application tests
-
-**Week 3-4**: Deploy v2 to staging, run full integration suite
-
-**Week 5-6**: Load testing and performance validation on staging
-
-**Week 7**: Final approvals and production cutover planning
-
-**Week 8**: Deploy v2 to production, monitor closely
-
-**Week 9+**: After validation, remove v1 folder and converge all environments to v2
-
 ## Advanced Patterns
 
 ### Emergency Overrides
