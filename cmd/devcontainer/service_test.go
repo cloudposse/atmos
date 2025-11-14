@@ -57,7 +57,7 @@ func (m *mockRuntimeProvider) Attach(ctx context.Context, atmosConfig *schema.At
 	return m.attachError
 }
 
-func (m *mockRuntimeProvider) Stop(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, timeout int) error {
+func (m *mockRuntimeProvider) Stop(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts StopOptions) error {
 	return m.stopError
 }
 
@@ -72,7 +72,7 @@ func (m *mockRuntimeProvider) Logs(ctx context.Context, atmosConfig *schema.Atmo
 	return io.NopCloser(nil), nil
 }
 
-func (m *mockRuntimeProvider) Remove(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, force bool) error {
+func (m *mockRuntimeProvider) Remove(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts RemoveOptions) error {
 	return m.removeError
 }
 
@@ -481,26 +481,26 @@ func TestService_Remove(t *testing.T) {
 	tests := []struct {
 		name          string
 		devName       string
-		force         bool
+		opts          RemoveOptions
 		runtime       *mockRuntimeProvider
 		expectedError bool
 	}{
 		{
 			name:    "remove success",
 			devName: "geodesic",
-			force:   false,
+			opts:    RemoveOptions{Force: false},
 			runtime: &mockRuntimeProvider{},
 		},
 		{
 			name:    "remove with force",
 			devName: "geodesic",
-			force:   true,
+			opts:    RemoveOptions{Force: true},
 			runtime: &mockRuntimeProvider{},
 		},
 		{
 			name:    "remove fails",
 			devName: "geodesic",
-			force:   false,
+			opts:    RemoveOptions{Force: false},
 			runtime: &mockRuntimeProvider{
 				removeError: errors.New("container in use"),
 			},
@@ -512,7 +512,7 @@ func TestService_Remove(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			service := NewTestableService(nil, tt.runtime, nil)
 
-			err := service.Remove(context.Background(), tt.devName, tt.force)
+			err := service.Remove(context.Background(), tt.devName, tt.opts)
 
 			if tt.expectedError {
 				assert.Error(t, err)

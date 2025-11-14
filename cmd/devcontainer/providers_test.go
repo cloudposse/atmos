@@ -264,7 +264,7 @@ func TestDockerRuntimeProvider_Remove(t *testing.T) {
 	ctx := context.Background()
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	err := provider.Remove(ctx, atmosConfig, "test", false)
+	err := provider.Remove(ctx, atmosConfig, "test", RemoveOptions{Force: false})
 
 	// We expect this to fail without Docker daemon/container.
 	assert.Error(t, err)
