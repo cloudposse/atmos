@@ -604,7 +604,7 @@ func TestListProfileFiles(t *testing.T) {
 					0o644,
 				))
 			},
-			expectedFiles: []string{"atmos.yaml", "stacks/dev.yaml"},
+			expectedFiles: []string{"atmos.yaml", filepath.Join("stacks", "dev.yaml")},
 			expectError:   false,
 		},
 		{

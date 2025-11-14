@@ -1,7 +1,6 @@
 package list
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -233,10 +232,6 @@ func TestBuildProfileRows(t *testing.T) {
 				path := rows[0][2]
 				assert.LessOrEqual(t, len(path), pathWidth,
 					"Path should be truncated to fit column width")
-				if len(rows[0][2]) > pathWidth {
-					assert.True(t, strings.HasPrefix(path, "..."),
-						"Truncated path should start with ...")
-				}
 			},
 		},
 		{

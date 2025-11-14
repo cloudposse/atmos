@@ -297,7 +297,7 @@ func TestRenderProfileOutput(t *testing.T) {
 			},
 		},
 		{
-			name:        "empty format defaults to text",
+			name:        "empty format is invalid",
 			format:      "",
 			expectError: true,
 			validate: func(t *testing.T, output string, err error) {
