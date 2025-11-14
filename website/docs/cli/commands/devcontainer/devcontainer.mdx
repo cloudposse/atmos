@@ -7,6 +7,8 @@ description: Manage development containers for Atmos workflows
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 Use this command to manage development containers (devcontainers) for your Atmos workflows.
@@ -22,54 +24,106 @@ Devcontainers provide isolated, reproducible development environments with all r
 
 Atmos devcontainers require either **Docker** or **Podman** to be installed and running on your system.
 
-#### Docker
+<Tabs queryString="runtime">
+  <TabItem value="docker" label="Docker" default>
+    #### Installation
 
-**Installation:**
-- **macOS**: [Docker Desktop for Mac](https://docs.docker.com/desktop/install/mac-install/)
-- **Windows**: [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/)
-- **Linux**: [Docker Engine](https://docs.docker.com/engine/install/)
+    <Tabs groupId="operating-systems">
+      <TabItem value="macos" label="macOS" default>
+        Install [Docker Desktop for Mac](https://docs.docker.com/desktop/install/mac-install/)
 
-**Starting Docker:**
-```bash
-# macOS/Windows: Start Docker Desktop application
-# Linux:
-sudo systemctl start docker
-sudo systemctl enable docker  # Enable on boot
-```
+        ```bash
+        # Or via Homebrew
+        brew install --cask docker
+        ```
 
-#### Podman (Recommended for Linux)
+        **Start Docker Desktop** from Applications or Launchpad.
+      </TabItem>
 
-**Installation:**
-- **macOS**: `brew install podman` ([Podman Desktop](https://podman-desktop.io/))
-- **Windows**: [Podman Desktop for Windows](https://podman.io/docs/installation#windows)
-- **Linux**:
-  - **Ubuntu/Debian**: `sudo apt-get install podman`
-  - **Fedora/RHEL**: `sudo dnf install podman`
-  - **Arch**: `sudo pacman -S podman`
+      <TabItem value="windows" label="Windows">
+        Install [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/)
 
-**Starting Podman:**
-```bash
-# macOS/Windows with Podman Desktop
-podman machine init
-podman machine start
+        **Start Docker Desktop** from the Start menu.
+      </TabItem>
 
-# Linux (rootless mode - no daemon required)
-# Podman runs without a daemon on Linux
-```
+      <TabItem value="linux" label="Linux">
+        Install [Docker Engine](https://docs.docker.com/engine/install/) for your distribution.
 
-#### Verification
+        ```bash
+        # Ubuntu/Debian
+        sudo apt-get update
+        sudo apt-get install docker-ce docker-ce-cli containerd.io
 
-Verify your container runtime is working:
+        # Fedora/RHEL
+        sudo dnf install docker-ce docker-ce-cli containerd.io
 
-```bash
-# For Docker:
-docker --version
-docker ps
+        # Start and enable Docker
+        sudo systemctl start docker
+        sudo systemctl enable docker
+        ```
+      </TabItem>
+    </Tabs>
 
-# For Podman:
-podman --version
-podman ps
-```
+    #### Verification
+
+    ```bash
+    docker --version
+    docker ps
+    ```
+  </TabItem>
+
+  <TabItem value="podman" label="Podman">
+    #### Installation
+
+    <Tabs groupId="operating-systems">
+      <TabItem value="macos" label="macOS" default>
+        ```bash
+        brew install podman
+        ```
+
+        Or install [Podman Desktop](https://podman-desktop.io/) for GUI management.
+
+        **Initialize and start Podman machine:**
+        ```bash
+        podman machine init
+        podman machine start
+        ```
+      </TabItem>
+
+      <TabItem value="windows" label="Windows">
+        Install [Podman Desktop for Windows](https://podman.io/docs/installation#windows)
+
+        **Initialize and start Podman machine:**
+        ```bash
+        podman machine init
+        podman machine start
+        ```
+      </TabItem>
+
+      <TabItem value="linux" label="Linux">
+        ```bash
+        # Ubuntu/Debian
+        sudo apt-get install podman
+
+        # Fedora/RHEL
+        sudo dnf install podman
+
+        # Arch
+        sudo pacman -S podman
+        ```
+
+        **Note:** Podman runs rootless on Linux - no daemon required.
+      </TabItem>
+    </Tabs>
+
+    #### Verification
+
+    ```bash
+    podman --version
+    podman ps
+    ```
+  </TabItem>
+</Tabs>
 
 ### Runtime Selection
 
