@@ -47,7 +47,7 @@ func TestDetectRuntime_ExplicitSetting(t *testing.T) {
 				// Note: This may fail if docker/podman not installed.
 				// In CI, this tests the logic path at minimum.
 				// If runtime not available, that's ok for this test.
-				// Error expected - runtime not available
+				t.Logf("Runtime detection failed (runtime not available): %v", err)
 			}
 		})
 	}
