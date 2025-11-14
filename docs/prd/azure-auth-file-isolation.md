@@ -65,7 +65,7 @@ $ atmos auth logout customer-a-azure  # ❌ DELETES personal credentials too!
 
 # Personal hobby account is gone
 $ az account show  # ❌ No longer logged in - must re-login manually
-```text
+```
 
 This is unacceptable. Developers should be able to maintain their personal Azure hobby accounts alongside Atmos-managed enterprise accounts without interference.
 
@@ -1228,7 +1228,6 @@ func TestAzureAuth_EndToEnd(t *testing.T) {
            tenant_id: "..."
            files:
              base_path: "~/custom/azure"  # Custom location
-   ```
    ```
 
 2. **Global Flags Reference** (`website/docs/cli/global-flags.mdx`):
