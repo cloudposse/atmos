@@ -65,7 +65,7 @@ $ atmos auth logout customer-a-azure  # ❌ DELETES personal credentials too!
 
 # Personal hobby account is gone
 $ az account show  # ❌ No longer logged in - must re-login manually
-```
+```text
 
 This is unacceptable. Developers should be able to maintain their personal Azure hobby accounts alongside Atmos-managed enterprise accounts without interference.
 
@@ -166,7 +166,7 @@ This PRD implements patterns defined in:
 
 **All identity providers MUST follow this structure:**
 
-```
+```text
 ~/.config/atmos/{cloud}/       # XDG_CONFIG_HOME/atmos/{cloud}
 ├── {provider-name-1}/         # Provider-specific subdirectory
 │   ├── credentials.*          # Credentials (format varies by provider)
@@ -177,7 +177,7 @@ This PRD implements patterns defined in:
 ```
 
 **Examples:**
-```
+```text
 ~/.config/atmos/aws/aws-sso/credentials           # AWS SSO provider
 ~/.config/atmos/aws/aws-sso/config                # AWS config
 ~/.config/atmos/azure/azure-oidc/msal_token_cache.json   # Azure OIDC provider
@@ -190,7 +190,7 @@ This PRD implements patterns defined in:
 
 #### File Structure
 
-```
+```text
 ~/.config/atmos/azure/         # XDG_CONFIG_HOME/atmos/azure
 ├── azure-oidc/                # OIDC/Device Code provider
 │   ├── msal_token_cache.json  # MSAL token cache
@@ -433,7 +433,7 @@ func (m *AzureFileManager) CleanupAll() error {
 
     return nil
 }
-```
+```text
 
 #### 2. Azure Auth Context (`pkg/schema/schema.go`) - UPDATE EXISTING
 
@@ -661,7 +661,7 @@ func SetEnvironmentVariables(authContext *schema.AuthContext, stackInfo *schema.
 
     return nil
 }
-```
+```text
 
 #### 4. Update `PrepareEnvironment` Function (`pkg/auth/cloud/azure/env.go`) - UPDATE EXISTING
 
@@ -816,7 +816,7 @@ func (p *deviceCodeProvider) updateAzureCLICacheLegacy(update cliCacheUpdate) er
         "Run 'atmos auth login' again to use new paths.")
     // ... existing implementation ...
 }
-```
+```text
 
 Also update the provider initialization to accept `basePath`:
 
@@ -872,7 +872,7 @@ auth:
           # Supports tilde expansion: ~/custom/azure
           # Supports environment variables: ${HOME}/custom/azure
           base_path: ""  # Empty = use XDG default (recommended)
-```
+```text
 
 ## Universal Pattern for All Providers
 
@@ -917,7 +917,7 @@ func SetAuthContext(params *SetAuthContextParams) error
 
 // SetEnvironmentVariables derives environment variables from AuthContext.
 func SetEnvironmentVariables(authContext *schema.AuthContext, stackInfo *schema.ConfigAndStacksInfo) error
-```
+```text
 
 ### Environment Variable Patterns
 
@@ -1027,7 +1027,7 @@ func TestAzureFileManager_GetProviderDir(t *testing.T) {
 
     assert.Equal(t, "/home/user/.config/atmos/azure/azure-oidc", providerDir)
 }
-```
+```text
 
 **Setup Tests (`pkg/auth/cloud/azure/setup_test.go`):**
 ```go
@@ -1105,7 +1105,7 @@ func TestPrepareEnvironment_ClearsConflictingVars(t *testing.T) {
     // Other vars preserved
     assert.Equal(t, "value", result["OTHER_VAR"])
 }
-```
+```text
 
 ### Integration Tests
 

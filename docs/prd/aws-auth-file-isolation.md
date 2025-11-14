@@ -30,7 +30,7 @@ Most cloud tooling (AWS CLI, Terraform, etc.) uses a single shared configuration
 
 **Atmos Solution: Physical File Isolation**
 Atmos provides **physically separate credential files** for each identity/customer:
-```
+```text
 ~/.config/atmos/aws/customer-a-prod/credentials   # Customer A production
 ~/.config/atmos/aws/customer-b-prod/credentials   # Customer B production
 ~/.config/atmos/aws/internal-dev/credentials      # Internal development
@@ -49,7 +49,7 @@ Atmos provides **physically separate credential files** for each identity/custom
 
 ### Directory Structure
 
-```
+```text
 ~/.config/atmos/aws/           # XDG_CONFIG_HOME/atmos/aws (base directory)
 ├── aws-sso/                   # Provider name (from atmos.yaml)
 │   ├── credentials            # AWS credentials file (INI format)
@@ -264,7 +264,7 @@ type AWSAuthContext struct {
 ### 1. Physical File Separation = Provable Security
 
 **Physically separate credential files per provider:**
-```
+```text
 ~/.config/atmos/aws/
 ├── customer-a-prod/
 │   ├── credentials    # ONLY Customer A credentials
@@ -285,7 +285,7 @@ type AWSAuthContext struct {
 - ✅ **No shared state**—zero risk of credential cross-contamination
 
 **Contrast with standard AWS CLI approach:**
-```
+```ini
 ~/.aws/credentials    # ALL customers in ONE file (risky!)
 [customer-a-prod]
 aws_access_key_id = ASIA...
@@ -372,7 +372,7 @@ $ atmos auth logout aws-sso
 ### 4. Multi-Provider Support
 
 **Multiple AWS providers can coexist:**
-```
+```text
 ~/.config/atmos/aws/
 ├── aws-sso/          # SSO provider for production
 ├── aws-user/         # IAM user provider for development

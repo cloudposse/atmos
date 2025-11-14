@@ -50,7 +50,7 @@ Developers typically have:
    - Must not interfere with personal accounts
 
 **Without isolation (anti-pattern):**
-```
+```text
 ~/.aws/credentials           # Mixed: Personal hobby account + customer accounts
 ~/.azure/msal_token_cache    # Shared: Personal projects + enterprise work
 ~/.config/gcloud/            # Can't tell: Which is personal vs work?
@@ -63,7 +63,7 @@ Developers typically have:
 - ❌ **Configuration corruption**: Atmos overwrites your carefully configured personal settings
 
 **With isolation (correct pattern):**
-```
+```text
 # Atmos-managed enterprise/customer credentials
 ~/.config/atmos/aws/customer-a-prod/      # Customer A production account
 ~/.config/atmos/aws/customer-b-dev/       # Customer B development account
@@ -88,7 +88,7 @@ Developers typically have:
 
 **All providers MUST follow this structure:**
 
-```
+```text
 ~/.config/atmos/{cloud}/       # XDG_CONFIG_HOME/atmos/{cloud}
 ├── {provider-name-1}/         # Provider-specific subdirectory
 │   ├── credentials.*          # Credentials (format varies by provider)
@@ -103,7 +103,7 @@ Developers typically have:
 - **Windows**: `%APPDATA%\atmos\{cloud}\`
 
 **Examples:**
-```
+```text
 ~/.config/atmos/aws/aws-sso/credentials           # AWS SSO provider
 ~/.config/atmos/aws/aws-sso/config                # AWS config
 ~/.config/atmos/azure/azure-oidc/msal_token_cache.json   # Azure OIDC provider
