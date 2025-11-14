@@ -182,9 +182,9 @@ func TestManager_Logout(t *testing.T) {
 				m.identities["test-identity"] = mockIdentity
 			}
 
-			// Execute logout.
+			// Execute logout (with deleteKeychain=true to match test expectations).
 			ctx := context.Background()
-			err := m.Logout(ctx, tt.identityName)
+			err := m.Logout(ctx, tt.identityName, true)
 
 			// Check error expectation.
 			if (err != nil) != tt.wantErr {
@@ -317,9 +317,9 @@ func TestManager_LogoutProvider(t *testing.T) {
 				m.identities[identityName] = mockIdentity
 			}
 
-			// Execute logout.
+			// Execute logout (with deleteKeychain=true to match test expectations).
 			ctx := context.Background()
-			err := m.LogoutProvider(ctx, tt.providerName)
+			err := m.LogoutProvider(ctx, tt.providerName, true)
 
 			// Check error expectation.
 			if (err != nil) != tt.wantErr {
@@ -448,9 +448,9 @@ func TestManager_LogoutAll(t *testing.T) {
 				m.identities[identityName] = mockIdentity
 			}
 
-			// Execute logout.
+			// Execute logout (with deleteKeychain=true to match test expectations).
 			ctx := context.Background()
-			err := m.LogoutAll(ctx)
+			err := m.LogoutAll(ctx, true)
 
 			// Check error expectation.
 			if (err != nil) != tt.wantErr {
@@ -598,9 +598,9 @@ func TestManager_LogoutProvider_TransitiveChain(t *testing.T) {
 		m.identities[identityName] = mockIdentity
 	}
 
-	// Execute LogoutProvider - should find all three identities transitively.
+	// Execute LogoutProvider - should find all three identities transitively (deleteKeychain=true).
 	ctx := context.Background()
-	err := m.LogoutProvider(ctx, "provider1")
+	err := m.LogoutProvider(ctx, "provider1", true)
 	if err != nil {
 		t.Errorf("LogoutProvider() unexpected error = %v", err)
 	}
@@ -635,7 +635,7 @@ func TestManager_Logout_NotSupported(t *testing.T) {
 	mockIdentity.EXPECT().Logout(gomock.Any()).Return(errUtils.ErrLogoutNotSupported)
 
 	ctx := context.Background()
-	err := m.Logout(ctx, "github-identity")
+	err := m.Logout(ctx, "github-identity", true)
 	// Should succeed (exit 0) even though identity returned ErrLogoutNotSupported.
 	if err != nil {
 		t.Errorf("Logout() should succeed with ErrLogoutNotSupported, got error = %v", err)
@@ -675,7 +675,7 @@ func TestManager_LogoutProvider_WithFailures(t *testing.T) {
 	mockProvider.EXPECT().Logout(gomock.Any()).Return(errors.New("provider logout failed"))
 
 	ctx := context.Background()
-	err := m.LogoutProvider(ctx, "test-provider")
+	err := m.LogoutProvider(ctx, "test-provider", true)
 
 	// Should return error with both identity and provider failures.
 	if err == nil {
@@ -721,7 +721,7 @@ func TestManager_Logout_IdentityInChain(t *testing.T) {
 	mockIdentity.EXPECT().Logout(gomock.Any()).Return(nil)
 
 	ctx := context.Background()
-	err := m.Logout(ctx, "standalone-identity")
+	err := m.Logout(ctx, "standalone-identity", true)
 	if err != nil {
 		t.Errorf("Logout() failed: %v", err)
 	}
@@ -758,7 +758,7 @@ func TestManager_Logout_IdentityLogoutNotSupported(t *testing.T) {
 	mockIdentity.EXPECT().Logout(gomock.Any()).Return(errUtils.ErrLogoutNotSupported)
 
 	ctx := context.Background()
-	err := m.Logout(ctx, "test-identity")
+	err := m.Logout(ctx, "test-identity", true)
 	// Should succeed (ErrLogoutNotSupported is treated as success).
 	if err != nil {
 		t.Errorf("Logout() should succeed when identity.Logout returns ErrLogoutNotSupported, got: %v", err)
@@ -796,7 +796,7 @@ func TestManager_Logout_IdentityInChainLogoutFails(t *testing.T) {
 	mockIdentity.EXPECT().Logout(gomock.Any()).Return(errors.New("identity cleanup failed"))
 
 	ctx := context.Background()
-	err := m.Logout(ctx, "standalone-identity")
+	err := m.Logout(ctx, "standalone-identity", true)
 
 	// Should return partial logout (1 keyring deleted, but identity cleanup failed).
 	if err == nil {
@@ -857,7 +857,7 @@ func TestManager_LogoutAll_WithErrors(t *testing.T) {
 	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
 
 	ctx := context.Background()
-	err := m.LogoutAll(ctx)
+	err := m.LogoutAll(ctx, true)
 
 	// Should return error when some deletions fail.
 	// Since identity2 has 0 removed and 1 error, it returns ErrLogoutFailed.
@@ -926,7 +926,7 @@ func TestManager_LogoutAll_LogsOutProviders(t *testing.T) {
 	mockProvider2.EXPECT().Logout(gomock.Any()).Return(nil)
 
 	ctx := context.Background()
-	err := m.LogoutAll(ctx)
+	err := m.LogoutAll(ctx, true)
 	if err != nil {
 		t.Errorf("LogoutAll() should succeed when all operations succeed, got: %v", err)
 	}

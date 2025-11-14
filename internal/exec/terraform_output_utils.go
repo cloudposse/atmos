@@ -115,7 +115,7 @@ func (a *authContextWrapper) ListProviders() []string {
 	panic("authContextWrapper.ListProviders should not be called")
 }
 
-func (a *authContextWrapper) Logout(ctx context.Context, identityName string) error {
+func (a *authContextWrapper) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
 	defer perf.Track(nil, "exec.authContextWrapper.Logout")()
 
 	panic("authContextWrapper.Logout should not be called")
@@ -163,13 +163,13 @@ func (a *authContextWrapper) GetProviders() map[string]schema.Provider {
 	panic("authContextWrapper.GetProviders should not be called")
 }
 
-func (a *authContextWrapper) LogoutProvider(ctx context.Context, providerName string) error {
+func (a *authContextWrapper) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
 	defer perf.Track(nil, "exec.authContextWrapper.LogoutProvider")()
 
 	panic("authContextWrapper.LogoutProvider should not be called")
 }
 
-func (a *authContextWrapper) LogoutAll(ctx context.Context) error {
+func (a *authContextWrapper) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	defer perf.Track(nil, "exec.authContextWrapper.LogoutAll")()
 
 	panic("authContextWrapper.LogoutAll should not be called")
