@@ -30,7 +30,7 @@ type RuntimeProvider interface {
 	Start(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts StartOptions) error
 
 	// Stop stops a running devcontainer.
-	Stop(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, timeout int) error
+	Stop(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts StopOptions) error
 
 	// Attach attaches to a running devcontainer.
 	Attach(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts AttachOptions) error
@@ -42,7 +42,7 @@ type RuntimeProvider interface {
 	Logs(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts LogsOptions) (io.ReadCloser, error)
 
 	// Remove removes a devcontainer.
-	Remove(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, force bool) error
+	Remove(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts RemoveOptions) error
 
 	// Rebuild rebuilds a devcontainer.
 	Rebuild(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts RebuildOptions) error

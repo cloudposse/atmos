@@ -78,8 +78,8 @@ func (d *DockerRuntimeProvider) Start(ctx context.Context, atmosConfig *schema.A
 }
 
 // Stop stops a running devcontainer.
-func (d *DockerRuntimeProvider) Stop(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, timeout int) error {
-	return d.manager.Stop(atmosConfig, name, "", timeout)
+func (d *DockerRuntimeProvider) Stop(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts StopOptions) error {
+	return d.manager.Stop(atmosConfig, name, opts.Instance, opts.Timeout)
 }
 
 // Attach attaches to a running devcontainer.
@@ -107,8 +107,8 @@ func (d *DockerRuntimeProvider) Logs(ctx context.Context, atmosConfig *schema.At
 }
 
 // Remove removes a devcontainer.
-func (d *DockerRuntimeProvider) Remove(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, force bool) error {
-	return d.manager.Remove(atmosConfig, name, "", force)
+func (d *DockerRuntimeProvider) Remove(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts RemoveOptions) error {
+	return d.manager.Remove(atmosConfig, name, opts.Instance, opts.Force)
 }
 
 // Rebuild rebuilds a devcontainer.

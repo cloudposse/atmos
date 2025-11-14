@@ -184,17 +184,17 @@ func (mr *MockRuntimeProviderMockRecorder) Rebuild(ctx, atmosConfig, name, opts 
 }
 
 // Remove mocks base method.
-func (m *MockRuntimeProvider) Remove(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, force bool) error {
+func (m *MockRuntimeProvider) Remove(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts RemoveOptions) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Remove", ctx, atmosConfig, name, force)
+	ret := m.ctrl.Call(m, "Remove", ctx, atmosConfig, name, opts)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Remove indicates an expected call of Remove.
-func (mr *MockRuntimeProviderMockRecorder) Remove(ctx, atmosConfig, name, force any) *gomock.Call {
+func (mr *MockRuntimeProviderMockRecorder) Remove(ctx, atmosConfig, name, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockRuntimeProvider)(nil).Remove), ctx, atmosConfig, name, force)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockRuntimeProvider)(nil).Remove), ctx, atmosConfig, name, opts)
 }
 
 // Start mocks base method.
@@ -212,17 +212,17 @@ func (mr *MockRuntimeProviderMockRecorder) Start(ctx, atmosConfig, name, opts an
 }
 
 // Stop mocks base method.
-func (m *MockRuntimeProvider) Stop(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, timeout int) error {
+func (m *MockRuntimeProvider) Stop(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts StopOptions) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Stop", ctx, atmosConfig, name, timeout)
+	ret := m.ctrl.Call(m, "Stop", ctx, atmosConfig, name, opts)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Stop indicates an expected call of Stop.
-func (mr *MockRuntimeProviderMockRecorder) Stop(ctx, atmosConfig, name, timeout any) *gomock.Call {
+func (mr *MockRuntimeProviderMockRecorder) Stop(ctx, atmosConfig, name, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockRuntimeProvider)(nil).Stop), ctx, atmosConfig, name, timeout)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockRuntimeProvider)(nil).Stop), ctx, atmosConfig, name, opts)
 }
 
 // MockUIProvider is a mock of UIProvider interface.

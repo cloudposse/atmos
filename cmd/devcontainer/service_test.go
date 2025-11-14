@@ -334,7 +334,7 @@ func TestService_Stop(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			service := NewTestableService(nil, tt.runtime, nil)
 
-			err := service.Stop(context.Background(), tt.devName, tt.timeout)
+			err := service.Stop(context.Background(), tt.devName, StopOptions{Timeout: tt.timeout})
 
 			if tt.expectedError {
 				assert.Error(t, err)

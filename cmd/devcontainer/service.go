@@ -122,8 +122,8 @@ func (s *Service) Start(ctx context.Context, name string, opts StartOptions) err
 }
 
 // Stop stops a running devcontainer.
-func (s *Service) Stop(ctx context.Context, name string, timeout int) error {
-	return s.runtime.Stop(ctx, s.atmosConfig, name, timeout)
+func (s *Service) Stop(ctx context.Context, name string, opts StopOptions) error {
+	return s.runtime.Stop(ctx, s.atmosConfig, name, opts)
 }
 
 // List lists all running devcontainers.
@@ -150,8 +150,8 @@ func (s *Service) Logs(ctx context.Context, name string, opts LogsOptions) error
 }
 
 // Remove removes a devcontainer.
-func (s *Service) Remove(ctx context.Context, name string, force bool) error {
-	return s.runtime.Remove(ctx, s.atmosConfig, name, force)
+func (s *Service) Remove(ctx context.Context, name string, opts RemoveOptions) error {
+	return s.runtime.Remove(ctx, s.atmosConfig, name, opts)
 }
 
 // Rebuild rebuilds a devcontainer.

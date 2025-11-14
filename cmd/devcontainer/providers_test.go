@@ -216,7 +216,7 @@ func TestDockerRuntimeProvider_Stop(t *testing.T) {
 	ctx := context.Background()
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	err := provider.Stop(ctx, atmosConfig, "test", 10)
+	err := provider.Stop(ctx, atmosConfig, "test", StopOptions{Timeout: 10})
 
 	// We expect this to fail without Docker daemon/container.
 	assert.Error(t, err)
