@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -58,16 +57,8 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset viper state to prevent pollution from previous tests.
-			// This is critical because other tests may call viper.Reset() which clears
-			// environment variable bindings, causing this test to not pick up ATMOS_CLI_CONFIG_PATH.
-			viper.Reset()
-
-			// CRITICAL: Must use absolute path, not relative path, because viper may resolve
-			// the path from a different working directory in CI vs locally.
-			testDir, err := filepath.Abs("../tests/fixtures/scenarios/atmos-auth")
-			require.NoError(t, err, "Failed to get absolute path to test fixture")
-
+			// Set up test fixture with auth configuration for each subtest.
+			testDir := "../tests/fixtures/scenarios/atmos-auth"
 			t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
 			t.Setenv("ATMOS_BASE_PATH", testDir)
 
@@ -79,7 +70,7 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 			testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
 			// Call the core business logic directly, bypassing handleHelpRequest and checkAtmosConfig.
-			err = executeAuthShellCommandCore(testCmd, tt.args)
+			err := executeAuthShellCommandCore(testCmd, tt.args)
 
 			if tt.expectedSentinelErr != nil {
 				require.Error(t, err, "Expected an error but got nil")
