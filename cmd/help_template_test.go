@@ -238,7 +238,7 @@ func TestIsCommandAvailable(t *testing.T) {
 		cmd := &cobra.Command{
 			Use:    "test",
 			Hidden: false,
-			Run:    func(cmd *cobra.Command, args []string) {}, // Need Run function to be available
+			Run:    func(cmd *cobra.Command, args []string) {}, // Need Run function to be available.
 		}
 		if !isCommandAvailable(cmd) {
 			t.Error("Expected available command to be available")
@@ -303,7 +303,7 @@ func TestCalculateCommandWidth(t *testing.T) {
 			if tt.hasSubcommand {
 				subCmd := &cobra.Command{
 					Use: "subcommand",
-					Run: func(cmd *cobra.Command, args []string) {}, // Make subcommand available
+					Run: func(cmd *cobra.Command, args []string) {}, // Make subcommand available.
 				}
 				cmd.AddCommand(subCmd)
 			}
@@ -352,7 +352,7 @@ func TestCalculateMaxCommandWidth(t *testing.T) {
 			{Use: "verylongbutthisishidden", Hidden: true, Run: func(cmd *cobra.Command, args []string) {}},
 		}
 		result := calculateMaxCommandWidth(commands)
-		if result != 5 { // Length of "short"
+		if result != 5 { // Length of "short".
 			t.Errorf("Expected 5 (ignoring hidden), got %d", result)
 		}
 	})

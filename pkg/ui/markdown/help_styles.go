@@ -119,7 +119,7 @@ func GetHelpStyle() ([]byte, error) {
 		Enumeration: ansi.StylePrimitive{
 			BlockPrefix: ". ",
 		},
-		// Inline code - no background, just purple
+		// Inline code - no background, just purple.
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Color:  stringPtr(DefaultPurple),
@@ -128,17 +128,17 @@ func GetHelpStyle() ([]byte, error) {
 			},
 			Margin: uintPtr(0),
 		},
-		// Code blocks - no syntax highlighting, no backgrounds
-		// Disable Chroma completely to prevent nested backgrounds
+		// Code blocks - no syntax highlighting, no backgrounds.
+		// Disable Chroma completely to prevent nested backgrounds.
 		CodeBlock: ansi.StyleCodeBlock{
 			StyleBlock: ansi.StyleBlock{
 				StylePrimitive: ansi.StylePrimitive{
 					Color:           stringPtr(DefaultLightGray),
-					BackgroundColor: stringPtr(""), // Explicitly no background
+					BackgroundColor: stringPtr(""), // Explicitly no background.
 				},
 				Margin: uintPtr(0),
 			},
-			Chroma: nil, // Disable chroma to avoid nested backgrounds
+			Chroma: nil, // Disable chroma to avoid nested backgrounds.
 		},
 		Table: ansi.StyleTable{
 			StyleBlock:      ansi.StyleBlock{},

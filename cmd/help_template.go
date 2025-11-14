@@ -36,10 +36,8 @@ const (
 
 // String constants for environment variable values.
 const (
-	valueTrue  = "true"
-	valueFalse = "false"
-	valueOne   = "1"
-	valueZero  = "0"
+	valueOne  = "1"
+	valueZero = "0"
 )
 
 // colorConfig holds the color detection and environment variable configuration.
