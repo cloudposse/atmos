@@ -271,7 +271,7 @@ func execTerraformOutput(
 				return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'backend' section", component, stack)
 			}
 
-			componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, terraformWorkspace)
+			componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, terraformWorkspace, authContext)
 			if err != nil {
 				return nil, err
 			}
@@ -292,7 +292,7 @@ func execTerraformOutput(
 
 			log.Debug("Writing provider overrides", "file", providerOverrideFileName)
 
-			providerOverrides := generateComponentProviderOverrides(providersSection)
+			providerOverrides := generateComponentProviderOverrides(providersSection, authContext)
 			err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
 			if err != nil {
 				return nil, err

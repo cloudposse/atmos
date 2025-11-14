@@ -486,7 +486,7 @@ func TestBackendGenerationWithNestedMaps(t *testing.T) {
 		}
 
 		// Generate backend config
-		result, err := generateComponentBackendConfig("s3", backendConfig, "")
+		result, err := generateComponentBackendConfig("s3", backendConfig, "", nil)
 		require.NoError(t, err)
 
 		// Navigate to assume_role section
@@ -670,7 +670,7 @@ func TestGenerateComponentBackendConfigFunction(t *testing.T) {
 			},
 		}
 
-		result, err := generateComponentBackendConfig("cloud", backendConfig, "prod")
+		result, err := generateComponentBackendConfig("cloud", backendConfig, "prod", nil)
 		require.NoError(t, err)
 
 		// Verify structure
@@ -696,7 +696,7 @@ func TestGenerateComponentBackendConfigFunction(t *testing.T) {
 			},
 		}
 
-		result, err := generateComponentBackendConfig("cloud", backendConfig, "")
+		result, err := generateComponentBackendConfig("cloud", backendConfig, "", nil)
 		require.NoError(t, err)
 
 		terraform, ok := result["terraform"].(map[string]any)
@@ -719,7 +719,7 @@ func TestGenerateComponentBackendConfigFunction(t *testing.T) {
 			"region": "us-east-1",
 		}
 
-		result, err := generateComponentBackendConfig("s3", backendConfig, "")
+		result, err := generateComponentBackendConfig("s3", backendConfig, "", nil)
 		require.NoError(t, err)
 
 		// For non-cloud backends, should return wrapped config
@@ -748,7 +748,7 @@ func TestGenerateComponentBackendConfigFunction(t *testing.T) {
 			},
 		}
 
-		result, err := generateComponentBackendConfig("s3", backendConfig, "")
+		result, err := generateComponentBackendConfig("s3", backendConfig, "", nil)
 		require.NoError(t, err)
 
 		terraform := result["terraform"].(map[string]any)
@@ -768,7 +768,7 @@ func TestGenerateComponentBackendConfigFunction(t *testing.T) {
 			"path": "terraform.tfstate",
 		}
 
-		result, err := generateComponentBackendConfig("local", backendConfig, "")
+		result, err := generateComponentBackendConfig("local", backendConfig, "", nil)
 		require.NoError(t, err)
 
 		terraform := result["terraform"].(map[string]any)

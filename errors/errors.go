@@ -99,7 +99,16 @@ var (
 	ErrAzureContainerRequired = errors.New("container_name is required for azurerm backend")
 	ErrStorageAccountRequired = errors.New("storage_account_name is required for azurerm backend")
 	ErrAzurePermissionDenied  = errors.New("permission denied accessing Azure blob")
-	ErrBackendConfigRequired  = errors.New("backend configuration is required")
+
+	// Azure authentication errors.
+	ErrAzureOIDClaimNotFound      = errors.New("oid claim not found in token")
+	ErrAzureUsernameClaimNotFound = errors.New("no username claim found in token (tried upn, unique_name, email)")
+	ErrAzureInvalidJWTFormat      = errors.New("invalid JWT format")
+	ErrAzureExpirationTimeEmpty   = errors.New("expiration time is empty")
+	ErrAzureTimeParseFailure      = errors.New("unable to parse time: tried RFC3339, local time formats, and Unix timestamp")
+	ErrAzureNoAccountsInCache     = errors.New("no accounts found in cache")
+	ErrAzureNoAccountForTenant    = errors.New("no account found for tenant")
+	ErrBackendConfigRequired      = errors.New("backend configuration is required")
 
 	// Git-related errors.
 	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")

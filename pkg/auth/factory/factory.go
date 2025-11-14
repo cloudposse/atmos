@@ -5,7 +5,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsIdentities "github.com/cloudposse/atmos/pkg/auth/identities/aws"
+	azureIdentities "github.com/cloudposse/atmos/pkg/auth/identities/azure"
 	awsProviders "github.com/cloudposse/atmos/pkg/auth/providers/aws"
+	azureProviders "github.com/cloudposse/atmos/pkg/auth/providers/azure"
 	githubProviders "github.com/cloudposse/atmos/pkg/auth/providers/github"
 	mockProviders "github.com/cloudposse/atmos/pkg/auth/providers/mock"
 	mockawsProviders "github.com/cloudposse/atmos/pkg/auth/providers/mock/aws"
@@ -25,6 +27,10 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 		return awsProviders.NewSSOProvider(name, config)
 	case "aws/saml":
 		return awsProviders.NewSAMLProvider(name, config)
+	case "azure/cli":
+		return azureProviders.NewCLIProvider(name, config)
+	case "azure/device-code":
+		return azureProviders.NewDeviceCodeProvider(name, config)
 	case "github/oidc":
 		return githubProviders.NewOIDCProvider(name, config)
 	case "mock":
@@ -49,6 +55,8 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 		return awsIdentities.NewAssumeRoleIdentity(name, config)
 	case "aws/user":
 		return awsIdentities.NewUserIdentity(name, config)
+	case "azure/subscription":
+		return azureIdentities.NewSubscriptionIdentity(name, config)
 	case "mock":
 		return mockProviders.NewIdentity(name, config), nil
 	case "mock-aws":
