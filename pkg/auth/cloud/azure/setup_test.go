@@ -180,6 +180,25 @@ func TestSetAuthContext(t *testing.T) {
 				assert.Nil(t, authContext.Azure)
 			},
 		},
+		{
+			name: "expired credentials returns error",
+			params: &SetAuthContextParams{
+				AuthContext:  &schema.AuthContext{},
+				ProviderName: "test-provider",
+				IdentityName: "test-identity",
+				Credentials: &types.AzureCredentials{
+					AccessToken:    "test-access-token",
+					TokenType:      "Bearer",
+					TenantID:       "tenant-123",
+					SubscriptionID: "sub-456",
+					Location:       "eastus",
+					Expiration:     now.Add(-1 * time.Hour).Format(time.RFC3339), // Expired 1 hour ago
+				},
+				BasePath: tmpDir,
+			},
+			expectError: true,
+			errorType:   errUtils.ErrAuthenticationFailed,
+		},
 	}
 
 	for _, tt := range tests {

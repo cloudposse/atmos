@@ -66,6 +66,11 @@ func SetAuthContext(params *SetAuthContextParams) error {
 		return nil // No Azure credentials to setup.
 	}
 
+	// Validate credentials are not expired.
+	if azureCreds.IsExpired() {
+		return fmt.Errorf("%w: Azure credentials are expired", errUtils.ErrAuthenticationFailed)
+	}
+
 	m, err := NewAzureFileManager(params.BasePath)
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthenticationFailed, err)
