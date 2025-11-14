@@ -122,7 +122,7 @@ func TestAzureCredentials_Validate_EmptySubscriptionID(t *testing.T) {
 }
 
 func TestAzureCredentials_Validate_WithExpiration(t *testing.T) {
-	// Test that expiration is returned when available.
+	// Test that Validate handles credentials that include an Expiration value.
 	now := time.Now().UTC()
 	c := &AzureCredentials{
 		AccessToken:    "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6IkZTaW11RnJGTm9DMHNKWEdtdjEzbk5aY2VEYyIsImtpZCI6IkZTaW11RnJGTm9DMHNKWEdtdjEzbk5aY2VEYyJ9.EXAMPLE",
@@ -132,7 +132,8 @@ func TestAzureCredentials_Validate_WithExpiration(t *testing.T) {
 		Expiration:     now.Add(1 * time.Hour).Format(time.RFC3339),
 	}
 
-	// This will fail validation (invalid creds), but we're testing the method structure.
+	// This will fail validation (invalid creds); this primarily ensures the code
+	// path with a non-empty Expiration field does not panic and returns an error.
 	ctx := context.Background()
 	_, err := c.Validate(ctx)
 	assert.Error(t, err, "Should fail with invalid credentials")
