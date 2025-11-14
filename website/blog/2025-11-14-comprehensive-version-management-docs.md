@@ -5,7 +5,9 @@ authors: [osterman]
 tags: [atmos, documentation, version-management, versioning, deployment-strategies]
 ---
 
-We've published comprehensive new documentation on version management patterns for Atmos, providing clear guidance on managing infrastructure component versions across your environments. Whether you're running a small startup or a large enterprise, understanding version management patterns is crucial for safe, reliable infrastructure deployments.
+There's no one-size-fits-all approach to version management. Through years of experience implementing infrastructure across hundreds of organizations, we've seen different versioning patterns work better depending on what you want to optimize for—whether that's simplicity, control, regulatory compliance, or development velocity.
+
+This new documentation captures the versioning patterns we've implemented, seen in production, and refined with teams ranging from small startups to large enterprises. Each pattern has trade-offs, and the right choice depends on your organization's needs and constraints.
 
 <!--truncate-->
 
@@ -110,3 +112,7 @@ The documentation includes:
 **The best approach is what your engineering organization already follows.** If your team has established Git Flow practices, extending them to infrastructure management keeps the mental model consistent. If you're building modern cloud-native infrastructure with strong automation, Continuous Version Deployment provides the simplest path forward.
 
 Ready to explore? Check out the new [Version Management documentation](/design-patterns/version-management) today!
+
+## Share Your Experience
+
+Have you found another versioning strategy that works well for your organization? We'd love to hear about it! Share your approach in our [GitHub Discussions](https://github.com/cloudposse/atmos/discussions) or [open an issue](https://github.com/cloudposse/atmos/issues) to help us expand this documentation with real-world patterns from the community.
