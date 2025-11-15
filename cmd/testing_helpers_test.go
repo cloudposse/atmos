@@ -5,6 +5,11 @@ import (
 	"reflect"
 
 	"github.com/spf13/pflag"
+
+	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // flagSnapshot stores the state of a flag for restoration.
@@ -13,21 +18,27 @@ type flagSnapshot struct {
 	changed bool
 }
 
-// cmdStateSnapshot stores the complete state of RootCmd for restoration.
+// cmdStateSnapshot stores the complete state of RootCmd and I/O for restoration.
 type cmdStateSnapshot struct {
-	args   []string
-	osArgs []string
-	flags  map[string]flagSnapshot
+	args     []string
+	osArgs   []string
+	osStdout *os.File
+	osStderr *os.File
+	osStdin  *os.File
+	flags    map[string]flagSnapshot
 }
 
-// snapshotRootCmdState captures the current state of RootCmd including all flag values.
+// snapshotRootCmdState captures the current state of RootCmd including all flag values and I/O streams.
 // This allows tests to save state at the beginning and restore it in cleanup via NewTestKit,
 // preventing test pollution without needing to maintain a hardcoded list of flags.
 func snapshotRootCmdState() *cmdStateSnapshot {
 	snapshot := &cmdStateSnapshot{
-		args:   make([]string, len(RootCmd.Flags().Args())),
-		osArgs: make([]string, len(os.Args)),
-		flags:  make(map[string]flagSnapshot),
+		args:     make([]string, len(RootCmd.Flags().Args())),
+		osArgs:   make([]string, len(os.Args)),
+		osStdout: os.Stdout,
+		osStderr: os.Stderr,
+		osStdin:  os.Stdin,
+		flags:    make(map[string]flagSnapshot),
 	}
 
 	// Copy args.
@@ -79,14 +90,27 @@ func restoreStringSliceFlag(f *pflag.Flag, snap flagSnapshot) {
 	f.Changed = snap.changed
 }
 
-// restoreRootCmdState restores RootCmd to a previously captured state.
+// restoreRootCmdState restores RootCmd, Viper, and I/O to a previously captured state.
 func restoreRootCmdState(snapshot *cmdStateSnapshot) {
+	// Reset global I/O and UI state BEFORE restoring os std streams.
+	// This ensures cached I/O contexts are cleared while tests may still have
+	// modified stdout/stderr, preventing the next test from inheriting stale stream references.
+	iolib.Reset()
+	data.Reset()
+	ui.Reset()
+	homedir.Reset()
+
 	// Restore command args.
 	RootCmd.SetArgs(snapshot.args)
 
 	// Restore os.Args.
 	os.Args = make([]string, len(snapshot.osArgs))
 	copy(os.Args, snapshot.osArgs)
+
+	// Restore os std streams.
+	os.Stdout = snapshot.osStdout
+	os.Stderr = snapshot.osStderr
+	os.Stdin = snapshot.osStdin
 
 	// Restore all flags to their snapshotted values.
 	restoreFlags := func(flagSet *pflag.FlagSet) {

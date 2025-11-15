@@ -43,10 +43,13 @@ import (
 
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
-	_ "github.com/cloudposse/atmos/cmd/about"
 	"github.com/cloudposse/atmos/cmd/internal"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
+	toolchainCmd "github.com/cloudposse/atmos/cmd/toolchain"
 	"github.com/cloudposse/atmos/cmd/version"
+	"github.com/cloudposse/atmos/toolchain"
+
+	_ "github.com/cloudposse/atmos/cmd/about"
 )
 
 const (
@@ -71,7 +74,12 @@ var logFileHandle *os.File
 // This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
 // where Cobra doesn't parse flags before PersistentPreRun is called.
 func parseChdirFromArgs() string {
-	args := os.Args
+	return parseChdirFromArgsList(os.Args)
+}
+
+// parseChdirFromArgsList extracts the chdir value from a list of arguments.
+// Exposed for testing.
+func parseChdirFromArgsList(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
@@ -582,6 +590,8 @@ func Execute() error {
 	// Set atmosConfig for commands that need access to config.
 	version.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
+	toolchainCmd.SetAtmosConfig(&atmosConfig)
+	toolchain.SetAtmosConfig(&atmosConfig)
 
 	utils.InitializeMarkdown(&atmosConfig)
 	errUtils.InitializeMarkdown(&atmosConfig)
@@ -763,6 +773,9 @@ func init() {
 	if err := viper.BindEnv("ATMOS_GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"); err != nil {
 		log.Error("Failed to bind ATMOS_GITHUB_TOKEN environment variable", "error", err)
 	}
+
+	// Note: Toolchain command is now registered via the command registry pattern.
+	// The blank import of cmd/toolchain automatically registers it.
 
 	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)

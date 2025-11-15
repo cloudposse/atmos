@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
@@ -16,6 +17,12 @@ func TestDescribeAffected(t *testing.T) {
 	_ = NewTestKit(t)
 
 	t.Chdir("../tests/fixtures/scenarios/basic")
+
+	// Disable authentication for this test to prevent validation errors.
+	// Set both environment variable and viper value to ensure it's recognized.
+	t.Setenv("ATMOS_IDENTITY", "false")
+	viper.Set("identity", "false")
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 

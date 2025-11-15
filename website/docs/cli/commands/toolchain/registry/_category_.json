@@ -1,0 +1,8 @@
+{
+  "label": "Registry",
+  "position": 20,
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/toolchain/registry/usage"
+  }
+}

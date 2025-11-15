@@ -44,6 +44,7 @@ type StyleSet struct {
 	XMark     lipgloss.Style
 	Footer    lipgloss.Style
 	Border    lipgloss.Style
+	Spinner   lipgloss.Style
 
 	// Version styles
 	VersionNumber lipgloss.Style
@@ -131,6 +132,7 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		XMark:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)).SetString(IconXMark),
 		Footer:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)).Italic(true),
 		Border:    getBorderStyle(scheme),
+		Spinner:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
 
 		// Version styles
 		VersionNumber: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),

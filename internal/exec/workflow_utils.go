@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
@@ -93,6 +94,30 @@ func ExecuteWorkflow(
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
 
 	log.Debug("Executing workflow", "workflow", workflow, "path", workflowPath)
+
+	// Resolve and install workflow dependencies
+	resolver := dependencies.NewResolver(&atmosConfig)
+	deps, err := resolver.ResolveWorkflowDependencies(workflowDefinition)
+	if err != nil {
+		return fmt.Errorf("failed to resolve workflow dependencies: %w", err)
+	}
+
+	if len(deps) > 0 {
+		log.Debug("Installing workflow dependencies", "tools", deps)
+		installer := dependencies.NewInstaller(&atmosConfig)
+		if err := installer.EnsureTools(deps); err != nil {
+			return fmt.Errorf("failed to install workflow dependencies: %w", err)
+		}
+
+		// Update PATH to include installed tools
+		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
+			return fmt.Errorf("failed to update PATH for workflow dependencies: %w", err)
+		}
+	}
+
+	// Create base environment with updated PATH for workflow steps.
+	// Steps will either use this directly (no identity) or merge it with auth credentials (with identity).
+	baseWorkflowEnv := []string{fmt.Sprintf("PATH=%s", os.Getenv("PATH"))}
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err := u.PrintAsYAMLToFileDescriptor(&atmosConfig, workflowDefinition)
@@ -185,16 +210,16 @@ func ExecuteWorkflow(
 			}
 
 			// Prepare shell environment with authentication credentials.
-			// Start with current OS environment and let PrepareShellEnvironment configure auth.
-			stepEnv, err = authManager.PrepareShellEnvironment(ctx, stepIdentity, os.Environ())
+			// Start with base workflow environment (includes updated PATH) and let PrepareShellEnvironment configure auth.
+			stepEnv, err = authManager.PrepareShellEnvironment(ctx, stepIdentity, append(os.Environ(), baseWorkflowEnv...))
 			if err != nil {
 				return fmt.Errorf("failed to prepare shell environment for identity %q in step %q: %w", stepIdentity, step.Name, err)
 			}
 
 			log.Debug("Prepared environment with identity", "identity", stepIdentity, "step", step.Name)
 		} else {
-			// No identity specified, use empty environment (subprocess inherits from parent).
-			stepEnv = []string{}
+			// No identity specified, use base workflow environment with updated PATH.
+			stepEnv = baseWorkflowEnv
 		}
 
 		var err error

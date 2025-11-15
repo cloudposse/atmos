@@ -1,0 +1,61 @@
+---
+title: atmos toolchain du
+sidebar_label: du
+sidebar_class_name: command
+id: du
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Display the total disk space consumed by all installed tools in your toolchain. This helps you monitor storage usage and identify when cleanup might be needed. The output is shown in a human-readable format (KB, MB, GB).
+</Intro>
+
+<Screengrab title="atmos toolchain du --help" slug="atmos-toolchain-du--help" />
+
+## Usage
+
+Execute the `atmos toolchain du` command like this:
+
+```shell
+atmos toolchain du
+```
+
+This command will calculate the total size of all installed tools and display the result using an informational toast message.
+
+## Examples
+
+### Check disk usage
+
+```shell
+atmos toolchain du
+```
+
+Example output:
+```
+ℹ Total disk space used by installed tools: 245.6mb
+```
+
+### Common scenarios
+
+**No tools installed:**
+```shell
+atmos toolchain du
+```
+Output: `ℹ No tools installed (0 B)`
+
+**After installing multiple tools:**
+```shell
+atmos toolchain install terraform@1.5.0
+atmos toolchain install kubectl@1.28.0
+atmos toolchain du
+```
+Output: `ℹ Total disk space used by installed tools: 312.4mb`
+
+## Notes
+
+- The command recursively calculates the size of all files in the toolchain installation directory
+- Sizes are displayed in human-readable format (bytes, KB, MB, or GB)
+- If the installation directory doesn't exist, it reports 0 usage without error
+- The command respects the configured installation path from `atmos.yaml` or the `--toolchain-path` flag

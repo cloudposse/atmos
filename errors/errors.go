@@ -143,6 +143,30 @@ var (
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
+	// Dependency management errors.
+	ErrDependencyConstraint = errors.New("dependency constraint validation failed")
+	ErrDependencyResolution = errors.New("dependency resolution failed")
+	ErrToolInstall          = errors.New("tool installation failed")
+
+	// Toolchain errors.
+	ErrToolNotFound              = errors.New("tool not found")
+	ErrInvalidToolSpec           = errors.New("invalid tool specification")
+	ErrToolAlreadyInstalled      = errors.New("tool already installed")
+	ErrDownloadFailed            = errors.New("download failed")
+	ErrExtractionFailed          = errors.New("extraction failed")
+	ErrChecksumMismatch          = errors.New("checksum mismatch")
+	ErrNoVersionsInstalled       = errors.New("no versions installed")
+	ErrLatestFileNotFound        = errors.New("latest version file not found")
+	ErrRegistryNotReachable      = errors.New("registry not reachable")
+	ErrToolNotInRegistry         = errors.New("tool not in registry")
+	ErrAliasNotFound             = errors.New("alias not found")
+	ErrBinaryNotExecutable       = errors.New("binary not executable")
+	ErrBinaryNotFound            = errors.New("binary not found")
+	ErrLockfileVersionMismatch   = errors.New("lockfile version mismatch")
+	ErrNoAssetTemplate           = errors.New("no asset template defined")
+	ErrAssetTemplateInvalid      = errors.New("asset template invalid")
+	ErrToolVersionsFileOperation = errors.New("tool-versions file operation failed")
+
 	// Flag validation errors.
 	ErrCompatibilityFlagMissingTarget = errors.New("compatibility flag references non-existent flag")
 	ErrInvalidFlagValue               = errors.New("invalid value for flag")
@@ -411,6 +435,7 @@ var (
 	ErrSetPermissions      = errors.New("failed to set permissions")
 	ErrReadDirectory       = errors.New("failed to read directory")
 	ErrComputeRelativePath = errors.New("failed to compute relative path")
+	ErrFileOperation       = errors.New("file operation failed")
 
 	// OCI/Container image errors.
 	ErrCreateTempDirectory   = ErrCreateTempDir // Alias to avoid duplicate sentinels

@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
@@ -15,6 +16,11 @@ import (
 
 func TestDescribeStacksRunnable(t *testing.T) {
 	_ = NewTestKit(t)
+
+	// Disable authentication for this test to prevent validation errors.
+	// Set both environment variable and viper value to ensure it's recognized.
+	t.Setenv("ATMOS_IDENTITY", "false")
+	viper.Set("identity", "false")
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
