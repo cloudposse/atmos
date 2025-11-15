@@ -116,6 +116,10 @@ components:
         workspaceFolder: /workspace
 ```
 
+:::tip
+When using `!random` for port forwarding in devcontainers, the generated port will be displayed when the container starts, making it easy to see which port was assigned.
+:::
+
 ### Load Balancer Configuration
 
 Generate random ports for backend services:
@@ -163,8 +167,4 @@ invalid number of arguments. The function requires exactly 2 arguments (min max)
 
 :::tip
 Unlike environment variables or template functions, `!random` generates a new value each time Atmos processes the configuration. If you need consistent values across multiple operations, consider using `!env` with a pre-generated value or storing the result in a variable.
-:::
-
-:::tip
-When using `!random` for port forwarding in devcontainers, the generated port will be displayed when the container starts, making it easy to see which port was assigned.
 :::

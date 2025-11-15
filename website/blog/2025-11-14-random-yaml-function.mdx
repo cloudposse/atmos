@@ -12,19 +12,24 @@ Need to generate random port numbers, worker IDs, or other numeric values in you
 
 ## What's New
 
-We've added a new `!random` YAML function that generates cryptographically secure random integers within a specified range. It's simple, type-safe, and works anywhere in your Atmos stack manifests.
+We've added a new `!random` YAML function that generates cryptographically secure random integers. Use it anywhere in your Atmos stack manifests:
 
 ```yaml
 vars:
-  # Generate a random ephemeral port
-  app_port: !random 49152 65535
+  app_port: !random 49152 65535  # Random ephemeral port
+  worker_id: !random 1000 9999   # Random worker ID
 ```
+
+The function accepts 0, 1, or 2 arguments:
+- `!random` - Random number 0-65535
+- `!random 100` - Random number 0-100
+- `!random 1024 65535` - Random number 1024-65535
 
 ## Common Use Cases
 
-### Random Port Numbers for DevContainers
+### DevContainer Port Forwarding
 
-Avoid port conflicts when running multiple devcontainer instances by generating random ports automatically:
+Avoid port conflicts when running multiple devcontainer instances:
 
 ```yaml
 components:
@@ -33,120 +38,25 @@ components:
       spec:
         image: mcr.microsoft.com/devcontainers/go:1.24
         forwardPorts:
-          - !random 8000 9000  # Web server
-          - !random 3000 3999  # Dev server
-          - !random 5432 5442  # Database
-        workspaceFolder: /workspace
-```
-
-When the devcontainer starts, Atmos displays the randomly assigned ports so you know exactly where to connect.
-
-### Dynamic Worker IDs
-
-Generate unique identifiers for workers, tasks, or other components:
-
-```yaml
-vars:
-  worker_config:
-    worker_id: !random 1000 9999
-    shard_id: !random 1 100
-    replica_number: !random 1 10
-```
-
-### Load Balancer Backend Ports
-
-Automatically assign random ports to backend services to avoid conflicts:
-
-```yaml
-vars:
-  backend_ports:
-    api_service: !random 10000 10999
-    metrics_endpoint: !random 11000 11999
-    health_check: !random 12000 12999
-```
-
-### Test Environment Configuration
-
-Generate random values for test isolation:
-
-```yaml
-components:
-  terraform:
-    test-cluster:
-      vars:
-        # Different port for each test run
-        test_server_port: !random 20000 29999
-
-        # Random seed for data generation
-        test_data_seed: !random 1000 999999
-```
-
-## Port Ranges to Know
-
-When generating random ports, use these ranges:
-
-- **Registered Ports** (1024-49151): Common application ports, no root required
-- **Ephemeral Ports** (49152-65535): Best for dynamic allocation and local development
-
-For devcontainers and local development, stick to these ranges to avoid privilege requirements and conflicts with system services.
-
-## How It Works
-
-The `!random` function uses Go's `crypto/rand` package for cryptographically secure random number generation. This ensures:
-
-- **Unpredictable values** that can't be guessed
-- **No collisions** between multiple calls (statistically)
-- **Security-appropriate** for generating ports, IDs, or tokens
-
-Every time Atmos processes your configuration, it generates fresh random values.
-
-## Example: Multi-Service DevContainer
-
-Here's a complete example showing random port assignment for a multi-service development environment:
-
-```yaml
-components:
-  devcontainer:
-    full-stack:
-      spec:
-        image: cloudposse/geodesic:latest
-        forwardPorts:
-          # Frontend
-          - !random 3000 3099
-
-          # Backend API
-          - !random 8000 8099
-
-          # Database
+          - !random 8000 9000
           - !random 5432 5442
-
-          # Redis cache
-          - !random 6379 6389
-
-          # Metrics/monitoring
-          - !random 9090 9099
-        workspaceFolder: /workspace
 ```
 
-Each service gets a random port in its designated range, and Atmos shows you all the assigned ports when the container starts.
+### Dynamic Configuration
 
-## Get Started
+Generate unique identifiers and random values for testing:
 
-The `!random` function is available now. Check out the [full documentation](/functions/yaml/random) for more details and examples.
-
-Like all Atmos YAML functions, `!random` is:
-- **Type-safe** - operates on structured data, not raw strings
-- **Error-resistant** - can't break YAML syntax
-- **Well-documented** - clear error messages when something goes wrong
-
-Try it out and let us know what you think!
+```yaml
+vars:
+  worker_id: !random 1000 9999
+  test_port: !random 20000 29999
+  backend_ports:
+    api: !random 10000 10999
+    metrics: !random 11000 11999
+```
 
 ## Resources
 
 - [`!random` Function Documentation](/functions/yaml/random)
 - [YAML Functions Overview](/functions/yaml)
 - [DevContainer Documentation](/cli/commands/devcontainer)
-
----
-
-*Have questions or feedback? Join our [Slack community](https://slack.cloudposse.com/) or [open an issue on GitHub](https://github.com/cloudposse/atmos/issues).*
