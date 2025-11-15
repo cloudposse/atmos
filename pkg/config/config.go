@@ -195,14 +195,14 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 // AtmosConfigAbsolutePaths converts all base paths in the configuration to absolute paths.
 // This function sets TerraformDirAbsolutePath, HelmfileDirAbsolutePath, PackerDirAbsolutePath,
 // StacksBaseAbsolutePath, IncludeStackAbsolutePaths, and ExcludeStackAbsolutePaths.
-// resolveAbsolutePath converts a path to absolute form, resolving relative paths
+// ResolveAbsolutePath converts a path to absolute form, resolving relative paths.
 // relative to the CLI config directory (where atmos.yaml is located) instead of CWD.
 // This allows ATMOS_BASE_PATH to work correctly when set to a relative path.
 //
 // Resolution order:
 // 1. If path is already absolute → return as-is
 // 2. If path is relative and cliConfigPath is set → resolve relative to cliConfigPath
-// 3. Otherwise → resolve relative to current working directory (fallback for backwards compatibility)
+// 3. Otherwise → resolve relative to current working directory (fallback for backwards compatibility).
 func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
 	// If already absolute, return as-is.
 	if filepath.IsAbs(path) {
@@ -231,28 +231,12 @@ func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
 
 func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	// First, resolve the base path itself to an absolute path.
-	// When base_path is in atmos.yaml as a relative path (e.g., "./"), it should be resolved
-	// relative to where atmos.yaml is located (atmosConfig.CliConfigPath).
-	// However, when ATMOS_BASE_PATH env var is set, it should be resolved relative to CWD,
-	// not relative to atmos.yaml location (env vars are set from the shell/CWD context).
+	// Relative paths are resolved relative to atmos.yaml location (atmosConfig.CliConfigPath).
 	var atmosBasePathAbs string
 	var err error
-	if os.Getenv("ATMOS_BASE_PATH") != "" {
-		// ATMOS_BASE_PATH env var is set - resolve relative to CWD.
-		if filepath.IsAbs(atmosConfig.BasePath) {
-			atmosBasePathAbs = atmosConfig.BasePath
-		} else {
-			atmosBasePathAbs, err = filepath.Abs(atmosConfig.BasePath)
-			if err != nil {
-				return err
-			}
-		}
-	} else {
-		// base_path from config file - resolve relative to atmos.yaml location.
-		atmosBasePathAbs, err = resolveAbsolutePath(atmosConfig.BasePath, atmosConfig.CliConfigPath)
-		if err != nil {
-			return err
-		}
+	atmosBasePathAbs, err = resolveAbsolutePath(atmosConfig.BasePath, atmosConfig.CliConfigPath)
+	if err != nil {
+		return err
 	}
 
 	// Store the absolute base path in BasePathAbsolute field.

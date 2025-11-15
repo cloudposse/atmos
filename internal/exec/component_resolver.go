@@ -2,6 +2,7 @@ package exec
 
 import (
 	comp "github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -20,6 +21,8 @@ func ResolveComponentFromPath(
 	stack string,
 	expectedComponentType string,
 ) (string, error) {
+	defer perf.Track(atmosConfig, "exec.ResolveComponentFromPath")()
+
 	return componentResolver.ResolveComponentFromPath(atmosConfig, path, stack, expectedComponentType)
 }
 
@@ -30,6 +33,8 @@ func ResolveComponentFromPathWithoutTypeCheck(
 	path string,
 	stack string,
 ) (string, error) {
+	defer perf.Track(atmosConfig, "exec.ResolveComponentFromPathWithoutTypeCheck")()
+
 	return componentResolver.ResolveComponentFromPathWithoutTypeCheck(atmosConfig, path, stack)
 }
 
@@ -41,5 +46,7 @@ func ResolveComponentFromPathWithoutValidation(
 	path string,
 	expectedComponentType string,
 ) (string, error) {
+	defer perf.Track(atmosConfig, "exec.ResolveComponentFromPathWithoutValidation")()
+
 	return componentResolver.ResolveComponentFromPathWithoutValidation(atmosConfig, path, expectedComponentType)
 }

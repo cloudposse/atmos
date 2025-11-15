@@ -147,7 +147,6 @@ func tryExtractComponentType(
 	if err != nil {
 		// If symlink resolution fails, continue with original path.
 		log.Trace("Could not resolve symlinks in base path", "path", basePath, "error", err)
-		basePathResolved = basePath
 	} else {
 		basePath = basePathResolved
 	}

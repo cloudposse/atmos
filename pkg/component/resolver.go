@@ -27,6 +27,8 @@ type Resolver struct {
 
 // NewResolver creates a new component resolver with the given stack loader.
 func NewResolver(stackLoader StackLoader) *Resolver {
+	defer perf.Track(nil, "component.NewResolver")()
+
 	return &Resolver{stackLoader: stackLoader}
 }
 

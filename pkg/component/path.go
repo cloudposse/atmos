@@ -3,6 +3,8 @@ package component
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // IsExplicitComponentPath determines if a component argument represents an explicit filesystem path.
@@ -16,6 +18,8 @@ import (
 //
 // Otherwise, it's treated as a component name (even if it contains slashes like "vpc/security-group").
 func IsExplicitComponentPath(component string) bool {
+	defer perf.Track(nil, "component.IsExplicitComponentPath")()
+
 	return component == "." ||
 		strings.HasPrefix(component, "./") ||
 		strings.HasPrefix(component, "../") ||

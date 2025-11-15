@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -11,6 +12,8 @@ type ExecStackLoader struct{}
 
 // NewStackLoader creates a new stack loader.
 func NewStackLoader() *ExecStackLoader {
+	defer perf.Track(nil, "exec.NewStackLoader")()
+
 	return &ExecStackLoader{}
 }
 
