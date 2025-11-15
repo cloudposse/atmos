@@ -5,12 +5,12 @@
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> tree stacks
 
 <span style="font-weight:bold;color:#005f87;">stacks</span>/
-|-- <span style="font-weight:bold;color:#005f87;">catalog</span>/
-|   `-- myapp.yaml
-`-- <span style="font-weight:bold;color:#005f87;">deploy</span>/
-    |-- dev.yaml
-    |-- prod.yaml
-    `-- staging.yaml
+├── <span style="font-weight:bold;color:#005f87;">catalog</span>/
+│   └── myapp.yaml
+└── <span style="font-weight:bold;color:#005f87;">deploy</span>/
+    ├── dev.yaml
+    ├── prod.yaml
+    └── staging.yaml
 
 3 directories, 4 files
 
@@ -22,17 +22,17 @@
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> cat stacks/catalog/myapp.yaml
 
      File: <span style="font-weight:bold;">stacks/catalog/myapp.yaml</span>
-<span style="color:#404040;">   1</span> <span style="color:#959595;">#</span><span style="color:#959595;"> yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json</span>
+<span style="color:#404040;">   1</span> <span style="color:#969896;">#</span><span style="color:#969896;"> yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json</span>
 <span style="color:#404040;">   2</span> 
-<span style="color:#404040;">   3</span> <span style="color:#5faf5f;">components</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">   4</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">terraform</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">   5</span> <span style="color:#2a2a2a;">    </span><span style="color:#5faf5f;">myapp</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">   6</span> <span style="color:#2a2a2a;">      </span><span style="color:#5faf5f;">vars</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">   7</span> <span style="color:#2a2a2a;">        </span><span style="color:#5faf5f;">location</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">Los Angeles</span>
-<span style="color:#404040;">   8</span> <span style="color:#2a2a2a;">        </span><span style="color:#5faf5f;">lang</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">en</span>
-<span style="color:#404040;">   9</span> <span style="color:#2a2a2a;">        </span><span style="color:#5faf5f;">format</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">'</span><span style="color:#005f87;">'</span>
-<span style="color:#404040;">  10</span> <span style="color:#2a2a2a;">        </span><span style="color:#5faf5f;">options</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">'</span><span style="color:#005f87;">0</span><span style="color:#005f87;">'</span>
-<span style="color:#404040;">  11</span> <span style="color:#2a2a2a;">        </span><span style="color:#5faf5f;">units</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">m</span>
+<span style="color:#404040;">   3</span> <span style="color:#63a35c;">components</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">   4</span> <span style="color:#333333;">  </span><span style="color:#63a35c;">terraform</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">   5</span> <span style="color:#333333;">    </span><span style="color:#63a35c;">myapp</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">   6</span> <span style="color:#333333;">      </span><span style="color:#63a35c;">vars</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">   7</span> <span style="color:#333333;">        </span><span style="color:#63a35c;">location</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">Los Angeles</span>
+<span style="color:#404040;">   8</span> <span style="color:#333333;">        </span><span style="color:#63a35c;">lang</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">en</span>
+<span style="color:#404040;">   9</span> <span style="color:#333333;">        </span><span style="color:#63a35c;">format</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">'</span><span style="color:#005f87;">'</span>
+<span style="color:#404040;">  10</span> <span style="color:#333333;">        </span><span style="color:#63a35c;">options</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">'</span><span style="color:#005f87;">0</span><span style="color:#005f87;">'</span>
+<span style="color:#404040;">  11</span> <span style="color:#333333;">        </span><span style="color:#63a35c;">units</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">m</span>
 
 
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
@@ -42,20 +42,20 @@
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> cat stacks/deploy/dev.yaml
 
      File: <span style="font-weight:bold;">stacks/deploy/dev.yaml</span>
-<span style="color:#404040;">   1</span> <span style="color:#959595;">#</span><span style="color:#959595;"> yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json</span>
+<span style="color:#404040;">   1</span> <span style="color:#969896;">#</span><span style="color:#969896;"> yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json</span>
 <span style="color:#404040;">   2</span> 
-<span style="color:#404040;">   3</span> <span style="color:#5faf5f;">vars</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">   4</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">stage</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">dev</span>
+<span style="color:#404040;">   3</span> <span style="color:#63a35c;">vars</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">   4</span> <span style="color:#333333;">  </span><span style="color:#63a35c;">stage</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">dev</span>
 <span style="color:#404040;">   5</span> 
-<span style="color:#404040;">   6</span> <span style="color:#5faf5f;">import</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">   7</span> <span style="color:#2a2a2a;">  </span><span style="color:#2a2a2a;">-</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">catalog/myapp</span>
+<span style="color:#404040;">   6</span> <span style="color:#63a35c;">import</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">   7</span> <span style="color:#333333;">  </span><span style="color:#333333;">-</span><span style="color:#333333;"> </span><span style="color:#005f87;">catalog/myapp</span>
 <span style="color:#404040;">   8</span> 
-<span style="color:#404040;">   9</span> <span style="color:#5faf5f;">components</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">  10</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">terraform</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">  11</span> <span style="color:#2a2a2a;">    </span><span style="color:#5faf5f;">myapp</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">  12</span> <span style="color:#2a2a2a;">      </span><span style="color:#5faf5f;">vars</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">  13</span> <span style="color:#2a2a2a;">        </span><span style="color:#5faf5f;">location</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">Stockholm</span>
-<span style="color:#404040;">  14</span> <span style="color:#2a2a2a;">        </span><span style="color:#5faf5f;">lang</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">se</span>
+<span style="color:#404040;">   9</span> <span style="color:#63a35c;">components</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">  10</span> <span style="color:#333333;">  </span><span style="color:#63a35c;">terraform</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">  11</span> <span style="color:#333333;">    </span><span style="color:#63a35c;">myapp</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">  12</span> <span style="color:#333333;">      </span><span style="color:#63a35c;">vars</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">  13</span> <span style="color:#333333;">        </span><span style="color:#63a35c;">location</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">Stockholm</span>
+<span style="color:#404040;">  14</span> <span style="color:#333333;">        </span><span style="color:#63a35c;">lang</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">se</span>
 
 
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
@@ -64,20 +64,20 @@
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> cat stacks/deploy/staging.yaml
 
      File: <span style="font-weight:bold;">stacks/deploy/staging.yaml</span>
-<span style="color:#404040;">   1</span> <span style="color:#959595;">#</span><span style="color:#959595;"> yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json</span>
+<span style="color:#404040;">   1</span> <span style="color:#969896;">#</span><span style="color:#969896;"> yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json</span>
 <span style="color:#404040;">   2</span> 
-<span style="color:#404040;">   3</span> <span style="color:#5faf5f;">vars</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">   4</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">stage</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">staging</span>
+<span style="color:#404040;">   3</span> <span style="color:#63a35c;">vars</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">   4</span> <span style="color:#333333;">  </span><span style="color:#63a35c;">stage</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">staging</span>
 <span style="color:#404040;">   5</span> 
-<span style="color:#404040;">   6</span> <span style="color:#5faf5f;">import</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">   7</span> <span style="color:#2a2a2a;">  </span><span style="color:#2a2a2a;">-</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">catalog/myapp</span>
+<span style="color:#404040;">   6</span> <span style="color:#63a35c;">import</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">   7</span> <span style="color:#333333;">  </span><span style="color:#333333;">-</span><span style="color:#333333;"> </span><span style="color:#005f87;">catalog/myapp</span>
 <span style="color:#404040;">   8</span> 
-<span style="color:#404040;">   9</span> <span style="color:#5faf5f;">components</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">  10</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">terraform</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">  11</span> <span style="color:#2a2a2a;">    </span><span style="color:#5faf5f;">myapp</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">  12</span> <span style="color:#2a2a2a;">      </span><span style="color:#5faf5f;">vars</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">  13</span> <span style="color:#2a2a2a;">        </span><span style="color:#5faf5f;">location</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">Los Angeles</span>
-<span style="color:#404040;">  14</span> <span style="color:#2a2a2a;">        </span><span style="color:#5faf5f;">lang</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">en</span>
+<span style="color:#404040;">   9</span> <span style="color:#63a35c;">components</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">  10</span> <span style="color:#333333;">  </span><span style="color:#63a35c;">terraform</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">  11</span> <span style="color:#333333;">    </span><span style="color:#63a35c;">myapp</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">  12</span> <span style="color:#333333;">      </span><span style="color:#63a35c;">vars</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">  13</span> <span style="color:#333333;">        </span><span style="color:#63a35c;">location</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">Los Angeles</span>
+<span style="color:#404040;">  14</span> <span style="color:#333333;">        </span><span style="color:#63a35c;">lang</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">en</span>
 
 
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
@@ -86,17 +86,17 @@
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> cat stacks/deploy/prod.yaml
 
      File: <span style="font-weight:bold;">stacks/deploy/prod.yaml</span>
-<span style="color:#404040;">   1</span> <span style="color:#959595;">#</span><span style="color:#959595;"> yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json</span>
+<span style="color:#404040;">   1</span> <span style="color:#969896;">#</span><span style="color:#969896;"> yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json</span>
 <span style="color:#404040;">   2</span> 
-<span style="color:#404040;">   3</span> <span style="color:#5faf5f;">vars</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">   4</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">stage</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">prod</span>
+<span style="color:#404040;">   3</span> <span style="color:#63a35c;">vars</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">   4</span> <span style="color:#333333;">  </span><span style="color:#63a35c;">stage</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">prod</span>
 <span style="color:#404040;">   5</span> 
-<span style="color:#404040;">   6</span> <span style="color:#5faf5f;">import</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">   7</span> <span style="color:#2a2a2a;">  </span><span style="color:#2a2a2a;">-</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">catalog/myapp</span>
+<span style="color:#404040;">   6</span> <span style="color:#63a35c;">import</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">   7</span> <span style="color:#333333;">  </span><span style="color:#333333;">-</span><span style="color:#333333;"> </span><span style="color:#005f87;">catalog/myapp</span>
 <span style="color:#404040;">   8</span> 
-<span style="color:#404040;">   9</span> <span style="color:#5faf5f;">components</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">  10</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">terraform</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">  11</span> <span style="color:#2a2a2a;">    </span><span style="color:#5faf5f;">myapp</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">  12</span> <span style="color:#2a2a2a;">      </span><span style="color:#5faf5f;">vars</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">  13</span> <span style="color:#2a2a2a;">        </span><span style="color:#5faf5f;">location</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">Los Angeles</span>
-<span style="color:#404040;">  14</span> <span style="color:#2a2a2a;">        </span><span style="color:#5faf5f;">lang</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">en</span>
+<span style="color:#404040;">   9</span> <span style="color:#63a35c;">components</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">  10</span> <span style="color:#333333;">  </span><span style="color:#63a35c;">terraform</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">  11</span> <span style="color:#333333;">    </span><span style="color:#63a35c;">myapp</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">  12</span> <span style="color:#333333;">      </span><span style="color:#63a35c;">vars</span><span style="color:#333333;">:</span>
+<span style="color:#404040;">  13</span> <span style="color:#333333;">        </span><span style="color:#63a35c;">location</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">Los Angeles</span>
+<span style="color:#404040;">  14</span> <span style="color:#333333;">        </span><span style="color:#63a35c;">lang</span><span style="color:#333333;">:</span><span style="color:#333333;"> </span><span style="color:#005f87;">en</span>
