@@ -15,6 +15,18 @@ atmos --help
 atmos atlantis --help
 atmos atlantis generate --help
 atmos atlantis generate repo-config --help
+atmos auth --help
+atmos auth console --help
+atmos auth env --help
+atmos auth exec --help
+atmos auth list --help
+atmos auth login --help
+atmos auth logout --help
+atmos auth shell --help
+atmos auth user --help
+atmos auth user configure --help
+atmos auth validate --help
+atmos auth whoami --help
 atmos aws --help
 atmos aws eks --help
 atmos aws eks update-kubeconfig --help
