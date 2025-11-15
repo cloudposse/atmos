@@ -200,11 +200,11 @@ errors:
 
     # Use environment variable for dynamic environment name
     # Set ATMOS_ENVIRONMENT in your CI/CD pipeline
-    environment: "${ATMOS_ENVIRONMENT}"
+    environment: !env ATMOS_ENVIRONMENT
 
     # Set release from CI/CD pipeline
     # Example: "v1.2.3" or "commit-abc123"
-    release: "${CI_COMMIT_TAG}"
+    release: !env CI_COMMIT_TAG
 
     # Reduce noise in development
     sample_rate: 0.1  # Only 10% of errors in dev
@@ -256,7 +256,7 @@ export ATMOS_SENTRY_DSN="https://your-public-key@sentry.io/project-id"
 errors:
   sentry:
     enabled: true
-    dsn: "${ATMOS_SENTRY_DSN}"
+    dsn: !env ATMOS_SENTRY_DSN
     environment: "production"
 ```
 </File>
@@ -272,11 +272,11 @@ Track infrastructure deployment failures across all your CI pipelines:
 errors:
   sentry:
     enabled: true
-    dsn: "${SENTRY_DSN}"
+    dsn: !env SENTRY_DSN
     environment: "ci"
     tags:
-      pipeline: "${CI_PIPELINE_ID}"
-      branch: "${CI_COMMIT_BRANCH}"
+      pipeline: !env CI_PIPELINE_ID
+      branch: !env CI_COMMIT_BRANCH
       team: "platform"
 ```
 </File>
@@ -296,12 +296,12 @@ Different teams can share the same Sentry project with custom tags:
 errors:
   sentry:
     enabled: true
-    dsn: "${SENTRY_DSN}"
-    environment: "${ENVIRONMENT}"
+    dsn: !env SENTRY_DSN
+    environment: !env ENVIRONMENT
     tags:
-      team: "${TEAM_NAME}"        # "platform", "security", "data"
+      team: !env TEAM_NAME        # "platform", "security", "data"
       service: "atmos"
-      region: "${AWS_REGION}"
+      region: !env AWS_REGION
 ```
 </File>
 
@@ -321,16 +321,16 @@ Reduce noise in development while maintaining full monitoring in production:
 errors:
   format:
     # More detail in development
-    verbose: ${DEVELOPMENT:-false}
+    verbose: !env DEVELOPMENT false
 
   sentry:
     # Only enable in production/staging
-    enabled: ${SENTRY_ENABLED:-false}
-    dsn: "${SENTRY_DSN}"
-    environment: "${ENVIRONMENT:-development}"
+    enabled: !env SENTRY_ENABLED false
+    dsn: !env SENTRY_DSN
+    environment: !env ENVIRONMENT development
 
     # Sample aggressively in dev, fully in prod
-    sample_rate: ${SENTRY_SAMPLE_RATE:-0.1}
+    sample_rate: !env SENTRY_SAMPLE_RATE 0.1
 ```
 </File>
 
