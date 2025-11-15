@@ -41,6 +41,26 @@ See [all flags](#flags).
 Run `atmos terraform deploy --help` to see all the available options
 :::
 
+## Configuration
+
+Configure default behavior for `terraform deploy` in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Run 'terraform init' before deploy
+    deploy_run_init: true
+
+    # Auto-generate backend configuration
+    auto_generate_backend_file: true
+```
+
+These settings can also be controlled via environment variables:
+```shell
+export ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT=true
+export ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=true
+```
+
 ## Examples
 
 ### Simple Example

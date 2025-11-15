@@ -52,6 +52,15 @@ const config = {
                         from: '/reference/terraform-limitations',
                         to: '/introduction/why-atmos'
                     },
+                    // Component Catalog redirects for reorganization
+                    {
+                        from: '/design-patterns/component-catalog-with-mixins',
+                        to: '/design-patterns/component-catalog/with-mixins'
+                    },
+                    {
+                        from: '/design-patterns/component-catalog-template',
+                        to: '/design-patterns/component-catalog/template'
+                    },
                     // Redirects for template functions moved to /functions/template/
                     {
                         from: '/core-concepts/stacks/templates/functions/atmos.Component',
