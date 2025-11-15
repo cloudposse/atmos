@@ -614,3 +614,244 @@ func TestFormatter_FormattedMethods(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatter_FormatToast_SingleLine(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	tests := []struct {
+		name     string
+		icon     string
+		message  string
+		expected string
+	}{
+		{
+			name:     "simple single line",
+			icon:     "✓",
+			message:  "Done",
+			expected: "✓ Done\n",
+		},
+		{
+			name:     "emoji icon",
+			icon:     "📦",
+			message:  "Package installed",
+			expected: "📦 Package installed\n",
+		},
+		{
+			name:     "multi-character emoji",
+			icon:     "🔧",
+			message:  "Tool configured",
+			expected: "🔧 Tool configured\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := f.formatToast(tt.icon, tt.message)
+			if got != tt.expected {
+				t.Errorf("formatToast() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatter_FormatToast_Multiline(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	tests := []struct {
+		name     string
+		icon     string
+		message  string
+		expected string
+	}{
+		{
+			name:     "two lines",
+			icon:     "✓",
+			message:  "Installation complete\nVersion: 1.2.3",
+			expected: "✓ Installation complete\n  Version: 1.2.3\n",
+		},
+		{
+			name:     "three lines",
+			icon:     "✓",
+			message:  "Done\nFile: test.txt\nSize: 1.2MB",
+			expected: "✓ Done\n  File: test.txt\n  Size: 1.2MB\n",
+		},
+		{
+			name:     "emoji icon multiline",
+			icon:     "📦",
+			message:  "Package installed\nName: atmos\nVersion: 1.2.3",
+			expected: "📦 Package installed\n  Name: atmos\n  Version: 1.2.3\n",
+		},
+		{
+			name:     "error icon multiline",
+			icon:     "✗",
+			message:  "Installation failed\nReason: Network timeout\nRetry suggested",
+			expected: "✗ Installation failed\n  Reason: Network timeout\n  Retry suggested\n",
+		},
+		{
+			name:     "empty lines preserved",
+			icon:     "ℹ",
+			message:  "Processing\n\nComplete",
+			expected: "ℹ Processing\n  \n  Complete\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := f.formatToast(tt.icon, tt.message)
+			if got != tt.expected {
+				t.Errorf("formatToast() = %q, want %q", got, tt.expected)
+				// Show visual diff
+				t.Logf("Got:\n%s", got)
+				t.Logf("Want:\n%s", tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatter_FormatToast_UnicodeWidth(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	tests := []struct {
+		name        string
+		icon        string
+		message     string
+		description string
+	}{
+		{
+			name:        "single char icon",
+			icon:        "✓",
+			message:     "Line 1\nLine 2",
+			description: "Simple checkmark has width 1",
+		},
+		{
+			name:        "emoji icon",
+			icon:        "📦",
+			message:     "Line 1\nLine 2",
+			description: "Emoji typically has width 2",
+		},
+		{
+			name:        "double width icon",
+			icon:        "🔧",
+			message:     "Line 1\nLine 2",
+			description: "Wrench emoji has width 2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := f.formatToast(tt.icon, tt.message)
+
+			// Verify that continuation lines are indented
+			lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+			if len(lines) < 2 {
+				t.Fatalf("Expected at least 2 lines, got %d", len(lines))
+			}
+
+			// First line should start with icon
+			if !strings.HasPrefix(lines[0], tt.icon) {
+				t.Errorf("First line should start with icon %q, got %q", tt.icon, lines[0])
+			}
+
+			// Second line should be indented (start with space)
+			if !strings.HasPrefix(lines[1], " ") {
+				t.Errorf("Second line should be indented, got %q", lines[1])
+			}
+
+			// Calculate expected indent based on icon rune count
+			iconWidth := len([]rune(tt.icon))
+			expectedIndent := strings.Repeat(" ", iconWidth+1)
+
+			// Verify indent matches
+			if !strings.HasPrefix(lines[1], expectedIndent) {
+				t.Errorf("Second line indent = %d spaces, want %d spaces (icon width %d)",
+					len(lines[1])-len(strings.TrimLeft(lines[1], " ")),
+					iconWidth+1,
+					iconWidth)
+			}
+		})
+	}
+}
+
+func TestToast_Integration(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	InitFormatter(ioCtx)
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+	tests := []struct {
+		name     string
+		icon     string
+		message  string
+		wantErr  bool
+		contains []string
+	}{
+		{
+			name:     "single line toast",
+			icon:     "✓",
+			message:  "Success",
+			wantErr:  false,
+			contains: []string{"✓", "Success"},
+		},
+		{
+			name:     "multiline toast",
+			icon:     "📦",
+			message:  "Installed\nVersion: 1.0",
+			wantErr:  false,
+			contains: []string{"📦", "Installed", "Version: 1.0"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Toast(tt.icon, tt.message)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Toast() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestToastf_Integration(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	InitFormatter(ioCtx)
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+	tests := []struct {
+		name    string
+		icon    string
+		format  string
+		args    []interface{}
+		wantErr bool
+	}{
+		{
+			name:    "formatted single line",
+			icon:    "✓",
+			format:  "Installed %s version %s",
+			args:    []interface{}{"atmos", "1.2.3"},
+			wantErr: false,
+		},
+		{
+			name:    "formatted multiline",
+			icon:    "📦",
+			format:  "Package: %s\nVersion: %s\nSize: %dMB",
+			args:    []interface{}{"atmos", "1.2.3", 42},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Toastf(tt.icon, tt.format, tt.args...)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Toastf() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

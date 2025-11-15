@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/charmbracelet/glamour"
@@ -17,6 +18,9 @@ const (
 	// Character constants.
 	newline = "\n"
 	tab     = "\t"
+
+	// Format templates.
+	iconMessageFormat = "%s %s"
 )
 
 var (
@@ -62,23 +66,24 @@ func getFormatter() (*formatter, error) {
 
 // Toast writes a toast notification with a custom icon and message to stderr (UI channel).
 // This is the primary pattern for toast-style notifications with flexible icon support.
+// Supports multiline messages - automatically splits on newlines and indents continuation lines.
 // Flow: ui.Toast() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 //
 // Parameters:
 //   - icon: Custom icon/emoji (e.g., "📦", "🔧", "✓", or use theme.Styles.Checkmark.String())
-//   - message: The message text
+//   - message: The message text (can contain newlines for multiline toasts)
 //
 // Example usage:
 //
 //	ui.Toast("📦", "Using latest version: 1.2.3")
 //	ui.Toast("🔧", "Tool not installed")
-//	ui.Toast(theme.Styles.Checkmark.String(), "Deployment complete")
+//	ui.Toast("✓", "Installation complete\nVersion: 1.2.3\nLocation: /usr/local/bin")
 func Toast(icon, message string) error {
 	f, err := getFormatter()
 	if err != nil {
 		return err
 	}
-	formatted := fmt.Sprintf("%s %s", icon, message) + newline
+	formatted := f.formatToast(icon, message)
 	return f.terminal.Write(formatted)
 }
 
@@ -328,9 +333,55 @@ func (f *formatter) ColorProfile() terminal.ColorProfile {
 // Returns formatted string: "{icon} {text}" with color applied (or plain if no color support).
 func (f *formatter) StatusMessage(icon string, style *lipgloss.Style, text string) string {
 	if !f.SupportsColor() {
-		return fmt.Sprintf("%s %s", icon, text)
+		return fmt.Sprintf(iconMessageFormat, icon, text)
 	}
-	return style.Render(fmt.Sprintf("%s %s", icon, text))
+	return style.Render(fmt.Sprintf(iconMessageFormat, icon, text))
+}
+
+// formatToast formats a toast message with icon, handling multiline messages with proper indentation.
+// Splits message on newlines and indents continuation lines to align with the first line text.
+//
+// Parameters:
+//   - icon: The icon/emoji to prefix the message
+//   - message: The message text (may contain newlines)
+//
+// Returns formatted string with newline at the end.
+//
+// Example:
+//
+//	formatToast("✓", "Done\nFile: test.txt\nSize: 1.2MB")
+//	// Returns: "✓ Done\n  File: test.txt\n  Size: 1.2MB\n"
+func (f *formatter) formatToast(icon, message string) string {
+	// Import strings package is already available at package level
+	lines := strings.Split(message, "\n")
+
+	if len(lines) == 1 {
+		// Single line - simple format
+		return fmt.Sprintf(iconMessageFormat, icon, message) + newline
+	}
+
+	// Multiline - calculate indent for continuation lines
+	// Icon + space = visual width to match
+	// Use rune count for proper unicode handling
+	iconWidth := len([]rune(icon))
+	indent := strings.Repeat(" ", iconWidth+1)
+
+	// Build formatted output
+	var result strings.Builder
+	for i, line := range lines {
+		if i == 0 {
+			// First line gets the icon
+			result.WriteString(fmt.Sprintf(iconMessageFormat, icon, line))
+		} else {
+			// Continuation lines get indented
+			result.WriteString(newline)
+			result.WriteString(indent)
+			result.WriteString(line)
+		}
+	}
+	result.WriteString(newline)
+
+	return result.String()
 }
 
 // Semantic formatting - delegates to StatusMessage with appropriate icons and styles.
