@@ -29,7 +29,7 @@ devcontainer:
       runtime: podman  # Optional: docker, podman, or omit for auto-detect
     spec: !include devcontainer.json
 
-  # Alternative: Define inline
+  # Alternative: Define inline with random port forwarding
   terraform:
     settings:
       runtime: podman  # Use Podman for this devcontainer
@@ -42,18 +42,14 @@ devcontainer:
         - "type=bind,source=${localEnv:HOME}/.aws,target=/root/.aws,readonly"
         - "type=volume,source=terraform-cache,target=/root/.terraform.d"
       forwardPorts:
-        - 8080
-        - 3000
-      portsAttributes:
-        "8080":
-          label: "Terraform UI"
-          protocol: "http"
+        - !random 8080 8099  # Random port in web server range
+        - !random 3000 3099  # Random port in dev server range
       containerEnv:
         TF_PLUGIN_CACHE_DIR: "/root/.terraform.d/plugin-cache"
         TERM: "${localEnv:TERM}"
       remoteUser: "root"
 
-  # Python development environment
+  # Python development environment with random ports
   python:
     spec:
       name: "Python 3.11 Dev"
@@ -61,12 +57,8 @@ devcontainer:
       workspaceFolder: "/workspace"
       workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
       forwardPorts:
-        - 8000
-        - 8080
-      portsAttributes:
-        "8000":
-          label: "Django/Flask"
-          protocol: "http"
+        - !random 8000 8099  # Random port for Django/Flask
+        - !random 5432 5442  # Random port for PostgreSQL
       containerEnv:
         PYTHONUNBUFFERED: "1"
       remoteUser: "root"

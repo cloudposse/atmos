@@ -10,7 +10,7 @@ components:
         remoteUser: "root"
         workspaceFolder: "/workspace"
         forwardPorts:
-          - 8080
+          - !random 8080 8099  # Random port for testing
         containerEnv:
           TEST_VAR: "test-value"
 
