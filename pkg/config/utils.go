@@ -423,6 +423,13 @@ func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) err
 
 	if len(atmosConfig.Logs.Level) > 0 {
 		if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+			// Extract explanation from error message (format: "sentinel\nexplanation").
+			errMsg := err.Error()
+			parts := strings.SplitN(errMsg, "\n", 2)
+			if len(parts) > 1 {
+				// Return error with explanation preserved.
+				return fmt.Errorf("%w\n%s", log.ErrInvalidLogLevel, parts[1])
+			}
 			return err
 		}
 	}
