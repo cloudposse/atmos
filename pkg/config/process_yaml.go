@@ -122,6 +122,8 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 		return handleInclude(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot):
 		return handleGitRoot(node, v, currentPath)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncRandom):
+		return handleRandom(node, v, currentPath)
 	}
 	return nil
 }
@@ -203,5 +205,19 @@ func handleGitRoot(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	// Set the value in Viper .
 	v.Set(currentPath, gitRootValue)
 	node.Tag = "" // Avoid re-processing .
+	return nil
+}
+
+// handleRandom processes a YAML node with an !random tag and sets the value in Viper.
+func handleRandom(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
+	randomValue, err := u.ProcessTagRandom(strFunc)
+	if err != nil {
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncRandom, node.Value, err)
+	}
+	// Set the value in Viper.
+	v.Set(currentPath, randomValue)
+	node.Tag = "" // Avoid re-processing.
 	return nil
 }

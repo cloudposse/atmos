@@ -1,0 +1,153 @@
+---
+title: "!random"
+sidebar_position: 10
+sidebar_label: "!random"
+sidebar_class_name: command
+description: Generate a random integer within a specified range
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `!random` Atmos YAML function generates a cryptographically secure random integer within a specified range.
+    This is particularly useful for generating random port numbers, IDs, or other numeric values in your devcontainer and stack configurations.
+</Intro>
+
+## Usage
+
+The `!random` function requires exactly two parameters:
+
+```yaml
+  # Generate a random integer between min and max (inclusive)
+  !random <min> <max>
+```
+
+## Arguments
+
+<dl>
+    <dt>`min`</dt>
+    <dd>
+        Minimum value (inclusive). Must be an integer less than `max`.
+    </dd>
+
+    <dt>`max`</dt>
+    <dd>
+        Maximum value (inclusive). Must be an integer greater than `min`.
+    </dd>
+</dl>
+
+The function generates a cryptographically secure random integer in the range `[min, max]` (both bounds inclusive).
+
+## Examples
+
+### Random Port Numbers
+
+Generate random ports for devcontainer configurations:
+
+```yaml
+components:
+  devcontainer:
+    backend-api:
+      spec:
+        image: mcr.microsoft.com/devcontainers/go:1.24
+        forwardPorts:
+          - !random 1024 65535
+        workspaceFolder: /workspace
+```
+
+### Random Ports in Stack Configurations
+
+```yaml
+vars:
+  # Generate a random ephemeral port
+  app_port: !random 49152 65535
+
+  # Generate a random port in registered port range
+  service_port: !random 1024 49151
+
+  # Generate a random ID
+  worker_id: !random 1000 9999
+```
+
+### Multiple Random Values
+
+Each `!random` call generates an independent random value:
+
+```yaml
+vars:
+  primary_port: !random 8000 9000
+  secondary_port: !random 8000 9000  # Different from primary_port
+  fallback_port: !random 8000 9000   # Different from both above
+```
+
+## Common Use Cases
+
+### DevContainer Port Forwarding
+
+Automatically assign random ports to avoid conflicts when running multiple devcontainer instances:
+
+```yaml
+components:
+  devcontainer:
+    geodesic:
+      spec:
+        image: cloudposse/geodesic:latest
+        forwardPorts:
+          - !random 8080 8099  # Web server
+          - !random 3000 3099  # Dev server
+          - !random 5432 5442  # Database
+        workspaceFolder: /workspace
+```
+
+### Load Balancer Configuration
+
+Generate random ports for backend services:
+
+```yaml
+vars:
+  backend_ports:
+    api: !random 10000 10999
+    metrics: !random 11000 11999
+    health: !random 12000 12999
+```
+
+## Port Ranges
+
+Common port ranges for different purposes:
+
+- **System Ports**: 0-1023 (requires root/admin privileges)
+- **Registered Ports**: 1024-49151 (commonly used application ports)
+- **Ephemeral Ports**: 49152-65535 (typically used for dynamic/private port allocation)
+
+For devcontainers and local development, use registered or ephemeral port ranges to avoid privilege requirements and conflicts with system services.
+
+## Cryptographic Security
+
+The `!random` function uses Go's `crypto/rand` package to generate cryptographically secure random numbers. This ensures:
+
+- **Unpredictability**: Values cannot be guessed or predicted
+- **No collisions**: Multiple calls produce different values (statistically)
+- **Suitable for security**: Safe for generating ports, tokens, or other security-sensitive values
+
+## Error Handling
+
+The function will fail with a clear error message if:
+
+- Less than 2 arguments provided
+- More than 2 arguments provided
+- Arguments are not valid integers
+- `min` >= `max`
+
+Example error:
+
+```
+invalid number of arguments. The function requires exactly 2 arguments (min max): !random 1024
+```
+
+:::tip
+Unlike environment variables or template functions, `!random` generates a new value each time Atmos processes the configuration. If you need consistent values across multiple operations, consider using `!env` with a pre-generated value or storing the result in a variable.
+:::
+
+:::tip
+When using `!random` for port forwarding in devcontainers, the generated port will be displayed when the container starts, making it easy to see which port was assigned.
+:::

@@ -106,17 +106,17 @@ func (m *Manager) Start(atmosConfig *schema.AtmosConfiguration, name, instance, 
 		return createAndStartNewContainer(params)
 	}
 
-	return startExistingContainer(ctx, runtime, &containers[0], containerName)
+	return startExistingContainer(ctx, runtime, &containers[0], containerName, config)
 }
 
 // startExistingContainer starts an existing container if it's not running.
-func startExistingContainer(ctx context.Context, runtime container.Runtime, containerInfo *container.Info, containerName string) error {
+func startExistingContainer(ctx context.Context, runtime container.Runtime, containerInfo *container.Info, containerName string, config *Config) error {
 	if isContainerRunning(containerInfo.Status) {
 		_ = ui.Infof("Container %s is already running", containerName)
 		return nil
 	}
 
-	return runWithSpinner(
+	err := runWithSpinner(
 		fmt.Sprintf("Starting container %s", containerName),
 		fmt.Sprintf("Started container %s", containerName),
 		func() error {
@@ -136,4 +136,12 @@ func startExistingContainer(ctx context.Context, runtime container.Runtime, cont
 			}
 			return nil
 		})
+	if err != nil {
+		return err
+	}
+
+	// Display container information.
+	displayContainerInfo(config)
+
+	return nil
 }

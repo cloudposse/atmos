@@ -326,7 +326,11 @@ func TestStartExistingContainer(t *testing.T) {
 			tt.setupMocks(mockRuntime)
 
 			ctx := context.Background()
-			err := startExistingContainer(ctx, mockRuntime, tt.containerInfo, tt.containerInfo.Name)
+			testConfig := &Config{
+				Image:        "test-image",
+				ForwardPorts: []interface{}{8080},
+			}
+			err := startExistingContainer(ctx, mockRuntime, tt.containerInfo, tt.containerInfo.Name, testConfig)
 
 			if tt.expectError {
 				require.Error(t, err)

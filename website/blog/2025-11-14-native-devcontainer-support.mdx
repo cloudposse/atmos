@@ -38,7 +38,7 @@ We asked ourselves: if devcontainers are just JSON configuration describing whic
 
 After all, launching a container, mounting volumes, forwarding ports, and executing commands is straightforward. And Atmos can bring superpowers that go beyond basic devcontainer support.
 
-**The result? Install Atmos, and you're done.** No Docker Desktop devcontainer CLI, no separate tools. From that point on, everything can happen from a Docker image that gets pulled automatically.
+**The result? Install Atmos and a container runtime (Docker or Podman), and you're done.** No separate devcontainer CLI, no additional tools. Our implementation is actually slicker than the official CLI—it natively integrates with `atmos auth` to pass authentication credentials to running containers, and includes automatic output masking so you can operate securely. From that point on, everything can happen from a Docker image that gets pulled automatically.
 
 ## Introducing `atmos devcontainer shell`
 
@@ -51,7 +51,7 @@ atmos devcontainer shell geodesic
 # That's it. You're in a fully-equipped DevOps environment.
 ```
 
-Inside the container, you have everything:
+When using Geodesic as your devcontainer, you have everything pre-installed:
 - Terraform with all major providers
 - kubectl and Kubernetes tools
 - Helmfile and Helm
@@ -115,12 +115,12 @@ components:
       spec:
         name: "Geodesic DevOps Toolbox"
         image: "cloudposse/geodesic:latest"
-        workspaceFolder: "/localhost"
-        workspaceMount: "type=bind,source=${PWD},target=/localhost"
+        workspaceFolder: "/workspace"
+        workspaceMount: "type=bind,source=${PWD},target=/workspace"
         forwardPorts:
           - 8080
         containerEnv:
-          ATMOS_BASE_PATH: "/localhost"
+          ATMOS_BASE_PATH: "/workspace"
         remoteUser: "root"
 
     terraform:
@@ -156,7 +156,7 @@ components:
       spec:
         - !include .devcontainer/devcontainer.json
         - containerEnv:
-            ATMOS_BASE_PATH: "/localhost"
+            ATMOS_BASE_PATH: "/workspace"
             CUSTOM_VAR: "value"
 ```
 
@@ -164,26 +164,11 @@ This is the **real Atmos `!include` function**—the same powerful YAML processi
 
 ## Geodesic: A Production-Ready Devcontainer
 
-While Atmos supports any devcontainer configuration, **Geodesic is a proven DevOps toolbox** that's been battle-tested for almost 10 years.
+While Atmos supports any devcontainer configuration, **[Geodesic](/blog/geodesic-production-ready-devcontainer) is a proven DevOps toolbox** that's been battle-tested for almost 10 years.
 
-[Geodesic](https://github.com/cloudposse/geodesic) is Cloud Posse's implementation of the DevOps toolbox pattern—a comprehensive development container that includes:
+Geodesic comes pre-loaded with Atmos, Terraform, kubectl, cloud CLIs (AWS, Azure, GCP), and all the tools you need for infrastructure work. It's multi-platform (amd64/arm64), Debian-based, customizable, and has nearly a decade of production usage.
 
-- **Atmos** (of course!)
-- **Terraform** with all major providers
-- **kubectl** and Kubernetes tools (helm, helmfile, k9s, etc.)
-- **Cloud CLIs**: AWS CLI, Azure CLI, Google Cloud SDK
-- **Data processing**: jq, yq, gomplate
-- **Development essentials**: git, make, vim, and more
-- **Custom scripts and tooling**
-
-Geodesic images are:
-- **Multi-platform**: linux/amd64 and linux/arm64
-- **Debian-based**: Familiar package management
-- **Customizable**: Use as a base image for your own toolbox
-- **Production-tested**: Nearly a decade of real-world usage
-- **Open source**: Over 1,000 stars on GitHub
-
-**Geodesic is a devcontainer implementation.** It predates the Development Containers spec, but it's the exact same concept: a containerized environment with all your tools pre-installed and pre-configured.
+**Read the full post**: [Geodesic: A Production-Ready DevOps Toolbox for Development Containers](/blog/geodesic-production-ready-devcontainer)
 
 ## Getting Started in 2 Minutes
 
@@ -197,12 +182,9 @@ brew install atmos
 cd my-infrastructure
 
 # 3. Launch your devcontainer
-atmos devcontainer shell geodesic
+atmos devcontainer shell
 
-# You're in. Start working.
-$ atmos terraform plan vpc -s prod
-$ kubectl get pods
-$ helm list
+# You're in. Start working immediately.
 ```
 
 **That's the ingenious part**: All you need to install is Atmos. Everything else—Terraform, cloud CLIs, Kubernetes tools—gets pulled from the container image automatically.
@@ -220,17 +202,16 @@ cd atmos/examples/devcontainer
 
 # The example includes a complete configuration
 cat atmos.yaml
-# Shows geodesic devcontainer with !include usage
 
 # Launch it
-atmos devcontainer shell geodesic
+atmos devcontainer shell
 ```
 
 The `examples/devcontainer` folder contains:
 - Complete `atmos.yaml` with devcontainer configuration
-- Example `devcontainer.json` file
+- Example `devcontainer.json` file showing the `!include` pattern
 - Shell aliases for convenience
-- Ready-to-use Geodesic setup
+- Ready-to-use configurations
 
 **Use this as a starting point** for your own configuration. Copy it, customize it, make it yours.
 
@@ -242,7 +223,7 @@ Make it even easier with shell aliases in your `atmos.yaml`:
 # atmos.yaml
 cli:
   aliases:
-    shell: "devcontainer shell geodesic"
+    shell: "devcontainer shell"
 ```
 
 Now you can just type:
@@ -252,7 +233,13 @@ atmos shell
 # Immediately launches your devcontainer
 ```
 
-This mirrors the classic Geodesic pattern where you'd type `./geodesic.sh` to launch your environment. Now it's even simpler: `atmos shell`.
+If you have a default devcontainer you always use, you can hardcode it:
+
+```yaml
+cli:
+  aliases:
+    shell: "devcontainer shell geodesic"
+```
 
 ## Additional Lifecycle Commands
 
@@ -474,17 +461,6 @@ components:
 
 Each project gets the right tool versions automatically.
 
-## What's Next?
-
-This is just the beginning. We're planning:
-
-- **Pre-built environments**: Official Atmos devcontainer images for common workflows
-- **Enhanced IDE integration**: Better detection and coordination with VS Code and JetBrains
-- **Template library**: Common devcontainer configurations for different infrastructure patterns
-- **Identity autocomplete**: Tab completion for available identities
-
-But the foundation is solid, battle-tested, and ready for production use today.
-
 ## Get Started Now
 
 ### 1. Upgrade Atmos
@@ -515,8 +491,8 @@ components:
     geodesic:
       spec:
         image: "cloudposse/geodesic:latest"
-        workspaceFolder: "/localhost"
-        workspaceMount: "type=bind,source=${PWD},target=/localhost"
+        workspaceFolder: "/workspace"
+        workspaceMount: "type=bind,source=${PWD},target=/workspace"
 
 cli:
   aliases:
@@ -538,16 +514,17 @@ The result? **Install Atmos, run one command, and everything just works.**
 
 No more "works on my machine." No more installation marathons. No more version conflicts. Just consistent, reproducible, containerized development environments that work everywhere—on your laptop, in CI, on your team member's machine.
 
-**Use Geodesic to get started quickly**, or create your own devcontainer, or use Geodesic as a base to build on. Check out the `examples/devcontainer` folder for a live example you can use immediately.
+**Want a production-ready solution?** Check out [Geodesic: A Production-Ready DevOps Toolbox](/blog/geodesic-production-ready-devcontainer) to get started in minutes. Or create your own devcontainer configuration. The `examples/devcontainer` folder has live examples you can use immediately.
 
 It's a pretty ingenious system, if we do say so ourselves.
 
 ## Resources
 
 - [Devcontainer Command Documentation](/cli/commands/devcontainer)
-- [Geodesic GitHub Repository](https://github.com/cloudposse/geodesic)
+- [Geodesic: A Production-Ready DevOps Toolbox](/blog/geodesic-production-ready-devcontainer)
 - [Development Containers Specification](https://containers.dev/)
 - [Atmos Examples - Devcontainer](https://github.com/cloudposse/atmos/tree/main/examples/devcontainer)
+- [Geodesic GitHub Repository](https://github.com/cloudposse/geodesic)
 - [Atmos GitHub Repository](https://github.com/cloudposse/atmos)
 
 ---
