@@ -68,6 +68,9 @@ var profilerServer *profiler.Server
 // logFileHandle holds the opened log file for the lifetime of the program.
 var logFileHandle *os.File
 
+// chdirProcessed tracks whether chdir has already been processed to avoid double-processing.
+var chdirProcessed bool
+
 // parseChdirFromArgs manually parses --chdir or -C flag from os.Args.
 // This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
 // where Cobra doesn't parse flags before PersistentPreRun is called.
@@ -101,10 +104,76 @@ func parseChdirFromArgs() string {
 	return ""
 }
 
+// processEarlyChdirFlag processes --chdir flag before RootCmd is fully initialized.
+// This is called in Execute() before loading atmos.yaml to ensure the config is loaded
+// from the correct directory. It uses manual parsing since RootCmd isn't ready yet.
+func processEarlyChdirFlag() error {
+	// If chdir already processed, skip (avoid double-processing).
+	if chdirProcessed {
+		return nil
+	}
+
+	// Parse --chdir from os.Args since we can't use Cobra flags yet.
+	chdir := parseChdirFromArgs()
+
+	// If flag is not set, check environment variable.
+	if chdir == "" {
+		//nolint:forbidigo // Must use os.Getenv: chdir is processed before Viper configuration loads.
+		chdir = os.Getenv("ATMOS_CHDIR")
+	}
+
+	if chdir == "" {
+		return nil // No chdir specified.
+	}
+
+	// Expand tilde to home directory using filesystem package.
+	homeDirProvider := filesystem.NewOSHomeDirProvider()
+	expandedPath, err := homeDirProvider.Expand(chdir)
+	if err != nil {
+		return fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
+	}
+
+	// Clean and make absolute to handle both relative and absolute paths.
+	absPath, err := filepath.Abs(expandedPath)
+	if err != nil {
+		return fmt.Errorf("%w: invalid chdir path: %s", errUtils.ErrPathResolution, chdir)
+	}
+
+	// Verify the directory exists before attempting to change to it.
+	stat, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("%w: directory does not exist: %s", errUtils.ErrWorkdirNotExist, absPath)
+		}
+		return fmt.Errorf("%w: failed to access directory: %s", errUtils.ErrStatFile, absPath)
+	}
+
+	if !stat.IsDir() {
+		return fmt.Errorf("%w: not a directory: %s", errUtils.ErrWorkdirNotExist, absPath)
+	}
+
+	// Change to the specified directory.
+	if err := os.Chdir(absPath); err != nil {
+		return fmt.Errorf("%w: failed to change directory to %s", errUtils.ErrPathResolution, absPath)
+	}
+
+	// Mark as processed to avoid double-processing in PersistentPreRun.
+	chdirProcessed = true
+
+	return nil
+}
+
 // processChdirFlag processes the --chdir flag and ATMOS_CHDIR environment variable,
 // changing the working directory before any other operations.
 // Precedence: --chdir flag > ATMOS_CHDIR environment variable.
+// Note: This is also called from PersistentPreRun, but will be a no-op if
+// processEarlyChdirFlag() already processed the chdir in Execute().
 func processChdirFlag(cmd *cobra.Command) error {
+	// If chdir already processed in Execute(), skip to avoid double-processing.
+	if chdirProcessed {
+		return nil
+	}
+
 	// Try to get chdir from parsed flags first (works when DisableFlagParsing=false).
 	chdir, _ := cmd.Flags().GetString("chdir")
 
@@ -155,6 +224,9 @@ func processChdirFlag(cmd *cobra.Command) error {
 	if err := os.Chdir(absPath); err != nil {
 		return fmt.Errorf("%w: failed to change directory to %s", errUtils.ErrPathResolution, absPath)
 	}
+
+	// Mark as processed to avoid double-processing.
+	chdirProcessed = true
 
 	return nil
 }
@@ -578,6 +650,18 @@ func applyProfileTypeFlag(config *profiler.Config, cmd *cobra.Command) error {
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the RootCmd.
 func Execute() error {
+	// CRITICAL: Process --chdir flag BEFORE loading config.
+	// This ensures atmos.yaml is loaded from the correct directory when using --chdir.
+	// We must process chdir early because aliases depend on the config, and the config
+	// depends on the working directory.
+	//
+	// Note: We create a temporary command to parse flags because RootCmd hasn't been
+	// fully initialized yet (custom commands/aliases not added). This is safe because
+	// --chdir is a global persistent flag defined in init().
+	if err := processEarlyChdirFlag(); err != nil {
+		return err
+	}
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config.

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/charmbracelet/glamour"
@@ -278,9 +279,62 @@ func (f *formatter) StatusMessage(icon string, style *lipgloss.Style, text strin
 	return fmt.Sprintf("%s %s", styledIcon, text)
 }
 
-// Semantic formatting - delegates to StatusMessage with appropriate icons and styles.
+// Toast renders markdown text with an icon prefix and auto-indents multi-line content.
+func (f *formatter) Toast(icon string, style *lipgloss.Style, text string) (string, error) {
+	// Render markdown first
+	rendered, err := f.Markdown(text)
+	if err != nil {
+		return "", err
+	}
+
+	// Trim leading and trailing newlines that markdown rendering adds
+	rendered = strings.Trim(rendered, "\n")
+
+	// Style the icon if color is supported
+	var styledIcon string
+	if f.SupportsColor() && style != nil {
+		styledIcon = style.Render(icon)
+	} else {
+		styledIcon = icon
+	}
+
+	// Calculate indent for multi-line (icon width + space)
+	// Info icon ℹ is 2 characters wide in most terminals
+	iconWidth := 2
+	indent := strings.Repeat(" ", iconWidth+1)
+
+	// Split by newlines and filter out empty lines (glamour adds blank lines with just spaces)
+	allLines := strings.Split(rendered, "\n")
+	var lines []string
+	for _, line := range allLines {
+		// Keep lines that have non-whitespace content
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, line)
+		}
+	}
+
+	if len(lines) == 0 {
+		// No content after filtering empty lines
+		return styledIcon, nil
+	}
+
+	if len(lines) == 1 {
+		return fmt.Sprintf("%s %s", styledIcon, lines[0]), nil
+	}
+
+	// Multi-line: first line with icon, rest indented
+	result := fmt.Sprintf("%s %s", styledIcon, lines[0])
+	for i := 1; i < len(lines); i++ {
+		result += "\n" + indent + lines[i]
+	}
+
+	return result, nil
+}
+
+// Semantic formatting - all use Toast for markdown rendering and icon styling.
 func (f *formatter) Success(text string) string {
-	return f.StatusMessage("✓", &f.styles.Success, text)
+	result, _ := f.Toast("✓", &f.styles.Success, text)
+	return result
 }
 
 func (f *formatter) Successf(format string, a ...interface{}) string {
@@ -288,7 +342,8 @@ func (f *formatter) Successf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Warning(text string) string {
-	return f.StatusMessage("⚠", &f.styles.Warning, text)
+	result, _ := f.Toast("⚠", &f.styles.Warning, text)
+	return result
 }
 
 func (f *formatter) Warningf(format string, a ...interface{}) string {
@@ -296,7 +351,8 @@ func (f *formatter) Warningf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Error(text string) string {
-	return f.StatusMessage("✗", &f.styles.Error, text)
+	result, _ := f.Toast("✗", &f.styles.Error, text)
+	return result
 }
 
 func (f *formatter) Errorf(format string, a ...interface{}) string {
@@ -304,7 +360,8 @@ func (f *formatter) Errorf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Info(text string) string {
-	return f.StatusMessage("ℹ", &f.styles.Info, text)
+	result, _ := f.Toast("ℹ", &f.styles.Info, text)
+	return result
 }
 
 func (f *formatter) Infof(format string, a ...interface{}) string {

@@ -2,7 +2,9 @@ package devcontainer
 
 import (
 	"fmt"
+	"strings"
 
+	"dario.cat/mergo"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -244,9 +246,41 @@ func extractAndValidateSpec(devcontainerMap map[string]any, name string) (*Confi
 		return nil, fmt.Errorf("%w: devcontainer '%s' missing 'spec' section", errUtils.ErrInvalidDevcontainerConfig, name)
 	}
 
+	// Handle list-based spec (sequence of maps to merge).
+	// When using list syntax, Viper stores the list AND creates indexed keys (spec[0], spec[1], etc.)
+	// We need to collect the indexed items and merge them.
+	if specList, isList := specRaw.([]any); isList {
+		log.Debug("Detected list-based spec, collecting indexed items", "name", name, "items", len(specList))
+		maps := make([]map[string]any, 0, len(specList))
+
+		// Collect spec[0], spec[1], etc. which contain the processed YAML functions
+		for i := 0; i < len(specList); i++ {
+			key := fmt.Sprintf("spec[%d]", i)
+			if item, exists := devcontainerMap[key]; exists {
+				if itemMap, ok := item.(map[string]any); ok {
+					maps = append(maps, itemMap)
+				} else {
+					log.Warn("Spec list item is not a map", "name", name, "index", i, "type", fmt.Sprintf("%T", item))
+				}
+			}
+		}
+
+		if len(maps) > 0 {
+			merged, err := mergeSpecMaps(maps, name)
+			if err != nil {
+				return nil, err
+			}
+			specRaw = merged
+		} else {
+			return nil, fmt.Errorf("%w: devcontainer `%s` has empty spec list", errUtils.ErrInvalidDevcontainerConfig, name)
+		}
+	} else {
+		log.Debug("Spec type", "name", name, "type", fmt.Sprintf("%T", specRaw))
+	}
+
 	specMap, ok := specRaw.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("%w: devcontainer spec must be a map", errUtils.ErrInvalidDevcontainerConfig)
+		return nil, fmt.Errorf("%w: devcontainer spec must be a map (got %T)", errUtils.ErrInvalidDevcontainerConfig, specRaw)
 	}
 
 	config, err := deserializeSpec(specMap, name)
@@ -271,6 +305,132 @@ func extractAndValidateSpec(devcontainerMap map[string]any, name string) (*Confi
 	}
 
 	return config, nil
+}
+
+// mergeSpecMaps merges a list of maps into a single map.
+// This supports the pattern where spec is defined as a sequence of maps to be merged:
+//
+//	spec:
+//	  - !include devcontainer.json
+//	  - forwardPorts:
+//	      - !random 8080 8099
+func mergeSpecMaps(maps []map[string]any, name string) (map[string]any, error) {
+	defer perf.Track(nil, "devcontainer.mergeSpecMaps")()
+
+	if len(maps) == 0 {
+		return nil, errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
+			WithExplanationf("Devcontainer `%s` spec list cannot be empty", name).
+			WithHint("Either use a map directly or provide at least one item in the list").
+			WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
+			WithContext("devcontainer_name", name).
+			WithExitCode(2).
+			Err()
+	}
+
+	// Merge all maps in order using mergo with override.
+	result := make(map[string]any)
+	for k, v := range maps[0] {
+		result[k] = v
+	}
+
+	log.Debug("Starting merge", "name", name, "map_count", len(maps), "initial_keys", len(result))
+
+	for i := 1; i < len(maps); i++ {
+		log.Debug("Merging map", "name", name, "index", i, "keys", len(maps[i]))
+		if err := mergo.Merge(&result, maps[i], mergo.WithOverride); err != nil {
+			return nil, errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
+				WithCause(err).
+				WithExplanationf("Failed to merge devcontainer `%s` spec list", name).
+				WithHint("Check that all items in the spec list are valid maps").
+				WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
+				WithContext("devcontainer_name", name).
+				WithExitCode(2).
+				Err()
+		}
+		log.Debug("After merge", "name", name, "result_keys", len(result))
+	}
+
+	log.Debug("Final merged result", "name", name, "keys", fmt.Sprintf("%v", getKeys(result)))
+
+	// Fix indexed array keys (e.g., forwardports[0], forwardports[1] → forwardports: [value0, value1])
+	result = consolidateIndexedKeys(result)
+
+	return result, nil
+}
+
+func getKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// consolidateIndexedKeys converts Viper's indexed keys (e.g., "ports[0]", "ports[1]") back into arrays.
+// Viper stores both the raw list AND indexed keys for processed values.
+// We need to collect the indexed values and replace the raw list.
+func consolidateIndexedKeys(m map[string]any) map[string]any {
+	defer perf.Track(nil, "devcontainer.consolidateIndexedKeys")()
+
+	result := make(map[string]any)
+	indexedArrays := make(map[string][]any)
+
+	// First pass: identify indexed keys and collect their values
+	for k, v := range m {
+		// Check if key has format "name[index]"
+		if idx := strings.Index(k, "["); idx > 0 && strings.HasSuffix(k, "]") {
+			baseName := k[:idx]
+			indexStr := k[idx+1 : len(k)-1]
+			var index int
+			if _, err := fmt.Sscanf(indexStr, "%d", &index); err == nil {
+				// Valid indexed key
+				if _, exists := indexedArrays[baseName]; !exists {
+					indexedArrays[baseName] = make([]any, 0)
+				}
+				// Store with index for later sorting
+				indexedArrays[baseName] = append(indexedArrays[baseName], indexedValue{index: index, value: v})
+			} else {
+				// Not a numeric index, keep as-is
+				result[k] = v
+			}
+		} else {
+			// Not an indexed key
+			result[k] = v
+		}
+	}
+
+	// Second pass: convert indexed arrays back to proper arrays
+	for baseName, indexedVals := range indexedArrays {
+		// Sort by index
+		sortIndexedValues(indexedVals)
+
+		// Extract just the values in order
+		array := make([]any, len(indexedVals))
+		for i, iv := range indexedVals {
+			array[i] = iv.(indexedValue).value
+		}
+
+		// Replace the base key with the sorted array
+		result[baseName] = array
+	}
+
+	return result
+}
+
+type indexedValue struct {
+	index int
+	value any
+}
+
+func sortIndexedValues(vals []any) {
+	// Simple bubble sort for small arrays (devcontainer configs are small)
+	for i := 0; i < len(vals); i++ {
+		for j := i + 1; j < len(vals); j++ {
+			if vals[i].(indexedValue).index > vals[j].(indexedValue).index {
+				vals[i], vals[j] = vals[j], vals[i]
+			}
+		}
+	}
 }
 
 // LoadAllConfigs loads all devcontainer configurations from atmos.yaml.

@@ -15,9 +15,10 @@ type flagSnapshot struct {
 
 // cmdStateSnapshot stores the complete state of RootCmd for restoration.
 type cmdStateSnapshot struct {
-	args   []string
-	osArgs []string
-	flags  map[string]flagSnapshot
+	args           []string
+	osArgs         []string
+	flags          map[string]flagSnapshot
+	chdirProcessed bool
 }
 
 // snapshotRootCmdState captures the current state of RootCmd including all flag values.
@@ -25,9 +26,10 @@ type cmdStateSnapshot struct {
 // preventing test pollution without needing to maintain a hardcoded list of flags.
 func snapshotRootCmdState() *cmdStateSnapshot {
 	snapshot := &cmdStateSnapshot{
-		args:   make([]string, len(RootCmd.Flags().Args())),
-		osArgs: make([]string, len(os.Args)),
-		flags:  make(map[string]flagSnapshot),
+		args:           make([]string, len(RootCmd.Flags().Args())),
+		osArgs:         make([]string, len(os.Args)),
+		flags:          make(map[string]flagSnapshot),
+		chdirProcessed: chdirProcessed,
 	}
 
 	// Copy args.
@@ -87,6 +89,9 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 	// Restore os.Args.
 	os.Args = make([]string, len(snapshot.osArgs))
 	copy(os.Args, snapshot.osArgs)
+
+	// Restore chdirProcessed flag.
+	chdirProcessed = snapshot.chdirProcessed
 
 	// Restore all flags to their snapshotted values.
 	restoreFlags := func(flagSet *pflag.FlagSet) {

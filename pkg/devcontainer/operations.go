@@ -290,7 +290,7 @@ func displayContainerInfo(config *Config) {
 
 	// Show image.
 	if config.Image != "" {
-		info = append(info, fmt.Sprintf("Image: %s", config.Image))
+		info = append(info, fmt.Sprintf("- **Image:** %s", config.Image))
 	}
 
 	// Show workspace mount.
@@ -303,9 +303,10 @@ func displayContainerInfo(config *Config) {
 		info = append(info, portsInfo)
 	}
 
-	// Display info if we have any.
+	// Display all info using Info (which now uses Toast with markdown rendering).
+	// Use markdown list syntax for proper line separation.
 	if len(info) > 0 {
-		_ = ui.Infof("\n%s\n", strings.Join(info, "\n"))
+		_ = ui.Info(strings.Join(info, "\n"))
 	}
 }
 
@@ -316,9 +317,9 @@ func formatWorkspaceInfo(workspaceFolder string) string {
 	}
 	cwd, _ := os.Getwd()
 	if cwd != "" {
-		return fmt.Sprintf("Workspace: %s → %s", cwd, workspaceFolder)
+		return fmt.Sprintf("- **Workspace:** %s → %s", cwd, workspaceFolder)
 	}
-	return fmt.Sprintf("Workspace folder: %s", workspaceFolder)
+	return fmt.Sprintf("- **Workspace folder:** %s", workspaceFolder)
 }
 
 // formatPortsInfo formats the forwarded ports information.
@@ -340,7 +341,7 @@ func formatPortsInfo(forwardPorts []interface{}) string {
 	}
 
 	if len(ports) > 0 {
-		return fmt.Sprintf("Ports: %s", strings.Join(ports, ", "))
+		return fmt.Sprintf("- **Ports:** %s", strings.Join(ports, ", "))
 	}
 	return ""
 }

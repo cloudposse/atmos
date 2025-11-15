@@ -27,7 +27,11 @@ devcontainer:
   geodesic:
     settings:
       runtime: podman  # Optional: docker, podman, or omit for auto-detect
-    spec: !include devcontainer.json
+    spec:
+      - !include devcontainer.json
+      - forwardPorts:
+          - !random 8080 8099  # Random port in web server range
+          - !random 3000 3099  # Random port in dev server range
 
   # Alternative: Define inline with random port forwarding
   terraform:

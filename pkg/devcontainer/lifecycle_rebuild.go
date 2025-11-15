@@ -92,5 +92,9 @@ func rebuildContainer(p *rebuildParams) error {
 	}
 
 	u.PrintfMessageToTUI("%s Container %s rebuilt successfully\n", theme.Styles.Checkmark.String(), p.containerName)
+
+	// Display container information.
+	displayContainerInfo(p.config)
+
 	return nil
 }

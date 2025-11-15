@@ -278,7 +278,7 @@ devcontainer:
 
 #### Option 2: Import from devcontainer.json with Overrides
 
-Use the `!include` YAML function with YAML merge syntax (`<<:`) to import and override:
+Use the `!include` YAML function with list-based merging to import and override:
 
 ```yaml
 # atmos.yaml
@@ -287,19 +287,24 @@ devcontainer:
     settings:
       runtime: docker
     spec:
-      <<: !include .devcontainer/devcontainer.json
+      - !include .devcontainer/devcontainer.json
+      - {} # No overrides
 
   terraform:
     settings:
       runtime: podman
     spec:
       # Import base configuration and override specific fields
-      <<: !include .devcontainer/terraform.json
-      image: hashicorp/terraform:1.6  # Override image
-      forwardPorts: [8080, 3000]      # Override ports
-      containerEnv:
-        TF_PLUGIN_CACHE_DIR: "/root/.terraform.d/plugin-cache"
+      - !include .devcontainer/terraform.json
+      - image: hashicorp/terraform:1.6  # Override image
+        forwardPorts:
+          - !random 8080 8099  # Random port for web
+          - !random 3000 3099  # Random port for dev
+        containerEnv:
+          TF_PLUGIN_CACHE_DIR: "/root/.terraform.d/plugin-cache"
 ```
+
+**Note:** The `<<:` YAML merge key syntax does NOT work with `!include` because YAML merge keys are processed before custom tags are resolved. Use the list-based syntax shown above instead.
 
 #### Option 3: Simple Include (No Overrides)
 

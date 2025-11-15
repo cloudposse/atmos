@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -111,6 +112,13 @@ func convertMounts(config *Config, cwd string) []container.Mount {
 	for _, mountStr := range config.Mounts {
 		expandedMountStr := expandDevcontainerVars(mountStr, cwd)
 		if mount := parseMountString(expandedMountStr); mount != nil {
+			// Skip bind mounts where the source directory doesn't exist.
+			if mount.Type == "bind" && mount.Source != "" {
+				if _, err := os.Stat(mount.Source); os.IsNotExist(err) {
+					log.Warn("Skipping mount for non-existent directory", "source", mount.Source)
+					continue
+				}
+			}
 			mounts = append(mounts, *mount)
 		}
 	}

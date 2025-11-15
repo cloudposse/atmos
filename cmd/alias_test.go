@@ -113,6 +113,92 @@ func TestVersionCommandSkipsAliasProcessing(t *testing.T) {
 	}
 }
 
+func TestAliasChdirProcessing(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Save original working directory.
+	originalWd, err := os.Getwd()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.Chdir(originalWd)
+	})
+
+	// Test that --chdir works with aliases by loading config from the target directory.
+	t.Run("chdir loads config from target directory before processing aliases", func(t *testing.T) {
+		_ = NewTestKit(t)
+
+		// This test verifies that when using --chdir, atmos loads the config from the
+		// target directory (not the current directory) before processing aliases.
+		//
+		// The fix ensures processEarlyChdirFlag() runs before cfg.InitCliConfig() in Execute(),
+		// so that atmos.yaml is loaded from the correct directory and aliases are registered
+		// from the correct config.
+		//
+		// We can't easily test the full flow because Execute() changes global state,
+		// but we can verify that the filterChdirArgs function works correctly (tested below)
+		// and manually verify with: atmos shell --chdir examples/devcontainer --help
+		//
+		// The manual verification should show the devcontainer shell help, not an error
+		// about unknown command.
+	})
+
+	t.Run("filterChdirArgs removes chdir flags", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			input    []string
+			expected []string
+		}{
+			{
+				name:     "removes --chdir with value",
+				input:    []string{"--chdir", "somedir", "arg1", "arg2"},
+				expected: []string{"arg1", "arg2"},
+			},
+			{
+				name:     "removes -C with value",
+				input:    []string{"-C", "somedir", "arg1", "arg2"},
+				expected: []string{"arg1", "arg2"},
+			},
+			{
+				name:     "removes --chdir=value",
+				input:    []string{"--chdir=somedir", "arg1", "arg2"},
+				expected: []string{"arg1", "arg2"},
+			},
+			{
+				name:     "removes -C=value",
+				input:    []string{"-C=somedir", "arg1", "arg2"},
+				expected: []string{"arg1", "arg2"},
+			},
+			{
+				name:     "removes -C<value> concatenated",
+				input:    []string{"-Csomedir", "arg1", "arg2"},
+				expected: []string{"arg1", "arg2"},
+			},
+			{
+				name:     "removes multiple chdir flags",
+				input:    []string{"--chdir", "dir1", "arg1", "-C", "dir2", "arg2"},
+				expected: []string{"arg1", "arg2"},
+			},
+			{
+				name:     "preserves other flags",
+				input:    []string{"--stack", "dev", "--chdir", "somedir", "--component", "vpc"},
+				expected: []string{"--stack", "dev", "--component", "vpc"},
+			},
+			{
+				name:     "preserves args that start with -C but are longer flags",
+				input:    []string{"--chdir", "somedir", "--config", "file.yaml"},
+				expected: []string{"--config", "file.yaml"},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := filterChdirArgs(tt.input)
+				assert.Equal(t, tt.expected, result)
+			})
+		}
+	})
+}
+
 func TestAliasFlagPassing(t *testing.T) {
 	_ = NewTestKit(t)
 

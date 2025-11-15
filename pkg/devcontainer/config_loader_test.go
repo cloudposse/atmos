@@ -1094,3 +1094,394 @@ func TestValidateConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestMergeSpecMaps(t *testing.T) {
+	tests := []struct {
+		name        string
+		maps        []map[string]any
+		dcName      string
+		expected    map[string]any
+		expectError bool
+	}{
+		{
+			name: "merge two maps with no conflicts",
+			maps: []map[string]any{
+				{
+					"name":  "base-container",
+					"image": "alpine:latest",
+				},
+				{
+					"workspacefolder": "/workspace",
+					"remoteuser":      "root",
+				},
+			},
+			dcName: "test",
+			expected: map[string]any{
+				"name":            "base-container",
+				"image":           "alpine:latest",
+				"workspacefolder": "/workspace",
+				"remoteuser":      "root",
+			},
+			expectError: false,
+		},
+		{
+			name: "merge with override - second map wins",
+			maps: []map[string]any{
+				{
+					"name":  "base-container",
+					"image": "alpine:latest",
+				},
+				{
+					"image": "ubuntu:22.04", // Override
+				},
+			},
+			dcName: "test",
+			expected: map[string]any{
+				"name":  "base-container",
+				"image": "ubuntu:22.04", // Second value wins
+			},
+			expectError: false,
+		},
+		{
+			name: "merge forwardports arrays",
+			maps: []map[string]any{
+				{
+					"forwardports": []any{},
+				},
+				{
+					"forwardports": []any{8080, 3000},
+				},
+			},
+			dcName: "test",
+			expected: map[string]any{
+				"forwardports": []any{8080, 3000},
+			},
+			expectError: false,
+		},
+		{
+			name: "merge containerenv maps",
+			maps: []map[string]any{
+				{
+					"containerenv": map[string]any{
+						"NODE_ENV": "development",
+						"DEBUG":    "true",
+					},
+				},
+				{
+					"containerenv": map[string]any{
+						"NODE_ENV": "production", // Override
+						"API_URL":  "https://api.example.com",
+					},
+				},
+			},
+			dcName: "test",
+			expected: map[string]any{
+				"containerenv": map[string]any{
+					"NODE_ENV": "production", // Second value wins
+					"DEBUG":    "true",
+					"API_URL":  "https://api.example.com",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "merge three maps in order",
+			maps: []map[string]any{
+				{
+					"name":  "base",
+					"image": "alpine:latest",
+				},
+				{
+					"image":           "ubuntu:22.04",
+					"workspacefolder": "/workspace",
+				},
+				{
+					"image":      "debian:bullseye",
+					"remoteuser": "vscode",
+				},
+			},
+			dcName: "test",
+			expected: map[string]any{
+				"name":            "base",
+				"image":           "debian:bullseye", // Third value wins
+				"workspacefolder": "/workspace",
+				"remoteuser":      "vscode",
+			},
+			expectError: false,
+		},
+		{
+			name:        "empty maps list returns error",
+			maps:        []map[string]any{},
+			dcName:      "test",
+			expectError: true,
+		},
+		{
+			name: "single map",
+			maps: []map[string]any{
+				{
+					"name":  "test",
+					"image": "alpine:latest",
+				},
+			},
+			dcName: "test",
+			expected: map[string]any{
+				"name":  "test",
+				"image": "alpine:latest",
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mergeSpecMaps(tt.maps, tt.dcName)
+
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
+
+func TestConsolidateIndexedKeys(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		expected map[string]any
+	}{
+		{
+			name: "consolidate forwardports indexed keys",
+			input: map[string]any{
+				"image":           "alpine:latest",
+				"forwardports[0]": 8080,
+				"forwardports[1]": 3000,
+				"forwardports[2]": 5432,
+			},
+			expected: map[string]any{
+				"image":        "alpine:latest",
+				"forwardports": []any{8080, 3000, 5432},
+			},
+		},
+		{
+			name: "consolidate mounts indexed keys",
+			input: map[string]any{
+				"mounts[0]": "type=bind,source=/host,target=/container",
+				"mounts[1]": "type=volume,source=data,target=/data",
+			},
+			expected: map[string]any{
+				"mounts": []any{
+					"type=bind,source=/host,target=/container",
+					"type=volume,source=data,target=/data",
+				},
+			},
+		},
+		{
+			name: "mixed indexed and non-indexed keys",
+			input: map[string]any{
+				"image":           "ubuntu:22.04",
+				"name":            "test",
+				"forwardports[0]": 8080,
+				"forwardports[1]": 3000,
+				"remoteuser":      "vscode",
+			},
+			expected: map[string]any{
+				"image":        "ubuntu:22.04",
+				"name":         "test",
+				"forwardports": []any{8080, 3000},
+				"remoteuser":   "vscode",
+			},
+		},
+		{
+			name: "no indexed keys",
+			input: map[string]any{
+				"image": "alpine:latest",
+				"name":  "test",
+			},
+			expected: map[string]any{
+				"image": "alpine:latest",
+				"name":  "test",
+			},
+		},
+		{
+			name: "multiple arrays with indexed keys",
+			input: map[string]any{
+				"forwardports[0]": 8080,
+				"forwardports[1]": 3000,
+				"mounts[0]":       "bind-mount",
+				"mounts[1]":       "volume-mount",
+			},
+			expected: map[string]any{
+				"forwardports": []any{8080, 3000},
+				"mounts":       []any{"bind-mount", "volume-mount"},
+			},
+		},
+		{
+			name: "out of order indices",
+			input: map[string]any{
+				"forwardports[2]": 5432,
+				"forwardports[0]": 8080,
+				"forwardports[1]": 3000,
+			},
+			expected: map[string]any{
+				"forwardports": []any{8080, 3000, 5432},
+			},
+		},
+		{
+			name:     "empty map",
+			input:    map[string]any{},
+			expected: map[string]any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := consolidateIndexedKeys(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExtractAndValidateSpec_ListBased(t *testing.T) {
+	tests := []struct {
+		name        string
+		devMap      map[string]any
+		dcName      string
+		expectError bool
+		assert      func(t *testing.T, config *Config)
+	}{
+		{
+			name: "list-based spec with two maps",
+			devMap: map[string]any{
+				"spec": []any{
+					map[string]any{
+						"name":  "base",
+						"image": "alpine:latest",
+					},
+					map[string]any{
+						"image":           "ubuntu:22.04",
+						"workspacefolder": "/workspace",
+					},
+				},
+				"spec[0]": map[string]any{
+					"name":  "base",
+					"image": "alpine:latest",
+				},
+				"spec[1]": map[string]any{
+					"image":           "ubuntu:22.04",
+					"workspacefolder": "/workspace",
+				},
+			},
+			dcName:      "test",
+			expectError: false,
+			assert: func(t *testing.T, config *Config) {
+				assert.Equal(t, "base", config.Name)
+				assert.Equal(t, "ubuntu:22.04", config.Image)         // Second map overrides
+				assert.Equal(t, "/workspace", config.WorkspaceFolder) // From second map
+			},
+		},
+		{
+			name: "list-based spec with forwardports override",
+			devMap: map[string]any{
+				"spec": []any{
+					map[string]any{
+						"image": "alpine:latest",
+					},
+					map[string]any{},
+				},
+				"spec[0]": map[string]any{
+					"image": "alpine:latest",
+				},
+				"spec[1]": map[string]any{
+					"forwardports[0]": 8080,
+					"forwardports[1]": 3000,
+				},
+			},
+			dcName:      "test",
+			expectError: false,
+			assert: func(t *testing.T, config *Config) {
+				assert.Equal(t, "alpine:latest", config.Image)
+				assert.Equal(t, []any{8080, 3000}, config.ForwardPorts)
+			},
+		},
+		{
+			name: "list-based spec with containerenv merge",
+			devMap: map[string]any{
+				"spec": []any{
+					map[string]any{
+						"image": "alpine:latest",
+					},
+					map[string]any{},
+				},
+				"spec[0]": map[string]any{
+					"image": "alpine:latest",
+					"containerenv": map[string]any{
+						"NODE_ENV": "development",
+						"DEBUG":    "true",
+					},
+				},
+				"spec[1]": map[string]any{
+					"containerenv": map[string]any{
+						"NODE_ENV": "production", // Override
+						"API_URL":  "https://api.example.com",
+					},
+				},
+			},
+			dcName:      "test",
+			expectError: false,
+			assert: func(t *testing.T, config *Config) {
+				assert.Equal(t, "alpine:latest", config.Image)
+				assert.Equal(t, map[string]string{
+					"NODE_ENV": "production", // Overridden
+					"DEBUG":    "true",
+					"API_URL":  "https://api.example.com",
+				}, config.ContainerEnv)
+			},
+		},
+		{
+			name: "list-based spec with three maps",
+			devMap: map[string]any{
+				"spec": []any{
+					map[string]any{},
+					map[string]any{},
+					map[string]any{},
+				},
+				"spec[0]": map[string]any{
+					"name":  "base",
+					"image": "alpine:latest",
+				},
+				"spec[1]": map[string]any{
+					"image":           "ubuntu:22.04",
+					"workspacefolder": "/workspace",
+				},
+				"spec[2]": map[string]any{
+					"image":      "debian:bullseye",
+					"remoteuser": "vscode",
+				},
+			},
+			dcName:      "test",
+			expectError: false,
+			assert: func(t *testing.T, config *Config) {
+				assert.Equal(t, "base", config.Name)
+				assert.Equal(t, "debian:bullseye", config.Image) // Third map wins
+				assert.Equal(t, "/workspace", config.WorkspaceFolder)
+				assert.Equal(t, "vscode", config.RemoteUser)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, err := extractAndValidateSpec(tt.devMap, tt.dcName)
+
+			if tt.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				tt.assert(t, config)
+			}
+		})
+	}
+}

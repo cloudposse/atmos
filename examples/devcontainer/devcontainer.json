@@ -6,13 +6,12 @@
 
   "mounts": [
     "type=bind,source=${localEnv:HOME}/.config,target=/root/.config",
-    "type=bind,source=${localEnv:HOME}/.aws,target=/root/.aws",
     "type=bind,source=${localEnv:HOME}/.ssh,target=/root/.ssh,readonly",
     "type=bind,source=${localEnv:HOME}/.kube,target=/root/.kube",
     "type=bind,source=${localEnv:HOME}/.terraform.d,target=/root/.terraform.d"
   ],
 
-  "forwardPorts": [8080, 3000],
+  "forwardPorts": [],
 
   "portsAttributes": {
     "8080": {
