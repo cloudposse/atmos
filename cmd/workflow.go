@@ -28,7 +28,6 @@ var workflowCmd = &cobra.Command{
 			return nil
 		}
 
-
 		// Get the --file flag value
 		workflowFile, _ := cmd.Flags().GetString("file")
 
