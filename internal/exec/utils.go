@@ -398,13 +398,14 @@ func ProcessStacks(
 				continue
 			}
 
-			if atmosConfig.Stacks.NameTemplate != "" {
+			switch {
+			case atmosConfig.Stacks.NameTemplate != "":
 				tmpl, err2 := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 				if err2 != nil {
 					continue
 				}
 				configAndStacksInfo.ContextPrefix = tmpl
-			} else if atmosConfig.Stacks.NamePattern != "" {
+			case atmosConfig.Stacks.NamePattern != "":
 				// Process context.
 				configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 
@@ -416,7 +417,7 @@ func ProcessStacks(
 				if err != nil {
 					continue
 				}
-			} else {
+			default:
 				return configAndStacksInfo, errUtils.ErrMissingStackNameTemplateAndPattern
 			}
 
@@ -509,13 +510,14 @@ func ProcessStacks(
 						continue
 					}
 
-					if atmosConfig.Stacks.NameTemplate != "" {
+					switch {
+					case atmosConfig.Stacks.NameTemplate != "":
 						tmpl, err2 := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 						if err2 != nil {
 							continue
 						}
 						configAndStacksInfo.ContextPrefix = tmpl
-					} else if atmosConfig.Stacks.NamePattern != "" {
+					case atmosConfig.Stacks.NamePattern != "":
 						// Process context.
 						configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 
@@ -527,7 +529,7 @@ func ProcessStacks(
 						if err != nil {
 							continue
 						}
-					} else {
+					default:
 						return configAndStacksInfo, errUtils.ErrMissingStackNameTemplateAndPattern
 					}
 

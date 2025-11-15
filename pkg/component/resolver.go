@@ -10,6 +10,13 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	// ComponentKey is the key used for component fields in stack configuration maps.
+	ComponentKey = "component"
+	// TypeKey is the key used for component type fields in stack configuration maps.
+	TypeKey = "type"
+)
+
 // StackLoader is an interface for loading stack configurations.
 // This allows the component package to avoid depending on internal/exec.
 type StackLoader interface {
@@ -309,14 +316,14 @@ func findComponentMatches(
 		}
 
 		// Check 'component' field.
-		if comp, ok := componentConfigMap["component"].(string); ok && comp == componentName {
+		if comp, ok := componentConfigMap[ComponentKey].(string); ok && comp == componentName {
 			matches = append(matches, stackKey)
 			continue
 		}
 
 		// Check 'metadata.component' field.
 		if metadata, ok := componentConfigMap["metadata"].(map[string]any); ok {
-			if metaComp, ok := metadata["component"].(string); ok && metaComp == componentName {
+			if metaComp, ok := metadata[ComponentKey].(string); ok && metaComp == componentName {
 				matches = append(matches, stackKey)
 			}
 		}
