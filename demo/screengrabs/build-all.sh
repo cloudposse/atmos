@@ -95,7 +95,8 @@ function sed_inplace() {
 function record() {
     local demo=$1
     local command=$2
-    local extension="${command##*.}" # if any...
+    local first_word="${command%% *}"
+    local extension="${first_word##*.}" # if any...
     local demo_path=../../examples/$demo
     local output_base_file=artifacts/$(echo "$command" | sed -E 's/ --charset=UTF-8//g' | sed -E 's/ -/-/g' | sed -E 's/ +/-/g' | sed 's/---/--/g' | sed 's/scripts\///' | sed 's/\.sh$//')
     local output_html=${output_base_file}.html
@@ -125,8 +126,10 @@ function record() {
 postprocess_ansi() {
   local file=$1
   # Remove terminal escape sequences (OSC, cursor position queries, etc.)
-  sed_inplace -E 's/\^\[\]([0-9]+;[^\^]*)\^G//g' $file
-  sed_inplace -E 's/\^\[(\[[0-9;]+R)//g' $file
+  local esc=$'\033'
+  local bel=$'\007'
+  sed_inplace -E "s/${esc}\\]([0-9]+;[^${esc}]*)(${bel}|${esc}\\\\)//g" "$file"
+  sed_inplace -E "s/${esc}\\[[0-9;]+R//g" "$file"
 
   # Remove noise and clean up the output
   sed_inplace '/- Finding latest version of/d' $file

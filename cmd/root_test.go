@@ -450,6 +450,9 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 	// where stdin/stdout/stderr are not connected to a terminal.
 
 	t.Run("help should not error when ATMOS_PAGER=false and no TTY", func(t *testing.T) {
+		// Use NewTestKit to isolate RootCmd state.
+		_ = NewTestKit(t)
+
 		// Save original environment.
 		originalPager := os.Getenv("ATMOS_PAGER")
 		originalArgs := os.Args
@@ -492,6 +495,9 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 	})
 
 	t.Run("help should not error when ATMOS_PAGER=true but no TTY", func(t *testing.T) {
+		// Use NewTestKit to isolate RootCmd state.
+		_ = NewTestKit(t)
+
 		// Save original environment.
 		originalPager := os.Getenv("ATMOS_PAGER")
 		originalArgs := os.Args

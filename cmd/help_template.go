@@ -129,6 +129,8 @@ func detectColorConfig() colorConfig {
 	_ = viper.BindEnv(envForceColor)
 	_ = viper.BindEnv(envNoColor)
 	_ = viper.BindEnv(envAtmosDebugColor)
+	_ = viper.BindEnv(envTerm)
+	_ = viper.BindEnv(envColorTerm)
 
 	// Check ATMOS_FORCE_COLOR first, then fallback to standard env vars.
 	atmosForceColor := viper.GetString(envAtmosForceColor)
@@ -558,7 +560,8 @@ func applyColoredHelpTemplate(cmd *cobra.Command) {
 	styles := createHelpStyles(writerConf.renderer)
 
 	// Load Atmos configuration for markdown rendering.
-	atmosConfig, _ := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	// Use processStacks=false since help rendering only needs terminal/docs settings.
+	atmosConfig, _ := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 
 	// Create help render context.
 	ctx := &helpRenderContext{
