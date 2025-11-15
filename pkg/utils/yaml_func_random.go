@@ -19,13 +19,16 @@ const (
 
 // ProcessTagRandom processes the !random YAML function and returns a random integer within the specified range.
 // Usage:
-//   !random           - Generate random number between 0 and 65535
-//   !random max       - Generate random number between 0 and max
-//   !random min max   - Generate random number between min and max
+//
+//	!random           - Generate random number between 0 and 65535
+//	!random max       - Generate random number between 0 and max
+//	!random min max   - Generate random number between min and max
+//
 // Examples:
-//   !random           -> random number 0-65535
-//   !random 100       -> random number 0-100
-//   !random 1024 65535 -> random number 1024-65535
+//
+//	!random           -> random number 0-65535
+//	!random 100       -> random number 0-100
+//	!random 1024 65535 -> random number 1024-65535
 func ProcessTagRandom(input string) (int, error) {
 	defer perf.Track(nil, "utils.ProcessTagRandom")()
 
