@@ -18,12 +18,16 @@ const (
 	// Character constants.
 	newline = "\n"
 	tab     = "\t"
+
+	// Format constants.
+	iconMessageFormat = "%s %s"
 )
 
 var (
 	// Global formatter instance and I/O context.
 	globalIO        io.Context
 	globalFormatter *formatter
+	globalTerminal  terminal.Terminal
 	formatterMu     sync.RWMutex
 )
 
@@ -41,7 +45,7 @@ func InitFormatter(ioCtx io.Context) {
 
 	// Create terminal instance with I/O writer for automatic masking
 	// terminal.Write() → io.Write(UIStream) → masking → stderr
-	globalTerminal := terminal.New(terminal.WithIO(termWriter))
+	globalTerminal = terminal.New(terminal.WithIO(termWriter))
 
 	// Create formatter with I/O context and terminal
 	globalFormatter = NewFormatter(ioCtx, globalTerminal).(*formatter)
@@ -202,6 +206,28 @@ func Infof(format string, a ...interface{}) error {
 	return f.terminal.Write(formatted)
 }
 
+// Toast writes a toast message with custom icon to stderr (UI channel).
+// Flow: ui.Toast() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Toast(icon, message string) error {
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
+	formatted := f.Toast(icon, message) + newline
+	return f.terminal.Write(formatted)
+}
+
+// Toastf writes a formatted toast message with custom icon to stderr (UI channel).
+// Flow: ui.Toastf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Toastf(icon, format string, a ...interface{}) error {
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
+	formatted := f.Toastf(icon, format, a...) + newline
+	return f.terminal.Write(formatted)
+}
+
 // Write writes plain text to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Write(text string) error {
@@ -272,22 +298,27 @@ func (f *formatter) ColorProfile() terminal.ColorProfile {
 // Returns formatted string: "{colored icon} {text}" where only the icon is colored.
 func (f *formatter) StatusMessage(icon string, style *lipgloss.Style, text string) string {
 	if !f.SupportsColor() {
-		return fmt.Sprintf("%s %s", icon, text)
+		return fmt.Sprintf(iconMessageFormat, icon, text)
 	}
 	// Style only the icon, not the entire message.
 	styledIcon := style.Render(icon)
-	return fmt.Sprintf("%s %s", styledIcon, text)
+	return fmt.Sprintf(iconMessageFormat, styledIcon, text)
 }
 
 // Toast renders markdown text with an icon prefix and auto-indents multi-line content.
-// Delegates to ToastMarkdown with preserved newlines.
-func (f *formatter) Toast(icon string, style *lipgloss.Style, text string) (string, error) {
-	return f.ToastMarkdown(icon, style, text)
+func (f *formatter) Toast(icon, message string) string {
+	result, _ := f.toastMarkdown(icon, nil, message)
+	return result
 }
 
-// ToastMarkdown renders markdown text with preserved newlines, an icon prefix, and auto-indents multi-line content.
+// Toastf renders formatted markdown text with an icon prefix.
+func (f *formatter) Toastf(icon, format string, a ...interface{}) string {
+	return f.Toast(icon, fmt.Sprintf(format, a...))
+}
+
+// toastMarkdown renders markdown text with preserved newlines, an icon prefix, and auto-indents multi-line content.
 // Uses a compact stylesheet for toast-style inline formatting.
-func (f *formatter) ToastMarkdown(icon string, style *lipgloss.Style, text string) (string, error) {
+func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text string) (string, error) {
 	// Render markdown with toast-specific compact stylesheet
 	rendered, err := f.renderToastMarkdown(text)
 	if err != nil {
@@ -313,7 +344,7 @@ func (f *formatter) ToastMarkdown(icon string, style *lipgloss.Style, text strin
 	}
 
 	if len(lines) == 1 {
-		return fmt.Sprintf("%s %s", styledIcon, lines[0]), nil
+		return fmt.Sprintf(iconMessageFormat, styledIcon, lines[0]), nil
 	}
 
 	// Calculate indent for multi-line (icon width)
@@ -322,7 +353,7 @@ func (f *formatter) ToastMarkdown(icon string, style *lipgloss.Style, text strin
 	indent := strings.Repeat(" ", iconWidth)
 
 	// Multi-line: first line with icon, rest indented
-	result := fmt.Sprintf("%s %s", styledIcon, lines[0])
+	result := fmt.Sprintf(iconMessageFormat, styledIcon, lines[0])
 	for i := 1; i < len(lines); i++ {
 		result += "\n" + indent + lines[i]
 	}
@@ -370,9 +401,9 @@ func (f *formatter) renderToastMarkdown(content string) (string, error) {
 	return rendered, nil
 }
 
-// Semantic formatting - all use Toast for markdown rendering and icon styling.
+// Semantic formatting - all use toastMarkdown for markdown rendering and icon styling.
 func (f *formatter) Success(text string) string {
-	result, _ := f.Toast("✓", &f.styles.Success, text)
+	result, _ := f.toastMarkdown("✓", &f.styles.Success, text)
 	return result
 }
 
@@ -381,7 +412,7 @@ func (f *formatter) Successf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Warning(text string) string {
-	result, _ := f.Toast("⚠", &f.styles.Warning, text)
+	result, _ := f.toastMarkdown("⚠", &f.styles.Warning, text)
 	return result
 }
 
@@ -390,7 +421,7 @@ func (f *formatter) Warningf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Error(text string) string {
-	result, _ := f.Toast("✗", &f.styles.Error, text)
+	result, _ := f.toastMarkdown("✗", &f.styles.Error, text)
 	return result
 }
 
@@ -399,7 +430,7 @@ func (f *formatter) Errorf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Info(text string) string {
-	result, _ := f.Toast("ℹ", &f.styles.Info, text)
+	result, _ := f.toastMarkdown("ℹ", &f.styles.Info, text)
 	return result
 }
 
