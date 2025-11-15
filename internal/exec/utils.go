@@ -551,6 +551,10 @@ func ProcessStacks(
 							))
 					}
 				}
+			} else if errors.Is(pathErr, errUtils.ErrPathNotInComponentDir) {
+				// Path resolution failed because path is not in component directories.
+				// Return the detailed path error instead of generic "component not found".
+				return configAndStacksInfo, pathErr
 			}
 		}
 
