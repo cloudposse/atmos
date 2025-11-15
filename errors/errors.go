@@ -64,10 +64,10 @@ var (
 	ErrTTYRequired          = errors.New("requires a TTY")
 
 	// Component and positional argument errors.
-	ErrComponentRequired        = errors.New("component is required")
-	ErrInvalidPositionalArgs    = errors.New("invalid positional arguments")
-	ErrWorkflowNameRequired     = errors.New("workflow name is required")
-	ErrInvalidStackConfiguration = errors.New("invalid stack configuration")
+	ErrComponentRequired          = errors.New("component is required")
+	ErrInvalidPositionalArgs      = errors.New("invalid positional arguments")
+	ErrWorkflowNameRequired       = errors.New("workflow name is required")
+	ErrInvalidStackConfiguration  = errors.New("invalid stack configuration")
 	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
