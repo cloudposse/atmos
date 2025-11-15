@@ -31,7 +31,7 @@ tests:
       diff: []
       stdout:
         - "Validate the authentication configuration in atmos.yaml"
-        - "Usage:"
+        - "USAGE"
         - "atmos auth validate"
       exit_code: 0
 
@@ -50,7 +50,7 @@ tests:
       diff: []
       stdout:
         - "Display information about the current effective authentication principal."
-        - "Usage:"
+        - "USAGE"
         - "atmos auth whoami"
       exit_code: 0
 
@@ -87,7 +87,7 @@ tests:
       diff: []
       stdout:
         - "Outputs environment variables for the assumed identity"
-        - "Usage:"
+        - "USAGE"
         - "atmos auth env"
         - "--format"
         - "bash"
@@ -167,7 +167,7 @@ tests:
       diff: []
       stdout:
         - "Execute a command with the authenticated identity's environment variables set."
-        - "Usage:"
+        - "USAGE"
         - "atmos auth exec"
         - "--identity"
       exit_code: 0
@@ -207,7 +207,7 @@ tests:
       diff: []
       stdout:
         - "Authenticate to cloud providers using an identity defined in atmos.yaml"
-        - "Usage:"
+        - "USAGE"
         - "atmos auth login"
         - "--identity"
       exit_code: 0
@@ -246,7 +246,7 @@ tests:
       stdout:
         - "Configure static AWS user credentials"
         - "stored securely in keyring"
-        - "Usage:"
+        - "USAGE"
         - "atmos auth user configure"
       exit_code: 0
 
