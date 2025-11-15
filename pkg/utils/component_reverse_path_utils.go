@@ -119,22 +119,13 @@ func normalizePathForResolution(path string) (string, error) {
 }
 
 // tryExtractComponentType attempts to extract component info for a specific component type.
-func tryExtractComponentType(
-	atmosConfig *schema.AtmosConfiguration,
-	absPath string,
-	componentType string,
-) (*ComponentInfo, error) {
-	// Get the base path for this component type.
-	basePath, _, err := getBasePathForComponentType(atmosConfig, componentType)
-	if err != nil {
-		return nil, err
-	}
-
+// resolveAndCleanBasePath resolves a base path to absolute form and resolves symlinks.
+func resolveAndCleanBasePath(basePath string) (string, error) {
 	// Ensure base path is absolute.
 	if !filepath.IsAbs(basePath) {
 		basePathAbs, err := filepath.Abs(basePath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve base path: %w", err)
+			return "", fmt.Errorf("failed to resolve base path: %w", err)
 		}
 		basePath = basePathAbs
 	}
@@ -151,6 +142,39 @@ func tryExtractComponentType(
 		basePath = basePathResolved
 	}
 
+	return basePath, nil
+}
+
+// buildComponentBaseError creates a detailed error for when a path points to the component base directory.
+func buildComponentBaseError(absPath, basePath, componentType string) error {
+	return errUtils.Build(errUtils.ErrPathIsComponentBase).
+		WithHintf("Cannot resolve component: path points to component base directory\nPath: `%s`\nComponent base: `%s`", absPath, basePath).
+		WithHintf("Navigate into a specific component directory\nExample: `cd %s/vpc && atmos %s plan . --stack <stack>`",
+			filepath.Base(basePath), componentType).
+		WithContext("path", absPath).
+		WithContext("base_path", basePath).
+		WithContext("component_type", componentType).
+		WithExitCode(2).
+		Err()
+}
+
+func tryExtractComponentType(
+	atmosConfig *schema.AtmosConfiguration,
+	absPath string,
+	componentType string,
+) (*ComponentInfo, error) {
+	// Get the base path for this component type.
+	basePath, _, err := getBasePathForComponentType(atmosConfig, componentType)
+	if err != nil {
+		return nil, err
+	}
+
+	// Resolve and clean the base path.
+	basePath, err = resolveAndCleanBasePath(basePath)
+	if err != nil {
+		return nil, err
+	}
+
 	// Check if absPath is within basePath.
 	relPath, err := filepath.Rel(basePath, absPath)
 	if err != nil {
@@ -164,16 +188,7 @@ func tryExtractComponentType(
 
 	// If relPath is ".", the path IS the base path (not allowed).
 	if relPath == "." {
-		baseErr := errUtils.Build(errUtils.ErrPathIsComponentBase).
-			WithHintf("Cannot resolve component: path points to component base directory\nPath: `%s`\nComponent base: `%s`", absPath, basePath).
-			WithHintf("Navigate into a specific component directory\nExample: `cd %s/vpc && atmos %s plan . --stack <stack>`",
-				filepath.Base(basePath), componentType).
-			WithContext("path", absPath).
-			WithContext("base_path", basePath).
-			WithContext("component_type", componentType).
-			WithExitCode(2).
-			Err()
-		return nil, baseErr
+		return nil, buildComponentBaseError(absPath, basePath, componentType)
 	}
 
 	// Split the relative path into parts.
@@ -188,16 +203,7 @@ func tryExtractComponentType(
 	}
 
 	if len(nonEmptyParts) == 0 {
-		baseErr := errUtils.Build(errUtils.ErrPathIsComponentBase).
-			WithHintf("Cannot resolve component: path points to component base directory\nPath: `%s`\nComponent base: `%s`", absPath, basePath).
-			WithHintf("Navigate into a specific component directory\nExample: `cd %s/vpc && atmos %s plan . --stack <stack>`",
-				filepath.Base(basePath), componentType).
-			WithContext("path", absPath).
-			WithContext("base_path", basePath).
-			WithContext("component_type", componentType).
-			WithExitCode(2).
-			Err()
-		return nil, baseErr
+		return nil, buildComponentBaseError(absPath, basePath, componentType)
 	}
 
 	// Determine folder prefix and component name.
