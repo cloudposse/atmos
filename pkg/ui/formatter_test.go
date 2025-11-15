@@ -855,3 +855,262 @@ func TestToastf_Integration(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	tests := []struct {
+		name     string
+		icon     string
+		message  string
+		expected string
+	}{
+		{
+			name:     "empty message",
+			icon:     "✓",
+			message:  "",
+			expected: "✓ \n",
+		},
+		{
+			name:     "message with only newline",
+			icon:     "✓",
+			message:  "\n",
+			expected: "✓ \n  \n",
+		},
+		{
+			name:     "message starting with newline",
+			icon:     "✓",
+			message:  "\nStarting text",
+			expected: "✓ \n  Starting text\n",
+		},
+		{
+			name:     "message ending with newline",
+			icon:     "✓",
+			message:  "Ending text\n",
+			expected: "✓ Ending text\n  \n",
+		},
+		{
+			name:     "multiple consecutive newlines",
+			icon:     "ℹ",
+			message:  "Line 1\n\n\nLine 2",
+			expected: "ℹ Line 1\n  \n  \n  Line 2\n",
+		},
+		{
+			name:     "long multiline message",
+			icon:     "📋",
+			message:  "Task 1\nTask 2\nTask 3\nTask 4\nTask 5",
+			expected: "📋 Task 1\n  Task 2\n  Task 3\n  Task 4\n  Task 5\n",
+		},
+		{
+			name:     "special characters in message",
+			icon:     "⚠",
+			message:  "Warning: special chars\n\t- Tab character\n  - Spaces",
+			expected: "⚠ Warning: special chars\n  \t- Tab character\n    - Spaces\n",
+		},
+		{
+			name:     "unicode in message",
+			icon:     "✓",
+			message:  "Unicode: 你好\n世界",
+			expected: "✓ Unicode: 你好\n  世界\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := f.formatToast(tt.icon, tt.message)
+			if got != tt.expected {
+				t.Errorf("formatToast() = %q, want %q", got, tt.expected)
+				// Show visual diff
+				t.Logf("Got:\n%s", got)
+				t.Logf("Want:\n%s", tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatter_FormatToast_RealWorldExamples(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	tests := []struct {
+		name        string
+		icon        string
+		message     string
+		description string
+	}{
+		{
+			name:        "installation success",
+			icon:        "✓",
+			message:     "Installation complete\nPackage: terraform\nVersion: 1.5.0\nLocation: /usr/local/bin/terraform",
+			description: "Multi-line installation summary",
+		},
+		{
+			name:        "error with details",
+			icon:        "✗",
+			message:     "Deployment failed\nReason: Connection timeout\nHost: example.com\nRetry: Run 'atmos deploy' again",
+			description: "Multi-line error message",
+		},
+		{
+			name:        "progress update",
+			icon:        "📦",
+			message:     "Processing components\nFound: 15 stacks\nProcessing: ue2-prod\nStatus: validating",
+			description: "Multi-line progress notification",
+		},
+		{
+			name:        "configuration info",
+			icon:        "ℹ",
+			message:     "Configuration loaded\nFile: atmos.yaml\nStacks: 42\nComponents: 156",
+			description: "Multi-line configuration summary",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := f.formatToast(tt.icon, tt.message)
+
+			// Verify structure
+			lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+			if len(lines) < 2 {
+				t.Errorf("Expected multiline output for %s, got single line", tt.description)
+			}
+
+			// First line should have icon
+			if !strings.HasPrefix(lines[0], tt.icon) {
+				t.Errorf("First line should start with icon %q, got %q", tt.icon, lines[0])
+			}
+
+			// All continuation lines should be indented
+			for i := 1; i < len(lines); i++ {
+				if !strings.HasPrefix(lines[i], " ") {
+					t.Errorf("Line %d should be indented, got %q", i+1, lines[i])
+				}
+			}
+
+			// Verify ends with newline
+			if !strings.HasSuffix(got, "\n") {
+				t.Error("Output should end with newline")
+			}
+		})
+	}
+}
+
+func TestToast_WithConvenienceFunctions(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	InitFormatter(ioCtx)
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+	tests := []struct {
+		name     string
+		fn       func() error
+		contains []string
+	}{
+		{
+			name: "Success with multiline via Success",
+			fn: func() error {
+				return Success("Done\nAll tasks completed")
+			},
+			contains: []string{"✓", "Done", "All tasks completed"},
+		},
+		{
+			name: "Error with multiline via Error",
+			fn: func() error {
+				return Error("Failed\nCheck logs for details")
+			},
+			contains: []string{"✗", "Failed", "Check logs"},
+		},
+		{
+			name: "Warning with multiline via Warning",
+			fn: func() error {
+				return Warning("Deprecated\nUse new API instead")
+			},
+			contains: []string{"⚠", "Deprecated", "new API"},
+		},
+		{
+			name: "Info with multiline via Info",
+			fn: func() error {
+				return Info("Processing\nStep 1 of 3")
+			},
+			contains: []string{"ℹ", "Processing", "Step 1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.fn()
+			if err != nil {
+				t.Errorf("Function returned error: %v", err)
+			}
+		})
+	}
+}
+
+func TestToastf_FormattingWithMultiline(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	InitFormatter(ioCtx)
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+	tests := []struct {
+		name   string
+		icon   string
+		format string
+		args   []interface{}
+	}{
+		{
+			name:   "formatted with embedded newlines",
+			icon:   "✓",
+			format: "Installed: %s\nVersion: %s\nSize: %d MB",
+			args:   []interface{}{"atmos", "1.2.3", 42},
+		},
+		{
+			name:   "formatted with multiple types",
+			icon:   "📊",
+			format: "Stats\nProcessed: %d files\nDuration: %.2f seconds\nSuccess rate: %d%%",
+			args:   []interface{}{150, 12.34, 98},
+		},
+		{
+			name:   "formatted with boolean",
+			icon:   "🔍",
+			format: "Validation\nPassed: %t\nErrors: %d",
+			args:   []interface{}{true, 0},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Toastf(tt.icon, tt.format, tt.args...)
+			if err != nil {
+				t.Errorf("Toastf() returned error: %v", err)
+			}
+		})
+	}
+}
+
+func TestFormatter_FormatToast_NotInitialized(t *testing.T) {
+	// Temporarily clear global formatter
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	globalFormatter = nil
+	formatterMu.Unlock()
+
+	// Restore after test
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		formatterMu.Unlock()
+	}()
+
+	err := Toast("✓", "This should fail")
+	if err == nil {
+		t.Error("Expected error when formatter not initialized, got nil")
+	}
+
+	err = Toastf("✓", "This should fail: %s", "test")
+	if err == nil {
+		t.Error("Expected error when formatter not initialized for Toastf, got nil")
+	}
+}
