@@ -231,8 +231,8 @@ errors:
   # Sentry integration
   sentry:
     enabled: true
-    dsn: "${ATMOS_SENTRY_DSN}"
-    environment: "${ATMOS_ENV}"
+    dsn: !env ATMOS_SENTRY_DSN
+    environment: !env ATMOS_ENV
 
     # Sample rate: 1.0 = 100%, 0.5 = 50% (default: 1.0)
     sample_rate: 1.0
