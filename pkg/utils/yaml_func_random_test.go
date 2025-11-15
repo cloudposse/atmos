@@ -17,7 +17,31 @@ func TestProcessTagRandom(t *testing.T) {
 		max         int
 	}{
 		{
-			name:       "valid range 1024-65535",
+			name:       "no arguments - use defaults",
+			input:      "!random",
+			wantErr:    false,
+			checkRange: true,
+			min:        0,
+			max:        65535,
+		},
+		{
+			name:       "one argument - max only",
+			input:      "!random 100",
+			wantErr:    false,
+			checkRange: true,
+			min:        0,
+			max:        100,
+		},
+		{
+			name:       "one argument - large max",
+			input:      "!random 9999",
+			wantErr:    false,
+			checkRange: true,
+			min:        0,
+			max:        9999,
+		},
+		{
+			name:       "two arguments - valid range 1024-65535",
 			input:      "!random 1024 65535",
 			wantErr:    false,
 			checkRange: true,
@@ -25,7 +49,7 @@ func TestProcessTagRandom(t *testing.T) {
 			max:        65535,
 		},
 		{
-			name:       "valid range 1-100",
+			name:       "two arguments - valid range 1-100",
 			input:      "!random 1 100",
 			wantErr:    false,
 			checkRange: true,
@@ -33,18 +57,12 @@ func TestProcessTagRandom(t *testing.T) {
 			max:        100,
 		},
 		{
-			name:       "valid small range 5-10",
+			name:       "two arguments - valid small range 5-10",
 			input:      "!random 5 10",
 			wantErr:    false,
 			checkRange: true,
 			min:        5,
 			max:        10,
-		},
-		{
-			name:        "missing arguments",
-			input:       "!random 1024",
-			wantErr:     true,
-			errContains: "invalid number of arguments",
 		},
 		{
 			name:        "too many arguments",
@@ -53,13 +71,19 @@ func TestProcessTagRandom(t *testing.T) {
 			errContains: "invalid number of arguments",
 		},
 		{
-			name:        "invalid min value",
+			name:        "invalid max value with one argument",
+			input:       "!random xyz",
+			wantErr:     true,
+			errContains: "invalid max value",
+		},
+		{
+			name:        "invalid min value with two arguments",
 			input:       "!random abc 65535",
 			wantErr:     true,
 			errContains: "invalid min value",
 		},
 		{
-			name:        "invalid max value",
+			name:        "invalid max value with two arguments",
 			input:       "!random 1024 xyz",
 			wantErr:     true,
 			errContains: "invalid max value",
@@ -75,12 +99,6 @@ func TestProcessTagRandom(t *testing.T) {
 			input:       "!random 1024 1024",
 			wantErr:     true,
 			errContains: "min value",
-		},
-		{
-			name:        "empty input",
-			input:       "!random",
-			wantErr:     true,
-			errContains: "invalid",
 		},
 	}
 

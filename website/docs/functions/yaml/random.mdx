@@ -15,30 +15,57 @@ import Intro from '@site/src/components/Intro'
 
 ## Usage
 
-The `!random` function requires exactly two parameters:
+The `!random` function accepts 0, 1, or 2 parameters for maximum flexibility:
 
 ```yaml
-  # Generate a random integer between min and max (inclusive)
+  # Generate a random integer between 0 and 65535 (default range)
+  !random
+
+  # Generate a random integer between 0 and max
+  !random <max>
+
+  # Generate a random integer between min and max
   !random <min> <max>
 ```
 
 ## Arguments
 
 <dl>
-    <dt>`min`</dt>
+    <dt>`min` (optional)</dt>
     <dd>
-        Minimum value (inclusive). Must be an integer less than `max`.
+        Minimum value (inclusive). Must be an integer less than `max`. Defaults to 0 if not specified.
     </dd>
 
-    <dt>`max`</dt>
+    <dt>`max` (optional)</dt>
     <dd>
-        Maximum value (inclusive). Must be an integer greater than `min`.
+        Maximum value (inclusive). Must be an integer greater than `min`. Defaults to 65535 if not specified.
     </dd>
 </dl>
 
 The function generates a cryptographically secure random integer in the range `[min, max]` (both bounds inclusive).
 
+**Default Behavior:**
+- `!random` → Random number from 0 to 65535
+- `!random 100` → Random number from 0 to 100
+- `!random 1024 65535` → Random number from 1024 to 65535
+
 ## Examples
+
+### Simple Random Values
+
+Use `!random` without arguments for quick random number generation:
+
+```yaml
+vars:
+  # Generate any random number in the full range
+  random_id: !random
+
+  # Generate random number from 0 to 100
+  percentage: !random 100
+
+  # Generate random number from 1 to 10
+  priority: !random 1 10
+```
 
 ### Random Port Numbers
 
@@ -51,7 +78,8 @@ components:
       spec:
         image: mcr.microsoft.com/devcontainers/go:1.24
         forwardPorts:
-          - !random 1024 65535
+          - !random 1024 65535  # Specific range
+          - !random 9999        # 0 to 9999
         workspaceFolder: /workspace
 ```
 
@@ -67,17 +95,6 @@ vars:
 
   # Generate a random ID
   worker_id: !random 1000 9999
-```
-
-### Multiple Random Values
-
-Each `!random` call generates an independent random value:
-
-```yaml
-vars:
-  primary_port: !random 8000 9000
-  secondary_port: !random 8000 9000  # Different from primary_port
-  fallback_port: !random 8000 9000   # Different from both above
 ```
 
 ## Common Use Cases
