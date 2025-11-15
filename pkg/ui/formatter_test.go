@@ -1114,3 +1114,219 @@ func TestFormatter_FormatToast_NotInitialized(t *testing.T) {
 		t.Error("Expected error when formatter not initialized for Toastf, got nil")
 	}
 }
+
+func TestFormatter_ConvenienceFunctions_Multiline(t *testing.T) {
+	tests := []struct {
+		name    string
+		fn      func(*formatter, string) string
+		message string
+		icon    string
+	}{
+		{
+			name:    "Success multiline",
+			fn:      func(f *formatter, msg string) string { return f.Success(msg) },
+			message: "Done\nAll complete",
+			icon:    "✓",
+		},
+		{
+			name:    "Error multiline",
+			fn:      func(f *formatter, msg string) string { return f.Error(msg) },
+			message: "Failed\nCheck logs",
+			icon:    "✗",
+		},
+		{
+			name:    "Warning multiline",
+			fn:      func(f *formatter, msg string) string { return f.Warning(msg) },
+			message: "Deprecated\nUse new API",
+			icon:    "⚠",
+		},
+		{
+			name:    "Info multiline",
+			fn:      func(f *formatter, msg string) string { return f.Info(msg) },
+			message: "Processing\nStep 1 of 3",
+			icon:    "ℹ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test with color
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(terminal.ColorTrue)
+			f := NewFormatter(ioCtx, term).(*formatter)
+
+			result := tt.fn(f, tt.message)
+			lines := strings.Split(result, "\n")
+
+			if len(lines) < 2 {
+				t.Errorf("Expected multiline output, got single line: %q", result)
+			}
+
+			// First line should contain the icon
+			if !strings.Contains(lines[0], tt.icon) {
+				t.Errorf("First line should contain icon %q, got %q", tt.icon, lines[0])
+			}
+
+			// Second line should be indented
+			if !strings.HasPrefix(lines[1], " ") {
+				t.Errorf("Second line should be indented, got %q", lines[1])
+			}
+
+			// Test without color
+			termNoColor := createMockTerminal(terminal.ColorNone)
+			fNoColor := NewFormatter(ioCtx, termNoColor).(*formatter)
+
+			resultNoColor := tt.fn(fNoColor, tt.message)
+			linesNoColor := strings.Split(resultNoColor, "\n")
+
+			if len(linesNoColor) < 2 {
+				t.Errorf("Expected multiline output without color, got single line: %q", resultNoColor)
+			}
+
+			// Should still have icon and indentation
+			if !strings.Contains(linesNoColor[0], tt.icon) {
+				t.Errorf("First line without color should contain icon %q, got %q", tt.icon, linesNoColor[0])
+			}
+
+			if !strings.HasPrefix(linesNoColor[1], " ") {
+				t.Errorf("Second line without color should be indented, got %q", linesNoColor[1])
+			}
+		})
+	}
+}
+
+func TestFormatter_ANSIStripping(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorTrue)
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "plain text",
+			input:    "hello",
+			expected: "hello",
+		},
+		{
+			name:     "red text",
+			input:    "\x1b[31mhello\x1b[0m",
+			expected: "hello",
+		},
+		{
+			name:     "green bold text",
+			input:    "\x1b[1;32mhello\x1b[0m",
+			expected: "hello",
+		},
+		{
+			name:     "multiple colors",
+			input:    "\x1b[31mred\x1b[0m and \x1b[32mgreen\x1b[0m",
+			expected: "red and green",
+		},
+		{
+			name:     "icon only",
+			input:    "✓",
+			expected: "✓",
+		},
+		{
+			name:     "colored icon",
+			input:    "\x1b[32m✓\x1b[0m",
+			expected: "✓",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := f.stripANSI(tt.input)
+			if got != tt.expected {
+				t.Errorf("stripANSI(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFormatter_Successf_Multiline(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	result := f.Successf("Installed: %s\nVersion: %s", "atmos", "1.2.3")
+	lines := strings.Split(result, "\n")
+
+	if len(lines) < 2 {
+		t.Errorf("Expected multiline output, got: %q", result)
+	}
+
+	if !strings.Contains(lines[0], "Installed: atmos") {
+		t.Errorf("First line should contain formatted text, got: %q", lines[0])
+	}
+
+	if !strings.Contains(lines[1], "Version: 1.2.3") {
+		t.Errorf("Second line should contain formatted text, got: %q", lines[1])
+	}
+}
+
+func TestFormatter_Errorf_Multiline(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	result := f.Errorf("Failed: %s\nReason: %s", "deployment", "timeout")
+	lines := strings.Split(result, "\n")
+
+	if len(lines) < 2 {
+		t.Errorf("Expected multiline output, got: %q", result)
+	}
+
+	if !strings.Contains(lines[0], "Failed: deployment") {
+		t.Errorf("First line should contain formatted text, got: %q", lines[0])
+	}
+
+	if !strings.Contains(lines[1], "Reason: timeout") {
+		t.Errorf("Second line should contain formatted text, got: %q", lines[1])
+	}
+}
+
+func TestFormatter_Warningf_Multiline(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	result := f.Warningf("Deprecated: %s\nUse: %s instead", "old_api", "new_api")
+	lines := strings.Split(result, "\n")
+
+	if len(lines) < 2 {
+		t.Errorf("Expected multiline output, got: %q", result)
+	}
+
+	if !strings.Contains(lines[0], "Deprecated: old_api") {
+		t.Errorf("First line should contain formatted text, got: %q", lines[0])
+	}
+
+	if !strings.Contains(lines[1], "Use: new_api instead") {
+		t.Errorf("Second line should contain formatted text, got: %q", lines[1])
+	}
+}
+
+func TestFormatter_Infof_Multiline(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	result := f.Infof("Processing: %d items\nCompleted: %d%%", 100, 50)
+	lines := strings.Split(result, "\n")
+
+	if len(lines) < 2 {
+		t.Errorf("Expected multiline output, got: %q", result)
+	}
+
+	if !strings.Contains(lines[0], "Processing: 100 items") {
+		t.Errorf("First line should contain formatted text, got: %q", lines[0])
+	}
+
+	if !strings.Contains(lines[1], "Completed: 50%") {
+		t.Errorf("Second line should contain formatted text, got: %q", lines[1])
+	}
+}

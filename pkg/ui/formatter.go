@@ -342,7 +342,7 @@ func (f *formatter) StatusMessage(icon string, style *lipgloss.Style, text strin
 // Splits message on newlines and indents continuation lines to align with the first line text.
 //
 // Parameters:
-//   - icon: The icon/emoji to prefix the message
+//   - icon: The icon/emoji to prefix the message (may include ANSI color codes)
 //   - message: The message text (may contain newlines)
 //
 // Returns formatted string with newline at the end.
@@ -352,7 +352,6 @@ func (f *formatter) StatusMessage(icon string, style *lipgloss.Style, text strin
 //	formatToast("✓", "Done\nFile: test.txt\nSize: 1.2MB")
 //	// Returns: "✓ Done\n  File: test.txt\n  Size: 1.2MB\n"
 func (f *formatter) formatToast(icon, message string) string {
-	// Import strings package is already available at package level
 	lines := strings.Split(message, "\n")
 
 	if len(lines) == 1 {
@@ -362,15 +361,16 @@ func (f *formatter) formatToast(icon, message string) string {
 
 	// Multiline - calculate indent for continuation lines
 	// Icon + space = visual width to match
-	// Use rune count for proper unicode handling
-	iconWidth := len([]rune(icon))
+	// Note: Use plain icon for width calculation (strip ANSI if present)
+	plainIcon := f.stripANSI(icon)
+	iconWidth := len([]rune(plainIcon))
 	indent := strings.Repeat(" ", iconWidth+1)
 
 	// Build formatted output
 	var result strings.Builder
 	for i, line := range lines {
 		if i == 0 {
-			// First line gets the icon
+			// First line gets the icon (potentially with color)
 			result.WriteString(fmt.Sprintf(iconMessageFormat, icon, line))
 		} else {
 			// Continuation lines get indented
@@ -384,9 +384,38 @@ func (f *formatter) formatToast(icon, message string) string {
 	return result.String()
 }
 
-// Semantic formatting - delegates to StatusMessage with appropriate icons and styles.
+// stripANSI removes ANSI escape codes from a string for width calculation.
+func (f *formatter) stripANSI(s string) string {
+	// Simple ANSI escape code pattern: \x1b[...m
+	// This handles most color codes
+	var result strings.Builder
+	inEscape := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			inEscape = true
+			i++ // Skip '['
+			continue
+		}
+		if inEscape {
+			if s[i] == 'm' {
+				inEscape = false
+			}
+			continue
+		}
+		result.WriteByte(s[i])
+	}
+	return result.String()
+}
+
+// Semantic formatting - uses formatToast with colored icons for multiline support.
 func (f *formatter) Success(text string) string {
-	return f.StatusMessage("✓", &f.styles.Success, text)
+	icon := "✓"
+	if f.SupportsColor() {
+		icon = f.styles.Success.Render(icon)
+	}
+	// Remove the trailing newline that formatToast adds since callers will add it
+	result := f.formatToast(icon, text)
+	return strings.TrimSuffix(result, newline)
 }
 
 func (f *formatter) Successf(format string, a ...interface{}) string {
@@ -394,7 +423,13 @@ func (f *formatter) Successf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Warning(text string) string {
-	return f.StatusMessage("⚠", &f.styles.Warning, text)
+	icon := "⚠"
+	if f.SupportsColor() {
+		icon = f.styles.Warning.Render(icon)
+	}
+	// Remove the trailing newline that formatToast adds since callers will add it
+	result := f.formatToast(icon, text)
+	return strings.TrimSuffix(result, newline)
 }
 
 func (f *formatter) Warningf(format string, a ...interface{}) string {
@@ -402,7 +437,13 @@ func (f *formatter) Warningf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Error(text string) string {
-	return f.StatusMessage("✗", &f.styles.Error, text)
+	icon := "✗"
+	if f.SupportsColor() {
+		icon = f.styles.Error.Render(icon)
+	}
+	// Remove the trailing newline that formatToast adds since callers will add it
+	result := f.formatToast(icon, text)
+	return strings.TrimSuffix(result, newline)
 }
 
 func (f *formatter) Errorf(format string, a ...interface{}) string {
@@ -410,7 +451,13 @@ func (f *formatter) Errorf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Info(text string) string {
-	return f.StatusMessage("ℹ", &f.styles.Info, text)
+	icon := "ℹ"
+	if f.SupportsColor() {
+		icon = f.styles.Info.Render(icon)
+	}
+	// Remove the trailing newline that formatToast adds since callers will add it
+	result := f.formatToast(icon, text)
+	return strings.TrimSuffix(result, newline)
 }
 
 func (f *formatter) Infof(format string, a ...interface{}) string {
