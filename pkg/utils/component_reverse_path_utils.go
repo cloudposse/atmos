@@ -159,7 +159,7 @@ func tryExtractComponentType(
 
 	// If relPath starts with "..", it's not within basePath.
 	if strings.HasPrefix(relPath, "..") {
-		return nil, fmt.Errorf("path is not within %s base path", componentType)
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrPathNotWithinComponentBase, componentType)
 	}
 
 	// If relPath is ".", the path IS the base path (not allowed).

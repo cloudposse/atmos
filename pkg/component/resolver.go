@@ -241,7 +241,7 @@ func (r *Resolver) loadStackConfig(
 	// Validate stack configuration format.
 	stackConfigMap, ok := stackConfig.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("invalid stack configuration for '%s'", stack)
+		return nil, fmt.Errorf("%w for '%s'", errUtils.ErrInvalidStackConfiguration, stack)
 	}
 
 	return stackConfigMap, nil
