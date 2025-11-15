@@ -17,29 +17,35 @@ func TestPerformIdentityLogout(t *testing.T) {
 	defer ctrl.Finish()
 
 	tests := []struct {
-		name          string
-		identityName  string
-		dryRun        bool
-		setupMocks    func(*types.MockAuthManager)
-		expectedError error
+		name           string
+		identityName   string
+		dryRun         bool
+		deleteKeychain bool
+		force          bool
+		setupMocks     func(*types.MockAuthManager)
+		expectedError  error
 	}{
 		{
-			name:         "successful logout",
-			identityName: "test-identity",
-			dryRun:       false,
+			name:           "successful logout without keychain deletion",
+			identityName:   "test-identity",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
-				m.EXPECT().Logout(gomock.Any(), "test-identity").Return(nil)
+				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(nil)
 			},
 			expectedError: nil,
 		},
 		{
-			name:         "identity not found",
-			identityName: "nonexistent",
-			dryRun:       false,
+			name:           "identity not found",
+			identityName:   "nonexistent",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"other-identity": {},
@@ -48,9 +54,11 @@ func TestPerformIdentityLogout(t *testing.T) {
 			expectedError: errUtils.ErrIdentityNotInConfig,
 		},
 		{
-			name:         "dry run mode",
-			identityName: "test-identity",
-			dryRun:       true,
+			name:           "dry run mode",
+			identityName:   "test-identity",
+			dryRun:         true,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"test-identity": {},
@@ -61,35 +69,41 @@ func TestPerformIdentityLogout(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name:         "partial logout",
-			identityName: "test-identity",
-			dryRun:       false,
+			name:           "partial logout",
+			identityName:   "test-identity",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
-				m.EXPECT().Logout(gomock.Any(), "test-identity").Return(errUtils.ErrPartialLogout)
+				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(errUtils.ErrPartialLogout)
 			},
 			expectedError: nil, // Partial logout is treated as success.
 		},
 		{
-			name:         "logout failed",
-			identityName: "test-identity",
-			dryRun:       false,
+			name:           "logout failed",
+			identityName:   "test-identity",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
-				m.EXPECT().Logout(gomock.Any(), "test-identity").Return(errUtils.ErrLogoutFailed)
+				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(errUtils.ErrLogoutFailed)
 			},
 			expectedError: errUtils.ErrLogoutFailed,
 		},
 		{
-			name:         "dry run with no provider",
-			identityName: "test-identity",
-			dryRun:       true,
+			name:           "dry run with no provider",
+			identityName:   "test-identity",
+			dryRun:         true,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"test-identity": {},
@@ -106,7 +120,7 @@ func TestPerformIdentityLogout(t *testing.T) {
 			tt.setupMocks(mockManager)
 
 			ctx := context.Background()
-			err := performIdentityLogout(ctx, mockManager, tt.identityName, tt.dryRun)
+			err := performIdentityLogout(ctx, mockManager, tt.identityName, tt.dryRun, tt.deleteKeychain, tt.force)
 
 			if tt.expectedError != nil {
 				assert.Error(t, err)
@@ -123,16 +137,20 @@ func TestPerformProviderLogout(t *testing.T) {
 	defer ctrl.Finish()
 
 	tests := []struct {
-		name          string
-		providerName  string
-		dryRun        bool
-		setupMocks    func(*types.MockAuthManager)
-		expectedError error
+		name           string
+		providerName   string
+		dryRun         bool
+		deleteKeychain bool
+		force          bool
+		setupMocks     func(*types.MockAuthManager)
+		expectedError  error
 	}{
 		{
-			name:         "successful logout",
-			providerName: "test-provider",
-			dryRun:       false,
+			name:           "successful logout without keychain deletion",
+			providerName:   "test-provider",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
 					"test-provider": {},
@@ -141,14 +159,16 @@ func TestPerformProviderLogout(t *testing.T) {
 					"identity1": {Kind: "aws/permission-set"},
 				})
 				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
-				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider").Return(nil)
+				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", false).Return(nil)
 			},
 			expectedError: nil,
 		},
 		{
-			name:         "provider not found",
-			providerName: "nonexistent",
-			dryRun:       false,
+			name:           "provider not found",
+			providerName:   "nonexistent",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
 					"other-provider": {},
@@ -157,9 +177,11 @@ func TestPerformProviderLogout(t *testing.T) {
 			expectedError: errUtils.ErrProviderNotInConfig,
 		},
 		{
-			name:         "dry run mode",
-			providerName: "test-provider",
-			dryRun:       true,
+			name:           "dry run mode",
+			providerName:   "test-provider",
+			dryRun:         true,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
 					"test-provider": {},
@@ -173,9 +195,11 @@ func TestPerformProviderLogout(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name:         "partial logout",
-			providerName: "test-provider",
-			dryRun:       false,
+			name:           "partial logout",
+			providerName:   "test-provider",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
 					"test-provider": {},
@@ -184,14 +208,16 @@ func TestPerformProviderLogout(t *testing.T) {
 					"identity1": {Kind: "aws/permission-set"},
 				})
 				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
-				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider").Return(errUtils.ErrPartialLogout)
+				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", false).Return(errUtils.ErrPartialLogout)
 			},
 			expectedError: nil, // Partial logout is treated as success (exit 0).
 		},
 		{
-			name:         "logout failed",
-			providerName: "test-provider",
-			dryRun:       false,
+			name:           "logout failed",
+			providerName:   "test-provider",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
 					"test-provider": {},
@@ -200,7 +226,7 @@ func TestPerformProviderLogout(t *testing.T) {
 					"identity1": {Kind: "aws/permission-set"},
 				})
 				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
-				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider").Return(errUtils.ErrLogoutFailed)
+				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", false).Return(errUtils.ErrLogoutFailed)
 			},
 			expectedError: errUtils.ErrLogoutFailed,
 		},
@@ -212,7 +238,7 @@ func TestPerformProviderLogout(t *testing.T) {
 			tt.setupMocks(mockManager)
 
 			ctx := context.Background()
-			err := performProviderLogout(ctx, mockManager, tt.providerName, tt.dryRun)
+			err := performProviderLogout(ctx, mockManager, tt.providerName, tt.dryRun, tt.deleteKeychain, tt.force)
 
 			if tt.expectedError != nil {
 				assert.Error(t, err)
@@ -229,16 +255,20 @@ func TestPerformLogoutAll(t *testing.T) {
 	defer ctrl.Finish()
 
 	tests := []struct {
-		name          string
-		dryRun        bool
-		setupMocks    func(*types.MockAuthManager)
-		expectedError error
+		name           string
+		dryRun         bool
+		deleteKeychain bool
+		force          bool
+		setupMocks     func(*types.MockAuthManager)
+		expectedError  error
 	}{
 		{
-			name:   "successful logout all",
-			dryRun: false,
+			name:           "successful logout all without keychain deletion",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
-				m.EXPECT().LogoutAll(gomock.Any()).Return(nil)
+				m.EXPECT().LogoutAll(gomock.Any(), false).Return(nil)
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"identity1": {Kind: "aws/permission-set"},
 					"identity2": {Kind: "aws/user"},
@@ -247,8 +277,10 @@ func TestPerformLogoutAll(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name:   "dry run mode with providers",
-			dryRun: true,
+			name:           "dry run mode with providers",
+			dryRun:         true,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
 					"provider1": {},
@@ -260,27 +292,33 @@ func TestPerformLogoutAll(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name:   "dry run mode with no providers",
-			dryRun: true,
+			name:           "dry run mode with no providers",
+			dryRun:         true,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{})
 			},
 			expectedError: nil,
 		},
 		{
-			name:   "partial logout all",
-			dryRun: false,
+			name:           "partial logout all",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
-				m.EXPECT().LogoutAll(gomock.Any()).Return(errUtils.ErrPartialLogout)
+				m.EXPECT().LogoutAll(gomock.Any(), false).Return(errUtils.ErrPartialLogout)
 				// Note: GetIdentities() is NOT called for partial logout because it returns early.
 			},
 			expectedError: nil, // Partial logout is treated as success.
 		},
 		{
-			name:   "logout all failed",
-			dryRun: false,
+			name:           "logout all failed",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
-				m.EXPECT().LogoutAll(gomock.Any()).Return(errUtils.ErrLogoutFailed)
+				m.EXPECT().LogoutAll(gomock.Any(), false).Return(errUtils.ErrLogoutFailed)
 			},
 			expectedError: errUtils.ErrLogoutFailed,
 		},
@@ -292,7 +330,7 @@ func TestPerformLogoutAll(t *testing.T) {
 			tt.setupMocks(mockManager)
 
 			ctx := context.Background()
-			err := performLogoutAll(ctx, mockManager, tt.dryRun)
+			err := performLogoutAll(ctx, mockManager, tt.dryRun, tt.deleteKeychain, tt.force)
 
 			if tt.expectedError != nil {
 				assert.Error(t, err)
@@ -313,7 +351,7 @@ func TestPerformInteractiveLogout_NoIdentities(t *testing.T) {
 	mockManager.EXPECT().GetProviders().Return(map[string]schema.Provider{})
 
 	ctx := context.Background()
-	err := performInteractiveLogout(ctx, mockManager, false)
+	err := performInteractiveLogout(ctx, mockManager, false, false, false)
 
 	assert.NoError(t, err)
 }
@@ -381,16 +419,20 @@ func TestPerformLogoutAll_WithAllFlag(t *testing.T) {
 	defer ctrl.Finish()
 
 	tests := []struct {
-		name          string
-		dryRun        bool
-		setupMocks    func(*types.MockAuthManager)
-		expectedError error
+		name           string
+		dryRun         bool
+		deleteKeychain bool
+		force          bool
+		setupMocks     func(*types.MockAuthManager)
+		expectedError  error
 	}{
 		{
-			name:   "all flag triggers logout all",
-			dryRun: false,
+			name:           "all flag triggers logout all",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
-				m.EXPECT().LogoutAll(gomock.Any()).Return(nil)
+				m.EXPECT().LogoutAll(gomock.Any(), false).Return(nil)
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"identity1": {Kind: "aws/permission-set"},
 					"identity2": {Kind: "aws/user"},
@@ -399,8 +441,10 @@ func TestPerformLogoutAll_WithAllFlag(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name:   "all flag with dry run",
-			dryRun: true,
+			name:           "all flag with dry run",
+			dryRun:         true,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
 				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
 					"provider1": {},
@@ -410,18 +454,22 @@ func TestPerformLogoutAll_WithAllFlag(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name:   "all flag with partial logout",
-			dryRun: false,
+			name:           "all flag with partial logout",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
-				m.EXPECT().LogoutAll(gomock.Any()).Return(errUtils.ErrPartialLogout)
+				m.EXPECT().LogoutAll(gomock.Any(), false).Return(errUtils.ErrPartialLogout)
 			},
 			expectedError: nil, // Partial logout treated as success.
 		},
 		{
-			name:   "all flag with logout failure",
-			dryRun: false,
+			name:           "all flag with logout failure",
+			dryRun:         false,
+			deleteKeychain: false,
+			force:          false,
 			setupMocks: func(m *types.MockAuthManager) {
-				m.EXPECT().LogoutAll(gomock.Any()).Return(errUtils.ErrLogoutFailed)
+				m.EXPECT().LogoutAll(gomock.Any(), false).Return(errUtils.ErrLogoutFailed)
 			},
 			expectedError: errUtils.ErrLogoutFailed,
 		},
@@ -433,7 +481,188 @@ func TestPerformLogoutAll_WithAllFlag(t *testing.T) {
 			tt.setupMocks(mockManager)
 
 			ctx := context.Background()
-			err := performLogoutAll(ctx, mockManager, tt.dryRun)
+			err := performLogoutAll(ctx, mockManager, tt.dryRun, tt.deleteKeychain, tt.force)
+
+			if tt.expectedError != nil {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, tt.expectedError)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestPerformIdentityLogout_WithKeychainFlag(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	tests := []struct {
+		name           string
+		identityName   string
+		deleteKeychain bool
+		force          bool
+		setupMocks     func(*types.MockAuthManager)
+		expectedError  error
+	}{
+		{
+			name:           "logout without keychain deletion (default)",
+			identityName:   "test-identity",
+			deleteKeychain: false,
+			force:          false,
+			setupMocks: func(m *types.MockAuthManager) {
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"test-identity": {},
+				})
+				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(nil)
+			},
+			expectedError: nil,
+		},
+		{
+			name:           "logout with keychain deletion",
+			identityName:   "test-identity",
+			deleteKeychain: true,
+			force:          true, // Force to skip confirmation.
+			setupMocks: func(m *types.MockAuthManager) {
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"test-identity": {},
+				})
+				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().Logout(gomock.Any(), "test-identity", true).Return(nil)
+			},
+			expectedError: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockManager := types.NewMockAuthManager(ctrl)
+			tt.setupMocks(mockManager)
+
+			ctx := context.Background()
+			err := performIdentityLogout(ctx, mockManager, tt.identityName, false, tt.deleteKeychain, tt.force)
+
+			if tt.expectedError != nil {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, tt.expectedError)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestPerformProviderLogout_WithKeychainFlag(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	tests := []struct {
+		name           string
+		providerName   string
+		deleteKeychain bool
+		force          bool
+		setupMocks     func(*types.MockAuthManager)
+		expectedError  error
+	}{
+		{
+			name:           "provider logout without keychain deletion (default)",
+			providerName:   "test-provider",
+			deleteKeychain: false,
+			force:          false,
+			setupMocks: func(m *types.MockAuthManager) {
+				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+					"test-provider": {},
+				})
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"identity1": {Kind: "aws/permission-set"},
+				})
+				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
+				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", false).Return(nil)
+			},
+			expectedError: nil,
+		},
+		{
+			name:           "provider logout with keychain deletion",
+			providerName:   "test-provider",
+			deleteKeychain: true,
+			force:          true, // Force to skip confirmation.
+			setupMocks: func(m *types.MockAuthManager) {
+				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+					"test-provider": {},
+				})
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"identity1": {Kind: "aws/permission-set"},
+				})
+				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
+				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", true).Return(nil)
+			},
+			expectedError: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockManager := types.NewMockAuthManager(ctrl)
+			tt.setupMocks(mockManager)
+
+			ctx := context.Background()
+			err := performProviderLogout(ctx, mockManager, tt.providerName, false, tt.deleteKeychain, tt.force)
+
+			if tt.expectedError != nil {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, tt.expectedError)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestPerformLogoutAll_WithKeychainFlag(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	tests := []struct {
+		name           string
+		deleteKeychain bool
+		force          bool
+		setupMocks     func(*types.MockAuthManager)
+		expectedError  error
+	}{
+		{
+			name:           "logout all without keychain deletion (default)",
+			deleteKeychain: false,
+			force:          false,
+			setupMocks: func(m *types.MockAuthManager) {
+				m.EXPECT().LogoutAll(gomock.Any(), false).Return(nil)
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"identity1": {Kind: "aws/permission-set"},
+				})
+			},
+			expectedError: nil,
+		},
+		{
+			name:           "logout all with keychain deletion",
+			deleteKeychain: true,
+			force:          true, // Force to skip confirmation.
+			setupMocks: func(m *types.MockAuthManager) {
+				m.EXPECT().LogoutAll(gomock.Any(), true).Return(nil)
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"identity1": {Kind: "aws/permission-set"},
+				})
+			},
+			expectedError: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockManager := types.NewMockAuthManager(ctrl)
+			tt.setupMocks(mockManager)
+
+			ctx := context.Background()
+			err := performLogoutAll(ctx, mockManager, false, tt.deleteKeychain, tt.force)
 
 			if tt.expectedError != nil {
 				assert.Error(t, err)

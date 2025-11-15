@@ -511,16 +511,17 @@ var (
 	ErrNilStoreValue      = errors.New("cannot store nil value")
 
 	// Logout errors.
-	ErrLogoutFailed         = errors.New("logout failed")
-	ErrPartialLogout        = errors.New("partial logout")
-	ErrLogoutNotSupported   = errors.New("logout not supported for this provider")
-	ErrLogoutNotImplemented = errors.New("logout not implemented for this provider")
-	ErrKeyringDeletion      = errors.New("keyring deletion failed")
-	ErrProviderLogout       = errors.New("provider logout failed")
-	ErrIdentityLogout       = errors.New("identity logout failed")
-	ErrIdentityNotInConfig  = errors.New("identity not found in configuration")
-	ErrProviderNotInConfig  = errors.New("provider not found in configuration")
-	ErrInvalidLogoutOption  = errors.New("invalid logout option")
+	ErrLogoutFailed                         = errors.New("logout failed")
+	ErrPartialLogout                        = errors.New("partial logout")
+	ErrLogoutNotSupported                   = errors.New("logout not supported for this provider")
+	ErrLogoutNotImplemented                 = errors.New("logout not implemented for this provider")
+	ErrKeyringDeletion                      = errors.New("keyring deletion failed")
+	ErrKeychainDeletionRequiresConfirmation = errors.New("keychain deletion requires interactive confirmation or --force flag")
+	ErrProviderLogout                       = errors.New("provider logout failed")
+	ErrIdentityLogout                       = errors.New("identity logout failed")
+	ErrIdentityNotInConfig                  = errors.New("identity not found in configuration")
+	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
+	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

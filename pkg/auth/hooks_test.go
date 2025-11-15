@@ -57,15 +57,15 @@ func (s *stubAuthManager) GetProviders() map[string]schema.Provider {
 	return map[string]schema.Provider{}
 }
 
-func (s *stubAuthManager) Logout(ctx context.Context, identityName string) error {
+func (s *stubAuthManager) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
 	return nil
 }
 
-func (s *stubAuthManager) LogoutProvider(ctx context.Context, providerName string) error {
+func (s *stubAuthManager) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
 	return nil
 }
 
-func (s *stubAuthManager) LogoutAll(ctx context.Context) error {
+func (s *stubAuthManager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	return nil
 }
 
