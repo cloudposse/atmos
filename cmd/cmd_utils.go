@@ -540,8 +540,9 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	return &clone, nil
 }
 
-// checkAtmosConfig checks Atmos config.
-func checkAtmosConfig(opts ...AtmosValidateOption) {
+// validateAtmosConfig checks the Atmos configuration and returns an error instead of exiting.
+// This makes the function testable by allowing errors to be handled by the caller.
+func validateAtmosConfig(opts ...AtmosValidateOption) error {
 	vCfg := &ValidateConfig{
 		CheckStack: true, // Default value true to check the stack
 	}
@@ -552,14 +553,34 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	if vCfg.CheckStack {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
-			printMessageForMissingAtmosConfig(atmosConfig)
-			errUtils.Exit(1)
+			// Return an error with context instead of printing and exiting
+			return errUtils.Build(errUtils.ErrStacksDirectoryDoesNotExist).
+				WithHintf("Stacks directory not found at %s", atmosConfig.StacksBaseAbsolutePath).
+				WithContext("base_path", atmosConfig.BasePath).
+				WithContext("stacks_base_path", atmosConfig.Stacks.BasePath).
+				Err()
 		}
+	}
+
+	return nil
+}
+
+// checkAtmosConfig checks Atmos config and exits on error.
+// This is the legacy wrapper that preserves existing behavior for backward compatibility.
+func checkAtmosConfig(opts ...AtmosValidateOption) {
+	err := validateAtmosConfig(opts...)
+	if err != nil {
+		// Try to load config for error display (may fail, that's OK)
+		atmosConfig, _ := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		printMessageForMissingAtmosConfig(atmosConfig)
+		errUtils.Exit(1)
 	}
 }
 
@@ -681,9 +702,12 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 }
 
 // getConfigAndStacksInfo processes the CLI config and stacks.
-func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
+// Returns error instead of calling os.Exit for better testability.
+func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
 	// Check Atmos configuration
-	checkAtmosConfig()
+	if err := validateAtmosConfig(); err != nil {
+		return schema.ConfigAndStacksInfo{}, err
+	}
 
 	var argsAfterDoubleDash []string
 	finalArgs := args
@@ -695,8 +719,46 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	}
 
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-	return info
+	if err != nil {
+		return schema.ConfigAndStacksInfo{}, err
+	}
+
+	// Resolve path-based component arguments to component names
+	if info.NeedsPathResolution && info.ComponentFromArg != "" {
+		atmosConfig, err := cfg.InitCliConfig(info, false)
+		if err != nil {
+			return schema.ConfigAndStacksInfo{}, fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
+		}
+
+		// Extract component name from path without stack validation.
+		// Stack validation happens later in ProcessStacks().
+		//
+		// Note: This extracts the directory-based component name (e.g., "vpc" from "components/terraform/vpc").
+		// If multiple components reference the same directory via metadata.component, the user must
+		// use the exact component name instead of the path (e.g., "vpc/1" or "vpc/2", not ".").
+		resolvedComponent, err := e.ResolveComponentFromPathWithoutValidation(
+			&atmosConfig,
+			info.ComponentFromArg,
+			commandName, // Component type is the command name (terraform, helmfile, packer)
+		)
+		if err != nil {
+			wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
+			return schema.ConfigAndStacksInfo{}, errUtils.Build(wrappedErr).
+				WithHint("Make sure the path is within your component directories").
+				Err()
+		}
+
+		log.Debug("Resolved component from path",
+			"original_path", info.ComponentFromArg,
+			"resolved_component", resolvedComponent,
+			"stack", info.Stack,
+		)
+
+		info.ComponentFromArg = resolvedComponent
+		info.NeedsPathResolution = false // Mark as resolved
+	}
+
+	return info, nil
 }
 
 // enableHeatmapIfRequested checks os.Args for --heatmap and --heatmap-mode flags.
@@ -779,7 +841,49 @@ func showUsageExample(cmd *cobra.Command, details string) {
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// If a component was provided as the first argument, filter stacks by that component.
 	if len(args) > 0 && args[0] != "" {
-		output, err := listStacksForComponent(args[0])
+		component := args[0]
+
+		// Check if argument is a path that needs resolution
+		// Paths are: ".", or contain path separators
+		if component == "." || strings.Contains(component, string(filepath.Separator)) {
+			// Attempt to resolve path to component name for stack filtering
+			// Use silent error handling - if resolution fails, just list all stacks (graceful degradation)
+			configAndStacksInfo := schema.ConfigAndStacksInfo{}
+			atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+			if err == nil {
+				// Determine component type from command
+				// Walk up command chain to find root command (terraform, helmfile, packer)
+				componentType := determineComponentTypeFromCommand(cmd)
+
+				// Try to resolve the path (without stack context for completion)
+				resolvedComponent, err := e.ResolveComponentFromPath(
+					&atmosConfig,
+					component,
+					"", // No stack context yet - we're completing the stack flag
+					componentType,
+				)
+				if err == nil {
+					component = resolvedComponent
+					log.Trace("Resolved path for stack completion",
+						"original", args[0],
+						"resolved", component,
+					)
+				} else {
+					// If resolution fails, fall through to list all stacks (graceful degradation)
+					log.Trace("Could not resolve path for stack completion, listing all stacks",
+						"path", component,
+						"error", err,
+					)
+					output, err := listStacks(cmd)
+					if err != nil {
+						return nil, cobra.ShellCompDirectiveNoFileComp
+					}
+					return output, cobra.ShellCompDirectiveNoFileComp
+				}
+			}
+		}
+
+		output, err := listStacksForComponent(component)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
@@ -792,6 +896,25 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return output, cobra.ShellCompDirectiveNoFileComp
+}
+
+// determineComponentTypeFromCommand walks up the command chain to find the component type.
+func determineComponentTypeFromCommand(cmd *cobra.Command) string {
+	// Walk up to find the root component command (terraform, helmfile, packer).
+	current := cmd
+	for current != nil {
+		switch current.Name() {
+		case "terraform":
+			return "terraform"
+		case "helmfile":
+			return "helmfile"
+		case "packer":
+			return "packer"
+		}
+		current = current.Parent()
+	}
+	// Default to terraform if we can't determine
+	return "terraform"
 }
 
 // listStacksForComponent returns stacks that contain the specified component.
@@ -877,6 +1000,15 @@ func identityArgCompletion(cmd *cobra.Command, args []string, toComplete string)
 
 func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) == 0 {
+		// Check if user is typing a path
+		// Enable directory completion for paths
+		// Check for both platform-specific separator and forward slash (works on all platforms)
+		if toComplete == "." || strings.Contains(toComplete, string(filepath.Separator)) || strings.Contains(toComplete, "/") {
+			log.Trace("Enabling directory completion for path input", "toComplete", toComplete)
+			return nil, cobra.ShellCompDirectiveFilterDirs
+		}
+
+		// Otherwise, suggest component names from stack configurations
 		output, err := listComponents(cmd)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp

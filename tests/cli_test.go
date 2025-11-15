@@ -466,6 +466,18 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
 	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
 
+	// 15. Normalize basePathAbsolute values in config output.
+	// This field shows the absolute path to the repo, which varies by environment.
+	// Replace with the normalized path placeholder for consistency.
+	basePathAbsoluteRegex := regexp.MustCompile(`(?m)^basePathAbsolute: /absolute/path/to/repo.*$`)
+	result = basePathAbsoluteRegex.ReplaceAllString(result, "basePathAbsolute: /absolute/path/to/repo")
+
+	// 16. Normalize provisioned_by_user values in component output.
+	// This field shows the current username, which varies by environment (erik, runner, etc.).
+	// Replace with a generic placeholder.
+	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
+	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
+
 	return result, nil
 }
 
@@ -1284,7 +1296,28 @@ func verifyFormatValidation(t *testing.T, output string, formats []string) bool 
 				return false
 			}
 		default:
-			t.Logf("Unknown format: %s", format)
+			t.Errorf("Unknown format: %s", format)
+			return false
+		}
+	}
+	return true
+}
+
+// validateFormatValidationSilent checks format validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateFormatValidationSilent(output string, formats []string) bool {
+	for _, format := range formats {
+		switch format {
+		case "json":
+			if !validateJSONFormatSilent(output) {
+				return false
+			}
+		case "yaml":
+			if !validateYAMLFormatSilent(output) {
+				return false
+			}
+		default:
+			// Unknown format - return false without logging
 			return false
 		}
 	}
@@ -1295,24 +1328,32 @@ func verifyYAMLFormat(t *testing.T, output string) bool {
 	var data interface{}
 	err := yaml.Unmarshal([]byte(output), &data)
 	if err != nil {
-		t.Logf("YAML validation failed: %v", err)
+		t.Errorf("YAML validation failed: %v", err)
 		// Show context around the error if possible.
 		lines := strings.Split(output, "\n")
 		preview := strings.Join(lines[:min(10, len(lines))], "\n")
 		if len(preview) > 500 {
 			preview = preview[:500] + "..."
 		}
-		t.Logf("Output preview:\n%s", preview)
+		t.Errorf("Output preview:\n%s", preview)
 		return false
 	}
 	return true
+}
+
+// validateYAMLFormatSilent checks YAML validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateYAMLFormatSilent(output string) bool {
+	var data interface{}
+	err := yaml.Unmarshal([]byte(output), &data)
+	return err == nil
 }
 
 func verifyJSONFormat(t *testing.T, output string) bool {
 	var data interface{}
 	err := json.Unmarshal([]byte(output), &data)
 	if err != nil {
-		t.Logf("JSON validation failed: %v", err)
+		t.Errorf("JSON validation failed: %v", err)
 		// Try to provide context about where the error occurred.
 		if syntaxErr, ok := err.(*json.SyntaxError); ok {
 			offset := syntaxErr.Offset
@@ -1320,11 +1361,19 @@ func verifyJSONFormat(t *testing.T, output string) bool {
 			start := max(0, int(offset)-50)
 			end := min(len(output), int(offset)+50)
 			snippet := output[start:end]
-			t.Logf("Error at offset %d, context: ...%s...", offset, snippet)
+			t.Errorf("Error at offset %d, context: ...%s...", offset, snippet)
 		}
 		return false
 	}
 	return true
+}
+
+// validateJSONFormatSilent checks JSON validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateJSONFormatSilent(output string) bool {
+	var data interface{}
+	err := json.Unmarshal([]byte(output), &data)
+	return err == nil
 }
 
 func min(a, b int) int {
@@ -1619,7 +1668,7 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 			// Generate a colorized diff for better readability
 			diff = colorizeDiffWithThreshold(filteredStderrActual, filteredStderrExpected, 10)
 		}
-		t.Errorf("Stderr diff mismatch for %q:\n%s", stdoutPath, diff)
+		t.Errorf("Stderr diff mismatch for %q:\n%s", stderrPath, diff)
 	}
 
 	return true

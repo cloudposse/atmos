@@ -34,7 +34,10 @@ func packerRun(cmd *cobra.Command, commandName string, args []string) error {
 	enableHeatmapIfRequested()
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
-	info := getConfigAndStacksInfo("packer", cmd, diffArgs)
+	info, err := getConfigAndStacksInfo("packer", cmd, diffArgs)
+	if err != nil {
+		return err
+	}
 	info.CliArgs = []string{"packer", commandName}
 
 	flags := cmd.Flags()

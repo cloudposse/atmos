@@ -19,7 +19,6 @@ func TestExecutePacker_Validate(t *testing.T) {
 
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
-	t.Setenv("ATMOS_BASE_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 
@@ -86,7 +85,6 @@ func TestExecutePacker_Inspect(t *testing.T) {
 
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
-	t.Setenv("ATMOS_BASE_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 
@@ -136,7 +134,6 @@ func TestExecutePacker_Version(t *testing.T) {
 
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
-	t.Setenv("ATMOS_BASE_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 
@@ -180,7 +177,6 @@ func TestExecutePacker_Init(t *testing.T) {
 
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
-	t.Setenv("ATMOS_BASE_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 
@@ -206,7 +202,6 @@ func TestExecutePacker_Errors(t *testing.T) {
 
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
-	t.Setenv("ATMOS_BASE_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.InfoLevel)
 

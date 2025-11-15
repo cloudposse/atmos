@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -181,7 +182,7 @@ func ProcessComponentConfig(
 }
 
 var (
-	// FindStacksMapCache stores the results of FindStacksMap to avoid re-processing
+	// FindStacksMapCache stores the results of FindStacksMap to avoid re-processing.
 	// all YAML files multiple times within the same command execution.
 	// Cache key: JSON-serialized atmosConfig key fields + ignoreMissingFiles flag.
 	findStacksMapCache   map[string]*findStacksMapCacheEntry
@@ -397,13 +398,14 @@ func ProcessStacks(
 				continue
 			}
 
-			if atmosConfig.Stacks.NameTemplate != "" {
+			switch {
+			case atmosConfig.Stacks.NameTemplate != "":
 				tmpl, err2 := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 				if err2 != nil {
 					continue
 				}
 				configAndStacksInfo.ContextPrefix = tmpl
-			} else if atmosConfig.Stacks.NamePattern != "" {
+			case atmosConfig.Stacks.NamePattern != "":
 				// Process context.
 				configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 
@@ -415,8 +417,8 @@ func ProcessStacks(
 				if err != nil {
 					continue
 				}
-			} else {
-				return configAndStacksInfo, errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml' CLI config")
+			default:
+				return configAndStacksInfo, errUtils.ErrMissingStackNameTemplateAndPattern
 			}
 
 			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
@@ -443,6 +445,120 @@ func ProcessStacks(
 			return configAndStacksInfo, nil
 		}
 
+		// Only attempt path resolution fallback if the component argument looks like a file path.
+		// This prevents treating plain component names (like "vpc") as relative paths from CWD.
+		//
+		// Note: Component names in stack configs can contain forward slashes (like "infra/vpc"),
+		// but these are namespace prefixes, not file paths. The key distinction is:
+		// - "infra/vpc" as a component name → already found in first loop, no fallback needed
+		// - "components/terraform/vpc" as a path → not found in first loop, fallback needed
+		//
+		// Path indicators (trigger fallback):
+		// - Forward slash: "components/terraform/vpc"
+		// - Backslash (Windows): "components\terraform\vpc"
+		// - Dot paths: ".", "..", "./vpc"
+		//
+		// Examples that should NOT trigger fallback: "vpc", "top-level-component1", "infra/vpc" (if defined in stack)
+		pathArg := configAndStacksInfo.ComponentFromArg
+		hasForwardSlash := strings.Contains(pathArg, "/")
+		hasPlatformSep := filepath.Separator != '/' && strings.ContainsRune(pathArg, filepath.Separator)
+		// Check for dot paths with both forward slash and platform separator.
+		isDotPath := pathArg == "." || pathArg == ".." ||
+			strings.HasPrefix(pathArg, "./") || strings.HasPrefix(pathArg, "../") ||
+			strings.HasPrefix(pathArg, "."+string(filepath.Separator)) ||
+			strings.HasPrefix(pathArg, ".."+string(filepath.Separator))
+		shouldAttemptPathResolution := foundStackCount == 0 && (hasForwardSlash || hasPlatformSep || isDotPath)
+
+		if shouldAttemptPathResolution {
+			// Component not found - try fallback to path resolution.
+			// If the component argument looks like it could be a path (e.g., "components/terraform/vpc"),
+			// try resolving it as a filesystem path and retry with the resolved component name.
+			log.Debug("Component not found by name, attempting path resolution fallback",
+				"component", configAndStacksInfo.ComponentFromArg,
+				"stack", configAndStacksInfo.Stack,
+			)
+
+			resolvedComponent, pathErr := ResolveComponentFromPathWithoutValidation(
+				atmosConfig,
+				configAndStacksInfo.ComponentFromArg,
+				configAndStacksInfo.ComponentType,
+			)
+
+			if pathErr == nil {
+				// Path resolution succeeded - retry with resolved component name.
+				log.Debug("Path resolution succeeded, retrying with resolved component",
+					"original", configAndStacksInfo.ComponentFromArg,
+					"resolved", resolvedComponent,
+				)
+
+				// Update ComponentFromArg with resolved name and retry the loop.
+				configAndStacksInfo.ComponentFromArg = resolvedComponent
+				foundStackCount = 0
+				foundStacks = nil
+
+				for stackName := range stacksMap {
+					// Check if we've found the component in the stack.
+					err = ProcessComponentConfig(
+						&configAndStacksInfo,
+						stackName,
+						stacksMap,
+						configAndStacksInfo.ComponentType,
+						configAndStacksInfo.ComponentFromArg,
+						authManager,
+					)
+					if err != nil {
+						continue
+					}
+
+					switch {
+					case atmosConfig.Stacks.NameTemplate != "":
+						tmpl, err2 := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+						if err2 != nil {
+							continue
+						}
+						configAndStacksInfo.ContextPrefix = tmpl
+					case atmosConfig.Stacks.NamePattern != "":
+						// Process context.
+						configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+
+						configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
+							configAndStacksInfo.Context,
+							GetStackNamePattern(atmosConfig),
+							stackName,
+						)
+						if err != nil {
+							continue
+						}
+					default:
+						return configAndStacksInfo, errUtils.ErrMissingStackNameTemplateAndPattern
+					}
+
+					configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
+					configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+
+					// Check if we've found the stack.
+					if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
+						configAndStacksInfo.StackFile = stackName
+						foundConfigAndStacksInfo = configAndStacksInfo
+						foundStackCount++
+						foundStacks = append(foundStacks, stackName)
+
+						log.Debug(
+							fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
+								configAndStacksInfo.ComponentFromArg,
+								configAndStacksInfo.Stack,
+								stackName,
+							))
+					}
+				}
+			} else if errors.Is(pathErr, errUtils.ErrPathNotInComponentDir) {
+				// Path resolution failed because path is not in component directories.
+				// Return the detailed path error instead of generic "component not found".
+				return configAndStacksInfo, pathErr
+			}
+		}
+
+		// If still not found after path resolution attempt (or if path resolution was skipped), return error.
 		if foundStackCount == 0 {
 			cliConfigYaml := ""
 

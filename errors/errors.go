@@ -69,9 +69,11 @@ var (
 	ErrInvalidAuthManagerType = errors.New("invalid authManager type")
 
 	// Component and positional argument errors.
-	ErrComponentRequired     = errors.New("component is required")
-	ErrInvalidPositionalArgs = errors.New("invalid positional arguments")
-	ErrWorkflowNameRequired  = errors.New("workflow name is required")
+	ErrComponentRequired          = errors.New("component is required")
+	ErrInvalidPositionalArgs      = errors.New("invalid positional arguments")
+	ErrWorkflowNameRequired       = errors.New("workflow name is required")
+	ErrInvalidStackConfiguration  = errors.New("invalid stack configuration")
+	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -521,6 +523,14 @@ var (
 	ErrIdentityNotInConfig  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption  = errors.New("invalid logout option")
+
+	// Component path resolution errors.
+	ErrPathNotInComponentDir  = errors.New("path is not within Atmos component directories")
+	ErrComponentTypeMismatch  = errors.New("path component type does not match command")
+	ErrComponentNotInStack    = errors.New("component not found in stack configuration")
+	ErrPathResolutionFailed   = errors.New("failed to resolve component from path")
+	ErrPathIsComponentBase    = errors.New("must specify a component directory, not the base directory")
+	ErrAmbiguousComponentPath = errors.New("ambiguous component path")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
