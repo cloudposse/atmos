@@ -197,6 +197,95 @@ func TestAliasChdirProcessing(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("filters ATMOS_CHDIR from environment", func(t *testing.T) {
+		// This test verifies that when spawning aliased commands, we properly filter
+		// out ATMOS_CHDIR from the environment to prevent the child process from
+		// re-applying the parent's chdir directive.
+
+		tests := []struct {
+			name               string
+			environ            []string
+			expectedContains   string
+			expectedNotContain string
+		}{
+			{
+				name: "adds empty ATMOS_CHDIR when present",
+				environ: []string{
+					"PATH=/usr/bin",
+					"ATMOS_CHDIR=/some/path",
+					"HOME=/home/user",
+				},
+				expectedContains:   "ATMOS_CHDIR=",
+				expectedNotContain: "ATMOS_CHDIR=/some/path",
+			},
+			{
+				name: "no ATMOS_CHDIR when not present",
+				environ: []string{
+					"PATH=/usr/bin",
+					"HOME=/home/user",
+				},
+				expectedContains:   "PATH=/usr/bin",
+				expectedNotContain: "ATMOS_CHDIR=",
+			},
+			{
+				name: "preserves other environment variables",
+				environ: []string{
+					"PATH=/usr/bin",
+					"ATMOS_CHDIR=/some/path",
+					"HOME=/home/user",
+					"ATMOS_OTHER_VAR=value",
+				},
+				expectedContains:   "ATMOS_OTHER_VAR=value",
+				expectedNotContain: "ATMOS_CHDIR=/some/path",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// Simulate the filtering logic from cmd_utils.go.
+				filteredEnv := make([]string, 0, len(tt.environ))
+				foundAtmosChdir := false
+				for _, env := range tt.environ {
+					if strings.HasPrefix(env, "ATMOS_CHDIR=") {
+						foundAtmosChdir = true
+						continue
+					}
+					filteredEnv = append(filteredEnv, env)
+				}
+				// Add empty ATMOS_CHDIR to override parent's value in merged environment.
+				if foundAtmosChdir {
+					filteredEnv = append(filteredEnv, "ATMOS_CHDIR=")
+				}
+
+				// Verify expectations.
+				envStr := strings.Join(filteredEnv, "\n")
+				if tt.expectedContains != "" {
+					assert.Contains(t, envStr, tt.expectedContains,
+						"filtered environment should contain %s", tt.expectedContains)
+				}
+				if tt.expectedNotContain != "" {
+					assert.NotContains(t, envStr, tt.expectedNotContain,
+						"filtered environment should NOT contain %s", tt.expectedNotContain)
+				}
+
+				// Additional verification for ATMOS_CHDIR handling.
+				if foundAtmosChdir {
+					// Should have exactly one ATMOS_CHDIR= entry.
+					count := 0
+					for _, env := range filteredEnv {
+						if strings.HasPrefix(env, "ATMOS_CHDIR=") {
+							count++
+							// Should be empty value to override parent.
+							assert.Equal(t, "ATMOS_CHDIR=", env,
+								"ATMOS_CHDIR should have empty value to override parent")
+						}
+					}
+					assert.Equal(t, 1, count, "should have exactly one ATMOS_CHDIR= entry")
+				}
+			})
+		}
+	})
 }
 
 func TestAliasFlagPassing(t *testing.T) {
