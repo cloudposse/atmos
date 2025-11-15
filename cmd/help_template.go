@@ -128,6 +128,24 @@ func isFalsy(val string) bool {
 	return falsy
 }
 
+// setColorEnvVarsForDisabled sets environment variables to disable color.
+func setColorEnvVarsForDisabled() {
+	os.Setenv(envNoColor, valueOne)
+	os.Setenv(envForceColor, valueZero)
+	os.Setenv(envCliColorForce, valueZero)
+}
+
+// setColorEnvVarsForEnabled sets environment variables to enable color.
+func setColorEnvVarsForEnabled() {
+	os.Unsetenv(envNoColor)
+	if viper.GetString(envForceColor) == "" {
+		os.Setenv(envForceColor, valueOne)
+	}
+	if viper.GetString(envCliColorForce) == "" {
+		os.Setenv(envCliColorForce, valueOne)
+	}
+}
+
 // detectColorConfig detects and configures color settings based on environment variables.
 func detectColorConfig() colorConfig {
 	defer perf.Track(nil, "cmd.detectColorConfig")()
@@ -141,6 +159,17 @@ func detectColorConfig() colorConfig {
 	_ = viper.BindEnv(envTerm)
 	_ = viper.BindEnv(envColorTerm)
 
+	// Check NO_COLOR first - it unconditionally disables color.
+	noColor := viper.GetString(envNoColor)
+	if noColor != "" {
+		setColorEnvVarsForDisabled()
+		return colorConfig{
+			forceColor:         false,
+			explicitlyDisabled: true,
+			debugColors:        viper.GetString(envAtmosDebugColor) != "",
+		}
+	}
+
 	// Check ATMOS_FORCE_COLOR first, then fallback to standard env vars.
 	atmosForceColor := viper.GetString(envAtmosForceColor)
 	cliColorForce := viper.GetString(envCliColorForce)
@@ -148,32 +177,19 @@ func detectColorConfig() colorConfig {
 
 	// Determine final forceColor value.
 	explicitlyDisabled := isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv)
-	forceColor := false
-	if !explicitlyDisabled {
-		forceColor = isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
-	}
+	forceColor := !explicitlyDisabled && (isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv))
 
 	// Ensure standard env vars are set for ALL color libraries.
 	if explicitlyDisabled {
-		os.Setenv(envNoColor, valueOne)
-		os.Setenv(envForceColor, valueZero)
-		os.Setenv(envCliColorForce, valueZero)
+		setColorEnvVarsForDisabled()
 	} else if forceColor {
-		os.Unsetenv(envNoColor)
-		if viper.GetString(envForceColor) == "" {
-			os.Setenv(envForceColor, valueOne)
-		}
-		if viper.GetString(envCliColorForce) == "" {
-			os.Setenv(envCliColorForce, valueOne)
-		}
+		setColorEnvVarsForEnabled()
 	}
-
-	debugColors := viper.GetString(envAtmosDebugColor) != ""
 
 	return colorConfig{
 		forceColor:         forceColor,
 		explicitlyDisabled: explicitlyDisabled,
-		debugColors:        debugColors,
+		debugColors:        viper.GetString(envAtmosDebugColor) != "",
 	}
 }
 
@@ -593,14 +609,27 @@ func applyColoredHelpTemplate(cmd *cobra.Command) {
 	styles := createHelpStyles(writerConf.renderer)
 
 	// Load Atmos configuration for markdown rendering.
+	// Reuse existing atmosConfig from root/Execute if available, otherwise load a minimal config.
 	// Use processStacks=false since help rendering only needs terminal/docs settings.
-	atmosConfig, _ := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	var helpAtmosConfig *schema.AtmosConfiguration
+	if atmosConfig.BasePath != "" {
+		// atmosConfig already loaded by root command.
+		helpAtmosConfig = &atmosConfig
+	} else {
+		// Load minimal config without processing stacks.
+		config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		if err != nil {
+			// If config loading fails, use a minimal zero-value config.
+			config = schema.AtmosConfiguration{}
+		}
+		helpAtmosConfig = &config
+	}
 
 	// Create help render context.
 	ctx := &helpRenderContext{
 		writer:      writerConf.writer,
 		renderer:    writerConf.renderer,
-		atmosConfig: &atmosConfig,
+		atmosConfig: helpAtmosConfig,
 		styles:      &styles,
 	}
 

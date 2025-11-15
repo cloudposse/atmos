@@ -331,7 +331,7 @@ All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` 
 
 **Verifying Links:** Find doc file (`find website/docs/cli/commands -name "*keyword*"`), check slug in frontmatter (`head -10 <file> | grep slug`), verify existing links (`grep -r "<url>" website/docs/`).
 
-**Common mistakes:** Using command name vs filename, not checking slug frontmatter, guessing URLs.
+**Common mistakes:** Using command name vs. filename, not checking slug frontmatter, guessing URLs.
 
 ### Documentation Requirements (MANDATORY)
 Use `<dl>` for arguments/flags. Follow Docusaurus conventions: frontmatter, purpose note, screengrab, usage/examples/arguments/flags sections. File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
