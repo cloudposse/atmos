@@ -562,8 +562,8 @@ auth:
     break-glass-user:
       kind: aws/user
       credentials:
-        access_key_id: '{{getenv "AWS_ACCESS_KEY_ID"}}'
-        secret_access_key: '{{getenv "AWS_SECRET_ACCESS_KEY"}}'
+        access_key_id: !env AWS_ACCESS_KEY_ID
+        secret_access_key: !env AWS_SECRET_ACCESS_KEY
         mfa_arn: 'arn:aws:iam::123456789012:mfa/emergency-user'
         region: us-east-1
       session:
