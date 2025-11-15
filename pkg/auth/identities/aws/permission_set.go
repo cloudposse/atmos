@@ -110,29 +110,57 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 // Validate validates the identity configuration.
 func (i *permissionSetIdentity) Validate() error {
 	if i.config.Principal == nil {
-		return fmt.Errorf("%w: principal is required", errUtils.ErrInvalidIdentityConfig)
+		return errUtils.Build(errUtils.ErrMissingPrincipal).
+			WithHintf("Identity '%s' requires principal configuration", i.name).
+			WithHint("Add 'principal' field with 'name' and 'account' to the identity configuration").
+			WithContext("identity", i.name).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Check permission set name in principal or spec (backward compatibility).
 	var permissionSetName string
 	var ok bool
 	if permissionSetName, ok = i.config.Principal["name"].(string); !ok || permissionSetName == "" {
-		return fmt.Errorf("%w: permission set name is required in principal", errUtils.ErrInvalidIdentityConfig)
+		return errUtils.Build(errUtils.ErrMissingPermissionSet).
+			WithHintf("Missing permission set name for identity '%s'", i.name).
+			WithHint("Add 'name' field to the identity's principal configuration").
+			WithHint("Example: principal: { name: 'DevAccess', account: { id: '123456789012' } }").
+			WithContext("identity", i.name).
+			WithExitCode(2).
+			Err()
 	}
 
 	// Check account info in principal.
 	var accountSpec map[string]interface{}
 	if accountSpec, ok = i.config.Principal["account"].(map[string]interface{}); !ok {
-		return fmt.Errorf("%w: account specification is required in principal", errUtils.ErrInvalidIdentityConfig)
+		return errUtils.Build(errUtils.ErrMissingAccountSpec).
+			WithHintf("Missing account specification for identity '%s'", i.name).
+			WithHint("Add 'account' field with 'name' or 'id' to the identity's principal configuration").
+			WithHint("Example: principal: { name: 'DevAccess', account: { id: '123456789012' } }").
+			WithContext("identity", i.name).
+			WithExitCode(2).
+			Err()
 	}
 
 	accountName, okName := accountSpec["name"].(string)
 	accountID, okID := accountSpec["id"].(string)
 	if !okName && !okID {
-		return fmt.Errorf("%w: account name or account ID is required", errUtils.ErrInvalidIdentityConfig)
+		return errUtils.Build(errUtils.ErrMissingAccountSpec).
+			WithHintf("Account name or ID is required for identity '%s'", i.name).
+			WithHint("Add 'name' or 'id' to the account configuration").
+			WithHint("Example: account: { id: '123456789012' } or account: { name: 'production' }").
+			WithContext("identity", i.name).
+			WithExitCode(2).
+			Err()
 	}
 	if accountName == "" && accountID == "" {
-		return fmt.Errorf("%w: account name or account ID is required", errUtils.ErrInvalidIdentityConfig)
+		return errUtils.Build(errUtils.ErrMissingAccountSpec).
+			WithHintf("Account name or ID cannot be empty for identity '%s'", i.name).
+			WithHint("Provide a valid account name or ID").
+			WithContext("identity", i.name).
+			WithExitCode(2).
+			Err()
 	}
 	return nil
 }

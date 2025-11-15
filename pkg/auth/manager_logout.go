@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -150,6 +151,12 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 		log.Debug("Provider logout succeeded", logKeyProvider, providerName)
 	}
 
+	// Clean up auto-provisioned identities cache file if it exists.
+	if err := m.removeProvisionedIdentitiesCache(providerName); err != nil {
+		log.Debug("Failed to remove provisioned identities cache", logKeyProvider, providerName, "error", err)
+		errs = append(errs, fmt.Errorf("failed to remove provisioned identities cache for provider %q: %w", providerName, err))
+	}
+
 	log.Info("Provider logout completed", logKeyProvider, providerName, "identities", len(identityNames), "errors", len(errs))
 
 	if len(errs) > 0 {
@@ -195,6 +202,12 @@ func (m *manager) LogoutAll(ctx context.Context) error {
 		} else {
 			log.Debug("Provider logout succeeded", logKeyProvider, providerName)
 		}
+
+		// Clean up auto-provisioned identities cache file if it exists.
+		if err := m.removeProvisionedIdentitiesCache(providerName); err != nil {
+			log.Debug("Failed to remove provisioned identities cache", logKeyProvider, providerName, "error", err)
+			errs = append(errs, fmt.Errorf("failed to remove provisioned identities cache for provider %q: %w", providerName, err))
+		}
 	}
 
 	log.Info("Logout all completed", "identities", len(m.config.Identities), "providers", len(m.providers), "errors", len(errs))
@@ -203,5 +216,26 @@ func (m *manager) LogoutAll(ctx context.Context) error {
 		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
 	}
 
+	return nil
+}
+
+// removeProvisionedIdentitiesCache removes the auto-provisioned identities cache file for a provider.
+// This is called during provider logout to clean up auto-provisioned identities.
+func (m *manager) removeProvisionedIdentitiesCache(providerName string) error {
+	defer perf.Track(nil, "auth.Manager.removeProvisionedIdentitiesCache")()
+
+	// Create a provisioning writer to get the cache file path.
+	writer, err := types.NewProvisioningWriter()
+	if err != nil {
+		log.Debug("Failed to create provisioning writer", logKeyProvider, providerName, "error", err)
+		return fmt.Errorf("failed to create provisioning writer: %w", err)
+	}
+
+	// Remove the provisioned identities cache file.
+	if err := writer.Remove(providerName); err != nil {
+		return fmt.Errorf("failed to remove provisioned identities cache: %w", err)
+	}
+
+	log.Debug("Removed provisioned identities cache", logKeyProvider, providerName)
 	return nil
 }

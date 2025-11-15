@@ -473,6 +473,15 @@ var (
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")
 	ErrUserAborted                  = errors.New("user aborted")
 
+	// AWS SSO specific errors.
+	ErrSSOSessionExpired      = errors.New("aws sso session expired")
+	ErrSSODeviceAuthFailed    = errors.New("aws sso device authorization failed")
+	ErrSSOTokenCreationFailed = errors.New("aws sso token creation failed")
+	ErrSSOAccountListFailed   = errors.New("failed to list aws sso accounts")
+	ErrSSORoleListFailed      = errors.New("failed to list aws sso roles")
+	ErrSSOProvisioningFailed  = errors.New("aws sso identity provisioning failed")
+	ErrSSOInvalidToken        = errors.New("invalid aws sso token")
+
 	// Auth manager and identity/provider resolution errors (centralized sentinels).
 	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")
 	ErrNoCredentialsFound            = errors.New("no credentials found for identity")
@@ -494,6 +503,12 @@ var (
 	ErrNoCommandSpecified            = errors.New("no command specified")
 	ErrCommandNotFound               = errors.New("command not found")
 	ErrCommandFailed                 = errors.New("command execution failed")
+
+	// Auth validation errors - specific sentinel errors for configuration validation.
+	ErrMissingPrincipal     = errors.New("principal is required")
+	ErrMissingAssumeRole    = errors.New("assume_role is required in principal")
+	ErrMissingPermissionSet = errors.New("permission set name is required in principal")
+	ErrMissingAccountSpec   = errors.New("account specification is required in principal")
 
 	ErrInvalidSubcommand = errors.New("invalid subcommand")
 	ErrSubcommandFailed  = errors.New("subcommand failed")
