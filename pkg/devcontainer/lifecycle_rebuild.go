@@ -6,8 +6,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Rebuild rebuilds a devcontainer from scratch.
@@ -91,7 +90,7 @@ func rebuildContainer(p *rebuildParams) error {
 		return err
 	}
 
-	u.PrintfMessageToTUI("%s Container %s rebuilt successfully\n", theme.Styles.Checkmark.String(), p.containerName)
+	_ = ui.Successf("Container %s rebuilt successfully", p.containerName)
 
 	// Display container information.
 	displayContainerInfo(p.config)

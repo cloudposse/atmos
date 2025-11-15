@@ -280,14 +280,21 @@ func (f *formatter) StatusMessage(icon string, style *lipgloss.Style, text strin
 }
 
 // Toast renders markdown text with an icon prefix and auto-indents multi-line content.
+// Delegates to ToastMarkdown with preserved newlines.
 func (f *formatter) Toast(icon string, style *lipgloss.Style, text string) (string, error) {
-	// Render markdown first
-	rendered, err := f.Markdown(text)
+	return f.ToastMarkdown(icon, style, text)
+}
+
+// ToastMarkdown renders markdown text with preserved newlines, an icon prefix, and auto-indents multi-line content.
+// Uses a compact stylesheet for toast-style inline formatting.
+func (f *formatter) ToastMarkdown(icon string, style *lipgloss.Style, text string) (string, error) {
+	// Render markdown with toast-specific compact stylesheet
+	rendered, err := f.renderToastMarkdown(text)
 	if err != nil {
 		return "", err
 	}
 
-	// Trim leading and trailing newlines that markdown rendering adds
+	// Trim leading and trailing newlines
 	rendered = strings.Trim(rendered, "\n")
 
 	// Style the icon if color is supported
@@ -298,29 +305,21 @@ func (f *formatter) Toast(icon string, style *lipgloss.Style, text string) (stri
 		styledIcon = icon
 	}
 
-	// Calculate indent for multi-line (icon width + space)
-	// Info icon ℹ is 2 characters wide in most terminals
-	iconWidth := 2
-	indent := strings.Repeat(" ", iconWidth+1)
-
-	// Split by newlines and filter out empty lines (glamour adds blank lines with just spaces)
-	allLines := strings.Split(rendered, "\n")
-	var lines []string
-	for _, line := range allLines {
-		// Keep lines that have non-whitespace content
-		if strings.TrimSpace(line) != "" {
-			lines = append(lines, line)
-		}
-	}
+	// Split by newlines
+	lines := strings.Split(rendered, "\n")
 
 	if len(lines) == 0 {
-		// No content after filtering empty lines
 		return styledIcon, nil
 	}
 
 	if len(lines) == 1 {
 		return fmt.Sprintf("%s %s", styledIcon, lines[0]), nil
 	}
+
+	// Calculate indent for multi-line (icon width)
+	// Info icon ℹ is 2 characters wide in most terminals
+	iconWidth := 2
+	indent := strings.Repeat(" ", iconWidth)
 
 	// Multi-line: first line with icon, rest indented
 	result := fmt.Sprintf("%s %s", styledIcon, lines[0])
@@ -329,6 +328,46 @@ func (f *formatter) Toast(icon string, style *lipgloss.Style, text string) (stri
 	}
 
 	return result, nil
+}
+
+// renderToastMarkdown renders markdown with a compact stylesheet for toast messages.
+func (f *formatter) renderToastMarkdown(content string) (string, error) {
+	// Build glamour options with compact toast stylesheet
+	var opts []glamour.TermRendererOption
+
+	// No word wrap for toast - preserve formatting
+	opts = append(opts, glamour.WithPreservedNewLines())
+
+	// Get theme-based glamour style and modify it for compact toast rendering
+	if f.terminal.ColorProfile() != terminal.ColorNone {
+		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
+		if themeName == "" {
+			themeName = "default"
+		}
+		glamourStyle, err := theme.GetGlamourStyleForTheme(themeName)
+		if err == nil {
+			// Modify the theme style to have zero margins
+			// Parse the existing theme and override margin settings
+			opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
+		}
+	} else {
+		opts = append(opts, glamour.WithStylePath("notty"))
+	}
+
+	renderer, err := glamour.NewTermRenderer(opts...)
+	if err != nil {
+		// Degrade gracefully: return plain content if renderer creation fails
+		return content, err
+	}
+	defer renderer.Close()
+
+	rendered, err := renderer.Render(content)
+	if err != nil {
+		// Degrade gracefully: return plain content if rendering fails
+		return content, err
+	}
+
+	return rendered, nil
 }
 
 // Semantic formatting - all use Toast for markdown rendering and icon styling.
@@ -399,6 +438,11 @@ func (f *formatter) Label(text string) string {
 // Markdown returns the rendered markdown string (pure function, no I/O).
 // For writing markdown to channels, use package-level ui.Markdown() or ui.MarkdownMessage().
 func (f *formatter) Markdown(content string) (string, error) {
+	return f.renderMarkdown(content, false)
+}
+
+// renderMarkdown is the internal markdown rendering implementation.
+func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (string, error) {
 	// Determine max width from config or terminal
 	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
 	if maxWidth == 0 {
@@ -414,6 +458,11 @@ func (f *formatter) Markdown(content string) (string, error) {
 
 	if maxWidth > 0 {
 		opts = append(opts, glamour.WithWordWrap(maxWidth))
+	}
+
+	// Preserve newlines if requested
+	if preserveNewlines {
+		opts = append(opts, glamour.WithPreservedNewLines())
 	}
 
 	// Use theme-aware glamour styles
