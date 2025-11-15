@@ -543,9 +543,11 @@ func TestPackageFunctions_NotInitialized(t *testing.T) {
 	formatterMu.Lock()
 	oldFormatter := globalFormatter
 	oldTerminal := globalTerminal
+	oldFormat := Format
 	oldIO := globalIO
 	globalFormatter = nil
 	globalTerminal = nil
+	Format = nil
 	globalIO = nil
 	formatterMu.Unlock()
 
@@ -554,6 +556,7 @@ func TestPackageFunctions_NotInitialized(t *testing.T) {
 		formatterMu.Lock()
 		globalFormatter = oldFormatter
 		globalTerminal = oldTerminal
+		Format = oldFormat
 		globalIO = oldIO
 		formatterMu.Unlock()
 	}()
