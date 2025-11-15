@@ -1,4 +1,4 @@
-FROM golang:1.24.6 AS confetty
+FROM golang:1.25.4 AS confetty
 
 # Set the working directory
 WORKDIR /app
