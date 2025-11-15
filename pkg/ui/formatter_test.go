@@ -765,8 +765,8 @@ func TestFormatter_FormatToast_UnicodeWidth(t *testing.T) {
 				t.Errorf("Second line should be indented, got %q", lines[1])
 			}
 
-			// Calculate expected indent based on icon rune count
-			iconWidth := len([]rune(tt.icon))
+			// Calculate expected indent using lipgloss.Width() - same as production code
+			iconWidth := lipgloss.Width(tt.icon)
 			expectedIndent := strings.Repeat(" ", iconWidth+1)
 
 			// Verify indent matches
