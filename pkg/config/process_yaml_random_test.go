@@ -62,10 +62,12 @@ devcontainer:
 				ports := v.Get("devcontainer.test.spec.forwardPorts")
 				require.NotNil(t, ports)
 
-				portsSlice := ports.([]any)
+				portsSlice, ok := ports.([]any)
+				require.True(t, ok, "expected []any for ports")
 				require.Len(t, portsSlice, 1)
 
-				port := portsSlice[0].(int)
+				port, ok := portsSlice[0].(int)
+				require.True(t, ok, "expected int for port")
 				assert.GreaterOrEqual(t, port, 0)
 				assert.LessOrEqual(t, port, 9999)
 			},
@@ -84,12 +86,14 @@ devcontainer:
 				ports := v.Get("devcontainer.test.spec.forwardPorts")
 				require.NotNil(t, ports)
 
-				portsSlice := ports.([]any)
+				portsSlice, ok := ports.([]any)
+				require.True(t, ok, "expected ports to be []any")
 				require.Len(t, portsSlice, 1)
 
-				port := portsSlice[0].(int)
-				assert.GreaterOrEqual(t, port, 0)
-				assert.LessOrEqual(t, port, 65535)
+				portVal, ok := portsSlice[0].(int)
+				require.True(t, ok, "expected port element to be int")
+				assert.GreaterOrEqual(t, portVal, 0)
+				assert.LessOrEqual(t, portVal, 65535)
 			},
 		},
 		{

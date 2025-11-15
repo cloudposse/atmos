@@ -214,8 +214,17 @@ func processCommandAliases(
 					// now invalid (since we already changed directories).
 					filteredArgs := filterChdirArgs(args)
 
+					// Filter out ATMOS_CHDIR from environment variables to prevent the child process
+					// from re-applying the parent's chdir directive.
+					filteredEnv := make([]string, 0, len(os.Environ()))
+					for _, env := range os.Environ() {
+						if !strings.HasPrefix(env, "ATMOS_CHDIR=") {
+							filteredEnv = append(filteredEnv, env)
+						}
+					}
+
 					commandToRun := fmt.Sprintf("%s %s %s", execPath, aliasCmd, strings.Join(filteredArgs, " "))
-					err = e.ExecuteShell(commandToRun, commandToRun, currentDirPath, nil, false)
+					err = e.ExecuteShell(commandToRun, commandToRun, currentDirPath, filteredEnv, false)
 					errUtils.CheckErrorPrintAndExit(err, "", "")
 				},
 			}

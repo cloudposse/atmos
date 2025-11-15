@@ -391,23 +391,29 @@ func LoadDevcontainerConfig(
     }
 
     // 2. Get specific devcontainer by name
-    devcontainerData, ok := devcontainers[name].(map[string]interface{})
+    devcontainerData, ok := atmosConfig.Components.Devcontainer[name].(map[string]interface{})
     if !ok {
-        return nil, fmt.Errorf("%w: devcontainer '%s' not found", errUtils.ErrDevcontainerNotFound, name)
+        return nil, nil, fmt.Errorf("%w: devcontainer '%s' not found", errUtils.ErrDevcontainerNotFound, name)
     }
 
     // 3. Filter unsupported fields and convert to typed config
     config := &DevcontainerConfig{}
     if err := filterAndUnmarshal(devcontainerData, config, name); err != nil {
-        return nil, err
+        return nil, nil, err
     }
 
     // 4. Validate required fields
     if err := validateConfig(config); err != nil {
-        return nil, err
+        return nil, nil, err
     }
 
-    return config, nil
+    // 5. Extract settings (runtime configuration)
+    settings := &DevcontainerSettings{}
+    if runtime, ok := devcontainerData["runtime"].(string); ok {
+        settings.Runtime = runtime
+    }
+
+    return config, settings, nil
 }
 
 // Filter unsupported fields and log them
