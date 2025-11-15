@@ -59,6 +59,8 @@ const (
 	defaultTopFunctionsMax = 50
 	// VerboseFlagName is the name of the verbose flag.
 	verboseFlagName = "verbose"
+	// AnsiEscapePrefix is the ANSI escape sequence prefix.
+	ansiEscapePrefix = "\x1b["
 )
 
 // atmosConfig This is initialized before everything in the Execute function. So we can directly use this.
@@ -669,20 +671,74 @@ func isBackgroundCode(ansiCode string) bool {
 	return strings.HasPrefix(ansiCode, "48;") || strings.Contains(ansiCode, ";48;")
 }
 
+// stripBackgroundFromSGR strips background color parameters from an SGR sequence.
+func stripBackgroundFromSGR(sgrParams string) string {
+	// Remove trailing 'm' if present for easier processing.
+	params := strings.TrimSuffix(sgrParams, "m")
+	if params == "" {
+		return sgrParams
+	}
+
+	parts := strings.Split(params, ";")
+	var filtered []string
+	i := 0
+
+	for i < len(parts) {
+		part := parts[i]
+
+		// Check if this is a background color sequence (48).
+		if part != "48" {
+			// Keep foreground and other codes.
+			filtered = append(filtered, part)
+			i++
+			continue
+		}
+
+		// Skip 48 and its associated parameters.
+		i++
+		if i >= len(parts) {
+			continue
+		}
+
+		// Handle different background color types.
+		switch parts[i] {
+		case "2":
+			// TrueColor: 48;2;r;g;b - skip 5 parts total (48, 2, r, g, b).
+			i += 4 // Skip 2, r, g, b (already skipped 48).
+		case "5":
+			// 256 color: 48;5;n - skip 3 parts total (48, 5, n).
+			i += 2 // Skip 5, n (already skipped 48).
+		}
+	}
+
+	if len(filtered) == 0 {
+		return ""
+	}
+
+	return strings.Join(filtered, ";") + "m"
+}
+
 // processAnsiEscapeSequence processes a single ANSI escape sequence part.
 func processAnsiEscapeSequence(part string) (codeToKeep string, remainder string) {
 	endIdx := findAnsiCodeEnd(part)
 	if endIdx == -1 {
-		// No ending found, keep entire part as-is
-		return "\x1b[" + part, ""
+		// No ending found, keep entire part as-is.
+		return ansiEscapePrefix + part, ""
 	}
 
 	ansiCode := part[:endIdx+1]
 	remainder = part[endIdx+1:]
 
-	// Keep non-background codes
-	if !isBackgroundCode(ansiCode) {
-		codeToKeep = "\x1b[" + ansiCode
+	// Check if this is a combined sequence with background color.
+	if isBackgroundCode(ansiCode) {
+		// Strip background parts but keep foreground.
+		stripped := stripBackgroundFromSGR(ansiCode)
+		if stripped != "" {
+			codeToKeep = ansiEscapePrefix + stripped
+		}
+	} else {
+		// No background, keep entire sequence.
+		codeToKeep = ansiEscapePrefix + ansiCode
 	}
 
 	return codeToKeep, remainder
@@ -695,15 +751,15 @@ func processAnsiEscapeSequence(part string) (codeToKeep string, remainder string
 func stripBackgroundCodes(s string) string {
 	defer perf.Track(nil, "cmd.stripBackgroundCodes")()
 
-	parts := strings.Split(s, "\x1b[")
+	parts := strings.Split(s, ansiEscapePrefix)
 	if len(parts) == 0 {
 		return s
 	}
 
-	// First part has no escape sequence
+	// First part has no escape sequence.
 	result := parts[0]
 
-	// Process remaining parts (each starts with an ANSI code)
+	// Process remaining parts (each starts with an ANSI code).
 	for i := 1; i < len(parts); i++ {
 		codeToKeep, remainder := processAnsiEscapeSequence(parts[i])
 		result += codeToKeep + remainder
@@ -972,8 +1028,7 @@ func getInvalidCommandName(input string) string {
 //
 //nolint:unparam // cmd parameter reserved for future use
 func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
-	// Print performance summary to console.
-	// Filter out functions with zero total time for cleaner output.
+	// Print performance summary to console, filtering out zero-time functions.
 	snap := perf.SnapshotTopFiltered("total", defaultTopFunctionsMax)
 	utils.PrintfMessageToTUI("\n=== Atmos Performance Summary ===\n")
 	utils.PrintfMessageToTUI("Elapsed: %s  Functions: %d  Calls: %d\n", snap.Elapsed, snap.TotalFuncs, snap.TotalCalls)

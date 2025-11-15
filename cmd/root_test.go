@@ -706,8 +706,18 @@ func TestStripBackgroundCodes(t *testing.T) {
 			expected: "background\x1b[0m",
 		},
 		{
-			name:     "foreground and background mixed",
+			name:     "foreground and background mixed (separate sequences)",
 			input:    "\x1b[38;5;123m\x1b[48;5;200mtext\x1b[0m",
+			expected: "\x1b[38;5;123mtext\x1b[0m",
+		},
+		{
+			name:     "combined foreground and background in single sequence (TrueColor)",
+			input:    "\x1b[38;2;255;0;0;48;2;0;0;255mred on blue\x1b[0m",
+			expected: "\x1b[38;2;255;0;0mred on blue\x1b[0m",
+		},
+		{
+			name:     "combined foreground and background in single sequence (256 color)",
+			input:    "\x1b[38;5;123;48;5;200mtext\x1b[0m",
 			expected: "\x1b[38;5;123mtext\x1b[0m",
 		},
 		{
