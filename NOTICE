@@ -281,6 +281,10 @@ APACHE 2.0 LICENSED DEPENDENCIES
     License: Apache-2.0
     URL: https://github.com/golang/groupcache/blob/2c02b8208cf8/LICENSE
 
+  - github.com/golang/mock/gomock
+    License: Apache-2.0
+    URL: https://github.com/golang/mock/blob/v1.6.0/LICENSE
+
   - github.com/google/go-containerregistry
     License: Apache-2.0
     URL: https://github.com/google/go-containerregistry/blob/v0.20.6/LICENSE
@@ -837,7 +841,7 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/go-getter
     License: MPL-2.0
-    URL: https://github.com/hashicorp/go-getter/blob/v1.8.3/LICENSE
+    URL: https://github.com/hashicorp/go-getter/blob/v1.8.2/LICENSE
 
   - github.com/hashicorp/go-immutable-radix
     License: MPL-2.0

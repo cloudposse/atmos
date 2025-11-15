@@ -32,6 +32,22 @@ Use these flags with extreme caution as they can lead to irreversible data loss.
 Run `atmos terraform clean --help` to see all the available options
 :::
 
+## Delete custom files
+
+You can delete custom files or folders using glob patterns.
+```
+components:
+  terraform:
+    station:
+      vars:
+        location: Stockholm
+        lang: se
+      settings:
+        clean:
+          paths:
+           - temp.log
+```
+
 ## Examples
 
 ```shell
