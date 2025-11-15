@@ -650,7 +650,7 @@ func TestFormatter_FormatToast_SingleLine(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := f.formatToast(tt.icon, tt.message)
+			got := f.Toast(tt.icon, tt.message)
 			if got != tt.expected {
 				t.Errorf("formatToast() = %q, want %q", got, tt.expected)
 			}
@@ -703,7 +703,7 @@ func TestFormatter_FormatToast_Multiline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := f.formatToast(tt.icon, tt.message)
+			got := f.Toast(tt.icon, tt.message)
 			if got != tt.expected {
 				t.Errorf("formatToast() = %q, want %q", got, tt.expected)
 				// Show visual diff
@@ -747,7 +747,7 @@ func TestFormatter_FormatToast_UnicodeWidth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := f.formatToast(tt.icon, tt.message)
+			got := f.Toast(tt.icon, tt.message)
 
 			// Verify that continuation lines are indented
 			lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
@@ -921,7 +921,7 @@ func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := f.formatToast(tt.icon, tt.message)
+			got := f.Toast(tt.icon, tt.message)
 			if got != tt.expected {
 				t.Errorf("formatToast() = %q, want %q", got, tt.expected)
 				// Show visual diff
@@ -971,7 +971,7 @@ func TestFormatter_FormatToast_RealWorldExamples(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := f.formatToast(tt.icon, tt.message)
+			got := f.Toast(tt.icon, tt.message)
 
 			// Verify structure
 			lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
@@ -1093,16 +1093,19 @@ func TestToastf_FormattingWithMultiline(t *testing.T) {
 }
 
 func TestFormatter_FormatToast_NotInitialized(t *testing.T) {
-	// Temporarily clear global formatter
+	// Temporarily clear global formatter and Format
 	formatterMu.Lock()
 	oldFormatter := globalFormatter
+	oldFormat := Format
 	globalFormatter = nil
+	Format = nil
 	formatterMu.Unlock()
 
 	// Restore after test
 	defer func() {
 		formatterMu.Lock()
 		globalFormatter = oldFormatter
+		Format = oldFormat
 		formatterMu.Unlock()
 	}()
 
