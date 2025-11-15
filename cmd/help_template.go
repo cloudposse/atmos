@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/wordwrap"
 	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -32,6 +33,14 @@ const (
 	envAtmosDebugColor = "ATMOS_DEBUG_COLORS"
 	envTerm            = "TERM"
 	envColorTerm       = "COLORTERM"
+)
+
+// Help formatting layout constants.
+const (
+	commandListLeftPad        = 6   // Left padding for command list entries.
+	commandDescriptionSpacing = 2   // Spacing between command name and description.
+	minDescriptionWidth       = 40  // Minimum width for description text.
+	spaceChar                 = " " // Space character for padding.
 )
 
 // String constants for environment variable values.
@@ -491,14 +500,38 @@ func formatCommandLine(ctx *helpRenderContext, cmd *cobra.Command, maxWidth int)
 
 	padding := maxWidth - len(cmdName) - len(cmdTypePlain)
 
-	fmt.Fprint(ctx.writer, "      ")
+	// Calculate where the description starts (left pad + command name + padding + spacing)
+	descColStart := commandListLeftPad + maxWidth + commandDescriptionSpacing
+
+	// Get terminal width and calculate available width for description
+	termWidth := getTerminalWidth()
+	descWidth := termWidth - descColStart
+	if descWidth < minDescriptionWidth {
+		descWidth = minDescriptionWidth
+	}
+
+	fmt.Fprint(ctx.writer, strings.Repeat(spaceChar, commandListLeftPad))
 	fmt.Fprint(ctx.writer, ctx.styles.commandName.Render(cmdName))
 	fmt.Fprint(ctx.writer, cmdTypeStyled)
-	fmt.Fprint(ctx.writer, strings.Repeat(" ", padding))
+	fmt.Fprint(ctx.writer, strings.Repeat(spaceChar, padding))
+	fmt.Fprint(ctx.writer, strings.Repeat(spaceChar, commandDescriptionSpacing))
 
-	// Render description as Markdown (like flags do).
-	desc := renderMarkdownDescription(cmd.Short)
-	fmt.Fprintf(ctx.writer, "  %s\n", desc)
+	// Wrap and render description with proper indentation for continuation lines
+	wrapped := wordwrap.String(cmd.Short, descWidth)
+	lines := strings.Split(wrapped, "\n")
+
+	// Print first line (already positioned)
+	if len(lines) > 0 {
+		fmt.Fprintf(ctx.writer, "%s\n", ctx.styles.commandName.Render(lines[0]))
+	}
+
+	// Print continuation lines with proper indentation
+	if len(lines) > 1 {
+		indentStr := strings.Repeat(spaceChar, descColStart)
+		for i := 1; i < len(lines); i++ {
+			fmt.Fprintf(ctx.writer, "%s%s\n", indentStr, ctx.styles.commandName.Render(lines[i]))
+		}
+	}
 }
 
 // printAvailableCommands prints the list of available subcommands.
