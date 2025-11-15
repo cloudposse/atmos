@@ -577,6 +577,8 @@ func renderSingleFlag(w io.Writer, f *pflag.Flag, layout flagRenderLayout, style
 //
 //nolint:revive,gocritic // Function signature required for compatibility with help template system.
 func renderFlags(w io.Writer, flags *pflag.FlagSet, flagStyle, argTypeStyle, descStyle lipgloss.Style, termWidth int, atmosConfig *schema.AtmosConfiguration) {
+	defer perf.Track(atmosConfig, "cmd.renderFlags")()
+
 	if flags == nil {
 		return
 	}
