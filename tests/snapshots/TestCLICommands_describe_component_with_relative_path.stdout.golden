@@ -1,6 +1,6 @@
 atlantis_project: tenant1-ue2-dev-top-level-component1
 atmos_cli_config:
-  base_path: ../..
+  base_path: .
   components:
     terraform:
       base_path: components/terraform
