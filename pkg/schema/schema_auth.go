@@ -28,6 +28,8 @@ type Provider struct {
 	Driver                string                 `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
 	ProviderType          string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type"` // Deprecated: use driver.
 	DownloadBrowserDriver bool                   `yaml:"download_browser_driver,omitempty" json:"download_browser_driver,omitempty" mapstructure:"download_browser_driver"`
+	BrowserType           string                 `yaml:"browser_type,omitempty" json:"browser_type,omitempty" mapstructure:"browser_type"`                                  // Browser engine type: chromium, firefox, webkit, chrome, msedge, etc.
+	BrowserExecutablePath string                 `yaml:"browser_executable_path,omitempty" json:"browser_executable_path,omitempty" mapstructure:"browser_executable_path"` // Path to custom browser executable.
 	Session               *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
 	Console               *ConsoleConfig         `yaml:"console,omitempty" json:"console,omitempty" mapstructure:"console"`
 	Default               bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
