@@ -96,6 +96,20 @@ ui.Toast("📦", "Using latest version: 1.2.3")
 ui.Toastf("🔧", "Tool %s is not installed", toolName)
 ui.Toastf("✓", "Set %s@%s in %s", tool, version, file)
 
+// Multiline toasts - automatically indented
+ui.Toast("✓", "Installation complete\nVersion: 1.2.3\nLocation: /usr/local/bin")
+// Output:
+// ✓ Installation complete
+//   Version: 1.2.3
+//   Location: /usr/local/bin
+
+ui.Toastf("📦", "Package: %s\nVersion: %s\nSize: %dMB", name, version, size)
+// Output:
+// 📦 Package: atmos
+//   Version: 1.2.3
+//   Size: 42MB
+
+
 // Themed icons - convenience wrappers for common status types
 ui.Success("Done!")                   // ✓ Done! (green)
 ui.Successf("Loaded %d items", n)     // ✓ Loaded 5 items (green)
