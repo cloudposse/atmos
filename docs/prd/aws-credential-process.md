@@ -486,16 +486,18 @@ EOF
 
 ## Appendix: Example Configurations
 
-### Example 1: aws-sso-cli (Primary Use Case)
+### Example 1: Generic Corporate Credential Helper (Primary Use Case)
 ```yaml
 auth:
   identities:
-    staging:
+    production:
       kind: aws/credentials
       credentials:
-        credential_process: 'aws-sso process --sso staging --arn arn:aws:iam::111111111111:role/DevOps'
+        credential_process: '/usr/local/bin/corporate-credential-helper production'
         region: us-east-1
 ```
+
+**This is the core use case**: Organizations have their own custom credential vending tools that output AWS credentials in the standard format. The examples below show common third-party tools that follow the same pattern.
 
 ### Example 2: Okta AWS CLI
 ```yaml
@@ -508,7 +510,18 @@ auth:
         region: us-east-1
 ```
 
-### Example 3: Custom SAML Script
+### Example 3: aws-sso-cli
+```yaml
+auth:
+  identities:
+    staging:
+      kind: aws/credentials
+      credentials:
+        credential_process: 'aws-sso process --sso staging --arn arn:aws:iam::111111111111:role/DevOps'
+        region: us-east-1
+```
+
+### Example 4: Custom SAML Script
 ```yaml
 auth:
   identities:
@@ -519,14 +532,25 @@ auth:
         region: us-west-2
 ```
 
-### Example 4: Identity Chaining with Role Assumption
+### Example 5: AWS Vault Integration
+```yaml
+auth:
+  identities:
+    my-account:
+      kind: aws/credentials
+      credentials:
+        credential_process: 'aws-vault exec my-profile --json'
+        region: eu-central-1
+```
+
+### Example 6: Identity Chaining with Role Assumption
 ```yaml
 auth:
   identities:
     corp-base:
       kind: aws/credentials
       credentials:
-        credential_process: 'aws-sso process --sso corporate --arn arn:aws:iam::123456789012:role/BaseAccess'
+        credential_process: '/usr/local/bin/corporate-sso-helper'
 
     staging-poweruser:
       kind: aws/assume-role
@@ -543,18 +567,7 @@ auth:
         role_arn: 'arn:aws:iam::111111111111:role/ReadOnly'
 ```
 
-### Example 5: AWS Vault Integration
-```yaml
-auth:
-  identities:
-    my-account:
-      kind: aws/credentials
-      credentials:
-        credential_process: 'aws-vault exec my-profile --json'
-        region: eu-central-1
-```
-
-### Example 6: Comparison with aws/user
+### Example 7: Comparison with aws/user
 ```yaml
 auth:
   identities:
@@ -569,11 +582,11 @@ auth:
       session:
         duration: '12h'  # Atmos calls GetSessionToken with MFA
 
-    # For external credential processes (SSO, SAML, etc.)
-    sso-user:
+    # For external credential processes (corporate SSO, Okta, etc.)
+    corporate-sso:
       kind: aws/credentials
       credentials:
-        credential_process: 'aws-sso process --sso prod --arn arn:aws:iam::123456789012:role/Engineer'
+        credential_process: '/usr/local/bin/corporate-credential-helper prod'
         region: us-east-1
       # No session config - external process determines expiration
 ```
