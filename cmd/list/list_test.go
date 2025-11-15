@@ -1,4 +1,4 @@
-package cmd
+package list
 
 import (
 	"testing"
@@ -185,22 +185,22 @@ func TestListCmds_Error(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err := listComponentsCmd.RunE(listComponentsCmd, []string{"--invalid-flag"})
+	err := componentsCmd.RunE(componentsCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "list components command should return an error when called with invalid flags")
 
-	err = listMetadataCmd.RunE(listMetadataCmd, []string{"--invalid-flag"})
+	err = metadataCmd.RunE(metadataCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "list metadata command should return an error when called with invalid flags")
 
-	err = listSettingsCmd.RunE(listSettingsCmd, []string{"--invalid-flag"})
+	err = settingsCmd.RunE(settingsCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "list settings command should return an error when called with invalid flags")
 
-	err = listValuesCmd.RunE(listValuesCmd, []string{"--invalid-flag"})
+	err = valuesCmd.RunE(valuesCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "list values command should return an error when called with invalid flags")
 
-	err = listVendorCmd.RunE(listVendorCmd, []string{"--invalid-flag"})
+	err = vendorCmd.RunE(vendorCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "list vendor command should return an error when called with invalid flags")
 
-	err = listWorkflowsCmd.RunE(listWorkflowsCmd, []string{"--invalid-flag"})
+	err = workflowsCmd.RunE(workflowsCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "list workflows command should return an error when called with invalid flags")
 }
 

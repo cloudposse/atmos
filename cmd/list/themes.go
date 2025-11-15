@@ -1,4 +1,4 @@
-package cmd
+package list
 
 import (
 	"fmt"
@@ -6,16 +6,27 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
-// listThemesCmd lists available terminal themes (alias for 'theme list').
-var listThemesCmd = &cobra.Command{
+var themesParser *flags.StandardParser
+
+// ThemesOptions contains parsed flags for the themes command.
+type ThemesOptions struct {
+	global.Flags
+	All bool
+}
+
+// themesCmd lists available terminal themes (alias for 'theme list').
+var themesCmd = &cobra.Command{
 	Use:   "themes",
 	Short: "List available terminal themes (alias for 'theme list')",
 	Long:  "Display available terminal themes that can be used for markdown rendering. By default shows recommended themes.\nThis is an alias for 'atmos theme list'.",
@@ -31,15 +42,39 @@ const (
 	lineWidth         = 80
 )
 
-var listAllThemes bool
-
 func init() {
-	listThemesCmd.Flags().BoolVar(&listAllThemes, "all", false, "Show all available themes (default: show only recommended themes)")
-	listCmd.AddCommand(listThemesCmd)
+	// Create parser with themes-specific flags using functional options
+	themesParser = flags.NewStandardParser(
+		flags.WithBoolFlag("all", "", false, "Show all available themes (default: show only recommended themes)"),
+		flags.WithEnvVars("all", "ATMOS_LIST_ALL_THEMES"),
+	)
+
+	// Register flags
+	themesParser.RegisterFlags(themesCmd)
+
+	// Bind flags to Viper for environment variable support
+	if err := themesParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 }
 
 // executeListThemes runs the list themes command.
 func executeListThemes(cmd *cobra.Command, args []string) error {
+	// Parse flags using StandardParser with Viper precedence
+	v := viper.GetViper()
+	if err := themesParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	opts := &ThemesOptions{
+		Flags: flags.ParseGlobalFlags(cmd, v),
+		All:   v.GetBool("all"),
+	}
+
+	return executeListThemesWithOptions(opts)
+}
+
+func executeListThemesWithOptions(opts *ThemesOptions) error {
 	// Get the current active theme from configuration
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
@@ -55,11 +90,11 @@ func executeListThemes(cmd *cobra.Command, args []string) error {
 
 	// Default behavior: show only recommended themes
 	// --all flag: show everything
-	if !listAllThemes {
+	if !opts.All {
 		themes = filterRecommendedThemes(themes, activeTheme)
 	}
 
-	return displayThemes(themes, activeTheme, !listAllThemes)
+	return displayThemes(opts, themes, activeTheme, !opts.All)
 }
 
 // listThemes retrieves all available themes.
@@ -105,20 +140,20 @@ func filterRecommendedThemes(themes []*theme.Theme, activeTheme string) []*theme
 }
 
 // displayThemes formats and displays the themes to the terminal.
-func displayThemes(themes []*theme.Theme, activeTheme string, showingRecommendedOnly bool) error {
+func displayThemes(opts *ThemesOptions, themes []*theme.Theme, activeTheme string, showingRecommendedOnly bool) error {
 	// Check if we're in TTY mode
 	if !term.IsTTYSupportForStdout() {
 		// Fall back to simple text output for non-TTY
-		output := formatSimpleOutput(themes, activeTheme, showingRecommendedOnly)
+		output := formatSimpleOutput(opts, themes, activeTheme, showingRecommendedOnly)
 		return ui.Write(output)
 	}
 
-	output := formatThemesTable(themes, activeTheme, showingRecommendedOnly)
+	output := formatThemesTable(opts, themes, activeTheme, showingRecommendedOnly)
 	return ui.Write(output)
 }
 
 // formatThemesTable formats themes into a styled Charmbracelet table.
-func formatThemesTable(themes []*theme.Theme, activeTheme string, showingRecommendedOnly bool) string {
+func formatThemesTable(opts *ThemesOptions, themes []*theme.Theme, activeTheme string, showingRecommendedOnly bool) string {
 	// Prepare headers and rows
 	headers := []string{"", "Name", "Type", "Source"}
 	var rows [][]string
@@ -132,7 +167,7 @@ func formatThemesTable(themes []*theme.Theme, activeTheme string, showingRecomme
 
 		// Theme name with recommended indicator (only show star when --all is used)
 		name := t.Name
-		if listAllThemes && theme.IsRecommended(t.Name) {
+		if opts.All && theme.IsRecommended(t.Name) {
 			name += " ★"
 		}
 
@@ -181,7 +216,7 @@ func formatThemesTable(themes []*theme.Theme, activeTheme string, showingRecomme
 }
 
 // formatSimpleOutput formats themes as simple text for non-TTY output.
-func formatSimpleOutput(themes []*theme.Theme, activeTheme string, showingRecommendedOnly bool) string {
+func formatSimpleOutput(opts *ThemesOptions, themes []*theme.Theme, activeTheme string, showingRecommendedOnly bool) string {
 	var output string
 
 	// Header
@@ -196,7 +231,7 @@ func formatSimpleOutput(themes []*theme.Theme, activeTheme string, showingRecomm
 		}
 
 		recommended := ""
-		if listAllThemes && theme.IsRecommended(t.Name) {
+		if opts.All && theme.IsRecommended(t.Name) {
 			recommended = "★"
 		}
 
