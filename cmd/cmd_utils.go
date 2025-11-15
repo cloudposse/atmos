@@ -215,12 +215,20 @@ func processCommandAliases(
 					filteredArgs := filterChdirArgs(args)
 
 					// Filter out ATMOS_CHDIR from environment variables to prevent the child process
-					// from re-applying the parent's chdir directive.
+					// from re-applying the parent's chdir directive. Since ExecuteShell merges with
+					// os.Environ(), we must explicitly set ATMOS_CHDIR to empty string to override it.
 					filteredEnv := make([]string, 0, len(os.Environ()))
+					foundAtmosChdir := false
 					for _, env := range os.Environ() {
-						if !strings.HasPrefix(env, "ATMOS_CHDIR=") {
-							filteredEnv = append(filteredEnv, env)
+						if strings.HasPrefix(env, "ATMOS_CHDIR=") {
+							foundAtmosChdir = true
+							continue
 						}
+						filteredEnv = append(filteredEnv, env)
+					}
+					// Add empty ATMOS_CHDIR to override parent's value in merged environment.
+					if foundAtmosChdir {
+						filteredEnv = append(filteredEnv, "ATMOS_CHDIR=")
 					}
 
 					commandToRun := fmt.Sprintf("%s %s %s", execPath, aliasCmd, strings.Join(filteredArgs, " "))
