@@ -17,7 +17,7 @@ You're now on a new, empty workspace. Workspaces isolate their state,
 so if you run &quot;terraform plan&quot; Terraform will not see any existing state
 for this configuration.</span>
 <span style="font-weight:bold;">data.http.weather: Reading...</span>
-<span style="font-weight:bold;">data.http.weather: Read complete after 0s 
+<span style="font-weight:bold;">data.http.weather: Read complete after 1s 
     [id=https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m]</span>
 
 Terraform used the selected providers to generate the following execution
@@ -32,11 +32,11 @@ Terraform will perform the following actions:
 
             Weather report: Los+Angeles
             
-                            Overcast
-              <span style="font-weight:bold;color:#555555;">     .--.    </span> <span style="color:#afff00;">18</span> °C          
-              <span style="font-weight:bold;color:#555555;">  .-(    ).  </span> <span style="font-weight:bold;">↖</span> <span style="color:#ffff00;">13</span> km/h      
-              <span style="font-weight:bold;color:#555555;"> (___.__)__) </span> 16 km          
-                            0.0 mm
+              <span style="color:#c0c0c0;">     .-.     </span> Light rain, mist
+              <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#afff00;">18</span> °C          
+              <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">←</span> <span style="color:#afff00;">7</span> km/h       
+              <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 10 km          
+              <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.0 mm
 
 
       <span style="color:green;">+</span> content_base64sha256 = (known after apply)
@@ -63,11 +63,11 @@ Changes to Outputs:
 
         Weather report: Los+Angeles
         
-                        Overcast
-          <span style="font-weight:bold;color:#555555;">     .--.    </span> <span style="color:#afff00;">18</span> °C          
-          <span style="font-weight:bold;color:#555555;">  .-(    ).  </span> <span style="font-weight:bold;">↖</span> <span style="color:#ffff00;">13</span> km/h      
-          <span style="font-weight:bold;color:#555555;"> (___.__)__) </span> 16 km          
-                        0.0 mm
+          <span style="color:#c0c0c0;">     .-.     </span> Light rain, mist
+          <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#afff00;">18</span> °C          
+          <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">←</span> <span style="color:#afff00;">7</span> km/h       
+          <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 10 km          
+          <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.0 mm
 
 
 <span style="font-weight:bold;">local_file.cache: Creating...</span>
@@ -86,11 +86,11 @@ weather =
 
 Weather report: Los+Angeles
 
-                Overcast
-  <span style="font-weight:bold;color:#555555;">     .--.    </span> <span style="color:#afff00;">18</span> °C          
-  <span style="font-weight:bold;color:#555555;">  .-(    ).  </span> <span style="font-weight:bold;">↖</span> <span style="color:#ffff00;">13</span> km/h      
-  <span style="font-weight:bold;color:#555555;"> (___.__)__) </span> 16 km          
-                0.0 mm         
+  <span style="color:#c0c0c0;">     .-.     </span> Light rain, mist
+  <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#afff00;">18</span> °C          
+  <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">←</span> <span style="color:#afff00;">7</span> km/h       
+  <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 10 km          
+  <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.0 mm         
 
 
 

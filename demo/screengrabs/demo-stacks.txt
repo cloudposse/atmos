@@ -43,6 +43,7 @@ atmos describe dependents --help
 atmos describe stacks --help
 atmos describe workflows --help
 atmos docs --help
+atmos docs generate --help
 atmos list --help
 atmos list components --help
 atmos list metadata --help
