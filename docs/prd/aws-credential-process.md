@@ -1,8 +1,8 @@
-# PRD: AWS Credential Process Support for Atmos Auth
+# PRD: AWS Credentials Identity with credential_process Support
 
 ## Overview
 
-Support AWS SDK's `credential_process` configuration as a first-class credential source for AWS identities in Atmos Auth. This enables integration with external credential helper programs (Okta CLI, custom SAML tools, hardware tokens, etc.) following the AWS standard for credential provider chains.
+Introduce a new `aws/credentials` identity kind that obtains AWS credentials from external processes using the AWS SDK's `credential_process` standard. This enables integration with external credential helper programs (aws-sso-cli, Okta CLI, aws-vault, custom SAML tools, hardware tokens, etc.) following the AWS standard for credential provider chains.
 
 ## Background
 
@@ -15,12 +15,11 @@ Organizations use external processes to obtain temporary AWS credentials from va
 - Corporate identity management tools
 
 Currently, Atmos Auth supports:
-- IAM user long-lived credentials (access key + secret key)
-- STS session tokens with MFA
-- Role assumption chains
-- IAM Identity Center (SSO)
+- `aws/user` - IAM user long-lived credentials with STS session token generation
+- `aws/assume-role` - Role assumption chains
+- `aws/permission-set` - IAM Identity Center (SSO) permission sets
 
-However, users cannot integrate external credential helper programs that follow the AWS `credential_process` standard.
+However, these identity kinds don't support credentials from external processes. Users need a way to integrate external credential helper programs that follow the AWS `credential_process` standard without the IAM User-specific behavior (MFA prompts, GetSessionToken calls).
 
 ### User Story
 
@@ -33,9 +32,9 @@ However, users cannot integrate external credential helper programs that follow 
 auth:
   identities:
     staging:
-      kind: aws/user
+      kind: aws/credentials
       credentials:
-        credential_process: '{{getenv "HOME"}}/.local/bin/okta-credential-helper staging'
+        credential_process: 'aws-sso process --sso staging --arn arn:aws:iam::111111111111:role/Admin'
         region: eu-west-1
 ```
 
@@ -57,40 +56,47 @@ Both approaches break Atmos's unified authentication model and require manual cr
 
 ## Non-Goals
 
-- Creating a new identity kind `aws/process` (use existing `aws/user`)
 - Supporting non-AWS credential processes
 - Implementing credential helper programs (only consume them)
 - Validating external process security (user's responsibility)
+- Modifying existing `aws/user` identity behavior (keep it focused on IAM Users)
 
 ## Technical Design
 
 ### 1. Configuration Schema
 
-Extend `aws/user` identity to accept `credential_process` in credentials map:
+Introduce new `aws/credentials` identity kind for external credential processes:
 
 ```yaml
 auth:
   identities:
     <identity-name>:
-      kind: aws/user
+      kind: aws/credentials
       credentials:
-        # Option 1: External credential process (NEW)
         credential_process: '<command with arguments>'
         region: <aws-region>  # Optional, defaults to us-east-1
-
-        # Option 2: Long-lived credentials (EXISTING)
-        access_key_id: '{{getenv "AWS_ACCESS_KEY_ID"}}'
-        secret_access_key: '{{getenv "AWS_SECRET_ACCESS_KEY"}}'
-        mfa_arn: 'arn:aws:iam::123456789012:mfa/username'  # Optional
-        region: <aws-region>  # Optional
-
-      session:
-        duration: '12h'  # Optional, applies if external process returns non-session credentials
 ```
 
-**Mutual Exclusivity:**
-- `credential_process` is mutually exclusive with `access_key_id`/`secret_access_key`
-- If both are configured, return validation error
+**Why a new kind instead of extending `aws/user`?**
+
+The `aws/user` identity kind is specifically designed for IAM Users and performs these IAM User-specific operations:
+1. Takes long-lived credentials (access key + secret key)
+2. Calls STS `GetSessionToken` to generate temporary credentials
+3. Handles MFA prompts for IAM User MFA devices
+4. Enforces IAM User session duration limits (12h without MFA, 36h with MFA)
+
+**Semantic mismatch with credential_process:**
+- External processes (like `aws-sso process`) return **already-temporary credentials** from SSO, assumed roles, or other sources
+- These credentials already include a session token
+- Calling `GetSessionToken` again would fail (can't get session token from session credentials)
+- MFA is handled by the external process, not by Atmos
+- Session limits are determined by the external process, not IAM User limits
+
+**Solution: `aws/credentials` identity**
+- **Semantic meaning**: "I have AWS credentials from an external source"
+- **Behavior**: Use credentials as-is without transformation
+- **Agnostic**: Works with any credential type (IAM User, assumed role, SSO, etc.)
+- **Simpler**: No MFA prompting, no STS calls, just execute process and use credentials
 
 ### 2. Credential Process Specification
 
@@ -131,21 +137,40 @@ Follow AWS SDK specification exactly:
 
 ### 3. Implementation Architecture
 
-#### 3.1 Credential Resolution Precedence
+#### 3.1 Identity Kind Comparison
 
-Update `resolveLongLivedCredentials()` in `pkg/auth/identities/aws/user.go`:
+| Feature | `aws/user` | `aws/credentials` (NEW) |
+|---------|-----------|------------------------|
+| **Purpose** | IAM User authentication | External credential processes |
+| **Credential source** | Access key + secret key | credential_process output |
+| **Transformation** | Calls STS GetSessionToken | Uses credentials as-is |
+| **MFA** | Prompts for token | Handled by external process |
+| **Session limits** | IAM User limits (12h-36h) | Process-determined |
+| **Typical use** | Break-glass IAM users | SSO, SAML, corporate auth |
+| **Provider name** | `aws-user` | `aws-credentials` |
 
-```
-Priority (highest to lowest):
-1. credential_process (external command) - NEW
-2. YAML credentials (access_key_id + secret_access_key)
-3. Keyring credentials
-```
+#### 3.2 Implementation Files
 
-#### 3.2 Process Execution Flow
+**New files to create:**
+- `pkg/auth/identities/aws/credentials.go` - Main implementation
+- `pkg/auth/identities/aws/credentials_test.go` - Unit tests
+- `pkg/auth/identities/aws/process_executor.go` - Process execution helper (shared)
+
+**Files to modify:**
+- `pkg/auth/factory/factory.go` - Register new identity kind
+- `pkg/schema/schema_auth.go` - Already supports arbitrary kinds
+- `pkg/auth/cloud/aws/files.go` - May need provider name constant
+
+#### 3.3 Process Execution Flow
 
 ```go
-func (i *userIdentity) credentialsFromProcess(ctx context.Context, command string) (*types.AWSCredentials, error) {
+// pkg/auth/identities/aws/credentials.go
+type credentialsIdentity struct {
+    name   string
+    config *schema.Identity
+}
+
+func (i *credentialsIdentity) credentialsFromProcess(ctx context.Context, command string) (*types.AWSCredentials, error) {
     // 1. Expand template variables in command
     expandedCmd := expandTemplate(command, i.config)
 
@@ -180,12 +205,12 @@ func (i *userIdentity) credentialsFromProcess(ctx context.Context, command strin
 }
 ```
 
-#### 3.3 Credential Caching Strategy
+#### 3.4 Credential Caching Strategy
 
 **Cache Behavior:**
 - Cache credentials in memory during Atmos execution
 - Respect `Expiration` field from process output
-- If no expiration provided, assume credentials valid for current operation only
+- If no expiration provided, re-execute process for each operation
 - Do NOT cache in keyring (external process is source of truth)
 
 **Refresh Behavior:**
@@ -195,31 +220,50 @@ func (i *userIdentity) credentialsFromProcess(ctx context.Context, command strin
 
 **File Storage:**
 - Write temporary credentials to AWS config files (same as existing flow)
+- Use provider name `aws-credentials` for file paths
 - Include expiration metadata in INI comments
 - This enables AWS SDK tools to use cached credentials
 
-#### 3.4 Session Token Handling
+#### 3.5 Credential Usage (No Transformation)
 
-**If external process returns SessionToken:**
-- Use credentials directly without calling STS GetSessionToken
-- Skip MFA prompt (external process handles authentication)
-- Write credentials to AWS files with session token
+**Unlike `aws/user`, `aws/credentials` does NOT transform credentials:**
 
-**If external process returns long-lived credentials (no SessionToken):**
-- Fall back to existing GetSessionToken flow
-- Prompt for MFA if `mfa_arn` configured
-- Generate session token with configured duration
+```go
+func (i *credentialsIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (types.ICredentials, error) {
+    // Get credential_process command from config
+    credProcess, ok := i.config.Credentials["credential_process"].(string)
+    if !ok || credProcess == "" {
+        return nil, fmt.Errorf("%w: credential_process is required for aws/credentials identity", errUtils.ErrInvalidAuthConfig)
+    }
 
-#### 3.5 Integration with Existing Features
+    // Execute external process and get credentials
+    creds, err := i.credentialsFromProcess(ctx, credProcess)
+    if err != nil {
+        return nil, err
+    }
+
+    // Use credentials as-is - NO GetSessionToken call
+    // External process already provided temporary credentials
+    return creds, nil
+}
+```
+
+**Key difference from `aws/user`:**
+- ✅ No STS GetSessionToken API call
+- ✅ No MFA prompting (external process handles auth)
+- ✅ No session duration limits (respects process expiration)
+- ✅ Works with any credential type (SSO, assumed role, IAM user)
+
+#### 3.6 Integration with Existing Features
 
 **Identity Chaining:**
 ```yaml
 auth:
   identities:
     corp-sso:
-      kind: aws/user
+      kind: aws/credentials
       credentials:
-        credential_process: '/usr/local/bin/okta-aws staging'
+        credential_process: 'aws-sso process --sso staging --arn arn:aws:iam::123456789012:role/PowerUser'
 
     staging-admin:
       kind: aws/assume-role
@@ -295,26 +339,25 @@ $ atmos terraform plan vpc -s staging --identity corp-sso
 
 ### 6. Configuration Validation
 
-Add validation in `pkg/auth/types/interfaces.go` Validator:
+Add validation in `pkg/auth/validator/validator.go`:
 
 ```go
 func (v *validator) ValidateIdentity(name string, identity *schema.Identity, providers map[string]*schema.Provider) error {
-    if identity.Kind == "aws/user" {
-        hasCredProcess := identity.Credentials["credential_process"] != nil
-        hasAccessKey := identity.Credentials["access_key_id"] != nil
-        hasSecretKey := identity.Credentials["secret_access_key"] != nil
-
-        // Mutual exclusivity check
-        if hasCredProcess && (hasAccessKey || hasSecretKey) {
-            return fmt.Errorf("identity %q: credential_process is mutually exclusive with access_key_id/secret_access_key", name)
+    if identity.Kind == "aws/credentials" {
+        // credential_process is required
+        credProcess, ok := identity.Credentials["credential_process"].(string)
+        if !ok || credProcess == "" {
+            return fmt.Errorf("identity %q: aws/credentials requires non-empty credential_process", name)
         }
 
-        // Validate credential_process command
-        if hasCredProcess {
-            cmd, ok := identity.Credentials["credential_process"].(string)
-            if !ok || cmd == "" {
-                return fmt.Errorf("identity %q: credential_process must be a non-empty string", name)
-            }
+        // Ensure no conflicting fields (aws/credentials is process-only)
+        if identity.Credentials["access_key_id"] != nil || identity.Credentials["secret_access_key"] != nil {
+            return fmt.Errorf("identity %q: aws/credentials does not support access_key_id/secret_access_key (use aws/user for IAM User credentials)", name)
+        }
+
+        // Via provider is not supported (aws/credentials is standalone like aws/user)
+        if identity.Via != nil && identity.Via.Provider != "" {
+            return fmt.Errorf("identity %q: aws/credentials does not support via.provider (credentials come from external process)", name)
         }
     }
     return nil
@@ -443,38 +486,47 @@ EOF
 
 ## Appendix: Example Configurations
 
-### Example 1: Okta AWS CLI
+### Example 1: aws-sso-cli (Primary Use Case)
 ```yaml
 auth:
   identities:
     staging:
-      kind: aws/user
+      kind: aws/credentials
       credentials:
-        credential_process: 'okta-aws-cli --profile staging --oidc-client-id 0oa123456789abcdef'
+        credential_process: 'aws-sso process --sso staging --arn arn:aws:iam::111111111111:role/DevOps'
         region: us-east-1
 ```
 
-### Example 2: Custom SAML Script
+### Example 2: Okta AWS CLI
 ```yaml
 auth:
   identities:
     production:
-      kind: aws/user
+      kind: aws/credentials
+      credentials:
+        credential_process: 'okta-aws-cli --profile production --oidc-client-id 0oa123456789abcdef'
+        region: us-east-1
+```
+
+### Example 3: Custom SAML Script
+```yaml
+auth:
+  identities:
+    production:
+      kind: aws/credentials
       credentials:
         credential_process: '{{getenv "HOME"}}/.local/bin/saml-to-aws --account production --role admin'
         region: us-west-2
-      session:
-        duration: '8h'  # Used if process returns long-lived credentials
 ```
 
-### Example 3: Identity Chaining
+### Example 4: Identity Chaining with Role Assumption
 ```yaml
 auth:
   identities:
     corp-base:
-      kind: aws/user
+      kind: aws/credentials
       credentials:
-        credential_process: '/usr/local/bin/corporate-sso-helper'
+        credential_process: 'aws-sso process --sso corporate --arn arn:aws:iam::123456789012:role/BaseAccess'
 
     staging-poweruser:
       kind: aws/assume-role
@@ -491,13 +543,37 @@ auth:
         role_arn: 'arn:aws:iam::111111111111:role/ReadOnly'
 ```
 
-### Example 4: AWS Vault Integration
+### Example 5: AWS Vault Integration
 ```yaml
 auth:
   identities:
     my-account:
-      kind: aws/user
+      kind: aws/credentials
       credentials:
         credential_process: 'aws-vault exec my-profile --json'
         region: eu-central-1
+```
+
+### Example 6: Comparison with aws/user
+```yaml
+auth:
+  identities:
+    # For IAM Users with long-lived credentials
+    break-glass-user:
+      kind: aws/user
+      credentials:
+        access_key_id: '{{getenv "AWS_ACCESS_KEY_ID"}}'
+        secret_access_key: '{{getenv "AWS_SECRET_ACCESS_KEY"}}'
+        mfa_arn: 'arn:aws:iam::123456789012:mfa/emergency-user'
+        region: us-east-1
+      session:
+        duration: '12h'  # Atmos calls GetSessionToken with MFA
+
+    # For external credential processes (SSO, SAML, etc.)
+    sso-user:
+      kind: aws/credentials
+      credentials:
+        credential_process: 'aws-sso process --sso prod --arn arn:aws:iam::123456789012:role/Engineer'
+        region: us-east-1
+      # No session config - external process determines expiration
 ```
