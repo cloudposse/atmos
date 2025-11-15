@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
@@ -683,7 +685,7 @@ func TestFormatter_FormatToast_Multiline(t *testing.T) {
 			name:     "emoji icon multiline",
 			icon:     "📦",
 			message:  "Package installed\nName: atmos\nVersion: 1.2.3",
-			expected: "📦 Package installed\n  Name: atmos\n  Version: 1.2.3\n",
+			expected: "📦 Package installed\n   Name: atmos\n   Version: 1.2.3\n", // 3 spaces: emoji is 2 cells + 1
 		},
 		{
 			name:     "error icon multiline",
@@ -901,7 +903,7 @@ func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
 			name:     "long multiline message",
 			icon:     "📋",
 			message:  "Task 1\nTask 2\nTask 3\nTask 4\nTask 5",
-			expected: "📋 Task 1\n  Task 2\n  Task 3\n  Task 4\n  Task 5\n",
+			expected: "📋 Task 1\n   Task 2\n   Task 3\n   Task 4\n   Task 5\n", // 3 spaces: emoji is 2 cells + 1
 		},
 		{
 			name:     "special characters in message",
@@ -1195,53 +1197,50 @@ func TestFormatter_ConvenienceFunctions_Multiline(t *testing.T) {
 	}
 }
 
-func TestFormatter_ANSIStripping(t *testing.T) {
-	ioCtx := createTestIOContext()
-	term := createMockTerminal(terminal.ColorTrue)
-	f := NewFormatter(ioCtx, term).(*formatter)
-
+func TestFormatter_LipglossWidth(t *testing.T) {
+	// Test that lipgloss.Width correctly handles ANSI codes and multi-cell characters.
 	tests := []struct {
 		name     string
 		input    string
-		expected string
+		expected int
 	}{
 		{
 			name:     "plain text",
 			input:    "hello",
-			expected: "hello",
+			expected: 5,
 		},
 		{
-			name:     "red text",
-			input:    "\x1b[31mhello\x1b[0m",
-			expected: "hello",
+			name:     "plain icon",
+			input:    "✓",
+			expected: 1,
 		},
 		{
-			name:     "green bold text",
-			input:    "\x1b[1;32mhello\x1b[0m",
-			expected: "hello",
+			name:     "colored icon with ANSI",
+			input:    "\x1b[32m✓\x1b[0m",
+			expected: 1, // ANSI codes should not count
+		},
+		{
+			name:     "emoji",
+			input:    "📦",
+			expected: 2, // Wide character
+		},
+		{
+			name:     "colored emoji",
+			input:    "\x1b[31m📦\x1b[0m",
+			expected: 2, // ANSI codes stripped, emoji is 2 cells
 		},
 		{
 			name:     "multiple colors",
 			input:    "\x1b[31mred\x1b[0m and \x1b[32mgreen\x1b[0m",
-			expected: "red and green",
-		},
-		{
-			name:     "icon only",
-			input:    "✓",
-			expected: "✓",
-		},
-		{
-			name:     "colored icon",
-			input:    "\x1b[32m✓\x1b[0m",
-			expected: "✓",
+			expected: 13, // "red and green"
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := f.stripANSI(tt.input)
+			got := lipgloss.Width(tt.input)
 			if got != tt.expected {
-				t.Errorf("stripANSI(%q) = %q, want %q", tt.input, got, tt.expected)
+				t.Errorf("lipgloss.Width(%q) = %d, want %d", tt.input, got, tt.expected)
 			}
 		})
 	}
