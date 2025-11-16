@@ -133,6 +133,7 @@ func processSimpleTags(
 	input string,
 	currentStack string,
 	skip []string,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, bool) {
 	if matchesPrefix(input, u.AtmosYamlFuncTemplate, skip) {
 		return processTagTemplate(input), true
@@ -149,7 +150,7 @@ func processSimpleTags(
 		return processTagStore(atmosConfig, input, currentStack), true
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncEnv, skip) {
-		res, err := u.ProcessTagEnv(input)
+		res, err := u.ProcessTagEnv(input, stackInfo)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return res, true
 	}
@@ -170,7 +171,7 @@ func processCustomTagsWithContext(
 	}
 
 	// Try simple tags.
-	if result, handled := processSimpleTags(atmosConfig, input, currentStack, skip); handled {
+	if result, handled := processSimpleTags(atmosConfig, input, currentStack, skip, stackInfo); handled {
 		return result
 	}
 
