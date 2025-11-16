@@ -11,7 +11,7 @@ tests:
     expect:
       diff: []
       stdout:
-        - "Available Commands:"
+        - "AVAILABLE COMMANDS"
         - "\\bauth\\b"
         - "\\batlantis\\b"
         - "\\baws\\b"
@@ -29,7 +29,7 @@ tests:
         - "\\bvendor\\b"
         - "\\bversion\\b"
         - "\\bworkflow\\b"
-        - "Flags:"
+        - "FLAGS"
         - "for more information about a command"
       exit_code: 0
 
