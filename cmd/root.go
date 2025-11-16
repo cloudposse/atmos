@@ -244,9 +244,11 @@ var RootCmd = &cobra.Command{
 				if versionErr != nil {
 					errUtils.CheckErrorPrintAndExit(versionErr, "", "")
 				}
-				// Version output is complete. No need to call os.Exit - command will naturally exit.
-				// This improves testability by allowing error bubbling instead of deep exits.
-				return
+				// Version output is complete. Exit successfully.
+				// Must explicitly exit here because returning from PersistentPreRun
+				// doesn't prevent RunE from executing, which would call checkAtmosConfig()
+				// and fail with exit code 1 in directories without atmos.yaml.
+				errUtils.Exit(0)
 			}
 		}
 
