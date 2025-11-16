@@ -673,3 +673,187 @@ func TestPerformLogoutAll_WithKeychainFlag(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectExternalCredentials(t *testing.T) {
+	tests := []struct {
+		name     string
+		envVars  map[string]string
+		expected int // Number of warnings expected
+	}{
+		{
+			name:     "no external credentials",
+			envVars:  map[string]string{},
+			expected: 0,
+		},
+		{
+			name: "google application credentials",
+			envVars: map[string]string{
+				"GOOGLE_APPLICATION_CREDENTIALS": "/path/to/creds.json",
+			},
+			expected: 1,
+		},
+		{
+			name: "azure certificate path",
+			envVars: map[string]string{
+				"AZURE_CERTIFICATE_PATH": "/path/to/cert.pem",
+			},
+			expected: 1,
+		},
+		{
+			name: "aws shared credentials file",
+			envVars: map[string]string{
+				"AWS_SHARED_CREDENTIALS_FILE": "/path/to/credentials",
+			},
+			expected: 1,
+		},
+		{
+			name: "all external credentials",
+			envVars: map[string]string{
+				"GOOGLE_APPLICATION_CREDENTIALS": "/path/to/gcp.json",
+				"AZURE_CERTIFICATE_PATH":         "/path/to/azure.pem",
+				"AWS_SHARED_CREDENTIALS_FILE":    "/path/to/aws",
+			},
+			expected: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set environment variables.
+			for key, value := range tt.envVars {
+				t.Setenv(key, value)
+			}
+
+			warnings := detectExternalCredentials()
+			assert.Len(t, warnings, tt.expected)
+		})
+	}
+}
+
+func TestDisplayExternalCredentialWarnings(t *testing.T) {
+	tests := []struct {
+		name    string
+		envVars map[string]string
+	}{
+		{
+			name:    "no external credentials - should not panic",
+			envVars: map[string]string{},
+		},
+		{
+			name: "with external credentials - should not panic",
+			envVars: map[string]string{
+				"GOOGLE_APPLICATION_CREDENTIALS": "/path/to/creds.json",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set environment variables.
+			for key, value := range tt.envVars {
+				t.Setenv(key, value)
+			}
+
+			assert.NotPanics(t, func() {
+				displayExternalCredentialWarnings()
+			})
+		})
+	}
+}
+
+func TestConfirmKeychainDeletion(t *testing.T) {
+	tests := []struct {
+		name               string
+		identityOrProvider string
+		force              bool
+		isTTY              bool
+		expectedConfirmed  bool
+		expectedError      error
+	}{
+		{
+			name:               "force flag bypasses confirmation",
+			identityOrProvider: "test-identity",
+			force:              true,
+			isTTY:              true,
+			expectedConfirmed:  true,
+			expectedError:      nil,
+		},
+		{
+			name:               "non-TTY without force returns error",
+			identityOrProvider: "test-identity",
+			force:              false,
+			isTTY:              false,
+			expectedConfirmed:  false,
+			expectedError:      errUtils.ErrKeychainDeletionRequiresConfirmation,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			confirmed, err := confirmKeychainDeletion(tt.identityOrProvider, tt.force, tt.isTTY)
+
+			assert.Equal(t, tt.expectedConfirmed, confirmed)
+			if tt.expectedError != nil {
+				assert.ErrorIs(t, err, tt.expectedError)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestPerformIdentityLogout_DryRunWithKeychainFlag(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockManager := types.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"test-identity": {},
+	})
+	mockManager.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+	mockManager.EXPECT().GetFilesDisplayPath("test-provider").Return("/home/user/.aws/atmos")
+
+	ctx := context.Background()
+	// Dry run with deleteKeychain should show what would be removed.
+	err := performIdentityLogout(ctx, mockManager, "test-identity", true, true, false)
+
+	assert.NoError(t, err)
+}
+
+func TestPerformProviderLogout_DryRunWithKeychainFlag(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockManager := types.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"test-provider": {},
+	})
+	mockManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"identity1": {Kind: "aws/permission-set"},
+	})
+	mockManager.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
+	mockManager.EXPECT().GetFilesDisplayPath("test-provider").Return("/home/user/.aws/atmos")
+
+	ctx := context.Background()
+	// Dry run with deleteKeychain should show what would be removed.
+	err := performProviderLogout(ctx, mockManager, "test-provider", true, true, false)
+
+	assert.NoError(t, err)
+}
+
+func TestPerformLogoutAll_DryRunWithKeychainFlag(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockManager := types.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"provider1": {},
+	})
+	mockManager.EXPECT().GetFilesDisplayPath("provider1").Return("/home/user/.config/atmos")
+
+	ctx := context.Background()
+	// Dry run with deleteKeychain should show what would be removed.
+	err := performLogoutAll(ctx, mockManager, true, true, false)
+
+	assert.NoError(t, err)
+}
