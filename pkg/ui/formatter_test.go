@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/terminal"
@@ -534,7 +535,9 @@ func TestFormatter_AutomaticIcons(t *testing.T) {
 			if !strings.Contains(got, tt.expectedIcon) {
 				t.Errorf("%s output = %q, should contain icon %q", tt.name, got, tt.expectedIcon)
 			}
-			if !strings.Contains(got, tt.text) {
+			// Strip ANSI codes before checking text containment (Glamour wraps each char in styling)
+			plainText := ansi.Strip(got)
+			if !strings.Contains(plainText, tt.text) {
 				t.Errorf("%s output = %q, should contain text %q", tt.name, got, tt.text)
 			}
 
@@ -598,7 +601,9 @@ func TestFormatter_FormattedMethods(t *testing.T) {
 			if !strings.Contains(got, tt.expectedIcon) {
 				t.Errorf("%s output = %q, should contain icon %q", tt.name, got, tt.expectedIcon)
 			}
-			if !strings.Contains(got, tt.expectedText) {
+			// Strip ANSI codes before checking text containment (Glamour wraps each char in styling)
+			plainText := ansi.Strip(got)
+			if !strings.Contains(plainText, tt.expectedText) {
 				t.Errorf("%s output = %q, should contain text %q", tt.name, got, tt.expectedText)
 			}
 
@@ -873,31 +878,31 @@ func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
 			name:     "empty message",
 			icon:     "✓",
 			message:  "",
-			expected: "✓ \n",
+			expected: "✓ \n  \n", // Glamour renders empty as paragraph with indent
 		},
 		{
 			name:     "message with only newline",
 			icon:     "✓",
 			message:  "\n",
-			expected: "✓ \n  \n",
+			expected: "✓ \n  \n", // Glamour collapses single newline to empty paragraph
 		},
 		{
 			name:     "message starting with newline",
 			icon:     "✓",
 			message:  "\nStarting text",
-			expected: "✓ \n  Starting text\n",
+			expected: "✓ Starting text\n", // Glamour doesn't preserve leading newline in markdown
 		},
 		{
 			name:     "message ending with newline",
 			icon:     "✓",
 			message:  "Ending text\n",
-			expected: "✓ Ending text\n  \n",
+			expected: "✓ Ending text\n  \n", // Glamour treats trailing newline as paragraph separation
 		},
 		{
 			name:     "multiple consecutive newlines",
 			icon:     "ℹ",
 			message:  "Line 1\n\n\nLine 2",
-			expected: "ℹ Line 1\n  \n  \n  Line 2\n",
+			expected: "ℹ Line 1\n  \n  Line 2\n", // Glamour collapses multiple newlines to single empty line
 		},
 		{
 			name:     "long multiline message",
@@ -909,7 +914,7 @@ func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
 			name:     "special characters in message",
 			icon:     "⚠",
 			message:  "Warning: special chars\n\t- Tab character\n  - Spaces",
-			expected: "⚠ Warning: special chars\n  \t- Tab character\n    - Spaces\n",
+			expected: "⚠ Warning: special chars\n  - Tab character\n  \n  • Spaces\n", // Glamour normalizes whitespace, adds paragraph break, and converts "  - " to bullet
 		},
 		{
 			name:     "unicode in message",
@@ -1172,8 +1177,9 @@ func TestFormatter_ConvenienceFunctions_Multiline(t *testing.T) {
 				t.Errorf("First line should contain icon %q, got %q", tt.icon, lines[0])
 			}
 
-			// Second line should be indented
-			if !strings.HasPrefix(lines[1], " ") {
+			// Second line should be indented (strip ANSI codes first)
+			plainLine := ansi.Strip(lines[1])
+			if !strings.HasPrefix(plainLine, " ") {
 				t.Errorf("Second line should be indented, got %q", lines[1])
 			}
 
@@ -1330,5 +1336,104 @@ func TestFormatter_Infof_Multiline(t *testing.T) {
 
 	if !strings.Contains(lines[1], "Completed: 50%") {
 		t.Errorf("Second line should contain formatted text, got: %q", lines[1])
+	}
+}
+
+func TestTrimTrailingWhitespace(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{
+			name:     "single line with trailing spaces",
+			input:    "hello world     ",
+			expected: []string{"hello world"},
+		},
+		{
+			name:     "single line without trailing spaces",
+			input:    "hello world",
+			expected: []string{"hello world"},
+		},
+		{
+			name:     "multiple lines with trailing spaces",
+			input:    "line one     \nline two     \nline three     ",
+			expected: []string{"line one", "line two", "line three"},
+		},
+		{
+			name:     "empty line with only spaces (preserves 2-space indent)",
+			input:    "line one\n     \nline three",
+			expected: []string{"line one", "  ", "line three"},
+		},
+		{
+			name:     "empty line with 2 spaces (preserves indent)",
+			input:    "line one\n  \nline three",
+			expected: []string{"line one", "  ", "line three"},
+		},
+		{
+			name:     "empty line with 1 space (preserves single space)",
+			input:    "line one\n \nline three",
+			expected: []string{"line one", " ", "line three"},
+		},
+		{
+			name:     "truly empty line (no spaces)",
+			input:    "line one\n\nline three",
+			expected: []string{"line one", "", "line three"},
+		},
+		{
+			name:     "mixed: text with trailing spaces and empty lines",
+			input:    "text     \n     \nmore text     ",
+			expected: []string{"text", "  ", "more text"},
+		},
+		{
+			name:     "leading spaces preserved, trailing spaces removed",
+			input:    "  indented text     ",
+			expected: []string{"  indented text"},
+		},
+		{
+			name:     "multiple empty lines with spaces",
+			input:    "start\n     \n     \nend",
+			expected: []string{"start", "  ", "  ", "end"},
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: []string{""},
+		},
+		{
+			name:     "only spaces (becomes 2-space indent)",
+			input:    "          ",
+			expected: []string{"  "},
+		},
+		{
+			name:     "tabs and spaces mixed (trims only trailing spaces, not tabs)",
+			input:    "text\t\t   ",
+			expected: []string{"text\t\t"},
+		},
+		{
+			name:     "real Glamour output with 80-char padding",
+			input:    "Success message" + strings.Repeat(" ", 65) + "\n  " + strings.Repeat(" ", 78),
+			expected: []string{"Success message", "  "},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := trimTrailingWhitespace(tt.input)
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("Expected %d lines, got %d lines", len(tt.expected), len(result))
+				t.Errorf("Expected: %#v", tt.expected)
+				t.Errorf("Got: %#v", result)
+				return
+			}
+
+			for i := range result {
+				if result[i] != tt.expected[i] {
+					t.Errorf("Line %d mismatch:\n  Expected: %q (len=%d)\n  Got:      %q (len=%d)",
+						i, tt.expected[i], len(tt.expected[i]), result[i], len(result[i]))
+				}
+			}
+		})
 	}
 }

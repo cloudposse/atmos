@@ -68,12 +68,6 @@ func processCustomCommands(
 	var command *cobra.Command
 	existingTopLevelCommands := make(map[string]*cobra.Command)
 
-	// Build commands and their hierarchy from the alias map
-	for alias, fullCmd := range atmosConfig.CommandAliases {
-		parts := strings.Fields(fullCmd)
-		addCommandWithAlias(RootCmd, alias, parts)
-	}
-
 	if topLevel {
 		existingTopLevelCommands = getTopLevelCommands()
 	}
@@ -147,33 +141,36 @@ func processCustomCommands(
 	return nil
 }
 
-// addCommandWithAlias adds a command hierarchy based on the full command.
-func addCommandWithAlias(parentCmd *cobra.Command, alias string, parts []string) {
-	if len(parts) == 0 {
-		return
-	}
+// filterChdirArgs removes --chdir and -C flags from args.
+// This is used when executing aliased commands to prevent double-processing of chdir.
+func filterChdirArgs(args []string) []string {
+	filtered := make([]string, 0, len(args))
+	skipNext := false
 
-	// Check if a command with the current part already exists
-	var cmd *cobra.Command
-	for _, c := range parentCmd.Commands() {
-		if c.Use == parts[0] {
-			cmd = c
-			break
+	for _, arg := range args {
+		if skipNext {
+			skipNext = false
+			continue
 		}
+
+		// Skip --chdir=value, -C=value, -C<value> (concatenated).
+		if strings.HasPrefix(arg, "--chdir=") ||
+			strings.HasPrefix(arg, "-C=") ||
+			(strings.HasPrefix(arg, "-C") && len(arg) > 2) {
+			continue
+		}
+
+		// Skip --chdir value or -C value (next arg is the value).
+		if arg == "--chdir" || arg == "-C" {
+			skipNext = true
+			continue
+		}
+
+		// Keep all other args.
+		filtered = append(filtered, arg)
 	}
 
-	// If the command doesn't exist, create it
-	if cmd == nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("subcommand `%s` not found for alias `%s`", parts[0], alias), "", "")
-	}
-
-	// If there are more parts, recurse for the next level
-	if len(parts) > 1 {
-		addCommandWithAlias(cmd, alias, parts[1:])
-	} else if !Contains(cmd.Aliases, alias) {
-		// This is the last part of the command, add the alias
-		cmd.Aliases = append(cmd.Aliases, alias)
-	}
+	return filtered
 }
 
 // processCommandAliases processes the command aliases.
@@ -205,8 +202,37 @@ func processCommandAliases(
 					err := cmd.ParseFlags(args)
 					errUtils.CheckErrorPrintAndExit(err, "", "")
 
-					commandToRun := fmt.Sprintf("%s %s %s", os.Args[0], aliasCmd, strings.Join(args, " "))
-					err = e.ExecuteShell(commandToRun, commandToRun, currentDirPath, nil, false)
+					// Use os.Executable() to get the absolute path to the currently running binary.
+					// This ensures that the same binary is used even when invoked via relative paths,
+					// symlinks, or from different working directories.
+					execPath, err := os.Executable()
+					errUtils.CheckErrorPrintAndExit(err, "", "")
+
+					// Filter out --chdir and -C flags from args before passing to the aliased command.
+					// The chdir has already been processed by the parent atmos invocation, and passing
+					// it again would cause the new process to try to chdir to a relative path that's
+					// now invalid (since we already changed directories).
+					filteredArgs := filterChdirArgs(args)
+
+					// Filter out ATMOS_CHDIR from environment variables to prevent the child process
+					// from re-applying the parent's chdir directive. Since ExecuteShell merges with
+					// os.Environ(), we must explicitly set ATMOS_CHDIR to empty string to override it.
+					filteredEnv := make([]string, 0, len(os.Environ()))
+					foundAtmosChdir := false
+					for _, env := range os.Environ() {
+						if strings.HasPrefix(env, "ATMOS_CHDIR=") {
+							foundAtmosChdir = true
+							continue
+						}
+						filteredEnv = append(filteredEnv, env)
+					}
+					// Add empty ATMOS_CHDIR to override parent's value in merged environment.
+					if foundAtmosChdir {
+						filteredEnv = append(filteredEnv, "ATMOS_CHDIR=")
+					}
+
+					commandToRun := fmt.Sprintf("%s %s %s", execPath, aliasCmd, strings.Join(filteredArgs, " "))
+					err = e.ExecuteShell(commandToRun, commandToRun, currentDirPath, filteredEnv, false)
 					errUtils.CheckErrorPrintAndExit(err, "", "")
 				},
 			}

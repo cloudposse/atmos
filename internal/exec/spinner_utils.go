@@ -9,6 +9,7 @@ import (
 	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -40,13 +41,13 @@ func (m modelSpinner) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m modelSpinner) View() string {
-	return fmt.Sprintf("\r%s %s", m.spinner.View(), m.message)
+	return fmt.Sprintf("%s%s %s", terminal.EscCarriageReturn, m.spinner.View(), m.message)
 }
 
 // NewSpinner initializes a spinner and returns a pointer to a tea.Program.
 func NewSpinner(message string) *tea.Program {
 	s := spinner.New()
-	s.Style = theme.Styles.Link
+	s.Style = theme.GetCurrentStyles().Spinner
 
 	var opts []tea.ProgramOption
 	if !term.IsTTYSupportForStdout() {

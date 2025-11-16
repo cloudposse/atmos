@@ -8,7 +8,7 @@ Usage:
 
 Aliases:
 
-  terraform, tf, tr
+  terraform, tf
 
 
 Available Commands:
@@ -48,11 +48,6 @@ Native terraform Commands:
   validate                       Check whether the configuration is valid
   version                        Show the current Terraform version
   workspace                      Manage Terraform workspaces
-
-Subcommand Aliases:
-
-  ta                             Alias of "atmos terraform apply" command
-  tp                             Alias of "atmos terraform plan" command
 
 
 Flags:

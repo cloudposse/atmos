@@ -15,6 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 //go:embed markdown/atmos_version_list_usage.md
@@ -98,6 +99,7 @@ func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*gith
 		// Create spinner model.
 		s := spinner.New()
 		s.Spinner = spinner.Dot
+		s.Style = theme.GetCurrentStyles().Spinner
 
 		// Fetch releases with spinner.
 		m := &listModel{spinner: s, client: client, opts: opts}

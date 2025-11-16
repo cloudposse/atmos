@@ -1,0 +1,56 @@
+---
+title: atmos devcontainer stop
+sidebar_label: stop
+sidebar_class_name: command
+id: stop
+description: Stop a running devcontainer
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to stop a running devcontainer. The container is not removed, so you can start it again later.
+</Intro>
+
+<Screengrab title="atmos devcontainer stop --help" slug="atmos-devcontainer-stop--help" />
+
+## Usage
+
+```shell
+atmos devcontainer stop <name> [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Name of the devcontainer to stop</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--instance string`</dt>
+  <dd>Instance name for this devcontainer (default: `default`)</dd>
+
+  <dt>`--timeout int`</dt>
+  <dd>Timeout in seconds to wait for container to stop (default: `10`)</dd>
+</dl>
+
+## Examples
+
+```shell
+# Stop a devcontainer
+atmos devcontainer stop geodesic
+
+# Stop with custom timeout
+atmos devcontainer stop geodesic --timeout 30
+
+# Stop a specific instance
+atmos devcontainer stop terraform --instance project-a
+```
+
+## See Also
+
+- [`atmos devcontainer start`](/cli/commands/devcontainer/start)
+- [`atmos devcontainer remove`](/cli/commands/devcontainer/remove)

@@ -1,6 +1,7 @@
 package types
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -86,4 +87,13 @@ func TestOIDCCredentials_BuildWhoamiInfo(t *testing.T) {
 
 	// Nil target is tolerated.
 	c.BuildWhoamiInfo(nil)
+}
+
+func TestOIDCCredentials_Validate(t *testing.T) {
+	// Validate is not implemented for OIDC credentials.
+	c := &OIDCCredentials{Token: "test-token"}
+	info, err := c.Validate(context.TODO())
+	assert.Nil(t, info)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrNotImplemented))
 }

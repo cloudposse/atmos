@@ -92,12 +92,12 @@ func (mw *maskedWriter) Write(p []byte) (n int, err error) {
 
 	written, err := mw.underlying.Write(maskedBytes)
 	if err != nil {
-		return written, err
+		return 0, err
 	}
 
 	// Check for partial write
 	if written < len(maskedBytes) {
-		return written, stdio.ErrShortWrite
+		return 0, stdio.ErrShortWrite
 	}
 
 	// Return original length to maintain write semantics
