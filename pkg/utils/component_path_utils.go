@@ -124,8 +124,9 @@ func cleanDuplicatedPath(path string) string {
 		startIdx = 1
 	}
 
-	// Only look for duplications of sequences that are at least 3 parts long
-	minLength := 3
+	// Only look for duplications of sequences that are at least 2 parts long.
+	// This catches patterns like /tests/fixtures/tests/fixtures (2-part duplication).
+	minLength := 2
 	if len(parts)-startIdx < minLength*2 {
 		return cleanedPath
 	}
