@@ -779,6 +779,30 @@ func TestConfirmKeychainDeletion(t *testing.T) {
 			expectedError:      nil,
 		},
 		{
+			name:               "force flag with provider name bypasses confirmation",
+			identityOrProvider: "aws-provider",
+			force:              true,
+			isTTY:              true,
+			expectedConfirmed:  true,
+			expectedError:      nil,
+		},
+		{
+			name:               "force flag with all identities bypasses confirmation",
+			identityOrProvider: "all identities",
+			force:              true,
+			isTTY:              true,
+			expectedConfirmed:  true,
+			expectedError:      nil,
+		},
+		{
+			name:               "force flag bypasses even in non-TTY",
+			identityOrProvider: "test-identity",
+			force:              true,
+			isTTY:              false,
+			expectedConfirmed:  true,
+			expectedError:      nil,
+		},
+		{
 			name:               "non-TTY without force returns error",
 			identityOrProvider: "test-identity",
 			force:              false,
@@ -856,4 +880,305 @@ func TestPerformLogoutAll_DryRunWithKeychainFlag(t *testing.T) {
 	err := performLogoutAll(ctx, mockManager, true, true, false)
 
 	assert.NoError(t, err)
+}
+
+func TestConfirmKeychainDeletion_MessageVariations(t *testing.T) {
+	// These tests verify the message building logic is exercised.
+	// The interactive prompt itself cannot be tested without mocking Huh.
+	tests := []struct {
+		name               string
+		identityOrProvider string
+		force              bool
+		isTTY              bool
+	}{
+		{
+			name:               "identity message with force",
+			identityOrProvider: "prod-identity",
+			force:              true,
+			isTTY:              true,
+		},
+		{
+			name:               "provider message with force",
+			identityOrProvider: "aws-prod",
+			force:              true,
+			isTTY:              true,
+		},
+		{
+			name:               "all identities message with force",
+			identityOrProvider: "all identities",
+			force:              true,
+			isTTY:              true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			confirmed, err := confirmKeychainDeletion(tt.identityOrProvider, tt.force, tt.isTTY)
+			assert.NoError(t, err)
+			assert.True(t, confirmed)
+		})
+	}
+}
+
+func TestPerformIdentityLogout_DryRunWithoutProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockManager := types.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"test-identity": {},
+	})
+	mockManager.EXPECT().GetProviderForIdentity("test-identity").Return("")
+
+	ctx := context.Background()
+	// Dry run with no provider and no keychain deletion.
+	err := performIdentityLogout(ctx, mockManager, "test-identity", true, false, false)
+
+	assert.NoError(t, err)
+}
+
+func TestPerformIdentityLogout_DryRunWithKeychainAndNoProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockManager := types.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"test-identity": {},
+	})
+	mockManager.EXPECT().GetProviderForIdentity("test-identity").Return("")
+
+	ctx := context.Background()
+	// Dry run with keychain deletion but no provider.
+	err := performIdentityLogout(ctx, mockManager, "test-identity", true, true, false)
+
+	assert.NoError(t, err)
+}
+
+func TestBuildKeychainDeletionMessage(t *testing.T) {
+	tests := []struct {
+		name               string
+		identityOrProvider string
+		expectedContains   []string
+	}{
+		{
+			name:               "identity message",
+			identityOrProvider: "prod-identity",
+			expectedContains: []string{
+				"prod-identity",
+				"Delete keychain credentials",
+				"Access keys and credentials",
+				"Service account credentials",
+				"Provider credentials",
+				"Session data will also be cleared",
+			},
+		},
+		{
+			name:               "provider message",
+			identityOrProvider: "aws-prod",
+			expectedContains: []string{
+				"aws-prod",
+				"Delete keychain credentials",
+			},
+		},
+		{
+			name:               "all identities message",
+			identityOrProvider: "all identities",
+			expectedContains: []string{
+				"all identities",
+				"Delete keychain credentials",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			message := buildKeychainDeletionMessage(tt.identityOrProvider)
+
+			// Verify all expected strings are present.
+			for _, expected := range tt.expectedContains {
+				assert.Contains(t, message, expected)
+			}
+
+			// Verify message is not empty.
+			assert.NotEmpty(t, message)
+		})
+	}
+}
+
+func TestBuildLogoutOptions(t *testing.T) {
+	tests := []struct {
+		name              string
+		identities        map[string]schema.Identity
+		providers         map[string]schema.Provider
+		expectedCount     int
+		expectedTypes     map[string]int // Count of each type.
+		expectedTargets   []string
+		expectedAllOption bool
+	}{
+		{
+			name: "single identity and provider",
+			identities: map[string]schema.Identity{
+				"prod-identity": {},
+			},
+			providers: map[string]schema.Provider{
+				"aws-prod": {},
+			},
+			expectedCount: 3, // 1 identity + 1 provider + 1 "all"
+			expectedTypes: map[string]int{
+				"identity": 1,
+				"provider": 1,
+				"all":      1,
+			},
+			expectedTargets:   []string{"prod-identity", "aws-prod", ""},
+			expectedAllOption: true,
+		},
+		{
+			name: "multiple identities and providers",
+			identities: map[string]schema.Identity{
+				"identity1": {},
+				"identity2": {},
+			},
+			providers: map[string]schema.Provider{
+				"provider1": {},
+				"provider2": {},
+			},
+			expectedCount: 5, // 2 identities + 2 providers + 1 "all"
+			expectedTypes: map[string]int{
+				"identity": 2,
+				"provider": 2,
+				"all":      1,
+			},
+			expectedAllOption: true,
+		},
+		{
+			name:          "no providers",
+			identities:    map[string]schema.Identity{"identity1": {}},
+			providers:     map[string]schema.Provider{},
+			expectedCount: 2, // 1 identity + 1 "all"
+			expectedTypes: map[string]int{
+				"identity": 1,
+				"all":      1,
+			},
+			expectedAllOption: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			options := buildLogoutOptions(tt.identities, tt.providers)
+
+			// Verify count.
+			assert.Len(t, options, tt.expectedCount)
+
+			// Count each type.
+			typeCounts := make(map[string]int)
+			for _, opt := range options {
+				typeCounts[opt.typ]++
+			}
+			assert.Equal(t, tt.expectedTypes, typeCounts)
+
+			// Verify "all" option exists if expected.
+			if tt.expectedAllOption {
+				foundAll := false
+				for _, opt := range options {
+					if opt.typ == "all" {
+						foundAll = true
+						assert.Equal(t, "", opt.target)
+						assert.Contains(t, opt.label, "All identities")
+					}
+				}
+				assert.True(t, foundAll, "Expected 'all' option not found")
+			}
+
+			// Verify each option has a non-empty label.
+			for _, opt := range options {
+				assert.NotEmpty(t, opt.label)
+			}
+		})
+	}
+}
+
+func TestExecuteLogoutOption(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	tests := []struct {
+		name          string
+		option        logoutOption
+		setupMocks    func(*types.MockAuthManager)
+		expectedError error
+	}{
+		{
+			name: "identity option",
+			option: logoutOption{
+				typ:    "identity",
+				target: "test-identity",
+			},
+			setupMocks: func(m *types.MockAuthManager) {
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"test-identity": {},
+				})
+				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(nil)
+			},
+			expectedError: nil,
+		},
+		{
+			name: "provider option",
+			option: logoutOption{
+				typ:    "provider",
+				target: "test-provider",
+			},
+			setupMocks: func(m *types.MockAuthManager) {
+				m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+					"test-provider": {},
+				})
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"identity1": {},
+				})
+				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
+				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", false).Return(nil)
+			},
+			expectedError: nil,
+		},
+		{
+			name: "all option",
+			option: logoutOption{
+				typ:    "all",
+				target: "",
+			},
+			setupMocks: func(m *types.MockAuthManager) {
+				m.EXPECT().LogoutAll(gomock.Any(), false).Return(nil)
+				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+					"identity1": {},
+				})
+			},
+			expectedError: nil,
+		},
+		{
+			name: "invalid option",
+			option: logoutOption{
+				typ:    "invalid",
+				target: "",
+			},
+			setupMocks:    func(m *types.MockAuthManager) {},
+			expectedError: errUtils.ErrInvalidLogoutOption,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockManager := types.NewMockAuthManager(ctrl)
+			tt.setupMocks(mockManager)
+
+			ctx := context.Background()
+			err := executeLogoutOption(ctx, mockManager, tt.option, false, false, false)
+
+			if tt.expectedError != nil {
+				assert.ErrorIs(t, err, tt.expectedError)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
