@@ -224,7 +224,8 @@ func TestRenderListTable(t *testing.T) {
 			// This test just verifies the function doesn't panic.
 			// Output verification would require capturing stdout.
 			assert.NotPanics(t, func() {
-				renderListTable(tt.configs, tt.runningNames)
+				// Pass empty container info slice for test
+				renderListTable(tt.configs, tt.runningNames, []container.Info{})
 			})
 		})
 	}

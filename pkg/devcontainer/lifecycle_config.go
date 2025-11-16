@@ -2,9 +2,11 @@ package devcontainer
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // ShowConfig shows the configuration for a devcontainer.
@@ -83,11 +85,23 @@ func printMounts(config *Config) {
 	}
 }
 
+// containsRandomFunction checks if any port uses the !random YAML function.
+func containsRandomFunction(forwardPorts []interface{}) bool {
+	for _, port := range forwardPorts {
+		if str, ok := port.(string); ok {
+			if strings.Contains(str, "!random") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // printPorts prints port forwarding configuration.
 func printPorts(config *Config) {
 	ports, err := ParsePorts(config.ForwardPorts, config.PortsAttributes)
 	if err != nil {
-		fmt.Printf("\nForward Ports: Error parsing ports: %v\n", err)
+		_ = ui.Warningf("Error parsing ports: %v", err)
 		return
 	}
 	if len(ports) == 0 {
@@ -101,6 +115,11 @@ func printPorts(config *Config) {
 		} else {
 			fmt.Printf("  - %d:%d\n", port.HostPort, port.ContainerPort)
 		}
+	}
+
+	// Warn about !random values.
+	if containsRandomFunction(config.ForwardPorts) {
+		_ = ui.Warning("Ports using !random will generate new values each time Atmos processes the configuration.\nTo see actual runtime ports, use: atmos devcontainer list")
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -58,12 +59,37 @@ func (m *Manager) List(atmosConfig *schema.AtmosConfiguration) error {
 	}
 
 	// Render the table using lipgloss.
-	renderListTable(configs, runningNames)
+	renderListTable(configs, runningNames, runningContainers)
 	return nil
 }
 
+// getPortsForDisplay returns the appropriate port string for display.
+// For running containers, uses actual runtime ports from container.Info.
+// For stopped containers, returns configured ports.
+func getPortsForDisplay(name string, config *Config, runningContainers []container.Info, runningNames map[string]bool) string {
+	defer perf.Track(nil, "devcontainer.getPortsForDisplay")()
+
+	// Use actual runtime ports for running containers.
+	if runningNames[name] {
+		for _, c := range runningContainers {
+			if IsAtmosDevcontainer(c.Name) {
+				if containerName, _ := ParseContainerName(c.Name); containerName == name {
+					if len(c.Ports) > 0 {
+						return FormatPortBindings(c.Ports)
+					}
+					break
+				}
+			}
+		}
+	}
+
+	// Show configured ports for stopped containers or if no ports in runtime info.
+	ports, _ := ParsePorts(config.ForwardPorts, config.PortsAttributes)
+	return FormatPortBindings(ports)
+}
+
 // renderListTable renders devcontainer list as a formatted table.
-func renderListTable(configs map[string]*Config, runningNames map[string]bool) {
+func renderListTable(configs map[string]*Config, runningNames map[string]bool, runningContainers []container.Info) {
 	// Sort names for consistent output.
 	var names []string
 	for name := range configs {
@@ -88,9 +114,8 @@ func renderListTable(configs map[string]*Config, runningNames map[string]bool) {
 			image = fmt.Sprintf("(build: %s)", config.Build.Dockerfile)
 		}
 
-		// Get ports.
-		ports, _ := ParsePorts(config.ForwardPorts, config.PortsAttributes)
-		portsStr := FormatPortBindings(ports)
+		// Get ports using helper function.
+		portsStr := getPortsForDisplay(name, config, runningContainers, runningNames)
 
 		// Format row.
 		row := fmt.Sprintf("%s %-20s %-40s %-30s", indicator, name, image, portsStr)

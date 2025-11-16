@@ -116,8 +116,18 @@ components:
         workspaceFolder: /workspace
 ```
 
-:::tip
-When using `!random` for port forwarding in devcontainers, the generated port will be displayed when the container starts, making it easy to see which port was assigned.
+:::tip Viewing Actual Devcontainer Ports
+When using `!random` for devcontainer port forwarding, the container is created with specific random ports that remain fixed for that container's lifetime. To see which ports your running container is actually using:
+
+```bash
+# Shows actual runtime ports for running containers
+atmos devcontainer list
+
+# Or use docker/podman directly
+docker ps
+```
+
+The `atmos devcontainer config` command shows the configuration (which regenerates random values), not the actual runtime ports.
 :::
 
 ### Load Balancer Configuration
@@ -165,6 +175,16 @@ Example error:
 invalid number of arguments. The function requires exactly 2 arguments (min max): !random 1024
 ```
 
-:::tip
-Unlike environment variables or template functions, `!random` generates a new value each time Atmos processes the configuration. If you need consistent values across multiple operations, consider using `!env` with a pre-generated value or storing the result in a variable.
+:::warning Important: Values Are Not Persisted
+The `!random` function generates a **new random value every time** Atmos processes your configuration. This means:
+
+- **Not saved:** Random values are never persisted to disk
+- **Regenerated:** Each `atmos` command generates new random values
+- **Devcontainer ports:** When using `!random` for devcontainer ports:
+  - The container is created with specific port values at creation time
+  - Running `atmos devcontainer list` shows the **actual runtime ports** the container is using
+  - Running `atmos devcontainer config` shows **new random values** (not the ones the container uses)
+  - To see which ports a running container is using, use `atmos devcontainer list` or `docker ps`
+
+**For consistent values:** Use `!env` with a pre-generated value or hardcode specific ports in your configuration.
 :::

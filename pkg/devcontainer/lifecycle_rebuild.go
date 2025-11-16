@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/cloudposse/atmos/pkg/container"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -92,8 +93,14 @@ func rebuildContainer(p *rebuildParams) error {
 
 	_ = ui.Successf("Container %s rebuilt successfully", p.containerName)
 
-	// Display container information.
-	displayContainerInfo(p.config)
+	// Inspect container to get actual port information after rebuild.
+	containerInfo, err := p.runtime.Inspect(p.ctx, containerID)
+	if err != nil {
+		log.Warn("Failed to inspect container for port info", "error", err)
+		displayContainerInfo(p.config, nil)
+	} else {
+		displayContainerInfo(p.config, containerInfo)
+	}
 
 	return nil
 }

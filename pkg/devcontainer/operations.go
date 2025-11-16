@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
@@ -59,8 +60,14 @@ func createAndStartNewContainer(params *containerParams) error {
 			Err()
 	}
 
-	// Display container information.
-	displayContainerInfo(params.config)
+	// Inspect container to get actual port information after creation.
+	containerInfo, err := params.runtime.Inspect(params.ctx, containerID)
+	if err != nil {
+		log.Warn("Failed to inspect container for port info", "error", err)
+		displayContainerInfo(params.config, nil)
+	} else {
+		displayContainerInfo(params.config, containerInfo)
+	}
 
 	return nil
 }
@@ -285,7 +292,8 @@ func buildImageIfNeeded(ctx context.Context, runtime container.Runtime, config *
 }
 
 // displayContainerInfo displays key information about the container in a user-friendly format.
-func displayContainerInfo(config *Config) {
+// If containerInfo is provided, shows actual runtime ports; otherwise shows configured ports.
+func displayContainerInfo(config *Config, containerInfo *container.Info) {
 	var info []string
 
 	// Show image.
@@ -298,8 +306,10 @@ func displayContainerInfo(config *Config) {
 		info = append(info, workspaceInfo)
 	}
 
-	// Show forwarded ports.
-	if portsInfo := formatPortsInfo(config.ForwardPorts); portsInfo != "" {
+	// Show actual runtime ports if available, otherwise show configured ports.
+	if containerInfo != nil && len(containerInfo.Ports) > 0 {
+		info = append(info, fmt.Sprintf("**Ports:** %s", FormatPortBindings(containerInfo.Ports)))
+	} else if portsInfo := formatPortsInfo(config.ForwardPorts); portsInfo != "" {
 		info = append(info, portsInfo)
 	}
 

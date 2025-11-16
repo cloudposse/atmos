@@ -6,6 +6,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -140,8 +141,14 @@ func startExistingContainer(ctx context.Context, runtime container.Runtime, cont
 		return err
 	}
 
-	// Display container information.
-	displayContainerInfo(config)
+	// Inspect container to get actual port information after starting.
+	inspectedInfo, err := runtime.Inspect(ctx, containerInfo.ID)
+	if err != nil {
+		log.Warn("Failed to inspect container for port info", "error", err)
+		displayContainerInfo(config, nil)
+	} else {
+		displayContainerInfo(config, inspectedInfo)
+	}
 
 	return nil
 }
