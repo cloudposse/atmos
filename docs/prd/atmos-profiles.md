@@ -1416,6 +1416,12 @@ atmos auth list identities --profile platform-admin --filter-by-profile-tags
    - Deep merge semantics for configuration values (via `mergeConfigFile()`)
    - Recursive directory support with depth-based sorting
    - Priority file handling (atmos.yaml loaded first)
+   - **Cross-platform path handling:**
+     - All path operations use `filepath.Join` for OS-agnostic path construction
+     - Respect platform-specific separators (Windows `\`, Unix/macOS `/`)
+     - XDG directories on Unix/macOS (`~/.config`, `$XDG_CONFIG_HOME`)
+     - AppData directories on Windows (`%APPDATA%`)
+     - Path normalization via `filepath.Clean` for consistent behavior
 
 8. **Profile precedence logic:**
    - Multiple profiles: left-to-right (first profile lowest precedence)
