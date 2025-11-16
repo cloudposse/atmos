@@ -18,9 +18,12 @@ const (
 	// Character constants.
 	newline = "\n"
 	tab     = "\t"
+	space   = " "
 
-	// Format constants.
-	iconMessageFormat = "%s %s"
+	// Formatting constants.
+	iconMessageFormat    = "%s %s"
+	paragraphIndent      = "  " // 2-space indent for paragraph continuation
+	paragraphIndentWidth = 2    // Width of paragraph indent
 )
 
 var (
@@ -213,7 +216,7 @@ func Toast(icon, message string) error {
 	if err != nil {
 		return err
 	}
-	formatted := f.Toast(icon, message) + newline
+	formatted := f.Toast(icon, message) // formatter.Toast() already includes trailing newline
 	return f.terminal.Write(formatted)
 }
 
@@ -224,7 +227,7 @@ func Toastf(icon, format string, a ...interface{}) error {
 	if err != nil {
 		return err
 	}
-	formatted := f.Toastf(icon, format, a...) + newline
+	formatted := f.Toastf(icon, format, a...) // formatter.Toastf() already includes trailing newline
 	return f.terminal.Write(formatted)
 }
 
@@ -306,14 +309,38 @@ func (f *formatter) StatusMessage(icon string, style *lipgloss.Style, text strin
 }
 
 // Toast renders markdown text with an icon prefix and auto-indents multi-line content.
+// Returns the formatted string with a trailing newline.
 func (f *formatter) Toast(icon, message string) string {
 	result, _ := f.toastMarkdown(icon, nil, message)
-	return result
+	return result + newline
 }
 
 // Toastf renders formatted markdown text with an icon prefix.
 func (f *formatter) Toastf(icon, format string, a ...interface{}) string {
 	return f.Toast(icon, fmt.Sprintf(format, a...))
+}
+
+// trimTrailingWhitespace splits rendered markdown by newlines and trims trailing spaces
+// that Glamour adds for padding. For empty lines (all whitespace), it preserves
+// the leading indent (first 2 spaces) to maintain paragraph structure.
+func trimTrailingWhitespace(rendered string) []string {
+	lines := strings.Split(rendered, newline)
+	for i := range lines {
+		trimmed := strings.TrimRight(lines[i], space)
+		// If line became empty after trimming but had content before,
+		// it was an empty line with indent - preserve the indent
+		if trimmed == "" && len(lines[i]) > 0 {
+			// Preserve up to 2 leading spaces for paragraph indent
+			if len(lines[i]) >= paragraphIndentWidth {
+				lines[i] = paragraphIndent
+			} else {
+				lines[i] = lines[i][:len(lines[i])] // Keep whatever spaces there were
+			}
+		} else {
+			lines[i] = trimmed
+		}
+	}
+	return lines
 }
 
 // toastMarkdown renders markdown text with preserved newlines, an icon prefix, and auto-indents multi-line content.
@@ -325,8 +352,15 @@ func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text strin
 		return "", err
 	}
 
-	// Trim leading and trailing newlines
-	rendered = strings.Trim(rendered, "\n")
+	// Glamour adds 1 leading newline and 2 trailing newlines to every output
+	// Remove these, but preserve any newlines that were in the original message
+	rendered = strings.TrimPrefix(rendered, "\n")   // Remove Glamour's leading newline
+	rendered = strings.TrimSuffix(rendered, "\n\n") // Remove Glamour's trailing newlines
+	// If there's still a trailing newline, it was from the original message
+	if !strings.HasSuffix(rendered, "\n") && strings.HasSuffix(text, "\n") {
+		// Original had trailing newline but rendering lost it, add it back
+		rendered += "\n"
+	}
 
 	// Style the icon if color is supported
 	var styledIcon string
@@ -336,26 +370,35 @@ func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text strin
 		styledIcon = icon
 	}
 
-	// Split by newlines
-	lines := strings.Split(rendered, "\n")
+	// Split by newlines and trim trailing padding that Glamour adds
+	lines := trimTrailingWhitespace(rendered)
 
 	if len(lines) == 0 {
 		return styledIcon, nil
 	}
 
 	if len(lines) == 1 {
-		return fmt.Sprintf(iconMessageFormat, styledIcon, lines[0]), nil
+		// For single line: trim leading spaces from Glamour's paragraph indent
+		// since the icon+space already provides visual separation
+		line := strings.TrimLeft(lines[0], space)
+		return fmt.Sprintf(iconMessageFormat, styledIcon, line), nil
 	}
 
-	// Calculate indent for multi-line (icon width)
-	// Info icon ℹ is 2 characters wide in most terminals
-	iconWidth := 2
-	indent := strings.Repeat(" ", iconWidth)
+	// Multi-line: trim leading spaces from first line (goes next to icon)
+	lines[0] = strings.TrimLeft(lines[0], space)
 
-	// Multi-line: first line with icon, rest indented
+	// Multi-line: first line with icon, rest indented to align under first line's text
 	result := fmt.Sprintf(iconMessageFormat, styledIcon, lines[0])
+
+	// Calculate indent: icon width + 1 space from iconMessageFormat
+	// Use lipgloss.Width to handle multi-cell characters like emojis
+	iconWidth := lipgloss.Width(icon)
+	indent := strings.Repeat(space, iconWidth+1) // +1 for the space in "%s %s" format
+
 	for i := 1; i < len(lines); i++ {
-		result += "\n" + indent + lines[i]
+		// Glamour already added 2-space paragraph indent, replace with our calculated indent
+		line := strings.TrimLeft(lines[i], space) // Remove Glamour's indent
+		result += newline + indent + line
 	}
 
 	return result, nil
@@ -366,7 +409,19 @@ func (f *formatter) renderToastMarkdown(content string) (string, error) {
 	// Build glamour options with compact toast stylesheet
 	var opts []glamour.TermRendererOption
 
-	// No word wrap for toast - preserve formatting
+	// Enable word wrap for toast messages to respect terminal width
+	// Note: Glamour adds padding to fill width - we trim it later
+	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
+	if maxWidth == 0 {
+		// Use terminal width if available
+		termWidth := f.terminal.Width(terminal.Stdout)
+		if termWidth > 0 {
+			maxWidth = termWidth
+		}
+	}
+	if maxWidth > 0 {
+		opts = append(opts, glamour.WithWordWrap(maxWidth))
+	}
 	opts = append(opts, glamour.WithPreservedNewLines())
 
 	// Get theme-based glamour style and modify it for compact toast rendering

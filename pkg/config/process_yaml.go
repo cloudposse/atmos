@@ -58,23 +58,33 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 		return nil
 	}
 
-	if node.Kind == yaml.MappingNode {
+	switch node.Kind {
+	case yaml.DocumentNode:
+		// Document nodes are just wrappers, process their content.
+		for _, child := range node.Content {
+			if err := processNode(child, v, currentPath); err != nil {
+				return err
+			}
+		}
+
+	case yaml.MappingNode:
 		if err := processMappingNode(node, v, currentPath); err != nil {
 			return err
 		}
-	}
 
-	if node.Kind == yaml.ScalarNode && node.Tag != "" {
-		if err := processScalarNode(node, v, currentPath); err != nil {
+	case yaml.SequenceNode:
+		if err := processSequenceNode(node, v, currentPath); err != nil {
 			return err
+		}
+
+	case yaml.ScalarNode:
+		if node.Tag != "" {
+			if err := processScalarNode(node, v, currentPath); err != nil {
+				return err
+			}
 		}
 	}
 
-	// Determine if parent is a sequence to correctly index children
-	parentIsSeq := node.Kind == yaml.SequenceNode
-	if err := processChildren(node.Content, v, currentPath, parentIsSeq); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -95,17 +105,163 @@ func processMappingNode(node *yaml.Node, v *viper.Viper, currentPath string) err
 	return nil
 }
 
-func processChildren(children []*yaml.Node, v *viper.Viper, currentPath string, parentIsSeq bool) error {
-	for idx, child := range children {
-		newPath := currentPath
-		if parentIsSeq {
-			newPath = fmt.Sprintf("%s[%d]", currentPath, idx)
+func processSequenceNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	// Check if any child in the sequence has a custom tag that needs processing.
+	needsProcessing := false
+	for _, child := range node.Content {
+		if child.Kind == yaml.ScalarNode && hasCustomTag(child.Tag) {
+			needsProcessing = true
+			break
 		}
-		if err := processNode(child, v, newPath); err != nil {
-			return err
+		if child.Kind == yaml.MappingNode && containsCustomTags(child) {
+			needsProcessing = true
+			break
 		}
 	}
+
+	// If no custom tags, skip processing and let normal YAML handling work.
+	if !needsProcessing {
+		return nil
+	}
+
+	// Collect all processed values from the sequence.
+	var values []any
+
+	for idx, child := range node.Content {
+		// Build the path for this sequence element.
+		elementPath := fmt.Sprintf("%s[%d]", currentPath, idx)
+
+		// Handle different node types in the sequence.
+		if child.Kind == yaml.ScalarNode && child.Tag != "" {
+			// Scalar with a tag: process the tag and get the value.
+			value, err := processScalarNodeValue(child)
+			if err != nil {
+				return err
+			}
+			values = append(values, value)
+			// Also set the individual element for path-based access.
+			v.Set(elementPath, value)
+			// Clear the tag to avoid re-processing.
+			child.Tag = ""
+		} else if child.Kind == yaml.MappingNode {
+			// Nested mapping: process recursively to enable path-based access.
+			if err := processMappingNode(child, v, elementPath); err != nil {
+				return err
+			}
+			// Decode the mapping for the slice.
+			var val any
+			if err := child.Decode(&val); err != nil {
+				return err
+			}
+			values = append(values, val)
+		} else {
+			// Other types: decode normally.
+			var val any
+			if err := child.Decode(&val); err != nil {
+				return err
+			}
+			values = append(values, val)
+			// Set the individual element.
+			v.Set(elementPath, val)
+		}
+	}
+
+	// Set the complete sequence in Viper.
+	if len(values) > 0 && currentPath != "" {
+		v.Set(currentPath, values)
+	}
+
 	return nil
+}
+
+// hasCustomTag checks if a tag is a custom Atmos YAML function tag.
+func hasCustomTag(tag string) bool {
+	return strings.HasPrefix(tag, u.AtmosYamlFuncEnv) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncExec) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncInclude) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncGitRoot) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncRandom)
+}
+
+// containsCustomTags recursively checks if a node or its descendants contain custom tags.
+func containsCustomTags(node *yaml.Node) bool {
+	if node == nil {
+		return false
+	}
+
+	// Check current node.
+	if hasCustomTag(node.Tag) {
+		return true
+	}
+
+	// Recursively check all children.
+	for _, child := range node.Content {
+		if containsCustomTags(child) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// processScalarNodeValue processes a scalar node with a tag and returns its value.
+func processScalarNodeValue(node *yaml.Node) (any, error) {
+	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
+
+	switch {
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncEnv):
+		envValue, err := u.ProcessTagEnv(strFunc)
+		if err != nil {
+			log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+			return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncEnv, node.Value, err)
+		}
+		return strings.TrimSpace(envValue), nil
+
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncExec):
+		execValue, err := u.ProcessTagExec(strFunc)
+		if err != nil {
+			log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+			return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncExec, node.Value, err)
+		}
+		return execValue, nil
+
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncInclude):
+		includeValue, err := u.UnmarshalYAML[map[any]any](fmt.Sprintf("%s: %s %s", "include_data", node.Tag, node.Value))
+		if err != nil {
+			log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+			return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+		}
+		if includeValue != nil {
+			if data, ok := includeValue["include_data"]; ok {
+				return data, nil
+			}
+		}
+		return nil, nil
+
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot):
+		gitRootValue, err := u.ProcessTagGitRoot(strFunc)
+		if err != nil {
+			log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+			return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncGitRoot, node.Value, err)
+		}
+		return strings.TrimSpace(gitRootValue), nil
+
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncRandom):
+		randomValue, err := u.ProcessTagRandom(strFunc)
+		if err != nil {
+			log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+			return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncRandom, node.Value, err)
+		}
+		return randomValue, nil
+
+	default:
+		// Unknown tag, decode as-is.
+		var val any
+		if err := node.Decode(&val); err != nil {
+			return nil, err
+		}
+		return val, nil
+	}
 }
 
 func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) error {

@@ -2,6 +2,7 @@ package devcontainer
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"dario.cat/mergo"
@@ -423,14 +424,9 @@ type indexedValue struct {
 }
 
 func sortIndexedValues(vals []any) {
-	// Simple bubble sort for small arrays (devcontainer configs are small)
-	for i := 0; i < len(vals); i++ {
-		for j := i + 1; j < len(vals); j++ {
-			if vals[i].(indexedValue).index > vals[j].(indexedValue).index {
-				vals[i], vals[j] = vals[j], vals[i]
-			}
-		}
-	}
+	sort.Slice(vals, func(i, j int) bool {
+		return vals[i].(indexedValue).index < vals[j].(indexedValue).index
+	})
 }
 
 // LoadAllConfigs loads all devcontainer configurations from atmos.yaml.

@@ -121,37 +121,37 @@ func TestFormatPortsInfo(t *testing.T) {
 		{
 			name:         "single int port",
 			forwardPorts: []interface{}{8080},
-			expected:     "Ports: 8080",
+			expected:     "**Ports:** 8080",
 		},
 		{
 			name:         "single float64 port",
 			forwardPorts: []interface{}{8080.0},
-			expected:     "Ports: 8080",
+			expected:     "**Ports:** 8080",
 		},
 		{
 			name:         "single string port",
 			forwardPorts: []interface{}{"8080:8080"},
-			expected:     "Ports: 8080:8080",
+			expected:     "**Ports:** 8080:8080",
 		},
 		{
 			name:         "multiple int ports",
 			forwardPorts: []interface{}{8080, 3000, 5432},
-			expected:     "Ports: 8080, 3000, 5432",
+			expected:     "**Ports:** 8080, 3000, 5432",
 		},
 		{
 			name:         "mixed types",
 			forwardPorts: []interface{}{8080, 3000.0, "5432:5432"},
-			expected:     "Ports: 8080, 3000, 5432:5432",
+			expected:     "**Ports:** 8080, 3000, 5432:5432",
 		},
 		{
 			name:         "float64 with decimals gets truncated",
 			forwardPorts: []interface{}{8080.9},
-			expected:     "Ports: 8080",
+			expected:     "**Ports:** 8080",
 		},
 		{
 			name:         "unsupported type ignored",
 			forwardPorts: []interface{}{8080, true, "3000"}, // bool is ignored.
-			expected:     "Ports: 8080, 3000",
+			expected:     "**Ports:** 8080, 3000",
 		},
 	}
 
