@@ -38,7 +38,7 @@ auth:
       via:
         provider: github-oidc
       default: true  # Default for github-oidc provider
-```
+```text
 
 **The Problem:**
 - **Interactive (TTY)**: User selects from 3 defaults (works as intended - provider-based favorites)
@@ -108,7 +108,7 @@ auth:
         provider: github-oidc-provider
       principal:
         assume_role: "arn:aws:iam::123456789012:role/GitHubActionsDeployRole"
-```
+```text
 
 **Precedence:**
 
@@ -118,7 +118,7 @@ auth:
 3. auth.defaults.identity        (global selected default) ← NEW
 4. identity.default: true        (favorites - interactive selection or error)
 5. Error: no default identity
-```
+```text
 
 ### Option 2: `auth.settings` (Alternative)
 
@@ -136,7 +136,7 @@ auth:
 
   identities:
     # ... same as above
-```
+```text
 
 **Note:** Less structured than Option 1, but flatter hierarchy.
 
@@ -164,7 +164,7 @@ type AuthDefaults struct {
     Console  *ConsoleConfig  `yaml:"console,omitempty" json:"console,omitempty" mapstructure:"console"`     // Default console config
     Keyring  *KeyringConfig  `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`     // Default keyring config
 }
-```
+```text
 
 ### Implementation Changes
 
@@ -222,7 +222,7 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
         return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
     }
 }
-```
+```text
 
 ### Profile Usage Examples
 
@@ -247,7 +247,7 @@ auth:
     github-oidc-provider:
       kind: github/oidc
       region: us-east-1
-```
+```text
 
 **Usage:**
 ```bash
@@ -256,7 +256,7 @@ ATMOS_PROFILE=ci atmos terraform apply component -s prod
 
 # Override with explicit identity
 ATMOS_PROFILE=ci atmos terraform apply component -s prod --identity different-identity
-```
+```text
 
 #### Base Config with Favorites
 
@@ -283,7 +283,7 @@ auth:
       principal:
         account_id: "123456789012"
         permission_set: ReadOnlyAccess
-```
+```text
 
 **Behavior:**
 - **Interactive (TTY)**: User chooses from `developer-sandbox` and `developer-prod`
@@ -296,7 +296,7 @@ auth:
 auth:
   defaults:
     identity: developer-sandbox  # Overrides base config favorites
-```
+```text
 
 **Behavior:**
 - When `--profile developer` active: Uses `developer-sandbox` automatically
@@ -325,7 +325,7 @@ auth:
       kind: aws/permission-set
       # Uses global default: 8h
       # ... identity config
-```
+```text
 
 **Behavior:**
 - `short-lived` identity uses 1h session (identity-level override)
@@ -346,7 +346,7 @@ This proposal introduces **two distinct concepts** of defaults, each serving a d
 auth:
   defaults:
     identity: my-chosen-identity  # THE selected default (singular)
-```
+```text
 
 **Characteristics:**
 - **Deterministic** - Always returns the same identity
@@ -370,7 +370,7 @@ auth:
       default: true  # Favorite #2
     identity-c:
       default: true  # Favorite #3
-```
+```text
 
 **Characteristics:**
 - **Non-deterministic** - Requires user choice when multiple exist
@@ -391,7 +391,7 @@ auth:
       default: true  # Also a favorite
     identity-b:
       default: true  # Favorite
-```
+```text
 
 **Resolution:**
 1. `auth.defaults.identity` is checked first → Returns `identity-a` deterministically
@@ -415,7 +415,7 @@ atmos terraform plan component -s stack
 auth:
   defaults:
     identity: my-identity
-```
+```text
 
 **Precedence with environment variables:**
 ```text
@@ -425,7 +425,7 @@ auth:
 4. auth.defaults.identity         (selected default via config)
 5. identity.default: true         (favorites)
 6. Error: no default identity
-```
+```text
 
 **Note:** `ATMOS_DEFAULTS_IDENTITY` env var takes precedence over `auth.defaults.identity` config, following Viper's environment variable precedence pattern.
 
@@ -454,7 +454,7 @@ Console Session Resolution (per identity):
 1. identity.console.session_duration  (identity-specific override)
 2. auth.defaults.console.session_duration (global default) ← NEW
 3. Provider console default           (provider-level default)
-```
+```text
 
 ## Use Cases
 
@@ -472,7 +472,7 @@ auth:
   identities:
     github-oidc-identity:
       # ... config
-```
+```text
 
 **Result:** CI runs without TTY errors, automatically uses `github-oidc-identity`.
 
@@ -494,7 +494,7 @@ auth:
       default: true  # Favorite for quick --identity selection
     platform-admin:
       default: false  # Not a favorite (requires explicit --identity)
-```
+```text
 
 **Result:**
 - Default commands use `developer-sandbox`
@@ -526,7 +526,7 @@ auth:
     platform-admin:
       kind: aws/permission-set
       # ... config
-```
+```text
 
 **Result:**
 - `--profile audit` automatically uses `audit-read-only`
@@ -549,7 +549,7 @@ auth:
       session:
         duration: "1h"  # Override for this identity
     # Other identities inherit 12h default
-```
+```text
 
 **Result:** Reduces configuration duplication, clear overrides.
 
@@ -652,7 +652,7 @@ auth:
 
 ```bash
 ATMOS_DEFAULT_IDENTITY=github-oidc-identity
-```
+```text
 
 **Pros:**
 - Simple, no schema changes
@@ -671,7 +671,7 @@ ATMOS_DEFAULT_IDENTITY=github-oidc-identity
 profiles:
   ci:
     default_identity: github-oidc-identity
-```
+```text
 
 **Pros:**
 - Clear profile scope

@@ -301,8 +301,9 @@ func TestRenderProfileOutput(t *testing.T) {
 			format:      "",
 			expectError: true,
 			validate: func(t *testing.T, output string, err error) {
-				// Empty format is invalid - should error.
 				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrInvalidFormat)
+				assert.Empty(t, output)
 			},
 		},
 	}

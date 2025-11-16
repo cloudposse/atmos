@@ -37,7 +37,7 @@ auth:
       principal:
         account_id: "123456789012"
         permission_set: DeveloperAccess
-```
+```text
 
 ### Challenges
 
@@ -63,7 +63,7 @@ auth:
 ```bash
 # In GitHub Actions workflow
 ATMOS_PROFILE=ci atmos terraform apply component -s prod
-```
+```text
 
 #### UC2: Role-Based Defaults
 **Actor**: Developer vs. Platform Engineer
@@ -81,7 +81,7 @@ atmos terraform apply vpc -s prod --profile platform-admin
 
 # Security audit
 atmos describe stacks --profile audit
-```
+```text
 
 #### UC3: Debug/Development Profile
 **Actor**: Atmos core developer or user troubleshooting issues
@@ -90,7 +90,7 @@ atmos describe stacks --profile audit
 ```bash
 # Enable trace logging and profiling
 atmos terraform plan vpc -s dev --profile debug
-```
+```text
 
 #### UC4: Testing Profiles
 **Actor**: Automated test suite
@@ -99,7 +99,7 @@ atmos terraform plan vpc -s dev --profile debug
 ```bash
 # Run tests with test-specific configuration
 ATMOS_PROFILE=test make test-integration
-```
+```text
 
 ## Goals
 
@@ -133,7 +133,7 @@ profiles:
   base_path: "./profiles"        # Base directory for profiles (relative or absolute)
   # OR
   base_path: "/shared/profiles"  # Absolute path
-```
+```text
 
 **FR1.2**: Profile discovery MUST search multiple locations in precedence order:
 
@@ -205,7 +205,7 @@ infrastructure/
     # Additional prod-specific overrides
     logs:
       level: Warning                  # Override ci profile's Info level
-```
+```text
 
 #### FR2: Profile Activation
 
@@ -219,13 +219,13 @@ atmos terraform plan vpc -s dev --profile developer,debug
 
 # Multiple profiles via repeated flag
 atmos terraform plan vpc -s dev --profile developer --profile debug
-```
+```text
 
 **FR2.2**: Profiles MUST be activated via `ATMOS_PROFILE` environment variable (comma-separated)
 ```bash
 ATMOS_PROFILE=ci atmos terraform apply vpc -s prod
 ATMOS_PROFILE=developer,debug atmos describe stacks
-```
+```text
 
 **FR2.3**: Multiple profile specification methods:
 - Comma-separated: `--profile developer,debug`
@@ -293,7 +293,7 @@ Available Profiles
 
 Tip: View profile details with 'atmos profile show <profile>'
      Use a profile with 'atmos <command> --profile <profile>'
-```
+```text
 
 **FR5.2.1**: Table styling MUST use lipgloss with:
 - Header row with bold styling
@@ -342,7 +342,7 @@ auth:
 logs:
   level: Warning
   file: /dev/stderr
-```
+```text
 
 **Note**: The "Merged Configuration" section uses `u.GetHighlightedYAML()` for syntax highlighting (keys in blue, values in appropriate colors, proper indentation).
 
@@ -419,7 +419,7 @@ Available Identities
 │ dev-sandbox       │ aws/permission-… │ developer   │
 │ local-testing     │ aws/static       │ local       │
 └───────────────────┴──────────────────┴─────────────┘
-```
+```text
 
 **FR6.8**: Tag filtering configuration example:
 ```yaml
@@ -429,7 +429,7 @@ metadata:
   tags: ["developer", "local"]
 
 # When filtering is enabled, only resources with these tags will be shown
-```
+```text
 
 **FR6.9**: Implementation requirements (Phase 2):
 When this feature is implemented, the following tasks must be completed:
@@ -484,7 +484,7 @@ type ConfigMetadata struct {
     Tags        []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
     Deprecated  bool     `yaml:"deprecated,omitempty" json:"deprecated,omitempty" mapstructure:"deprecated"`
 }
-```
+```text
 
 **TR2.4**: JSON Schema definitions in `pkg/datafetcher/schema/` MUST include top-level `profiles` configuration
 
@@ -524,7 +524,7 @@ func mergeConfigMetadata(existing *ConfigMetadata, incoming *ConfigMetadata) {
         existing.Tags = appendUnique(existing.Tags, incoming.Tags)
     }
 }
-```
+```text
 
 **Note**: Tag-based filtering has been moved to a separate Functional Requirement (FR6: Tag-Based Resource Filtering) and scoped as a Phase 2 enhancement. It is not part of the initial profiles implementation.
 
@@ -598,7 +598,7 @@ func mergeConfigMetadata(existing *ConfigMetadata, incoming *ConfigMetadata) {
 **TR5.12**: `cmd/describe_config.go` MUST add `--provenance` flag similar to `cmd/describe_component.go`:
 ```go
 describeConfigCmd.PersistentFlags().Bool("provenance", false, "Enable provenance tracking to show where configuration values originated")
-```
+```text
 
 **TR5.13**: `internal/exec/describe_config.go` MUST accept `Provenance bool` parameter in execution params
 
@@ -673,7 +673,7 @@ describeConfigCmd.PersistentFlags().Bool("provenance", false, "Enable provenance
 │ 5. Unmarshal Final Configuration                                 │
 │    • Return merged AtmosConfiguration                            │
 └─────────────────────────────────────────────────────────────────┘
-```
+```text
 
 ### Profile Configuration Examples
 
@@ -688,7 +688,7 @@ profiles:
 
 # This adds to the profile search locations
 # (XDG and other locations are still searched)
-```
+```text
 
 **Profile location precedence:**
 
@@ -718,7 +718,7 @@ profiles:
 
 ```bash
 atmos profile list
-```
+```text
 
 Output:
 ```text
@@ -735,12 +735,12 @@ Available Profiles
 
 Tip: View profile details with 'atmos profile show <profile>'
      Use a profile with 'atmos <command> --profile <profile>'
-```
+```text
 
 JSON output format:
 ```bash
 atmos profile list --format json
-```
+```text
 
 Output:
 ```json
@@ -762,13 +762,13 @@ Output:
     }
   ]
 }
-```
+```text
 
 #### Viewing Profile Details
 
 ```bash
 atmos profile show developer
-```
+```text
 
 Output:
 ```text
@@ -798,14 +798,14 @@ auth:
 logs:
   level: Warning
   file: /dev/stderr
-```
+```text
 
 Note: The YAML configuration is syntax highlighted with colors (similar to `atmos describe config`).
 
 Show only file list:
 ```bash
 atmos profile show developer --files
-```
+```text
 
 Output:
 ```text
@@ -819,12 +819,12 @@ Files (in merge order)
   1. /infrastructure/atmos/.atmos/profiles/developer/auth.yaml
   2. /infrastructure/atmos/.atmos/profiles/developer/logging.yaml
   3. ~/.config/atmos/profiles/developer/overrides.yaml
-```
+```text
 
 JSON format:
 ```bash
 atmos profile show developer --format json
-```
+```text
 
 Output:
 ```json
@@ -856,15 +856,15 @@ Output:
     }
   }
 }
-```
+```text
 
 Show with provenance tracking:
 ```bash
 atmos profile show developer --provenance
-```
+```text
 
 Output:
-```
+```text
 Profile: developer
 
 Locations
@@ -891,7 +891,7 @@ auth:
 logs:
   level: Warning               # profiles/developer/overrides.yaml:2 (XDG)
   file: /dev/stderr            # .atmos/profiles/developer/logging.yaml:3
-```
+```text
 
 Note: Provenance annotations show the source file and line number where each value was defined. If a value was overridden, the most recent source is shown.
 
@@ -943,7 +943,7 @@ settings:
   terminal:
     color: false
     pager: false
-```
+```text
 
 Usage:
 ```bash
@@ -958,7 +958,7 @@ atmos terraform apply component -s prod --profile ci --identity different-identi
 
 # Or via environment variable
 ATMOS_PROFILE=ci ATMOS_IDENTITY=different-identity atmos terraform apply component -s prod
-```
+```text
 
 **How profiles interact with identity selection (with `auth.defaults`):**
 - Profile sets `auth.defaults.identity: github-oidc-identity` (selected default)
@@ -967,13 +967,13 @@ ATMOS_PROFILE=ci ATMOS_IDENTITY=different-identity atmos terraform apply compone
 - With `ATMOS_IDENTITY=different-identity`: Overrides profile default, uses `different-identity`
 
 **Precedence chain:**
-```
+```text
 1. --identity=explicit         (CLI flag with value)
 2. ATMOS_IDENTITY             (environment variable)
 3. auth.defaults.identity     (selected default from profile)
 4. identity.default: true     (favorites - interactive or error)
 5. Error: no default identity
-```
+```text
 
 **Why this works in CI:**
 - `auth.defaults.identity` provides deterministic selection (no TTY needed)
@@ -1042,7 +1042,7 @@ logs:
 components:
   terraform:
     auto_generate_backend_file: true
-```
+```text
 
 Usage:
 ```bash
@@ -1057,7 +1057,7 @@ atmos terraform plan vpc -s dev --profile developer --identity
 
 # Explicit identity override
 atmos terraform plan vpc -s dev --profile developer --identity developer-prod
-```
+```text
 
 **Benefits of combining `auth.defaults.identity` with `identity.default: true`:**
 - `auth.defaults.identity: developer-sandbox` - Automatic default (no prompts)
@@ -1093,7 +1093,7 @@ settings:
   terminal:
     color: true
     pager: false
-```
+```text
 
 Usage:
 ```bash
@@ -1108,7 +1108,7 @@ ATMOS_PROFILE=developer,debug atmos terraform plan vpc -s dev
 
 # Debug output goes to ./atmos-debug.log
 # CPU profile saved to ./atmos-profile.prof
-```
+```text
 
 #### Describe Config with Provenance
 
@@ -1116,10 +1116,10 @@ Show where configuration values originated (including active profiles):
 
 ```bash
 atmos describe config --profile developer --provenance
-```
+```text
 
 Output:
-```
+```text
 Active Profiles: developer
 
 Configuration (with provenance)
@@ -1149,14 +1149,14 @@ components:
 settings:
   terminal:
     color: true                     # atmos.yaml:15
-```
+```text
 
 Note: Values from active profiles show `profiles/<name>/<file>` as the source. Values from base `atmos.yaml` show `atmos.yaml` as the source. This helps users understand which configurations are coming from profiles vs. base config.
 
 With multiple profiles:
 ```bash
 atmos describe config --profile developer,debug --provenance
-```
+```text
 
 Output shows precedence (rightmost profile wins):
 ```text
@@ -1172,7 +1172,7 @@ profiler:
 settings:
   terminal:
     pager: false                    # profiles/debug/terminal.yaml:4 (override)
-```
+```text
 
 **Profile composition behavior:**
 - When using `--profile developer,debug`:
@@ -1231,14 +1231,14 @@ auth:
       tags: ["ci", "github-actions"]  # Does NOT match profile tags
       via:
         provider: github-oidc-provider
-```
+```text
 
 **Usage with Tag Filtering:**
 
 ```bash
 # List identities with tag filtering enabled
 atmos auth list identities --profile developer --filter-by-profile-tags
-```
+```text
 
 **Output (filtered):**
 ```text
@@ -1252,14 +1252,14 @@ Available Identities (filtered by profile tags: developer, local, development)
 └───────────────────┴────────────────────┴────────────────────────┘
 
 Showing 2 of 4 total identities (filtered by tags)
-```
+```text
 
 **Without tag filtering:**
 
 ```bash
 # Show all identities regardless of tags
 atmos auth list identities --profile developer
-```
+```text
 
 **Output (unfiltered):**
 ```text
@@ -1275,7 +1275,7 @@ Available Identities
 └───────────────────┴────────────────────┴────────────────────────┘
 
 Showing 4 identities
-```
+```text
 
 **Benefits:**
 - **Reduces noise** - Only see relevant resources for your current context
@@ -1288,7 +1288,7 @@ Showing 4 identities
 ```bash
 # Activate both developer and ci profiles
 atmos auth list identities --profile developer,ci --filter-by-profile-tags
-```
+```text
 
 **Result:**
 - Profile tags combined: `["developer", "local", "development", "ci", "github-actions"]`
@@ -1327,7 +1327,7 @@ auth:
       kind: aws/sso
       region: us-east-1
       start_url: https://prod.awsapps.com/start
-```
+```text
 
 Usage:
 ```bash
@@ -1335,7 +1335,7 @@ atmos terraform apply vpc -s prod --profile platform-admin
 
 # With tag filtering: Only shows admin-tagged identities
 atmos auth list identities --profile platform-admin --filter-by-profile-tags
-```
+```text
 
 ### Implementation Plan
 
@@ -1560,7 +1560,7 @@ Available profiles:
 Profile location: /infrastructure/atmos/profiles/
 
 Tip: Create profile directory with: mkdir -p /infrastructure/atmos/profiles/ci
-```
+```text
 
 #### Invalid Profile Configuration
 ```text
@@ -1572,7 +1572,7 @@ Syntax error in /infrastructure/atmos/profiles/ci/auth.yaml:
 Profile: ci
 File: auth.yaml
 Path: /infrastructure/atmos/profiles/ci/auth.yaml
-```
+```text
 
 #### Multiple Profiles with Conflicts
 ```text
@@ -1583,7 +1583,7 @@ Setting 'logs.level' is defined in multiple profiles:
   • debug: Trace
 
 Using value from last profile: debug (Trace)
-```
+```text
 
 ### No Impact on Existing Functionality
 
@@ -1622,7 +1622,7 @@ auth:
 
 # In TTY: Interactive selection (works)
 # In CI: Error - "multiple default identities" (breaks)
-```
+```text
 
 **With `auth.defaults.identity` in profiles:**
 ```yaml
@@ -1633,7 +1633,7 @@ auth:
 
 # In TTY: Uses github-oidc-identity (works)
 # In CI: Uses github-oidc-identity (works)
-```
+```text
 
 ### How Profiles Use Auth Defaults
 
@@ -1644,7 +1644,7 @@ auth:
   defaults:
     identity: github-oidc-identity  # Required for CI
     # No identity.default: true needed
-```
+```text
 
 **Pattern 2: Developer Profile (Interactive + Default)**
 ```yaml
@@ -1657,7 +1657,7 @@ auth:
       default: true                  # Also mark as favorite
     developer-prod:
       default: true                  # Favorite for quick switching
-```
+```text
 
 **Pattern 3: Base Config (Favorites Only)**
 ```yaml
@@ -1671,7 +1671,7 @@ auth:
       default: true  # Favorite
   # TTY: Interactive selection
   # CI: Error (intentional - forces explicit --identity or profile usage)
-```
+```text
 
 ### Precedence with Profiles
 
@@ -1683,14 +1683,14 @@ When profiles are active, the full precedence chain is:
 3. auth.defaults.identity         (from active profile) ← Profiles use this
 4. identity.default: true         (favorites from base or profile)
 5. Error: no default identity
-```
+```text
 
 **Example with multiple profiles:**
 ```bash
 # Both profiles set auth.defaults.identity
 atmos terraform plan --profile developer,ci
 # Result: Uses ci profile's auth.defaults.identity (rightmost wins)
-```
+```text
 
 ### Key Benefits for Profiles
 
@@ -1748,7 +1748,7 @@ import:
 # Override specific settings
 logs:
   level: Warning             # Override ci profile's Info level
-```
+```text
 
 This leverages Atmos's existing import resolution, cycle detection, and merge logic without requiring new code.
 
@@ -1769,7 +1769,7 @@ Provide official profile templates via `atmos profile init`:
 ```bash
 atmos profile init --template github-actions --name ci
 atmos profile init --template developer --name dev
-```
+```text
 
 This would generate starter profile directories with common configurations. May not be needed if profiles are simple enough to create manually.
 
@@ -1787,7 +1787,7 @@ atmos profile validate ci
 # ✗ terminal.yaml - Syntax error at line 5: unexpected key 'invalid_field'
 #
 # Profile validation failed: 1 error found
-```
+```text
 
 **Use cases:**
 - Pre-commit hooks to validate profile changes
