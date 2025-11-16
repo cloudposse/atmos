@@ -1,5 +1,5 @@
 
-👽 test darwin/arm64
+👽 test linux/amd64
 
 Validate the authentication configuration in atmos.yaml for syntax and logical  
 errors.                                                                         

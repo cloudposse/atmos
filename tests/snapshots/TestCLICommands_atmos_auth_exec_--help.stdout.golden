@@ -1,5 +1,5 @@
 
-👽 test darwin/arm64
+👽 test linux/amd64
 
 Execute a command with the authenticated identity's environment variables set.  
 Use -- to separate Atmos flags from the command's native arguments.             
