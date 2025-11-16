@@ -1236,8 +1236,9 @@ func initCobraConfig() {
 
 			pager := pager.NewWithAtmosConfig(pagerEnabled)
 			if err := pager.Run("Atmos CLI Help", buf.String()); err != nil {
-				log.Error("Failed to run pager", "error", err)
-				errUtils.OsExit(1)
+				// Pager already falls back to direct output (pkg/pager/pager.go:88-92).
+				// Just log a warning - help was still shown successfully.
+				log.Warn("Pager unavailable, content printed directly", "error", err)
 			}
 		default:
 			// Fallback for other cases.
