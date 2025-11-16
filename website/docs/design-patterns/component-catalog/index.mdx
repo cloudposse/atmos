@@ -1,17 +1,44 @@
 ---
-title: Component Catalog
+title: Component Catalog Patterns
 sidebar_position: 5
 sidebar_label: Component Catalog
-description: Component Catalog Atmos Design Pattern
+description: Component Catalog Patterns in Atmos - Strategies for Organizing Reusable Component Configurations
+id: component-catalog
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import PillBox from '@site/src/components/PillBox'
+import KeyPoints from '@site/src/components/KeyPoints'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
-The **Component Catalog** is a powerful pattern for organizing and managing the configuration of components across multiple stacks, enabling easy reuse of default configurations. Use this pattern to maintain a DRY (Don't Repeat Yourself) configuration approach, ensuring consistent and efficient deployments across various environments and regions.
+The **Component Catalog Patterns** are a collection of strategies for organizing and managing reusable component configurations across multiple stacks. These patterns enable you to maintain DRY (Don't Repeat Yourself) configuration while providing flexibility for customization across different environments, regions, and organizational units.
 </Intro>
+
+The Component Catalog is one of Atmos's most powerful features, allowing you to create a library of pre-configured components that can be easily imported and customized for different deployment contexts. Whether you're managing a simple multi-environment setup or a complex multi-organization architecture, these patterns help you maintain consistency while avoiding configuration duplication.
+
+<KeyPoints>
+- Creating a centralized library of reusable component configurations
+- Using catalogs to maintain consistency across environments while allowing customization
+- Combining catalogs with mixins for powerful configuration inheritance
+- Leveraging templates for dynamic component generation
+- Understanding when to use catalogs vs inline configuration
+</KeyPoints>
+
+## Available Patterns
+
+The Component Catalog patterns provide different approaches for organizing and managing component configurations:
+
+### Core Pattern: Basic Component Catalog
+The foundation pattern that establishes a centralized library of component configurations. This pattern creates a mirror structure of your Terraform components in the `stacks/catalog` directory, making it easy to find and manage default configurations.
+
+### Advanced Patterns
+
+#### 1. [Component Catalog with Mixins](/design-patterns/component-catalog/with-mixins)
+Combines the Component Catalog pattern with mixins to create powerful, multi-layered configuration inheritance. This pattern is ideal for complex organizational structures where you need to share configuration across multiple dimensions (regions, environments, teams).
+
+#### 2. [Component Catalog Template](/design-patterns/component-catalog/template)
+Uses Go templates within catalog configurations to dynamically generate component settings. This pattern enables sophisticated configuration logic and reduces repetition when dealing with patterns in your infrastructure.
 
 ## Use-cases
 
@@ -367,12 +394,17 @@ patterns:
 
 ## Related Patterns
 
-- [Component Catalog with Mixins](/design-patterns/component-catalog-with-mixins)
-- [Component Catalog Template](/design-patterns/component-catalog-template)
-- [Component Inheritance](/design-patterns/component-inheritance)
-- [Inline Component Configuration](/design-patterns/inline-component-configuration)
-- [Inline Component Customization](/design-patterns/inline-component-customization)
-- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
+### Component Catalog Variations
+- [Component Catalog with Mixins](/design-patterns/component-catalog/with-mixins) - Combine catalogs with mixins for multi-dimensional inheritance
+- [Component Catalog Template](/design-patterns/component-catalog/template) - Use templates for dynamic configuration generation
+
+### Alternative Approaches
+- [Component Inheritance](/design-patterns/component-inheritance) - Direct component inheritance without catalogs
+- [Inline Component Configuration](/design-patterns/inline-component-configuration) - Configure components directly in stack files
+- [Inline Component Customization](/design-patterns/inline-component-customization) - Customize components inline for simple cases
+
+### Organizational Patterns
+- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration) - Structure catalogs for complex organizations
 
 ## References
 
