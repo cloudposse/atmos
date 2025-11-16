@@ -254,7 +254,7 @@ tests:
       diff: []
       stderr:
         - "Error"
-      exit_code: 1
+      exit_code: 2
 
   - name: describe component with component name (backward compatibility)
     enabled: true

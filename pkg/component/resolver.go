@@ -72,7 +72,9 @@ func (r *Resolver) ResolveComponentFromPath(
 	// 1. Extract component info from path.
 	componentInfo, err := u.ExtractComponentInfoFromPath(atmosConfig, path)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
+		// Return the error directly to preserve detailed hints and exit codes.
+		// ExtractComponentInfoFromPath already wraps errors appropriately.
+		return "", err
 	}
 
 	// 2. Verify component type matches.
@@ -128,7 +130,9 @@ func (r *Resolver) ResolveComponentFromPathWithoutTypeCheck(
 	// 1. Extract component info from path.
 	componentInfo, err := u.ExtractComponentInfoFromPath(atmosConfig, path)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
+		// Return the error directly to preserve detailed hints and exit codes.
+		// ExtractComponentInfoFromPath already wraps errors appropriately.
+		return "", err
 	}
 
 	// 2. If stack is specified, validate component exists in stack and get actual stack key.
@@ -182,7 +186,9 @@ func (r *Resolver) ResolveComponentFromPathWithoutValidation(
 	// 1. Extract component info from path.
 	componentInfo, err := u.ExtractComponentInfoFromPath(atmosConfig, path)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
+		// Return the error directly to preserve detailed hints and exit codes.
+		// ExtractComponentInfoFromPath already wraps errors appropriately.
+		return "", err
 	}
 
 	// 2. Verify component type matches.

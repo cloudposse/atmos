@@ -3,8 +3,8 @@
 
 # Error
 
-**Error:** failed to resolve component from path: path component type does not
-match command
+**Error:** failed to resolve component from path: path is not within Atmos
+component directories
 
 ## Hints
 

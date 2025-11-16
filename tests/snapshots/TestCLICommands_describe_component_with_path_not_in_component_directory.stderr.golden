@@ -3,12 +3,21 @@
 
 # Error
 
-**Error:** invalid component
+**Error:** path is not within Atmos component directories
 
-## Explanation
+## Hints
 
-Could not find the component stacks in the stack tenant1-ue2-dev. Check that all
-the context variables are correctly defined in the stack manifests. Are the
-component and stack names correct? Did you forget an import?
+💡 Path
+/absolute/path/to/external
+conductor/hanoi/tests/fixtures/scenarios/complete/stacks
+points to the stacks configuration directory, not a component
+
+Stacks directory:
+/absolute/path/to/external
+conductor/hanoi/tests/fixtures/scenarios/complete/stacks
+
+💡 Components are located in component directories (terraform, helmfile, packer)
+Change to a component directory and use . or provide a path within a component
+directory
 
 

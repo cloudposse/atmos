@@ -110,15 +110,9 @@ var describeComponentCmd = &cobra.Command{
 			// Stack validation will happen later in ExecuteDescribeComponent.
 			componentInfo, err := u.ExtractComponentInfoFromPath(&atmosConfig, component)
 			if err != nil {
-				pathErr := errUtils.Build(errUtils.ErrPathResolutionFailed).
-					WithHintf("Failed to resolve component from path: `%s`", component).
-					WithHint("Ensure the path is within configured component directories\nRun `atmos describe config` to see component base paths").
-					WithContext("path", component).
-					WithContext("stack", stack).
-					WithContext("error", err.Error()).
-					WithExitCode(2).
-					Err()
-				return pathErr
+				// Return the error directly to preserve detailed hints and exit codes.
+				// ExtractComponentInfoFromPath already provides detailed error messages with hints.
+				return err
 			}
 			component = componentInfo.FullComponent
 		}

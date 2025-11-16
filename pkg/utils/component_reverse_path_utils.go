@@ -41,7 +41,13 @@ func ExtractComponentInfoFromPath(
 
 	log.Debug("Extracting component info from path", "original", path, "normalized", absPath)
 
-	// 2. Try to match against each component type.
+	// 2. Check if the path points to known configuration directories (stacks, workflows).
+	// These should not be treated as component paths.
+	if err := validatePathIsNotConfigDirectory(atmosConfig, absPath); err != nil {
+		return nil, err
+	}
+
+	// 3. Try to match against each component type.
 	componentTypes := []string{"terraform", "helmfile", "packer"}
 	for _, componentType := range componentTypes {
 		info, err := tryExtractComponentType(atmosConfig, absPath, componentType)
@@ -58,16 +64,69 @@ func ExtractComponentInfoFromPath(
 	}
 
 	// None of the component types matched.
+	packerBasePath := atmosConfig.Components.Packer.BasePath
+	if packerBasePath == "" {
+		packerBasePath = "components/packer"
+	}
+
 	err = errUtils.Build(errUtils.ErrPathNotInComponentDir).
-		WithHintf("Path `%s` is not within any configured component directories\n\nConfigured component base paths:\n  - Terraform: `%s`\n  - Helmfile: `%s`",
-			absPath, atmosConfig.Components.Terraform.BasePath, atmosConfig.Components.Helmfile.BasePath).
-		WithHint("Run `atmos describe config` to see configured component base paths\nEnsure you're in a component directory under one of the base paths above").
+		WithHintf("Path `%s` is not within any configured component directories\n\nConfigured component base paths:\n  - Terraform: `%s`\n  - Helmfile: `%s`\n  - Packer: `%s`",
+			absPath, atmosConfig.Components.Terraform.BasePath, atmosConfig.Components.Helmfile.BasePath, packerBasePath).
+		WithHint("Change to a component directory and use `.` or provide a path within one of the component directories above").
 		WithContext("path", absPath).
 		WithContext("terraform_base", atmosConfig.Components.Terraform.BasePath).
 		WithContext("helmfile_base", atmosConfig.Components.Helmfile.BasePath).
+		WithContext("packer_base", packerBasePath).
 		WithExitCode(2).
 		Err()
 	return nil, err
+}
+
+// validatePathIsNotConfigDirectory checks if the path points to a known configuration directory.
+// Returns an error if the path is within stacks or workflows directories.
+func validatePathIsNotConfigDirectory(atmosConfig *schema.AtmosConfiguration, absPath string) error {
+	// Get absolute paths for stack and workflow directories.
+	stacksBasePath := atmosConfig.Stacks.BasePath
+	if stacksBasePath != "" && !filepath.IsAbs(stacksBasePath) {
+		stacksBasePath, _ = filepath.Abs(stacksBasePath)
+	}
+
+	workflowsBasePath := atmosConfig.Workflows.BasePath
+	if workflowsBasePath != "" && !filepath.IsAbs(workflowsBasePath) {
+		workflowsBasePath, _ = filepath.Abs(workflowsBasePath)
+	}
+
+	// Check if path is within or equals stacks directory.
+	if stacksBasePath != "" {
+		stacksBasePath = filepath.Clean(stacksBasePath)
+		if absPath == stacksBasePath || strings.HasPrefix(absPath, stacksBasePath+string(filepath.Separator)) {
+			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
+				WithHintf("Path `%s` points to the stacks configuration directory, not a component\n\nStacks directory: `%s`",
+					absPath, stacksBasePath).
+				WithHint("Components are located in component directories (terraform, helmfile, packer)\nChange to a component directory and use `.` or provide a path within a component directory").
+				WithContext("path", absPath).
+				WithContext("stacks_base", stacksBasePath).
+				WithExitCode(2).
+				Err()
+		}
+	}
+
+	// Check if path is within or equals workflows directory.
+	if workflowsBasePath != "" {
+		workflowsBasePath = filepath.Clean(workflowsBasePath)
+		if absPath == workflowsBasePath || strings.HasPrefix(absPath, workflowsBasePath+string(filepath.Separator)) {
+			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
+				WithHintf("Path `%s` points to the workflows directory, not a component\n\nWorkflows directory: `%s`",
+					absPath, workflowsBasePath).
+				WithHint("Components are located in component directories (terraform, helmfile, packer)\nChange to a component directory and use `.` or provide a path within a component directory").
+				WithContext("path", absPath).
+				WithContext("workflows_base", workflowsBasePath).
+				WithExitCode(2).
+				Err()
+		}
+	}
+
+	return nil
 }
 
 // normalizePathForResolution converts a path to absolute, clean, and symlink-resolved form.
