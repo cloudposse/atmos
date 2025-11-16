@@ -62,3 +62,9 @@ func (a *AboutCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsB
 func (a *AboutCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
 	return nil
 }
+
+// GetAliases returns command aliases.
+// About command has no aliases.
+func (a *AboutCommandProvider) GetAliases() []internal.CommandAlias {
+	return nil
+}

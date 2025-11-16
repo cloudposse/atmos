@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -63,6 +64,10 @@ func Register(provider CommandProvider) {
 // in cmd/root.go init(). It registers all commands that have been added
 // to the registry via Register().
 //
+// This function performs registration in two phases:
+// 1. Register all primary commands to the root command
+// 2. Register command aliases to their respective parent commands
+//
 // Custom commands from atmos.yaml are processed AFTER this function
 // via processCustomCommands(), allowing custom commands to extend or
 // override built-in commands.
@@ -79,6 +84,7 @@ func RegisterAll(root *cobra.Command) error {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
 
+	// Phase 1: Register all primary commands.
 	for name, provider := range registry.providers {
 		cmd := provider.GetCommand()
 		if cmd == nil {
@@ -86,6 +92,88 @@ func RegisterAll(root *cobra.Command) error {
 		}
 
 		root.AddCommand(cmd)
+	}
+
+	// Phase 2: Register command aliases.
+	// This must happen after phase 1 to ensure parent commands exist.
+	for name, provider := range registry.providers {
+		aliases := provider.GetAliases()
+		if len(aliases) == 0 {
+			continue
+		}
+
+		// Get the original command to access subcommands.
+		originalCmd := provider.GetCommand()
+		if originalCmd == nil {
+			return fmt.Errorf("%w: provider %s", errUtils.ErrCommandNil, name)
+		}
+
+		for _, alias := range aliases {
+			// Find the parent command to add the alias under.
+			parentCmd, _, err := root.Find([]string{alias.ParentCommand})
+			if err != nil {
+				return fmt.Errorf("failed to find parent command %q for alias %q: %w", alias.ParentCommand, alias.Name, err)
+			}
+
+			// Determine which command to alias (parent or subcommand).
+			var sourceCmd *cobra.Command
+			if alias.Subcommand == "" {
+				// Alias the parent command itself.
+				sourceCmd = originalCmd
+			} else {
+				// Alias a specific subcommand.
+				sourceCmd, _, err = originalCmd.Find([]string{alias.Subcommand})
+				if err != nil {
+					return fmt.Errorf("failed to find subcommand %q for alias %q: %w", alias.Subcommand, alias.Name, err)
+				}
+				// Verify we actually found the subcommand and not just the parent.
+				if sourceCmd == originalCmd {
+					return fmt.Errorf("failed to find subcommand %q for alias %q: subcommand does not exist", alias.Subcommand, alias.Name)
+				}
+			}
+
+			// Create an alias command that delegates to the source command.
+			//
+			// Key delegation mechanisms:
+			// - Args: Enforces the same argument validation as the source
+			// - Run/RunE: Executes the source command's logic (copy whichever is non-nil)
+			// - FParseErrWhitelist: Allows the same flag parsing behavior
+			// - ValidArgsFunction: Provides the same shell completion
+			aliasCmd := &cobra.Command{
+				Use:                alias.Name,
+				Short:              alias.Short,
+				Long:               alias.Long,
+				Example:            alias.Example,
+				Args:               sourceCmd.Args,
+				Run:                sourceCmd.Run,
+				RunE:               sourceCmd.RunE,
+				FParseErrWhitelist: sourceCmd.FParseErrWhitelist,
+				ValidArgsFunction:  sourceCmd.ValidArgsFunction,
+			}
+
+			// Share flags with the source command.
+			// Using AddFlag shares the same flag instance, which means:
+			// 1. Flag values set on the alias are visible to the source RunE
+			// 2. Flag validation happens naturally through shared state
+			// 3. No need to manually copy flag values between commands
+			// This creates true delegation where the alias is just a different
+			// path to the same underlying command implementation.
+			sourceCmd.Flags().VisitAll(func(flag *pflag.Flag) {
+				aliasCmd.Flags().AddFlag(flag)
+			})
+
+			// Share flag completion functions.
+			// This ensures the alias provides the same shell completion
+			// suggestions as the source command for all flags.
+			sourceCmd.Flags().VisitAll(func(flag *pflag.Flag) {
+				if completionFunc, _ := sourceCmd.GetFlagCompletionFunc(flag.Name); completionFunc != nil {
+					_ = aliasCmd.RegisterFlagCompletionFunc(flag.Name, completionFunc)
+				}
+			})
+
+			// Add the alias command to the parent.
+			parentCmd.AddCommand(aliasCmd)
+		}
 	}
 
 	return nil
