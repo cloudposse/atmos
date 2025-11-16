@@ -244,7 +244,8 @@ var RootCmd = &cobra.Command{
 				if versionErr != nil {
 					errUtils.CheckErrorPrintAndExit(versionErr, "", "")
 				}
-				errUtils.OsExit(0)
+				// Version output is complete. No need to call os.Exit - command will naturally exit.
+				// This improves testability by allowing error bubbling instead of deep exits.
 				return
 			}
 		}

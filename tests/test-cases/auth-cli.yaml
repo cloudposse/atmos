@@ -33,6 +33,8 @@ tests:
         - "Validate the authentication configuration in atmos.yaml"
         - "USAGE"
         - "atmos auth validate"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   # Auth Whoami Tests
@@ -52,6 +54,8 @@ tests:
         - "Display information about the current effective authentication principal."
         - "USAGE"
         - "atmos auth whoami"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos auth whoami --identity test-user
@@ -93,6 +97,8 @@ tests:
         - "bash"
         - "json"
         - "dotenv"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos auth env --format json --identity test-user
@@ -170,6 +176,8 @@ tests:
         - "USAGE"
         - "atmos auth exec"
         - "--identity"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos auth exec --identity test-user -- echo hello
@@ -210,6 +218,8 @@ tests:
         - "USAGE"
         - "atmos auth login"
         - "--identity"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos auth login --identity test-user
