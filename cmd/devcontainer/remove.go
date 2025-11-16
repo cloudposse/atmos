@@ -67,13 +67,6 @@ func init() {
 		flags.WithEnvVars("force", "ATMOS_DEVCONTAINER_FORCE"),
 	)
 
-	// Register flags using the standard RegisterFlags method.
-	removeParser.RegisterFlags(removeCmd)
-
-	// Bind flags to Viper for environment variable support.
-	if err := removeParser.BindToViper(viper.GetViper()); err != nil {
-		panic(err)
-	}
-
+	initCommandWithFlags(removeCmd, removeParser)
 	devcontainerCmd.AddCommand(removeCmd)
 }

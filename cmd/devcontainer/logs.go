@@ -71,13 +71,6 @@ func init() {
 		flags.WithEnvVars("tail", "ATMOS_DEVCONTAINER_TAIL"),
 	)
 
-	// Register flags using the standard RegisterFlags method.
-	logsParser.RegisterFlags(logsCmd)
-
-	// Bind flags to Viper for environment variable support.
-	if err := logsParser.BindToViper(viper.GetViper()); err != nil {
-		panic(err)
-	}
-
+	initCommandWithFlags(logsCmd, logsParser)
 	devcontainerCmd.AddCommand(logsCmd)
 }

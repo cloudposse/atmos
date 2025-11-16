@@ -9,6 +9,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// parseTestHelper is a generic helper for testing parse functions.
+// It creates a viper instance with the given settings and calls the parse function.
+func parseTestHelper[T any](
+	t *testing.T,
+	viperSettings map[string]interface{},
+	parseFunc func(*cobra.Command, *viper.Viper, []string) (T, error),
+) T {
+	t.Helper()
+
+	// Create a fresh viper instance for this test.
+	v := viper.New()
+	for key, value := range viperSettings {
+		v.Set(key, value)
+	}
+
+	// Create a dummy command (not needed for parsing, but required by signature).
+	cmd := &cobra.Command{}
+
+	// Parse options.
+	opts, err := parseFunc(cmd, v, []string{})
+	require.NoError(t, err)
+
+	return opts
+}
+
 func TestParseAttachOptions(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -52,18 +77,7 @@ func TestParseAttachOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a fresh viper instance for this test.
-			v := viper.New()
-			for key, value := range tt.viperSettings {
-				v.Set(key, value)
-			}
-
-			// Create a dummy command (not needed for parsing, but required by signature).
-			cmd := &cobra.Command{}
-
-			// Parse options.
-			opts, err := parseAttachOptions(cmd, v, []string{})
-			require.NoError(t, err)
+			opts := parseTestHelper(t, tt.viperSettings, parseAttachOptions)
 
 			// Verify parsed options.
 			assert.Equal(t, tt.expectedOptions.Instance, opts.Instance)
@@ -134,18 +148,7 @@ func TestParseExecOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a fresh viper instance for this test.
-			v := viper.New()
-			for key, value := range tt.viperSettings {
-				v.Set(key, value)
-			}
-
-			// Create a dummy command (not needed for parsing, but required by signature).
-			cmd := &cobra.Command{}
-
-			// Parse options.
-			opts, err := parseExecOptions(cmd, v, []string{})
-			require.NoError(t, err)
+			opts := parseTestHelper(t, tt.viperSettings, parseExecOptions)
 
 			// Verify parsed options.
 			assert.Equal(t, tt.expectedOptions.Instance, opts.Instance)
@@ -217,18 +220,7 @@ func TestParseLogsOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a fresh viper instance for this test.
-			v := viper.New()
-			for key, value := range tt.viperSettings {
-				v.Set(key, value)
-			}
-
-			// Create a dummy command (not needed for parsing, but required by signature).
-			cmd := &cobra.Command{}
-
-			// Parse options.
-			opts, err := parseLogsOptions(cmd, v, []string{})
-			require.NoError(t, err)
+			opts := parseTestHelper(t, tt.viperSettings, parseLogsOptions)
 
 			// Verify parsed options.
 			assert.Equal(t, tt.expectedOptions.Instance, opts.Instance)
@@ -293,18 +285,7 @@ func TestParseRebuildOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a fresh viper instance for this test.
-			v := viper.New()
-			for key, value := range tt.viperSettings {
-				v.Set(key, value)
-			}
-
-			// Create a dummy command (not needed for parsing, but required by signature).
-			cmd := &cobra.Command{}
-
-			// Parse options.
-			opts, err := parseRebuildOptions(cmd, v, []string{})
-			require.NoError(t, err)
+			opts := parseTestHelper(t, tt.viperSettings, parseRebuildOptions)
 
 			// Verify parsed options.
 			assert.Equal(t, tt.expectedOptions.Instance, opts.Instance)
@@ -358,18 +339,7 @@ func TestParseRemoveOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a fresh viper instance for this test.
-			v := viper.New()
-			for key, value := range tt.viperSettings {
-				v.Set(key, value)
-			}
-
-			// Create a dummy command (not needed for parsing, but required by signature).
-			cmd := &cobra.Command{}
-
-			// Parse options.
-			opts, err := parseRemoveOptions(cmd, v, []string{})
-			require.NoError(t, err)
+			opts := parseTestHelper(t, tt.viperSettings, parseRemoveOptions)
 
 			// Verify parsed options.
 			assert.Equal(t, tt.expectedOptions.Instance, opts.Instance)
@@ -440,18 +410,7 @@ func TestParseStartOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a fresh viper instance for this test.
-			v := viper.New()
-			for key, value := range tt.viperSettings {
-				v.Set(key, value)
-			}
-
-			// Create a dummy command (not needed for parsing, but required by signature).
-			cmd := &cobra.Command{}
-
-			// Parse options.
-			opts, err := parseStartOptions(cmd, v, []string{})
-			require.NoError(t, err)
+			opts := parseTestHelper(t, tt.viperSettings, parseStartOptions)
 
 			// Verify parsed options.
 			assert.Equal(t, tt.expectedOptions.Instance, opts.Instance)
@@ -536,18 +495,7 @@ func TestParseStopOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a fresh viper instance for this test.
-			v := viper.New()
-			for key, value := range tt.viperSettings {
-				v.Set(key, value)
-			}
-
-			// Create a dummy command (not needed for parsing, but required by signature).
-			cmd := &cobra.Command{}
-
-			// Parse options.
-			opts, err := parseStopOptions(cmd, v, []string{})
-			require.NoError(t, err)
+			opts := parseTestHelper(t, tt.viperSettings, parseStopOptions)
 
 			// Verify parsed options.
 			assert.Equal(t, tt.expectedOptions.Instance, opts.Instance)
@@ -672,18 +620,7 @@ func TestParseShellOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a fresh viper instance for this test.
-			v := viper.New()
-			for key, value := range tt.viperSettings {
-				v.Set(key, value)
-			}
-
-			// Create a dummy command (not needed for parsing, but required by signature).
-			cmd := &cobra.Command{}
-
-			// Parse options.
-			opts, err := parseShellOptions(cmd, v, []string{})
-			require.NoError(t, err)
+			opts := parseTestHelper(t, tt.viperSettings, parseShellOptions)
 
 			// Verify parsed options.
 			assert.Equal(t, tt.expectedOptions.Instance, opts.Instance)

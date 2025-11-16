@@ -195,13 +195,7 @@ func init() {
 		flags.WithEnvVars("no-pull", "ATMOS_DEVCONTAINER_NO_PULL"),
 	)
 
-	// Register flags using the standard RegisterFlags method.
-	shellParser.RegisterFlags(shellCmd)
-
-	// Bind flags to Viper for environment variable support.
-	if err := shellParser.BindToViper(viper.GetViper()); err != nil {
-		panic(err)
-	}
+	initCommandWithFlags(shellCmd, shellParser)
 
 	// Mark flags as mutually exclusive.
 	shellCmd.MarkFlagsMutuallyExclusive("new", "replace")

@@ -8,12 +8,14 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -142,4 +144,16 @@ func createUnauthenticatedAuthManager(authConfig *schema.AuthConfig) (auth.AuthM
 	}
 
 	return authManager, nil
+}
+
+// initCommandWithFlags initializes a command's flags using StandardParser.
+// This helper reduces code duplication across devcontainer subcommands.
+func initCommandWithFlags(cmd *cobra.Command, parser *flags.StandardParser) {
+	// Register flags using the standard RegisterFlags method.
+	parser.RegisterFlags(cmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := parser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 }

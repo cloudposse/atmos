@@ -352,14 +352,14 @@ func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text strin
 		return "", err
 	}
 
-	// Glamour adds 1 leading newline and 2 trailing newlines to every output
-	// Remove these, but preserve any newlines that were in the original message
-	rendered = strings.TrimPrefix(rendered, "\n")   // Remove Glamour's leading newline
-	rendered = strings.TrimSuffix(rendered, "\n\n") // Remove Glamour's trailing newlines
-	// If there's still a trailing newline, it was from the original message
-	if !strings.HasSuffix(rendered, "\n") && strings.HasSuffix(text, "\n") {
-		// Original had trailing newline but rendering lost it, add it back
-		rendered += "\n"
+	// Glamour adds 1 leading newline and 2 trailing newlines to every output.
+	// Remove these, but preserve any newlines that were in the original message.
+	rendered = strings.TrimPrefix(rendered, newline)          // Remove Glamour's leading newline
+	rendered = strings.TrimSuffix(rendered, newline+newline) // Remove Glamour's trailing newlines
+	// If there's still a trailing newline, it was from the original message.
+	if !strings.HasSuffix(rendered, newline) && strings.HasSuffix(text, newline) {
+		// Original had trailing newline but rendering lost it, add it back.
+		rendered += newline
 	}
 
 	// Style the icon if color is supported

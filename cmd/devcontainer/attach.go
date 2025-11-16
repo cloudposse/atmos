@@ -68,13 +68,6 @@ func init() {
 		flags.WithEnvVars("pty", "ATMOS_DEVCONTAINER_PTY"),
 	)
 
-	// Register flags using the standard RegisterFlags method.
-	attachParser.RegisterFlags(attachCmd)
-
-	// Bind flags to Viper for environment variable support.
-	if err := attachParser.BindToViper(viper.GetViper()); err != nil {
-		panic(err)
-	}
-
+	initCommandWithFlags(attachCmd, attachParser)
 	devcontainerCmd.AddCommand(attachCmd)
 }

@@ -115,13 +115,6 @@ func init() {
 		flags.WithEnvVars("no-pull", "ATMOS_DEVCONTAINER_NO_PULL"),
 	)
 
-	// Register flags using the standard RegisterFlags method.
-	rebuildParser.RegisterFlags(rebuildCmd)
-
-	// Bind flags to Viper for environment variable support.
-	if err := rebuildParser.BindToViper(viper.GetViper()); err != nil {
-		panic(err)
-	}
-
+	initCommandWithFlags(rebuildCmd, rebuildParser)
 	devcontainerCmd.AddCommand(rebuildCmd)
 }
