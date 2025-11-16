@@ -101,6 +101,13 @@ func handleUNCPath(cleanedPath, volume string) string {
 	return volume + windowsPathSeparator + remainder
 }
 
+// CleanDuplicatedPath removes duplicate path segments that sometimes occur due to
+// symlink resolution or path joining issues.
+// For example: /foo/bar/foo/bar/baz becomes /foo/bar/baz.
+func CleanDuplicatedPath(path string) string {
+	return cleanDuplicatedPath(path)
+}
+
 // cleanDuplicatedPath detects and removes path duplication patterns.
 // For example: /path/to/base/.//path/to/base/components -> /path/to/base/components
 // This only removes duplications when a significant path segment is duplicated,

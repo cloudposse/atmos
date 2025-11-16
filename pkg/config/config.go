@@ -239,6 +239,9 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 
+	// Clean up any path duplication that might occur from incorrect configuration or symlink resolution.
+	atmosBasePathAbs = u.CleanDuplicatedPath(atmosBasePathAbs)
+
 	// Store the absolute base path in BasePathAbsolute field.
 	// This allows other code (like schema validation) to use the absolute path while
 	// preserving the original BasePath value (which may be relative) for display/serialization.
@@ -251,6 +254,8 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	if err != nil {
 		return err
 	}
+	// Clean up any path duplication that might occur from incorrect configuration or symlink resolution.
+	stacksBaseAbsPath = u.CleanDuplicatedPath(stacksBaseAbsPath)
 	atmosConfig.StacksBaseAbsolutePath = stacksBaseAbsPath
 
 	// Convert the included stack paths to absolute paths
