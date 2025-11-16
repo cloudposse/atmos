@@ -34,6 +34,17 @@ func main() {
 	// Ensure cleanup happens on normal exit.
 	defer cmd.Cleanup()
 
+	// Handle --version flag at application entry point to avoid deep exit in command infrastructure.
+	// This eliminates the need for os.Exit in PersistentPreRun, making tests work with Go 1.25.
+	// Check os.Args directly since we're in main() (tests call cmd.Execute() directly).
+	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
+		err := cmd.ExecuteVersion()
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+		return // Exit normally after printing version
+	}
+
 	err := cmd.Execute()
 	if err != nil {
 		// Check for typed exit code error first to preserve subcommand exit codes.

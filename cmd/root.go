@@ -237,20 +237,9 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
-		// Check for --version flag (uses same code path as version command).
-		if cmd.Flags().Changed("version") {
-			if versionFlag, err := cmd.Flags().GetBool("version"); err == nil && versionFlag {
-				versionErr := e.NewVersionExec(&tmpConfig).Execute(false, "")
-				if versionErr != nil {
-					errUtils.CheckErrorPrintAndExit(versionErr, "", "")
-				}
-				// Version output is complete. Exit successfully.
-				// Must explicitly exit here because returning from PersistentPreRun
-				// doesn't prevent RunE from executing, which would call checkAtmosConfig()
-				// and fail with exit code 1 in directories without atmos.yaml.
-				errUtils.Exit(0)
-			}
-		}
+		// Note: --version flag is now handled in main.go before Execute() for production use.
+		// For tests that use RootCmd.SetArgs(["--version"]), we don't need special handling here
+		// since tests expect normal command flow without os.Exit.
 
 		// Enable performance tracking if heatmap flag is set.
 		// P95 latency tracking via HDR histogram is automatically enabled.
@@ -953,12 +942,23 @@ func applyProfileTypeFlag(config *profiler.Config, cmd *cobra.Command) error {
 	return nil
 }
 
+// ExecuteVersion prints the version information.
+// This is called by main.main() when --version flag is detected at the application entry point.
+// Handling version here (instead of in PersistentPreRun) eliminates the deep exit,
+// allowing tests to run normally without triggering os.Exit in Go 1.25+.
+func ExecuteVersion() error {
+	// Initialize minimal config for version command (may not find atmos.yaml, which is OK).
+	tmpConfig, _ := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	return e.NewVersionExec(&tmpConfig).Execute(false, "")
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the RootCmd.
 func Execute() error {
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config.
+	// Note: --version flag is now handled in main.go before calling Execute().
 	var initErr error
 	atmosConfig, initErr = cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 

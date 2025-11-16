@@ -319,6 +319,8 @@ func TestSetupLogger_NoColorWithTraceLevel(t *testing.T) {
 }
 
 func TestVersionFlagParsing(t *testing.T) {
+	_ = NewTestKit(t)
+
 	tests := []struct {
 		name        string
 		args        []string
@@ -343,6 +345,8 @@ func TestVersionFlagParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
 			// Reset flag states before each test - need to reset both value and Changed state.
 			versionFlag := RootCmd.PersistentFlags().Lookup("version")
 			if versionFlag != nil {
@@ -371,26 +375,13 @@ func TestVersionFlagParsing(t *testing.T) {
 
 func TestVersionFlagExecutionPath(t *testing.T) {
 	tests := []struct {
-		name       string
-		setup      func()
-		cleanup    func()
-		expectExit int
+		name        string
+		setup       func()
+		cleanup     func()
+		expectError bool
 	}{
 		{
-			name: "version flag triggers successful exit",
-			setup: func() {
-				versionFlag := RootCmd.PersistentFlags().Lookup("version")
-				if versionFlag != nil {
-					versionFlag.Value.Set("false")
-					versionFlag.Changed = false
-				}
-				RootCmd.SetArgs([]string{"--version"})
-			},
-			cleanup:    func() {},
-			expectExit: 0,
-		},
-		{
-			name: "version subcommand bypasses flag handler",
+			name: "version subcommand works normally without deep exit",
 			setup: func() {
 				versionFlag := RootCmd.PersistentFlags().Lookup("version")
 				if versionFlag != nil {
@@ -399,8 +390,8 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 				}
 				RootCmd.SetArgs([]string{"version"})
 			},
-			cleanup:    func() {},
-			expectExit: -1, // No exit expected
+			cleanup:     func() {},
+			expectError: false, // Should complete normally, no error
 		},
 	}
 
@@ -409,39 +400,19 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 			// Use NewTestKit to isolate RootCmd state.
 			_ = NewTestKit(t)
 
-			// Save original OsExit and restore after test.
-			originalOsExit := errUtils.OsExit
-			t.Cleanup(func() {
-				errUtils.OsExit = originalOsExit
-				tt.cleanup()
-			})
-
-			// Mock OsExit to panic with the exit code so we can test the execution path
-			// without actually exiting the test process.
-			type exitPanic struct {
-				code int
-			}
-			errUtils.OsExit = func(code int) {
-				panic(exitPanic{code: code})
-			}
+			t.Cleanup(tt.cleanup)
 
 			// Setup test conditions.
 			tt.setup()
 
-			if tt.expectExit >= 0 {
-				// Execute should call version command and then exit with expected code.
-				// We expect it to panic with our exitPanic struct containing the exit code.
-				// This verifies that the --version flag handler is being executed and
-				// calls os.Exit via errUtils.OsExit.
-				assert.PanicsWithValue(t, exitPanic{code: tt.expectExit}, func() {
-					_ = Execute()
-				}, "Execute should exit with code %d", tt.expectExit)
+			// Execute should complete normally without calling os.Exit.
+			// The --version flag is now handled in main.go for production,
+			// so tests only verify the version subcommand works without deep exit.
+			err := Execute()
+			if tt.expectError {
+				assert.Error(t, err, "Execute should return an error")
 			} else {
-				// No exit expected, just run normally.
-				// This test ensures the version flag check doesn't interfere with normal commands.
-				assert.NotPanics(t, func() {
-					_ = Execute()
-				}, "Execute should not exit when version flag is not set")
+				assert.NoError(t, err, "Execute should complete without error")
 			}
 		})
 	}
