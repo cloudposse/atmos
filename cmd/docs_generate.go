@@ -17,14 +17,8 @@ Supports native terraform-docs injection.`,
 	Args:      cobra.ExactArgs(1),
 	ValidArgs: []string{"readme"},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) != 1 {
-			return ErrInvalidArguments
-		}
-		err := e.ExecuteDocsGenerateCmd(cmd, args)
-		if err != nil {
-			return err
-		}
-		return nil
+		// cobra.ExactArgs(1) already validates argument count
+		return e.ExecuteDocsGenerateCmd(cmd, args)
 	},
 }
 

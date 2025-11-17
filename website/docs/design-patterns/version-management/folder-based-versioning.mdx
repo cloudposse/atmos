@@ -1,0 +1,376 @@
+---
+title: Folder-Based Versioning
+sidebar_position: 3
+sidebar_label: Folder-Based Versioning
+description: Folder-Based Versioning - The foundational approach for organizing components with explicit folder structure
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<PillBox>Atmos Design Pattern</PillBox>
+<Intro>
+**Folder-Based Versioning** is the foundational folder organization approach within [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment). Components are organized in simple, explicit folders (`vpc/`, `eks/`, `rds/`) on the main branch. What you see is what you get—no magic, no hidden versioning. This straightforward structure makes divergence visible and patching any version straightforward.
+</Intro>
+
+This is the recommended starting point for most teams and what most components use. The explicit folder structure provides clarity: you can see at a glance which components exist and how they're organized. All subsequent folder organization approaches ([Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels) and [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)) build on this foundation.
+
+<KeyPoints>
+- No magic: what you see in the folder structure is what you get
+- Explicit divergence visibility through folder organization
+- Straightforward patching—modify the component folder directly
+- Foundation that other folder organization approaches build upon
+- Clear separation between different components
+</KeyPoints>
+
+## Use Cases
+
+Use the **Folder-Based Versioning** pattern when:
+
+- You need **significant component rework** that will take time to stabilize
+- You want **explicit version boundaries** visible in the repository
+- You need to **run multiple versions side-by-side** for extended periods
+- You're making **breaking changes** that require careful migration
+- You want **clear separation** between stable and experimental code
+- You need **gradual migration paths** for complex components
+
+## Problem
+
+Major component changes often require extended development periods and careful migration strategies. Traditional versioning approaches can create challenges:
+
+- **In-place changes** destabilize existing deployments
+- **Feature flags** add complexity and technical debt
+- **Branch-based development** delays integration and feedback
+- **Hidden versioning** makes it hard to understand what's deployed where
+
+Folder-Based Versioning addresses these issues by making versions first-class citizens in the repository structure.
+
+## Solution
+
+Create separate folders for each major version of a component. Environments explicitly reference the folder containing their desired version, making version selection transparent and reversible.
+
+### Core Principles
+
+1. **Versions as Folders**: Each major version gets its own directory
+2. **Explicit References**: Stacks explicitly choose which folder/version to use
+3. **Parallel Development**: Multiple versions can evolve independently
+4. **Stable State Keys**: Workspace keys remain constant across version switches
+5. **Clear Deprecation**: Old versions are clearly marked and eventually removed
+
+## Implementation
+
+### Directory Structure
+
+Organize components with version-specific folders:
+
+<File title="Directory Structure">
+```text
+components/
+  terraform/
+    vpc/
+      v1/                   # Version 1 implementation
+        main.tf
+        variables.tf
+        outputs.tf
+        README.md
+      v2/                   # Version 2 implementation
+        main.tf
+        variables.tf
+        outputs.tf
+        README.md
+        MIGRATION.md        # Migration guide from v1
+      v3-preview/           # Version 3 in development
+        main.tf
+        variables.tf
+        outputs.tf
+        README.md
+    rds/
+      standard/             # Standard RDS version
+        main.tf
+      aurora/               # Aurora variant
+        main.tf
+      v2-deprecated/        # Deprecated version
+        main.tf
+        DEPRECATED.md
+```
+</File>
+
+### Stack Configuration
+
+Environments reference specific version folders:
+
+<Tabs>
+<TabItem value="dev" label="Development" default>
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc/v2  # Reference v2 folder for development
+      settings:
+        # CRITICAL: Don't include version in workspace key
+        workspace_key_prefix: "vpc"
+      vars:
+        name: "dev-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+</TabItem>
+
+<TabItem value="prod" label="Production">
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc/v1  # Production still on stable v1
+      settings:
+        # Same workspace key as dev - enables migration
+        workspace_key_prefix: "prod/vpc"
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.2.0.0/16"
+```
+</File>
+</TabItem>
+</Tabs>
+
+### Version Naming Conventions
+
+Choose clear, consistent naming patterns within your component folders:
+
+<File title="components/terraform directory structure">
+```text
+components/
+  terraform/
+    vpc/
+      v1/                    # Semantic versioning
+      v2/
+      v3-preview/
+
+    rds/
+      standard/              # Feature-based versioning
+      aurora/
+      serverless/
+
+    eks/
+      stable/                # Release-channel versioning
+      beta/
+      deprecated/
+
+    lambda/
+      2023/                  # Date-based versioning
+      2024/
+      2025/
+```
+</File>
+
+## Workspace Key Management
+
+:::warning Workspace Key Configuration
+This pattern works best with Atmos auto-generated [backend configuration](/core-concepts/components/terraform/backends). The `workspace_key_prefix` must remain stable across version changes to prevent state conflicts:
+
+```yaml
+# WRONG - Version in workspace key causes state problems
+settings:
+  workspace_key_prefix: "prod/vpc/v2"  # Don't do this!
+
+# CORRECT - Stable workspace key across versions
+settings:
+  workspace_key_prefix: "prod/vpc"     # Version-agnostic key
+```
+
+When the workspace key includes version information, switching versions requires complex state migrations. Keep it stable!
+:::
+
+## Migration Strategies
+
+### Gradual Migration
+
+Roll out new versions progressively through environments:
+
+<File title="migration-plan.yaml">
+```yaml
+# Week 1: Development environments
+dev:
+  vpc:
+    metadata:
+      component: vpc/v2
+
+# Week 2: Staging environments
+staging:
+  vpc:
+    metadata:
+      component: vpc/v2
+
+# Week 3: Production canary
+prod-canary:
+  vpc:
+    metadata:
+      component: vpc/v2
+
+# Week 4: All production
+prod:
+  vpc:
+    metadata:
+      component: vpc/v2
+```
+</File>
+
+### In-Place Upgrade
+
+For backwards-compatible changes, switch the folder reference:
+
+```bash
+# Before upgrade - verify current state
+atmos terraform plan vpc --stack prod-us-east-1
+
+# Update stack configuration to point to new version
+# Edit: metadata.component from "vpc/v1" to "vpc/v2"
+
+# Plan with new version - should show intended changes
+atmos terraform plan vpc --stack prod-us-east-1
+
+# Apply the upgrade
+atmos terraform apply vpc --stack prod-us-east-1
+```
+
+## Rollback Strategy
+
+Folder-based versioning makes rollback trivial - just switch the folder reference:
+
+### Update Stack Configuration
+
+```yaml
+# stacks/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        # Rollback from v2 to v1
+        component: vpc/v1  # Was: vpc/v2
+      settings:
+        workspace_key_prefix: "prod/vpc"  # Keep stable!
+```
+
+### Validate and Apply
+
+```bash
+# Validate the rollback
+atmos terraform plan vpc --stack prod-us-east-1
+
+# Review the changes - should show reverting to v1 behavior
+
+# Apply the rollback
+atmos terraform apply vpc --stack prod-us-east-1
+```
+
+:::tip Zero-Downtime Rollback
+Since the old version folder still exists unchanged, rollback is instantaneous and risk-free. The stable workspace key means no state migration is needed.
+:::
+
+### Rollback Verification
+
+```bash
+# Quick sanity check - verify stack config points to correct folder
+atmos describe component vpc --stack prod-us-east-1 | grep "component:"
+# Should show: component: vpc/v1
+
+# TRUE VERIFICATION - plan should show no changes
+atmos terraform plan vpc --stack prod-us-east-1
+# Should output: No changes. Your infrastructure matches the configuration.
+```
+
+The "no changes" output proves that the rollback was successfully applied to the infrastructure, not just the configuration.
+
+## Benefits
+
+The **Folder-Based Versioning** approach provides:
+
+- **No Magic**: What you see in the folder structure is exactly what you get—no hidden versioning mechanisms or complex abstractions
+- **Explicit Divergence**: When components diverge (e.g., creating `vpc/v2` alongside `vpc/`), it's immediately visible in the repository structure
+- **Straightforward Patching**: Need to patch a component? Modify the folder directly. No need to track down version references or update manifests
+- **Foundation for Extensions**: Provides the base that [Release Tracks](/design-patterns/version-management/release-tracks-channels) and [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning) build upon
+- **Clear Organization**: Component structure is self-documenting through the folder hierarchy
+- **Safe Experimentation**: New versions can be developed in separate folders without affecting existing deployments
+- **Gradual Migration**: Environments can switch folders at their own pace
+
+## Drawbacks
+
+The pattern also has limitations:
+
+- **Repository Growth**: Multiple versions increase repository size
+- **Maintenance Overhead**: Bug fixes may need to be applied to multiple versions
+- **Potential Confusion**: Developers must understand which version to modify
+- **Code Duplication**: Similar code exists in multiple folders
+- **Cleanup Discipline**: Deprecated versions must be actively removed
+
+## Best Practices
+
+- **Version Lifecycle Management:** Define clear lifecycle stages for component versions including Preview (experimental, API unstable), Beta (feature complete, testing in progress), Stable (production ready), Deprecated (marked for removal), and Archived (no longer maintained). Document transition criteria and timelines between stages.
+
+  <File title="docs/version-lifecycle.md">
+  ```markdown
+  # Component Version Lifecycle
+
+  ## Stages
+  1. **Preview** (-preview suffix): Experimental, API unstable
+  2. **Beta** (-beta suffix): Feature complete, testing in progress
+  3. **Stable** (no suffix or -v2): Production ready
+  4. **Deprecated** (-deprecated suffix): Marked for removal
+  5. **Archived** (moved to archive/): No longer maintained
+
+  ## Transitions
+  - Preview → Beta: After API stabilization
+  - Beta → Stable: After production validation
+  - Stable → Deprecated: When newer version is stable
+  - Deprecated → Archived: After all migrations complete
+
+  ## Timeline
+  - Minimum 30 days in Beta before Stable
+  - Minimum 90 days Deprecated before removal
+  - Document migration path before deprecation
+  ```
+  </File>
+
+- **Version Documentation:** Maintain clear documentation for each version including a component version matrix showing status (Stable, Beta, Preview, Deprecated) and version-specific notes with deprecation dates and migration guidance.
+
+- **Shared Code Management:** Minimize duplication by using shared modules that can be imported by multiple versions, reducing maintenance burden while allowing version-specific variations.
+
+- **Testing Strategy:** Test all active versions using Atmos validation commands to ensure each version continues to function correctly as the codebase evolves.
+
+- **Migration Process:** Migrate components to new versions by updating stack configuration to reference the new version folder, then preview and apply changes using Atmos terraform commands.
+
+## Drawbacks and Trade-offs
+
+While Folder-Based Versioning provides clear benefits, consider these trade-offs:
+
+### Code Duplication
+**Multiple copies** of similar code exist across version folders with considerable overlap, requiring updates in multiple locations when applying security patches or bug fixes to older versions still in use.
+
+### Divergence Risk
+When versions evolve independently over extended periods, environments can **drift significantly** from each other, making it difficult to reason about the overall system state and increasing the likelihood of environment-specific issues.
+
+### Release Tracking Challenge
+Git commits record when code changes were **merged**, not when they were **deployed** to environments. Without additional tooling or documentation, it's challenging to determine which version of a component is actually running in which environment at any given time. Git shows the history of the code, not the deployment state.
+
+## Summary
+
+Folder-Based Versioning provides explicit, visible version management through repository structure. It excels when you need to maintain multiple versions in parallel, make breaking changes safely, or provide clear migration paths. While it can increase repository size and maintenance overhead, the clarity and safety it provides often outweigh these costs, especially for critical infrastructure components.
+
+:::tip Key Takeaway
+Folder-based versioning makes version boundaries explicit and migrations reversible. It's ideal for major version changes that require extended development and careful rollout strategies.
+:::
+
+## Related Patterns
+
+- [Versioning Schemes](./versioning-schemes) - Simple naming and sequential versioning work well with folder-based approach
+- [Release Tracks/Channels](./release-tracks-channels) - Abstract version management through tracks
+- [Vendoring Components](./vendoring-components) - Local copies with origin tracking
+- [Strict Version Pinning](./strict-version-pinning) - Explicit version control per environment
+- [Component Catalog](/design-patterns/component-catalog) - Organizing reusable components
