@@ -1,5 +1,5 @@
 
-👽 test darwin/arm64
+👽 test linux/amd64
 
 This command runs Helmfile commands to manage Kubernetes deployments using      
 Helmfile.                                                                       

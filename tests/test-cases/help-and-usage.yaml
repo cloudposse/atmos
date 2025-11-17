@@ -81,6 +81,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos terraform apply help
     enabled: true
@@ -100,6 +102,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos terraform non-existent
     enabled: true
@@ -181,6 +185,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos helmfile --help
     enabled: true
@@ -199,6 +205,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos helmfile apply non-existent
     enabled: true
@@ -244,6 +252,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos helmfile apply --help
     enabled: true
@@ -263,6 +273,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis
     enabled: true
@@ -293,6 +305,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis --help
     enabled: true
@@ -311,6 +325,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos atlantis generate
