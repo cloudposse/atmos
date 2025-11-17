@@ -183,8 +183,20 @@ func formatComplexValue(val interface{}) string {
 }
 
 // createStyledTable creates a styled table with headers and rows.
-// Uses the same clean styling as atmos version list.
+// Uses the same clean styling as atmos version list with width calculation and wrapping.
 func CreateStyledTable(header []string, rows [][]string) string {
+	// Get terminal width - use exactly what's detected.
+	detectedWidth := templates.GetTerminalWidth()
+
+	// Calculate padding more conservatively, similar to version list approach.
+	// Each column needs: padding (2 chars) + separator space (1 char) = 3 chars per column
+	// Plus additional margin for safety
+	numColumns := len(header)
+	tableBorderPadding := (numColumns * 3) + 4 // 3 per column + 4 for margins
+
+	// Account for table borders and padding.
+	tableWidth := detectedWidth - tableBorderPadding
+
 	// Table styling - simple and clean like version list.
 	headerStyle := lipgloss.NewStyle().Bold(true)
 	cellStyle := lipgloss.NewStyle()
@@ -208,6 +220,12 @@ func CreateStyledTable(header []string, rows [][]string) string {
 				return cellStyle.Padding(0, 1)
 			}
 		})
+
+	// Only set width and enable wrapping if we have a reasonable terminal width.
+	// This prevents issues when terminal width detection fails or is unreasonably small.
+	if tableWidth > 40 {
+		t = t.Width(tableWidth).Wrap(true)
+	}
 
 	return t.String() + utils.GetLineEnding()
 }

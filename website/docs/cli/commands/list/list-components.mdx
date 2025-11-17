@@ -21,7 +21,7 @@ Execute the `list components` command like this:
 atmos list components
 ```
 
-This command lists Atmos components in a specified stack.
+This command lists Atmos components in a specified stack:
 
 ```shell
 atmos list components -s <stack>
@@ -38,27 +38,141 @@ atmos list components
 atmos list components -s tenant1-ue2-dev
 ```
 
-### Custom Columns for Components
+Filter by component type:
+```shell
+# List only real (non-abstract) components
+atmos list components --type real
 
-This configuration customizes the output of `atmos list components`:
+# List abstract components
+atmos list components --type abstract
 
-```yaml
-# In atmos.yaml
-components:
-  list:
-    columns:
-      - name: Component Name
-        value: "{{ .component_name }}"
-      - name: Component Type
-        value: "{{ .component_type }}"
-      - name: Component Path
-        value: "{{ .component_path }}"
+# List all components including abstract
+atmos list components --type all
 ```
-Running `atmos list components` will produce a table with these custom columns.
+
+Filter by enabled/locked status:
+```shell
+# List only enabled components
+atmos list components --enabled=true
+
+# List only locked components
+atmos list components --locked=true
+```
+
+Output in different formats:
+```shell
+# JSON format
+atmos list components --format json
+
+# YAML format
+atmos list components --format yaml
+```
 
 ## Flags
 
 <dl>
-  <dt>`--stack` / `-s` <em>(optional)</em></dt>
-  <dd>Atmos stack.</dd>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Filter by specific stack name</dd>
+
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+
+  <dt>`--columns`</dt>
+  <dd>Columns to display (comma-separated). Overrides `components.list.columns` configuration in atmos.yaml</dd>
+
+  <dt>`--type` / `-t`</dt>
+  <dd>Component type: `real`, `abstract`, `all` (default: `real`)</dd>
+
+  <dt>`--enabled`</dt>
+  <dd>Filter by enabled status (omit for all, `--enabled=true` for enabled only)</dd>
+
+  <dt>`--locked`</dt>
+  <dd>Filter by locked status (omit for all, `--locked=true` for locked only)</dd>
+
+  <dt>`--filter`</dt>
+  <dd>Filter expression using YQ syntax</dd>
+
+  <dt>`--sort`</dt>
+  <dd>Sort by column:order (e.g., `component:asc,stack:desc`)</dd>
 </dl>
+
+## Custom Columns Configuration
+
+You can customize the columns displayed by `atmos list components` in your `atmos.yaml`:
+
+```yaml
+# atmos.yaml
+components:
+  list:
+    columns:
+      - name: Component
+        value: "{{ .atmos_component }}"
+      - name: Stack
+        value: "{{ .atmos_stack }}"
+      - name: Type
+        value: "{{ .atmos_component_type }}"
+      - name: Enabled
+        value: "{{ .enabled }}"
+      - name: Description
+        value: "{{ .metadata.description }}"
+```
+
+### Available Template Fields
+
+Column `value` fields support Go template syntax with access to:
+
+- `.atmos_component` - Atmos component name
+- `.atmos_stack` - Stack name
+- `.atmos_component_type` - Component type (`terraform`, `helmfile`, etc.)
+- `.component` - Terraform/Helmfile component path
+- `.vars` - All component variables (e.g., `.vars.region`, `.vars.tenant`)
+- `.settings` - Component settings
+- `.metadata` - Component metadata (e.g., `.metadata.description`, `.metadata.component`)
+- `.env` - Environment variables
+- `.enabled` - Whether component is enabled (boolean)
+- `.locked` - Whether component is locked (boolean)
+- `.abstract` - Whether component is abstract (boolean)
+
+### Template Functions
+
+Columns support template functions for data transformation:
+
+```yaml
+components:
+  list:
+    columns:
+      - name: Component (Upper)
+        value: "{{ .atmos_component | upper }}"
+      - name: Region
+        value: "{{ .vars.region | default \"N/A\" }}"
+      - name: Status
+        value: "{{ if .enabled }}Enabled{{ else }}Disabled{{ end }}"
+      - name: Short Description
+        value: "{{ .metadata.description | truncate 50 }}"
+```
+
+Available functions:
+- `upper`, `lower` - String case conversion
+- `truncate` - Truncate string with ellipsis
+- `len` - Length of arrays/strings
+- `default` - Provide default value if empty
+- `toString` - Convert value to string
+- `ternary` - Conditional expression
+
+### Override Columns via CLI
+
+Override configured columns using the `--columns` flag:
+
+```shell
+# Display only component and stack columns
+atmos list components --columns atmos_component,atmos_stack
+
+# Display custom subset
+atmos list components --columns "atmos_component,atmos_stack,vars.region,enabled"
+```
+
+## Related Commands
+
+- [`atmos list instances`](/cli/commands/list/list-instances) - List all component instances across stacks
+- [`atmos list stacks`](/cli/commands/list/stacks) - List all stacks
+- [`atmos describe component`](/cli/commands/describe/component) - Get detailed component configuration

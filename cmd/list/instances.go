@@ -19,7 +19,9 @@ type InstancesOptions struct {
 	MaxColumns int
 	Delimiter  string
 	Stack      string
+	Filter     string
 	Query      string
+	Sort       string
 	Upload     bool
 }
 
@@ -48,7 +50,9 @@ var instancesCmd = &cobra.Command{
 			MaxColumns: v.GetInt("max-columns"),
 			Delimiter:  v.GetString("delimiter"),
 			Stack:      v.GetString("stack"),
+			Filter:     v.GetString("filter"),
 			Query:      v.GetString("query"),
+			Sort:       v.GetString("sort"),
 			Upload:     v.GetBool("upload"),
 		}
 
@@ -63,7 +67,9 @@ func init() {
 		WithDelimiterFlag,
 		WithMaxColumnsFlag,
 		WithStackFlag,
+		WithFilterFlag,
 		WithQueryFlag,
+		WithSortFlag,
 		WithUploadFlag,
 	)
 

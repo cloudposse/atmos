@@ -90,42 +90,69 @@ atmos list workflows --format csv --delimiter ','
 :::
 
 
-## Examples
+## Custom Columns Configuration
 
-### Custom Columns for Workflows
-
-This configuration customizes the output of `atmos list workflows`:
+You can customize the columns displayed by `atmos list workflows` in your `atmos.yaml`:
 
 ```yaml
-# In atmos.yaml
+# atmos.yaml
 workflows:
   list:
     columns:
       - name: Workflow
-        value: "{{ .workflow_name }}"
-      - name: Definition File
-        value: "{{ .workflow_file }}"
+        value: "{{ .name }}"
+      - name: File
+        value: "{{ .file }}"
       - name: Description
-        value: "{{ .workflow_description }}"
+        value: "{{ .description }}"
+      - name: Steps
+        value: "{{ .steps | len }} steps"
 ```
-Running `atmos list workflows` will display these columns.
 
-## Examples
+### Available Template Fields
 
-### Custom Columns for Workflows
+Column `value` fields support Go template syntax with access to:
 
-This configuration customizes the output of `atmos list workflows`:
+- `.name` - Workflow name
+- `.file` - Workflow definition file path
+- `.description` - Workflow description
+- `.steps` - Array of workflow steps
+- `.stack` - Stack name (if workflow is stack-specific)
+
+### Template Functions
+
+Columns support template functions for data transformation:
 
 ```yaml
-# In atmos.yaml
 workflows:
   list:
     columns:
-      - name: Workflow
-        value: "{{ .workflow_name }}"
-      - name: Definition File
-        value: "{{ .workflow_file }}"
-      - name: Description
-        value: "{{ .workflow_description }}"
+      - name: Workflow (Upper)
+        value: "{{ .name | upper }}"
+      - name: Short File
+        value: "{{ .file | truncate 30 }}"
+      - name: Step Count
+        value: "{{ .steps | len }}"
+      - name: Has Description
+        value: "{{ if .description }}Yes{{ else }}No{{ end }}"
 ```
-Running `atmos list workflows` will display these columns.
+
+Available functions:
+- `upper`, `lower` - String case conversion
+- `truncate` - Truncate string with ellipsis
+- `len` - Length of arrays/strings
+- `join` - Join array elements with delimiter
+- `toString` - Convert value to string
+- `ternary` - Conditional expression
+
+### Override Columns via CLI
+
+Override configured columns using the `--columns` flag:
+
+```shell
+# Display only name and file columns
+atmos list workflows --columns name,file
+
+# Display custom subset
+atmos list workflows --columns "name,file,description"
+```

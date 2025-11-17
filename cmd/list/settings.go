@@ -16,6 +16,7 @@ import (
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	utils "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -112,12 +113,12 @@ func setupSettingsOptions(opts *SettingsOptions, componentFilter string) *l.Filt
 	}
 }
 
-// logNoSettingsFoundMessage logs an appropriate message when no settings are found.
-func logNoSettingsFoundMessage(componentFilter string) {
+// displayNoSettingsFoundMessage displays an appropriate message when no settings are found.
+func displayNoSettingsFoundMessage(componentFilter string) {
 	if componentFilter != "" {
-		log.Info("No settings found", "component", componentFilter)
+		_ = ui.Info("No settings found for component: " + componentFilter)
 	} else {
-		log.Info("No settings found")
+		_ = ui.Info("No settings found")
 	}
 }
 
@@ -164,7 +165,7 @@ func listSettingsWithOptions(opts *SettingsOptions, args []string) (string, erro
 	if err != nil {
 		var noValuesErr *listerrors.NoValuesFoundError
 		if errors.As(err, &noValuesErr) {
-			logNoSettingsFoundMessage(componentFilter)
+			displayNoSettingsFoundMessage(componentFilter)
 			return "", nil
 		}
 		return "", err

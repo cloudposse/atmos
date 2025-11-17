@@ -18,6 +18,7 @@ import (
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -148,13 +149,13 @@ var varsCmd = &cobra.Command{
 		if err != nil {
 			var componentVarsNotFoundErr *listerrors.ComponentVarsNotFoundError
 			if errors.As(err, &componentVarsNotFoundErr) {
-				log.Info("No vars found", "component", componentVarsNotFoundErr.Component)
+				_ = ui.Info("No vars found for component: " + componentVarsNotFoundErr.Component)
 				return nil
 			}
 
 			var noValuesErr *listerrors.NoValuesFoundError
 			if errors.As(err, &noValuesErr) {
-				log.Info("No values found for query '.vars'", "component", args[0])
+				_ = ui.Info("No values found for query '.vars' for component: " + args[0])
 				return nil
 			}
 
@@ -272,12 +273,12 @@ func getFilterOptionsFromValues(opts *ValuesOptions) *l.FilterOptions {
 	}
 }
 
-// logNoValuesFoundMessage logs an appropriate message when no values or vars are found.
-func logNoValuesFoundMessage(componentName string, query string) {
+// displayNoValuesFoundMessage displays an appropriate message when no values or vars are found.
+func displayNoValuesFoundMessage(componentName string, query string) {
 	if query == ".vars" {
-		log.Info("No vars found", "component", componentName)
+		_ = ui.Info("No vars found for component: " + componentName)
 	} else {
-		log.Info("No values found", "component", componentName)
+		_ = ui.Info("No values found for component: " + componentName)
 	}
 }
 
@@ -354,7 +355,7 @@ func listValuesWithOptions(opts *ValuesOptions, args []string) (string, error) {
 	if err != nil {
 		var noValuesErr *listerrors.NoValuesFoundError
 		if errors.As(err, &noValuesErr) {
-			logNoValuesFoundMessage(componentName, filterOptions.Query)
+			displayNoValuesFoundMessage(componentName, filterOptions.Query)
 			return "", nil
 		}
 		return "", err

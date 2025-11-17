@@ -24,6 +24,7 @@ func WithFormatFlag(options *[]flags.Option) {
 	*options = append(*options,
 		flags.WithStringFlag("format", "f", "", "Output format: table, json, yaml, csv, tsv"),
 		flags.WithEnvVars("format", "ATMOS_LIST_FORMAT"),
+		flags.WithValidValues("format", "table", "json", "yaml", "csv", "tsv"),
 	)
 }
 
@@ -62,7 +63,7 @@ func WithStackFlag(options *[]flags.Option) {
 }
 
 // WithFilterFlag adds YQ filter expression flag with environment variable support.
-// Used by: components, vendor.
+// Used by: components, vendor, instances.
 func WithFilterFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithFilterFlag")()
 

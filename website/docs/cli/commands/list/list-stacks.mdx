@@ -3,7 +3,7 @@ title: atmos list stacks
 sidebar_label: stacks
 sidebar_class_name: command
 id: stacks
-description: Use this command to list all Stack configurations or a stack of a specified component.
+description: Use this command to list all Stack configurations or stacks for a specified component
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
@@ -35,32 +35,125 @@ Run `atmos list stacks --help` to see all the available options
 
 ## Examples
 
+List all stacks:
 ```shell
 atmos list stacks
+```
+
+List stacks for a specific component:
+```shell
 atmos list stacks -c vpc
+atmos list stacks --component eks
 ```
 
-### Customizing Output Columns
+Output in different formats:
+```shell
+# JSON format
+atmos list stacks --format json
 
-This configuration customizes the output of `atmos list stacks`:
+# YAML format
+atmos list stacks --format yaml
 
-```yaml
-# In atmos.yaml
-stacks:
-  list:
-    format: table
-    columns:
-      - name: Stack Name
-        value: "{{ .stack_name }}"
-      - name: Configuration Path
-        value: "{{ .stack_path }}"
+# CSV format
+atmos list stacks --format csv
 ```
 
-When you run `atmos list stacks`, the output table will have columns titled "Stack Name" and "Configuration Path".
+Sort stacks:
+```shell
+# Sort by stack name ascending
+atmos list stacks --sort stack:asc
+
+# Sort by component name descending
+atmos list stacks --component vpc --sort component:desc
+```
 
 ## Flags
 
 <dl>
-  <dt>`--component` / `-c` <em>(optional)</em></dt>
-  <dd>Atmos component.</dd>
+  <dt>`--component` / `-c`</dt>
+  <dd>Filter stacks by component name</dd>
+
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+
+  <dt>`--columns`</dt>
+  <dd>Columns to display (comma-separated). Overrides `stacks.list.columns` configuration in atmos.yaml</dd>
+
+  <dt>`--delimiter`</dt>
+  <dd>Delimiter for CSV/TSV output (default: tab for tsv, comma for csv)</dd>
+
+  <dt>`--sort`</dt>
+  <dd>Sort by column:order (e.g., `stack:asc,component:desc`)</dd>
 </dl>
+
+## Custom Columns Configuration
+
+You can customize the columns displayed by `atmos list stacks` in your `atmos.yaml`:
+
+```yaml
+# atmos.yaml
+stacks:
+  list:
+    columns:
+      - name: Stack
+        value: "{{ .stack }}"
+      - name: Components
+        value: "{{ .components | len }} components"
+      - name: File
+        value: "{{ .file }}"
+```
+
+:::note
+Column configuration for stacks is under the `stacks.list.columns` section in atmos.yaml, not `components.list.columns`.
+:::
+
+### Available Template Fields
+
+Column `value` fields support Go template syntax with access to:
+
+- `.stack` - Stack name
+- `.components` - Array of components in the stack
+- `.file` - Stack configuration file path
+- `.vars` - Stack-level variables (if available)
+
+### Template Functions
+
+Columns support template functions for data transformation:
+
+```yaml
+stacks:
+  list:
+    columns:
+      - name: Stack (Upper)
+        value: "{{ .stack | upper }}"
+      - name: Component Count
+        value: "{{ .components | len }}"
+      - name: Short File
+        value: "{{ .file | truncate 40 }}"
+```
+
+Available functions:
+- `upper`, `lower` - String case conversion
+- `truncate` - Truncate string with ellipsis
+- `len` - Length of arrays/strings
+- `join` - Join array elements with delimiter
+- `toString` - Convert value to string
+- `ternary` - Conditional expression
+
+### Override Columns via CLI
+
+Override configured columns using the `--columns` flag:
+
+```shell
+# Display only stack and file columns
+atmos list stacks --columns stack,file
+
+# Display custom subset
+atmos list stacks --columns "stack,components,file"
+```
+
+## Related Commands
+
+- [`atmos list components`](/cli/commands/list/components) - List all components
+- [`atmos list instances`](/cli/commands/list/list-instances) - List all component instances across stacks
+- [`atmos describe stacks`](/cli/commands/describe/stacks) - Get detailed stack configuration
