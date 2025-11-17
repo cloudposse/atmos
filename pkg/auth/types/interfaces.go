@@ -233,16 +233,19 @@ type AuthManager interface {
 	GetProviders() map[string]schema.Provider
 
 	// Logout removes credentials for the specified identity and its authentication chain.
+	// If deleteKeychain is true, also removes credentials from system keychain.
 	// Best-effort: continues cleanup even if individual steps fail.
-	Logout(ctx context.Context, identityName string) error
+	Logout(ctx context.Context, identityName string, deleteKeychain bool) error
 
 	// LogoutProvider removes all credentials for the specified provider.
+	// If deleteKeychain is true, also removes credentials from system keychain.
 	// Best-effort: continues cleanup even if individual steps fail.
-	LogoutProvider(ctx context.Context, providerName string) error
+	LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error
 
 	// LogoutAll removes all cached credentials for all identities.
+	// If deleteKeychain is true, also removes credentials from system keychain.
 	// Best-effort: continues cleanup even if individual steps fail.
-	LogoutAll(ctx context.Context) error
+	LogoutAll(ctx context.Context, deleteKeychain bool) error
 
 	// GetEnvironmentVariables returns the environment variables for an identity
 	// without performing authentication or validation.

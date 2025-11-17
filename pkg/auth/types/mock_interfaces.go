@@ -583,45 +583,45 @@ func (mr *MockAuthManagerMockRecorder) ListProviders() *gomock.Call {
 }
 
 // Logout mocks base method.
-func (m *MockAuthManager) Logout(ctx context.Context, identityName string) error {
+func (m *MockAuthManager) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Logout", ctx, identityName)
+	ret := m.ctrl.Call(m, "Logout", ctx, identityName, deleteKeychain)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Logout indicates an expected call of Logout.
-func (mr *MockAuthManagerMockRecorder) Logout(ctx, identityName any) *gomock.Call {
+func (mr *MockAuthManagerMockRecorder) Logout(ctx, identityName, deleteKeychain any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockAuthManager)(nil).Logout), ctx, identityName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockAuthManager)(nil).Logout), ctx, identityName, deleteKeychain)
 }
 
 // LogoutAll mocks base method.
-func (m *MockAuthManager) LogoutAll(ctx context.Context) error {
+func (m *MockAuthManager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LogoutAll", ctx)
+	ret := m.ctrl.Call(m, "LogoutAll", ctx, deleteKeychain)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // LogoutAll indicates an expected call of LogoutAll.
-func (mr *MockAuthManagerMockRecorder) LogoutAll(ctx any) *gomock.Call {
+func (mr *MockAuthManagerMockRecorder) LogoutAll(ctx, deleteKeychain any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutAll", reflect.TypeOf((*MockAuthManager)(nil).LogoutAll), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutAll", reflect.TypeOf((*MockAuthManager)(nil).LogoutAll), ctx, deleteKeychain)
 }
 
 // LogoutProvider mocks base method.
-func (m *MockAuthManager) LogoutProvider(ctx context.Context, providerName string) error {
+func (m *MockAuthManager) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LogoutProvider", ctx, providerName)
+	ret := m.ctrl.Call(m, "LogoutProvider", ctx, providerName, deleteKeychain)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // LogoutProvider indicates an expected call of LogoutProvider.
-func (mr *MockAuthManagerMockRecorder) LogoutProvider(ctx, providerName any) *gomock.Call {
+func (mr *MockAuthManagerMockRecorder) LogoutProvider(ctx, providerName, deleteKeychain any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutProvider", reflect.TypeOf((*MockAuthManager)(nil).LogoutProvider), ctx, providerName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutProvider", reflect.TypeOf((*MockAuthManager)(nil).LogoutProvider), ctx, providerName, deleteKeychain)
 }
 
 // PrepareShellEnvironment mocks base method.

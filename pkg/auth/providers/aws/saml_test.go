@@ -118,9 +118,9 @@ func (s stubSamlMgr) GetStackInfo() *schema.ConfigAndStacksInfo                 
 func (s stubSamlMgr) ListProviders() []string                                   { return nil }
 func (s stubSamlMgr) GetIdentities() map[string]schema.Identity                 { return s.idmap }
 func (s stubSamlMgr) GetProviders() map[string]schema.Provider                  { return nil }
-func (s stubSamlMgr) Logout(context.Context, string) error                      { return nil }
-func (s stubSamlMgr) LogoutProvider(context.Context, string) error              { return nil }
-func (s stubSamlMgr) LogoutAll(context.Context) error                           { return nil }
+func (s stubSamlMgr) Logout(context.Context, string, bool) error                { return nil }
+func (s stubSamlMgr) LogoutProvider(context.Context, string, bool) error        { return nil }
+func (s stubSamlMgr) LogoutAll(context.Context, bool) error                     { return nil }
 func (s stubSamlMgr) GetEnvironmentVariables(string) (map[string]string, error) {
 	return make(map[string]string), nil
 }
