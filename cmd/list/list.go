@@ -4,6 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 // listCmd commands list stacks and components.
@@ -45,4 +47,16 @@ func (l *ListCommandProvider) GetName() string {
 
 func (l *ListCommandProvider) GetGroup() string {
 	return "Stack Introspection"
+}
+
+func (l *ListCommandProvider) GetFlagsBuilder() flags.Builder {
+	return nil
+}
+
+func (l *ListCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (l *ListCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }

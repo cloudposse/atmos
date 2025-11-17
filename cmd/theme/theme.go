@@ -4,6 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -53,4 +55,16 @@ func (t *ThemeCommandProvider) GetName() string {
 // GetGroup returns the command group for help organization.
 func (t *ThemeCommandProvider) GetGroup() string {
 	return "Other Commands"
+}
+
+func (t *ThemeCommandProvider) GetFlagsBuilder() flags.Builder {
+	return nil
+}
+
+func (t *ThemeCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (t *ThemeCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }

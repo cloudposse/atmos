@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 // mockCommandProvider is a test implementation of CommandProvider.
@@ -29,6 +31,18 @@ func (m *mockCommandProvider) GetName() string {
 
 func (m *mockCommandProvider) GetGroup() string {
 	return m.group
+}
+
+func (m *mockCommandProvider) GetFlagsBuilder() flags.Builder {
+	return nil
+}
+
+func (m *mockCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (m *mockCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }
 
 func TestRegister(t *testing.T) {

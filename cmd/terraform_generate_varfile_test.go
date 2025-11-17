@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/tests"
@@ -35,15 +34,6 @@ func TestTerraformGenerateVarfileCmd(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
-
-	// Reset flag states to prevent pollution from other tests.
-	// Only reset flags that were actually changed to avoid issues with complex flag types.
-	defer func() {
-		RootCmd.PersistentFlags().Visit(func(f *pflag.Flag) {
-			_ = f.Value.Set(f.DefValue)
-			f.Changed = false
-		})
-	}()
 
 	// Capture stderr.
 	oldStderr := os.Stderr
@@ -98,15 +88,6 @@ func TestTerraformGenerateVarfileCmdNoColor(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 	t.Setenv("NO_COLOR", "1")
-
-	// Reset flag states to prevent pollution from other tests.
-	// Only reset flags that were actually changed to avoid issues with complex flag types.
-	defer func() {
-		RootCmd.PersistentFlags().Visit(func(f *pflag.Flag) {
-			_ = f.Value.Set(f.DefValue)
-			f.Changed = false
-		})
-	}()
 
 	// Capture stderr.
 	oldStderr := os.Stderr

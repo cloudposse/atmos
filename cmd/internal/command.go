@@ -1,6 +1,11 @@
 package internal
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
+)
 
 // CommandProvider is the interface that built-in command packages implement
 // to register themselves with the Atmos command registry.
@@ -22,6 +27,18 @@ import "github.com/spf13/cobra"
 //
 //	func (a *AboutCommandProvider) GetGroup() string {
 //	    return "Other Commands"
+//	}
+//
+//	func (a *AboutCommandProvider) GetFlagsBuilder() flags.Builder {
+//	    return nil
+//	}
+//
+//	func (a *AboutCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+//	    return nil
+//	}
+//
+//	func (a *AboutCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+//	    return nil
 //	}
 //
 //	func init() {
@@ -47,4 +64,16 @@ type CommandProvider interface {
 	//   - "Pro Features"             (auth, pro)
 	//   - "Other Commands"           (about, completion, version, support)
 	GetGroup() string
+
+	// GetFlagsBuilder returns the flags builder for this command.
+	// Return nil if the command has no flags.
+	GetFlagsBuilder() flags.Builder
+
+	// GetPositionalArgsBuilder returns the positional args builder for this command.
+	// Return nil if the command has no positional arguments.
+	GetPositionalArgsBuilder() *flags.PositionalArgsBuilder
+
+	// GetCompatibilityFlags returns compatibility flags for this command.
+	// Return nil if the command has no compatibility flags.
+	GetCompatibilityFlags() map[string]compat.CompatibilityFlag
 }
