@@ -77,8 +77,6 @@ components:
         value: "{{ .vars.region }}"
       - name: Component Folder
         value: "{{ .component_folder }}"
-      - name: Description
-        value: "{{ .metadata.description }}"
 
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
