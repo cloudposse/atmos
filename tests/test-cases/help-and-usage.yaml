@@ -117,6 +117,7 @@ tests:
     workdir: "../"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_FORCE_TTY: "true"
     command: "atmos"
     args:
       - "terraform"
