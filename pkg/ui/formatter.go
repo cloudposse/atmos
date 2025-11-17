@@ -316,7 +316,8 @@ func Writeln(text string) error {
 }
 
 // ClearLine clears the current line in the terminal and returns cursor to the beginning.
-// Uses ANSI escape sequences to clear the line before writing new content.
+// Respects NO_COLOR and terminal capabilities - uses ANSI escape sequences only when supported.
+// When colors are disabled, only writes carriage return to move cursor to start of line.
 // This is useful for replacing spinner messages or other dynamic output with final status messages.
 // Flow: ui.ClearLine() → ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 //
@@ -326,7 +327,19 @@ func Writeln(text string) error {
 //	_ = ui.ClearLine()
 //	_ = ui.Success("Operation completed successfully")
 func ClearLine() error {
-	return Write(clearLine)
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+
+	if globalTerminal == nil {
+		return errUtils.ErrUIFormatterNotInitialized
+	}
+
+	// Only use ANSI clear sequence if terminal supports colors.
+	// When NO_COLOR=1 or color is disabled, just use carriage return.
+	if globalTerminal.ColorProfile() != terminal.ColorNone {
+		return Write(clearLine) // \r\x1b[K - carriage return + clear to EOL
+	}
+	return Write("\r") // Just carriage return when colors disabled
 }
 
 // Format exposes the global formatter for advanced use cases.
