@@ -59,8 +59,14 @@ components:
     # Custom columns for 'atmos list instances' command
     # Each column supports Go template syntax with access to instance data
     columns:
+      - name: " "
+        value: "{{ .status }}"
       - name: Stack
         value: "{{ .stack }}"
+      - name: Component
+        value: "{{ .component }}"
+      - name: Type
+        value: "{{ .type }}"
       - name: Tenant
         value: "{{ .vars.tenant }}"
       - name: Environment
@@ -69,8 +75,8 @@ components:
         value: "{{ .vars.stage }}"
       - name: Region
         value: "{{ .vars.region }}"
-      - name: Component
-        value: "{{ .component }}"
+      - name: Base Component
+        value: "{{ .component_base }}"
       - name: Description
         value: "{{ .metadata.description }}"
 

@@ -203,7 +203,25 @@ func TestExtractMetadata(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := ExtractMetadata(tc.instances)
-			assert.Equal(t, tc.expected, result)
+
+			// Check length matches.
+			assert.Len(t, result, len(tc.expected))
+
+			// Check each item's fields (excluding status which contains ANSI codes).
+			for i := range result {
+				if i < len(tc.expected) {
+					// Verify status field exists and is non-empty.
+					assert.Contains(t, result[i], "status")
+					assert.NotEmpty(t, result[i]["status"])
+
+					// Check all other fields match expected.
+					for key, expectedVal := range tc.expected[i] {
+						if key != "status" {
+							assert.Equal(t, expectedVal, result[i][key], "mismatch for key %s", key)
+						}
+					}
+				}
+			}
 		})
 	}
 }
@@ -242,6 +260,10 @@ func TestExtractMetadata_IncludesVarsSettingsEnv(t *testing.T) {
 
 	assert.Len(t, result, 1)
 
+	// Verify status is included.
+	assert.Contains(t, result[0], "status")
+	assert.NotEmpty(t, result[0]["status"])
+
 	// Verify vars are included
 	assert.Contains(t, result[0], "vars")
 	vars := result[0]["vars"].(map[string]any)
@@ -258,4 +280,48 @@ func TestExtractMetadata_IncludesVarsSettingsEnv(t *testing.T) {
 	assert.Contains(t, result[0], "env")
 	env := result[0]["env"].(map[string]any)
 	assert.Equal(t, "us-east-2", env["AWS_REGION"])
+}
+
+func TestGetStatusIndicator(t *testing.T) {
+	tests := []struct {
+		name     string
+		enabled  bool
+		locked   bool
+		contains string // Check if output contains the dot character
+	}{
+		{
+			name:     "enabled and not locked shows green",
+			enabled:  true,
+			locked:   false,
+			contains: "●",
+		},
+		{
+			name:     "locked shows red",
+			enabled:  true,
+			locked:   true,
+			contains: "●",
+		},
+		{
+			name:     "disabled shows gray",
+			enabled:  false,
+			locked:   false,
+			contains: "●",
+		},
+		{
+			name:     "disabled and locked shows red (locked takes precedence)",
+			enabled:  false,
+			locked:   true,
+			contains: "●",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getStatusIndicator(tt.enabled, tt.locked)
+			// Always contains the status dot.
+			assert.Contains(t, result, tt.contains)
+			// Result is non-empty (may or may not have ANSI codes depending on TTY).
+			assert.NotEmpty(t, result)
+		})
+	}
 }

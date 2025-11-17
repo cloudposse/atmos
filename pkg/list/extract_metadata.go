@@ -1,8 +1,30 @@
 package list
 
 import (
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// getStatusIndicator returns a colored dot indicator based on enabled/locked state.
+// - Gray (●) if enabled: false (disabled).
+// - Red (●) if locked: true.
+// - Green (●) if enabled: true and not locked.
+func getStatusIndicator(enabled, locked bool) string {
+	const statusDot = "●"
+
+	switch {
+	case locked:
+		// Red for locked.
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(statusDot)
+	case enabled:
+		// Green for enabled.
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(statusDot)
+	default:
+		// Gray for disabled.
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(statusDot)
+	}
+}
 
 // ExtractMetadata transforms schema.Instance slice into []map[string]any for renderer.
 // Extracts metadata fields and makes them accessible to column templates.
@@ -53,8 +75,12 @@ func ExtractMetadata(instances []schema.Instance) []map[string]any {
 			description = val
 		}
 
+		// Compute status indicator.
+		status := getStatusIndicator(enabled, locked)
+
 		// Create flat map with all fields accessible to templates.
 		item := map[string]any{
+			"status":         status, // Colored status dot (●)
 			"stack":          instance.Stack,
 			"component":      instance.Component,
 			"component_type": instance.ComponentType,
