@@ -170,10 +170,76 @@ func formatCollectionValue(v reflect.Value) string {
 	case reflect.Map:
 		return fmt.Sprintf("{...} (%d keys)", count)
 	case reflect.Array, reflect.Slice:
+		// Try to expand scalar arrays into multi-line format.
+		if expanded := tryExpandScalarArray(v); expanded != "" {
+			return expanded
+		}
 		return fmt.Sprintf("[...] (%d items)", count)
 	default:
 		return "{unknown collection}"
 	}
+}
+
+// tryExpandScalarArray attempts to expand an array of scalar values into a multi-line string.
+// Returns empty string if the array contains non-scalar values.
+func tryExpandScalarArray(v reflect.Value) string {
+	if v.Len() == 0 {
+		return ""
+	}
+
+	// Check if all elements are scalars (string, number, bool).
+	var items []string
+	for i := 0; i < v.Len(); i++ {
+		elem := v.Index(i)
+
+		// Handle interface{} wrapping.
+		if elem.Kind() == reflect.Interface {
+			elem = elem.Elem()
+		}
+
+		// Check if element is a scalar type.
+		switch elem.Kind() {
+		case reflect.String:
+			items = append(items, elem.String())
+		case reflect.Bool:
+			items = append(items, fmt.Sprintf("%v", elem.Bool()))
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			items = append(items, fmt.Sprintf("%d", elem.Int()))
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			items = append(items, fmt.Sprintf("%d", elem.Uint()))
+		case reflect.Float32, reflect.Float64:
+			items = append(items, fmt.Sprintf("%.2f", elem.Float()))
+		default:
+			// Non-scalar element found, return empty to use placeholder format.
+			return ""
+		}
+	}
+
+	// Join scalar items with newlines for multi-row display.
+	return joinItems(items)
+}
+
+// joinItems joins array items with newlines, respecting MaxColumnWidth.
+func joinItems(items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+
+	// Join with newlines.
+	result := ""
+	for i, item := range items {
+		if i > 0 {
+			result += "\n"
+		}
+		// Truncate individual items if they're too long.
+		if len(item) > MaxColumnWidth {
+			result += item[:MaxColumnWidth-3] + "..."
+		} else {
+			result += item
+		}
+	}
+
+	return result
 }
 
 // formatComplexValue formats complex values using JSON.

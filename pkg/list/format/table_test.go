@@ -1,0 +1,150 @@
+package format
+
+import (
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestTryExpandScalarArray(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected string
+	}{
+		{
+			name:     "String array",
+			input:    []interface{}{"us-east-1a", "us-east-1b", "us-east-1c"},
+			expected: "us-east-1a\nus-east-1b\nus-east-1c",
+		},
+		{
+			name:     "Integer array",
+			input:    []interface{}{1, 2, 3},
+			expected: "1\n2\n3",
+		},
+		{
+			name:     "Boolean array",
+			input:    []interface{}{true, false, true},
+			expected: "true\nfalse\ntrue",
+		},
+		{
+			name:     "Empty array",
+			input:    []interface{}{},
+			expected: "",
+		},
+		{
+			name:     "Mixed types (non-scalar)",
+			input:    []interface{}{"string", map[string]string{"key": "value"}},
+			expected: "", // Should return empty for non-scalar arrays
+		},
+		{
+			name:     "Nested array (non-scalar)",
+			input:    []interface{}{[]string{"a", "b"}, []string{"c", "d"}},
+			expected: "", // Should return empty for nested arrays
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := reflect.ValueOf(tt.input)
+			result := tryExpandScalarArray(v)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFormatCollectionValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected string
+	}{
+		{
+			name:     "Scalar string array expands",
+			input:    []interface{}{"zone-a", "zone-b", "zone-c"},
+			expected: "zone-a\nzone-b\nzone-c",
+		},
+		{
+			name:     "Map shows placeholder",
+			input:    map[string]interface{}{"key1": "value1", "key2": "value2"},
+			expected: "{...} (2 keys)",
+		},
+		{
+			name:     "Complex array shows placeholder",
+			input:    []interface{}{map[string]string{"a": "b"}, map[string]string{"c": "d"}},
+			expected: "[...] (2 items)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := reflect.ValueOf(tt.input)
+			result := formatCollectionValue(v)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestJoinItems(t *testing.T) {
+	tests := []struct {
+		name     string
+		items    []string
+		expected string
+	}{
+		{
+			name:     "Multiple items",
+			items:    []string{"item1", "item2", "item3"},
+			expected: "item1\nitem2\nitem3",
+		},
+		{
+			name:     "Single item",
+			items:    []string{"item1"},
+			expected: "item1",
+		},
+		{
+			name:     "Empty array",
+			items:    []string{},
+			expected: "",
+		},
+		{
+			name:     "Items with long values get truncated",
+			items:    []string{strings.Repeat("a", 70)},
+			expected: strings.Repeat("a", 57) + "...",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := joinItems(tt.items)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFormatTableCellValueWithArrays(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		contains string
+	}{
+		{
+			name:     "Scalar array expands",
+			input:    []interface{}{"us-east-1a", "us-east-1b"},
+			contains: "us-east-1a\nus-east-1b",
+		},
+		{
+			name:     "Map shows placeholder",
+			input:    map[string]interface{}{"key": "value"},
+			contains: "{...} (1 keys)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatTableCellValue(tt.input)
+			assert.Contains(t, result, tt.contains)
+		})
+	}
+}
