@@ -36,6 +36,42 @@ Use registry pattern for extensibility and plugin-like architecture. Existing im
 
 **New commands MUST use command registry pattern.** See `docs/prd/command-registry-pattern.md`
 
+### Specialized Agents (MANDATORY)
+Before implementing domain-specific functionality, consult specialized agents in `.claude/agents/`. These agents have deep expertise in specific areas and prevent implementation mistakes.
+
+**Available agents:**
+- **flag-handler** - CLI commands with flag parsing, CommandProvider interface, StandardParser patterns
+- **test-automation-expert** - Comprehensive test coverage and test infrastructure
+- **code-reviewer** - Quality validation and CLAUDE.md compliance
+- **tui-expert** - Terminal UI components and lipgloss styling
+
+**When to invoke:**
+- Implementing new CLI commands → Use `flag-handler` agent
+- Adding flags to existing commands → Use `flag-handler` agent
+- Writing comprehensive tests → Use `test-automation-expert` agent
+- Validating implementation quality → Use `code-reviewer` agent
+- Building terminal UI components → Use `tui-expert` agent
+
+**How to invoke:**
+Use Task tool with appropriate subagent_type:
+```
+Task(
+  subagent_type: "flag-handler",
+  prompt: "Help design named wrapper functions for list command flags"
+)
+```
+
+**Why this matters:**
+- Specialized agents prevent implementing incorrect patterns
+- Ensure consistency with existing infrastructure
+- Catch issues early before code review
+- Provide authoritative guidance from domain experts
+- Reduce rework and wasted time
+
+**Anti-pattern:**
+❌ Writing PRDs or implementation code without consulting domain-specific agents
+✅ Always consult the appropriate agent before implementing specialized functionality
+
 ### Interface-Driven Design (MANDATORY)
 - Define interfaces for all major functionality
 - Use dependency injection for testability

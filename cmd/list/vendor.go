@@ -13,7 +13,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
+	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/filter"
+	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/renderer"
+	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 var vendorParser *flags.StandardParser
@@ -21,16 +27,17 @@ var vendorParser *flags.StandardParser
 // VendorOptions contains parsed flags for the vendor command.
 type VendorOptions struct {
 	global.Flags
-	Format    string
-	Stack     string
-	Delimiter string
+	Format  string
+	Stack   string
+	Columns string
+	Sort    string
 }
 
 // vendorCmd lists vendor configurations.
 var vendorCmd = &cobra.Command{
 	Use:   "vendor",
-	Short: "List all vendor configurations",
-	Long:  "List all vendor configurations in a tabular way, including component and vendor manifests.",
+	Short: "List all vendor configurations with filtering, sorting, and formatting options",
+	Long:  `List Atmos vendor configurations including component and vendor manifests with support for filtering, custom column selection, sorting, and multiple output formats.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Skip stack validation for vendor.
@@ -38,68 +45,141 @@ var vendorCmd = &cobra.Command{
 			return err
 		}
 
-		// Parse flags using StandardParser with Viper precedence
+		// Parse flags using StandardParser with Viper precedence.
 		v := viper.GetViper()
 		if err := vendorParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
 
 		opts := &VendorOptions{
-			Flags:     flags.ParseGlobalFlags(cmd, v),
-			Format:    v.GetString("format"),
-			Stack:     v.GetString("stack"),
-			Delimiter: v.GetString("delimiter"),
+			Flags:   flags.ParseGlobalFlags(cmd, v),
+			Format:  v.GetString("format"),
+			Stack:   v.GetString("stack"),
+			Columns: v.GetString("columns"),
+			Sort:    v.GetString("sort"),
 		}
 
-		output, err := listVendorWithOptions(opts)
-		if err != nil {
-			return err
-		}
-
-		// Obfuscate home directory paths before printing.
-		obfuscatedOutput := obfuscateHomeDirInOutput(output)
-		fmt.Println(obfuscatedOutput)
-		return nil
+		return listVendorWithOptions(opts)
 	},
 }
 
 func init() {
-	// Create parser with vendor-specific flags using functional options
-	vendorParser = flags.NewStandardParser(
-		flags.WithStringFlag("format", "f", "", "Output format: table, json, yaml, csv, tsv"),
-		flags.WithStringFlag("stack", "s", "", "Filter by stack name or pattern"),
-		flags.WithStringFlag("delimiter", "d", "", "Delimiter for CSV/TSV output"),
-		flags.WithEnvVars("format", "ATMOS_LIST_FORMAT"),
-		flags.WithEnvVars("stack", "ATMOS_STACK"),
-		flags.WithEnvVars("delimiter", "ATMOS_LIST_DELIMITER"),
+	// Create parser with vendor-specific flags using flag wrappers.
+	vendorParser = NewListParser(
+		WithFormatFlag,
+		WithColumnsFlag,
+		WithSortFlag,
+		WithStackFlag,
 	)
 
-	// Register flags
+	// Register flags.
 	vendorParser.RegisterFlags(vendorCmd)
 
-	// Add stack completion
+	// Add stack completion.
 	addStackCompletion(vendorCmd)
 
-	// Bind flags to Viper for environment variable support
+	// Bind flags to Viper for environment variable support.
 	if err := vendorParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
 }
 
-func listVendorWithOptions(opts *VendorOptions) (string, error) {
+func listVendorWithOptions(opts *VendorOptions) error {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	options := &l.FilterOptions{
-		FormatStr:    opts.Format,
-		StackPattern: opts.Stack,
-		Delimiter:    opts.Delimiter,
+	// Get vendor configurations.
+	vendors, err := l.GetVendorConfigurations(&atmosConfig)
+	if err != nil {
+		return err
 	}
 
-	return l.FilterAndListVendor(&atmosConfig, options)
+	if len(vendors) == 0 {
+		ui.Info("No vendor configurations found")
+		return nil
+	}
+
+	// Build filters.
+	filters := buildVendorFilters(opts)
+
+	// Get column configuration.
+	columns := getVendorColumns(&atmosConfig, opts.Columns)
+
+	// Build column selector.
+	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
+	if err != nil {
+		return fmt.Errorf("error creating column selector: %w", err)
+	}
+
+	// Build sorters.
+	sorters, err := buildVendorSorters(opts.Sort)
+	if err != nil {
+		return fmt.Errorf("error parsing sort specification: %w", err)
+	}
+
+	// Create renderer and execute pipeline.
+	outputFormat := format.Format(opts.Format)
+	r := renderer.New(filters, selector, sorters, outputFormat)
+
+	return r.Render(vendors)
+}
+
+// buildVendorFilters creates filters based on command options.
+func buildVendorFilters(opts *VendorOptions) []filter.Filter {
+	var filters []filter.Filter
+
+	// Stack filter (glob pattern on component field).
+	if opts.Stack != "" {
+		globFilter, err := filter.NewGlobFilter("component", opts.Stack)
+		if err == nil {
+			filters = append(filters, globFilter)
+		}
+	}
+
+	return filters
+}
+
+// getVendorColumns returns column configuration.
+func getVendorColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag string) []column.Config {
+	// If --columns flag is provided, parse it and return.
+	if columnsFlag != "" {
+		return parseColumnsFlag(columnsFlag)
+	}
+
+	// Check atmos.yaml for vendor.list.columns configuration.
+	if len(atmosConfig.Vendor.List.Columns) > 0 {
+		var configs []column.Config
+		for _, col := range atmosConfig.Vendor.List.Columns {
+			configs = append(configs, column.Config{
+				Name:  col.Name,
+				Value: col.Value,
+			})
+		}
+		return configs
+	}
+
+	// Default columns for vendor.
+	return []column.Config{
+		{Name: "Component", Value: "{{ .component }}"},
+		{Name: "Type", Value: "{{ .type }}"},
+		{Name: "Manifest", Value: "{{ .manifest }}"},
+		{Name: "Folder", Value: "{{ .folder }}"},
+	}
+}
+
+// buildVendorSorters creates sorters from sort specification.
+func buildVendorSorters(sortSpec string) ([]*listSort.Sorter, error) {
+	if sortSpec == "" {
+		// Default sort: by component ascending.
+		return []*listSort.Sorter{
+			listSort.NewSorter("Component", listSort.Ascending),
+		}, nil
+	}
+
+	return listSort.ParseSortSpec(sortSpec)
 }
 
 // obfuscateHomeDirInOutput replaces occurrences of the home directory with "~" to prevent leaking user paths.

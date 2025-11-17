@@ -13,29 +13,33 @@ import (
 // TestVendorOptions tests the VendorOptions structure.
 func TestVendorOptions(t *testing.T) {
 	testCases := []struct {
-		name              string
-		opts              *VendorOptions
-		expectedFormat    string
-		expectedStack     string
-		expectedDelimiter string
+		name            string
+		opts            *VendorOptions
+		expectedFormat  string
+		expectedStack   string
+		expectedColumns string
+		expectedSort    string
 	}{
 		{
 			name: "all options populated",
 			opts: &VendorOptions{
-				Format:    "json",
-				Stack:     "prod-*",
-				Delimiter: ",",
+				Format:  "json",
+				Stack:   "prod-*",
+				Columns: "component,type",
+				Sort:    "component:asc",
 			},
-			expectedFormat:    "json",
-			expectedStack:     "prod-*",
-			expectedDelimiter: ",",
+			expectedFormat:  "json",
+			expectedStack:   "prod-*",
+			expectedColumns: "component,type",
+			expectedSort:    "component:asc",
 		},
 		{
-			name:              "empty options",
-			opts:              &VendorOptions{},
-			expectedFormat:    "",
-			expectedStack:     "",
-			expectedDelimiter: "",
+			name:            "empty options",
+			opts:            &VendorOptions{},
+			expectedFormat:  "",
+			expectedStack:   "",
+			expectedColumns: "",
+			expectedSort:    "",
 		},
 		{
 			name: "yaml format with stack filter",
@@ -43,9 +47,10 @@ func TestVendorOptions(t *testing.T) {
 				Format: "yaml",
 				Stack:  "*-staging-*",
 			},
-			expectedFormat:    "yaml",
-			expectedStack:     "*-staging-*",
-			expectedDelimiter: "",
+			expectedFormat:  "yaml",
+			expectedStack:   "*-staging-*",
+			expectedColumns: "",
+			expectedSort:    "",
 		},
 	}
 
@@ -53,7 +58,8 @@ func TestVendorOptions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.expectedFormat, tc.opts.Format)
 			assert.Equal(t, tc.expectedStack, tc.opts.Stack)
-			assert.Equal(t, tc.expectedDelimiter, tc.opts.Delimiter)
+			assert.Equal(t, tc.expectedColumns, tc.opts.Columns)
+			assert.Equal(t, tc.expectedSort, tc.opts.Sort)
 		})
 	}
 }

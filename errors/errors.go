@@ -39,6 +39,8 @@ var (
 	ErrPathResolution                        = errors.New("failed to resolve absolute path")
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
 	ErrInvalidTemplateSettings               = errors.New("invalid template settings")
+	ErrTemplateEvaluation                    = errors.New("template evaluation failed")
+	ErrInvalidConfig                         = errors.New("invalid configuration")
 	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
@@ -388,6 +390,7 @@ var (
 	ErrParseStacks               = errors.New("could not parse stacks")
 	ErrParseComponents           = errors.New("could not parse components")
 	ErrNoComponentsFound         = errors.New("no components found")
+	ErrNoStacksFound             = errors.New("no stacks found")
 	ErrStackNotFound             = errors.New("stack not found")
 	ErrProcessStack              = errors.New("error processing stack")
 

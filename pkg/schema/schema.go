@@ -379,6 +379,9 @@ type Components struct {
 	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
 	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
 
+	// List configuration for component listing.
+	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
+
 	// Dynamic plugin component types.
 	// Uses mapstructure:",remain" to capture all unmapped fields from the YAML/JSON.
 	// This allows new component types (like mock, pulumi, cdk) to be added without schema changes.
@@ -408,11 +411,12 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 }
 
 type Stacks struct {
-	BasePath      string   `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	IncludedPaths []string `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
-	ExcludedPaths []string `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
-	NamePattern   string   `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
-	NameTemplate  string   `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
+	BasePath      string     `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	IncludedPaths []string   `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
+	ExcludedPaths []string   `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
+	NamePattern   string     `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
+	NameTemplate  string     `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
+	List          ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 }
 
 type Workflows struct {
