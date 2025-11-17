@@ -20,6 +20,9 @@ const (
 	newline = "\n"
 	tab     = "\t"
 
+	// ANSI escape sequences.
+	clearLine = "\r\x1b[K" // Carriage return + clear from cursor to end of line
+
 	// Format templates.
 	iconMessageFormat = "%s %s"
 )
@@ -312,19 +315,16 @@ func Writeln(text string) error {
 	return Write(text + newline)
 }
 
-// ClearLine clears the current line in the terminal and returns cursor to the beginning.
-// Uses ANSI escape sequences: \r moves cursor to start, \x1b[K clears from cursor to end of line.
-// This is useful for replacing spinner messages or other dynamic output with final status messages.
-// Flow: ui.ClearLine() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// ClearLine returns the ANSI escape sequence to clear the current line.
+// This is a constant string that can be written to clear the line and return cursor to the beginning.
+// Use with ui.Write() to clear spinner messages or other dynamic output.
 //
 // Example usage:
 //
 //	// Clear spinner line and show success message
-//	_ = ui.ClearLine()
+//	_ = ui.Write(ui.ClearLine)
 //	_ = ui.Success("Operation completed successfully")
-func ClearLine() error {
-	return Write("\r\x1b[K")
-}
+const ClearLine = clearLine
 
 // Format exposes the global formatter for advanced use cases.
 // Most code should use the package-level functions (ui.Success, ui.Error, etc.).
