@@ -62,11 +62,12 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	err = ValidateStacks(&atmosConfig)
+	styles := theme.GetCurrentStyles()
 	if err != nil {
-		u.PrintfMessageToTUI("\r%s Stack validation failed\n", theme.Styles.XMark)
+		u.PrintfMessageToTUI("\r%s Stack validation failed\n", styles.XMark.Render("x"))
 		return err
 	}
-	u.PrintfMessageToTUI("\r%s All stacks validated successfully\n", theme.Styles.Checkmark)
+	u.PrintfMessageToTUI("\r%s All stacks validated successfully\n", styles.Checkmark.Render("✓"))
 	log.Debug("Stack validation completed")
 	return nil
 }
