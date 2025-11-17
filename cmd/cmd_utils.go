@@ -562,7 +562,7 @@ func validateAtmosConfig(opts ...AtmosValidateOption) error {
 		if !atmosConfigExists || err != nil {
 			// Return an error with context instead of printing and exiting
 			return errUtils.Build(errUtils.ErrStacksDirectoryDoesNotExist).
-				WithHintf("Stacks directory not found:\n  %s", atmosConfig.StacksBaseAbsolutePath).
+				WithHintf("Stacks directory not found:\n%s", atmosConfig.StacksBaseAbsolutePath).
 				WithContext("base_path", atmosConfig.BasePath).
 				WithContext("stacks_base_path", atmosConfig.Stacks.BasePath).
 				Err()

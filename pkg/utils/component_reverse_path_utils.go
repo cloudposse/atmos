@@ -90,13 +90,33 @@ func validatePathIsNotConfigDirectory(atmosConfig *schema.AtmosConfiguration, ab
 	workflowsBasePath := resolveBasePath(atmosConfig.Workflows.BasePath)
 
 	// Check if path is within or equals stacks directory.
-	if err := checkPathNotInDirectory(absPath, stacksBasePath, "stacks configuration", "stacks_base"); err != nil {
-		return err
+	if stacksBasePath != "" {
+		stacksBasePath = filepath.Clean(stacksBasePath)
+		if absPath == stacksBasePath || strings.HasPrefix(absPath, stacksBasePath+string(filepath.Separator)) {
+			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
+				WithHintf("Path points to the stacks configuration directory, not a component:\n%s\n\nStacks directory:\n%s",
+					absPath, stacksBasePath).
+				WithHint("Components are located in component directories (terraform, helmfile, packer)\nChange to a component directory and use `.` or provide a path within a component directory").
+				WithContext("path", absPath).
+				WithContext("stacks_base", stacksBasePath).
+				WithExitCode(2).
+				Err()
+		}
 	}
 
 	// Check if path is within or equals workflows directory.
-	if err := checkPathNotInDirectory(absPath, workflowsBasePath, "workflows", "workflows_base"); err != nil {
-		return err
+	if workflowsBasePath != "" {
+		workflowsBasePath = filepath.Clean(workflowsBasePath)
+		if absPath == workflowsBasePath || strings.HasPrefix(absPath, workflowsBasePath+string(filepath.Separator)) {
+			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
+				WithHintf("Path points to the workflows directory, not a component:\n%s\n\nWorkflows directory:\n%s",
+					absPath, workflowsBasePath).
+				WithHint("Components are located in component directories (terraform, helmfile, packer)\nChange to a component directory and use `.` or provide a path within a component directory").
+				WithContext("path", absPath).
+				WithContext("workflows_base", workflowsBasePath).
+				WithExitCode(2).
+				Err()
+		}
 	}
 
 	return nil
@@ -109,35 +129,6 @@ func resolveBasePath(basePath string) string {
 	}
 	absPath, _ := filepath.Abs(basePath)
 	return absPath
-}
-
-// checkPathNotInDirectory returns an error if absPath is within or equals the specified directory.
-func checkPathNotInDirectory(absPath, dirPath, dirDesc, contextKey string) error {
-	if dirPath == "" {
-		return nil
-	}
-
-	dirPath = filepath.Clean(dirPath)
-	if absPath == dirPath || strings.HasPrefix(absPath, dirPath+string(filepath.Separator)) {
-		return errUtils.Build(errUtils.ErrPathNotInComponentDir).
-			WithHintf("Path points to the %s directory, not a component:\n  %s\n\n%s directory:\n  %s",
-				dirDesc, absPath, capitalizeFirst(dirDesc), dirPath).
-			WithHint("Components are located in component directories (terraform, helmfile, packer)\nChange to a component directory and use `.` or provide a path within a component directory").
-			WithContext("path", absPath).
-			WithContext(contextKey, dirPath).
-			WithExitCode(2).
-			Err()
-	}
-
-	return nil
-}
-
-// capitalizeFirst capitalizes the first letter of a string.
-func capitalizeFirst(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // normalizePathForResolution converts a path to absolute, clean, and symlink-resolved form.
