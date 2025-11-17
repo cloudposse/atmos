@@ -69,10 +69,10 @@ components:
         value: "{{ .vars.stage }}"
       - name: Region
         value: "{{ .vars.region }}"
-      - name: Description
-        value: "{{ .metadata.description }}"
       - name: Component
         value: "{{ .component }}"
+      - name: Description
+        value: "{{ .metadata.description }}"
 
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments

@@ -21,10 +21,13 @@ import (
 
 // Constants for table formatting.
 const (
-	MaxColumnWidth     = 60 // Maximum width for a column.
-	TableColumnPadding = 3  // Padding for table columns.
-	DefaultKeyWidth    = 15 // Default base width for keys.
-	KeyValue           = "value"
+	MaxColumnWidth            = 60 // Maximum width for a column.
+	TableColumnPadding        = 3  // Padding for table columns.
+	DefaultKeyWidth           = 15 // Default base width for keys.
+	KeyValue                  = "value"
+	CompactColumnMaxWidth     = 20 // Maximum width for non-Description columns.
+	DescriptionColumnMinWidth = 30 // Minimum width for Description column.
+	MinColumnWidth            = 5  // Absolute minimum width for any column.
 )
 
 // Error variables for table formatting.
@@ -481,20 +484,159 @@ func renderInlineMarkdown(content string) string {
 	return strings.TrimSpace(singleLine)
 }
 
+// calculateColumnWidths calculates optimal widths for each column.
+// Returns a map of column index to width.
+func calculateColumnWidths(header []string, rows [][]string, terminalWidth int) []int {
+	numColumns := len(header)
+	if numColumns == 0 {
+		return []int{}
+	}
+
+	// Calculate padding: each column needs padding (2 chars per side = 4 total) + separator (1 char)
+	const paddingPerColumn = 5
+	totalPadding := numColumns * paddingPerColumn
+
+	// Available space for actual content.
+	availableWidth := terminalWidth - totalPadding
+	if availableWidth < numColumns {
+		// Fallback: very small terminal, distribute evenly.
+		evenWidth := availableWidth / numColumns
+		widths := make([]int, numColumns)
+		for i := range widths {
+			widths[i] = evenWidth
+		}
+		return widths
+	}
+
+	// Calculate the minimum width needed for each column (based on content + header).
+	minWidths := make([]int, numColumns)
+	for col := 0; col < numColumns; col++ {
+		// Start with header width.
+		minWidths[col] = lipgloss.Width(header[col])
+
+		// Check all row values for this column.
+		for _, row := range rows {
+			if col < len(row) {
+				// For multi-line content, use the widest line.
+				cellWidth := getMaxLineWidth(row[col])
+				if cellWidth > minWidths[col] {
+					minWidths[col] = cellWidth
+				}
+			}
+		}
+	}
+
+	// Find Description column index.
+	descriptionColIndex := -1
+	for i, h := range header {
+		if h == "Description" {
+			descriptionColIndex = i
+			break
+		}
+	}
+
+	// Calculate column widths with smart distribution.
+	widths := make([]int, numColumns)
+
+	// Strategy: Give compact columns their minimum width, allocate remaining space to Description.
+	totalMinWidth := 0
+	for i, minWidth := range minWidths {
+		// Cap non-Description columns at a reasonable max.
+		if i != descriptionColIndex {
+			if minWidth > CompactColumnMaxWidth {
+				minWidth = CompactColumnMaxWidth // Cap component names, stack names, etc.
+			}
+		}
+		totalMinWidth += minWidth
+	}
+
+	// If Description column exists, give it flexible space.
+	if descriptionColIndex >= 0 {
+		// Allocate minimum widths to all columns first.
+		for i := range widths {
+			if i == descriptionColIndex {
+				widths[i] = DescriptionColumnMinWidth // Start with reasonable minimum for Description.
+			} else {
+				widths[i] = minWidths[i]
+				if widths[i] > CompactColumnMaxWidth {
+					widths[i] = CompactColumnMaxWidth // Cap non-Description columns.
+				}
+			}
+		}
+
+		// Calculate how much space Description can take.
+		usedWidth := 0
+		for i, w := range widths {
+			if i != descriptionColIndex {
+				usedWidth += w
+			}
+		}
+
+		// Give remaining space to Description, but cap at MaxColumnWidth.
+		remainingWidth := availableWidth - usedWidth
+		if remainingWidth > MaxColumnWidth {
+			remainingWidth = MaxColumnWidth
+		}
+		if remainingWidth < DescriptionColumnMinWidth {
+			remainingWidth = DescriptionColumnMinWidth // Minimum for Description.
+		}
+		widths[descriptionColIndex] = remainingWidth
+	} else {
+		// No Description column: distribute space proportionally.
+		if totalMinWidth <= availableWidth {
+			// Enough space: use minimum widths.
+			copy(widths, minWidths)
+		} else {
+			// Not enough space: scale down proportionally.
+			scaleFactor := float64(availableWidth) / float64(totalMinWidth)
+			for i, minWidth := range minWidths {
+				widths[i] = int(float64(minWidth) * scaleFactor)
+				if widths[i] < MinColumnWidth {
+					widths[i] = MinColumnWidth // Absolute minimum.
+				}
+			}
+		}
+	}
+
+	return widths
+}
+
+// padToWidth pads a string to the target width without truncating.
+// For multi-line content, pads each line individually.
+func padToWidth(s string, width int) string {
+	if width <= 0 {
+		return s
+	}
+
+	// For multi-line content, pad each line.
+	lines := splitLines(s)
+	if len(lines) > 1 {
+		padded := make([]string, len(lines))
+		for i, line := range lines {
+			currentWidth := lipgloss.Width(line)
+			if currentWidth < width {
+				padded[i] = line + strings.Repeat(" ", width-currentWidth)
+			} else {
+				padded[i] = line
+			}
+		}
+		return strings.Join(padded, "\n")
+	}
+
+	// Single line: pad if needed.
+	currentWidth := lipgloss.Width(s)
+	if currentWidth < width {
+		return s + strings.Repeat(" ", width-currentWidth)
+	}
+	return s
+}
+
+
 // createStyledTable creates a styled table with headers and rows.
-// Uses the same clean styling as atmos version list with width calculation and wrapping.
+// Uses intelligent column width calculation to optimize space usage.
 func CreateStyledTable(header []string, rows [][]string) string {
 	// Get terminal width - use exactly what's detected.
 	detectedWidth := templates.GetTerminalWidth()
-
-	// Calculate padding more conservatively, similar to version list approach.
-	// Each column needs: padding (2 chars) + separator space (1 char) = 3 chars per column
-	// Plus additional margin for safety
-	numColumns := len(header)
-	tableBorderPadding := (numColumns * 3) + 4 // 3 per column + 4 for margins
-
-	// Account for table borders and padding.
-	tableWidth := detectedWidth - tableBorderPadding
 
 	// Get theme-aware styles.
 	styles := theme.GetCurrentStyles()
@@ -522,13 +664,40 @@ func CreateStyledTable(header []string, rows [][]string) string {
 		}
 	}
 
+	// Calculate optimal column widths.
+	columnWidths := calculateColumnWidths(header, processedRows, detectedWidth)
+
+	// Pad headers to match column widths.
+	paddedHeaders := make([]string, len(header))
+	for i, h := range header {
+		if i < len(columnWidths) {
+			paddedHeaders[i] = padToWidth(h, columnWidths[i])
+		} else {
+			paddedHeaders[i] = h
+		}
+	}
+
+	// Pad cells to match column widths (don't truncate, just pad).
+	constrainedRows := make([][]string, len(processedRows))
+	for i, row := range processedRows {
+		constrainedRows[i] = make([]string, len(row))
+		for j, cell := range row {
+			if j < len(columnWidths) {
+				// Pad to width, but allow wrapping for long content.
+				constrainedRows[i][j] = padToWidth(cell, columnWidths[j])
+			} else {
+				constrainedRows[i][j] = cell
+			}
+		}
+	}
+
 	// Table styling - simple and clean like version list.
 	headerStyle := lipgloss.NewStyle().Bold(true)
 	cellStyle := lipgloss.NewStyle()
 
 	t := table.New().
-		Headers(header...).
-		Rows(processedRows...).
+		Headers(paddedHeaders...).
+		Rows(constrainedRows...).
 		BorderHeader(true).                                               // Show border under header.
 		BorderTop(false).                                                 // No top border.
 		BorderBottom(false).                                              // No bottom border.
@@ -545,19 +714,13 @@ func CreateStyledTable(header []string, rows [][]string) string {
 				// Apply semantic styling based on cell content.
 				baseStyle := cellStyle.Padding(0, 1)
 				// Row indices for data start at 0, matching the rows array.
-				if row >= 0 && row < len(processedRows) && col < len(processedRows[row]) {
-					cellValue := processedRows[row][col]
+				if row >= 0 && row < len(constrainedRows) && col < len(constrainedRows[row]) {
+					cellValue := constrainedRows[row][col]
 					return getCellStyle(cellValue, &baseStyle, styles)
 				}
 				return baseStyle
 			}
 		})
-
-	// Only set width and enable wrapping if we have a reasonable terminal width.
-	// This prevents issues when terminal width detection fails or is unreasonably small.
-	if tableWidth > 40 {
-		t = t.Width(tableWidth).Wrap(true)
-	}
 
 	return t.String() + utils.GetLineEnding()
 }
