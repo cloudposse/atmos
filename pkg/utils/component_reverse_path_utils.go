@@ -86,47 +86,58 @@ func ExtractComponentInfoFromPath(
 // Returns an error if the path is within stacks or workflows directories.
 func validatePathIsNotConfigDirectory(atmosConfig *schema.AtmosConfiguration, absPath string) error {
 	// Get absolute paths for stack and workflow directories.
-	stacksBasePath := atmosConfig.Stacks.BasePath
-	if stacksBasePath != "" && !filepath.IsAbs(stacksBasePath) {
-		stacksBasePath, _ = filepath.Abs(stacksBasePath)
-	}
-
-	workflowsBasePath := atmosConfig.Workflows.BasePath
-	if workflowsBasePath != "" && !filepath.IsAbs(workflowsBasePath) {
-		workflowsBasePath, _ = filepath.Abs(workflowsBasePath)
-	}
+	stacksBasePath := resolveBasePath(atmosConfig.Stacks.BasePath)
+	workflowsBasePath := resolveBasePath(atmosConfig.Workflows.BasePath)
 
 	// Check if path is within or equals stacks directory.
-	if stacksBasePath != "" {
-		stacksBasePath = filepath.Clean(stacksBasePath)
-		if absPath == stacksBasePath || strings.HasPrefix(absPath, stacksBasePath+string(filepath.Separator)) {
-			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
-				WithHintf("Path `%s` points to the stacks configuration directory, not a component\n\nStacks directory: `%s`",
-					absPath, stacksBasePath).
-				WithHint("Components are located in component directories (terraform, helmfile, packer)\nChange to a component directory and use `.` or provide a path within a component directory").
-				WithContext("path", absPath).
-				WithContext("stacks_base", stacksBasePath).
-				WithExitCode(2).
-				Err()
-		}
+	if err := checkPathNotInDirectory(absPath, stacksBasePath, "stacks configuration", "stacks_base"); err != nil {
+		return err
 	}
 
 	// Check if path is within or equals workflows directory.
-	if workflowsBasePath != "" {
-		workflowsBasePath = filepath.Clean(workflowsBasePath)
-		if absPath == workflowsBasePath || strings.HasPrefix(absPath, workflowsBasePath+string(filepath.Separator)) {
-			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
-				WithHintf("Path `%s` points to the workflows directory, not a component\n\nWorkflows directory: `%s`",
-					absPath, workflowsBasePath).
-				WithHint("Components are located in component directories (terraform, helmfile, packer)\nChange to a component directory and use `.` or provide a path within a component directory").
-				WithContext("path", absPath).
-				WithContext("workflows_base", workflowsBasePath).
-				WithExitCode(2).
-				Err()
-		}
+	if err := checkPathNotInDirectory(absPath, workflowsBasePath, "workflows", "workflows_base"); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+// resolveBasePath converts a relative base path to absolute.
+func resolveBasePath(basePath string) string {
+	if basePath == "" || filepath.IsAbs(basePath) {
+		return basePath
+	}
+	absPath, _ := filepath.Abs(basePath)
+	return absPath
+}
+
+// checkPathNotInDirectory returns an error if absPath is within or equals the specified directory.
+func checkPathNotInDirectory(absPath, dirPath, dirDesc, contextKey string) error {
+	if dirPath == "" {
+		return nil
+	}
+
+	dirPath = filepath.Clean(dirPath)
+	if absPath == dirPath || strings.HasPrefix(absPath, dirPath+string(filepath.Separator)) {
+		return errUtils.Build(errUtils.ErrPathNotInComponentDir).
+			WithHintf("Path points to the %s directory, not a component:\n  %s\n\n%s directory:\n  %s",
+				dirDesc, absPath, capitalizeFirst(dirDesc), dirPath).
+			WithHint("Components are located in component directories (terraform, helmfile, packer)\nChange to a component directory and use `.` or provide a path within a component directory").
+			WithContext("path", absPath).
+			WithContext(contextKey, dirPath).
+			WithExitCode(2).
+			Err()
+	}
+
+	return nil
+}
+
+// capitalizeFirst capitalizes the first letter of a string.
+func capitalizeFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // normalizePathForResolution converts a path to absolute, clean, and symlink-resolved form.
@@ -223,69 +234,84 @@ func tryExtractComponentType(
 	absPath string,
 	componentType string,
 ) (*ComponentInfo, error) {
-	// Get the base path for this component type.
-	basePath, _, err := getBasePathForComponentType(atmosConfig, componentType)
+	// Get and resolve the base path for this component type.
+	basePath, err := getResolvedBasePath(atmosConfig, componentType)
 	if err != nil {
 		return nil, err
 	}
 
-	// Resolve and clean the base path.
-	basePath, err = resolveAndCleanBasePath(basePath)
+	// Compute relative path and validate it's within base path.
+	relPath, err := validatePathWithinBase(absPath, basePath, componentType)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if absPath is within basePath.
-	relPath, err := filepath.Rel(basePath, absPath)
-	if err != nil {
-		return nil, fmt.Errorf("path is not relative to %s base path: %w", componentType, err)
-	}
-
-	// If relPath starts with "..", it's not within basePath.
-	if strings.HasPrefix(relPath, "..") {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrPathNotWithinComponentBase, componentType)
-	}
-
-	// If relPath is ".", the path IS the base path (not allowed).
-	if relPath == "." {
+	// Parse the relative path into component parts.
+	parts := parseRelativePathParts(relPath)
+	if len(parts) == 0 {
 		return nil, buildComponentBaseError(absPath, basePath, componentType)
 	}
 
-	// Split the relative path into parts.
-	parts := strings.Split(relPath, string(filepath.Separator))
+	// Build component info from parsed parts.
+	return buildComponentInfo(componentType, parts), nil
+}
 
-	// Filter out empty parts (can happen on Windows or with trailing slashes).
+// getResolvedBasePath gets the base path for a component type and resolves it to absolute.
+func getResolvedBasePath(atmosConfig *schema.AtmosConfiguration, componentType string) (string, error) {
+	basePath, _, err := getBasePathForComponentType(atmosConfig, componentType)
+	if err != nil {
+		return "", err
+	}
+
+	return resolveAndCleanBasePath(basePath)
+}
+
+// validatePathWithinBase validates that absPath is within basePath and returns the relative path.
+func validatePathWithinBase(absPath, basePath, componentType string) (string, error) {
+	relPath, err := filepath.Rel(basePath, absPath)
+	if err != nil {
+		return "", fmt.Errorf("path is not relative to %s base path: %w", componentType, err)
+	}
+
+	if strings.HasPrefix(relPath, "..") {
+		return "", fmt.Errorf("%w: %s", errUtils.ErrPathNotWithinComponentBase, componentType)
+	}
+
+	if relPath == "." {
+		return "", buildComponentBaseError(absPath, basePath, componentType)
+	}
+
+	return relPath, nil
+}
+
+// parseRelativePathParts splits a relative path and filters out empty parts.
+func parseRelativePathParts(relPath string) []string {
+	parts := strings.Split(relPath, string(filepath.Separator))
 	var nonEmptyParts []string
 	for _, part := range parts {
 		if part != "" {
 			nonEmptyParts = append(nonEmptyParts, part)
 		}
 	}
+	return nonEmptyParts
+}
 
-	if len(nonEmptyParts) == 0 {
-		return nil, buildComponentBaseError(absPath, basePath, componentType)
-	}
+// buildComponentInfo constructs ComponentInfo from path parts.
+func buildComponentInfo(componentType string, parts []string) *ComponentInfo {
+	var folderPrefix, componentName, fullComponent string
 
-	// Determine folder prefix and component name.
-	var folderPrefix string
-	var componentName string
-	var fullComponent string
-
-	if len(nonEmptyParts) == 1 {
+	if len(parts) == 1 {
 		// No folder prefix - component is directly in base path.
-		// Example: components/terraform/vpc → component="vpc"
-		componentName = nonEmptyParts[0]
+		componentName = parts[0]
 		fullComponent = componentName
 	} else {
 		// Has folder prefix - everything except last part is folder prefix.
-		// Example: components/terraform/vpc/security-group → folder="vpc", component="security-group"
-		folderPrefix = filepath.Join(nonEmptyParts[:len(nonEmptyParts)-1]...)
-		componentName = nonEmptyParts[len(nonEmptyParts)-1]
+		folderPrefix = filepath.Join(parts[:len(parts)-1]...)
+		componentName = parts[len(parts)-1]
 		fullComponent = filepath.Join(folderPrefix, componentName)
 	}
 
 	// Convert Windows backslashes to forward slashes for component names.
-	// Component names in stack configs always use forward slashes.
 	fullComponent = filepath.ToSlash(fullComponent)
 	if folderPrefix != "" {
 		folderPrefix = filepath.ToSlash(folderPrefix)
@@ -296,5 +322,5 @@ func tryExtractComponentType(
 		FolderPrefix:  folderPrefix,
 		ComponentName: componentName,
 		FullComponent: fullComponent,
-	}, nil
+	}
 }

@@ -243,6 +243,8 @@ tests:
     snapshot: true
     description: "Test error when path is outside component directories"
     workdir: "fixtures/scenarios/complete"
+    env:
+      ATMOS_FORCE_TTY: "true"
     command: "atmos"
     args:
       - "describe"

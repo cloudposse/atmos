@@ -7,10 +7,9 @@
 
 ## Hints
 
-💡 Path
+💡 Path points to the stacks configuration directory, not a component:
 /absolute/path/to/external
 conductor/hanoi/tests/fixtures/scenarios/complete/stacks
-points to the stacks configuration directory, not a component
 
 Stacks directory:
 /absolute/path/to/external

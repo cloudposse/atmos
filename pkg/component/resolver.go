@@ -15,6 +15,8 @@ const (
 	ComponentKey = "component"
 	// TypeKey is the key used for component type fields in stack configuration maps.
 	TypeKey = "type"
+	// StackKey is the key used for stack fields in logging and context.
+	StackKey = "stack"
 )
 
 // StackLoader is an interface for loading stack configurations.
@@ -149,9 +151,9 @@ func (r *Resolver) ResolveComponentFromPathWithoutTypeCheck(
 
 	log.Debug("Successfully resolved component from path (without type check)",
 		"path", path,
-		"component", resolvedComponent,
+		ComponentKey, resolvedComponent,
 		"detected_type", componentInfo.ComponentType,
-		"stack", stack,
+		StackKey, stack,
 	)
 
 	return resolvedComponent, nil
@@ -393,9 +395,9 @@ func (r *Resolver) validateComponentInStack(
 	defer perf.Track(atmosConfig, "component.validateComponentInStack")()
 
 	log.Debug("Validating component exists in stack",
-		"component", componentName,
-		"stack", stack,
-		"type", componentType,
+		ComponentKey, componentName,
+		StackKey, stack,
+		TypeKey, componentType,
 	)
 
 	// Load and validate stack configuration.
@@ -422,16 +424,16 @@ func (r *Resolver) validateComponentInStack(
 	// Log success.
 	if resolvedComponent == componentName {
 		log.Debug("Component validated successfully in stack (direct match)",
-			"component", componentName,
-			"stack", stack,
-			"type", componentType,
+			ComponentKey, componentName,
+			StackKey, stack,
+			TypeKey, componentType,
 		)
 	} else {
 		log.Debug("Component validated successfully in stack (alias match)",
 			"path_component", componentName,
 			"stack_key", resolvedComponent,
-			"stack", stack,
-			"type", componentType,
+			StackKey, stack,
+			TypeKey, componentType,
 		)
 	}
 
