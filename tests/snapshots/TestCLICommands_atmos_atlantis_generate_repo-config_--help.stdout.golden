@@ -1,5 +1,5 @@
 
-👽 test darwin/arm64
+👽 test linux/amd64
 
 Generate the repository configuration file required for Atlantis to manage      
 Terraform repositories.                                                         

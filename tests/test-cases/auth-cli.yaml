@@ -258,6 +258,8 @@ tests:
         - "stored securely in keyring"
         - "USAGE"
         - "atmos auth user configure"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   # Error Cases

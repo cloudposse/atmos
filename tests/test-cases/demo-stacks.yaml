@@ -31,6 +31,8 @@ tests:
         - "\\bworkflow\\b"
         - "FLAGS"
         - "for more information about a command"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos version
