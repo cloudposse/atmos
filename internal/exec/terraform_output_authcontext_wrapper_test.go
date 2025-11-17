@@ -98,7 +98,7 @@ func TestAuthContextWrapperStubMethodsPanic(t *testing.T) {
 
 	t.Run("Logout panics", func(t *testing.T) {
 		assert.Panics(t, func() {
-			_ = wrapper.Logout(context.TODO(), "test")
+			_ = wrapper.Logout(context.TODO(), "test", false)
 		}, "Logout should panic")
 	})
 
@@ -146,13 +146,13 @@ func TestAuthContextWrapperStubMethodsPanic(t *testing.T) {
 
 	t.Run("LogoutProvider panics", func(t *testing.T) {
 		assert.Panics(t, func() {
-			_ = wrapper.LogoutProvider(context.TODO(), "test")
+			_ = wrapper.LogoutProvider(context.TODO(), "test", false)
 		}, "LogoutProvider should panic")
 	})
 
 	t.Run("LogoutAll panics", func(t *testing.T) {
 		assert.Panics(t, func() {
-			_ = wrapper.LogoutAll(context.TODO())
+			_ = wrapper.LogoutAll(context.TODO(), false)
 		}, "LogoutAll should panic")
 	})
 

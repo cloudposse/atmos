@@ -10,7 +10,9 @@ const (
 	ProviderKindAWSPermissionSet     = "aws/permission-set"
 
 	// Azure provider kinds.
-	ProviderKindAzureOIDC = "azure/oidc"
+	ProviderKindAzureOIDC       = "azure/oidc"
+	ProviderKindAzureCLI        = "azure/cli"
+	ProviderKindAzureDeviceCode = "azure/device-code"
 
 	// GCP provider kinds.
 	ProviderKindGCPOIDC = "gcp/oidc"

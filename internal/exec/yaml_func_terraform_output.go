@@ -99,13 +99,15 @@ func processTagTerraformOutputWithContext(
 	// Track dependency and defer cleanup.
 	defer trackOutputDependency(atmosConfig, resolutionCtx, component, stack, input)()
 
-	// Extract authContext from stackInfo if available.
+	// Extract authContext and authManager from stackInfo if available.
 	var authContext *schema.AuthContext
+	var authManager any
 	if stackInfo != nil {
 		authContext = stackInfo.AuthContext
+		authManager = stackInfo.AuthManager
 	}
 
-	value, exists, err := outputGetter.GetOutput(atmosConfig, stack, component, output, false, authContext)
+	value, exists, err := outputGetter.GetOutput(atmosConfig, stack, component, output, false, authContext, authManager)
 	if err != nil {
 		er := fmt.Errorf("failed to get terraform output for component %s in stack %s, output %s: %w", component, stack, output, err)
 		errUtils.CheckErrorPrintAndExit(er, "", "")

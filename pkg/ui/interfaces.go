@@ -23,12 +23,17 @@ import (
 //
 // Uses io.Terminal for capability detection and theme.StyleSet for styling.
 type Formatter interface {
+	// Toast formatting - flexible toast notifications with custom icons and multiline support
+	// Automatically handles newlines with proper indentation
+	Toast(icon, message string) string                   // Returns "{icon} {message}" with multiline support
+	Toastf(icon, format string, a ...interface{}) string // Returns formatted toast
+
 	// Status message formatting - standardized output with icons
 	// This is the foundational method used by Success/Error/Warning/Info
 	StatusMessage(icon string, style *lipgloss.Style, text string) string
 
 	// Semantic formatting - returns styled strings with automatic icons (uses theme.StyleSet)
-	// These methods use StatusMessage internally with predefined icons
+	// These methods use Toast internally with predefined icons and colors
 	Success(text string) string                      // Returns "✓ {text}" in green
 	Successf(format string, a ...interface{}) string // Returns "✓ {formatted}" in green
 	Warning(text string) string                      // Returns "⚠ {text}" in yellow

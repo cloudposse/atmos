@@ -539,11 +539,15 @@ func TestGetFormatter_NotInitialized(t *testing.T) {
 }
 
 func TestPackageFunctions_NotInitialized(t *testing.T) {
-	// Save current formatter.
+	// Save current globals.
 	formatterMu.Lock()
 	oldFormatter := globalFormatter
+	oldTerminal := globalTerminal
+	oldFormat := Format
 	oldIO := globalIO
 	globalFormatter = nil
+	globalTerminal = nil
+	Format = nil
 	globalIO = nil
 	formatterMu.Unlock()
 
@@ -551,6 +555,8 @@ func TestPackageFunctions_NotInitialized(t *testing.T) {
 	defer func() {
 		formatterMu.Lock()
 		globalFormatter = oldFormatter
+		globalTerminal = oldTerminal
+		Format = oldFormat
 		globalIO = oldIO
 		formatterMu.Unlock()
 	}()

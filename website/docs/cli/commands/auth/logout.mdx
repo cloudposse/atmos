@@ -11,11 +11,17 @@ import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Use this command to securely remove locally cached authentication credentials from the system keyring and credential files. This is useful when switching identities, ending work sessions, or troubleshooting authentication issues.
+Use this command to clear local session data (tokens, cached credentials) while preserving your keychain credentials for faster re-authentication. This is useful when switching identities, ending work sessions, or troubleshooting authentication issues.
 </Intro>
 
-:::warning Local Credentials Only
-This command only removes **credentials stored on your local filesystem and system keychain**. It does **not** log you out of any web-based sessions with your identity provider (AWS SSO, Okta, etc.). Your browser sessions will remain active until you explicitly sign out from the identity provider's website.
+:::tip Safe by Default
+By default, `atmos auth logout` preserves your **keychain credentials** (IAM user access keys, service account credentials) to enable instant re-authentication. It only clears **session data** (AWS SSO tokens, temporary credentials).
+
+To also delete keychain credentials, use the `--keychain` flag. This requires interactive confirmation for safety (bypass with `--force` in CI/CD).
+:::
+
+:::warning Browser Sessions Remain Active
+This command only removes **local credentials**. It does **not** log you out of web-based sessions with your identity provider (AWS SSO, Okta, etc.). Your browser sessions remain active until you explicitly sign out from the identity provider's website.
 :::
 
 ## The Problem
@@ -189,22 +195,77 @@ Would remove:
     - ~/.config/atmos/aws/backup-provider/
 ```
 
+### Delete Keychain Credentials (Destructive)
+
+By default, logout preserves keychain credentials for instant re-authentication. Use `--keychain` to permanently delete them:
+
+```shell
+# Interactive mode with confirmation
+atmos auth logout dev-admin --keychain
+```
+
+**Interactive confirmation prompt:**
+
+```
+Delete keychain credentials for dev-admin?
+
+This will permanently remove:
+  • IAM user access keys
+  • Service account credentials
+  • Provider credentials
+
+Session data will also be cleared.
+
+? Yes, delete credentials / No, keep credentials
+```
+
+**For CI/CD (non-interactive):**
+
+```shell
+# Bypass confirmation with --force
+atmos auth logout dev-admin --keychain --force
+```
+
+**What happens:**
+- Deletes credentials from system keychain (IAM keys, service account creds)
+- Clears session data (AWS SSO tokens, temporary credentials)
+- Removes AWS config files
+- Requires re-authentication (`atmos auth login`) to use this identity again
+
+**When to use `--keychain`:**
+- Permanently removing an identity you no longer need
+- Security incident response (credential rotation)
+- Switching to different IAM user or service account
+- Complete credential cleanup before machine decommission
+
+**When NOT to use `--keychain`:**
+- Normal end-of-day logout (preserve keychain for next day)
+- Switching between identities temporarily
+- Troubleshooting authentication issues
+
 ## Quick Reference
 
 Understanding what gets removed:
 
-| Command | Keyring Entries | AWS Config Files | `atmos.yaml` Configuration | Use When |
-|---------|----------------|------------------|---------------------------|----------|
-| `atmos auth logout <identity>` | **Identity only** | **Identity profile removed** | **Not affected** | Done with specific identity |
-| `atmos auth logout --provider <name>` | Provider + all identities | **Entire provider directory** | **Not affected** | Switching providers or AWS organizations |
-| `atmos auth logout --all` | All identities | All identity profiles | **Not affected** | Complete cleanup or troubleshooting |
+| Command | Keychain Credentials | Session Data | AWS Config Files | Use When |
+|---------|---------------------|--------------|------------------|----------|
+| `atmos auth logout <identity>` | **Preserved** | **Cleared** | **Identity profile removed** | End of work session |
+| `atmos auth logout <identity> --keychain` | **Deleted** | **Cleared** | **Identity profile removed** | Permanently remove identity |
+| `atmos auth logout --provider <name>` | **Preserved** | **Cleared** | **Entire provider directory** | Switch providers |
+| `atmos auth logout --provider <name> --keychain` | **Deleted** | **Cleared** | **Entire provider directory** | Permanently remove provider |
+| `atmos auth logout --all` | **Preserved** | **Cleared** | **All profiles removed** | Clean session data |
+| `atmos auth logout --all --keychain` | **Deleted** | **Cleared** | **All profiles removed** | Complete cleanup |
 
-:::tip Selective Cleanup
-`atmos auth logout <identity>` only removes **that specific identity**. Other identities using the same provider remain authenticated and usable. Use `--provider` for complete provider cleanup.
+:::tip Safe by Default
+Without `--keychain`, logout preserves your stored credentials (IAM user keys, service account creds) for instant re-authentication. It only clears session data (AWS SSO tokens, temporary credentials).
+:::
+
+:::danger Permanent Deletion
+Using `--keychain` permanently deletes credentials from your system keychain. You'll need to re-enter IAM user access keys or re-authenticate service accounts when logging in again.
 :::
 
 :::tip Re-authentication
-All logout commands preserve your `atmos.yaml` configuration. Simply run `atmos auth login` to authenticate again with any configured identity.
+All logout commands preserve your `atmos.yaml` configuration. Run `atmos auth login` to re-authenticate with any configured identity.
 :::
 
 ## Arguments
@@ -229,42 +290,100 @@ All logout commands preserve your `atmos.yaml` configuration. Simply run `atmos 
   </dd>
 
   <dt>`--all`</dt>
-  <dd>Logout from all identities and providers. Removes all cached credentials from the system keyring and credential files. Useful when switching AWS organizations or troubleshooting authentication issues.</dd>
+  <dd>Logout from all identities and providers. Clears session data for all identities. Combine with `--keychain` to also remove stored credentials.</dd>
 
   <dt>`--provider`</dt>
-  <dd>Logout from a specific provider instead of an identity. Removes all identities that authenticate through this provider.</dd>
+  <dd>Logout from a specific provider instead of an identity. Clears session data for all identities using this provider. Combine with `--keychain` to also remove stored credentials.</dd>
+
+  <dt>`--keychain`</dt>
+  <dd>
+    **Also delete credentials from system keychain** (destructive operation). By default, logout preserves keychain credentials (IAM user access keys, service account credentials) to enable instant re-authentication.
+
+    **When specified:**
+    - Requires interactive confirmation (shows what will be deleted)
+    - Use `--force` to bypass confirmation in CI/CD environments
+    - Permanently removes: IAM user access keys, service account credentials, provider credentials
+    - Session data is also cleared (always happens during logout)
+
+    **Example:**
+    ```shell
+    # Interactive confirmation
+    atmos auth logout dev-admin --keychain
+
+    # Non-interactive (CI/CD)
+    atmos auth logout dev-admin --keychain --force
+    ```
+  </dd>
+
+  <dt>`--force`</dt>
+  <dd>
+    Skip interactive confirmation prompts. Required when using `--keychain` in non-interactive environments (CI/CD pipelines, scripts).
+
+    **Safety note:** Only use with `--keychain` when you're certain you want to delete credentials. This bypasses the confirmation dialog that warns about permanent credential deletion.
+  </dd>
 
   <dt>`--dry-run`</dt>
-  <dd>Preview what would be removed without actually deleting credentials. Useful for understanding the scope of logout.</dd>
+  <dd>Preview what would be removed without actually deleting anything. Shows which session data and (if `--keychain` is used) which keychain entries would be deleted. Useful for understanding the scope of logout.</dd>
 </dl>
 
 ## How It Works
 
-### Selective Identity Logout
+### Default Behavior (Safe by Default)
 
-When you log out of a specific identity, Atmos performs **selective cleanup** to preserve other identities:
+By default, `atmos auth logout` clears **session data only**:
 
-**Example:** For `atmos auth logout dev-admin` with chain `aws-sso → dev-org-admin → dev-admin`:
+**Example:** For `atmos auth logout dev-admin` (without `--keychain`):
 
-1. Removes keyring entry for **only** `dev-admin`
-2. Removes `dev-admin` profile from `~/.config/atmos/aws/aws-sso/credentials`
-3. Removes `dev-admin` profile from `~/.config/atmos/aws/aws-sso/config`
-4. Keyring entries for `aws-sso` and `dev-org-admin` are **preserved**
-5. Other identity profiles in the config files are **preserved**
+1. Clears session data:
+   - Removes `dev-admin` profile from `~/.config/atmos/aws/aws-sso/credentials`
+   - Removes `dev-admin` profile from `~/.config/atmos/aws/aws-sso/config`
+   - Clears AWS SSO tokens from `~/.aws/sso/cache/`
 
-Other identities using `aws-sso` (like `prod-admin`, `staging-admin`) remain fully functional.
+2. Preserves keychain credentials:
+   - Keyring entry for `dev-admin` is **preserved**
+   - Keyring entries for authentication chain (`aws-sso`, `dev-org-admin`) are **preserved**
+   - Other identity credentials remain intact
 
-### Provider Logout (Complete Cleanup)
+**Next login** (`atmos auth login dev-admin`):
+- Uses preserved keychain credentials instantly
+- No need to re-enter IAM user access keys
+- No need to re-authenticate service accounts
+- Faster authentication (skips interactive prompts)
 
-When you log out of a provider using `--provider`, Atmos performs **complete cleanup**:
+### Destructive Logout with --keychain
 
-**Example:** For `atmos auth logout --provider aws-sso`:
+Adding `--keychain` permanently deletes credentials from system keychain:
 
-1. Logs out each identity using the provider (removes keyring + profiles)
-2. Removes provider keyring entry: `aws-sso`
+**Example:** For `atmos auth logout dev-admin --keychain`:
+
+1. Requires interactive confirmation (bypass with `--force` in CI/CD)
+2. Deletes keychain credentials:
+   - Removes keyring entry for `dev-admin`
+   - IAM user access keys are permanently deleted
+   - Service account credentials are permanently deleted
+3. Clears session data (same as default logout)
+
+**Next login** (`atmos auth login dev-admin`):
+- Requires re-entering IAM user access keys
+- Requires re-authenticating service accounts
+- Full authentication flow (no shortcuts)
+
+### Provider Logout
+
+When you log out of a provider using `--provider`, Atmos performs **complete cleanup for that provider**:
+
+**Example:** For `atmos auth logout --provider aws-sso` (without `--keychain`):
+
+1. Logs out each identity using the provider (clears session data for all)
+2. Keychain credentials are **preserved** (unless `--keychain` is specified)
 3. Deletes entire provider directory: `~/.config/atmos/aws/aws-sso/`
 
-This is the nuclear option - all identities using that provider will need to re-authenticate.
+**With `--keychain`:** `atmos auth logout --provider aws-sso --keychain`
+1. Deletes provider keyring entry
+2. Deletes all identity keyring entries using this provider
+3. Deletes entire provider directory
+
+This is the nuclear option when you want to completely remove all traces of a provider.
 
 ### Credential Storage Locations
 
@@ -339,14 +458,20 @@ To completely end your session and fully logout:
 
 ### What Gets Removed
 
-Logout removes:
+**Default logout** (without `--keychain`):
 
-- ✅ Credentials stored in system keyring
-- ✅ AWS credential files (XDG-compliant: `~/.config/atmos/aws/<provider>/credentials` on Linux)
-- ✅ AWS config files (XDG-compliant: `~/.config/atmos/aws/<provider>/config` on Linux)
+- ✅ AWS credential files (XDG-compliant: `~/.config/atmos/aws/<provider>/credentials`)
+- ✅ AWS config files (XDG-compliant: `~/.config/atmos/aws/<provider>/config`)
+- ✅ AWS SSO tokens (`~/.aws/sso/cache/`)
 - ✅ Empty provider directories
 
-Logout does NOT remove:
+**With `--keychain` flag:**
+
+- ✅ Everything above, PLUS:
+- ✅ Credentials stored in system keychain (IAM user keys, service account creds)
+- ✅ Provider credentials from system keychain
+
+**Logout does NOT remove:**
 
 - ❌ Browser session cookies
 - ❌ Identity provider sessions

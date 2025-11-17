@@ -52,10 +52,16 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig) (string, error) {
 	// - When multiple defaults exist, we want to show ONLY those defaults
 	defaultIdentity, err := tempManager.GetDefaultIdentity(false)
 	if err != nil {
-		// Error means we're in non-interactive mode and couldn't determine identity.
-		// Return empty string (no authentication) to maintain backward compatibility.
-		// This is intentional - we gracefully handle the error instead of propagating it.
-		//nolint:nilerr // Intentionally returning nil to maintain backward compatibility
+		// Special case: If user explicitly aborted (Ctrl+C), propagate the error immediately.
+		// This allows the caller to exit cleanly without continuing execution.
+		if errors.Is(err, errUtils.ErrUserAborted) {
+			return "", err
+		}
+
+		// For other errors (no default identity in CI mode, etc.), return empty string.
+		// This maintains backward compatibility where no authentication is performed
+		// when a default identity cannot be determined automatically.
+		// We intentionally return nil error here to maintain backward compatibility.
 		return "", nil
 	}
 

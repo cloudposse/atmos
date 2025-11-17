@@ -24,6 +24,8 @@ var workflowCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+			// Return after TUI execution to prevent showing usage error.
+			return nil
 		}
 
 		// Get the --file flag value
@@ -35,6 +37,7 @@ var workflowCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+			return nil
 		}
 
 		// Execute the workflow command

@@ -155,63 +155,6 @@ Benefits:
 - **Type-safe** - Static error definitions prevent typos
 - **Testable** - Mock and verify error messages in tests
 
-## Real-World Impact
-
-### Faster Troubleshooting
-
-**Before:**
-```
-Error: command execution failed
-Exit code: 1
-```
-Time to resolution: 30+ minutes (searching docs, trial and error)
-
-**After:**
-```
-# Workflow Error
-
-**Error:** workflow step execution failed
-
-## Explanation
-
-The following command failed to execute:
-atmos terraform plan vpc -s prod
-
-## Hints
-
-💡 To resume the workflow from this step, run:
-   atmos workflow deploy -f prod --from-step deploy-vpc
-
-💡 Check component configuration in stacks/prod.yaml
-
-## Context
-
-• Workflow: deploy
-• Step: deploy-vpc
-• Component: vpc
-• Stack: prod-us-east-1
-• Exit Code: 1
-```
-Time to resolution: 2-3 minutes (clear guidance + exact command to retry)
-
-### Enterprise Visibility
-
-Platform teams can now:
-
-1. **Track error patterns** - "70% of errors are missing AWS credentials"
-2. **Identify problem areas** - "Component X fails validation in 3 different stacks"
-3. **Measure improvement** - "Error rate decreased 40% after documentation update"
-4. **Support teams proactively** - "Team Y has 10x more errors than average"
-
-### Better Developer Experience
-
-Contributors can:
-
-1. **Add helpful errors easily** - Use error builder pattern
-2. **Test error messages** - Verify hints and formatting
-3. **Maintain consistency** - All errors follow the same pattern
-4. **Iterate quickly** - Update hints without changing error handling
-
 ## Configuration
 
 ### Basic Setup (Better Error Messages)
@@ -231,8 +174,8 @@ errors:
   # Sentry integration
   sentry:
     enabled: true
-    dsn: "${ATMOS_SENTRY_DSN}"
-    environment: "${ATMOS_ENV}"
+    dsn: !env ATMOS_SENTRY_DSN
+    environment: !env ATMOS_ENV
 
     # Sample rate: 1.0 = 100%, 0.5 = 50% (default: 1.0)
     sample_rate: 1.0
@@ -281,26 +224,6 @@ return errUtils.Build(errUtils.ErrWorkflowNotFound).
 ```
 
 See `docs/errors.md` for the complete developer guide.
-
-## Why This Matters
-
-Infrastructure as Code is complex. When managing hundreds of components across multiple environments, every minute spent debugging is time not spent delivering value.
-
-By providing **helpful hints**, **rich context**, and **enterprise error tracking**, we're:
-
-1. **Reducing time to resolution** - Fix issues in minutes instead of hours
-2. **Improving team productivity** - Less context switching, more building
-3. **Enabling data-driven improvements** - Track and fix systemic issues
-4. **Creating better software** - Consistent, helpful error messages across Atmos
-
-This is infrastructure we wish we'd had years ago. Now it's built into Atmos by default.
-
-## What's Next
-
-We're continuing to improve error handling:
-
-- **More helpful hints** - Adding guidance to more errors across Atmos
-- **Enhanced context** - Automatically include more relevant information with each error
 
 ## Get Involved
 

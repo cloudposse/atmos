@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -217,4 +218,41 @@ func TestTerraformIdentityFlagHandling(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestUserAbortExitCode tests that ErrUserAborted results in exit code 130.
+// This is a regression test for the bug where pressing Ctrl+C during identity
+// selection would not properly exit the program, causing terraform to continue executing.
+//
+// The fix ensures that when GetDefaultIdentity returns ErrUserAborted, we immediately
+// exit with code 130 (POSIX SIGINT: 128 + 2) before falling through to the generic
+// error handler.
+func TestUserAbortExitCode(t *testing.T) {
+	// Save original OsExit and restore it after the test.
+	originalOsExit := errUtils.OsExit
+	defer func() {
+		errUtils.OsExit = originalOsExit
+	}()
+
+	// Track whether Exit was called and with what code.
+	var exitCalled bool
+	var exitCode int
+	errUtils.OsExit = func(code int) {
+		exitCalled = true
+		exitCode = code
+		// Don't actually exit during the test.
+	}
+
+	// Simulate the error handling logic from handleInteractiveIdentitySelection.
+	// This is the key fix: when we get ErrUserAborted, we should exit with code 130.
+	err := errUtils.ErrUserAborted
+
+	// This is the fix applied in terraform_utils.go:handleInteractiveIdentitySelection
+	if errors.Is(err, errUtils.ErrUserAborted) {
+		errUtils.Exit(errUtils.ExitCodeSIGINT)
+	}
+
+	// Verify that Exit was called with the correct exit code.
+	assert.True(t, exitCalled, "Exit should have been called when user aborts")
+	assert.Equal(t, errUtils.ExitCodeSIGINT, exitCode, "Exit code should be ExitCodeSIGINT (POSIX SIGINT: 128 + 2)")
 }

@@ -462,11 +462,10 @@ func TestGetConsoleProvider(t *testing.T) {
 			wantErr:      false,
 		},
 		{
-			name:         "Azure OIDC returns not implemented error",
+			name:         "Azure OIDC returns console provider successfully",
 			providerKind: types.ProviderKindAzureOIDC,
 			identityName: "test-identity",
-			wantErr:      true,
-			errContains:  "Azure console access not yet implemented",
+			wantErr:      false,
 		},
 		{
 			name:         "GCP OIDC returns not implemented error",
@@ -601,7 +600,7 @@ func (m *mockAuthManagerForProvider) ListIdentities() []string {
 	return nil
 }
 
-func (m *mockAuthManagerForProvider) Logout(ctx context.Context, identityName string) error {
+func (m *mockAuthManagerForProvider) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
 	return errors.New("not implemented")
 }
 
@@ -645,11 +644,11 @@ func (m *mockAuthManagerForProvider) GetProviders() map[string]schema.Provider {
 	return nil
 }
 
-func (m *mockAuthManagerForProvider) LogoutProvider(ctx context.Context, providerName string) error {
+func (m *mockAuthManagerForProvider) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
 	return errors.New("not implemented")
 }
 
-func (m *mockAuthManagerForProvider) LogoutAll(ctx context.Context) error {
+func (m *mockAuthManagerForProvider) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	return errors.New("not implemented")
 }
 
@@ -690,7 +689,7 @@ func (m *mockAuthManagerForIdentity) ListIdentities() []string {
 	return nil
 }
 
-func (m *mockAuthManagerForIdentity) Logout(ctx context.Context, identityName string) error {
+func (m *mockAuthManagerForIdentity) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
 	return errors.New("not implemented")
 }
 
@@ -734,11 +733,11 @@ func (m *mockAuthManagerForIdentity) GetProviders() map[string]schema.Provider {
 	return nil
 }
 
-func (m *mockAuthManagerForIdentity) LogoutProvider(ctx context.Context, providerName string) error {
+func (m *mockAuthManagerForIdentity) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
 	return errors.New("not implemented")
 }
 
-func (m *mockAuthManagerForIdentity) LogoutAll(ctx context.Context) error {
+func (m *mockAuthManagerForIdentity) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	return errors.New("not implemented")
 }
 

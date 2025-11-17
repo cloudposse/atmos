@@ -305,7 +305,12 @@ package ui
 
 // ===== Package-level functions (what developers use) =====
 
-// UI channel output (stderr) - formatted messages with icons
+// Toast notifications (stderr) - status messages with custom or themed icons
+// This is the primary pattern for all toast-style notifications
+func Toast(icon, message string) error           // {icon} {message} → stderr
+func Toastf(icon, format string, a ...any) error // {icon} {formatted} → stderr
+
+// Convenience wrappers for common toast types (implemented as Toast calls)
 func Success(text string) error              // ✓ {text} in green → stderr
 func Successf(format string, a ...any) error // ✓ {formatted} in green → stderr
 func Error(text string) error                // ✗ {text} in red → stderr
@@ -411,11 +416,33 @@ ui.Write("Loading configuration...")
 ui.Writef("Processing %d items...", count)
 ui.Writeln("Done")  // Automatic newline
 
-// Formatted messages (with icons and colors)
+// Toast notifications with custom icons
+ui.Toast("📦", "Using latest version: 1.2.3")
+ui.Toastf("🔧", "Tool %s is not installed. Installing...", toolName)
+ui.Toastf("✓", "Set %s@%s in %s", tool, version, file)
+
+// Multiline toast notifications - automatically indented
+ui.Toast("✓", "Installation complete\nVersion: 1.2.3\nLocation: /usr/local/bin")
+// Output:
+// ✓ Installation complete
+//   Version: 1.2.3
+//   Location: /usr/local/bin
+
+ui.Toastf("📦", "Installed: %s\nVersion: %s\nSize: %dMB", name, version, size)
+// Output:
+// 📦 Installed: atmos
+//   Version: 1.2.3
+//   Size: 42MB
+
+// Toast notifications with themed icons (convenience wrappers)
 ui.Success("Configuration loaded!")
+ui.Successf("Installed %s/%s@%s", owner, repo, version)
 ui.Error("Failed to load configuration")
+ui.Errorf("Install failed %s/%s@%s: %v", owner, repo, version, err)
 ui.Warning("Stack is deprecated")
+ui.Warningf("Slow operation took %s", duration)
 ui.Info("Processing 150 components...")
+ui.Infof("Found %d matching files", count)
 ```
 
 #### Pattern 3: Markdown (Context-Dependent)

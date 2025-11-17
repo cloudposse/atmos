@@ -186,6 +186,14 @@ func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
 	// GetDefaultIdentity() handles TTY and CI detection via isInteractive().
 	selectedIdentity, err := authManager.GetDefaultIdentity(true)
 	if err != nil {
+		// Check if user explicitly aborted (Ctrl+C, ESC, etc.).
+		// In this case, we want to exit immediately without showing an error.
+		if errors.Is(err, errUtils.ErrUserAborted) {
+			log.Debug("User aborted identity selection, exiting with SIGINT code")
+			// Exit immediately with POSIX SIGINT exit code.
+			// Note: We bypass error formatting as user abort is not an error condition.
+			errUtils.Exit(errUtils.ExitCodeSIGINT)
+		}
 		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrDefaultIdentity, err), "", "")
 	}
 

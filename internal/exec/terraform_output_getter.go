@@ -19,6 +19,7 @@ type TerraformOutputGetter interface {
 		output string,
 		skipCache bool,
 		authContext *schema.AuthContext,
+		authManager any,
 	) (any, bool, error)
 }
 
@@ -33,10 +34,11 @@ func (d *defaultOutputGetter) GetOutput(
 	output string,
 	skipCache bool,
 	authContext *schema.AuthContext,
+	authManager any,
 ) (any, bool, error) {
 	defer perf.Track(atmosConfig, "exec.defaultOutputGetter.GetOutput")()
 
-	return GetTerraformOutput(atmosConfig, stack, component, output, skipCache, authContext)
+	return GetTerraformOutput(atmosConfig, stack, component, output, skipCache, authContext, authManager)
 }
 
 // Global variable that can be overridden in tests.

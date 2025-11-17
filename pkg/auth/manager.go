@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -368,14 +369,23 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	sort.Strings(sortedIdentities)
 
 	var selectedIdentity string
+
+	// Create custom keymap that adds ESC to quit keys.
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "quit"),
+	)
+
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title(message).
+				Description("Press ctrl+c or esc to exit").
 				Options(huh.NewOptions(sortedIdentities...)...).
 				Value(&selectedIdentity),
 		),
-	)
+	).WithKeyMap(keyMap)
 
 	if err := form.Run(); err != nil {
 		// Check if user aborted (Ctrl+C, ESC, etc.).

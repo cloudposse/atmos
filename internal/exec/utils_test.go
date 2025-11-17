@@ -163,7 +163,7 @@ func TestGenerateComponentProviderOverrides(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateComponentProviderOverrides(tt.providerOverrides)
+			result := generateComponentProviderOverrides(tt.providerOverrides, nil)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -260,7 +260,7 @@ func TestGenerateComponentBackendConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := generateComponentBackendConfig(tt.backendType, tt.backendConfig, tt.terraformWorkspace)
+			result, err := generateComponentBackendConfig(tt.backendType, tt.backendConfig, tt.terraformWorkspace, nil)
 
 			if tt.expectError {
 				assert.Error(t, err)

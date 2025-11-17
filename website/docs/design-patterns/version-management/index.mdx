@@ -1,0 +1,408 @@
+---
+title: Version Management Patterns
+sidebar_position: 1
+sidebar_label: Version Management
+description: Version Management Patterns in Atmos - Strategies for Managing Component Versions
+id: version-management
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<PillBox>Atmos Design Pattern</PillBox>
+<Intro>
+The **Version Management Patterns** are a collection of strategies for managing component versions in Atmos. These patterns address one of the most challenging problems in infrastructure-as-code: balancing **stability** (reproducibility, rollback) with **velocity** (fast iterations, safety via feedback loops).
+</Intro>
+
+Managing versions of infrastructure components requires careful consideration of trade-offs between convergence speed, operational overhead, and safety. Atmos supports multiple design patterns for managing component versions, each with distinct benefits and considerations. There's no silver bullet—choose patterns based on your organization's culture, team size, and operational maturity.
+
+<KeyPoints>
+- Understanding the fundamental tension between deployment (declaring target state) and release (applying changes)
+- How different versioning strategies optimize for different goals: reproducibility, convergence, or feedback
+- Why "just pin everything" often creates more problems than it solves at scale
+- Practical patterns for managing versions across environments with minimal operational overhead
+</KeyPoints>
+
+## The Version Management Challenge
+
+Traditional Terraform/IaC wisdom advocates pinning every version per environment for reproducibility. While this improves predictability, it often creates significant challenges:
+
+### Problems with Strict Pinning
+
+1. **Optimizes for Divergence**: Each environment drifts unless you constantly update pins
+2. **Weakens Cross-Environment Feedback**: Lower environments stay pinned to old versions, so `terraform plan` doesn't reveal cross-environment impact
+3. **Requires Lockstep Promotion**: If dev received 10 incremental releases, production must receive those same 10 in order
+4. **Creates Operational Overhead**: At scale, you'll face PR storms from automated dependency updates
+5. **Complicates Third-Party Usage**: You don't control upstream cadence; forks and patches accumulate
+
+### The Atmos Philosophy
+
+Atmos's default philosophy differs from strict pinning: allow **transient divergence** but drive **convergence** to common versions across environments within a reasonable window. This approach improves feedback loops and reduces fragility while maintaining the ability to pin versions when truly necessary.
+
+## Core Concepts
+
+Before exploring the patterns, it's important to understand key distinctions:
+
+### Deployment vs Release
+
+- **Deployment**: Declaring that an environment should converge to a specific version of a component (the target state)
+- **Release**: Actually updating the environment to that version (the change is applied)
+
+Some teams use Git for both deployment and release (Git-as-source-of-truth _and_ rollout trigger), while others separate these concerns (e.g., Git for deployment, CI/CD for release).
+
+### Trunk-Based Development vs Git Flow
+
+Most version management patterns in Atmos follow **trunk-based development**, where:
+- All changes flow through a single main branch (trunk)
+- Versioning happens through tags, folders, or configuration files
+- Environments pull from the same branch but use different version selectors
+- Short-lived feature branches merge quickly back to main
+
+This contrasts with **Git Flow**, which uses:
+- Multiple long-lived branches representing different stages
+- Environments tied to specific branches
+- Promotion through merges between branches
+- More complex branching strategies
+
+### Component Sourcing Philosophy
+
+Atmos takes a different approach to component sourcing than conventional tools. Instead of pinning to remote sources dynamically, we advocate **explicit vendoring**—creating local immutable copies of upstream components.
+
+**The Atmos Approach:**
+- **Vendor root modules**: Create local copies and commit them to your repository
+- **Pin components to folders**: Reference vendored folders in your component configurations
+- **Make explicit what other tools do implicitly**: Other tools clone sources just-in-time to temporary folders; we make this explicit and permanent
+
+:::tip AI Coding Tools Love This
+AI assistants like Claude Code and Cursor work significantly better with vendored code. When components are local, AI tools have full context of your codebase—they can navigate between files, understand dependencies, and provide accurate suggestions without needing to fetch external repositories.
+:::
+
+This emerged from countless projects where pure remote sourcing created productivity blockers:
+- **Coordination nightmare**: Cross-cutting changes required dozens of PRs across multiple repositories
+- **Developer friction**: Can't search codebase, IDE navigation breaks, constant context switching to external repos
+- **Emergency response delays**: Security patches blocked waiting for upstream release cycles
+
+**The Pragmatic Principle:** Converge with upstream when it makes sense, diverge when you need to. Pure DRY leads to complexity rashes—dogmatic approaches kill operational efficiency.
+
+For complete details on the benefits and implementation, see [Vendoring Component Versions](/design-patterns/version-management/vendoring-components).
+
+## Available Patterns
+
+This guide covers two primary deployment strategies you can implement using Atmos: **Continuous Version Deployment** (trunk-based, recommended) and **Git Flow** (branch-based). Within Continuous Version Deployment, you can use different folder organization approaches.
+
+### Recommended Strategy: [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment)
+
+**The recommended trunk-based deployment strategy** where environments progressively converge to whatever component path they reference in stack configurations. All environments work from the main branch, using automation and progressive rollout to control deployment safety.
+
+This approach:
+
+- **Promotes convergence**: All environments converge to the same version through progressive rollout, reducing drift
+- **Embraces trunk-based development**: Single source of truth in the main branch
+- **Enables easy previews**: You can immediately see change impacts across all dependent environments
+- **Simplifies operations**: No complex version tracking or branch management
+- **Supports rapid iteration**: Deploy frequently with confidence
+
+<Tabs>
+<TabItem value="dev" label="Development" default>
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # All environments converge to this component path
+      vars:
+        environment: dev
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+</TabItem>
+
+<TabItem value="staging" label="Staging">
+<File title="stacks/staging/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # Same component as dev
+      vars:
+        environment: staging
+        cidr_block: "10.1.0.0/16"
+```
+</File>
+</TabItem>
+
+<TabItem value="prod" label="Production">
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # Same component as all environments
+      vars:
+        environment: prod
+        cidr_block: "10.2.0.0/16"
+```
+</File>
+</TabItem>
+</Tabs>
+
+Use environment-specific configuration and deployment automation to control rollout. You can organize your components using different folder structures depending on your needs.
+
+#### Folder Organization Approaches
+
+Within Continuous Version Deployment, choose how to organize your component folders:
+
+##### 1. [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)
+
+   The foundational approach—organize components in simple folders (`vpc/`, `eks/`, `rds/`). What you see is what you get, with no magic. Explicit folder structure makes divergence visible and patching any version straightforward. All subsequent approaches build on this foundation.
+
+##### 2. [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)
+
+   Extends folder-based versioning with named release channels (`alpha/vpc`, `beta/vpc`, `prod/vpc`). Environments subscribe to moving tracks; you promote tracks, not individual environment pins.
+
+##### 3. [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)
+
+   Creates explicit component versions following SemVer (`vpc/1.2.3`, `vpc/2.0.0`). Works well when vendoring from external sources or managing shared component libraries within your organization.
+
+### Alternative Strategy: [Git Flow: Branches as Channels](/design-patterns/version-management/git-flow-branches-as-channels)
+
+**The branch-based alternative** where long-lived branches map to release channels. Environments track branches; promotions happen via merges between branches. Uses simple folder-based versioning since branches serve as the versioning mechanism.
+
+**When to use Git Flow over trunk-based:**
+
+Use Git Flow when you need version control to represent **current state versus desired state**. The trunk-based approach assumes all environments should converge to the same version. Git Flow is better when you want to optimize for:
+
+- **Prolonged divergence**: Environments may remain on different versions for extended periods by design
+- **Explicit promotion**: Cherry-picking and merging specific changes between release tracks
+- **Established workflows**: Your organization already practices Git Flow branch management
+- **Branch-based mental model**: Teams are comfortable with long-lived branches and merge strategies
+
+**Remember**: The best approach is what your engineering organization already follows. If your team has established Git Flow practices, extending them to infrastructure management keeps the mental model consistent. This isn't about one approach being universally better—it's about alignment with your team's workflows and culture.
+
+### Complementary Technique: [Vendoring Component Versions](/design-patterns/version-management/vendoring-components)
+
+A technique that works with any deployment strategy to automate copying component versions from multiple external sources. Maintains a manifest tracking origin and lineage, providing strong local control with predictable update windows. Can be combined with any folder organization approach.
+
+## Quick Comparison
+
+### Deployment Strategies
+
+| Strategy | Development Model | Convergence | Feedback | Automation | Best For |
+|----------|------------------|-------------|----------|------------|----------|
+| **Continuous Version Deployment** | Trunk-based | Very High | Strong | Required | Most teams - simple, automated convergence |
+| **Git Flow** | Branch-based | Medium | Medium | Optional | Legacy systems with established branch workflows |
+
+### Folder Organization Approaches (within Continuous Version Deployment)
+
+| Approach | Structure Example | Convergence | Operational Overhead | When to Use |
+|----------|------------------|-------------|---------------------|-------------|
+| **Folder-Based Versioning** | `vpc/`, `eks/`, `rds/` | High | Low | Default - simple, explicit folders |
+| **Release Tracks/Channels** | `alpha/vpc`, `beta/vpc`, `prod/vpc` | High | Medium | Multiple environments needing coordinated progression |
+| **Strict Version Pinning** | `vpc/1.2.3`, `vpc/2.0.0` | Low | High | Vendored components requiring exact version tracking |
+
+### Complementary Technique
+
+**Vendoring Component Versions**: Works with any deployment strategy and folder approach. Automates copying external component versions locally with manifest tracking for origin/lineage.
+
+## Choosing a Pattern
+
+The right pattern depends on your organization's needs and culture. Consider these guiding questions:
+
+1. **Roll Forward vs. Rollback**: Does your organization truly need to optimize for rollback, or do you have a culture of rolling forward quickly with strong testing and convergence?
+
+2. **Team Size and Scale**: How many environments do you manage? Strict pinning becomes increasingly painful as environment count grows.
+
+3. **Release Cadence**: How frequently do you update components? High-frequency updates favor patterns with strong convergence.
+
+4. **Third-Party Dependencies**: How much of your infrastructure relies on external modules? Heavy third-party usage may benefit from vendoring.
+
+5. **Operational Maturity**: Do you have strong CI/CD and testing practices? Mature practices enable safer use of convergent patterns.
+
+## Best Practices
+
+Regardless of the pattern you choose:
+
+### 1. Keep `workspace_key_prefix` Stable
+Never include version information in the `workspace_key_prefix` setting. This ensures Terraform state remains stable when switching versions or patterns.
+
+```yaml
+# WRONG: Version in workspace key
+settings:
+  workspace_key_prefix: "prod/vpc/v2"
+
+# CORRECT: Stable workspace key
+settings:
+  workspace_key_prefix: "vpc"
+```
+
+### 2. Document Version Decisions
+Maintain clear documentation about which patterns you're using for which components and why. This helps new team members understand the versioning strategy.
+
+### 3. Test Promotion Paths
+Whatever pattern you choose, regularly test the full promotion path from development to production. Don't let environments diverge for extended periods.
+
+### 4. Monitor Divergence
+Set up monitoring to track version divergence across environments. Alert when environments drift beyond acceptable thresholds.
+
+## Anti-Patterns to Avoid
+
+While Atmos is flexible, certain patterns create operational problems. Avoid these common anti-patterns:
+
+### ❌ Vendoring Multiple Versions to the Same Path
+
+**Problem**: When you vendor multiple versions/channels to the same component path, the last one vendored overwrites all previous ones.
+
+```yaml
+# WRONG: All channels overwrite each other
+spec:
+  sources:
+    - component: vpc-dev
+      source: "git::...?ref=channels/dev"
+      targets:
+        - "components/terraform/vpc"  # ← Same path for all
+    - component: vpc-prod
+      source: "git::...?ref=channels/prod"
+      targets:
+        - "components/terraform/vpc"  # ← Overwrites dev!
+```
+
+**Solution**: Vendor to distinct paths per version/channel:
+
+```yaml
+# CORRECT: Each channel has its own path
+spec:
+  sources:
+    - component: vpc-dev
+      targets:
+        - "components/terraform/channels/dev/vpc"
+    - component: vpc-prod
+      targets:
+        - "components/terraform/channels/prod/vpc"
+```
+
+### ❌ Including Version/Environment in `workspace_key_prefix`
+
+**Problem**: Breaks Terraform state continuity during version migrations or promotions.
+
+```yaml
+# WRONG: Version in workspace key
+settings:
+  workspace_key_prefix: "prod/vpc/v2"  # State lives at different path per version
+```
+
+**Solution**: Keep workspace keys version-agnostic:
+
+```yaml
+# CORRECT: Stable workspace key
+settings:
+  workspace_key_prefix: "vpc"  # State path stays same across versions
+```
+
+### ❌ Using Git Branches for Long-Lived Divergence Without Vendoring
+
+**Problem**: Creates merge conflicts, makes promotion difficult, and couples deployment to Git workflow.
+
+**Solution**: If using Git Flow, vendor branches to distinct local paths rather than deploying directly from branches.
+
+### ❌ Mixing Trunk-Based and Git Flow Patterns
+
+**Problem**: Team confusion about promotion paths, unclear source of truth, competing workflows.
+
+**Solution**: Choose one deployment strategy (Continuous Version Deployment or Git Flow) and stick with it organization-wide.
+
+### ❌ Over-Pinning Environments
+
+**Problem**: Every environment pinned to explicit versions creates:
+- High operational overhead (constant version updates)
+- Weak feedback loops (lower environments don't reveal production issues)
+- Requires lockstep promotions (all intermediate versions must be applied in order)
+
+**Solution**: Use convergence patterns (Continuous Version Deployment) unless you have specific compliance or rollback requirements that justify pinning.
+
+### ❌ Inconsistent Path Conventions
+
+**Problem**: Mixing `{track}/{component}` with `{component}/{track}` makes reasoning about structure difficult.
+
+```yaml
+# WRONG: Inconsistent conventions
+component: prod/vpc      # Track-first
+component: eks/staging   # Component-first
+component: beta/rds      # Track-first again
+```
+
+**Solution**: Choose one convention and apply it consistently:
+
+```yaml
+# CORRECT: Consistent track-first
+component: prod/vpc
+component: prod/eks
+component: beta/rds
+
+# OR: Consistent component-first
+component: vpc/prod
+component: eks/prod
+component: rds/beta
+```
+
+## Versioning Schemes
+
+Different patterns work best with specific [versioning schemes](/design-patterns/version-management/versioning-schemes)—naming conventions for identifying component versions:
+
+**Number-Based Schemes** (fixed points):
+- **SemVer** (`1.2.3`), **CalVer** (`2024.10.1`), **Sequential** (`v1`, `v2`)
+- Work with: [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)
+- Create immutable version identifiers that never change
+
+**Label-Based Schemes** (moving targets):
+- **Maturity Levels** (`alpha`, `beta`, `stable`), **Environment Names** (`dev`, `staging`, `prod`)
+- Work with: [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)
+- Create stage identifiers that point to evolving versions
+
+See the [Versioning Schemes reference](/design-patterns/version-management/versioning-schemes) for detailed guidance on choosing and implementing naming conventions.
+
+## Mixing Strategies
+
+:::tip Idiomatic Implementations
+These strategies can be mixed and matched, but **the patterns shown here represent idiomatic implementations that work well together**. While technically possible to use any versioning scheme with any pattern, certain combinations are more natural and operationally efficient.
+:::
+
+You don't need to use a single pattern exclusively. Common combinations include:
+
+- **Tracks for Applications, Pinning for Platform**: Use release tracks for frequently-updated application components while strictly pinning critical platform components
+- **Vendoring + Tracks**: Vendor third-party code while using release tracks for internal components
+- **Folder Versioning for Major Changes**: Use folder-based versioning for breaking changes while using tracks for routine updates
+- **Different Schemes per Component Type**: Platform components use SemVer while application components use maturity levels
+
+## Summary
+
+Version management in infrastructure-as-code requires careful consideration of trade-offs. While strict version pinning provides reproducibility, it often creates more problems than it solves at scale. Atmos supports multiple patterns that allow you to optimize for your specific needs—whether that's rapid convergence, strong rollback capabilities, or predictable promotion paths.
+
+The key is to choose patterns deliberately based on your organization's culture, scale, and operational maturity. Start with simpler patterns and evolve as your needs grow. Remember that the goal isn't perfect reproducibility—it's delivering reliable infrastructure changes with appropriate safety controls and feedback loops.
+
+:::tip Next Steps
+Review each pattern in detail to understand its implementation, trade-offs, and best practices. Start with the pattern that best matches your current workflow, then iterate based on experience.
+:::
+
+## Honorable Mention: Release Artifacts (Advanced)
+
+For teams requiring immutable deployment records, consider creating **release artifacts** separate from Git that represent exactly what was deployed to each environment. These artifacts:
+
+- Provide an immutable audit trail independent of Git history
+- Support cryptographic signing for compliance requirements
+- Enable exact reproduction of any historical deployment
+- Decouple deployment records from version control changes
+
+This pattern adds significant complexity. Beyond artifact generation, you must maintain a robust system of record that maps which artifact versions are deployed to each environment and manages their progression paths. This becomes particularly challenging in organizations with complex environment topologies that don't follow simple linear promotion flows.
+
+## Related Patterns
+
+- [Versioning Schemes](/design-patterns/version-management/versioning-schemes) - Naming conventions for component versions
+- [Component Inheritance](/design-patterns/component-inheritance) - Base components that serve as blueprints
+- [Component Catalog](/design-patterns/component-catalog) - Centralized component library
+- [Multiple Component Instances](/design-patterns/multiple-component-instances) - Deploying multiple instances of the same component
