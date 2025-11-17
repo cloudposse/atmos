@@ -37,7 +37,9 @@ func main() {
 	// Handle --version flag at application entry point to avoid deep exit in command infrastructure.
 	// This eliminates the need for os.Exit in PersistentPreRun, making tests work with Go 1.25.
 	// Check os.Args directly since we're in main() (tests call cmd.Execute() directly).
-	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
+	// Note: Only intercept --version flag here. The "version" subcommand should go through
+	// normal Cobra flow to ensure PersistentPreRun executes (needed for proper logging setup).
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		err := cmd.ExecuteVersion()
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")

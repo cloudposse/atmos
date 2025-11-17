@@ -950,6 +950,10 @@ func applyProfileTypeFlag(config *profiler.Config, cmd *cobra.Command) error {
 func ExecuteVersion() error {
 	// Initialize minimal config for version command (may not find atmos.yaml, which is OK).
 	tmpConfig, _ := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+
+	// Set up logger to ensure debug/trace messages appear.
+	SetupLogger(&tmpConfig)
+
 	return e.NewVersionExec(&tmpConfig).Execute(false, "")
 }
 
