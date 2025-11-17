@@ -1,32 +1,32 @@
 package list
 
 import (
-	"encoding/csv"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
-	term "github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/renderer"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-const (
-	componentHeader = "Component"
-	stackHeader     = "Stack"
-)
+// Default columns for list instances if not specified in atmos.yaml.
+var defaultInstanceColumns = []column.Config{
+	{Name: "Component", Value: "{{ .component }}"},
+	{Name: "Stack", Value: "{{ .stack }}"},
+}
 
 // processComponentConfig processes a single component configuration and returns an instance if valid.
 func processComponentConfig(stackName, componentName, componentType string, componentConfig interface{}) *schema.Instance {
@@ -167,41 +167,22 @@ func sortInstances(instances []schema.Instance) []schema.Instance {
 	return instances
 }
 
-// formatInstances formats the instances for output.
-func formatInstances(instances []schema.Instance) string {
-	formatOpts := format.FormatOptions{
-		TTY:           term.IsTTYSupportForStdout(),
-		CustomHeaders: []string{componentHeader, stackHeader},
-	}
-
-	// If not in a TTY environment, output CSV.
-	if !formatOpts.TTY {
-		var output strings.Builder
-		csvWriter := csv.NewWriter(&output)
-		if err := csvWriter.Write([]string{componentHeader, stackHeader}); err != nil {
-			return ""
-		}
-		for _, i := range instances {
-			if err := csvWriter.Write([]string{i.Component, i.Stack}); err != nil {
-				return ""
+// getInstanceColumns returns column configuration from atmos.yaml or defaults.
+func getInstanceColumns(atmosConfig *schema.AtmosConfiguration) []column.Config {
+	// Check if custom columns are configured in atmos.yaml.
+	if len(atmosConfig.Components.List.Columns) > 0 {
+		columns := make([]column.Config, len(atmosConfig.Components.List.Columns))
+		for i, col := range atmosConfig.Components.List.Columns {
+			columns[i] = column.Config{
+				Name:  col.Name,
+				Value: col.Value,
 			}
 		}
-		csvWriter.Flush()
-		if err := csvWriter.Error(); err != nil {
-			log.Error(errUtils.ErrFailedToFinalizeCSVOutput.Error(), "error", err)
-			return ""
-		}
-		return output.String()
+		return columns
 	}
 
-	// For TTY mode, create a styled table with only Component and Stack columns.
-	tableRows := make([][]string, 0, len(instances))
-	for _, i := range instances {
-		row := []string{i.Component, i.Stack}
-		tableRows = append(tableRows, row)
-	}
-
-	return format.CreateStyledTable(formatOpts.CustomHeaders, tableRows)
+	// Return default columns.
+	return defaultInstanceColumns
 }
 
 // uploadInstancesWithDeps uploads instances to Atmos Pro API using injected dependencies.
@@ -301,7 +282,7 @@ func processInstances(atmosConfig *schema.AtmosConfiguration) ([]schema.Instance
 
 // ExecuteListInstancesCmd executes the list instances command.
 func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
-	// Inline initializeConfig.
+	// Initialize CLI config.
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToInitConfig.Error(), "error", err)
@@ -315,6 +296,8 @@ func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comman
 		return errors.Join(errUtils.ErrParseFlag, err)
 	}
 
+	formatFlag, _ := cmd.Flags().GetString("format")
+
 	// Process instances.
 	instances, err := processInstances(&atmosConfig)
 	if err != nil {
@@ -322,15 +305,31 @@ func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comman
 		return errors.Join(errUtils.ErrProcessInstances, err)
 	}
 
-	// Inline handleOutput.
-	output := formatInstances(instances)
-	fmt.Fprint(os.Stdout, output)
+	// Extract instances into renderer-compatible format.
+	data := ExtractInstances(instances)
+
+	// Get column configuration.
+	columns := getInstanceColumns(&atmosConfig)
+
+	// Create column selector.
+	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
+	if err != nil {
+		return fmt.Errorf("failed to create column selector: %w", err)
+	}
+
+	// Create renderer.
+	r := renderer.New(nil, selector, nil, format.Format(formatFlag))
+
+	// Render output.
+	if err := r.Render(data); err != nil {
+		return fmt.Errorf("failed to render instances: %w", err)
+	}
 
 	// Handle upload if requested.
 	if upload {
 		proInstances := filterProEnabledInstances(instances)
 		if len(proInstances) == 0 {
-			u.PrintfMessageToTUI("No Atmos Pro-enabled instances found; nothing to upload.")
+			_ = ui.Info("No Atmos Pro-enabled instances found; nothing to upload.")
 			return nil
 		}
 		return uploadInstances(proInstances)

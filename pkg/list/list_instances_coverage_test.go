@@ -10,49 +10,6 @@ import (
 	"github.com/cloudposse/atmos/tests"
 )
 
-// TestFormatInstances_TTY tests formatInstances() in TTY mode (table format).
-func TestFormatInstances_TTY(t *testing.T) {
-	// This test covers the TTY branch that creates a styled table.
-	instances := []schema.Instance{
-		{Component: "vpc", Stack: "dev"},
-		{Component: "app", Stack: "prod"},
-	}
-
-	result := formatInstances(instances)
-
-	// Should produce table output with headers and data.
-	assert.NotEmpty(t, result)
-	assert.Contains(t, result, "Component")
-	assert.Contains(t, result, "Stack")
-}
-
-// TestFormatInstances_WithMultipleInstances tests formatInstances() with multiple instances.
-func TestFormatInstances_WithMultipleInstances(t *testing.T) {
-	// Test with multiple instances to cover the loop logic.
-	instances := []schema.Instance{
-		{Component: "vpc", Stack: "dev"},
-		{Component: "app", Stack: "prod"},
-		{Component: "db", Stack: "staging"},
-	}
-
-	result := formatInstances(instances)
-
-	// Should produce output with all instances.
-	assert.NotEmpty(t, result)
-	assert.Contains(t, result, "Component")
-	assert.Contains(t, result, "Stack")
-}
-
-// TestFormatInstances_EmptyList tests formatInstances() with empty instance list.
-func TestFormatInstances_EmptyList(t *testing.T) {
-	instances := []schema.Instance{}
-
-	result := formatInstances(instances)
-
-	// Should produce output with headers but no data rows.
-	assert.NotEmpty(t, result)
-}
-
 // TestUploadInstances tests the uploadInstances() wrapper function.
 func TestUploadInstances(t *testing.T) {
 	// This tests the production wrapper that uses default implementations.
@@ -100,6 +57,7 @@ func TestExecuteListInstancesCmd(t *testing.T) {
 	// Create command with flags.
 	cmd := &cobra.Command{}
 	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "table", "Output format")
 
 	info := &schema.ConfigAndStacksInfo{
 		BasePath: fixturePath,
@@ -117,6 +75,7 @@ func TestExecuteListInstancesCmd_InvalidConfig(t *testing.T) {
 	// Create command with flags.
 	cmd := &cobra.Command{}
 	cmd.Flags().Bool("upload", false, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "table", "Output format")
 
 	// Use invalid config to trigger error path.
 	info := &schema.ConfigAndStacksInfo{
@@ -135,6 +94,7 @@ func TestExecuteListInstancesCmd_UploadPath(t *testing.T) {
 	// Test that upload flag parsing works.
 	cmd := &cobra.Command{}
 	cmd.Flags().Bool("upload", true, "Upload instances to Atmos Pro")
+	cmd.Flags().String("format", "table", "Output format")
 
 	info := &schema.ConfigAndStacksInfo{
 		BasePath: "/nonexistent/path",
