@@ -39,11 +39,70 @@ func WithDelimiterFlag(options *[]flags.Option) {
 	)
 }
 
-// WithColumnsFlag adds column selection flag with environment variable support.
-// Allows CLI override of atmos.yaml column configuration.
-// Used by: components, stacks, workflows, vendor, instances.
-func WithColumnsFlag(options *[]flags.Option) {
-	defer perf.Track(nil, "list.WithColumnsFlag")()
+// WithInstancesColumnsFlag adds column selection flag for list instances command.
+// Tab completion is registered via RegisterFlagCompletionFunc in the command init.
+// Used by: instances.
+func WithInstancesColumnsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithInstancesColumnsFlag")()
+
+	*options = append(*options,
+		flags.WithStringSliceFlag("columns", "", []string{}, "Columns to display (comma-separated, overrides atmos.yaml)"),
+		flags.WithEnvVars("columns", "ATMOS_LIST_COLUMNS"),
+	)
+}
+
+// WithMetadataColumnsFlag adds column selection flag for list metadata and components commands.
+// Tab completion is registered via RegisterFlagCompletionFunc in the command init.
+// Used by: metadata, components.
+func WithMetadataColumnsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithMetadataColumnsFlag")()
+
+	*options = append(*options,
+		flags.WithStringSliceFlag("columns", "", []string{}, "Columns to display (comma-separated, overrides atmos.yaml)"),
+		flags.WithEnvVars("columns", "ATMOS_LIST_COLUMNS"),
+	)
+}
+
+// WithComponentsColumnsFlag adds column selection flag for list components command.
+// Components command uses the same columns as metadata.
+// Tab completion is registered via RegisterFlagCompletionFunc in the command init.
+// Used by: components.
+func WithComponentsColumnsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithComponentsColumnsFlag")()
+
+	// Components share metadata columns.
+	WithMetadataColumnsFlag(options)
+}
+
+// WithStacksColumnsFlag adds column selection flag for list stacks command.
+// Tab completion is registered via RegisterFlagCompletionFunc in the command init.
+// Used by: stacks.
+func WithStacksColumnsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithStacksColumnsFlag")()
+
+	*options = append(*options,
+		flags.WithStringSliceFlag("columns", "", []string{}, "Columns to display (comma-separated, overrides atmos.yaml)"),
+		flags.WithEnvVars("columns", "ATMOS_LIST_COLUMNS"),
+	)
+}
+
+// WithWorkflowsColumnsFlag adds column selection flag for list workflows command.
+// Tab completion is registered via RegisterFlagCompletionFunc in the command init.
+// Used by: workflows.
+func WithWorkflowsColumnsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithWorkflowsColumnsFlag")()
+
+	*options = append(*options,
+		flags.WithStringSliceFlag("columns", "", []string{}, "Columns to display (comma-separated, overrides atmos.yaml)"),
+		flags.WithEnvVars("columns", "ATMOS_LIST_COLUMNS"),
+	)
+}
+
+// WithVendorColumnsFlag adds column selection flag for list vendor command.
+// Tab completion is registered via RegisterFlagCompletionFunc in the command init.
+// Used by: vendor.
+func WithVendorColumnsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithVendorColumnsFlag")()
 
 	*options = append(*options,
 		flags.WithStringSliceFlag("columns", "", []string{}, "Columns to display (comma-separated, overrides atmos.yaml)"),

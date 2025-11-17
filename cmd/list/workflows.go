@@ -60,17 +60,45 @@ var workflowsCmd = &cobra.Command{
 	},
 }
 
+// columnsCompletionForWorkflows provides dynamic tab completion for --columns flag.
+// Returns column names from atmos.yaml workflows.list.columns configuration.
+func columnsCompletionForWorkflows(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// Load atmos configuration.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Extract column names from atmos.yaml configuration.
+	if len(atmosConfig.Workflows.List.Columns) > 0 {
+		var columnNames []string
+		for _, col := range atmosConfig.Workflows.List.Columns {
+			columnNames = append(columnNames, col.Name)
+		}
+		return columnNames, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// If no custom columns configured, return empty list.
+	return nil, cobra.ShellCompDirectiveNoFileComp
+}
+
 func init() {
 	// Create parser with workflows-specific flags using flag wrappers.
 	workflowsParser = NewListParser(
 		WithFormatFlag,
-		WithColumnsFlag,
+		WithWorkflowsColumnsFlag,
 		WithSortFlag,
 		WithFileFlag,
 	)
 
 	// Register flags.
 	workflowsParser.RegisterFlags(workflowsCmd)
+
+	// Register dynamic tab completion for --columns flag.
+	if err := workflowsCmd.RegisterFlagCompletionFunc("columns", columnsCompletionForWorkflows); err != nil {
+		panic(err)
+	}
 
 	// Bind flags to Viper for environment variable support.
 	if err := workflowsParser.BindToViper(viper.GetViper()); err != nil {

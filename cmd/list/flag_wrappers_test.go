@@ -27,9 +27,9 @@ func TestWithFormatFlag(t *testing.T) {
 	assert.Contains(t, flag.Usage, "Output format")
 }
 
-// TestWithColumnsFlag verifies columns flag registration.
-func TestWithColumnsFlag(t *testing.T) {
-	parser := NewListParser(WithColumnsFlag)
+// TestWithInstancesColumnsFlag verifies columns flag registration for instances.
+func TestWithInstancesColumnsFlag(t *testing.T) {
+	parser := NewListParser(WithInstancesColumnsFlag)
 	assert.NotNil(t, parser)
 
 	cmd := &cobra.Command{Use: "test"}
@@ -267,7 +267,7 @@ func TestNewListParser_MultipleFlagsComposition(t *testing.T) {
 	// Simulate components command with all relevant flags
 	parser := NewListParser(
 		WithFormatFlag,
-		WithColumnsFlag,
+		WithComponentsColumnsFlag,
 		WithSortFlag,
 		WithFilterFlag,
 		WithStackFlag,
@@ -300,7 +300,7 @@ func TestNewListParser_SelectiveFlagComposition(t *testing.T) {
 			name: "components command",
 			builders: []func(*[]flags.Option){
 				WithFormatFlag,
-				WithColumnsFlag,
+				WithComponentsColumnsFlag,
 				WithSortFlag,
 				WithFilterFlag,
 				WithStackFlag,
@@ -315,7 +315,7 @@ func TestNewListParser_SelectiveFlagComposition(t *testing.T) {
 			name: "stacks command",
 			builders: []func(*[]flags.Option){
 				WithFormatFlag,
-				WithColumnsFlag,
+				WithStacksColumnsFlag,
 				WithSortFlag,
 				WithComponentFlag,
 			},
@@ -327,7 +327,7 @@ func TestNewListParser_SelectiveFlagComposition(t *testing.T) {
 			builders: []func(*[]flags.Option){
 				WithFormatFlag,
 				WithDelimiterFlag,
-				WithColumnsFlag,
+				WithWorkflowsColumnsFlag,
 				WithSortFlag,
 				WithFileFlag,
 			},
@@ -383,7 +383,7 @@ func TestFlagEnvironmentVariableBinding(t *testing.T) {
 		envVarName string
 	}{
 		{"format", WithFormatFlag, "format", "ATMOS_LIST_FORMAT"},
-		{"columns", WithColumnsFlag, "columns", "ATMOS_LIST_COLUMNS"},
+		{"columns", WithInstancesColumnsFlag, "columns", "ATMOS_LIST_COLUMNS"},
 		{"sort", WithSortFlag, "sort", "ATMOS_LIST_SORT"},
 		{"filter", WithFilterFlag, "filter", "ATMOS_LIST_FILTER"},
 		{"stack", WithStackFlag, "stack", "ATMOS_STACK"},

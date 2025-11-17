@@ -63,17 +63,45 @@ var vendorCmd = &cobra.Command{
 	},
 }
 
+// columnsCompletionForVendor provides dynamic tab completion for --columns flag.
+// Returns column names from atmos.yaml vendor.list.columns configuration.
+func columnsCompletionForVendor(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// Load atmos configuration.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Extract column names from atmos.yaml configuration.
+	if len(atmosConfig.Vendor.List.Columns) > 0 {
+		var columnNames []string
+		for _, col := range atmosConfig.Vendor.List.Columns {
+			columnNames = append(columnNames, col.Name)
+		}
+		return columnNames, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// If no custom columns configured, return empty list.
+	return nil, cobra.ShellCompDirectiveNoFileComp
+}
+
 func init() {
 	// Create parser with vendor-specific flags using flag wrappers.
 	vendorParser = NewListParser(
 		WithFormatFlag,
-		WithColumnsFlag,
+		WithVendorColumnsFlag,
 		WithSortFlag,
 		WithStackFlag,
 	)
 
 	// Register flags.
 	vendorParser.RegisterFlags(vendorCmd)
+
+	// Register dynamic tab completion for --columns flag.
+	if err := vendorCmd.RegisterFlagCompletionFunc("columns", columnsCompletionForVendor); err != nil {
+		panic(err)
+	}
 
 	// Add stack completion.
 	addStackCompletion(vendorCmd)

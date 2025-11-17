@@ -70,11 +70,34 @@ var componentsCmd = &cobra.Command{
 	},
 }
 
+// columnsCompletionForComponents provides dynamic tab completion for --columns flag.
+// Returns column names from atmos.yaml components.list.columns configuration.
+func columnsCompletionForComponents(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// Load atmos configuration.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Extract column names from atmos.yaml configuration.
+	if len(atmosConfig.Components.List.Columns) > 0 {
+		var columnNames []string
+		for _, col := range atmosConfig.Components.List.Columns {
+			columnNames = append(columnNames, col.Name)
+		}
+		return columnNames, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// If no custom columns configured, return empty list.
+	return nil, cobra.ShellCompDirectiveNoFileComp
+}
+
 func init() {
 	// Create parser with components-specific flags using flag wrappers.
 	componentsParser = NewListParser(
 		WithFormatFlag,
-		WithColumnsFlag,
+		WithComponentsColumnsFlag,
 		WithSortFlag,
 		WithStackFlag,
 		WithTypeFlag,
@@ -85,6 +108,11 @@ func init() {
 
 	// Register flags.
 	componentsParser.RegisterFlags(componentsCmd)
+
+	// Register dynamic tab completion for --columns flag.
+	if err := componentsCmd.RegisterFlagCompletionFunc("columns", columnsCompletionForComponents); err != nil {
+		panic(err)
+	}
 
 	// Bind flags to Viper for environment variable support.
 	if err := componentsParser.BindToViper(viper.GetViper()); err != nil {
