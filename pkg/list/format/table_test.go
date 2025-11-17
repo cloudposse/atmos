@@ -67,9 +67,14 @@ func TestFormatCollectionValue(t *testing.T) {
 			expected: "zone-a\nzone-b\nzone-c",
 		},
 		{
-			name:     "Map shows placeholder",
+			name:     "Scalar map expands",
 			input:    map[string]interface{}{"key1": "value1", "key2": "value2"},
-			expected: "{...} (2 keys)",
+			expected: "key1: value1\nkey2: value2",
+		},
+		{
+			name:     "Complex map shows placeholder",
+			input:    map[string]interface{}{"key1": map[string]string{"nested": "value"}},
+			expected: "{...} (1 keys)",
 		},
 		{
 			name:     "Complex array shows placeholder",
@@ -135,8 +140,13 @@ func TestFormatTableCellValueWithArrays(t *testing.T) {
 			contains: "us-east-1a\nus-east-1b",
 		},
 		{
-			name:     "Map shows placeholder",
+			name:     "Scalar map expands",
 			input:    map[string]interface{}{"key": "value"},
+			contains: "key: value",
+		},
+		{
+			name:     "Complex map shows placeholder",
+			input:    map[string]interface{}{"key": map[string]string{"nested": "value"}},
 			contains: "{...} (1 keys)",
 		},
 	}
@@ -145,6 +155,48 @@ func TestFormatTableCellValueWithArrays(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := formatTableCellValue(tt.input)
 			assert.Contains(t, result, tt.contains)
+		})
+	}
+}
+
+func TestTryExpandScalarMap(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected string
+	}{
+		{
+			name:     "String map",
+			input:    map[string]interface{}{"env": "production", "team": "platform"},
+			expected: "env: production\nteam: platform",
+		},
+		{
+			name:     "Mixed scalar types",
+			input:    map[string]interface{}{"count": 5, "enabled": true, "name": "test"},
+			expected: "count: 5\nenabled: true\nname: test",
+		},
+		{
+			name:     "Empty map",
+			input:    map[string]interface{}{},
+			expected: "",
+		},
+		{
+			name:     "Nested map (non-scalar)",
+			input:    map[string]interface{}{"outer": map[string]string{"inner": "value"}},
+			expected: "", // Should return empty for non-scalar values
+		},
+		{
+			name:     "Map with array value (non-scalar)",
+			input:    map[string]interface{}{"list": []string{"a", "b"}},
+			expected: "", // Should return empty for non-scalar values
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := reflect.ValueOf(tt.input)
+			result := tryExpandScalarMap(v)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

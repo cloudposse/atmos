@@ -169,6 +169,10 @@ func formatCollectionValue(v reflect.Value) string {
 	count := v.Len()
 	switch v.Kind() {
 	case reflect.Map:
+		// Try to expand scalar maps (like tags) into multi-line format.
+		if expanded := tryExpandScalarMap(v); expanded != "" {
+			return expanded
+		}
 		return fmt.Sprintf("{...} (%d keys)", count)
 	case reflect.Array, reflect.Slice:
 		// Try to expand scalar arrays into multi-line format.
@@ -217,6 +221,66 @@ func tryExpandScalarArray(v reflect.Value) string {
 	}
 
 	// Join scalar items with newlines for multi-row display.
+	return joinItems(items)
+}
+
+// tryExpandScalarMap attempts to expand a map with scalar values into a multi-line string.
+// Returns empty string if the map contains non-scalar values.
+func tryExpandScalarMap(v reflect.Value) string {
+	if v.Len() == 0 {
+		return ""
+	}
+
+	// Extract map keys and sort them for consistent ordering.
+	keys := v.MapKeys()
+	if len(keys) == 0 {
+		return ""
+	}
+
+	// Sort keys by their string representation.
+	sortedKeys := make([]string, len(keys))
+	keyMap := make(map[string]reflect.Value)
+	for i, key := range keys {
+		keyStr := fmt.Sprintf("%v", key.Interface())
+		sortedKeys[i] = keyStr
+		keyMap[keyStr] = key
+	}
+	sort.Strings(sortedKeys)
+
+	// Check if all values are scalars and format as "key: value".
+	var items []string
+	for _, keyStr := range sortedKeys {
+		key := keyMap[keyStr]
+		val := v.MapIndex(key)
+
+		// Handle interface{} wrapping.
+		if val.Kind() == reflect.Interface {
+			val = val.Elem()
+		}
+
+		// Check if value is a scalar type.
+		var valueStr string
+		switch val.Kind() {
+		case reflect.String:
+			valueStr = val.String()
+		case reflect.Bool:
+			valueStr = fmt.Sprintf("%v", val.Bool())
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			valueStr = fmt.Sprintf("%d", val.Int())
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			valueStr = fmt.Sprintf("%d", val.Uint())
+		case reflect.Float32, reflect.Float64:
+			valueStr = fmt.Sprintf("%.2f", val.Float())
+		default:
+			// Non-scalar value found, return empty to use placeholder format.
+			return ""
+		}
+
+		// Format as "key: value".
+		items = append(items, fmt.Sprintf("%s: %s", keyStr, valueStr))
+	}
+
+	// Join key-value pairs with newlines for multi-row display.
 	return joinItems(items)
 }
 
