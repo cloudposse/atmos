@@ -64,7 +64,7 @@ func TestExecuteListInstancesCmd(t *testing.T) {
 	}
 
 	// Execute command - should successfully list instances.
-	err := ExecuteListInstancesCmd(info, cmd, []string{})
+	err := ExecuteListInstancesCmd(info, cmd, []string{}, false)
 
 	// Should succeed with valid fixture.
 	assert.NoError(t, err)
@@ -83,7 +83,7 @@ func TestExecuteListInstancesCmd_InvalidConfig(t *testing.T) {
 	}
 
 	// Execute command - will error but won't panic.
-	err := ExecuteListInstancesCmd(info, cmd, []string{})
+	err := ExecuteListInstancesCmd(info, cmd, []string{}, false)
 
 	// Error is expected with invalid config.
 	assert.Error(t, err)
@@ -101,7 +101,7 @@ func TestExecuteListInstancesCmd_UploadPath(t *testing.T) {
 	}
 
 	// Execute with upload enabled - will error in config loading before upload.
-	err := ExecuteListInstancesCmd(info, cmd, []string{})
+	err := ExecuteListInstancesCmd(info, cmd, []string{}, false)
 
 	// Error is expected (config load will fail).
 	assert.Error(t, err)

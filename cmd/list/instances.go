@@ -1,13 +1,17 @@
 package list
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list"
+	"github.com/cloudposse/atmos/pkg/list/format"
 )
 
 var instancesParser *flags.StandardParser
@@ -23,6 +27,7 @@ type InstancesOptions struct {
 	Query      string
 	Sort       string
 	Upload     bool
+	Provenance bool
 }
 
 // instancesCmd lists atmos instances.
@@ -54,6 +59,7 @@ var instancesCmd = &cobra.Command{
 			Query:      v.GetString("query"),
 			Sort:       v.GetString("sort"),
 			Upload:     v.GetBool("upload"),
+			Provenance: v.GetBool("provenance"),
 		}
 
 		return executeListInstancesCmd(cmd, args, opts)
@@ -71,6 +77,7 @@ func init() {
 		WithQueryFlag,
 		WithSortFlag,
 		WithUploadFlag,
+		WithProvenanceFlag,
 	)
 
 	// Register flags.
@@ -83,6 +90,11 @@ func init() {
 }
 
 func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesOptions) error {
+	// Validate that --provenance only works with --format=tree.
+	if opts.Provenance && opts.Format != string(format.FormatTree) {
+		return fmt.Errorf("%w: --provenance flag only works with --format=tree", errUtils.ErrInvalidFlag)
+	}
+
 	// Process and validate command line arguments.
 	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
 	if err != nil {
@@ -91,5 +103,5 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 	configAndStacksInfo.Command = "list"
 	configAndStacksInfo.SubCommand = "instances"
 
-	return list.ExecuteListInstancesCmd(&configAndStacksInfo, cmd, args)
+	return list.ExecuteListInstancesCmd(&configAndStacksInfo, cmd, args, opts.Provenance)
 }

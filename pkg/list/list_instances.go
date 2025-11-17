@@ -281,7 +281,8 @@ func processInstances(atmosConfig *schema.AtmosConfiguration) ([]schema.Instance
 }
 
 // ExecuteListInstancesCmd executes the list instances command.
-func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
+func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string, showImports bool) error {
+	log.Trace("ExecuteListInstancesCmd starting")
 	// Initialize CLI config.
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -303,6 +304,36 @@ func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comman
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
 		return errors.Join(errUtils.ErrProcessInstances, err)
+	}
+
+	// Handle tree format specially.
+	log.Trace("Checking format flag", "format_flag", formatFlag, "format_tree", format.FormatTree, "match", formatFlag == string(format.FormatTree))
+	if formatFlag == string(format.FormatTree) {
+		// Enable provenance tracking to capture import chains.
+		atmosConfig.TrackProvenance = true
+
+		// Clear caches to ensure fresh processing with provenance enabled.
+		e.ClearMergeContexts()
+		e.ClearFindStacksMapCache()
+
+		// Get all stacks for provenance-based import resolution.
+		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+		if err != nil {
+			log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
+			return errors.Join(errUtils.ErrExecuteDescribeStacks, err)
+		}
+
+		// Resolve import trees using provenance system.
+		importTrees, err := ResolveImportTreeFromProvenance(stacksMap, &atmosConfig)
+		if err != nil {
+			return fmt.Errorf("failed to resolve import trees: %w", err)
+		}
+
+		// Render tree view.
+		// Use showImports parameter from --provenance flag.
+		output := format.RenderInstancesTree(importTrees, showImports)
+		fmt.Println(output)
+		return nil
 	}
 
 	// Extract instances into renderer-compatible format with metadata fields.

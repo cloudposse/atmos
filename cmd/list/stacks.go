@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -16,6 +17,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
+	"github.com/cloudposse/atmos/pkg/list/tree"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -25,10 +28,11 @@ var stacksParser *flags.StandardParser
 // StacksOptions contains parsed flags for the stacks command.
 type StacksOptions struct {
 	global.Flags
-	Component string
-	Format    string
-	Columns   string
-	Sort      string
+	Component  string
+	Format     string
+	Columns    string
+	Sort       string
+	Provenance bool
 }
 
 // stacksCmd lists atmos stacks.
@@ -50,11 +54,12 @@ var stacksCmd = &cobra.Command{
 		}
 
 		opts := &StacksOptions{
-			Flags:     flags.ParseGlobalFlags(cmd, v),
-			Component: v.GetString("component"),
-			Format:    v.GetString("format"),
-			Columns:   v.GetString("columns"),
-			Sort:      v.GetString("sort"),
+			Flags:      flags.ParseGlobalFlags(cmd, v),
+			Component:  v.GetString("component"),
+			Format:     v.GetString("format"),
+			Columns:    v.GetString("columns"),
+			Sort:       v.GetString("sort"),
+			Provenance: v.GetBool("provenance"),
 		}
 
 		return listStacksWithOptions(opts)
@@ -68,6 +73,7 @@ func init() {
 		WithColumnsFlag,
 		WithSortFlag,
 		WithComponentFlag,
+		WithProvenanceFlag,
 	)
 
 	// Register flags.
@@ -80,11 +86,21 @@ func init() {
 }
 
 func listStacksWithOptions(opts *StacksOptions) error {
+	// Validate that --provenance only works with --format=tree.
+	if opts.Provenance && opts.Format != string(format.FormatTree) {
+		return fmt.Errorf("%w: --provenance flag only works with --format=tree", errUtils.ErrInvalidFlag)
+	}
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return fmt.Errorf("error initializing CLI config: %v", err)
+	}
+
+	// If format is empty, check command-specific config.
+	if opts.Format == "" && atmosConfig.Stacks.List.Format != "" {
+		opts.Format = atmosConfig.Stacks.List.Format
 	}
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
@@ -108,6 +124,47 @@ func listStacksWithOptions(opts *StacksOptions) error {
 
 	if len(stacks) == 0 {
 		ui.Info("No stacks found")
+		return nil
+	}
+
+	// Handle tree format specially - it shows import hierarchies.
+	if opts.Format == "tree" {
+		log.Trace("Tree format detected, enabling provenance tracking")
+		// Enable provenance tracking to capture import chains.
+		atmosConfig.TrackProvenance = true
+
+		// Clear caches to ensure fresh processing with provenance enabled.
+		e.ClearMergeContexts()
+		e.ClearFindStacksMapCache()
+		log.Trace("Caches cleared, re-processing with provenance")
+
+		// Re-process stacks with provenance tracking enabled.
+		stacksMap, err = e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+		if err != nil {
+			return fmt.Errorf("error re-processing stacks with provenance: %w", err)
+		}
+
+		// Resolve import trees using provenance system.
+		importTreesWithComponents, err := l.ResolveImportTreeFromProvenance(stacksMap, &atmosConfig)
+		if err != nil {
+			return fmt.Errorf("error resolving import tree from provenance: %w", err)
+		}
+
+		// Flatten component level - for stacks view, we just need stack → imports.
+		// All components in a stack share the same import chain from the stack file.
+		importTrees := make(map[string][]*tree.ImportNode)
+		for stackName, componentImports := range importTreesWithComponents {
+			// Just take the first component's imports (they're all the same for a stack file).
+			for _, imports := range componentImports {
+				importTrees[stackName] = imports
+				break
+			}
+		}
+
+		// Render the tree.
+		// Use showImports from --provenance flag.
+		output := format.RenderStacksTree(importTrees, opts.Provenance)
+		fmt.Println(output)
 		return nil
 	}
 

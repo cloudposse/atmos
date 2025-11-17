@@ -22,9 +22,9 @@ func WithFormatFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithFormatFlag")()
 
 	*options = append(*options,
-		flags.WithStringFlag("format", "f", "", "Output format: table, json, yaml, csv, tsv"),
+		flags.WithStringFlag("format", "f", "", "Output format: table, json, yaml, csv, tsv, tree"),
 		flags.WithEnvVars("format", "ATMOS_LIST_FORMAT"),
-		flags.WithValidValues("format", "table", "json", "yaml", "csv", "tsv"),
+		flags.WithValidValues("format", "table", "json", "yaml", "csv", "tsv", "tree"),
 	)
 }
 
@@ -207,6 +207,17 @@ func WithUploadFlag(options *[]flags.Option) {
 	*options = append(*options,
 		flags.WithBoolFlag("upload", "", false, "Upload instances to Atmos Pro API"),
 		flags.WithEnvVars("upload", "ATMOS_UPLOAD"),
+	)
+}
+
+// WithProvenanceFlag adds provenance display flag for tree format.
+// Used by: instances, stacks.
+func WithProvenanceFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithProvenanceFlag")()
+
+	*options = append(*options,
+		flags.WithBoolFlag("provenance", "", false, "Show import provenance (only works with --format=tree)"),
+		flags.WithEnvVars("provenance", "ATMOS_PROVENANCE"),
 	)
 }
 
