@@ -59,19 +59,8 @@ type HelpStyle struct {
 	Aliases       *color.Color
 }
 
-// Styles - DEPRECATED: Use theme.GetCurrentStyles() instead.
-// This global variable uses hard-coded colors that don't respond to theme changes.
-// New code should call GetCurrentStyles() to get theme-aware styles.
-//
-// Example migration:
-//
-//	// Old (deprecated):
-//	fmt.Print(Styles.Checkmark.String())
-//
-//	// New (theme-aware):
-//	styles := theme.GetCurrentStyles()
-//	fmt.Print(styles.Success.Render(theme.IconCheckmark))
-var Styles = struct {
+// StylesStruct defines the structure for legacy deprecated styles.
+type StylesStruct struct {
 	VersionNumber lipgloss.Style
 	NewVersion    lipgloss.Style
 	Link          lipgloss.Style
@@ -84,25 +73,57 @@ var Styles = struct {
 	Description   lipgloss.Style
 	Border        lipgloss.Style
 	Help          HelpStyle
-}{
-	VersionNumber: lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGray)),
-	NewVersion:    lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGreen)),
-	Link:          lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)),
-	PackageName:   lipgloss.NewStyle().Foreground(lipgloss.Color(ColorPink)),
-	Checkmark:     lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCheckmark)).SetString(IconCheckmark),
-	XMark:         lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed)).SetString("x"),
-	GrayText:      lipgloss.NewStyle().Foreground(lipgloss.Color(ColorDarkGray)),
-	SelectedItem:  lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color(ColorSelectedItem)),
-	CommandName:   lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGreen)),
-	Description:   lipgloss.NewStyle().Foreground(lipgloss.Color(ColorWhite)),
-	Border:        lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(ColorBorder)),
-	Help: HelpStyle{
-		Headings: color.New(color.FgHiCyan).Add(color.Bold).Add(color.Underline),
-		Commands: color.New(color.FgHiGreen).Add(color.Bold),
-		Example:  color.New(color.Italic),
-		ExecName: color.New(color.Bold),
-		Flags:    color.New(color.Bold),
-	},
+}
+
+// Styles - DEPRECATED: Use theme.GetCurrentStyles() instead.
+// This global variable uses hard-coded colors that don't respond to theme changes.
+// New code should call GetCurrentStyles() to get theme-aware styles.
+//
+// Example migration:
+//
+//	// Old (deprecated):
+//	fmt.Print(Styles.Checkmark.String())
+//
+//	// New (theme-aware):
+//	styles := theme.GetCurrentStyles()
+//	fmt.Print(styles.Success.Render(theme.IconCheckmark))
+var Styles = createLegacyStyles()
+
+// createLegacyStyles creates the legacy Styles struct with current lipgloss color profile.
+// Note: We use .Render() instead of .SetString() to respect the current color profile.
+// SetString() bakes in ANSI codes at creation time, while Render() applies them dynamically.
+func createLegacyStyles() StylesStruct {
+	checkmarkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCheckmark))
+	xmarkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(ColorRed))
+
+	return StylesStruct{
+		VersionNumber: lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGray)),
+		NewVersion:    lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGreen)),
+		Link:          lipgloss.NewStyle().Foreground(lipgloss.Color(ColorCyan)),
+		PackageName:   lipgloss.NewStyle().Foreground(lipgloss.Color(ColorPink)),
+		// Use Render() to apply color profile at rendering time, not creation time
+		Checkmark:    checkmarkStyle.SetString(checkmarkStyle.Render(IconCheckmark)),
+		XMark:        xmarkStyle.SetString(xmarkStyle.Render("x")),
+		GrayText:     lipgloss.NewStyle().Foreground(lipgloss.Color(ColorDarkGray)),
+		SelectedItem: lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color(ColorSelectedItem)),
+		CommandName:  lipgloss.NewStyle().Foreground(lipgloss.Color(ColorGreen)),
+		Description:  lipgloss.NewStyle().Foreground(lipgloss.Color(ColorWhite)),
+		Border:       lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(ColorBorder)),
+		Help: HelpStyle{
+			Headings: color.New(color.FgHiCyan).Add(color.Bold).Add(color.Underline),
+			Commands: color.New(color.FgHiGreen).Add(color.Bold),
+			Example:  color.New(color.Italic),
+			ExecName: color.New(color.Bold),
+			Flags:    color.New(color.Bold),
+		},
+	}
+}
+
+// refreshLegacyStyles regenerates the Styles global variable with the current lipgloss color profile.
+// This is called when the color profile changes (e.g., NO_COLOR is set) to ensure
+// legacy code using theme.Styles.Checkmark/XMark gets updated styling.
+func refreshLegacyStyles() {
+	Styles = createLegacyStyles()
 }
 
 // Colors - DEPRECATED: Use theme.GetCurrentStyles() instead.

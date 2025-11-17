@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/io"
@@ -47,10 +48,45 @@ func InitFormatter(ioCtx io.Context) {
 	// terminal.Write() → io.Write(UIStream) → masking → stderr
 	globalTerminal = terminal.New(terminal.WithIO(termWriter))
 
+	// Configure lipgloss global color profile based on terminal capabilities.
+	// This ensures that all lipgloss styles (including theme.Styles) respect
+	// terminal color settings like NO_COLOR.
+	configureColorProfile(globalTerminal)
+
 	// Create formatter with I/O context and terminal
 	// Note: Formatter still gets terminal for terminal capability detection (color profile, width, etc.)
 	globalFormatter = NewFormatter(ioCtx, globalTerminal).(*formatter)
 	Format = globalFormatter // Also expose for advanced use
+}
+
+// configureColorProfile sets the global lipgloss color profile based on terminal capabilities.
+// This ensures all lipgloss styles respect NO_COLOR and other terminal color settings.
+func configureColorProfile(term terminal.Terminal) {
+	profile := term.ColorProfile()
+
+	// Map terminal color profile to termenv profile for lipgloss
+	var termProfile termenv.Profile
+	switch profile {
+	case terminal.ColorNone:
+		termProfile = termenv.Ascii
+	case terminal.Color16:
+		termProfile = termenv.ANSI
+	case terminal.Color256:
+		termProfile = termenv.ANSI256
+	case terminal.ColorTrue:
+		termProfile = termenv.TrueColor
+	default:
+		termProfile = termenv.Ascii
+	}
+
+	// Set the global lipgloss color profile
+	lipgloss.SetColorProfile(termProfile)
+
+	// Force theme styles to be regenerated with the new color profile.
+	// This is critical because theme.CurrentStyles caches lipgloss styles that
+	// bake in ANSI codes at creation time. When the color profile changes,
+	// we must regenerate the styles.
+	theme.InvalidateStyleCache()
 }
 
 // getFormatter returns the global formatter instance.

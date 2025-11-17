@@ -207,6 +207,12 @@ var RootCmd = &cobra.Command{
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 
+		// Configure lipgloss color profile early, before config loading.
+		// This is critical because stack processing during config load may trigger
+		// validation that uses theme styles. We need to set the color profile BEFORE
+		// those styles are accessed to ensure NO_COLOR and other settings are respected.
+		configureEarlyColorProfile(cmd)
+
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		// Honor CLI overrides for resolving atmos.yaml and its imports.
 		if bp, _ := cmd.Flags().GetString("base-path"); bp != "" {
@@ -358,6 +364,37 @@ func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 	log.Debug("Set", "logs-level", log.GetLevelString(), "logs-file", atmosConfig.Logs.File)
+}
+
+// configureEarlyColorProfile sets the lipgloss color profile based on environment variables.
+// This is called early in PersistentPreRun, before config loading, to ensure that any
+// theme styles accessed during stack processing respect NO_COLOR and other settings.
+func configureEarlyColorProfile(cmd *cobra.Command) {
+	// Check NO_COLOR environment variable (standard terminal env var).
+	//nolint:forbidigo // Standard terminal env var, must use os.Getenv before config loads.
+	if os.Getenv("NO_COLOR") != "" {
+		// NO_COLOR is set - disable all colors
+		lipgloss.SetColorProfile(termenv.Ascii)
+		theme.InvalidateStyleCache() // Regenerate theme styles without colors
+		return
+	}
+
+	// Check --no-color flag (already parsed by cobra at this point)
+	if noColor, _ := cmd.Flags().GetBool("no-color"); noColor {
+		lipgloss.SetColorProfile(termenv.Ascii)
+		theme.InvalidateStyleCache()
+		return
+	}
+
+	// Check --force-color flag
+	if forceColor, _ := cmd.Flags().GetBool("force-color"); forceColor {
+		lipgloss.SetColorProfile(termenv.TrueColor)
+		theme.InvalidateStyleCache()
+		return
+	}
+
+	// Note: Full color profile detection happens later in InitFormatter().
+	// This early configuration just handles the most critical cases (NO_COLOR).
 }
 
 // setupColorProfile configures the global lipgloss color profile based on Atmos configuration.
