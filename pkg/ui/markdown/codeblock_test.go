@@ -22,7 +22,7 @@ func TestNewCodeblockStyle(t *testing.T) {
 
 	t.Run("creates style without debug mode", func(t *testing.T) {
 		// Ensure ATMOS_DEBUG_COLORS is not set.
-		os.Unsetenv("ATMOS_DEBUG_COLORS")
+		t.Setenv("ATMOS_DEBUG_COLORS", "")
 
 		renderer := lipgloss.NewRenderer(os.Stdout)
 		style := NewCodeblockStyle(renderer)
