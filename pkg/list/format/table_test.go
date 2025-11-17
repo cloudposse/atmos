@@ -337,3 +337,54 @@ func TestRenderInlineMarkdown(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectContentType_NoValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected cellContentType
+	}{
+		{
+			name:     "<no value> detected",
+			input:    "<no value>",
+			expected: contentTypeNoValue,
+		},
+		{
+			name:     "Empty string is default",
+			input:    "",
+			expected: contentTypeDefault,
+		},
+		{
+			name:     "Boolean true",
+			input:    "true",
+			expected: contentTypeBoolean,
+		},
+		{
+			name:     "Number",
+			input:    "42",
+			expected: contentTypeNumber,
+		},
+		{
+			name:     "Placeholder map",
+			input:    "{...} (3 keys)",
+			expected: contentTypePlaceholder,
+		},
+		{
+			name:     "Placeholder array",
+			input:    "[...] (5 items)",
+			expected: contentTypePlaceholder,
+		},
+		{
+			name:     "Regular text",
+			input:    "vpc",
+			expected: contentTypeDefault,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := detectContentType(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

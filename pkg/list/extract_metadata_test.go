@@ -55,6 +55,9 @@ func TestExtractMetadata(t *testing.T) {
 						"inherits":    []interface{}{"vpc/defaults"},
 						"description": "VPC infrastructure",
 					},
+					"vars":     map[string]any(nil),
+					"settings": map[string]any(nil),
+					"env":      map[string]any(nil),
 				},
 			},
 		},
@@ -94,6 +97,9 @@ func TestExtractMetadata(t *testing.T) {
 						"inherits":    []interface{}{"eks/defaults", "eks/prod-overrides"},
 						"description": "EKS cluster",
 					},
+					"vars":     map[string]any(nil),
+					"settings": map[string]any(nil),
+					"env":      map[string]any(nil),
 				},
 			},
 		},
@@ -119,6 +125,9 @@ func TestExtractMetadata(t *testing.T) {
 					"inherits":       "",
 					"description":    "",
 					"metadata":       map[string]any{},
+					"vars":           map[string]any(nil),
+					"settings":       map[string]any(nil),
+					"env":            map[string]any(nil),
 				},
 			},
 		},
@@ -163,6 +172,9 @@ func TestExtractMetadata(t *testing.T) {
 						"enabled":     true,
 						"description": "Development VPC",
 					},
+					"vars":     map[string]any(nil),
+					"settings": map[string]any(nil),
+					"env":      map[string]any(nil),
 				},
 				{
 					"stack":          "plat-ue2-prod",
@@ -180,6 +192,9 @@ func TestExtractMetadata(t *testing.T) {
 						"locked":    true,
 						"component": "eks-base",
 					},
+					"vars":     map[string]any(nil),
+					"settings": map[string]any(nil),
+					"env":      map[string]any(nil),
 				},
 			},
 		},
@@ -191,4 +206,56 @@ func TestExtractMetadata(t *testing.T) {
 			assert.Equal(t, tc.expected, result)
 		})
 	}
+}
+
+func TestExtractMetadata_IncludesVarsSettingsEnv(t *testing.T) {
+	instances := []schema.Instance{
+		{
+			Component:     "vpc",
+			Stack:         "plat-ue2-dev",
+			ComponentType: "terraform",
+			Metadata: map[string]any{
+				"type":        "real",
+				"enabled":     true,
+				"description": "VPC infrastructure",
+			},
+			Vars: map[string]any{
+				"region":      "us-east-2",
+				"environment": "dev",
+				"tags": map[string]string{
+					"Team": "platform",
+					"Env":  "dev",
+				},
+			},
+			Settings: map[string]any{
+				"spacelift": map[string]any{
+					"workspace_enabled": true,
+				},
+			},
+			Env: map[string]any{
+				"AWS_REGION": "us-east-2",
+			},
+		},
+	}
+
+	result := ExtractMetadata(instances)
+
+	assert.Len(t, result, 1)
+
+	// Verify vars are included
+	assert.Contains(t, result[0], "vars")
+	vars := result[0]["vars"].(map[string]any)
+	assert.Equal(t, "us-east-2", vars["region"])
+	assert.Equal(t, "dev", vars["environment"])
+
+	// Verify settings are included
+	assert.Contains(t, result[0], "settings")
+	settings := result[0]["settings"].(map[string]any)
+	spacelift := settings["spacelift"].(map[string]any)
+	assert.Equal(t, true, spacelift["workspace_enabled"])
+
+	// Verify env is included
+	assert.Contains(t, result[0], "env")
+	env := result[0]["env"].(map[string]any)
+	assert.Equal(t, "us-east-2", env["AWS_REGION"])
 }

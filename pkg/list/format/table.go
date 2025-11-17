@@ -360,6 +360,7 @@ const (
 	contentTypeBoolean
 	contentTypeNumber
 	contentTypePlaceholder
+	contentTypeNoValue // For Go template <no value> output
 )
 
 // Regular expressions for content detection.
@@ -371,6 +372,11 @@ var (
 func detectContentType(value string) cellContentType {
 	if value == "" {
 		return contentTypeDefault
+	}
+
+	// Check for <no value> from Go templates.
+	if value == "<no value>" {
+		return contentTypeNoValue
 	}
 
 	// Check for placeholders first (they contain specific patterns).
@@ -406,6 +412,9 @@ func getCellStyle(value string, baseStyle *lipgloss.Style, styles *theme.StyleSe
 		return baseStyle.Foreground(styles.Info.GetForeground())
 
 	case contentTypePlaceholder:
+		return baseStyle.Foreground(styles.Muted.GetForeground())
+
+	case contentTypeNoValue:
 		return baseStyle.Foreground(styles.Muted.GetForeground())
 
 	default:

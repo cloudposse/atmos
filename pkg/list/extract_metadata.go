@@ -65,6 +65,9 @@ func ExtractMetadata(instances []schema.Instance) []map[string]any {
 			"inherits":       inherits,
 			"description":    description,
 			"metadata":       instance.Metadata, // Full metadata for advanced filtering
+			"vars":           instance.Vars,     // Expose vars for template access
+			"settings":       instance.Settings, // Expose settings for template access
+			"env":            instance.Env,      // Expose env for template access
 		}
 
 		result = append(result, item)
