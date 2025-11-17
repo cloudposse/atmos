@@ -17,7 +17,7 @@ func TestVendorOptions(t *testing.T) {
 		opts            *VendorOptions
 		expectedFormat  string
 		expectedStack   string
-		expectedColumns string
+		expectedColumns []string
 		expectedSort    string
 	}{
 		{
@@ -25,12 +25,12 @@ func TestVendorOptions(t *testing.T) {
 			opts: &VendorOptions{
 				Format:  "json",
 				Stack:   "prod-*",
-				Columns: "component,type",
+				Columns: []string{"component", "type"},
 				Sort:    "component:asc",
 			},
 			expectedFormat:  "json",
 			expectedStack:   "prod-*",
-			expectedColumns: "component,type",
+			expectedColumns: []string{"component", "type"},
 			expectedSort:    "component:asc",
 		},
 		{
@@ -38,7 +38,7 @@ func TestVendorOptions(t *testing.T) {
 			opts:            &VendorOptions{},
 			expectedFormat:  "",
 			expectedStack:   "",
-			expectedColumns: "",
+			expectedColumns: nil,
 			expectedSort:    "",
 		},
 		{
@@ -49,7 +49,7 @@ func TestVendorOptions(t *testing.T) {
 			},
 			expectedFormat:  "yaml",
 			expectedStack:   "*-staging-*",
-			expectedColumns: "",
+			expectedColumns: nil,
 			expectedSort:    "",
 		},
 	}

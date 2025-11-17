@@ -20,6 +20,7 @@ var instancesParser *flags.StandardParser
 type InstancesOptions struct {
 	global.Flags
 	Format     string
+	Columns    []string
 	MaxColumns int
 	Delimiter  string
 	Stack      string
@@ -52,6 +53,7 @@ var instancesCmd = &cobra.Command{
 		opts := &InstancesOptions{
 			Flags:      flags.ParseGlobalFlags(cmd, v),
 			Format:     v.GetString("format"),
+			Columns:    v.GetStringSlice("columns"),
 			MaxColumns: v.GetInt("max-columns"),
 			Delimiter:  v.GetString("delimiter"),
 			Stack:      v.GetString("stack"),
@@ -70,6 +72,7 @@ func init() {
 	// Create parser using flag wrappers.
 	instancesParser = NewListParser(
 		WithFormatFlag,
+		WithColumnsFlag,
 		WithDelimiterFlag,
 		WithMaxColumnsFlag,
 		WithStackFlag,
@@ -103,5 +106,5 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 	configAndStacksInfo.Command = "list"
 	configAndStacksInfo.SubCommand = "instances"
 
-	return list.ExecuteListInstancesCmd(&configAndStacksInfo, cmd, args, opts.Provenance)
+	return list.ExecuteListInstancesCmd(&configAndStacksInfo, cmd, args, opts.Provenance, opts.Columns)
 }

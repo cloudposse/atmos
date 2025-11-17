@@ -29,7 +29,7 @@ type VendorOptions struct {
 	global.Flags
 	Format  string
 	Stack   string
-	Columns string
+	Columns []string
 	Sort    string
 }
 
@@ -55,7 +55,7 @@ var vendorCmd = &cobra.Command{
 			Flags:   flags.ParseGlobalFlags(cmd, v),
 			Format:  v.GetString("format"),
 			Stack:   v.GetString("stack"),
-			Columns: v.GetString("columns"),
+			Columns: v.GetStringSlice("columns"),
 			Sort:    v.GetString("sort"),
 		}
 
@@ -148,9 +148,9 @@ func buildVendorFilters(opts *VendorOptions) []filter.Filter {
 }
 
 // getVendorColumns returns column configuration.
-func getVendorColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag string) []column.Config {
+func getVendorColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) []column.Config {
 	// If --columns flag is provided, parse it and return.
-	if columnsFlag != "" {
+	if len(columnsFlag) > 0 {
 		return parseColumnsFlag(columnsFlag)
 	}
 

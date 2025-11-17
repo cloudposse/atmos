@@ -39,7 +39,7 @@ This command is useful for:
 
 <dl>
   <dt>`--format` / `-f`</dt>
-  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`. Overrides `vendor.list.format` configuration in atmos.yaml (default: `table`)</dd>
 
   <dt>`--delimiter`</dt>
   <dd>Delimiter for CSV/TSV output (default: tab for tsv, comma for csv)</dd>
@@ -94,14 +94,28 @@ atmos list vendor --sort component:asc
 atmos list vendor --sort "source:asc,component:asc"
 ```
 
-## Custom Columns Configuration
+## Configuration
 
-You can customize the columns displayed by `atmos list vendor` in your `atmos.yaml`:
+You can customize the default output format and columns displayed by `atmos list vendor` in your `atmos.yaml`:
+
+### Default Format
 
 ```yaml
 # atmos.yaml
 vendor:
   list:
+    format: table  # Default format: table, json, yaml, csv, tsv
+```
+
+**Precedence**: CLI `--format` flag > Config file > Environment variable `ATMOS_LIST_FORMAT` > Default (`table`)
+
+### Custom Columns
+
+```yaml
+# atmos.yaml
+vendor:
+  list:
+    format: table
     columns:
       - name: Component
         value: "{{ .component }}"

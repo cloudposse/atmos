@@ -26,7 +26,7 @@ type WorkflowsOptions struct {
 	global.Flags
 	File    string
 	Format  string
-	Columns string
+	Columns []string
 	Sort    string
 }
 
@@ -52,7 +52,7 @@ var workflowsCmd = &cobra.Command{
 			Flags:   flags.ParseGlobalFlags(cmd, v),
 			File:    v.GetString("file"),
 			Format:  v.GetString("format"),
-			Columns: v.GetString("columns"),
+			Columns: v.GetStringSlice("columns"),
 			Sort:    v.GetString("sort"),
 		}
 
@@ -83,6 +83,11 @@ func listWorkflowsWithOptions(opts *WorkflowsOptions) error {
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return err
+	}
+
+	// If format is empty, check command-specific config.
+	if opts.Format == "" && atmosConfig.Workflows.List.Format != "" {
+		opts.Format = atmosConfig.Workflows.List.Format
 	}
 
 	// Extract workflows into structured data.
@@ -132,9 +137,9 @@ func buildWorkflowFilters(opts *WorkflowsOptions) []filter.Filter {
 }
 
 // getWorkflowColumns returns column configuration.
-func getWorkflowColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag string) []column.Config {
+func getWorkflowColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) []column.Config {
 	// If --columns flag is provided, parse it and return.
-	if columnsFlag != "" {
+	if len(columnsFlag) > 0 {
 		return parseColumnsFlag(columnsFlag)
 	}
 
@@ -153,7 +158,7 @@ func getWorkflowColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag stri
 	// Default columns for workflows.
 	return []column.Config{
 		{Name: "File", Value: "{{ .file }}"},
-		{Name: "Workflow", Value: "{{ .workflow }}"},
+		{Name: "Workflow", Value: "{{ .name }}"},
 		{Name: "Description", Value: "{{ .description }}"},
 		{Name: "Steps", Value: "{{ .steps }}"},
 	}

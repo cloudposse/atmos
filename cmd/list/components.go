@@ -31,7 +31,7 @@ type ComponentsOptions struct {
 	Enabled  string
 	Locked   string
 	Format   string
-	Columns  string
+	Columns  []string
 	Sort     string
 	Abstract bool
 }
@@ -61,7 +61,7 @@ var componentsCmd = &cobra.Command{
 			Enabled:  v.GetString("enabled"),
 			Locked:   v.GetString("locked"),
 			Format:   v.GetString("format"),
-			Columns:  v.GetString("columns"),
+			Columns:  v.GetStringSlice("columns"),
 			Sort:     v.GetString("sort"),
 			Abstract: v.GetBool("abstract"),
 		}
@@ -183,9 +183,9 @@ func buildComponentFilters(opts *ComponentsOptions) []filter.Filter {
 }
 
 // getComponentColumns returns column configuration.
-func getComponentColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag string) []column.Config {
+func getComponentColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) []column.Config {
 	// If --columns flag is provided, parse it and return.
-	if columnsFlag != "" {
+	if len(columnsFlag) > 0 {
 		return parseColumnsFlag(columnsFlag)
 	}
 
@@ -221,10 +221,13 @@ func buildComponentSorters(sortSpec string) ([]*listSort.Sorter, error) {
 	return listSort.ParseSortSpec(sortSpec)
 }
 
-// parseColumnsFlag parses comma-separated column names.
-func parseColumnsFlag(columnsFlag string) []column.Config {
+// parseColumnsFlag parses column names from CLI flag.
+//
+//nolint:unparam // columnsFlag will be used when column parsing is implemented
+func parseColumnsFlag(columnsFlag []string) []column.Config {
 	// TODO: Implement parsing of column specifications from CLI.
-	// For now, return default columns.
+	// For now, return default columns as placeholder.
+	// The flag is registered but parsing is not yet implemented.
 	return []column.Config{
 		{Name: "Component", Value: "{{ .component }}"},
 		{Name: "Stack", Value: "{{ .stack }}"},

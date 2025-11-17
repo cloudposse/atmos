@@ -28,6 +28,15 @@ var defaultInstanceColumns = []column.Config{
 	{Name: "Stack", Value: "{{ .stack }}"},
 }
 
+// parseColumnsFlag parses column names from CLI flag.
+// Currently not implemented - users should configure columns via atmos.yaml.
+func parseColumnsFlag(columnsFlag []string) []column.Config {
+	// TODO: Implement parsing of column specifications from CLI.
+	// For now, return default columns as placeholder.
+	// The flag is registered but parsing is not yet implemented.
+	return defaultInstanceColumns
+}
+
 // processComponentConfig processes a single component configuration and returns an instance if valid.
 func processComponentConfig(stackName, componentName, componentType string, componentConfig interface{}) *schema.Instance {
 	componentConfigMap, ok := componentConfig.(map[string]any)
@@ -167,8 +176,13 @@ func sortInstances(instances []schema.Instance) []schema.Instance {
 	return instances
 }
 
-// getInstanceColumns returns column configuration from atmos.yaml or defaults.
-func getInstanceColumns(atmosConfig *schema.AtmosConfiguration) []column.Config {
+// getInstanceColumns returns column configuration from CLI flag, atmos.yaml, or defaults.
+func getInstanceColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) []column.Config {
+	// If --columns flag is provided, parse it and return.
+	if len(columnsFlag) > 0 {
+		return parseColumnsFlag(columnsFlag)
+	}
+
 	// Check if custom columns are configured in atmos.yaml.
 	if len(atmosConfig.Components.List.Columns) > 0 {
 		columns := make([]column.Config, len(atmosConfig.Components.List.Columns))
@@ -281,7 +295,7 @@ func processInstances(atmosConfig *schema.AtmosConfiguration) ([]schema.Instance
 }
 
 // ExecuteListInstancesCmd executes the list instances command.
-func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string, showImports bool) error {
+func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string, showImports bool, columnsFlag []string) error {
 	log.Trace("ExecuteListInstancesCmd starting")
 	// Initialize CLI config.
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
@@ -340,7 +354,7 @@ func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comman
 	data := ExtractMetadata(instances)
 
 	// Get column configuration.
-	columns := getInstanceColumns(&atmosConfig)
+	columns := getInstanceColumns(&atmosConfig, columnsFlag)
 
 	// Create column selector.
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())

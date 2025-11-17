@@ -26,8 +26,13 @@ var defaultMetadataColumns = []column.Config{
 	{Name: "Description", Value: "{{ .description }}"},
 }
 
-// getMetadataColumns returns column configuration from atmos.yaml or defaults.
-func getMetadataColumns(atmosConfig *schema.AtmosConfiguration) []column.Config {
+// getMetadataColumns returns column configuration from CLI flag, atmos.yaml, or defaults.
+func getMetadataColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) []column.Config {
+	// If --columns flag is provided, parse it and return.
+	if len(columnsFlag) > 0 {
+		return parseMetadataColumnsFlag(columnsFlag)
+	}
+
 	// Check if custom columns are configured in atmos.yaml.
 	if len(atmosConfig.Components.List.Columns) > 0 {
 		columns := make([]column.Config, len(atmosConfig.Components.List.Columns))
@@ -44,16 +49,31 @@ func getMetadataColumns(atmosConfig *schema.AtmosConfiguration) []column.Config 
 	return defaultMetadataColumns
 }
 
+// parseMetadataColumnsFlag parses column names from CLI flag for metadata command.
+// Currently not implemented - users should configure columns via atmos.yaml.
+func parseMetadataColumnsFlag(columnsFlag []string) []column.Config {
+	// TODO: Implement parsing of column specifications from CLI.
+	// For now, return default columns as placeholder.
+	// The flag is registered but parsing is not yet implemented.
+	return defaultMetadataColumns
+}
+
+// MetadataOptions contains options for list metadata command.
+type MetadataOptions struct {
+	Format  string
+	Columns []string
+	Sort    string
+	Filter  string
+	Stack   string
+}
+
 // ExecuteListMetadataCmd executes the list metadata command using the renderer pipeline.
-func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
+func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string, opts *MetadataOptions) error {
 	// Initialize CLI config.
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
-
-	// Get flags.
-	formatFlag, _ := cmd.Flags().GetString("format")
 
 	// Process instances (same as list instances, but we'll extract metadata).
 	instances, err := processInstances(&atmosConfig)
@@ -65,7 +85,7 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	data := ExtractMetadata(instances)
 
 	// Get column configuration.
-	columns := getMetadataColumns(&atmosConfig)
+	columns := getMetadataColumns(&atmosConfig, opts.Columns)
 
 	// Create column selector.
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
@@ -73,8 +93,9 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 		return fmt.Errorf("failed to create column selector: %w", err)
 	}
 
-	// Create renderer.
-	r := renderer.New(nil, selector, nil, format.Format(formatFlag))
+	// Create renderer with filters and sorters.
+	// TODO: Implement filter and sort support using opts.Filter and opts.Sort
+	r := renderer.New(nil, selector, nil, format.Format(opts.Format))
 
 	// Render output.
 	if err := r.Render(data); err != nil {

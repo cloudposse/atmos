@@ -30,7 +30,7 @@ type StacksOptions struct {
 	global.Flags
 	Component  string
 	Format     string
-	Columns    string
+	Columns    []string
 	Sort       string
 	Provenance bool
 }
@@ -57,7 +57,7 @@ var stacksCmd = &cobra.Command{
 			Flags:      flags.ParseGlobalFlags(cmd, v),
 			Component:  v.GetString("component"),
 			Format:     v.GetString("format"),
-			Columns:    v.GetString("columns"),
+			Columns:    v.GetStringSlice("columns"),
 			Sort:       v.GetString("sort"),
 			Provenance: v.GetBool("provenance"),
 		}
@@ -204,9 +204,9 @@ func buildStackFilters(opts *StacksOptions) []filter.Filter {
 }
 
 // getStackColumns returns column configuration.
-func getStackColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag string, hasComponent bool) []column.Config {
+func getStackColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string, hasComponent bool) []column.Config {
 	// If --columns flag is provided, parse it and return.
-	if columnsFlag != "" {
+	if len(columnsFlag) > 0 {
 		return parseColumnsFlag(columnsFlag)
 	}
 

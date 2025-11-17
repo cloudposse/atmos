@@ -1465,10 +1465,18 @@ atmos list vendor --columns component,type,manifest,folder
 3. No sorting (default)
 
 **Output Format**:
-1. CLI `--format` flag
-2. `atmos.yaml` `{command}.list.format`
+1. CLI `--format` flag (highest priority)
+2. Command-specific `{command}.list.format` (for commands with config sections)
 3. Environment variable `ATMOS_LIST_FORMAT`
 4. `"table"` (default)
+
+**Note**: Only commands with dedicated config sections support `list.format` configuration:
+- `stacks.list.format`
+- `components.list.format`
+- `workflows.list.format`
+- `vendor.list.format`
+
+Commands without config sections (instances, values, vars, metadata, settings) use env var and CLI flag only.
 
 ## Appendix D: Error Messages
 

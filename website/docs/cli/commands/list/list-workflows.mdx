@@ -33,9 +33,13 @@ This command is useful for:
   <dt>`--file, -f string`</dt>
   <dd>Filter workflows by file (e.g., `atmos list workflows -f workflow1`)</dd>
   <dt>`--format string`</dt>
-  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`. Overrides `workflows.list.format` configuration in atmos.yaml (default: `table`)</dd>
   <dt>`--delimiter string`</dt>
   <dd>Delimiter for csv/tsv output (default: `\t`)</dd>
+  <dt>`--columns string`</dt>
+  <dd>Columns to display (comma-separated). Overrides `workflows.list.columns` configuration in atmos.yaml</dd>
+  <dt>`--sort string`</dt>
+  <dd>Sort by column:order (e.g., `name:asc,file:desc`)</dd>
 </dl>
 
 ## Examples
@@ -90,14 +94,28 @@ atmos list workflows --format csv --delimiter ','
 :::
 
 
-## Custom Columns Configuration
+## Configuration
 
-You can customize the columns displayed by `atmos list workflows` in your `atmos.yaml`:
+You can customize the default output format and columns displayed by `atmos list workflows` in your `atmos.yaml`:
+
+### Default Format
 
 ```yaml
 # atmos.yaml
 workflows:
   list:
+    format: table  # Default format: table, json, yaml, csv, tsv
+```
+
+**Precedence**: CLI `--format` flag > Config file > Environment variable `ATMOS_LIST_FORMAT` > Default (`table`)
+
+### Custom Columns
+
+```yaml
+# atmos.yaml
+workflows:
+  list:
+    format: table
     columns:
       - name: Workflow
         value: "{{ .name }}"

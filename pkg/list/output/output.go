@@ -26,8 +26,7 @@ func (m *Manager) Write(content string) error {
 	}
 
 	// Human-readable → stderr (UI channel)
-	_ = ui.Write(content)
-	return nil
+	return ui.Write(content)
 }
 
 // IsStructured returns true if the format is structured data (JSON, YAML, CSV, TSV).

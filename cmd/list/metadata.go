@@ -87,5 +87,14 @@ func executeListMetadataCmd(cmd *cobra.Command, args []string, opts *MetadataOpt
 	configAndStacksInfo.Command = "list"
 	configAndStacksInfo.SubCommand = "metadata"
 
-	return list.ExecuteListMetadataCmd(&configAndStacksInfo, cmd, args)
+	// Convert cmd-level options to pkg-level options.
+	pkgOpts := &list.MetadataOptions{
+		Format:  opts.Format,
+		Columns: opts.Columns,
+		Sort:    opts.Sort,
+		Filter:  opts.Filter,
+		Stack:   opts.Stack,
+	}
+
+	return list.ExecuteListMetadataCmd(&configAndStacksInfo, cmd, args, pkgOpts)
 }

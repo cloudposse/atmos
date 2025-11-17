@@ -208,6 +208,11 @@ func ParseSortSpec(spec string) ([]*Sorter, error) {
 		}
 
 		column := strings.TrimSpace(fields[0])
+		// Normalize column name: capitalize first letter for case-insensitive matching.
+		// This allows users to use "stack:asc" instead of requiring "Stack:asc".
+		if len(column) > 0 {
+			column = strings.ToUpper(column[:1]) + column[1:]
+		}
 		orderStr := strings.ToLower(strings.TrimSpace(fields[1]))
 
 		var order Order
