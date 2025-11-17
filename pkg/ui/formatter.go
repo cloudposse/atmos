@@ -315,16 +315,19 @@ func Writeln(text string) error {
 	return Write(text + newline)
 }
 
-// ClearLine returns the ANSI escape sequence to clear the current line.
-// This is a constant string that can be written to clear the line and return cursor to the beginning.
-// Use with ui.Write() to clear spinner messages or other dynamic output.
+// ClearLine clears the current line in the terminal and returns cursor to the beginning.
+// Uses ANSI escape sequences to clear the line before writing new content.
+// This is useful for replacing spinner messages or other dynamic output with final status messages.
+// Flow: ui.ClearLine() → ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 //
 // Example usage:
 //
 //	// Clear spinner line and show success message
-//	_ = ui.Write(ui.ClearLine)
+//	_ = ui.ClearLine()
 //	_ = ui.Success("Operation completed successfully")
-const ClearLine = clearLine
+func ClearLine() error {
+	return Write(clearLine)
+}
 
 // Format exposes the global formatter for advanced use cases.
 // Most code should use the package-level functions (ui.Success, ui.Error, etc.).
