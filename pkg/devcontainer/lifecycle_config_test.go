@@ -456,13 +456,12 @@ func TestPrintPorts(t *testing.T) {
 			expectEmpty: true,
 		},
 		{
-			name: "invalid ports - shows error",
+			name: "invalid ports - shows error to stderr",
 			config: &Config{
 				ForwardPorts: []interface{}{"invalid"},
 			},
-			expectedContains: []string{
-				"Error parsing ports",
-			},
+			// Error now goes to stderr via ui.Warning, not stdout
+			expectEmpty: true,
 		},
 	}
 

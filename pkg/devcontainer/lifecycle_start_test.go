@@ -47,6 +47,12 @@ func TestManager_Start(t *testing.T) {
 				runtime.EXPECT().
 					Start(gomock.Any(), "container-id").
 					Return(nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "container-id").
+					Return(&container.Info{
+						ID:    "container-id",
+						Ports: []container.PortBinding{},
+					}, nil)
 			},
 			expectError: false,
 		},
@@ -78,6 +84,12 @@ func TestManager_Start(t *testing.T) {
 				runtime.EXPECT().
 					Start(gomock.Any(), "container-id").
 					Return(nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "container-id").
+					Return(&container.Info{
+						ID:    "container-id",
+						Ports: []container.PortBinding{},
+					}, nil)
 			},
 			expectError: false,
 		},
@@ -104,6 +116,12 @@ func TestManager_Start(t *testing.T) {
 				runtime.EXPECT().
 					Start(gomock.Any(), "existing-id").
 					Return(nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "existing-id").
+					Return(&container.Info{
+						ID:    "existing-id",
+						Ports: []container.PortBinding{},
+					}, nil)
 			},
 			expectError: false,
 		},
@@ -298,6 +316,12 @@ func TestStartExistingContainer(t *testing.T) {
 				runtime.EXPECT().
 					Start(gomock.Any(), "stopped-id").
 					Return(nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "stopped-id").
+					Return(&container.Info{
+						ID:    "stopped-id",
+						Ports: []container.PortBinding{},
+					}, nil)
 			},
 			expectError: false,
 		},

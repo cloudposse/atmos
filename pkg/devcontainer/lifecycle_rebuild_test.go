@@ -67,6 +67,12 @@ func TestManager_Rebuild(t *testing.T) {
 				runtime.EXPECT().
 					Start(gomock.Any(), "new-id").
 					Return(nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "new-id").
+					Return(&container.Info{
+						ID:    "new-id",
+						Ports: []container.PortBinding{},
+					}, nil)
 			},
 			expectError: false,
 		},
@@ -102,6 +108,12 @@ func TestManager_Rebuild(t *testing.T) {
 				runtime.EXPECT().
 					Start(gomock.Any(), "new-id").
 					Return(nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "new-id").
+					Return(&container.Info{
+						ID:    "new-id",
+						Ports: []container.PortBinding{},
+					}, nil)
 			},
 			expectError: false,
 		},
@@ -131,6 +143,12 @@ func TestManager_Rebuild(t *testing.T) {
 				runtime.EXPECT().
 					Start(gomock.Any(), "new-id").
 					Return(nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "new-id").
+					Return(&container.Info{
+						ID:    "new-id",
+						Ports: []container.PortBinding{},
+					}, nil)
 			},
 			expectError: false,
 		},
@@ -335,6 +353,12 @@ func TestManager_Rebuild(t *testing.T) {
 				runtime.EXPECT().
 					Start(gomock.Any(), "new-id").
 					Return(nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "new-id").
+					Return(&container.Info{
+						ID:    "new-id",
+						Ports: []container.PortBinding{},
+					}, nil)
 			},
 			expectError: false,
 		},
@@ -361,6 +385,12 @@ func TestManager_Rebuild(t *testing.T) {
 				runtime.EXPECT().
 					Start(gomock.Any(), "new-id").
 					Return(nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "new-id").
+					Return(&container.Info{
+						ID:    "new-id",
+						Ports: []container.PortBinding{},
+					}, nil)
 			},
 			expectError: false,
 		},
@@ -404,6 +434,12 @@ func TestManager_Rebuild(t *testing.T) {
 					runtime.EXPECT().
 						Start(gomock.Any(), "new-id").
 						Return(nil),
+					runtime.EXPECT().
+						Inspect(gomock.Any(), "new-id").
+						Return(&container.Info{
+							ID:    "new-id",
+							Ports: []container.PortBinding{},
+						}, nil),
 				)
 			},
 			expectError: false,

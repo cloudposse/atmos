@@ -714,6 +714,12 @@ func TestCreateAndStartNewContainer(t *testing.T) {
 				m.EXPECT().
 					Start(gomock.Any(), "container-id-123").
 					Return(nil)
+				m.EXPECT().
+					Inspect(gomock.Any(), "container-id-123").
+					Return(&container.Info{
+						ID:    "container-id-123",
+						Ports: []container.PortBinding{},
+					}, nil)
 			},
 			expectError: false,
 		},
@@ -738,6 +744,12 @@ func TestCreateAndStartNewContainer(t *testing.T) {
 				m.EXPECT().
 					Start(gomock.Any(), "container-id-123").
 					Return(nil)
+				m.EXPECT().
+					Inspect(gomock.Any(), "container-id-123").
+					Return(&container.Info{
+						ID:    "container-id-123",
+						Ports: []container.PortBinding{},
+					}, nil)
 			},
 			expectError: false,
 		},
