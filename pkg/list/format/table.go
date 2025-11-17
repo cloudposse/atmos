@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
 	"sort"
+	"strconv"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/cloudposse/atmos/internal/tui/templates"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -182,6 +185,67 @@ func formatComplexValue(val interface{}) string {
 	return truncateString(string(jsonBytes))
 }
 
+// cellContentType represents the type of content in a table cell.
+type cellContentType int
+
+const (
+	contentTypeDefault cellContentType = iota
+	contentTypeBoolean
+	contentTypeNumber
+	contentTypePlaceholder
+)
+
+// Regular expressions for content detection.
+var (
+	placeholderRegex = regexp.MustCompile(`^(\{\.\.\.}|\[\.\.\.]).*$`)
+)
+
+// detectContentType determines the content type of a cell value.
+func detectContentType(value string) cellContentType {
+	if value == "" {
+		return contentTypeDefault
+	}
+
+	// Check for placeholders first (they contain specific patterns).
+	if placeholderRegex.MatchString(value) {
+		return contentTypePlaceholder
+	}
+
+	// Check for booleans.
+	if value == "true" || value == "false" {
+		return contentTypeBoolean
+	}
+
+	// Check for numbers (integers or floats).
+	if _, err := strconv.ParseFloat(value, 64); err == nil {
+		return contentTypeNumber
+	}
+
+	return contentTypeDefault
+}
+
+// getCellStyle returns the appropriate lipgloss style for a cell based on its content.
+func getCellStyle(value string, baseStyle *lipgloss.Style, styles *theme.StyleSet) lipgloss.Style {
+	contentType := detectContentType(value)
+
+	switch contentType {
+	case contentTypeBoolean:
+		if value == "true" {
+			return baseStyle.Foreground(styles.Success.GetForeground())
+		}
+		return baseStyle.Foreground(styles.Error.GetForeground())
+
+	case contentTypeNumber:
+		return baseStyle.Foreground(styles.Info.GetForeground())
+
+	case contentTypePlaceholder:
+		return baseStyle.Foreground(styles.Muted.GetForeground())
+
+	default:
+		return *baseStyle
+	}
+}
+
 // createStyledTable creates a styled table with headers and rows.
 // Uses the same clean styling as atmos version list with width calculation and wrapping.
 func CreateStyledTable(header []string, rows [][]string) string {
@@ -196,6 +260,9 @@ func CreateStyledTable(header []string, rows [][]string) string {
 
 	// Account for table borders and padding.
 	tableWidth := detectedWidth - tableBorderPadding
+
+	// Get theme-aware styles.
+	styles := theme.GetCurrentStyles()
 
 	// Table styling - simple and clean like version list.
 	headerStyle := lipgloss.NewStyle().Bold(true)
@@ -217,7 +284,14 @@ func CreateStyledTable(header []string, rows [][]string) string {
 			case row == table.HeaderRow:
 				return headerStyle.Padding(0, 1)
 			default:
-				return cellStyle.Padding(0, 1)
+				// Apply semantic styling based on cell content.
+				baseStyle := cellStyle.Padding(0, 1)
+				// Row indices for data start at 0, matching the rows array.
+				if row >= 0 && row < len(rows) && col < len(rows[row]) {
+					cellValue := rows[row][col]
+					return getCellStyle(cellValue, &baseStyle, styles)
+				}
+				return baseStyle
 			}
 		})
 
