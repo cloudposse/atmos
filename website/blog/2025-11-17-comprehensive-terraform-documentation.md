@@ -1,11 +1,11 @@
 ---
-slug: enhanced-cli-experience-and-documentation
-title: Enhanced CLI Experience and Comprehensive Terraform Documentation
-authors: [atmos]
-tags: [atmos, terraform, cli, documentation, ux]
+slug: comprehensive-terraform-documentation
+title: Comprehensive Terraform Documentation and Enhanced Help System
+authors: [osterman]
+tags: [terraform, documentation, contributors]
 ---
 
-We're excited to announce a major update to Atmos that significantly improves the CLI experience, documentation, and code quality. This release focuses on making Atmos more accessible, maintainable, and powerful for managing your cloud infrastructure.
+We're excited to announce major improvements to Atmos documentation, making it easier than ever to understand and use Terraform commands with Atmos. This release focuses on comprehensive command documentation, automated screengrab generation, and an improved help system.
 
 <!-- truncate -->
 
@@ -26,21 +26,6 @@ Key additions include:
 
 [View Terraform Documentation](/cli/commands/terraform/usage)
 
-## Enhanced Color Output Support
-
-Color output in CI/CD pipelines and non-TTY environments is now fully supported through the `ATMOS_FORCE_COLOR` environment variable:
-
-```bash
-# Force colored output in CI/CD
-export ATMOS_FORCE_COLOR=true
-atmos terraform plan myapp -s dev
-
-# Supports truthy values: 1, true, yes, on, always, 2, 3
-# Supports falsy values: 0, false, no, off
-```
-
-This enhancement ensures that Atmos help text, logs, and command output render beautifully even when piped or redirected, making debugging in CI/CD environments much easier.
-
 ## Improved Help System
 
 The help system has been completely refactored for better maintainability and user experience:
@@ -54,29 +39,6 @@ Example improvements:
 - `renderFlags()` function reduced from 94 lines to focused 20-line implementation
 - `configureWriter()` split into 5 specialized functions
 - Added comprehensive unit tests for help rendering logic
-
-## Code Quality Improvements
-
-This release includes significant internal improvements:
-
-### Reduced Cognitive Complexity
-- Functions with cognitive complexity >15 have been refactored
-- Better separation of concerns with single-responsibility functions
-- Improved testability across the codebase
-
-### Enhanced Performance Tracking
-All public functions now include performance instrumentation:
-
-```go
-defer perf.Track(atmosConfig, "package.FunctionName")()
-```
-
-This allows us to identify bottlenecks and optimize performance in future releases.
-
-### Better Error Handling
-- Consistent use of static errors from `errors/errors.go`
-- Proper error wrapping with context
-- Use of `errors.Join()` for combining multiple errors
 
 ## Screengrab Generation Infrastructure
 
@@ -99,22 +61,13 @@ Numerous documentation improvements including:
 - Added security warnings for credential handling in planfiles
 - Improved markdown formatting consistency
 
-## What's Next
-
-We're continuing to improve Atmos with:
-- Additional template functions for dynamic configurations
-- Enhanced validation and policy enforcement
-- Better integration with cloud provider CLIs
-- More comprehensive testing infrastructure
-
 ## Upgrade Notes
 
 This release maintains backward compatibility. To take advantage of the new features:
 
 1. Update to the latest Atmos version
 2. Review the new [Terraform documentation](/cli/commands/terraform/usage)
-3. Consider using `ATMOS_FORCE_COLOR` in CI/CD pipelines
-4. Check your workflows against the updated command descriptions
+3. Check your workflows against the updated command descriptions
 
 ## Contributors
 
