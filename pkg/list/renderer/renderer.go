@@ -87,6 +87,11 @@ func (r *Renderer) Render(data []map[string]any) error {
 
 // formatTable formats headers and rows into the requested format.
 func formatTable(headers []string, rows [][]string, f format.Format) (string, error) {
+	// Default to table format if empty.
+	if f == "" {
+		f = format.FormatTable
+	}
+
 	switch f {
 	case format.FormatJSON:
 		return formatJSON(headers, rows)
