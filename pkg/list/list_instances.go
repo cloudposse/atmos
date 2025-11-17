@@ -305,8 +305,8 @@ func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comman
 		return errors.Join(errUtils.ErrProcessInstances, err)
 	}
 
-	// Extract instances into renderer-compatible format.
-	data := ExtractInstances(instances)
+	// Extract instances into renderer-compatible format with metadata fields.
+	data := ExtractMetadata(instances)
 
 	// Get column configuration.
 	columns := getInstanceColumns(&atmosConfig)

@@ -118,8 +118,8 @@ func TestExtractMetadata(t *testing.T) {
 					"stack":          "test",
 					"component":      "minimal",
 					"component_type": "terraform",
-					"type":           "",
-					"enabled":        false,
+					"type":           "real", // Defaults to "real" since abstract components are filtered.
+					"enabled":        true,   // Defaults to true.
 					"locked":         false,
 					"component_base": "",
 					"inherits":       "",

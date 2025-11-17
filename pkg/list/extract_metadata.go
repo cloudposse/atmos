@@ -37,14 +37,19 @@ func ExtractMetadata(instances []schema.Instance) []map[string]any {
 		var enabled, locked bool
 		var componentVal, inherits, description string
 
+		// Default type to "real" since abstract components are filtered out in createInstance.
+		metadataType = "real"
 		if val, ok := instance.Metadata["type"].(string); ok {
 			metadataType = val
 		}
 
+		// Default enabled to true.
+		enabled = true
 		if val, ok := instance.Metadata["enabled"].(bool); ok {
 			enabled = val
 		}
 
+		// Check locked in metadata.
 		if val, ok := instance.Metadata["locked"].(bool); ok {
 			locked = val
 		}
