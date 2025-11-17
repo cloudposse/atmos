@@ -57,11 +57,16 @@ var (
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
 
+	// Theme-related errors.
+	ErrThemeNotFound = errors.New("theme not found")
+	ErrInvalidTheme  = errors.New("invalid theme")
+
 	// Authentication and TTY errors.
-	ErrAuthConsole          = errors.New("auth console operation failed")
-	ErrProviderNotSupported = errors.New("provider does not support this operation")
-	ErrUnknownServiceAlias  = errors.New("unknown service alias")
-	ErrTTYRequired          = errors.New("requires a TTY")
+	ErrAuthConsole            = errors.New("auth console operation failed")
+	ErrProviderNotSupported   = errors.New("provider does not support this operation")
+	ErrUnknownServiceAlias    = errors.New("unknown service alias")
+	ErrTTYRequired            = errors.New("requires a TTY")
+	ErrInvalidAuthManagerType = errors.New("invalid authManager type")
 
 	// Component and positional argument errors.
 	ErrComponentRequired          = errors.New("component is required")
@@ -100,7 +105,16 @@ var (
 	ErrAzureContainerRequired = errors.New("container_name is required for azurerm backend")
 	ErrStorageAccountRequired = errors.New("storage_account_name is required for azurerm backend")
 	ErrAzurePermissionDenied  = errors.New("permission denied accessing Azure blob")
-	ErrBackendConfigRequired  = errors.New("backend configuration is required")
+
+	// Azure authentication errors.
+	ErrAzureOIDClaimNotFound      = errors.New("oid claim not found in token")
+	ErrAzureUsernameClaimNotFound = errors.New("no username claim found in token (tried upn, unique_name, email)")
+	ErrAzureInvalidJWTFormat      = errors.New("invalid JWT format")
+	ErrAzureExpirationTimeEmpty   = errors.New("expiration time is empty")
+	ErrAzureTimeParseFailure      = errors.New("unable to parse time: tried RFC3339, local time formats, and Unix timestamp")
+	ErrAzureNoAccountsInCache     = errors.New("no accounts found in cache")
+	ErrAzureNoAccountForTenant    = errors.New("no account found for tenant")
+	ErrBackendConfigRequired      = errors.New("backend configuration is required")
 
 	// Git-related errors.
 	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")
@@ -499,16 +513,17 @@ var (
 	ErrNilStoreValue      = errors.New("cannot store nil value")
 
 	// Logout errors.
-	ErrLogoutFailed         = errors.New("logout failed")
-	ErrPartialLogout        = errors.New("partial logout")
-	ErrLogoutNotSupported   = errors.New("logout not supported for this provider")
-	ErrLogoutNotImplemented = errors.New("logout not implemented for this provider")
-	ErrKeyringDeletion      = errors.New("keyring deletion failed")
-	ErrProviderLogout       = errors.New("provider logout failed")
-	ErrIdentityLogout       = errors.New("identity logout failed")
-	ErrIdentityNotInConfig  = errors.New("identity not found in configuration")
-	ErrProviderNotInConfig  = errors.New("provider not found in configuration")
-	ErrInvalidLogoutOption  = errors.New("invalid logout option")
+	ErrLogoutFailed                         = errors.New("logout failed")
+	ErrPartialLogout                        = errors.New("partial logout")
+	ErrLogoutNotSupported                   = errors.New("logout not supported for this provider")
+	ErrLogoutNotImplemented                 = errors.New("logout not implemented for this provider")
+	ErrKeyringDeletion                      = errors.New("keyring deletion failed")
+	ErrKeychainDeletionRequiresConfirmation = errors.New("keychain deletion requires interactive confirmation or --force flag")
+	ErrProviderLogout                       = errors.New("provider logout failed")
+	ErrIdentityLogout                       = errors.New("identity logout failed")
+	ErrIdentityNotInConfig                  = errors.New("identity not found in configuration")
+	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
+	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
 
 	// Component path resolution errors.
 	ErrPathNotInComponentDir  = errors.New("path is not within Atmos component directories")

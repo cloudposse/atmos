@@ -20,6 +20,7 @@ on:
 env:
   TERRAFORM_VERSION: "1.9.7"
   OPEN_TOFU_VERSION: "1.9.1"
+  HELM_VERSION: "v3.19.2"
   HELMFILE_VERSION: "v1.1.0"
   PACKER_VERSION: "1.14.2"
 
@@ -159,6 +160,7 @@ jobs:
         uses: helmfile/helmfile-action@v2.0.5
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
+          helm-version: ${{ env.HELM_VERSION }}
           helmfile-version: ${{ env.HELMFILE_VERSION }}
           helmfile-args: version
           helmfile-auto-init: "false"
@@ -245,7 +247,7 @@ jobs:
           ignore: DL3008
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           # Path to SARIF file relative to the root of the repository
@@ -364,8 +366,13 @@ jobs:
       - name: Install the Cloud Posse package repository
         run: curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | sudo bash
 
-      - name: Install kubectl, helmfile, and helm
-        run: sudo apt-get -y install kubectl helmfile helm
+      - name: Install kubectl and helmfile
+        run: sudo apt-get -y install kubectl helmfile
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
 
       - name: Install helm-diff plugin
         run: helm plugin install https://github.com/databus23/helm-diff

@@ -1,0 +1,60 @@
+---
+slug: safe-logout-preserves-keychain
+title: "Safe Logout: Preserve Keychain Credentials by Default"
+authors: [osterman]
+tags: [atmos, authentication, ux, breaking-changes]
+---
+
+`atmos auth logout` now preserves keychain credentials by default for faster re-authentication. Only session data is cleared. Use `--keychain` to permanently delete credentials.
+
+<!--truncate-->
+
+## What Changed
+
+**Before:** `atmos auth logout` deleted everything (keychain credentials + session data)
+**After:** `atmos auth logout` only clears session data, preserves keychain credentials
+
+This means you don't have to re-enter access keys every time you log back in.
+
+## Why This Matters
+
+Most logouts are temporary (end of day, switching identities), not permanent credential removal. Forcing credential re-entry every time encourages users to skip logout entirely.
+
+Now logout is fast and reversible:
+
+```shell
+# End of day
+$ atmos auth logout dev-admin
+✓ Cleared session data
+✓ Preserved keychain credentials
+
+# Next morning - instant re-authentication
+$ atmos auth login dev-admin
+✓ Authenticated as dev-admin
+```
+
+## Permanently Delete Credentials
+
+Use `--keychain` when you need to remove credentials permanently:
+
+```shell
+atmos auth logout dev-admin --keychain
+```
+
+Interactive confirmation prevents accidents. Use `--force` for CI/CD:
+
+```shell
+atmos auth logout dev-admin --keychain --force
+```
+
+## Migration
+
+If your scripts expect the old behavior (delete everything), add `--keychain`:
+
+```shell
+atmos auth logout dev-admin --keychain --force
+```
+
+For most users, no changes needed.
+
+Read more: [atmos auth logout](/cli/commands/auth/logout)
