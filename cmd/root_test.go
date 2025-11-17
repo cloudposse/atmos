@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"os"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -977,4 +979,522 @@ func TestExecuteVersion(t *testing.T) {
 			t.Logf("ExecuteVersion returned error: %v", err)
 		}
 	})
+}
+
+// TestGetTerminalWidth tests terminal width detection.
+func TestGetTerminalWidth(t *testing.T) {
+	// getTerminalWidth has fallback logic for when terminal size detection fails.
+	// We can't easily mock xterm.GetSize, but we can verify it returns a sane value.
+	width := getTerminalWidth()
+
+	// Should return either detected width or default (120).
+	assert.Greater(t, width, 0, "Terminal width should be positive")
+	assert.LessOrEqual(t, width, 120, "Terminal width should not exceed default max")
+}
+
+// TestBuildFlagDescription tests flag description formatting.
+func TestBuildFlagDescription(t *testing.T) {
+	tests := []struct {
+		name     string
+		flag     *cobra.Command
+		flagName string
+		defValue string
+		usage    string
+		expected string
+	}{
+		{
+			name:     "flag with default value",
+			flagName: "timeout",
+			defValue: "30s",
+			usage:    "Connection timeout",
+			expected: "Connection timeout (default `30s`)",
+		},
+		{
+			name:     "bool flag with false default",
+			flagName: "verbose",
+			defValue: "false",
+			usage:    "Enable verbose output",
+			expected: "Enable verbose output",
+		},
+		{
+			name:     "flag with zero default",
+			flagName: "retries",
+			defValue: "0",
+			usage:    "Number of retries",
+			expected: "Number of retries",
+		},
+		{
+			name:     "flag with empty array default",
+			flagName: "tags",
+			defValue: "[]",
+			usage:    "Resource tags",
+			expected: "Resource tags",
+		},
+		{
+			name:     "help flag",
+			flagName: "help",
+			defValue: "true",
+			usage:    "Show help",
+			expected: "Show help",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			if tt.flagName == "help" {
+				cmd.PersistentFlags().BoolP(tt.flagName, "h", false, tt.usage)
+			} else {
+				cmd.PersistentFlags().String(tt.flagName, tt.defValue, tt.usage)
+			}
+
+			flag := cmd.PersistentFlags().Lookup(tt.flagName)
+			if flag != nil {
+				flag.DefValue = tt.defValue
+				result := buildFlagDescription(flag)
+				assert.Contains(t, result, tt.usage)
+				if tt.defValue != "false" && tt.defValue != "0" && tt.defValue != "[]" && tt.flagName != "help" && tt.defValue != "" {
+					assert.Contains(t, result, "default")
+				}
+			}
+		})
+	}
+}
+
+// TestCalculateMaxFlagWidth tests flag width calculation.
+func TestCalculateMaxFlagWidth(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().StringP("short", "s", "", "Short flag")
+	cmd.Flags().String("very-long-flag-name-here", "", "Long flag")
+	cmd.Flags().BoolP("hidden", "x", false, "Hidden flag")
+	cmd.Flags().Lookup("hidden").Hidden = true
+
+	maxWidth := calculateMaxFlagWidth(cmd.Flags())
+
+	// Should find the longest visible flag.
+	assert.Greater(t, maxWidth, 0)
+	// Should not count hidden flags.
+	// The very-long-flag-name-here should be the max.
+	assert.Greater(t, maxWidth, len("--short"))
+}
+
+// TestGetInvalidCommandName tests extraction of command name from error message.
+func TestGetInvalidCommandName(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "valid unknown command error",
+			input:    `unknown command "foobar" for "atmos"`,
+			expected: "foobar",
+		},
+		{
+			name:     "unknown subcommand",
+			input:    `unknown command "terraform-plan" for "atmos"`,
+			expected: "terraform-plan",
+		},
+		{
+			name:     "no match",
+			input:    "some other error message",
+			expected: "",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getInvalidCommandName(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestApplyBoolFlag tests boolean flag application.
+func TestApplyBoolFlag(t *testing.T) {
+	tests := []struct {
+		name         string
+		flagName     string
+		flagValue    bool
+		flagChanged  bool
+		expectCalled bool
+	}{
+		{
+			name:         "flag set to true",
+			flagName:     "test-bool",
+			flagValue:    true,
+			flagChanged:  true,
+			expectCalled: true,
+		},
+		{
+			name:         "flag set to false",
+			flagName:     "test-bool",
+			flagValue:    false,
+			flagChanged:  true,
+			expectCalled: true,
+		},
+		{
+			name:         "flag not changed",
+			flagName:     "test-bool",
+			flagValue:    false,
+			flagChanged:  false,
+			expectCalled: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().Bool(tt.flagName, false, "test flag")
+
+			if tt.flagChanged {
+				cmd.Flags().Set(tt.flagName, fmt.Sprintf("%t", tt.flagValue))
+			}
+
+			called := false
+			var capturedValue bool
+			setter := func(val bool) {
+				called = true
+				capturedValue = val
+			}
+
+			applyBoolFlag(cmd, tt.flagName, setter)
+
+			assert.Equal(t, tt.expectCalled, called, "Setter should be called: %v", tt.expectCalled)
+			if tt.expectCalled {
+				assert.Equal(t, tt.flagValue, capturedValue)
+			}
+		})
+	}
+}
+
+// TestApplyIntFlag tests integer flag application.
+func TestApplyIntFlag(t *testing.T) {
+	tests := []struct {
+		name         string
+		flagName     string
+		flagValue    int
+		flagChanged  bool
+		expectCalled bool
+	}{
+		{
+			name:         "flag set to positive value",
+			flagName:     "test-int",
+			flagValue:    42,
+			flagChanged:  true,
+			expectCalled: true,
+		},
+		{
+			name:         "flag set to zero",
+			flagName:     "test-int",
+			flagValue:    0,
+			flagChanged:  true,
+			expectCalled: true,
+		},
+		{
+			name:         "flag not changed",
+			flagName:     "test-int",
+			flagValue:    0,
+			flagChanged:  false,
+			expectCalled: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().Int(tt.flagName, 0, "test flag")
+
+			if tt.flagChanged {
+				cmd.Flags().Set(tt.flagName, fmt.Sprintf("%d", tt.flagValue))
+			}
+
+			called := false
+			var capturedValue int
+			setter := func(val int) {
+				called = true
+				capturedValue = val
+			}
+
+			applyIntFlag(cmd, tt.flagName, setter)
+
+			assert.Equal(t, tt.expectCalled, called, "Setter should be called: %v", tt.expectCalled)
+			if tt.expectCalled {
+				assert.Equal(t, tt.flagValue, capturedValue)
+			}
+		})
+	}
+}
+
+// TestApplyStringFlag tests string flag application.
+func TestApplyStringFlag(t *testing.T) {
+	tests := []struct {
+		name         string
+		flagName     string
+		flagValue    string
+		flagChanged  bool
+		expectCalled bool
+	}{
+		{
+			name:         "flag set to non-empty value",
+			flagName:     "test-string",
+			flagValue:    "hello",
+			flagChanged:  true,
+			expectCalled: true,
+		},
+		{
+			name:         "flag set to empty value",
+			flagName:     "test-string",
+			flagValue:    "",
+			flagChanged:  true,
+			expectCalled: true,
+		},
+		{
+			name:         "flag not changed",
+			flagName:     "test-string",
+			flagValue:    "",
+			flagChanged:  false,
+			expectCalled: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().String(tt.flagName, "", "test flag")
+
+			if tt.flagChanged {
+				cmd.Flags().Set(tt.flagName, tt.flagValue)
+			}
+
+			called := false
+			var capturedValue string
+			setter := func(val string) {
+				called = true
+				capturedValue = val
+			}
+
+			applyStringFlag(cmd, tt.flagName, setter)
+
+			assert.Equal(t, tt.expectCalled, called, "Setter should be called: %v", tt.expectCalled)
+			if tt.expectCalled {
+				assert.Equal(t, tt.flagValue, capturedValue)
+			}
+		})
+	}
+}
+
+// TestApplyProfileFileFlag tests profile file flag application with auto-enable.
+func TestApplyProfileFileFlag(t *testing.T) {
+	tests := []struct {
+		name           string
+		flagValue      string
+		flagChanged    bool
+		expectEnabled  bool
+		expectFilePath string
+	}{
+		{
+			name:           "file specified - should auto-enable",
+			flagValue:      "/tmp/profile.prof",
+			flagChanged:    true,
+			expectEnabled:  true,
+			expectFilePath: "/tmp/profile.prof",
+		},
+		{
+			name:           "empty file - should not enable",
+			flagValue:      "",
+			flagChanged:    true,
+			expectEnabled:  false,
+			expectFilePath: "",
+		},
+		{
+			name:           "flag not changed",
+			flagValue:      "",
+			flagChanged:    false,
+			expectEnabled:  false,
+			expectFilePath: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().String("profile-file", "", "profile file path")
+
+			if tt.flagChanged {
+				cmd.Flags().Set("profile-file", tt.flagValue)
+			}
+
+			config := &schema.AtmosConfiguration{
+				Profiler: profiler.Config{
+					Enabled: false,
+					File:    "",
+				},
+			}
+
+			err := applyProfileFileFlag(&config.Profiler, cmd)
+			assert.NoError(t, err)
+
+			assert.Equal(t, tt.expectEnabled, config.Profiler.Enabled)
+			assert.Equal(t, tt.expectFilePath, config.Profiler.File)
+		})
+	}
+}
+
+// TestApplyProfileTypeFlag tests profile type flag application with validation.
+func TestApplyProfileTypeFlag(t *testing.T) {
+	tests := []struct {
+		name        string
+		flagValue   string
+		flagChanged bool
+		expectError bool
+		expectType  profiler.ProfileType
+	}{
+		{
+			name:        "valid cpu profile type",
+			flagValue:   "cpu",
+			flagChanged: true,
+			expectError: false,
+			expectType:  profiler.ProfileTypeCPU,
+		},
+		{
+			name:        "valid heap profile type",
+			flagValue:   "heap",
+			flagChanged: true,
+			expectError: false,
+			expectType:  profiler.ProfileTypeHeap,
+		},
+		{
+			name:        "invalid profile type",
+			flagValue:   "invalid",
+			flagChanged: true,
+			expectError: true,
+		},
+		{
+			name:        "flag not changed",
+			flagValue:   "",
+			flagChanged: false,
+			expectError: false,
+			expectType:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().String("profile-type", "", "profile type")
+
+			if tt.flagChanged {
+				cmd.Flags().Set("profile-type", tt.flagValue)
+			}
+
+			config := &schema.AtmosConfiguration{
+				Profiler: profiler.Config{
+					ProfileType: "",
+				},
+			}
+
+			err := applyProfileTypeFlag(&config.Profiler, cmd)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				if tt.flagChanged && !tt.expectError {
+					assert.Equal(t, tt.expectType, config.Profiler.ProfileType)
+				}
+			}
+		})
+	}
+}
+
+// TestFormatFlagNameParts tests flag name formatting.
+func TestFormatFlagNameParts(t *testing.T) {
+	tests := []struct {
+		name       string
+		flagName   string
+		shorthand  string
+		flagType   string
+		expectName string
+		expectType string
+	}{
+		{
+			name:       "flag with shorthand",
+			flagName:   "verbose",
+			shorthand:  "v",
+			flagType:   "bool",
+			expectName: "-v, --verbose",
+			expectType: "",
+		},
+		{
+			name:       "flag without shorthand",
+			flagName:   "config",
+			shorthand:  "",
+			flagType:   "string",
+			expectName: "    --config",
+			expectType: "string",
+		},
+		{
+			name:       "stringSlice type",
+			flagName:   "tags",
+			shorthand:  "",
+			flagType:   "stringSlice",
+			expectName: "    --tags",
+			expectType: "strings",
+		},
+		{
+			name:       "int type with shorthand",
+			flagName:   "timeout",
+			shorthand:  "t",
+			flagType:   "int",
+			expectName: "-t, --timeout",
+			expectType: "int",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+
+			// Create flag based on type.
+			switch tt.flagType {
+			case "bool":
+				if tt.shorthand != "" {
+					cmd.Flags().BoolP(tt.flagName, tt.shorthand, false, "test")
+				} else {
+					cmd.Flags().Bool(tt.flagName, false, "test")
+				}
+			case "string":
+				if tt.shorthand != "" {
+					cmd.Flags().StringP(tt.flagName, tt.shorthand, "", "test")
+				} else {
+					cmd.Flags().String(tt.flagName, "", "test")
+				}
+			case "stringSlice":
+				if tt.shorthand != "" {
+					cmd.Flags().StringSliceP(tt.flagName, tt.shorthand, nil, "test")
+				} else {
+					cmd.Flags().StringSlice(tt.flagName, nil, "test")
+				}
+			case "int":
+				if tt.shorthand != "" {
+					cmd.Flags().IntP(tt.flagName, tt.shorthand, 0, "test")
+				} else {
+					cmd.Flags().Int(tt.flagName, 0, "test")
+				}
+			}
+
+			flag := cmd.Flags().Lookup(tt.flagName)
+			assert.NotNil(t, flag)
+
+			name, ftype := formatFlagNameParts(flag)
+			assert.Equal(t, tt.expectName, name)
+			assert.Equal(t, tt.expectType, ftype)
+		})
+	}
 }
