@@ -9,6 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestIsTruthy(t *testing.T) {
@@ -767,4 +769,310 @@ func TestPrintFooter(t *testing.T) {
 			t.Log("Output:", output)
 		}
 	})
+}
+
+func TestPrintSubcommandAliases(t *testing.T) {
+	tests := []struct {
+		name        string
+		subcommands []*cobra.Command
+		shouldPrint bool
+		contains    []string
+	}{
+		{
+			name: "subcommands with aliases",
+			subcommands: []*cobra.Command{
+				{Use: "apply", Aliases: []string{"a"}, Short: "Apply changes", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "destroy", Aliases: []string{"d", "del"}, Short: "Destroy resources", Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: true,
+			contains:    []string{"SUBCOMMAND ALIASES", "a", "Alias of"},
+		},
+		{
+			name: "subcommands without aliases",
+			subcommands: []*cobra.Command{
+				{Use: "apply", Short: "Apply changes", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "destroy", Short: "Destroy resources", Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: false,
+			contains:    []string{},
+		},
+		{
+			name: "mixed - some with aliases, some without",
+			subcommands: []*cobra.Command{
+				{Use: "apply", Short: "Apply changes", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "destroy", Aliases: []string{"d"}, Short: "Destroy resources", Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: true,
+			contains:    []string{"SUBCOMMAND ALIASES", "d"},
+		},
+		{
+			name:        "no subcommands",
+			subcommands: []*cobra.Command{},
+			shouldPrint: false,
+			contains:    []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			cmd := &cobra.Command{
+				Use:   "test",
+				Short: "Test command",
+			}
+
+			for _, subcmd := range tt.subcommands {
+				cmd.AddCommand(subcmd)
+			}
+
+			ctx := &helpRenderContext{
+				writer: &buf,
+				styles: &styles,
+			}
+
+			printSubcommandAliases(ctx, cmd)
+
+			output := buf.String()
+			if tt.shouldPrint && output == "" {
+				t.Error("Expected subcommand aliases to be printed")
+			}
+			if !tt.shouldPrint && output != "" {
+				t.Errorf("Expected no output, got: %q", output)
+			}
+
+			for _, expected := range tt.contains {
+				if !strings.Contains(output, expected) {
+					t.Errorf("Expected output to contain %q, got: %q", expected, output)
+				}
+			}
+		})
+	}
+}
+
+func TestFormatCommandLine(t *testing.T) {
+	tests := []struct {
+		name     string
+		cmd      *cobra.Command
+		maxWidth int
+		contains []string
+	}{
+		{
+			name: "simple command",
+			cmd: &cobra.Command{
+				Use:   "apply",
+				Short: "Apply changes to infrastructure",
+			},
+			maxWidth: 20,
+			contains: []string{"apply", "Apply changes"},
+		},
+		{
+			name: "command with subcommands",
+			cmd: &cobra.Command{
+				Use:   "terraform",
+				Short: "Terraform commands",
+			},
+			maxWidth: 20,
+			contains: []string{"terraform", "[command]", "Terraform commands"},
+		},
+		{
+			name: "command with long description",
+			cmd: &cobra.Command{
+				Use:   "validate",
+				Short: "Validate stack configuration files against JSON Schema and OPA policies to ensure correctness",
+			},
+			maxWidth: 15,
+			contains: []string{"validate", "Validate stack"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			// Add subcommand if testing that case
+			if strings.Contains(tt.name, "subcommands") {
+				tt.cmd.AddCommand(&cobra.Command{Use: "plan", Run: func(cmd *cobra.Command, args []string) {}})
+			}
+
+			ctx := &helpRenderContext{
+				writer: &buf,
+				styles: &styles,
+			}
+
+			formatCommandLine(ctx, tt.cmd, tt.maxWidth)
+
+			output := buf.String()
+			for _, expected := range tt.contains {
+				if !strings.Contains(output, expected) {
+					t.Errorf("Expected output to contain %q, got: %q", expected, output)
+				}
+			}
+		})
+	}
+}
+
+func TestPrintAvailableCommands(t *testing.T) {
+	tests := []struct {
+		name        string
+		subcommands []*cobra.Command
+		shouldPrint bool
+		contains    []string
+	}{
+		{
+			name: "with available subcommands",
+			subcommands: []*cobra.Command{
+				{Use: "apply", Short: "Apply changes", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "plan", Short: "Plan changes", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "destroy", Short: "Destroy resources", Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: true,
+			contains:    []string{"AVAILABLE COMMANDS", "apply", "plan", "destroy"},
+		},
+		{
+			name: "with hidden commands",
+			subcommands: []*cobra.Command{
+				{Use: "apply", Short: "Apply changes", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "hidden", Short: "Hidden command", Hidden: true, Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: true,
+			contains:    []string{"AVAILABLE COMMANDS", "apply"},
+		},
+		{
+			name:        "no subcommands",
+			subcommands: []*cobra.Command{},
+			shouldPrint: false,
+			contains:    []string{},
+		},
+		{
+			name: "only hidden commands",
+			subcommands: []*cobra.Command{
+				{Use: "hidden1", Short: "Hidden command 1", Hidden: true, Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "hidden2", Short: "Hidden command 2", Hidden: true, Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: false,
+			contains:    []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			cmd := &cobra.Command{
+				Use:   "test",
+				Short: "Test command",
+			}
+
+			for _, subcmd := range tt.subcommands {
+				cmd.AddCommand(subcmd)
+			}
+
+			ctx := &helpRenderContext{
+				writer: &buf,
+				styles: &styles,
+			}
+
+			printAvailableCommands(ctx, cmd)
+
+			output := buf.String()
+			if tt.shouldPrint && output == "" {
+				t.Error("Expected available commands to be printed")
+			}
+			if !tt.shouldPrint && output != "" {
+				t.Errorf("Expected no output, got: %q", output)
+			}
+
+			for _, expected := range tt.contains {
+				if !strings.Contains(output, expected) {
+					t.Errorf("Expected output to contain %q, got: %q", expected, output)
+				}
+			}
+		})
+	}
+}
+
+func TestPrintFlags(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupCmd    func(*cobra.Command)
+		shouldPrint bool
+		contains    []string
+	}{
+		{
+			name: "with local flags",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("stack", "", "Stack name")
+				cmd.Flags().Bool("verbose", false, "Verbose output")
+			},
+			shouldPrint: true,
+			contains:    []string{"FLAGS", "--stack", "--verbose"},
+		},
+		{
+			name: "with inherited flags",
+			setupCmd: func(cmd *cobra.Command) {
+				parent := &cobra.Command{Use: "parent"}
+				parent.PersistentFlags().String("config", "", "Config file")
+				cmd.Parent()
+				parent.AddCommand(cmd)
+			},
+			shouldPrint: true,
+			contains:    []string{"GLOBAL FLAGS", "--config"},
+		},
+		{
+			name: "with both local and inherited flags",
+			setupCmd: func(cmd *cobra.Command) {
+				parent := &cobra.Command{Use: "parent"}
+				parent.PersistentFlags().String("config", "", "Config file")
+				cmd.Flags().String("stack", "", "Stack name")
+				parent.AddCommand(cmd)
+			},
+			shouldPrint: true,
+			contains:    []string{"FLAGS", "--stack", "GLOBAL FLAGS", "--config"},
+		},
+		{
+			name: "no flags",
+			setupCmd: func(cmd *cobra.Command) {
+				// No flags added
+			},
+			shouldPrint: false,
+			contains:    []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+
+			cmd := &cobra.Command{
+				Use:   "test",
+				Short: "Test command",
+				Run:   func(cmd *cobra.Command, args []string) {},
+			}
+
+			tt.setupCmd(cmd)
+
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			printFlags(&buf, cmd, &schema.AtmosConfiguration{}, &styles)
+
+			output := buf.String()
+			if tt.shouldPrint && output == "" && len(tt.contains) > 0 {
+				t.Error("Expected flags to be printed")
+			}
+
+			for _, expected := range tt.contains {
+				if !strings.Contains(output, expected) {
+					t.Errorf("Expected output to contain %q, got: %q", expected, output)
+				}
+			}
+		})
+	}
 }
