@@ -287,3 +287,53 @@ func TestSplitLines(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderInlineMarkdown(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		contains string // Check if output contains this (for rendered markdown)
+	}{
+		{
+			name:     "Empty string",
+			input:    "",
+			contains: "",
+		},
+		{
+			name:     "Plain text",
+			input:    "Virtual Private Cloud with subnets",
+			contains: "Virtual Private Cloud with subnets",
+		},
+		{
+			name:     "Bold text",
+			input:    "**Important** configuration",
+			contains: "Important",
+		},
+		{
+			name:     "Italic text",
+			input:    "*Enhanced* security",
+			contains: "Enhanced",
+		},
+		{
+			name:     "Inline code",
+			input:    "Configure `vpc_id` parameter",
+			contains: "vpc_id",
+		},
+		{
+			name:     "Multiple newlines collapsed",
+			input:    "Line one\n\nLine two\n\nLine three",
+			contains: "Line one Line two Line three",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := renderInlineMarkdown(tt.input)
+			if tt.contains != "" {
+				assert.Contains(t, result, tt.contains)
+			} else {
+				assert.Equal(t, tt.contains, result)
+			}
+		})
+	}
+}

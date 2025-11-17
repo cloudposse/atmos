@@ -9,9 +9,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/cloudposse/atmos/internal/tui/templates"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
@@ -411,6 +413,65 @@ func getCellStyle(value string, baseStyle *lipgloss.Style, styles *theme.StyleSe
 	}
 }
 
+// renderInlineMarkdown renders markdown content inline for table cells.
+// Strips newlines and renders markdown formatting (bold, italic, links, code).
+func renderInlineMarkdown(content string) string {
+	if content == "" {
+		return ""
+	}
+
+	// Create a terminal instance to detect color support.
+	term := terminal.New()
+
+	// Build glamour options for inline rendering.
+	var opts []glamour.TermRendererOption
+
+	// Use theme-aware glamour styles if color is supported.
+	if term.ColorProfile() != terminal.ColorNone {
+		// Get the configured theme name from atmos config if available.
+		// Default to "dark" theme for better terminal compatibility.
+		themeName := "dark"
+		glamourStyle, err := theme.GetGlamourStyleForTheme(themeName)
+		if err == nil {
+			opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
+		} else {
+			// Fallback to auto style if theme conversion fails.
+			opts = append(opts, glamour.WithAutoStyle())
+		}
+	} else {
+		// Use plain notty style for terminals without color.
+		opts = append(opts, glamour.WithStylePath("notty"))
+	}
+
+	// No word wrap - we'll handle line breaks manually.
+	opts = append(opts, glamour.WithWordWrap(0))
+
+	// Create the renderer.
+	renderer, err := glamour.NewTermRenderer(opts...)
+	if err != nil {
+		// If rendering fails, return the original content.
+		return content
+	}
+	defer renderer.Close()
+
+	// Render the markdown.
+	rendered, err := renderer.Render(content)
+	if err != nil {
+		// If rendering fails, return the original content.
+		return content
+	}
+
+	// Convert to single line by replacing newlines with spaces.
+	// This keeps inline markdown (bold, italic, code) but removes block formatting.
+	singleLine := strings.ReplaceAll(rendered, "\n", " ")
+
+	// Collapse multiple spaces into single space.
+	singleLine = regexp.MustCompile(`\s+`).ReplaceAllString(singleLine, " ")
+
+	// Trim leading and trailing whitespace.
+	return strings.TrimSpace(singleLine)
+}
+
 // createStyledTable creates a styled table with headers and rows.
 // Uses the same clean styling as atmos version list with width calculation and wrapping.
 func CreateStyledTable(header []string, rows [][]string) string {
@@ -429,13 +490,36 @@ func CreateStyledTable(header []string, rows [][]string) string {
 	// Get theme-aware styles.
 	styles := theme.GetCurrentStyles()
 
+	// Find the index of the "Description" column if it exists.
+	descriptionColIndex := -1
+	for i, h := range header {
+		if h == "Description" {
+			descriptionColIndex = i
+			break
+		}
+	}
+
+	// Apply markdown rendering to Description column cells.
+	processedRows := rows
+	if descriptionColIndex >= 0 {
+		processedRows = make([][]string, len(rows))
+		for i, row := range rows {
+			processedRows[i] = make([]string, len(row))
+			copy(processedRows[i], row)
+			if descriptionColIndex < len(row) && row[descriptionColIndex] != "" {
+				// Render markdown content inline (strip block elements).
+				processedRows[i][descriptionColIndex] = renderInlineMarkdown(row[descriptionColIndex])
+			}
+		}
+	}
+
 	// Table styling - simple and clean like version list.
 	headerStyle := lipgloss.NewStyle().Bold(true)
 	cellStyle := lipgloss.NewStyle()
 
 	t := table.New().
 		Headers(header...).
-		Rows(rows...).
+		Rows(processedRows...).
 		BorderHeader(true).                                               // Show border under header.
 		BorderTop(false).                                                 // No top border.
 		BorderBottom(false).                                              // No bottom border.
@@ -452,8 +536,8 @@ func CreateStyledTable(header []string, rows [][]string) string {
 				// Apply semantic styling based on cell content.
 				baseStyle := cellStyle.Padding(0, 1)
 				// Row indices for data start at 0, matching the rows array.
-				if row >= 0 && row < len(rows) && col < len(rows[row]) {
-					cellValue := rows[row][col]
+				if row >= 0 && row < len(processedRows) && col < len(processedRows[row]) {
+					cellValue := processedRows[row][col]
 					return getCellStyle(cellValue, &baseStyle, styles)
 				}
 				return baseStyle
