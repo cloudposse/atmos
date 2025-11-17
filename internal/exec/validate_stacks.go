@@ -63,9 +63,11 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 
 	err = ValidateStacks(&atmosConfig)
 	if err != nil {
+		_ = ui.Write("\r")
 		_ = ui.Error("Stack validation failed")
 		return err
 	}
+	_ = ui.Write("\r")
 	_ = ui.Success("All stacks validated successfully")
 	log.Debug("Stack validation completed")
 	return nil
