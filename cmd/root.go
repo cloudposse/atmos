@@ -377,11 +377,11 @@ func setupColorProfile(atmosConfig *schema.AtmosConfiguration) {
 // This is called during init() before Boa styles are created, ensuring Cobra help
 // text rendering respects the forced color profile.
 func setupColorProfileFromEnv() {
-	// Check environment variable first.
-	v := viper.New()
-	v.SetEnvPrefix("ATMOS")
-	v.AutomaticEnv()
-	forceColor := v.GetBool("FORCE_COLOR")
+	defer perf.Track(nil, "cmd.setupColorProfileFromEnv")()
+
+	// Check environment variable first using global viper.
+	// Note: ATMOS env prefix and AutomaticEnv are configured in init().
+	forceColor := viper.GetBool("FORCE_COLOR")
 
 	// Also check --force-color CLI flag by manually parsing os.Args.
 	// This is needed because Cobra hasn't parsed flags yet during init().
@@ -1100,6 +1100,11 @@ func init() {
 	if versionFlag := RootCmd.PersistentFlags().Lookup("version"); versionFlag != nil {
 		versionFlag.DefValue = ""
 	}
+	// Configure viper for automatic environment variable binding.
+	// This must happen before setupColorProfileFromEnv() uses viper.GetBool("FORCE_COLOR").
+	viper.SetEnvPrefix("ATMOS")
+	viper.AutomaticEnv()
+
 	// Bind verbose flag to environment variable.
 	if err := viper.BindEnv(verboseFlagName, "ATMOS_VERBOSE"); err != nil {
 		log.Error("Failed to bind ATMOS_VERBOSE environment variable", "error", err)
@@ -1128,11 +1133,13 @@ func init() {
 	ioCtx, ioErr := iolib.NewContext()
 	if ioErr != nil {
 		log.Error("Failed to initialize I/O context", "error", ioErr)
-	} else {
-		ui.InitFormatter(ioCtx)
-		data.InitWriter(ioCtx)
-		data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
+		// Fail fast: I/O context is critical for all output operations.
+		// Without it, ui.Format and data.Writer are unset, risking nil-pointer panics.
+		errUtils.CheckErrorPrintAndExit(ioErr, "Failed to initialize I/O context", "")
 	}
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+	data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
 
 	initCobraConfig()
 }
