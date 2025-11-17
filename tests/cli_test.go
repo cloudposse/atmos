@@ -1016,6 +1016,16 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	var stdout, stderr bytes.Buffer
 	var exitCode int
 
+	// Defer output logging - only runs if THIS subtest fails
+	defer func() {
+		if t.Failed() {
+			t.Logf("\n=== Full output from failed test ===")
+			t.Logf("Exit Code: %d", exitCode)
+			t.Logf("\nStdout (%d bytes):\n%s", len(stdout.String()), stdout.String())
+			t.Logf("\nStderr (%d bytes):\n%s", len(stderr.String()), stderr.String())
+		}
+	}()
+
 	if tc.Tty {
 		// Run the command in TTY mode
 		ptyOutput, err := simulateTtyCommand(t, cmd, "")
@@ -1023,8 +1033,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		// Check if the context timeout was exceeded
 		if ctx.Err() == context.DeadlineExceeded {
 			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
-			t.Errorf("Captured stdout:\n%s", stdout.String())
-			t.Errorf("Captured stderr:\n%s", stderr.String())
 			return
 		}
 
@@ -1055,8 +1063,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		if ctx.Err() == context.DeadlineExceeded {
 			// Handle the timeout case first
 			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
-			t.Errorf("Captured stdout:\n%s", stdout.String())
-			t.Errorf("Captured stderr:\n%s", stderr.String())
 			return
 		}
 
@@ -1212,11 +1218,9 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPatte
 		match := re.MatchString(output)
 		if pattern.Negate && match {
 			t.Errorf("Reason: %s unexpectedly matched negated pattern %q.", outputType, pattern.Pattern)
-			t.Errorf("Output: %q", output)
 			success = false
 		} else if !pattern.Negate && !match {
 			t.Errorf("Reason: %s did not match pattern %q.", outputType, pattern.Pattern)
-			t.Errorf("Output: %q", output)
 			success = false
 		}
 	}
@@ -1268,14 +1272,12 @@ func verifyFileContains(t *testing.T, filePatterns map[string][]MatchPattern) bo
 				// Negated pattern: Ensure the pattern does NOT match
 				if re.Match(content) {
 					t.Errorf("Reason: File %q unexpectedly matched negated pattern %q.", file, matchPattern.Pattern)
-					t.Errorf("Content: %q", string(content))
 					success = false
 				}
 			} else {
 				// Regular pattern: Ensure the pattern matches
 				if !re.Match(content) {
 					t.Errorf("Reason: File %q did not match pattern %q.", file, matchPattern.Pattern)
-					t.Errorf("Content: %q", string(content))
 					success = false
 				}
 			}
