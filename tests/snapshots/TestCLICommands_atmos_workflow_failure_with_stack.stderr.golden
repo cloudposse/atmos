@@ -1,6 +1,6 @@
 
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-Executing command: `atmos terraform plan idontexist`
+ℹ Executing command: `atmos terraform plan idontexist`
 
 # Error
 
@@ -16,18 +16,17 @@ component and stack names correct? Did you forget an import?
 
 # Workflow Error
 
-**Error:** workflow step execution failed: subcommand exited with code 1
-
-## Explanation
-
-The following command failed to execute:
-
- atmos terraform plan idontexist -s prod
+**Error:** workflow step execution failed: max attempts (1) exceeded, last
+error: subcommand exited with code 1
 
 ## Hints
 
+💡 The following command failed to execute:
+
+ atmos terraform plan idontexist -s 'prod'
+
 💡 To resume the workflow from this step, run:
 
- atmos workflow fail-with-stack -f test --from-step step1 -s prod
+ atmos workflow fail-with-stack -f test --from-step 'step1' -s 'prod'
 
 
