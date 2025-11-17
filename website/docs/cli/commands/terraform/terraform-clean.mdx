@@ -31,6 +31,23 @@ Use these flags with extreme caution as they can lead to irreversible data loss.
 Run `atmos terraform clean --help` to see all the available options
 :::
 
+## Configuration
+
+Configure default behavior for `terraform clean` in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Auto-generate backend configuration
+    auto_generate_backend_file: true
+```
+
+The Terraform data directory location can be controlled via environment variable:
+```shell
+# Set custom Terraform data directory (defaults to .terraform)
+export TF_DATA_DIR="/tmp/.terraform"
+```
+
 ## Examples
 
 ```shell

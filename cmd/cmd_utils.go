@@ -813,6 +813,46 @@ func listStacksForComponent(component string) ([]string, error) {
 	return output, err
 }
 
+// listStacks is a wrapper that calls the list package's listAllStacks function.
+func listStacks(cmd *cobra.Command) ([]string, error) {
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return nil, fmt.Errorf("error initializing CLI config: %v", err)
+	}
+
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error describing stacks: %v", err)
+	}
+
+	output, err := l.FilterAndListStacks(stacksMap, "")
+	return output, err
+}
+
+// listComponents is a wrapper that lists all components.
+func listComponents(cmd *cobra.Command) ([]string, error) {
+	flags := cmd.Flags()
+	stackFlag, err := flags.GetString("stack")
+	if err != nil {
+		stackFlag = ""
+	}
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return nil, fmt.Errorf("error initializing CLI config: %v", err)
+	}
+
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error describing stacks: %v", err)
+	}
+
+	output, err := l.FilterAndListComponents(stackFlag, stacksMap)
+	return output, err
+}
+
 func AddStackCompletion(cmd *cobra.Command) {
 	if cmd.Flag("stack") == nil {
 		cmd.PersistentFlags().StringP("stack", "s", "", stackHint)
