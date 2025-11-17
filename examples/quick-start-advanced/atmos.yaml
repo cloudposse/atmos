@@ -75,8 +75,8 @@ components:
         value: "{{ .vars.stage }}"
       - name: Region
         value: "{{ .vars.region }}"
-      - name: Base Component
-        value: "{{ .component_base }}"
+      - name: Component Folder
+        value: "{{ .component_folder }}"
       - name: Description
         value: "{{ .metadata.description }}"
 

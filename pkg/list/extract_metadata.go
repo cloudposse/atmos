@@ -83,22 +83,31 @@ func ExtractMetadata(instances []schema.Instance) []map[string]any {
 		// Compute status indicator.
 		status := getStatusIndicator(enabled, locked)
 
+		// Determine the actual component folder used.
+		// If metadata.component is set, use it (it's the base component).
+		// Otherwise, use the component name itself.
+		componentFolder := instance.Component
+		if componentVal != "" {
+			componentFolder = componentVal
+		}
+
 		// Create flat map with all fields accessible to templates.
 		item := map[string]any{
-			"status":         status, // Colored status dot (●)
-			"stack":          instance.Stack,
-			"component":      instance.Component,
-			"component_type": instance.ComponentType,
-			"type":           metadataType,
-			"enabled":        enabled,
-			"locked":         locked,
-			"component_base": componentVal,
-			"inherits":       inherits,
-			"description":    description,
-			"metadata":       instance.Metadata, // Full metadata for advanced filtering
-			"vars":           instance.Vars,     // Expose vars for template access
-			"settings":       instance.Settings, // Expose settings for template access
-			"env":            instance.Env,      // Expose env for template access
+			"status":           status, // Colored status dot (●)
+			"stack":            instance.Stack,
+			"component":        instance.Component,
+			"component_type":   instance.ComponentType,
+			"component_folder": componentFolder, // The actual component folder name
+			"type":             metadataType,
+			"enabled":          enabled,
+			"locked":           locked,
+			"component_base":   componentVal,
+			"inherits":         inherits,
+			"description":      description,
+			"metadata":         instance.Metadata, // Full metadata for advanced filtering
+			"vars":             instance.Vars,     // Expose vars for template access
+			"settings":         instance.Settings, // Expose settings for template access
+			"env":              instance.Env,      // Expose env for template access
 		}
 
 		result = append(result, item)
