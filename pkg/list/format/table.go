@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/cloudposse/atmos/internal/tui/templates"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/pkg/errors"
 )
@@ -184,22 +183,31 @@ func formatComplexValue(val interface{}) string {
 }
 
 // createStyledTable creates a styled table with headers and rows.
+// Uses the same clean styling as atmos version list.
 func CreateStyledTable(header []string, rows [][]string) string {
+	// Table styling - simple and clean like version list.
+	headerStyle := lipgloss.NewStyle().Bold(true)
+	cellStyle := lipgloss.NewStyle()
+
 	t := table.New().
-		Border(lipgloss.ThickBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorBorder))).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			style := lipgloss.NewStyle().PaddingLeft(1).PaddingRight(1)
-			if row == -1 {
-				return style.
-					Foreground(lipgloss.Color(theme.ColorGreen)).
-					Bold(true).
-					Align(lipgloss.Center)
-			}
-			return style.Inherit(theme.Styles.Description)
-		}).
 		Headers(header...).
-		Rows(rows...)
+		Rows(rows...).
+		BorderHeader(true).                                               // Show border under header.
+		BorderTop(false).                                                 // No top border.
+		BorderBottom(false).                                              // No bottom border.
+		BorderLeft(false).                                                // No left border.
+		BorderRight(false).                                               // No right border.
+		BorderRow(false).                                                 // No row separators.
+		BorderColumn(false).                                              // No column separators.
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))). // Gray border.
+		StyleFunc(func(row, col int) lipgloss.Style {
+			switch {
+			case row == table.HeaderRow:
+				return headerStyle.Padding(0, 1)
+			default:
+				return cellStyle.Padding(0, 1)
+			}
+		})
 
 	return t.String() + utils.GetLineEnding()
 }
