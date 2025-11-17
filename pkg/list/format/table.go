@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
@@ -402,8 +403,9 @@ func (f *TableFormatter) Format(data map[string]interface{}, options FormatOptio
 func calculateMaxKeyWidth(valueKeys []string) int {
 	maxKeyWidth := DefaultKeyWidth // Base width assumption
 	for _, key := range valueKeys {
-		if len(key) > maxKeyWidth {
-			maxKeyWidth = len(key)
+		keyWidth := lipgloss.Width(key)
+		if keyWidth > maxKeyWidth {
+			maxKeyWidth = keyWidth
 		}
 	}
 	return maxKeyWidth
@@ -424,7 +426,8 @@ func getMaxValueWidth(stackData map[string]interface{}, valueKeys []string) int 
 	for _, valueKey := range valueKeys {
 		if val, ok := stackData[valueKey]; ok {
 			formattedValue := formatTableCellValue(val)
-			valueWidth := len(formattedValue)
+			// For multi-line values, get the width of the widest line.
+			valueWidth := getMaxLineWidth(formattedValue)
 
 			if valueWidth > maxWidth {
 				maxWidth = valueWidth
@@ -435,10 +438,36 @@ func getMaxValueWidth(stackData map[string]interface{}, valueKeys []string) int 
 	return limitWidth(maxWidth)
 }
 
+// getMaxLineWidth returns the maximum visual width of any line in a multi-line string.
+// Uses lipgloss.Width to properly handle ANSI codes and multi-byte characters.
+func getMaxLineWidth(s string) int {
+	if s == "" {
+		return 0
+	}
+
+	maxWidth := 0
+	lines := splitLines(s)
+	for _, line := range lines {
+		width := lipgloss.Width(line)
+		if width > maxWidth {
+			maxWidth = width
+		}
+	}
+	return maxWidth
+}
+
+// splitLines splits a string by newlines.
+func splitLines(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	return strings.Split(s, "\n")
+}
+
 // calculateStackColumnWidth calculates the width for a single stack column.
 func calculateStackColumnWidth(stackName string, stackData map[string]interface{}, valueKeys []string) int {
-	// Start with the width based on stack name
-	columnWidth := limitWidth(len(stackName))
+	// Start with the width based on stack name using visual width.
+	columnWidth := limitWidth(lipgloss.Width(stackName))
 
 	// Check value widths
 	valueWidth := getMaxValueWidth(stackData, valueKeys)

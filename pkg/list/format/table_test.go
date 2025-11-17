@@ -148,3 +148,80 @@ func TestFormatTableCellValueWithArrays(t *testing.T) {
 		})
 	}
 }
+
+func TestGetMaxLineWidth(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected int
+	}{
+		{
+			name:     "Single line",
+			input:    "hello",
+			expected: 5,
+		},
+		{
+			name:     "Multi-line - first longest",
+			input:    "hello world\nhi\nbye",
+			expected: 11,
+		},
+		{
+			name:     "Multi-line - middle longest",
+			input:    "hi\nhello world\nbye",
+			expected: 11,
+		},
+		{
+			name:     "Empty string",
+			input:    "",
+			expected: 0,
+		},
+		{
+			name:     "ANSI colored text",
+			input:    "\x1b[31mred\x1b[0m\nblue",
+			expected: 4, // "blue" is longer visually, ANSI codes don't count
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getMaxLineWidth(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSplitLines(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{
+			name:     "Single line",
+			input:    "hello",
+			expected: []string{"hello"},
+		},
+		{
+			name:     "Multiple lines",
+			input:    "line1\nline2\nline3",
+			expected: []string{"line1", "line2", "line3"},
+		},
+		{
+			name:     "Empty string",
+			input:    "",
+			expected: []string{},
+		},
+		{
+			name:     "Trailing newline",
+			input:    "line1\nline2\n",
+			expected: []string{"line1", "line2", ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := splitLines(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
