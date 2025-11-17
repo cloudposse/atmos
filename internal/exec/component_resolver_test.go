@@ -137,7 +137,7 @@ func TestResolveComponentFromPath_PathNotInComponentDir(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrPathResolutionFailed)
+	assert.ErrorIs(t, err, errUtils.ErrPathNotInComponentDir)
 	assert.Contains(t, err.Error(), "not within Atmos component directories")
 }
 
