@@ -23,5 +23,7 @@ func (l *ExecStackLoader) FindStacksMap(atmosConfig *schema.AtmosConfiguration, 
 	map[string]map[string]any,
 	error,
 ) {
+	defer perf.Track(atmosConfig, "exec.ExecStackLoader.FindStacksMap")()
+
 	return FindStacksMap(atmosConfig, ignoreMissingFiles)
 }

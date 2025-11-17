@@ -196,7 +196,7 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 // This function sets TerraformDirAbsolutePath, HelmfileDirAbsolutePath, PackerDirAbsolutePath,
 // StacksBaseAbsolutePath, IncludeStackAbsolutePaths, and ExcludeStackAbsolutePaths.
 // ResolveAbsolutePath converts a path to absolute form, resolving relative paths.
-// relative to the CLI config directory (where atmos.yaml is located) instead of CWD.
+// Relative to the CLI config directory (where atmos.yaml is located) instead of CWD.
 // This allows ATMOS_BASE_PATH to work correctly when set to a relative path.
 //
 // Resolution order:

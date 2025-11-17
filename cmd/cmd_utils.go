@@ -862,13 +862,7 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 					"", // No stack context yet - we're completing the stack flag
 					componentType,
 				)
-				if err == nil {
-					component = resolvedComponent
-					log.Trace("Resolved path for stack completion",
-						"original", args[0],
-						"resolved", component,
-					)
-				} else {
+				if err != nil {
 					// If resolution fails, fall through to list all stacks (graceful degradation)
 					log.Trace("Could not resolve path for stack completion, listing all stacks",
 						"path", component,
@@ -880,6 +874,11 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 					}
 					return output, cobra.ShellCompDirectiveNoFileComp
 				}
+				component = resolvedComponent
+				log.Trace("Resolved path for stack completion",
+					"original", args[0],
+					"resolved", component,
+				)
 			}
 		}
 

@@ -305,6 +305,90 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 	return stacksMap, rawStackConfigs, nil
 }
 
+// processStackContextPrefix processes the context prefix for a stack based on name template or pattern.
+func processStackContextPrefix(
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	stackName string,
+) error {
+	switch {
+	case atmosConfig.Stacks.NameTemplate != "":
+		tmpl, err := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		if err != nil {
+			return err
+		}
+		configAndStacksInfo.ContextPrefix = tmpl
+	case atmosConfig.Stacks.NamePattern != "":
+		// Process context.
+		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+
+		var err error
+		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
+			configAndStacksInfo.Context,
+			GetStackNamePattern(atmosConfig),
+			stackName,
+		)
+		if err != nil {
+			return err
+		}
+	default:
+		return errUtils.ErrMissingStackNameTemplateAndPattern
+	}
+
+	configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
+	configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+	return nil
+}
+
+// findComponentInStacks searches for a component across all stacks and returns matching stacks.
+// Returns the count of found stacks, list of stack names, and the config info for the found component.
+func findComponentInStacks(
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	stacksMap map[string]any,
+	authManager auth.AuthManager,
+) (int, []string, schema.ConfigAndStacksInfo) {
+	foundStackCount := 0
+	var foundStacks []string
+	var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
+
+	for stackName := range stacksMap {
+		// Check if we've found the component in the stack.
+		err := ProcessComponentConfig(
+			configAndStacksInfo,
+			stackName,
+			stacksMap,
+			configAndStacksInfo.ComponentType,
+			configAndStacksInfo.ComponentFromArg,
+			authManager,
+		)
+		if err != nil {
+			continue
+		}
+
+		if err := processStackContextPrefix(atmosConfig, configAndStacksInfo, stackName); err != nil {
+			continue
+		}
+
+		// Check if we've found the stack.
+		if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
+			configAndStacksInfo.StackFile = stackName
+			foundConfigAndStacksInfo = *configAndStacksInfo
+			foundStackCount++
+			foundStacks = append(foundStacks, stackName)
+
+			log.Debug(
+				fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
+					configAndStacksInfo.ComponentFromArg,
+					configAndStacksInfo.Stack,
+					stackName,
+				))
+		}
+	}
+
+	return foundStackCount, foundStacks, foundConfigAndStacksInfo
+}
+
 // ProcessStacks processes stack config.
 func ProcessStacks(
 	atmosConfig *schema.AtmosConfiguration,
@@ -380,65 +464,12 @@ func ProcessStacks(
 			return configAndStacksInfo, err
 		}
 	} else {
-		foundStackCount := 0
-		var foundStacks []string
-		var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
-
-		for stackName := range stacksMap {
-			// Check if we've found the component in the stack.
-			err = ProcessComponentConfig(
-				&configAndStacksInfo,
-				stackName,
-				stacksMap,
-				configAndStacksInfo.ComponentType,
-				configAndStacksInfo.ComponentFromArg,
-				authManager,
-			)
-			if err != nil {
-				continue
-			}
-
-			switch {
-			case atmosConfig.Stacks.NameTemplate != "":
-				tmpl, err2 := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
-				if err2 != nil {
-					continue
-				}
-				configAndStacksInfo.ContextPrefix = tmpl
-			case atmosConfig.Stacks.NamePattern != "":
-				// Process context.
-				configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-
-				configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
-					configAndStacksInfo.Context,
-					GetStackNamePattern(atmosConfig),
-					stackName,
-				)
-				if err != nil {
-					continue
-				}
-			default:
-				return configAndStacksInfo, errUtils.ErrMissingStackNameTemplateAndPattern
-			}
-
-			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-			configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-
-			// Check if we've found the stack.
-			if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
-				configAndStacksInfo.StackFile = stackName
-				foundConfigAndStacksInfo = configAndStacksInfo
-				foundStackCount++
-				foundStacks = append(foundStacks, stackName)
-
-				log.Debug(
-					fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
-						configAndStacksInfo.ComponentFromArg,
-						configAndStacksInfo.Stack,
-						stackName,
-					))
-			}
-		}
+		foundStackCount, foundStacks, foundConfigAndStacksInfo := findComponentInStacks(
+			atmosConfig,
+			&configAndStacksInfo,
+			stacksMap,
+			authManager,
+		)
 
 		if foundStackCount == 0 && !checkStack {
 			// Allow proceeding without error if checkStack is false (e.g., for operations that don't require a stack).
@@ -493,64 +524,13 @@ func ProcessStacks(
 
 				// Update ComponentFromArg with resolved name and retry the loop.
 				configAndStacksInfo.ComponentFromArg = resolvedComponent
-				foundStackCount = 0
-				foundStacks = nil
 
-				for stackName := range stacksMap {
-					// Check if we've found the component in the stack.
-					err = ProcessComponentConfig(
-						&configAndStacksInfo,
-						stackName,
-						stacksMap,
-						configAndStacksInfo.ComponentType,
-						configAndStacksInfo.ComponentFromArg,
-						authManager,
-					)
-					if err != nil {
-						continue
-					}
-
-					switch {
-					case atmosConfig.Stacks.NameTemplate != "":
-						tmpl, err2 := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
-						if err2 != nil {
-							continue
-						}
-						configAndStacksInfo.ContextPrefix = tmpl
-					case atmosConfig.Stacks.NamePattern != "":
-						// Process context.
-						configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-
-						configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
-							configAndStacksInfo.Context,
-							GetStackNamePattern(atmosConfig),
-							stackName,
-						)
-						if err != nil {
-							continue
-						}
-					default:
-						return configAndStacksInfo, errUtils.ErrMissingStackNameTemplateAndPattern
-					}
-
-					configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-					configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-
-					// Check if we've found the stack.
-					if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
-						configAndStacksInfo.StackFile = stackName
-						foundConfigAndStacksInfo = configAndStacksInfo
-						foundStackCount++
-						foundStacks = append(foundStacks, stackName)
-
-						log.Debug(
-							fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
-								configAndStacksInfo.ComponentFromArg,
-								configAndStacksInfo.Stack,
-								stackName,
-							))
-					}
-				}
+				foundStackCount, foundStacks, foundConfigAndStacksInfo = findComponentInStacks(
+					atmosConfig,
+					&configAndStacksInfo,
+					stacksMap,
+					authManager,
+				)
 			} else if errors.Is(pathErr, errUtils.ErrPathNotInComponentDir) {
 				// Path resolution failed because path is not in component directories.
 				// Return the detailed path error instead of generic "component not found".

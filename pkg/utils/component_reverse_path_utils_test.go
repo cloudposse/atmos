@@ -154,14 +154,6 @@ func TestExtractComponentInfoFromPath(t *testing.T) {
 }
 
 func TestExtractComponentInfoFromPath_CurrentDirectory(t *testing.T) {
-	// Save current directory
-	originalWd, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() {
-		err := os.Chdir(originalWd)
-		require.NoError(t, err)
-	}()
-
 	// Create a temporary directory structure
 	tmpDir := t.TempDir()
 	terraformBase := filepath.Join(tmpDir, "components", "terraform")
@@ -169,9 +161,8 @@ func TestExtractComponentInfoFromPath_CurrentDirectory(t *testing.T) {
 
 	require.NoError(t, os.MkdirAll(componentDir, 0o755))
 
-	// Change to the component directory
-	err = os.Chdir(componentDir)
-	require.NoError(t, err)
+	// Change to the component directory (t.Chdir automatically restores on cleanup)
+	t.Chdir(componentDir)
 
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath:                 tmpDir,

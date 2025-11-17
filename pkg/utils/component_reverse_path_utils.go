@@ -178,7 +178,8 @@ func normalizePathForResolution(path string) (string, error) {
 }
 
 // tryExtractComponentType attempts to extract component info for a specific component type.
-// resolveAndCleanBasePath resolves a base path to absolute form and resolves symlinks.
+
+// ResolveAndCleanBasePath resolves a base path to absolute form and resolves symlinks.
 func resolveAndCleanBasePath(basePath string) (string, error) {
 	// Ensure base path is absolute.
 	if !filepath.IsAbs(basePath) {
