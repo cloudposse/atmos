@@ -167,56 +167,65 @@ var varsCmd = &cobra.Command{
 }
 
 func init() {
-	// Create parser for values command with all flags
-	valuesParser = newCommonListParser(
-		flags.WithBoolFlag("abstract", "", false, "Include abstract components"),
-		flags.WithBoolFlag("vars", "", false, "Show only vars (equivalent to --query .vars)"),
-		flags.WithBoolFlag("process-templates", "", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command"),
-		flags.WithBoolFlag("process-functions", "", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
-		flags.WithEnvVars("abstract", "ATMOS_LIST_ABSTRACT"),
-		flags.WithEnvVars("vars", "ATMOS_LIST_VARS"),
-		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
-		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
+	// Create parser for values command using flag wrappers.
+	valuesParser = NewListParser(
+		WithFormatFlag,
+		WithDelimiterFlag,
+		WithStackFlag,
+		WithQueryFlag,
+		WithMaxColumnsFlag,
+		WithAbstractFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
+		// Add vars flag only for values command.
+		func(options *[]flags.Option) {
+			*options = append(*options,
+				flags.WithBoolFlag("vars", "", false, "Show only vars (equivalent to --query .vars)"),
+				flags.WithEnvVars("vars", "ATMOS_LIST_VARS"),
+			)
+		},
 	)
 
-	// Register flags for values command
+	// Register flags for values command.
 	valuesParser.RegisterFlags(valuesCmd)
 
-	// Customize query flag usage for values command
+	// Customize query flag usage for values command.
 	if queryFlag := valuesCmd.PersistentFlags().Lookup("query"); queryFlag != nil {
 		queryFlag.Usage = "Filter the results using YQ expressions"
 	}
 
-	// Add stack completion
+	// Add stack completion.
 	addStackCompletion(valuesCmd)
 
-	// Bind flags to Viper for environment variable support
+	// Bind flags to Viper for environment variable support.
 	if err := valuesParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
 
-	// Create parser for vars command (no vars flag, as it's always .vars)
-	varsParser = newCommonListParser(
-		flags.WithBoolFlag("abstract", "", false, "Include abstract components"),
-		flags.WithBoolFlag("process-templates", "", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command"),
-		flags.WithBoolFlag("process-functions", "", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
-		flags.WithEnvVars("abstract", "ATMOS_LIST_ABSTRACT"),
-		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
-		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
+	// Create parser for vars command (no vars flag, as it's always .vars).
+	varsParser = NewListParser(
+		WithFormatFlag,
+		WithDelimiterFlag,
+		WithStackFlag,
+		WithQueryFlag,
+		WithMaxColumnsFlag,
+		WithAbstractFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
 	)
 
-	// Register flags for vars command
+	// Register flags for vars command.
 	varsParser.RegisterFlags(varsCmd)
 
-	// Customize query flag usage for vars command
+	// Customize query flag usage for vars command.
 	if queryFlag := varsCmd.PersistentFlags().Lookup("query"); queryFlag != nil {
 		queryFlag.Usage = "Filter the results using YQ expressions"
 	}
 
-	// Add stack completion
+	// Add stack completion.
 	addStackCompletion(varsCmd)
 
-	// Bind flags to Viper for environment variable support
+	// Bind flags to Viper for environment variable support.
 	if err := varsParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}

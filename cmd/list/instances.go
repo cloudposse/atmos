@@ -57,16 +57,20 @@ var instancesCmd = &cobra.Command{
 }
 
 func init() {
-	// Create parser with common list flags plus upload flag
-	instancesParser = newCommonListParser(
-		flags.WithBoolFlag("upload", "", false, "Upload instances to pro API"),
-		flags.WithEnvVars("upload", "ATMOS_LIST_UPLOAD"),
+	// Create parser using flag wrappers.
+	instancesParser = NewListParser(
+		WithFormatFlag,
+		WithDelimiterFlag,
+		WithMaxColumnsFlag,
+		WithStackFlag,
+		WithQueryFlag,
+		WithUploadFlag,
 	)
 
-	// Register flags
+	// Register flags.
 	instancesParser.RegisterFlags(instancesCmd)
 
-	// Bind flags to Viper for environment variable support
+	// Bind flags to Viper for environment variable support.
 	if err := instancesParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
