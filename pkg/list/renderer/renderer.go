@@ -7,6 +7,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -53,7 +54,7 @@ func (r *Renderer) Render(data []map[string]any) error {
 		var ok bool
 		filtered, ok = result.([]map[string]any)
 		if !ok {
-			return fmt.Errorf("filter returned invalid type: expected []map[string]any, got %T", result)
+			return fmt.Errorf("%w: filter returned invalid type: expected []map[string]any, got %T", errUtils.ErrInvalidConfig, result)
 		}
 	}
 
@@ -104,7 +105,7 @@ func formatTable(headers []string, rows [][]string, f format.Format) (string, er
 	case format.FormatTable:
 		return formatStyledTable(headers, rows), nil
 	default:
-		return "", fmt.Errorf("unsupported format: %s", f)
+		return "", fmt.Errorf("%w: unsupported format: %s", errUtils.ErrInvalidConfig, f)
 	}
 }
 

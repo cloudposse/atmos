@@ -72,7 +72,12 @@ var logFileHandle *os.File
 // This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
 // where Cobra doesn't parse flags before PersistentPreRun is called.
 func parseChdirFromArgs() string {
-	args := os.Args
+	return parseChdirFromArgsInternal(os.Args)
+}
+
+// parseChdirFromArgsInternal manually parses --chdir or -C flag from the provided args.
+// This internal version accepts args as a parameter for testability.
+func parseChdirFromArgsInternal(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 

@@ -172,7 +172,7 @@ func (s *Selector) evaluateTemplate(cfg Config, data map[string]any) (string, er
 	// Get the pre-parsed template for this column
 	tmpl := s.templateMap.Lookup(cfg.Name)
 	if tmpl == nil {
-		return "", fmt.Errorf("template %q not found", cfg.Name)
+		return "", fmt.Errorf("%w: template %q not found", errUtils.ErrTemplateEvaluation, cfg.Name)
 	}
 
 	// Build template context from data
@@ -320,7 +320,7 @@ func toInt(v any) int {
 		return int(val)
 	case string:
 		var i int
-		fmt.Sscanf(val, "%d", &i)
+		_, _ = fmt.Sscanf(val, "%d", &i)
 		return i
 	default:
 		return 0

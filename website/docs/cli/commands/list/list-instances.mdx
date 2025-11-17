@@ -32,10 +32,13 @@ The `atmos list instances` command displays all component instances defined acro
 
 <dl>
   <dt>`--format` / `-f`</dt>
-  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree` (default: `table`)</dd>
 
   <dt>`--delimiter`</dt>
   <dd>Delimiter for CSV/TSV output (default: tab for tsv, comma for csv)</dd>
+
+  <dt>`--provenance`</dt>
+  <dd>Show import provenance in tree format. Only works with `--format=tree`. Displays the import hierarchy showing which files each component inherits from.</dd>
 
   <dt>`--columns`</dt>
   <dd>Columns to display (comma-separated). Overrides `components.list.columns` configuration in atmos.yaml</dd>
@@ -106,6 +109,52 @@ Upload instances to Atmos Pro:
 ```shell
 atmos list instances --upload
 ```
+
+View instances in tree format:
+```shell
+# Tree view without import details
+atmos list instances --format tree
+
+# Tree view with import provenance (shows inheritance chain)
+atmos list instances --format tree --provenance
+```
+
+## Tree Format with Import Provenance
+
+The `tree` format provides a hierarchical view of your component instances organized by stack. When combined with the `--provenance` flag, it shows the complete import chain for each component, making it easy to understand configuration inheritance.
+
+### Tree Format Structure
+
+The tree format displays:
+- **Stacks** as top-level nodes
+- **Components** as child nodes under each stack
+- **Import hierarchy** (when `--provenance` is enabled) showing the chain of stack configuration files
+
+### Import Provenance
+
+When you enable `--provenance`, each component shows its import chain - the sequence of stack configuration files it inherits from. This is particularly useful for:
+
+- **Debugging configuration** - See exactly where each component's configuration comes from
+- **Understanding inheritance** - Visualize the complete import chain
+- **Auditing changes** - Track which base configurations affect which components
+- **Documentation** - Generate visual representations of stack dependencies
+
+Example tree output with provenance:
+```
+Component Instances
+│
+├── tenant1-ue2-dev
+│   ├── vpc
+│   │   ├── stacks/tenant1/ue2/dev
+│   │   ├── stacks/tenant1/ue2/_defaults
+│   │   └── stacks/catalog/vpc
+│   └── eks
+│       ├── stacks/tenant1/ue2/dev
+│       ├── stacks/tenant1/ue2/_defaults
+│       └── stacks/catalog/eks
+```
+
+The import chain is shown from most specific (top) to most general (bottom), reflecting how Atmos merges configurations.
 
 ## Custom Columns Configuration
 
@@ -179,6 +228,7 @@ atmos list instances --columns "stack,component,vars.region,enabled"
 ```
 
 :::tip
+- Use `--format tree --provenance` to visualize component import hierarchies
 - Use the `--filter` flag for complex filtering with YQ syntax
 - Combine `--stack` (glob pattern) with `--filter` (YQ expression) for precise filtering
 - The `--upload` flag sends instance data to Atmos Pro for centralized infrastructure management

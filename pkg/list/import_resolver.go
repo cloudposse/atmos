@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/list/tree"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"gopkg.in/yaml.v3"
 )
 
 // ResolveImportTree resolves the complete import tree for all stacks.
@@ -92,7 +94,7 @@ func findStackFilePath(stackName string, atmosConfig *schema.AtmosConfiguration)
 	}
 
 	// If not found, return error (stack file might not exist as a standalone file).
-	return "", fmt.Errorf("stack file not found for: %s", stackName)
+	return "", fmt.Errorf("%w: %s", errUtils.ErrStackManifestFileNotFound, stackName)
 }
 
 // readImportsFromFile reads the import/imports array from a YAML file.

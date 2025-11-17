@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -95,12 +96,17 @@ func listComponentsWithOptions(opts *ComponentsOptions) error {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return fmt.Errorf("error initializing CLI config: %v", err)
+		return fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
+	}
+
+	// If format is empty, check command-specific config.
+	if opts.Format == "" && atmosConfig.Components.List.Format != "" {
+		opts.Format = atmosConfig.Components.List.Format
 	}
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
-		return fmt.Errorf("error describing stacks: %v", err)
+		return fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
 
 	// Extract components into structured data.
@@ -110,7 +116,7 @@ func listComponentsWithOptions(opts *ComponentsOptions) error {
 	}
 
 	if len(components) == 0 {
-		ui.Info("No components found")
+		_ = ui.Info("No components found")
 		return nil
 	}
 

@@ -67,6 +67,18 @@ atmos list stacks --sort stack:asc
 atmos list stacks --component vpc --sort component:desc
 ```
 
+View stacks in tree format:
+```shell
+# Tree view without import details
+atmos list stacks --format tree
+
+# Tree view with import provenance (shows inheritance chain)
+atmos list stacks --format tree --provenance
+
+# Tree view with provenance for a specific component
+atmos list stacks --component vpc --format tree --provenance
+```
+
 ## Flags
 
 <dl>
@@ -74,7 +86,7 @@ atmos list stacks --component vpc --sort component:desc
   <dd>Filter stacks by component name</dd>
 
   <dt>`--format` / `-f`</dt>
-  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree`. Overrides `stacks.list.format` configuration in atmos.yaml (default: `table`)</dd>
 
   <dt>`--columns`</dt>
   <dd>Columns to display (comma-separated). Overrides `stacks.list.columns` configuration in atmos.yaml</dd>
@@ -84,16 +96,79 @@ atmos list stacks --component vpc --sort component:desc
 
   <dt>`--sort`</dt>
   <dd>Sort by column:order (e.g., `stack:asc,component:desc`)</dd>
+
+  <dt>`--provenance`</dt>
+  <dd>Show import provenance in tree format. Only works with `--format=tree`. Displays the import hierarchy showing which files each stack inherits from.</dd>
 </dl>
 
-## Custom Columns Configuration
+## Tree Format with Import Provenance
 
-You can customize the columns displayed by `atmos list stacks` in your `atmos.yaml`:
+The `tree` format provides a hierarchical view of your stacks. When combined with the `--provenance` flag, it shows the complete import chain for each stack, making it easy to understand configuration inheritance.
+
+### Tree Format Structure
+
+The tree format displays:
+- **Stack names** as top-level nodes
+- **Import hierarchy** (when `--provenance` is enabled) showing the chain of stack configuration files that each stack imports
+
+### Import Provenance
+
+When you enable `--provenance`, each stack shows its import chain - the sequence of stack configuration files it inherits from. This is particularly useful for:
+
+- **Debugging configuration** - See exactly where each stack's configuration comes from
+- **Understanding inheritance** - Visualize the complete import chain
+- **Auditing changes** - Track which base configurations affect which stacks
+- **Documentation** - Generate visual representations of stack dependencies
+
+Example tree output with provenance:
+```
+Stacks
+│
+├── tenant1-ue2-dev
+│   ├── stacks/tenant1/ue2/dev
+│   ├── stacks/tenant1/ue2/_defaults
+│   ├── stacks/tenant1/_defaults
+│   └── stacks/_defaults
+│
+├── tenant1-ue2-staging
+│   ├── stacks/tenant1/ue2/staging
+│   ├── stacks/tenant1/ue2/_defaults
+│   ├── stacks/tenant1/_defaults
+│   └── stacks/_defaults
+```
+
+The import chain is shown from most specific (top) to most general (bottom), reflecting how Atmos merges configurations.
+
+When used with `--component`, the tree shows only stacks that contain the specified component:
+
+```shell
+atmos list stacks --component vpc --format tree --provenance
+```
+
+This filters the output to show only stacks where the `vpc` component is defined, along with their import chains.
+
+## Configuration
+
+You can customize the default output format and columns displayed by `atmos list stacks` in your `atmos.yaml`:
+
+### Default Format
 
 ```yaml
 # atmos.yaml
 stacks:
   list:
+    format: tree  # Default format: table, json, yaml, csv, tsv, tree
+```
+
+**Precedence**: CLI `--format` flag > Config file > Environment variable `ATMOS_LIST_FORMAT` > Default (`table`)
+
+### Custom Columns
+
+```yaml
+# atmos.yaml
+stacks:
+  list:
+    format: table
     columns:
       - name: Stack
         value: "{{ .stack }}"

@@ -26,7 +26,7 @@ func (m *Manager) Write(content string) error {
 	}
 
 	// Human-readable → stderr (UI channel)
-	ui.Write(content)
+	_ = ui.Write(content)
 	return nil
 }
 

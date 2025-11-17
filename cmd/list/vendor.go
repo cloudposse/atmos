@@ -91,6 +91,11 @@ func listVendorWithOptions(opts *VendorOptions) error {
 		return err
 	}
 
+	// If format is empty, check command-specific config.
+	if opts.Format == "" && atmosConfig.Vendor.List.Format != "" {
+		opts.Format = atmosConfig.Vendor.List.Format
+	}
+
 	// Get vendor configurations.
 	vendors, err := l.GetVendorConfigurations(&atmosConfig)
 	if err != nil {
@@ -98,7 +103,7 @@ func listVendorWithOptions(opts *VendorOptions) error {
 	}
 
 	if len(vendors) == 0 {
-		ui.Info("No vendor configurations found")
+		_ = ui.Info("No vendor configurations found")
 		return nil
 	}
 

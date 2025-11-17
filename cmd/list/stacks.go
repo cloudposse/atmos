@@ -95,7 +95,7 @@ func listStacksWithOptions(opts *StacksOptions) error {
 
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return fmt.Errorf("error initializing CLI config: %v", err)
+		return fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
 	}
 
 	// If format is empty, check command-specific config.
@@ -105,7 +105,7 @@ func listStacksWithOptions(opts *StacksOptions) error {
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
-		return fmt.Errorf("error describing stacks: %v", err)
+		return fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
 
 	// Extract stacks into structured data.
@@ -123,7 +123,7 @@ func listStacksWithOptions(opts *StacksOptions) error {
 	}
 
 	if len(stacks) == 0 {
-		ui.Info("No stacks found")
+		_ = ui.Info("No stacks found")
 		return nil
 	}
 
