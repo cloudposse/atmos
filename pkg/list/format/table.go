@@ -186,7 +186,7 @@ func formatCollectionValue(v reflect.Value) string {
 }
 
 // tryExpandScalarArray attempts to expand an array of scalar values into a multi-line string.
-// Returns empty string if the array contains non-scalar values.
+// Returns empty string if the array contains non-scalar values or would be too wide.
 func tryExpandScalarArray(v reflect.Value) string {
 	if v.Len() == 0 {
 		return ""
@@ -194,6 +194,8 @@ func tryExpandScalarArray(v reflect.Value) string {
 
 	// Check if all elements are scalars (string, number, bool).
 	var items []string
+	maxItemWidth := 0
+
 	for i := 0; i < v.Len(); i++ {
 		elem := v.Index(i)
 
@@ -203,21 +205,37 @@ func tryExpandScalarArray(v reflect.Value) string {
 		}
 
 		// Check if element is a scalar type.
+		var itemStr string
 		switch elem.Kind() {
 		case reflect.String:
-			items = append(items, elem.String())
+			itemStr = elem.String()
 		case reflect.Bool:
-			items = append(items, fmt.Sprintf("%v", elem.Bool()))
+			itemStr = fmt.Sprintf("%v", elem.Bool())
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			items = append(items, fmt.Sprintf("%d", elem.Int()))
+			itemStr = fmt.Sprintf("%d", elem.Int())
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			items = append(items, fmt.Sprintf("%d", elem.Uint()))
+			itemStr = fmt.Sprintf("%d", elem.Uint())
 		case reflect.Float32, reflect.Float64:
-			items = append(items, fmt.Sprintf("%.2f", elem.Float()))
+			itemStr = fmt.Sprintf("%.2f", elem.Float())
 		default:
 			// Non-scalar element found, return empty to use placeholder format.
 			return ""
 		}
+
+		items = append(items, itemStr)
+
+		// Track the widest item to check if expansion is reasonable.
+		itemWidth := lipgloss.Width(itemStr)
+		if itemWidth > maxItemWidth {
+			maxItemWidth = itemWidth
+		}
+	}
+
+	// If the widest item exceeds a reasonable width, don't expand.
+	// Use a threshold that's reasonable for table display (about 1/3 of MaxColumnWidth).
+	const maxReasonableItemWidth = 20
+	if maxItemWidth > maxReasonableItemWidth {
+		return ""
 	}
 
 	// Join scalar items with newlines for multi-row display.
@@ -225,7 +243,7 @@ func tryExpandScalarArray(v reflect.Value) string {
 }
 
 // tryExpandScalarMap attempts to expand a map with scalar values into a multi-line string.
-// Returns empty string if the map contains non-scalar values.
+// Returns empty string if the map contains non-scalar values or would be too wide.
 func tryExpandScalarMap(v reflect.Value) string {
 	if v.Len() == 0 {
 		return ""
@@ -249,6 +267,8 @@ func tryExpandScalarMap(v reflect.Value) string {
 
 	// Check if all values are scalars and format as "key: value".
 	var items []string
+	maxItemWidth := 0
+
 	for _, keyStr := range sortedKeys {
 		key := keyMap[keyStr]
 		val := v.MapIndex(key)
@@ -277,7 +297,21 @@ func tryExpandScalarMap(v reflect.Value) string {
 		}
 
 		// Format as "key: value".
-		items = append(items, fmt.Sprintf("%s: %s", keyStr, valueStr))
+		itemStr := fmt.Sprintf("%s: %s", keyStr, valueStr)
+		items = append(items, itemStr)
+
+		// Track the widest item to check if expansion is reasonable.
+		itemWidth := lipgloss.Width(itemStr)
+		if itemWidth > maxItemWidth {
+			maxItemWidth = itemWidth
+		}
+	}
+
+	// If the widest item exceeds a reasonable width, don't expand.
+	// Use a threshold that's reasonable for table display (about 1/3 of MaxColumnWidth).
+	const maxReasonableItemWidth = 20
+	if maxItemWidth > maxReasonableItemWidth {
+		return ""
 	}
 
 	// Join key-value pairs with newlines for multi-row display.

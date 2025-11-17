@@ -44,6 +44,11 @@ func TestTryExpandScalarArray(t *testing.T) {
 			input:    []interface{}{[]string{"a", "b"}, []string{"c", "d"}},
 			expected: "", // Should return empty for nested arrays
 		},
+		{
+			name:     "Array with very long strings (too wide)",
+			input:    []interface{}{"this-is-a-very-long-string-that-exceeds-the-width-threshold", "short"},
+			expected: "", // Should return empty if any item is too wide
+		},
 	}
 
 	for _, tt := range tests {
@@ -189,6 +194,11 @@ func TestTryExpandScalarMap(t *testing.T) {
 			name:     "Map with array value (non-scalar)",
 			input:    map[string]interface{}{"list": []string{"a", "b"}},
 			expected: "", // Should return empty for non-scalar values
+		},
+		{
+			name:     "Map with very long value (too wide)",
+			input:    map[string]interface{}{"key": "this-is-a-very-long-string-that-exceeds-the-width-threshold"},
+			expected: "", // Should return empty if any item is too wide
 		},
 	}
 
