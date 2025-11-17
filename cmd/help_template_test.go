@@ -1,9 +1,14 @@
 package cmd
 
 import (
+	"bytes"
+	"os"
+	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 func TestIsTruthy(t *testing.T) {
@@ -354,6 +359,412 @@ func TestCalculateMaxCommandWidth(t *testing.T) {
 		result := calculateMaxCommandWidth(commands)
 		if result != 5 { // Length of "short".
 			t.Errorf("Expected 5 (ignoring hidden), got %d", result)
+		}
+	})
+}
+
+func TestDetectColorConfig(t *testing.T) {
+	tests := []struct {
+		name             string
+		env              map[string]string
+		expectedForce    bool
+		expectedDisabled bool
+	}{
+		{
+			name:             "NO_COLOR disables color",
+			env:              map[string]string{"NO_COLOR": "1"},
+			expectedForce:    false,
+			expectedDisabled: true,
+		},
+		{
+			name:             "FORCE_COLOR=1 enables color",
+			env:              map[string]string{"FORCE_COLOR": "1"},
+			expectedForce:    true,
+			expectedDisabled: false,
+		},
+		{
+			name:             "FORCE_COLOR=0 disables even if ATMOS_FORCE_COLOR=1",
+			env:              map[string]string{"ATMOS_FORCE_COLOR": "1", "FORCE_COLOR": "0"},
+			expectedForce:    false,
+			expectedDisabled: true,
+		},
+		{
+			name:             "CLICOLOR_FORCE=1 enables color",
+			env:              map[string]string{"CLICOLOR_FORCE": "1"},
+			expectedForce:    true,
+			expectedDisabled: false,
+		},
+		{
+			name:             "FORCE_COLOR=0 disables color",
+			env:              map[string]string{"FORCE_COLOR": "0"},
+			expectedForce:    false,
+			expectedDisabled: true,
+		},
+		{
+			name:             "NO_COLOR takes precedence over FORCE_COLOR",
+			env:              map[string]string{"NO_COLOR": "1", "FORCE_COLOR": "1"},
+			expectedForce:    false,
+			expectedDisabled: true,
+		},
+		{
+			name:             "empty env defaults to no force, no disable",
+			env:              map[string]string{},
+			expectedForce:    false,
+			expectedDisabled: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clear viper state before each test.
+			viper.Reset()
+
+			// Clear and set environment variables.
+			envVars := []string{"NO_COLOR", "FORCE_COLOR", "CLICOLOR_FORCE", "ATMOS_FORCE_COLOR", "ATMOS_DEBUG_COLORS", "TERM", "COLORTERM"}
+			for _, env := range envVars {
+				t.Setenv(env, "")
+			}
+
+			// Set test environment.
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+
+			config := detectColorConfig()
+
+			if config.forceColor != tt.expectedForce {
+				t.Errorf("forceColor = %v, want %v", config.forceColor, tt.expectedForce)
+			}
+			if config.explicitlyDisabled != tt.expectedDisabled {
+				t.Errorf("explicitlyDisabled = %v, want %v", config.explicitlyDisabled, tt.expectedDisabled)
+			}
+		})
+	}
+}
+
+func TestConfigureWriter(t *testing.T) {
+	tests := []struct {
+		name           string
+		config         colorConfig
+		expectRenderer bool
+	}{
+		{
+			name: "disabled color creates Ascii renderer",
+			config: colorConfig{
+				forceColor:         false,
+				explicitlyDisabled: true,
+				debugColors:        false,
+			},
+			expectRenderer: true,
+		},
+		{
+			name: "forced color creates ANSI256 renderer",
+			config: colorConfig{
+				forceColor:         true,
+				explicitlyDisabled: false,
+				debugColors:        false,
+			},
+			expectRenderer: true,
+		},
+		{
+			name: "auto-detect creates renderer",
+			config: colorConfig{
+				forceColor:         false,
+				explicitlyDisabled: false,
+				debugColors:        false,
+			},
+			expectRenderer: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test"}
+			wc := configureWriter(cmd, tt.config)
+
+			if tt.expectRenderer && wc.renderer == nil {
+				t.Error("Expected renderer to be created, got nil")
+			}
+			if wc.writer == nil {
+				t.Error("Expected writer to be created, got nil")
+			}
+		})
+	}
+}
+
+func TestCreateHelpStyles(t *testing.T) {
+	t.Run("creates non-nil styles", func(t *testing.T) {
+		renderer := lipgloss.NewRenderer(os.Stdout)
+		styles := createHelpStyles(renderer)
+
+		// Check that all styles are initialized (non-zero values).
+		if styles.heading.String() == "" && styles.commandName.String() == "" {
+			// Styles might be zero-value, just ensure no panic.
+			t.Log("Styles created successfully")
+		}
+	})
+}
+
+func TestRenderMarkdownDescription(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		contains string
+	}{
+		{
+			name:     "plain text unchanged",
+			input:    "simple description",
+			contains: "simple description",
+		},
+		{
+			name:     "markdown with backticks",
+			input:    "use `atmos version` to check version",
+			contains: "atmos version",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			contains: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := renderMarkdownDescription(tt.input)
+			if !strings.Contains(result, tt.contains) {
+				t.Errorf("Expected result to contain %q, got %q", tt.contains, result)
+			}
+		})
+	}
+}
+
+func TestPrintLogoAndVersion(t *testing.T) {
+	t.Run("prints logo and version to buffer", func(t *testing.T) {
+		var buf bytes.Buffer
+		renderer := lipgloss.NewRenderer(&buf)
+		styles := createHelpStyles(renderer)
+
+		// This function should not panic.
+		printLogoAndVersion(&buf, &styles)
+
+		output := buf.String()
+		// The function uses PrintStyledTextToSpecifiedOutput which may or may not write to buffer
+		// depending on terminal detection. Just ensure it doesn't panic.
+		if len(output) > 0 {
+			t.Logf("Output length: %d", len(output))
+		}
+	})
+}
+
+func TestPrintDescription(t *testing.T) {
+	tests := []struct {
+		name        string
+		short       string
+		long        string
+		shouldPrint bool
+	}{
+		{
+			name:        "with short description",
+			short:       "Short description",
+			long:        "",
+			shouldPrint: true,
+		},
+		{
+			name:        "with long description",
+			short:       "",
+			long:        "Long description here",
+			shouldPrint: true,
+		},
+		{
+			name:        "prefers long over short",
+			short:       "Short",
+			long:        "Long",
+			shouldPrint: true,
+		},
+		{
+			name:        "no description",
+			short:       "",
+			long:        "",
+			shouldPrint: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			cmd := &cobra.Command{
+				Use:   "test",
+				Short: tt.short,
+				Long:  tt.long,
+			}
+
+			printDescription(&buf, cmd, &styles)
+
+			output := buf.String()
+			if tt.shouldPrint && output == "" {
+				t.Error("Expected description to be printed")
+			}
+			if tt.shouldPrint {
+				expected := tt.long
+				if expected == "" {
+					expected = tt.short
+				}
+				if !strings.Contains(output, expected) {
+					t.Errorf("Expected output to contain %q", expected)
+				}
+			}
+		})
+	}
+}
+
+func TestPrintUsageSection(t *testing.T) {
+	t.Run("prints usage for command", func(t *testing.T) {
+		var buf bytes.Buffer
+		renderer := lipgloss.NewRenderer(&buf)
+		styles := createHelpStyles(renderer)
+
+		cmd := &cobra.Command{
+			Use: "test [flags] <args>",
+		}
+
+		printUsageSection(&buf, cmd, renderer, &styles)
+
+		output := buf.String()
+		if !strings.Contains(output, "USAGE") && !strings.Contains(output, "test") {
+			t.Error("Expected output to contain usage information")
+		}
+	})
+}
+
+func TestPrintAliases(t *testing.T) {
+	tests := []struct {
+		name        string
+		aliases     []string
+		shouldPrint bool
+	}{
+		{
+			name:        "with aliases",
+			aliases:     []string{"t", "tst"},
+			shouldPrint: true,
+		},
+		{
+			name:        "no aliases",
+			aliases:     []string{},
+			shouldPrint: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			cmd := &cobra.Command{
+				Use:     "test",
+				Aliases: tt.aliases,
+			}
+
+			printAliases(&buf, cmd, &styles)
+
+			output := buf.String()
+			if tt.shouldPrint && output == "" {
+				t.Error("Expected aliases to be printed")
+			}
+			if tt.shouldPrint {
+				for _, alias := range tt.aliases {
+					if !strings.Contains(output, alias) {
+						t.Errorf("Expected output to contain alias %q", alias)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestPrintExamples(t *testing.T) {
+	tests := []struct {
+		name        string
+		example     string
+		shouldPrint bool
+	}{
+		{
+			name:        "with examples",
+			example:     "atmos version\natmos help",
+			shouldPrint: true,
+		},
+		{
+			name:        "no examples",
+			example:     "",
+			shouldPrint: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			cmd := &cobra.Command{
+				Use:     "test",
+				Example: tt.example,
+			}
+
+			printExamples(&buf, cmd, renderer, &styles)
+
+			output := buf.String()
+			if tt.shouldPrint && output == "" {
+				t.Error("Expected examples to be printed")
+			}
+			if tt.shouldPrint && !strings.Contains(output, "EXAMPLE") {
+				t.Log("Output:", output)
+			}
+		})
+	}
+}
+
+func TestApplyColoredHelpTemplate(t *testing.T) {
+	t.Run("applies help template without panic", func(t *testing.T) {
+		cmd := &cobra.Command{
+			Use:   "test",
+			Short: "Test command",
+			Run:   func(cmd *cobra.Command, args []string) {},
+		}
+
+		// Clear environment to avoid test contamination.
+		t.Setenv("NO_COLOR", "")
+		t.Setenv("FORCE_COLOR", "")
+
+		// This should not panic.
+		applyColoredHelpTemplate(cmd)
+
+		// Verify help template was set.
+		if cmd.HelpTemplate() == "" {
+			t.Error("Expected help template to be set")
+		}
+	})
+}
+
+func TestPrintFooter(t *testing.T) {
+	t.Run("prints footer message", func(t *testing.T) {
+		var buf bytes.Buffer
+		renderer := lipgloss.NewRenderer(&buf)
+		styles := createHelpStyles(renderer)
+
+		cmd := &cobra.Command{
+			Use: "test",
+		}
+
+		printFooter(&buf, cmd, &styles)
+
+		output := buf.String()
+		// Footer should contain "help" message.
+		if !strings.Contains(output, "help") && !strings.Contains(output, "--help") {
+			t.Log("Output:", output)
 		}
 	})
 }

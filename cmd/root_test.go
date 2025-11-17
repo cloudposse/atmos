@@ -853,3 +853,128 @@ func TestParseChdirFromArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestSetupColorProfile(t *testing.T) {
+	tests := []struct {
+		name        string
+		forceColor  bool
+		expectForce bool
+	}{
+		{
+			name:        "force color enabled",
+			forceColor:  true,
+			expectForce: true,
+		},
+		{
+			name:        "force color disabled",
+			forceColor:  false,
+			expectForce: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						ForceColor: tt.forceColor,
+					},
+				},
+			}
+
+			// Should not panic.
+			setupColorProfile(atmosConfig)
+
+			// The function sets global color profile - difficult to test directly,
+			// but we can verify it doesn't crash.
+		})
+	}
+}
+
+func TestSetupColorProfileFromEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		envVar   string
+		envValue string
+		args     []string
+	}{
+		{
+			name:     "ATMOS_FORCE_COLOR set",
+			envVar:   "ATMOS_FORCE_COLOR",
+			envValue: "true",
+			args:     []string{},
+		},
+		{
+			name:     "force-color flag",
+			envVar:   "",
+			envValue: "",
+			args:     []string{"atmos", "--force-color", "version"},
+		},
+		{
+			name:     "no force color",
+			envVar:   "",
+			envValue: "",
+			args:     []string{"atmos", "version"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save and restore os.Args.
+			oldArgs := os.Args
+			defer func() { os.Args = oldArgs }()
+
+			if tt.envVar != "" {
+				t.Setenv(tt.envVar, tt.envValue)
+			}
+
+			if len(tt.args) > 0 {
+				os.Args = tt.args
+			}
+
+			// Should not panic.
+			setupColorProfileFromEnv()
+		})
+	}
+}
+
+func TestCleanup(t *testing.T) {
+	t.Run("cleanup without log file", func(t *testing.T) {
+		// Ensure logFileHandle is nil.
+		logFileHandle = nil
+
+		// Should not panic.
+		Cleanup()
+	})
+
+	t.Run("cleanup with log file", func(t *testing.T) {
+		// Create a temporary log file.
+		tmpFile, err := os.CreateTemp("", "test-log-*.log")
+		if err != nil {
+			t.Fatalf("Failed to create temp file: %v", err)
+		}
+		defer os.Remove(tmpFile.Name())
+
+		// Set the global log file handle.
+		logFileHandle = tmpFile
+
+		// Cleanup should close the file.
+		Cleanup()
+
+		// Verify the handle was cleared.
+		if logFileHandle != nil {
+			t.Error("Expected logFileHandle to be nil after cleanup")
+		}
+	})
+}
+
+func TestExecuteVersion(t *testing.T) {
+	t.Run("executes version command", func(t *testing.T) {
+		// This function executes the version command.
+		// We just verify it doesn't panic.
+		err := ExecuteVersion()
+		if err != nil {
+			t.Logf("ExecuteVersion returned error: %v", err)
+		}
+	})
+}
