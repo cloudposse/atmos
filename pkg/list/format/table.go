@@ -631,7 +631,6 @@ func padToWidth(s string, width int) string {
 	return s
 }
 
-
 // createStyledTable creates a styled table with headers and rows.
 // Uses intelligent column width calculation to optimize space usage.
 func CreateStyledTable(header []string, rows [][]string) string {
