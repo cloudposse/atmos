@@ -37,40 +37,7 @@ Use registry pattern for extensibility and plugin-like architecture. Existing im
 **New commands MUST use command registry pattern.** See `docs/prd/command-registry-pattern.md`
 
 ### Specialized Agents (MANDATORY)
-Before implementing domain-specific functionality, consult specialized agents in `.claude/agents/`. These agents have deep expertise in specific areas and prevent implementation mistakes.
-
-**Available agents:**
-- **flag-handler** - CLI commands with flag parsing, CommandProvider interface, StandardParser patterns
-- **test-automation-expert** - Comprehensive test coverage and test infrastructure
-- **code-reviewer** - Quality validation and CLAUDE.md compliance
-- **tui-expert** - Terminal UI components and lipgloss styling
-
-**When to invoke:**
-- Implementing new CLI commands → Use `flag-handler` agent
-- Adding flags to existing commands → Use `flag-handler` agent
-- Writing comprehensive tests → Use `test-automation-expert` agent
-- Validating implementation quality → Use `code-reviewer` agent
-- Building terminal UI components → Use `tui-expert` agent
-
-**How to invoke:**
-Use Task tool with appropriate subagent_type:
-```
-Task(
-  subagent_type: "flag-handler",
-  prompt: "Help design named wrapper functions for list command flags"
-)
-```
-
-**Why this matters:**
-- Specialized agents prevent implementing incorrect patterns
-- Ensure consistency with existing infrastructure
-- Catch issues early before code review
-- Provide authoritative guidance from domain experts
-- Reduce rework and wasted time
-
-**Anti-pattern:**
-❌ Writing PRDs or implementation code without consulting domain-specific agents
-✅ Always consult the appropriate agent before implementing specialized functionality
+Consult agents in `.claude/agents/` before implementing: `flag-handler` (CLI/flags), `test-automation-expert` (tests), `code-reviewer` (quality), `tui-expert` (terminal UI). Use Task tool: `Task(subagent_type: "flag-handler", prompt: "...")`. Prevents incorrect patterns and ensures consistency.
 
 ### Interface-Driven Design (MANDATORY)
 - Define interfaces for all major functionality
@@ -236,35 +203,7 @@ io := iolib.NewContext()
 fmt.Fprintf(io.Data(), ...)  // Use data.Printf() instead
 ```
 
-**Why this matters:**
-
-**Zero-Configuration Degradation:**
-Write code assuming a full-featured TTY - the system automatically handles everything:
-- ✅ **Color degradation** - TrueColor → 256 → 16 → None (respects NO_COLOR, CLICOLOR, terminal capability)
-- ✅ **Width adaptation** - Automatically wraps to terminal width or config max_width
-- ✅ **TTY detection** - Piped/redirected output becomes plain text automatically
-- ✅ **CI detection** - Detects CI environments and disables interactivity
-- ✅ **Markdown rendering** - Degrades gracefully from styled to plain text
-- ✅ **Icon support** - Shows icons in capable terminals, omits in others
-
-**Security & Reliability:**
-- ✅ **Automatic secret masking** - AWS keys, tokens, passwords masked before output
-- ✅ **Format-aware masking** - Handles JSON/YAML quoted variants
-- ✅ **No leakage** - Secrets never reach stdout/stderr/logs
-- ✅ **Pattern-based** - Detects common secret patterns automatically
-
-**Developer Experience:**
-- ✅ **No capability checking** - Never write `if tty { color() } else { plain() }`
-- ✅ **No manual masking** - Never write `redact(secret)` before output
-- ✅ **No stream selection** - Just use `data.*` (stdout) or `ui.*` (stderr)
-- ✅ **Testable** - Mock data.Writer() and ui functions for unit tests
-- ✅ **Enforced by linter** - Prevents direct fmt.Fprintf usage
-
-**User Experience:**
-- ✅ **Respects preferences** - Honors --no-color, --redirect-stderr, NO_COLOR env
-- ✅ **Pipeline friendly** - `atmos deploy | tee log.txt` works perfectly
-- ✅ **Accessibility** - Works in all terminal environments (screen readers, etc.)
-- ✅ **Consistent** - Same code path for all output, fewer bugs
+**Benefits:** Auto color/width degradation, TTY detection, secret masking, no manual capability checking, testable, pipeline-friendly, respects NO_COLOR/CLICOLOR.
 
 **Force Flags (for screenshot generation):**
 Use these flags to generate consistent output regardless of environment:
