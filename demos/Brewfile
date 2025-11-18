@@ -1,0 +1,17 @@
+# Brewfile for Atmos VHS Demo Videos
+# Install with: brew bundle --file=demos/Brewfile
+
+# VHS - Terminal recorder for generating animated GIFs
+brew "vhs"
+
+# gifsicle - GIF optimizer for reducing file sizes
+brew "gifsicle"
+
+# Freeze - Static screenshots of code and terminal output (optional)
+brew "freeze"
+
+# FFmpeg - Video encoding (VHS dependency) + audio processing for MP4 outputs
+brew "ffmpeg"
+
+# ttyd - Terminal emulator (VHS dependency)
+brew "ttyd"

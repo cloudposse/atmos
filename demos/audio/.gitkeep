@@ -1,0 +1,10 @@
+# Audio files for VHS demo videos
+#
+# Place background music MP3 files here and reference them in scenes.yaml:
+#
+# Example:
+#   audio:
+#     source: "audio/background-music.mp3"
+#     volume: 0.3
+#     fade_out: 2.0
+#     loop: true

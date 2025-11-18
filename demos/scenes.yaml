@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=scenes-schema.json
+---
+version: "1.0"
+
+scenes:
+  # Demo Stacks Examples.
+  - name: "demo-stacks-describe"
+    enabled: true
+    description: "Describe stacks in demo-stacks example"
+    tape: "scenes/demo-stacks/describe.tape"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+
+  - name: "demo-stacks-component"
+    enabled: true
+    description: "Describe component configuration across environments"
+    tape: "scenes/demo-stacks/component.tape"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+
+  - name: "demo-stacks-validate"
+    enabled: true
+    description: "Validate stack and component configurations"
+    tape: "scenes/demo-stacks/validate.tape"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+
+  - name: "demo-stacks-terraform-plan"
+    enabled: true
+    description: "Run terraform plan with demo-stacks"
+    tape: "scenes/demo-stacks/terraform-plan.tape"
+    requires:
+      - atmos
+      - terraform
+    outputs:
+      - gif
+      - png
+
+  - name: "demo-stacks-list"
+    enabled: true
+    description: "List stacks and components"
+    tape: "scenes/demo-stacks/list.tape"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
