@@ -548,6 +548,16 @@ func TestCleanDuplicatedPath(t *testing.T) {
 			input:    "/workspace/components/workspace/components/terraform",
 			expected: "/workspace/components/terraform",
 		},
+		{
+			name:     "Windows volume duplication - forward slash",
+			input:    "D:/D:/a/atmos/tests/fixtures/components",
+			expected: "D:/a/atmos/tests/fixtures/components",
+		},
+		{
+			name:     "Windows volume duplication - backslash",
+			input:    filepath.FromSlash("D:/D:/a/atmos/tests/fixtures/components"),
+			expected: filepath.FromSlash("D:/a/atmos/tests/fixtures/components"),
+		},
 	}
 
 	for _, tt := range tests {
