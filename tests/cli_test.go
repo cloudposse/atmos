@@ -354,6 +354,12 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	wrappedPathRegex := regexp.MustCompile(`(/[^\s\n]+[./])\n([a-zA-Z0-9._-]+/)`)
 	output = wrappedPathRegex.ReplaceAllString(output, "$1$2")
 
+	// Also handle hint messages where the path is on the next line vs same line
+	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
+	// Also handles plain labels like "Stacks directory:\n/path"
+	hintPathRegex := regexp.MustCompile(`(?m)(💡[^\n]+:|^[A-Z][^\n]+directory:)\n(/[^\s\n]+)`)
+	output = hintPathRegex.ReplaceAllString(output, "$1 $2")
+
 	// 3. Normalize the repository root:
 	//    - Clean the path (which may not collapse all extra slashes after the drive letter, etc.)
 	//    - Convert to forward slashes,
