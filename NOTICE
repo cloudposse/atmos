@@ -51,7 +51,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - cloud.google.com/go/storage
     License: Apache-2.0
-    URL: https://github.com/googleapis/google-cloud-go/blob/storage/v1.57.1/storage/LICENSE
+    URL: https://github.com/googleapis/google-cloud-go/blob/storage/v1.57.2/storage/LICENSE
 
   - cuelang.org/go
     License: Apache-2.0
@@ -287,7 +287,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/google/renameio/v2
     License: Apache-2.0
-    URL: https://github.com/google/renameio/blob/v2.0.0/LICENSE
+    URL: https://github.com/google/renameio/blob/v2.0.1/LICENSE
 
   - github.com/google/s2a-go
     License: Apache-2.0
@@ -480,6 +480,10 @@ APACHE 2.0 LICENSED DEPENDENCIES
   - go.yaml.in/yaml/v2
     License: Apache-2.0
     URL: https://github.com/yaml/go-yaml/blob/v2.4.2/LICENSE
+
+  - go.yaml.in/yaml/v4
+    License: Apache-2.0
+    URL: https://github.com/yaml/go-yaml/blob/v4.0.0-rc.3/LICENSE
 
   - gocloud.dev
     License: Apache-2.0
@@ -732,7 +736,7 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/crypto
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/crypto/+/v0.43.0:LICENSE
+    URL: https://cs.opensource.google/go/x/crypto/+/v0.44.0:LICENSE
 
   - golang.org/x/exp
     License: BSD-3-Clause
@@ -744,7 +748,7 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/net
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/net/+/v0.46.0:LICENSE
+    URL: https://cs.opensource.google/go/x/net/+/v0.47.0:LICENSE
 
   - golang.org/x/oauth2
     License: BSD-3-Clause
@@ -1210,7 +1214,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/getsentry/sentry-go
     License: MIT
-    URL: https://github.com/getsentry/sentry-go/blob/v0.37.0/LICENSE
+    URL: https://github.com/getsentry/sentry-go/blob/v0.38.0/LICENSE
 
   - github.com/go-logfmt/logfmt
     License: MIT
@@ -1422,7 +1426,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/mikefarah/yq/v4/pkg/yqlib
     License: MIT
-    URL: https://github.com/mikefarah/yq/blob/v4.48.1/LICENSE
+    URL: https://github.com/mikefarah/yq/blob/v4.48.2/LICENSE
 
   - github.com/mitchellh/copystructure
     License: MIT

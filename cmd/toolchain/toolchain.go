@@ -162,6 +162,13 @@ func (t *ToolchainCommandProvider) GetGroup() string {
 	return "Toolchain Commands"
 }
 
+// GetAliases returns command aliases for the toolchain command.
+func (t *ToolchainCommandProvider) GetAliases() []internal.CommandAlias {
+	defer perf.Track(nil, "ToolchainCommandProvider.GetAliases")()
+
+	return nil
+}
+
 // GetFlagsBuilder returns the flags builder for this command.
 func (t *ToolchainCommandProvider) GetFlagsBuilder() flags.Builder {
 	return toolchainParser

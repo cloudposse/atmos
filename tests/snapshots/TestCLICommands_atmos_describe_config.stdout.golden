@@ -222,5 +222,7 @@
     "versions_file": "",
     "use_tool_versions": false,
     "use_lock_file": false
-  }
+  },
+  "profiles": {},
+  "metadata": {}
 }
