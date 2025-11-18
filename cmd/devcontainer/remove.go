@@ -50,7 +50,8 @@ Use --force to remove a running container without stopping it first.`,
 
 // parseRemoveOptions parses command flags into RemoveOptions.
 //
-//nolint:unparam // args parameter kept for consistency with other parse functions
+// parseRemoveOptions builds a RemoveOptions populated from the Viper configuration.
+// It reads the "instance" and "force" keys from v; the args parameter is unused but retained for API consistency.
 func parseRemoveOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*RemoveOptions, error) {
 	return &RemoveOptions{
 		Instance: v.GetString("instance"),
@@ -58,6 +59,9 @@ func parseRemoveOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*Rem
 	}, nil
 }
 
+// init initializes the remove command's flag parser and registers the command with the devcontainer command.
+// It creates a StandardParser with the "instance" and "force" flags (including environment variable bindings),
+// attaches those flags to removeCmd, and adds removeCmd as a subcommand of devcontainerCmd.
 func init() {
 	// Create parser with remove-specific flags using functional options.
 	removeParser = flags.NewStandardParser(

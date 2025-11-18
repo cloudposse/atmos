@@ -25,7 +25,7 @@ func NewService() *Service {
 	}
 }
 
-// NewTestableService creates a service with injectable providers (for tests).
+// NewTestableService creates a Service configured with the provided config, runtime, and UI providers for use in tests.
 func NewTestableService(
 	config ConfigProvider,
 	runtime RuntimeProvider,

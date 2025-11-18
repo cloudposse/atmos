@@ -63,7 +63,8 @@ from the command to execute.`,
 
 // parseExecOptions parses command flags into ExecOptions.
 //
-//nolint:unparam // args parameter kept for consistency with other parse functions
+// parseExecOptions constructs an ExecOptions populated from viper configuration values.
+// It reads the "instance", "interactive", and "pty" keys from v and returns the populated ExecOptions; the args parameter is unused but accepted for consistency with other parse functions.
 func parseExecOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*ExecOptions, error) {
 	return &ExecOptions{
 		Instance:    v.GetString("instance"),
@@ -72,6 +73,10 @@ func parseExecOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*ExecO
 	}, nil
 }
 
+// init registers the exec subcommand and its flags: it constructs the exec-specific
+// StandardParser with the instance, interactive, and pty flags (including environment
+// variable bindings), registers those flags with execCmd, and attaches execCmd to
+// the devcontainer command tree.
 func init() {
 	// Create parser with exec-specific flags using functional options.
 	execParser = flags.NewStandardParser(

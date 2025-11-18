@@ -27,6 +27,7 @@ imported devcontainer.json files.`,
 	},
 }
 
+// init registers the config command as a subcommand of the devcontainer command.
 func init() {
 	devcontainerCmd.AddCommand(configCmd)
 }

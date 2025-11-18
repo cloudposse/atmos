@@ -51,7 +51,8 @@ or --tail to limit the number of lines shown.`,
 
 // parseLogsOptions parses command flags into LogsOptions.
 //
-//nolint:unparam // args parameter kept for consistency with other parse functions
+// parseLogsOptions creates a LogsOptions populated from the command's Viper-backed flags.
+// The args slice is ignored and retained for API consistency.
 func parseLogsOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*LogsOptions, error) {
 	return &LogsOptions{
 		Instance: v.GetString("instance"),
@@ -60,6 +61,7 @@ func parseLogsOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*LogsO
 	}, nil
 }
 
+// init initializes the logs command by creating its flags parser (instance, follow, tail with corresponding environment bindings), registering those flags with the command, and adding logsCmd to devcontainerCmd.
 func init() {
 	// Create parser with logs-specific flags using functional options.
 	logsParser = flags.NewStandardParser(

@@ -52,7 +52,10 @@ func preprocessAtmosYamlFunc(yamlContent []byte, v *viper.Viper) error {
 // Parameters:
 // - node: A pointer to the current YAML node being processed.
 // - v: A pointer to a Viper instance where processed values will be stored.
-// - currentPath: The hierarchical key path used to track nested YAML structures.
+// processNode recursively traverses a YAML node tree and processes custom Atmos YAML directives, updating the provided Viper instance with resolved values.
+// It accepts Document, Mapping, Sequence, and tagged Scalar nodes and uses currentPath as the hierarchical key path for nested values.
+// node is the YAML node to process, v is the Viper instance to populate, and currentPath is the hierarchical key path used for setting values.
+// It returns an error if processing any directive or child node fails.
 func processNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if node == nil {
 		return nil
@@ -88,6 +91,9 @@ func processNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	return nil
 }
 
+// processMappingNode walks a YAML mapping node, constructs dotted paths for each key under currentPath, and processes each corresponding value into the provided Viper instance.
+// It iterates over key/value pairs, appends the key to currentPath using "." when currentPath is non-empty, and delegates processing of each value to processNode.
+// Returns any error produced while processing a child value.
 func processMappingNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	for i := 0; i < len(node.Content); i += 2 {
 		keyNode := node.Content[i]
@@ -105,6 +111,17 @@ func processMappingNode(node *yaml.Node, v *viper.Viper, currentPath string) err
 	return nil
 }
 
+// processSequenceNode processes a YAML sequence node and resolves any custom Atmos
+// YAML function tags it contains, populating the provided Viper instance with the
+// evaluated element values.
+//
+// If the sequence contains no custom tags this function is a no-op. For sequences
+// that require processing it sets each element individually using an index-based
+// path (for example, "parent[0]") and, if the sequence yields any values and
+// currentPath is non-empty, sets the entire sequence at currentPath. Processed
+// scalar tags are cleared on the node to avoid duplicate processing.
+//
+// Errors from underlying tag evaluation or node decoding are returned.
 func processSequenceNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	// Check if any child in the sequence has a custom tag that needs processing.
 	needsProcessing := false
@@ -174,7 +191,7 @@ func processSequenceNode(node *yaml.Node, v *viper.Viper, currentPath string) er
 	return nil
 }
 
-// hasCustomTag checks if a tag is a custom Atmos YAML function tag.
+// hasCustomTag reports whether the YAML tag starts with any Atmos custom function prefix (env, exec, include, repo-root, random).
 func hasCustomTag(tag string) bool {
 	return strings.HasPrefix(tag, u.AtmosYamlFuncEnv) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncExec) ||
@@ -183,7 +200,8 @@ func hasCustomTag(tag string) bool {
 		strings.HasPrefix(tag, u.AtmosYamlFuncRandom)
 }
 
-// containsCustomTags recursively checks if a node or its descendants contain custom tags.
+// containsCustomTags reports whether the node or any of its descendants contains a custom Atmos YAML function tag.
+// A custom tag is an Atmos function tag such as !env, !exec, !include, !repo-root, or !random; the function returns true if any node in the subtree has one of these tags.
 func containsCustomTags(node *yaml.Node) bool {
 	if node == nil {
 		return false
@@ -204,7 +222,8 @@ func containsCustomTags(node *yaml.Node) bool {
 	return false
 }
 
-// processScalarNodeValue processes a scalar node with a tag and returns its value.
+// processScalarNodeValue evaluates a YAML scalar node's custom Atmos tag and returns the resolved value.
+// It supports the !env, !exec, !include, !repo-root, and !random tags; failures during evaluation return an error wrapped with ErrExecuteYamlFunctions, and unknown/unsupported tags are decoded and returned as their YAML value.
 func processScalarNodeValue(node *yaml.Node) (any, error) {
 	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
 
@@ -264,6 +283,10 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 	}
 }
 
+// processScalarNode processes a YAML scalar node tagged with an Atmos custom function and stores the resolved value in v.
+// It dispatches handling for !env, !exec, !include, !repo-root and !random tags to their respective handlers.
+// If the node has no tag or the tag is not one of the recognized Atmos functions, the function is a no-op.
+// It returns any error produced by the invoked handler.
 func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if node.Tag == "" {
 		return nil
@@ -348,7 +371,8 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	return nil
 }
 
-// handleGitRoot processes a YAML node with an !repo-root tag and sets the value in Viper, returns an error if the processing fails, warns if the value is empty.
+// handleGitRoot evaluates an `!repo-root` YAML tag and stores the resulting repository root string into Viper at the given path.
+// If evaluation fails, it returns an error wrapped with ErrExecuteYamlFunctions; if the result is empty it logs a debug warning but still sets the value.
 func handleGitRoot(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
 	gitRootValue, err := u.ProcessTagGitRoot(strFunc)
@@ -366,7 +390,11 @@ func handleGitRoot(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	return nil
 }
 
-// handleRandom processes a YAML node with an !random tag and sets the value in Viper.
+// handleRandom evaluates a YAML scalar tagged with !random and stores the result in the provided Viper instance.
+// 
+// If evaluation succeeds, the resulting value is stored at the given Viper key path (`currentPath`) and the node's
+// tag is cleared to avoid re-processing. If the underlying random tag processor returns an error, that error is
+// logged and returned wrapped with ErrExecuteYamlFunctions.
 func handleRandom(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
 	randomValue, err := u.ProcessTagRandom(strFunc)

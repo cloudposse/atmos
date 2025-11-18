@@ -526,7 +526,14 @@ func execTerraformOutput(
 // Returns:
 //   - value: The output value (may be nil if the output exists but has a null value)
 //   - exists: Whether the output key exists in the terraform outputs
-//   - error: Any error that occurred during retrieval (SDK errors, network issues, etc.)
+// GetTerraformOutput retrieves the named Terraform output for a specific component in a stack.
+// It may return a cached result unless skipCache is true, and it will use the provided authManager
+// (if non-nil) or an authContext-derived wrapper to resolve credentials for describing the component.
+// If the component is configured to use a static remote state backend, the value is read from that
+// static section instead of executing Terraform.
+//
+// The function returns the output value, a boolean that is true when the output path exists (even if null),
+// and an error if retrieval or evaluation failed.
 func GetTerraformOutput(
 	atmosConfig *schema.AtmosConfiguration,
 	stack string,

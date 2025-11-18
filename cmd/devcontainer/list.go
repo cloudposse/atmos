@@ -24,6 +24,7 @@ Shows the name, image, and configured ports for each devcontainer.`,
 	},
 }
 
+// init registers the list subcommand under the devcontainer command.
 func init() {
 	devcontainerCmd.AddCommand(listCmd)
 }

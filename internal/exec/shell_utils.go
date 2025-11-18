@@ -306,7 +306,8 @@ func execTerraformShellCommand(
 	return nil
 }
 
-// ExecAuthShellCommand executes `auth shell` command by starting a new interactive shell with authentication environment variables.
+// ExecAuthShellCommand starts a new interactive shell with the provided authentication environment variables.
+// It increments ATMOS_SHLVL for the session, sets ATMOS_IDENTITY plus the supplied auth env vars into the shell environment (merged with the host environment), prints enter/exit messages, and launches the resolved shell command; returns an error if no suitable shell is found or if the shell process fails.
 func ExecAuthShellCommand(
 	atmosConfig *schema.AtmosConfiguration,
 	identityName string,
