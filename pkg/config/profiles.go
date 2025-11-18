@@ -154,11 +154,25 @@ func loadProfileFiles(v *viper.Viper, profileDir string, profileName string) err
 	// Validate directory exists.
 	info, err := os.Stat(profileDir)
 	if err != nil {
-		return errUtils.Build(errUtils.ErrProfileDirNotExist).
-			WithExplanationf("Profile `%s` directory does not exist", profileName).
+		// Differentiate between "not found" and "not accessible".
+		if os.IsNotExist(err) {
+			return errUtils.Build(errUtils.ErrProfileDirNotExist).
+				WithExplanationf("Profile `%s` directory does not exist", profileName).
+				WithExplanationf("Expected path: `%s`", profileDir).
+				WithHint("Run `atmos profile list` to see available profiles").
+				WithHintf("Create directory: `mkdir -p %s`", profileDir).
+				WithContext("profile", profileName).
+				WithContext("path", profileDir).
+				WithContext("error", err.Error()).
+				WithExitCode(2).
+				Err()
+		}
+
+		// Directory exists but is not accessible (permissions, etc.).
+		return errUtils.Build(errUtils.ErrProfileDirNotAccessible).
+			WithExplanationf("Profile `%s` directory exists but is not accessible", profileName).
 			WithExplanationf("Expected path: `%s`", profileDir).
-			WithHint("Run `atmos profile list` to see available profiles").
-			WithHintf("Create directory: `mkdir -p %s`", profileDir).
+			WithHint("Check directory permissions and ownership").
 			WithContext("profile", profileName).
 			WithContext("path", profileDir).
 			WithContext("error", err.Error()).
