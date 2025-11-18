@@ -1,0 +1,39 @@
+---
+version: "1.0"
+
+# Global VHS settings (applied to all scenes unless overridden)
+vhs:
+  theme: "Catppuccin Mocha"
+  font_family: "FiraCode Nerd Font"
+  font_size: 14
+  typing_speed: "50ms"
+  width: 1400
+  height: 800
+  padding: 10
+  framerate: 20
+  shell: "bash"
+  cursor_blink: false
+
+# GIF optimization settings
+optimization:
+  gifsicle:
+    enabled: true
+    lossy: 80
+    colors: 256
+    optimize_level: 3
+
+# Storage backend configuration
+backend:
+  type: "gh-pages"
+
+  gh_pages:
+    branch: "gh-pages"
+    path: "demos"
+    base_url: "https://cloudposse.github.io/atmos/demos"
+
+  # Future S3 support
+  # s3:
+  #   bucket: "atmos-demos"
+  #   region: "us-east-1"
+  #   prefix: "demos/"
+  #   base_url: "https://d1234567890.cloudfront.net/demos"

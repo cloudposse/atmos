@@ -54,6 +54,17 @@ tools/gomodcheck/.gomodcheck: tools/gomodcheck/*.go
 	@chmod +x tools/gomodcheck/.gomodcheck
 	@test -x tools/gomodcheck/.gomodcheck || (echo "Error: Failed to make gomodcheck executable" && exit 1)
 
+# Build director tool for VHS demo generation.
+.PHONY: director
+director: build/director
+
+build/director: tools/director/**/*.go
+	@echo "Building director..."
+	@cd tools/director && go build -o ../../build/director .
+	@chmod +x build/director
+	@test -x build/director || (echo "Error: Failed to make director executable" && exit 1)
+	@echo "Director built successfully: ./build/director"
+
 build-linux: GOOS=linux
 build-linux: build-default
 
