@@ -1,0 +1,22 @@
+# Production Profile - Settings
+# Conservative settings for production deployments with extra safety
+
+settings:
+  terminal:
+    color: true
+    max_width: 100
+    unicode: true
+    syntax_highlighting:
+      enabled: true
+    title: true
+    alerts: true  # Show warnings prominently
+
+logs:
+  level: Warning  # Only show warnings and errors in production
+  file: "/dev/stderr"
+
+components:
+  terraform:
+    apply_auto_approve: false  # Never auto-approve in production
+    deploy_run_init: true
+    init_run_reconfigure: true

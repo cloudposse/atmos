@@ -54,3 +54,9 @@ func (t *ThemeCommandProvider) GetName() string {
 func (t *ThemeCommandProvider) GetGroup() string {
 	return "Other Commands"
 }
+
+// GetAliases returns command aliases.
+// Theme command has no aliases.
+func (t *ThemeCommandProvider) GetAliases() []internal.CommandAlias {
+	return nil
+}

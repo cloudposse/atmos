@@ -124,6 +124,11 @@ func (i *InitCommandProvider) GetGroup() string {
 	return "Configuration Management"
 }
 
+// GetAliases returns command aliases (none for init).
+func (i *InitCommandProvider) GetAliases() []internal.CommandAlias {
+	return nil
+}
+
 // GetFlagsBuilder returns the flags builder for this command.
 func (i *InitCommandProvider) GetFlagsBuilder() flags.Builder {
 	return initParser

@@ -235,6 +235,11 @@ func (s *ScaffoldCommandProvider) GetGroup() string {
 	return "Configuration Management"
 }
 
+// GetAliases returns command aliases (none for scaffold).
+func (s *ScaffoldCommandProvider) GetAliases() []internal.CommandAlias {
+	return nil
+}
+
 // GetFlagsBuilder returns the flags builder for this command.
 func (s *ScaffoldCommandProvider) GetFlagsBuilder() flags.Builder {
 	return scaffoldGenerateParser
