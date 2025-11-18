@@ -86,8 +86,9 @@ func ExtractComponentInfoFromPath(
 // Returns an error if the path is within stacks or workflows directories.
 func validatePathIsNotConfigDirectory(atmosConfig *schema.AtmosConfiguration, absPath string) error {
 	// Get absolute paths for stack and workflow directories.
-	stacksBasePath := resolveBasePath(atmosConfig.Stacks.BasePath)
-	workflowsBasePath := resolveBasePath(atmosConfig.Workflows.BasePath)
+	// Prefer pre-resolved absolute path fields from config when available.
+	stacksBasePath := getStacksBasePath(atmosConfig)
+	workflowsBasePath := getWorkflowsBasePath(atmosConfig)
 
 	// Check if path is within or equals stacks directory.
 	if stacksBasePath != "" {
@@ -120,6 +121,24 @@ func validatePathIsNotConfigDirectory(atmosConfig *schema.AtmosConfiguration, ab
 	}
 
 	return nil
+}
+
+// getStacksBasePath returns the absolute stacks base path.
+// Prefers the pre-resolved StacksBaseAbsolutePath when available.
+func getStacksBasePath(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig.StacksBaseAbsolutePath != "" {
+		return atmosConfig.StacksBaseAbsolutePath
+	}
+	return resolveBasePath(atmosConfig.Stacks.BasePath)
+}
+
+// getWorkflowsBasePath returns the absolute workflows base path.
+// Currently there's no pre-resolved field, so we use resolveBasePath.
+// This function provides consistency and future-proofing for when
+// WorkflowsBaseAbsolutePath is added to the schema.
+func getWorkflowsBasePath(atmosConfig *schema.AtmosConfiguration) string {
+	// TODO: Use atmosConfig.WorkflowsBaseAbsolutePath when it's added to the schema.
+	return resolveBasePath(atmosConfig.Workflows.BasePath)
 }
 
 // resolveBasePath converts a relative base path to absolute.

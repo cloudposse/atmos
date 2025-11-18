@@ -273,6 +273,13 @@ var (
 	ErrDescribingStacks            = errors.New("error describing stacks")
 	ErrComponentNameRequired       = errors.New("component name is required")
 
+	// Version command errors.
+	ErrVersionDisplayFailed   = errors.New("failed to display version information")
+	ErrVersionCheckFailed     = errors.New("failed to check for version updates")
+	ErrVersionFormatInvalid   = errors.New("invalid version output format")
+	ErrVersionCacheLoadFailed = errors.New("failed to load version check cache")
+	ErrVersionGitHubAPIFailed = errors.New("failed to query GitHub API for releases")
+
 	// Atlantis errors.
 	ErrAtlantisInvalidFlags          = errors.New("incompatible atlantis flags")
 	ErrAtlantisProjectTemplateNotDef = errors.New("atlantis project template is not defined")

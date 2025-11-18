@@ -431,3 +431,134 @@ func TestGetBasePathForComponentType(t *testing.T) {
 		})
 	}
 }
+
+func TestCleanDuplicatedPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "simple path without duplication",
+			input:    "/workspace/components/terraform",
+			expected: "/workspace/components/terraform",
+		},
+		{
+			name:     "2-part duplication - basic",
+			input:    "/a/b/a/b/c",
+			expected: "/a/b/c",
+		},
+		{
+			name:     "2-part duplication - tests/fixtures",
+			input:    "/workspace/tests/fixtures/tests/fixtures/components",
+			expected: "/workspace/tests/fixtures/components",
+		},
+		{
+			name:     "2-part duplication - at start",
+			input:    "/foo/bar/foo/bar",
+			expected: "/foo/bar",
+		},
+		{
+			name:     "2-part duplication - in middle",
+			input:    "/prefix/a/b/a/b/suffix",
+			expected: "/prefix/a/b/suffix",
+		},
+		{
+			name:     "3-part duplication",
+			input:    "/x/y/z/x/y/z/end",
+			expected: "/x/y/z/end",
+		},
+		{
+			name:     "recursive duplication - multiple consecutive",
+			input:    "/a/b/a/b/a/b/c",
+			expected: "/a/b/c",
+		},
+		{
+			name:     "recursive duplication - chain",
+			input:    "/x/y/x/y/x/y/z",
+			expected: "/x/y/z",
+		},
+		{
+			name:     "4-part duplication",
+			input:    "/one/two/three/four/one/two/three/four/end",
+			expected: "/one/two/three/four/end",
+		},
+		{
+			name:     "legitimate repeated 2-part sequences - different context",
+			input:    "/a/b/c/a/b",
+			expected: "/a/b/c/a/b",
+		},
+		{
+			name:     "legitimate repeated parts - not consecutive",
+			input:    "/components/terraform/other/components/helmfile",
+			expected: "/components/terraform/other/components/helmfile",
+		},
+		{
+			name:     "single part path",
+			input:    "/workspace",
+			expected: "/workspace",
+		},
+		{
+			name:     "two part path - no duplication possible",
+			input:    "/a/b",
+			expected: "/a/b",
+		},
+		{
+			name:     "three part path - no duplication",
+			input:    "/a/b/c",
+			expected: "/a/b/c",
+		},
+		{
+			name:     "relative path with 2-part duplication",
+			input:    "tests/fixtures/tests/fixtures/file.txt",
+			expected: "tests/fixtures/file.txt",
+		},
+		{
+			name:     "path with dots cleaned first",
+			input:    "/a/b/./a/b/c",
+			expected: "/a/b/c",
+		},
+		{
+			name:     "symlink scenario - real use case",
+			input:    "/Users/erik/atmos/tests/fixtures/tests/fixtures/components/terraform/vpc",
+			expected: "/Users/erik/atmos/tests/fixtures/components/terraform/vpc",
+		},
+		{
+			name:     "Windows-style path with 2-part duplication",
+			input:    filepath.Join("C:", "workspace", "tests", "fixtures", "tests", "fixtures", "components"),
+			expected: filepath.Join("C:", "workspace", "tests", "fixtures", "components"),
+		},
+		{
+			name:     "no false positive - similar but not duplicate",
+			input:    "/test/fixture/tests/fixtures/component",
+			expected: "/test/fixture/tests/fixtures/component",
+		},
+		{
+			name:     "exact 2-part repeat at end",
+			input:    "/prefix/suffix/suffix",
+			expected: "/prefix/suffix/suffix",
+		},
+		{
+			name:     "2-part duplication with single separator",
+			input:    "/workspace/components/workspace/components/terraform",
+			expected: "/workspace/components/terraform",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := cleanDuplicatedPath(tt.input)
+			assert.Equal(t, tt.expected, result, "cleanDuplicatedPath(%q) = %q, want %q", tt.input, result, tt.expected)
+
+			// Additional verification: result should be clean
+			if result != "" {
+				assert.Equal(t, filepath.Clean(result), result, "Result should be a clean path")
+			}
+		})
+	}
+}
