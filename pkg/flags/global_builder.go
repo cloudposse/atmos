@@ -100,6 +100,10 @@ func (b *GlobalOptionsBuilder) registerTerminalFlags(defaults *global.Flags) {
 	b.WithForceTTY()
 	b.WithMask()
 
+	// Interactive prompts configuration.
+	b.options = append(b.options, WithBoolFlag("interactive", "", defaults.Interactive, "Enable interactive prompts for missing required flags (requires TTY, disabled in CI)"))
+	b.options = append(b.options, WithEnvVars("interactive", "ATMOS_INTERACTIVE"))
+
 	// Output configuration - pager with NoOptDefVal.
 	b.options = append(b.options, WithStringFlag("pager", "", defaults.Pager.Value(), "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)"))
 	b.options = append(b.options, WithEnvVars("pager", "ATMOS_PAGER", "PAGER"))

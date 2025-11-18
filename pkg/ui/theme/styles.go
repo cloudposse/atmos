@@ -70,6 +70,12 @@ type StyleSet struct {
 		BorderUnfocused   lipgloss.Style
 	}
 
+	// Interactive prompt styles (Huh library)
+	Interactive struct {
+		ButtonForeground lipgloss.Style // Button text style
+		ButtonBackground lipgloss.Style // Button background style
+	}
+
 	// Diff/Output styles
 	Diff struct {
 		Added   lipgloss.Style
@@ -146,6 +152,9 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 
 		// TUI component styles
 		TUI: getTUIStyles(scheme),
+
+		// Interactive prompt styles
+		Interactive: getInteractiveStyles(scheme),
 
 		// Diff/Output styles
 		Diff: getDiffStyles(scheme),
@@ -236,6 +245,20 @@ func getTUIStyles(scheme *ColorScheme) struct {
 			BorderForeground(lipgloss.Color(scheme.Border)),
 		BorderUnfocused: lipgloss.NewStyle().
 			Border(lipgloss.HiddenBorder()),
+	}
+}
+
+// getInteractiveStyles returns the interactive prompt styles for the given color scheme.
+func getInteractiveStyles(scheme *ColorScheme) struct {
+	ButtonForeground lipgloss.Style
+	ButtonBackground lipgloss.Style
+} {
+	return struct {
+		ButtonForeground lipgloss.Style
+		ButtonBackground lipgloss.Style
+	}{
+		ButtonForeground: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.ButtonForeground)),
+		ButtonBackground: lipgloss.NewStyle().Background(lipgloss.Color(scheme.ButtonBackground)),
 	}
 }
 

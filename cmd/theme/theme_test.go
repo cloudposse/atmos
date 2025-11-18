@@ -35,7 +35,7 @@ func TestThemeCommand(t *testing.T) {
 	t.Run("has show subcommand", func(t *testing.T) {
 		hasShowCmd := false
 		for _, subCmd := range themeCmd.Commands() {
-			if subCmd.Use == "show [theme-name]" {
+			if subCmd.Use == "show <theme-name>" {
 				hasShowCmd = true
 				break
 			}
@@ -111,15 +111,16 @@ func TestThemeListCommand(t *testing.T) {
 
 func TestThemeShowCommand(t *testing.T) {
 	t.Run("show command exists", func(t *testing.T) {
-		assert.Equal(t, "show [theme-name]", themeShowCmd.Use)
+		assert.Equal(t, "show <theme-name>", themeShowCmd.Use)
 		assert.NotEmpty(t, themeShowCmd.Short)
 		assert.NotEmpty(t, themeShowCmd.Long)
 	})
 
-	t.Run("requires exactly one argument", func(t *testing.T) {
-		// Validate Args is set to ExactArgs(1).
+	t.Run("accepts zero or one argument (prompt-aware)", func(t *testing.T) {
+		// Validate Args is prompt-aware: allows 0 or 1 argument, rejects more than 1.
+		// Zero arguments allowed because interactive prompts will handle missing args.
 		err := themeShowCmd.Args(themeShowCmd, []string{})
-		assert.Error(t, err, "show command should require exactly one argument")
+		assert.NoError(t, err, "show command should allow zero arguments (prompts will handle)")
 
 		err = themeShowCmd.Args(themeShowCmd, []string{"dracula"})
 		assert.NoError(t, err, "show command should accept one argument")

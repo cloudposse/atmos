@@ -35,14 +35,17 @@ import (
 //	parser.RegisterFlags(cmd)
 //	parser.BindToViper(viper.GetViper())
 type StandardFlagParser struct {
-	registry       *FlagRegistry
-	cmd            *cobra.Command // Command for manual flag parsing
-	viper          *viper.Viper   // Viper instance for precedence handling
-	viperPrefix    string
-	validValues    map[string][]string   // Valid values for flags (flag name -> valid values)
-	validationMsgs map[string]string     // Custom validation error messages (flag name -> message)
-	parsedFlags    *pflag.FlagSet        // Combined FlagSet used in last Parse() call (for Changed checks)
-	positionalArgs *positionalArgsConfig // Positional argument configuration
+	registry             *FlagRegistry
+	cmd                  *cobra.Command // Command for manual flag parsing
+	viper                *viper.Viper   // Viper instance for precedence handling
+	viperPrefix          string
+	validValues          map[string][]string          // Valid values for flags (flag name -> valid values)
+	validationMsgs       map[string]string            // Custom validation error messages (flag name -> message)
+	parsedFlags          *pflag.FlagSet               // Combined FlagSet used in last Parse() call (for Changed checks)
+	positionalArgs       *positionalArgsConfig        // Positional argument configuration
+	flagPrompts          map[string]*flagPromptConfig // Prompt configs for missing required flags (Use Case 1)
+	optionalValuePrompts map[string]*flagPromptConfig // Prompt configs for optional value flags (Use Case 2)
+	positionalPrompts    map[string]*flagPromptConfig // Prompt configs for missing positional args (Use Case 3)
 }
 
 // NewStandardFlagParser creates a new StandardFlagParser with the given options.
@@ -58,7 +61,10 @@ func NewStandardFlagParser(opts ...Option) *StandardFlagParser {
 	defer perf.Track(nil, "flags.NewStandardFlagParser")()
 
 	config := &parserConfig{
-		registry: NewFlagRegistry(),
+		registry:             NewFlagRegistry(),
+		flagPrompts:          make(map[string]*flagPromptConfig),
+		optionalValuePrompts: make(map[string]*flagPromptConfig),
+		positionalPrompts:    make(map[string]*flagPromptConfig),
 	}
 
 	// Apply options
@@ -67,10 +73,13 @@ func NewStandardFlagParser(opts ...Option) *StandardFlagParser {
 	}
 
 	return &StandardFlagParser{
-		registry:       config.registry,
-		viperPrefix:    config.viperPrefix,
-		validValues:    make(map[string][]string),
-		validationMsgs: make(map[string]string),
+		registry:             config.registry,
+		viperPrefix:          config.viperPrefix,
+		validValues:          make(map[string][]string),
+		validationMsgs:       make(map[string]string),
+		flagPrompts:          config.flagPrompts,
+		optionalValuePrompts: config.optionalValuePrompts,
+		positionalPrompts:    config.positionalPrompts,
 	}
 }
 
@@ -110,6 +119,9 @@ func (p *StandardFlagParser) ParsedFlags() *pflag.FlagSet {
 // For commands that need to pass unknown flags to external tools (terraform, helmfile, packer),
 // those commands should set DisableFlagParsing=true manually in their command definition.
 // This is a temporary measure until the compatibility flags system is fully integrated.
+//
+// If positional args with prompts are configured, this sets a prompt-aware Args validator
+// that allows missing required args when interactive mode is available.
 func (p *StandardFlagParser) RegisterFlags(cmd *cobra.Command) {
 	defer perf.Track(nil, "flags.StandardFlagParser.RegisterFlags")()
 
@@ -137,6 +149,42 @@ func (p *StandardFlagParser) RegisterFlags(cmd *cobra.Command) {
 
 	// Auto-register completion functions for flags with valid values.
 	p.registerCompletions(cmd)
+
+	// If positional args with prompts are configured, set prompt-aware validator
+	p.registerPositionalArgsValidator(cmd)
+}
+
+// registerPositionalArgsValidator sets a prompt-aware Args validator on the command
+// if positional args are configured and prompts exist.
+//
+// This allows missing required positional args when interactive prompts will handle them,
+// solving the timing issue where Cobra's Args validation happens before Parse() can prompt.
+func (p *StandardFlagParser) registerPositionalArgsValidator(cmd *cobra.Command) {
+	defer perf.Track(nil, "flags.StandardFlagParser.registerPositionalArgsValidator")()
+
+	// Only set validator if positional args are configured
+	if p.positionalArgs == nil || len(p.positionalArgs.specs) == 0 {
+		return
+	}
+
+	// Check if any prompts are configured for positional args
+	hasPrompts := false
+	for _, spec := range p.positionalArgs.specs {
+		if _, exists := p.positionalPrompts[spec.Name]; exists {
+			hasPrompts = true
+			break
+		}
+	}
+
+	// Create a builder to generate the prompt-aware validator
+	builder := NewPositionalArgsBuilder()
+	for _, spec := range p.positionalArgs.specs {
+		builder.AddArg(spec)
+	}
+
+	// Generate and set the prompt-aware validator
+	validator := builder.GeneratePromptAwareValidator(hasPrompts)
+	cmd.Args = validator
 }
 
 // GetActualArgs extracts the actual arguments when DisableFlagParsing=true.
@@ -503,9 +551,24 @@ func (p *StandardFlagParser) validatePositionalArgs(positionalArgs []string) err
 	defer perf.Track(nil, "flags.StandardFlagParser.validatePositionalArgs")()
 
 	if p.positionalArgs != nil && p.positionalArgs.validator != nil {
-		if err := p.positionalArgs.validator(p.cmd, positionalArgs); err != nil {
-			return err
+		// Skip validation if prompts are configured - they will handle missing args.
+		// The prompt-aware validator on cmd.Args already passed, allowing execution
+		// to reach Parse(), so we should allow prompts to fill in missing values.
+		hasPrompts := false
+		for _, spec := range p.positionalArgs.specs {
+			if _, exists := p.positionalPrompts[spec.Name]; exists {
+				hasPrompts = true
+				break
+			}
 		}
+
+		if !hasPrompts {
+			// No prompts configured, use standard validation
+			if err := p.positionalArgs.validator(p.cmd, positionalArgs); err != nil {
+				return err
+			}
+		}
+		// If prompts configured, skip validation - prompts will handle it
 	}
 	return nil
 }
@@ -581,6 +644,11 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 
 	// Step 3: Populate Flags map from Viper with precedence applied.
 	p.populateFlagsFromViper(result, combinedFlags)
+
+	// Step 3.5: Handle interactive prompts (all 3 use cases).
+	if err := p.handleInteractivePrompts(result, combinedFlags); err != nil {
+		return nil, err
+	}
 
 	// Step 4: Validate flag values against valid values constraints.
 	if combinedFlags != nil {
@@ -727,6 +795,178 @@ func (p *StandardFlagParser) GetIdentityFromCmd(cmd *cobra.Command, v *viper.Vip
 	// Flag not changed - fall back to Viper (env var or config)
 	viperKey := p.getViperKey(flagName)
 	return v.GetString(viperKey), nil
+}
+
+// handleInteractivePrompts handles all 3 interactive prompt use cases:
+// 1. Missing required flags
+// 2. Optional value flags (sentinel pattern)
+// 3. Missing required positional arguments.
+func (p *StandardFlagParser) handleInteractivePrompts(result *ParsedConfig, combinedFlags *pflag.FlagSet) error {
+	defer perf.Track(nil, "flags.StandardFlagParser.handleInteractivePrompts")()
+
+	// Use Case 2: Handle optional value flags (--flag without value triggers prompt).
+	if err := p.promptForOptionalValueFlags(result, combinedFlags); err != nil {
+		return err
+	}
+
+	// Use Case 1: Handle missing required flags.
+	if err := p.promptForMissingRequiredFlags(result, combinedFlags); err != nil {
+		return err
+	}
+
+	// Use Case 3: Handle missing required positional arguments.
+	if err := p.promptForMissingPositionalArgs(result); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// promptForOptionalValueFlags handles Use Case 2: Optional value flags.
+// When a flag has NoOptDefVal=cfg.IdentityFlagSelectValue and the user provides the flag
+// without a value, prompt for selection.
+func (p *StandardFlagParser) promptForOptionalValueFlags(result *ParsedConfig, combinedFlags *pflag.FlagSet) error {
+	defer perf.Track(nil, "flags.StandardFlagParser.promptForOptionalValueFlags")()
+
+	if combinedFlags == nil || len(p.optionalValuePrompts) == 0 {
+		return nil
+	}
+
+	for flagName, promptConfig := range p.optionalValuePrompts {
+		// Get current flag value.
+		flagValue, ok := result.Flags[flagName].(string)
+		if !ok {
+			continue
+		}
+
+		// Check if flag value is the sentinel (user wants interactive selection).
+		if flagValue != cfg.IdentityFlagSelectValue {
+			continue
+		}
+
+		// Prompt for value.
+		selectedValue, err := PromptForOptionalValue(
+			flagName,
+			flagValue,
+			promptConfig.PromptTitle,
+			promptConfig.CompletionFunc,
+			p.cmd,
+			result.PositionalArgs,
+		)
+		if err != nil {
+			// Prompt failed (user aborted, error occurred, etc.) - return the error.
+			return err
+		}
+
+		if selectedValue == "" {
+			// Not interactive or no options available - keep sentinel value.
+			continue
+		}
+
+		// Update flag value with selection.
+		result.Flags[flagName] = selectedValue
+	}
+
+	return nil
+}
+
+// promptForMissingRequiredFlags handles Use Case 1: Missing required flags.
+// If a required flag is not set and has a prompt config, show interactive prompt.
+func (p *StandardFlagParser) promptForMissingRequiredFlags(result *ParsedConfig, combinedFlags *pflag.FlagSet) error {
+	defer perf.Track(nil, "flags.StandardFlagParser.promptForMissingRequiredFlags")()
+
+	if combinedFlags == nil || len(p.flagPrompts) == 0 {
+		return nil
+	}
+
+	for flagName, promptConfig := range p.flagPrompts {
+		// Check if flag is missing (empty or not set).
+		flagValue, ok := result.Flags[flagName].(string)
+		if ok && flagValue != "" {
+			continue // Flag has value, no prompt needed.
+		}
+
+		// Check if flag was explicitly set to empty (user intentionally passed empty value).
+		cobraFlag := combinedFlags.Lookup(flagName)
+		if cobraFlag != nil && cobraFlag.Changed {
+			continue // User explicitly set the value (even if empty), don't prompt.
+		}
+
+		// Prompt for missing required flag.
+		selectedValue, err := PromptForMissingRequired(
+			flagName,
+			promptConfig.PromptTitle,
+			promptConfig.CompletionFunc,
+			p.cmd,
+			result.PositionalArgs,
+		)
+		if err != nil {
+			// Prompt failed (user aborted, error occurred, etc.) - return the error.
+			return err
+		}
+
+		if selectedValue == "" {
+			// Not interactive or no options available - let command validation handle it.
+			continue
+		}
+
+		// Update flag value with selection.
+		result.Flags[flagName] = selectedValue
+	}
+
+	return nil
+}
+
+// promptForMissingPositionalArgs handles Use Case 3: Missing required positional arguments.
+// If a required positional arg is missing and has a prompt config, show interactive prompt.
+func (p *StandardFlagParser) promptForMissingPositionalArgs(result *ParsedConfig) error {
+	defer perf.Track(nil, "flags.StandardFlagParser.promptForMissingPositionalArgs")()
+
+	if p.positionalArgs == nil || len(p.positionalPrompts) == 0 {
+		return nil
+	}
+
+	// Iterate through positional arg specs in order.
+	for i, spec := range p.positionalArgs.specs {
+		// Check if this positional arg is missing.
+		if i < len(result.PositionalArgs) {
+			continue // Argument already provided.
+		}
+
+		// Check if this arg is required and has a prompt config.
+		if !spec.Required {
+			continue // Optional arg, no prompt needed.
+		}
+
+		promptConfig, hasPrompt := p.positionalPrompts[spec.Name]
+		if !hasPrompt {
+			continue // No prompt configured for this arg.
+		}
+
+		// Prompt for missing positional argument.
+		selectedValue, err := PromptForPositionalArg(
+			spec.Name,
+			promptConfig.PromptTitle,
+			promptConfig.CompletionFunc,
+			p.cmd,
+			result.PositionalArgs,
+		)
+		if err != nil {
+			// Prompt failed (user aborted, error occurred, etc.) - return the error.
+			return err
+		}
+
+		if selectedValue == "" {
+			// Not interactive or no options available - skip this arg.
+			// The command's validation will catch the missing required arg.
+			continue
+		}
+
+		// Append the selected value to positional args.
+		result.PositionalArgs = append(result.PositionalArgs, selectedValue)
+	}
+
+	return nil
 }
 
 // Reset clears any internal parser state to prevent pollution between test runs.
