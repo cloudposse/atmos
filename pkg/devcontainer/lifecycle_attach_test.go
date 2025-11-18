@@ -51,6 +51,12 @@ func TestManager_Attach(t *testing.T) {
 						},
 					}, nil)
 				runtime.EXPECT().
+					Inspect(gomock.Any(), "running-id").
+					Return(&container.Info{
+						ID:    "running-id",
+						Ports: []container.PortBinding{},
+					}, nil)
+				runtime.EXPECT().
 					Attach(gomock.Any(), "running-id", gomock.Any()).
 					Return(nil)
 			},
@@ -83,6 +89,12 @@ func TestManager_Attach(t *testing.T) {
 				runtime.EXPECT().
 					Start(gomock.Any(), "stopped-id").
 					Return(nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "stopped-id").
+					Return(&container.Info{
+						ID:    "stopped-id",
+						Ports: []container.PortBinding{},
+					}, nil)
 				runtime.EXPECT().
 					Attach(gomock.Any(), "stopped-id", gomock.Any()).
 					Return(nil)
@@ -204,6 +216,12 @@ func TestManager_Attach(t *testing.T) {
 						},
 					}, nil)
 				runtime.EXPECT().
+					Inspect(gomock.Any(), "running-id").
+					Return(&container.Info{
+						ID:    "running-id",
+						Ports: []container.PortBinding{},
+					}, nil)
+				runtime.EXPECT().
 					Attach(gomock.Any(), "running-id", gomock.Any()).
 					Return(errors.New("attach failed"))
 			},
@@ -233,6 +251,12 @@ func TestManager_Attach(t *testing.T) {
 							Name:   "atmos-devcontainer.test.default",
 							Status: "running",
 						},
+					}, nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "running-id").
+					Return(&container.Info{
+						ID:    "running-id",
+						Ports: []container.PortBinding{},
 					}, nil)
 				// PTY mode calls runtime.Info() to determine the binary (docker/podman).
 				runtime.EXPECT().
@@ -311,6 +335,12 @@ func TestFindAndStartContainer(t *testing.T) {
 							Status: "running",
 						},
 					}, nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "running-id").
+					Return(&container.Info{
+						ID:    "running-id",
+						Ports: []container.PortBinding{},
+					}, nil)
 			},
 			expectError: false,
 		},
@@ -330,6 +360,12 @@ func TestFindAndStartContainer(t *testing.T) {
 				runtime.EXPECT().
 					Start(gomock.Any(), "stopped-id").
 					Return(nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "stopped-id").
+					Return(&container.Info{
+						ID:    "stopped-id",
+						Ports: []container.PortBinding{},
+					}, nil)
 			},
 			expectError: false,
 		},
@@ -386,7 +422,11 @@ func TestFindAndStartContainer(t *testing.T) {
 			tt.setupMocks(mockRuntime)
 
 			ctx := context.Background()
-			containerInfo, err := findAndStartContainer(ctx, mockRuntime, tt.containerName)
+			testConfig := &Config{
+				Image:        "test-image",
+				ForwardPorts: []interface{}{8080},
+			}
+			containerInfo, err := findAndStartContainer(ctx, mockRuntime, tt.containerName, testConfig)
 
 			if tt.expectError {
 				require.Error(t, err)

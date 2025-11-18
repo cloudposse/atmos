@@ -63,7 +63,7 @@ func (m *Manager) Attach(atmosConfig *schema.AtmosConfiguration, name, instance 
 	}
 
 	ctx := context.Background()
-	containerInfo, err := findAndStartContainer(ctx, runtime, containerName)
+	containerInfo, err := findAndStartContainer(ctx, runtime, containerName, config)
 	if err != nil {
 		return errUtils.Build(err).
 			WithContext("devcontainer_name", name).
@@ -82,7 +82,9 @@ func (m *Manager) Attach(atmosConfig *schema.AtmosConfiguration, name, instance 
 }
 
 // findAndStartContainer finds a container and starts it if needed.
-func findAndStartContainer(ctx context.Context, runtime container.Runtime, containerName string) (*container.Info, error) {
+// After ensuring the container is running, it inspects the container to get actual port information
+// and displays the container info to the user.
+func findAndStartContainer(ctx context.Context, runtime container.Runtime, containerName string, config *Config) (*container.Info, error) {
 	filters := map[string]string{"name": containerName}
 	containers, err := runtime.List(ctx, filters)
 	if err != nil {
@@ -110,11 +112,21 @@ func findAndStartContainer(ctx context.Context, runtime container.Runtime, conta
 	}
 
 	containerInfo := &containers[0]
+	wasRunning := isContainerRunning(containerInfo.Status)
 
-	if !isContainerRunning(containerInfo.Status) {
+	if !wasRunning {
 		if err := startContainerForAttach(ctx, runtime, containerInfo, containerName); err != nil {
 			return nil, err
 		}
+	}
+
+	// Inspect container to get actual port information for display.
+	inspectedInfo, err := runtime.Inspect(ctx, containerInfo.ID)
+	if err != nil {
+		log.Warn("Failed to inspect container for port info", "error", err)
+		displayContainerInfo(config, nil)
+	} else {
+		displayContainerInfo(config, inspectedInfo)
 	}
 
 	return containerInfo, nil

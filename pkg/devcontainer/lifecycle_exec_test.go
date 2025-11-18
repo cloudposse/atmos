@@ -53,6 +53,12 @@ func TestManager_Exec(t *testing.T) {
 						},
 					}, nil)
 				runtime.EXPECT().
+					Inspect(gomock.Any(), "running-id").
+					Return(&container.Info{
+						ID:    "running-id",
+						Ports: []container.PortBinding{},
+					}, nil)
+				runtime.EXPECT().
 					Exec(gomock.Any(), "running-id", []string{"ls", "-la"}, gomock.Any()).
 					Return(nil)
 			},
@@ -90,6 +96,12 @@ func TestManager_Exec(t *testing.T) {
 					Start(gomock.Any(), "stopped-id").
 					Return(nil)
 				runtime.EXPECT().
+					Inspect(gomock.Any(), "stopped-id").
+					Return(&container.Info{
+						ID:    "stopped-id",
+						Ports: []container.PortBinding{},
+					}, nil)
+				runtime.EXPECT().
 					Exec(gomock.Any(), "stopped-id", []string{"pwd"}, gomock.Any()).
 					Return(nil)
 			},
@@ -122,6 +134,12 @@ func TestManager_Exec(t *testing.T) {
 							Name:   "atmos-devcontainer.test.default",
 							Status: "running",
 						},
+					}, nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "running-id").
+					Return(&container.Info{
+						ID:    "running-id",
+						Ports: []container.PortBinding{},
 					}, nil)
 				runtime.EXPECT().
 					Exec(gomock.Any(), "running-id", []string{"bash"}, gomock.Any()).
@@ -262,6 +280,12 @@ func TestManager_Exec(t *testing.T) {
 						},
 					}, nil)
 				runtime.EXPECT().
+					Inspect(gomock.Any(), "running-id").
+					Return(&container.Info{
+						ID:    "running-id",
+						Ports: []container.PortBinding{},
+					}, nil)
+				runtime.EXPECT().
 					Exec(gomock.Any(), "running-id", []string{"ls"}, gomock.Any()).
 					Return(errors.New("exec failed"))
 			},
@@ -295,6 +319,12 @@ func TestManager_Exec(t *testing.T) {
 							Name:   "atmos-devcontainer.test.default",
 							Status: "running",
 						},
+					}, nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "running-id").
+					Return(&container.Info{
+						ID:    "running-id",
+						Ports: []container.PortBinding{},
 					}, nil)
 				// PTY mode calls runtime.Info() to determine the binary (docker/podman).
 				runtime.EXPECT().

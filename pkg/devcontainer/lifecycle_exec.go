@@ -32,7 +32,7 @@ type ExecParams struct {
 func (m *Manager) Exec(atmosConfig *schema.AtmosConfiguration, params ExecParams) error {
 	defer perf.Track(atmosConfig, "devcontainer.Exec")()
 
-	_, settings, err := m.configLoader.LoadConfig(atmosConfig, params.Name)
+	config, settings, err := m.configLoader.LoadConfig(atmosConfig, params.Name)
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func (m *Manager) Exec(atmosConfig *schema.AtmosConfiguration, params ExecParams
 	}
 
 	ctx := context.Background()
-	containerInfo, err := findAndStartContainer(ctx, runtime, containerName)
+	containerInfo, err := findAndStartContainer(ctx, runtime, containerName, config)
 	if err != nil {
 		return err
 	}
