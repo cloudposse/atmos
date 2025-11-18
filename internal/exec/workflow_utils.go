@@ -364,16 +364,22 @@ func ExecuteDescribeWorkflows(
 
 		fileContent, err := os.ReadFile(workflowPath)
 		if err != nil {
-			return nil, nil, nil, err
+			// Skip files that can't be read (permission issues, etc.).
+			log.Warn("Skipping workflow file", "file", f, "error", err)
+			continue
 		}
 
 		workflowManifest, err := u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
+			// Skip files that can't be parsed as YAML.
+			log.Warn("Skipping invalid workflow file", "file", f, "error", err)
+			continue
 		}
 
 		if workflowManifest.Workflows == nil {
-			return nil, nil, nil, fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)
+			// Skip files without the workflows key.
+			log.Warn("Skipping workflow file without 'workflows:' key", "file", f)
+			continue
 		}
 
 		workflowConfig := workflowManifest.Workflows
