@@ -222,5 +222,7 @@
     "host": "",
     "file": "",
     "profile_type": ""
-  }
+  },
+  "profiles": {},
+  "metadata": {}
 }

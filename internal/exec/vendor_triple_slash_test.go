@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/tests"
-	"github.com/spf13/cobra"
 )
 
 // TestVendorPullWithTripleSlashPattern tests the vendor pull command with the triple-slash pattern.
@@ -33,11 +32,8 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 	// Change to the test directory.
 	t.Chdir(testDir)
 
-	// Set up the command.
-	cmd := &cobra.Command{}
-	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
-	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
+	// Set up the command with global flags.
+	cmd := newTestCommandWithGlobalFlags("pull")
 
 	flags := cmd.Flags()
 	flags.String("component", "s3-bucket", "")
@@ -119,11 +115,8 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 		assert.FileExists(t, file, "Vendor file should exist: %s", file)
 	}
 
-	// Set up the command.
-	cmd := &cobra.Command{}
-	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
-	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
+	// Set up the command with global flags.
+	cmd := newTestCommandWithGlobalFlags("pull")
 
 	flags := cmd.Flags()
 	flags.String("component", "", "")

@@ -370,9 +370,9 @@ func TestListCommand_FormatValidation(t *testing.T) {
 			err := cmd.RunE(cmd, []string{})
 
 			if tt.wantError {
-				// Should fail with unsupported format error.
+				// Should fail with invalid format error.
 				require.Error(t, err, "Expected error for invalid format")
-				assert.Contains(t, err.Error(), "unsupported")
+				assert.Contains(t, err.Error(), "invalid")
 			}
 			// For valid formats, test passes if no error or if GitHub API fails.
 			// We don't assert NoError here because GitHub API might fail.
