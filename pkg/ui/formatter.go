@@ -321,6 +321,73 @@ func (f *formatter) Toastf(icon, format string, a ...interface{}) string {
 	return f.Toast(icon, fmt.Sprintf(format, a...))
 }
 
+// trimRightSpaces removes only trailing spaces (not tabs) from an ANSI-coded string while
+// preserving all ANSI escape sequences on the actual content.
+// This is useful for removing Glamour's padding spaces while preserving intentional tabs.
+func trimRightSpaces(s string) string {
+	// Strip ANSI codes to get plain text version
+	stripped := ansi.Strip(s)
+
+	// Trim only trailing spaces from plain text (preserve tabs)
+	trimmed := strings.TrimRight(stripped, " ")
+
+	// If nothing to trim, return original
+	if trimmed == stripped {
+		return s
+	}
+
+	// If completely empty after trim, return empty
+	if trimmed == "" {
+		return ""
+	}
+
+	// Build result by copying characters and ANSI codes up to the length of trimmed content,
+	// then capture any ANSI codes that immediately follow the last character (before whitespace)
+	var result strings.Builder
+	plainIdx := 0
+	i := 0
+
+	// Copy content and ANSI codes until we've matched all trimmed characters
+	for i < len(s) && plainIdx < len(trimmed) {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			// Copy ANSI sequence
+			start := i
+			i += 2
+			for i < len(s) && (s[i] < 'A' || s[i] > 'Z') && (s[i] < 'a' || s[i] > 'z') {
+				i++
+			}
+			if i < len(s) {
+				i++
+			}
+			result.WriteString(s[start:i])
+		} else {
+			// Copy visible character
+			result.WriteByte(s[i])
+			plainIdx++
+			i++
+		}
+	}
+
+	// Capture any trailing ANSI codes that immediately follow the last character
+	for i < len(s) {
+		if s[i] != '\x1b' || i+1 >= len(s) || s[i+1] != '[' {
+			// Stop at first non-ANSI character (whitespace we're trimming)
+			break
+		}
+		start := i
+		i += 2
+		for i < len(s) && (s[i] < 'A' || s[i] > 'Z') && (s[i] < 'a' || s[i] > 'z') {
+			i++
+		}
+		if i < len(s) {
+			i++
+		}
+		result.WriteString(s[start:i])
+	}
+
+	return result.String()
+}
+
 // TrimRight removes trailing whitespace from an ANSI-coded string while
 // preserving all ANSI escape sequences on the actual content.
 // This is useful for removing Glamour's padding spaces that are wrapped in ANSI codes.
@@ -421,8 +488,8 @@ func TrimRight(s string) string {
 func trimTrailingWhitespace(rendered string) []string {
 	lines := strings.Split(rendered, newline)
 	for i := range lines {
-		// Use TrimRight to remove trailing whitespace including ANSI-wrapped spaces
-		line := TrimRight(lines[i])
+		// Use trimRightSpaces to remove trailing spaces while preserving tabs
+		line := trimRightSpaces(lines[i])
 
 		// If line became empty after trimming but had content before,
 		// it was an empty line with indent - preserve the indent
