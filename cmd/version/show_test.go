@@ -322,7 +322,7 @@ func TestShowCommand_FormatValidation(t *testing.T) {
 				case "yaml":
 					return formatReleaseDetailYAML(release)
 				default:
-					return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrUnsupportedOutputFormat, showFormat)
+					return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrInvalidFormat, showFormat)
 				}
 			}
 

@@ -126,7 +126,6 @@ auth:
 auth:
   # NEW: Global settings for auth behavior
   settings:
-    default_identity: github-oidc-identity
     session_duration: "12h"
     console_session_duration: "8h"
     keyring_type: "system"
@@ -135,10 +134,12 @@ auth:
     # ... same as above
 
   identities:
+    github-oidc-identity:
+      default: true  # Current implementation uses identity-level default
     # ... same as above
 ```text
 
-**Note:** Less structured than Option 1, but flatter hierarchy.
+**Note:** Less structured than Option 1, but flatter hierarchy. Default identity selection uses the existing `identity.default: true` field.
 
 ## Detailed Design (Option 1 - Recommended)
 
@@ -670,15 +671,17 @@ ATMOS_DEFAULT_IDENTITY=github-oidc-identity
 ```yaml
 profiles:
   ci:
-    default_identity: github-oidc-identity
+    auth:
+      identities:
+        github-oidc-identity:
+          default: true
 ```text
 
 **Pros:**
 - Clear profile scope
-- Separate from auth config
+- Uses existing identity default mechanism
 
 **Cons:**
-- Breaks auth config encapsulation
 - Profile needs to know about auth internals
 - Doesn't solve global session defaults
 

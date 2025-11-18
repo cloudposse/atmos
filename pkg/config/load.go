@@ -108,7 +108,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 			return atmosConfig, err
 		}
 
-		log.Info("Profiles loaded successfully",
+		log.Debug("Profiles loaded successfully",
 			"profiles", configAndStacksInfo.ProfilesFromArg,
 			"count", len(configAndStacksInfo.ProfilesFromArg))
 	}

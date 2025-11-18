@@ -245,7 +245,7 @@ func loadProfiles(v *viper.Viper, profileNames []string, atmosConfig *schema.Atm
 			return err
 		}
 
-		log.Info("Loading profile",
+		log.Debug("Loading profile",
 			"profile", profileName,
 			"location", locType,
 			"path", profileDir)

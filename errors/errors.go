@@ -52,7 +52,6 @@ var (
 	ErrInvalidOffset                         = errors.New("offset must be >= 0")
 	ErrDuplicateFlagRegistration             = errors.New("duplicate flag registration")
 	ErrInvalidSinceDate                      = errors.New("invalid date format for --since")
-	ErrUnsupportedOutputFormat               = errors.New("unsupported output format")
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
