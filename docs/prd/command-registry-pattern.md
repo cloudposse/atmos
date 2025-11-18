@@ -123,6 +123,29 @@ package internal
 
 import "github.com/spf13/cobra"
 
+// CommandAlias represents an alias for a command or subcommand under a different parent.
+type CommandAlias struct {
+    // Subcommand is the name of the subcommand to alias (empty string for the parent command).
+    // For example, "list" to alias "atmos profile list" as "atmos list profiles".
+    Subcommand string
+
+    // ParentCommand is the name of the parent command to add the alias under.
+    // For example, "list" to create "atmos list profiles" as an alias for "atmos profile list".
+    ParentCommand string
+
+    // Name is the alias command name (e.g., "profiles" for "atmos list profiles").
+    Name string
+
+    // Short is the short description for the alias command.
+    Short string
+
+    // Long is the long description for the alias command.
+    Long string
+
+    // Example is the usage example for the alias command.
+    Example string
+}
+
 // CommandProvider is the interface that built-in command packages implement
 // to register themselves with the Atmos command registry.
 type CommandProvider interface {
@@ -136,6 +159,11 @@ type CommandProvider interface {
     // Examples: "Core Stack Commands", "Stack Introspection",
     //          "Configuration Management", "Cloud Integration"
     GetGroup() string
+
+    // GetAliases returns a list of command aliases to register.
+    // Aliases allow the same command to be accessible under different parent commands.
+    // Return nil or an empty slice if the command has no aliases.
+    GetAliases() []CommandAlias
 }
 ```
 
@@ -184,17 +212,89 @@ func Register(provider CommandProvider) {
 }
 
 // RegisterAll registers all built-in commands with the root command.
-// Custom commands are processed separately via processCustomCommands().
+//
+// This function performs registration in two phases:
+// 1. Register all primary commands to the root command
+// 2. Register command aliases to their respective parent commands
+//
+// Custom commands from atmos.yaml are processed AFTER this function
+// via processCustomCommands(), allowing custom commands to extend or
+// override built-in commands.
 func RegisterAll(root *cobra.Command) error {
     registry.mu.RLock()
     defer registry.mu.RUnlock()
 
+    // Phase 1: Register all primary commands.
     for name, provider := range registry.providers {
         cmd := provider.GetCommand()
         if cmd == nil {
             return fmt.Errorf("command provider %s returned nil command", name)
         }
         root.AddCommand(cmd)
+    }
+
+    // Phase 2: Register command aliases.
+    // This must happen after phase 1 to ensure parent commands exist.
+    for name, provider := range registry.providers {
+        aliases := provider.GetAliases()
+        if len(aliases) == 0 {
+            continue
+        }
+
+        originalCmd := provider.GetCommand()
+        if originalCmd == nil {
+            return fmt.Errorf("command provider %s returned nil command", name)
+        }
+
+        for _, alias := range aliases {
+            // Find the parent command to add the alias under.
+            parentCmd, _, err := root.Find([]string{alias.ParentCommand})
+            if err != nil {
+                return fmt.Errorf("failed to find parent command %q for alias %q: %w",
+                    alias.ParentCommand, alias.Name, err)
+            }
+
+            // Determine which command to alias (parent or subcommand).
+            var sourceCmd *cobra.Command
+            if alias.Subcommand == "" {
+                sourceCmd = originalCmd
+            } else {
+                sourceCmd, _, err = originalCmd.Find([]string{alias.Subcommand})
+                if err != nil {
+                    return fmt.Errorf("failed to find subcommand %q for alias %q: %w",
+                        alias.Subcommand, alias.Name, err)
+                }
+            }
+
+            // Create an alias command that delegates to the source command.
+            aliasCmd := &cobra.Command{
+                Use:                alias.Name,
+                Short:              alias.Short,
+                Long:               alias.Long,
+                Example:            alias.Example,
+                Args:               sourceCmd.Args,
+                RunE:               sourceCmd.RunE,
+                FParseErrWhitelist: sourceCmd.FParseErrWhitelist,
+                ValidArgsFunction:  sourceCmd.ValidArgsFunction,
+            }
+
+            // Share flags with the source command using AddFlag.
+            // This shares the same flag instance, ensuring flag values
+            // set on the alias are visible to the source's RunE function.
+            sourceCmd.Flags().VisitAll(func(flag *pflag.Flag) {
+                aliasCmd.Flags().AddFlag(flag)
+            })
+
+            // Share flag completion functions.
+            sourceCmd.Flags().VisitAll(func(flag *pflag.Flag) {
+                if completionFunc, _ := sourceCmd.GetFlagCompletionFunc(flag.Name); completionFunc != nil {
+                    _ = aliasCmd.RegisterFlagCompletionFunc(flag.Name, completionFunc)
+                }
+            })
+
+            // Add the alias command to the parent.
+            parentCmd.AddCommand(aliasCmd)
+        }
     }
 
     return nil
@@ -284,6 +384,10 @@ func (a *AboutCommandProvider) GetName() string {
 func (a *AboutCommandProvider) GetGroup() string {
     return "Other Commands"
 }
+
+func (a *AboutCommandProvider) GetAliases() []internal.CommandAlias {
+    return nil // No aliases for this command
+}
 ```
 
 ### 4. Markdown Content Management
@@ -339,7 +443,97 @@ var aboutCmd = &cobra.Command{
 - ✅ Compatible with Go's embed restrictions
 - ✅ Easy to maintain and update content
 
-### 5. Updated Root Command
+### 5. Command Aliases
+
+The command registry supports **first-class command aliases**, allowing commands to be accessible under different parent commands. This provides better discoverability and UX without code duplication.
+
+**Example: Profile Command Alias**
+
+```go
+// cmd/profile/profile.go
+package profile
+
+import (
+    "github.com/spf13/cobra"
+    "github.com/cloudposse/atmos/cmd/internal"
+)
+
+var profileCmd = &cobra.Command{
+    Use:   "profile",
+    Short: "Manage configuration profiles",
+}
+
+type ProfileCommandProvider struct{}
+
+func (p *ProfileCommandProvider) GetCommand() *cobra.Command {
+    return profileCmd
+}
+
+func (p *ProfileCommandProvider) GetName() string {
+    return "profile"
+}
+
+func (p *ProfileCommandProvider) GetGroup() string {
+    return "Configuration Management"
+}
+
+// GetAliases creates "atmos list profiles" as an alias for "atmos profile list".
+func (p *ProfileCommandProvider) GetAliases() []internal.CommandAlias {
+    return []internal.CommandAlias{
+        {
+            Subcommand:    "list",           // Alias "profile list" subcommand
+            ParentCommand: "list",           // Under "list" parent
+            Name:          "profiles",       // As "list profiles"
+            Short:         "List available configuration profiles",
+            Long:          `This is an alias for "atmos profile list".`,
+            Example: `# List all available profiles
+atmos list profiles
+
+# List profiles in JSON format
+atmos list profiles --format json`,
+        },
+    }
+}
+```
+
+**How It Works:**
+
+1. **Declaration**: Commands define aliases via `GetAliases()` method
+2. **Registration**: `RegisterAll()` creates alias commands in phase 2
+3. **Delegation**: Alias commands delegate to source commands:
+   - **Args**: Shares argument validation
+   - **RunE**: Executes the same business logic
+   - **Flags**: Shares the same flag instances via `AddFlag`
+   - **Completion**: Shares shell completion functions
+4. **True Delegation**: Flag values set on alias are visible to source's RunE
+
+**Key Design Decisions:**
+
+- **Flag Sharing**: Uses `AddFlag` to share the same flag instance between alias and source
+  - Ensures flag values set on the alias are visible to the source's RunE function
+  - No need to manually copy flag values between commands
+  - Validation happens naturally through shared state
+
+- **No Code Duplication**: All logic remains in the source command
+  - Alias is purely a routing mechanism
+  - Changes to source command automatically apply to aliases
+
+- **Declarative Definition**: Aliases defined where the command is defined
+  - Easy to discover what aliases exist for a command
+  - No separate alias configuration files
+
+- **Subcommand Support**: Can alias either parent commands or specific subcommands
+  - `Subcommand: ""` aliases the parent command
+  - `Subcommand: "list"` aliases a specific subcommand
+
+**Use Cases:**
+
+- **Improved Discoverability**: `atmos list profiles` is more intuitive than `atmos profile list`
+- **Grouping Related Commands**: Group related list operations under `atmos list`
+- **Backwards Compatibility**: Keep old command paths while introducing new organization
+- **User Experience**: Provide multiple paths to the same functionality
+
+### 6. Updated Root Command
 
 ```go
 // cmd/root.go

@@ -67,6 +67,10 @@ func (m *MyCommandProvider) GetName() string {
 func (m *MyCommandProvider) GetGroup() string {
     return "Other Commands" // See "Command Groups" section
 }
+
+func (m *MyCommandProvider) GetAliases() []internal.CommandAlias {
+    return nil // No aliases (see "Adding Command Aliases" section)
+}
 ```
 
 **Step 3: Add the business logic**
@@ -450,6 +454,135 @@ Use these standard groups for `GetGroup()`:
 
 ---
 
+## Adding Command Aliases
+
+Command aliases allow your command to be accessible under different parent commands, improving discoverability without code duplication.
+
+### When to Use Aliases
+
+Use aliases when:
+- **Improved UX**: A command makes more sense under multiple parents (e.g., `profile list` and `list profiles`)
+- **Discoverability**: Users might naturally look for a command in different locations
+- **Grouping**: Want to group related operations (e.g., all list operations under `atmos list`)
+- **Migration**: Maintaining backwards compatibility while reorganizing commands
+
+### How to Add an Alias
+
+Implement the `GetAliases()` method in your CommandProvider:
+
+```go
+// cmd/profile/profile.go
+package profile
+
+import (
+    "github.com/spf13/cobra"
+    "github.com/cloudposse/atmos/cmd/internal"
+)
+
+type ProfileCommandProvider struct{}
+
+func (p *ProfileCommandProvider) GetCommand() *cobra.Command {
+    return profileCmd
+}
+
+func (p *ProfileCommandProvider) GetName() string {
+    return "profile"
+}
+
+func (p *ProfileCommandProvider) GetGroup() string {
+    return "Configuration Management"
+}
+
+// GetAliases creates "atmos list profiles" as an alias for "atmos profile list".
+func (p *ProfileCommandProvider) GetAliases() []internal.CommandAlias {
+    return []internal.CommandAlias{
+        {
+            Subcommand:    "list",           // Which subcommand to alias
+            ParentCommand: "list",           // Under which parent
+            Name:          "profiles",       // Alias name
+            Short:         "List available configuration profiles",
+            Long:          `This is an alias for "atmos profile list".`,
+            Example: `# List all available profiles
+atmos list profiles
+
+# List profiles in JSON format
+atmos list profiles --format json`,
+        },
+    }
+}
+```
+
+### Alias Configuration Fields
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `Subcommand` | Name of subcommand to alias (empty string for parent) | `"list"` |
+| `ParentCommand` | Parent command to add alias under | `"list"` |
+| `Name` | Alias command name | `"profiles"` |
+| `Short` | Short description | `"List available configuration profiles"` |
+| `Long` | Detailed description | `This is an alias for "atmos profile list".` |
+| `Example` | Usage examples | Multi-line example string |
+
+### How Aliases Work
+
+Aliases provide **true delegation** to the source command:
+
+1. **Flag Sharing**: Uses `AddFlag` to share the same flag instance
+   - Flag values set on alias are visible to source's RunE function
+   - No manual flag copying needed
+   - Validation happens naturally through shared state
+
+2. **Execution Delegation**:
+   - **Args**: Same argument validation
+   - **RunE**: Executes same business logic
+   - **Completion**: Same shell completion
+
+3. **No Code Duplication**:
+   - All logic stays in source command
+   - Changes to source automatically apply to aliases
+
+### Examples
+
+**Aliasing a Subcommand:**
+```go
+// Makes "atmos list profiles" an alias for "atmos profile list"
+{
+    Subcommand:    "list",
+    ParentCommand: "list",
+    Name:          "profiles",
+    Short:         "List available configuration profiles",
+}
+```
+
+**Aliasing a Parent Command:**
+```go
+// Makes "atmos help" an alias for "atmos about"
+{
+    Subcommand:    "",  // Empty = alias the parent command itself
+    ParentCommand: "help",
+    Name:          "about",
+    Short:         "Show information about Atmos",
+}
+```
+
+**No Aliases:**
+```go
+// Most commands don't need aliases
+func (m *MyCommandProvider) GetAliases() []internal.CommandAlias {
+    return nil
+}
+```
+
+### Best Practices for Aliases
+
+- **Clear documentation**: Always indicate it's an alias in Long description
+- **Consistent naming**: Use plural for collections (`profiles`, `stacks`)
+- **Limit aliases**: Don't create too many paths to the same command
+- **Test both paths**: Ensure both source and alias work identically
+- **Update examples**: Include examples for the alias command
+
+---
+
 ## Best Practices
 
 ### 1. Command Naming
@@ -578,12 +711,14 @@ commands:
 
 - [ ] Create package directory: `cmd/[command]/`
 - [ ] Implement command with RunE function
-- [ ] Implement CommandProvider interface
+- [ ] Implement CommandProvider interface (including `GetAliases()`)
 - [ ] Register with `internal.Register()`
 - [ ] Add blank import to `cmd/root.go`
 - [ ] Add business logic to `internal/exec/`
+- [ ] Add command aliases if needed (see "Adding Command Aliases" section)
 - [ ] Write unit tests
 - [ ] Write integration tests (in `tests/`)
+- [ ] Test aliases if added (verify both source and alias paths work)
 - [ ] Add Docusaurus documentation in `website/docs/cli/commands/`
 - [ ] Build website to verify docs: `cd website && npm run build`
 - [ ] Test with custom commands from `atmos.yaml`

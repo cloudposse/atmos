@@ -14,9 +14,10 @@ import (
 
 // mockCommandProvider is a test implementation of CommandProvider.
 type mockCommandProvider struct {
-	name  string
-	group string
-	cmd   *cobra.Command
+	name    string
+	group   string
+	cmd     *cobra.Command
+	aliases []CommandAlias
 }
 
 func (m *mockCommandProvider) GetCommand() *cobra.Command {
@@ -29,6 +30,10 @@ func (m *mockCommandProvider) GetName() string {
 
 func (m *mockCommandProvider) GetGroup() string {
 	return m.group
+}
+
+func (m *mockCommandProvider) GetAliases() []CommandAlias {
+	return m.aliases
 }
 
 func TestRegister(t *testing.T) {
@@ -367,4 +372,458 @@ func TestCustomCommandCanExtendRegistryCommand(t *testing.T) {
 	customCmd, _, err := tfCmd.Find([]string{"custom-plan"})
 	require.NoError(t, err)
 	assert.Equal(t, "custom-plan", customCmd.Use)
+}
+
+// Test alias functionality.
+
+func TestRegisterAllWithSimpleAlias(t *testing.T) {
+	Reset()
+
+	rootCmd := &cobra.Command{Use: "root"}
+	listCmd := &cobra.Command{Use: "list"}
+	rootCmd.AddCommand(listCmd)
+
+	// Create a command with a subcommand and an alias
+	profileCmd := &cobra.Command{Use: "profile"}
+	profileListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List profiles",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+	}
+	profileCmd.AddCommand(profileListCmd)
+
+	provider := &mockCommandProvider{
+		name:  "profile",
+		group: "Configuration Management",
+		cmd:   profileCmd,
+		aliases: []CommandAlias{
+			{
+				Subcommand:    "list",
+				ParentCommand: "list",
+				Name:          "profiles",
+				Short:         "List available configuration profiles",
+				Long:          `Alias for "atmos profile list".`,
+				Example:       "atmos list profiles",
+			},
+		},
+	}
+
+	Register(provider)
+
+	err := RegisterAll(rootCmd)
+	require.NoError(t, err)
+
+	// Verify original command exists
+	originalCmd, _, err := rootCmd.Find([]string{"profile", "list"})
+	require.NoError(t, err)
+	assert.Equal(t, "list", originalCmd.Use)
+
+	// Verify alias exists under list parent
+	aliasCmd, _, err := rootCmd.Find([]string{"list", "profiles"})
+	require.NoError(t, err)
+	assert.Equal(t, "profiles", aliasCmd.Use)
+	assert.Equal(t, "List available configuration profiles", aliasCmd.Short)
+	assert.Equal(t, `Alias for "atmos profile list".`, aliasCmd.Long)
+}
+
+func TestAliasWithFlags(t *testing.T) {
+	Reset()
+
+	rootCmd := &cobra.Command{Use: "root"}
+	listCmd := &cobra.Command{Use: "list"}
+	rootCmd.AddCommand(listCmd)
+
+	// Create command with flags
+	executed := false
+	var formatFlag string
+
+	profileCmd := &cobra.Command{Use: "profile"}
+	profileListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List profiles",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			executed = true
+			formatFlag, _ = cmd.Flags().GetString("format")
+			return nil
+		},
+	}
+	profileListCmd.Flags().StringP("format", "f", "table", "Output format")
+	profileCmd.AddCommand(profileListCmd)
+
+	provider := &mockCommandProvider{
+		name:  "profile",
+		group: "Test",
+		cmd:   profileCmd,
+		aliases: []CommandAlias{
+			{
+				Subcommand:    "list",
+				ParentCommand: "list",
+				Name:          "profiles",
+				Short:         "Alias",
+			},
+		},
+	}
+
+	Register(provider)
+	err := RegisterAll(rootCmd)
+	require.NoError(t, err)
+
+	// Find and execute alias
+	aliasCmd, _, err := rootCmd.Find([]string{"list", "profiles"})
+	require.NoError(t, err)
+
+	// Set flag and execute RunE directly
+	err = aliasCmd.Flags().Set("format", "json")
+	require.NoError(t, err)
+
+	err = aliasCmd.RunE(aliasCmd, []string{})
+	require.NoError(t, err)
+
+	// Verify flag was passed through
+	assert.True(t, executed, "RunE should have been called")
+	assert.Equal(t, "json", formatFlag, "flag value should be passed through")
+}
+
+func TestAliasWithArgs(t *testing.T) {
+	Reset()
+
+	rootCmd := &cobra.Command{Use: "root"}
+	showCmd := &cobra.Command{Use: "show"}
+	rootCmd.AddCommand(showCmd)
+
+	// Create command that requires args
+	var receivedArg string
+
+	profileCmd := &cobra.Command{Use: "profile"}
+	profileShowCmd := &cobra.Command{
+		Use:   "show <name>",
+		Short: "Show profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			receivedArg = args[0]
+			return nil
+		},
+	}
+	profileCmd.AddCommand(profileShowCmd)
+
+	provider := &mockCommandProvider{
+		name:  "profile",
+		group: "Test",
+		cmd:   profileCmd,
+		aliases: []CommandAlias{
+			{
+				Subcommand:    "show",
+				ParentCommand: "show",
+				Name:          "profile",
+				Short:         "Alias",
+			},
+		},
+	}
+
+	Register(provider)
+	err := RegisterAll(rootCmd)
+	require.NoError(t, err)
+
+	// Find and execute alias with argument
+	aliasCmd, _, err := rootCmd.Find([]string{"show", "profile"})
+	require.NoError(t, err)
+
+	// Execute RunE directly with args
+	err = aliasCmd.RunE(aliasCmd, []string{"test-profile"})
+	require.NoError(t, err)
+
+	assert.Equal(t, "test-profile", receivedArg, "argument should be passed through")
+}
+
+func TestAliasParentCommand(t *testing.T) {
+	Reset()
+
+	rootCmd := &cobra.Command{Use: "root"}
+	aliasParent := &cobra.Command{Use: "alias-parent"}
+	rootCmd.AddCommand(aliasParent)
+
+	// Create parent command (not a subcommand) to alias
+	executed := false
+	aboutCmd := &cobra.Command{
+		Use:   "about",
+		Short: "About command",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			executed = true
+			return nil
+		},
+	}
+
+	provider := &mockCommandProvider{
+		name:  "about",
+		group: "Test",
+		cmd:   aboutCmd,
+		aliases: []CommandAlias{
+			{
+				Subcommand:    "", // Empty = alias the parent command itself
+				ParentCommand: "alias-parent",
+				Name:          "info",
+				Short:         "Alias for about",
+			},
+		},
+	}
+
+	Register(provider)
+	err := RegisterAll(rootCmd)
+	require.NoError(t, err)
+
+	// Verify original command
+	originalCmd, _, err := rootCmd.Find([]string{"about"})
+	require.NoError(t, err)
+	assert.Equal(t, "about", originalCmd.Use)
+
+	// Verify alias exists
+	aliasCmd, _, err := rootCmd.Find([]string{"alias-parent", "info"})
+	require.NoError(t, err)
+	assert.Equal(t, "info", aliasCmd.Use)
+
+	// Verify RunE was copied (both should point to the same function)
+	assert.NotNil(t, aliasCmd.RunE, "alias should have RunE copied from source")
+
+	// Execute the RunE directly to verify delegation
+	err = aliasCmd.RunE(aliasCmd, []string{})
+	require.NoError(t, err)
+	assert.True(t, executed, "alias RunE should delegate to original command's RunE")
+}
+
+func TestMultipleAliases(t *testing.T) {
+	Reset()
+
+	rootCmd := &cobra.Command{Use: "root"}
+	listCmd := &cobra.Command{Use: "list"}
+	showCmd := &cobra.Command{Use: "show"}
+	rootCmd.AddCommand(listCmd, showCmd)
+
+	// Create command with multiple subcommands and multiple aliases
+	parentCmd := &cobra.Command{Use: "parent"}
+	listSubCmd := &cobra.Command{Use: "list", Short: "List", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
+	showSubCmd := &cobra.Command{Use: "show", Short: "Show", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
+	parentCmd.AddCommand(listSubCmd, showSubCmd)
+
+	provider := &mockCommandProvider{
+		name:  "parent",
+		group: "Test",
+		cmd:   parentCmd,
+		aliases: []CommandAlias{
+			{
+				Subcommand:    "list",
+				ParentCommand: "list",
+				Name:          "items",
+				Short:         "List items alias",
+			},
+			{
+				Subcommand:    "show",
+				ParentCommand: "show",
+				Name:          "item",
+				Short:         "Show item alias",
+			},
+		},
+	}
+
+	Register(provider)
+	err := RegisterAll(rootCmd)
+	require.NoError(t, err)
+
+	// Verify first alias
+	alias1, _, err := rootCmd.Find([]string{"list", "items"})
+	require.NoError(t, err)
+	assert.Equal(t, "items", alias1.Use)
+
+	// Verify second alias
+	alias2, _, err := rootCmd.Find([]string{"show", "item"})
+	require.NoError(t, err)
+	assert.Equal(t, "item", alias2.Use)
+}
+
+func TestAliasErrorParentNotFound(t *testing.T) {
+	Reset()
+
+	rootCmd := &cobra.Command{Use: "root"}
+
+	parentCmd := &cobra.Command{Use: "parent"}
+	listSubCmd := &cobra.Command{Use: "list", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
+	parentCmd.AddCommand(listSubCmd)
+
+	provider := &mockCommandProvider{
+		name:  "parent",
+		group: "Test",
+		cmd:   parentCmd,
+		aliases: []CommandAlias{
+			{
+				Subcommand:    "list",
+				ParentCommand: "nonexistent", // Parent doesn't exist
+				Name:          "items",
+			},
+		},
+	}
+
+	Register(provider)
+	err := RegisterAll(rootCmd)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to find parent command")
+	assert.Contains(t, err.Error(), "nonexistent")
+}
+
+func TestAliasErrorSubcommandNotFound(t *testing.T) {
+	Reset()
+
+	rootCmd := &cobra.Command{Use: "root"}
+	listCmd := &cobra.Command{Use: "list"}
+	rootCmd.AddCommand(listCmd)
+
+	parentCmd := &cobra.Command{Use: "parent"}
+	// Add one subcommand but alias references a different one
+	existingCmd := &cobra.Command{Use: "existing", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
+	parentCmd.AddCommand(existingCmd)
+
+	provider := &mockCommandProvider{
+		name:  "parent",
+		group: "Test",
+		cmd:   parentCmd,
+		aliases: []CommandAlias{
+			{
+				Subcommand:    "nonexistent", // Subcommand doesn't exist
+				ParentCommand: "list",
+				Name:          "items",
+			},
+		},
+	}
+
+	Register(provider)
+	err := RegisterAll(rootCmd)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to find subcommand")
+	assert.Contains(t, err.Error(), "nonexistent")
+}
+
+func TestAliasNoAliases(t *testing.T) {
+	Reset()
+
+	rootCmd := &cobra.Command{Use: "root"}
+
+	provider := &mockCommandProvider{
+		name:    "test",
+		group:   "Test",
+		cmd:     &cobra.Command{Use: "test"},
+		aliases: nil, // No aliases
+	}
+
+	Register(provider)
+	err := RegisterAll(rootCmd)
+	require.NoError(t, err)
+
+	// Should just register the command without errors
+	assert.Len(t, rootCmd.Commands(), 1)
+}
+
+func TestAliasFlagCompletion(t *testing.T) {
+	Reset()
+
+	rootCmd := &cobra.Command{Use: "root"}
+	listCmd := &cobra.Command{Use: "list"}
+	rootCmd.AddCommand(listCmd)
+
+	// Create command with flag completion
+	profileCmd := &cobra.Command{Use: "profile"}
+	profileListCmd := &cobra.Command{
+		Use:  "list",
+		RunE: func(cmd *cobra.Command, args []string) error { return nil },
+	}
+	profileListCmd.Flags().StringP("format", "f", "table", "Output format")
+
+	// Register flag completion
+	_ = profileListCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"table", "json", "yaml"}, cobra.ShellCompDirectiveNoFileComp
+	})
+
+	profileCmd.AddCommand(profileListCmd)
+
+	provider := &mockCommandProvider{
+		name:  "profile",
+		group: "Test",
+		cmd:   profileCmd,
+		aliases: []CommandAlias{
+			{
+				Subcommand:    "list",
+				ParentCommand: "list",
+				Name:          "profiles",
+			},
+		},
+	}
+
+	Register(provider)
+	err := RegisterAll(rootCmd)
+	require.NoError(t, err)
+
+	// Get alias command
+	aliasCmd, _, err := rootCmd.Find([]string{"list", "profiles"})
+	require.NoError(t, err)
+
+	// Verify flag completion was copied
+	completionFunc, _ := aliasCmd.GetFlagCompletionFunc("format")
+	assert.NotNil(t, completionFunc, "flag completion should be copied to alias")
+
+	// Test completion function works
+	completions, _ := completionFunc(aliasCmd, []string{}, "")
+	assert.Contains(t, completions, "table")
+	assert.Contains(t, completions, "json")
+	assert.Contains(t, completions, "yaml")
+}
+
+func TestAliasValidArgsFunction(t *testing.T) {
+	Reset()
+
+	rootCmd := &cobra.Command{Use: "root"}
+	showCmd := &cobra.Command{Use: "show"}
+	rootCmd.AddCommand(showCmd)
+
+	// Create command with ValidArgsFunction
+	profileCmd := &cobra.Command{Use: "profile"}
+	profileShowCmd := &cobra.Command{
+		Use:  "show <name>",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error { return nil },
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			return []string{"dev", "prod", "staging"}, cobra.ShellCompDirectiveNoFileComp
+		},
+	}
+	profileCmd.AddCommand(profileShowCmd)
+
+	provider := &mockCommandProvider{
+		name:  "profile",
+		group: "Test",
+		cmd:   profileCmd,
+		aliases: []CommandAlias{
+			{
+				Subcommand:    "show",
+				ParentCommand: "show",
+				Name:          "profile",
+			},
+		},
+	}
+
+	Register(provider)
+	err := RegisterAll(rootCmd)
+	require.NoError(t, err)
+
+	// Get alias command
+	aliasCmd, _, err := rootCmd.Find([]string{"show", "profile"})
+	require.NoError(t, err)
+
+	// Verify ValidArgsFunction was copied
+	assert.NotNil(t, aliasCmd.ValidArgsFunction, "ValidArgsFunction should be copied")
+
+	// Test completion function works
+	completions, _ := aliasCmd.ValidArgsFunction(aliasCmd, []string{}, "")
+	assert.Contains(t, completions, "dev")
+	assert.Contains(t, completions, "prod")
+	assert.Contains(t, completions, "staging")
 }

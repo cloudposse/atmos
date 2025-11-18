@@ -52,3 +52,8 @@ func (d *DevcontainerCommandProvider) GetName() string {
 func (d *DevcontainerCommandProvider) GetGroup() string {
 	return "Workflow Commands"
 }
+
+// GetAliases returns command aliases (none for devcontainer).
+func (d *DevcontainerCommandProvider) GetAliases() []internal.CommandAlias {
+	return nil
+}

@@ -18,6 +18,7 @@ Valid subcommands are:
 • list
 • packer
 • pro
+• profile
 • show
 • support
 • terraform

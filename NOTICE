@@ -287,7 +287,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/google/renameio/v2
     License: Apache-2.0
-    URL: https://github.com/google/renameio/blob/v2.0.0/LICENSE
+    URL: https://github.com/google/renameio/blob/v2.0.1/LICENSE
 
   - github.com/google/s2a-go
     License: Apache-2.0
@@ -1218,7 +1218,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/getsentry/sentry-go
     License: MIT
-    URL: https://github.com/getsentry/sentry-go/blob/v0.37.0/LICENSE
+    URL: https://github.com/getsentry/sentry-go/blob/v0.38.0/LICENSE
 
   - github.com/go-logfmt/logfmt
     License: MIT

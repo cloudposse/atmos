@@ -137,6 +137,12 @@ linters:
           msg: Use `log.Debug()` for debug messages instead of `log.Warn()` with "DEBUG" in the message
         - pattern: log\.Error\(.*[Dd][Ee][Bb][Uu][Gg]
           msg: Use `log.Debug()` for debug messages instead of `log.Error()` with "DEBUG" in the message
+        # Flag Binding Protection: ENFORCED
+        # pkg/flags/ infrastructure is fully implemented - these patterns are now banned outside pkg/flags/.
+        - pattern: viper\.BindEnv\(
+          msg: NEVER call viper.BindEnv() directly - use pkg/flags/ unified flag parser (consult flag-handler agent)
+        - pattern: viper\.BindPFlag\(
+          msg: NEVER call viper.BindPFlag() directly - use pkg/flags/ unified flag parser (consult flag-handler agent)
       exclude-godoc-examples: false
       analyze-types: true
     funlen:
@@ -297,6 +303,15 @@ linters:
           - err113
         path: ".*"
         source: 'errors\.Join\(.*errUtils\..*fmt\.Errorf'
+      # Allow viper.BindEnv and viper.BindPFlag in pkg/flags/ and test files
+      - linters:
+          - forbidigo
+        path: ^pkg/flags/
+        text: "viper\\.BindEnv|viper\\.BindPFlag"
+      - linters:
+          - forbidigo
+        path: _test\.go$
+        text: "viper\\.BindEnv|viper\\.BindPFlag"
     paths:
       - experiments/.*
       - third_party$

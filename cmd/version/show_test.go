@@ -322,7 +322,7 @@ func TestShowCommand_FormatValidation(t *testing.T) {
 				case "yaml":
 					return formatReleaseDetailYAML(release)
 				default:
-					return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrUnsupportedOutputFormat, showFormat)
+					return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrInvalidFormat, showFormat)
 				}
 			}
 
@@ -333,7 +333,7 @@ func TestShowCommand_FormatValidation(t *testing.T) {
 
 			if tt.wantError {
 				require.Error(t, err, "Expected error for invalid format")
-				assert.Contains(t, err.Error(), "unsupported")
+				assert.Contains(t, err.Error(), "invalid")
 			} else {
 				assert.NoError(t, err, "Expected no error for valid format %s", tt.format)
 			}

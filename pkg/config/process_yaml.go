@@ -210,7 +210,7 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 
 	switch {
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncEnv):
-		envValue, err := u.ProcessTagEnv(strFunc)
+		envValue, err := u.ProcessTagEnv(strFunc, nil)
 		if err != nil {
 			log.Debug(failedToProcess, functionKey, strFunc, "error", err)
 			return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncEnv, node.Value, err)
@@ -287,7 +287,9 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 // handleEnv processes a YAML node with an !env tag and sets the value in Viper, returns an error if the processing fails, warns if the value is empty.
 func handleEnv(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
-	envValue, err := u.ProcessTagEnv(strFunc)
+	// In atmos.yaml processing, we don't have stack context, so pass nil.
+	// This will make !env fall back to OS environment variables only.
+	envValue, err := u.ProcessTagEnv(strFunc, nil)
 	if err != nil {
 		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
 		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncEnv, node.Value, err)
