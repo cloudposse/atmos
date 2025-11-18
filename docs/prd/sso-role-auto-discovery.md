@@ -225,21 +225,14 @@ Instead of runtime-only identities or new commands, **enable auto-provisiony at 
 
 ```yaml
 # atmos.yaml
-providers:
-  sso-prod:
-    kind: aws/iam-identity-center
-    start_url: https://my-org.awsapps.com/start
-    region: us-east-1
-    spec:
+auth:
+  providers:
+    sso-prod:
+      kind: aws/iam-identity-center
+      start_url: https://my-org.awsapps.com/start
+      region: us-east-1
       # Enable automatic identity provisioning
       auto_provision_identities: true
-
-      # Optional: Configure provisioning behavior
-      provisioning:
-        cache_duration: 1h
-        filters:
-          accounts: ["production", "staging"]
-          roles: ["AdministratorAccess", "PowerUserAccess"]
 ```
 
 #### Login Triggers Provisioning
@@ -423,8 +416,8 @@ providers:
     kind: aws/iam-identity-center
     start_url: https://my-org.awsapps.com/start
     region: us-east-1
+    auto_provision_identities: true
     spec:
-      auto_provision_identities: true
       discovery:
         filters:
           accounts: ["production", "staging"]  # Only these accounts
@@ -733,8 +726,8 @@ func (m *manager) shouldAutoProvision(providerName string) bool {
         return false
     }
 
-    if spec, ok := provider.Spec["auto_provision_identities"].(bool); ok {
-        return spec
+    if provider.AutoProvisionIdentities != nil && *provider.AutoProvisionIdentities {
+        return true
     }
 
     return false
@@ -813,15 +806,11 @@ func injectProvisionedIdentityImports(atmosConfig *schema.AtmosConfiguration) er
 }
 
 func shouldAutoProvisionIdentities(provider *schema.Provider) bool {
-    if provider.Spec == nil {
+    if provider.AutoProvisionIdentities == nil {
         return false
     }
 
-    if autoProvision, ok := provider.Spec["auto_provision_identities"].(bool); ok {
-        return autoProvision
-    }
-
-    return false
+    return *provider.AutoProvisionIdentities
 }
 
 func getProvisioningOutputPath(providerName string, provider *schema.Provider) string {
@@ -853,7 +842,7 @@ func getProvisioningOutputPath(providerName string, provider *schema.Provider) s
    └─> Cache token in keyring
 
 3. Auth Manager: Check auto_provision_identities
-   └─> provider.Spec["auto_provision_identities"] == true?
+   └─> provider.AutoProvisionIdentities != nil && *provider.AutoProvisionIdentities?
 
 4. Auth Manager: Provision Identities
    └─> ssoProvider.ProvisionIdentities(ctx, accessToken)
@@ -933,10 +922,10 @@ providers:
     start_url: https://my-org.awsapps.com/start
     region: us-east-1
 
-    spec:
-      # Enable auto-provisiony (default: false)
-      auto_provision_identities: true
+    # Enable auto-provision (default: false)
+    auto_provision_identities: true
 
+    spec:
       # Optional: Discovery configuration
       discovery:
         # Cache duration (default: 1h)
@@ -980,14 +969,14 @@ providers:
 {
   "providers": {
     "properties": {
+      "auto_provision_identities": {
+        "type": "boolean",
+        "description": "Automatically discover and populate identities from AWS SSO",
+        "default": false
+      },
       "spec": {
         "type": "object",
         "properties": {
-          "auto_provision_identities": {
-            "type": "boolean",
-            "description": "Automatically discover and populate identities from AWS SSO",
-            "default": false
-          },
           "discovery": {
             "type": "object",
             "properties": {

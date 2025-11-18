@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -398,4 +399,92 @@ func TestSSOProvider_PollForAccessToken_SlowDown(t *testing.T) {
 // strPtr is a helper to create string pointers.
 func strPtr(s string) *string {
 	return &s
+}
+
+func TestSSOProvider_Authenticate_WithValidCachedToken(t *testing.T) {
+	// Test that Authenticate returns cached token when available and valid.
+	// This covers the early return path in Authenticate() when cache hit occurs.
+	expiration := time.Now().Add(1 * time.Hour)
+
+	config := &schema.Provider{
+		Kind:     "aws/iam-identity-center",
+		Region:   "us-east-1",
+		StartURL: "https://company.awsapps.com/start",
+	}
+
+	provider, err := NewSSOProvider("test-sso", config)
+	require.NoError(t, err)
+
+	// Mock cache storage to return valid cached token.
+	mockStorage := &mockCacheStorage{
+		getXDGCacheDirFunc: func(subdir string, perm os.FileMode) (string, error) {
+			return "/tmp/atmos-cache", nil
+		},
+		mkdirAllFunc: func(path string, perm os.FileMode) error {
+			return nil
+		},
+		readFileFunc: func(path string) ([]byte, error) {
+			// Return valid cached token JSON.
+			data := `{"accessToken":"cached-access-token","expiresAt":"` + expiration.Format(time.RFC3339) + `","region":"us-east-1","startUrl":"https://company.awsapps.com/start"}`
+			return []byte(data), nil
+		},
+	}
+	provider.cacheStorage = mockStorage
+
+	ctx := context.Background()
+	creds, err := provider.Authenticate(ctx)
+
+	// Should succeed using cached token without device flow.
+	assert.NoError(t, err)
+	assert.NotNil(t, creds)
+
+	awsCreds, ok := creds.(*authTypes.AWSCredentials)
+	assert.True(t, ok)
+	assert.Equal(t, "cached-access-token", awsCreds.AccessKeyID) // Token stored in AccessKeyID field.
+	assert.Equal(t, "us-east-1", awsCreds.Region)
+	assert.NotEmpty(t, awsCreds.Expiration)
+}
+
+func TestSSOProvider_Authenticate_WithExpiredCachedToken(t *testing.T) {
+	// Test that expired cached token triggers new authentication.
+	// This covers the cache miss path when token is expired.
+	t.Setenv("GO_TEST", "1") // Prevent browser launch.
+	t.Setenv("CI", "1")      // Use plain text output.
+
+	pastExpiration := time.Now().Add(-10 * time.Minute) // Expired 10 minutes ago.
+
+	config := &schema.Provider{
+		Kind:     "aws/iam-identity-center",
+		Region:   "us-east-1",
+		StartURL: "https://company.awsapps.com/start",
+	}
+
+	provider, err := NewSSOProvider("test-sso", config)
+	require.NoError(t, err)
+
+	// Mock cache storage to return expired token.
+	mockStorage := &mockCacheStorage{
+		getXDGCacheDirFunc: func(subdir string, perm os.FileMode) (string, error) {
+			return "/tmp/atmos-cache", nil
+		},
+		mkdirAllFunc: func(path string, perm os.FileMode) error {
+			return nil
+		},
+		readFileFunc: func(path string) ([]byte, error) {
+			// Return expired token JSON.
+			data := `{"accessToken":"expired-token","expiresAt":"` + pastExpiration.Format(time.RFC3339) + `","region":"us-east-1","startUrl":"https://company.awsapps.com/start"}`
+			return []byte(data), nil
+		},
+	}
+	provider.cacheStorage = mockStorage
+
+	// Use short timeout since this will fail (no real SSO setup).
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	_, err = provider.Authenticate(ctx)
+
+	// Should attempt device flow (and fail in test environment).
+	// The important part is that it didn't use the expired cached token.
+	assert.Error(t, err) // Expected to fail without real SSO.
 }
