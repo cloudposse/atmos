@@ -151,6 +151,10 @@ func PromptForOptionalValue(flagName, flagValue, promptTitle string, completionF
 func PromptForPositionalArg(argName, promptTitle string, completionFunc CompletionFunc, cmd *cobra.Command, currentArgs []string) (string, error) {
 	defer perf.Track(nil, "flags.PromptForPositionalArg")()
 
+	if !isInteractive() {
+		return "", nil // Gracefully return empty - Cobra will handle the error
+	}
+
 	// Call completion function to get options.
 	// Pass current args in case completion is context-dependent (e.g., stack completion depends on component).
 	options, _ := completionFunc(cmd, currentArgs, "")
@@ -158,6 +162,5 @@ func PromptForPositionalArg(argName, promptTitle string, completionFunc Completi
 		return "", nil // No options available, let Cobra handle the error
 	}
 
-	// PromptForValue will check isInteractive() internally
 	return PromptForValue(argName, promptTitle, options)
 }
