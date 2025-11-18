@@ -68,3 +68,9 @@ func (t *ThemeCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsB
 func (t *ThemeCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
 	return nil
 }
+
+// GetAliases returns command aliases.
+// Theme command has no aliases.
+func (t *ThemeCommandProvider) GetAliases() []internal.CommandAlias {
+	return nil
+}

@@ -1,86 +1,117 @@
 
-👽 test linux/amd64
 
-This command reconciles the actual state of Helm releases in the cluster with   
-the desired state defined in your configurations by applying the necessary      
-changes.                                                                        
-                                                                                
-Example usage: atmos helmfile apply echo-server -s tenant1-ue2-dev atmos        
-helmfile                                                                        
-apply echo-server -s tenant1-ue2-dev --redirect-stderr /dev/stdout              
+This command reconciles the actual state of Helm releases in the cluster with the desired state defined in your configurations by applying the necessary changes.
 
-USAGE
+Example usage: atmos helmfile apply echo-server -s tenant1-ue2-dev atmos helmfile apply echo-server -s tenant1-ue2-dev --redirect-stderr /dev/stdout
 
-                                    
-    $ atmos helmfile apply [flags]  
-                                    
+Usage:
 
-FLAGS
-
-  -h, --help  help for apply
+  atmos helmfile apply [flags]
 
 
-GLOBAL FLAGS
+Flags:
 
-      --                        Use double dashes to separate Atmos-specific options from native arguments and flags
-                                for the command.
+    -h, --help    help for apply
 
-      --base-path string        Base path for Atmos project
 
-  -C, --chdir string            Change working directory before executing the command (run as if Atmos started in this
-                                directory)
+Global Flags:
 
-      --config strings          Paths to configuration files (comma-separated or repeated flag)
+        --base-path string           Base path for Atmos project
 
-      --config-path strings     Paths to search for Atmos configuration (comma-separated or repeated flag)
+    -C, --chdir string               Change working directory before executing
+                                     the command (run as if Atmos started in
+                                     this directory)
 
-      --force-color             Force color output even when not a TTY (useful for screenshots)
+        --config stringSlice         Paths to configuration files
+                                     (comma-separated or repeated flag) (default
+                                     [])
 
-      --force-tty               Force TTY mode with sane defaults when terminal detection fails (useful for
-                                screenshots)
+        --config-path stringSlice    Paths to search for Atmos configuration
+                                     (comma-separated or repeated flag) (default
+                                     [])
 
-      --heatmap                 Show performance heatmap visualization after command execution (includes P95 latency)
+        --force-color                Force color output even when not a TTY
+                                     (useful for screenshots) (default false)
 
-      --heatmap-mode string     Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI) (default
-                                bar)
+        --force-tty                  Force TTY mode with sane defaults when
+                                     terminal detection fails (useful for
+                                     screenshots) (default false)
 
-      --identity string         Identity to use for authentication. Use --identity to select interactively, --
-                                identity=NAME to specify
+        --heatmap                    Show performance heatmap visualization
+                                     after command execution (includes P95
+                                     latency) (default false)
 
-      --logs-file string        The file to write Atmos logs to. Logs can be written to any file or any standard file
-                                descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
-                                /dev/stderr)
+        --heatmap-mode string        Heatmap visualization mode: bar, sparkline,
+                                     table (press 1-3 to switch in TUI) (default
+                                     bar)
 
-      --logs-level string       Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log
-                                level is set to Off, Atmos will not log any messages (default Warning)
+        --identity string            Identity to use for authentication. Use
+                                     --identity to select interactively,
+                                     --identity=NAME to specify
 
-      --mask                    Enable automatic masking of sensitive data in output (use --mask=false to disable)
-                                (default true)
+        --logs-file string           The file to write Atmos logs to. Logs can
+                                     be written to any file or any standard file
+                                     descriptor, including '/dev/stdout',
+                                     '/dev/stderr' and '/dev/null' (default
+                                     /dev/stderr)
 
-      --no-color                Disable color output
+        --logs-level string          Logs level. Supported log levels are Trace,
+                                     Debug, Info, Warning, Off. If the log level
+                                     is set to Off, Atmos will not log any
+                                     messages (default Warning)
 
-      --pager string            Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --
-                                pager=less to use specific pager)
+        --mask                       Enable automatic masking of sensitive data
+                                     in output (use --mask=false to disable)
+                                     (default true)
 
-      --profile-file string     Write profiling data to file instead of starting server
+        --no-color                   Disable color output (default false)
 
-      --profile-type string     Type of profile to collect when using --profile-file. Options: cpu, heap, allocs,
-                                goroutine, block, mutex, threadcreate, trace (default cpu)
+        --pager string               Enable pager for output (--pager or
+                                     --pager=true to enable, --pager=false to
+                                     disable, --pager=less to use specific
+                                     pager)
 
-      --profiler-enabled        Enable pprof profiling server
+        --profile stringSlice        Activate configuration profiles
+                                     (comma-separated or repeated flag) (default
+                                     [])
 
-      --profiler-host string    Host for pprof profiling server (default localhost)
+        --profile-file string        Write profiling data to file instead of
+                                     starting server
 
-      --profiler-port int       Port for pprof profiling server (default 6060)
+        --profile-type string        Type of profile to collect when using
+                                     --profile-file. Options: cpu, heap, allocs,
+                                     goroutine, block, mutex, threadcreate,
+                                     trace (default cpu)
 
-      --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
-                                standard file descriptor (including '/dev/null')
+        --profiler-enabled           Enable pprof profiling server (default
+                                     false)
 
-  -s, --stack string            The stack flag specifies the environment or configuration set for deployment in
-                                Atmos CLI.
+        --profiler-host string       Host for pprof profiling server (default
+                                     localhost)
 
-  -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
+        --profiler-port int          Port for pprof profiling server (default
+                                     6060)
 
-      --version                 Display the Atmos CLI version
+        --redirect-stderr string     File descriptor to redirect stderr to.
+                                     Errors can be redirected to any file or any
+                                     standard file descriptor (including
+                                     '/dev/null')
+
+    -s, --stack string               The stack flag specifies the environment
+                                     or configuration set for deployment in
+                                     Atmos CLI.
+
+    -v, --verbose                    Enable verbose error output with full
+                                     context, stack traces, and detailed
+                                     information (default false)
+
+        --version                    Display the Atmos CLI version
+
+        --                           Use double dashes to separate
+                                     Atmos-specific options from native
+                                     arguments and flags for the command.
+
+
+Use atmos helmfile apply --help for more information about a command.
 
 

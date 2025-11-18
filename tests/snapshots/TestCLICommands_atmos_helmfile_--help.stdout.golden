@@ -1,96 +1,127 @@
 
-👽 test linux/amd64
 
-This command runs Helmfile commands to manage Kubernetes deployments using      
-Helmfile.                                                                       
+This command runs Helmfile commands to manage Kubernetes deployments using Helmfile.
 
-USAGE
+Usage:
 
-                                            
-    $ atmos helmfile [sub-command] [flags]  
-                                            
+  atmos helmfile [sub-command] [flags]
 
-ALIASES
+Aliases:
 
   helmfile, hf
 
-AVAILABLE COMMANDS
 
-      apply               Apply changes to align the actual state of Helm releases with the desired state.
-      destroy             Destroy the Helm releases for the specified stack.
-      diff                Show differences between the desired and actual state of Helm releases.
-      generate [command]  Generate configurations for Helmfile components
-      sync                Synchronize the state of Helm releases by reconciling the actual state with the desired state
-                          (applies changes as needed).
-      version             Get Helmfile version
+Available Commands:
 
-FLAGS
-
-      --              Use double dashes to separate Atmos-specific options from native arguments and flags for the
-                      command.
-
-  -h, --help          help for helmfile
-
-  -s, --stack string  The stack flag specifies the environment or configuration set for deployment in Atmos CLI.
+  apply                          Apply changes to align the actual state of Helm releases with the desired state.
+  destroy                        Destroy the Helm releases for the specified stack.
+  diff                           Show differences between the desired and actual state of Helm releases.
+  generate                       Generate configurations for Helmfile components
+  sync                           Synchronize the state of Helm releases with the desired state without making changes.
+  version                        Get Helmfile version
 
 
-GLOBAL FLAGS
+Flags:
 
-      --base-path string        Base path for Atmos project
+    -h, --help            help for helmfile
 
-  -C, --chdir string            Change working directory before executing the command (run as if Atmos started in this
-                                directory)
+    -s, --stack string    The stack flag specifies the environment or
+                          configuration set for deployment in Atmos CLI.
 
-      --config strings          Paths to configuration files (comma-separated or repeated flag)
-
-      --config-path strings     Paths to search for Atmos configuration (comma-separated or repeated flag)
-
-      --force-color             Force color output even when not a TTY (useful for screenshots)
-
-      --force-tty               Force TTY mode with sane defaults when terminal detection fails (useful for
-                                screenshots)
-
-      --heatmap                 Show performance heatmap visualization after command execution (includes P95 latency)
-
-      --heatmap-mode string     Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI) (default
-                                bar)
-
-      --identity string         Identity to use for authentication. Use --identity to select interactively, --
-                                identity=NAME to specify
-
-      --logs-file string        The file to write Atmos logs to. Logs can be written to any file or any standard file
-                                descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
-                                /dev/stderr)
-
-      --logs-level string       Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log
-                                level is set to Off, Atmos will not log any messages (default Warning)
-
-      --mask                    Enable automatic masking of sensitive data in output (use --mask=false to disable)
-                                (default true)
-
-      --no-color                Disable color output
-
-      --pager string            Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --
-                                pager=less to use specific pager)
-
-      --profile-file string     Write profiling data to file instead of starting server
-
-      --profile-type string     Type of profile to collect when using --profile-file. Options: cpu, heap, allocs,
-                                goroutine, block, mutex, threadcreate, trace (default cpu)
-
-      --profiler-enabled        Enable pprof profiling server
-
-      --profiler-host string    Host for pprof profiling server (default localhost)
-
-      --profiler-port int       Port for pprof profiling server (default 6060)
-
-      --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
-                                standard file descriptor (including '/dev/null')
-
-  -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
-
-      --version                 Display the Atmos CLI version
+        --                Use double dashes to separate Atmos-specific options
+                          from native arguments and flags for the command.
 
 
+Global Flags:
 
-Use atmos helmfile [command] --help for more information about a command.
+        --base-path string           Base path for Atmos project
+
+    -C, --chdir string               Change working directory before executing
+                                     the command (run as if Atmos started in
+                                     this directory)
+
+        --config stringSlice         Paths to configuration files
+                                     (comma-separated or repeated flag) (default
+                                     [])
+
+        --config-path stringSlice    Paths to search for Atmos configuration
+                                     (comma-separated or repeated flag) (default
+                                     [])
+
+        --force-color                Force color output even when not a TTY
+                                     (useful for screenshots) (default false)
+
+        --force-tty                  Force TTY mode with sane defaults when
+                                     terminal detection fails (useful for
+                                     screenshots) (default false)
+
+        --heatmap                    Show performance heatmap visualization
+                                     after command execution (includes P95
+                                     latency) (default false)
+
+        --heatmap-mode string        Heatmap visualization mode: bar, sparkline,
+                                     table (press 1-3 to switch in TUI) (default
+                                     bar)
+
+        --identity string            Identity to use for authentication. Use
+                                     --identity to select interactively,
+                                     --identity=NAME to specify
+
+        --logs-file string           The file to write Atmos logs to. Logs can
+                                     be written to any file or any standard file
+                                     descriptor, including '/dev/stdout',
+                                     '/dev/stderr' and '/dev/null' (default
+                                     /dev/stderr)
+
+        --logs-level string          Logs level. Supported log levels are Trace,
+                                     Debug, Info, Warning, Off. If the log level
+                                     is set to Off, Atmos will not log any
+                                     messages (default Warning)
+
+        --mask                       Enable automatic masking of sensitive data
+                                     in output (use --mask=false to disable)
+                                     (default true)
+
+        --no-color                   Disable color output (default false)
+
+        --pager string               Enable pager for output (--pager or
+                                     --pager=true to enable, --pager=false to
+                                     disable, --pager=less to use specific
+                                     pager)
+
+        --profile stringSlice        Activate configuration profiles
+                                     (comma-separated or repeated flag) (default
+                                     [])
+
+        --profile-file string        Write profiling data to file instead of
+                                     starting server
+
+        --profile-type string        Type of profile to collect when using
+                                     --profile-file. Options: cpu, heap, allocs,
+                                     goroutine, block, mutex, threadcreate,
+                                     trace (default cpu)
+
+        --profiler-enabled           Enable pprof profiling server (default
+                                     false)
+
+        --profiler-host string       Host for pprof profiling server (default
+                                     localhost)
+
+        --profiler-port int          Port for pprof profiling server (default
+                                     6060)
+
+        --redirect-stderr string     File descriptor to redirect stderr to.
+                                     Errors can be redirected to any file or any
+                                     standard file descriptor (including
+                                     '/dev/null')
+
+    -v, --verbose                    Enable verbose error output with full
+                                     context, stack traces, and detailed
+                                     information (default false)
+
+        --version                    Display the Atmos CLI version
+
+
+Use atmos helmfile [subcommand] --help for more information about a command.
+
+

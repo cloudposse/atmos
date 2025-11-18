@@ -20,6 +20,7 @@ type StyleSet struct {
 	Warning lipgloss.Style
 	Error   lipgloss.Style
 	Info    lipgloss.Style
+	Notice  lipgloss.Style
 	Debug   lipgloss.Style
 	Trace   lipgloss.Style
 
@@ -107,6 +108,7 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		Warning: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
 		Error:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)),
 		Info:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Link)),
+		Notice:  lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
 		Debug:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
 		Trace:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)).Faint(true),
 
@@ -449,6 +451,16 @@ func GetInfoStyle() lipgloss.Style {
 		return lipgloss.NewStyle()
 	}
 	return styles.Info
+}
+
+// GetNoticeStyle returns the notice style from the current theme.
+// Notice style is used for neutral informational messages, typically in empty states.
+func GetNoticeStyle() lipgloss.Style {
+	styles := GetCurrentStyles()
+	if styles == nil {
+		return lipgloss.NewStyle()
+	}
+	return styles.Notice
 }
 
 // GetDebugStyle returns the debug style from the current theme.

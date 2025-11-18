@@ -144,4 +144,7 @@ const (
 	ProfilerTypeFlag    = "--profiler-type"
 	HeatmapFlag         = "--heatmap"
 	HeatmapModeFlag     = "--heatmap-mode"
+
+	// Auth profile flags.
+	AuthProfileFlag = "--profile"
 )

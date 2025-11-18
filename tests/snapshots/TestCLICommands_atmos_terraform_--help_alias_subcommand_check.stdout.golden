@@ -1,307 +1,256 @@
 
-👽 test linux/amd64
 
-This command allows you to execute Terraform commands, such as **plan**,        
-**apply**, and **destroy**, using Atmos stack configurations for consistent     
-infrastructure management.                                                      
-                                                                                
-Atmos enhances Terraform with additional automation, safety features, and       
-streamlined workflows. See the **Additions and Differences** section below for  
-details on how Atmos extends native Terraform.                                  
-                                                                                
-# Additions and Differences from Native Terraform                               
-                                                                                
-Atmos enhances Terraform with additional automation and safety features. Below  
-are the key differences:                                                        
-                                                                                
-## Automatic Initialization                                                     
-                                                                                
-**Before executing terraform commands, Atmos runs **terraform init**            
-automatically.**                                                                
-                                                                                
-• Skip initialization with --skip-init flag when your project is already        
-initialized:                                                                    
- atmos terraform <command> <component> -s <stack> --skip-init                   
-                                                                                
-                                                                                
-## Deploy Command                                                               
-                                                                                
-The atmos terraform deploy command provides automated deployment:               
-                                                                                
-• Executes terraform apply -auto-approve (bypasses manual approval)             
-• Supports --deploy-run-init=true|false to control initialization               
-• Use --from-plan flag to apply a previously generated planfile:                
- atmos terraform deploy <component> -s <stack> --from-plan                      
-                                                                                
-                                                                                
-## Plan Command Enhancements                                                    
-                                                                                
-### Working with Planfiles                                                      
-                                                                                
-• **Apply command with planfiles:**                                             
- # Generate plan                                                                
- atmos terraform plan <component> -s <stack> -out=<FILE>                        
-                                                                                
- # Apply the plan                                                               
- atmos terraform apply <component> -s <stack> --planfile <FILE>                 
-                                                                                
-• **Skip planfile generation:**                                                 
- atmos terraform plan <component> -s <stack> --skip-planfile=true               
-Use this when working with Terraform Cloud, which doesn't support local         
-planfiles.                                                                      
-                                                                                
-## Clean Command                                                                
-                                                                                
-The atmos terraform clean command removes temporary files and state:            
-                                                                                
-• Deletes .terraform folder, .terraform.lock.hcl lock file, and generated       
-planfiles/varfiles                                                              
-• Use --skip-lock-file to preserve the lock file                                
-• **Deletes local state files** (including terraform.tfstate.d)                 
-• Use --force to bypass confirmation prompt                                     
-                                                                                
-⚠️ **Warning:** This command can lead to permanent state loss if not using      
-remote backends.                                                                
-                                                                                
-## Workspace Management                                                         
-                                                                                
-The atmos terraform workspace command automates workspace setup:                
-                                                                                
-1. Runs terraform init -reconfigure                                             
-2. Runs terraform workspace select                                              
-3. Creates workspace with terraform workspace new if needed                     
-                                                                                
-## Import Command                                                               
-                                                                                
-The atmos terraform import command automatically sets AWS region:               
-                                                                                
-• Searches for region variable in component configuration                       
-• Sets AWS_REGION=<region> environment variable before import                   
-                                                                                
-## Backend Generation                                                           
-                                                                                
-Generate backend configurations for Terraform remote state:                     
-                                                                                
-• **Single component:**                                                         
- atmos terraform generate backend <component> -s <stack>                        
-                                                                                
-• **All components:**                                                           
- atmos terraform generate backends                                              
-                                                                                
-                                                                                
-## Varfile Generation                                                           
-                                                                                
-Generate variable files for Terraform:                                          
-                                                                                
-• **Single component:**                                                         
- atmos terraform generate varfile <component> -s <stack>                        
-                                                                                
-• **All components:**                                                           
- atmos terraform generate varfiles                                              
-                                                                                
-                                                                                
-## Plan Diff                                                                    
-                                                                                
-Compare two Terraform plans to see differences:                                 
-                                                                                
- atmos terraform plan-diff --orig <original-plan> --new <new-plan>              
-                                                                                
-If --new is not provided, generates a new plan with current configuration.      
-                                                                                
-## Shell Mode                                                                   
-                                                                                
-Launch an interactive shell with Atmos environment configured:                  
-                                                                                
- atmos terraform shell <component> -s <stack>                                   
-                                                                                
-Execute native terraform commands inside the configured shell environment.      
-                                                                                
-## Passing Native Terraform Flags                                               
-                                                                                
-Use double-dash -- to pass additional flags to terraform:                       
-                                                                                
- atmos terraform plan <component> -s <stack> -- -refresh=false                  
- atmos terraform apply <component> -s <stack> -- -lock=false                    
+This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.
 
-USAGE
+Usage:
 
-                                             
-    $ atmos terraform [sub-command] [flags]  
-                                             
+  atmos terraform [sub-command] [flags]
 
-ALIASES
+Aliases:
 
   terraform, tf, tr
 
-SUBCOMMAND ALIASES
 
-      ta               Alias of terraform apply command
-      tp               Alias of terraform plan command
+Available Commands:
 
-EXAMPLES
+  clean                          Clean up Terraform state and artifacts.
+  deploy                         Deploy the specified infrastructure using Terraform
+  generate                       Generate Terraform configuration files for Atmos components and stacks.
+  plan-diff                      Compare two Terraform plans and show the differences
+  shell                          Configure an environment for an Atmos component and start a new shell.
+  varfile                        Load variables from a file
+  write                          Write variables to a file
 
-                                                                      
-    – Execute a terraform subcommand                                  
-                                                                      
-                                                                      
-     $ atmos terraform [subcommand] <component-name> -s <stack-name>  
-                                                                      
+Native terraform Commands:
 
-AVAILABLE COMMANDS
+  apply                          Apply changes to infrastructure
+  console                        Try Terraform expressions at an interactive command prompt
+  destroy                        Destroy previously-created infrastructure
+  fmt                            Reformat your configuration in the standard style
+  force-unlock                   Release a stuck lock on the current workspace
+  get                            Install or upgrade remote Terraform modules
+  graph                          Generate a Graphviz graph of the steps in an operation
+  import                         Import existing infrastructure into Terraform state.
+  init                           Prepare your working directory for other commands
+  login                          Obtain and save credentials for a remote host
+  logout                         Remove locally-stored credentials for a remote host
+  metadata                       Metadata related commands
+  modules                        Show all declared modules in a working directory
+  output                         Show output values from your root module
+  plan                           Show changes required by the current configuration
+  providers                      Show the providers required for this configuration
+  refresh                        Update the state to match remote systems
+  show                           Show the current state or a saved plan
+  state                          Advanced state management
+  taint                          Mark a resource instance as not fully functional
+  test                           Execute integration tests for Terraform modules
+  untaint                        Remove the 'tainted' state from a resource instance
+  validate                       Check whether the configuration is valid
+  version                        Show the current Terraform version
+  workspace                      Manage Terraform workspaces
 
-      apply               Apply changes to infrastructure
-      clean               Clean up Terraform state and artifacts.
-      console             Try Terraform expressions at an interactive command prompt
-      deploy              Deploy the specified infrastructure using Terraform
-      destroy             Destroy previously-created infrastructure
-      fmt                 Reformat your configuration in the standard style
-      force-unlock        Release a stuck lock on the current workspace
-      generate [command]  Generate Terraform configuration files for Atmos components and stacks.
-      get                 Install or upgrade remote Terraform modules
-      graph               Generate a Graphviz graph of the steps in an operation
-      import              Import existing infrastructure into Terraform state.
-      init                Prepare your working directory for other commands
-      login               Obtain and save credentials for a remote host
-      logout              Remove locally-stored credentials for a remote host
-      metadata            Metadata related commands
-      modules             Show all declared modules in a working directory
-      output              Show output values from your root module
-      plan                Show changes required by the current configuration
-      plan-diff           Compare two Terraform plans and show the differences
-      providers           Show the providers required for this configuration
-      refresh             Update the state to match remote systems
-      shell               Configure an environment for an Atmos component and start a new shell.
-      show                Show the current state or a saved plan
-      state               Advanced state management
-      taint               Mark a resource instance as not fully functional
-      test                Execute integration tests for Terraform modules
-      untaint             Remove the 'tainted' state from a resource instance
-      validate            Check whether the configuration is valid
-      varfile             Load variables from a file
-      version             Show the current Terraform version
-      workspace           Manage Terraform workspaces
-      write               Write variables to a file
+Subcommand Aliases:
 
-FLAGS
-
-      --                          Use double dashes to separate Atmos-specific options from native arguments and flags
-                                  for the command.
-
-      --append-user-agent string  Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string
-                                  in Terraform provider requests. Example: Atmos/test (Cloud Posse;
-                                  +https://atmos.tools). This flag works with almost all commands.
-
-      --clone-target-ref          Clone the target reference with which to compare the current branch: atmos terraform
-                                   --affected --clone-target-ref=true
-                                  If set to 'false' (default), the target reference will be checked out instead
-                                  This requires that the target reference is already cloned by Git, and the
-                                  information about it exists in the '.git' directory
-
-      --components strings        Filter by specific components
-
-      --dry-run                   Simulate the command without making any changes
-
-  -h, --help                      help for terraform
-
-  -i, --identity string           Specify the identity to authenticate to before running Terraform commands. Use
-                                  without value to interactively select.
-
-      --include-dependents        For each affected component, detect the dependent components and process them in the
-                                  dependency order, recursively: atmos terraform  --affected --include-
-                                  dependents
-
-      --init-pass-vars            Pass the generated varfile to terraform init using the --var-file flag. OpenTofu
-                                  supports passing a varfile to init to dynamically configure backends
-
-      --process-functions         Enable/disable YAML functions processing in Atmos stack manifests when executing
-                                  terraform commands (default true)
-
-      --process-templates         Enable/disable Go template processing in Atmos stack manifests when executing
-                                  terraform commands (default true)
-
-  -q, --query string              Execute atmos terraform <command> on the components filtered by a YQ expression,
-                                  in all stacks or in a specific stack
-
-      --ref string                Git reference with which to compare the current branch: atmos terraform  --
-                                  affected --ref refs/heads/main. Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-
-                                  References for more details
-
-      --repo-path string          Filesystem path to the already cloned target repository with which to compare the
-                                  current branch: atmos terraform  --affected --repo-path
-                                  <path_to_already_cloned_repo>
-
-      --sha string                Git commit SHA with which to compare the current branch: atmos terraform  --affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
-
-      --skip strings              Skip executing specific YAML functions in the Atmos stack manifests when executing
-                                  terraform commands
-
-      --skip-init                 Skip running terraform init before executing terraform commands
-
-      --ssh-key string            Path to PEM-encoded private key to clone private repos using SSH: atmos terraform
-                                   --affected --ssh-key <path_to_ssh_key>
-
-      --ssh-key-password string   Encryption password for the PEM-encoded private key if the key contains a password-
-                                  encrypted PEM block: atmos terraform  --affected --ssh-key <path_to_ssh_key> --
-                                  ssh-key-password
-
-  -s, --stack string              The stack flag specifies the environment or configuration set for deployment in
-                                  Atmos CLI.
+  ta                             Alias of "atmos terraform apply" command
+  tp                             Alias of "atmos terraform plan" command
 
 
-GLOBAL FLAGS
+Flags:
 
-      --base-path string        Base path for Atmos project
+        --append-user-agent string    Sets the TF_APPEND_USER_AGENT environment
+                                      variable to customize the User-Agent
+                                      string in Terraform provider requests.
+                                      Example: Atmos/test (Cloud Posse;
+                                      +https://atmos.tools). This flag works
+                                      with almost all commands.
 
-  -C, --chdir string            Change working directory before executing the command (run as if Atmos started in this
-                                directory)
+        --clone-target-ref            Clone the target reference with which to
+                                      compare the current branch: atmos
+                                      terraform  --affected
+                                      --clone-target-ref=true
+                                      If set to 'false' (default), the target
+                                      reference will be checked out instead
+                                      This requires that the target reference is
+                                      already cloned by Git, and the information
+                                      about it exists in the '.git' directory
+                                      (default false)
 
-      --config strings          Paths to configuration files (comma-separated or repeated flag)
+        --components stringSlice      Filter by specific components (default
+                                      [])
 
-      --config-path strings     Paths to search for Atmos configuration (comma-separated or repeated flag)
+        --dry-run                     Simulate the command without making any
+                                      changes (default false)
 
-      --force-color             Force color output even when not a TTY (useful for screenshots)
+    -h, --help                        help for terraform
 
-      --force-tty               Force TTY mode with sane defaults when terminal detection fails (useful for
-                                screenshots)
+    -i, --identity string             Specify the identity to authenticate to
+                                      before running Terraform commands. Use
+                                      without value to interactively select.
 
-      --heatmap                 Show performance heatmap visualization after command execution (includes P95 latency)
+        --include-dependents          For each affected component, detect the
+                                      dependent components and process them in
+                                      the dependency order, recursively: atmos
+                                      terraform  --affected
+                                      --include-dependents (default false)
 
-      --heatmap-mode string     Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI) (default
-                                bar)
+        --init-pass-vars              Pass the generated varfile to terraform
+                                      init using the --var-file flag.
+                                      OpenTofu supports passing a varfile to
+                                      init to dynamically configure backends
+                                      (default false)
 
-      --logs-file string        The file to write Atmos logs to. Logs can be written to any file or any standard file
-                                descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
-                                /dev/stderr)
+        --process-functions           Enable/disable YAML functions processing
+                                      in Atmos stack manifests when executing
+                                      terraform commands (default true)
 
-      --logs-level string       Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log
-                                level is set to Off, Atmos will not log any messages (default Warning)
+        --process-templates           Enable/disable Go template processing in
+                                      Atmos stack manifests when executing
+                                      terraform commands (default true)
 
-      --mask                    Enable automatic masking of sensitive data in output (use --mask=false to disable)
-                                (default true)
+    -q, --query string                Execute atmos terraform <command> on the
+                                      components filtered by a YQ expression, in
+                                      all stacks or in a specific stack
 
-      --no-color                Disable color output
+        --ref string                  Git reference with which to compare the
+                                      current branch: atmos terraform
+                                       --affected --ref
+                                      refs/heads/main. Refer to
+                                      https://git-scm.com/book/en/v2/Git-Internals-Git-References
+                                      for more details
 
-      --pager string            Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --
-                                pager=less to use specific pager)
+        --repo-path string            Filesystem path to the already cloned
+                                      target repository with which to compare
+                                      the current branch: atmos terraform
+                                       --affected --repo-path
+                                      <path_to_already_cloned_repo>
 
-      --profile-file string     Write profiling data to file instead of starting server
+        --sha string                  Git commit SHA with which to compare the
+                                      current branch: atmos terraform
+                                       --affected --sha
+                                      3a5eafeab90426bd82bf5899896b28cc0bab3073
 
-      --profile-type string     Type of profile to collect when using --profile-file. Options: cpu, heap, allocs,
-                                goroutine, block, mutex, threadcreate, trace (default cpu)
+        --skip stringSlice            Skip executing specific YAML functions in
+                                      the Atmos stack manifests when executing
+                                      terraform commands (default [])
 
-      --profiler-enabled        Enable pprof profiling server
+        --skip-init                   Skip running terraform init before
+                                      executing terraform commands (default
+                                      false)
 
-      --profiler-host string    Host for pprof profiling server (default localhost)
+        --ssh-key string              Path to PEM-encoded private key to clone
+                                      private repos using SSH: atmos terraform
+                                       --affected --ssh-key
+                                      <path_to_ssh_key>
 
-      --profiler-port int       Port for pprof profiling server (default 6060)
+        --ssh-key-password string     Encryption password for the PEM-encoded
+                                      private key if the key contains a
+                                      password-encrypted PEM block: atmos
+                                      terraform  --affected
+                                      --ssh-key <path_to_ssh_key>
+                                      --ssh-key-password
 
-      --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
-                                standard file descriptor (including '/dev/null')
+    -s, --stack string                The stack flag specifies the environment
+                                      or configuration set for deployment in
+                                      Atmos CLI.
 
-  -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
+        --                            Use double dashes to separate
+                                      Atmos-specific options from native
+                                      arguments and flags for the command.
 
-      --version                 Display the Atmos CLI version
+
+Global Flags:
+
+        --base-path string           Base path for Atmos project
+
+    -C, --chdir string               Change working directory before executing
+                                     the command (run as if Atmos started in
+                                     this directory)
+
+        --config stringSlice         Paths to configuration files
+                                     (comma-separated or repeated flag) (default
+                                     [])
+
+        --config-path stringSlice    Paths to search for Atmos configuration
+                                     (comma-separated or repeated flag) (default
+                                     [])
+
+        --force-color                Force color output even when not a TTY
+                                     (useful for screenshots) (default false)
+
+        --force-tty                  Force TTY mode with sane defaults when
+                                     terminal detection fails (useful for
+                                     screenshots) (default false)
+
+        --heatmap                    Show performance heatmap visualization
+                                     after command execution (includes P95
+                                     latency) (default false)
+
+        --heatmap-mode string        Heatmap visualization mode: bar, sparkline,
+                                     table (press 1-3 to switch in TUI) (default
+                                     bar)
+
+        --logs-file string           The file to write Atmos logs to. Logs can
+                                     be written to any file or any standard file
+                                     descriptor, including '/dev/stdout',
+                                     '/dev/stderr' and '/dev/null' (default
+                                     /dev/stderr)
+
+        --logs-level string          Logs level. Supported log levels are Trace,
+                                     Debug, Info, Warning, Off. If the log level
+                                     is set to Off, Atmos will not log any
+                                     messages (default Warning)
+
+        --mask                       Enable automatic masking of sensitive data
+                                     in output (use --mask=false to disable)
+                                     (default true)
+
+        --no-color                   Disable color output (default false)
+
+        --pager string               Enable pager for output (--pager or
+                                     --pager=true to enable, --pager=false to
+                                     disable, --pager=less to use specific
+                                     pager)
+
+        --profile stringSlice        Activate configuration profiles
+                                     (comma-separated or repeated flag) (default
+                                     [])
+
+        --profile-file string        Write profiling data to file instead of
+                                     starting server
+
+        --profile-type string        Type of profile to collect when using
+                                     --profile-file. Options: cpu, heap, allocs,
+                                     goroutine, block, mutex, threadcreate,
+                                     trace (default cpu)
+
+        --profiler-enabled           Enable pprof profiling server (default
+                                     false)
+
+        --profiler-host string       Host for pprof profiling server (default
+                                     localhost)
+
+        --profiler-port int          Port for pprof profiling server (default
+                                     6060)
+
+        --redirect-stderr string     File descriptor to redirect stderr to.
+                                     Errors can be redirected to any file or any
+                                     standard file descriptor (including
+                                     '/dev/null')
+
+    -v, --verbose                    Enable verbose error output with full
+                                     context, stack traces, and detailed
+                                     information (default false)
+
+        --version                    Display the Atmos CLI version
 
 
+Examples:
 
-Use atmos terraform [command] --help for more information about a command.
+– Execute a terraform subcommand
+
+  $ atmos terraform [subcommand] <component-name> -s <stack-name>
+
+
+Use atmos terraform [subcommand] --help for more information about a command.
+
+

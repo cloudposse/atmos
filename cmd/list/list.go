@@ -60,3 +60,8 @@ func (l *ListCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBu
 func (l *ListCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
 	return nil
 }
+
+// GetAliases returns command aliases (none for list command).
+func (l *ListCommandProvider) GetAliases() []internal.CommandAlias {
+	return nil
+}
