@@ -1,0 +1,13 @@
+# Catalog component with base env configuration
+components:
+  terraform:
+    test-component:
+      metadata:
+        component: test-component
+        type: abstract
+      env:
+        COMPONENT_ENV_VAR: "component-value"
+        GLOBAL_OVERRIDE_TEST: "from-component"
+      vars:
+        enabled: true
+        name: "test-component"
