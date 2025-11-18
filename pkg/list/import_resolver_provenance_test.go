@@ -743,3 +743,372 @@ vars:
 	nodes2 := resolveImportFileImports(basePath, atmosConfig, visited2, cache)
 	assert.Equal(t, 1, len(nodes2))
 }
+
+// TestResolveImportFileImports_FileNotFound tests handling of missing import file.
+func TestResolveImportFileImports_FileNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: tmpDir,
+	}
+
+	visited := make(map[string]bool)
+	cache := make(map[string][]string)
+
+	// Try to resolve imports from non-existent file.
+	filePath := filepath.Join(tmpDir, "nonexistent.yaml")
+	nodes := resolveImportFileImports(filePath, atmosConfig, visited, cache)
+
+	// Should return nil (no nodes) when file can't be read.
+	assert.Nil(t, nodes)
+}
+
+// TestResolveImportFileImports_InvalidYAML tests handling of invalid YAML file.
+func TestResolveImportFileImports_InvalidYAML(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	invalidContent := `
+imports: [unclosed
+vars: broken
+`
+	filePath := filepath.Join(tmpDir, "invalid.yaml")
+	err := os.WriteFile(filePath, []byte(invalidContent), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: tmpDir,
+	}
+
+	visited := make(map[string]bool)
+	cache := make(map[string][]string)
+
+	nodes := resolveImportFileImports(filePath, atmosConfig, visited, cache)
+
+	// Should return nil when YAML parsing fails.
+	assert.Nil(t, nodes)
+}
+
+// TestResolveImportFileImports_EmptyFile tests file with no imports.
+func TestResolveImportFileImports_EmptyFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	emptyContent := `
+vars:
+  environment: prod
+`
+	filePath := filepath.Join(tmpDir, "empty.yaml")
+	err := os.WriteFile(filePath, []byte(emptyContent), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: tmpDir,
+	}
+
+	visited := make(map[string]bool)
+	cache := make(map[string][]string)
+
+	nodes := resolveImportFileImports(filePath, atmosConfig, visited, cache)
+
+	// Should handle empty imports gracefully.
+	assert.Empty(t, nodes)
+	assert.Contains(t, cache, filePath)
+	assert.Empty(t, cache[filePath])
+}
+
+// TestResolveImportFileImports_DeepRecursion tests deep import chains.
+func TestResolveImportFileImports_DeepRecursion(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create chain: file1 → file2 → file3 → file4 → file5.
+	for i := 1; i <= 5; i++ {
+		var content string
+		if i < 5 {
+			content = `
+imports:
+  - file` + string(rune('0'+i+1)) + `
+vars:
+  level: ` + string(rune('0'+i))
+		} else {
+			content = `
+vars:
+  level: 5
+`
+		}
+		filePath := filepath.Join(tmpDir, "file"+string(rune('0'+i))+".yaml")
+		err := os.WriteFile(filePath, []byte(content), 0o644)
+		require.NoError(t, err)
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: tmpDir,
+	}
+
+	visited := make(map[string]bool)
+	cache := make(map[string][]string)
+
+	file1Path := filepath.Join(tmpDir, "file1.yaml")
+	nodes := resolveImportFileImports(file1Path, atmosConfig, visited, cache)
+
+	// Should resolve all levels.
+	assert.Len(t, nodes, 1)
+	node := nodes[0]
+	assert.Equal(t, "file2", node.Path)
+
+	// Navigate through all levels.
+	for i := 2; i < 5; i++ {
+		assert.Len(t, node.Children, 1)
+		node = node.Children[0]
+		assert.Equal(t, "file"+string(rune('0'+i+1)), node.Path)
+	}
+
+	// Last node should have no children.
+	assert.Empty(t, node.Children)
+}
+
+// TestResolveImportFileImports_VisitedBacktracking tests visited map backtracking.
+func TestResolveImportFileImports_VisitedBacktracking(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create structure:
+	//   parent imports both a and b
+	//   a imports common
+	//   b imports common
+	// 'common' should appear in both branches (not marked circular).
+
+	parentContent := `
+imports:
+  - a
+  - b
+`
+	err := os.WriteFile(filepath.Join(tmpDir, "parent.yaml"), []byte(parentContent), 0o644)
+	require.NoError(t, err)
+
+	aContent := `
+imports:
+  - common
+vars:
+  name: a
+`
+	err = os.WriteFile(filepath.Join(tmpDir, "a.yaml"), []byte(aContent), 0o644)
+	require.NoError(t, err)
+
+	bContent := `
+imports:
+  - common
+vars:
+  name: b
+`
+	err = os.WriteFile(filepath.Join(tmpDir, "b.yaml"), []byte(bContent), 0o644)
+	require.NoError(t, err)
+
+	commonContent := `
+vars:
+  shared: true
+`
+	err = os.WriteFile(filepath.Join(tmpDir, "common.yaml"), []byte(commonContent), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: tmpDir,
+	}
+
+	visited := make(map[string]bool)
+	cache := make(map[string][]string)
+
+	parentPath := filepath.Join(tmpDir, "parent.yaml")
+	nodes := resolveImportFileImports(parentPath, atmosConfig, visited, cache)
+
+	// Should have 2 top-level nodes (a and b).
+	assert.Len(t, nodes, 2)
+
+	// Both a and b should have 'common' as child (not marked circular).
+	for _, node := range nodes {
+		assert.Len(t, node.Children, 1)
+		assert.Equal(t, "common", node.Children[0].Path)
+		assert.False(t, node.Children[0].Circular, "Expected backtracking to allow same import in different branches")
+	}
+}
+
+// TestResolveImportFileImports_WithCache tests cache population and reuse.
+func TestResolveImportFileImports_WithCache(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	baseContent := `
+imports:
+  - common
+vars:
+  base: true
+`
+	basePath := filepath.Join(tmpDir, "base.yaml")
+	err := os.WriteFile(basePath, []byte(baseContent), 0o644)
+	require.NoError(t, err)
+
+	commonContent := `
+vars:
+  common: true
+`
+	commonPath := filepath.Join(tmpDir, "common.yaml")
+	err = os.WriteFile(commonPath, []byte(commonContent), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: tmpDir,
+	}
+
+	visited := make(map[string]bool)
+	cache := make(map[string][]string)
+
+	// First call - populates cache.
+	nodes1 := resolveImportFileImports(basePath, atmosConfig, visited, cache)
+	assert.Len(t, nodes1, 1)
+	assert.Contains(t, cache, basePath)
+
+	// Modify file on disk.
+	err = os.WriteFile(basePath, []byte("imports:\n  - different"), 0o644)
+	require.NoError(t, err)
+
+	// Second call - should use cache (not re-read file).
+	visited2 := make(map[string]bool)
+	nodes2 := resolveImportFileImports(basePath, atmosConfig, visited2, cache)
+	assert.Len(t, nodes2, 1)
+	assert.Equal(t, "common", nodes2[0].Path, "Expected cached import, not re-read file")
+}
+
+// TestBuildImportTreeFromChain_LongChain tests processing of long import chains.
+func TestBuildImportTreeFromChain_LongChain(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: "/tmp/stacks",
+	}
+
+	// Create a chain with 10 imports.
+	importChain := []string{"/tmp/stacks/parent.yaml"}
+	for i := 1; i <= 10; i++ {
+		importChain = append(importChain, "/tmp/stacks/import"+string(rune('0'+i))+".yaml")
+	}
+
+	nodes := buildImportTreeFromChain(importChain, atmosConfig)
+
+	// Should have 10 nodes (skipping first element which is parent).
+	assert.Len(t, nodes, 10)
+
+	// Verify paths are correctly stripped.
+	for i, node := range nodes {
+		expected := "import" + string(rune('0'+i+1))
+		assert.Equal(t, expected, node.Path)
+	}
+}
+
+// TestBuildImportTreeFromChain_DuplicateInChain tests duplicate imports in chain.
+func TestBuildImportTreeFromChain_DuplicateInChain(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create files.
+	baseContent := `vars: {}`
+	basePath := filepath.Join(tmpDir, "base.yaml")
+	err := os.WriteFile(basePath, []byte(baseContent), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: tmpDir,
+	}
+
+	// Import chain with duplicate.
+	importChain := []string{
+		filepath.Join(tmpDir, "parent.yaml"),
+		basePath,
+		filepath.Join(tmpDir, "other.yaml"),
+		basePath, // Duplicate - visited is cleared after each import so not marked circular
+	}
+
+	nodes := buildImportTreeFromChain(importChain, atmosConfig)
+
+	// Should have 3 nodes.
+	assert.Len(t, nodes, 3)
+
+	// All nodes get their paths.
+	assert.Equal(t, "base", nodes[0].Path)
+	assert.Equal(t, "other", nodes[1].Path)
+	assert.Equal(t, "base", nodes[2].Path)
+
+	// Duplicates in chain are allowed because visited is cleared after processing each import.
+	// This allows the same file to appear multiple times in the merge chain.
+	assert.False(t, nodes[0].Circular)
+	assert.False(t, nodes[2].Circular)
+}
+
+// TestBuildNodesFromImportPaths_LargeImportList tests handling of many imports.
+func TestBuildNodesFromImportPaths_LargeImportList(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: tmpDir,
+	}
+
+	// Create 20 import paths.
+	var imports []string
+	for i := 1; i <= 20; i++ {
+		imports = append(imports, "catalog/import"+string(rune('0'+i)))
+	}
+
+	visited := make(map[string]bool)
+	cache := make(map[string][]string)
+
+	nodes := buildNodesFromImportPaths(imports, filepath.Join(tmpDir, "parent.yaml"), atmosConfig, visited, cache)
+
+	// Should have 20 nodes.
+	assert.Len(t, nodes, 20)
+
+	// Verify all imports are present.
+	for i, node := range nodes {
+		expected := "catalog/import" + string(rune('0'+i+1))
+		assert.Equal(t, expected, node.Path)
+	}
+}
+
+// TestBuildNodesFromImportPaths_WithRealFiles tests node building with actual files.
+func TestBuildNodesFromImportPaths_WithRealFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create catalog directory.
+	catalogDir := filepath.Join(tmpDir, "catalog")
+	err := os.MkdirAll(catalogDir, 0o755)
+	require.NoError(t, err)
+
+	// Create base.yaml with import.
+	baseContent := `
+imports:
+  - catalog/network
+vars:
+  base: true
+`
+	basePath := filepath.Join(catalogDir, "base.yaml")
+	err = os.WriteFile(basePath, []byte(baseContent), 0o644)
+	require.NoError(t, err)
+
+	// Create network.yaml (no imports).
+	networkContent := `
+vars:
+  network: true
+`
+	networkPath := filepath.Join(catalogDir, "network.yaml")
+	err = os.WriteFile(networkPath, []byte(networkContent), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath: tmpDir,
+	}
+
+	imports := []string{"catalog/base"}
+	visited := make(map[string]bool)
+	cache := make(map[string][]string)
+
+	nodes := buildNodesFromImportPaths(imports, filepath.Join(tmpDir, "parent.yaml"), atmosConfig, visited, cache)
+
+	// Should have 1 top-level node.
+	assert.Len(t, nodes, 1)
+	assert.Equal(t, "catalog/base", nodes[0].Path)
+
+	// base.yaml should have network as child.
+	assert.Len(t, nodes[0].Children, 1)
+	assert.Equal(t, "catalog/network", nodes[0].Children[0].Path)
+}

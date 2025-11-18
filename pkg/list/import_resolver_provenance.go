@@ -378,7 +378,7 @@ func buildNodesFromImportPaths(
 }
 
 // resolveImportPath converts a relative import path to an absolute file path.
-func resolveImportPath(importPath, parentFilePath string, atmosConfig *schema.AtmosConfiguration) string {
+func resolveImportPath(importPath, _ string, atmosConfig *schema.AtmosConfiguration) string {
 	// Import paths are relative to the stacks base path.
 	basePath := atmosConfig.StacksBaseAbsolutePath
 
@@ -405,7 +405,8 @@ func readImportsFromYAMLFile(filePath string) ([]string, error) {
 	}
 
 	// Extract imports (can be "import" or "imports" array).
-	var imports []string
+	// Initialize as empty slice to ensure we return []string{} instead of nil.
+	imports := []string{}
 
 	// Check for "import" field.
 	if importVal, ok := data["import"]; ok {
