@@ -59,7 +59,7 @@ func WithStackValidation(check bool) AtmosValidateOption {
 }
 
 // processCustomCommands registers custom commands defined in the Atmos configuration onto the given parent Cobra command.
-// 
+//
 // It reads the provided command definitions, reuses any existing top-level commands when appropriate, and adds new Cobra
 // commands with their descriptions, persistent flags (including an `--identity` override), required-flag enforcement, and
 // nested subcommands. The function mutates parentCommand by attaching the created commands and returns an error if any

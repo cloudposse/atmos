@@ -391,7 +391,7 @@ func handleGitRoot(node *yaml.Node, v *viper.Viper, currentPath string) error {
 }
 
 // handleRandom evaluates a YAML scalar tagged with !random and stores the result in the provided Viper instance.
-// 
+//
 // If evaluation succeeds, the resulting value is stored at the given Viper key path (`currentPath`) and the node's
 // tag is cleared to avoid re-processing. If the underlying random tag processor returns an error, that error is
 // logged and returned wrapped with ErrExecuteYamlFunctions.
