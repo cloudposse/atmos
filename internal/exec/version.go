@@ -53,7 +53,7 @@ func (v versionExec) Execute(checkFlag bool, format string) error {
 	v.printMessage("")
 	err := v.printStyledText("ATMOS")
 	if err != nil {
-		//nolint:revive // deep-exit: log.Fatal is appropriate here for version display errors
+		//nolint:gocritic,revive // exitAfterDefer,deep-exit: log.Fatal is appropriate here for version display errors
 		log.Fatal(err)
 	}
 

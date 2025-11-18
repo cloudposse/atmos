@@ -592,11 +592,10 @@ func Execute() error {
 	errUtils.InitializeMarkdown(&atmosConfig)
 
 	if initErr != nil && !errors.Is(initErr, cfg.NotFound) {
-		if isVersionCommand() {
-			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
-		} else {
+		if !isVersionCommand() {
 			return initErr
 		}
+		log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 	}
 
 	// Set the log level for the charmbracelet/log package based on the atmosConfig.
