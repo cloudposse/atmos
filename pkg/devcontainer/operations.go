@@ -313,9 +313,8 @@ func displayContainerInfo(config *Config, containerInfo *container.Info) {
 		info = append(info, portsInfo)
 	}
 
-	// Display each line separately to avoid extra blank lines from markdown rendering
-	for _, line := range info {
-		_ = ui.Info(line)
+	if len(info) > 0 {
+		_ = ui.Info(strings.Join(info, "\n"))
 	}
 }
 

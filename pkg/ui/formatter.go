@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/io"
@@ -320,16 +321,112 @@ func (f *formatter) Toastf(icon, format string, a ...interface{}) string {
 	return f.Toast(icon, fmt.Sprintf(format, a...))
 }
 
+// TrimRight removes trailing whitespace from an ANSI-coded string while
+// preserving all ANSI escape sequences on the actual content.
+// This is useful for removing Glamour's padding spaces that are wrapped in ANSI codes.
+func TrimRight(s string) string {
+	// Strip ANSI codes to get plain text version
+	stripped := ansi.Strip(s)
+
+	// Trim trailing whitespace from plain text
+	trimmed := strings.TrimRight(stripped, " \t")
+
+	// If nothing to trim, return original
+	if trimmed == stripped {
+		return s
+	}
+
+	// If completely empty after trim, return empty
+	if trimmed == "" {
+		return ""
+	}
+
+	// Build result by copying characters and ANSI codes up to the length of trimmed content,
+	// then capture any ANSI codes that immediately follow the last character (before whitespace)
+	var result strings.Builder
+	plainIdx := 0
+	i := 0
+
+	// Copy content and ANSI codes until we've matched all trimmed characters
+	for i < len(s) && plainIdx < len(trimmed) {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			// Copy ANSI sequence
+			start := i
+			i += 2
+			for i < len(s) && (s[i] < 'A' || s[i] > 'Z') && (s[i] < 'a' || s[i] > 'z') {
+				i++
+			}
+			if i < len(s) {
+				i++
+			}
+			result.WriteString(s[start:i])
+		} else {
+			// Copy visible character
+			result.WriteByte(s[i])
+			plainIdx++
+			i++
+		}
+	}
+
+	// After matching all content, copy any ANSI codes that come before whitespace
+	// This preserves reset codes like \x1b[0m that follow the last character,
+	// but NOT color codes that wrap trailing whitespace
+	for i < len(s) && s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+		start := i
+		i += 2
+		for i < len(s) && (s[i] < 'A' || s[i] > 'Z') && (s[i] < 'a' || s[i] > 'z') {
+			i++
+		}
+		if i < len(s) {
+			i++
+		}
+
+		// Check what comes immediately after this ANSI code
+		// If it's directly whitespace, this code ended styling before the whitespace - include it
+		// If it's another ANSI code followed by whitespace, that next code wraps the whitespace - stop here
+		if i >= len(s) || s[i] == ' ' || s[i] == '\t' {
+			// Whitespace or end of string directly after this code - include the code
+			result.WriteString(s[start:i])
+			break // Stop after this code, don't copy whitespace-wrapping codes
+		} else if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			// Another ANSI code follows - peek ahead to see if it wraps whitespace
+			j := i + 2
+			for j < len(s) && (s[j] < 'A' || s[j] > 'Z') && (s[j] < 'a' || s[j] > 'z') {
+				j++
+			}
+			if j < len(s) {
+				j++
+			}
+			// Check if whitespace follows that next code
+			if j < len(s) && (s[j] == ' ' || s[j] == '\t') {
+				// Next code wraps whitespace - include current code but stop
+				result.WriteString(s[start:i])
+				break
+			} else {
+				// Next code doesn't wrap whitespace - include current and continue
+				result.WriteString(s[start:i])
+			}
+		} else {
+			// Some other content follows - shouldn't happen after trimmed content, but include the code
+			result.WriteString(s[start:i])
+		}
+	}
+
+	return result.String()
+}
+
 // trimTrailingWhitespace splits rendered markdown by newlines and trims trailing spaces
-// that Glamour adds for padding. For empty lines (all whitespace), it preserves
-// the leading indent (first 2 spaces) to maintain paragraph structure.
+// that Glamour adds for padding (including ANSI-wrapped spaces). For empty lines (all whitespace),
+// it preserves the leading indent (first 2 spaces) to maintain paragraph structure.
 func trimTrailingWhitespace(rendered string) []string {
 	lines := strings.Split(rendered, newline)
 	for i := range lines {
-		trimmed := strings.TrimRight(lines[i], space)
+		// Use TrimRight to remove trailing whitespace including ANSI-wrapped spaces
+		line := TrimRight(lines[i])
+
 		// If line became empty after trimming but had content before,
 		// it was an empty line with indent - preserve the indent
-		if trimmed == "" && len(lines[i]) > 0 {
+		if line == "" && len(lines[i]) > 0 {
 			// Preserve up to 2 leading spaces for paragraph indent
 			if len(lines[i]) >= paragraphIndentWidth {
 				lines[i] = paragraphIndent
@@ -337,7 +434,7 @@ func trimTrailingWhitespace(rendered string) []string {
 				lines[i] = lines[i][:len(lines[i])] // Keep whatever spaces there were
 			}
 		} else {
-			lines[i] = trimmed
+			lines[i] = line
 		}
 	}
 	return lines
@@ -409,8 +506,8 @@ func (f *formatter) renderToastMarkdown(content string) (string, error) {
 	// Build glamour options with compact toast stylesheet
 	var opts []glamour.TermRendererOption
 
-	// Enable word wrap for toast messages to respect terminal width
-	// Note: Glamour adds padding to fill width - we trim it later
+	// Enable word wrap for toast messages to respect terminal width.
+	// Note: Glamour adds padding to fill width - we trim it with trimTrailingWhitespace().
 	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
 	if maxWidth == 0 {
 		// Use terminal width if available
