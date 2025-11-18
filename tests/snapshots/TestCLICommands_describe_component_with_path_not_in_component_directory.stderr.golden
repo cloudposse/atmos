@@ -8,12 +8,10 @@
 ## Hints
 
 💡 Path points to the stacks configuration directory, not a component:
-/absolute/path/to/external
-conductor/hanoi/tests/fixtures/scenarios/complete/stacks
+/absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks
 
 Stacks directory:
-/absolute/path/to/external
-conductor/hanoi/tests/fixtures/scenarios/complete/stacks
+/absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks
 
 💡 Components are located in component directories (terraform, helmfile, packer)
 Change to a component directory and use . or provide a path within a component

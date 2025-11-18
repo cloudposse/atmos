@@ -348,7 +348,13 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		return "", errors.New("failed to determine repository root")
 	}
 
-	// 2. Normalize the repository root:
+	// 2. Pre-process: Join word-wrapped paths that were broken by Glamour rendering.
+	// Glamour may wrap long paths like "/Users/erik/conductor/atmos/.\nconductor/hanoi/..."
+	// This regex finds patterns where a path ends with a dot or slash followed by newline and continues
+	wrappedPathRegex := regexp.MustCompile(`(/[^\s\n]+[./])\n([a-zA-Z0-9._-]+/)`)
+	output = wrappedPathRegex.ReplaceAllString(output, "$1$2")
+
+	// 3. Normalize the repository root:
 	//    - Clean the path (which may not collapse all extra slashes after the drive letter, etc.)
 	//    - Convert to forward slashes,
 	//    - And explicitly collapse extra slashes.
