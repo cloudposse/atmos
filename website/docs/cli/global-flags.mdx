@@ -445,6 +445,15 @@ All global flags can be set using environment variables. The precedence order is
     <dt>`ATMOS_BASE_PATH`</dt>
     <dd>Sets the base path for the Atmos project</dd>
 
+    <dt>`ATMOS_PROFILE`</dt>
+    <dd>
+        Activate configuration profiles (comma-separated).
+        - Equivalent to the `--profile` flag
+        - CLI flag takes precedence over this environment variable
+        - Supports multiple profiles: `ATMOS_PROFILE="developer,debug"`
+        - Example: `ATMOS_PROFILE=ci atmos terraform plan vpc -s prod`
+    </dd>
+
     <dt>`ATMOS_LOGS_LEVEL`</dt>
     <dd>Sets the logging level</dd>
 
