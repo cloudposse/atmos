@@ -19,11 +19,12 @@ import (
 // Renderer orchestrates the complete list rendering pipeline.
 // Pipeline: data → filter → column selection → sort → format → output.
 type Renderer struct {
-	filters  []filter.Filter
-	selector *column.Selector
-	sorters  []*sort.Sorter
-	format   format.Format
-	output   *output.Manager
+	filters   []filter.Filter
+	selector  *column.Selector
+	sorters   []*sort.Sorter
+	format    format.Format
+	delimiter string
+	output    *output.Manager
 }
 
 // New creates a renderer with optional components.
@@ -32,13 +33,15 @@ func New(
 	selector *column.Selector,
 	sorters []*sort.Sorter,
 	fmt format.Format,
+	delimiter string,
 ) *Renderer {
 	return &Renderer{
-		filters:  filters,
-		selector: selector,
-		sorters:  sorters,
-		format:   fmt,
-		output:   output.New(fmt),
+		filters:   filters,
+		selector:  selector,
+		sorters:   sorters,
+		format:    fmt,
+		delimiter: delimiter,
+		output:    output.New(fmt),
 	}
 }
 
@@ -79,7 +82,7 @@ func (r *Renderer) Render(data []map[string]any) error {
 	}
 
 	// Step 4: Format output.
-	formatted, err := formatTable(headers, rows, r.format)
+	formatted, err := r.formatTable(headers, rows)
 	if err != nil {
 		return fmt.Errorf("formatting failed: %w", err)
 	}
@@ -93,7 +96,8 @@ func (r *Renderer) Render(data []map[string]any) error {
 }
 
 // formatTable formats headers and rows into the requested format.
-func formatTable(headers []string, rows [][]string, f format.Format) (string, error) {
+func (r *Renderer) formatTable(headers []string, rows [][]string) (string, error) {
+	f := r.format
 	// Default to table format if empty.
 	if f == "" {
 		f = format.FormatTable
@@ -105,9 +109,17 @@ func formatTable(headers []string, rows [][]string, f format.Format) (string, er
 	case format.FormatYAML:
 		return formatYAML(headers, rows)
 	case format.FormatCSV:
-		return formatDelimited(headers, rows, ",")
+		delim := r.delimiter
+		if delim == "" {
+			delim = ","
+		}
+		return formatDelimited(headers, rows, delim)
 	case format.FormatTSV:
-		return formatDelimited(headers, rows, "\t")
+		delim := r.delimiter
+		if delim == "" {
+			delim = "\t"
+		}
+		return formatDelimited(headers, rows, delim)
 	case format.FormatTable:
 		return formatStyledTableOrPlain(headers, rows), nil
 	default:

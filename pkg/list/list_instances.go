@@ -39,6 +39,8 @@ type InstancesCommandOptions struct {
 	ColumnsFlag []string
 	FilterSpec  string
 	SortSpec    string
+	Delimiter   string
+	Query       string
 }
 
 // parseColumnsFlag parses column names from CLI flag.
@@ -392,7 +394,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	}
 
 	// Create renderer.
-	r := renderer.New(filters, selector, sorters, format.Format(formatFlag))
+	r := renderer.New(filters, selector, sorters, format.Format(formatFlag), opts.Delimiter)
 
 	// Render output.
 	if err := r.Render(data); err != nil {

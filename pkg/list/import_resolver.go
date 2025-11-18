@@ -81,10 +81,11 @@ func findStackFilePath(stackName string, atmosConfig *schema.AtmosConfiguration)
 	stacksBasePath := atmosConfig.StacksBaseAbsolutePath
 
 	// Try common patterns.
+	transformed := strings.ReplaceAll(stackName, "-", string(os.PathSeparator))
 	possiblePaths := []string{
 		filepath.Join(stacksBasePath, "orgs", stackName+".yaml"),
 		filepath.Join(stacksBasePath, stackName+".yaml"),
-		filepath.Join(stacksBasePath, strings.ReplaceAll(stackName, "-", "/"), ".yaml"),
+		filepath.Join(stacksBasePath, transformed+".yaml"),
 	}
 
 	for _, path := range possiblePaths {

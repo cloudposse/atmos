@@ -206,6 +206,9 @@ func tryExpandScalarArray(v reflect.Value) string {
 
 		// Handle interface{} wrapping.
 		if elem.Kind() == reflect.Interface {
+			if elem.IsNil() {
+				return "" // Fall back to placeholder format for nil interfaces.
+			}
 			elem = elem.Elem()
 		}
 
@@ -280,6 +283,9 @@ func tryExpandScalarMap(v reflect.Value) string {
 
 		// Handle interface{} wrapping.
 		if val.Kind() == reflect.Interface {
+			if val.IsNil() {
+				return "" // Fall back to placeholder format for nil interfaces.
+			}
 			val = val.Elem()
 		}
 

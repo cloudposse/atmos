@@ -159,7 +159,7 @@ func listWorkflowsWithOptions(cmd *cobra.Command, args []string, opts *Workflows
 
 	// Create renderer and execute pipeline.
 	outputFormat := format.Format(opts.Format)
-	r := renderer.New(filters, selector, sorters, outputFormat)
+	r := renderer.New(filters, selector, sorters, outputFormat, "")
 
 	return r.Render(workflows)
 }

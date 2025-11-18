@@ -62,11 +62,12 @@ func parseMetadataColumnsFlag(columnsFlag []string) []column.Config {
 
 // MetadataOptions contains options for list metadata command.
 type MetadataOptions struct {
-	Format  string
-	Columns []string
-	Sort    string
-	Filter  string
-	Stack   string
+	Format    string
+	Columns   []string
+	Sort      string
+	Filter    string
+	Stack     string
+	Delimiter string
 }
 
 // ExecuteListMetadataCmd executes the list metadata command using the renderer pipeline.
@@ -108,7 +109,7 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	}
 
 	// Create renderer with filters and sorters.
-	r := renderer.New(filters, selector, sorters, format.Format(opts.Format))
+	r := renderer.New(filters, selector, sorters, format.Format(opts.Format), opts.Delimiter)
 
 	// Render output.
 	if err := r.Render(data); err != nil {

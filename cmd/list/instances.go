@@ -147,5 +147,7 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 		ColumnsFlag: opts.Columns,
 		FilterSpec:  opts.Filter,
 		SortSpec:    opts.Sort,
+		Delimiter:   opts.Delimiter,
+		Query:       opts.Query,
 	})
 }

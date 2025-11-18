@@ -36,7 +36,7 @@ func TestRenderer_EmptyFormat(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create renderer with empty format string.
-	r := New(nil, selector, nil, "")
+	r := New(nil, selector, nil, "", "")
 
 	// Should not error - should default to table format.
 	err = r.Render(data)
@@ -78,7 +78,7 @@ func TestRenderer_AllFormats(t *testing.T) {
 			selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
 			require.NoError(t, err)
 
-			r := New(nil, selector, nil, tc.format)
+			r := New(nil, selector, nil, tc.format, "")
 			err = r.Render(testData)
 			assert.NoError(t, err)
 		})
@@ -112,7 +112,7 @@ func TestRenderer_WithSorting(t *testing.T) {
 		sort.NewSorter("Stack", sort.Ascending),
 	}
 
-	r := New(nil, selector, sorters, format.FormatJSON)
+	r := New(nil, selector, sorters, format.FormatJSON, "")
 	err = r.Render(testData)
 	assert.NoError(t, err)
 }
@@ -134,7 +134,7 @@ func TestRenderer_EmptyData(t *testing.T) {
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
 	require.NoError(t, err)
 
-	r := New(nil, selector, nil, format.FormatTable)
+	r := New(nil, selector, nil, format.FormatTable, "")
 	err = r.Render(testData)
 	assert.NoError(t, err)
 }
@@ -159,7 +159,7 @@ func TestRenderer_InvalidFormat(t *testing.T) {
 	require.NoError(t, err)
 
 	// Use invalid format.
-	r := New(nil, selector, nil, format.Format("invalid"))
+	r := New(nil, selector, nil, format.Format("invalid"), "")
 	err = r.Render(testData)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported format")

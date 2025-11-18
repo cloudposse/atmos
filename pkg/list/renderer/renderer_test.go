@@ -28,6 +28,7 @@ func TestNew(t *testing.T) {
 		selector,
 		[]*sort.Sorter{},
 		format.FormatJSON,
+		"",
 	)
 
 	assert.NotNil(t, r)
@@ -67,7 +68,7 @@ func TestRenderer_Render_Complete(t *testing.T) {
 		sort.NewSorter("Component", sort.Ascending),
 	}
 
-	r := New(filters, selector, sorters, format.FormatJSON)
+	r := New(filters, selector, sorters, format.FormatJSON, "")
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
@@ -91,7 +92,7 @@ func TestRenderer_Render_NoFilters(t *testing.T) {
 	selector, err := column.NewSelector(configs, column.BuildColumnFuncMap())
 	require.NoError(t, err)
 
-	r := New(nil, selector, nil, format.FormatJSON)
+	r := New(nil, selector, nil, format.FormatJSON, "")
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
@@ -115,7 +116,7 @@ func TestRenderer_Render_NoSorters(t *testing.T) {
 	selector, err := column.NewSelector(configs, column.BuildColumnFuncMap())
 	require.NoError(t, err)
 
-	r := New(nil, selector, nil, format.FormatYAML)
+	r := New(nil, selector, nil, format.FormatYAML, "")
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
@@ -151,7 +152,7 @@ func TestRenderer_Render_MultipleFilters(t *testing.T) {
 		filter.NewBoolFilter("enabled", &trueVal),
 	}
 
-	r := New(filters, selector, nil, format.FormatCSV)
+	r := New(filters, selector, nil, format.FormatCSV, "")
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
@@ -184,7 +185,7 @@ func TestRenderer_Render_MultiSorter(t *testing.T) {
 		sort.NewSorter("Component", sort.Ascending),
 	}
 
-	r := New(nil, selector, sorters, format.FormatTSV)
+	r := New(nil, selector, sorters, format.FormatTSV, "")
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
@@ -205,7 +206,7 @@ func TestRenderer_Render_EmptyData(t *testing.T) {
 	selector, err := column.NewSelector(configs, column.BuildColumnFuncMap())
 	require.NoError(t, err)
 
-	r := New(nil, selector, nil, format.FormatJSON)
+	r := New(nil, selector, nil, format.FormatJSON, "")
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
@@ -230,7 +231,7 @@ func TestRenderer_Render_TableFormat(t *testing.T) {
 	selector, err := column.NewSelector(configs, column.BuildColumnFuncMap())
 	require.NoError(t, err)
 
-	r := New(nil, selector, nil, format.FormatTable)
+	r := New(nil, selector, nil, format.FormatTable, "")
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
@@ -254,7 +255,7 @@ func TestRenderer_Render_InvalidColumnTemplate(t *testing.T) {
 	selector, err := column.NewSelector(configs, column.BuildColumnFuncMap())
 	require.NoError(t, err)
 
-	r := New(nil, selector, nil, format.FormatJSON)
+	r := New(nil, selector, nil, format.FormatJSON, "")
 
 	// Should still succeed - template returns "<no value>" for missing fields.
 	err = r.Render(testData)
@@ -284,7 +285,7 @@ func TestRenderer_Render_FilterReturnsNoResults(t *testing.T) {
 		filter.NewColumnFilter("stack", "nonexistent"),
 	}
 
-	r := New(filters, selector, nil, format.FormatJSON)
+	r := New(filters, selector, nil, format.FormatJSON, "")
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
@@ -316,7 +317,7 @@ func TestRenderer_Render_GlobFilter(t *testing.T) {
 
 	filters := []filter.Filter{globFilter}
 
-	r := New(filters, selector, nil, format.FormatJSON)
+	r := New(filters, selector, nil, format.FormatJSON, "")
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
@@ -365,7 +366,7 @@ func TestRenderer_Render_CompleteWorkflow(t *testing.T) {
 		sort.NewSorter("Component", sort.Ascending),
 	}
 
-	r := New(filters, selector, sorters, format.FormatJSON)
+	r := New(filters, selector, sorters, format.FormatJSON, "")
 
 	err = r.Render(testData)
 	assert.NoError(t, err)
@@ -393,7 +394,7 @@ func TestRenderer_Render_SortError(t *testing.T) {
 		sort.NewSorter("NonExistent", sort.Ascending),
 	}
 
-	r := New(nil, selector, sorters, format.FormatJSON)
+	r := New(nil, selector, sorters, format.FormatJSON, "")
 
 	err = r.Render(testData)
 	assert.Error(t, err)
@@ -429,7 +430,7 @@ func TestRenderer_Render_AllFormats(t *testing.T) {
 
 	for _, f := range formats {
 		t.Run(string(f), func(t *testing.T) {
-			r := New(nil, selector, nil, f)
+			r := New(nil, selector, nil, f, "")
 			err := r.Render(testData)
 			assert.NoError(t, err)
 		})
@@ -454,7 +455,7 @@ func TestRenderer_Render_UnsupportedFormat(t *testing.T) {
 	require.NoError(t, err)
 
 	// Use an unsupported format.
-	r := New(nil, selector, nil, format.Format("unsupported"))
+	r := New(nil, selector, nil, format.Format("unsupported"), "")
 
 	err = r.Render(testData)
 	assert.Error(t, err)
@@ -482,7 +483,7 @@ func TestRenderer_Render_FilterReturnsInvalidType(t *testing.T) {
 	// Use a filter that returns invalid type.
 	badFilter := &mockBadFilter{}
 
-	r := New([]filter.Filter{badFilter}, selector, nil, format.FormatJSON)
+	r := New([]filter.Filter{badFilter}, selector, nil, format.FormatJSON, "")
 
 	err = r.Render(testData)
 	assert.Error(t, err)
