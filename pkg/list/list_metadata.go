@@ -3,6 +3,7 @@ package list
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -29,10 +30,15 @@ var defaultMetadataColumns = []column.Config{
 }
 
 // getMetadataColumns returns column configuration from CLI flag, atmos.yaml, or defaults.
-func getMetadataColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) []column.Config {
+// Returns error if CLI flag parsing fails.
+func getMetadataColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) ([]column.Config, error) {
 	// If --columns flag is provided, parse it and return.
 	if len(columnsFlag) > 0 {
-		return parseMetadataColumnsFlag(columnsFlag)
+		columns, err := parseMetadataColumnsFlag(columnsFlag)
+		if err != nil {
+			return nil, err
+		}
+		return columns, nil
 	}
 
 	// Check if custom columns are configured in atmos.yaml.
@@ -44,20 +50,48 @@ func getMetadataColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []st
 				Value: col.Value,
 			}
 		}
-		return columns
+		return columns, nil
 	}
 
 	// Return default columns.
-	return defaultMetadataColumns
+	return defaultMetadataColumns, nil
 }
 
-// parseMetadataColumnsFlag parses column names from CLI flag for metadata command.
-// Currently not implemented - users should configure columns via atmos.yaml.
-func parseMetadataColumnsFlag(columnsFlag []string) []column.Config {
-	// TODO: Implement parsing of column specifications from CLI.
-	// For now, return default columns as placeholder.
-	// The flag is registered but parsing is not yet implemented.
-	return defaultMetadataColumns
+// parseMetadataColumnsFlag parses column specifications from CLI flag.
+// Each flag value should be in the format: "Name=TemplateExpression"
+// Example: --columns "Component={{ .component }}" --columns "Stack={{ .stack }}"
+// Returns error if any column specification is invalid.
+func parseMetadataColumnsFlag(columnsFlag []string) ([]column.Config, error) {
+	if len(columnsFlag) == 0 {
+		return defaultMetadataColumns, nil
+	}
+
+	columns := make([]column.Config, 0, len(columnsFlag))
+	for i, spec := range columnsFlag {
+		// Split on first '=' to separate name from template
+		parts := strings.SplitN(spec, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("%w: column spec %d must be in format 'Name=Template', got: %q",
+				errUtils.ErrInvalidConfig, i+1, spec)
+		}
+
+		name := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		if name == "" {
+			return nil, fmt.Errorf("%w: column spec %d has empty name", errUtils.ErrInvalidConfig, i+1)
+		}
+		if value == "" {
+			return nil, fmt.Errorf("%w: column spec %d has empty template", errUtils.ErrInvalidConfig, i+1)
+		}
+
+		columns = append(columns, column.Config{
+			Name:  name,
+			Value: value,
+		})
+	}
+
+	return columns, nil
 }
 
 // MetadataOptions contains options for list metadata command.
@@ -88,7 +122,10 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	data := ExtractMetadata(instances)
 
 	// Get column configuration.
-	columns := getMetadataColumns(&atmosConfig, opts.Columns)
+	columns, err := getMetadataColumns(&atmosConfig, opts.Columns)
+	if err != nil {
+		return errors.Join(errUtils.ErrInvalidConfig, err)
+	}
 
 	// Create column selector.
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())

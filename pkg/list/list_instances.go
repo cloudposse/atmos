@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -43,13 +44,41 @@ type InstancesCommandOptions struct {
 	Query       string
 }
 
-// parseColumnsFlag parses column names from CLI flag.
-// Currently not implemented - users should configure columns via atmos.yaml.
-func parseColumnsFlag(columnsFlag []string) []column.Config {
-	// TODO: Implement parsing of column specifications from CLI.
-	// For now, return default columns as placeholder.
-	// The flag is registered but parsing is not yet implemented.
-	return defaultInstanceColumns
+// parseColumnsFlag parses column specifications from CLI flag.
+// Each flag value should be in the format: "Name=TemplateExpression"
+// Example: --columns "Component={{ .component }}" --columns "Stack={{ .stack }}"
+// Returns error if any column specification is invalid.
+func parseColumnsFlag(columnsFlag []string) ([]column.Config, error) {
+	if len(columnsFlag) == 0 {
+		return defaultInstanceColumns, nil
+	}
+
+	columns := make([]column.Config, 0, len(columnsFlag))
+	for i, spec := range columnsFlag {
+		// Split on first '=' to separate name from template
+		parts := strings.SplitN(spec, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("%w: column spec %d must be in format 'Name=Template', got: %q",
+				errUtils.ErrInvalidConfig, i+1, spec)
+		}
+
+		name := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		if name == "" {
+			return nil, fmt.Errorf("%w: column spec %d has empty name", errUtils.ErrInvalidConfig, i+1)
+		}
+		if value == "" {
+			return nil, fmt.Errorf("%w: column spec %d has empty template", errUtils.ErrInvalidConfig, i+1)
+		}
+
+		columns = append(columns, column.Config{
+			Name:  name,
+			Value: value,
+		})
+	}
+
+	return columns, nil
 }
 
 // processComponentConfig processes a single component configuration and returns an instance if valid.
@@ -192,10 +221,15 @@ func sortInstances(instances []schema.Instance) []schema.Instance {
 }
 
 // getInstanceColumns returns column configuration from CLI flag, atmos.yaml, or defaults.
-func getInstanceColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) []column.Config {
+// Returns error if CLI flag parsing fails.
+func getInstanceColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) ([]column.Config, error) {
 	// If --columns flag is provided, parse it and return.
 	if len(columnsFlag) > 0 {
-		return parseColumnsFlag(columnsFlag)
+		columns, err := parseColumnsFlag(columnsFlag)
+		if err != nil {
+			return nil, err
+		}
+		return columns, nil
 	}
 
 	// Check if custom columns are configured in atmos.yaml.
@@ -207,11 +241,11 @@ func getInstanceColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []st
 				Value: col.Value,
 			}
 		}
-		return columns
+		return columns, nil
 	}
 
 	// Return default columns.
-	return defaultInstanceColumns
+	return defaultInstanceColumns, nil
 }
 
 // uploadInstancesWithDeps uploads instances to Atmos Pro API using injected dependencies.
@@ -373,7 +407,11 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	data := ExtractMetadata(instances)
 
 	// Get column configuration.
-	columns := getInstanceColumns(&atmosConfig, opts.ColumnsFlag)
+	columns, err := getInstanceColumns(&atmosConfig, opts.ColumnsFlag)
+	if err != nil {
+		log.Error("failed to get columns", "error", err)
+		return errors.Join(errUtils.ErrInvalidConfig, err)
+	}
 
 	// Create column selector.
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
@@ -388,7 +426,8 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	}
 
 	// Build sorters from sort specification.
-	sorters, err := buildInstanceSorters(opts.SortSpec)
+	// Pass columns to allow smart default sorting based on available columns.
+	sorters, err := buildInstanceSorters(opts.SortSpec, columns)
 	if err != nil {
 		return fmt.Errorf("failed to build sorters: %w", err)
 	}
@@ -424,14 +463,28 @@ func buildInstanceFilters(filterSpec string) ([]filter.Filter, error) {
 }
 
 // buildInstanceSorters creates sorters from sort specification.
-func buildInstanceSorters(sortSpec string) ([]*listSort.Sorter, error) {
-	if sortSpec == "" {
-		// Default sort: by component then stack ascending.
+// When sortSpec is empty and columns contain default "Component" and "Stack",
+// applies default sorting. Otherwise returns empty sorters (natural order).
+func buildInstanceSorters(sortSpec string, columns []column.Config) ([]*listSort.Sorter, error) {
+	// If user provided explicit sort spec, use it.
+	if sortSpec != "" {
+		return listSort.ParseSortSpec(sortSpec)
+	}
+
+	// Build map of available column names.
+	columnNames := make(map[string]bool)
+	for _, col := range columns {
+		columnNames[col.Name] = true
+	}
+
+	// Only apply default sort if both Component and Stack columns exist.
+	if columnNames["Component"] && columnNames["Stack"] {
 		return []*listSort.Sorter{
 			listSort.NewSorter("Component", listSort.Ascending),
 			listSort.NewSorter("Stack", listSort.Ascending),
 		}, nil
 	}
 
-	return listSort.ParseSortSpec(sortSpec)
+	// No default sort for custom columns - return empty sorters (natural order).
+	return nil, nil
 }
