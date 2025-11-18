@@ -553,7 +553,13 @@ func TestCleanDuplicatedPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := cleanDuplicatedPath(tt.input)
-			assert.Equal(t, tt.expected, result, "cleanDuplicatedPath(%q) = %q, want %q", tt.input, result, tt.expected)
+
+			// Normalize expected path to use OS-specific separators for comparison
+			// cleanDuplicatedPath returns OS-specific paths, so we need to convert
+			// the hardcoded forward-slash expected values to match
+			expected := filepath.FromSlash(tt.expected)
+
+			assert.Equal(t, expected, result, "cleanDuplicatedPath(%q) = %q, want %q", tt.input, result, expected)
 
 			// Additional verification: result should be clean
 			if result != "" {
