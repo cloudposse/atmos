@@ -357,6 +357,7 @@ func TestExecuteWorkflowCmd(t *testing.T) {
 		cmd.PersistentFlags().String("base-path", "", "Base path")
 		cmd.PersistentFlags().StringSlice("config", []string{}, "Config files")
 		cmd.PersistentFlags().StringSlice("config-path", []string{}, "Config paths")
+		cmd.PersistentFlags().StringSlice("profile", []string{}, "Configuration profile")
 
 		return cmd
 	}

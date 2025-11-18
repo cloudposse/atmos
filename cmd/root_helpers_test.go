@@ -828,11 +828,6 @@ func TestRootCmd_RunE(t *testing.T) {
 	// This test verifies that the root command's RunE function
 	// properly handles configuration and prints the ATMOS logo.
 
-	// Save original state.
-	originalWd, err := os.Getwd()
-	assert.NoError(t, err)
-	defer os.Chdir(originalWd)
-
 	// Use test fixtures.
 	stacksPath := "../tests/fixtures/scenarios/complete"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)

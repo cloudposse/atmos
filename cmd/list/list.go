@@ -46,3 +46,8 @@ func (l *ListCommandProvider) GetName() string {
 func (l *ListCommandProvider) GetGroup() string {
 	return "Stack Introspection"
 }
+
+// GetAliases returns command aliases (none for list command).
+func (l *ListCommandProvider) GetAliases() []internal.CommandAlias {
+	return nil
+}
