@@ -1,0 +1,134 @@
+---
+slug: interactive-flag-prompts
+title: "Interactive Prompts for Missing Required Flags"
+authors: [osterman]
+tags: [enhancement, developer-experience]
+---
+
+Atmos now includes interactive prompts for missing required flags and positional arguments, making commands more discoverable and user-friendly. This feature is being gradually rolled out across commands.
+
+<!--truncate-->
+
+## What Changed
+
+Commands with required flags or positional arguments now automatically prompt you to select from available options when values are missing. This works just like shell autocomplete, helping you discover available options without memorizing values or checking documentation.
+
+For example, running `atmos theme show` without arguments now displays an interactive menu:
+
+```bash
+atmos theme show
+# ↓ Shows interactive selector with available themes
+```
+
+Previously, you'd see an error message requiring you to check the docs for valid values.
+
+## Why This Matters
+
+Interactive prompts significantly improve the developer experience by:
+
+1. **Reducing cognitive load** - No need to remember all valid values for flags
+2. **Faster workflow** - Select from a menu instead of typing and potentially mistyping
+3. **Better discoverability** - See what options are available without leaving the terminal
+4. **CI-friendly** - Automatically disabled in non-interactive environments (CI/CD, piped output)
+
+## How It Works
+
+Interactive prompts appear when all these conditions are met:
+
+1. **TTY detected** - You're running in an interactive terminal
+2. **Required flag missing** - The command has a required flag without a value
+3. **`--interactive` flag is true** - Enabled by default, disable with `--interactive=false`
+
+### Flag Patterns
+
+**Interactive selector with empty value:**
+```bash
+# Prompts for identity selection
+atmos auth whoami --identity
+
+# Prompts for theme selection
+atmos theme show --theme
+```
+
+**Interactive selector when flag omitted:**
+```bash
+# Prompts if stack completion is available
+atmos terraform plan mycomponent
+```
+
+**Skip prompt with explicit value:**
+```bash
+# No prompt - uses provided value
+atmos theme show --theme default
+atmos auth whoami --identity production
+```
+
+## Disabling Interactive Prompts
+
+For scripting or CI/CD environments, disable prompts using:
+
+**Via flag:**
+```bash
+atmos theme show --interactive=false
+```
+
+**Via environment variable:**
+```bash
+export ATMOS_INTERACTIVE=false
+atmos theme show
+```
+
+**Via configuration:**
+```yaml
+# atmos.yaml
+settings:
+  interactive: false
+```
+
+Interactive prompts are automatically disabled when:
+- Running in CI (detected via `CI` environment variable)
+- Output is piped or redirected
+- Not running in a TTY
+
+## Examples in Action
+
+### Theme Selection
+```bash
+$ atmos theme show
+? Select a theme:
+  > default
+    github-dark
+    dracula
+    monokai
+```
+
+### Identity Selection
+```bash
+$ atmos auth whoami --identity
+? Select an identity:
+  > production
+    staging
+    development
+```
+
+### Positional Arguments
+```bash
+$ atmos describe component
+? Select a component:
+  > vpc
+    eks-cluster
+    rds-aurora
+```
+
+## Rollout Status
+
+This feature is currently being rolled out across Atmos commands. Initial support is available for:
+- `atmos theme show` - Theme selection
+- `atmos auth` commands - Identity selection
+
+**Coming soon:** We're actively working to add interactive prompts to core functionality including `atmos terraform`, `atmos helmfile`, and `atmos packer`. These commands will prompt for component and stack selection when values are missing, making it even easier to work with infrastructure components.
+
+## Get Involved
+
+- [Documentation: Developing Atmos Commands](https://atmos.tools/developing-atmos-commands)
+- Share your feedback in the [Atmos Community Slack](https://cloudposse.com/slack)
