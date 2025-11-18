@@ -8,8 +8,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// newTestCommandWithGlobalFlags creates a test command with all global flags registered
+// using the flag registry pattern. This ensures test commands have the same flags as
+// production commands that inherit from RootCmd.
+func newTestCommandWithGlobalFlags(use string) *cobra.Command {
+	cmd := &cobra.Command{Use: use}
+
+	// Register global flags using the same pattern as cmd/root.go.
+	globalParser := flags.NewGlobalOptionsBuilder().Build()
+	globalParser.RegisterPersistentFlags(cmd)
+
+	return cmd
+}
 
 func Test_processArgsAndFlags(t *testing.T) {
 	inputArgsAndFlags := []string{
@@ -614,15 +628,10 @@ func TestProcessCommandLineArgs_IdentityFromEnvironmentVariable(t *testing.T) {
 				t.Setenv("ATMOS_IDENTITY", tt.envValue)
 			}
 
-			// Create a minimal cobra command for testing with required flags.
-			cmd := &cobra.Command{
-				Use: "terraform",
-			}
+			// Create a test command with global flags registered via flag registry.
+			cmd := newTestCommandWithGlobalFlags("terraform")
 			cmd.Flags().String("stack", "", "stack name")
 			cmd.Flags().String("identity", "", "identity name")
-			cmd.Flags().String("base-path", "", "base path")
-			cmd.Flags().StringSlice("config", []string{}, "config files")
-			cmd.Flags().StringSlice("config-path", []string{}, "config paths")
 
 			// Process the command-line arguments.
 			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})
@@ -666,15 +675,10 @@ func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a minimal cobra command for testing with required flags.
-			cmd := &cobra.Command{
-				Use: "terraform",
-			}
+			// Create a test command with global flags registered via flag registry.
+			cmd := newTestCommandWithGlobalFlags("terraform")
 			cmd.Flags().String("stack", "", "stack name")
 			cmd.Flags().String("identity", "", "identity name")
-			cmd.Flags().String("base-path", "", "base path")
-			cmd.Flags().StringSlice("config", []string{}, "config files")
-			cmd.Flags().StringSlice("config-path", []string{}, "config paths")
 
 			// Process the command-line arguments.
 			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})

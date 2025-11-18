@@ -124,6 +124,10 @@ Global Flags:
                                       Atmos stack manifests when executing
                                       terraform commands (default true)
 
+        --profile stringSlice         Activate configuration profiles
+                                      (comma-separated or repeated flag)
+                                      (default [])
+
         --profile-file string         Write profiling data to file instead of
                                       starting server
 

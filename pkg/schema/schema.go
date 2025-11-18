@@ -23,6 +23,32 @@ type Describe struct {
 	Settings DescribeSettings `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 }
 
+// ProfilesConfig defines configuration for the profiles system.
+type ProfilesConfig struct {
+	// BasePath is the custom directory for profile storage.
+	// If relative, resolved from atmos.yaml directory.
+	// If absolute, used as-is.
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+}
+
+// ConfigMetadata contains metadata about a configuration file or profile.
+type ConfigMetadata struct {
+	// Name is the name of the configuration or profile.
+	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+
+	// Description is a human-readable description.
+	Description string `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
+
+	// Version is the semantic version of the configuration.
+	Version string `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
+
+	// Tags are labels for filtering and organization.
+	Tags []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
+
+	// Deprecated indicates if this configuration should no longer be used.
+	Deprecated bool `yaml:"deprecated,omitempty" json:"deprecated,omitempty" mapstructure:"deprecated"`
+}
+
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
@@ -63,6 +89,8 @@ type AtmosConfiguration struct {
 	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
 	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
+	Profiles        ProfilesConfig      `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
+	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -667,6 +695,7 @@ type ConfigAndStacksInfo struct {
 	AtmosManifestJsonSchema   string
 	AtmosCliConfigPath        string
 	AtmosBasePath             string
+	ProfilesFromArg           []string
 	RedirectStdErr            string
 	LogsLevel                 string
 	LogsFile                  string

@@ -69,6 +69,10 @@ Global Flags:
                                      disable, --pager=less to use specific
                                      pager)
 
+        --profile stringSlice        Activate configuration profiles
+                                     (comma-separated or repeated flag) (default
+                                     [])
+
         --profile-file string        Write profiling data to file instead of
                                      starting server
 

@@ -541,11 +541,13 @@ if err := viper.BindEnv("identity", "ATMOS_IDENTITY", "IDENTITY"); err != nil {
 
 ### Default Identity
 
-Consider supporting default identity in `atmos.yaml`:
+Default identity is supported via the `default` field on identities in `atmos.yaml`:
 
 ```yaml
 auth:
-  default_identity: core-auto/terraform
+  identities:
+    core-auto/terraform:
+      default: true
 ```
 
 ### Identity Caching

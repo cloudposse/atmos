@@ -49,7 +49,8 @@ func ParseLogLevel(logLevel string) (LogLevel, error) {
 		}
 	}
 
-	return "", fmt.Errorf("%w: the log level '%s' is not recognized. Valid options are: %v", ErrInvalidLogLevel, logLevel, validLevels)
+	// Return just the sentinel with details that can be parsed by the error builder.
+	return "", fmt.Errorf("%w\nthe log level '%s' is not recognized. Valid options are: %v", ErrInvalidLogLevel, logLevel, validLevels)
 }
 
 // ConvertLogLevel converts a string LogLevel to a charm Level.
