@@ -88,6 +88,33 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		}
 	}
 	setEnv(v)
+
+	// Load profiles if specified via --profile flag or ATMOS_PROFILE env var.
+	// Profiles are loaded after base config but before final unmarshaling.
+	// This allows profiles to override base config settings.
+	if len(configAndStacksInfo.ProfilesFromArg) > 0 {
+		// First, do a temporary unmarshal to get CliConfigPath and Profiles config.
+		// We need these to discover and load profile directories.
+		var tempConfig schema.AtmosConfiguration
+		if err := v.Unmarshal(&tempConfig); err != nil {
+			return atmosConfig, err
+		}
+
+		// Copy the already-computed CLI config directory into tempConfig.
+		// This ensures relative profile paths resolve against the actual CLI config directory
+		// rather than the current working directory.
+		tempConfig.CliConfigPath = atmosConfig.CliConfigPath
+
+		// Load each profile in order (left-to-right precedence).
+		if err := loadProfiles(v, configAndStacksInfo.ProfilesFromArg, &tempConfig); err != nil {
+			return atmosConfig, err
+		}
+
+		log.Debug("Profiles loaded successfully",
+			"profiles", configAndStacksInfo.ProfilesFromArg,
+			"count", len(configAndStacksInfo.ProfilesFromArg))
+	}
+
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err := v.Unmarshal(&atmosConfig)
@@ -515,6 +542,56 @@ func shouldExcludePathForTesting(dirPath string) bool {
 	return false
 }
 
+// loadAtmosConfigsFromDirectory loads all YAML configuration files from a directory
+// and merges them into the destination viper instance.
+// This is used by both .atmos.d/ loading and profile loading.
+//
+// The directory can contain:
+//   - YAML files (.yaml, .yml)
+//   - Subdirectories with YAML files
+//   - Special files like atmos.yaml (loaded with priority)
+//
+// Files are loaded in order:
+//  1. Priority files (atmos.yaml) first
+//  2. Sorted by depth (shallower first)
+//  3. Lexicographic order within same depth
+//
+// Parameters:
+//   - searchPattern: Glob pattern for finding files (e.g., "/path/to/dir/**/*")
+//   - dst: Destination viper instance to merge configs into
+//   - source: Description for error messages (e.g., ".atmos.d", "profile 'developer'")
+//
+// Returns error if files can't be read or YAML is invalid.
+func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, source string) error {
+	// Find all config files using existing search infrastructure.
+	foundPaths, err := SearchAtmosConfig(searchPattern)
+	if err != nil {
+		return fmt.Errorf("%w: failed to search for configuration files in %s: %w", errUtils.ErrParseFile, source, err)
+	}
+
+	// No files found is not an error - just means directory is empty.
+	if len(foundPaths) == 0 {
+		log.Trace("No configuration files found", "source", source, "pattern", searchPattern)
+		return nil
+	}
+
+	// Load and merge each file.
+	for _, filePath := range foundPaths {
+		if err := mergeConfigFile(filePath, dst); err != nil {
+			return fmt.Errorf("%w: failed to load configuration file from %s: %s: %w", errUtils.ErrParseFile, source, filePath, err)
+		}
+
+		log.Trace("Loaded configuration file", "path", filePath, "source", source)
+	}
+
+	log.Debug("Loaded configuration directory",
+		"source", source,
+		"files", len(foundPaths),
+		"pattern", searchPattern)
+
+	return nil
+}
+
 // mergeDefaultImports merges default imports (`atmos.d/`,`.atmos.d/`)
 // from a specified directory into the destination configuration.
 func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
@@ -532,27 +609,22 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 		return nil
 	}
 
-	var atmosFoundFilePaths []string
 	// Search for `atmos.d/` configurations.
-	searchDir := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
-	foundPaths1, _ := SearchAtmosConfig(searchDir)
-	if len(foundPaths1) > 0 {
-		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths1...)
+	searchPattern := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
+	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
+		log.Trace("Failed to load atmos.d configs", "error", err)
+		// Don't return error - just log and continue.
+		// This maintains existing behavior where .atmos.d loading is optional.
 	}
+
 	// Search for `.atmos.d` configurations.
-	searchDir = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
-	foundPaths2, _ := SearchAtmosConfig(searchDir)
-	if len(foundPaths2) > 0 {
-		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths2...)
+	searchPattern = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
+	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
+		log.Trace("Failed to load .atmos.d configs", "error", err)
+		// Don't return error - just log and continue.
+		// This maintains existing behavior where .atmos.d loading is optional.
 	}
-	for _, filePath := range atmosFoundFilePaths {
-		err := mergeConfigFile(filePath, dst)
-		if err != nil {
-			log.Debug("error loading config file", "path", filePath, "error", err)
-			continue
-		}
-		log.Trace("atmos merged config", "path", filePath)
-	}
+
 	return nil
 }
 
