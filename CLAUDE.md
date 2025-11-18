@@ -347,16 +347,16 @@ assert.Contains(t, err.Error(), "...")  // FORBIDDEN
 ```
 
 **Rules:**
-- ✅ ALWAYS use `errors.Is()` for checking, NEVER string comparison
-- ✅ ALWAYS use `assert.ErrorIs()` in tests, NEVER `assert.Contains(err.Error(), ...)`
-- ✅ ALWAYS use sentinel errors from `errors/errors.go`
-- ❌ NEVER create dynamic errors: `errors.New("msg")`
-- ❌ NEVER string matching: `err.Error() == "..."` or `strings.Contains(err.Error(), ...)`
+- ✅ ALWAYS use `errors.Is()` for checking, NEVER string comparison.
+- ✅ ALWAYS use `assert.ErrorIs()` in tests, NEVER `assert.Contains(err.Error(), ...)`.
+- ✅ ALWAYS use sentinel errors from `errors/errors.go`.
+- ❌ NEVER create dynamic errors: `errors.New("msg")`.
+- ❌ NEVER string matching: `err.Error() == "..."` or `strings.Contains(err.Error(), ...)`.
 
 **Legacy patterns (internal/non-user-facing only):**
-- `errors.Join` for multiple errors, `fmt.Errorf("%w", err)` for chains
+- `errors.Join` for multiple errors, `fmt.Errorf("%w", err)` for chains.
 
-See `docs/errors.md` for complete ErrorBuilder API guide
+See `docs/errors.md` for complete ErrorBuilder API guide.
 
 ### Testing Strategy (MANDATORY)
 - **Prefer unit tests with mocks** over integration tests
@@ -469,7 +469,7 @@ Check status: `gh pr checks {pr}`. Reply to threads: Use `gh api graphql` with `
 4. Document in website if user-facing
 
 ### Bug Fixing (MANDATORY)
-1. Write failing test 2. Verify fails 3. Fix iteratively 4. Run full suite
+1. Write failing test. 2. Verify fails. 3. Fix iteratively. 4. Run full suite.
 
 ### Extending Store Integration
 1. Implement interface in `pkg/store/`
