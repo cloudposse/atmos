@@ -163,18 +163,6 @@ $ atmos workflow
 
 This shows all available workflows across all files, allowing you to browse and select interactively.
 
-## Get Started
-
-This feature is available now. Just upgrade to the latest Atmos release:
-
-```bash
-# Check your version
-atmos version
-
-# Try auto-discovery
-atmos workflow <your-workflow-name>
-```
-
 ## Get Involved
 
 We're building Atmos in the open and welcome your feedback:
