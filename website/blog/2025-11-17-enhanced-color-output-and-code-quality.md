@@ -45,7 +45,7 @@ This allows us to identify bottlenecks and optimize performance in future releas
 ### Better Error Handling
 - Consistent use of static errors from `errors/errors.go`
 - Proper error wrapping with context
-- Use of `errors.Join()` for combining multiple errors
+- Use of `errors.Join()` for combining multiple errors.
 
 ## What's Next
 

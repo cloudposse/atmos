@@ -22,7 +22,7 @@ We've added comprehensive documentation for all Terraform commands integrated wi
 Key additions include:
 - Terraform planfile workflow documentation with security considerations
 - All Terraform subcommands (`plan`, `apply`, `destroy`, `validate`, `fmt`, `output`, etc.)
-- Best practices for using Terraform with Atmos
+- Best practices for using Terraform with Atmos.
 
 [View Terraform Documentation](/cli/commands/terraform/usage)
 
@@ -59,7 +59,7 @@ Numerous documentation improvements including:
 - Corrected Terraform command examples
 - Updated helmfile sync description to accurately reflect behavior
 - Added security warnings for credential handling in planfiles
-- Improved markdown formatting consistency
+- Improved Markdown formatting consistency
 
 ## Upgrade Notes
 

@@ -195,7 +195,7 @@ func TestTokenize(t *testing.T) {
 			}
 
 			if tt.expectedLength > 0 && len(tokens) != tt.expectedLength {
-				t.Logf("Expected %d tokens, got %d", tt.expectedLength, len(tokens))
+				t.Errorf("Expected %d tokens, got %d", tt.expectedLength, len(tokens))
 			}
 		})
 	}

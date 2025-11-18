@@ -8,8 +8,11 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -73,7 +76,7 @@ func TestTerraformGenerateVarfileCmd(t *testing.T) {
 }
 
 func TestTerraformGenerateVarfileCmdNoColor(t *testing.T) {
-	_ = NewTestKit(t)
+	tk := NewTestKit(t)
 
 	tests.RequireTerraform(t)
 
@@ -84,10 +87,15 @@ func TestTerraformGenerateVarfileCmdNoColor(t *testing.T) {
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
 	// Use t.Setenv() for automatic cleanup by test framework.
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
-	t.Setenv("NO_COLOR", "1")
+	tk.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	tk.Setenv("ATMOS_BASE_PATH", stacksPath)
+	tk.Setenv("ATMOS_LOGS_LEVEL", "Debug")
+	tk.Setenv("NO_COLOR", "1")
+
+	// Force color profile reset to ensure NO_COLOR is respected.
+	// This is necessary because previous tests may have initialized colors.
+	lipgloss.SetColorProfile(termenv.Ascii)
+	theme.InvalidateStyleCache()
 
 	// Capture stderr.
 	oldStderr := os.Stderr
@@ -121,6 +129,10 @@ func TestTerraformGenerateVarfileCmdNoColor(t *testing.T) {
 
 	// Verify NO ANSI codes are present when NO_COLOR is set.
 	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	if ansiRegex.MatchString(outputStr) {
+		t.Logf("Raw output with ANSI codes:\n%q", outputStr)
+		t.Logf("Output length: %d bytes", len(outputStr))
+	}
 	assert.False(t, ansiRegex.MatchString(outputStr), "Output should not contain ANSI codes when NO_COLOR=1")
 
 	// Check if the output contains the expected output (plain text).
