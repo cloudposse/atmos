@@ -139,5 +139,13 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 	configAndStacksInfo.Command = "list"
 	configAndStacksInfo.SubCommand = "instances"
 
-	return list.ExecuteListInstancesCmd(&configAndStacksInfo, cmd, args, opts.Provenance, opts.Columns)
+	return list.ExecuteListInstancesCmd(&list.InstancesCommandOptions{
+		Info:        &configAndStacksInfo,
+		Cmd:         cmd,
+		Args:        args,
+		ShowImports: opts.Provenance,
+		ColumnsFlag: opts.Columns,
+		FilterSpec:  opts.Filter,
+		SortSpec:    opts.Sort,
+	})
 }

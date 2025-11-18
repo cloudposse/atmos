@@ -6,7 +6,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -50,6 +53,14 @@ func TestProcessInstances(t *testing.T) {
 
 // TestExecuteListInstancesCmd tests the main command entry point with real fixtures.
 func TestExecuteListInstancesCmd(t *testing.T) {
+	// Initialize I/O and UI contexts for testing.
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		t.Fatalf("failed to initialize I/O context: %v", err)
+	}
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
 	// Use actual test fixture for integration test.
 	fixturePath := "../../tests/fixtures/scenarios/complete"
 	tests.RequireFilePath(t, fixturePath, "test fixture directory")
@@ -64,7 +75,15 @@ func TestExecuteListInstancesCmd(t *testing.T) {
 	}
 
 	// Execute command - should successfully list instances.
-	err := ExecuteListInstancesCmd(info, cmd, []string{}, false, []string{})
+	err = ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:        info,
+		Cmd:         cmd,
+		Args:        []string{},
+		ShowImports: false,
+		ColumnsFlag: []string{},
+		FilterSpec:  "",
+		SortSpec:    "",
+	})
 
 	// Should succeed with valid fixture.
 	assert.NoError(t, err)
@@ -83,7 +102,15 @@ func TestExecuteListInstancesCmd_InvalidConfig(t *testing.T) {
 	}
 
 	// Execute command - will error but won't panic.
-	err := ExecuteListInstancesCmd(info, cmd, []string{}, false, []string{})
+	err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:        info,
+		Cmd:         cmd,
+		Args:        []string{},
+		ShowImports: false,
+		ColumnsFlag: []string{},
+		FilterSpec:  "",
+		SortSpec:    "",
+	})
 
 	// Error is expected with invalid config.
 	assert.Error(t, err)
@@ -101,7 +128,15 @@ func TestExecuteListInstancesCmd_UploadPath(t *testing.T) {
 	}
 
 	// Execute with upload enabled - will error in config loading before upload.
-	err := ExecuteListInstancesCmd(info, cmd, []string{}, false, []string{})
+	err := ExecuteListInstancesCmd(&InstancesCommandOptions{
+		Info:        info,
+		Cmd:         cmd,
+		Args:        []string{},
+		ShowImports: false,
+		ColumnsFlag: []string{},
+		FilterSpec:  "",
+		SortSpec:    "",
+	})
 
 	// Error is expected (config load will fail).
 	assert.Error(t, err)

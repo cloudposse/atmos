@@ -12,8 +12,10 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
+	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
@@ -26,6 +28,17 @@ import (
 var defaultInstanceColumns = []column.Config{
 	{Name: "Component", Value: "{{ .component }}"},
 	{Name: "Stack", Value: "{{ .stack }}"},
+}
+
+// InstancesCommandOptions contains options for the list instances command.
+type InstancesCommandOptions struct {
+	Info        *schema.ConfigAndStacksInfo
+	Cmd         *cobra.Command
+	Args        []string
+	ShowImports bool
+	ColumnsFlag []string
+	FilterSpec  string
+	SortSpec    string
 }
 
 // parseColumnsFlag parses column names from CLI flag.
@@ -295,23 +308,23 @@ func processInstances(atmosConfig *schema.AtmosConfiguration) ([]schema.Instance
 }
 
 // ExecuteListInstancesCmd executes the list instances command.
-func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string, showImports bool, columnsFlag []string) error {
+func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	log.Trace("ExecuteListInstancesCmd starting")
 	// Initialize CLI config.
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	atmosConfig, err := cfg.InitCliConfig(*opts.Info, true)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToInitConfig.Error(), "error", err)
 		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
 
 	// Get flags.
-	upload, err := cmd.Flags().GetBool("upload")
+	upload, err := opts.Cmd.Flags().GetBool("upload")
 	if err != nil {
 		log.Error(errUtils.ErrParseFlag.Error(), "flag", "upload", "error", err)
 		return errors.Join(errUtils.ErrParseFlag, err)
 	}
 
-	formatFlag, _ := cmd.Flags().GetString("format")
+	formatFlag, _ := opts.Cmd.Flags().GetString("format")
 
 	// Process instances.
 	instances, err := processInstances(&atmosConfig)
@@ -345,7 +358,7 @@ func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comman
 
 		// Render tree view.
 		// Use showImports parameter from --provenance flag.
-		output := format.RenderInstancesTree(importTrees, showImports)
+		output := format.RenderInstancesTree(importTrees, opts.ShowImports)
 		fmt.Println(output)
 		return nil
 	}
@@ -354,7 +367,7 @@ func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comman
 	data := ExtractMetadata(instances)
 
 	// Get column configuration.
-	columns := getInstanceColumns(&atmosConfig, columnsFlag)
+	columns := getInstanceColumns(&atmosConfig, opts.ColumnsFlag)
 
 	// Create column selector.
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
@@ -362,8 +375,20 @@ func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comman
 		return fmt.Errorf("failed to create column selector: %w", err)
 	}
 
+	// Build filters from filter specification.
+	filters, err := buildInstanceFilters(opts.FilterSpec)
+	if err != nil {
+		return fmt.Errorf("failed to build filters: %w", err)
+	}
+
+	// Build sorters from sort specification.
+	sorters, err := buildInstanceSorters(opts.SortSpec)
+	if err != nil {
+		return fmt.Errorf("failed to build sorters: %w", err)
+	}
+
 	// Create renderer.
-	r := renderer.New(nil, selector, nil, format.Format(formatFlag))
+	r := renderer.New(filters, selector, sorters, format.Format(formatFlag))
 
 	// Render output.
 	if err := r.Render(data); err != nil {
@@ -381,4 +406,26 @@ func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comman
 	}
 
 	return nil
+}
+
+// buildInstanceFilters creates filters from filter specification.
+// The filter spec format is currently undefined for instances,
+// so this returns an empty filter list for now.
+func buildInstanceFilters(filterSpec string) ([]filter.Filter, error) {
+	// TODO: Implement filter parsing when filter spec format is defined.
+	// For now, return empty filter list.
+	return nil, nil
+}
+
+// buildInstanceSorters creates sorters from sort specification.
+func buildInstanceSorters(sortSpec string) ([]*listSort.Sorter, error) {
+	if sortSpec == "" {
+		// Default sort: by component then stack ascending.
+		return []*listSort.Sorter{
+			listSort.NewSorter("Component", listSort.Ascending),
+			listSort.NewSorter("Stack", listSort.Ascending),
+		}, nil
+	}
+
+	return listSort.ParseSortSpec(sortSpec)
 }

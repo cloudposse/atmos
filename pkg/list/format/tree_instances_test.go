@@ -60,11 +60,11 @@ func TestRenderInstancesTree_SpacerBetweenComponents(t *testing.T) {
 		}
 	}
 
-	// We should have at least 3 spacers:
-	// - 1 at top (after "Stacks" header)
-	// - 2 between 3 components (vpc-vpc-flow-logs-bucket, vpc-flow-logs-bucket-eks)
-	if spacerCount < 3 {
-		t.Errorf("Expected at least 3 spacer lines, got %d", spacerCount)
+	// We should have 1 spacer:
+	// - 1 at top (after "Component Instances" header)
+	// - No spacers between components when showImports=false (only one stack)
+	if spacerCount != 1 {
+		t.Errorf("Expected exactly 1 spacer line, got %d", spacerCount)
 		t.Logf("Output:\n%s", plainOutput)
 	}
 }
@@ -119,12 +119,11 @@ func TestRenderInstancesTree_MultipleStacks(t *testing.T) {
 	}
 
 	// Should have:
-	// - 1 at top (after "Stacks")
-	// - 1 between component1 and component2 in stack-a
+	// - 1 at top (after "Component Instances" header)
 	// - 1 between stack-a and stack-b
-	// Total: at least 3 spacers
-	if spacerCount < 3 {
-		t.Errorf("Expected at least 3 spacer lines, got %d", spacerCount)
+	// Total: 2 spacers (no spacers between components when showImports=false)
+	if spacerCount != 2 {
+		t.Errorf("Expected exactly 2 spacer lines, got %d", spacerCount)
 		t.Logf("Output:\n%s", plainOutput)
 	}
 }
