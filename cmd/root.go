@@ -682,7 +682,7 @@ func getInvalidCommandName(input string) string {
 
 // displayPerformanceHeatmap shows the performance heatmap visualization.
 //
-// convertToTermenvProfile converts our terminal.ColorProfile to termenv.Profile.
+// ConvertToTermenvProfile converts our terminal.ColorProfile to termenv.Profile.
 //
 //nolint:unparam // cmd parameter reserved for future use
 func convertToTermenvProfile(profile terminal.ColorProfile) termenv.Profile {

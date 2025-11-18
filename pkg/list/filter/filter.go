@@ -48,7 +48,7 @@ func NewGlobFilter(field, pattern string) (*GlobFilter, error) {
 	// Validate pattern syntax
 	_, err := filepath.Match(pattern, "test")
 	if err != nil {
-		return nil, fmt.Errorf("%w: invalid glob pattern %q: %v", errUtils.ErrInvalidConfig, pattern, err)
+		return nil, fmt.Errorf("%w: invalid glob pattern %q: %w", errUtils.ErrInvalidConfig, pattern, err)
 	}
 
 	return &GlobFilter{
@@ -74,7 +74,7 @@ func (f *GlobFilter) Apply(data interface{}) (interface{}, error) {
 		valueStr := fmt.Sprintf("%v", value)
 		matched, err := filepath.Match(f.Pattern, valueStr)
 		if err != nil {
-			return nil, fmt.Errorf("%w: pattern matching failed: %v", errUtils.ErrInvalidConfig, err)
+			return nil, fmt.Errorf("%w: pattern matching failed: %w", errUtils.ErrInvalidConfig, err)
 		}
 
 		if matched {
@@ -117,7 +117,7 @@ func (f *ColumnValueFilter) Apply(data interface{}) (interface{}, error) {
 }
 
 // NewBoolFilter creates a filter for boolean field values.
-// value nil = all, true = only true values, false = only false values.
+// Value nil = all, true = only true values, false = only false values.
 func NewBoolFilter(field string, value *bool) *BoolFilter {
 	return &BoolFilter{
 		Field: field,

@@ -150,7 +150,7 @@ func buildStackNodeWithComponents(stackName string, components map[string][]*lis
 // buildComponentNodeSimple creates a tree node for a component without imports.
 func buildComponentNodeSimple(componentName string, componentFolder string) *tree.Tree {
 	// Build display text: component_name (component_folder)
-	displayText := componentName
+	var displayText string
 	if componentFolder != "" {
 		// Style component name and folder path separately.
 		styledName := getComponentStyle().Render(componentName)

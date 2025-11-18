@@ -107,10 +107,15 @@ func (s *Sorter) compare(a, b string) int {
 	}
 }
 
+const (
+	// FloatBitSize is the bit size for ParseFloat (64-bit float).
+	floatBitSize = 64
+)
+
 // compareNumeric compares two strings as numbers.
 func compareNumeric(a, b string) int {
-	numA, errA := strconv.ParseFloat(a, 64)
-	numB, errB := strconv.ParseFloat(b, 64)
+	numA, errA := strconv.ParseFloat(a, floatBitSize)
+	numB, errB := strconv.ParseFloat(b, floatBitSize)
 
 	// Non-numeric values sort last
 	if errA != nil && errB != nil {

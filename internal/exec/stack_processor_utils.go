@@ -676,11 +676,11 @@ func processYAMLConfigFileWithContextInternal(
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 			}
-			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, tmplErr)
+			wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, tmplErr)
 			if mergeContext != nil {
 				return nil, nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			}
-			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
+			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 		}
 	}
 
@@ -1054,11 +1054,12 @@ func processYAMLConfigFileWithContextInternal(
 
 			// Store merge context for imported files if provenance tracking is enabled.
 			if atmosConfig != nil && atmosConfig.TrackProvenance {
-				if result.mergeContext == nil {
+				switch {
+				case result.mergeContext == nil:
 					log.Trace("Import has nil merge context", "import", result.importRelativePathWithoutExt)
-				} else if !result.mergeContext.IsProvenanceEnabled() {
+				case !result.mergeContext.IsProvenanceEnabled():
 					log.Trace("Import has merge context but provenance not enabled", "import", result.importRelativePathWithoutExt)
-				} else {
+				default:
 					log.Trace("Storing merge context for import", "import", result.importRelativePathWithoutExt, "chain_length", len(result.mergeContext.ImportChain))
 					SetMergeContextForStack(result.importRelativePathWithoutExt, result.mergeContext)
 

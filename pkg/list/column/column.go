@@ -48,7 +48,7 @@ type TemplateContext struct {
 
 // NewSelector creates a selector with Go template support.
 // Templates are pre-parsed for performance but NOT evaluated until Extract().
-// funcMap should include functions like atmos.Component, toString, get, etc.
+// FuncMap should include functions like atmos.Component, toString, get, etc.
 func NewSelector(configs []Config, funcMap template.FuncMap) (*Selector, error) {
 	if len(configs) == 0 {
 		return nil, fmt.Errorf("%w: no columns configured", errUtils.ErrInvalidConfig)
@@ -67,7 +67,7 @@ func NewSelector(configs []Config, funcMap template.FuncMap) (*Selector, error) 
 		// Parse each column template
 		_, err := tmplMap.New(cfg.Name).Parse(cfg.Value)
 		if err != nil {
-			return nil, fmt.Errorf("%w: invalid template for column %q: %v", errUtils.ErrInvalidConfig, cfg.Name, err)
+			return nil, fmt.Errorf("%w: invalid template for column %q: %w", errUtils.ErrInvalidConfig, cfg.Name, err)
 		}
 	}
 
@@ -123,7 +123,7 @@ func (s *Selector) Extract(data []map[string]any) (headers []string, rows [][]st
 			// Evaluate template for this column and data item
 			value, evalErr := s.evaluateTemplate(cfg, item)
 			if evalErr != nil {
-				return nil, nil, fmt.Errorf("%w: row %d, column %q: %v", errUtils.ErrTemplateEvaluation, i, cfg.Name, evalErr)
+				return nil, nil, fmt.Errorf("%w: row %d, column %q: %w", errUtils.ErrTemplateEvaluation, i, cfg.Name, evalErr)
 			}
 			row[j] = value
 		}

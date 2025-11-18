@@ -260,7 +260,7 @@ func extractComponentsFromStackData(stackData interface{}) map[string]bool {
 
 // buildImportTreeFromChain builds an import tree from MergeContext.ImportChain.
 // ImportChain[0] = parent stack file
-// ImportChain[1..N] = imported files in merge order
+// ImportChain[1..N] = imported files in merge order.
 func buildImportTreeFromChain(importChain []string, atmosConfig *schema.AtmosConfiguration) []*tree.ImportNode {
 	if len(importChain) <= 1 {
 		// No imports (just the stack file itself).
@@ -304,7 +304,7 @@ func buildImportTreeFromChain(importChain []string, atmosConfig *schema.AtmosCon
 func stripBasePath(absolutePath, basePath string) string {
 	// Ensure both paths end with separator for consistent comparison.
 	if !strings.HasSuffix(basePath, string(filepath.Separator)) {
-		basePath = basePath + string(filepath.Separator)
+		basePath += string(filepath.Separator)
 	}
 
 	relativePath := strings.TrimPrefix(absolutePath, basePath)
@@ -384,7 +384,7 @@ func resolveImportPath(importPath, _ string, atmosConfig *schema.AtmosConfigurat
 
 	// Add .yaml extension if not present.
 	if !strings.HasSuffix(importPath, ".yaml") && !strings.HasSuffix(importPath, ".yml") {
-		importPath = importPath + ".yaml"
+		importPath += ".yaml"
 	}
 
 	return filepath.Join(basePath, importPath)

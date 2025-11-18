@@ -50,7 +50,7 @@ func getStackImports(stackName string, atmosConfig *schema.AtmosConfiguration, c
 	stackFilePath, err := findStackFilePath(stackName, atmosConfig)
 	if err != nil {
 		// Stack might not have a direct file (could be generated), return empty imports.
-		return []string{}, nil
+		return nil, err
 	}
 
 	// Check cache first.
@@ -71,7 +71,7 @@ func getStackImports(stackName string, atmosConfig *schema.AtmosConfiguration, c
 }
 
 // findStackFilePath attempts to find the file path for a stack.
-// Stacks follow the pattern: stacks/orgs/{org}/{tenant}/{environment}/*.yaml
+// Stacks follow the pattern: stacks/orgs/{org}/{tenant}/{environment}/*.yaml.
 func findStackFilePath(stackName string, atmosConfig *schema.AtmosConfiguration) (string, error) {
 	// Try to construct the file path from the stack name.
 	// Stack names follow pattern like "plat-ue2-prod" which maps to files in stacks/orgs/
@@ -195,7 +195,7 @@ func resolveImportFilePath(importPath string, atmosConfig *schema.AtmosConfigura
 	// Import paths are relative to the stacks base path.
 	// They may or may not have .yaml extension.
 	if !strings.HasSuffix(importPath, ".yaml") && !strings.HasSuffix(importPath, ".yml") {
-		importPath = importPath + ".yaml"
+		importPath += ".yaml"
 	}
 
 	return filepath.Join(stacksBasePath, importPath)

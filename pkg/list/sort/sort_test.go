@@ -140,11 +140,12 @@ func TestCompareNumeric(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := compareNumeric(tt.a, tt.b)
-			if tt.expected < 0 {
+			switch {
+			case tt.expected < 0:
 				assert.Less(t, result, 0)
-			} else if tt.expected > 0 {
+			case tt.expected > 0:
 				assert.Greater(t, result, 0)
-			} else {
+			default:
 				assert.Equal(t, 0, result)
 			}
 		})
@@ -170,11 +171,12 @@ func TestCompareBoolean(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := compareBoolean(tt.a, tt.b)
-			if tt.expected < 0 {
+			switch {
+			case tt.expected < 0:
 				assert.Less(t, result, 0)
-			} else if tt.expected > 0 {
+			case tt.expected > 0:
 				assert.Greater(t, result, 0)
-			} else {
+			default:
 				assert.Equal(t, 0, result)
 			}
 		})
