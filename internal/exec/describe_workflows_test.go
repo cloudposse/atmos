@@ -139,3 +139,207 @@ workflows:
 		})
 	}
 }
+
+func TestFindWorkflowAcrossFiles(t *testing.T) {
+	tmpDir := setupTestWorkflowEnvironment(t)
+
+	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
+
+	// Create workflow files with duplicate workflow names.
+	workflow1Content := `
+workflows:
+  deploy:
+    description: "Deploy infrastructure from file 1"
+    steps:
+      - name: "step1"
+        type: "shell"
+        command: "echo 'Deploying from file 1'"
+  test:
+    description: "Run tests"
+    steps:
+      - name: "test"
+        type: "shell"
+        command: "echo 'Testing'"
+`
+	createTestWorkflowFile(t, workflowsDir, "infrastructure.yaml", workflow1Content)
+
+	workflow2Content := `
+workflows:
+  deploy:
+    description: "Deploy infrastructure from file 2"
+    steps:
+      - name: "step1"
+        type: "shell"
+        command: "echo 'Deploying from file 2'"
+  cleanup:
+    description: "Cleanup resources"
+    steps:
+      - name: "cleanup"
+        type: "shell"
+        command: "echo 'Cleaning up'"
+`
+	createTestWorkflowFile(t, workflowsDir, "maintenance.yaml", workflow2Content)
+
+	config := initTestConfig(t)
+	config.BasePath = tmpDir
+	config.Workflows.BasePath = "stacks/workflows"
+
+	tests := []struct {
+		name              string
+		workflowName      string
+		wantErr           bool
+		expectedMatches   int
+		checkDescriptions bool
+	}{
+		{
+			name:              "find workflow with multiple matches",
+			workflowName:      "deploy",
+			wantErr:           false,
+			expectedMatches:   2,
+			checkDescriptions: true,
+		},
+		{
+			name:            "find workflow with single match",
+			workflowName:    "test",
+			wantErr:         false,
+			expectedMatches: 1,
+		},
+		{
+			name:            "workflow not found",
+			workflowName:    "nonexistent",
+			wantErr:         false,
+			expectedMatches: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			matches, err := findWorkflowAcrossFiles(tt.workflowName, &config)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Len(t, matches, tt.expectedMatches)
+
+				if tt.checkDescriptions && len(matches) > 0 {
+					// Verify descriptions are populated.
+					for _, match := range matches {
+						assert.NotEmpty(t, match.Description)
+						assert.Contains(t, match.Description, "Deploy infrastructure")
+					}
+				}
+
+				// Verify all matches have the correct workflow name.
+				for _, match := range matches {
+					assert.Equal(t, tt.workflowName, match.Name)
+					assert.NotEmpty(t, match.File)
+				}
+			}
+		})
+	}
+}
+
+func TestFindWorkflowAcrossFiles_ExecuteDescribeWorkflowsError(t *testing.T) {
+	// Config with invalid workflows base path.
+	config := schema.AtmosConfiguration{
+		Workflows: schema.Workflows{
+			BasePath: "",
+		},
+	}
+
+	matches, err := findWorkflowAcrossFiles("deploy", &config)
+
+	assert.Error(t, err)
+	assert.Nil(t, matches)
+	assert.Contains(t, err.Error(), "'workflows.base_path' must be configured")
+}
+
+func TestExecuteDescribeWorkflows_InvalidYAMLFile(t *testing.T) {
+	tmpDir := setupTestWorkflowEnvironment(t)
+
+	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
+
+	// Create a valid workflow file.
+	validWorkflow := `
+workflows:
+  deploy:
+    description: "Valid workflow"
+    steps:
+      - name: "step1"
+        type: "shell"
+        command: "echo 'valid'"
+`
+	createTestWorkflowFile(t, workflowsDir, "valid.yaml", validWorkflow)
+
+	// Create an invalid YAML file.
+	invalidYAML := `this is not valid yaml: [[[`
+	createTestWorkflowFile(t, workflowsDir, "invalid.yaml", invalidYAML)
+
+	config := initTestConfig(t)
+	config.BasePath = tmpDir
+	config.Workflows.BasePath = "stacks/workflows"
+
+	// Should continue processing and return valid workflows despite invalid file.
+	listResult, _, _, err := ExecuteDescribeWorkflows(config)
+
+	// Should not error - invalid files are logged and skipped.
+	assert.NoError(t, err)
+	// Should still find the valid workflow.
+	assert.Len(t, listResult, 1)
+	assert.Equal(t, "deploy", listResult[0].Workflow)
+}
+
+func TestExecuteDescribeWorkflows_FileWithoutWorkflowsKey(t *testing.T) {
+	tmpDir := setupTestWorkflowEnvironment(t)
+
+	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
+
+	// Create a valid workflow file.
+	validWorkflow := `
+workflows:
+  deploy:
+    description: "Valid workflow"
+    steps:
+      - name: "step1"
+        type: "shell"
+        command: "echo 'valid'"
+`
+	createTestWorkflowFile(t, workflowsDir, "valid.yaml", validWorkflow)
+
+	// Create a file without workflows key.
+	noWorkflowsKey := `
+some_other_key:
+  value: "not a workflow file"
+`
+	createTestWorkflowFile(t, workflowsDir, "not-workflows.yaml", noWorkflowsKey)
+
+	config := initTestConfig(t)
+	config.BasePath = tmpDir
+	config.Workflows.BasePath = "stacks/workflows"
+
+	// Should continue processing and return valid workflows.
+	listResult, _, _, err := ExecuteDescribeWorkflows(config)
+
+	// Should not error - files without workflows key are logged and skipped.
+	assert.NoError(t, err)
+	// Should still find the valid workflow.
+	assert.Len(t, listResult, 1)
+	assert.Equal(t, "deploy", listResult[0].Workflow)
+}
+
+func TestExecuteDescribeWorkflows_EmptyWorkflowsDirectory(t *testing.T) {
+	tmpDir := setupTestWorkflowEnvironment(t)
+
+	config := initTestConfig(t)
+	config.BasePath = tmpDir
+	config.Workflows.BasePath = "stacks/workflows"
+
+	// Empty workflows directory.
+	listResult, mapResult, allResult, err := ExecuteDescribeWorkflows(config)
+
+	assert.NoError(t, err)
+	assert.Len(t, listResult, 0)
+	assert.Len(t, mapResult, 0)
+	assert.Len(t, allResult, 0)
+}
