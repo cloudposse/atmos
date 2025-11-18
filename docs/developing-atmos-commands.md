@@ -973,7 +973,7 @@ See these commands for reference implementations:
 ## Further Reading
 
 - [I/O and UI Output Guide](io-and-ui-output.md) - **How to handle output in commands**
-- [Flag Handler Documentation](.claude/agents/flag-handler.md) - **Complete flag handler guide**
+- [Flag Handler Documentation](../.claude/agents/flag-handler.md) - **Complete flag handler guide**
 - [Command Registry Pattern PRD](prd/command-registry-pattern.md)
 - [Cobra Documentation](https://github.com/spf13/cobra)
 - [Atmos Custom Commands](/core-concepts/custom-commands)

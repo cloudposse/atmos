@@ -331,8 +331,7 @@ func WithRegistry(registry *FlagRegistry) Option {
 //
 // Example:
 //
-//	WithStringFlag("stack", "s", "", "Stack name"),
-//	WithRequired("stack"),
+//	WithRequiredStringFlag("stack", "s", "Stack name"),
 //	WithCompletionPrompt("stack", "Choose a stack", stackFlagCompletion),
 func WithCompletionPrompt(flagName, promptTitle string, completionFunc CompletionFunc) Option {
 	defer perf.Track(nil, "flags.WithCompletionPrompt")()
