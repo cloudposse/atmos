@@ -374,10 +374,12 @@ func ProcessYAMLConfigFiles(
 				return
 			}
 
-			if len(mergeContext.ImportChain) > 0 {
-				log.Trace("After processing file, merge context has import chain", "file", stackFileName, "import_chain_length", len(mergeContext.ImportChain), "import_chain", mergeContext.ImportChain)
-			} else {
-				log.Trace("After processing file, merge context has empty import chain", "file", stackFileName)
+			if mergeContext != nil {
+				if len(mergeContext.ImportChain) > 0 {
+					log.Trace("After processing file, merge context has import chain", "file", stackFileName, "import_chain_length", len(mergeContext.ImportChain), "import_chain", mergeContext.ImportChain)
+				} else {
+					log.Trace("After processing file, merge context has empty import chain", "file", stackFileName)
+				}
 			}
 
 			var imports []string

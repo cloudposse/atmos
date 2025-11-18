@@ -36,6 +36,8 @@ tests:
     args:
       - "list"
       - "instances"
+      - "--format"
+      - "csv"
     expect:
       exit_code: 0
       stdout:

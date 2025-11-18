@@ -178,16 +178,21 @@ func listStacksWithOptions(opts *StacksOptions) error {
 			return fmt.Errorf("error resolving import tree from provenance: %w", err)
 		}
 
+		// Build a set of allowed stack names from the already-filtered stacks slice.
+		allowedStacks := make(map[string]bool)
+		for _, stack := range stacks {
+			if stackName, ok := stack["stack"].(string); ok {
+				allowedStacks[stackName] = true
+			}
+		}
+
 		// Flatten component level - for stacks view, we just need stack → imports.
 		// All components in a stack share the same import chain from the stack file.
 		importTrees := make(map[string][]*tree.ImportNode)
 		for stackName, componentImports := range importTreesWithComponents {
-			// Filter by component if specified.
-			if opts.Component != "" {
-				// Only include this stack if it has the requested component.
-				if _, hasComponent := componentImports[opts.Component]; !hasComponent {
-					continue
-				}
+			// Only include stacks present in the filtered result (honors --component filter).
+			if !allowedStacks[stackName] {
+				continue
 			}
 
 			// Just take the first component's imports (they're all the same for a stack file).

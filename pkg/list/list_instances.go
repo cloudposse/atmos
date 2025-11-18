@@ -324,7 +324,11 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		return errors.Join(errUtils.ErrParseFlag, err)
 	}
 
-	formatFlag, _ := opts.Cmd.Flags().GetString("format")
+	formatFlag, err := opts.Cmd.Flags().GetString("format")
+	if err != nil {
+		log.Error(errUtils.ErrParseFlag.Error(), "flag", "format", "error", err)
+		return errors.Join(errUtils.ErrParseFlag, err)
+	}
 
 	// Process instances.
 	instances, err := processInstances(&atmosConfig)

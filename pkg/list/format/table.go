@@ -498,9 +498,16 @@ func calculateColumnWidths(header []string, rows [][]string, terminalWidth int) 
 
 	// Available space for actual content.
 	availableWidth := terminalWidth - totalPadding
+
+	// Clamp availableWidth to ensure at least MinColumnWidth per column.
+	minRequiredWidth := numColumns * MinColumnWidth
+	if availableWidth < minRequiredWidth {
+		availableWidth = minRequiredWidth
+	}
+
+	// Ensure evenWidth is non-negative in fallback case.
 	if availableWidth < numColumns {
-		// Fallback: very small terminal, distribute evenly.
-		evenWidth := availableWidth / numColumns
+		evenWidth := MinColumnWidth
 		widths := make([]int, numColumns)
 		for i := range widths {
 			widths[i] = evenWidth
@@ -574,13 +581,43 @@ func calculateColumnWidths(header []string, rows [][]string, terminalWidth int) 
 
 		// Give remaining space to Description, but cap at MaxColumnWidth.
 		remainingWidth := availableWidth - usedWidth
+		// Ensure remainingWidth never exceeds total available space.
+		if remainingWidth > availableWidth {
+			remainingWidth = availableWidth
+		}
 		if remainingWidth > MaxColumnWidth {
 			remainingWidth = MaxColumnWidth
 		}
 		if remainingWidth < DescriptionColumnMinWidth {
 			remainingWidth = DescriptionColumnMinWidth // Minimum for Description.
 		}
+		// Bound to MinColumnWidth as absolute floor.
+		if remainingWidth < MinColumnWidth {
+			remainingWidth = MinColumnWidth
+		}
 		widths[descriptionColIndex] = remainingWidth
+
+		// Ensure total width doesn't exceed availableWidth by shrinking non-Description columns if needed.
+		totalWidth := 0
+		for _, w := range widths {
+			totalWidth += w
+		}
+		if totalWidth > availableWidth {
+			// Shrink non-Description columns to MinColumnWidth if necessary.
+			excess := totalWidth - availableWidth
+			for i := range widths {
+				if i != descriptionColIndex && excess > 0 {
+					reduction := widths[i] - MinColumnWidth
+					if reduction > 0 {
+						if reduction > excess {
+							reduction = excess
+						}
+						widths[i] -= reduction
+						excess -= reduction
+					}
+				}
+			}
+		}
 	} else {
 		// No Description column: distribute space proportionally.
 		if totalMinWidth <= availableWidth {

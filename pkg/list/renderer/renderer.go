@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/output"
 	"github.com/cloudposse/atmos/pkg/list/sort"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 // Renderer orchestrates the complete list rendering pipeline.
@@ -108,7 +109,7 @@ func formatTable(headers []string, rows [][]string, f format.Format) (string, er
 	case format.FormatTSV:
 		return formatDelimited(headers, rows, "\t")
 	case format.FormatTable:
-		return formatStyledTable(headers, rows), nil
+		return formatStyledTableOrPlain(headers, rows), nil
 	default:
 		return "", fmt.Errorf("%w: unsupported format: %s", errUtils.ErrInvalidConfig, f)
 	}
@@ -164,7 +165,43 @@ func formatDelimited(headers []string, rows [][]string, delimiter string) (strin
 	return strings.Join(lines, "\n"), nil
 }
 
-// formatStyledTable formats headers and rows as a styled table using existing helper.
-func formatStyledTable(headers []string, rows [][]string) string {
+// formatStyledTableOrPlain formats output as a styled table for TTY or plain list when piped.
+// When stdout is not a TTY (piped/redirected), outputs plain format without headers for backward compatibility.
+// This maintains compatibility with scripts that expect simple line-by-line output.
+func formatStyledTableOrPlain(headers []string, rows [][]string) string {
+	// Check if stdout is a TTY
+	term := terminal.New()
+	isTTY := term.IsTTY(terminal.Stdout)
+
+	if !isTTY {
+		// Piped/redirected output - use plain format (no headers, no borders)
+		// This matches the old behavior for backward compatibility with scripts.
+		return formatPlainList(headers, rows)
+	}
+
+	// Interactive terminal - use styled table
 	return format.CreateStyledTable(headers, rows)
+}
+
+// formatPlainList formats rows as a simple list (one value per line, no headers).
+// Used when output is piped to maintain backward compatibility with scripts.
+func formatPlainList(headers []string, rows [][]string) string {
+	var lines []string
+
+	// For single-column output, just output the values (most common case for list commands)
+	if len(headers) == 1 {
+		for _, row := range rows {
+			if len(row) > 0 {
+				lines = append(lines, row[0])
+			}
+		}
+	} else {
+		// Multi-column output when piped - use tab-separated values without headers
+		// This provides structured data that can be processed by scripts
+		for _, row := range rows {
+			lines = append(lines, strings.Join(row, "\t"))
+		}
+	}
+
+	return strings.Join(lines, "\n") + "\n"
 }

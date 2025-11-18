@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
@@ -56,15 +57,19 @@ var workflowsCmd = &cobra.Command{
 			Sort:    v.GetString("sort"),
 		}
 
-		return listWorkflowsWithOptions(opts)
+		return listWorkflowsWithOptions(cmd, args, opts)
 	},
 }
 
 // columnsCompletionForWorkflows provides dynamic tab completion for --columns flag.
 // Returns column names from atmos.yaml workflows.list.columns configuration.
 func columnsCompletionForWorkflows(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	// Load atmos configuration.
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	// Load atmos configuration with CLI flags.
+	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -106,8 +111,13 @@ func init() {
 	}
 }
 
-func listWorkflowsWithOptions(opts *WorkflowsOptions) error {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+func listWorkflowsWithOptions(cmd *cobra.Command, args []string, opts *WorkflowsOptions) error {
+	// Process command line args to get real ConfigAndStacksInfo with CLI flags.
+	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	if err != nil {
+		return err
+	}
+
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return err

@@ -17,6 +17,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/elewis787/boa"
+	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -36,6 +37,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -270,6 +272,11 @@ var RootCmd = &cobra.Command{
 		ui.InitFormatter(ioCtx)
 		data.InitWriter(ioCtx)
 		data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
+
+		// Configure lipgloss color profile based on terminal capabilities.
+		// This ensures tables and styled output degrade gracefully when piped or in non-TTY environments.
+		term := terminal.New()
+		lipgloss.SetColorProfile(convertToTermenvProfile(term.ColorProfile()))
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -675,7 +682,25 @@ func getInvalidCommandName(input string) string {
 
 // displayPerformanceHeatmap shows the performance heatmap visualization.
 //
+// convertToTermenvProfile converts our terminal.ColorProfile to termenv.Profile.
+//
 //nolint:unparam // cmd parameter reserved for future use
+func convertToTermenvProfile(profile terminal.ColorProfile) termenv.Profile {
+	switch profile {
+	case terminal.ColorNone:
+		return termenv.Ascii
+	case terminal.Color16:
+		return termenv.ANSI
+	case terminal.Color256:
+		return termenv.ANSI256
+	case terminal.ColorTrue:
+		return termenv.TrueColor
+	default:
+		// Default to ASCII (no color) for unknown profiles.
+		return termenv.Ascii
+	}
+}
+
 func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	// Print performance summary to console.
 	// Filter out functions with zero total time for cleaner output (for table).
