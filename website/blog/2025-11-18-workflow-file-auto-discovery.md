@@ -163,50 +163,6 @@ $ atmos workflow
 
 This shows all available workflows across all files, allowing you to browse and select interactively.
 
-## Implementation Details
-
-### Resilient File Discovery
-
-The auto-discovery implementation is robust and handles edge cases gracefully:
-
-- **Skips unreadable files** - Permission errors don't stop discovery
-- **Ignores invalid YAML** - Malformed files are skipped with warnings
-- **Handles missing keys** - Files without `workflows:` key are ignored
-- **Logs warnings** - All skipped files are logged for debugging
-
-### Performance Considerations
-
-File discovery is fast and efficient:
-
-- **Cached results** - Workflow metadata is cached during discovery
-- **Minimal I/O** - Only reads files once during the search
-- **Early termination** - Stops searching after finding a unique match
-
-## Migration Guide
-
-No migration needed! This feature is fully backward compatible. You can:
-
-1. **Keep using `--file`** - All existing scripts continue to work
-2. **Gradually adopt auto-discovery** - Remove `--file` from workflows where convenient
-3. **Mix both approaches** - Use auto-discovery for ad-hoc commands, `--file` for scripts
-
-## Technical Details
-
-### For Developers
-
-Implementation highlights:
-
-- **Smart file scanning** - Recursively searches configured workflow paths
-- **Error handling** - Gracefully skips invalid files with informative warnings
-- **Interactive prompts** - Uses Atmos TUI components for multiple-match scenarios
-- **Test coverage** - Comprehensive test suite covering all discovery scenarios
-
-Key files:
-
-- `internal/exec/workflow_utils.go` - Auto-discovery implementation
-- `internal/exec/workflow_test.go` - Test coverage for discovery logic
-- `cmd/workflow/workflow.go` - Updated command implementation
-
 ## Get Started
 
 This feature is available now. Just upgrade to the latest Atmos release:
