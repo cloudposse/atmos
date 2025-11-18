@@ -28,8 +28,8 @@ type ComponentsOptions struct {
 	global.Flags
 	Stack    string
 	Type     string
-	Enabled  string
-	Locked   string
+	Enabled  *bool
+	Locked   *bool
 	Format   string
 	Columns  []string
 	Sort     string
@@ -54,12 +54,25 @@ var componentsCmd = &cobra.Command{
 			return err
 		}
 
+		// Parse enabled/locked flags as tri-state (*bool).
+		// nil = unset (show all), true = filter for true, false = filter for false.
+		var enabledPtr *bool
+		if v.IsSet("enabled") {
+			val := v.GetBool("enabled")
+			enabledPtr = &val
+		}
+		var lockedPtr *bool
+		if v.IsSet("locked") {
+			val := v.GetBool("locked")
+			lockedPtr = &val
+		}
+
 		opts := &ComponentsOptions{
 			Flags:    flags.ParseGlobalFlags(cmd, v),
 			Stack:    v.GetString("stack"),
 			Type:     v.GetString("type"),
-			Enabled:  v.GetString("enabled"),
-			Locked:   v.GetString("locked"),
+			Enabled:  enabledPtr,
+			Locked:   lockedPtr,
 			Format:   v.GetString("format"),
 			Columns:  v.GetStringSlice("columns"),
 			Sort:     v.GetString("sort"),
@@ -190,16 +203,14 @@ func buildComponentFilters(opts *ComponentsOptions) []filter.Filter {
 		filters = append(filters, filter.NewColumnFilter("type", opts.Type))
 	}
 
-	// Enabled filter.
-	if opts.Enabled != "" && opts.Enabled != "all" {
-		enabled := opts.Enabled == "true"
-		filters = append(filters, filter.NewBoolFilter("enabled", &enabled))
+	// Enabled filter (tri-state: nil = all, true = enabled only, false = disabled only).
+	if opts.Enabled != nil {
+		filters = append(filters, filter.NewBoolFilter("enabled", opts.Enabled))
 	}
 
-	// Locked filter.
-	if opts.Locked != "" && opts.Locked != "all" {
-		locked := opts.Locked == "true"
-		filters = append(filters, filter.NewBoolFilter("locked", &locked))
+	// Locked filter (tri-state: nil = all, true = locked only, false = unlocked only).
+	if opts.Locked != nil {
+		filters = append(filters, filter.NewBoolFilter("locked", opts.Locked))
 	}
 
 	// Abstract filter (show real components only by default).

@@ -114,11 +114,6 @@ func init() {
 }
 
 func listStacksWithOptions(opts *StacksOptions) error {
-	// Validate that --provenance only works with --format=tree.
-	if opts.Provenance && opts.Format != string(format.FormatTree) {
-		return fmt.Errorf("%w: --provenance flag only works with --format=tree", errUtils.ErrInvalidFlag)
-	}
-
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
@@ -129,6 +124,11 @@ func listStacksWithOptions(opts *StacksOptions) error {
 	// If format is empty, check command-specific config.
 	if opts.Format == "" && atmosConfig.Stacks.List.Format != "" {
 		opts.Format = atmosConfig.Stacks.List.Format
+	}
+
+	// Validate that --provenance only works with --format=tree (after resolving format from config).
+	if opts.Provenance && opts.Format != string(format.FormatTree) {
+		return fmt.Errorf("%w: --provenance flag only works with --format=tree", errUtils.ErrInvalidFlag)
 	}
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
@@ -182,6 +182,14 @@ func listStacksWithOptions(opts *StacksOptions) error {
 		// All components in a stack share the same import chain from the stack file.
 		importTrees := make(map[string][]*tree.ImportNode)
 		for stackName, componentImports := range importTreesWithComponents {
+			// Filter by component if specified.
+			if opts.Component != "" {
+				// Only include this stack if it has the requested component.
+				if _, hasComponent := componentImports[opts.Component]; !hasComponent {
+					continue
+				}
+			}
+
 			// Just take the first component's imports (they're all the same for a stack file).
 			for _, imports := range componentImports {
 				importTrees[stackName] = imports

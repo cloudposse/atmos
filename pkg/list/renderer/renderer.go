@@ -43,6 +43,11 @@ func New(
 
 // Render executes the full pipeline and writes output.
 func (r *Renderer) Render(data []map[string]any) error {
+	// Guard against nil column selector.
+	if r.selector == nil {
+		return fmt.Errorf("%w: renderer created with nil column selector", errUtils.ErrInvalidConfig)
+	}
+
 	// Step 1: Apply filters (AND logic).
 	filtered := data
 	if len(r.filters) > 0 {

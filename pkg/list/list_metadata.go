@@ -9,8 +9,10 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
+	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -93,9 +95,20 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 		return fmt.Errorf("failed to create column selector: %w", err)
 	}
 
+	// Build filters from filter specification.
+	filters, err := buildMetadataFilters(opts.Filter)
+	if err != nil {
+		return fmt.Errorf("failed to build filters: %w", err)
+	}
+
+	// Build sorters from sort specification.
+	sorters, err := buildMetadataSorters(opts.Sort)
+	if err != nil {
+		return fmt.Errorf("failed to build sorters: %w", err)
+	}
+
 	// Create renderer with filters and sorters.
-	// TODO: Implement filter and sort support using opts.Filter and opts.Sort
-	r := renderer.New(nil, selector, nil, format.Format(opts.Format))
+	r := renderer.New(filters, selector, sorters, format.Format(opts.Format))
 
 	// Render output.
 	if err := r.Render(data); err != nil {
@@ -103,4 +116,26 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	}
 
 	return nil
+}
+
+// buildMetadataFilters creates filters from filter specification.
+// The filter spec format is currently undefined for metadata,
+// so this returns an empty filter list for now.
+func buildMetadataFilters(filterSpec string) ([]filter.Filter, error) {
+	// TODO: Implement filter parsing when filter spec format is defined.
+	// For now, return empty filter list.
+	return nil, nil
+}
+
+// buildMetadataSorters creates sorters from sort specification.
+func buildMetadataSorters(sortSpec string) ([]*listSort.Sorter, error) {
+	if sortSpec == "" {
+		// Default sort: by stack then component ascending.
+		return []*listSort.Sorter{
+			listSort.NewSorter("Stack", listSort.Ascending),
+			listSort.NewSorter("Component", listSort.Ascending),
+		}, nil
+	}
+
+	return listSort.ParseSortSpec(sortSpec)
 }
