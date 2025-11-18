@@ -121,6 +121,11 @@ func (w *WorkflowCommandProvider) GetGroup() string {
 	return "Core Stack Commands"
 }
 
+// GetAliases returns command aliases (none for workflow).
+func (w *WorkflowCommandProvider) GetAliases() []internal.CommandAlias {
+	return nil
+}
+
 // executeWorkflowWithOptions executes the workflow command with parsed options.
 func executeWorkflowWithOptions(cmd *cobra.Command, args []string, _ *WorkflowOptions) error {
 	// Execute the workflow command and return any errors to main.go for centralized formatting.

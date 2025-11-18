@@ -382,21 +382,22 @@ func TestExecuteWorkflowCmd(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("missing file flag", func(t *testing.T) {
+	t.Run("auto-discovery with no file flag - workflow not found", func(t *testing.T) {
 		stacksPath := "../../tests/fixtures/scenarios/workflows"
 
 		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 		t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 		cmd := createWorkflowCmd()
-		// Don't set --file flag.
+		// Don't set --file flag - should auto-discover workflow.
 
-		args := []string{"shell-pass"}
+		// Use a workflow name that doesn't exist.
+		args := []string{"nonexistent-workflow"}
 		err := ExecuteWorkflowCmd(cmd, args)
 
-		// Should error with missing file flag message.
+		// Should error with "no workflow found" message.
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "'--file' flag is required")
+		assert.ErrorIs(t, err, ErrWorkflowNoWorkflow)
 	})
 
 	t.Run("file not found", func(t *testing.T) {
