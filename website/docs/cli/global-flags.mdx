@@ -132,6 +132,80 @@ These flags are available for every Atmos command:
         - Atmos looks for `atmos.yaml`, `.atmos.yaml`, `atmos.yml`, or `.atmos.yml` in these directories
     </dd>
 
+    <dt>`--profile`</dt>
+    <dd>
+        Activate configuration profiles for environment-specific settings.
+
+        **Use Cases:**
+        - **Development workflow**: Use debug logging and wider terminal output during development
+        - **CI/CD**: Disable interactive features and use plain text output in CI environments
+        - **Team collaboration**: Share consistent settings across team members via profiles
+        - **Multi-environment**: Different settings for staging vs production deployments
+
+        **Basic Usage:**
+        ```bash
+        # Activate a single profile
+        atmos --profile developer terraform plan vpc -s prod
+
+        # Use environment variable
+        ATMOS_PROFILE=developer atmos terraform plan vpc -s prod
+
+        # Activate multiple profiles (comma-separated, applied left-to-right)
+        atmos --profile ci,security terraform plan vpc -s prod
+        ATMOS_PROFILE="developer,debug" atmos describe stacks
+
+        # Flag takes precedence over environment variable
+        ATMOS_PROFILE=ci atmos --profile developer describe config
+        # Uses: developer profile (flag wins)
+        ```
+
+        **Profile Configuration:**
+
+        Profiles are defined in your `atmos.yaml` or in separate profile directories. Each profile can override any Atmos configuration setting:
+
+        ```yaml
+        # atmos.yaml
+        profiles:
+          developer:
+            logs:
+              level: Debug
+            settings:
+              terminal:
+                max_width: 120
+
+          ci:
+            logs:
+              level: Info
+            settings:
+              terminal:
+                color: false
+                pager: false
+        ```
+
+        Or use separate profile directories for better organization:
+
+        ```
+        profiles/
+        ├── developer/
+        │   ├── atmos.yaml      # Developer-specific config
+        │   └── auth.yaml       # Developer auth settings
+        ├── ci/
+        │   ├── atmos.yaml      # CI-specific config
+        │   └── auth.yaml       # CI auth settings
+        └── production/
+            ├── atmos.yaml      # Production config
+            └── auth.yaml       # Production auth settings
+        ```
+
+        **Available via:**
+        - `--profile` flag
+        - `ATMOS_PROFILE` environment variable
+
+        <Note>
+            Profiles are loaded early in Atmos initialization (before stack processing) and can override any configuration setting including logging, terminal settings, and authentication.
+        </Note>
+    </dd>
+
     <dt>`--logs-level`</dt>
     <dd>
         Set the logging level for Atmos operations.
@@ -370,6 +444,15 @@ All global flags can be set using environment variables. The precedence order is
 
     <dt>`ATMOS_BASE_PATH`</dt>
     <dd>Sets the base path for the Atmos project</dd>
+
+    <dt>`ATMOS_PROFILE`</dt>
+    <dd>
+        Activate configuration profiles (comma-separated).
+        - Equivalent to the `--profile` flag
+        - CLI flag takes precedence over this environment variable
+        - Supports multiple profiles: `ATMOS_PROFILE="developer,debug"`
+        - Example: `ATMOS_PROFILE=ci atmos terraform plan vpc -s prod`
+    </dd>
 
     <dt>`ATMOS_LOGS_LEVEL`</dt>
     <dd>Sets the logging level</dd>

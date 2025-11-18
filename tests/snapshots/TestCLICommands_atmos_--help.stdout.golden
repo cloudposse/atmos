@@ -22,6 +22,7 @@ Available Commands:
   list                           List available stacks and components
   packer                         Manage packer-based machine images for multiple platforms
   pro                            Access premium features integrated with atmos-pro.com
+  profile                        Manage configuration profiles
   support                        Show Atmos support options
   terraform                      Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
   theme                          Manage terminal themes for Atmos CLI
@@ -95,6 +96,10 @@ Flags:
                                      --pager=true to enable, --pager=false to
                                      disable, --pager=less to use specific
                                      pager)
+
+        --profile stringSlice        Activate configuration profiles
+                                     (comma-separated or repeated flag) (default
+                                     [])
 
         --profile-file string        Write profiling data to file instead of
                                      starting server

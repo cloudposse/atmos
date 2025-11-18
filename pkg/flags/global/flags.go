@@ -50,6 +50,9 @@ type Flags struct {
 	// Authentication.
 	Identity IdentitySelector
 
+	// Profiles.
+	Profile []string // Profile selects which configuration profiles to activate.
+
 	// Profiling configuration.
 	ProfilerEnabled bool
 	ProfilerPort    int
@@ -77,7 +80,8 @@ func NewFlags() Flags {
 		NoColor:      false,
 		ForceColor:   false,
 		ForceTTY:     false,
-		Mask:         true, // Enabled by default for security.
+		Mask:         true,       // Enabled by default for security.
+		Profile:      []string{}, // No profiles active by default.
 		ProfilerPort: DefaultProfilerPort,
 		ProfilerHost: "localhost",
 		ProfileType:  "cpu",
