@@ -1,6 +1,7 @@
 package list
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,6 +51,10 @@ func getStackImports(stackName string, atmosConfig *schema.AtmosConfiguration, c
 	stackFilePath, err := findStackFilePath(stackName, atmosConfig)
 	if err != nil {
 		// Stack might not have a direct file (could be generated), return empty imports.
+		// Only treat ErrStackManifestFileNotFound as non-error; propagate other errors.
+		if errors.Is(err, errUtils.ErrStackManifestFileNotFound) {
+			return []string{}, nil
+		}
 		return nil, err
 	}
 

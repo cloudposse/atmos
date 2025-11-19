@@ -166,9 +166,10 @@ func TestExtractVendor_MixedTypes(t *testing.T) {
 	componentCount := 0
 	vendorCount := 0
 	for _, vendor := range vendors {
-		if vendor["type"] == VendorTypeComponent {
+		switch vendor["type"] {
+		case VendorTypeComponent:
 			componentCount++
-		} else if vendor["type"] == VendorTypeVendor {
+		case VendorTypeVendor:
 			vendorCount++
 		}
 	}

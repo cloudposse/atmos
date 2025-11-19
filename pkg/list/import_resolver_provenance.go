@@ -13,6 +13,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	// File extension constants.
+	yamlExt = ".yaml"
+
+	// Component metadata field names.
+	fieldStackFile = "stack_file"
+)
+
 // ResolveImportTreeFromProvenance resolves import trees for all stacks using the provenance system.
 // Returns: map[stackName]map[componentName][]*tree.ImportNode
 //
@@ -43,29 +51,29 @@ func ResolveImportTreeFromProvenance(
 	// Each merge context corresponds to a stack file and contains the ImportChain.
 	for stackFilePath, ctx := range allMergeContexts {
 		if ctx == nil {
-			log.Trace("Merge context is nil", "stack_file", stackFilePath)
+			log.Trace("Merge context is nil", fieldStackFile, stackFilePath)
 			continue
 		}
 
 		if len(ctx.ImportChain) == 0 {
-			log.Trace("Merge context has empty import chain", "stack_file", stackFilePath)
+			log.Trace("Merge context has empty import chain", fieldStackFile, stackFilePath)
 			continue
 		}
 
-		log.Trace("Processing stack file", "stack_file", stackFilePath, "import_chain_length", len(ctx.ImportChain), "import_chain", ctx.ImportChain)
+		log.Trace("Processing stack file", fieldStackFile, stackFilePath, "import_chain_length", len(ctx.ImportChain), "import_chain", ctx.ImportChain)
 
 		// Find which stack(s) in stacksMap have this file path.
 		// We need to search through the stacksMap to find matching atmos_stack_file values.
 		matchingStacks := findStacksForFilePath(stackFilePath, stacksMap, atmosConfig)
 		if len(matchingStacks) == 0 {
 			// Could not determine stack name for this file.
-			log.Trace("Could not find stack for file path", "stack_file", stackFilePath)
+			log.Trace("Could not find stack for file path", fieldStackFile, stackFilePath)
 			continue
 		}
 
 		// Process each matching stack.
 		for stackName, components := range matchingStacks {
-			log.Trace("Found stack with components", "stack", stackName, "component_count", len(components), "stack_file", stackFilePath)
+			log.Trace("Found stack with components", "stack", stackName, "component_count", len(components), fieldStackFile, stackFilePath)
 
 			// Build import tree from the ImportChain.
 			componentImports := make(map[string][]*tree.ImportNode)
@@ -116,7 +124,7 @@ func findStacksForFilePath(
 	}
 
 	// Remove .yaml extension from relative path for comparison.
-	relFilePathNoExt := strings.TrimSuffix(relFilePath, ".yaml")
+	relFilePathNoExt := strings.TrimSuffix(relFilePath, yamlExt)
 	relFilePathNoExt = strings.TrimSuffix(relFilePathNoExt, ".yml")
 
 	log.Trace("Looking for stacks with file path", "abs", filePath, "rel", relFilePath, "noext", relFilePathNoExt)
@@ -154,7 +162,7 @@ func findStacksForFilePath(
 				if stackFile, ok := componentMap["atmos_stack_file"].(string); ok {
 					// Normalize stack file path and remove extension.
 					stackFileClean := filepath.Clean(stackFile)
-					stackFileNoExt := strings.TrimSuffix(stackFileClean, ".yaml")
+					stackFileNoExt := strings.TrimSuffix(stackFileClean, yamlExt)
 					stackFileNoExt = strings.TrimSuffix(stackFileNoExt, ".yml")
 
 					// Try multiple matching strategies:
@@ -310,7 +318,7 @@ func stripBasePath(absolutePath, basePath string) string {
 	relativePath := strings.TrimPrefix(absolutePath, basePath)
 
 	// Remove .yaml extension for cleaner display.
-	relativePath = strings.TrimSuffix(relativePath, ".yaml")
+	relativePath = strings.TrimSuffix(relativePath, yamlExt)
 	relativePath = strings.TrimSuffix(relativePath, ".yml")
 
 	return relativePath
@@ -383,8 +391,8 @@ func resolveImportPath(importPath, _ string, atmosConfig *schema.AtmosConfigurat
 	basePath := atmosConfig.StacksBaseAbsolutePath
 
 	// Add .yaml extension if not present.
-	if !strings.HasSuffix(importPath, ".yaml") && !strings.HasSuffix(importPath, ".yml") {
-		importPath += ".yaml"
+	if !strings.HasSuffix(importPath, yamlExt) && !strings.HasSuffix(importPath, ".yml") {
+		importPath += yamlExt
 	}
 
 	return filepath.Join(basePath, importPath)

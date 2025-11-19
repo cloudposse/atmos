@@ -1,5 +1,5 @@
 ---
-name: list-expert
+name: tui-list
 description: >-
   Expert in developing DX-friendly list commands for Atmos CLI. Specializes in table rendering,
   column configuration, filter/sort implementation, and pipeline-friendly output formats.
@@ -18,7 +18,7 @@ model: sonnet
 color: cyan
 ---
 
-# List Expert - DX-Friendly List Output Specialist
+# TUI List - DX-Friendly List Output Specialist
 
 Expert in Atmos list command architecture with deep knowledge of table rendering, column configuration,
 filter/sort patterns, and zero-configuration output degradation.

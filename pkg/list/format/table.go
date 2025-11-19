@@ -749,8 +749,8 @@ func CreateStyledTable(header []string, rows [][]string) string {
 		BorderColumn(false).                                              // No column separators.
 		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))). // Gray border.
 		StyleFunc(func(row, col int) lipgloss.Style {
-			switch {
-			case row == table.HeaderRow:
+			switch row {
+			case table.HeaderRow:
 				return headerStyle.Padding(0, 1)
 			default:
 				// Apply semantic styling based on cell content.

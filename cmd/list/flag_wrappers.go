@@ -5,6 +5,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	// Flag names.
+	flagColumns = "columns"
+
+	// Environment variables.
+	envListColumns = "ATMOS_LIST_COLUMNS"
+
+	// Flag descriptions.
+	descColumns = "Columns to display (comma-separated, overrides atmos.yaml)"
+)
+
 // Named wrapper functions for list command flags.
 // Follow With* naming convention from pkg/flags/ API.
 // Each function appends flag options to the provided slice.
@@ -46,8 +57,8 @@ func WithInstancesColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithInstancesColumnsFlag")()
 
 	*options = append(*options,
-		flags.WithStringSliceFlag("columns", "", []string{}, "Columns to display (comma-separated, overrides atmos.yaml)"),
-		flags.WithEnvVars("columns", "ATMOS_LIST_COLUMNS"),
+		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
+		flags.WithEnvVars(flagColumns, envListColumns),
 	)
 }
 
@@ -58,8 +69,8 @@ func WithMetadataColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithMetadataColumnsFlag")()
 
 	*options = append(*options,
-		flags.WithStringSliceFlag("columns", "", []string{}, "Columns to display (comma-separated, overrides atmos.yaml)"),
-		flags.WithEnvVars("columns", "ATMOS_LIST_COLUMNS"),
+		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
+		flags.WithEnvVars(flagColumns, envListColumns),
 	)
 }
 
@@ -81,8 +92,8 @@ func WithStacksColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithStacksColumnsFlag")()
 
 	*options = append(*options,
-		flags.WithStringSliceFlag("columns", "", []string{}, "Columns to display (comma-separated, overrides atmos.yaml)"),
-		flags.WithEnvVars("columns", "ATMOS_LIST_COLUMNS"),
+		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
+		flags.WithEnvVars(flagColumns, envListColumns),
 	)
 }
 
@@ -93,8 +104,8 @@ func WithWorkflowsColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithWorkflowsColumnsFlag")()
 
 	*options = append(*options,
-		flags.WithStringSliceFlag("columns", "", []string{}, "Columns to display (comma-separated, overrides atmos.yaml)"),
-		flags.WithEnvVars("columns", "ATMOS_LIST_COLUMNS"),
+		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
+		flags.WithEnvVars(flagColumns, envListColumns),
 	)
 }
 
@@ -105,8 +116,8 @@ func WithVendorColumnsFlag(options *[]flags.Option) {
 	defer perf.Track(nil, "list.WithVendorColumnsFlag")()
 
 	*options = append(*options,
-		flags.WithStringSliceFlag("columns", "", []string{}, "Columns to display (comma-separated, overrides atmos.yaml)"),
-		flags.WithEnvVars("columns", "ATMOS_LIST_COLUMNS"),
+		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
+		flags.WithEnvVars(flagColumns, envListColumns),
 	)
 }
 

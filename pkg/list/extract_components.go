@@ -6,6 +6,12 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+const (
+	// Component metadata field names.
+	metadataEnabled = "enabled"
+	metadataLocked  = "locked"
+)
+
 // ComponentData represents a component with all its attributes for listing.
 type ComponentData struct {
 	Component string
@@ -69,16 +75,16 @@ func extractComponentType(stackName, componentType string, componentsMap map[str
 				comp["metadata"] = metadata
 
 				// Extract common metadata fields to top level for easy filtering.
-				if enabled, ok := metadata["enabled"].(bool); ok {
-					comp["enabled"] = enabled
+				if enabled, ok := metadata[metadataEnabled].(bool); ok {
+					comp[metadataEnabled] = enabled
 				} else {
-					comp["enabled"] = true // Default to enabled.
+					comp[metadataEnabled] = true // Default to enabled.
 				}
 
-				if locked, ok := metadata["locked"].(bool); ok {
-					comp["locked"] = locked
+				if locked, ok := metadata[metadataLocked].(bool); ok {
+					comp[metadataLocked] = locked
 				} else {
-					comp["locked"] = false // Default to unlocked.
+					comp[metadataLocked] = false // Default to unlocked.
 				}
 
 				if compType, ok := metadata["type"].(string); ok {
@@ -88,8 +94,8 @@ func extractComponentType(stackName, componentType string, componentsMap map[str
 				}
 			} else {
 				// No metadata - use defaults.
-				comp["enabled"] = true
-				comp["locked"] = false
+				comp[metadataEnabled] = true
+				comp[metadataLocked] = false
 				comp["component_type"] = "real"
 			}
 
