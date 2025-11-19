@@ -941,10 +941,18 @@ func (m *manager) provisionIdentities(ctx context.Context, providerName string, 
 		return
 	}
 
+	// Guard against nil Counts to prevent panic from incomplete ProvisioningResult implementations.
+	accounts := 0
+	roles := 0
+	if result.Metadata.Counts != nil {
+		accounts = result.Metadata.Counts.Accounts
+		roles = result.Metadata.Counts.Roles
+	}
+
 	log.Debug("Provisioned identities from provider",
 		logKeyProvider, providerName,
-		"accounts", result.Metadata.Counts.Accounts,
-		"roles", result.Metadata.Counts.Roles,
+		"accounts", accounts,
+		"roles", roles,
 		"identities", len(result.Identities))
 
 	// Write provisioned identities to cache.

@@ -102,7 +102,7 @@ identities:
 - **Then** system queries AWS Identity Center APIs and discovers all available permission sets
 
 **FR2**: Populate identities without manual configuration
-- **Given** auto-provisiony completed successfully
+- **Given** auto-provisioning completed successfully
 - **When** user runs `atmos auth list`
 - **Then** all discovered permission sets appear as usable identities
 
@@ -149,7 +149,7 @@ identities:
 
 ### Design Philosophy: Dynamic Configuration Import
 
-Instead of runtime-only identities or new commands, **enable auto-provisiony at the provider level with a feature flag**. Discovery generates a valid Atmos configuration file that is automatically imported during config loading.
+Instead of runtime-only identities or new commands, **enable auto-provisioning at the provider level with a feature flag**. Discovery generates a valid Atmos configuration file that is automatically imported during config loading.
 
 **Key Principles**:
 - **Treat provisioned identities like any other config**: Process through normal Atmos import chain
@@ -1062,7 +1062,7 @@ providers:
 
 ### Phase 1: Core Discovery (MVP) - 5-7 days
 
-**Goal**: Basic auto-provisiony working end-to-end
+**Goal**: Basic auto-provisioning working end-to-end
 
 **Deliverables**:
 1. `pkg/auth/types/discovery.go` - Interface definitions
@@ -1189,10 +1189,10 @@ providers:
 **Decision**: Manual identities override auto-provisioned (standard Atmos import merge)
 
 **Rationale**:
-- Allows customizing specific identities while benefiting from auto-provisiony
+- Allows customizing specific identities while benefiting from auto-provisioning
 - Consistent with Atmos import precedence rules
 - Clear semantic: "I explicitly configured this, use my config"
-- Enables gradual migration from manual to auto-provisiony
+- Enables gradual migration from manual to auto-provisioning
 
 **Trade-off**: Manual config can silently override discovered (but this is expected behavior)
 
@@ -1217,7 +1217,7 @@ providers:
 **Rationale**:
 - Backward compatible (no behavior change unless enabled)
 - Allows gradual adoption across teams
-- Clear intent ("I want auto-provisiony for this provider")
+- Clear intent ("I want auto-provisioning for this provider")
 - Per-provider granularity (can enable for prod but not dev)
 
 **Trade-off**: Not enabled by default (but new feature, conservative rollout)
@@ -1327,7 +1327,7 @@ providers:
 
 ### A. Inspiration: aws-sso-cli
 
-The [aws-sso-cli](https://github.com/synfinatic/aws-sso-cli) tool demonstrates a successful implementation of AWS SSO role auto-provisiony. We analyzed their approach and adapted key concepts for Atmos.
+The [aws-sso-cli](https://github.com/synfinatic/aws-sso-cli) tool demonstrates a successful implementation of AWS SSO role auto-provisioning. We analyzed their approach and adapted key concepts for Atmos.
 
 #### How aws-sso-cli Implements Discovery
 
@@ -1404,7 +1404,7 @@ rolesResp, err := ssoClient.ListAccountRoles(ctx, &sso.ListAccountRolesInput{
 
 ## 12. Conclusion
 
-AWS SSO role auto-provisiony addresses a major pain point in Atmos onboarding and maintenance. By leveraging AWS Identity Center APIs and Atmos's existing config import system, we can provide zero-config identity population that "just works" while preserving backward compatibility and allowing manual customization.
+AWS SSO role auto-provisioning addresses a major pain point in Atmos onboarding and maintenance. By leveraging AWS Identity Center APIs and Atmos's existing config import system, we can provide zero-config identity population that "just works" while preserving backward compatibility and allowing manual customization.
 
 The phased implementation approach delivers immediate value (Phase 1 MVP) while establishing a foundation for advanced features (filtering, tags/labels). The design decisions prioritize user experience, backward compatibility, and alignment with Atmos's existing patterns (XDG paths, import precedence, provider-level configuration).
 

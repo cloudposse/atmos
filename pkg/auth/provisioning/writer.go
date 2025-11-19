@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -61,8 +62,11 @@ func (w *Writer) Write(result *Result) (string, error) {
 		return "", fmt.Errorf("%w: provider name cannot be empty", errUtils.ErrInvalidAuthConfig)
 	}
 
+	// Sanitize provider name to avoid path traversal and invalid path elements.
+	safeProvider := sanitizeProviderName(result.Provider)
+
 	// Create provider-specific cache directory.
-	providerDir := filepath.Join(w.CacheDir, result.Provider)
+	providerDir := filepath.Join(w.CacheDir, safeProvider)
 	if err := os.MkdirAll(providerDir, provisionedDirPerms); err != nil {
 		return "", fmt.Errorf("%w: failed to create cache directory %s: %w", errUtils.ErrInvalidAuthConfig, providerDir, err)
 	}
@@ -130,7 +134,8 @@ func getDefaultCacheDir() (string, error) {
 func (w *Writer) GetProvisionedIdentitiesPath(providerName string) string {
 	defer perf.Track(nil, "provisioning.Writer.GetProvisionedIdentitiesPath")()
 
-	return filepath.Join(w.CacheDir, providerName, ProvisionedFileName)
+	safeProvider := sanitizeProviderName(providerName)
+	return filepath.Join(w.CacheDir, safeProvider, ProvisionedFileName)
 }
 
 // Remove removes the provisioned identities file for a provider.
@@ -150,4 +155,20 @@ func (w *Writer) Remove(providerName string) error {
 	}
 
 	return nil
+}
+
+// sanitizeProviderName converts a provider name into a safe single path element.
+// It strips leading/trailing spaces and replaces any path separators with "_".
+// This prevents path traversal attacks where provider names could contain "../" or absolute paths.
+func sanitizeProviderName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "_"
+	}
+	// Replace OS-specific path separators to prevent escaping the cache dir.
+	name = strings.ReplaceAll(name, string(filepath.Separator), "_")
+	// Also replace forward slashes on Windows and backslashes on Unix for cross-platform safety.
+	name = strings.ReplaceAll(name, "/", "_")
+	name = strings.ReplaceAll(name, "\\", "_")
+	return name
 }
