@@ -34,6 +34,31 @@ const (
 
 var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 
+// parseProfilesFromArgs manually parses --profile flags from os.Args.
+// This is a workaround for Viper's BindPFlag not syncing flag values immediately.
+// Supports both --profile=value and --profile value syntax.
+func parseProfilesFromArgs(args []string) []string {
+	var profiles []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--profile" && i+1 < len(args) {
+			// --profile value syntax.
+			profiles = append(profiles, args[i+1])
+			i++ // Skip next arg.
+		} else if strings.HasPrefix(arg, "--profile=") {
+			// --profile=value syntax.
+			value := strings.TrimPrefix(arg, "--profile=")
+			// Handle comma-separated values.
+			for _, v := range strings.Split(value, ",") {
+				if trimmed := strings.TrimSpace(v); trimmed != "" {
+					profiles = append(profiles, trimmed)
+				}
+			}
+		}
+	}
+	return profiles
+}
+
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
 // * Home directory (~/.atmos).
@@ -90,6 +115,31 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// Load profiles if specified via --profile flag or ATMOS_PROFILE env var.
 	// Profiles are loaded after base config but before final unmarshaling.
 	// This allows profiles to override base config settings.
+
+	// If profiles weren't passed via ConfigAndStacksInfo, check if they were
+	// specified via --profile flag or ATMOS_PROFILE env var.
+	// Note: Global flags are bound to viper.GetViper() (global singleton), not the local viper instance.
+	if len(configAndStacksInfo.ProfilesFromArg) == 0 {
+		globalViper := viper.GetViper()
+
+		// WORKAROUND: Viper's BindPFlag doesn't always sync CLI flag values immediately.
+		// When using --profile flag, the value may be in os.Args but not yet in Viper.
+		// Environment variables work fine (ATMOS_PROFILE).
+		// Check both Viper (for env vars) and os.Args (for CLI flags).
+		if globalViper.IsSet("profile") && len(globalViper.GetStringSlice("profile")) > 0 {
+			// Env var path - value is in Viper.
+			configAndStacksInfo.ProfilesFromArg = globalViper.GetStringSlice("profile")
+			log.Debug("Profiles loaded from env var", "profiles", configAndStacksInfo.ProfilesFromArg)
+		} else {
+			// CLI flag path - parse os.Args manually.
+			profiles := parseProfilesFromArgs(os.Args)
+			if len(profiles) > 0 {
+				configAndStacksInfo.ProfilesFromArg = profiles
+				log.Debug("Profiles loaded from CLI flag", "profiles", profiles)
+			}
+		}
+	}
+
 	if len(configAndStacksInfo.ProfilesFromArg) > 0 {
 		// First, do a temporary unmarshal to get CliConfigPath and Profiles config.
 		// We need these to discover and load profile directories.
