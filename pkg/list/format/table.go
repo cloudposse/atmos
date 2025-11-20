@@ -207,57 +207,81 @@ func tryExpandScalarArray(v reflect.Value) string {
 		return ""
 	}
 
-	// Check if all elements are scalars (string, number, bool).
+	items, maxItemWidth := extractScalarArrayItems(v)
+	if items == nil {
+		return ""
+	}
+
+	if !isWidthReasonable(maxItemWidth) {
+		return ""
+	}
+
+	return joinItems(items)
+}
+
+// extractScalarArrayItems extracts scalar items from an array.
+// Returns nil if array contains non-scalar values.
+func extractScalarArrayItems(v reflect.Value) ([]string, int) {
 	var items []string
 	maxItemWidth := 0
 
 	for i := 0; i < v.Len(); i++ {
-		elem := v.Index(i)
-
-		// Handle interface{} wrapping.
-		if elem.Kind() == reflect.Interface {
-			if elem.IsNil() {
-				return "" // Fall back to placeholder format for nil interfaces.
-			}
-			elem = elem.Elem()
+		elem := unwrapInterfaceValue(v.Index(i))
+		if elem.Kind() == reflect.Invalid {
+			return nil, 0
 		}
 
-		// Check if element is a scalar type.
-		var itemStr string
-		switch elem.Kind() {
-		case reflect.String:
-			itemStr = elem.String()
-		case reflect.Bool:
-			itemStr = fmt.Sprintf(fmtBool, elem.Bool())
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			itemStr = fmt.Sprintf(fmtInt, elem.Int())
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			itemStr = fmt.Sprintf(fmtInt, elem.Uint())
-		case reflect.Float32, reflect.Float64:
-			itemStr = fmt.Sprintf(fmtFloat, elem.Float())
-		default:
-			// Non-scalar element found, return empty to use placeholder format.
-			return ""
+		itemStr := formatScalarValue(elem)
+		if itemStr == "" {
+			return nil, 0
 		}
 
 		items = append(items, itemStr)
 
-		// Track the widest item to check if expansion is reasonable.
 		itemWidth := lipgloss.Width(itemStr)
 		if itemWidth > maxItemWidth {
 			maxItemWidth = itemWidth
 		}
 	}
 
-	// If the widest item exceeds a reasonable width, don't expand.
-	// Use a threshold that's reasonable for table display (about 1/3 of MaxColumnWidth).
-	const maxReasonableItemWidth = 20
-	if maxItemWidth > maxReasonableItemWidth {
+	return items, maxItemWidth
+}
+
+// unwrapInterfaceValue unwraps interface{} wrappers from a reflect value.
+// Returns Invalid kind if the value is nil.
+func unwrapInterfaceValue(elem reflect.Value) reflect.Value {
+	if elem.Kind() == reflect.Interface {
+		if elem.IsNil() {
+			return reflect.Value{}
+		}
+		return elem.Elem()
+	}
+	return elem
+}
+
+// formatScalarValue formats a scalar reflect value as a string.
+// Returns empty string if the value is not a scalar type.
+func formatScalarValue(elem reflect.Value) string {
+	switch elem.Kind() {
+	case reflect.String:
+		return elem.String()
+	case reflect.Bool:
+		return fmt.Sprintf(fmtBool, elem.Bool())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return fmt.Sprintf(fmtInt, elem.Int())
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return fmt.Sprintf(fmtInt, elem.Uint())
+	case reflect.Float32, reflect.Float64:
+		return fmt.Sprintf(fmtFloat, elem.Float())
+	default:
 		return ""
 	}
+}
 
-	// Join scalar items with newlines for multi-row display.
-	return joinItems(items)
+// isWidthReasonable checks if the width is reasonable for table display.
+func isWidthReasonable(width int) bool {
+	const maxReasonableItemWidth = 20
+	return width <= maxReasonableItemWidth
 }
 
 // tryExpandScalarMap attempts to expand a map with scalar values into a multi-line string.
@@ -267,76 +291,72 @@ func tryExpandScalarMap(v reflect.Value) string {
 		return ""
 	}
 
-	// Extract map keys and sort them for consistent ordering.
-	keys := v.MapKeys()
-	if len(keys) == 0 {
+	sortedKeys, keyMap := sortMapKeys(v)
+	if sortedKeys == nil {
 		return ""
 	}
 
-	// Sort keys by their string representation.
+	items, maxItemWidth := extractScalarMapItems(v, sortedKeys, keyMap)
+	if items == nil {
+		return ""
+	}
+
+	if !isWidthReasonable(maxItemWidth) {
+		return ""
+	}
+
+	return joinItems(items)
+}
+
+// sortMapKeys sorts map keys by their string representation.
+// Returns nil if the map is empty.
+func sortMapKeys(v reflect.Value) ([]string, map[string]reflect.Value) {
+	keys := v.MapKeys()
+	if len(keys) == 0 {
+		return nil, nil
+	}
+
 	sortedKeys := make([]string, len(keys))
 	keyMap := make(map[string]reflect.Value)
+
 	for i, key := range keys {
 		keyStr := fmt.Sprintf(fmtBool, key.Interface())
 		sortedKeys[i] = keyStr
 		keyMap[keyStr] = key
 	}
-	sort.Strings(sortedKeys)
 
-	// Check if all values are scalars and format as "key: value".
+	sort.Strings(sortedKeys)
+	return sortedKeys, keyMap
+}
+
+// extractScalarMapItems extracts scalar key-value pairs from a map.
+// Returns nil if the map contains non-scalar values.
+func extractScalarMapItems(v reflect.Value, sortedKeys []string, keyMap map[string]reflect.Value) ([]string, int) {
 	var items []string
 	maxItemWidth := 0
 
 	for _, keyStr := range sortedKeys {
 		key := keyMap[keyStr]
-		val := v.MapIndex(key)
-
-		// Handle interface{} wrapping.
-		if val.Kind() == reflect.Interface {
-			if val.IsNil() {
-				return "" // Fall back to placeholder format for nil interfaces.
-			}
-			val = val.Elem()
+		val := unwrapInterfaceValue(v.MapIndex(key))
+		if val.Kind() == reflect.Invalid {
+			return nil, 0
 		}
 
-		// Check if value is a scalar type.
-		var valueStr string
-		switch val.Kind() {
-		case reflect.String:
-			valueStr = val.String()
-		case reflect.Bool:
-			valueStr = fmt.Sprintf(fmtBool, val.Bool())
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			valueStr = fmt.Sprintf(fmtInt, val.Int())
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			valueStr = fmt.Sprintf(fmtInt, val.Uint())
-		case reflect.Float32, reflect.Float64:
-			valueStr = fmt.Sprintf(fmtFloat, val.Float())
-		default:
-			// Non-scalar value found, return empty to use placeholder format.
-			return ""
+		valueStr := formatScalarValue(val)
+		if valueStr == "" {
+			return nil, 0
 		}
 
-		// Format as "key: value".
 		itemStr := fmt.Sprintf("%s: %s", keyStr, valueStr)
 		items = append(items, itemStr)
 
-		// Track the widest item to check if expansion is reasonable.
 		itemWidth := lipgloss.Width(itemStr)
 		if itemWidth > maxItemWidth {
 			maxItemWidth = itemWidth
 		}
 	}
 
-	// If the widest item exceeds a reasonable width, don't expand.
-	// Use a threshold that's reasonable for table display (about 1/3 of MaxColumnWidth).
-	const maxReasonableItemWidth = 20
-	if maxItemWidth > maxReasonableItemWidth {
-		return ""
-	}
-
-	// Join key-value pairs with newlines for multi-row display.
-	return joinItems(items)
+	return items, maxItemWidth
 }
 
 // joinItems joins array items with newlines, respecting MaxColumnWidth.
@@ -500,47 +520,71 @@ func renderInlineMarkdown(content string) string {
 	return strings.TrimSpace(singleLine)
 }
 
-// calculateColumnWidths calculates optimal widths for each column.
-// Returns a map of column index to width.
+// ColumnWidthParams contains parameters for column width calculation.
+type columnWidthParams struct {
+	numColumns          int
+	availableWidth      int
+	minWidths           []int
+	descriptionColIndex int
+}
+
+// calculateColumnWidths calculates optimal column widths for table display.
 func calculateColumnWidths(header []string, rows [][]string, terminalWidth int) []int {
 	numColumns := len(header)
 	if numColumns == 0 {
 		return []int{}
 	}
 
-	// Calculate padding: each column needs padding (2 chars per side = 4 total) + separator (1 char)
+	availableWidth := calculateAvailableWidth(terminalWidth, numColumns)
+	if availableWidth < numColumns {
+		return createUniformWidths(numColumns)
+	}
+
+	minWidths := calculateMinimumWidths(header, rows, numColumns)
+	descriptionColIndex := findDescriptionColumnIndex(header)
+
+	params := columnWidthParams{
+		numColumns:          numColumns,
+		availableWidth:      availableWidth,
+		minWidths:           minWidths,
+		descriptionColIndex: descriptionColIndex,
+	}
+
+	return distributeWidths(params)
+}
+
+// calculateAvailableWidth calculates the available width for table content.
+func calculateAvailableWidth(terminalWidth, numColumns int) int {
 	const paddingPerColumn = 5
 	totalPadding := numColumns * paddingPerColumn
-
-	// Available space for actual content.
 	availableWidth := terminalWidth - totalPadding
 
-	// Clamp availableWidth to ensure at least MinColumnWidth per column.
 	minRequiredWidth := numColumns * MinColumnWidth
 	if availableWidth < minRequiredWidth {
-		availableWidth = minRequiredWidth
+		return minRequiredWidth
 	}
 
-	// Ensure evenWidth is non-negative in fallback case.
-	if availableWidth < numColumns {
-		evenWidth := MinColumnWidth
-		widths := make([]int, numColumns)
-		for i := range widths {
-			widths[i] = evenWidth
-		}
-		return widths
-	}
+	return availableWidth
+}
 
-	// Calculate the minimum width needed for each column (based on content + header).
+// createUniformWidths creates uniform column widths when space is limited.
+func createUniformWidths(numColumns int) []int {
+	widths := make([]int, numColumns)
+	for i := range widths {
+		widths[i] = MinColumnWidth
+	}
+	return widths
+}
+
+// calculateMinimumWidths calculates the minimum width needed for each column.
+func calculateMinimumWidths(header []string, rows [][]string, numColumns int) []int {
 	minWidths := make([]int, numColumns)
+
 	for col := 0; col < numColumns; col++ {
-		// Start with header width.
 		minWidths[col] = lipgloss.Width(header[col])
 
-		// Check all row values for this column.
 		for _, row := range rows {
 			if col < len(row) {
-				// For multi-line content, use the widest line.
 				cellWidth := getMaxLineWidth(row[col])
 				if cellWidth > minWidths[col] {
 					minWidths[col] = cellWidth
@@ -549,109 +593,146 @@ func calculateColumnWidths(header []string, rows [][]string, terminalWidth int) 
 		}
 	}
 
-	// Find Description column index.
-	descriptionColIndex := -1
+	return minWidths
+}
+
+// findDescriptionColumnIndex finds the index of the Description column.
+func findDescriptionColumnIndex(header []string) int {
 	for i, h := range header {
 		if h == "Description" {
-			descriptionColIndex = i
-			break
+			return i
 		}
 	}
+	return -1
+}
 
-	// Calculate column widths with smart distribution.
-	widths := make([]int, numColumns)
-
-	// Strategy: Give compact columns their minimum width, allocate remaining space to Description.
-	totalMinWidth := 0
-	for i, minWidth := range minWidths {
-		// Cap non-Description columns at a reasonable max.
-		if i != descriptionColIndex {
-			if minWidth > CompactColumnMaxWidth {
-				minWidth = CompactColumnMaxWidth // Cap component names, stack names, etc.
-			}
-		}
-		totalMinWidth += minWidth
+// distributeWidths distributes available width among columns.
+func distributeWidths(params columnWidthParams) []int {
+	if params.descriptionColIndex >= 0 {
+		return distributeWithDescriptionColumn(params)
 	}
+	return distributeProportionally(params)
+}
 
-	// If Description column exists, give it flexible space.
-	if descriptionColIndex >= 0 {
-		// Allocate minimum widths to all columns first.
-		for i := range widths {
-			if i == descriptionColIndex {
-				widths[i] = DescriptionColumnMinWidth // Start with reasonable minimum for Description.
-			} else {
-				widths[i] = minWidths[i]
-				if widths[i] > CompactColumnMaxWidth {
-					widths[i] = CompactColumnMaxWidth // Cap non-Description columns.
-				}
-			}
-		}
+// distributeWithDescriptionColumn distributes width when a Description column exists.
+func distributeWithDescriptionColumn(params columnWidthParams) []int {
+	widths := allocateInitialWidths(params)
+	usedWidth := calculateUsedWidth(widths, params.descriptionColIndex)
 
-		// Calculate how much space Description can take.
-		usedWidth := 0
-		for i, w := range widths {
-			if i != descriptionColIndex {
-				usedWidth += w
-			}
-		}
+	descWidth := calculateDescriptionWidth(params.availableWidth, usedWidth)
+	widths[params.descriptionColIndex] = descWidth
 
-		// Give remaining space to Description, but cap at MaxColumnWidth.
-		remainingWidth := availableWidth - usedWidth
-		// Ensure remainingWidth never exceeds total available space.
-		if remainingWidth > availableWidth {
-			remainingWidth = availableWidth
-		}
-		if remainingWidth > MaxColumnWidth {
-			remainingWidth = MaxColumnWidth
-		}
-		if remainingWidth < DescriptionColumnMinWidth {
-			remainingWidth = DescriptionColumnMinWidth // Minimum for Description.
-		}
-		// Bound to MinColumnWidth as absolute floor.
-		if remainingWidth < MinColumnWidth {
-			remainingWidth = MinColumnWidth
-		}
-		widths[descriptionColIndex] = remainingWidth
+	return shrinkIfNeeded(widths, params.availableWidth, params.descriptionColIndex)
+}
 
-		// Ensure total width doesn't exceed availableWidth by shrinking non-Description columns if needed.
-		totalWidth := 0
-		for _, w := range widths {
-			totalWidth += w
-		}
-		if totalWidth > availableWidth {
-			// Shrink non-Description columns to MinColumnWidth if necessary.
-			excess := totalWidth - availableWidth
-			for i := range widths {
-				if i != descriptionColIndex && excess > 0 {
-					reduction := widths[i] - MinColumnWidth
-					if reduction > 0 {
-						if reduction > excess {
-							reduction = excess
-						}
-						widths[i] -= reduction
-						excess -= reduction
-					}
-				}
-			}
-		}
-	} else {
-		// No Description column: distribute space proportionally.
-		if totalMinWidth <= availableWidth {
-			// Enough space: use minimum widths.
-			copy(widths, minWidths)
+// allocateInitialWidths allocates initial widths to all columns.
+func allocateInitialWidths(params columnWidthParams) []int {
+	widths := make([]int, params.numColumns)
+
+	for i := range widths {
+		if i == params.descriptionColIndex {
+			widths[i] = DescriptionColumnMinWidth
 		} else {
-			// Not enough space: scale down proportionally.
-			scaleFactor := float64(availableWidth) / float64(totalMinWidth)
-			for i, minWidth := range minWidths {
-				widths[i] = int(float64(minWidth) * scaleFactor)
-				if widths[i] < MinColumnWidth {
-					widths[i] = MinColumnWidth // Absolute minimum.
-				}
+			widths[i] = params.minWidths[i]
+			if widths[i] > CompactColumnMaxWidth {
+				widths[i] = CompactColumnMaxWidth
 			}
 		}
 	}
 
 	return widths
+}
+
+// calculateUsedWidth calculates total width used by non-Description columns.
+func calculateUsedWidth(widths []int, descriptionColIndex int) int {
+	usedWidth := 0
+	for i, w := range widths {
+		if i != descriptionColIndex {
+			usedWidth += w
+		}
+	}
+	return usedWidth
+}
+
+// calculateDescriptionWidth calculates the width for the Description column.
+func calculateDescriptionWidth(availableWidth, usedWidth int) int {
+	remainingWidth := availableWidth - usedWidth
+
+	if remainingWidth > availableWidth {
+		remainingWidth = availableWidth
+	}
+	if remainingWidth > MaxColumnWidth {
+		remainingWidth = MaxColumnWidth
+	}
+	if remainingWidth < DescriptionColumnMinWidth {
+		remainingWidth = DescriptionColumnMinWidth
+	}
+	if remainingWidth < MinColumnWidth {
+		remainingWidth = MinColumnWidth
+	}
+
+	return remainingWidth
+}
+
+// shrinkIfNeeded shrinks non-Description columns if total width exceeds available space.
+func shrinkIfNeeded(widths []int, availableWidth, descriptionColIndex int) []int {
+	totalWidth := 0
+	for _, w := range widths {
+		totalWidth += w
+	}
+
+	if totalWidth <= availableWidth {
+		return widths
+	}
+
+	excess := totalWidth - availableWidth
+	for i := range widths {
+		if i != descriptionColIndex && excess > 0 {
+			reduction := widths[i] - MinColumnWidth
+			if reduction > 0 {
+				if reduction > excess {
+					reduction = excess
+				}
+				widths[i] -= reduction
+				excess -= reduction
+			}
+		}
+	}
+
+	return widths
+}
+
+// distributeProportionally distributes width proportionally when no Description column exists.
+func distributeProportionally(params columnWidthParams) []int {
+	widths := make([]int, params.numColumns)
+	totalMinWidth := calculateTotalMinWidth(params.minWidths, params.descriptionColIndex)
+
+	if totalMinWidth <= params.availableWidth {
+		copy(widths, params.minWidths)
+		return widths
+	}
+
+	scaleFactor := float64(params.availableWidth) / float64(totalMinWidth)
+	for i, minWidth := range params.minWidths {
+		widths[i] = int(float64(minWidth) * scaleFactor)
+		if widths[i] < MinColumnWidth {
+			widths[i] = MinColumnWidth
+		}
+	}
+
+	return widths
+}
+
+// calculateTotalMinWidth calculates total minimum width with capping for non-Description columns.
+func calculateTotalMinWidth(minWidths []int, descriptionColIndex int) int {
+	totalMinWidth := 0
+	for i, minWidth := range minWidths {
+		if i != descriptionColIndex && minWidth > CompactColumnMaxWidth {
+			minWidth = CompactColumnMaxWidth
+		}
+		totalMinWidth += minWidth
+	}
+	return totalMinWidth
 }
 
 // padToWidth pads a string to the target width without truncating.
