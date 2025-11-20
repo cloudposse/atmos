@@ -1,12 +1,18 @@
 package component
 
 import (
+	"errors"
 	"fmt"
 
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/huh"
+
 	errUtils "github.com/cloudposse/atmos/errors"
+	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -348,42 +354,144 @@ func handleComponentMatches(
 	componentType string,
 ) (string, error) {
 	if len(matches) == 0 {
-		err := errUtils.Build(errUtils.ErrComponentNotInStack).
-			WithHintf("Component `%s` not found in stack `%s`", componentName, stack).
-			WithHintf("Run `atmos list stacks --component %s` to see stacks containing this component\nRun `atmos list components --stack %s` to see components in this stack",
-				componentName, stack).
-			WithContext("component", componentName).
-			WithContext("stack", stack).
-			WithContext("component_type", componentType).
-			WithExitCode(2).
-			Err()
-		return "", err
+		return handleNoMatches(componentName, stack, componentType)
 	}
 
 	if len(matches) > 1 {
-		matchesStr := ""
-		for i, match := range matches {
-			if i > 0 {
-				matchesStr += ", "
-			}
-			matchesStr += match
-		}
-		err := errUtils.Build(errUtils.ErrAmbiguousComponentPath).
-			WithHintf("Path resolves to `%s` which is referenced by multiple components in stack `%s`\nMatching components: %s",
-				componentName, stack, matchesStr).
-			WithHintf("Use the exact component name instead of a path\nExample: `atmos %s <command> %s --stack %s`",
-				componentType, matches[0], stack).
-			WithContext("path_component", componentName).
-			WithContext("stack", stack).
-			WithContext("matches", matchesStr).
-			WithContext("match_count", fmt.Sprintf("%d", len(matches))).
-			WithExitCode(2).
-			Err()
-		return "", err
+		return handleMultipleMatches(matches, componentName, stack, componentType)
 	}
 
 	// Exactly one match found.
 	return matches[0], nil
+}
+
+// handleNoMatches returns an error when no component matches are found.
+func handleNoMatches(componentName, stack, componentType string) (string, error) {
+	err := errUtils.Build(errUtils.ErrComponentNotInStack).
+		WithHintf("Component `%s` not found in stack `%s`", componentName, stack).
+		WithHintf("Run `atmos list stacks --component %s` to see stacks containing this component\nRun `atmos list components --stack %s` to see components in this stack",
+			componentName, stack).
+		WithContext("component", componentName).
+		WithContext(StackKey, stack).
+		WithContext("component_type", componentType).
+		WithExitCode(2).
+		Err()
+	return "", err
+}
+
+// handleMultipleMatches handles the case when multiple components match.
+// In interactive terminals, prompts user to select. Otherwise returns an error.
+func handleMultipleMatches(matches []string, componentName, stack, componentType string) (string, error) {
+	// Check if we're in an interactive terminal.
+	term := terminal.New()
+	if !term.IsTTY(terminal.Stderr) {
+		// Non-interactive terminal - return error.
+		return "", buildAmbiguousComponentError(matches, componentName, stack, componentType)
+	}
+
+	// Interactive terminal - prompt user to select.
+	log.Debug("Multiple component matches found, prompting user for selection",
+		"matches", matches,
+		"component", componentName,
+		StackKey, stack,
+	)
+
+	selected, err := promptForComponentSelection(matches, componentName, stack)
+	if err != nil {
+		// If user aborted, return specific error.
+		if errors.Is(err, errUtils.ErrUserAborted) {
+			return "", errUtils.ErrUserAborted
+		}
+		// Other error - fall back to ambiguous path error.
+		log.Debug("Component selection failed, falling back to error",
+			"error", err.Error(),
+		)
+		return "", buildAmbiguousComponentError(matches, componentName, stack, componentType)
+	}
+
+	// User made a selection - return it.
+	log.Info("User selected component from interactive prompt",
+		"selected", selected,
+		"matches", matches,
+		StackKey, stack,
+	)
+	return selected, nil
+}
+
+// buildAmbiguousComponentError builds an error for ambiguous component paths.
+func buildAmbiguousComponentError(matches []string, componentName, stack, componentType string) error {
+	matchesStr := ""
+	for i, match := range matches {
+		if i > 0 {
+			matchesStr += ", "
+		}
+		matchesStr += match
+	}
+
+	// Use first match as example, guaranteed to exist since len(matches) > 1.
+	exampleComponent := matches[0]
+
+	return errUtils.Build(errUtils.ErrAmbiguousComponentPath).
+		WithHintf("Path resolves to `%s` which is referenced by multiple components in stack `%s`\nMatching components: %s",
+			componentName, stack, matchesStr).
+		WithHintf("Use the exact component name instead of a path\nExample: `atmos %s <command> %s --stack %s`",
+			componentType, exampleComponent, stack).
+		WithContext("path_component", componentName).
+		WithContext(StackKey, stack).
+		WithContext("matches", matchesStr).
+		WithContext("match_count", fmt.Sprintf("%d", len(matches))).
+		WithExitCode(2).
+		Err()
+}
+
+// promptForComponentSelection prompts the user to select from multiple matching components.
+// Uses Charmbracelet's Huh library for interactive selection.
+// Returns the selected component name or an error if user aborts or selection fails.
+func promptForComponentSelection(
+	matches []string,
+	componentName string,
+	stack string,
+) (string, error) {
+	var selected string
+
+	// Build options - just show component names for simplicity.
+	// Future enhancement: could show vars or metadata for each option.
+	options := make([]huh.Option[string], len(matches))
+	for i, match := range matches {
+		options[i] = huh.NewOption(match, match)
+	}
+
+	// Configure keymap for abort.
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "cancel"),
+	)
+
+	// Create selector with Atmos theme.
+	selector := huh.NewSelect[string]().
+		Title(fmt.Sprintf("Component path '%s' matches multiple instances in stack '%s'", componentName, stack)).
+		Description("Select which component instance to use (ctrl+c to cancel)").
+		Options(options...).
+		Value(&selected).
+		WithTheme(uiutils.NewAtmosHuhTheme()).
+		WithKeyMap(keyMap)
+
+	// Run interactive prompt.
+	if err := selector.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return "", errUtils.ErrUserAborted
+		}
+		return "", fmt.Errorf("component selection failed: %w", err)
+	}
+
+	log.Debug("User selected component",
+		"selected", selected,
+		"from_matches", matches,
+		StackKey, stack,
+	)
+
+	return selected, nil
 }
 
 func (r *Resolver) validateComponentInStack(

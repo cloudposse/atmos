@@ -2,7 +2,8 @@ base_path: "./"
 
 components:
   terraform:
-    base_path: "components/terraform"
+    # Reference shared components instead of local duplicates
+    base_path: "../../components/terraform"
     apply_auto_approve: false
 
 stacks:

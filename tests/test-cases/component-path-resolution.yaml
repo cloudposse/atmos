@@ -327,3 +327,48 @@ tests:
     expect:
       diff: []
       exit_code: 0
+
+  # Ambiguous component path tests (multiple instances)
+  # Note: These tests verify the non-interactive (CI/CD) behavior.
+  # Interactive selection (TTY available) requires manual testing.
+  - name: terraform plan with ambiguous component path (non-interactive)
+    enabled: false
+    snapshot: true
+    description: "Test error when component folder matches multiple instances (non-TTY)"
+    workdir: "fixtures/scenarios/component-instances/components/terraform/vpc"
+    command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../../.."
+    args:
+      - "terraform"
+      - "plan"
+      - "."
+      - "--stack"
+      - "dev"
+    expect:
+      diff: []
+      stderr:
+        - "ambiguous component path"
+        - "multiple components"
+      exit_code: 2
+
+  - name: describe component with ambiguous path (non-interactive)
+    enabled: false
+    snapshot: true
+    description: "Test error when component folder matches multiple instances (non-TTY)"
+    workdir: "fixtures/scenarios/component-instances/components/terraform/vpc"
+    command: "atmos"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "../../.."
+    args:
+      - "describe"
+      - "component"
+      - "."
+      - "--stack"
+      - "dev"
+    expect:
+      diff: []
+      stderr:
+        - "ambiguous component path"
+        - "multiple components"
+      exit_code: 2

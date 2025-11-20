@@ -901,6 +901,266 @@ Comprehensive package and function comments following godoc conventions.
 - Stack configuration is source of truth
 - Adds maintenance burden (must keep in sync)
 
+## Interactive Component Selection
+
+### Problem
+
+When a component folder (e.g., `components/terraform/vpc`) is used by multiple component instances in a stack configuration (e.g., `vpc-dev`, `vpc-prod`, `vpc-staging`), the system currently returns an ambiguous component path error.
+
+**Example scenario:**
+```yaml
+# Stack configuration with multiple instances
+components:
+  terraform:
+    vpc-dev:
+      metadata:
+        component: vpc  # Points to components/terraform/vpc
+      vars:
+        environment: dev
+    vpc-prod:
+      metadata:
+        component: vpc  # Same folder, different instance
+      vars:
+        environment: prod
+    vpc-staging:
+      metadata:
+        component: vpc  # Same folder, another instance
+      vars:
+        environment: staging
+```
+
+**Current behavior (non-interactive terminals and interactive terminals):**
+```bash
+$ cd components/terraform/vpc
+$ atmos terraform plan . --stack dev
+
+Error: ambiguous component path
+  Path resolves to `vpc` which is referenced by multiple components in stack `dev`
+  Matching components: vpc-dev, vpc-prod, vpc-staging
+
+  Hint: Use the exact component name instead of a path
+  Example: `atmos terraform <command> vpc-dev --stack dev`
+```
+
+### Solution: Interactive Component Selection
+
+**New behavior depends on terminal type:**
+
+#### Non-Interactive Terminal (TTY not available)
+- **When:** Piped output, CI/CD, redirected streams
+- **Behavior:** Return error (same as current)
+- **Rationale:** Cannot prompt user, must fail explicitly
+
+#### Interactive Terminal (TTY available)
+- **When:** User is at a terminal prompt
+- **Behavior:** Show interactive selector using Charmbracelet's Huh library
+- **Rationale:** Better UX - let user choose instead of erroring
+
+**Interactive prompt example:**
+```bash
+$ cd components/terraform/vpc
+$ atmos terraform plan . --stack dev
+
+Component path 'vpc' matches multiple instances in stack 'dev'
+Select which component instance to use (ctrl+c to cancel)
+
+❯ vpc-dev (environment: dev)
+  vpc-prod (environment: prod)
+  vpc-staging (environment: staging)
+```
+
+**After selection:**
+```bash
+Selected: vpc-dev
+Running: atmos terraform plan vpc-dev --stack dev
+...
+```
+
+**User abort:**
+```bash
+$ cd components/terraform/vpc
+$ atmos terraform plan . --stack dev
+
+Component path 'vpc' matches multiple instances in stack 'dev'
+Select which component instance to use (ctrl+c to cancel)
+
+❯ vpc-dev (environment: dev)
+  vpc-prod (environment: prod)
+  vpc-staging (environment: staging)
+
+^C
+
+Error: user aborted component selection
+```
+
+### Implementation Details
+
+**Location:** `pkg/component/resolver.go:343-387` (function `handleComponentMatches()`)
+
+**Logic flow:**
+```go
+if len(matches) > 1 {
+    // NEW: Check terminal type
+    term := terminal.New()
+
+    if term.IsTTY(terminal.Stderr) {
+        // Interactive terminal - prompt user
+        selected, err := promptForComponentSelection(matches, componentName, stack, componentType)
+        if err != nil {
+            if errors.Is(err, huh.ErrUserAborted) {
+                return "", errUtils.ErrUserAborted
+            }
+            // Other error - fall back to error message
+            return "", buildAmbiguousComponentError(...)
+        }
+        return selected, nil
+    }
+
+    // Non-interactive terminal - return error as before
+    return "", buildAmbiguousComponentError(...)
+}
+```
+
+**New function signature:**
+```go
+// promptForComponentSelection prompts the user to select from multiple matching components.
+// Uses Charmbracelet's Huh library for interactive selection.
+// Returns the selected component name or an error if user aborts or selection fails.
+func promptForComponentSelection(
+    matches []string,
+    componentName string,
+    stack string,
+    componentType string,
+) (string, error)
+```
+
+**Huh usage pattern (following existing code):**
+```go
+func promptForComponentSelection(
+    matches []string,
+    componentName string,
+    stack string,
+    componentType string,
+) (string, error) {
+    var selected string
+
+    // Build options with helpful descriptions
+    options := make([]huh.Option[string], len(matches))
+    for i, match := range matches {
+        // TODO: Could enhance to show vars or other metadata
+        options[i] = huh.NewOption(match, match)
+    }
+
+    // Configure keymap for abort
+    keyMap := huh.NewDefaultKeyMap()
+    keyMap.Quit = key.NewBinding(
+        key.WithKeys("ctrl+c", "esc"),
+        key.WithHelp("ctrl+c/esc", "cancel"),
+    )
+
+    // Create selector
+    selector := huh.NewSelect[string]().
+        Title(fmt.Sprintf("Component path '%s' matches multiple instances in stack '%s'", componentName, stack)).
+        Description("Select which component instance to use (ctrl+c to cancel)").
+        Options(options...).
+        Value(&selected).
+        WithTheme(uiutils.NewAtmosHuhTheme()).
+        WithKeyMap(keyMap)
+
+    // Run interactive prompt
+    if err := selector.Run(); err != nil {
+        if errors.Is(err, huh.ErrUserAborted) {
+            return "", errUtils.ErrUserAborted
+        }
+        return "", fmt.Errorf("component selection failed: %w", err)
+    }
+
+    return selected, nil
+}
+```
+
+### Error Handling
+
+**New error sentinel:**
+```go
+// Add to errors/errors.go
+var (
+    ErrUserAborted = errors.New("user aborted operation")
+)
+```
+
+**Error scenarios:**
+1. **User presses Ctrl+C or Esc** → Return `ErrUserAborted`
+2. **Huh library error** → Wrap and return error
+3. **Non-TTY environment** → Return existing `ErrAmbiguousComponentPath`
+
+### Benefits
+
+- ✅ **Better UX for developers** - Select instead of re-typing command
+- ✅ **Preserves CI/CD compatibility** - Non-TTY still errors (fail fast)
+- ✅ **Follows existing patterns** - Uses same Huh library as auth commands
+- ✅ **Graceful degradation** - Falls back to error when TTY not available
+- ✅ **User control** - Can abort with Ctrl+C/Esc
+- ✅ **Consistent theme** - Uses Atmos custom Huh theme
+
+### Testing Requirements
+
+**Unit tests:**
+- Test TTY detection logic
+- Test prompt function with mock Huh interface
+- Test error handling for user abort
+- Test fallback to error for non-TTY
+
+**Integration tests:**
+- Test real CLI flow with simulated TTY
+- Verify prompt appears with correct options
+- Test selection persistence
+- Verify non-TTY behavior unchanged
+
+**Test file:** `pkg/component/resolver_test.go`
+
+### Documentation Updates
+
+**User-facing documentation:**
+
+Update `website/docs/cli/commands/terraform/terraform.mdx`:
+
+```markdown
+### Handling Multiple Component Instances
+
+If a component folder is used by multiple component instances in a stack (e.g., `vpc-dev`, `vpc-prod`), Atmos will:
+
+**In interactive terminals:**
+- Show a selection menu to choose which instance to use
+- Use arrow keys to select, Enter to confirm, Ctrl+C to cancel
+
+**In non-interactive environments (CI/CD, piped output):**
+- Return an error with all matching component names
+- Require explicit component name instead of path
+```
+
+### Backwards Compatibility
+
+✅ **Fully Backwards Compatible**
+
+- **Non-interactive terminals:** Same error behavior as before
+- **CI/CD pipelines:** No behavior change (still errors)
+- **Scripted usage:** No behavior change (still errors)
+- **Interactive usage:** Enhanced UX with selection menu
+- **No breaking changes** to existing workflows
+
+### Related Patterns
+
+**Existing Huh usage in Atmos:**
+- `cmd/auth_user.go:47-54` - Identity selection
+- `cmd/auth_logout.go:249` - Interactive confirmations
+- `pkg/auth/manager.go:380-398` - Simple select with custom keymap
+
+**Existing terminal detection:**
+- `pkg/terminal/terminal.go:49-50` - `IsTTY()` interface
+- `cmd/root.go:341` - Color detection based on TTY
+- `cmd/auth_logout.go:249` - Interactive confirmations based on TTY
+
 ## Open Questions
 
 1. **Should we support relative paths outside current directory?**
@@ -918,6 +1178,10 @@ Comprehensive package and function comments following godoc conventions.
 
 4. **Should we cache path-to-component mappings?**
    - Decision: DEFER to Phase 4 - only if performance testing shows need
+
+5. **Should we show additional metadata in selection options?**
+   - Example: Show environment, region, or other vars in option descriptions
+   - Decision: START SIMPLE - Just show component names, enhance later if needed
 
 ## References
 

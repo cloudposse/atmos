@@ -1,12 +1,15 @@
 vars:
   stage: dev
-  region: us-east-1
 
 components:
   terraform:
+    # Reference shared mock component with slash in name
     infra/vpc:
       metadata:
-        component: infra/vpc
+        component: mock
       vars:
-        name: "dev-vpc"
-        region: us-east-1
+        foo: "infra-vpc-foo"
+        bar: "infra-vpc-bar"
+        tags:
+          Name: "dev-vpc"
+          Environment: "dev"

@@ -37,8 +37,10 @@ This works with all Terraform, Helmfile, and Packer commands that accept a compo
 
 - **Auto-detection** - Atmos automatically detects component type (terraform/helmfile/packer) from the filesystem path
 - **Stack validation** - Validates the component exists in the specified stack configuration
+- **Interactive selection** - When multiple components reference the same path, choose from an interactive menu (in terminals)
 - **Tab completion** - Shell completion works with both paths and component names
 - **Error handling** - Clear error messages when paths can't be resolved
+- **CI/CD friendly** - Gracefully handles non-interactive environments with appropriate errors
 
 ## Examples
 
@@ -76,11 +78,11 @@ atmos helmfile diff . --stack dev
 atmos helmfile apply . --stack prod
 ```
 
-## Important Limitation
+## Handling Multiple Component Instances
 
-Path-based resolution only works when the component path resolves to a **single unique component** in the stack. If multiple components reference the same filesystem path, you must use the unique component name.
+When multiple components in a stack reference the same filesystem path, Atmos provides an interactive selection menu in terminal environments.
 
-**Example scenario where path resolution won't work:**
+**Example scenario with multiple instances:**
 
 ```yaml
 # stacks/deploy/dev.yaml
@@ -99,14 +101,40 @@ components:
         name: station-2
 ```
 
-In this case, both `station/1` and `station/2` reference the same path `components/terraform/weather`. You cannot use:
+### Interactive Selection (Terminal)
+
+When you're in an interactive terminal (like your local command line), Atmos presents a selection menu:
 
 ```bash
 cd components/terraform/weather
-atmos terraform plan . --stack dev  # ❌ Ambiguous - which component?
+atmos terraform plan . --stack dev
+
+Component path 'weather' matches multiple instances in stack 'dev'
+Select which component instance to use (ctrl+c to cancel)
+
+❯ station/1
+  station/2
 ```
 
-Instead, you must use the unique component names:
+Use arrow keys to select the component instance you want, press Enter to confirm, or Ctrl+C/Esc to cancel.
+
+### Non-Interactive Environments (CI/CD)
+
+In non-interactive environments like CI/CD pipelines or when output is piped, Atmos returns an error with all matching component names:
+
+```bash
+cd components/terraform/weather
+atmos terraform plan . --stack dev | tee log.txt
+
+Error: ambiguous component path
+  Path resolves to 'weather' which is referenced by multiple components in stack 'dev'
+  Matching components: station/1, station/2
+
+  Hint: Use the exact component name instead of a path
+  Example: atmos terraform plan station/1 --stack dev
+```
+
+You can always use the explicit component name in any environment:
 
 ```bash
 atmos terraform plan station/1 --stack dev  # ✓ Explicit and unambiguous
@@ -128,7 +156,9 @@ atmos terraform plan infra/vpc --stack dev
 - Must be inside a component directory under the configured base path
 - Must specify `--stack` flag when using paths
 - Component must exist in the specified stack configuration
-- **The component path must resolve to a unique component name** - If multiple components in the stack reference the same component path (e.g., `station/1` and `station/2` both using `components/terraform/weather`), you must use the unique component name instead of the path
+- **Multiple component instances**: If multiple components reference the same path, Atmos will:
+  - In interactive terminals: Show a selection menu to choose which instance
+  - In CI/CD or piped output: Return an error requiring an explicit component name
 
 ## Documentation
 
