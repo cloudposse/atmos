@@ -45,7 +45,7 @@ func ExtractMetadata(instances []schema.Instance) []map[string]any {
 
 	for i := range instances {
 		metadata := extractInstanceMetadata(&instances[i])
-		item := buildMetadataMap(&instances[i], metadata)
+		item := buildMetadataMap(&instances[i], &metadata)
 		result = append(result, item)
 	}
 
@@ -157,7 +157,7 @@ func determineComponentFolder(component, componentVal string) string {
 }
 
 // buildMetadataMap creates a flat map with all fields accessible to templates.
-func buildMetadataMap(instance *schema.Instance, metadata instanceMetadata) map[string]any {
+func buildMetadataMap(instance *schema.Instance, metadata *instanceMetadata) map[string]any {
 	return map[string]any{
 		"status":           metadata.status, // Colored status dot (●)
 		"stack":            instance.Stack,

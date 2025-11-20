@@ -3,13 +3,10 @@ package format
 import (
 	"fmt"
 	"sort"
-	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
 
 	listtree "github.com/cloudposse/atmos/pkg/list/tree"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // RenderStacksTree renders stacks with their import hierarchies as a tree.
@@ -19,35 +16,26 @@ func RenderStacksTree(stacksWithImports map[string][]*listtree.ImportNode, showI
 		return "No stacks found"
 	}
 
-	var output strings.Builder
+	header := renderTreeHeader("Stacks")
+	root := buildStacksRootTree(stacksWithImports, showImports)
+	treeOutput := root.String()
+	cleanedOutput := cleanupSpacerMarkers(treeOutput, []string{spacerMarker})
 
-	// Create h1 header style with solid background (matching auth list).
-	h1Style := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorWhite)).
-		Background(lipgloss.Color(theme.ColorBlue)).
-		Bold(true).
-		Padding(0, 1)
+	return header + cleanedOutput + treeNewline
+}
 
-	// Title.
-	output.WriteString(h1Style.Render("Stacks"))
-	output.WriteString(treeNewline)
-
-	// Sort stack names for consistent output.
-	var stackNames []string
-	for stackName := range stacksWithImports {
-		stackNames = append(stackNames, stackName)
-	}
-	sort.Strings(stackNames)
-
-	// Create unified tree structure with all stacks.
+// buildStacksRootTree builds the root tree structure for stacks.
+func buildStacksRootTree(stacksWithImports map[string][]*listtree.ImportNode, showImports bool) *tree.Tree {
 	root := tree.New().EnumeratorStyle(getBranchStyle())
 
-	const spacerMarker = "<<<SPACER>>>"
-
-	// Add spacer at the top (after header).
+	// Add spacer at the top.
 	topSpacer := tree.New().Root(spacerMarker).EnumeratorStyle(getBranchStyle())
 	root.Child(topSpacer)
 
+	// Sort stack names for consistent output.
+	stackNames := getSortedKeysFromImportsMap(stacksWithImports)
+
+	// Build tree for each stack.
 	for i, stackName := range stackNames {
 		imports := stacksWithImports[stackName]
 		var stackNode *tree.Tree
@@ -65,40 +53,17 @@ func RenderStacksTree(stacksWithImports map[string][]*listtree.ImportNode, showI
 		}
 	}
 
-	// Render the tree.
-	treeOutput := root.String()
+	return root
+}
 
-	// Post-process to clean up spacer lines.
-	// Spacer nodes render with the marker text, replace with just "│".
-	lines := strings.Split(treeOutput, treeNewline)
-	var cleaned []string
-	for _, line := range lines {
-		// Check if this line contains the spacer marker.
-		// Strip ANSI codes first to get the plain text.
-		plainLine := stripANSI(line)
-		if !strings.Contains(plainLine, spacerMarker) {
-			cleaned = append(cleaned, line)
-			continue
-		}
-
-		// Replace the entire line with just the continuation character.
-		// Find the indentation level (before the tree characters).
-		indent := 0
-		for _, ch := range plainLine {
-			if ch != ' ' {
-				break
-			}
-			indent++
-		}
-		// Render just the vertical bar with proper styling.
-		style := getBranchStyle()
-		cleaned = append(cleaned, strings.Repeat(" ", indent)+style.Render("│"))
+// getSortedKeysFromImportsMap extracts and sorts stack names from an imports map.
+func getSortedKeysFromImportsMap(stacksWithImports map[string][]*listtree.ImportNode) []string {
+	stackNames := make([]string, 0, len(stacksWithImports))
+	for stackName := range stacksWithImports {
+		stackNames = append(stackNames, stackName)
 	}
-
-	output.WriteString(strings.Join(cleaned, treeNewline))
-	output.WriteString(treeNewline)
-
-	return output.String()
+	sort.Strings(stackNames)
+	return stackNames
 }
 
 // buildStackNodeSimple creates a tree node for a stack without imports.

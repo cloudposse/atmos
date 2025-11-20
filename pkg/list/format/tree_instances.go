@@ -16,6 +16,11 @@ const (
 	treeNewline = "\n"
 )
 
+const (
+	spacerMarker          = "<<<SPACER>>>"
+	componentSpacerMarker = "<<<COMPONENT_SPACER>>>"
+)
+
 // RenderInstancesTree renders stacks with their components and import hierarchies as a tree.
 // Structure: Stacks → Components → Imports.
 // If showImports is false, only shows stacks and components without import details.
@@ -24,34 +29,35 @@ func RenderInstancesTree(stacksWithComponents map[string]map[string][]*listtree.
 		return "No stacks found"
 	}
 
-	var output strings.Builder
+	header := renderTreeHeader("Component Instances")
+	root := buildInstancesRootTree(stacksWithComponents, showImports)
+	treeOutput := root.String()
+	cleanedOutput := cleanupSpacerMarkers(treeOutput, []string{spacerMarker, componentSpacerMarker})
 
-	// Create h1 header style with solid background (matching list stacks).
+	return header + cleanedOutput + treeNewline
+}
+
+// renderTreeHeader creates and renders a styled header for tree output.
+func renderTreeHeader(title string) string {
 	h1Style := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.ColorWhite)).
 		Background(lipgloss.Color(theme.ColorBlue)).
 		Bold(true).
 		Padding(0, 1)
 
-	// Title.
-	output.WriteString(h1Style.Render("Component Instances"))
-	output.WriteString(treeNewline)
+	return h1Style.Render(title) + treeNewline
+}
 
-	// Create root tree.
+// buildInstancesRootTree builds the root tree structure for instances.
+func buildInstancesRootTree(stacksWithComponents map[string]map[string][]*listtree.ImportNode, showImports bool) *tree.Tree {
 	root := tree.New().EnumeratorStyle(getBranchStyle())
 
-	// Sort stack names for consistent output.
-	var stackNames []string
-	for stackName := range stacksWithComponents {
-		stackNames = append(stackNames, stackName)
-	}
-	sort.Strings(stackNames)
-
-	const spacerMarker = "<<<SPACER>>>"
-
-	// Add spacer at the top (after header).
+	// Add spacer at the top.
 	topSpacer := tree.New().Root(spacerMarker).EnumeratorStyle(getBranchStyle())
 	root.Child(topSpacer)
+
+	// Sort stack names for consistent output.
+	stackNames := getSortedStackNames(stacksWithComponents)
 
 	// Build tree for each stack.
 	for i, stackName := range stackNames {
@@ -66,42 +72,61 @@ func RenderInstancesTree(stacksWithComponents map[string]map[string][]*listtree.
 		}
 	}
 
-	// Render the tree.
-	treeOutput := root.String()
+	return root
+}
 
-	// Post-process to clean up spacer lines.
-	// Spacer nodes render with the marker text, replace with just "│".
-	const componentSpacerMarker = "<<<COMPONENT_SPACER>>>"
+// getSortedStackNames extracts and sorts stack names from a map.
+func getSortedStackNames(stacksWithComponents map[string]map[string][]*listtree.ImportNode) []string {
+	stackNames := make([]string, 0, len(stacksWithComponents))
+	for stackName := range stacksWithComponents {
+		stackNames = append(stackNames, stackName)
+	}
+	sort.Strings(stackNames)
+	return stackNames
+}
 
+// cleanupSpacerMarkers removes spacer markers from tree output and replaces with styled vertical bars.
+func cleanupSpacerMarkers(treeOutput string, markers []string) string {
 	lines := strings.Split(treeOutput, treeNewline)
-	var cleaned []string
+	cleaned := make([]string, 0, len(lines))
+
 	for _, line := range lines {
-		// Check if this line contains any spacer marker.
-		// Strip ANSI codes first to get the plain text.
 		plainLine := stripANSI(line)
-		if !strings.Contains(plainLine, spacerMarker) && !strings.Contains(plainLine, componentSpacerMarker) {
+
+		if !containsAnyMarker(plainLine, markers) {
 			cleaned = append(cleaned, line)
 			continue
 		}
 
-		// Replace the entire line with just the continuation character.
-		// Find the indentation level (before the tree characters).
-		indent := 0
-		for _, ch := range plainLine {
-			if ch != ' ' {
-				break
-			}
-			indent++
-		}
-		// Render just the vertical bar with proper styling.
+		// Replace spacer line with styled vertical bar.
+		indent := getIndentLevel(plainLine)
 		style := getBranchStyle()
 		cleaned = append(cleaned, strings.Repeat(" ", indent)+style.Render("│"))
 	}
 
-	output.WriteString(strings.Join(cleaned, treeNewline))
-	output.WriteString(treeNewline)
+	return strings.Join(cleaned, treeNewline)
+}
 
-	return output.String()
+// containsAnyMarker checks if a string contains any of the given markers.
+func containsAnyMarker(s string, markers []string) bool {
+	for _, marker := range markers {
+		if strings.Contains(s, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// getIndentLevel returns the number of leading spaces in a string.
+func getIndentLevel(s string) int {
+	indent := 0
+	for _, ch := range s {
+		if ch != ' ' {
+			break
+		}
+		indent++
+	}
+	return indent
 }
 
 // buildStackNodeWithComponents creates a tree node for a stack with its components.
