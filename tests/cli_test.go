@@ -1587,6 +1587,12 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 		return true
 	}
 
+	// Normalize line endings FIRST before sanitization.
+	// This ensures sanitizeOutput regex patterns work consistently across platforms.
+	// On Windows, CLI output may contain CRLF (\r\n) but our regex patterns expect LF (\n).
+	stdoutOutput = normalizeLineEndings(stdoutOutput)
+	stderrOutput = normalizeLineEndings(stderrOutput)
+
 	// Sanitize outputs and fail the test if sanitization fails.
 	var err error
 	var sanitizeOpts []sanitizeOption
@@ -1602,11 +1608,6 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 	if err != nil {
 		t.Fatalf("failed to sanitize stderr output: %v", err)
 	}
-
-	// Normalize line endings in actual output for cross-platform consistency.
-	// This handles cases where CLI might output CRLF on Windows but snapshots use LF.
-	stdoutOutput = normalizeLineEndings(stdoutOutput)
-	stderrOutput = normalizeLineEndings(stderrOutput)
 
 	stdoutPath, stderrPath, ttyPath := getSnapshotFilenames(t.Name(), tc.Tty)
 
