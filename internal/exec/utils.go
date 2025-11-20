@@ -28,38 +28,6 @@ const (
 	terraformConfigKey = "terraform_config"
 )
 
-// mergeGlobalAuthConfig merges global auth config from atmosConfig into component section.
-// Returns the merged auth section map. Also updates componentSection["auth"] to prevent
-// postProcessTemplatesAndYamlFunctions from overwriting with empty auth.
-func mergeGlobalAuthConfig(atmosConfig *schema.AtmosConfiguration, componentSection map[string]any) map[string]any {
-	authSection := map[string]any{}
-
-	if len(atmosConfig.Auth.Providers) > 0 {
-		authSection["providers"] = atmosConfig.Auth.Providers
-	}
-	if len(atmosConfig.Auth.Identities) > 0 {
-		authSection["identities"] = atmosConfig.Auth.Identities
-	}
-	if atmosConfig.Auth.Logs.Level != "" || atmosConfig.Auth.Logs.File != "" {
-		authSection["logs"] = map[string]any{
-			"level": atmosConfig.Auth.Logs.Level,
-			"file":  atmosConfig.Auth.Logs.File,
-		}
-	}
-	if atmosConfig.Auth.Keyring.Type != "" {
-		authSection["keyring"] = atmosConfig.Auth.Keyring
-	}
-
-	if len(authSection) == 0 {
-		return map[string]any{}
-	}
-
-	// Also update componentSection["auth"] so postProcessTemplatesAndYamlFunctions doesn't overwrite.
-	componentSection[cfg.AuthSectionName] = authSection
-
-	return authSection
-}
-
 // ProcessComponentConfig processes component config sections.
 func ProcessComponentConfig(
 	atmosConfig *schema.AtmosConfiguration,
