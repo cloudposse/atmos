@@ -48,6 +48,11 @@ func TestParseProfilesFromArgs(t *testing.T) {
 			expected: []string{"dev", "staging", "prod"},
 		},
 		{
+			name:     "comma-separated with --profile value syntax",
+			args:     []string{"atmos", "describe", "config", "--profile", "dev,staging"},
+			expected: []string{"dev", "staging"},
+		},
+		{
 			name:     "mixed syntax",
 			args:     []string{"atmos", "describe", "config", "--profile", "dev", "--profile=staging,prod"},
 			expected: []string{"dev", "staging", "prod"},

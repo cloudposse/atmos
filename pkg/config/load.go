@@ -42,13 +42,16 @@ func parseProfilesFromArgs(args []string) []string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--profile" && i+1 < len(args) {
-			// --profile value syntax.
-			profiles = append(profiles, args[i+1])
+			// --profile value syntax - handle comma-separated values.
+			for _, v := range strings.Split(args[i+1], ",") {
+				if trimmed := strings.TrimSpace(v); trimmed != "" {
+					profiles = append(profiles, trimmed)
+				}
+			}
 			i++ // Skip next arg.
 		} else if strings.HasPrefix(arg, "--profile=") {
-			// --profile=value syntax.
+			// --profile=value syntax - handle comma-separated values.
 			value := strings.TrimPrefix(arg, "--profile=")
-			// Handle comma-separated values.
 			for _, v := range strings.Split(value, ",") {
 				if trimmed := strings.TrimSpace(v); trimmed != "" {
 					profiles = append(profiles, trimmed)
