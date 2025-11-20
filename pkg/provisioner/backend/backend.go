@@ -10,12 +10,19 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const (
+	// BeforeTerraformInitEvent is the hook event name for backend provisioners.
+	// This matches the constant defined in internal/exec/terraform.go and pkg/hooks/event.go (hooks.BeforeTerraformInit).
+	// We use a local constant here to avoid import cycles.
+	beforeTerraformInitEvent = "before.terraform.init"
+)
+
 func init() {
 	// Register backend provisioner to run before Terraform initialization.
 	// This ensures the backend exists before Terraform tries to configure it.
 	provisioner.RegisterProvisioner(provisioner.Provisioner{
 		Type:      "backend",
-		HookEvent: "before.terraform.init",
+		HookEvent: provisioner.HookEvent(beforeTerraformInitEvent),
 		Func:      ProvisionBackend,
 	})
 }

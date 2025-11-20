@@ -88,6 +88,7 @@ var (
 	ErrLoadAwsConfig                    = errors.New("failed to load AWS config")
 	ErrGetObjectFromS3                  = errors.New("failed to get object from S3")
 	ErrReadS3ObjectBody                 = errors.New("failed to read S3 object body")
+	ErrS3BucketAccessDenied             = errors.New("access denied to S3 bucket")
 	ErrCreateGCSClient                  = errors.New("failed to create GCS client")
 	ErrGetObjectFromGCS                 = errors.New("failed to get object from GCS")
 	ErrReadGCSObjectBody                = errors.New("failed to read GCS object body")

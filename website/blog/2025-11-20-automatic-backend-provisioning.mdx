@@ -28,11 +28,12 @@ Atmos now provisions backends automatically when needed. Just enable it in your 
 components:
   terraform:
     vpc:
+      backend_type: s3  # Must be at component level
+
       backend:
         bucket: my-terraform-state
         key: vpc/terraform.tfstate
         region: us-east-1
-        backend_type: s3
 
       provision:
         backend:
@@ -192,11 +193,12 @@ Enable automatic backend provisioning in your stack configuration:
 components:
   terraform:
     vpc:
+      backend_type: s3  # Must be at component level
+
       backend:
         bucket: acme-terraform-state-dev
         key: vpc/terraform.tfstate
         region: us-east-1
-        backend_type: s3
 
       provision:
         backend:

@@ -115,11 +115,12 @@ Enable backend provisioning in your stack manifest:
 components:
   terraform:
     vpc:
+      backend_type: s3  # Must be at component level
+
       backend:
         bucket: acme-terraform-state-dev
         key: vpc/terraform.tfstate
         region: us-east-1
-        backend_type: s3
 
       provision:
         backend:
@@ -216,11 +217,12 @@ components:
 
 **Required Configuration:**
 ```yaml
+backend_type: s3  # Must be at component level
+
 backend:
   bucket: my-terraform-state     # Required
   key: component/terraform.tfstate
   region: us-east-1              # Required
-  backend_type: s3
 ```
 
 **Cross-Account Support:**

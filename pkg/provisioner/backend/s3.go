@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	//nolint:depguard
@@ -12,7 +13,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	//nolint:depguard
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/aws_utils"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -64,19 +67,27 @@ func ProvisionS3Backend(
 	// Load AWS configuration with auth context.
 	awsConfig, err := loadAWSConfigWithAuth(ctx, config.region, config.roleArn, authContext)
 	if err != nil {
-		return fmt.Errorf(errFormat, provisioner.ErrLoadAWSConfig, err)
+		return errUtils.Build(provisioner.ErrLoadAWSConfig).
+			WithHint("Check AWS credentials are configured correctly").
+			WithHintf("Verify AWS region '%s' is valid", config.region).
+			WithHint("If using --identity flag, ensure the identity is authenticated").
+			WithContext("region", config.region).
+			WithContext("bucket", config.bucket).
+			Err()
 	}
 
 	// Create S3 client.
 	client := s3.NewFromConfig(awsConfig)
 
 	// Check if bucket exists and create if needed.
-	if err := ensureBucket(ctx, client, config.bucket, config.region); err != nil {
+	bucketAlreadyExisted, err := ensureBucket(ctx, client, config.bucket, config.region)
+	if err != nil {
 		return err
 	}
 
 	// Apply hardcoded defaults.
-	if err := applyS3BucketDefaults(ctx, client, config.bucket); err != nil {
+	// If bucket already existed, warn that settings may be overwritten.
+	if err := applyS3BucketDefaults(ctx, client, config.bucket, bucketAlreadyExisted); err != nil {
 		return fmt.Errorf(errFormat, provisioner.ErrApplyBucketDefaults, err)
 	}
 
@@ -114,23 +125,24 @@ func extractS3Config(backendConfig map[string]any) (*s3Config, error) {
 }
 
 // ensureBucket checks if bucket exists and creates it if needed.
-func ensureBucket(ctx context.Context, client *s3.Client, bucket, region string) error {
+// Returns (true, nil) if bucket already existed, (false, nil) if bucket was created, (_, error) on failure.
+func ensureBucket(ctx context.Context, client *s3.Client, bucket, region string) (bool, error) {
 	exists, err := bucketExists(ctx, client, bucket)
 	if err != nil {
-		return fmt.Errorf(errFormat, provisioner.ErrCheckBucketExist, err)
+		return false, fmt.Errorf(errFormat, provisioner.ErrCheckBucketExist, err)
 	}
 
 	if exists {
 		_ = ui.Info(fmt.Sprintf("S3 bucket %s already exists, skipping creation", bucket))
-		return nil
+		return true, nil
 	}
 
 	// Create bucket.
 	if err := createBucket(ctx, client, bucket, region); err != nil {
-		return fmt.Errorf(errFormat, provisioner.ErrCreateBucket, err)
+		return false, fmt.Errorf(errFormat, provisioner.ErrCreateBucket, err)
 	}
 	_ = ui.Success(fmt.Sprintf("Created S3 bucket: %s", bucket))
-	return nil
+	return false, nil
 }
 
 // loadAWSConfigWithAuth loads AWS configuration with optional role assumption.
@@ -149,6 +161,8 @@ func loadAWSConfigWithAuth(ctx context.Context, region, roleArn string, authCont
 }
 
 // bucketExists checks if an S3 bucket exists.
+// Returns (false, nil) if bucket doesn't exist (404).
+// Returns (false, error) for permission denied, network issues, or other errors.
 func bucketExists(ctx context.Context, client *s3.Client, bucket string) (bool, error) {
 	_, err := client.HeadBucket(ctx, &s3.HeadBucketInput{
 		Bucket: aws.String(bucket),
@@ -160,7 +174,49 @@ func bucketExists(ctx context.Context, client *s3.Client, bucket string) (bool, 
 		if errors.As(err, &notFound) || errors.As(err, &noSuchBucket) {
 			return false, nil
 		}
-		return false, err
+
+		// Check for HTTP status code to distinguish between different error types.
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
+			switch apiErr.ErrorCode() {
+			case "Forbidden", "AccessDenied":
+				// 403 Forbidden - permission denied.
+				return false, errUtils.Build(errUtils.ErrS3BucketAccessDenied).
+					WithHint("Check AWS IAM permissions for s3:ListBucket action").
+					WithHintf("Verify that your credentials have access to bucket '%s'", bucket).
+					WithContext("bucket", bucket).
+					WithContext("operation", "HeadBucket").
+					Err()
+			}
+		}
+
+		// Check for HTTP-level errors using response metadata.
+		var respErr interface{ HTTPStatusCode() int }
+		if errors.As(err, &respErr) {
+			statusCode := respErr.HTTPStatusCode()
+			switch statusCode {
+			case http.StatusForbidden:
+				// 403 Forbidden.
+				return false, errUtils.Build(errUtils.ErrS3BucketAccessDenied).
+					WithHint("Check AWS IAM permissions for s3:ListBucket action").
+					WithHintf("Verify that your credentials have access to bucket '%s'", bucket).
+					WithContext("bucket", bucket).
+					WithContext("status_code", fmt.Sprintf("%d", statusCode)).
+					Err()
+			case http.StatusNotFound:
+				// 404 Not Found (shouldn't reach here due to type checks above, but be defensive).
+				return false, nil
+			}
+		}
+
+		// Network or other transient error.
+		return false, errUtils.Build(provisioner.ErrCheckBucketExist).
+			WithHint("Check network connectivity to AWS S3").
+			WithHint("Verify AWS region is correct").
+			WithHintf("Try again - this may be a transient network issue").
+			WithContext("bucket", bucket).
+			WithContext("error", err.Error()).
+			Err()
 	}
 
 	return true, nil
@@ -184,13 +240,32 @@ func createBucket(ctx context.Context, client *s3.Client, bucket, region string)
 }
 
 // applyS3BucketDefaults applies hardcoded defaults to an S3 bucket.
-func applyS3BucketDefaults(ctx context.Context, client *s3.Client, bucket string) error {
+//
+// IMPORTANT: This function always overwrites existing settings with opinionated defaults:
+// - Versioning: ENABLED
+// - Encryption: AES-256 (replaces any existing encryption including KMS)
+// - Public Access: BLOCKED (all 4 settings)
+// - Tags: Replaces entire tag set with Name and ManagedBy=Atmos only
+//
+// If the bucket already existed (alreadyExisted=true), warnings are logged to inform the user
+// that existing settings are being modified.
+func applyS3BucketDefaults(ctx context.Context, client *s3.Client, bucket string, alreadyExisted bool) error {
+	// Warn user if modifying pre-existing bucket settings.
+	if alreadyExisted {
+		_ = ui.Warning(fmt.Sprintf("Applying Atmos defaults to existing bucket '%s'", bucket))
+		_ = ui.Write("  - Versioning will be ENABLED")
+		_ = ui.Write("  - Encryption will be set to AES-256 (existing KMS encryption will be replaced)")
+		_ = ui.Write("  - Public access will be BLOCKED (all 4 settings)")
+		_ = ui.Write("  - Tags will be replaced with: Name, ManagedBy=Atmos")
+	}
+
 	// 1. Enable versioning (ALWAYS).
 	if err := enableVersioning(ctx, client, bucket); err != nil {
 		return fmt.Errorf(errFormat, provisioner.ErrEnableVersioning, err)
 	}
 
 	// 2. Enable encryption with AES-256 (ALWAYS).
+	// NOTE: This replaces any existing encryption configuration, including KMS.
 	if err := enableEncryption(ctx, client, bucket); err != nil {
 		return fmt.Errorf(errFormat, provisioner.ErrEnableEncryption, err)
 	}
@@ -201,6 +276,7 @@ func applyS3BucketDefaults(ctx context.Context, client *s3.Client, bucket string
 	}
 
 	// 4. Apply standard tags (ALWAYS).
+	// NOTE: This replaces the entire tag set. Existing tags are not preserved.
 	if err := applyTags(ctx, client, bucket); err != nil {
 		return fmt.Errorf(errFormat, provisioner.ErrApplyTags, err)
 	}

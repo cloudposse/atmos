@@ -26,10 +26,11 @@ import (
 )
 
 const (
+	// BeforeTerraformInitEvent is the hook event name for provisioners that run before terraform init.
+	// This matches the hook event registered by backend provisioners in pkg/provisioner/backend/backend.go.
+	// See pkg/hooks/event.go (hooks.BeforeTerraformInit) for the canonical definition.
 	beforeTerraformInitEvent = "before.terraform.init"
-)
 
-const (
 	autoApproveFlag           = "-auto-approve"
 	outFlag                   = "-out"
 	varFileFlag               = "-var-file"
