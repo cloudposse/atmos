@@ -101,7 +101,7 @@ func (b *GlobalOptionsBuilder) registerTerminalFlags(defaults *global.Flags) {
 	b.WithMask()
 
 	// Interactive prompts configuration.
-	b.options = append(b.options, WithBoolFlag("interactive", "", defaults.Interactive, "Enable interactive prompts for missing required flags (requires TTY, disabled in CI)"))
+	b.options = append(b.options, WithBoolFlag("interactive", "", defaults.Interactive, "Enable interactive prompts for missing required flags, optional value flags using the sentinel pattern, and missing positional arguments (requires TTY, disabled in CI)"))
 	b.options = append(b.options, WithEnvVars("interactive", "ATMOS_INTERACTIVE"))
 
 	// Output configuration - pager with NoOptDefVal.

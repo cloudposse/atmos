@@ -43,7 +43,7 @@ type Flags struct {
 	ForceColor  bool // Force color output even when not a TTY (--force-color).
 	ForceTTY    bool // Force TTY mode with sane defaults (--force-tty).
 	Mask        bool // Enable automatic masking of sensitive data (--mask).
-	Interactive bool // Enable interactive prompts for missing required flags (--interactive).
+	Interactive bool // Enable interactive prompts for missing required flags, optional value flags using the sentinel pattern, and missing positional arguments (--interactive).
 
 	// Output configuration.
 	Pager PagerSelector
