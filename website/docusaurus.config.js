@@ -179,6 +179,10 @@ const config = {
                     'core-concepts/*',
                     'cli/*',
                 ],
+                pathTransformation: {
+                    // Remove 'docs' prefix from URLs since routeBasePath is '/'
+                    ignorePaths: ['docs'],
+                },
             },
         ]
     ],
