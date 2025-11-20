@@ -586,6 +586,7 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 
 // checkAtmosConfigE checks Atmos config and returns an error instead of exiting.
 // This is the testable version that should be used in commands' RunE functions.
+// The returned error has exit code 1 attached for proper process termination.
 func checkAtmosConfigE(opts ...AtmosValidateOption) error {
 	err := validateAtmosConfig(opts...)
 	if err == nil {
@@ -599,8 +600,9 @@ func checkAtmosConfigE(opts ...AtmosValidateOption) error {
 	var errMsg strings.Builder
 	buildAtmosConfigErrorMessage(&errMsg, &atmosConfig)
 
-	// Wrap the original validation error with the formatted message.
-	return fmt.Errorf("%w: %s", errUtils.ErrMissingAtmosConfig, errMsg.String())
+	// Wrap the original validation error with the formatted message and exit code 1.
+	formattedErr := fmt.Errorf("%w: %s", errUtils.ErrMissingAtmosConfig, errMsg.String())
+	return errUtils.WithExitCode(formattedErr, 1)
 }
 
 // buildAtmosConfigErrorMessage builds a formatted error message for missing Atmos configuration.
