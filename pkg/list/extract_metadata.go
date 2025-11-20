@@ -26,92 +26,153 @@ func getStatusIndicator(enabled, locked bool) string {
 	}
 }
 
+// instanceMetadata holds extracted metadata fields from a schema.Instance.
+type instanceMetadata struct {
+	metadataType    string
+	enabled         bool
+	locked          bool
+	componentVal    string
+	inherits        string
+	description     string
+	componentFolder string
+	status          string
+}
+
 // ExtractMetadata transforms schema.Instance slice into []map[string]any for renderer.
 // Extracts metadata fields and makes them accessible to column templates.
 func ExtractMetadata(instances []schema.Instance) []map[string]any {
 	result := make([]map[string]any, 0, len(instances))
 
-	for _, instance := range instances {
-		// Get metadata fields with safe type assertions.
-		var metadataType string
-		var enabled, locked bool
-		var componentVal, inherits, description string
-
-		// Default type to "real" since abstract components are filtered out in createInstance.
-		metadataType = "real"
-		if val, ok := instance.Metadata["type"].(string); ok {
-			metadataType = val
-		}
-
-		// Default enabled to true.
-		enabled = true
-		if val, ok := instance.Metadata["enabled"].(bool); ok {
-			enabled = val
-		}
-
-		// Check locked in metadata.
-		if val, ok := instance.Metadata["locked"].(bool); ok {
-			locked = val
-		}
-
-		if val, ok := instance.Metadata["component"].(string); ok {
-			componentVal = val
-		}
-
-		if val, ok := instance.Metadata["inherits"].([]interface{}); ok {
-			// Convert []interface{} to comma-separated string.
-			inheritsSlice := make([]string, 0, len(val))
-			for _, v := range val {
-				if str, ok := v.(string); ok {
-					inheritsSlice = append(inheritsSlice, str)
-				}
-			}
-			if len(inheritsSlice) > 0 {
-				for i, s := range inheritsSlice {
-					if i > 0 {
-						inherits += ", "
-					}
-					inherits += s
-				}
-			}
-		}
-
-		if val, ok := instance.Metadata["description"].(string); ok {
-			description = val
-		}
-
-		// Compute status indicator.
-		status := getStatusIndicator(enabled, locked)
-
-		// Determine the actual component folder used.
-		// If metadata.component is set, use it (it's the base component).
-		// Otherwise, use the component name itself.
-		componentFolder := instance.Component
-		if componentVal != "" {
-			componentFolder = componentVal
-		}
-
-		// Create flat map with all fields accessible to templates.
-		item := map[string]any{
-			"status":           status, // Colored status dot (●)
-			"stack":            instance.Stack,
-			"component":        instance.Component,
-			"component_type":   instance.ComponentType,
-			"component_folder": componentFolder, // The actual component folder name
-			"type":             metadataType,
-			"enabled":          enabled,
-			"locked":           locked,
-			"component_base":   componentVal,
-			"inherits":         inherits,
-			"description":      description,
-			"metadata":         instance.Metadata, // Full metadata for advanced filtering
-			"vars":             instance.Vars,     // Expose vars for template access
-			"settings":         instance.Settings, // Expose settings for template access
-			"env":              instance.Env,      // Expose env for template access
-		}
-
+	for i := range instances {
+		metadata := extractInstanceMetadata(&instances[i])
+		item := buildMetadataMap(&instances[i], metadata)
 		result = append(result, item)
 	}
 
 	return result
+}
+
+// extractInstanceMetadata extracts and processes metadata fields from an instance.
+func extractInstanceMetadata(instance *schema.Instance) instanceMetadata {
+	metadata := instanceMetadata{
+		metadataType: getMetadataType(instance),
+		enabled:      getEnabledStatus(instance),
+		locked:       getLockedStatus(instance),
+		componentVal: getComponentValue(instance),
+		inherits:     getInheritsString(instance),
+		description:  getDescription(instance),
+	}
+
+	metadata.componentFolder = determineComponentFolder(instance.Component, metadata.componentVal)
+	metadata.status = getStatusIndicator(metadata.enabled, metadata.locked)
+
+	return metadata
+}
+
+// getMetadataType extracts the metadata type, defaulting to "real".
+func getMetadataType(instance *schema.Instance) string {
+	if val, ok := instance.Metadata["type"].(string); ok {
+		return val
+	}
+	return "real"
+}
+
+// getEnabledStatus extracts the enabled status, defaulting to true.
+func getEnabledStatus(instance *schema.Instance) bool {
+	if val, ok := instance.Metadata[metadataEnabled].(bool); ok {
+		return val
+	}
+	return true
+}
+
+// getLockedStatus extracts the locked status.
+func getLockedStatus(instance *schema.Instance) bool {
+	if val, ok := instance.Metadata[metadataLocked].(bool); ok {
+		return val
+	}
+	return false
+}
+
+// getComponentValue extracts the component value from metadata.
+func getComponentValue(instance *schema.Instance) string {
+	if val, ok := instance.Metadata["component"].(string); ok {
+		return val
+	}
+	return ""
+}
+
+// getInheritsString converts the inherits array to a comma-separated string.
+func getInheritsString(instance *schema.Instance) string {
+	val, ok := instance.Metadata["inherits"].([]interface{})
+	if !ok {
+		return ""
+	}
+
+	inheritsSlice := convertToStringSlice(val)
+	return joinWithComma(inheritsSlice)
+}
+
+// convertToStringSlice converts []interface{} to []string.
+func convertToStringSlice(values []interface{}) []string {
+	result := make([]string, 0, len(values))
+	for _, v := range values {
+		if str, ok := v.(string); ok {
+			result = append(result, str)
+		}
+	}
+	return result
+}
+
+// joinWithComma joins a string slice with comma separators.
+func joinWithComma(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+
+	result := ""
+	for i, s := range values {
+		if i > 0 {
+			result += ", "
+		}
+		result += s
+	}
+	return result
+}
+
+// getDescription extracts the description from metadata.
+func getDescription(instance *schema.Instance) string {
+	if val, ok := instance.Metadata["description"].(string); ok {
+		return val
+	}
+	return ""
+}
+
+// determineComponentFolder determines the actual component folder.
+// If componentVal is set, use it (base component); otherwise use component name.
+func determineComponentFolder(component, componentVal string) string {
+	if componentVal != "" {
+		return componentVal
+	}
+	return component
+}
+
+// buildMetadataMap creates a flat map with all fields accessible to templates.
+func buildMetadataMap(instance *schema.Instance, metadata instanceMetadata) map[string]any {
+	return map[string]any{
+		"status":           metadata.status, // Colored status dot (●)
+		"stack":            instance.Stack,
+		"component":        instance.Component,
+		"component_type":   instance.ComponentType,
+		"component_folder": metadata.componentFolder, // The actual component folder name
+		"type":             metadata.metadataType,
+		"enabled":          metadata.enabled,
+		"locked":           metadata.locked,
+		"component_base":   metadata.componentVal,
+		"inherits":         metadata.inherits,
+		"description":      metadata.description,
+		"metadata":         instance.Metadata, // Full metadata for advanced filtering
+		"vars":             instance.Vars,     // Expose vars for template access
+		"settings":         instance.Settings, // Expose settings for template access
+		"env":              instance.Env,      // Expose env for template access
+	}
 }
