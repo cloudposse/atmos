@@ -35,7 +35,10 @@ const (
 
 var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 
-const profileKey = "profile"
+const (
+	profileKey       = "profile"
+	profileDelimiter = ","
+)
 
 // parseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
 // This is a fallback for commands with DisableFlagParsing=true (terraform, helmfile, packer).
@@ -101,18 +104,55 @@ func parseViperProfilesFromEnv(profiles []string) []string {
 	return parsed
 }
 
+// parseProfilesFromEnvString parses comma-separated profiles from an environment variable value.
+// Trims whitespace and filters empty entries.
+func parseProfilesFromEnvString(envValue string) []string {
+	var result []string
+	for _, v := range strings.Split(envValue, profileDelimiter) {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+// getProfilesFromFallbacks handles fallback profile loading when Viper doesn't have profiles set.
+// Returns profiles and source ("flag" or "env") for logging.
+func getProfilesFromFallbacks() ([]string, string) {
+	// Fallback: For commands with DisableFlagParsing=true, Cobra never parses flags,
+	// so Viper won't have flag values. Manually parse os.Args as fallback.
+	profiles := parseProfilesFromOsArgs(os.Args)
+	if len(profiles) > 0 {
+		return profiles, "flag"
+	}
+
+	// Check environment variable directly as final fallback.
+	if envProfiles := os.Getenv("ATMOS_PROFILE"); envProfiles != "" { //nolint:forbidigo
+		result := parseProfilesFromEnvString(envProfiles)
+		if len(result) > 0 {
+			return result, "env"
+		}
+	}
+
+	return nil, ""
+}
+
 // getProfilesFromFlagsOrEnv retrieves profiles from --profile flag or ATMOS_PROFILE env var.
 // This is a helper function to reduce nesting complexity in LoadConfig.
 // Returns profiles and source ("env" or "flag") for logging.
 //
 // NOTE: This function reads from Viper's global singleton, which has flag values synced
 // by syncGlobalFlagsToViper() in cmd/root.go PersistentPreRun before InitCliConfig is called.
+//
+// IMPORTANT: For commands with DisableFlagParsing=true (terraform, helmfile, packer),
+// Cobra never parses flags, so we fall back to parseProfilesFromOsArgs() to manually
+// parse the --profile flag from os.Args. This ensures profiles work for all commands.
 func getProfilesFromFlagsOrEnv() ([]string, string) {
 	globalViper := viper.GetViper()
 
 	// Check if profile is set in Viper (from either flag or env var).
 	if !globalViper.IsSet(profileKey) {
-		return nil, ""
+		return getProfilesFromFallbacks()
 	}
 
 	profiles := globalViper.GetStringSlice(profileKey)
