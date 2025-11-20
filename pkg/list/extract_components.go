@@ -62,51 +62,69 @@ func extractComponentType(stackName, componentType string, componentsMap map[str
 
 	var result []map[string]any
 	for componentName, componentData := range typeComponents {
-		comp := map[string]any{
-			"component": componentName,
-			"stack":     stackName,
-			"type":      componentType,
-		}
-
-		// Extract metadata if available.
-		if compMap, ok := componentData.(map[string]any); ok {
-			// Extract metadata fields.
-			if metadata, ok := compMap["metadata"].(map[string]any); ok {
-				comp["metadata"] = metadata
-
-				// Extract common metadata fields to top level for easy filtering.
-				if enabled, ok := metadata[metadataEnabled].(bool); ok {
-					comp[metadataEnabled] = enabled
-				} else {
-					comp[metadataEnabled] = true // Default to enabled.
-				}
-
-				if locked, ok := metadata[metadataLocked].(bool); ok {
-					comp[metadataLocked] = locked
-				} else {
-					comp[metadataLocked] = false // Default to unlocked.
-				}
-
-				if compType, ok := metadata["type"].(string); ok {
-					comp["component_type"] = compType // real/abstract.
-				} else {
-					comp["component_type"] = "real" // Default to real.
-				}
-			} else {
-				// No metadata - use defaults.
-				comp[metadataEnabled] = true
-				comp[metadataLocked] = false
-				comp["component_type"] = "real"
-			}
-
-			// Store full component data for template access.
-			comp["data"] = compMap
-		}
-
+		comp := buildBaseComponent(componentName, stackName, componentType)
+		enrichComponentWithMetadata(comp, componentData)
 		result = append(result, comp)
 	}
 
 	return result
+}
+
+// buildBaseComponent creates the base component map with required fields.
+func buildBaseComponent(componentName, stackName, componentType string) map[string]any {
+	return map[string]any{
+		"component": componentName,
+		"stack":     stackName,
+		"type":      componentType,
+	}
+}
+
+// enrichComponentWithMetadata adds metadata fields to a component map.
+func enrichComponentWithMetadata(comp map[string]any, componentData any) {
+	compMap, ok := componentData.(map[string]any)
+	if !ok {
+		return
+	}
+
+	metadata, hasMetadata := compMap["metadata"].(map[string]any)
+	if hasMetadata {
+		comp["metadata"] = metadata
+		extractMetadataFields(comp, metadata)
+	} else {
+		setDefaultMetadataFields(comp)
+	}
+
+	comp["data"] = compMap
+}
+
+// extractMetadataFields extracts common metadata fields to top level.
+func extractMetadataFields(comp map[string]any, metadata map[string]any) {
+	comp[metadataEnabled] = getBoolWithDefault(metadata, metadataEnabled, true)
+	comp[metadataLocked] = getBoolWithDefault(metadata, metadataLocked, false)
+	comp["component_type"] = getStringWithDefault(metadata, "type", "real")
+}
+
+// setDefaultMetadataFields sets default values for metadata fields.
+func setDefaultMetadataFields(comp map[string]any) {
+	comp[metadataEnabled] = true
+	comp[metadataLocked] = false
+	comp["component_type"] = "real"
+}
+
+// getBoolWithDefault safely extracts a bool value or returns the default.
+func getBoolWithDefault(m map[string]any, key string, defaultValue bool) bool {
+	if val, ok := m[key].(bool); ok {
+		return val
+	}
+	return defaultValue
+}
+
+// getStringWithDefault safely extracts a string value or returns the default.
+func getStringWithDefault(m map[string]any, key string, defaultValue string) string {
+	if val, ok := m[key].(string); ok {
+		return val
+	}
+	return defaultValue
 }
 
 // ExtractComponentsForStack extracts components for a specific stack only.
