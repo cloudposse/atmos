@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Note: parseProfilesFromArgs is already tested in load_profile_test.go
+
 func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -65,6 +67,16 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			osArgs:           []string{"atmos", "describe", "config"},
 			expectedProfiles: nil,
 			expectedSource:   "",
+		},
+		{
+			name: "environment variable takes precedence over CLI flag",
+			setupViper: func() {
+				v := viper.GetViper()
+				v.Set("profile", []string{"env-profile"})
+			},
+			osArgs:           []string{"atmos", "describe", "config", "--profile", "cli-profile"},
+			expectedProfiles: []string{"env-profile"},
+			expectedSource:   "env",
 		},
 	}
 
