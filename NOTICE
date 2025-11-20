@@ -411,7 +411,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/spiffe/go-spiffe/v2
     License: Apache-2.0
-    URL: https://github.com/spiffe/go-spiffe/blob/v2.5.0/v2/LICENSE
+    URL: https://github.com/spiffe/go-spiffe/blob/v2.5.0/LICENSE
 
   - github.com/xanzy/ssh-agent
     License: Apache-2.0
@@ -648,7 +648,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/googleapis/gax-go/v2
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/gax-go/blob/v2.15.0/v2/LICENSE
+    URL: https://github.com/googleapis/gax-go/blob/v2.15.0/LICENSE
 
   - github.com/gorilla/css/scanner
     License: BSD-3-Clause
