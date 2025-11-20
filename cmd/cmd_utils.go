@@ -600,33 +600,38 @@ func checkAtmosConfigE(opts ...AtmosValidateOption) error {
 	builder := errUtils.Build(errUtils.ErrMissingAtmosConfig).
 		WithExitCode(1)
 
-	// Add git repo warning hint if applicable.
-	if gitErr := verifyInsideGitRepoE(); gitErr != nil {
-		builder = builder.WithHint(gitErr.Error())
-	}
-
-	// Add configuration-specific hints.
+	// Build explanation with problem details.
+	var explanation strings.Builder
 	stacksDir := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 
+	// Add git repo warning to explanation if applicable.
+	if gitErr := verifyInsideGitRepoE(); gitErr != nil {
+		explanation.WriteString(gitErr.Error())
+		explanation.WriteString("\n\n")
+	}
+
 	if _, statErr := os.Stat(atmosConfig.CliConfigPath); os.IsNotExist(statErr) {
-		builder = builder.WithHint("The `atmos.yaml` CLI config file was not found.")
+		explanation.WriteString("The `atmos.yaml` CLI config file was not found.\n\n")
 	}
 
 	if _, statErr := os.Stat(stacksDir); os.IsNotExist(statErr) {
-		builder = builder.WithHintf("The default Atmos stacks directory is set to `%s`, but the directory does not exist in the current path.", stacksDir)
+		fmt.Fprintf(&explanation, "The default Atmos stacks directory `%s` does not exist in the current path.\n\n", stacksDir)
 	} else if atmosConfig.CliConfigPath != "" {
 		if _, statErr := os.Stat(atmosConfig.CliConfigPath); !os.IsNotExist(statErr) {
-			builder = builder.WithHintf("The `atmos.yaml` CLI config file specifies the directory for Atmos stacks as `%s`, but the directory does not exist.", stacksDir)
+			fmt.Fprintf(&explanation, "The `atmos.yaml` config file specifies stacks directory as `%s`, but it does not exist.\n\n", stacksDir)
 		}
 	}
 
-	// Add getting started hints.
+	if explanation.Len() > 0 {
+		builder = builder.WithExplanation(strings.TrimSpace(explanation.String()))
+	}
+
+	// Add actionable hints - what the user should DO.
 	builder = builder.
-		WithHint("To configure and start using Atmos, refer to:").
-		WithHint("- Atmos CLI Configuration: https://atmos.tools/cli/configuration").
-		WithHint("- Atmos Components: https://atmos.tools/core-concepts/components").
-		WithHint("- Atmos Stacks: https://atmos.tools/core-concepts/stacks").
-		WithHint("- Quick Start: https://atmos.tools/quick-start")
+		WithHint("Initialize your git repository if you haven't already: git init").
+		WithHint("Create atmos.yaml configuration file in your repository root").
+		WithHint("Set up your stacks directory structure").
+		WithHint("See documentation: https://atmos.tools/cli/configuration")
 
 	return builder.Err()
 }
