@@ -1,4 +1,4 @@
-package list
+package extract
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExtractStacks(t *testing.T) {
+func TestStacks(t *testing.T) {
 	stacksMap := map[string]any{
 		"plat-ue2-dev": map[string]any{
 			"components": map[string]any{
@@ -33,7 +33,7 @@ func TestExtractStacks(t *testing.T) {
 		},
 	}
 
-	stacks, err := ExtractStacks(stacksMap)
+	stacks, err := Stacks(stacksMap)
 	require.NoError(t, err)
 	assert.Len(t, stacks, 3)
 
@@ -52,18 +52,18 @@ func TestExtractStacks(t *testing.T) {
 	assert.True(t, stackNames["plat-uw2-staging"])
 }
 
-func TestExtractStacks_Nil(t *testing.T) {
-	_, err := ExtractStacks(nil)
+func TestStacks_Nil(t *testing.T) {
+	_, err := Stacks(nil)
 	assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
 }
 
-func TestExtractStacks_EmptyMap(t *testing.T) {
-	stacks, err := ExtractStacks(map[string]any{})
+func TestStacks_EmptyMap(t *testing.T) {
+	stacks, err := Stacks(map[string]any{})
 	require.NoError(t, err)
 	assert.Empty(t, stacks)
 }
 
-func TestExtractStacksForComponent(t *testing.T) {
+func TestStacksForComponent(t *testing.T) {
 	stacksMap := map[string]any{
 		"plat-ue2-dev": map[string]any{
 			"components": map[string]any{
@@ -90,7 +90,7 @@ func TestExtractStacksForComponent(t *testing.T) {
 		},
 	}
 
-	stacks, err := ExtractStacksForComponent("vpc", stacksMap)
+	stacks, err := StacksForComponent("vpc", stacksMap)
 	require.NoError(t, err)
 	assert.Len(t, stacks, 2)
 
@@ -102,7 +102,7 @@ func TestExtractStacksForComponent(t *testing.T) {
 	}
 }
 
-func TestExtractStacksForComponent_MultipleTypes(t *testing.T) {
+func TestStacksForComponent_MultipleTypes(t *testing.T) {
 	stacksMap := map[string]any{
 		"plat-ue2-dev": map[string]any{
 			"components": map[string]any{
@@ -123,7 +123,7 @@ func TestExtractStacksForComponent_MultipleTypes(t *testing.T) {
 		},
 	}
 
-	stacks, err := ExtractStacksForComponent("ingress", stacksMap)
+	stacks, err := StacksForComponent("ingress", stacksMap)
 	require.NoError(t, err)
 	assert.Len(t, stacks, 2)
 
@@ -133,7 +133,7 @@ func TestExtractStacksForComponent_MultipleTypes(t *testing.T) {
 	}
 }
 
-func TestExtractStacksForComponent_NotFound(t *testing.T) {
+func TestStacksForComponent_NotFound(t *testing.T) {
 	stacksMap := map[string]any{
 		"plat-ue2-dev": map[string]any{
 			"components": map[string]any{
@@ -144,36 +144,36 @@ func TestExtractStacksForComponent_NotFound(t *testing.T) {
 		},
 	}
 
-	_, err := ExtractStacksForComponent("nonexistent", stacksMap)
+	_, err := StacksForComponent("nonexistent", stacksMap)
 	assert.ErrorIs(t, err, errUtils.ErrNoStacksFound)
 }
 
-func TestExtractStacksForComponent_Nil(t *testing.T) {
-	_, err := ExtractStacksForComponent("vpc", nil)
+func TestStacksForComponent_Nil(t *testing.T) {
+	_, err := StacksForComponent("vpc", nil)
 	assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
 }
 
-func TestExtractStacksForComponent_InvalidData(t *testing.T) {
+func TestStacksForComponent_InvalidData(t *testing.T) {
 	stacksMap := map[string]any{
 		"test": "invalid",
 	}
 
-	_, err := ExtractStacksForComponent("vpc", stacksMap)
+	_, err := StacksForComponent("vpc", stacksMap)
 	assert.ErrorIs(t, err, errUtils.ErrNoStacksFound)
 }
 
-func TestExtractStacksForComponent_NoComponents(t *testing.T) {
+func TestStacksForComponent_NoComponents(t *testing.T) {
 	stacksMap := map[string]any{
 		"test": map[string]any{
 			"vars": map[string]any{},
 		},
 	}
 
-	_, err := ExtractStacksForComponent("vpc", stacksMap)
+	_, err := StacksForComponent("vpc", stacksMap)
 	assert.ErrorIs(t, err, errUtils.ErrNoStacksFound)
 }
 
-func TestExtractStacksForComponent_EmptyComponents(t *testing.T) {
+func TestStacksForComponent_EmptyComponents(t *testing.T) {
 	stacksMap := map[string]any{
 		"test": map[string]any{
 			"components": map[string]any{
@@ -183,6 +183,6 @@ func TestExtractStacksForComponent_EmptyComponents(t *testing.T) {
 		},
 	}
 
-	_, err := ExtractStacksForComponent("vpc", stacksMap)
+	_, err := StacksForComponent("vpc", stacksMap)
 	assert.ErrorIs(t, err, errUtils.ErrNoStacksFound)
 }

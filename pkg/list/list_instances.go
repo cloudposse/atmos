@@ -13,8 +13,10 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/importresolver"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -391,7 +393,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		}
 
 		// Resolve import trees using provenance system.
-		importTrees, err := ResolveImportTreeFromProvenance(stacksMap, &atmosConfig)
+		importTrees, err := importresolver.ResolveImportTreeFromProvenance(stacksMap, &atmosConfig)
 		if err != nil {
 			return fmt.Errorf("failed to resolve import trees: %w", err)
 		}
@@ -404,7 +406,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	}
 
 	// Extract instances into renderer-compatible format with metadata fields.
-	data := ExtractMetadata(instances)
+	data := extract.Metadata(instances)
 
 	// Get column configuration.
 	columns, err := getInstanceColumns(&atmosConfig, opts.ColumnsFlag)

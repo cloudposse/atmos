@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
@@ -125,7 +126,13 @@ func listVendorWithOptions(opts *VendorOptions) error {
 	}
 
 	// Get vendor configurations.
-	vendors, err := l.GetVendorConfigurations(&atmosConfig)
+	vendorInfos, err := l.GetVendorInfos(&atmosConfig)
+	if err != nil {
+		return err
+	}
+
+	// Convert to renderer-compatible format.
+	vendors, err := extract.Vendor(vendorInfos)
 	if err != nil {
 		return err
 	}

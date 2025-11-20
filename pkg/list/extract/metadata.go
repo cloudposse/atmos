@@ -1,4 +1,4 @@
-package list
+package extract
 
 import (
 	"github.com/charmbracelet/lipgloss"
@@ -40,7 +40,7 @@ type instanceMetadata struct {
 
 // ExtractMetadata transforms schema.Instance slice into []map[string]any for renderer.
 // Extracts metadata fields and makes them accessible to column templates.
-func ExtractMetadata(instances []schema.Instance) []map[string]any {
+func Metadata(instances []schema.Instance) []map[string]any {
 	result := make([]map[string]any, 0, len(instances))
 
 	for i := range instances {

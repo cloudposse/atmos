@@ -10,8 +10,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
-	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
@@ -129,7 +129,7 @@ func listWorkflowsWithOptions(cmd *cobra.Command, args []string, opts *Workflows
 	}
 
 	// Extract workflows into structured data.
-	workflows, err := l.ExtractWorkflows(&atmosConfig, opts.File)
+	workflows, err := extract.Workflows(&atmosConfig, opts.File)
 	if err != nil {
 		return err
 	}

@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
@@ -119,7 +120,7 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	}
 
 	// Extract metadata into renderer-compatible format.
-	data := ExtractMetadata(instances)
+	data := extract.Metadata(instances)
 
 	// Get column configuration.
 	columns, err := getMetadataColumns(&atmosConfig, opts.Columns)

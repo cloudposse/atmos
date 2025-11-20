@@ -1,4 +1,4 @@
-package list
+package extract
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExtractComponents(t *testing.T) {
+func TestComponents(t *testing.T) {
 	stacksMap := map[string]any{
 		"plat-ue2-dev": map[string]any{
 			"components": map[string]any{
@@ -51,7 +51,7 @@ func TestExtractComponents(t *testing.T) {
 		},
 	}
 
-	components, err := ExtractComponents(stacksMap)
+	components, err := Components(stacksMap)
 	require.NoError(t, err)
 	assert.Len(t, components, 4) // vpc, eks, ingress, vpc
 
@@ -66,40 +66,40 @@ func TestExtractComponents(t *testing.T) {
 	}
 }
 
-func TestExtractComponents_Nil(t *testing.T) {
-	_, err := ExtractComponents(nil)
+func TestComponents_Nil(t *testing.T) {
+	_, err := Components(nil)
 	assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
 }
 
-func TestExtractComponents_EmptyMap(t *testing.T) {
-	components, err := ExtractComponents(map[string]any{})
+func TestComponents_EmptyMap(t *testing.T) {
+	components, err := Components(map[string]any{})
 	require.NoError(t, err)
 	assert.Empty(t, components)
 }
 
-func TestExtractComponents_InvalidStack(t *testing.T) {
+func TestComponents_InvalidStack(t *testing.T) {
 	stacksMap := map[string]any{
 		"invalid": "not a map",
 	}
 
-	components, err := ExtractComponents(stacksMap)
+	components, err := Components(stacksMap)
 	require.NoError(t, err)
 	assert.Empty(t, components) // Skips invalid stacks.
 }
 
-func TestExtractComponents_NoComponents(t *testing.T) {
+func TestComponents_NoComponents(t *testing.T) {
 	stacksMap := map[string]any{
 		"plat-ue2-dev": map[string]any{
 			"vars": map[string]any{},
 		},
 	}
 
-	components, err := ExtractComponents(stacksMap)
+	components, err := Components(stacksMap)
 	require.NoError(t, err)
 	assert.Empty(t, components)
 }
 
-func TestExtractComponents_DefaultValues(t *testing.T) {
+func TestComponents_DefaultValues(t *testing.T) {
 	stacksMap := map[string]any{
 		"test-stack": map[string]any{
 			"components": map[string]any{
@@ -110,7 +110,7 @@ func TestExtractComponents_DefaultValues(t *testing.T) {
 		},
 	}
 
-	components, err := ExtractComponents(stacksMap)
+	components, err := Components(stacksMap)
 	require.NoError(t, err)
 	require.Len(t, components, 1)
 
@@ -123,7 +123,7 @@ func TestExtractComponents_DefaultValues(t *testing.T) {
 	assert.Equal(t, "real", comp["component_type"])
 }
 
-func TestExtractComponentsForStack(t *testing.T) {
+func TestComponentsForStack(t *testing.T) {
 	stacksMap := map[string]any{
 		"plat-ue2-dev": map[string]any{
 			"components": map[string]any{
@@ -142,7 +142,7 @@ func TestExtractComponentsForStack(t *testing.T) {
 		},
 	}
 
-	components, err := ExtractComponentsForStack("plat-ue2-dev", stacksMap)
+	components, err := ComponentsForStack("plat-ue2-dev", stacksMap)
 	require.NoError(t, err)
 	assert.Len(t, components, 2)
 
@@ -152,36 +152,36 @@ func TestExtractComponentsForStack(t *testing.T) {
 	}
 }
 
-func TestExtractComponentsForStack_NotFound(t *testing.T) {
+func TestComponentsForStack_NotFound(t *testing.T) {
 	stacksMap := map[string]any{
 		"plat-ue2-dev": map[string]any{},
 	}
 
-	_, err := ExtractComponentsForStack("nonexistent", stacksMap)
+	_, err := ComponentsForStack("nonexistent", stacksMap)
 	assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
 }
 
-func TestExtractComponentsForStack_InvalidData(t *testing.T) {
+func TestComponentsForStack_InvalidData(t *testing.T) {
 	stacksMap := map[string]any{
 		"test": "invalid",
 	}
 
-	_, err := ExtractComponentsForStack("test", stacksMap)
+	_, err := ComponentsForStack("test", stacksMap)
 	assert.ErrorIs(t, err, errUtils.ErrParseStacks)
 }
 
-func TestExtractComponentsForStack_NoComponents(t *testing.T) {
+func TestComponentsForStack_NoComponents(t *testing.T) {
 	stacksMap := map[string]any{
 		"test": map[string]any{
 			"vars": map[string]any{},
 		},
 	}
 
-	_, err := ExtractComponentsForStack("test", stacksMap)
+	_, err := ComponentsForStack("test", stacksMap)
 	assert.ErrorIs(t, err, errUtils.ErrParseComponents)
 }
 
-func TestExtractComponentsForStack_EmptyComponents(t *testing.T) {
+func TestComponentsForStack_EmptyComponents(t *testing.T) {
 	stacksMap := map[string]any{
 		"test": map[string]any{
 			"components": map[string]any{
@@ -191,7 +191,7 @@ func TestExtractComponentsForStack_EmptyComponents(t *testing.T) {
 		},
 	}
 
-	_, err := ExtractComponentsForStack("test", stacksMap)
+	_, err := ComponentsForStack("test", stacksMap)
 	assert.ErrorIs(t, err, errUtils.ErrNoComponentsFound)
 }
 

@@ -1,4 +1,4 @@
-package list
+package extract
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestExtractMetadata(t *testing.T) {
+func TestMetadata(t *testing.T) {
 	testCases := []struct {
 		name      string
 		instances []schema.Instance
@@ -207,7 +207,7 @@ func TestExtractMetadata(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := ExtractMetadata(tc.instances)
+			result := Metadata(tc.instances)
 
 			// Check length matches.
 			assert.Len(t, result, len(tc.expected))
@@ -231,7 +231,7 @@ func TestExtractMetadata(t *testing.T) {
 	}
 }
 
-func TestExtractMetadata_IncludesVarsSettingsEnv(t *testing.T) {
+func TestMetadata_IncludesVarsSettingsEnv(t *testing.T) {
 	instances := []schema.Instance{
 		{
 			Component:     "vpc",
@@ -261,7 +261,7 @@ func TestExtractMetadata_IncludesVarsSettingsEnv(t *testing.T) {
 		},
 	}
 
-	result := ExtractMetadata(instances)
+	result := Metadata(instances)
 
 	assert.Len(t, result, 1)
 

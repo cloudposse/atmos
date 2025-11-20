@@ -1,4 +1,4 @@
-package list
+package extract
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 
 // ExtractStacks transforms stacksMap into structured stack data.
 // Returns []map[string]any suitable for the renderer pipeline.
-func ExtractStacks(stacksMap map[string]any) ([]map[string]any, error) {
+func Stacks(stacksMap map[string]any) ([]map[string]any, error) {
 	if stacksMap == nil {
 		return nil, errUtils.ErrStackNotFound
 	}
@@ -27,7 +27,7 @@ func ExtractStacks(stacksMap map[string]any) ([]map[string]any, error) {
 }
 
 // ExtractStacksForComponent extracts stacks that contain a specific component.
-func ExtractStacksForComponent(componentName string, stacksMap map[string]any) ([]map[string]any, error) {
+func StacksForComponent(componentName string, stacksMap map[string]any) ([]map[string]any, error) {
 	if stacksMap == nil {
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrStackNotFound, componentName)
 	}

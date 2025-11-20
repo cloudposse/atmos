@@ -1,4 +1,4 @@
-package list
+package extract
 
 import (
 	"errors"
@@ -15,7 +15,7 @@ import (
 
 // ExtractWorkflows transforms workflow manifests into structured data.
 // Returns []map[string]any suitable for the renderer pipeline.
-func ExtractWorkflows(atmosConfig *schema.AtmosConfiguration, fileFilter string) ([]map[string]any, error) {
+func Workflows(atmosConfig *schema.AtmosConfiguration, fileFilter string) ([]map[string]any, error) {
 	var workflows []map[string]any
 
 	// If a specific file is provided, validate and load it.

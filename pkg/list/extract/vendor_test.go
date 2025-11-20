@@ -1,4 +1,4 @@
-package list
+package extract
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExtractVendor(t *testing.T) {
+func TestVendor(t *testing.T) {
 	vendorInfos := []VendorInfo{
 		{
 			Component: "vpc/v1",
@@ -23,7 +23,7 @@ func TestExtractVendor(t *testing.T) {
 		},
 	}
 
-	vendors, err := ExtractVendor(vendorInfos)
+	vendors, err := Vendor(vendorInfos)
 	require.NoError(t, err)
 	assert.Len(t, vendors, 2)
 
@@ -59,13 +59,13 @@ func TestExtractVendor(t *testing.T) {
 	assert.Equal(t, "components/terraform/eks/cluster", eks["folder"])
 }
 
-func TestExtractVendor_EmptyList(t *testing.T) {
-	vendors, err := ExtractVendor([]VendorInfo{})
+func TestVendor_EmptyList(t *testing.T) {
+	vendors, err := Vendor([]VendorInfo{})
 	require.NoError(t, err)
 	assert.Empty(t, vendors)
 }
 
-func TestExtractVendor_SingleVendor(t *testing.T) {
+func TestVendor_SingleVendor(t *testing.T) {
 	vendorInfos := []VendorInfo{
 		{
 			Component: "rds",
@@ -75,7 +75,7 @@ func TestExtractVendor_SingleVendor(t *testing.T) {
 		},
 	}
 
-	vendors, err := ExtractVendor(vendorInfos)
+	vendors, err := Vendor(vendorInfos)
 	require.NoError(t, err)
 	assert.Len(t, vendors, 1)
 
@@ -84,7 +84,7 @@ func TestExtractVendor_SingleVendor(t *testing.T) {
 	assert.Equal(t, VendorTypeVendor, vendor["type"])
 }
 
-func TestExtractVendor_ComponentManifests(t *testing.T) {
+func TestVendor_ComponentManifests(t *testing.T) {
 	vendorInfos := []VendorInfo{
 		{
 			Component: "vpc",
@@ -100,7 +100,7 @@ func TestExtractVendor_ComponentManifests(t *testing.T) {
 		},
 	}
 
-	vendors, err := ExtractVendor(vendorInfos)
+	vendors, err := Vendor(vendorInfos)
 	require.NoError(t, err)
 	assert.Len(t, vendors, 2)
 
@@ -110,7 +110,7 @@ func TestExtractVendor_ComponentManifests(t *testing.T) {
 	}
 }
 
-func TestExtractVendor_VendorManifests(t *testing.T) {
+func TestVendor_VendorManifests(t *testing.T) {
 	vendorInfos := []VendorInfo{
 		{
 			Component: "vpc",
@@ -126,7 +126,7 @@ func TestExtractVendor_VendorManifests(t *testing.T) {
 		},
 	}
 
-	vendors, err := ExtractVendor(vendorInfos)
+	vendors, err := Vendor(vendorInfos)
 	require.NoError(t, err)
 	assert.Len(t, vendors, 2)
 
@@ -136,7 +136,7 @@ func TestExtractVendor_VendorManifests(t *testing.T) {
 	}
 }
 
-func TestExtractVendor_MixedTypes(t *testing.T) {
+func TestVendor_MixedTypes(t *testing.T) {
 	vendorInfos := []VendorInfo{
 		{
 			Component: "vpc",
@@ -158,7 +158,7 @@ func TestExtractVendor_MixedTypes(t *testing.T) {
 		},
 	}
 
-	vendors, err := ExtractVendor(vendorInfos)
+	vendors, err := Vendor(vendorInfos)
 	require.NoError(t, err)
 	assert.Len(t, vendors, 3)
 

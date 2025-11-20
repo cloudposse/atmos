@@ -1,4 +1,4 @@
-package list
+package extract
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestExtractInstances(t *testing.T) {
+func TestInstances(t *testing.T) {
 	testCases := []struct {
 		name      string
 		instances []schema.Instance
@@ -117,7 +117,7 @@ func TestExtractInstances(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := ExtractInstances(tc.instances)
+			result := Instances(tc.instances)
 			assert.Equal(t, tc.expected, result)
 		})
 	}

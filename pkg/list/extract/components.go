@@ -1,4 +1,4 @@
-package list
+package extract
 
 import (
 	"fmt"
@@ -24,7 +24,7 @@ type ComponentData struct {
 
 // ExtractComponents transforms stacksMap into structured component data.
 // Returns []map[string]any suitable for the renderer pipeline.
-func ExtractComponents(stacksMap map[string]any) ([]map[string]any, error) {
+func Components(stacksMap map[string]any) ([]map[string]any, error) {
 	if stacksMap == nil {
 		return nil, errUtils.ErrStackNotFound
 	}
@@ -128,7 +128,7 @@ func getStringWithDefault(m map[string]any, key string, defaultValue string) str
 }
 
 // ExtractComponentsForStack extracts components for a specific stack only.
-func ExtractComponentsForStack(stackName string, stacksMap map[string]any) ([]map[string]any, error) {
+func ComponentsForStack(stackName string, stacksMap map[string]any) ([]map[string]any, error) {
 	stackData, ok := stacksMap[stackName]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrStackNotFound, stackName)

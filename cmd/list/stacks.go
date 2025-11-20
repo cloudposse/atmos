@@ -11,10 +11,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
-	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/importresolver"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/list/tree"
@@ -139,12 +140,12 @@ func listStacksWithOptions(opts *StacksOptions) error {
 	// Extract stacks into structured data.
 	var stacks []map[string]any
 	if opts.Component != "" {
-		stacks, err = l.ExtractStacksForComponent(opts.Component, stacksMap)
+		stacks, err = extract.StacksForComponent(opts.Component, stacksMap)
 		if err != nil {
 			return err
 		}
 	} else {
-		stacks, err = l.ExtractStacks(stacksMap)
+		stacks, err = extract.Stacks(stacksMap)
 		if err != nil {
 			return err
 		}
@@ -173,7 +174,7 @@ func listStacksWithOptions(opts *StacksOptions) error {
 		}
 
 		// Resolve import trees using provenance system.
-		importTreesWithComponents, err := l.ResolveImportTreeFromProvenance(stacksMap, &atmosConfig)
+		importTreesWithComponents, err := importresolver.ResolveImportTreeFromProvenance(stacksMap, &atmosConfig)
 		if err != nil {
 			return fmt.Errorf("error resolving import tree from provenance: %w", err)
 		}

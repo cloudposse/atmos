@@ -11,8 +11,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
-	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
@@ -151,7 +151,7 @@ func listComponentsWithOptions(opts *ComponentsOptions) error {
 	}
 
 	// Extract components into structured data.
-	components, err := l.ExtractComponents(stacksMap)
+	components, err := extract.Components(stacksMap)
 	if err != nil {
 		return err
 	}
