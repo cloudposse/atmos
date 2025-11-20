@@ -689,3 +689,88 @@ func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {
 		})
 	}
 }
+
+func TestProcessCommandLineArgs_ProfileFromEnvironmentVariable(t *testing.T) {
+	tests := []struct {
+		name           string
+		envValue       string
+		expectedResult []string
+	}{
+		{
+			name:           "single profile from environment variable",
+			envValue:       "production",
+			expectedResult: []string{"production"},
+		},
+		{
+			name:           "multiple profiles from environment variable",
+			envValue:       "dev,staging,prod",
+			expectedResult: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:           "profiles with empty entries",
+			envValue:       "dev,,prod",
+			expectedResult: []string{"dev", "prod"},
+		},
+		{
+			name:           "profiles with spaces",
+			envValue:       "dev, staging , prod",
+			expectedResult: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:           "profiles with leading/trailing commas",
+			envValue:       ",dev,staging,",
+			expectedResult: []string{"dev", "staging"},
+		},
+		{
+			name:           "only whitespace and commas",
+			envValue:       " , , ",
+			expectedResult: []string{},
+		},
+		{
+			name:           "empty environment variable",
+			envValue:       "",
+			expectedResult: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set environment variable.
+			if tt.envValue != "" {
+				t.Setenv("ATMOS_PROFILE", tt.envValue)
+			}
+
+			// Create test command with global flags (including profile flag).
+			cmd := newTestCommandWithGlobalFlags("test")
+			cmd.Flags().String("stack", "", "stack name")
+
+			// Process with no --profile flag in args (should use env var).
+			result, err := ProcessCommandLineArgs("terraform", cmd, []string{}, []string{})
+
+			// Verify results.
+			require.NoError(t, err, "ProcessCommandLineArgs should not return error")
+			assert.Equal(t, tt.expectedResult, result.ProfilesFromArg, "Profiles should match expected value")
+		})
+	}
+}
+
+func TestProcessCommandLineArgs_ProfileFlagTakesPrecedenceOverEnv(t *testing.T) {
+	// Set environment variable.
+	t.Setenv("ATMOS_PROFILE", "env-profile")
+
+	// Create test command with global flags.
+	cmd := newTestCommandWithGlobalFlags("test")
+	cmd.Flags().String("stack", "", "stack name")
+
+	// Set profile flag directly (simulating --profile flag).
+	// Profile is a persistent flag, so use PersistentFlags().
+	err := cmd.PersistentFlags().Set("profile", "flag-profile")
+	require.NoError(t, err)
+
+	// Process command line args.
+	result, err := ProcessCommandLineArgs("terraform", cmd, []string{}, []string{})
+
+	// Verify that flag takes precedence.
+	require.NoError(t, err)
+	assert.Equal(t, []string{"flag-profile"}, result.ProfilesFromArg, "Flag should take precedence over env var")
+}
