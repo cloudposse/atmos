@@ -14,22 +14,22 @@ func TestParseProfilesFromArgs(t *testing.T) {
 	}{
 		{
 			name:     "--profile value syntax",
-			args:     []string{"atmos", "describe", "config", "--profile", "managers"},
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag, "managers"},
 			expected: []string{"managers"},
 		},
 		{
 			name:     "--profile=value syntax",
-			args:     []string{"atmos", "describe", "config", "--profile=managers"},
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=managers"},
 			expected: []string{"managers"},
 		},
 		{
 			name:     "comma-separated values",
-			args:     []string{"atmos", "describe", "config", "--profile=dev,staging,prod"},
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=dev,staging,prod"},
 			expected: []string{"dev", "staging", "prod"},
 		},
 		{
 			name:     "multiple --profile flags",
-			args:     []string{"atmos", "describe", "config", "--profile", "dev", "--profile", "staging"},
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag, "dev", AtmosProfileFlag, "staging"},
 			expected: []string{"dev", "staging"},
 		},
 		{
@@ -39,23 +39,58 @@ func TestParseProfilesFromArgs(t *testing.T) {
 		},
 		{
 			name:     "--profile at end without value",
-			args:     []string{"atmos", "describe", "config", "--profile"},
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag},
 			expected: nil,
 		},
 		{
 			name:     "comma-separated with spaces",
-			args:     []string{"atmos", "describe", "config", "--profile=dev, staging , prod"},
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=dev, staging , prod"},
 			expected: []string{"dev", "staging", "prod"},
 		},
 		{
+			name:     "comma-separated with --profile value syntax",
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag, "dev,staging"},
+			expected: []string{"dev", "staging"},
+		},
+		{
 			name:     "mixed syntax",
-			args:     []string{"atmos", "describe", "config", "--profile", "dev", "--profile=staging,prod"},
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag, "dev", AtmosProfileFlag + "=staging,prod"},
 			expected: []string{"dev", "staging", "prod"},
 		},
 		{
 			name:     "empty value in comma list",
-			args:     []string{"atmos", "describe", "config", "--profile=dev,,prod"},
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=dev,,prod"},
 			expected: []string{"dev", "prod"},
+		},
+		{
+			name:     "only whitespace in profile value",
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=   "},
+			expected: nil,
+		},
+		{
+			name:     "leading and trailing commas",
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=,dev,staging,"},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "multiple consecutive commas",
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=dev,,,staging"},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "profile value with only commas",
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=,,,"},
+			expected: nil,
+		},
+		{
+			name:     "mixed whitespace and empty values",
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=dev,  , , staging"},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "profile flag with equals but no value",
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "="},
+			expected: nil,
 		},
 	}
 

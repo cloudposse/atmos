@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Note: parseProfilesFromArgs is already tested in load_profile_test.go
+
 func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -21,6 +23,7 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			name: "profiles from environment variable",
 			setupViper: func() {
 				v := viper.GetViper()
+				// Simulate what happens in production: flags package parses ATMOS_PROFILE and stores in Viper
 				v.Set("profile", []string{"env-profile1", "env-profile2"})
 			},
 			setupEnv: func(t *testing.T) {
@@ -37,7 +40,7 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 				v.Set("profile", []string{"cli-profile"})
 			},
 			setupEnv:         nil, // Don't set ATMOS_PROFILE
-			osArgs:           []string{"atmos", "describe", "config", "--profile", "cli-profile"},
+			osArgs:           []string{"atmos", "describe", "config", AtmosProfileFlag, "cli-profile"},
 			expectedProfiles: []string{"cli-profile"},
 			expectedSource:   "flag",
 		},
@@ -48,7 +51,7 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 				v.Set("profile", []string{"cli-profile"})
 			},
 			setupEnv:         nil, // Don't set ATMOS_PROFILE
-			osArgs:           []string{"atmos", "describe", "config", "--profile=cli-profile"},
+			osArgs:           []string{"atmos", "describe", "config", AtmosProfileFlag + "=cli-profile"},
 			expectedProfiles: []string{"cli-profile"},
 			expectedSource:   "flag",
 		},
@@ -78,7 +81,11 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup
+			// Reset Viper state to prevent test pollution
+			viper.Reset()
+			t.Cleanup(viper.Reset)
+
+			// Setup Viper (for tests that still need it)
 			tt.setupViper()
 
 			// Save original os.Args and restore after test
