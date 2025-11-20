@@ -12,7 +12,7 @@ import (
 var atmosConfigPtr *schema.AtmosConfiguration
 
 // SetAtmosConfig sets the Atmos configuration for the devcontainer command.
-// This is called from root.go after atmosConfig is initialized.
+// SetAtmosConfig sets the package-level pointer to the provided AtmosConfiguration so devcontainer commands and providers can access the initialized configuration. It is intended to be called once during application initialization (for example, from root.go) after the Atmos configuration has been created.
 func SetAtmosConfig(config *schema.AtmosConfiguration) {
 	atmosConfigPtr = config
 }
@@ -29,6 +29,9 @@ and Podman runtimes with automatic detection.`,
 	Example: markdown.DevcontainerUsageMarkdown,
 }
 
+// init registers the devcontainer command provider with the internal registry so the
+// devcontainer command is available when this package is initialized (via blank import
+// in cmd/root.go).
 func init() {
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.

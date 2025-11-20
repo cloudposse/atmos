@@ -93,7 +93,8 @@ need to start fresh.`,
 
 // parseRebuildOptions parses command flags into RebuildOptions.
 //
-//nolint:unparam // args parameter kept for consistency with other parse functions
+// parseRebuildOptions constructs a RebuildOptions populated from flags and environment values read via viper.
+// The cmd and args parameters are unused and retained for API consistency.
 func parseRebuildOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*RebuildOptions, error) {
 	return &RebuildOptions{
 		Instance: v.GetString("instance"),
@@ -103,6 +104,8 @@ func parseRebuildOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*Re
 	}, nil
 }
 
+// init registers the rebuild subcommand and its flags, and wires the flag parser to the command.
+// It configures the rebuildParser with instance, attach, no-pull, and identity flags (plus their environment variable mappings) and adds rebuildCmd to devcontainerCmd.
 func init() {
 	// Create parser with rebuild-specific flags using functional options.
 	rebuildParser = flags.NewStandardParser(

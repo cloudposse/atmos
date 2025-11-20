@@ -92,7 +92,9 @@ Use --identity to launch the container with Atmos-managed credentials.`,
 
 // parseStartOptions parses command flags into StartOptions.
 //
-//nolint:unparam // args parameter kept for consistency with other parse functions
+// parseStartOptions builds a StartOptions value by reading the relevant flag values from v.
+// The args parameter is unused and kept for consistency with other parse* functions.
+// It returns the populated StartOptions and a nil error.
 func parseStartOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*StartOptions, error) {
 	return &StartOptions{
 		Instance: v.GetString("instance"),
@@ -101,6 +103,9 @@ func parseStartOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*Star
 	}, nil
 }
 
+// init initializes the start subcommand by creating its flag parser (instance, attach, identity),
+// binding environment variables, registering the flags with the start command, and adding the
+// start command to the devcontainer command tree.
 func init() {
 	// Create parser with start-specific flags using functional options.
 	startParser = flags.NewStandardParser(

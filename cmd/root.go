@@ -75,7 +75,9 @@ var chdirProcessed bool
 
 // parseChdirFromArgs manually parses --chdir or -C flag from os.Args.
 // This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
-// where Cobra doesn't parse flags before PersistentPreRun is called.
+// parseChdirFromArgs scans the process arguments for a chdir flag and returns the specified path if present.
+// It recognizes `--chdir=value`, `--chdir value`, `-C=value`, `-Cvalue`, and `-C value` forms.
+// If no chdir flag is found, it returns an empty string.
 func parseChdirFromArgs() string {
 	args := os.Args
 	for i := 0; i < len(args); i++ {
@@ -108,7 +110,12 @@ func parseChdirFromArgs() string {
 
 // processEarlyChdirFlag processes --chdir flag before RootCmd is fully initialized.
 // This is called in Execute() before loading atmos.yaml to ensure the config is loaded
-// from the correct directory. It uses manual parsing since RootCmd isn't ready yet.
+// processEarlyChdirFlag changes the current working directory based on the first
+// occurrence of the `--chdir`/`-C` flag (parsed from os.Args) or the ATMOS_CHDIR
+// environment variable, expanding `~`, resolving to an absolute path, and
+// validating that the target exists and is a directory.
+// It returns nil on success or an error describing why the directory could not
+// be resolved or changed.
 func processEarlyChdirFlag() error {
 	// If chdir already processed, skip (avoid double-processing).
 	if chdirProcessed {
@@ -169,7 +176,15 @@ func processEarlyChdirFlag() error {
 // changing the working directory before any other operations.
 // Precedence: --chdir flag > ATMOS_CHDIR environment variable.
 // Note: This is also called from PersistentPreRun, but will be a no-op if
-// processEarlyChdirFlag() already processed the chdir in Execute().
+// processChdirFlag changes the current working directory when a chdir target is provided
+// via the --chdir flag (or by parsing os.Args when flag parsing is disabled) or the
+// ATMOS_CHDIR environment variable, and marks the change as processed to avoid
+// double-processing.
+//
+// It expands a leading tilde, resolves the path to an absolute location, verifies the
+// path exists and is a directory, then calls os.Chdir. If the chdir has already been
+// handled, the function returns immediately. It returns an error when the path cannot
+// be resolved, does not exist, is not a directory, or when changing directories fails.
 func processChdirFlag(cmd *cobra.Command) error {
 	// If chdir already processed in Execute(), skip to avoid double-processing.
 	if chdirProcessed {
@@ -713,7 +728,12 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the RootCmd.
+// Execute runs the root CLI command and performs one-time global startup tasks.
+// It processes a leading --chdir before loading configuration, loads and wires the CLI
+// configuration to subsystems, initializes markdown rendering and logging, registers
+// custom commands and aliases (unless running the version command), executes the root
+// command, captures telemetry, and handles unknown-command errors by showing usage.
+// This function is invoked once from main.main.
 func Execute() error {
 	// CRITICAL: Process --chdir flag BEFORE loading config.
 	// This ensures atmos.yaml is loaded from the correct directory when using --chdir.
@@ -884,6 +904,8 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	return heatmap.StartBubbleTeaUI(sigCtx, heatModel, mode)
 }
 
+// init initializes CLI wiring for the package: it registers built-in commands, adds template helpers, registers and binds global persistent flags and related environment variables, adjusts the version flag default, sets the custom usage template, and configures Cobra behavior for the root command.
+// This prepares global flag precedence, environment bindings (color, mask, verbose, GitHub token), and other root-level CLI integrations before command execution.
 func init() {
 	// Register built-in commands from the registry.
 	// This must happen BEFORE custom commands are processed in Execute().

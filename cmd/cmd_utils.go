@@ -58,7 +58,12 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	}
 }
 
-// processCustomCommands processes and executes custom commands.
+// processCustomCommands registers custom commands defined in the Atmos configuration onto the given parent Cobra command.
+//
+// It reads the provided command definitions, reuses any existing top-level commands when appropriate, and adds new Cobra
+// commands with their descriptions, persistent flags (including an `--identity` override), required-flag enforcement, and
+// nested subcommands. The function mutates parentCommand by attaching the created commands and returns an error if any
+// configuration cloning, flag setup, or recursive processing fails.
 func processCustomCommands(
 	atmosConfig schema.AtmosConfiguration,
 	commands []schema.Command,
@@ -142,7 +147,8 @@ func processCustomCommands(
 }
 
 // filterChdirArgs removes --chdir and -C flags from args.
-// This is used when executing aliased commands to prevent double-processing of chdir.
+// filterChdirArgs returns a copy of args with any chdir flags and their values removed.
+// It removes `--chdir`, `--chdir=<value>`, `-C`, `-C=<value>`, and concatenated `-C<value>` forms, preserving the order of all other arguments.
 func filterChdirArgs(args []string) []string {
 	filtered := make([]string, 0, len(args))
 	skipNext := false
@@ -173,7 +179,11 @@ func filterChdirArgs(args []string) []string {
 	return filtered
 }
 
-// processCommandAliases processes the command aliases.
+// processCommandAliases registers command aliases from the provided configuration as subcommands of
+// parentCommand. When topLevel is true, aliases that would shadow existing top-level commands are
+// skipped. Each created alias executes the target command in a separate process using the current
+// executable, strips any --chdir / -C flags from the forwarded arguments, and removes ATMOS_CHDIR
+// from the child environment to avoid reapplying the parent's working-directory change.
 func processCommandAliases(
 	atmosConfig schema.AtmosConfiguration,
 	aliases schema.CommandAliases,

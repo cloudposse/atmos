@@ -20,7 +20,7 @@ type ErrorBuilder struct {
 
 // Build creates a new ErrorBuilder from a base error.
 // If the error is a sentinel error (simple errors.New() with no wrapping),
-// it will be automatically marked as a sentinel for errors.Is() checks.
+// If the provided error is non-nil and has no wrapped cause, it is recorded as a sentinel so it will be considered by errors.Is checks.
 func Build(err error) *ErrorBuilder {
 	builder := &ErrorBuilder{err: err}
 

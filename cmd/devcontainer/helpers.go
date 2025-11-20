@@ -19,7 +19,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// listAvailableDevcontainers returns a sorted list of all available devcontainer names.
+// listAvailableDevcontainers returns a sorted list of devcontainer names from the provided AtmosConfiguration.
+// If atmosConfig is nil or its Devcontainer field is nil, it returns an error wrapped with ErrDevcontainerNotFound.
 func listAvailableDevcontainers(atmosConfig *schema.AtmosConfiguration) ([]string, error) {
 	if atmosConfig == nil || atmosConfig.Devcontainer == nil {
 		return nil, fmt.Errorf("%w: no devcontainers configured", errUtils.ErrDevcontainerNotFound)
@@ -34,7 +35,9 @@ func listAvailableDevcontainers(atmosConfig *schema.AtmosConfiguration) ([]strin
 	return names, nil
 }
 
-// promptForDevcontainer prompts the user to select a devcontainer from the available list.
+// promptForDevcontainer prompts the user to select a devcontainer from the provided list.
+// Returns the selected devcontainer name.
+// Returns an error if the devcontainer list is empty or if the interactive prompt fails.
 func promptForDevcontainer(message string, devcontainers []string) (string, error) {
 	if len(devcontainers) == 0 {
 		return "", fmt.Errorf("%w: no devcontainers available", errUtils.ErrDevcontainerNotFound)
@@ -58,7 +61,20 @@ func promptForDevcontainer(message string, devcontainers []string) (string, erro
 }
 
 // getDevcontainerName gets the devcontainer name from args or prompts the user.
-// If no name is provided in args and running interactively, prompts the user to select one.
+// getDevcontainerName obtains a devcontainer name from the provided arguments or, when none is given,
+// prompts the user to select one in an interactive terminal.
+//
+// If the first element of args is non-empty, that value is returned. If no name is provided and the
+// process is not running in an interactive terminal, an error is returned indicating the name is
+// required. When running interactively, the function loads the Atmos configuration to discover
+// available devcontainers, prompts the user to choose one, prints the chosen name to stderr, and
+// returns it.
+//
+// args is the command-line arguments slice; its first element, if present and non-empty, is used as
+// the devcontainer name.
+//
+// Returns the selected devcontainer name, or an error if a name could not be determined or on any
+// failure during configuration loading or prompting.
 func getDevcontainerName(args []string) (string, error) {
 	// If name provided in args, use it.
 	if len(args) > 0 && args[0] != "" {
@@ -121,13 +137,15 @@ func devcontainerNameCompletion(cmd *cobra.Command, args []string, toComplete st
 	return devcontainers, cobra.ShellCompDirectiveNoFileComp
 }
 
-// isAuthConfigured checks if authentication is configured in atmos.yaml.
+// isAuthConfigured reports whether authentication is configured for the provided AuthConfig.
+// It returns true if authConfig is non-nil and contains at least one identity, false otherwise.
 func isAuthConfigured(authConfig *schema.AuthConfig) bool {
 	return authConfig != nil && len(authConfig.Identities) > 0
 }
 
 // createUnauthenticatedAuthManager creates an auth manager without authenticating.
-// This is used to access GetDefaultIdentity() for interactive selection.
+// createUnauthenticatedAuthManager creates an AuthManager initialized with an empty AuthContext so callers can access identities (for example, GetDefaultIdentity) without performing authentication.
+// It returns the configured AuthManager, or an error if the manager could not be initialized.
 func createUnauthenticatedAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
 	authStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{},
@@ -147,7 +165,8 @@ func createUnauthenticatedAuthManager(authConfig *schema.AuthConfig) (auth.AuthM
 }
 
 // initCommandWithFlags initializes a command's flags using StandardParser.
-// This helper reduces code duplication across devcontainer subcommands.
+// initCommandWithFlags registers command flags with the provided parser and binds them to Viper.
+// It panics if binding the parser to Viper fails.
 func initCommandWithFlags(cmd *cobra.Command, parser *flags.StandardParser) {
 	// Register flags using the standard RegisterFlags method.
 	parser.RegisterFlags(cmd)

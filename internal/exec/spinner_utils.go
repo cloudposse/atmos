@@ -44,7 +44,10 @@ func (m modelSpinner) View() string {
 	return fmt.Sprintf("%s%s %s", terminal.EscCarriageReturn, m.spinner.View(), m.message)
 }
 
-// NewSpinner initializes a spinner and returns a pointer to a tea.Program.
+// NewSpinner creates a tea.Program that displays an animated spinner with the provided message.
+// It applies the current UI spinner style. If stdout lacks TTY support, the program is configured
+// without a renderer and without input; a debug message is logged and the message is written to stderr
+// as a fallback.
 func NewSpinner(message string) *tea.Program {
 	s := spinner.New()
 	s.Style = theme.GetCurrentStyles().Spinner

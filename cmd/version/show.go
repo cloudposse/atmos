@@ -85,7 +85,7 @@ func fetchRelease(client GitHubClient, versionArg string) (*github.RepositoryRel
 	return client.GetRelease("cloudposse", "atmos", versionArg)
 }
 
-// fetchReleaseWithSpinner fetches a release with a spinner if TTY is available.
+// program fails to run, if the spinner returns a nil or unexpected model, or if the spinner-run model reports an internal error.
 func fetchReleaseWithSpinner(client GitHubClient, versionArg string) (*github.RepositoryRelease, error) {
 	defer perf.Track(nil, "version.fetchReleaseWithSpinner")()
 

@@ -51,7 +51,10 @@ Experimental: Use --pty for PTY mode with masking support (not available on Wind
 
 // parseAttachOptions parses command flags into AttachOptions.
 //
-//nolint:unparam // args parameter kept for consistency with other parse functions
+// parseAttachOptions parses Viper-backed flags into an AttachOptions value.
+// The returned AttachOptions has Instance sourced from the "instance" key and
+// UsePTY sourced from the "pty" key. The args slice is unused and retained
+// for API consistency with other parsers.
 func parseAttachOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*AttachOptions, error) {
 	return &AttachOptions{
 		Instance: v.GetString("instance"),
@@ -59,6 +62,7 @@ func parseAttachOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*Att
 	}, nil
 }
 
+// init initializes the attach command by creating its flag parser (including `--instance` and `--pty` with environment variable bindings), attaching the parser to the command, and registering the command under devcontainerCmd.
 func init() {
 	// Create parser with attach-specific flags using functional options.
 	attachParser = flags.NewStandardParser(

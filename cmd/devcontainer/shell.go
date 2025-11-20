@@ -164,7 +164,8 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 
 // parseShellOptions parses command flags into ShellOptions.
 //
-//nolint:unparam // args parameter kept for consistency with other parse functions
+// parseShellOptions converts flag values from v into a ShellOptions struct.
+// It reads the flags "instance", "identity", "pty", "new", "replace", "rm", and "no-pull" from the provided Viper instance and returns the populated ShellOptions and a nil error.
 func parseShellOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*ShellOptions, error) {
 	return &ShellOptions{
 		Instance: v.GetString("instance"),
@@ -177,6 +178,8 @@ func parseShellOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*Shel
 	}, nil
 }
 
+// init configures and registers the `shell` subcommand.
+// It creates the flag parser with shell-specific flags and environment variables, initializes the command with those flags, marks `--new` and `--replace` as mutually exclusive, and adds `shellCmd` to `devcontainerCmd`.
 func init() {
 	// Create parser with shell-specific flags using functional options.
 	shellParser = flags.NewStandardParser(

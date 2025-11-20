@@ -89,7 +89,9 @@ func fetchReleasesCmd(client GitHubClient, opts ReleaseOptions) tea.Cmd {
 	}
 }
 
-// fetchReleasesWithSpinner fetches releases with a spinner if TTY is available.
+// fetchReleasesWithSpinner fetches releases for the cloudposse/atmos repository and displays a spinner on stderr when a TTY is available.
+// If a TTY is present, an interactive spinner is shown while fetching; any error from the spinner runtime or the fetch is returned.
+// If no TTY is present, releases are fetched directly via the provided client and any client error is returned.
 func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*github.RepositoryRelease, error) {
 	defer perf.Track(nil, "version.fetchReleasesWithSpinner")()
 
