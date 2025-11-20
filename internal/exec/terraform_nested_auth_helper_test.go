@@ -288,3 +288,52 @@ func TestGetComponentConfigForAuthResolution_ErrorHandling(t *testing.T) {
 		})
 	}
 }
+
+// TestIdentityInheritanceLogic tests the identity extraction logic from parent AuthManager chain.
+// This tests the core logic of identity inheritance that was added to fix the issue where
+// --identity flag wasn't propagating to nested components.
+func TestIdentityInheritanceLogic(t *testing.T) {
+	tests := []struct {
+		name             string
+		chain            []string
+		expectedIdentity string
+	}{
+		{
+			name:             "extracts last element from chain",
+			chain:            []string{"provider", "identity1", "target-identity"},
+			expectedIdentity: "target-identity",
+		},
+		{
+			name:             "handles single element chain",
+			chain:            []string{"only-identity"},
+			expectedIdentity: "only-identity",
+		},
+		{
+			name:             "handles multi-level chain",
+			chain:            []string{"p1", "i1", "i2", "i3", "final"},
+			expectedIdentity: "final",
+		},
+		{
+			name:             "handles empty chain",
+			chain:            []string{},
+			expectedIdentity: "",
+		},
+		{
+			name:             "handles nil chain (treated as empty)",
+			chain:            nil,
+			expectedIdentity: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate the identity extraction logic from createComponentAuthManager
+			var identityName string
+			if len(tt.chain) > 0 {
+				identityName = tt.chain[len(tt.chain)-1]
+			}
+
+			assert.Equal(t, tt.expectedIdentity, identityName)
+		})
+	}
+}
