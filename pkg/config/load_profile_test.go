@@ -13,48 +13,48 @@ func TestParseProfilesFromArgs(t *testing.T) {
 		expected []string
 	}{
 		{
-			name: "--profile value syntax",
-			args: []string{"atmos", "describe", "config", "--profile", "managers"},
+			name:     "--profile value syntax",
+			args:     []string{"atmos", "describe", "config", "--profile", "managers"},
 			expected: []string{"managers"},
 		},
 		{
-			name: "--profile=value syntax",
-			args: []string{"atmos", "describe", "config", "--profile=managers"},
+			name:     "--profile=value syntax",
+			args:     []string{"atmos", "describe", "config", "--profile=managers"},
 			expected: []string{"managers"},
 		},
 		{
-			name: "comma-separated values",
-			args: []string{"atmos", "describe", "config", "--profile=dev,staging,prod"},
+			name:     "comma-separated values",
+			args:     []string{"atmos", "describe", "config", "--profile=dev,staging,prod"},
 			expected: []string{"dev", "staging", "prod"},
 		},
 		{
-			name: "multiple --profile flags",
-			args: []string{"atmos", "describe", "config", "--profile", "dev", "--profile", "staging"},
+			name:     "multiple --profile flags",
+			args:     []string{"atmos", "describe", "config", "--profile", "dev", "--profile", "staging"},
 			expected: []string{"dev", "staging"},
 		},
 		{
-			name: "no profile flag",
-			args: []string{"atmos", "describe", "config"},
+			name:     "no profile flag",
+			args:     []string{"atmos", "describe", "config"},
 			expected: nil,
 		},
 		{
-			name: "--profile at end without value",
-			args: []string{"atmos", "describe", "config", "--profile"},
+			name:     "--profile at end without value",
+			args:     []string{"atmos", "describe", "config", "--profile"},
 			expected: nil,
 		},
 		{
-			name: "comma-separated with spaces",
-			args: []string{"atmos", "describe", "config", "--profile=dev, staging , prod"},
+			name:     "comma-separated with spaces",
+			args:     []string{"atmos", "describe", "config", "--profile=dev, staging , prod"},
 			expected: []string{"dev", "staging", "prod"},
 		},
 		{
-			name: "mixed syntax",
-			args: []string{"atmos", "describe", "config", "--profile", "dev", "--profile=staging,prod"},
+			name:     "mixed syntax",
+			args:     []string{"atmos", "describe", "config", "--profile", "dev", "--profile=staging,prod"},
 			expected: []string{"dev", "staging", "prod"},
 		},
 		{
-			name: "empty value in comma list",
-			args: []string{"atmos", "describe", "config", "--profile=dev,,prod"},
+			name:     "empty value in comma list",
+			args:     []string{"atmos", "describe", "config", "--profile=dev,,prod"},
 			expected: []string{"dev", "prod"},
 		},
 	}
