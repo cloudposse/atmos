@@ -166,23 +166,12 @@ const config = {
             path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
         ],
         [
-            'docusaurus-plugin-llms',
+            path.resolve(__dirname, 'plugins', 'docusaurus-plugin-llms-txt'),
             {
-                generateLLMsTxt: true,
-                generateLLMsFullTxt: true,
-                docsDir: 'docs',
-                includeBlog: true,
-                includeOrder: [
-                    'introduction/*',
-                    'quick-start/*',
-                    'install/*',
-                    'core-concepts/*',
-                    'cli/*',
-                ],
-                pathTransformation: {
-                    // Remove 'docs' prefix from URLs since routeBasePath is '/'
-                    ignorePaths: ['docs'],
-                },
+                generateLlmsTxt: true,
+                generateLlmsFullTxt: true,
+                llmsTxtFilename: 'llms.txt',
+                llmsFullTxtFilename: 'llms-full.txt',
             },
         ]
     ],
