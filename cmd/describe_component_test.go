@@ -10,7 +10,7 @@ import (
 )
 
 func TestDescribeComponentCmd_Error(t *testing.T) {
-	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
+	stacksPath := "tests/fixtures/scenarios/terraform-apply-affected"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
@@ -29,67 +29,59 @@ func TestDescribeComponentCmd_ProvenanceFlag(t *testing.T) {
 }
 
 func TestDescribeComponentCmd_ProvenanceWithFormatJSON(t *testing.T) {
-	stacksPath := "../examples/quick-start-advanced"
+	tk := NewTestKit(t)
+
+	stacksPath := "examples/quick-start-advanced"
 
 	// Skip if examples directory doesn't exist
 	if _, err := os.Stat(stacksPath); os.IsNotExist(err) {
-		t.Skipf("Skipping test: %s directory not found", stacksPath)
+		tk.Skipf("Skipping test: %s directory not found", stacksPath)
 	}
 
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+	tk.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	tk.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	// Reset flags for this test
-	describeComponentCmd.PersistentFlags().Set("stack", "plat-ue2-dev")
-	describeComponentCmd.PersistentFlags().Set("format", "json")
-	describeComponentCmd.PersistentFlags().Set("provenance", "true")
-
-	defer func() {
-		describeComponentCmd.PersistentFlags().Set("stack", "")
-		describeComponentCmd.PersistentFlags().Set("format", "yaml")
-		describeComponentCmd.PersistentFlags().Set("provenance", "false")
-	}()
+	// Set flags for this test
+	require.NoError(tk, describeComponentCmd.PersistentFlags().Set("stack", "plat-ue2-dev"))
+	require.NoError(tk, describeComponentCmd.PersistentFlags().Set("format", "json"))
+	require.NoError(tk, describeComponentCmd.PersistentFlags().Set("provenance", "true"))
 
 	// Note: JSON format with provenance should work (provenance is embedded in the data)
 	err := describeComponentCmd.RunE(describeComponentCmd, []string{"vpc"})
 	// The command might fail due to missing files in test environment, but we're testing flag parsing
 	// If it fails, it should be for a reason other than flag parsing
 	if err != nil {
-		assert.NotContains(t, err.Error(), "unknown flag", "Should not fail due to unknown flag")
-		assert.NotContains(t, err.Error(), "invalid flag", "Should not fail due to invalid flag")
+		assert.NotContains(tk, err.Error(), "unknown flag", "Should not fail due to unknown flag")
+		assert.NotContains(tk, err.Error(), "invalid flag", "Should not fail due to invalid flag")
 	}
 }
 
 func TestDescribeComponentCmd_ProvenanceWithFileOutput(t *testing.T) {
-	stacksPath := "../examples/quick-start-advanced"
+	tk := NewTestKit(t)
+
+	stacksPath := "examples/quick-start-advanced"
 
 	// Skip if examples directory doesn't exist
 	if _, err := os.Stat(stacksPath); os.IsNotExist(err) {
-		t.Skipf("Skipping test: %s directory not found", stacksPath)
+		tk.Skipf("Skipping test: %s directory not found", stacksPath)
 	}
 
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+	tk.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	tk.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 	// Create a temporary file for output
 	tmpFile := filepath.Join(os.TempDir(), "test-provenance-output.yaml")
 	defer os.Remove(tmpFile)
 
-	// Reset flags for this test
-	describeComponentCmd.PersistentFlags().Set("stack", "plat-ue2-dev")
-	describeComponentCmd.PersistentFlags().Set("file", tmpFile)
-	describeComponentCmd.PersistentFlags().Set("provenance", "true")
-
-	defer func() {
-		describeComponentCmd.PersistentFlags().Set("stack", "")
-		describeComponentCmd.PersistentFlags().Set("file", "")
-		describeComponentCmd.PersistentFlags().Set("provenance", "false")
-	}()
+	// Set flags for this test
+	require.NoError(tk, describeComponentCmd.PersistentFlags().Set("stack", "plat-ue2-dev"))
+	require.NoError(tk, describeComponentCmd.PersistentFlags().Set("file", tmpFile))
+	require.NoError(tk, describeComponentCmd.PersistentFlags().Set("provenance", "true"))
 
 	err := describeComponentCmd.RunE(describeComponentCmd, []string{"vpc"})
 	// The command might fail due to missing files in test environment
 	if err != nil {
-		assert.NotContains(t, err.Error(), "unknown flag", "Should not fail due to unknown flag")
-		assert.NotContains(t, err.Error(), "invalid flag", "Should not fail due to invalid flag")
+		assert.NotContains(tk, err.Error(), "unknown flag", "Should not fail due to unknown flag")
+		assert.NotContains(tk, err.Error(), "invalid flag", "Should not fail due to invalid flag")
 	}
 }

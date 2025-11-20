@@ -357,7 +357,8 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// Also handle hint messages where the path is on the next line vs same line
 	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
 	// Also handles plain labels like "Stacks directory:\n/path"
-	hintPathRegex := regexp.MustCompile(`(?m)(💡[^\n]+:|^[A-Z][^\n]+directory:)\n(/[^\s\n]+)`)
+	// The regex uses [\s\S] to match across line breaks in case Glamour word-wraps the hint text
+	hintPathRegex := regexp.MustCompile(`(?m)(💡[\s\S]{0,200}?:|^[A-Z][\s\S]{0,200}?directory:)\s*\n(/[^\s\n]+)`)
 	output = hintPathRegex.ReplaceAllString(output, "$1 $2")
 
 	// 3. Normalize the repository root:

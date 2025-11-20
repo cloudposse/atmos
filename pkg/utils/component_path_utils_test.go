@@ -529,9 +529,12 @@ func TestCleanDuplicatedPath(t *testing.T) {
 			expected: "/Users/erik/atmos/tests/fixtures/components/terraform/vpc",
 		},
 		{
-			name:     "Windows-style path with 2-part duplication",
-			input:    filepath.Join("C:", "workspace", "tests", "fixtures", "tests", "fixtures", "components"),
-			expected: filepath.Join("C:", "workspace", "tests", "fixtures", "components"),
+			name: "Windows-style path with 2-part duplication",
+			// Use forward slashes - filepath.FromSlash will convert to OS-specific separators
+			// On Windows: C:/... becomes C:\...
+			// On Unix: C:/... stays as C:/... (a relative path for testing)
+			input:    "C:/workspace/tests/fixtures/tests/fixtures/components",
+			expected: "C:/workspace/tests/fixtures/components",
 		},
 		{
 			name:     "no false positive - similar but not duplicate",
@@ -562,14 +565,16 @@ func TestCleanDuplicatedPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := cleanDuplicatedPath(tt.input)
+			// Normalize input to use OS-specific separators for testing cross-platform paths
+			input := filepath.FromSlash(tt.input)
+			result := cleanDuplicatedPath(input)
 
 			// Normalize expected path to use OS-specific separators for comparison
 			// cleanDuplicatedPath returns OS-specific paths, so we need to convert
 			// the hardcoded forward-slash expected values to match
 			expected := filepath.FromSlash(tt.expected)
 
-			assert.Equal(t, expected, result, "cleanDuplicatedPath(%q) = %q, want %q", tt.input, result, expected)
+			assert.Equal(t, expected, result, "cleanDuplicatedPath(%q) = %q, want %q", input, result, expected)
 
 			// Additional verification: result should be clean
 			if result != "" {
