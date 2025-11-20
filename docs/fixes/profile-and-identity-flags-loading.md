@@ -272,7 +272,7 @@ This dual approach ensures both `ATMOS_PROFILE` env var and `--profile` CLI flag
 
 #### Step 1: Add Profile Parsing Helper Function
 
-**File:** `pkg/config/load.go` (lines 37-60)
+**File:** `pkg/config/load.go`
 
 Created `parseProfilesFromArgs()` function that manually parses `--profile` flags from `os.Args`:
 
@@ -314,7 +314,7 @@ func parseProfilesFromArgs(args []string) []string {
 
 #### Step 2: Update Profile Loading Logic
 
-**File:** `pkg/config/load.go` (lines 119-141)
+**File:** `pkg/config/load.go`
 
 Updated the profile loading check to use both Viper (env vars) and os.Args (CLI flags):
 
@@ -465,12 +465,14 @@ $ atmos describe config --profile managers | grep -A 30 '"auth"'
 ## Files Modified
 
 1. **`pkg/config/load.go`**
-  - Added `parseProfilesFromArgs()` helper function (lines 37-60)
-  - Updated profile loading logic to check both Viper and os.Args (lines 119-141)
+
+- Added `parseProfilesFromArgs()` helper function
+- Updated profile loading logic to check both Viper and os.Args
 
 2. **`pkg/config/load_profile_test.go`** (NEW)
-  - Created comprehensive test suite with 9 test cases
-  - Tests all flag syntax variations
+
+- Created comprehensive test suite with 9 test cases
+- Tests all flag syntax variations
 
 **Total changes:** 2 files modified/added, ~80 lines of code added
 
@@ -485,23 +487,26 @@ timing considerations:
    ```go
    globalParser.BindToViper(viper.GetViper())
    ```
-  - Creates binding between "profile" key and --profile flag
-  - Binding exists but no value yet
+
+- Creates binding between "profile" key and --profile flag
+- Binding exists but no value yet
 
 2. **When command runs (cmd/describe_config.go:31):**
    ```go
    atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
    ```
-  - Cobra has parsed flags
-  - Flag value exists in Cobra's FlagSet
-  - BUT: Viper hasn't synchronized the value yet
-  - `globalViper.IsSet("profile")` returns `true` (binding exists)
-  - `globalViper.GetStringSlice("profile")` returns `[]` (value not synced)
+
+- Cobra has parsed flags
+- Flag value exists in Cobra's FlagSet
+- BUT: Viper hasn't synchronized the value yet
+- `globalViper.IsSet("profile")` returns `true` (binding exists)
+- `globalViper.GetStringSlice("profile")` returns `[]` (value not synced)
 
 3. **Environment variables work differently:**
-  - Viper reads env vars directly, not through flag binding
-  - `ATMOS_PROFILE` is immediately available in Viper
-  - No synchronization delay
+
+- Viper reads env vars directly, not through flag binding
+- `ATMOS_PROFILE` is immediately available in Viper
+- No synchronization delay
 
 ### Alternative Solutions Considered
 
@@ -570,8 +575,223 @@ The current workaround:
 - ✅ Self-contained in one function
 - ✅ Easy to replace later if needed
 
+## Related Issue: Identity Flag Not Propagating to Nested Components
+
+### Problem Statement (Follow-up Issue)
+
+After implementing the profile loading fix, a related issue was discovered: when using `--profile` and `--identity`
+flags together, the identity selector still appeared during nested component operations (such as `!terraform.state` YAML
+functions).
+
+**Command:**
+
+```bash
+atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers --identity core-identity/managers-team-access
+```
+
+**Expected Behavior:**
+
+- Use the explicitly specified identity (`core-identity/managers-team-access`)
+- No identity selector should appear
+
+**Actual Behavior:**
+
+- Main component authenticated correctly with specified identity
+- Identity selector appeared when processing `!terraform.state` YAML function for nested component (`vpc`)
+- Error message: "Multiple default identities found. Please choose one"
+
+### Root Cause Analysis
+
+**Execution Flow:**
+
+1. **Main component authentication** ✅ Works correctly:
+   ```
+   identity = "core-identity/managers-team-access"
+   CreateAndAuthenticateManager(identity, mergedAuthConfig, "__SELECT__")
+   ```
+
+2. **Nested component authentication** ❌ Fails:
+   ```
+   YAML function: !terraform.state vpc vpc_id
+   └─ Calls resolveAuthManagerForNestedComponent()
+      └─ Calls createComponentAuthManager()
+         └─ CreateAndAuthenticateManager("", mergedAuthConfig, "__NO_SELECT__")
+            ↑
+            └─ Empty identity triggers auto-detection
+               └─ Finds multiple defaults in merged profile config
+                  └─ Shows selector prompt ❌
+   ```
+
+**Code Location:**
+
+**File:** `internal/exec/terraform_nested_auth_helper.go`
+
+```go
+componentAuthManager, err := auth.CreateAndAuthenticateManager(
+	"",               // ❌ Empty - triggers auto-detection
+	mergedAuthConfig, // Contains multiple defaults from profile
+	"__NO_SELECT__",
+)
+```
+
+**Why This Happened:**
+
+When YAML template functions (like `!terraform.state`) need to fetch state from other components, they create
+component-specific AuthManagers. The original implementation:
+
+- Did NOT inherit the user's explicitly specified identity
+- Always passed empty string for identity
+- Relied on auto-detection from component's auth config
+- With profiles containing multiple defaults, auto-detection triggered the selector
+
+### Solution Implemented
+
+**Inherit authenticated identity from parent AuthManager to nested components.**
+
+#### Step 1: Extract Identity from Parent AuthManager
+
+**File:** `internal/exec/terraform_nested_auth_helper.go`
+
+```go
+// Determine identity to use for component authentication.
+// If parent AuthManager exists and is authenticated, inherit its identity.
+// This ensures that when user explicitly specifies --identity flag, it propagates to nested components.
+var identityName string
+if parentAuthManager != nil {
+	chain := parentAuthManager.GetChain()
+	if len(chain) > 0 {
+		// Last element in chain is the authenticated identity.
+		identityName = chain[len(chain)-1]
+		log.Debug("Inheriting identity from parent AuthManager for component",
+			logKeyComponent, component,
+			logKeyStack, stack,
+			"inheritedIdentity", identityName,
+			"chain", chain,
+		)
+	}
+}
+```
+
+**Key points:**
+
+- `GetChain()` returns authentication chain: `[providerName, identity1, identity2, ..., targetIdentity]`
+- Last element is the authenticated identity
+- Extract and use for nested component authentication
+
+#### Step 2: Use Inherited Identity for Component AuthManager
+
+**File:** `internal/exec/terraform_nested_auth_helper.go`
+
+```go
+// Create and authenticate new AuthManager with merged config.
+// Use inherited identity from parent, or empty string to auto-detect from component's defaults.
+componentAuthManager, err := auth.CreateAndAuthenticateManager(
+	identityName,     // Inherited from parent, or empty to trigger auto-detection
+	mergedAuthConfig, // Merged component + global auth
+	cfg.IdentityFlagSelectValue,
+)
+```
+
+**Behavior:**
+
+- If parent AuthManager exists → inherit its authenticated identity
+- If no parent AuthManager → auto-detect from component's defaults (original behavior)
+- User's `--identity` choice now propagates to all nested operations
+
+### Testing Strategy
+
+#### Before Fix
+
+```bash
+# Command with both --profile and --identity
+atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers --identity core-identity/managers-team-access
+
+# Output:
+# ✅ Main component authenticates with core-identity/managers-team-access
+# ❌ When processing !terraform.state vpc vpc_id:
+#    ┃ Multiple default identities found. Please choose one:
+#    ┃ Press ctrl+c or esc to exit
+#    ┃ > core-identity/managers
+#    ┃   core-identity/managers-team-access
+```
+
+#### After Fix
+
+```bash
+# Same command
+atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers --identity core-identity/managers-team-access
+
+# Debug output shows identity inheritance:
+DEBU  Creating AuthManager with identity identity=core-identity/managers-team-access
+DEBU  Inheriting identity from parent AuthManager for component component=vpc inheritedIdentity=core-identity/managers-team-access
+DEBU  CreateAndAuthenticateManager called identityName=core-identity/managers-team-access
+
+# ✅ No selector prompt
+# ✅ Terraform plan executes successfully
+# ✅ All nested component operations use the same identity
+```
+
+### Verification
+
+**Manual testing performed:**
+
+1. **With --identity flag:**
+   ```bash
+   atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers --identity core-identity/managers-team-access
+   # ✅ No selector, uses specified identity for all operations
+   ```
+
+2. **Without --identity flag (multiple defaults):**
+   ```bash
+   atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers
+   # ✅ Shows selector once for main component
+   # ✅ Nested components inherit the selected identity
+   ```
+
+3. **Without profile (single default):**
+   ```bash
+   atmos terraform plan runs-on/cloudposse -s core-ue2-auto
+   # ✅ Auto-detects default identity, no selector
+   ```
+
+### Success Criteria
+
+All success criteria met:
+
+1. ✅ `--identity` flag propagates to nested component operations
+2. ✅ No identity selector appears when identity is explicitly specified
+3. ✅ YAML functions (`!terraform.state`, `!terraform.output`) use inherited identity
+4. ✅ User's identity choice is consistent throughout entire command execution
+5. ✅ Backward compatibility maintained (auto-detection still works when no parent exists)
+6. ✅ Existing tests continue to pass
+
+### Files Modified
+
+1. **`internal/exec/terraform_nested_auth_helper.go`**
+  - Updated `createComponentAuthManager()` to extract and inherit identity from parent AuthManager
+  - Added debug logging for identity inheritance
+
+**Total changes:** 1 file modified, ~15 lines of code added
+
+### Impact
+
+**Benefits:**
+
+- Consistent authentication across main and nested operations
+- User's explicit `--identity` choice is respected everywhere
+- Reduces confusion and improves user experience
+- No breaking changes to existing functionality
+
+**Affected Operations:**
+
+- `!terraform.state` YAML functions
+- `!terraform.output` YAML functions
+- Any nested component that creates component-specific AuthManager
+
 ## Related Documentation
 
 - **Profiles Configuration:** `website/docs/core-concepts/profiles/`
 - **Global Flags:** `pkg/flags/global_builder.go`
 - **Configuration Loading:** `pkg/config/load.go`
+- **Authentication Manager:** `pkg/auth/manager_helpers.go`
+- **Nested Component Authentication:** `internal/exec/terraform_nested_auth_helper.go`

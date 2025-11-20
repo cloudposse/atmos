@@ -173,17 +173,13 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
 	configAndStacksInfo.Identity = argsAndFlagsInfo.Identity
-	log.Debug("Identity after processArgsAndFlags", "identity", configAndStacksInfo.Identity)
 
 	// Fallback to ATMOS_IDENTITY environment variable if identity not set via flag.
 	// Use os.Getenv directly to avoid polluting viper config with temporary binding.
 	if configAndStacksInfo.Identity == "" {
 		if envIdentity := os.Getenv("ATMOS_IDENTITY"); envIdentity != "" { //nolint:forbidigo // Direct env var read to avoid viper config pollution
 			configAndStacksInfo.Identity = envIdentity
-			log.Debug("Identity from ATMOS_IDENTITY env var", "identity", configAndStacksInfo.Identity)
 		}
-	} else {
-		log.Debug("Using identity from CLI flag", "identity", configAndStacksInfo.Identity)
 	}
 
 	configAndStacksInfo.Affected = argsAndFlagsInfo.Affected
@@ -572,11 +568,9 @@ func processArgsAndFlags(
 			if len(inputArgsAndFlags) > (i+1) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
 				// Has value: --identity <value>.
 				info.Identity = inputArgsAndFlags[i+1]
-				log.Debug("Parsed --identity flag with value", "identity", info.Identity, "index", i, "nextArg", inputArgsAndFlags[i+1])
 			} else {
 				// No value: --identity (interactive selection).
 				info.Identity = cfg.IdentityFlagSelectValue
-				log.Debug("Parsed --identity flag without value (interactive selection)", "index", i)
 			}
 		} else if strings.HasPrefix(arg+"=", cfg.IdentityFlag) {
 			parts := strings.Split(arg, "=")

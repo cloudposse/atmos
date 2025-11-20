@@ -59,6 +59,30 @@ func parseProfilesFromArgs(args []string) []string {
 	return profiles
 }
 
+// getProfilesFromFlagsOrEnv retrieves profiles from --profile flag or ATMOS_PROFILE env var.
+// This is a helper function to reduce nesting complexity in LoadConfig.
+// Returns profiles and source ("env" or "flag") for logging.
+func getProfilesFromFlagsOrEnv() ([]string, string) {
+	globalViper := viper.GetViper()
+
+	// WORKAROUND: Viper's BindPFlag doesn't always sync CLI flag values immediately.
+	// When using --profile flag, the value may be in os.Args but not yet in Viper.
+	// Environment variables work fine (ATMOS_PROFILE).
+	// Check both Viper (for env vars) and os.Args (for CLI flags).
+	if globalViper.IsSet("profile") && len(globalViper.GetStringSlice("profile")) > 0 {
+		// Env var path - value is in Viper.
+		return globalViper.GetStringSlice("profile"), "env"
+	}
+
+	// CLI flag path - parse os.Args manually.
+	profiles := parseProfilesFromArgs(os.Args)
+	if len(profiles) > 0 {
+		return profiles, "flag"
+	}
+
+	return nil, ""
+}
+
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
 // * Home directory (~/.atmos).
@@ -120,23 +144,10 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// specified via --profile flag or ATMOS_PROFILE env var.
 	// Note: Global flags are bound to viper.GetViper() (global singleton), not the local viper instance.
 	if len(configAndStacksInfo.ProfilesFromArg) == 0 {
-		globalViper := viper.GetViper()
-
-		// WORKAROUND: Viper's BindPFlag doesn't always sync CLI flag values immediately.
-		// When using --profile flag, the value may be in os.Args but not yet in Viper.
-		// Environment variables work fine (ATMOS_PROFILE).
-		// Check both Viper (for env vars) and os.Args (for CLI flags).
-		if globalViper.IsSet("profile") && len(globalViper.GetStringSlice("profile")) > 0 {
-			// Env var path - value is in Viper.
-			configAndStacksInfo.ProfilesFromArg = globalViper.GetStringSlice("profile")
-			log.Debug("Profiles loaded from env var", "profiles", configAndStacksInfo.ProfilesFromArg)
-		} else {
-			// CLI flag path - parse os.Args manually.
-			profiles := parseProfilesFromArgs(os.Args)
-			if len(profiles) > 0 {
-				configAndStacksInfo.ProfilesFromArg = profiles
-				log.Debug("Profiles loaded from CLI flag", "profiles", profiles)
-			}
+		profiles, source := getProfilesFromFlagsOrEnv()
+		if len(profiles) > 0 {
+			configAndStacksInfo.ProfilesFromArg = profiles
+			log.Debug("Profiles loaded from CLI "+source, "profiles", profiles)
 		}
 	}
 
