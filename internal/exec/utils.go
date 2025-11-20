@@ -32,10 +32,6 @@ const (
 // Returns the merged auth section map. Also updates componentSection["auth"] to prevent
 // postProcessTemplatesAndYamlFunctions from overwriting with empty auth.
 func mergeGlobalAuthConfig(atmosConfig *schema.AtmosConfiguration, componentSection map[string]any) map[string]any {
-	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
-		return map[string]any{}
-	}
-
 	authSection := map[string]any{}
 
 	if len(atmosConfig.Auth.Providers) > 0 {
@@ -52,6 +48,10 @@ func mergeGlobalAuthConfig(atmosConfig *schema.AtmosConfiguration, componentSect
 	}
 	if atmosConfig.Auth.Keyring.Type != "" {
 		authSection["keyring"] = atmosConfig.Auth.Keyring
+	}
+
+	if len(authSection) == 0 {
+		return map[string]any{}
 	}
 
 	// Also update componentSection["auth"] so postProcessTemplatesAndYamlFunctions doesn't overwrite.

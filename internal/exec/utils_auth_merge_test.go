@@ -235,6 +235,79 @@ func TestMergeGlobalAuthConfig(t *testing.T) {
 			},
 			expectedComponentUpdate: true,
 		},
+		{
+			name: "logs-only-no-providers-or-identities",
+			atmosConfig: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Providers:  map[string]schema.Provider{},
+					Identities: map[string]schema.Identity{},
+					Logs: schema.Logs{
+						Level: "Debug",
+						File:  "/tmp/auth-only.log",
+					},
+				},
+			},
+			componentSection: map[string]any{},
+			expectedAuthSection: map[string]any{
+				"logs": map[string]any{
+					"level": "Debug",
+					"file":  "/tmp/auth-only.log",
+				},
+			},
+			expectedComponentUpdate: true,
+		},
+		{
+			name: "keyring-only-no-providers-or-identities",
+			atmosConfig: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Providers:  map[string]schema.Provider{},
+					Identities: map[string]schema.Identity{},
+					Keyring: schema.KeyringConfig{
+						Type: "file",
+						Spec: map[string]interface{}{
+							"path": "/tmp/atmos-keyring",
+						},
+					},
+				},
+			},
+			componentSection: map[string]any{},
+			expectedAuthSection: map[string]any{
+				"keyring": schema.KeyringConfig{
+					Type: "file",
+					Spec: map[string]interface{}{
+						"path": "/tmp/atmos-keyring",
+					},
+				},
+			},
+			expectedComponentUpdate: true,
+		},
+		{
+			name: "logs-and-keyring-only-no-providers-or-identities",
+			atmosConfig: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Providers:  map[string]schema.Provider{},
+					Identities: map[string]schema.Identity{},
+					Logs: schema.Logs{
+						Level: "Info",
+					},
+					Keyring: schema.KeyringConfig{
+						Type: "system",
+					},
+				},
+			},
+			componentSection: map[string]any{},
+			expectedAuthSection: map[string]any{
+				"logs": map[string]any{
+					"level": "Info",
+					"file":  "",
+				},
+				"keyring": schema.KeyringConfig{
+					Type: "system",
+					Spec: nil,
+				},
+			},
+			expectedComponentUpdate: true,
+		},
 	}
 
 	for _, tt := range tests {
