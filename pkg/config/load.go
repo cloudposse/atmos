@@ -64,22 +64,29 @@ func parseProfilesFromArgs(args []string) []string {
 // Returns profiles and source ("env" or "flag") for logging.
 // Precedence: CLI flags override environment variables.
 func getProfilesFromFlagsOrEnv() ([]string, string) {
-	globalViper := viper.GetViper()
-
-	// WORKAROUND: Viper's BindPFlag doesn't always sync CLI flag values immediately.
-	// When using --profile flag, the value may be in os.Args but not yet in Viper.
-	// Environment variables work fine (ATMOS_PROFILE).
-	// Check CLI flags FIRST (highest precedence), then fall back to env vars.
-
 	// CLI flag path - parse os.Args manually (highest priority).
+	// This is checked first because CLI flags should always take precedence.
 	profiles := parseProfilesFromArgs(os.Args)
 	if len(profiles) > 0 {
 		return profiles, "flag"
 	}
 
-	// Env var path - check Viper for ATMOS_PROFILE (lower priority).
-	if globalViper.IsSet("profile") && len(globalViper.GetStringSlice("profile")) > 0 {
-		return globalViper.GetStringSlice("profile"), "env"
+	// Env var path - check environment variable directly (lower priority).
+	// We read from os.Getenv instead of Viper to avoid stale cached values in tests.
+	// Viper caches environment variables, which can cause issues in test environments
+	// where tests may set/unset variables but Viper retains old values.
+	// forbidigo: allow os.Getenv for test isolation - prevents Viper caching issues
+	if envProfiles := os.Getenv("ATMOS_PROFILE"); envProfiles != "" { //nolint:forbidigo // Need fresh env reads for test isolation
+		// Handle comma-separated values, same as CLI flag parsing
+		var result []string
+		for _, v := range strings.Split(envProfiles, ",") {
+			if trimmed := strings.TrimSpace(v); trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		if len(result) > 0 {
+			return result, "env"
+		}
 	}
 
 	return nil, ""

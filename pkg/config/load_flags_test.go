@@ -21,8 +21,7 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 		{
 			name: "profiles from environment variable",
 			setupViper: func() {
-				v := viper.GetViper()
-				v.Set("profile", []string{"env-profile1", "env-profile2"})
+				// No Viper setup needed - we set the actual env var in the test
 			},
 			osArgs:           []string{"atmos", "describe", "config"},
 			expectedProfiles: []string{"env-profile1", "env-profile2"},
@@ -71,8 +70,7 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 		{
 			name: "CLI flag takes precedence over environment variable",
 			setupViper: func() {
-				v := viper.GetViper()
-				v.Set("profile", []string{"env-profile"})
+				// No Viper setup - environment will be set in the test body
 			},
 			osArgs:           []string{"atmos", "describe", "config", "--profile", "cli-profile"},
 			expectedProfiles: []string{"cli-profile"},
@@ -82,7 +80,15 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup
+			// Setup environment for tests that need it
+			switch tt.name {
+			case "profiles from environment variable":
+				t.Setenv("ATMOS_PROFILE", "env-profile1,env-profile2")
+			case "CLI flag takes precedence over environment variable":
+				t.Setenv("ATMOS_PROFILE", "env-profile")
+			}
+
+			// Setup Viper (for tests that still need it)
 			tt.setupViper()
 
 			// Save original os.Args and restore after test
