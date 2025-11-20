@@ -28,6 +28,16 @@ const (
 	CompactColumnMaxWidth     = 20 // Maximum width for non-Description columns.
 	DescriptionColumnMinWidth = 30 // Minimum width for Description column.
 	MinColumnWidth            = 5  // Absolute minimum width for any column.
+
+	// Format strings for value formatting.
+	fmtBool    = "%v"
+	fmtInt     = "%d"
+	fmtFloat   = "%.2f"
+	fmtSpace   = " "
+	fmtNewline = "\n"
+
+	// Parsing constants.
+	floatBitSize = 64
 )
 
 // Error variables for table formatting.
@@ -218,13 +228,13 @@ func tryExpandScalarArray(v reflect.Value) string {
 		case reflect.String:
 			itemStr = elem.String()
 		case reflect.Bool:
-			itemStr = fmt.Sprintf("%v", elem.Bool())
+			itemStr = fmt.Sprintf(fmtBool, elem.Bool())
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			itemStr = fmt.Sprintf("%d", elem.Int())
+			itemStr = fmt.Sprintf(fmtInt, elem.Int())
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			itemStr = fmt.Sprintf("%d", elem.Uint())
+			itemStr = fmt.Sprintf(fmtInt, elem.Uint())
 		case reflect.Float32, reflect.Float64:
-			itemStr = fmt.Sprintf("%.2f", elem.Float())
+			itemStr = fmt.Sprintf(fmtFloat, elem.Float())
 		default:
 			// Non-scalar element found, return empty to use placeholder format.
 			return ""
@@ -267,7 +277,7 @@ func tryExpandScalarMap(v reflect.Value) string {
 	sortedKeys := make([]string, len(keys))
 	keyMap := make(map[string]reflect.Value)
 	for i, key := range keys {
-		keyStr := fmt.Sprintf("%v", key.Interface())
+		keyStr := fmt.Sprintf(fmtBool, key.Interface())
 		sortedKeys[i] = keyStr
 		keyMap[keyStr] = key
 	}
@@ -295,13 +305,13 @@ func tryExpandScalarMap(v reflect.Value) string {
 		case reflect.String:
 			valueStr = val.String()
 		case reflect.Bool:
-			valueStr = fmt.Sprintf("%v", val.Bool())
+			valueStr = fmt.Sprintf(fmtBool, val.Bool())
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			valueStr = fmt.Sprintf("%d", val.Int())
+			valueStr = fmt.Sprintf(fmtInt, val.Int())
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			valueStr = fmt.Sprintf("%d", val.Uint())
+			valueStr = fmt.Sprintf(fmtInt, val.Uint())
 		case reflect.Float32, reflect.Float64:
-			valueStr = fmt.Sprintf("%.2f", val.Float())
+			valueStr = fmt.Sprintf(fmtFloat, val.Float())
 		default:
 			// Non-scalar value found, return empty to use placeholder format.
 			return ""
@@ -399,7 +409,7 @@ func detectContentType(value string) cellContentType {
 	}
 
 	// Check for numbers (integers or floats).
-	if _, err := strconv.ParseFloat(value, 64); err == nil {
+	if _, err := strconv.ParseFloat(value, floatBitSize); err == nil {
 		return contentTypeNumber
 	}
 
@@ -658,7 +668,7 @@ func padToWidth(s string, width int) string {
 		for i, line := range lines {
 			currentWidth := lipgloss.Width(line)
 			if currentWidth < width {
-				padded[i] = line + strings.Repeat(" ", width-currentWidth)
+				padded[i] = line + strings.Repeat(fmtSpace, width-currentWidth)
 			} else {
 				padded[i] = line
 			}
@@ -669,7 +679,7 @@ func padToWidth(s string, width int) string {
 	// Single line: pad if needed.
 	currentWidth := lipgloss.Width(s)
 	if currentWidth < width {
-		return s + strings.Repeat(" ", width-currentWidth)
+		return s + strings.Repeat(fmtSpace, width-currentWidth)
 	}
 	return s
 }
@@ -857,7 +867,7 @@ func splitLines(s string) []string {
 	if s == "" {
 		return []string{}
 	}
-	return strings.Split(s, "\n")
+	return strings.Split(s, fmtNewline)
 }
 
 // calculateStackColumnWidth calculates the width for a single stack column.
