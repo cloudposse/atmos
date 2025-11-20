@@ -23,7 +23,9 @@ var describeComponentCmd = &cobra.Command{
 	Args:               cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfigE(); err != nil {
+			return err
+		}
 
 		if len(args) != 1 {
 			return errors.New("invalid arguments. The command requires one argument `component`")

@@ -584,6 +584,73 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 }
 
+// checkAtmosConfigE checks Atmos config and returns an error instead of exiting.
+// This is the testable version that should be used in commands' RunE functions.
+func checkAtmosConfigE(opts ...AtmosValidateOption) error {
+	err := validateAtmosConfig(opts...)
+	if err == nil {
+		return nil
+	}
+
+	// Try to load config for error display (may fail, that's OK).
+	atmosConfig, _ := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+
+	// Build error message with configuration help.
+	var errMsg strings.Builder
+	buildAtmosConfigErrorMessage(&errMsg, &atmosConfig)
+
+	// Wrap the original validation error with the formatted message.
+	return fmt.Errorf("%w: %s", errUtils.ErrMissingAtmosConfig, errMsg.String())
+}
+
+// buildAtmosConfigErrorMessage builds a formatted error message for missing Atmos configuration.
+func buildAtmosConfigErrorMessage(errMsg *strings.Builder, atmosConfig *schema.AtmosConfiguration) {
+	errMsg.WriteString("\n")
+
+	// Write ATMOS header.
+	errMsg.WriteString("ATMOS\n\n")
+
+	// Include git repo warning if applicable.
+	if gitErr := verifyInsideGitRepoE(); gitErr != nil {
+		errMsg.WriteString(gitErr.Error())
+		errMsg.WriteString("\n\n")
+	}
+
+	stacksDir := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+
+	// Build the configuration error message.
+	errMsg.WriteString("## Missing Configuration\n\n")
+
+	if _, statErr := os.Stat(atmosConfig.CliConfigPath); os.IsNotExist(statErr) {
+		errMsg.WriteString("The `atmos.yaml` CLI config file was not found.\n\n")
+	}
+
+	buildStacksDirMessage(errMsg, atmosConfig, stacksDir)
+
+	errMsg.WriteString("## Getting Started\n\n")
+	errMsg.WriteString("To configure and start using Atmos, refer to the following documents:\n\n")
+	errMsg.WriteString("**Atmos CLI Configuration:** <https://atmos.tools/cli/configuration>\n\n")
+	errMsg.WriteString("**Atmos Components:** <https://atmos.tools/core-concepts/components>\n\n")
+	errMsg.WriteString("**Atmos Stacks:** <https://atmos.tools/core-concepts/stacks>\n\n")
+	errMsg.WriteString("**Quick Start:** <https://atmos.tools/quick-start>\n")
+}
+
+// buildStacksDirMessage adds stacks directory error messages to the error string.
+func buildStacksDirMessage(errMsg *strings.Builder, atmosConfig *schema.AtmosConfiguration, stacksDir string) {
+	if _, statErr := os.Stat(stacksDir); os.IsNotExist(statErr) {
+		fmt.Fprintf(errMsg, "The default Atmos stacks directory is set to `%s`, but the directory does not exist in the current path.\n\n", stacksDir)
+		return
+	}
+
+	if atmosConfig.CliConfigPath == "" {
+		return
+	}
+
+	if _, statErr := os.Stat(atmosConfig.CliConfigPath); !os.IsNotExist(statErr) {
+		fmt.Fprintf(errMsg, "The `atmos.yaml` CLI config file specifies the directory for Atmos stacks as `%s`, but the directory does not exist.\n\n", stacksDir)
+	}
+}
+
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
 func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 	fmt.Println()
@@ -797,6 +864,15 @@ func verifyInsideGitRepo() bool {
 		return false
 	}
 	return true
+}
+
+// verifyInsideGitRepoE returns an error if not inside a git repository.
+// This is the testable version that returns an error instead of just logging.
+func verifyInsideGitRepoE() error {
+	if !isGitRepository() {
+		return fmt.Errorf("%w: Atmos feels lonely outside, bring it home", errUtils.ErrNotInGitRepository)
+	}
+	return nil
 }
 
 func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {

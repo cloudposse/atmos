@@ -10,13 +10,12 @@ import (
 )
 
 func TestDescribeComponentCmd_Error(t *testing.T) {
-	stacksPath := "tests/fixtures/scenarios/terraform-apply-affected"
+	tk := NewTestKit(t)
 
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
+	// This test verifies that calling the command with no arguments returns an error.
+	// The command requires exactly one argument (the component name).
 	err := describeComponentCmd.RunE(describeComponentCmd, []string{})
-	assert.Error(t, err, "describe component command should return an error when called with no parameters")
+	assert.Error(tk, err, "describe component command should return an error when called with no parameters")
 }
 
 func TestDescribeComponentCmd_ProvenanceFlag(t *testing.T) {
