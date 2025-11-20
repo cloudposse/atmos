@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
@@ -34,61 +35,76 @@ const (
 
 var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 
-// parseProfilesFromArgs manually parses --profile flags from os.Args.
-// This is a workaround for Viper's BindPFlag not syncing flag values immediately.
-// Supports both --profile=value and --profile value syntax.
-func parseProfilesFromArgs(args []string) []string {
-	var profiles []string
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--profile" && i+1 < len(args) {
-			// --profile value syntax.
-			profiles = append(profiles, args[i+1])
-			i++ // Skip next arg.
-		} else if strings.HasPrefix(arg, "--profile=") {
-			// --profile=value syntax.
-			value := strings.TrimPrefix(arg, "--profile=")
-			// Handle comma-separated values.
-			for _, v := range strings.Split(value, ",") {
-				if trimmed := strings.TrimSpace(v); trimmed != "" {
-					profiles = append(profiles, trimmed)
-				}
-			}
+const profileKey = "profile"
+
+// parseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
+// This is a fallback for commands with DisableFlagParsing=true (terraform, helmfile, packer).
+// Uses pflag's StringSlice parser to handle all syntax variations correctly.
+func parseProfilesFromOsArgs(args []string) []string {
+	// Create temporary FlagSet just for parsing --profile.
+	fs := pflag.NewFlagSet("profile-parser", pflag.ContinueOnError)
+	fs.ParseErrorsAllowlist.UnknownFlags = true // Ignore other flags.
+
+	// Register profile flag using pflag's StringSlice (handles comma-separated values).
+	profiles := fs.StringSlice(profileKey, []string{}, "Configuration profiles")
+
+	// Parse args - pflag handles both --profile=value and --profile value syntax.
+	_ = fs.Parse(args) // Ignore errors from unknown flags.
+
+	if profiles == nil || len(*profiles) == 0 {
+		return nil
+	}
+
+	// Post-process: trim whitespace and filter empty values (maintains compatibility with manual parsing).
+	result := make([]string, 0, len(*profiles))
+	for _, profile := range *profiles {
+		trimmed := strings.TrimSpace(profile)
+		if trimmed != "" {
+			result = append(result, trimmed)
 		}
 	}
-	return profiles
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 // getProfilesFromFlagsOrEnv retrieves profiles from --profile flag or ATMOS_PROFILE env var.
 // This is a helper function to reduce nesting complexity in LoadConfig.
 // Returns profiles and source ("env" or "flag") for logging.
+//
+// NOTE: This function reads from Viper's global singleton, which has flag values synced
+// by syncGlobalFlagsToViper() in cmd/root.go PersistentPreRun before InitCliConfig is called.
 func getProfilesFromFlagsOrEnv() ([]string, string) {
 	globalViper := viper.GetViper()
 
-	// WORKAROUND: Viper's BindPFlag doesn't always sync CLI flag values immediately.
-	// When using --profile flag, the value may be in os.Args but not yet in Viper.
-	// Environment variables work fine (ATMOS_PROFILE).
-	// Check both Viper (for env vars) and os.Args (for CLI flags).
-	if globalViper.IsSet("profile") && len(globalViper.GetStringSlice("profile")) > 0 {
-		// Env var path - value is in Viper.
-		return globalViper.GetStringSlice("profile"), "env"
-	}
-
-	// CLI flag path - parse os.Args manually.
-	profiles := parseProfilesFromArgs(os.Args)
-	if len(profiles) > 0 {
+	// Check if profile is set in Viper (from either flag or env var).
+	// syncGlobalFlagsToViper() ensures CLI flag values are synced to Viper before InitCliConfig.
+	if globalViper.IsSet(profileKey) && len(globalViper.GetStringSlice(profileKey)) > 0 {
+		profiles := globalViper.GetStringSlice(profileKey)
+		// Determine source based on whether ATMOS_PROFILE env var is explicitly set.
+		// Env vars are read by Viper from BindEnv, but we check the env var directly
+		// to accurately determine the source for logging purposes.
+		if _, envSet := os.LookupEnv("ATMOS_PROFILE"); envSet {
+			return profiles, "env"
+		}
 		return profiles, "flag"
 	}
 
 	return nil, ""
 }
 
+// LoadConfig loads the Atmos configuration from multiple sources in order of precedence:
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
 // * Home directory (~/.atmos).
 // * Current working directory.
 // * ENV vars.
 // * Command-line arguments.
+//
+// NOTE: Global flags (like --profile) must be synced to Viper before calling this function.
+// This is done by syncGlobalFlagsToViper() in cmd/root.go PersistentPreRun.
 func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
 	v := viper.New()
 	var atmosConfig schema.AtmosConfiguration

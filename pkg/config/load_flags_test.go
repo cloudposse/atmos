@@ -12,6 +12,7 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 	tests := []struct {
 		name             string
 		setupViper       func()
+		setupEnv         func(*testing.T)
 		osArgs           []string
 		expectedProfiles []string
 		expectedSource   string
@@ -22,6 +23,9 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 				v := viper.GetViper()
 				v.Set("profile", []string{"env-profile1", "env-profile2"})
 			},
+			setupEnv: func(t *testing.T) {
+				t.Setenv("ATMOS_PROFILE", "env-profile1,env-profile2")
+			},
 			osArgs:           []string{"atmos", "describe", "config"},
 			expectedProfiles: []string{"env-profile1", "env-profile2"},
 			expectedSource:   "env",
@@ -30,8 +34,9 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			name: "profiles from CLI flag --profile value syntax",
 			setupViper: func() {
 				v := viper.GetViper()
-				v.Set("profile", nil) // Ensure viper doesn't have profile set
+				v.Set("profile", []string{"cli-profile"})
 			},
+			setupEnv:         nil, // Don't set ATMOS_PROFILE
 			osArgs:           []string{"atmos", "describe", "config", "--profile", "cli-profile"},
 			expectedProfiles: []string{"cli-profile"},
 			expectedSource:   "flag",
@@ -40,8 +45,9 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			name: "profiles from CLI flag --profile=value syntax",
 			setupViper: func() {
 				v := viper.GetViper()
-				v.Set("profile", nil)
+				v.Set("profile", []string{"cli-profile"})
 			},
+			setupEnv:         nil, // Don't set ATMOS_PROFILE
 			osArgs:           []string{"atmos", "describe", "config", "--profile=cli-profile"},
 			expectedProfiles: []string{"cli-profile"},
 			expectedSource:   "flag",
@@ -52,6 +58,7 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 				v := viper.GetViper()
 				v.Set("profile", nil)
 			},
+			setupEnv:         nil, // Don't set ATMOS_PROFILE
 			osArgs:           []string{"atmos", "describe", "config"},
 			expectedProfiles: nil,
 			expectedSource:   "",
@@ -62,6 +69,7 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 				v := viper.GetViper()
 				v.Set("profile", []string{})
 			},
+			setupEnv:         nil, // Don't set ATMOS_PROFILE
 			osArgs:           []string{"atmos", "describe", "config"},
 			expectedProfiles: nil,
 			expectedSource:   "",
@@ -75,8 +83,15 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 
 			// Save original os.Args and restore after test
 			originalArgs := os.Args
-			defer func() { os.Args = originalArgs }()
+			t.Cleanup(func() {
+				os.Args = originalArgs
+			})
 			os.Args = tt.osArgs
+
+			// Setup environment variables using t.Setenv for automatic cleanup
+			if tt.setupEnv != nil {
+				tt.setupEnv(t)
+			}
 
 			// Execute
 			profiles, source := getProfilesFromFlagsOrEnv()

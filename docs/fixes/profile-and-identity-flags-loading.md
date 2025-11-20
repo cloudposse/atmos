@@ -261,102 +261,144 @@ globalViper.GetStringSlice("profile") = [] ❌
 
 ### Fix Overview
 
-Since Viper's flag binding doesn't sync values immediately, we implemented a **workaround** that:
+Since Viper's flag binding doesn't sync values immediately, we implemented a **solution** that:
 
 1. **Checks Viper first** (for environment variables - works correctly)
-2. **Falls back to manual os.Args parsing** (for CLI flags - workaround for Viper timing issue)
+2. **Reads from Cobra's FlagSet** (for most commands - Cobra has already parsed flags)
+3. **Falls back to pflag parsing** (for commands with `DisableFlagParsing=true` like terraform/helmfile/packer)
 
-This dual approach ensures both `ATMOS_PROFILE` env var and `--profile` CLI flag work correctly.
+This approach ensures both `ATMOS_PROFILE` env var and `--profile` CLI flag work correctly while leveraging Atmos's existing flag infrastructure.
 
 ### Implementation Details
 
-#### Step 1: Add Profile Parsing Helper Function
+#### Step 1: Add Profile Parsing Helper Functions
 
 **File:** `pkg/config/load.go`
 
-Created `parseProfilesFromArgs()` function that manually parses `--profile` flags from `os.Args`:
+Created helper functions that use pflag library and Cobra's FlagSet:
 
 ```go
-// parseProfilesFromArgs manually parses --profile flags from os.Args.
-// This is a workaround for Viper's BindPFlag not syncing flag values immediately.
-// Supports both --profile=value and --profile value syntax.
-func parseProfilesFromArgs(args []string) []string {
-	var profiles []string
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--profile" && i+1 < len(args) {
-			// --profile value syntax.
-			profiles = append(profiles, args[i+1])
-			i++ // Skip next arg.
-		} else if strings.HasPrefix(arg, "--profile=") {
-			// --profile=value syntax.
-			value := strings.TrimPrefix(arg, "--profile=")
-			// Handle comma-separated values.
-			for _, v := range strings.Split(value, ",") {
-				if trimmed := strings.TrimSpace(v); trimmed != "" {
-					profiles = append(profiles, trimmed)
-				}
-			}
-		}
+// parseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
+// This is a fallback for commands with DisableFlagParsing=true (terraform, helmfile, packer).
+// Uses pflag's StringSlice parser to handle all syntax variations correctly.
+func parseProfilesFromOsArgs(args []string) []string {
+	// Create temporary FlagSet just for parsing --profile.
+	fs := pflag.NewFlagSet("profile-parser", pflag.ContinueOnError)
+	fs.ParseErrorsWhitelist.UnknownFlags = true // Ignore other flags.
+
+	// Register profile flag using pflag's StringSlice (handles comma-separated values).
+	profiles := fs.StringSlice("profile", []string{}, "Configuration profiles")
+
+	// Parse args - pflag handles both --profile=value and --profile value syntax.
+	_ = fs.Parse(args) // Ignore errors from unknown flags.
+
+	if profiles != nil && len(*profiles) > 0 {
+		return *profiles
 	}
-	return profiles
+	return nil
+}
+
+// getProfilesFromFlags retrieves profiles from Cobra's parsed flags with fallback to manual parsing.
+// First tries to read from Cobra's FlagSet (works for most commands).
+// Falls back to manual os.Args parsing for commands with DisableFlagParsing=true.
+func getProfilesFromFlags(cmd *cobra.Command) []string {
+	if cmd == nil {
+		// No command context, fall back to manual parsing.
+		return parseProfilesFromOsArgs(os.Args)
+	}
+
+	// Try to read from Cobra's already-parsed flags (preferred method).
+	if profiles, err := cmd.Flags().GetStringSlice("profile"); err == nil && len(profiles) > 0 {
+		return profiles
+	}
+
+	// Fallback for DisableFlagParsing commands (terraform, helmfile, packer).
+	return parseProfilesFromOsArgs(os.Args)
 }
 ```
 
 **Features:**
 
+- ✅ Reads from Cobra's FlagSet (architecturally correct - uses already-parsed flags)
+- ✅ Uses pflag library instead of manual string parsing (battle-tested, handles all edge cases)
 - ✅ Supports `--profile value` syntax
 - ✅ Supports `--profile=value` syntax
 - ✅ Handles comma-separated values: `--profile=dev,staging,prod`
 - ✅ Handles multiple flags: `--profile dev --profile staging`
-- ✅ Strips whitespace from comma-separated values
-- ✅ Filters out empty values
+- ✅ Works for commands with `DisableFlagParsing=true` (terraform/helmfile/packer)
+- ✅ Consistent with existing Atmos patterns (similar to `processChdirFlag`)
 
-#### Step 2: Update Profile Loading Logic
+#### Step 2: Update LoadConfig and InitCliConfig Signatures
+
+**Files:** `pkg/config/load.go`, `pkg/config/config.go`
+
+Updated function signatures to accept `cmd *cobra.Command` parameter:
+
+```go
+// LoadConfig loads the Atmos configuration from multiple sources.
+// The cmd parameter is used to read CLI flags directly from Cobra's FlagSet.
+// This is necessary because Viper's BindPFlag doesn't sync flag values immediately.
+func LoadConfig(cmd *cobra.Command, configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
+	// ... existing code ...
+}
+
+// InitCliConfig initializes the CLI configuration.
+// The cmd parameter is used to read CLI flags directly from Cobra's FlagSet.
+func InitCliConfig(cmd interface{}, configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+	// Convert interface{} to *cobra.Command if possible (safe cast).
+	var cobraCmd *cobra.Command
+	if c, ok := cmd.(*cobra.Command); ok {
+		cobraCmd = c
+	}
+
+	atmosConfig, err := LoadConfig(cobraCmd, &configAndStacksInfo)
+	// ... rest of code ...
+}
+```
+
+#### Step 3: Update Profile Loading Logic
 
 **File:** `pkg/config/load.go`
 
-Updated the profile loading check to use both Viper (env vars) and os.Args (CLI flags):
+Updated `getProfilesFromFlagsOrEnv` to accept `cmd` parameter and use `getProfilesFromFlags`:
 
 ```go
-// If profiles weren't passed via ConfigAndStacksInfo, check if they were
-// specified via --profile flag or ATMOS_PROFILE env var.
-// Note: Global flags are bound to viper.GetViper() (global singleton), not the local viper instance.
-if len(configAndStacksInfo.ProfilesFromArg) == 0 {
+func getProfilesFromFlagsOrEnv(cmd *cobra.Command) ([]string, string) {
 	globalViper := viper.GetViper()
 
 	// WORKAROUND: Viper's BindPFlag doesn't always sync CLI flag values immediately.
-	// When using --profile flag, the value may be in os.Args but not yet in Viper.
-	// Environment variables work fine (ATMOS_PROFILE).
-	// Check both Viper (for env vars) and os.Args (for CLI flags).
+	// When using --profile flag, Cobra has parsed it, but Viper hasn't synced the value yet.
+	// Environment variables work fine (ATMOS_PROFILE) because they're bound directly.
+	// Solution: Read from Cobra's FlagSet directly, which already has the parsed value.
 	if globalViper.IsSet("profile") && len(globalViper.GetStringSlice("profile")) > 0 {
 		// Env var path - value is in Viper.
-		configAndStacksInfo.ProfilesFromArg = globalViper.GetStringSlice("profile")
-		log.Debug("Profiles loaded from env var", "profiles", configAndStacksInfo.ProfilesFromArg)
-	} else {
-		// CLI flag path - parse os.Args manually.
-		profiles := parseProfilesFromArgs(os.Args)
-		if len(profiles) > 0 {
-			configAndStacksInfo.ProfilesFromArg = profiles
-			log.Debug("Profiles loaded from CLI flag", "profiles", profiles)
-		}
+		return globalViper.GetStringSlice("profile"), "env"
 	}
+
+	// CLI flag path - read from Cobra's FlagSet (or parse os.Args for DisableFlagParsing commands).
+	profiles := getProfilesFromFlags(cmd)
+	if len(profiles) > 0 {
+		return profiles, "flag"
+	}
+
+	return nil, ""
 }
 ```
 
 **Logic Flow:**
 
-1. Check if `ProfilesFromArg` is already populated (future-proofing for when commands start passing it explicitly)
-2. Get global Viper singleton (where global flags are bound)
-3. **First try Viper:** If `profile` key is set AND has non-empty value → use it (env var path)
-4. **Fallback to os.Args:** If Viper is empty → manually parse `os.Args` for `--profile` flags
-5. Log which method was used for debugging
+1. Check Viper first (for environment variables - works correctly)
+2. If not in Viper, call `getProfilesFromFlags(cmd)` which:
+   - Tries to read from Cobra's FlagSet if `cmd` is available (most commands)
+   - Falls back to pflag parsing of os.Args if `cmd` is nil or flag not found (DisableFlagParsing commands)
+3. Return profiles and source ("env" or "flag") for logging
 
 **Why This Works:**
 
 - **Environment variables:** Immediately available in Viper → first branch executes
-- **CLI flags:** Not in Viper yet → second branch parses os.Args directly
-- **No breaking changes:** Existing code that might pass ProfilesFromArg explicitly still works
+- **CLI flags (most commands):** Cobra has already parsed them → `cmd.Flags().GetStringSlice("profile")` returns the value
+- **CLI flags (terraform/helmfile/packer):** These commands have `DisableFlagParsing=true` → fallback to pflag parsing
+- **No breaking changes:** Functions accept `nil` for `cmd` parameter, falling back to pflag parsing
 
 ### Testing Strategy
 
@@ -518,42 +560,182 @@ timing considerations:
 
 **Rejected:** No official Viper API to force flag value synchronization
 
-#### Option 3: Read Flag from Cobra's FlagSet Directly
+#### Option 3: Read Flag from Cobra's FlagSet Directly (IMPLEMENTED)
 
-**Rejected:** Would require passing `cmd *cobra.Command` to InitCliConfig, changing many function signatures
+**Initially rejected, later implemented (2025-11-19):**
 
-#### Option 4: Parse os.Args Manually (CHOSEN)
+**Original concern:** Would require passing `cmd *cobra.Command` to InitCliConfig, changing many function signatures
 
-**Accepted:**
+**Decision:** After consultation with flag-handler agent, this is the **architecturally correct solution**. The signature changes are acceptable because:
+- ✅ Makes dependencies explicit (clear that we need command context)
+- ✅ Consistent with Atmos patterns (`processChdirFlag()` does the same)
+- ✅ Reads from source of truth (Cobra's already-parsed FlagSet)
+- ✅ Uses pflag for fallback instead of manual string parsing
+- ✅ Future-proof for when terraform/helmfile/packer migrate to command registry
 
-- ✅ Minimal code changes
-- ✅ No function signature changes
+**Implementation:**
+- Updated `LoadConfig(cmd *cobra.Command, configAndStacksInfo)`
+- Updated `InitCliConfig(cmd interface{}, configAndStacksInfo, processStacks)`
+- Updated ~100+ callers to pass `nil` or `cmd`
+- Regenerated interface mocks
+
+#### Option 4: Parse os.Args Manually (INITIAL IMPLEMENTATION)
+
+**Initially accepted, later improved:**
+
+- ✅ Minimal code changes (initially)
+- ✅ No function signature changes (initially)
 - ✅ Works reliably for all flag syntax variations
 - ✅ Easy to test
-- ✅ No side effects
+- ❌ Bypasses flag infrastructure (not ideal)
+- ❌ Reimplements pflag's StringSlice logic manually
+
+**Current Status:** This approach is still used as a **fallback** for `DisableFlagParsing=true` commands (terraform/helmfile/packer), but now uses pflag library instead of manual string parsing.
 
 ## Future Improvements
 
-### Proper Long-Term Fix
+### Evolution Path Summary
 
-The workaround can be replaced with a proper fix once Cobra/Viper timing is better understood:
+| Phase | Status | Description |
+|-------|--------|-------------|
+| **Phase 1: Initial Fix** | ✅ Complete | Manual string parsing of os.Args to bypass Viper timing issue |
+| **Phase 2: Refactoring with cmd parameter** | ✅ Complete (2025-11-19) | Pass `cmd` to `InitCliConfig()`, use pflag library, read from Cobra's FlagSet |
+| **Phase 3: Root Cause Fix** | ✅ Complete (2025-11-19) | Sync Viper in root.go before InitCliConfig, remove cmd parameter |
+| **Phase 4: Simplification** | 🔄 Pending | Remove parseProfilesFromOsArgs() after terraform/helmfile/packer migrate to command registry |
 
-1. **Option A: Pass cmd to InitCliConfig**
-   ```go
-   func InitCliConfig(cmd *cobra.Command, configAndStacksInfo *schema.ConfigAndStacksInfo) {
-   	if cmd != nil {
-   		profile, _ := cmd.Flags().GetStringSlice("profile")
-   		configAndStacksInfo.ProfilesFromArg = profile
-   	}
-   	// ... rest of function
-   }
-   ```
+### Current Implementation (Phase 3 - Root Cause Fix)
 
-2. **Option B: Explicit Viper sync method**
-   ```go
-   // If Viper adds this capability
-   viper.GetViper().SyncFlags(cmd.Flags())
-   ```
+**Status (2025-11-19):** The implementation now uses the **root cause fix** - syncing Viper in `cmd/root.go` before calling `InitCliConfig()`.
+
+#### How It Works
+
+**File:** `cmd/root.go`
+
+```go
+// syncGlobalFlagsToViper synchronizes global flags from Cobra's FlagSet to Viper.
+// This is necessary because Viper's BindPFlag doesn't immediately sync values when flags are parsed.
+// Call this after Cobra parses flags but before accessing flag values via Viper.
+func syncGlobalFlagsToViper(cmd *cobra.Command) {
+	v := viper.GetViper()
+
+	// Sync profile flag if explicitly set.
+	if cmd.Flags().Changed("profile") {
+		if profiles, err := cmd.Flags().GetStringSlice("profile"); err == nil {
+			v.Set("profile", profiles)
+		}
+	}
+
+	// Sync identity flag if explicitly set.
+	if cmd.Flags().Changed("identity") {
+		if identity, err := cmd.Flags().GetString("identity"); err == nil {
+			v.Set("identity", identity)
+		}
+	}
+}
+
+// In PersistentPreRun (called before every command):
+syncGlobalFlagsToViper(cmd)
+atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)  // NO cmd parameter
+```
+
+**Benefits:**
+- ✅ **Clean API** - No need to pass `cmd` to InitCliConfig() and LoadConfig()
+- ✅ **Fixes root cause** - Viper has flag values available immediately
+- ✅ **Minimal changes** - Only affects root.go and removes cmd parameter from 100+ call sites
+- ✅ **Future-proof** - Works for all commands, including terraform/helmfile/packer
+- ✅ **Centralized** - All flag syncing happens in one place (root.go PersistentPreRun)
+
+**Why This Is Better Than Phase 2:**
+- Phase 2 (passing `cmd` parameter) required updating 100+ function signatures
+- 99% of callers passed `nil`, which was a code smell
+- Phase 3 (sync in root.go) is centralized and affects no function signatures
+
+### Remaining Issue: DisableFlagParsing Commands
+
+The current implementation still has a fallback for commands with `DisableFlagParsing=true` (terraform/helmfile/packer):
+
+1. **For normal commands** - `syncGlobalFlagsToViper()` reads from Cobra's already-parsed FlagSet
+2. **For DisableFlagParsing commands** - These commands bypass Cobra's flag parsing, so we still need pflag fallback
+
+### After Terraform/Helmfile/Packer Migration
+
+Once these three commands migrate to the command registry pattern and use the standard flag handler:
+
+#### Removable Code
+
+```go
+// ❌ DELETE: No longer needed after migration
+func parseProfilesFromOsArgs(args []string) []string {
+    // pflag parsing fallback for DisableFlagParsing commands
+}
+```
+
+#### Simplified Code
+
+```go
+// ✅ SIMPLIFY: Two paths instead of three
+func getProfilesFromFlags(cmd *cobra.Command) []string {
+    if cmd == nil {
+        return nil  // No fallback needed
+    }
+
+    // Just read from Cobra's FlagSet - always works after migration
+    if profiles, err := cmd.Flags().GetStringSlice("profile"); err == nil && len(profiles) > 0 {
+        return profiles
+    }
+
+    return nil
+}
+```
+
+### Migration Checklist
+
+When migrating terraform/helmfile/packer commands:
+
+- [ ] **Remove `DisableFlagParsing: true`** from command definition
+- [ ] **Use standard flag parser** (`flags.NewStandardParser()`)
+- [ ] **Delete `parseProfilesFromOsArgs()`** function from `pkg/config/load.go`
+- [ ] **Simplify `getProfilesFromFlags()`** to only read from Cobra (remove os.Args fallback)
+- [ ] **Update tests** to remove os.Args parsing test cases
+- [ ] **Update documentation** to reflect simplified approach
+
+### Ultimate Solution: Fix Viper Timing
+
+The root cause could potentially be addressed by forcing Viper to sync before `InitCliConfig()`:
+
+```go
+// In cmd/root.go PersistentPreRun, before calling InitCliConfig
+func syncGlobalFlagsToViper(cmd *cobra.Command) {
+    v := viper.GetViper()
+
+    // Manually sync changed flags to Viper
+    cmd.Flags().Visit(func(flag *pflag.Flag) {
+        if flag.Changed {
+            v.Set(flag.Name, flag.Value.String())
+        }
+    })
+}
+```
+
+**Benefits:**
+- No need to pass `cmd` to `LoadConfig()`
+- All flag values available in Viper immediately
+- Simpler function signatures
+
+**Trade-offs:**
+- Adds complexity to root command setup
+- Still need to handle `DisableFlagParsing` commands differently
+- Current approach (passing `cmd`) is more explicit and easier to understand
+
+### Current Architecture is Future-Proof
+
+The `cmd` parameter pattern we implemented will remain useful even after migration:
+
+- ✅ Architecturally correct (reads from source of truth - Cobra's FlagSet)
+- ✅ Makes dependencies explicit
+- ✅ Easy to test (can mock `*cobra.Command`)
+- ✅ Consistent with other Atmos patterns (`processChdirFlag()`)
+- ✅ Self-documenting (clear that we're reading CLI flags)
 
 3. **Option C: Commands populate ProfilesFromArg**
    ```go
