@@ -70,6 +70,37 @@ func parseProfilesFromOsArgs(args []string) []string {
 	return result
 }
 
+// parseViperProfilesFromEnv handles Viper's quirky environment variable parsing for StringSlice.
+// Viper does NOT parse comma-separated environment variables correctly:
+//   - "dev,staging,prod" → []string{"dev,staging,prod"} (single element, NOT split)
+//   - "dev staging prod" → []string{"dev", "staging", "prod"} (splits on whitespace)
+//   - " dev , staging " → []string{"dev", ",", "staging"} (splits on whitespace, keeps commas!)
+func parseViperProfilesFromEnv(profiles []string) []string {
+	var parsed []string
+
+	for _, p := range profiles {
+		trimmed := strings.TrimSpace(p)
+		// Skip empty strings and standalone commas (from Viper's whitespace split).
+		if trimmed == "" || trimmed == "," {
+			continue
+		}
+
+		// If this element contains commas, split it further.
+		if strings.Contains(trimmed, ",") {
+			for _, part := range strings.Split(trimmed, ",") {
+				if partTrimmed := strings.TrimSpace(part); partTrimmed != "" {
+					parsed = append(parsed, partTrimmed)
+				}
+			}
+		} else {
+			// No commas, use as-is.
+			parsed = append(parsed, trimmed)
+		}
+	}
+
+	return parsed
+}
+
 // getProfilesFromFlagsOrEnv retrieves profiles from --profile flag or ATMOS_PROFILE env var.
 // This is a helper function to reduce nesting complexity in LoadConfig.
 // Returns profiles and source ("env" or "flag") for logging.
@@ -80,15 +111,24 @@ func getProfilesFromFlagsOrEnv() ([]string, string) {
 	globalViper := viper.GetViper()
 
 	// Check if profile is set in Viper (from either flag or env var).
-	// syncGlobalFlagsToViper() ensures CLI flag values are synced to Viper before InitCliConfig.
-	if globalViper.IsSet(profileKey) && len(globalViper.GetStringSlice(profileKey)) > 0 {
-		profiles := globalViper.GetStringSlice(profileKey)
-		// Determine source based on whether ATMOS_PROFILE env var is explicitly set.
-		// Env vars are read by Viper from BindEnv, but we check the env var directly
-		// to accurately determine the source for logging purposes.
-		if _, envSet := os.LookupEnv("ATMOS_PROFILE"); envSet {
-			return profiles, "env"
+	if !globalViper.IsSet(profileKey) {
+		return nil, ""
+	}
+
+	profiles := globalViper.GetStringSlice(profileKey)
+	_, envSet := os.LookupEnv("ATMOS_PROFILE")
+
+	// Environment variable path - needs special parsing for Viper quirks.
+	if envSet && len(profiles) > 0 {
+		parsed := parseViperProfilesFromEnv(profiles)
+		if len(parsed) > 0 {
+			return parsed, "env"
 		}
+		return nil, ""
+	}
+
+	// CLI flag path - already parsed correctly by pflag/Cobra.
+	if len(profiles) > 0 {
 		return profiles, "flag"
 	}
 
