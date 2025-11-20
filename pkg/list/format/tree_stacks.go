@@ -30,7 +30,7 @@ func RenderStacksTree(stacksWithImports map[string][]*listtree.ImportNode, showI
 
 	// Title.
 	output.WriteString(h1Style.Render("Stacks"))
-	output.WriteString("\n")
+	output.WriteString(treeNewline)
 
 	// Sort stack names for consistent output.
 	var stackNames []string
@@ -70,33 +70,33 @@ func RenderStacksTree(stacksWithImports map[string][]*listtree.ImportNode, showI
 
 	// Post-process to clean up spacer lines.
 	// Spacer nodes render with the marker text, replace with just "│".
-	lines := strings.Split(treeOutput, "\n")
+	lines := strings.Split(treeOutput, treeNewline)
 	var cleaned []string
 	for _, line := range lines {
 		// Check if this line contains the spacer marker.
 		// Strip ANSI codes first to get the plain text.
 		plainLine := stripANSI(line)
-		if strings.Contains(plainLine, spacerMarker) {
-			// Replace the entire line with just the continuation character.
-			// Find the indentation level (before the tree characters).
-			indent := 0
-			for _, ch := range plainLine {
-				if ch == ' ' {
-					indent++
-				} else {
-					break
-				}
-			}
-			// Render just the vertical bar with proper styling.
-			style := getBranchStyle()
-			cleaned = append(cleaned, strings.Repeat(" ", indent)+style.Render("│"))
-		} else {
+		if !strings.Contains(plainLine, spacerMarker) {
 			cleaned = append(cleaned, line)
+			continue
 		}
+
+		// Replace the entire line with just the continuation character.
+		// Find the indentation level (before the tree characters).
+		indent := 0
+		for _, ch := range plainLine {
+			if ch != ' ' {
+				break
+			}
+			indent++
+		}
+		// Render just the vertical bar with proper styling.
+		style := getBranchStyle()
+		cleaned = append(cleaned, strings.Repeat(" ", indent)+style.Render("│"))
 	}
 
-	output.WriteString(strings.Join(cleaned, "\n"))
-	output.WriteString("\n")
+	output.WriteString(strings.Join(cleaned, treeNewline))
+	output.WriteString(treeNewline)
 
 	return output.String()
 }

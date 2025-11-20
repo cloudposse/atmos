@@ -16,6 +16,7 @@ import (
 const (
 	// File extension constants.
 	yamlExt = ".yaml"
+	ymlExt  = ".yml"
 
 	// Component metadata field names.
 	fieldStackFile = "stack_file"
@@ -125,7 +126,7 @@ func findStacksForFilePath(
 
 	// Remove .yaml extension from relative path for comparison.
 	relFilePathNoExt := strings.TrimSuffix(relFilePath, yamlExt)
-	relFilePathNoExt = strings.TrimSuffix(relFilePathNoExt, ".yml")
+	relFilePathNoExt = strings.TrimSuffix(relFilePathNoExt, ymlExt)
 
 	log.Trace("Looking for stacks with file path", "abs", filePath, "rel", relFilePath, "noext", relFilePathNoExt)
 
@@ -163,7 +164,7 @@ func findStacksForFilePath(
 					// Normalize stack file path and remove extension.
 					stackFileClean := filepath.Clean(stackFile)
 					stackFileNoExt := strings.TrimSuffix(stackFileClean, yamlExt)
-					stackFileNoExt = strings.TrimSuffix(stackFileNoExt, ".yml")
+					stackFileNoExt = strings.TrimSuffix(stackFileNoExt, ymlExt)
 
 					// Try multiple matching strategies:
 					// 1. Exact match (with or without extension)
@@ -319,7 +320,7 @@ func stripBasePath(absolutePath, basePath string) string {
 
 	// Remove .yaml extension for cleaner display.
 	relativePath = strings.TrimSuffix(relativePath, yamlExt)
-	relativePath = strings.TrimSuffix(relativePath, ".yml")
+	relativePath = strings.TrimSuffix(relativePath, ymlExt)
 
 	return relativePath
 }
@@ -391,7 +392,7 @@ func resolveImportPath(importPath, _ string, atmosConfig *schema.AtmosConfigurat
 	basePath := atmosConfig.StacksBaseAbsolutePath
 
 	// Add .yaml extension if not present.
-	if !strings.HasSuffix(importPath, yamlExt) && !strings.HasSuffix(importPath, ".yml") {
+	if !strings.HasSuffix(importPath, yamlExt) && !strings.HasSuffix(importPath, ymlExt) {
 		importPath += yamlExt
 	}
 

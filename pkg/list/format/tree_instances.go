@@ -12,6 +12,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+const (
+	treeNewline = "\n"
+)
+
 // RenderInstancesTree renders stacks with their components and import hierarchies as a tree.
 // Structure: Stacks → Components → Imports.
 // If showImports is false, only shows stacks and components without import details.
@@ -31,7 +35,7 @@ func RenderInstancesTree(stacksWithComponents map[string]map[string][]*listtree.
 
 	// Title.
 	output.WriteString(h1Style.Render("Component Instances"))
-	output.WriteString("\n")
+	output.WriteString(treeNewline)
 
 	// Create root tree.
 	root := tree.New().EnumeratorStyle(getBranchStyle())
@@ -69,33 +73,33 @@ func RenderInstancesTree(stacksWithComponents map[string]map[string][]*listtree.
 	// Spacer nodes render with the marker text, replace with just "│".
 	const componentSpacerMarker = "<<<COMPONENT_SPACER>>>"
 
-	lines := strings.Split(treeOutput, "\n")
+	lines := strings.Split(treeOutput, treeNewline)
 	var cleaned []string
 	for _, line := range lines {
 		// Check if this line contains any spacer marker.
 		// Strip ANSI codes first to get the plain text.
 		plainLine := stripANSI(line)
-		if strings.Contains(plainLine, spacerMarker) || strings.Contains(plainLine, componentSpacerMarker) {
-			// Replace the entire line with just the continuation character.
-			// Find the indentation level (before the tree characters).
-			indent := 0
-			for _, ch := range plainLine {
-				if ch == ' ' {
-					indent++
-				} else {
-					break
-				}
-			}
-			// Render just the vertical bar with proper styling.
-			style := getBranchStyle()
-			cleaned = append(cleaned, strings.Repeat(" ", indent)+style.Render("│"))
-		} else {
+		if !strings.Contains(plainLine, spacerMarker) && !strings.Contains(plainLine, componentSpacerMarker) {
 			cleaned = append(cleaned, line)
+			continue
 		}
+
+		// Replace the entire line with just the continuation character.
+		// Find the indentation level (before the tree characters).
+		indent := 0
+		for _, ch := range plainLine {
+			if ch != ' ' {
+				break
+			}
+			indent++
+		}
+		// Render just the vertical bar with proper styling.
+		style := getBranchStyle()
+		cleaned = append(cleaned, strings.Repeat(" ", indent)+style.Render("│"))
 	}
 
-	output.WriteString(strings.Join(cleaned, "\n"))
-	output.WriteString("\n")
+	output.WriteString(strings.Join(cleaned, treeNewline))
+	output.WriteString(treeNewline)
 
 	return output.String()
 }
