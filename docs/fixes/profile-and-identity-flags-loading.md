@@ -71,21 +71,21 @@ Added `syncGlobalFlagsToViper()` function that runs in `PersistentPreRun` before
 // syncGlobalFlagsToViper synchronizes global flags from Cobra's FlagSet to Viper.
 // This is necessary because Viper's BindPFlag doesn't immediately sync values when flags are parsed.
 func syncGlobalFlagsToViper(cmd *cobra.Command) {
-	v := viper.GetViper()
+    v := viper.GetViper()
 
-	// Sync profile flag if explicitly set
-	if cmd.Flags().Changed("profile") {
-		if profiles, err := cmd.Flags().GetStringSlice("profile"); err == nil {
-			v.Set("profile", profiles)
-		}
-	}
+    // Sync profile flag if explicitly set
+    if cmd.Flags().Changed("profile") {
+        if profiles, err := cmd.Flags().GetStringSlice("profile"); err == nil {
+            v.Set("profile", profiles)
+        }
+    }
 
-	// Sync identity flag if explicitly set
-	if cmd.Flags().Changed("identity") {
-		if identity, err := cmd.Flags().GetString("identity"); err == nil {
-			v.Set("identity", identity)
-		}
-	}
+    // Sync identity flag if explicitly set
+    if cmd.Flags().Changed("identity") {
+        if identity, err := cmd.Flags().GetString("identity"); err == nil {
+            v.Set("identity", identity)
+        }
+    }
 }
 
 // In PersistentPreRun (called before every command):
@@ -109,20 +109,20 @@ For commands with `DisableFlagParsing=true` (terraform/helmfile/packer), Cobra n
 // parseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
 // This is a fallback for commands with DisableFlagParsing=true (terraform, helmfile, packer).
 func parseProfilesFromOsArgs(args []string) []string {
-	fs := pflag.NewFlagSet("profile-parser", pflag.ContinueOnError)
-	fs.ParseErrorsAllowlist.UnknownFlags = true
+    fs := pflag.NewFlagSet("profile-parser", pflag.ContinueOnError)
+    fs.ParseErrorsAllowlist.UnknownFlags = true
 
-	profiles := fs.StringSlice("profile", []string{}, "Configuration profiles")
-	_ = fs.Parse(args)
+    profiles := fs.StringSlice("profile", []string{}, "Configuration profiles")
+    _ = fs.Parse(args)
 
-	// Trim whitespace and filter empty values
-	result := make([]string, 0, len(*profiles))
-	for _, profile := range *profiles {
-		if trimmed := strings.TrimSpace(profile); trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
+    // Trim whitespace and filter empty values
+    result := make([]string, 0, len(*profiles))
+    for _, profile := range *profiles {
+        if trimmed := strings.TrimSpace(profile); trimmed != "" {
+            result = append(result, trimmed)
+        }
+    }
+    return result
 }
 ```
 
@@ -136,21 +136,21 @@ func parseProfilesFromOsArgs(args []string) []string {
 
 ```go
 func getProfilesFromFlagsOrEnv() ([]string, string) {
-	globalViper := viper.GetViper()
+    globalViper := viper.GetViper()
 
-	// Check if profile is set in Viper (from either flag or env var)
-	// syncGlobalFlagsToViper() ensures CLI flag values are synced before InitCliConfig
-	if globalViper.IsSet("profile") && len(globalViper.GetStringSlice("profile")) > 0 {
-		profiles := globalViper.GetStringSlice("profile")
+    // Check if profile is set in Viper (from either flag or env var)
+    // syncGlobalFlagsToViper() ensures CLI flag values are synced before InitCliConfig
+    if globalViper.IsSet("profile") && len(globalViper.GetStringSlice("profile")) > 0 {
+        profiles := globalViper.GetStringSlice("profile")
 
-		// Determine source based on whether ATMOS_PROFILE env var is explicitly set
-		if _, envSet := os.LookupEnv("ATMOS_PROFILE"); envSet {
-			return profiles, "env"
-		}
-		return profiles, "flag"
-	}
+        // Determine source based on whether ATMOS_PROFILE env var is explicitly set
+        if _, envSet := os.LookupEnv("ATMOS_PROFILE"); envSet {
+            return profiles, "env"
+        }
+        return profiles, "flag"
+    }
 
-	return nil, ""
+    return nil, ""
 }
 ```
 
@@ -281,21 +281,21 @@ Updated `createComponentAuthManager()` to inherit authenticated identity from pa
 // Determine identity to use for component authentication
 var identityName string
 if parentAuthManager != nil {
-	chain := parentAuthManager.GetChain()
-	if len(chain) > 0 {
-		// Last element in chain is the authenticated identity
-		identityName = chain[len(chain)-1]
-		log.Debug("Inheriting identity from parent AuthManager",
-			"component", component,
-			"inheritedIdentity", identityName)
-	}
+    chain := parentAuthManager.GetChain()
+    if len(chain) > 0 {
+        // Last element in chain is the authenticated identity
+        identityName = chain[len(chain)-1]
+        log.Debug("Inheriting identity from parent AuthManager",
+            "component", component,
+            "inheritedIdentity", identityName)
+    }
 }
 
 // Create AuthManager with inherited identity
 componentAuthManager, err := auth.CreateAndAuthenticateManager(
-	identityName,     // Inherited from parent, or empty to auto-detect
-	mergedAuthConfig,
-	cfg.IdentityFlagSelectValue,
+    identityName,     // Inherited from parent, or empty to auto-detect
+    mergedAuthConfig,
+    cfg.IdentityFlagSelectValue,
 )
 ```
 
