@@ -14,22 +14,22 @@ func TestParseProfilesFromArgs(t *testing.T) {
 	}{
 		{
 			name:     "--profile value syntax",
-			args:     []string{"atmos", "describe", "config", "--profile", "managers"},
+			args:     []string{"atmos", "describe", "config", AuthProfileFlag, "managers"},
 			expected: []string{"managers"},
 		},
 		{
 			name:     "--profile=value syntax",
-			args:     []string{"atmos", "describe", "config", "--profile=managers"},
+			args:     []string{"atmos", "describe", "config", AuthProfileFlag + "=managers"},
 			expected: []string{"managers"},
 		},
 		{
 			name:     "comma-separated values",
-			args:     []string{"atmos", "describe", "config", "--profile=dev,staging,prod"},
+			args:     []string{"atmos", "describe", "config", AuthProfileFlag + "=dev,staging,prod"},
 			expected: []string{"dev", "staging", "prod"},
 		},
 		{
 			name:     "multiple --profile flags",
-			args:     []string{"atmos", "describe", "config", "--profile", "dev", "--profile", "staging"},
+			args:     []string{"atmos", "describe", "config", AuthProfileFlag, "dev", AuthProfileFlag, "staging"},
 			expected: []string{"dev", "staging"},
 		},
 		{
@@ -39,27 +39,27 @@ func TestParseProfilesFromArgs(t *testing.T) {
 		},
 		{
 			name:     "--profile at end without value",
-			args:     []string{"atmos", "describe", "config", "--profile"},
+			args:     []string{"atmos", "describe", "config", AuthProfileFlag},
 			expected: nil,
 		},
 		{
 			name:     "comma-separated with spaces",
-			args:     []string{"atmos", "describe", "config", "--profile=dev, staging , prod"},
+			args:     []string{"atmos", "describe", "config", AuthProfileFlag + "=dev, staging , prod"},
 			expected: []string{"dev", "staging", "prod"},
 		},
 		{
 			name:     "comma-separated with --profile value syntax",
-			args:     []string{"atmos", "describe", "config", "--profile", "dev,staging"},
+			args:     []string{"atmos", "describe", "config", AuthProfileFlag, "dev,staging"},
 			expected: []string{"dev", "staging"},
 		},
 		{
 			name:     "mixed syntax",
-			args:     []string{"atmos", "describe", "config", "--profile", "dev", "--profile=staging,prod"},
+			args:     []string{"atmos", "describe", "config", AuthProfileFlag, "dev", AuthProfileFlag + "=staging,prod"},
 			expected: []string{"dev", "staging", "prod"},
 		},
 		{
 			name:     "empty value in comma list",
-			args:     []string{"atmos", "describe", "config", "--profile=dev,,prod"},
+			args:     []string{"atmos", "describe", "config", AuthProfileFlag + "=dev,,prod"},
 			expected: []string{"dev", "prod"},
 		},
 	}

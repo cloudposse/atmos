@@ -41,7 +41,7 @@ func parseProfilesFromArgs(args []string) []string {
 	var profiles []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		if arg == "--profile" && i+1 < len(args) {
+		if arg == AuthProfileFlag && i+1 < len(args) {
 			// --profile value syntax - handle comma-separated values.
 			for _, v := range strings.Split(args[i+1], ",") {
 				if trimmed := strings.TrimSpace(v); trimmed != "" {
@@ -49,9 +49,9 @@ func parseProfilesFromArgs(args []string) []string {
 				}
 			}
 			i++ // Skip next arg.
-		} else if strings.HasPrefix(arg, "--profile=") {
+		} else if strings.HasPrefix(arg, AuthProfileFlag+"=") {
 			// --profile=value syntax - handle comma-separated values.
-			value := strings.TrimPrefix(arg, "--profile=")
+			value := strings.TrimPrefix(arg, AuthProfileFlag+"=")
 			for _, v := range strings.Split(value, ",") {
 				if trimmed := strings.TrimSpace(v); trimmed != "" {
 					profiles = append(profiles, trimmed)

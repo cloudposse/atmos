@@ -33,7 +33,7 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 				v := viper.GetViper()
 				v.Set("profile", nil) // Ensure viper doesn't have profile set
 			},
-			osArgs:           []string{"atmos", "describe", "config", "--profile", "cli-profile"},
+			osArgs:           []string{"atmos", "describe", "config", AuthProfileFlag, "cli-profile"},
 			expectedProfiles: []string{"cli-profile"},
 			expectedSource:   "flag",
 		},
@@ -43,7 +43,7 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 				v := viper.GetViper()
 				v.Set("profile", nil)
 			},
-			osArgs:           []string{"atmos", "describe", "config", "--profile=cli-profile"},
+			osArgs:           []string{"atmos", "describe", "config", AuthProfileFlag + "=cli-profile"},
 			expectedProfiles: []string{"cli-profile"},
 			expectedSource:   "flag",
 		},
@@ -72,7 +72,7 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			setupViper: func() {
 				// No Viper setup - environment will be set in the test body
 			},
-			osArgs:           []string{"atmos", "describe", "config", "--profile", "cli-profile"},
+			osArgs:           []string{"atmos", "describe", "config", AuthProfileFlag, "cli-profile"},
 			expectedProfiles: []string{"cli-profile"},
 			expectedSource:   "flag",
 		},
