@@ -69,14 +69,14 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			expectedSource:   "",
 		},
 		{
-			name: "environment variable takes precedence over CLI flag",
+			name: "CLI flag takes precedence over environment variable",
 			setupViper: func() {
 				v := viper.GetViper()
 				v.Set("profile", []string{"env-profile"})
 			},
 			osArgs:           []string{"atmos", "describe", "config", "--profile", "cli-profile"},
-			expectedProfiles: []string{"env-profile"},
-			expectedSource:   "env",
+			expectedProfiles: []string{"cli-profile"},
+			expectedSource:   "flag",
 		},
 	}
 

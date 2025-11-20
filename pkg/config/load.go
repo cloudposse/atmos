@@ -62,22 +62,24 @@ func parseProfilesFromArgs(args []string) []string {
 // getProfilesFromFlagsOrEnv retrieves profiles from --profile flag or ATMOS_PROFILE env var.
 // This is a helper function to reduce nesting complexity in LoadConfig.
 // Returns profiles and source ("env" or "flag") for logging.
+// Precedence: CLI flags override environment variables.
 func getProfilesFromFlagsOrEnv() ([]string, string) {
 	globalViper := viper.GetViper()
 
 	// WORKAROUND: Viper's BindPFlag doesn't always sync CLI flag values immediately.
 	// When using --profile flag, the value may be in os.Args but not yet in Viper.
 	// Environment variables work fine (ATMOS_PROFILE).
-	// Check both Viper (for env vars) and os.Args (for CLI flags).
-	if globalViper.IsSet("profile") && len(globalViper.GetStringSlice("profile")) > 0 {
-		// Env var path - value is in Viper.
-		return globalViper.GetStringSlice("profile"), "env"
-	}
+	// Check CLI flags FIRST (highest precedence), then fall back to env vars.
 
-	// CLI flag path - parse os.Args manually.
+	// CLI flag path - parse os.Args manually (highest priority).
 	profiles := parseProfilesFromArgs(os.Args)
 	if len(profiles) > 0 {
 		return profiles, "flag"
+	}
+
+	// Env var path - check Viper for ATMOS_PROFILE (lower priority).
+	if globalViper.IsSet("profile") && len(globalViper.GetStringSlice("profile")) > 0 {
+		return globalViper.GetStringSlice("profile"), "env"
 	}
 
 	return nil, ""
