@@ -249,6 +249,107 @@ provision:
 - Provisioners check their own `enabled` flag
 - Provisioner-specific options defined by implementation
 
+### Configuration Hierarchy and Deep-Merge
+
+The `provision` configuration follows Atmos's standard deep-merge behavior and can be specified at **any level** in the stack hierarchy.
+
+#### Top-Level Defaults
+
+Set provisioning defaults for all components:
+
+```yaml
+# stacks/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: true
+```
+
+#### Environment-Specific Configuration
+
+Override at environment level:
+
+```yaml
+# stacks/orgs/acme/plat/dev/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: true    # Auto-provision in dev
+
+# stacks/orgs/acme/plat/prod/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: false   # Pre-provisioned in prod
+```
+
+#### Component-Level Overrides
+
+Override for specific components:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      provision:
+        backend:
+          enabled: true
+
+    eks:
+      provision:
+        backend:
+          enabled: false  # Component-level override
+```
+
+#### Catalog Inheritance
+
+Share provision configuration through component catalogs:
+
+```yaml
+# stacks/catalog/databases/defaults.yaml
+components:
+  terraform:
+    rds/defaults:
+      provision:
+        backend:
+          enabled: true
+
+# stacks/prod.yaml
+components:
+  terraform:
+    rds-primary:
+      metadata:
+        inherits: [rds/defaults]
+      # Inherits provision.backend.enabled: true
+      provision:
+        backend:
+          enabled: false  # Override inherited value
+```
+
+#### Multi-Provisioner Configuration
+
+Configure multiple provisioners with different settings:
+
+```yaml
+# Top-level: Enable backend provisioning everywhere
+terraform:
+  provision:
+    backend:
+      enabled: true
+
+# Component: Enable specific provisioner types
+components:
+  terraform:
+    app:
+      provision:
+        backend:
+          enabled: true   # Inherited from top-level
+        component:        # Future provisioner
+          vendor: true    # Component-specific setting
+```
+
+**Implementation Note:** Provisioners receive the fully resolved `componentConfig` after deep-merge, so they automatically benefit from hierarchy without additional code.
+
 ---
 
 ## AuthContext Integration

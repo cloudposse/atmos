@@ -126,6 +126,83 @@ components:
           enabled: true  # Enable automatic provisioning
 ```
 
+## Configuration Hierarchy
+
+The `provision.backend` configuration supports Atmos's deep-merge system and can be specified at multiple levels in the stack hierarchy. This provides flexibility to set defaults at high levels and override at component level.
+
+### Global Default (Organization-Level)
+
+Enable provisioning for all components in an organization:
+
+```yaml
+# stacks/orgs/acme/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: true
+```
+
+All components in this organization will inherit `provision.backend.enabled: true` unless explicitly overridden.
+
+### Environment-Level Configuration
+
+Set different provisioning policies per environment:
+
+```yaml
+# stacks/orgs/acme/plat/dev/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: true  # Auto-provision in dev
+
+# stacks/orgs/acme/plat/prod/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: false  # Pre-provisioned backends in prod
+```
+
+### Component Inheritance
+
+Use `metadata.inherits` to share provision configuration:
+
+```yaml
+# stacks/catalog/vpc/defaults.yaml
+components:
+  terraform:
+    vpc/defaults:
+      provision:
+        backend:
+          enabled: true
+
+# stacks/dev.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+      # Inherits provision.backend.enabled: true
+```
+
+### Component-Level Override
+
+Override inherited settings per component:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      provision:
+        backend:
+          enabled: false  # Disable for this specific component
+```
+
+**Deep-Merge Behavior:** Atmos combines configurations from all levels, giving you maximum flexibility:
+- Set defaults at organization or environment level
+- Override per component when needed
+- Use catalog inheritance for reusable patterns
+- Component-level configuration has highest precedence
+
 ## Supported Backend Types
 
 ### S3 (AWS)
@@ -312,7 +389,7 @@ provision:
     enabled: false  # Backend managed by Terraform
 ```
 
-See [Migration Guide](/core-concepts/backends/migration-to-production) for complete details.
+See the [Development vs Production](/core-concepts/components/terraform/backends#automatic-backend-provisioning) section in Backend Configuration for migration patterns.
 
 ## Idempotent Operations
 
@@ -332,13 +409,11 @@ S3 bucket 'acme-terraform-state-dev' already exists (idempotent)
 
 ## Related Commands
 
-- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize Terraform (auto-provisions if enabled)
-- [`atmos terraform plan`](/cli/commands/terraform/plan) - Plan Terraform changes (auto-provisions if enabled)
-- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply Terraform changes (auto-provisions if enabled)
+- `atmos terraform init` - Initialize Terraform (auto-provisions if enabled)
+- `atmos terraform plan` - Plan Terraform changes (auto-provisions if enabled)
+- `atmos terraform apply` - Apply Terraform changes (auto-provisions if enabled)
 
 ## Related Concepts
 
-- [Stack Configuration](/core-concepts/stacks/configuration)
-- [Backend Configuration](/core-concepts/backends)
-- [AuthManager](/core-concepts/auth)
-- [Migration to Production](/core-concepts/backends/migration-to-production)
+- [Stack Configuration](/core-concepts/stacks)
+- [Backend Configuration](/core-concepts/components/terraform/backends)

@@ -228,6 +228,110 @@ settings:
       enabled: true  # Global feature flag (default: false)
 ```
 
+### Configuration Hierarchy
+
+The `provision.backend` configuration leverages Atmos's deep-merge system and can be specified at **multiple levels** in the stack hierarchy. This provides maximum flexibility for different organizational patterns.
+
+#### 1. Top-Level Terraform Defaults
+
+Enable provisioning for all components across all environments:
+
+```yaml
+# stacks/_defaults.yaml or stacks/orgs/acme/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: true  # Applies to all components
+```
+
+#### 2. Environment-Level Configuration
+
+Override defaults per environment:
+
+```yaml
+# stacks/orgs/acme/plat/dev/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: true  # Enable for all dev components
+
+# stacks/orgs/acme/plat/prod/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: false  # Disable for production (use pre-provisioned backends)
+```
+
+#### 3. Component-Level Configuration
+
+Override at the component level:
+
+```yaml
+# stacks/dev.yaml
+components:
+  terraform:
+    vpc:
+      provision:
+        backend:
+          enabled: true  # Enable for this specific component
+
+    eks:
+      provision:
+        backend:
+          enabled: false  # Disable for this specific component
+```
+
+#### 4. Inheritance via metadata.inherits
+
+Share provision configuration through catalog components:
+
+```yaml
+# stacks/catalog/vpc/defaults.yaml
+components:
+  terraform:
+    vpc/defaults:
+      provision:
+        backend:
+          enabled: true
+
+# stacks/dev.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+      # Automatically inherits provision.backend.enabled: true
+```
+
+#### Deep-Merge Behavior
+
+Atmos deep-merges `provision` blocks across all hierarchy levels:
+
+```yaml
+# 1. Top-level default
+terraform:
+  provision:
+    backend:
+      enabled: true
+
+# 2. Component override
+components:
+  terraform:
+    vpc:
+      provision:
+        backend:
+          enabled: false  # Overrides top-level setting
+
+# Result after deep-merge:
+# vpc component has provision.backend.enabled: false
+```
+
+**Key Benefits:**
+- **DRY Principle**: Set defaults once at high levels
+- **Environment Flexibility**: Dev uses auto-provision, prod uses pre-provisioned
+- **Component Control**: Override per component when needed
+- **Catalog Reuse**: Share provision settings through inherits
+
 ### Configuration Filtering
 
 **Critical:** The `provision` block is **never serialized** to `backend.tf.json`:

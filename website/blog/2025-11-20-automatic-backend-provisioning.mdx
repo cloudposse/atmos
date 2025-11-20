@@ -48,6 +48,47 @@ When you run `atmos terraform plan vpc -s dev`, Atmos:
 
 All automatically. No manual intervention required.
 
+## Configuration Flexibility
+
+The `provision.backend` configuration supports Atmos's inheritance system, allowing you to set defaults at any level in your stack hierarchy.
+
+**Enable for all development environments:**
+
+```yaml
+# stacks/orgs/acme/plat/dev/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: true  # All dev components inherit this
+```
+
+**Disable for production:**
+
+```yaml
+# stacks/orgs/acme/plat/prod/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: false  # Production uses pre-provisioned backends
+```
+
+**Override per component:**
+
+```yaml
+components:
+  terraform:
+    vpc:
+      provision:
+        backend:
+          enabled: false  # Component-level override
+```
+
+Components automatically inherit these settings through Atmos's deep-merge system. This gives you maximum flexibility:
+- Set defaults at organization or environment level
+- Override for specific components when needed
+- Use catalog inheritance for reusable patterns
+- Different policies for dev/staging (auto-provision) vs prod (pre-provisioned)
+
 ## Secure by Default
 
 The S3 backend provisioner applies hardcoded security best practices:
@@ -171,8 +212,7 @@ atmos terraform plan vpc -s dev
 
 For more information:
 - [CLI Documentation](/cli/commands/provision/backend)
-- [Configuration Schema](/core-concepts/stacks/configuration)
-- [Migration Guide](/core-concepts/backends/migration-to-production)
+- [Backend Configuration](/core-concepts/components/terraform/backends)
 
 ## Community Feedback
 

@@ -663,6 +663,79 @@ When enabled, Atmos will:
 2. Provision the backend if it doesn't exist (with secure defaults)
 3. Continue with Terraform initialization and execution
 
+### Configuration Hierarchy
+
+The `provision.backend` configuration leverages Atmos's deep-merge system, allowing you to set defaults at high levels and override per component.
+
+#### Organization-Level Defaults
+
+Enable provisioning for all components in development environments:
+
+<Terminal title="stacks/orgs/acme/plat/dev/_defaults.yaml">
+```yaml
+terraform:
+  provision:
+    backend:
+      enabled: true  # All dev components inherit this
+```
+</Terminal>
+
+#### Environment-Specific Overrides
+
+Configure different provisioning policies per environment:
+
+<Terminal title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+```yaml
+terraform:
+  provision:
+    backend:
+      enabled: false  # Production uses pre-provisioned backends
+```
+</Terminal>
+
+#### Component Inheritance
+
+Share provision configuration through catalog components:
+
+<Terminal title="stacks/catalog/networking/vpc.yaml">
+```yaml
+components:
+  terraform:
+    vpc/defaults:
+      provision:
+        backend:
+          enabled: true  # Catalog default
+
+# stacks/dev.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+      # Inherits provision.backend.enabled: true
+```
+</Terminal>
+
+#### Component-Level Override
+
+Override for specific components:
+
+<Terminal title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      provision:
+        backend:
+          enabled: false  # Disable for this component
+```
+</Terminal>
+
+**Typical Pattern:**
+- **Dev/Staging**: Enable at environment level (`terraform.provision.backend.enabled: true`)
+- **Production**: Disable at environment level, use pre-provisioned backends managed by Terraform
+- **Per-Component**: Override when specific components need different behavior
+
 ### Supported Backend Types
 
 #### S3 (AWS)

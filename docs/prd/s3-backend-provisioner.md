@@ -159,6 +159,118 @@ components:
 2. Assume `TerraformStateAdmin` role in account 999999999999
 3. Create S3 bucket in account 999999999999
 
+### Multi-Environment Setup with Inheritance
+
+Leverage Atmos's deep-merge system to configure provisioning at different hierarchy levels:
+
+#### Organization-Level Defaults
+
+Enable provisioning for all development and staging environments:
+
+```yaml
+# stacks/orgs/acme/_defaults.yaml
+terraform:
+  backend_type: s3
+  backend:
+    region: us-east-1
+    encrypt: true
+
+# stacks/orgs/acme/plat/dev/_defaults.yaml
+terraform:
+  backend:
+    bucket: acme-terraform-state-dev  # Dev bucket
+  provision:
+    backend:
+      enabled: true  # Auto-provision in dev
+
+# stacks/orgs/acme/plat/staging/_defaults.yaml
+terraform:
+  backend:
+    bucket: acme-terraform-state-staging  # Staging bucket
+  provision:
+    backend:
+      enabled: true  # Auto-provision in staging
+
+# stacks/orgs/acme/plat/prod/_defaults.yaml
+terraform:
+  backend:
+    bucket: acme-terraform-state-prod  # Prod bucket
+  provision:
+    backend:
+      enabled: false  # Pre-provisioned in prod (managed by Terraform)
+```
+
+#### Catalog Inheritance Pattern
+
+Share provision configuration through component catalogs:
+
+```yaml
+# stacks/catalog/networking/vpc.yaml
+components:
+  terraform:
+    vpc/defaults:
+      backend_type: s3
+      backend:
+        key: vpc/terraform.tfstate
+        region: us-east-1
+      provision:
+        backend:
+          enabled: true  # Default: auto-provision
+
+# stacks/dev/us-east-1.yaml
+components:
+  terraform:
+    vpc-dev:
+      metadata:
+        inherits: [vpc/defaults]
+      # Inherits provision.backend.enabled: true
+      backend:
+        bucket: acme-terraform-state-dev  # Dev-specific bucket
+
+# stacks/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc-prod:
+      metadata:
+        inherits: [vpc/defaults]
+      backend:
+        bucket: acme-terraform-state-prod  # Prod-specific bucket
+      provision:
+        backend:
+          enabled: false  # Override: disable for production
+```
+
+#### Per-Component Override
+
+Override provisioning for specific components:
+
+```yaml
+# stacks/dev/us-east-1.yaml
+components:
+  terraform:
+    # VPC uses auto-provisioning (inherits from environment defaults)
+    vpc:
+      backend:
+        bucket: acme-terraform-state-dev
+        key: vpc/terraform.tfstate
+      # provision.backend.enabled: true (inherited)
+
+    # EKS explicitly disables auto-provisioning
+    eks:
+      backend:
+        bucket: acme-terraform-state-dev
+        key: eks/terraform.tfstate
+      provision:
+        backend:
+          enabled: false  # Component-level override
+```
+
+**Benefits of Hierarchy:**
+- **DRY**: Configure once at organization/environment level
+- **Flexibility**: Override per component when needed
+- **Consistency**: All dev environments auto-provision, all prod environments use pre-provisioned backends
+- **Maintainability**: Change provisioning policy in one place
+
 ---
 
 ## Implementation
