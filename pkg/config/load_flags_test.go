@@ -80,6 +80,10 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Reset Viper state to prevent test pollution
+			viper.Reset()
+			t.Cleanup(viper.Reset)
+
 			// Setup environment for tests that need it
 			switch tt.name {
 			case "profiles from environment variable":
