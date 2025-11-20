@@ -28,8 +28,41 @@ const (
 	terraformConfigKey = "terraform_config"
 )
 
+// mergeGlobalAuthConfig merges global auth config from atmosConfig into component section.
+// Returns the merged auth section map. Also updates componentSection["auth"] to prevent
+// postProcessTemplatesAndYamlFunctions from overwriting with empty auth.
+func mergeGlobalAuthConfig(atmosConfig *schema.AtmosConfiguration, componentSection map[string]any) map[string]any {
+	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
+		return map[string]any{}
+	}
+
+	authSection := map[string]any{}
+
+	if len(atmosConfig.Auth.Providers) > 0 {
+		authSection["providers"] = atmosConfig.Auth.Providers
+	}
+	if len(atmosConfig.Auth.Identities) > 0 {
+		authSection["identities"] = atmosConfig.Auth.Identities
+	}
+	if atmosConfig.Auth.Logs.Level != "" || atmosConfig.Auth.Logs.File != "" {
+		authSection["logs"] = map[string]any{
+			"level": atmosConfig.Auth.Logs.Level,
+			"file":  atmosConfig.Auth.Logs.File,
+		}
+	}
+	if atmosConfig.Auth.Keyring.Type != "" {
+		authSection["keyring"] = atmosConfig.Auth.Keyring
+	}
+
+	// Also update componentSection["auth"] so postProcessTemplatesAndYamlFunctions doesn't overwrite.
+	componentSection[cfg.AuthSectionName] = authSection
+
+	return authSection
+}
+
 // ProcessComponentConfig processes component config sections.
 func ProcessComponentConfig(
+	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
 	stacksMap map[string]any,
@@ -119,6 +152,12 @@ func ProcessComponentConfig(
 
 	if componentAuthSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
 		componentAuthSection = map[string]any{}
+	}
+
+	// Merge global auth config from atmosConfig if component doesn't have auth section.
+	// This ensures profiles with auth config work even when auth.yaml is not explicitly imported.
+	if len(componentAuthSection) == 0 && atmosConfig != nil {
+		componentAuthSection = mergeGlobalAuthConfig(atmosConfig, componentSection)
 	}
 
 	if componentSettingsSection, ok = componentSection[cfg.SettingsSectionName].(map[string]any); !ok {
@@ -352,6 +391,7 @@ func ProcessStacks(
 	// Check and process stacks.
 	if atmosConfig.StackType == "Directory" {
 		err = ProcessComponentConfig(
+			atmosConfig,
 			&configAndStacksInfo,
 			configAndStacksInfo.Stack,
 			stacksMap,
@@ -386,6 +426,7 @@ func ProcessStacks(
 		for stackName := range stacksMap {
 			// Check if we've found the component in the stack.
 			err = ProcessComponentConfig(
+				atmosConfig,
 				&configAndStacksInfo,
 				stackName,
 				stacksMap,
