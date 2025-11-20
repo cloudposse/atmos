@@ -295,14 +295,16 @@ func TestParseSortSpec(t *testing.T) {
 				if tt.errType != nil {
 					assert.ErrorIs(t, err, tt.errType)
 				}
-			} else {
-				require.NoError(t, err)
-				if tt.expectedCount == 0 {
-					assert.Nil(t, sorters)
-				} else {
-					assert.Len(t, sorters, tt.expectedCount)
-				}
+				return
 			}
+
+			require.NoError(t, err)
+			if tt.expectedCount == 0 {
+				assert.Nil(t, sorters)
+				return
+			}
+
+			assert.Len(t, sorters, tt.expectedCount)
 		})
 	}
 }

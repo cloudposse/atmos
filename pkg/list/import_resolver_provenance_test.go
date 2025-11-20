@@ -269,19 +269,22 @@ func TestExtractComponentFolders(t *testing.T) {
 
 			if tt.expectEmpty {
 				assert.Empty(t, result)
-			} else {
-				assert.NotEmpty(t, result)
-				if tt.expectedFolder != "" {
-					found := false
-					for _, folder := range result {
-						if folder == tt.expectedFolder {
-							found = true
-							break
-						}
-					}
-					assert.True(t, found, "Expected folder %s not found in result", tt.expectedFolder)
+				return
+			}
+
+			assert.NotEmpty(t, result)
+			if tt.expectedFolder == "" {
+				return
+			}
+
+			found := false
+			for _, folder := range result {
+				if folder == tt.expectedFolder {
+					found = true
+					break
 				}
 			}
+			assert.True(t, found, "Expected folder %s not found in result", tt.expectedFolder)
 		})
 	}
 }
