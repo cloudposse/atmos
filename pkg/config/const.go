@@ -144,4 +144,7 @@ const (
 	ProfilerTypeFlag    = "--profiler-type"
 	HeatmapFlag         = "--heatmap"
 	HeatmapModeFlag     = "--heatmap-mode"
+
+	// AtmosProfileFlag is the CLI flag for specifying Atmos profiles.
+	AtmosProfileFlag = "--profile"
 )

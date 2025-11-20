@@ -46,6 +46,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/about"
 	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/list"
+	_ "github.com/cloudposse/atmos/cmd/profile"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
 	"github.com/cloudposse/atmos/cmd/version"
 )
@@ -103,6 +104,35 @@ func parseChdirFromArgList(args []string) string {
 		}
 	}
 	return ""
+}
+
+// syncGlobalFlagsToViper synchronizes global flags from Cobra's FlagSet to Viper.
+// This is necessary because Viper's BindPFlag doesn't immediately sync values when flags are parsed.
+// Call this after Cobra parses flags but before accessing flag values via Viper.
+//
+// Background: When using viper.BindPFlag(), the binding happens at initialization time,
+// but the actual flag value isn't synced to Viper until you call viper.Get*().
+// For some code paths (especially in InitCliConfig), we need the flag values
+// available in Viper before config loading completes.
+//
+// This function explicitly syncs changed flags to Viper, making their values
+// immediately available via viper.Get*() calls.
+func syncGlobalFlagsToViper(cmd *cobra.Command) {
+	v := viper.GetViper()
+
+	// Sync profile flag if explicitly set.
+	if cmd.Flags().Changed("profile") {
+		if profiles, err := cmd.Flags().GetStringSlice("profile"); err == nil {
+			v.Set("profile", profiles)
+		}
+	}
+
+	// Sync identity flag if explicitly set.
+	if cmd.Flags().Changed("identity") {
+		if identity, err := cmd.Flags().GetString("identity"); err == nil {
+			v.Set("identity", identity)
+		}
+	}
 }
 
 // processChdirFlag processes the --chdir flag and ATMOS_CHDIR environment variable,
@@ -205,6 +235,10 @@ var RootCmd = &cobra.Command{
 		if err := processChdirFlag(cmd); err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
+
+		// Sync global flags from Cobra to Viper before InitCliConfig.
+		// This ensures flag values are immediately available in Viper for config loading.
+		syncGlobalFlagsToViper(cmd)
 
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		// Honor CLI overrides for resolving atmos.yaml and its imports.

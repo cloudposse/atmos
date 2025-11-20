@@ -31,15 +31,15 @@ func TestVendorPullBasicExecution(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	cmd := &cobra.Command{
-		Use:                "pull",
-		Short:              "Pull the latest vendor configurations or dependencies",
-		Long:               "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources.",
-		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-		Args:               cobra.NoArgs,
-		RunE:               ExecuteVendorPullCmd,
-	}
+	// Create command with global flags (including profile flag).
+	cmd := newTestCommandWithGlobalFlags("pull")
+	cmd.Short = "Pull the latest vendor configurations or dependencies"
+	cmd.Long = "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources."
+	cmd.FParseErrWhitelist = struct{ UnknownFlags bool }{UnknownFlags: false}
+	cmd.Args = cobra.NoArgs
+	cmd.RunE = ExecuteVendorPullCmd
 
+	// Add vendor-specific flags.
 	cmd.DisableFlagParsing = false
 	cmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component")
 	cmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack")
@@ -47,9 +47,6 @@ func TestVendorPullBasicExecution(t *testing.T) {
 	cmd.PersistentFlags().Bool("dry-run", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes.")
 	cmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags")
 	cmd.PersistentFlags().Bool("everything", false, "Vendor all components")
-	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
-	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
 
 	// Execute the command.
 	err := cmd.RunE(cmd, []string{})
@@ -88,11 +85,8 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/vendor"
 	t.Chdir(workDir)
 
-	// Set up vendor pull command.
-	cmd := &cobra.Command{}
-	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
-	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
+	// Set up vendor pull command with global flags.
+	cmd := newTestCommandWithGlobalFlags("pull")
 
 	flags := cmd.Flags()
 	flags.String("component", "", "")
@@ -174,11 +168,8 @@ func TestVendorPullTripleSlashNormalization(t *testing.T) {
 	testDir := "../../tests/fixtures/scenarios/vendor-triple-slash"
 	t.Chdir(testDir)
 
-	// Set up command.
-	cmd := &cobra.Command{}
-	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
-	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
+	// Set up command with global flags.
+	cmd := newTestCommandWithGlobalFlags("pull")
 
 	flags := cmd.Flags()
 	flags.String("component", "s3-bucket", "")

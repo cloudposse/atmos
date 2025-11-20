@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
@@ -34,12 +35,156 @@ const (
 
 var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 
+const (
+	profileKey       = "profile"
+	profileDelimiter = ","
+)
+
+// parseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
+// This is a fallback for commands with DisableFlagParsing=true (terraform, helmfile, packer).
+// Uses pflag's StringSlice parser to handle all syntax variations correctly.
+func parseProfilesFromOsArgs(args []string) []string {
+	// Create temporary FlagSet just for parsing --profile.
+	fs := pflag.NewFlagSet("profile-parser", pflag.ContinueOnError)
+	fs.ParseErrorsAllowlist.UnknownFlags = true // Ignore other flags.
+
+	// Register profile flag using pflag's StringSlice (handles comma-separated values).
+	profiles := fs.StringSlice(profileKey, []string{}, "Configuration profiles")
+
+	// Parse args - pflag handles both --profile=value and --profile value syntax.
+	_ = fs.Parse(args) // Ignore errors from unknown flags.
+
+	if profiles == nil || len(*profiles) == 0 {
+		return nil
+	}
+
+	// Post-process: trim whitespace and filter empty values (maintains compatibility with manual parsing).
+	result := make([]string, 0, len(*profiles))
+	for _, profile := range *profiles {
+		trimmed := strings.TrimSpace(profile)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+// parseViperProfilesFromEnv handles Viper's quirky environment variable parsing for StringSlice.
+// Viper does NOT parse comma-separated environment variables correctly:
+//   - "dev,staging,prod" → []string{"dev,staging,prod"} (single element, NOT split)
+//   - "dev staging prod" → []string{"dev", "staging", "prod"} (splits on whitespace)
+//   - " dev , staging " → []string{"dev", ",", "staging"} (splits on whitespace, keeps commas!)
+func parseViperProfilesFromEnv(profiles []string) []string {
+	var parsed []string
+
+	for _, p := range profiles {
+		trimmed := strings.TrimSpace(p)
+		// Skip empty strings and standalone commas (from Viper's whitespace split).
+		if trimmed == "" || trimmed == "," {
+			continue
+		}
+
+		// If this element contains commas, split it further.
+		if strings.Contains(trimmed, ",") {
+			for _, part := range strings.Split(trimmed, ",") {
+				if partTrimmed := strings.TrimSpace(part); partTrimmed != "" {
+					parsed = append(parsed, partTrimmed)
+				}
+			}
+		} else {
+			// No commas, use as-is.
+			parsed = append(parsed, trimmed)
+		}
+	}
+
+	return parsed
+}
+
+// parseProfilesFromEnvString parses comma-separated profiles from an environment variable value.
+// Trims whitespace and filters empty entries.
+func parseProfilesFromEnvString(envValue string) []string {
+	var result []string
+	for _, v := range strings.Split(envValue, profileDelimiter) {
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+// getProfilesFromFallbacks handles fallback profile loading when Viper doesn't have profiles set.
+// Returns profiles and source ("flag" or "env") for logging.
+func getProfilesFromFallbacks() ([]string, string) {
+	// Fallback: For commands with DisableFlagParsing=true, Cobra never parses flags,
+	// so Viper won't have flag values. Manually parse os.Args as fallback.
+	profiles := parseProfilesFromOsArgs(os.Args)
+	if len(profiles) > 0 {
+		return profiles, "flag"
+	}
+
+	// Check environment variable directly as final fallback.
+	if envProfiles := os.Getenv("ATMOS_PROFILE"); envProfiles != "" { //nolint:forbidigo
+		result := parseProfilesFromEnvString(envProfiles)
+		if len(result) > 0 {
+			return result, "env"
+		}
+	}
+
+	return nil, ""
+}
+
+// getProfilesFromFlagsOrEnv retrieves profiles from --profile flag or ATMOS_PROFILE env var.
+// This is a helper function to reduce nesting complexity in LoadConfig.
+// Returns profiles and source ("env" or "flag") for logging.
+//
+// NOTE: This function reads from Viper's global singleton, which has flag values synced
+// by syncGlobalFlagsToViper() in cmd/root.go PersistentPreRun before InitCliConfig is called.
+//
+// IMPORTANT: For commands with DisableFlagParsing=true (terraform, helmfile, packer),
+// Cobra never parses flags, so we fall back to parseProfilesFromOsArgs() to manually
+// parse the --profile flag from os.Args. This ensures profiles work for all commands.
+func getProfilesFromFlagsOrEnv() ([]string, string) {
+	globalViper := viper.GetViper()
+
+	// Check if profile is set in Viper (from either flag or env var).
+	if !globalViper.IsSet(profileKey) {
+		return getProfilesFromFallbacks()
+	}
+
+	profiles := globalViper.GetStringSlice(profileKey)
+	_, envSet := os.LookupEnv("ATMOS_PROFILE")
+
+	// Environment variable path - needs special parsing for Viper quirks.
+	if envSet && len(profiles) > 0 {
+		parsed := parseViperProfilesFromEnv(profiles)
+		if len(parsed) > 0 {
+			return parsed, "env"
+		}
+		return nil, ""
+	}
+
+	// CLI flag path - already parsed correctly by pflag/Cobra.
+	if len(profiles) > 0 {
+		return profiles, "flag"
+	}
+
+	return nil, ""
+}
+
+// LoadConfig loads the Atmos configuration from multiple sources in order of precedence:
 // * Embedded atmos.yaml (`atmos/pkg/config/atmos.yaml`)
 // * System dir (`/usr/local/etc/atmos` on Linux, `%LOCALAPPDATA%/atmos` on Windows).
 // * Home directory (~/.atmos).
 // * Current working directory.
 // * ENV vars.
 // * Command-line arguments.
+//
+// NOTE: Global flags (like --profile) must be synced to Viper before calling this function.
+// This is done by syncGlobalFlagsToViper() in cmd/root.go PersistentPreRun.
 func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
 	v := viper.New()
 	var atmosConfig schema.AtmosConfiguration
@@ -86,6 +231,45 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		}
 	}
 	setEnv(v)
+
+	// Load profiles if specified via --profile flag or ATMOS_PROFILE env var.
+	// Profiles are loaded after base config but before final unmarshaling.
+	// This allows profiles to override base config settings.
+
+	// If profiles weren't passed via ConfigAndStacksInfo, check if they were
+	// specified via --profile flag or ATMOS_PROFILE env var.
+	// Note: Global flags are bound to viper.GetViper() (global singleton), not the local viper instance.
+	if len(configAndStacksInfo.ProfilesFromArg) == 0 {
+		profiles, source := getProfilesFromFlagsOrEnv()
+		if len(profiles) > 0 {
+			configAndStacksInfo.ProfilesFromArg = profiles
+			log.Debug("Profiles loaded from CLI "+source, "profiles", profiles)
+		}
+	}
+
+	if len(configAndStacksInfo.ProfilesFromArg) > 0 {
+		// First, do a temporary unmarshal to get CliConfigPath and Profiles config.
+		// We need these to discover and load profile directories.
+		var tempConfig schema.AtmosConfiguration
+		if err := v.Unmarshal(&tempConfig); err != nil {
+			return atmosConfig, err
+		}
+
+		// Copy the already-computed CLI config directory into tempConfig.
+		// This ensures relative profile paths resolve against the actual CLI config directory
+		// rather than the current working directory.
+		tempConfig.CliConfigPath = atmosConfig.CliConfigPath
+
+		// Load each profile in order (left-to-right precedence).
+		if err := loadProfiles(v, configAndStacksInfo.ProfilesFromArg, &tempConfig); err != nil {
+			return atmosConfig, err
+		}
+
+		log.Debug("Profiles loaded successfully",
+			"profiles", configAndStacksInfo.ProfilesFromArg,
+			"count", len(configAndStacksInfo.ProfilesFromArg))
+	}
+
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err := v.Unmarshal(&atmosConfig)
@@ -517,6 +701,56 @@ func shouldExcludePathForTesting(dirPath string) bool {
 	return false
 }
 
+// loadAtmosConfigsFromDirectory loads all YAML configuration files from a directory
+// and merges them into the destination viper instance.
+// This is used by both .atmos.d/ loading and profile loading.
+//
+// The directory can contain:
+//   - YAML files (.yaml, .yml)
+//   - Subdirectories with YAML files
+//   - Special files like atmos.yaml (loaded with priority)
+//
+// Files are loaded in order:
+//  1. Priority files (atmos.yaml) first
+//  2. Sorted by depth (shallower first)
+//  3. Lexicographic order within same depth
+//
+// Parameters:
+//   - searchPattern: Glob pattern for finding files (e.g., "/path/to/dir/**/*")
+//   - dst: Destination viper instance to merge configs into
+//   - source: Description for error messages (e.g., ".atmos.d", "profile 'developer'")
+//
+// Returns error if files can't be read or YAML is invalid.
+func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, source string) error {
+	// Find all config files using existing search infrastructure.
+	foundPaths, err := SearchAtmosConfig(searchPattern)
+	if err != nil {
+		return fmt.Errorf("%w: failed to search for configuration files in %s: %w", errUtils.ErrParseFile, source, err)
+	}
+
+	// No files found is not an error - just means directory is empty.
+	if len(foundPaths) == 0 {
+		log.Trace("No configuration files found", "source", source, "pattern", searchPattern)
+		return nil
+	}
+
+	// Load and merge each file.
+	for _, filePath := range foundPaths {
+		if err := mergeConfigFile(filePath, dst); err != nil {
+			return fmt.Errorf("%w: failed to load configuration file from %s: %s: %w", errUtils.ErrParseFile, source, filePath, err)
+		}
+
+		log.Trace("Loaded configuration file", "path", filePath, "source", source)
+	}
+
+	log.Debug("Loaded configuration directory",
+		"source", source,
+		"files", len(foundPaths),
+		"pattern", searchPattern)
+
+	return nil
+}
+
 // mergeDefaultImports merges default imports (`atmos.d/`,`.atmos.d/`)
 // from a specified directory into the destination configuration.
 func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
@@ -534,27 +768,22 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 		return nil
 	}
 
-	var atmosFoundFilePaths []string
 	// Search for `atmos.d/` configurations.
-	searchDir := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
-	foundPaths1, _ := SearchAtmosConfig(searchDir)
-	if len(foundPaths1) > 0 {
-		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths1...)
+	searchPattern := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
+	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
+		log.Trace("Failed to load atmos.d configs", "error", err)
+		// Don't return error - just log and continue.
+		// This maintains existing behavior where .atmos.d loading is optional.
 	}
+
 	// Search for `.atmos.d` configurations.
-	searchDir = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
-	foundPaths2, _ := SearchAtmosConfig(searchDir)
-	if len(foundPaths2) > 0 {
-		atmosFoundFilePaths = append(atmosFoundFilePaths, foundPaths2...)
+	searchPattern = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
+	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
+		log.Trace("Failed to load .atmos.d configs", "error", err)
+		// Don't return error - just log and continue.
+		// This maintains existing behavior where .atmos.d loading is optional.
 	}
-	for _, filePath := range atmosFoundFilePaths {
-		err := mergeConfigFile(filePath, dst)
-		if err != nil {
-			log.Debug("error loading config file", "path", filePath, "error", err)
-			continue
-		}
-		log.Trace("atmos merged config", "path", filePath)
-	}
+
 	return nil
 }
 

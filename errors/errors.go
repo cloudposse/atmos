@@ -54,7 +54,6 @@ var (
 	ErrInvalidOffset                         = errors.New("offset must be >= 0")
 	ErrDuplicateFlagRegistration             = errors.New("duplicate flag registration")
 	ErrInvalidSinceDate                      = errors.New("invalid date format for --since")
-	ErrUnsupportedOutputFormat               = errors.New("unsupported output format")
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
@@ -139,6 +138,8 @@ var (
 	ErrWriteToStream  = errors.New("failed to write to stream")
 	ErrMaskingContent = errors.New("failed to mask content")
 	ErrHeadLookup     = errors.New("HEAD not found")
+	ErrInvalidFormat  = errors.New("invalid format")
+	ErrOutputFormat   = errors.New("output format error")
 
 	// Slice utility errors.
 	ErrNilInput         = errors.New("input must not be nil")
@@ -174,6 +175,16 @@ var (
 	ErrEmptyConfigFile             = errors.New("config file path is empty")
 	ErrAtmosFilesDirConfigNotFound = errors.New("atmos configuration file not found in directory")
 	ErrAtmosConfigNotFound         = errors.New("atmos configuration file not found")
+
+	// Profile errors.
+	ErrProfileNotFound         = errors.New("profile not found")
+	ErrProfileSyntax           = errors.New("profile syntax error")
+	ErrProfileDiscovery        = errors.New("failed to discover profiles")
+	ErrProfileLoad             = errors.New("failed to load profile")
+	ErrProfileMerge            = errors.New("failed to merge profile configuration")
+	ErrProfileDirNotExist      = errors.New("profile directory does not exist")
+	ErrProfileDirNotAccessible = errors.New("profile directory not accessible")
+	ErrProfileInvalidMetadata  = errors.New("invalid profile metadata")
 
 	ErrMissingStack                               = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrMissingComponent                           = errors.New("component is required")

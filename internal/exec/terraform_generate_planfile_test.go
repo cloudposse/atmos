@@ -40,28 +40,23 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 		assert.NoError(t, err)
 	}()
 
-	cmd := &cobra.Command{
-		Use:                "terraform generate planfile",
-		Short:              "Generate a planfile for a Terraform component",
-		Long:               "This command generates a `planfile` for a specified Atmos Terraform component.",
-		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-		Run: func(cmd *cobra.Command, args []string) {
-			err := ExecuteTerraformGeneratePlanfileCmd(cmd, args)
-			errUtils.CheckErrorPrintAndExit(err, "", "")
-		},
+	// Create test command with global flags registered (including 'profile').
+	cmd := newTestCommandWithGlobalFlags("terraform generate planfile")
+	cmd.Short = "Generate a planfile for a Terraform component"
+	cmd.Long = "This command generates a `planfile` for a specified Atmos Terraform component."
+	cmd.FParseErrWhitelist = struct{ UnknownFlags bool }{UnknownFlags: false}
+	cmd.Run = func(cmd *cobra.Command, args []string) {
+		err := ExecuteTerraformGeneratePlanfileCmd(cmd, args)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
+	// Add command-specific flags.
 	cmd.PersistentFlags().StringP("stack", "s", "", "Atmos stack")
 	cmd.PersistentFlags().StringP("file", "f", "", "Planfile name")
 	cmd.PersistentFlags().String("format", "json", "Output format (json or yaml)")
 	cmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	cmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	cmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
-	cmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
-	cmd.PersistentFlags().String("logs-file", "/dev/stderr", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
-	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
-	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 
 	// Execute the command
 	cmd.SetArgs([]string{component, "-s", stack, "--format", "json"})
