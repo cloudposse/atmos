@@ -263,10 +263,16 @@ globalViper.GetStringSlice("profile") = [] ❌
 
 Since Viper's flag binding doesn't sync values immediately, we implemented a **workaround** that:
 
-1. **Checks Viper first** (for environment variables - works correctly)
-2. **Falls back to manual os.Args parsing** (for CLI flags - workaround for Viper timing issue)
+1. **Checks CLI flags first** (manual os.Args parsing - highest priority)
+2. **Falls back to environment variables** (Viper - lower priority)
 
-This dual approach ensures both `ATMOS_PROFILE` env var and `--profile` CLI flag work correctly.
+This dual approach ensures both `ATMOS_PROFILE` env var and `--profile` CLI flag work correctly, with **CLI flags taking precedence** over environment variables (standard CLI behavior).
+
+**Precedence Order (highest to lowest):**
+1. CLI flags (`--profile`)
+2. Environment variables (`ATMOS_PROFILE`)
+3. Config file
+4. Defaults
 
 ### Implementation Details
 
@@ -316,7 +322,7 @@ func parseProfilesFromArgs(args []string) []string {
 
 **File:** `pkg/config/load.go`
 
-Updated the profile loading check to use both Viper (env vars) and os.Args (CLI flags):
+Updated the profile loading check to use both os.Args (CLI flags) and Viper (env vars), with **CLI flags taking precedence**:
 
 ```go
 // If profiles weren't passed via ConfigAndStacksInfo, check if they were
@@ -328,18 +334,17 @@ if len(configAndStacksInfo.ProfilesFromArg) == 0 {
 	// WORKAROUND: Viper's BindPFlag doesn't always sync CLI flag values immediately.
 	// When using --profile flag, the value may be in os.Args but not yet in Viper.
 	// Environment variables work fine (ATMOS_PROFILE).
-	// Check both Viper (for env vars) and os.Args (for CLI flags).
-	if globalViper.IsSet("profile") && len(globalViper.GetStringSlice("profile")) > 0 {
-		// Env var path - value is in Viper.
+	// Check CLI flags FIRST (highest precedence), then fall back to env vars.
+
+	// CLI flag path - parse os.Args manually (highest priority).
+	profiles := parseProfilesFromArgs(os.Args)
+	if len(profiles) > 0 {
+		configAndStacksInfo.ProfilesFromArg = profiles
+		log.Debug("Profiles loaded from CLI flag", "profiles", profiles)
+	} else if globalViper.IsSet("profile") && len(globalViper.GetStringSlice("profile")) > 0 {
+		// Env var path - value is in Viper (lower priority).
 		configAndStacksInfo.ProfilesFromArg = globalViper.GetStringSlice("profile")
 		log.Debug("Profiles loaded from env var", "profiles", configAndStacksInfo.ProfilesFromArg)
-	} else {
-		// CLI flag path - parse os.Args manually.
-		profiles := parseProfilesFromArgs(os.Args)
-		if len(profiles) > 0 {
-			configAndStacksInfo.ProfilesFromArg = profiles
-			log.Debug("Profiles loaded from CLI flag", "profiles", profiles)
-		}
 	}
 }
 ```
@@ -348,14 +353,15 @@ if len(configAndStacksInfo.ProfilesFromArg) == 0 {
 
 1. Check if `ProfilesFromArg` is already populated (future-proofing for when commands start passing it explicitly)
 2. Get global Viper singleton (where global flags are bound)
-3. **First try Viper:** If `profile` key is set AND has non-empty value → use it (env var path)
-4. **Fallback to os.Args:** If Viper is empty → manually parse `os.Args` for `--profile` flags
+3. **First try os.Args:** Manually parse `--profile` flags (CLI flags - highest priority)
+4. **Fallback to Viper:** If no CLI flags found → check Viper for `ATMOS_PROFILE` env var
 5. Log which method was used for debugging
 
 **Why This Works:**
 
-- **Environment variables:** Immediately available in Viper → first branch executes
-- **CLI flags:** Not in Viper yet → second branch parses os.Args directly
+- **CLI flags:** Checked FIRST → highest priority (standard CLI behavior)
+- **Environment variables:** Checked SECOND → lower priority
+- **CLI flags override env vars:** If both are set, CLI flag wins
 - **No breaking changes:** Existing code that might pass ProfilesFromArg explicitly still works
 
 ### Testing Strategy
