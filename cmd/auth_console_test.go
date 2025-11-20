@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -547,6 +548,10 @@ func TestResolveIdentityName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_ = NewTestKit(t)
+
+			// Ensure Viper doesn't have stale identity value from previous tests.
+			// resolveIdentityName() reads from Viper when flag is not changed.
+			viper.GetViper().Set("identity", "")
 
 			// Create a mock command.
 			cmd := &cobra.Command{}
