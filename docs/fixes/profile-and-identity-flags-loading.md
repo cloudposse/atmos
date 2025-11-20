@@ -2,9 +2,7 @@
 
 ## Problem Statement
 
-When executing Atmos commands with the `--profile` CLI flag, the specified profile configuration is not loaded and
-merged with the global configuration. This causes authentication failures and missing configuration even when valid
-profiles are defined. The `ATMOS_PROFILE` environment variable works correctly, but the `--profile` CLI flag does not.
+When executing Atmos commands with the `--profile` CLI flag, the specified profile configuration is not loaded and merged with the global configuration. This causes authentication failures and missing configuration even when valid profiles are defined. The `ATMOS_PROFILE` environment variable works correctly, but the `--profile` CLI flag does not.
 
 ## Symptoms
 
@@ -20,279 +18,69 @@ Error: No valid credential sources found
 atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers
 ```
 
-**With Comment in Main Config:**
-
-```yaml
-# import:
-#   - auth.yaml  # ← When commented out, authentication fails
-```
-
-**Profile Configuration:**
-
-```yaml
-auth:
-  providers:
-    cplive-sso:
-      kind: aws/iam-identity-center
-      region: us-east-2
-      start_url: https://cplive.awsapps.com/start/
-  identities:
-    core-identity/managers-team-access:
-      kind: aws/permission-set
-      default: true
-```
-
 **Expected Behavior:**
-
 - Profile configuration should be loaded and merged with global config
 - Authentication should work using profile's auth providers and identities
 - `atmos describe config --profile managers` should show merged configuration
 
 **Actual Behavior:**
-
 - Profile configuration is not loaded when using `--profile` flag
 - `atmos describe config --profile managers` shows `"providers": null`
 - Authentication fails with "No valid credential sources found"
 - `ATMOS_PROFILE=managers atmos describe config` works correctly (env var path)
 
-## Reproduction Case
+## Root Cause
 
-### Directory Structure
+### Viper Flag Binding Timing Issue
 
-```plaintext
-├── atmos.yaml                           # Main config (auth.yaml import commented out)
-├── profiles/
-│   └── managers/
-│       └── atmos.yaml                   # Profile with auth config
-└── auth.yaml                            # Global auth config (not imported)
-```
+Viper's `BindPFlag()` creates a binding between a Viper key and a Cobra pflag, but **flag values aren't immediately synced to Viper** after Cobra parses them:
 
-### Main Configuration
+1. **During initialization:**
+   - Global flags are bound to Viper: `viper.BindPFlag("profile", cmd.Flags().Lookup("profile"))`
+   - Binding exists but no value yet
 
-```yaml
-base_path: "."
+2. **When command runs:**
+   - Cobra has parsed flags
+   - Flag value exists in Cobra's `FlagSet`
+   - BUT: Viper hasn't synchronized the value yet
+   - `viper.IsSet("profile")` returns `true` (binding exists)
+   - `viper.GetStringSlice("profile")` returns `[]` (value not synced)
 
-# Import shared configuration
-# import:
-#   - auth.yaml  # ← COMMENTED OUT - should not be required when using profiles
+3. **Environment variables work differently:**
+   - Viper reads env vars directly, not through flag binding
+   - `ATMOS_PROFILE` is immediately available in Viper
+   - No synchronization delay
 
-components:
-  terraform:
-    base_path: "components/terraform"
-    command: "tofu"
+**This is why `ATMOS_PROFILE=managers` works but `--profile managers` doesn't.**
 
-stacks:
-  base_path: "stacks"
-  name_pattern: "{tenant}-{environment}-{stage}"
-```
+## Solution Implemented
 
-### Profile Configuration
+### Overview
 
-**File:** `profiles/managers/atmos.yaml`
+The fix addresses the Viper timing issue by **explicitly syncing flag values to Viper** in `cmd/root.go` before calling `InitCliConfig()`. This ensures both CLI flags and environment variables work correctly.
 
-```yaml
-auth:
-  logs:
-    level: Info
+### Implementation
 
-  providers:
-    cplive-saml:
-      kind: aws/saml
-      url: "..."
-      idp_arn: "..."
-      profile: ""
-      region: us-east-2
-    cplive-sso:
-      kind: aws/iam-identity-center
-      region: us-east-2
-      start_url: https://cplive.awsapps.com/start/
-
-  identities:
-    core-identity/managers-team-access:
-      kind: aws/permission-set
-      default: true
-      via:
-        provider: cplive-sso
-      principal:
-        name: "IdentityManagersTeamAccess"
-        account:
-          name: "core-identity"
-
-    core-identity/managers:
-      kind: aws/assume-role
-      default: false
-      via:
-        provider: cplive-sso
-      principal:
-        assume_role: "..."
-```
-
-### Test Commands
-
-```bash
-# ❌ FAILS: Profile not loaded, auth providers missing
-atmos describe config --profile managers
-
-# ❌ FAILS: No authentication available
-atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers
-
-# ✅ WORKS: Environment variable loads profile correctly
-ATMOS_PROFILE=managers atmos describe config
-
-# ✅ WORKS: When auth.yaml import is uncommented
-# But defeats the purpose of profiles!
-```
-
-## Root Cause Analysis
-
-### Execution Flow
-
-```plaintext
-1. User Command
-   └─ atmos describe config --profile managers
-
-2. Flag Registration (✅ Works - flags/global_builder.go:119-127)
-   └─ Global flag "--profile" is defined
-   └─ Flag is registered on RootCmd
-   └─ Flag is bound to viper.GetViper() (global singleton)
-   └─ Environment variable ATMOS_PROFILE is bound
-
-3. Command Execution (cmd/describe_config.go:18-40)
-   └─ RunE function is called by Cobra
-   └─ Cobra has parsed flags at this point
-   └─ atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-       ↓
-       └─ Passes EMPTY ConfigAndStacksInfo struct!
-       └─ configAndStacksInfo.ProfilesFromArg = []  // ❌ ALWAYS EMPTY!
-
-4. Profile Loading Check (pkg/config/load.go:105)
-   └─ if len(configAndStacksInfo.ProfilesFromArg) > 0 {
-       ├─ ❌ Condition is ALWAYS FALSE
-       └─ Profile loading code NEVER executes
-
-5. Result
-   └─ Configuration loaded WITHOUT profile merging
-   └─ auth.providers remains null (from global config)
-   └─ Authentication fails
-```
-
-### Code Location of First Bug
-
-**File:** `cmd/describe_config.go` (and ALL other commands)
-**Line:** 31
-
-```go
-atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-//                                     ↑
-//                                     └─ ❌ BUG: Empty struct, ProfilesFromArg is never set
-```
-
-**Impact:**
-Every command in Atmos passes an empty `ConfigAndStacksInfo{}` to `InitCliConfig`, so the `ProfilesFromArg` field is
-always empty regardless of what the user passes via `--profile` flag.
-
-### Code Location of Second Bug (Why CLI Flag Doesn't Work)
-
-**File:** `pkg/config/load.go`
-**Line:** 105
-
-```go
-if len(configAndStacksInfo.ProfilesFromArg) > 0 {
-// Load profiles...
-}
-// ❌ This block never executes because ProfilesFromArg is always empty!
-```
-
-**Root Cause of CLI Flag Not Working:**
-
-Even if we were to fix the first bug by reading the profile flag value, there's a **Viper/Cobra flag binding timing
-issue**:
-
-1. Global flags are bound to Viper during initialization (root.go:816):
-   ```go
-   globalParser.BindToViper(viper.GetViper())
-   ```
-
-2. `viper.BindPFlag()` creates a **binding** between Viper key and Cobra flag
-
-3. However, **flag VALUES aren't synchronized into Viper until after flag parsing**
-
-4. When `InitCliConfig` is called in command `RunE`, the binding exists but the value is empty:
-   ```
-   globalViper.IsSet("profile")         → true  (binding exists)
-   globalViper.GetStringSlice("profile") → []   (value not synced yet!)
-   ```
-
-5. Environment variables work because they're read directly into Viper, not via flag binding
-
-### Why Environment Variable Works
-
-```go
-// In global_builder.go:125
-EnvVars: []string{"ATMOS_PROFILE"}
-
-// Viper automatically reads ATMOS_PROFILE env var
-// and makes it available in globalViper.GetStringSlice("profile")
-```
-
-**Env var flow:**
-
-```
-ATMOS_PROFILE=managers
-    ↓
-Viper reads env var during initialization
-    ↓
-globalViper.GetStringSlice("profile") = ["managers"] ✅
-```
-
-**CLI flag flow:**
-
-```
---profile managers
-    ↓
-Cobra parses flag value
-    ↓
-viper.BindPFlag creates binding (but value not synced immediately)
-    ↓
-globalViper.GetStringSlice("profile") = [] ❌
-```
-
-## Solution Implemented (Phase 3 - Current)
-
-### Fix Overview
-
-**Current Implementation (as of 2025-11-19):** The final solution addresses Viper's flag binding timing issue by **syncing flags to Viper in root.go** before calling `InitCliConfig()`. This is cleaner and more centralized than the Phase 2 approach (which passed cmd parameter through 100+ function calls).
-
-The solution has two parts:
-
-1. **For normal commands:** `syncGlobalFlagsToViper()` in root.go reads from Cobra's already-parsed FlagSet and syncs values to Viper
-2. **For DisableFlagParsing commands:** `parseProfilesFromOsArgs()` uses pflag to parse os.Args as a fallback (these commands bypass Cobra's flag parsing)
-
-This ensures both `ATMOS_PROFILE` env var and `--profile` CLI flag work correctly while maintaining clean function signatures.
-
-### Implementation Details
-
-#### Part 1: Sync Flags in root.go (Main Solution)
+#### 1. Sync Flags in root.go (Main Solution)
 
 **File:** `cmd/root.go`
 
-Added `syncGlobalFlagsToViper()` function that runs in PersistentPreRun before `InitCliConfig()`:
+Added `syncGlobalFlagsToViper()` function that runs in `PersistentPreRun` before `InitCliConfig()`:
 
 ```go
 // syncGlobalFlagsToViper synchronizes global flags from Cobra's FlagSet to Viper.
 // This is necessary because Viper's BindPFlag doesn't immediately sync values when flags are parsed.
-// Call this after Cobra parses flags but before accessing flag values via Viper.
 func syncGlobalFlagsToViper(cmd *cobra.Command) {
 	v := viper.GetViper()
 
-	// Sync profile flag if explicitly set.
+	// Sync profile flag if explicitly set
 	if cmd.Flags().Changed("profile") {
 		if profiles, err := cmd.Flags().GetStringSlice("profile"); err == nil {
 			v.Set("profile", profiles)
 		}
 	}
 
-	// Sync identity flag if explicitly set.
+	// Sync identity flag if explicitly set
 	if cmd.Flags().Changed("identity") {
 		if identity, err := cmd.Flags().GetString("identity"); err == nil {
 			v.Set("identity", identity)
@@ -302,20 +90,20 @@ func syncGlobalFlagsToViper(cmd *cobra.Command) {
 
 // In PersistentPreRun (called before every command):
 syncGlobalFlagsToViper(cmd)
-atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)  // NO cmd parameter
+atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 ```
 
-**Benefits:**
-- ✅ **Centralized** - All flag syncing happens in one place
-- ✅ **Clean API** - No cmd parameter needed in InitCliConfig/LoadConfig
-- ✅ **Fixes root cause** - Viper has flag values immediately
-- ✅ **Works for all commands** - Handles both normal and DisableFlagParsing commands
+**How it works:**
+1. After Cobra parses flags, `PersistentPreRun` calls `syncGlobalFlagsToViper()`
+2. Function reads changed flags from Cobra's `FlagSet` using `cmd.Flags().Get*()`
+3. Writes values directly to Viper using `v.Set()`
+4. `InitCliConfig()` can now read flag values from Viper immediately
 
-#### Part 2: Fallback for DisableFlagParsing Commands
+#### 2. Fallback for DisableFlagParsing Commands
 
 **File:** `pkg/config/load.go`
 
-For commands with `DisableFlagParsing=true` (terraform/helmfile/packer), Cobra never parses flags, so `syncGlobalFlagsToViper()` can't read from FlagSet. We keep pflag fallback:
+For commands with `DisableFlagParsing=true` (terraform/helmfile/packer), Cobra never parses flags, so `syncGlobalFlagsToViper()` can't read from the FlagSet. We use pflag as a fallback:
 
 ```go
 // parseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
@@ -327,11 +115,10 @@ func parseProfilesFromOsArgs(args []string) []string {
 	profiles := fs.StringSlice("profile", []string{}, "Configuration profiles")
 	_ = fs.Parse(args)
 
-	// Post-process: trim whitespace and filter empty values
+	// Trim whitespace and filter empty values
 	result := make([]string, 0, len(*profiles))
 	for _, profile := range *profiles {
-		trimmed := strings.TrimSpace(profile)
-		if trimmed != "" {
+		if trimmed := strings.TrimSpace(profile); trimmed != "" {
 			result = append(result, trimmed)
 		}
 	}
@@ -339,23 +126,24 @@ func parseProfilesFromOsArgs(args []string) []string {
 }
 ```
 
-**Note:** This fallback is only needed until terraform/helmfile/packer migrate to command registry pattern. See Phase 4 in Evolution Path for removal plan.
+**Note:** This fallback is only needed until terraform/helmfile/packer migrate to the command registry pattern.
 
-#### Part 3: Simplified Profile Loading
+#### 3. Simplified Profile Loading
 
 **File:** `pkg/config/load.go`
 
-`getProfilesFromFlagsOrEnv()` now just reads from Viper (no cmd parameter needed):
+`getProfilesFromFlagsOrEnv()` reads from Viper (which now has synced values):
 
 ```go
 func getProfilesFromFlagsOrEnv() ([]string, string) {
 	globalViper := viper.GetViper()
 
-	// Check if profile is set in Viper (from either flag or env var).
-	// syncGlobalFlagsToViper() ensures CLI flag values are synced to Viper before InitCliConfig.
+	// Check if profile is set in Viper (from either flag or env var)
+	// syncGlobalFlagsToViper() ensures CLI flag values are synced before InitCliConfig
 	if globalViper.IsSet("profile") && len(globalViper.GetStringSlice("profile")) > 0 {
 		profiles := globalViper.GetStringSlice("profile")
-		// Determine source based on whether ATMOS_PROFILE env var is explicitly set.
+
+		// Determine source based on whether ATMOS_PROFILE env var is explicitly set
 		if _, envSet := os.LookupEnv("ATMOS_PROFILE"); envSet {
 			return profiles, "env"
 		}
@@ -366,69 +154,34 @@ func getProfilesFromFlagsOrEnv() ([]string, string) {
 }
 ```
 
-**Logic Flow:**
+### Why This Solution Works
 
-1. **Normal commands:** `syncGlobalFlagsToViper()` syncs flag → Viper has value → `getProfilesFromFlagsOrEnv()` reads from Viper
-2. **DisableFlagParsing commands:** `parseProfilesFromOsArgs()` is called during auth/config setup → value gets into Viper eventually
-3. **Environment variables:** Immediately available in Viper (no syncing needed)
+**For normal commands:**
+1. Cobra parses flags → stores values in FlagSet
+2. `syncGlobalFlagsToViper()` reads FlagSet → writes to Viper
+3. `getProfilesFromFlagsOrEnv()` reads from Viper → returns profiles
+4. Profile loading works ✅
 
-**Why This Works:**
+**For DisableFlagParsing commands:**
+1. Cobra skips flag parsing
+2. `parseProfilesFromOsArgs()` parses `os.Args` with pflag
+3. Values eventually get into Viper
+4. Profile loading works ✅
 
-- **Environment variables:** Bound directly to Viper, immediately available
-- **CLI flags (normal commands):** Synced to Viper in root.go PersistentPreRun
-- **CLI flags (DisableFlagParsing):** Parsed by pflag fallback when needed
-- **Clean signatures:** No cmd parameter in InitCliConfig, LoadConfig, or helper functions
+**For environment variables:**
+1. Viper reads `ATMOS_PROFILE` directly (no flag binding)
+2. Values immediately available in Viper
+3. Profile loading works ✅
 
-### Testing Strategy
+### Benefits
 
-#### Integration Tests
+- ✅ **Fixes root cause** - Viper has flag values available immediately
+- ✅ **Clean API** - No need to pass `cmd` parameter through functions
+- ✅ **Centralized** - All flag syncing happens in one place (root.go)
+- ✅ **Minimal changes** - Only affects root.go and config loading
+- ✅ **Future-proof** - Works for all commands
 
-**Manual testing performed:**
-
-1. **CLI flag syntax:**
-   ```bash
-   atmos describe config --profile managers
-   # ✅ Auth providers loaded correctly
-   ```
-
-2. **Environment variable:**
-   ```bash
-   ATMOS_PROFILE=managers atmos describe config
-   # ✅ Auth providers loaded correctly
-   ```
-
-3. **Comma-separated profiles:**
-   ```bash
-   atmos describe config --profile=managers,staging
-   # ✅ Both profiles loaded and merged
-   ```
-
-4. **Original failing command:**
-   ```bash
-   atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers
-   # ✅ Authentication works, terraform plan executes
-   ```
-
-5. **All existing tests pass:**
-   ```bash
-   go test ./pkg/config/... -run TestLoadConfig
-   # ✅ All tests pass
-   ```
-
-## Success Criteria
-
-All success criteria met:
-
-1. ✅ `--profile` CLI flag loads profile configuration and merges with global config
-2. ✅ `ATMOS_PROFILE` environment variable continues to work
-3. ✅ `atmos describe config --profile managers` shows merged auth providers and identities
-4. ✅ `atmos terraform plan --profile managers` authenticates successfully
-5. ✅ Comma-separated profiles work: `--profile=dev,staging,prod`
-6. ✅ Multiple profile flags work: `--profile dev --profile staging`
-7. ✅ All existing tests continue to pass
-8. ✅ New tests provide comprehensive coverage of flag parsing
-
-## Verification Output
+## Verification
 
 ### Before Fix
 
@@ -453,11 +206,6 @@ $ atmos describe config --profile managers | grep -A 30 '"auth"'
     },
     "keyring": {},
     "providers": {           # ✅ Providers from managers profile
-      "cplive-saml": {
-        "kind": "aws/saml",
-        "url": "",
-        "region": "us-east-2"
-      },
       "cplive-sso": {
         "kind": "aws/iam-identity-center",
         "start_url": "https://cplive.awsapps.com/start/",
@@ -465,15 +213,6 @@ $ atmos describe config --profile managers | grep -A 30 '"auth"'
       }
     },
     "identities": {          # ✅ Identities from managers profile
-      "core-identity/managers": {
-        "kind": "aws/assume-role",
-        "via": {
-          "provider": "cplive-sso"
-        },
-        "principal": {
-          "assume_role": ""
-        }
-      },
       "core-identity/managers-team-access": {
         "kind": "aws/permission-set",
         "default": true,
@@ -483,165 +222,97 @@ $ atmos describe config --profile managers | grep -A 30 '"auth"'
 }
 ```
 
+## Testing
+
+### Test Coverage
+
+**Unit tests** in `pkg/config/load_flags_test.go`:
+- Profiles from environment variable
+- Profiles from CLI flag (`--profile value` syntax)
+- Profiles from CLI flag (`--profile=value` syntax)
+- No profiles specified
+- Empty profile slice
+
+**Manual testing performed:**
+1. CLI flag syntax: `atmos describe config --profile managers` ✅
+2. Environment variable: `ATMOS_PROFILE=managers atmos describe config` ✅
+3. Comma-separated profiles: `atmos describe config --profile=managers,staging` ✅
+4. Original failing command: `atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers` ✅
+
 ## Files Modified
 
-1. **`pkg/config/load.go`**
+1. **`cmd/root.go`**
+   - Added `syncGlobalFlagsToViper()` function
+   - Called in `PersistentPreRun` before `InitCliConfig()`
 
-- Added `parseProfilesFromArgs()` helper function
-- Updated profile loading logic to check both Viper and os.Args
+2. **`pkg/config/load.go`**
+   - Added `parseProfilesFromOsArgs()` fallback for DisableFlagParsing commands
+   - Simplified `getProfilesFromFlagsOrEnv()` to read from Viper
 
-2. **`pkg/config/load_profile_test.go`** (NEW)
+3. **`pkg/config/load_flags_test.go`** (NEW)
+   - Comprehensive test suite for flag parsing
 
-- Created comprehensive test suite with 9 test cases
-- Tests all flag syntax variations
+## Related Fix: Identity Flag Propagation to Nested Components
 
-**Total changes:** 2 files modified/added, ~80 lines of code added
+### Problem
 
-## Why This Workaround is Necessary
+When using `--profile` and `--identity` flags together, the identity selector appeared during nested component operations (like `!terraform.state` YAML functions).
 
-### Viper Flag Binding Timing Issue
+```bash
+atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers --identity core-identity/managers-team-access
+# ❌ Identity selector appeared for nested components
+```
 
-Viper's `BindPFlag()` creates a **binding** between a Viper key and a Cobra pflag, but the synchronization of values has
-timing considerations:
+### Root Cause
 
-1. **During initialization (root.go:816):**
-   ```go
-   globalParser.BindToViper(viper.GetViper())
-   ```
+When YAML template functions fetch state from other components, they create component-specific AuthManagers. The original implementation:
+- Did NOT inherit the user's explicitly specified identity
+- Always passed empty string for identity
+- Relied on auto-detection from component's auth config
+- With profiles containing multiple defaults, auto-detection triggered the selector
 
-- Creates binding between "profile" key and --profile flag
-- Binding exists but no value yet
+### Solution
 
-2. **When command runs (cmd/describe_config.go:31):**
-   ```go
-   atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-   ```
+**File:** `internal/exec/terraform_nested_auth_helper.go`
 
-- Cobra has parsed flags
-- Flag value exists in Cobra's FlagSet
-- BUT: Viper hasn't synchronized the value yet
-- `globalViper.IsSet("profile")` returns `true` (binding exists)
-- `globalViper.GetStringSlice("profile")` returns `[]` (value not synced)
-
-3. **Environment variables work differently:**
-
-- Viper reads env vars directly, not through flag binding
-- `ATMOS_PROFILE` is immediately available in Viper
-- No synchronization delay
-
-### Alternative Solutions Considered
-
-#### Option 1: Call Viper's ReadInConfig Again
-
-**Rejected:** Would re-read entire config, potentially causing side effects
-
-#### Option 2: Explicitly Sync Flags to Viper
-
-**Rejected:** No official Viper API to force flag value synchronization
-
-#### Option 3: Read Flag from Cobra's FlagSet Directly (IMPLEMENTED)
-
-**Initially rejected, later implemented (2025-11-19):**
-
-**Original concern:** Would require passing `cmd *cobra.Command` to InitCliConfig, changing many function signatures
-
-**Decision:** After consultation with flag-handler agent, this is the **architecturally correct solution**. The signature changes are acceptable because:
-- ✅ Makes dependencies explicit (clear that we need command context)
-- ✅ Consistent with Atmos patterns (`processChdirFlag()` does the same)
-- ✅ Reads from source of truth (Cobra's already-parsed FlagSet)
-- ✅ Uses pflag for fallback instead of manual string parsing
-- ✅ Future-proof for when terraform/helmfile/packer migrate to command registry
-
-**Implementation:**
-- Updated `LoadConfig(cmd *cobra.Command, configAndStacksInfo)`
-- Updated `InitCliConfig(cmd interface{}, configAndStacksInfo, processStacks)`
-- Updated ~100+ callers to pass `nil` or `cmd`
-- Regenerated interface mocks
-
-#### Option 4: Parse os.Args Manually (INITIAL IMPLEMENTATION)
-
-**Initially accepted, later improved:**
-
-- ✅ Minimal code changes (initially)
-- ✅ No function signature changes (initially)
-- ✅ Works reliably for all flag syntax variations
-- ✅ Easy to test
-- ❌ Bypasses flag infrastructure (not ideal)
-- ❌ Reimplements pflag's StringSlice logic manually
-
-**Current Status:** This approach is still used as a **fallback** for `DisableFlagParsing=true` commands (terraform/helmfile/packer), but now uses pflag library instead of manual string parsing.
-
-## Future Improvements
-
-### Evolution Path Summary
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| **Phase 1: Initial Fix** | ✅ Complete | Manual string parsing of os.Args to bypass Viper timing issue |
-| **Phase 2: Refactoring with cmd parameter** | ✅ Complete (2025-11-19) | Pass `cmd` to `InitCliConfig()`, use pflag library, read from Cobra's FlagSet |
-| **Phase 3: Root Cause Fix** | ✅ Complete (2025-11-19) | Sync Viper in root.go before InitCliConfig, remove cmd parameter |
-| **Phase 4: Simplification** | 🔄 Pending | Remove parseProfilesFromOsArgs() after terraform/helmfile/packer migrate to command registry |
-
-### Current Implementation (Phase 3 - Root Cause Fix)
-
-**Status (2025-11-19):** The implementation now uses the **root cause fix** - syncing Viper in `cmd/root.go` before calling `InitCliConfig()`.
-
-#### How It Works
-
-**File:** `cmd/root.go`
+Updated `createComponentAuthManager()` to inherit authenticated identity from parent AuthManager:
 
 ```go
-// syncGlobalFlagsToViper synchronizes global flags from Cobra's FlagSet to Viper.
-// This is necessary because Viper's BindPFlag doesn't immediately sync values when flags are parsed.
-// Call this after Cobra parses flags but before accessing flag values via Viper.
-func syncGlobalFlagsToViper(cmd *cobra.Command) {
-	v := viper.GetViper()
-
-	// Sync profile flag if explicitly set.
-	if cmd.Flags().Changed("profile") {
-		if profiles, err := cmd.Flags().GetStringSlice("profile"); err == nil {
-			v.Set("profile", profiles)
-		}
-	}
-
-	// Sync identity flag if explicitly set.
-	if cmd.Flags().Changed("identity") {
-		if identity, err := cmd.Flags().GetString("identity"); err == nil {
-			v.Set("identity", identity)
-		}
+// Determine identity to use for component authentication
+var identityName string
+if parentAuthManager != nil {
+	chain := parentAuthManager.GetChain()
+	if len(chain) > 0 {
+		// Last element in chain is the authenticated identity
+		identityName = chain[len(chain)-1]
+		log.Debug("Inheriting identity from parent AuthManager",
+			"component", component,
+			"inheritedIdentity", identityName)
 	}
 }
 
-// In PersistentPreRun (called before every command):
-syncGlobalFlagsToViper(cmd)
-atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)  // NO cmd parameter
+// Create AuthManager with inherited identity
+componentAuthManager, err := auth.CreateAndAuthenticateManager(
+	identityName,     // Inherited from parent, or empty to auto-detect
+	mergedAuthConfig,
+	cfg.IdentityFlagSelectValue,
+)
 ```
 
-**Benefits:**
-- ✅ **Clean API** - No need to pass `cmd` to InitCliConfig() and LoadConfig()
-- ✅ **Fixes root cause** - Viper has flag values available immediately
-- ✅ **Minimal changes** - Only affects root.go and removes cmd parameter from 100+ call sites
-- ✅ **Future-proof** - Works for all commands, including terraform/helmfile/packer
-- ✅ **Centralized** - All flag syncing happens in one place (root.go PersistentPreRun)
+### Result
 
-**Why This Is Better Than Phase 2:**
-- Phase 2 (passing `cmd` parameter) required updating 100+ function signatures
-- 99% of callers passed `nil`, which was a code smell
-- Phase 3 (sync in root.go) is centralized and affects no function signatures
+- ✅ `--identity` flag propagates to nested component operations
+- ✅ No identity selector appears when identity is explicitly specified
+- ✅ YAML functions use inherited identity consistently
+- ✅ Backward compatibility maintained (auto-detection still works when no parent exists)
 
-### Remaining Issue: DisableFlagParsing Commands
-
-The current implementation still has a fallback for commands with `DisableFlagParsing=true` (terraform/helmfile/packer):
-
-1. **For normal commands** - `syncGlobalFlagsToViper()` reads from Cobra's already-parsed FlagSet
-2. **For DisableFlagParsing commands** - These commands bypass Cobra's flag parsing, so we still need pflag fallback
+## Future Improvements
 
 ### After Terraform/Helmfile/Packer Migration
 
-Once these three commands migrate to the command registry pattern and use the standard flag handler:
+Once terraform/helmfile/packer migrate to the command registry pattern, the `parseProfilesFromOsArgs()` fallback can be removed:
 
-#### Removable Code
-
+**Removable code:**
 ```go
 // ❌ DELETE: No longer needed after migration
 func parseProfilesFromOsArgs(args []string) []string {
@@ -649,305 +320,12 @@ func parseProfilesFromOsArgs(args []string) []string {
 }
 ```
 
-#### Simplified Code
-
-```go
-// ✅ SIMPLIFY: Two paths instead of three
-func getProfilesFromFlags(cmd *cobra.Command) []string {
-    if cmd == nil {
-        return nil  // No fallback needed
-    }
-
-    // Just read from Cobra's FlagSet - always works after migration
-    if profiles, err := cmd.Flags().GetStringSlice("profile"); err == nil && len(profiles) > 0 {
-        return profiles
-    }
-
-    return nil
-}
-```
-
-### Migration Checklist
-
-When migrating terraform/helmfile/packer commands:
-
-- [ ] **Remove `DisableFlagParsing: true`** from command definition
-- [ ] **Use standard flag parser** (`flags.NewStandardParser()`)
-- [ ] **Delete `parseProfilesFromOsArgs()`** function from `pkg/config/load.go`
-- [ ] **Simplify `getProfilesFromFlags()`** to only read from Cobra (remove os.Args fallback)
-- [ ] **Update tests** to remove os.Args parsing test cases
-- [ ] **Update documentation** to reflect simplified approach
-
-### Ultimate Solution: Fix Viper Timing
-
-The root cause could potentially be addressed by forcing Viper to sync before `InitCliConfig()`:
-
-```go
-// In cmd/root.go PersistentPreRun, before calling InitCliConfig
-func syncGlobalFlagsToViper(cmd *cobra.Command) {
-    v := viper.GetViper()
-
-    // Manually sync changed flags to Viper
-    cmd.Flags().Visit(func(flag *pflag.Flag) {
-        if flag.Changed {
-            v.Set(flag.Name, flag.Value.String())
-        }
-    })
-}
-```
-
-**Benefits:**
-- No need to pass `cmd` to `LoadConfig()`
-- All flag values available in Viper immediately
-- Simpler function signatures
-
-**Trade-offs:**
-- Adds complexity to root command setup
-- Still need to handle `DisableFlagParsing` commands differently
-- Current approach (passing `cmd`) is more explicit and easier to understand
-
-### Current Architecture is Future-Proof
-
-The `cmd` parameter pattern we implemented will remain useful even after migration:
-
-- ✅ Architecturally correct (reads from source of truth - Cobra's FlagSet)
-- ✅ Makes dependencies explicit
-- ✅ Easy to test (can mock `*cobra.Command`)
-- ✅ Consistent with other Atmos patterns (`processChdirFlag()`)
-- ✅ Self-documenting (clear that we're reading CLI flags)
-
-3. **Option C: Commands populate ProfilesFromArg**
-   ```go
-   // In each command's RunE:
-   profile, _ := cmd.Flags().GetStringSlice("profile")
-   info := schema.ConfigAndStacksInfo{
-   	ProfilesFromArg: profile,
-   }
-   atmosConfig, err := cfg.InitCliConfig(info, false)
-   ```
-
-### Why We Don't Need The Long-Term Fix Yet
-
-The current workaround:
-
-- ✅ Works reliably for all use cases
-- ✅ Well-tested
-- ✅ No performance impact (os.Args is tiny)
-- ✅ Self-contained in one function
-- ✅ Easy to replace later if needed
-
-## Related Issue: Identity Flag Not Propagating to Nested Components
-
-### Problem Statement (Follow-up Issue)
-
-After implementing the profile loading fix, a related issue was discovered: when using `--profile` and `--identity`
-flags together, the identity selector still appeared during nested component operations (such as `!terraform.state` YAML
-functions).
-
-**Command:**
-
-```bash
-atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers --identity core-identity/managers-team-access
-```
-
-**Expected Behavior:**
-
-- Use the explicitly specified identity (`core-identity/managers-team-access`)
-- No identity selector should appear
-
-**Actual Behavior:**
-
-- Main component authenticated correctly with specified identity
-- Identity selector appeared when processing `!terraform.state` YAML function for nested component (`vpc`)
-- Error message: "Multiple default identities found. Please choose one"
-
-### Root Cause Analysis
-
-**Execution Flow:**
-
-1. **Main component authentication** ✅ Works correctly:
-   ```
-   identity = "core-identity/managers-team-access"
-   CreateAndAuthenticateManager(identity, mergedAuthConfig, "__SELECT__")
-   ```
-
-2. **Nested component authentication** ❌ Fails:
-   ```
-   YAML function: !terraform.state vpc vpc_id
-   └─ Calls resolveAuthManagerForNestedComponent()
-      └─ Calls createComponentAuthManager()
-         └─ CreateAndAuthenticateManager("", mergedAuthConfig, "__NO_SELECT__")
-            ↑
-            └─ Empty identity triggers auto-detection
-               └─ Finds multiple defaults in merged profile config
-                  └─ Shows selector prompt ❌
-   ```
-
-**Code Location:**
-
-**File:** `internal/exec/terraform_nested_auth_helper.go`
-
-```go
-componentAuthManager, err := auth.CreateAndAuthenticateManager(
-	"",               // ❌ Empty - triggers auto-detection
-	mergedAuthConfig, // Contains multiple defaults from profile
-	"__NO_SELECT__",
-)
-```
-
-**Why This Happened:**
-
-When YAML template functions (like `!terraform.state`) need to fetch state from other components, they create
-component-specific AuthManagers. The original implementation:
-
-- Did NOT inherit the user's explicitly specified identity
-- Always passed empty string for identity
-- Relied on auto-detection from component's auth config
-- With profiles containing multiple defaults, auto-detection triggered the selector
-
-### Solution Implemented
-
-**Inherit authenticated identity from parent AuthManager to nested components.**
-
-#### Step 1: Extract Identity from Parent AuthManager
-
-**File:** `internal/exec/terraform_nested_auth_helper.go`
-
-```go
-// Determine identity to use for component authentication.
-// If parent AuthManager exists and is authenticated, inherit its identity.
-// This ensures that when user explicitly specifies --identity flag, it propagates to nested components.
-var identityName string
-if parentAuthManager != nil {
-	chain := parentAuthManager.GetChain()
-	if len(chain) > 0 {
-		// Last element in chain is the authenticated identity.
-		identityName = chain[len(chain)-1]
-		log.Debug("Inheriting identity from parent AuthManager for component",
-			logKeyComponent, component,
-			logKeyStack, stack,
-			"inheritedIdentity", identityName,
-			"chain", chain,
-		)
-	}
-}
-```
-
-**Key points:**
-
-- `GetChain()` returns authentication chain: `[providerName, identity1, identity2, ..., targetIdentity]`
-- Last element is the authenticated identity
-- Extract and use for nested component authentication
-
-#### Step 2: Use Inherited Identity for Component AuthManager
-
-**File:** `internal/exec/terraform_nested_auth_helper.go`
-
-```go
-// Create and authenticate new AuthManager with merged config.
-// Use inherited identity from parent, or empty string to auto-detect from component's defaults.
-componentAuthManager, err := auth.CreateAndAuthenticateManager(
-	identityName,     // Inherited from parent, or empty to trigger auto-detection
-	mergedAuthConfig, // Merged component + global auth
-	cfg.IdentityFlagSelectValue,
-)
-```
-
-**Behavior:**
-
-- If parent AuthManager exists → inherit its authenticated identity
-- If no parent AuthManager → auto-detect from component's defaults (original behavior)
-- User's `--identity` choice now propagates to all nested operations
-
-### Testing Strategy
-
-#### Before Fix
-
-```bash
-# Command with both --profile and --identity
-atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers --identity core-identity/managers-team-access
-
-# Output:
-# ✅ Main component authenticates with core-identity/managers-team-access
-# ❌ When processing !terraform.state vpc vpc_id:
-#    ┃ Multiple default identities found. Please choose one:
-#    ┃ Press ctrl+c or esc to exit
-#    ┃ > core-identity/managers
-#    ┃   core-identity/managers-team-access
-```
-
-#### After Fix
-
-```bash
-# Same command
-atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers --identity core-identity/managers-team-access
-
-# Debug output shows identity inheritance:
-DEBU  Creating AuthManager with identity identity=core-identity/managers-team-access
-DEBU  Inheriting identity from parent AuthManager for component component=vpc inheritedIdentity=core-identity/managers-team-access
-DEBU  CreateAndAuthenticateManager called identityName=core-identity/managers-team-access
-
-# ✅ No selector prompt
-# ✅ Terraform plan executes successfully
-# ✅ All nested component operations use the same identity
-```
-
-### Verification
-
-**Manual testing performed:**
-
-1. **With --identity flag:**
-   ```bash
-   atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers --identity core-identity/managers-team-access
-   # ✅ No selector, uses specified identity for all operations
-   ```
-
-2. **Without --identity flag (multiple defaults):**
-   ```bash
-   atmos terraform plan runs-on/cloudposse -s core-ue2-auto --profile managers
-   # ✅ Shows selector once for main component
-   # ✅ Nested components inherit the selected identity
-   ```
-
-3. **Without profile (single default):**
-   ```bash
-   atmos terraform plan runs-on/cloudposse -s core-ue2-auto
-   # ✅ Auto-detects default identity, no selector
-   ```
-
-### Success Criteria
-
-All success criteria met:
-
-1. ✅ `--identity` flag propagates to nested component operations
-2. ✅ No identity selector appears when identity is explicitly specified
-3. ✅ YAML functions (`!terraform.state`, `!terraform.output`) use inherited identity
-4. ✅ User's identity choice is consistent throughout entire command execution
-5. ✅ Backward compatibility maintained (auto-detection still works when no parent exists)
-6. ✅ Existing tests continue to pass
-
-### Files Modified
-
-1. **`internal/exec/terraform_nested_auth_helper.go`**
-  - Updated `createComponentAuthManager()` to extract and inherit identity from parent AuthManager
-  - Added debug logging for identity inheritance
-
-**Total changes:** 1 file modified, ~15 lines of code added
-
-### Impact
-
-**Benefits:**
-
-- Consistent authentication across main and nested operations
-- User's explicit `--identity` choice is respected everywhere
-- Reduces confusion and improves user experience
-- No breaking changes to existing functionality
-
-**Affected Operations:**
-
-- `!terraform.state` YAML functions
-- `!terraform.output` YAML functions
-- Any nested component that creates component-specific AuthManager
+**Migration checklist:**
+- [ ] Remove `DisableFlagParsing: true` from command definitions
+- [ ] Use standard flag parser (`flags.NewStandardParser()`)
+- [ ] Delete `parseProfilesFromOsArgs()` function
+- [ ] Update tests to remove os.Args parsing test cases
+- [ ] Update documentation
 
 ## Related Documentation
 
