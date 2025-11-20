@@ -596,61 +596,39 @@ func checkAtmosConfigE(opts ...AtmosValidateOption) error {
 	// Try to load config for error display (may fail, that's OK).
 	atmosConfig, _ := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 
-	// Build error message with configuration help.
-	var errMsg strings.Builder
-	buildAtmosConfigErrorMessage(&errMsg, &atmosConfig)
+	// Build the error using the error builder pattern.
+	builder := errUtils.Build(errUtils.ErrMissingAtmosConfig).
+		WithExitCode(1)
 
-	// Wrap the original validation error with the formatted message and exit code 1.
-	formattedErr := fmt.Errorf("%w: %s", errUtils.ErrMissingAtmosConfig, errMsg.String())
-	return errUtils.WithExitCode(formattedErr, 1)
-}
-
-// buildAtmosConfigErrorMessage builds a formatted error message for missing Atmos configuration.
-func buildAtmosConfigErrorMessage(errMsg *strings.Builder, atmosConfig *schema.AtmosConfiguration) {
-	errMsg.WriteString("\n")
-
-	// Write ATMOS header.
-	errMsg.WriteString("ATMOS\n\n")
-
-	// Include git repo warning if applicable.
+	// Add git repo warning hint if applicable.
 	if gitErr := verifyInsideGitRepoE(); gitErr != nil {
-		errMsg.WriteString(gitErr.Error())
-		errMsg.WriteString("\n\n")
+		builder = builder.WithHint(gitErr.Error())
 	}
 
+	// Add configuration-specific hints.
 	stacksDir := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 
-	// Build the configuration error message.
-	errMsg.WriteString("## Missing Configuration\n\n")
-
 	if _, statErr := os.Stat(atmosConfig.CliConfigPath); os.IsNotExist(statErr) {
-		errMsg.WriteString("The `atmos.yaml` CLI config file was not found.\n\n")
+		builder = builder.WithHint("The `atmos.yaml` CLI config file was not found.")
 	}
 
-	buildStacksDirMessage(errMsg, atmosConfig, stacksDir)
-
-	errMsg.WriteString("## Getting Started\n\n")
-	errMsg.WriteString("To configure and start using Atmos, refer to the following documents:\n\n")
-	errMsg.WriteString("**Atmos CLI Configuration:** <https://atmos.tools/cli/configuration>\n\n")
-	errMsg.WriteString("**Atmos Components:** <https://atmos.tools/core-concepts/components>\n\n")
-	errMsg.WriteString("**Atmos Stacks:** <https://atmos.tools/core-concepts/stacks>\n\n")
-	errMsg.WriteString("**Quick Start:** <https://atmos.tools/quick-start>\n")
-}
-
-// buildStacksDirMessage adds stacks directory error messages to the error string.
-func buildStacksDirMessage(errMsg *strings.Builder, atmosConfig *schema.AtmosConfiguration, stacksDir string) {
 	if _, statErr := os.Stat(stacksDir); os.IsNotExist(statErr) {
-		fmt.Fprintf(errMsg, "The default Atmos stacks directory is set to `%s`, but the directory does not exist in the current path.\n\n", stacksDir)
-		return
+		builder = builder.WithHintf("The default Atmos stacks directory is set to `%s`, but the directory does not exist in the current path.", stacksDir)
+	} else if atmosConfig.CliConfigPath != "" {
+		if _, statErr := os.Stat(atmosConfig.CliConfigPath); !os.IsNotExist(statErr) {
+			builder = builder.WithHintf("The `atmos.yaml` CLI config file specifies the directory for Atmos stacks as `%s`, but the directory does not exist.", stacksDir)
+		}
 	}
 
-	if atmosConfig.CliConfigPath == "" {
-		return
-	}
+	// Add getting started hints.
+	builder = builder.
+		WithHint("To configure and start using Atmos, refer to:").
+		WithHint("- Atmos CLI Configuration: https://atmos.tools/cli/configuration").
+		WithHint("- Atmos Components: https://atmos.tools/core-concepts/components").
+		WithHint("- Atmos Stacks: https://atmos.tools/core-concepts/stacks").
+		WithHint("- Quick Start: https://atmos.tools/quick-start")
 
-	if _, statErr := os.Stat(atmosConfig.CliConfigPath); !os.IsNotExist(statErr) {
-		fmt.Fprintf(errMsg, "The `atmos.yaml` CLI config file specifies the directory for Atmos stacks as `%s`, but the directory does not exist.\n\n", stacksDir)
-	}
+	return builder.Err()
 }
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
