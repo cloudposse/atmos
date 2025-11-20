@@ -62,6 +62,36 @@ func TestParseProfilesFromArgs(t *testing.T) {
 			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=dev,,prod"},
 			expected: []string{"dev", "prod"},
 		},
+		{
+			name:     "only whitespace in profile value",
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=   "},
+			expected: nil,
+		},
+		{
+			name:     "leading and trailing commas",
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=,dev,staging,"},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "multiple consecutive commas",
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=dev,,,staging"},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "profile value with only commas",
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=,,,"},
+			expected: nil,
+		},
+		{
+			name:     "mixed whitespace and empty values",
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "=dev,  , , staging"},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "profile flag with equals but no value",
+			args:     []string{"atmos", "describe", "config", AtmosProfileFlag + "="},
+			expected: nil,
+		},
 	}
 
 	for _, tt := range tests {

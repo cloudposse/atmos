@@ -76,6 +76,46 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			expectedProfiles: []string{"cli-profile"},
 			expectedSource:   "flag",
 		},
+		{
+			name: "environment variable with empty entries",
+			setupViper: func() {
+				v := viper.GetViper()
+				v.Set("profile", nil)
+			},
+			osArgs:           []string{"atmos", "describe", "config"},
+			expectedProfiles: []string{"dev", "prod"},
+			expectedSource:   "env",
+		},
+		{
+			name: "environment variable with only spaces",
+			setupViper: func() {
+				v := viper.GetViper()
+				v.Set("profile", nil)
+			},
+			osArgs:           []string{"atmos", "describe", "config"},
+			expectedProfiles: nil,
+			expectedSource:   "",
+		},
+		{
+			name: "environment variable with single profile",
+			setupViper: func() {
+				v := viper.GetViper()
+				v.Set("profile", nil)
+			},
+			osArgs:           []string{"atmos", "describe", "config"},
+			expectedProfiles: []string{"single"},
+			expectedSource:   "env",
+		},
+		{
+			name: "environment variable with leading/trailing commas",
+			setupViper: func() {
+				v := viper.GetViper()
+				v.Set("profile", nil)
+			},
+			osArgs:           []string{"atmos", "describe", "config"},
+			expectedProfiles: []string{"dev", "staging"},
+			expectedSource:   "env",
+		},
 	}
 
 	for _, tt := range tests {
@@ -90,6 +130,14 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 				t.Setenv("ATMOS_PROFILE", "env-profile1,env-profile2")
 			case "CLI flag takes precedence over environment variable":
 				t.Setenv("ATMOS_PROFILE", "env-profile")
+			case "environment variable with empty entries":
+				t.Setenv("ATMOS_PROFILE", "dev,,prod")
+			case "environment variable with only spaces":
+				t.Setenv("ATMOS_PROFILE", "  ,  ,  ")
+			case "environment variable with single profile":
+				t.Setenv("ATMOS_PROFILE", "single")
+			case "environment variable with leading/trailing commas":
+				t.Setenv("ATMOS_PROFILE", ",dev,staging,")
 			}
 
 			// Setup Viper (for tests that still need it)
