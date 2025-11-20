@@ -632,6 +632,236 @@ The generated files will have different `workspace_key_prefix` attribute auto-ge
 For this reason, configuring Atmos to auto-generate the backend configuration for the components in the stacks is recommended
 for all supported backend types.
 
+## Automatic Backend Provisioning
+
+Atmos can automatically provision S3 backend infrastructure before running Terraform commands. This eliminates the manual bootstrapping step of creating state storage.
+
+### Configuration
+
+Enable automatic provisioning in your stack manifests using the `provision.backend.enabled` setting:
+
+<Terminal title="stacks/catalog/vpc.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      backend:
+        bucket: acme-terraform-state-dev
+        key: vpc/terraform.tfstate
+        region: us-east-1
+        backend_type: s3
+
+      provision:
+        backend:
+          enabled: true  # Enable automatic provisioning
+```
+</Terminal>
+
+When enabled, Atmos will:
+
+1. Check if the backend exists before running Terraform commands
+2. Provision the backend if it doesn't exist (with secure defaults)
+3. Continue with Terraform initialization and execution
+
+### Supported Backend Types
+
+#### S3 (AWS)
+
+The S3 backend provisioner creates buckets with hardcoded security best practices:
+
+- **Versioning**: Enabled (protects against accidental deletions)
+- **Encryption**: AES-256 with AWS-managed keys (always enabled)
+- **Public Access**: Blocked (all 4 block settings enabled)
+- **Locking**: Native S3 locking (Terraform 1.10+, no DynamoDB required)
+- **Tags**: Automatic resource tags (`Name`, `ManagedBy=Atmos`)
+
+**Required Configuration:**
+
+<Terminal title="stacks/catalog/vpc.yaml">
+```yaml
+backend:
+  bucket: my-terraform-state     # Required
+  key: vpc/terraform.tfstate
+  region: us-east-1              # Required
+  backend_type: s3
+
+provision:
+  backend:
+    enabled: true
+```
+</Terminal>
+
+**Cross-Account Provisioning:**
+
+<Terminal title="stacks/catalog/vpc.yaml">
+```yaml
+backend:
+  bucket: my-terraform-state
+  region: us-east-1
+  assume_role:
+    role_arn: arn:aws:iam::999999999999:role/TerraformStateAdmin
+
+provision:
+  backend:
+    enabled: true
+```
+</Terminal>
+
+The provisioner will assume the specified role to create the bucket in the target account.
+
+### Manual Provisioning
+
+You can also provision backends explicitly using the CLI:
+
+<Terminal>
+```shell
+# Provision backend before Terraform execution
+atmos provision backend vpc --stack dev
+
+# Then run Terraform
+atmos terraform apply vpc --stack dev
+```
+</Terminal>
+
+This is useful for:
+
+- CI/CD pipelines with separate provisioning stages
+- Troubleshooting provisioning issues
+- Batch provisioning for multiple components
+- Pre-provisioning before large-scale deployments
+
+See [`atmos provision backend`](/cli/commands/provision/backend) for complete CLI documentation.
+
+### Required IAM Permissions
+
+For S3 backend provisioning, the identity needs these permissions:
+
+<Terminal title="IAM Policy">
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:HeadBucket",
+        "s3:PutBucketVersioning",
+        "s3:PutBucketEncryption",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketTagging"
+      ],
+      "Resource": "arn:aws:s3:::my-terraform-state*"
+    }
+  ]
+}
+```
+</Terminal>
+
+For cross-account provisioning, also add:
+
+<Terminal title="IAM Policy">
+```json
+{
+  "Effect": "Allow",
+  "Action": "sts:AssumeRole",
+  "Resource": "arn:aws:iam::999999999999:role/TerraformStateAdmin"
+}
+```
+</Terminal>
+
+### Development vs Production
+
+**Development Workflow** - Perfect for quick iteration:
+
+<Terminal title="stacks/dev.yaml">
+```yaml
+provision:
+  backend:
+    enabled: true  # Automatic provisioning for fast development
+```
+</Terminal>
+
+<Terminal>
+```shell
+atmos terraform plan vpc -s dev  # Backend created automatically
+```
+</Terminal>
+
+**Production Migration** - Import provisioned backend into Terraform:
+
+For production environments, import the automatically provisioned backend into Terraform for full lifecycle management:
+
+<Terminal title="components/terraform/vpc/backend-import.tf">
+```hcl
+# Import the provisioned backend into Terraform
+import {
+  to = aws_s3_bucket.terraform_state
+  id = "acme-terraform-state-prod"
+}
+
+resource "aws_s3_bucket" "terraform_state" {
+  bucket = "acme-terraform-state-prod"
+}
+
+# Add production-specific features
+resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+
+  rule {
+    id     = "delete-old-versions"
+    status = "Enabled"
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
+}
+
+resource "aws_s3_bucket_replication_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+  role   = aws_iam_role.replication.arn
+
+  rule {
+    id     = "replicate-state"
+    status = "Enabled"
+
+    destination {
+      bucket        = aws_s3_bucket.terraform_state_replica.arn
+      storage_class = "STANDARD_IA"
+    }
+  }
+}
+```
+</Terminal>
+
+Then disable automatic provisioning:
+
+<Terminal title="stacks/prod.yaml">
+```yaml
+provision:
+  backend:
+    enabled: false  # Backend now managed by Terraform
+```
+</Terminal>
+
+Alternatively, use the [`terraform-aws-tfstate-backend`](https://github.com/cloudposse/terraform-aws-tfstate-backend) module for production backends with advanced features like cross-region replication, lifecycle policies, and custom KMS keys.
+
+### Idempotent Operations
+
+Backend provisioning is idempotent—running it multiple times is safe:
+
+<Terminal>
+```shell
+$ atmos provision backend vpc --stack dev
+✓ Created S3 bucket 'acme-terraform-state-dev'
+
+$ atmos provision backend vpc --stack dev
+S3 bucket 'acme-terraform-state-dev' already exists (idempotent)
+✓ Backend provisioning completed
+```
+</Terminal>
+
 ## References
 
 - [Terraform Backend Configuration](https://developer.hashicorp.com/terraform/language/settings/backends/configuration)
