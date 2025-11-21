@@ -348,7 +348,7 @@ Planned support:
 **Provisioned identities not appearing:**
 1. Verify `auto_provision_identities: true` is set
 2. Check cache exists: `ls ~/.cache/atmos/auth/{provider}/`
-3. Re-authenticate: `atmos auth login {provider}`
+3. Re-authenticate: `atmos auth login --identity {identity}`
 4. Enable debug logging: `atmos auth login --log-level debug`
 
 **Provisioning fails but authentication succeeds:**
