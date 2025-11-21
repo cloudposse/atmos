@@ -978,6 +978,9 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 func (m *manager) provisionIdentities(ctx context.Context, providerName string, provider types.Provider, credentials types.ICredentials) {
 	defer perf.Track(nil, "auth.Manager.provisionIdentities")()
 
+	// Set up auth-specific logging and restore on exit.
+	defer m.setupAuthLogging()()
+
 	// Check if provider implements the Provisioner interface.
 	provisioner, ok := provider.(types.Provisioner)
 	if !ok {
@@ -1020,6 +1023,43 @@ func (m *manager) provisionIdentities(ctx context.Context, providerName string, 
 	}
 
 	log.Debug("Successfully provisioned and cached identities", logKeyProvider, providerName, "count", len(result.Identities))
+}
+
+// setupAuthLogging configures auth-specific logging (prefix and level).
+// Returns a cleanup function that restores the original settings.
+func (m *manager) setupAuthLogging() func() {
+	// Save current state.
+	currentLevel := log.GetLevel()
+
+	// Set auth prefix.
+	log.SetPrefix("atmos-auth")
+
+	// Set auth log level from config if specified.
+	if m.config.Logs.Level != "" {
+		if authLogLevel, err := log.ParseLogLevel(m.config.Logs.Level); err == nil {
+			// Convert Atmos LogLevel string to charm.Level.
+			switch authLogLevel {
+			case log.LogLevelTrace:
+				log.SetLevel(log.TraceLevel)
+			case log.LogLevelDebug:
+				log.SetLevel(log.DebugLevel)
+			case log.LogLevelInfo:
+				log.SetLevel(log.InfoLevel)
+			case log.LogLevelWarning:
+				log.SetLevel(log.WarnLevel)
+			case log.LogLevelError:
+				log.SetLevel(log.ErrorLevel)
+			case log.LogLevelOff:
+				log.SetLevel(log.FatalLevel)
+			}
+		}
+	}
+
+	// Return cleanup function.
+	return func() {
+		log.SetLevel(currentLevel)
+		log.SetPrefix("")
+	}
 }
 
 // writeProvisionedIdentities writes provisioned identities to the cache directory.

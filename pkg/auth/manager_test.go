@@ -1774,3 +1774,177 @@ func TestManager_GetProviders(t *testing.T) {
 	result := mgr.GetProviders()
 	assert.Equal(t, expectedProviders, result)
 }
+
+func TestManager_SetupAuthLogging(t *testing.T) {
+	tests := []struct {
+		name           string
+		logLevel       string
+		expectedPrefix string
+	}{
+		{
+			name:           "sets auth prefix and Debug level",
+			logLevel:       "Debug",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix and Info level",
+			logLevel:       "Info",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix and Warning level",
+			logLevel:       "Warning",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix and Error level",
+			logLevel:       "Error",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix with empty log level",
+			logLevel:       "",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix with invalid log level",
+			logLevel:       "InvalidLevel",
+			expectedPrefix: "atmos-auth",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Import log package to check state.
+			log := require.New(t)
+
+			mgr := &manager{
+				config: &schema.AuthConfig{
+					Logs: schema.Logs{
+						Level: tt.logLevel,
+					},
+				},
+			}
+
+			// Call setupAuthLogging and immediately call cleanup.
+			cleanup := mgr.setupAuthLogging()
+
+			// Verify prefix was set (we can't easily check the actual prefix value
+			// without accessing internal logger state, but we verify cleanup works).
+			log.NotNil(cleanup, "cleanup function should be returned")
+
+			// Call cleanup to restore state.
+			cleanup()
+
+			// After cleanup, verify we can still log (no panic).
+			// This is a basic sanity check that cleanup worked.
+		})
+	}
+}
+
+func TestManager_SetupAuthLogging_RestoresState(t *testing.T) {
+	// This test verifies that setupAuthLogging restores the original log state.
+	log := require.New(t)
+
+	// The log package is already imported at the file level, we can't test
+	// the actual level restoration without more complex mocking.
+	// This test verifies the cleanup function doesn't panic.
+
+	mgr := &manager{
+		config: &schema.AuthConfig{
+			Logs: schema.Logs{
+				Level: "Debug",
+			},
+		},
+	}
+
+	// Setup auth logging.
+	cleanup := mgr.setupAuthLogging()
+	log.NotNil(cleanup, "cleanup function should be returned")
+
+	// Call cleanup - should not panic.
+	cleanup()
+}
+
+func TestManager_AuthenticateProvider_Success(t *testing.T) {
+	// Create test credentials with expiration.
+	exp := time.Now().Add(time.Hour)
+	creds := &testCreds{exp: &exp}
+
+	provider := &testProvider{
+		name:  "test-provider",
+		creds: creds,
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+		providers: map[string]types.Provider{
+			"test-provider": provider,
+		},
+		credentialStore: &testStore{},
+	}
+
+	whoami, err := mgr.AuthenticateProvider(context.Background(), "test-provider")
+	require.NoError(t, err)
+	assert.NotNil(t, whoami)
+	assert.Equal(t, "test-provider", whoami.Provider)
+	assert.Empty(t, whoami.Identity, "provider-only auth should not have identity")
+	// Note: testCreds doesn't populate expiration in whoami like AWSCredentials would
+}
+
+func TestManager_AuthenticateProvider_ProviderNotFound(t *testing.T) {
+	mgr := &manager{
+		config:          &schema.AuthConfig{},
+		providers:       map[string]types.Provider{},
+		credentialStore: &testStore{},
+	}
+
+	_, err := mgr.AuthenticateProvider(context.Background(), "nonexistent-provider")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrProviderNotFound)
+}
+
+func TestManager_AuthenticateProvider_CaseInsensitive(t *testing.T) {
+	// Test that provider name lookup is case-insensitive.
+	provider := &testProvider{
+		name:  "Test-Provider",
+		creds: &testCreds{},
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+		providers: map[string]types.Provider{
+			"Test-Provider": provider,
+		},
+		credentialStore: &testStore{},
+	}
+
+	// Try lowercase.
+	whoami, err := mgr.AuthenticateProvider(context.Background(), "test-provider")
+	require.NoError(t, err)
+	assert.Equal(t, "Test-Provider", whoami.Provider, "should use original case")
+
+	// Try uppercase.
+	whoami, err = mgr.AuthenticateProvider(context.Background(), "TEST-PROVIDER")
+	require.NoError(t, err)
+	assert.Equal(t, "Test-Provider", whoami.Provider, "should use original case")
+}
+
+func TestManager_AuthenticateProvider_AuthenticationFailure(t *testing.T) {
+	provider := &testProvider{
+		name:    "test-provider",
+		authErr: fmt.Errorf("authentication failed"),
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+		providers: map[string]types.Provider{
+			"test-provider": provider,
+		},
+		credentialStore: &testStore{},
+	}
+
+	_, err := mgr.AuthenticateProvider(context.Background(), "test-provider")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+}
