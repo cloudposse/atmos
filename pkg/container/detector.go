@@ -17,6 +17,22 @@ const (
 	logKeyRuntime = "runtime"
 )
 
+// RuntimeStatus represents the availability status of a container runtime.
+type RuntimeStatus int
+
+const (
+	// RuntimeAvailable indicates the runtime is available and responsive.
+	RuntimeAvailable RuntimeStatus = iota
+	// RuntimeUnavailable indicates the runtime binary is not found.
+	RuntimeUnavailable
+	// RuntimeNotResponding indicates the runtime binary exists but is not responding.
+	RuntimeNotResponding
+	// RuntimeNeedsInit indicates Podman is present but needs machine initialization.
+	RuntimeNeedsInit
+	// RuntimeNeedsStart indicates Podman machine exists but needs to be started.
+	RuntimeNeedsStart
+)
+
 // DetectRuntime auto-detects the available container runtime.
 // Priority order:
 // 1. ATMOS_CONTAINER_RUNTIME environment variable
@@ -65,70 +81,115 @@ func DetectRuntime(ctx context.Context) (Runtime, error) {
 }
 
 // isAvailable checks if a container runtime is available and running.
-// For Podman, attempts to auto-start the machine if not running.
+// This does NOT auto-start Podman machines - use checkRuntimeStatus for detailed status.
 func isAvailable(ctx context.Context, runtimeType Type) bool {
 	defer perf.Track(nil, "container.isAvailable")()
+
+	status := checkRuntimeStatus(ctx, runtimeType)
+	return status == RuntimeAvailable
+}
+
+// checkRuntimeStatus returns the detailed availability status of a container runtime.
+// This allows callers to distinguish between unavailable, not responding, needs init, etc.
+func checkRuntimeStatus(ctx context.Context, runtimeType Type) RuntimeStatus {
+	defer perf.Track(nil, "container.checkRuntimeStatus")()
 
 	// Check if binary exists in PATH.
 	_, err := globalExecutor.LookPath(string(runtimeType))
 	if err != nil {
 		log.Debug("Runtime binary not found in PATH", logKeyRuntime, runtimeType)
-		return false
+		return RuntimeUnavailable
 	}
 
 	// Check if runtime is responsive.
 	cmd := globalExecutor.CommandContext(ctx, string(runtimeType), "info")
 	if err := cmd.Run(); err != nil {
 		log.Debug("Runtime is not responsive", logKeyRuntime, runtimeType, "error", err)
-		return tryRecoverRuntime(ctx, runtimeType)
+		return diagnoseUnresponsiveRuntime(ctx, runtimeType)
 	}
 
-	return true
+	return RuntimeAvailable
 }
 
-// tryRecoverRuntime attempts to recover an unresponsive runtime.
-// For Podman, tries to start the machine. Returns true if runtime is recovered.
-func tryRecoverRuntime(ctx context.Context, runtimeType Type) bool {
-	// For Podman, try to auto-start the machine.
+// diagnoseUnresponsiveRuntime determines why a runtime is not responding.
+// For Podman, checks if machine needs init or start. For others, returns NotResponding.
+func diagnoseUnresponsiveRuntime(ctx context.Context, runtimeType Type) RuntimeStatus {
+	// Only Podman has machine-based initialization.
 	if runtimeType != TypePodman {
-		return false
+		return RuntimeNotResponding
 	}
 
-	if !tryStartPodmanMachine(ctx) {
-		return false
+	// Check if any Podman machine exists.
+	if !podmanMachineExists(ctx) {
+		log.Debug("Podman machine does not exist - needs initialization", logKeyRuntime, runtimeType)
+		return RuntimeNeedsInit
 	}
 
-	// Retry check after starting machine.
-	cmd := globalExecutor.CommandContext(ctx, string(runtimeType), "info")
-	if err := cmd.Run(); err == nil {
-		log.Debug("Successfully started Podman machine", logKeyRuntime, runtimeType)
-		return true
-	}
-
-	return false
+	// Machine exists but not running.
+	log.Debug("Podman machine exists but not running - needs start", logKeyRuntime, runtimeType)
+	return RuntimeNeedsStart
 }
 
-// tryStartPodmanMachine attempts to start or initialize the default Podman machine.
-// Returns true if machine is ready, false otherwise.
-func tryStartPodmanMachine(ctx context.Context) bool {
-	defer perf.Track(nil, "container.tryStartPodmanMachine")()
+// TryRecoverPodmanRuntime attempts to recover Podman by initializing/starting the machine.
+// This is an opt-in operation that should only be called when the user explicitly requests it.
+// Returns the new status after recovery attempt.
+func TryRecoverPodmanRuntime(ctx context.Context) RuntimeStatus {
+	defer perf.Track(nil, "container.TryRecoverPodmanRuntime")()
 
-	// Check if any machine exists.
-	if !podmanMachineExists(ctx) {
-		// No machine exists - initialize one first.
+	status := checkRuntimeStatus(ctx, TypePodman)
+
+	switch status {
+	case RuntimeNeedsInit:
+		// Initialize and start the machine.
 		if err := initializePodmanMachine(ctx); err != nil {
 			log.Debug("Failed to initialize Podman machine", "error", err)
-			return false
+			return RuntimeNeedsInit
 		}
+		if err := startPodmanMachine(ctx); err != nil {
+			log.Debug("Failed to start Podman machine after init", "error", err)
+			return RuntimeNeedsStart
+		}
+
+	case RuntimeNeedsStart:
+		// Just start the existing machine.
+		if err := startPodmanMachine(ctx); err != nil {
+			log.Debug("Failed to start Podman machine", "error", err)
+			return RuntimeNeedsStart
+		}
+
+	default:
+		return status
 	}
 
-	// Start the machine.
-	if err := startPodmanMachine(ctx); err != nil {
-		log.Debug("Failed to start Podman machine", "error", err)
-		return false
+	// Verify recovery succeeded.
+	cmd := globalExecutor.CommandContext(ctx, string(TypePodman), "info")
+	if err := cmd.Run(); err != nil {
+		log.Debug("Podman still not responsive after recovery attempt", "error", err)
+		return RuntimeNotResponding
 	}
 
-	return true
+	log.Debug("Successfully recovered Podman runtime")
+	return RuntimeAvailable
+}
+
+// RuntimeStatusMessage returns a user-friendly message describing the runtime status.
+func RuntimeStatusMessage(status RuntimeStatus, runtimeType Type) string {
+	defer perf.Track(nil, "container.RuntimeStatusMessage")()
+
+	switch status {
+	case RuntimeAvailable:
+		return fmt.Sprintf("%s is available and running", runtimeType)
+	case RuntimeUnavailable:
+		return fmt.Sprintf("%s is not installed or not in PATH", runtimeType)
+	case RuntimeNotResponding:
+		return fmt.Sprintf("%s is installed but not responding", runtimeType)
+	case RuntimeNeedsInit:
+		return "Podman is installed but no machine exists. Run 'podman machine init' to create one."
+	case RuntimeNeedsStart:
+		return "Podman machine exists but is not running. Run 'podman machine start' to start it."
+	default:
+		return fmt.Sprintf("unknown status for %s", runtimeType)
+	}
 }
 
 // podmanMachineExists checks if any Podman machine exists.
