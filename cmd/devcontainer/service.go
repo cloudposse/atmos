@@ -3,6 +3,8 @@ package devcontainer
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -142,12 +144,19 @@ func (s *Service) Logs(ctx context.Context, name string, opts LogsOptions) error
 	if err != nil {
 		return err
 	}
-	if logs != nil {
-		defer logs.Close()
+	if logs == nil {
+		return nil
+	}
+	defer logs.Close()
+
+	// Stream logs to stdout.
+	if _, err := io.Copy(os.Stdout, logs); err != nil {
+		return errUtils.Build(err).
+			WithExplanation("Failed to stream container logs").
+			WithHint("Check that the container is running and accessible").
+			Err()
 	}
 
-	// Stream logs to output.
-	// Note: In production, this would handle follow mode, etc.
 	return nil
 }
 
