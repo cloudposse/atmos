@@ -23,6 +23,7 @@ Available Commands:
   packer                         Manage packer-based machine images for multiple platforms
   pro                            Access premium features integrated with atmos-pro.com
   profile                        Manage configuration profiles
+  provision                      Provision backend infrastructure for Terraform state storage
   support                        Show Atmos support options
   terraform                      Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
   theme                          Manage terminal themes for Atmos CLI
