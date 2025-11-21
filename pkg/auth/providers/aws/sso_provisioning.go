@@ -92,7 +92,7 @@ func (p *ssoProvider) provisionIdentitiesWithClient(ctx context.Context, ssoClie
 		Provider:      p.name,
 		ProvisionedAt: time.Now(),
 		Metadata: provisioning.Metadata{
-			Source: "aws-sso",
+			Source: p.name,
 			Counts: &provisioning.Counts{
 				Accounts:   len(accounts),
 				Roles:      roleCount,
@@ -142,7 +142,7 @@ func (p *ssoProvider) processAccountsForProvisioning(ctx context.Context, ssoCli
 			identities[identityName] = &schema.Identity{
 				Kind:      "aws/permission-set",
 				Provider:  p.name,
-				Via:       &schema.IdentityVia{Provider: "aws-sso"},
+				Via:       &schema.IdentityVia{Provider: p.name},
 				Principal: principal.ToMap(),
 			}
 		}

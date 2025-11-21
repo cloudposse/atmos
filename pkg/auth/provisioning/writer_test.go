@@ -38,7 +38,7 @@ func TestWriter_Write(t *testing.T) {
 			},
 		},
 		Metadata: Metadata{
-			Source: "aws-sso",
+			Source: "test-provider",
 			Counts: &Counts{
 				Accounts:   1,
 				Roles:      1,
@@ -67,7 +67,6 @@ func TestWriter_Write(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "test-account/TestRole")
 	assert.Contains(t, string(content), "test-provider")
-	assert.Contains(t, string(content), "aws-sso")
 }
 
 func TestWriter_Remove(t *testing.T) {
@@ -174,7 +173,7 @@ func TestWriter_Write_WithoutCounts(t *testing.T) {
 			},
 		},
 		Metadata: Metadata{
-			Source: "aws-sso",
+			Source: "test-provider",
 			// Counts is nil.
 		},
 	}
@@ -188,7 +187,7 @@ func TestWriter_Write_WithoutCounts(t *testing.T) {
 	content, err := os.ReadFile(filePath)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "test-account/TestRole")
-	assert.Contains(t, string(content), "aws-sso")
+	assert.Contains(t, string(content), "test-provider")
 	// Should not contain counts section.
 	assert.NotContains(t, string(content), "accounts:")
 }
@@ -211,7 +210,7 @@ func TestWriter_Write_WithoutExtra(t *testing.T) {
 			},
 		},
 		Metadata: Metadata{
-			Source: "aws-sso",
+			Source: "test-provider",
 			Counts: &Counts{
 				Accounts:   1,
 				Roles:      1,
@@ -253,7 +252,7 @@ func TestWriter_Write_WithAllMetadata(t *testing.T) {
 			},
 		},
 		Metadata: Metadata{
-			Source: "aws-sso",
+			Source: "test-provider",
 			Counts: &Counts{
 				Accounts:   3,
 				Roles:      10,
@@ -276,7 +275,7 @@ func TestWriter_Write_WithAllMetadata(t *testing.T) {
 	content, err := os.ReadFile(filePath)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "test-account/TestRole")
-	assert.Contains(t, string(content), "aws-sso")
+	assert.Contains(t, string(content), "test-provider")
 	assert.Contains(t, string(content), "accounts: 3")
 	assert.Contains(t, string(content), "roles: 10")
 	assert.Contains(t, string(content), "identities: 30")
@@ -324,7 +323,7 @@ func TestBuildConfig_Structure(t *testing.T) {
 			},
 		},
 		Metadata: Metadata{
-			Source: "aws-sso",
+			Source: "test-provider",
 			Counts: &Counts{
 				Accounts:   1,
 				Roles:      2,
@@ -351,7 +350,7 @@ func TestBuildConfig_Structure(t *testing.T) {
 	metadata, ok := authSection["_metadata"].(map[string]interface{})
 	require.True(t, ok)
 	assert.Equal(t, "2025-01-01T12:00:00Z", metadata["provisioned_at"])
-	assert.Equal(t, "aws-sso", metadata["source"])
+	assert.Equal(t, "test-provider", metadata["source"])
 	assert.Equal(t, "test-provider", metadata["provider"])
 
 	// Verify counts.
