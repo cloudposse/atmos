@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -1133,4 +1134,101 @@ func TestComponentsArgCompletion(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestIsGitRepository tests the isGitRepository function.
+func TestIsGitRepository(t *testing.T) {
+	// Test in a git repo (current directory should be a git repo).
+	t.Chdir("../")
+	result := isGitRepository()
+	assert.True(t, result, "Should detect git repository")
+}
+
+// TestIsGitRepository_NonGitDir tests isGitRepository in a non-git directory.
+func TestIsGitRepository_NonGitDir(t *testing.T) {
+	// Create a temp directory that's not a git repo.
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	result := isGitRepository()
+	assert.False(t, result, "Should not detect git repository in temp dir")
+}
+
+// TestVerifyInsideGitRepoE tests the verifyInsideGitRepoE function.
+func TestVerifyInsideGitRepoE(t *testing.T) {
+	// Test in a git repo.
+	t.Chdir("../")
+	err := verifyInsideGitRepoE()
+	assert.NoError(t, err, "Should not error in git repository")
+}
+
+// TestVerifyInsideGitRepoE_NonGitDir tests verifyInsideGitRepoE in a non-git directory.
+func TestVerifyInsideGitRepoE_NonGitDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err := verifyInsideGitRepoE()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNotInGitRepository)
+}
+
+// TestGetTopLevelCommands tests the getTopLevelCommands function.
+func TestGetTopLevelCommands(t *testing.T) {
+	result := getTopLevelCommands()
+
+	// Should return a map.
+	assert.NotNil(t, result)
+	// Should contain some commands.
+	assert.Greater(t, len(result), 0)
+}
+
+// TestListStacks tests the listStacks function.
+func TestListStacks(t *testing.T) {
+	t.Chdir("../examples/demo-stacks")
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack flag")
+
+	stacks, err := listStacks(cmd)
+	require.NoError(t, err)
+	assert.NotNil(t, stacks)
+	assert.Greater(t, len(stacks), 0)
+}
+
+// TestListStacks_InvalidDirectory tests listStacks in an invalid directory.
+func TestListStacks_InvalidDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack flag")
+
+	_, err := listStacks(cmd)
+	assert.Error(t, err)
+}
+
+// TestStackFlagCompletion_NoArgs tests the stackFlagCompletion function without args.
+func TestStackFlagCompletion_NoArgs(t *testing.T) {
+	t.Chdir("../examples/demo-stacks")
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack flag")
+
+	// Test without component arg.
+	stacks, directive := stackFlagCompletion(cmd, []string{}, "")
+	assert.NotNil(t, stacks)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestStackFlagCompletion_WithComponent tests stackFlagCompletion with a component.
+func TestStackFlagCompletion_WithComponent(t *testing.T) {
+	t.Chdir("../examples/demo-stacks")
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack flag")
+
+	// Test with component arg.
+	stacks, directive := stackFlagCompletion(cmd, []string{"myapp"}, "")
+	assert.NotNil(t, stacks)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }

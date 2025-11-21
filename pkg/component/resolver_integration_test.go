@@ -317,3 +317,105 @@ func TestHandleComponentMatches_NilMatches(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrComponentNotInStack)
 }
+
+// TestExtractComponentsSection_ValidComponents tests extracting valid component section.
+func TestExtractComponentsSection_ValidComponents(t *testing.T) {
+	stackConfig := map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{},
+			},
+		},
+	}
+
+	result, err := extractComponentsSection(stackConfig, "terraform", "dev")
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	_, hasVPC := result["vpc"]
+	assert.True(t, hasVPC)
+}
+
+// TestExtractComponentsSection_NoComponents tests stack with no components section.
+func TestExtractComponentsSection_NoComponents(t *testing.T) {
+	stackConfig := map[string]any{
+		"vars": map[string]any{},
+	}
+
+	result, err := extractComponentsSection(stackConfig, "terraform", "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "has no components section")
+	assert.Nil(t, result)
+}
+
+// TestExtractComponentsSection_InvalidComponentsType tests components field with wrong type.
+func TestExtractComponentsSection_InvalidComponentsType(t *testing.T) {
+	stackConfig := map[string]any{
+		"components": "not a map",
+	}
+
+	result, err := extractComponentsSection(stackConfig, "terraform", "dev")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid components section")
+	assert.Nil(t, result)
+}
+
+// TestExtractComponentsSection_HelmfileComponents tests extracting helmfile components.
+func TestExtractComponentsSection_HelmfileComponents(t *testing.T) {
+	stackConfig := map[string]any{
+		"components": map[string]any{
+			"helmfile": map[string]any{
+				"nginx": map[string]any{},
+			},
+		},
+	}
+
+	result, err := extractComponentsSection(stackConfig, "helmfile", "dev")
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	_, hasNginx := result["nginx"]
+	assert.True(t, hasNginx)
+}
+
+// TestBuildAmbiguousComponentError_MultipleMatches tests error with multiple matches.
+func TestBuildAmbiguousComponentError_MultipleMatches(t *testing.T) {
+	matches := []string{"vpc-dev", "vpc-prod"}
+
+	err := buildAmbiguousComponentError(matches, "vpc", "dev", "terraform")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAmbiguousComponentPath)
+	assert.Contains(t, err.Error(), "ambiguous component path")
+}
+
+// TestValidateComponentInStack_MultipleMatches tests behavior with multiple matching components in non-TTY.
+func TestValidateComponentInStack_MultipleMatches(t *testing.T) {
+	stacksMap := map[string]any{
+		"dev": createStackConfig(map[string]any{
+			"vpc-dev": map[string]any{
+				"component": "vpc",
+			},
+			"vpc-staging": map[string]any{
+				"component": "vpc",
+			},
+		}),
+	}
+
+	mockLoader := NewMockStackLoader(stacksMap)
+	resolver := NewResolver(mockLoader)
+	atmosConfig := newTestAtmosConfig()
+
+	// In non-TTY environment, should return ambiguous error.
+	result, err := resolver.validateComponentInStack(atmosConfig, "vpc", "dev", "terraform")
+
+	// Either succeeds with first match or fails with ambiguous error (depends on TTY).
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrAmbiguousComponentPath)
+	} else {
+		// If it didn't error, it should have picked one.
+		assert.Contains(t, []string{"vpc-dev", "vpc-staging"}, result)
+	}
+}
