@@ -57,23 +57,66 @@ func TestSAMLProvider_RequestedSessionSeconds(t *testing.T) {
 }
 
 func TestSAMLProvider_GetProviderType(t *testing.T) {
-	// Explicit driver config always wins.
+	// Explicit driver config always wins, regardless of Playwright driver availability.
 	p := &samlProvider{config: &schema.Provider{ProviderType: "Okta"}, url: "https://idp"}
 	assert.Equal(t, "Okta", p.getDriver())
 
-	// Without Playwright drivers, falls back to provider-specific types.
-	p = &samlProvider{config: &schema.Provider{}, url: "https://accounts.google.com/saml"}
-	assert.Equal(t, "GoogleApps", p.getDriver()) // Falls back when no drivers.
+	p = &samlProvider{config: &schema.Provider{Driver: "GoogleApps"}, url: "https://idp"}
+	assert.Equal(t, "GoogleApps", p.getDriver())
 
-	p = &samlProvider{config: &schema.Provider{}, url: "https://example.okta.com"}
-	assert.Equal(t, "Okta", p.getDriver())
+	// Without explicit driver config, behavior depends on Playwright driver availability.
+	// If drivers are available or can be downloaded, Browser is preferred.
+	// Otherwise, falls back to provider-specific types based on URL.
+	t.Run("provider-specific-fallback-or-browser", func(t *testing.T) {
+		testCases := []struct {
+			name             string
+			url              string
+			expectedFallback string // Expected when no Playwright drivers
+		}{
+			{
+				name:             "google",
+				url:              "https://accounts.google.com/saml",
+				expectedFallback: "GoogleApps",
+			},
+			{
+				name:             "okta",
+				url:              "https://example.okta.com",
+				expectedFallback: "Okta",
+			},
+			{
+				name:             "adfs",
+				url:              "https://corp/adfs/ls",
+				expectedFallback: "ADFS",
+			},
+			{
+				name:             "unknown",
+				url:              "https://idp",
+				expectedFallback: "Browser", // Unknown provider defaults to Browser
+			},
+		}
 
-	p = &samlProvider{config: &schema.Provider{}, url: "https://corp/adfs/ls"}
-	assert.Equal(t, "ADFS", p.getDriver())
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				// Disable auto-download to avoid affecting fallback behavior.
+				p := &samlProvider{config: &schema.Provider{DownloadBrowserDriver: false}, url: tc.url}
+				driver := p.getDriver()
 
-	// Unknown provider without drivers defaults to Browser (will auto-download).
-	p = &samlProvider{config: &schema.Provider{}, url: "https://idp"}
-	assert.Equal(t, "Browser", p.getDriver())
+				// If Playwright drivers are installed, Browser is returned.
+				// Otherwise, provider-specific type is returned.
+				if p.playwrightDriversInstalled() {
+					assert.Equal(t, "Browser", driver, "With Playwright drivers installed, should use Browser")
+				} else {
+					assert.Equal(t, tc.expectedFallback, driver, "Without Playwright drivers, should fall back to provider-specific type")
+				}
+			})
+		}
+	})
+
+	// When DownloadBrowserDriver is explicitly enabled, always expect Browser.
+	t.Run("download-enabled", func(t *testing.T) {
+		p := &samlProvider{config: &schema.Provider{DownloadBrowserDriver: true}, url: "https://accounts.google.com/saml"}
+		assert.Equal(t, "Browser", p.getDriver(), "With download enabled, should always use Browser")
+	})
 }
 
 func TestSAMLProvider_ValidateAndEnvironment(t *testing.T) {

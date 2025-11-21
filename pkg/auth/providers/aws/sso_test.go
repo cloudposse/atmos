@@ -502,7 +502,7 @@ func TestPollForAccessToken_ContextCancellation(t *testing.T) {
 	// The context cancellation is tested indirectly through the Authenticate method.
 	// This test primarily verifies that the provider is set up correctly for context handling.
 	assert.NotNil(t, provider)
-	assert.Equal(t, ctx.Err(), context.DeadlineExceeded)
+	assert.ErrorIs(t, ctx.Err(), context.DeadlineExceeded)
 }
 
 func TestPollResult_Structure(t *testing.T) {

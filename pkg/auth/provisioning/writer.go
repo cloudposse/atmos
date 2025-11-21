@@ -28,6 +28,9 @@ const (
 	// Directory and file permissions.
 	provisionedDirPerms  = 0o700 // User read/write/execute only.
 	provisionedFilePerms = 0o600 // User read/write only.
+
+	// PathSeparatorReplacement is the character used to replace path separators in provider names.
+	pathSeparatorReplacement = "_"
 )
 
 // Writer handles writing provisioned identities to disk.
@@ -163,12 +166,12 @@ func (w *Writer) Remove(providerName string) error {
 func sanitizeProviderName(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return "_"
+		return pathSeparatorReplacement
 	}
 	// Replace OS-specific path separators to prevent escaping the cache dir.
-	name = strings.ReplaceAll(name, string(filepath.Separator), "_")
+	name = strings.ReplaceAll(name, string(filepath.Separator), pathSeparatorReplacement)
 	// Also replace forward slashes on Windows and backslashes on Unix for cross-platform safety.
-	name = strings.ReplaceAll(name, "/", "_")
-	name = strings.ReplaceAll(name, "\\", "_")
+	name = strings.ReplaceAll(name, "/", pathSeparatorReplacement)
+	name = strings.ReplaceAll(name, "\\", pathSeparatorReplacement)
 	return name
 }

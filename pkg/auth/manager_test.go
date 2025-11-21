@@ -1740,3 +1740,37 @@ func TestManager_provisionIdentities_SuccessPath(t *testing.T) {
 	expectedPath := writer.GetProvisionedIdentitiesPath("test-provider")
 	assert.FileExists(t, expectedPath)
 }
+
+func TestManager_GetIdentities(t *testing.T) {
+	// Test GetIdentities returns the configured identities.
+	expectedIdentities := map[string]schema.Identity{
+		"identity1": {Kind: "aws/permission-set", Provider: "aws-sso"},
+		"identity2": {Kind: "aws/assume-role", Provider: "aws-saml"},
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{
+			Identities: expectedIdentities,
+		},
+	}
+
+	result := mgr.GetIdentities()
+	assert.Equal(t, expectedIdentities, result)
+}
+
+func TestManager_GetProviders(t *testing.T) {
+	// Test GetProviders returns the configured providers.
+	expectedProviders := map[string]schema.Provider{
+		"aws-sso":  {Kind: "aws/iam-identity-center", Region: "us-east-1"},
+		"aws-saml": {Kind: "aws/saml", Region: "us-west-2"},
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{
+			Providers: expectedProviders,
+		},
+	}
+
+	result := mgr.GetProviders()
+	assert.Equal(t, expectedProviders, result)
+}
