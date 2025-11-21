@@ -1035,7 +1035,7 @@ func (m *manager) setupAuthLogging() func() {
 	log.SetPrefix("atmos-auth")
 
 	// Set auth log level from config if specified.
-	if m.config.Logs.Level != "" {
+	if m.config != nil && m.config.Logs.Level != "" {
 		if authLogLevel, err := log.ParseLogLevel(m.config.Logs.Level); err == nil {
 			// Convert Atmos LogLevel string to charm.Level.
 			switch authLogLevel {
