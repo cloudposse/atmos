@@ -16,10 +16,14 @@ import (
 func TestDescribeDependents(t *testing.T) {
 	_ = NewTestKit(t)
 
-	// Disable authentication for this test to prevent validation errors.
-	// Set both environment variable and viper value to ensure it's recognized.
-	t.Setenv("ATMOS_IDENTITY", "false")
-	viper.Set("identity", "false")
+	// Reset Viper to clear any environment variable bindings from previous tests.
+	// This prevents ATMOS_IDENTITY or IDENTITY env vars from interfering with the test.
+	viper.Reset()
+
+	// Clear identity environment variables to prevent Viper from reading them.
+	// In CI, these might be set and cause auth validation to fail when no auth is configured.
+	t.Setenv("ATMOS_IDENTITY", "")
+	t.Setenv("IDENTITY", "")
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
