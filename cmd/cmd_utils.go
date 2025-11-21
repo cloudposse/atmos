@@ -146,8 +146,8 @@ func processCustomCommands(
 	return nil
 }
 
-// filterChdirArgs removes --chdir and -C flags from args.
-// filterChdirArgs returns a copy of args with any chdir flags and their values removed.
+// FilterChdirArgs removes --chdir and -C flags from args.
+// FilterChdirArgs returns a copy of args with any chdir flags and their values removed.
 // It removes `--chdir`, `--chdir=<value>`, `-C`, `-C=<value>`, and concatenated `-C<value>` forms, preserving the order of all other arguments.
 func filterChdirArgs(args []string) []string {
 	filtered := make([]string, 0, len(args))

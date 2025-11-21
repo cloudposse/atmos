@@ -51,7 +51,7 @@ Experimental: Use --pty for PTY mode with masking support (not available on Wind
 
 // parseAttachOptions parses command flags into AttachOptions.
 //
-// parseAttachOptions parses Viper-backed flags into an AttachOptions value.
+// ParseAttachOptions parses Viper-backed flags into an AttachOptions value.
 // The returned AttachOptions has Instance sourced from the "instance" key and
 // UsePTY sourced from the "pty" key. The args slice is unused and retained
 // for API consistency with other parsers.

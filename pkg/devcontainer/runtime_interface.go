@@ -4,6 +4,7 @@ package devcontainer
 
 import (
 	"github.com/cloudposse/atmos/pkg/container"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // RuntimeDetector handles container runtime detection.
@@ -17,10 +18,14 @@ type runtimeDetectorImpl struct{}
 
 // NewRuntimeDetector creates a new RuntimeDetector.
 func NewRuntimeDetector() RuntimeDetector {
+	defer perf.Track(nil, "devcontainer.NewRuntimeDetector")()
+
 	return &runtimeDetectorImpl{}
 }
 
 // DetectRuntime detects and returns the appropriate container runtime.
 func (r *runtimeDetectorImpl) DetectRuntime(preferred string) (container.Runtime, error) {
+	defer perf.Track(nil, "devcontainer.runtimeDetectorImpl.DetectRuntime")()
+
 	return DetectRuntime(preferred)
 }

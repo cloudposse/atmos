@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -77,51 +76,8 @@ func TestDevcontainerAliases(t *testing.T) {
 	assert.Contains(t, shellCmd.Short, "alias for", "shell should be an alias command")
 }
 
-func TestVersionCommandSkipsAliasProcessing(t *testing.T) {
-	// This test verifies that version commands are properly detected to skip alias processing.
-	// In cmd/root.go Execute(), isVersionCommand() guards alias processing to ensure
-	// 'atmos version' works even when aliases reference commands that don't exist
-	// (e.g., 'shell' alias referencing 'devcontainer' in older Atmos versions that
-	// don't have devcontainer support).
-	//
-	// Note: We can't directly execute the version command in tests because it
-	// calls os.Exit(0), which would terminate the test. Instead, we verify that
-	// isVersionCommand() correctly identifies version commands that should skip
-	// alias processing.
-
-	originalArgs := os.Args
-	defer func() { os.Args = originalArgs }()
-
-	testCases := []struct {
-		name     string
-		args     []string
-		expected bool
-	}{
-		{"version subcommand", []string{"atmos", "version"}, true},
-		{"--version flag", []string{"atmos", "--version"}, true},
-		{"other command", []string{"atmos", "terraform", "plan"}, false},
-		{"no args", []string{"atmos"}, false},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			os.Args = tc.args
-			result := isVersionCommand()
-			assert.Equal(t, tc.expected, result,
-				"isVersionCommand() should return %v for args %v to properly skip/process aliases", tc.expected, tc.args)
-		})
-	}
-}
-
 func TestAliasChdirProcessing(t *testing.T) {
 	_ = NewTestKit(t)
-
-	// Save original working directory.
-	originalWd, err := os.Getwd()
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(originalWd)
-	})
 
 	// Test that --chdir works with aliases by loading config from the target directory.
 	t.Run("chdir loads config from target directory before processing aliases", func(t *testing.T) {

@@ -4,6 +4,7 @@ package devcontainer
 
 import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -21,11 +22,15 @@ type configLoaderImpl struct{}
 
 // NewConfigLoader creates a new ConfigLoader.
 func NewConfigLoader() ConfigLoader {
+	defer perf.Track(nil, "devcontainer.NewConfigLoader")()
+
 	return &configLoaderImpl{}
 }
 
 // LoadConfig loads configuration for a specific devcontainer.
 func (c *configLoaderImpl) LoadConfig(atmosConfig *schema.AtmosConfiguration, name string) (*Config, *Settings, error) {
+	defer perf.Track(atmosConfig, "devcontainer.configLoaderImpl.LoadConfig")()
+
 	// Reload config to ensure we have the latest with all fields populated.
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
@@ -37,6 +42,8 @@ func (c *configLoaderImpl) LoadConfig(atmosConfig *schema.AtmosConfiguration, na
 
 // LoadAllConfigs loads all devcontainer configurations.
 func (c *configLoaderImpl) LoadAllConfigs(atmosConfig *schema.AtmosConfiguration) (map[string]*Config, error) {
+	defer perf.Track(atmosConfig, "devcontainer.configLoaderImpl.LoadAllConfigs")()
+
 	// Reload config to ensure we have the latest with all fields populated.
 	freshConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {

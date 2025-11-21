@@ -23,8 +23,6 @@ import (
 // The duplication is by design: each test suite validates different domain-specific status logic
 // with its own set of expected values and edge cases. Consolidating these would reduce readability
 // and make it harder to maintain domain-specific test scenarios independently.
-//
-//nolint:dupl // This table-driven test intentionally shares structure with other status validation tests.
 func TestIsContainerRunning(t *testing.T) {
 	tests := []struct {
 		name     string

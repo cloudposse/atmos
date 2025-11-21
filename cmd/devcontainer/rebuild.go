@@ -93,7 +93,7 @@ need to start fresh.`,
 
 // parseRebuildOptions parses command flags into RebuildOptions.
 //
-// parseRebuildOptions constructs a RebuildOptions populated from flags and environment values read via viper.
+// ParseRebuildOptions constructs a RebuildOptions populated from flags and environment values read via viper.
 // The cmd and args parameters are unused and retained for API consistency.
 func parseRebuildOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*RebuildOptions, error) {
 	return &RebuildOptions{

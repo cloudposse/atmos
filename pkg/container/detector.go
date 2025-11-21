@@ -80,23 +80,32 @@ func isAvailable(ctx context.Context, runtimeType Type) bool {
 	cmd := globalExecutor.CommandContext(ctx, string(runtimeType), "info")
 	if err := cmd.Run(); err != nil {
 		log.Debug("Runtime is not responsive", logKeyRuntime, runtimeType, "error", err)
-
-		// For Podman, try to auto-start the machine.
-		if runtimeType == TypePodman {
-			if tryStartPodmanMachine(ctx) {
-				// Retry check after starting machine.
-				cmd := globalExecutor.CommandContext(ctx, string(runtimeType), "info")
-				if err := cmd.Run(); err == nil {
-					log.Debug("Successfully started Podman machine", logKeyRuntime, runtimeType)
-					return true
-				}
-			}
-		}
-
-		return false
+		return tryRecoverRuntime(ctx, runtimeType)
 	}
 
 	return true
+}
+
+// tryRecoverRuntime attempts to recover an unresponsive runtime.
+// For Podman, tries to start the machine. Returns true if runtime is recovered.
+func tryRecoverRuntime(ctx context.Context, runtimeType Type) bool {
+	// For Podman, try to auto-start the machine.
+	if runtimeType != TypePodman {
+		return false
+	}
+
+	if !tryStartPodmanMachine(ctx) {
+		return false
+	}
+
+	// Retry check after starting machine.
+	cmd := globalExecutor.CommandContext(ctx, string(runtimeType), "info")
+	if err := cmd.Run(); err == nil {
+		log.Debug("Successfully started Podman machine", logKeyRuntime, runtimeType)
+		return true
+	}
+
+	return false
 }
 
 // tryStartPodmanMachine attempts to start or initialize the default Podman machine.

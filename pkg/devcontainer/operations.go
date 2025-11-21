@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	// defaultContainerStopTimeout is the default timeout for stopping containers.
+	// DefaultContainerStopTimeout is the default timeout for stopping containers.
 	defaultContainerStopTimeout = 10 * time.Second
 )
 

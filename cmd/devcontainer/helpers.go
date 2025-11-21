@@ -61,7 +61,7 @@ func promptForDevcontainer(message string, devcontainers []string) (string, erro
 }
 
 // getDevcontainerName gets the devcontainer name from args or prompts the user.
-// getDevcontainerName obtains a devcontainer name from the provided arguments or, when none is given,
+// GetDevcontainerName obtains a devcontainer name from the provided arguments or, when none is given,
 // prompts the user to select one in an interactive terminal.
 //
 // If the first element of args is non-empty, that value is returned. If no name is provided and the
@@ -70,7 +70,7 @@ func promptForDevcontainer(message string, devcontainers []string) (string, erro
 // available devcontainers, prompts the user to choose one, prints the chosen name to stderr, and
 // returns it.
 //
-// args is the command-line arguments slice; its first element, if present and non-empty, is used as
+// Args is the command-line arguments slice; its first element, if present and non-empty, is used as
 // the devcontainer name.
 //
 // Returns the selected devcontainer name, or an error if a name could not be determined or on any
@@ -144,7 +144,7 @@ func isAuthConfigured(authConfig *schema.AuthConfig) bool {
 }
 
 // createUnauthenticatedAuthManager creates an auth manager without authenticating.
-// createUnauthenticatedAuthManager creates an AuthManager initialized with an empty AuthContext so callers can access identities (for example, GetDefaultIdentity) without performing authentication.
+// CreateUnauthenticatedAuthManager creates an AuthManager initialized with an empty AuthContext so callers can access identities (for example, GetDefaultIdentity) without performing authentication.
 // It returns the configured AuthManager, or an error if the manager could not be initialized.
 func createUnauthenticatedAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
 	authStackInfo := &schema.ConfigAndStacksInfo{
@@ -165,7 +165,7 @@ func createUnauthenticatedAuthManager(authConfig *schema.AuthConfig) (auth.AuthM
 }
 
 // initCommandWithFlags initializes a command's flags using StandardParser.
-// initCommandWithFlags registers command flags with the provided parser and binds them to Viper.
+// InitCommandWithFlags registers command flags with the provided parser and binds them to Viper.
 // It panics if binding the parser to Viper fails.
 func initCommandWithFlags(cmd *cobra.Command, parser *flags.StandardParser) {
 	// Register flags using the standard RegisterFlags method.

@@ -4,6 +4,8 @@ package devcontainer
 
 import (
 	"context"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // IdentityManager handles identity-related operations for devcontainers.
@@ -17,10 +19,14 @@ type identityManagerImpl struct{}
 
 // NewIdentityManager creates a new IdentityManager.
 func NewIdentityManager() IdentityManager {
+	defer perf.Track(nil, "devcontainer.NewIdentityManager")()
+
 	return &identityManagerImpl{}
 }
 
 // InjectIdentityEnvironment injects identity environment variables into the config.
 func (i *identityManagerImpl) InjectIdentityEnvironment(ctx context.Context, config *Config, identityName string) error {
+	defer perf.Track(nil, "devcontainer.identityManagerImpl.InjectIdentityEnvironment")()
+
 	return injectIdentityEnvironment(ctx, config, identityName)
 }

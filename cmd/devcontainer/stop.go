@@ -70,7 +70,7 @@ Use --rm to automatically remove the container after stopping.`,
 
 // parseStopOptions parses command flags into StopOptions.
 //
-// parseStopOptions creates a StopOptions populated from Viper-configured flags.
+// ParseStopOptions creates a StopOptions populated from Viper-configured flags.
 // It reads the "instance", "timeout", and "rm" keys and returns the populated StopOptions; the error return is always nil.
 func parseStopOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*StopOptions, error) {
 	return &StopOptions{

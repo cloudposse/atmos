@@ -139,7 +139,7 @@ func processEarlyChdirFlag() error {
 	homeDirProvider := filesystem.NewOSHomeDirProvider()
 	expandedPath, err := homeDirProvider.Expand(chdir)
 	if err != nil {
-		return fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrPathResolution, err)
 	}
 
 	// Clean and make absolute to handle both relative and absolute paths.
@@ -244,7 +244,7 @@ func processChdirFlag(cmd *cobra.Command) error {
 	homeDirProvider := filesystem.NewOSHomeDirProvider()
 	expandedPath, err := homeDirProvider.Expand(chdir)
 	if err != nil {
-		return fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrPathResolution, err)
 	}
 
 	// Clean and make absolute to handle both relative and absolute paths.

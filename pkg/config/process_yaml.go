@@ -52,9 +52,9 @@ func preprocessAtmosYamlFunc(yamlContent []byte, v *viper.Viper) error {
 // Parameters:
 // - node: A pointer to the current YAML node being processed.
 // - v: A pointer to a Viper instance where processed values will be stored.
-// processNode recursively traverses a YAML node tree and processes custom Atmos YAML directives, updating the provided Viper instance with resolved values.
+// ProcessNode recursively traverses a YAML node tree and processes custom Atmos YAML directives, updating the provided Viper instance with resolved values.
 // It accepts Document, Mapping, Sequence, and tagged Scalar nodes and uses currentPath as the hierarchical key path for nested values.
-// node is the YAML node to process, v is the Viper instance to populate, and currentPath is the hierarchical key path used for setting values.
+// Node is the YAML node to process, v is the Viper instance to populate, and currentPath is the hierarchical key path used for setting values.
 // It returns an error if processing any directive or child node fails.
 func processNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	if node == nil {
@@ -148,39 +148,12 @@ func processSequenceNode(node *yaml.Node, v *viper.Viper, currentPath string) er
 		// Build the path for this sequence element.
 		elementPath := fmt.Sprintf("%s[%d]", currentPath, idx)
 
-		// Handle different node types in the sequence.
-		if child.Kind == yaml.ScalarNode && child.Tag != "" {
-			// Scalar with a tag: process the tag and get the value.
-			value, err := processScalarNodeValue(child)
-			if err != nil {
-				return err
-			}
-			values = append(values, value)
-			// Also set the individual element for path-based access.
-			v.Set(elementPath, value)
-			// Clear the tag to avoid re-processing.
-			child.Tag = ""
-		} else if child.Kind == yaml.MappingNode {
-			// Nested mapping: process recursively to enable path-based access.
-			if err := processMappingNode(child, v, elementPath); err != nil {
-				return err
-			}
-			// Decode the mapping for the slice.
-			var val any
-			if err := child.Decode(&val); err != nil {
-				return err
-			}
-			values = append(values, val)
-		} else {
-			// Other types: decode normally.
-			var val any
-			if err := child.Decode(&val); err != nil {
-				return err
-			}
-			values = append(values, val)
-			// Set the individual element.
-			v.Set(elementPath, val)
+		// Process the child node and append to values.
+		value, err := processSequenceElement(child, v, elementPath)
+		if err != nil {
+			return err
 		}
+		values = append(values, value)
 	}
 
 	// Set the complete sequence in Viper.
@@ -189,6 +162,44 @@ func processSequenceNode(node *yaml.Node, v *viper.Viper, currentPath string) er
 	}
 
 	return nil
+}
+
+// processSequenceElement processes a single element in a YAML sequence.
+// Returns the processed value or an error.
+func processSequenceElement(child *yaml.Node, v *viper.Viper, elementPath string) (any, error) {
+	switch {
+	case child.Kind == yaml.ScalarNode && child.Tag != "":
+		// Scalar with a tag: process the tag and get the value.
+		value, err := processScalarNodeValue(child)
+		if err != nil {
+			return nil, err
+		}
+		// Also set the individual element for path-based access.
+		v.Set(elementPath, value)
+		// Clear the tag to avoid re-processing.
+		child.Tag = ""
+		return value, nil
+	case child.Kind == yaml.MappingNode:
+		// Nested mapping: process recursively to enable path-based access.
+		if err := processMappingNode(child, v, elementPath); err != nil {
+			return nil, err
+		}
+		// Decode the mapping for the slice.
+		var val any
+		if err := child.Decode(&val); err != nil {
+			return nil, err
+		}
+		return val, nil
+	default:
+		// Other types: decode normally.
+		var val any
+		if err := child.Decode(&val); err != nil {
+			return nil, err
+		}
+		// Set the individual element.
+		v.Set(elementPath, val)
+		return val, nil
+	}
 }
 
 // hasCustomTag reports whether the YAML tag starts with any Atmos custom function prefix (env, exec, include, repo-root, random).

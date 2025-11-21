@@ -776,16 +776,14 @@ func TestAttachToContainer_PTYMode(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-			} else {
+			} else if err != nil {
 				// PTY mode will fail in test environment because it tries to execute
 				// actual shell commands. We verify that the PTY code path was reached
 				// by checking that runtime.Info() was called (via mock expectations).
 				// The error "exit status" or "executable not found" indicates PTY
 				// execution was attempted, which validates the code path.
-				if err != nil {
-					// Expected errors from actual PTY execution in test environment.
-					t.Logf("PTY execution failed in test (expected): %v", err)
-				}
+				// Expected errors from actual PTY execution in test environment.
+				t.Logf("PTY execution failed in test (expected): %v", err)
 			}
 		})
 	}

@@ -92,7 +92,7 @@ Use --identity to launch the container with Atmos-managed credentials.`,
 
 // parseStartOptions parses command flags into StartOptions.
 //
-// parseStartOptions builds a StartOptions value by reading the relevant flag values from v.
+// ParseStartOptions builds a StartOptions value by reading the relevant flag values from v.
 // The args parameter is unused and kept for consistency with other parse* functions.
 // It returns the populated StartOptions and a nil error.
 func parseStartOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*StartOptions, error) {

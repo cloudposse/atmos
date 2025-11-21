@@ -164,7 +164,7 @@ Inside the container, cloud provider SDKs automatically use the authenticated id
 
 // parseShellOptions parses command flags into ShellOptions.
 //
-// parseShellOptions converts flag values from v into a ShellOptions struct.
+// ParseShellOptions converts flag values from v into a ShellOptions struct.
 // It reads the flags "instance", "identity", "pty", "new", "replace", "rm", and "no-pull" from the provided Viper instance and returns the populated ShellOptions and a nil error.
 func parseShellOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*ShellOptions, error) {
 	return &ShellOptions{

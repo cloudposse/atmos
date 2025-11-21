@@ -438,6 +438,7 @@ func TrimRight(s string) string {
 	// After matching all content, copy any ANSI codes that come before whitespace
 	// This preserves reset codes like \x1b[0m that follow the last character,
 	// but NOT color codes that wrap trailing whitespace
+ansiLoop:
 	for i < len(s) && s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
 		start := i
 		i += 2
@@ -451,11 +452,12 @@ func TrimRight(s string) string {
 		// Check what comes immediately after this ANSI code
 		// If it's directly whitespace, this code ended styling before the whitespace - include it
 		// If it's another ANSI code followed by whitespace, that next code wraps the whitespace - stop here
-		if i >= len(s) || s[i] == ' ' || s[i] == '\t' {
-			// Whitespace or end of string directly after this code - include the code
+		switch {
+		case i >= len(s) || s[i] == ' ' || s[i] == '\t':
+			// Whitespace or end of string directly after this code - include the code and stop loop.
 			result.WriteString(s[start:i])
-			break // Stop after this code, don't copy whitespace-wrapping codes
-		} else if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			break ansiLoop
+		case s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[':
 			// Another ANSI code follows - peek ahead to see if it wraps whitespace
 			j := i + 2
 			for j < len(s) && (s[j] < 'A' || s[j] > 'Z') && (s[j] < 'a' || s[j] > 'z') {
@@ -466,15 +468,14 @@ func TrimRight(s string) string {
 			}
 			// Check if whitespace follows that next code
 			if j < len(s) && (s[j] == ' ' || s[j] == '\t') {
-				// Next code wraps whitespace - include current code but stop
+				// Next code wraps whitespace - include current code but stop loop.
 				result.WriteString(s[start:i])
-				break
-			} else {
-				// Next code doesn't wrap whitespace - include current and continue
-				result.WriteString(s[start:i])
+				break ansiLoop
 			}
-		} else {
-			// Some other content follows - shouldn't happen after trimmed content, but include the code
+			// Next code doesn't wrap whitespace - include current and continue loop.
+			result.WriteString(s[start:i])
+		default:
+			// Some other content follows - shouldn't happen after trimmed content, but include the code.
 			result.WriteString(s[start:i])
 		}
 	}

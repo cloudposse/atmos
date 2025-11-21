@@ -251,30 +251,11 @@ func extractAndValidateSpec(devcontainerMap map[string]any, name string) (*Confi
 	// When using list syntax, Viper stores the list AND creates indexed keys (spec[0], spec[1], etc.)
 	// We need to collect the indexed items and merge them.
 	if specList, isList := specRaw.([]any); isList {
-		log.Debug("Detected list-based spec, collecting indexed items", "name", name, "items", len(specList))
-		maps := make([]map[string]any, 0, len(specList))
-
-		// Collect spec[0], spec[1], etc. which contain the processed YAML functions
-		for i := 0; i < len(specList); i++ {
-			key := fmt.Sprintf("spec[%d]", i)
-			if item, exists := devcontainerMap[key]; exists {
-				if itemMap, ok := item.(map[string]any); ok {
-					maps = append(maps, itemMap)
-				} else {
-					log.Warn("Spec list item is not a map", "name", name, "index", i, "type", fmt.Sprintf("%T", item))
-				}
-			}
+		merged, err := collectAndMergeSpecList(specList, devcontainerMap, name)
+		if err != nil {
+			return nil, err
 		}
-
-		if len(maps) > 0 {
-			merged, err := mergeSpecMaps(maps, name)
-			if err != nil {
-				return nil, err
-			}
-			specRaw = merged
-		} else {
-			return nil, fmt.Errorf("%w: devcontainer `%s` has empty spec list", errUtils.ErrInvalidDevcontainerConfig, name)
-		}
+		specRaw = merged
 	} else {
 		log.Debug("Spec type", "name", name, "type", fmt.Sprintf("%T", specRaw))
 	}
@@ -306,6 +287,34 @@ func extractAndValidateSpec(devcontainerMap map[string]any, name string) (*Confi
 	}
 
 	return config, nil
+}
+
+// collectAndMergeSpecList collects indexed spec items and merges them.
+// Returns the merged map or an error if the list is empty or invalid.
+func collectAndMergeSpecList(specList []any, devcontainerMap map[string]any, name string) (map[string]any, error) {
+	log.Debug("Detected list-based spec, collecting indexed items", "name", name, "items", len(specList))
+	maps := make([]map[string]any, 0, len(specList))
+
+	// Collect spec[0], spec[1], etc. which contain the processed YAML functions
+	for i := 0; i < len(specList); i++ {
+		key := fmt.Sprintf("spec[%d]", i)
+		item, exists := devcontainerMap[key]
+		if !exists {
+			continue
+		}
+		itemMap, ok := item.(map[string]any)
+		if !ok {
+			log.Warn("Spec list item is not a map", "name", name, "index", i, "type", fmt.Sprintf("%T", item))
+			continue
+		}
+		maps = append(maps, itemMap)
+	}
+
+	if len(maps) == 0 {
+		return nil, fmt.Errorf("%w: devcontainer `%s` has empty spec list", errUtils.ErrInvalidDevcontainerConfig, name)
+	}
+
+	return mergeSpecMaps(maps, name)
 }
 
 // mergeSpecMaps merges a list of maps into a single map.
@@ -379,25 +388,28 @@ func consolidateIndexedKeys(m map[string]any) map[string]any {
 	// First pass: identify indexed keys and collect their values
 	for k, v := range m {
 		// Check if key has format "name[index]"
-		if idx := strings.Index(k, "["); idx > 0 && strings.HasSuffix(k, "]") {
-			baseName := k[:idx]
-			indexStr := k[idx+1 : len(k)-1]
-			var index int
-			if _, err := fmt.Sscanf(indexStr, "%d", &index); err == nil {
-				// Valid indexed key
-				if _, exists := indexedArrays[baseName]; !exists {
-					indexedArrays[baseName] = make([]any, 0)
-				}
-				// Store with index for later sorting
-				indexedArrays[baseName] = append(indexedArrays[baseName], indexedValue{index: index, value: v})
-			} else {
-				// Not a numeric index, keep as-is
-				result[k] = v
-			}
-		} else {
+		idx := strings.Index(k, "[")
+		if idx <= 0 || !strings.HasSuffix(k, "]") {
 			// Not an indexed key
 			result[k] = v
+			continue
 		}
+
+		baseName := k[:idx]
+		indexStr := k[idx+1 : len(k)-1]
+		var index int
+		if _, err := fmt.Sscanf(indexStr, "%d", &index); err != nil {
+			// Not a numeric index, keep as-is
+			result[k] = v
+			continue
+		}
+
+		// Valid indexed key
+		if _, exists := indexedArrays[baseName]; !exists {
+			indexedArrays[baseName] = make([]any, 0)
+		}
+		// Store with index for later sorting
+		indexedArrays[baseName] = append(indexedArrays[baseName], indexedValue{index: index, value: v})
 	}
 
 	// Second pass: convert indexed arrays back to proper arrays

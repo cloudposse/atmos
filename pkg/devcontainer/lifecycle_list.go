@@ -70,20 +70,27 @@ func getPortsForDisplay(name string, config *Config, runningContainers []contain
 	defer perf.Track(nil, "devcontainer.getPortsForDisplay")()
 
 	// Use actual runtime ports for running containers.
-	if runningNames[name] {
-		for _, c := range runningContainers {
-			if IsAtmosDevcontainer(c.Name) {
-				if containerName, _ := ParseContainerName(c.Name); containerName == name {
-					if len(c.Ports) > 0 {
-						return FormatPortBindings(c.Ports)
-					}
-					break
-				}
-			}
-		}
+	if !runningNames[name] {
+		// Show configured ports for stopped containers.
+		ports, _ := ParsePorts(config.ForwardPorts, config.PortsAttributes)
+		return FormatPortBindings(ports)
 	}
 
-	// Show configured ports for stopped containers or if no ports in runtime info.
+	// Find matching running container.
+	for _, c := range runningContainers {
+		if !IsAtmosDevcontainer(c.Name) {
+			continue
+		}
+		if containerName, _ := ParseContainerName(c.Name); containerName != name {
+			continue
+		}
+		if len(c.Ports) > 0 {
+			return FormatPortBindings(c.Ports)
+		}
+		break
+	}
+
+	// No ports in runtime info - show configured ports.
 	ports, _ := ParsePorts(config.ForwardPorts, config.PortsAttributes)
 	return FormatPortBindings(ports)
 }

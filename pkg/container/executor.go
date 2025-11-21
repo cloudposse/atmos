@@ -3,6 +3,8 @@ package container
 import (
 	"context"
 	"os/exec"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // CommandExecutor provides an abstraction for executing system commands.
@@ -27,11 +29,15 @@ func newDefaultExecutor() CommandExecutor {
 
 // LookPath searches for an executable named file in PATH.
 func (e *defaultExecutor) LookPath(file string) (string, error) {
+	defer perf.Track(nil, "container.defaultExecutor.LookPath")()
+
 	return exec.LookPath(file)
 }
 
 // CommandContext creates an exec.Cmd configured to run with the given context.
 func (e *defaultExecutor) CommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
+	defer perf.Track(nil, "container.defaultExecutor.CommandContext")()
+
 	return exec.CommandContext(ctx, name, args...)
 }
 

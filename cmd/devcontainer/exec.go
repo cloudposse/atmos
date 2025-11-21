@@ -63,7 +63,7 @@ from the command to execute.`,
 
 // parseExecOptions parses command flags into ExecOptions.
 //
-// parseExecOptions constructs an ExecOptions populated from viper configuration values.
+// ParseExecOptions constructs an ExecOptions populated from viper configuration values.
 // It reads the "instance", "interactive", and "pty" keys from v and returns the populated ExecOptions; the args parameter is unused but accepted for consistency with other parse functions.
 func parseExecOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*ExecOptions, error) {
 	return &ExecOptions{
