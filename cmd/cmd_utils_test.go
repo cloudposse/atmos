@@ -760,3 +760,377 @@ func TestErrorWrappingInGetConfigAndStacksInfo(t *testing.T) {
 		assert.NotEmpty(t, err.Error(), "Error should have a message")
 	}
 }
+
+// TestDetermineComponentTypeFromCommand tests component type detection from command hierarchy.
+func TestDetermineComponentTypeFromCommand(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupFunc    func() *cobra.Command
+		expectedType string
+	}{
+		{
+			name: "terraform command",
+			setupFunc: func() *cobra.Command {
+				terraform := &cobra.Command{Use: "terraform"}
+				plan := &cobra.Command{Use: "plan"}
+				terraform.AddCommand(plan)
+				return plan
+			},
+			expectedType: "terraform",
+		},
+		{
+			name: "helmfile command",
+			setupFunc: func() *cobra.Command {
+				helmfile := &cobra.Command{Use: "helmfile"}
+				apply := &cobra.Command{Use: "apply"}
+				helmfile.AddCommand(apply)
+				return apply
+			},
+			expectedType: "helmfile",
+		},
+		{
+			name: "packer command",
+			setupFunc: func() *cobra.Command {
+				packer := &cobra.Command{Use: "packer"}
+				build := &cobra.Command{Use: "build"}
+				packer.AddCommand(build)
+				return build
+			},
+			expectedType: "packer",
+		},
+		{
+			name: "nested terraform subcommand",
+			setupFunc: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				terraform := &cobra.Command{Use: "terraform"}
+				plan := &cobra.Command{Use: "plan"}
+				root.AddCommand(terraform)
+				terraform.AddCommand(plan)
+				return plan
+			},
+			expectedType: "terraform",
+		},
+		{
+			name: "unknown command defaults to terraform",
+			setupFunc: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				unknown := &cobra.Command{Use: "unknown"}
+				root.AddCommand(unknown)
+				return unknown
+			},
+			expectedType: "terraform",
+		},
+		{
+			name: "no parent command defaults to terraform",
+			setupFunc: func() *cobra.Command {
+				return &cobra.Command{Use: "standalone"}
+			},
+			expectedType: "terraform",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := tt.setupFunc()
+			result := determineComponentTypeFromCommand(cmd)
+			assert.Equal(t, tt.expectedType, result)
+		})
+	}
+}
+
+// TestCloneCommand tests the cloneCommand function.
+func TestCloneCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    *schema.Command
+		wantErr  bool
+		verifyFn func(t *testing.T, orig, clone *schema.Command)
+	}{
+		{
+			name: "basic command",
+			input: &schema.Command{
+				Name:        "test",
+				Description: "Test command",
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, orig.Name, clone.Name)
+				assert.Equal(t, orig.Description, clone.Description)
+			},
+		},
+		{
+			name: "command with steps",
+			input: &schema.Command{
+				Name:  "multi-step",
+				Steps: []string{"step1", "step2", "step3"},
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, len(orig.Steps), len(clone.Steps))
+				// Verify it's a deep copy - modifying clone doesn't affect original
+				clone.Steps[0] = "modified"
+				assert.NotEqual(t, orig.Steps[0], clone.Steps[0])
+			},
+		},
+		{
+			name: "command with nested commands",
+			input: &schema.Command{
+				Name: "parent",
+				Commands: []schema.Command{
+					{Name: "child1"},
+					{Name: "child2"},
+				},
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, len(orig.Commands), len(clone.Commands))
+				assert.Equal(t, orig.Commands[0].Name, clone.Commands[0].Name)
+			},
+		},
+		{
+			name: "command with flags",
+			input: &schema.Command{
+				Name: "with-flags",
+				Flags: []schema.CommandFlag{
+					{Name: "verbose", Type: "bool", Shorthand: "v"},
+					{Name: "output", Type: "string", Required: true},
+				},
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, len(orig.Flags), len(clone.Flags))
+				assert.Equal(t, orig.Flags[0].Name, clone.Flags[0].Name)
+				assert.Equal(t, orig.Flags[1].Required, clone.Flags[1].Required)
+			},
+		},
+		{
+			name: "command with arguments",
+			input: &schema.Command{
+				Name: "with-args",
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Required: true},
+					{Name: "stack", Default: "dev"},
+				},
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, len(orig.Arguments), len(clone.Arguments))
+				assert.Equal(t, orig.Arguments[0].Required, clone.Arguments[0].Required)
+				assert.Equal(t, orig.Arguments[1].Default, clone.Arguments[1].Default)
+			},
+		},
+		{
+			name: "command with env vars",
+			input: &schema.Command{
+				Name: "with-env",
+				Env: []schema.CommandEnv{
+					{Key: "AWS_PROFILE", Value: "dev"},
+					{Key: "TF_LOG", ValueCommand: "echo DEBUG"},
+				},
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, len(orig.Env), len(clone.Env))
+				assert.Equal(t, orig.Env[0].Key, clone.Env[0].Key)
+				assert.Equal(t, orig.Env[1].ValueCommand, clone.Env[1].ValueCommand)
+			},
+		},
+		{
+			name: "command with component config",
+			input: &schema.Command{
+				Name: "with-component-config",
+				ComponentConfig: schema.CommandComponentConfig{
+					Component: "vpc",
+					Stack:     "{{ .Arguments.stack }}",
+				},
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, orig.ComponentConfig.Component, clone.ComponentConfig.Component)
+				assert.Equal(t, orig.ComponentConfig.Stack, clone.ComponentConfig.Stack)
+			},
+		},
+		{
+			name:    "empty command",
+			input:   &schema.Command{},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, orig.Name, clone.Name)
+				assert.Empty(t, clone.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clone, err := cloneCommand(tt.input)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, clone)
+
+			// Verify it's a different object
+			if tt.input != nil {
+				assert.NotSame(t, tt.input, clone)
+			}
+
+			if tt.verifyFn != nil {
+				tt.verifyFn(t, tt.input, clone)
+			}
+		})
+	}
+}
+
+// TestHandleHelpRequest tests the handleHelpRequest function.
+func TestHandleHelpRequest(t *testing.T) {
+	// Note: handleHelpRequest calls os.Exit(0) when help is requested,
+	// so we can only test cases where it doesn't exit.
+	tests := []struct {
+		name          string
+		args          []string
+		shouldNotExit bool
+	}{
+		{
+			name:          "no args - does not exit",
+			args:          []string{},
+			shouldNotExit: true,
+		},
+		{
+			name:          "regular arg - does not exit",
+			args:          []string{"component-name"},
+			shouldNotExit: true,
+		},
+		{
+			name:          "non-help flag - does not exit",
+			args:          []string{"--verbose"},
+			shouldNotExit: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{
+				Use:   "test",
+				Short: "Test command",
+			}
+
+			if tt.shouldNotExit {
+				// This should not panic or call os.Exit
+				handleHelpRequest(cmd, tt.args)
+				// If we got here, the function returned normally
+				assert.True(t, true, "handleHelpRequest returned without exiting")
+			}
+		})
+	}
+}
+
+// TestListComponents tests the listComponents function.
+func TestListComponents(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupDir    string
+		stackFlag   string
+		expectError bool
+	}{
+		{
+			name:        "valid directory with components",
+			setupDir:    "../examples/demo-stacks",
+			stackFlag:   "",
+			expectError: false,
+		},
+		{
+			name:        "invalid directory",
+			setupDir:    "",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Change to test directory if specified.
+			if tt.setupDir != "" {
+				t.Chdir(tt.setupDir)
+			} else {
+				tmpDir := t.TempDir()
+				t.Chdir(tmpDir)
+			}
+
+			// Create a test command.
+			cmd := &cobra.Command{
+				Use: "test",
+			}
+			cmd.Flags().String("stack", tt.stackFlag, "Stack flag")
+
+			// Call the function.
+			components, err := listComponents(cmd)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, components)
+			}
+		})
+	}
+}
+
+// TestComponentsArgCompletion tests the ComponentsArgCompletion function.
+func TestComponentsArgCompletion(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupDir   string
+		args       []string
+		toComplete string
+		expectDir  bool // Whether we expect directory completion directive
+	}{
+		{
+			name:       "first arg with dot - directory completion",
+			setupDir:   "../examples/demo-stacks",
+			args:       []string{},
+			toComplete: ".",
+			expectDir:  true,
+		},
+		{
+			name:       "first arg with path separator - directory completion",
+			setupDir:   "../examples/demo-stacks",
+			args:       []string{},
+			toComplete: "./components/",
+			expectDir:  true,
+		},
+		{
+			name:       "first arg without path - component completion",
+			setupDir:   "../examples/demo-stacks",
+			args:       []string{},
+			toComplete: "myapp",
+			expectDir:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Change to test directory.
+			if tt.setupDir != "" {
+				t.Chdir(tt.setupDir)
+			}
+
+			// Create a test command.
+			cmd := &cobra.Command{
+				Use: "test",
+			}
+			cmd.Flags().String("stack", "", "Stack flag")
+
+			// Call the function.
+			_, directive := ComponentsArgCompletion(cmd, tt.args, tt.toComplete)
+
+			if tt.expectDir {
+				assert.Equal(t, cobra.ShellCompDirectiveFilterDirs, directive)
+			} else {
+				assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+			}
+		})
+	}
+}
