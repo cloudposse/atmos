@@ -2,6 +2,7 @@
 package list
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -343,4 +344,84 @@ func TestColumnsCompletionForStacks(t *testing.T) {
 	// Suggestions can be nil or empty when config is not available.
 	_ = suggestions // May be nil or empty
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestListStacksWithOptions_ProvenanceValidation tests the provenance validation logic.
+// Note: This test validates the error message contains expected text when provenance
+// validation fails (after config loads). If config loading fails first, test is skipped.
+func TestListStacksWithOptions_ProvenanceValidation(t *testing.T) {
+	tests := []struct {
+		name          string
+		format        string
+		provenance    bool
+		expectInvalid bool // true if we expect the provenance validation to fail
+	}{
+		{
+			name:          "provenance with table format is invalid",
+			format:        "table",
+			provenance:    true,
+			expectInvalid: true,
+		},
+		{
+			name:          "provenance with json format is invalid",
+			format:        "json",
+			provenance:    true,
+			expectInvalid: true,
+		},
+		{
+			name:          "provenance without format is invalid",
+			format:        "",
+			provenance:    true,
+			expectInvalid: true,
+		},
+		{
+			name:          "provenance with tree format is valid",
+			format:        "tree",
+			provenance:    true,
+			expectInvalid: false,
+		},
+		{
+			name:          "no provenance with any format is valid",
+			format:        "table",
+			provenance:    false,
+			expectInvalid: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := &StacksOptions{
+				Format:     tc.format,
+				Provenance: tc.provenance,
+			}
+
+			err := listStacksWithOptions(opts)
+
+			if err == nil {
+				// No error - if we expected invalid, test failed; otherwise pass.
+				if tc.expectInvalid {
+					t.Errorf("Expected provenance validation error, got none")
+				}
+				return
+			}
+
+			// Check if error is about provenance validation.
+			errMsg := err.Error()
+			isProvenanceError := strings.Contains(errMsg, "--provenance")
+
+			if tc.expectInvalid {
+				if isProvenanceError {
+					// Provenance validation error - test passes.
+					assert.Contains(t, errMsg, "--provenance")
+					return
+				}
+				// Config loading might fail first - skip this test case.
+				t.Skipf("Config error before provenance validation: %v", err)
+			} else {
+				// We expect provenance to be valid, so error should NOT be about provenance.
+				assert.NotContains(t, errMsg, "--provenance", "Got unexpected provenance error")
+				// Other errors (config loading, stacks processing) are acceptable.
+			}
+		})
+	}
 }
