@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/backend"
@@ -59,8 +60,20 @@ func Provision(
 
 // ProvisionWithParams provisions infrastructure resources using a params struct.
 // It validates the provisioner type, loads component configuration, and executes the provisioner.
+//
+//nolint:lintroller // Perf tracking is added after nil check to avoid dereferencing nil params.
 func ProvisionWithParams(params *ProvisionParams) error {
-	defer perf.Track(params.AtmosConfig, "provision.Provision")()
+	// Note: We validate params before calling perf.Track to avoid nil pointer dereference.
+	// The perf tracking is added after validation.
+	if params == nil {
+		return fmt.Errorf("%w: provision params", errUtils.ErrNilParam)
+	}
+
+	defer perf.Track(params.AtmosConfig, "provision.ProvisionWithParams")()
+
+	if params.DescribeComponent == nil {
+		return fmt.Errorf("%w: DescribeComponent callback", errUtils.ErrNilParam)
+	}
 
 	_ = ui.Info(fmt.Sprintf("Provisioning %s '%s' in stack '%s'", params.ProvisionerType, params.Component, params.Stack))
 
