@@ -214,6 +214,8 @@ jobs:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
+          # Enable Playwright integration tests to validate browser driver download
+          RUN_PLAYWRIGHT_INTEGRATION: 1
         run: make testacc-cover
 
       - name: Upload coverage report to Codecov

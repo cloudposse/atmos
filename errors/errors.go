@@ -480,6 +480,7 @@ var (
 	ErrInvalidIdentityConfig        = errors.New("invalid identity config")
 	ErrInvalidProviderKind          = errors.New("invalid provider kind")
 	ErrInvalidProviderConfig        = errors.New("invalid provider config")
+	ErrInvalidBrowserExecutable     = errors.New("invalid browser executable")
 	ErrAuthenticationFailed         = errors.New("authentication failed")
 	ErrPostAuthenticationHookFailed = errors.New("post authentication hook failed")
 	ErrAuthManager                  = errors.New("auth manager error")
