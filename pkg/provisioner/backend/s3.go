@@ -25,6 +25,19 @@ import (
 
 const errFormat = "%w: %w"
 
+// S3ClientAPI defines the interface for S3 operations.
+// This interface allows for mocking in tests.
+//
+//nolint:dupl // Interface definition intentionally mirrors mock struct signatures.
+type S3ClientAPI interface {
+	HeadBucket(ctx context.Context, params *s3.HeadBucketInput, optFns ...func(*s3.Options)) (*s3.HeadBucketOutput, error)
+	CreateBucket(ctx context.Context, params *s3.CreateBucketInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error)
+	PutBucketVersioning(ctx context.Context, params *s3.PutBucketVersioningInput, optFns ...func(*s3.Options)) (*s3.PutBucketVersioningOutput, error)
+	PutBucketEncryption(ctx context.Context, params *s3.PutBucketEncryptionInput, optFns ...func(*s3.Options)) (*s3.PutBucketEncryptionOutput, error)
+	PutPublicAccessBlock(ctx context.Context, params *s3.PutPublicAccessBlockInput, optFns ...func(*s3.Options)) (*s3.PutPublicAccessBlockOutput, error)
+	PutBucketTagging(ctx context.Context, params *s3.PutBucketTaggingInput, optFns ...func(*s3.Options)) (*s3.PutBucketTaggingOutput, error)
+}
+
 // s3Config holds S3 backend configuration.
 type s3Config struct {
 	bucket  string
@@ -126,7 +139,7 @@ func extractS3Config(backendConfig map[string]any) (*s3Config, error) {
 
 // ensureBucket checks if bucket exists and creates it if needed.
 // Returns (true, nil) if bucket already existed, (false, nil) if bucket was created, (_, error) on failure.
-func ensureBucket(ctx context.Context, client *s3.Client, bucket, region string) (bool, error) {
+func ensureBucket(ctx context.Context, client S3ClientAPI, bucket, region string) (bool, error) {
 	exists, err := bucketExists(ctx, client, bucket)
 	if err != nil {
 		return false, fmt.Errorf(errFormat, provisioner.ErrCheckBucketExist, err)
@@ -163,7 +176,7 @@ func loadAWSConfigWithAuth(ctx context.Context, region, roleArn string, authCont
 // bucketExists checks if an S3 bucket exists.
 // Returns (false, nil) if bucket doesn't exist (404).
 // Returns (false, error) for permission denied, network issues, or other errors.
-func bucketExists(ctx context.Context, client *s3.Client, bucket string) (bool, error) {
+func bucketExists(ctx context.Context, client S3ClientAPI, bucket string) (bool, error) {
 	_, err := client.HeadBucket(ctx, &s3.HeadBucketInput{
 		Bucket: aws.String(bucket),
 	})
@@ -223,7 +236,7 @@ func bucketExists(ctx context.Context, client *s3.Client, bucket string) (bool, 
 }
 
 // createBucket creates an S3 bucket.
-func createBucket(ctx context.Context, client *s3.Client, bucket, region string) error {
+func createBucket(ctx context.Context, client S3ClientAPI, bucket, region string) error {
 	input := &s3.CreateBucketInput{
 		Bucket: aws.String(bucket),
 	}
@@ -249,7 +262,7 @@ func createBucket(ctx context.Context, client *s3.Client, bucket, region string)
 //
 // If the bucket already existed (alreadyExisted=true), warnings are logged to inform the user
 // that existing settings are being modified.
-func applyS3BucketDefaults(ctx context.Context, client *s3.Client, bucket string, alreadyExisted bool) error {
+func applyS3BucketDefaults(ctx context.Context, client S3ClientAPI, bucket string, alreadyExisted bool) error {
 	// Warn user if modifying pre-existing bucket settings.
 	if alreadyExisted {
 		_ = ui.Warning(fmt.Sprintf("Applying Atmos defaults to existing bucket '%s'", bucket))
@@ -285,7 +298,7 @@ func applyS3BucketDefaults(ctx context.Context, client *s3.Client, bucket string
 }
 
 // enableVersioning enables versioning on an S3 bucket.
-func enableVersioning(ctx context.Context, client *s3.Client, bucket string) error {
+func enableVersioning(ctx context.Context, client S3ClientAPI, bucket string) error {
 	_, err := client.PutBucketVersioning(ctx, &s3.PutBucketVersioningInput{
 		Bucket: aws.String(bucket),
 		VersioningConfiguration: &types.VersioningConfiguration{
@@ -296,7 +309,7 @@ func enableVersioning(ctx context.Context, client *s3.Client, bucket string) err
 }
 
 // enableEncryption enables AES-256 encryption on an S3 bucket.
-func enableEncryption(ctx context.Context, client *s3.Client, bucket string) error {
+func enableEncryption(ctx context.Context, client S3ClientAPI, bucket string) error {
 	_, err := client.PutBucketEncryption(ctx, &s3.PutBucketEncryptionInput{
 		Bucket: aws.String(bucket),
 		ServerSideEncryptionConfiguration: &types.ServerSideEncryptionConfiguration{
@@ -314,7 +327,7 @@ func enableEncryption(ctx context.Context, client *s3.Client, bucket string) err
 }
 
 // blockPublicAccess blocks all public access to an S3 bucket.
-func blockPublicAccess(ctx context.Context, client *s3.Client, bucket string) error {
+func blockPublicAccess(ctx context.Context, client S3ClientAPI, bucket string) error {
 	_, err := client.PutPublicAccessBlock(ctx, &s3.PutPublicAccessBlockInput{
 		Bucket: aws.String(bucket),
 		PublicAccessBlockConfiguration: &types.PublicAccessBlockConfiguration{
@@ -328,7 +341,7 @@ func blockPublicAccess(ctx context.Context, client *s3.Client, bucket string) er
 }
 
 // applyTags applies standard tags to an S3 bucket.
-func applyTags(ctx context.Context, client *s3.Client, bucket string) error {
+func applyTags(ctx context.Context, client S3ClientAPI, bucket string) error {
 	_, err := client.PutBucketTagging(ctx, &s3.PutBucketTaggingInput{
 		Bucket: aws.String(bucket),
 		Tagging: &types.Tagging{
