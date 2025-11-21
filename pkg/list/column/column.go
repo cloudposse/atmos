@@ -189,6 +189,8 @@ func (s *Selector) evaluateTemplate(cfg Config, data map[string]any) (string, er
 
 // buildTemplateContext creates template context from raw data.
 // Maps common field names and makes full data available via .Raw.
+//
+//nolint:gocognit,revive,cyclop,funlen // Complexity and length from repetitive field mapping (unavoidable pattern).
 func buildTemplateContext(data map[string]any) any {
 	// Try to map to structured context for better template readability
 	ctx := make(map[string]any)

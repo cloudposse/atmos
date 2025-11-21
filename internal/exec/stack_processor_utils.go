@@ -874,6 +874,7 @@ func processYAMLConfigFileWithContextInternal(
 		err                          error
 	}
 
+	//nolint:staticcheck // atmosConfig nil check is present.
 	log.Trace("Processing import structs", "count", len(importStructs), "file", relativeFilePath, "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
 	for _, importStruct := range importStructs {
 		imp := importStruct.Path
@@ -1052,6 +1053,7 @@ func processYAMLConfigFileWithContextInternal(
 				return nil, nil, nil, nil, nil, nil, nil, nil, result.err
 			}
 
+			//nolint:nestif // Nesting required for provenance tracking.
 			// Store merge context for imported files if provenance tracking is enabled.
 			if atmosConfig != nil && atmosConfig.TrackProvenance {
 				switch {

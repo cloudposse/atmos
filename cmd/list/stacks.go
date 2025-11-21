@@ -118,7 +118,14 @@ func init() {
 	}
 }
 
+//nolint:gocognit,revive,cyclop,funlen // Complexity and length from necessary validation and format branching.
 func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOptions) error {
+	// Early validation: --provenance only works with --format=tree.
+	// This check runs before config loading for fast feedback when format is explicitly provided.
+	if opts.Provenance && opts.Format != "" && opts.Format != string(format.FormatTree) {
+		return fmt.Errorf("%w: --provenance flag only works with --format=tree", errUtils.ErrInvalidFlag)
+	}
+
 	// Process command line args to get real ConfigAndStacksInfo with CLI flags.
 	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
 	if err != nil {
@@ -165,6 +172,7 @@ func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOption
 	}
 
 	// Handle tree format specially - it shows import hierarchies.
+	//nolint:nestif // Nesting required for tree format handling.
 	if opts.Format == "tree" {
 		log.Trace("Tree format detected, enabling provenance tracking")
 		// Enable provenance tracking to capture import chains.

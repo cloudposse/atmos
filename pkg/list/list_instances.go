@@ -347,6 +347,8 @@ func processInstances(atmosConfig *schema.AtmosConfiguration) ([]schema.Instance
 }
 
 // ExecuteListInstancesCmd executes the list instances command.
+//
+//nolint:revive,cyclop,funlen // Complexity and length from format branching and upload handling (unavoidable pattern).
 func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	log.Trace("ExecuteListInstancesCmd starting")
 	// Initialize CLI config.

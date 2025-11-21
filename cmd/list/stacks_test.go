@@ -2,11 +2,11 @@
 package list
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -347,14 +347,15 @@ func TestColumnsCompletionForStacks(t *testing.T) {
 }
 
 // TestListStacksWithOptions_ProvenanceValidation tests the provenance validation logic.
-// Note: This test validates the error message contains expected text when provenance
-// validation fails (after config loads). If config loading fails first, test is skipped.
+// Note: This test validates the early validation that runs before config loading.
+// Only test cases with explicit format can be validated early (before config loading).
 func TestListStacksWithOptions_ProvenanceValidation(t *testing.T) {
 	tests := []struct {
 		name          string
 		format        string
 		provenance    bool
 		expectInvalid bool // true if we expect the provenance validation to fail
+		skipReason    string
 	}{
 		{
 			name:          "provenance with table format is invalid",
@@ -373,23 +374,30 @@ func TestListStacksWithOptions_ProvenanceValidation(t *testing.T) {
 			format:        "",
 			provenance:    true,
 			expectInvalid: true,
+			skipReason:    "Empty format requires config loading to determine default, cannot test with nil cmd",
 		},
 		{
 			name:          "provenance with tree format is valid",
 			format:        "tree",
 			provenance:    true,
 			expectInvalid: false,
+			skipReason:    "Valid provenance requires config loading to proceed, cannot test with nil cmd",
 		},
 		{
 			name:          "no provenance with any format is valid",
 			format:        "table",
 			provenance:    false,
 			expectInvalid: false,
+			skipReason:    "No provenance requires config loading to proceed, cannot test with nil cmd",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.skipReason != "" {
+				t.Skip(tc.skipReason)
+			}
+
 			opts := &StacksOptions{
 				Format:     tc.format,
 				Provenance: tc.provenance,
@@ -397,30 +405,12 @@ func TestListStacksWithOptions_ProvenanceValidation(t *testing.T) {
 
 			err := listStacksWithOptions(nil, nil, opts)
 
-			if err == nil {
-				// No error - if we expected invalid, test failed; otherwise pass.
-				if tc.expectInvalid {
-					t.Errorf("Expected provenance validation error, got none")
-				}
-				return
-			}
-
-			// Check if error is about provenance validation.
-			errMsg := err.Error()
-			isProvenanceError := strings.Contains(errMsg, "--provenance")
-
 			if tc.expectInvalid {
-				if isProvenanceError {
-					// Provenance validation error - test passes.
-					assert.Contains(t, errMsg, "--provenance")
-					return
-				}
-				// Config loading might fail first - skip this test case.
-				t.Skipf("Config error before provenance validation: %v", err)
-			} else {
-				// We expect provenance to be valid, so error should NOT be about provenance.
-				assert.NotContains(t, errMsg, "--provenance", "Got unexpected provenance error")
-				// Other errors (config loading, stacks processing) are acceptable.
+				require.Error(t, err, "Expected provenance validation error")
+				assert.Contains(t, err.Error(), "--provenance")
+			} else if err != nil {
+				// We don't expect a provenance error, but other errors are acceptable.
+				assert.NotContains(t, err.Error(), "--provenance", "Got unexpected provenance error")
 			}
 		})
 	}

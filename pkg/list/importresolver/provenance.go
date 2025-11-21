@@ -27,6 +27,8 @@ const (
 //
 // Note: This function relies on merge contexts being populated during stack processing.
 // Merge contexts are automatically created when ExecuteDescribeStacks processes stack files.
+//
+//nolint:gocognit,revive,funlen // Complexity and length from nested stack/component/import tree resolution (unavoidable pattern).
 func ResolveImportTreeFromProvenance(
 	stacksMap map[string]interface{},
 	atmosConfig *schema.AtmosConfiguration,
@@ -107,6 +109,8 @@ func ResolveImportTreeFromProvenance(
 
 // findStacksForFilePath finds all stacks that have components from the given file path.
 // Returns a map of stackName -> componentNames.
+//
+//nolint:gocognit,revive,funlen // Complexity and length from nested stack/component/metadata inspection (unavoidable pattern).
 func findStacksForFilePath(
 	filePath string,
 	stacksMap map[string]interface{},

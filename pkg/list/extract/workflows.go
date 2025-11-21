@@ -15,6 +15,8 @@ import (
 
 // ExtractWorkflows transforms workflow manifests into structured data.
 // Returns []map[string]any suitable for the renderer pipeline.
+//
+//nolint:gocognit,nestif,revive,funlen // Complexity and length from file handling and manifest parsing (unavoidable pattern).
 func Workflows(atmosConfig *schema.AtmosConfiguration, fileFilter string) ([]map[string]any, error) {
 	var workflows []map[string]any
 
