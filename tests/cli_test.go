@@ -354,13 +354,6 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	wrappedPathRegex := regexp.MustCompile(`(/[^\s\n]+[./])\n([a-zA-Z0-9._-]+/)`)
 	output = wrappedPathRegex.ReplaceAllString(output, "$1$2")
 
-	// Also handle hint messages where the path is on the next line vs same line
-	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
-	// Also handles plain labels like "Stacks directory:\n/path"
-	// The regex uses [\s\S] to match across line breaks in case Glamour word-wraps the hint text
-	hintPathRegex := regexp.MustCompile(`(?m)(💡[\s\S]{0,200}?:|^[A-Z][\s\S]{0,200}?directory:)\s*\n(/[^\s\n]+)`)
-	output = hintPathRegex.ReplaceAllString(output, "$1 $2")
-
 	// 3. Normalize the repository root:
 	//    - Clean the path (which may not collapse all extra slashes after the drive letter, etc.)
 	//    - Convert to forward slashes,
@@ -491,6 +484,13 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// Replace with a generic placeholder.
 	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
 	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
+
+	// 17. Join hint messages where the sanitized path ended up on the next line.
+	// This must run AFTER path sanitization because it matches the sanitized path pattern.
+	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
+	// Also handles plain labels like "Stacks directory:\n/path"
+	hintPathRegex := regexp.MustCompile(`(?m)(💡[^\n]{0,200}?:|^[A-Z][^\n]{0,200}?directory:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
+	result = hintPathRegex.ReplaceAllString(result, "$1 $2")
 
 	return result, nil
 }
