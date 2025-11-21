@@ -220,6 +220,64 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	return m.buildWhoamiInfo(identityName, finalCreds), nil
 }
 
+// AuthenticateProvider performs authentication directly with a provider.
+// This is used for provider-level operations like SSO auto-provisioning where
+// you want to authenticate to a provider without specifying a particular identity.
+func (m *manager) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
+	defer perf.Track(nil, "auth.Manager.AuthenticateProvider")()
+
+	log.Debug("Starting provider authentication", logKeyProvider, providerName)
+
+	// Resolve provider name case-insensitively.
+	resolvedProviderName := ""
+	for name := range m.providers {
+		if strings.EqualFold(name, providerName) {
+			resolvedProviderName = name
+			break
+		}
+	}
+
+	if resolvedProviderName == "" {
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrProviderNotFound, fmt.Sprintf(backtickedFmt, providerName))
+	}
+
+	// Use resolved name for authentication.
+	providerName = resolvedProviderName
+
+	// Authenticate with the provider.
+	credentials, err := m.authenticateWithProvider(ctx, providerName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build chain with just the provider.
+	m.chain = []string{providerName}
+
+	// Build and return whoami info for the provider.
+	return m.buildProviderWhoamiInfo(providerName, credentials), nil
+}
+
+// buildProviderWhoamiInfo builds WhoamiInfo for a provider (without an identity).
+func (m *manager) buildProviderWhoamiInfo(providerName string, creds types.ICredentials) *types.WhoamiInfo {
+	info := &types.WhoamiInfo{
+		Provider: providerName,
+		Identity: "", // No identity for provider-only auth.
+	}
+
+	// Add provider-specific fields if available.
+	if awsCreds, ok := creds.(*types.AWSCredentials); ok {
+		info.Region = awsCreds.Region
+		// Parse expiration string to time.Time if present.
+		if awsCreds.Expiration != "" {
+			if expTime, err := time.Parse(time.RFC3339, awsCreds.Expiration); err == nil {
+				info.Expiration = &expTime
+			}
+		}
+	}
+
+	return info
+}
+
 // GetChain returns the most recently built authentication chain.
 // The chain is in the format: [providerName, identity1, identity2, ..., targetIdentity].
 func (m *manager) GetChain() []string {

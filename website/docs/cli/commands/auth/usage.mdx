@@ -234,7 +234,7 @@ auth:
 Authenticate to trigger provisioning:
 
 ```bash
-atmos auth login --identity sso-prod
+atmos auth login --provider sso-prod
 # ✓ Provisioned 47 identities across 12 accounts (2.3s)
 ```
 
@@ -312,16 +312,16 @@ To force re-provisioning:
 
 ```bash
 # Logout to clear cache
-atmos auth logout --identity sso-prod
+atmos auth logout --provider sso-prod
 
 # Re-authenticate
-atmos auth login --identity sso-prod
+atmos auth login --provider sso-prod
 ```
 
 ### How It Works
 
 **Phase 1: Authentication & Provisioning**
-1. User authenticates with `atmos auth login`
+1. User authenticates with `atmos auth login --provider {provider}`
 2. Provider calls AWS SSO `ListAccounts` API
 3. For each account, calls `ListAccountRoles` API
 4. Creates identity for each permission set
@@ -348,8 +348,8 @@ Planned support:
 **Provisioned identities not appearing:**
 1. Verify `auto_provision_identities: true` is set
 2. Check cache exists: `ls ~/.cache/atmos/auth/{provider}/`
-3. Re-authenticate: `atmos auth login --identity {identity}`
-4. Enable debug logging: `atmos auth login --log-level debug`
+3. Re-authenticate: `atmos auth login --provider {provider}`
+4. Enable debug logging: `atmos auth login --provider {provider} --log-level debug`
 
 **Provisioning fails but authentication succeeds:**
 This is expected behavior. Provisioning is non-fatal—if it fails, authentication still succeeds and you can use manually configured identities.

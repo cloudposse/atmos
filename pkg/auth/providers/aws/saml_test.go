@@ -148,6 +148,10 @@ func (s stubSamlMgr) GetCachedCredentials(context.Context, string) (*types.Whoam
 func (s stubSamlMgr) Authenticate(context.Context, string) (*types.WhoamiInfo, error) {
 	return nil, nil
 }
+
+func (s stubSamlMgr) AuthenticateProvider(context.Context, string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
 func (s stubSamlMgr) Whoami(context.Context, string) (*types.WhoamiInfo, error) { return nil, nil }
 func (s stubSamlMgr) Validate() error                                           { return nil }
 func (s stubSamlMgr) GetDefaultIdentity(_ bool) (string, error)                 { return "", nil }

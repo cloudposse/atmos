@@ -15,7 +15,7 @@ One of Atmos's core design principles is **zero-configuration**: the tool should
 
 Previously, if you had access to 50 AWS accounts with multiple permission sets each, you'd need to manually configure hundreds of identity entries in your `atmos.yaml`. This was tedious, error-prone, and a barrier to adoption.
 
-Now, you authenticate once with `atmos auth login`, and Atmos automatically discovers and provisions all available permission sets as identities. You can immediately use any role without touching configuration files.
+Now, you authenticate once with `atmos auth login --provider {provider}`, and Atmos automatically discovers and provisions all available permission sets as identities. You can immediately use any role without touching configuration files.
 
 ## Why This Matters
 
@@ -41,7 +41,7 @@ auth:
 ```
 
 ```bash
-atmos auth login sso-prod
+atmos auth login --provider sso-prod
 # ✓ Provisioned 47 identities across 12 accounts (2.3s)
 
 atmos terraform plan --identity sandbox/PowerUserAccess
@@ -64,7 +64,7 @@ Auto-provisioning removes common friction points:
 Auto-provisioning follows a two-phase design:
 
 **Phase 1: Authentication & Provisioning**
-1. User authenticates: `atmos auth login sso-prod`
+1. User authenticates: `atmos auth login --provider sso-prod`
 2. Provider with `auto_provision_identities: true` queries AWS SSO APIs
 3. `ListAccounts` discovers all accessible AWS accounts
 4. `ListAccountRoles` discovers permission sets for each account
@@ -172,8 +172,8 @@ cat ~/.cache/atmos/auth/sso-prod/provisioned-identities.yaml
 To force re-provisioning, log out and re-authenticate:
 
 ```bash
-atmos auth logout sso-prod
-atmos auth login sso-prod
+atmos auth logout --provider sso-prod
+atmos auth login --provider sso-prod
 ```
 
 ## Use Cases
@@ -186,7 +186,7 @@ Organizations with many AWS accounts benefit immediately:
 # Before: Manually configure 50+ identities
 # After: One login, 50+ identities available
 
-atmos auth login sso-prod
+atmos auth login --provider sso-prod
 atmos terraform plan --identity sandbox/PowerUserAccess
 atmos terraform plan --identity staging/DeployerAccess
 atmos terraform plan --identity dev/ReadOnly
@@ -200,7 +200,7 @@ New team members can authenticate and deploy in minutes:
 ```bash
 git clone https://github.com/acme/infrastructure
 cd infrastructure
-atmos auth login sso-prod
+atmos auth login --provider sso-prod
 atmos terraform plan --identity sandbox/PowerUserAccess
 # Ready to deploy
 ```
@@ -249,7 +249,7 @@ Auto-provisioning is available in Atmos v2.x. To enable it:
 
 2. Authenticate:
    ```bash
-   atmos auth login sso-prod
+   atmos auth login --provider sso-prod
    ```
 
 3. Use any available role:
