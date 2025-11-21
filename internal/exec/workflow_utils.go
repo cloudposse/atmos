@@ -89,12 +89,12 @@ func ExecuteWorkflow(
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
-		errUtils.CheckErrorAndPrint(
-			ErrWorkflowNoSteps,
-			WorkflowErrTitle,
-			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", workflow),
-		)
-		return ErrWorkflowNoSteps
+		return errUtils.Build(ErrWorkflowNoSteps).
+			WithTitle(WorkflowErrTitle).
+			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", workflow).
+			WithContext("workflow", workflow).
+			WithExitCode(1).
+			Err()
 	}
 
 	// Check if the workflow steps have the `name` attribute
@@ -117,12 +117,14 @@ func ExecuteWorkflow(
 
 		if len(steps) == 0 {
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
-			errUtils.CheckErrorAndPrint(
-				ErrInvalidFromStep,
-				WorkflowErrTitle,
-				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, FormatList(stepNames)),
-			)
-			return ErrInvalidFromStep
+			return errUtils.Build(ErrInvalidFromStep).
+				WithTitle(WorkflowErrTitle).
+				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.", fromStep, workflow).
+				WithHintf("Available steps:\n%s", FormatList(stepNames)).
+				WithContext("from_step", fromStep).
+				WithContext("workflow", workflow).
+				WithExitCode(1).
+				Err()
 		}
 	}
 

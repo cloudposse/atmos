@@ -401,10 +401,20 @@ func TestExecuteWorkflowCmd(t *testing.T) {
 	})
 
 	t.Run("file not found", func(t *testing.T) {
-		// ExecuteWorkflowCmd calls CheckErrorPrintAndExit which exits the process.
-		// We can't test this directly without mocking. Skip for now or refactor.
-		// This test would require dependency injection to avoid the exit.
-		t.Skip("Requires refactoring to avoid CheckErrorPrintAndExit")
+		stacksPath := "../../tests/fixtures/scenarios/workflows"
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+		t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+		cmd := createWorkflowCmd()
+		err := cmd.ParseFlags([]string{"--file", "nonexistent-file.yaml"})
+		require.NoError(t, err)
+
+		args := []string{"some-workflow"}
+		err = ExecuteWorkflowCmd(cmd, args)
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrWorkflowFileNotFound)
 	})
 
 	t.Run("absolute file path", func(t *testing.T) {
@@ -515,14 +525,38 @@ func TestExecuteWorkflowCmd(t *testing.T) {
 	})
 
 	t.Run("invalid workflow manifest - no workflows key", func(t *testing.T) {
-		// This will call CheckErrorPrintAndExit which exits the process.
-		// Skip for now without dependency injection.
-		t.Skip("Requires refactoring to avoid CheckErrorPrintAndExit")
+		stacksPath := "../../tests/fixtures/scenarios/workflows"
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+		t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+		cmd := createWorkflowCmd()
+		// test-invalid.yaml exists but has no workflows: key.
+		err := cmd.ParseFlags([]string{"--file", "test-invalid.yaml"})
+		require.NoError(t, err)
+
+		args := []string{"any-workflow"}
+		err = ExecuteWorkflowCmd(cmd, args)
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidWorkflowManifest)
 	})
 
 	t.Run("workflow name not found in manifest", func(t *testing.T) {
-		// This will call CheckErrorPrintAndExit which exits the process.
-		// Skip for now without dependency injection.
-		t.Skip("Requires refactoring to avoid CheckErrorPrintAndExit")
+		stacksPath := "../../tests/fixtures/scenarios/workflows"
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+		t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+		cmd := createWorkflowCmd()
+		err := cmd.ParseFlags([]string{"--file", "test.yaml"})
+		require.NoError(t, err)
+
+		// Request a workflow name that doesn't exist in test.yaml.
+		args := []string{"nonexistent-workflow-name"}
+		err = ExecuteWorkflowCmd(cmd, args)
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrWorkflowNoWorkflow)
 	})
 }
