@@ -358,8 +358,9 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
 	// Also handles plain labels like "Stacks directory:\n/path"
 	// The regex uses [\s\S] to match across line breaks in case Glamour word-wraps the hint text
-	hintPathRegex := regexp.MustCompile(`(?m)(💡[\s\S]{0,200}?:|^[A-Z][\s\S]{0,200}?directory:)\s*\n(/[^\s\n]+)`)
-	output = hintPathRegex.ReplaceAllString(output, "$1 $2")
+	// Path pattern matches both Unix paths (/...) and Windows paths (D:\... or D:/...)
+	hintPathRegex := regexp.MustCompile(`(?m)(💡[\s\S]{0,200}?:|^[A-Z][\s\S]{0,200}?directory:)\s*\n([/\\]|[A-Za-z]:)([^\s\n]*)`)
+	output = hintPathRegex.ReplaceAllString(output, "$1 $2$3")
 
 	// 3. Normalize the repository root:
 	//    - Clean the path (which may not collapse all extra slashes after the drive letter, etc.)

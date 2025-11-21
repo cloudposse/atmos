@@ -514,6 +514,10 @@ func TestSanitizeOutput_WindowsLineEndingsInHintPaths(t *testing.T) {
 	// Build a path that's part of the repo.
 	testPath := repoRoot + "/tests/fixtures/scenarios/complete/stacks"
 
+	// Simulate a Windows-style path for testing the regex pattern.
+	// On Windows CI, the actual path would be like D:\a\atmos\atmos\tests\...
+	windowsStylePath := strings.ReplaceAll(repoRoot, "/", "\\") + "\\tests\\fixtures\\scenarios\\complete\\stacks"
+
 	tests := []struct {
 		name     string
 		input    string
@@ -538,6 +542,16 @@ func TestSanitizeOutput_WindowsLineEndingsInHintPaths(t *testing.T) {
 			name:     "Multi-line error with Windows CRLF",
 			input:    fmt.Sprintf("**Error:** path is not within Atmos component directories\r\n\r\n## Hints\r\n\r\n💡 Path points to the stacks configuration directory, not a component:\r\n%s\r\n\r\nStacks directory: %s", testPath, testPath),
 			expected: "**Error:** path is not within Atmos component directories\n\n## Hints\n\n💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks\n\nStacks directory: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+		{
+			name:     "Windows path with backslashes on next line",
+			input:    fmt.Sprintf("💡 Path points to the stacks configuration directory, not a component:\n%s", windowsStylePath),
+			expected: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+		{
+			name:     "Windows path with CRLF line ending",
+			input:    fmt.Sprintf("💡 Path points to the stacks configuration directory, not a component:\r\n%s", windowsStylePath),
+			expected: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
 		},
 	}
 
