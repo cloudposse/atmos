@@ -527,7 +527,7 @@ All global flags can be set using environment variables. The precedence order is
     <dt>`ATMOS_XDG_CACHE_HOME` / `XDG_CACHE_HOME`</dt>
     <dd>
         Override the default XDG cache directory for Atmos.
-        - Default: `~/.cache` on Linux/Unix/macOS, `%LOCALAPPDATA%` on Windows
+        - Default: `~/.cache` on Linux/Unix/macOS, `%LOCALAPPDATA%\cache` on Windows
         - Used for: Cache files (`cache.yaml`), auth provisioning cache
         - Example: `ATMOS_XDG_CACHE_HOME=/custom/cache atmos describe stacks`
     </dd>

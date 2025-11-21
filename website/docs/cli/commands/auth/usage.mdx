@@ -234,7 +234,7 @@ auth:
 Authenticate to trigger provisioning:
 
 ```bash
-atmos auth login sso-prod
+atmos auth login --identity sso-prod
 # ✓ Provisioned 47 identities across 12 accounts (2.3s)
 ```
 
@@ -306,16 +306,16 @@ Provisioned identities are cached following [XDG Base Directory Specification](h
 $XDG_CACHE_HOME/atmos/auth/{provider-name}/provisioned-identities.yaml
 ```
 
-By default, this resolves to `~/.cache/atmos/auth/` on Linux/macOS and `%LOCALAPPDATA%\atmos\cache\` on Windows.
+By default, this resolves to `~/.cache/atmos/auth/` on Linux/macOS and `%LOCALAPPDATA%\cache\atmos\auth\` on Windows.
 
 To force re-provisioning:
 
 ```bash
 # Logout to clear cache
-atmos auth logout sso-prod
+atmos auth logout --identity sso-prod
 
 # Re-authenticate
-atmos auth login sso-prod
+atmos auth login --identity sso-prod
 ```
 
 ### How It Works
