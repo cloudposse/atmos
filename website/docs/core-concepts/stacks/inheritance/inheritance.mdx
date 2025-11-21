@@ -46,6 +46,32 @@ and `metadata` component's configuration section.
 
 The concept of inheritance in Atmos is implemented through deep merging. Deep merging involves taking two maps or objects and combining them in a specific order, where the values in the latter map override those in the former. This approach allows us to achieve a template-free way of defining configurations in a logical, predictable, and consistent manner.
 
+## What Gets Inherited
+
+When a component inherits from a base component, the following sections are deep-merged:
+
+| Section | Inherited | Notes |
+|---------|-----------|-------|
+| `vars` | Yes | Variables passed to Terraform |
+| `settings` | Yes | Component settings |
+| `env` | Yes | Environment variables |
+| `backend` | Yes | Backend configuration |
+| `providers` | Yes | Provider overrides |
+| `metadata` | Yes | All fields except `metadata.inherits` |
+
+:::info Metadata Inheritance
+The `metadata` section is inherited from base components, with one exception: `metadata.inherits` itself is not inherited (since it defines the inheritance relationship). This enables patterns like defining `metadata.name` once in a base component for stable [workspace key prefixes](/core-concepts/components/terraform/backends).
+
+To disable metadata inheritance (for backwards compatibility with older configurations):
+
+```yaml
+# atmos.yaml
+stacks:
+  inherit:
+    metadata: false  # Default is true
+```
+:::
+
 ## Single Inheritance
 
 <PillBox>Easy</PillBox>
@@ -53,7 +79,7 @@ The concept of inheritance in Atmos is implemented through deep merging. Deep me
 Single Inheritance is used when an Atmos component inherits from another base Atmos component.
 
 In the diagram below, `ComponentA` is the base component. `ComponentB` and `ComponentC` are derived components, they inherit all the
-configurations (`vars`, `settings`, `env` and other sections) from `ComponentA`, and can override the default values from `ComponentA`.
+configurations (`vars`, `settings`, `env`, `metadata`, and other sections) from `ComponentA`, and can override the default values from `ComponentA`.
 
 
 ```mermaid
@@ -223,7 +249,7 @@ Multiple Inheritance is used when an Atmos component inherits from more than one
 
 
 In the diagram below, `ComponentA` and `ComponentB` are the base components. `ComponentC` is a derived components, it inherits all the
-configurations (`vars`, `settings`, `env` and other sections) from `ComponentA` and `ComponentB`, and can override the default values
+configurations (`vars`, `settings`, `env`, `metadata`, and other sections) from `ComponentA` and `ComponentB`, and can override the default values
 from `ComponentA` and `ComponentB`.
 
 ```mermaid
@@ -365,7 +391,7 @@ Multilevel Inheritance is used when an Atmos component inherits from a base Atmo
 In the diagram below, `ComponentC` directly inherits from `ComponentB`.
 `ComponentB` directly inherits from `ComponentA`.
 
-After this Multilevel Inheritance chain gets processed by Atmos, `ComponentC` will inherit all the configurations (`vars`, `settings`, `env` and other
+After this Multilevel Inheritance chain gets processed by Atmos, `ComponentC` will inherit all the configurations (`vars`, `settings`, `env`, `metadata`, and other
 sections) from both `ComponentB` and `ComponentA`.
 
 Note that `ComponentB` overrides the values from `ComponentA`.

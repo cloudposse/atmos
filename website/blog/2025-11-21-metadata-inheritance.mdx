@@ -1,0 +1,61 @@
+---
+slug: metadata-inheritance
+title: "Metadata Inheritance"
+authors: [osterman]
+tags: [feature, stacks, inheritance]
+---
+
+Metadata now inherits from base components, just like `vars` and `settings`.
+
+<!--truncate-->
+
+## The Problem
+
+You define a base component with governance settings, but every derived component still needs to repeat them:
+
+```yaml
+# You want to define this once...
+vpc/defaults:
+  metadata:
+    locked: true
+    terraform_workspace_pattern: "{tenant}-{environment}-{stage}"
+
+# ...but you had to copy it everywhere
+vpc-prod:
+  metadata:
+    inherits: [vpc/defaults]
+    locked: true                        # Copy-pasted
+    terraform_workspace_pattern: "..."  # Copy-pasted
+```
+
+## The Solution
+
+Now it just works:
+
+```yaml
+vpc/defaults:
+  metadata:
+    type: abstract
+    locked: true
+    terraform_workspace_pattern: "{tenant}-{environment}-{stage}"
+
+vpc-prod:
+  metadata:
+    inherits: [vpc/defaults]
+    # locked and terraform_workspace_pattern are inherited
+```
+
+The only field that doesn't inherit is `metadata.inherits` itself.
+
+## Configuration
+
+Metadata inheritance is now enabled by default. If this causes issues with existing configurations, you can disable it:
+
+```yaml
+# atmos.yaml
+stacks:
+  inherit:
+    metadata: false
+```
+
+See the [inheritance documentation](/core-concepts/stacks/inheritance) for details.

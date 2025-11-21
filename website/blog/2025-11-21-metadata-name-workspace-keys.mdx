@@ -1,0 +1,50 @@
+---
+slug: metadata-name-workspace-keys
+title: "Stable Workspace Keys with metadata.name"
+authors: [osterman]
+tags: [feature, terraform, backend]
+---
+
+New `metadata.name` field provides stable Terraform state paths when using versioned component folders.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos organizes Terraform state by component, grouping all instances of a component (across stacks) under the same state path prefix. This should be based on the *logical* component identity—but it was based on `metadata.component`, which includes the folder path.
+
+When you organize components in versioned folders (`vpc/v1`, `vpc/v2`), upgrading from v2 to v3 changed the state path. Terraform couldn't find your existing state—your infrastructure looked like it was never created.
+
+The workaround was manually setting `backend.s3.workspace_key_prefix` on every component. This was error-prone and tedious. Plus, [metadata wasn't inherited](/blog/metadata-inheritance) for legacy reasons, so you couldn't define it once in a base component.
+
+## The Solution
+
+Set `metadata.name` once in your base component:
+
+```yaml
+# stacks/catalog/vpc.yaml
+vpc/defaults:
+  metadata:
+    type: abstract
+    name: vpc           # Stable identity for state path
+    component: vpc/v2   # Physical path can change
+
+# stacks/prod.yaml
+vpc-prod:
+  metadata:
+    inherits: [vpc/defaults]
+    # State path stays at "vpc/" regardless of version
+```
+
+Upgrade by changing one line in the catalog:
+
+```yaml
+vpc/defaults:
+  metadata:
+    name: vpc           # Unchanged - state path stable
+    component: vpc/v3   # New version
+```
+
+All environments inherit the change. No state migration needed.
+
+See [folder-based versioning](/design-patterns/version-management/folder-based-versioning) for the complete pattern.

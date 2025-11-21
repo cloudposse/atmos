@@ -100,20 +100,40 @@ components/
 
 ### Stack Configuration
 
-Environments reference specific version folders:
+Define a base component with `metadata.name` for stable workspace keys, then inherit it:
 
 <Tabs>
-<TabItem value="dev" label="Development" default>
+<TabItem value="catalog" label="Catalog (Base)" default>
+<File title="stacks/catalog/vpc.yaml">
+```yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+        name: vpc           # Logical identity - stable across versions
+        component: vpc/v2   # Physical path to current version
+      vars:
+        # Default variables inherited by all VPC instances
+        public_subnets_enabled: false
+        nat_gateway_enabled: false
+```
+</File>
+</TabItem>
+
+<TabItem value="dev" label="Development">
 <File title="stacks/dev/us-east-1.yaml">
 ```yaml
+import:
+  - catalog/vpc
+
 components:
   terraform:
     vpc:
       metadata:
-        component: vpc/v2  # Reference v2 folder for development
-      settings:
-        # CRITICAL: Don't include version in workspace key
-        workspace_key_prefix: "vpc"
+        inherits:
+          - vpc/defaults
+        # Inherits name: vpc, component: vpc/v2
       vars:
         name: "dev-use1-vpc"
         cidr_block: "10.0.0.0/16"
@@ -124,14 +144,16 @@ components:
 <TabItem value="prod" label="Production">
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
+import:
+  - catalog/vpc
+
 components:
   terraform:
     vpc:
       metadata:
-        component: vpc/v1  # Production still on stable v1
-      settings:
-        # Same workspace key as dev - enables migration
-        workspace_key_prefix: "prod/vpc"
+        inherits:
+          - vpc/defaults
+        # Inherits name: vpc, component: vpc/v2
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.2.0.0/16"
@@ -139,6 +161,8 @@ components:
 </File>
 </TabItem>
 </Tabs>
+
+With this pattern, `workspace_key_prefix` is auto-generated from `metadata.name` (which is `vpc`), not from `metadata.component` (which would be `vpc-v2`). To upgrade all environments to `vpc/v3`, simply update `vpc/defaults` in the catalog.
 
 ### Version Naming Conventions
 
@@ -172,21 +196,14 @@ components/
 
 ## Workspace Key Management
 
-:::warning Workspace Key Configuration
-This pattern works best with Atmos auto-generated [backend configuration](/core-concepts/components/terraform/backends). The `workspace_key_prefix` must remain stable across version changes to prevent state conflicts:
+Atmos auto-generates `workspace_key_prefix` for [backend configuration](/core-concepts/components/terraform/backends) using this priority:
 
-```yaml
-# WRONG - Version in workspace key causes state problems
-settings:
-  workspace_key_prefix: "prod/vpc/v2"  # Don't do this!
+1. Explicit `backend.s3.workspace_key_prefix` (user override)
+2. `metadata.name` (logical identity)
+3. `metadata.component` (physical path)
+4. Atmos component name (YAML key)
 
-# CORRECT - Stable workspace key across versions
-settings:
-  workspace_key_prefix: "prod/vpc"     # Version-agnostic key
-```
-
-When the workspace key includes version information, switching versions requires complex state migrations. Keep it stable!
-:::
+By setting `metadata.name` in your base component, you ensure stable workspace keys across version upgrades. The `metadata.name` is inherited by all derived components, so you only need to define it once.
 
 ## Migration Strategies
 
@@ -242,21 +259,22 @@ atmos terraform apply vpc --stack prod-us-east-1
 
 ## Rollback Strategy
 
-Folder-based versioning makes rollback trivial - just switch the folder reference:
+Folder-based versioning makes rollback trivial - just update the base component:
 
-### Update Stack Configuration
+### Update Catalog Configuration
 
 ```yaml
-# stacks/prod/us-east-1.yaml
+# stacks/catalog/vpc.yaml
 components:
   terraform:
-    vpc:
+    vpc/defaults:
       metadata:
-        # Rollback from v2 to v1
-        component: vpc/v1  # Was: vpc/v2
-      settings:
-        workspace_key_prefix: "prod/vpc"  # Keep stable!
+        type: abstract
+        name: vpc           # Stable - unchanged
+        component: vpc/v1   # Rollback: was vpc/v2
 ```
+
+All environments inheriting from `vpc/defaults` will automatically roll back.
 
 ### Validate and Apply
 
@@ -271,7 +289,7 @@ atmos terraform apply vpc --stack prod-us-east-1
 ```
 
 :::tip Zero-Downtime Rollback
-Since the old version folder still exists unchanged, rollback is instantaneous and risk-free. The stable workspace key means no state migration is needed.
+Since the old version folder still exists unchanged, rollback is instantaneous and risk-free. With `metadata.name` providing a stable workspace key, no state migration is needed.
 :::
 
 ### Rollback Verification
