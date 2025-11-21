@@ -395,7 +395,7 @@ func TestListStacksWithOptions_ProvenanceValidation(t *testing.T) {
 				Provenance: tc.provenance,
 			}
 
-			err := listStacksWithOptions(opts)
+			err := listStacksWithOptions(nil, nil, opts)
 
 			if err == nil {
 				// No error - if we expected invalid, test failed; otherwise pass.

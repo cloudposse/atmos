@@ -954,4 +954,5 @@ type ListConfig struct {
 type ListColumnConfig struct {
 	Name  string `yaml:"name" json:"name" mapstructure:"name"`
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
+	Width int    `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`
 }

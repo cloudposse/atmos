@@ -12,17 +12,7 @@ const (
 	metadataLocked  = "locked"
 )
 
-// ComponentData represents a component with all its attributes for listing.
-type ComponentData struct {
-	Component string
-	Stack     string
-	Type      string // terraform, helmfile, packer, etc.
-	Enabled   bool
-	Locked    bool
-	Metadata  map[string]any
-}
-
-// ExtractComponents transforms stacksMap into structured component data.
+// Components transforms stacksMap into structured component data.
 // Returns []map[string]any suitable for the renderer pipeline.
 func Components(stacksMap map[string]any) ([]map[string]any, error) {
 	if stacksMap == nil {
@@ -127,7 +117,7 @@ func getStringWithDefault(m map[string]any, key string, defaultValue string) str
 	return defaultValue
 }
 
-// ExtractComponentsForStack extracts components for a specific stack only.
+// ComponentsForStack extracts components for a specific stack only.
 func ComponentsForStack(stackName string, stacksMap map[string]any) ([]map[string]any, error) {
 	stackData, ok := stacksMap[stackName]
 	if !ok {

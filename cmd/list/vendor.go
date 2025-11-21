@@ -196,6 +196,7 @@ func getVendorColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []stri
 			configs = append(configs, column.Config{
 				Name:  col.Name,
 				Value: col.Value,
+				Width: col.Width,
 			})
 		}
 		return configs

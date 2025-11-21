@@ -1069,13 +1069,13 @@ func processYAMLConfigFileWithContextInternal(
 						// Skip the first file if it's the same as the result's own file path (to avoid duplicates).
 						if len(result.mergeContext.ImportChain) > 0 && importedFile == result.mergeContext.ImportChain[0] {
 							// This is the imported file itself, add it only once.
-							if !contains(mergeContext.ImportChain, importedFile) {
+							if !u.SliceContainsString(mergeContext.ImportChain, importedFile) {
 								mergeContext.ImportChain = append(mergeContext.ImportChain, importedFile)
 								log.Trace("Added import to parent import chain", "file", importedFile)
 							}
 						} else {
 							// This is a nested import from the imported file.
-							if !contains(mergeContext.ImportChain, importedFile) {
+							if !u.SliceContainsString(mergeContext.ImportChain, importedFile) {
 								mergeContext.ImportChain = append(mergeContext.ImportChain, importedFile)
 								log.Trace("Added nested import to parent import chain", "file", importedFile)
 							}

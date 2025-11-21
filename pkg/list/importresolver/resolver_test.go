@@ -880,32 +880,35 @@ func TestExtractImportStrings_NonStringNonArray(t *testing.T) {
 
 // TestResolveImportFilePath_NoExtension tests adding .yaml extension.
 func TestResolveImportFilePath_NoExtension(t *testing.T) {
+	tmpDir := t.TempDir()
 	atmosConfig := &schema.AtmosConfiguration{
-		StacksBaseAbsolutePath: "/tmp/stacks",
+		StacksBaseAbsolutePath: tmpDir,
 	}
 
 	result := resolveImportFilePath("catalog/base", atmosConfig)
-	assert.Equal(t, "/tmp/stacks/catalog/base.yaml", result)
+	assert.Equal(t, filepath.Join(tmpDir, "catalog", "base.yaml"), result)
 }
 
 // TestResolveImportFilePath_WithYamlExtension tests existing .yaml extension.
 func TestResolveImportFilePath_WithYamlExtension(t *testing.T) {
+	tmpDir := t.TempDir()
 	atmosConfig := &schema.AtmosConfiguration{
-		StacksBaseAbsolutePath: "/tmp/stacks",
+		StacksBaseAbsolutePath: tmpDir,
 	}
 
 	result := resolveImportFilePath("catalog/base.yaml", atmosConfig)
-	assert.Equal(t, "/tmp/stacks/catalog/base.yaml", result)
+	assert.Equal(t, filepath.Join(tmpDir, "catalog", "base.yaml"), result)
 }
 
 // TestResolveImportFilePath_WithYmlExtension tests existing .yml extension.
 func TestResolveImportFilePath_WithYmlExtension(t *testing.T) {
+	tmpDir := t.TempDir()
 	atmosConfig := &schema.AtmosConfiguration{
-		StacksBaseAbsolutePath: "/tmp/stacks",
+		StacksBaseAbsolutePath: tmpDir,
 	}
 
 	result := resolveImportFilePath("catalog/base.yml", atmosConfig)
-	assert.Equal(t, "/tmp/stacks/catalog/base.yml", result)
+	assert.Equal(t, filepath.Join(tmpDir, "catalog", "base.yml"), result)
 }
 
 // TestBuildImportTree_FileNotFound tests graceful handling of missing file.

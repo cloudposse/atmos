@@ -3,11 +3,13 @@ package importresolver
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestResolveImportTreeFromProvenance tests the main entry point for import tree resolution.
@@ -409,6 +411,9 @@ func TestBuildImportTreeFromChain(t *testing.T) {
 
 // TestStripBasePath tests base path removal.
 func TestStripBasePath(t *testing.T) {
+	// Use t.TempDir() to get an OS-appropriate temp directory.
+	tmpDir := t.TempDir()
+
 	tests := []struct {
 		name         string
 		absolutePath string
@@ -417,32 +422,33 @@ func TestStripBasePath(t *testing.T) {
 	}{
 		{
 			name:         "Simple path",
-			absolutePath: "/tmp/stacks/catalog/base.yaml",
-			basePath:     "/tmp/stacks",
+			absolutePath: filepath.Join(tmpDir, "catalog", "base.yaml"),
+			basePath:     tmpDir,
 			expected:     "catalog/base",
 		},
 		{
 			name:         "Base path with trailing slash",
-			absolutePath: "/tmp/stacks/catalog/base.yaml",
-			basePath:     "/tmp/stacks/",
+			absolutePath: filepath.Join(tmpDir, "catalog", "base.yaml"),
+			basePath:     tmpDir + string(filepath.Separator),
 			expected:     "catalog/base",
 		},
 		{
 			name:         "Remove .yml extension",
-			absolutePath: "/tmp/stacks/catalog/base.yml",
-			basePath:     "/tmp/stacks",
+			absolutePath: filepath.Join(tmpDir, "catalog", "base.yml"),
+			basePath:     tmpDir,
 			expected:     "catalog/base",
 		},
 		{
 			name:         "Path already relative",
-			absolutePath: "catalog/base.yaml",
-			basePath:     "/tmp/stacks",
-			expected:     "catalog/base",
+			absolutePath: filepath.Join("catalog", "base.yaml"),
+			basePath:     tmpDir,
+			// When path is relative and doesn't start with basePath, filepath.Rel returns relative form.
+			expected: "catalog/base",
 		},
 		{
 			name:         "Nested directories",
-			absolutePath: "/tmp/stacks/catalog/network/vpc.yaml",
-			basePath:     "/tmp/stacks",
+			absolutePath: filepath.Join(tmpDir, "catalog", "network", "vpc.yaml"),
+			basePath:     tmpDir,
 			expected:     "catalog/network/vpc",
 		},
 	}
@@ -457,6 +463,9 @@ func TestStripBasePath(t *testing.T) {
 
 // TestResolveImportPath tests import path resolution.
 func TestResolveImportPath(t *testing.T) {
+	// Use t.TempDir() to get an OS-appropriate temp directory.
+	tmpDir := t.TempDir()
+
 	tests := []struct {
 		name       string
 		importPath string
@@ -465,27 +474,27 @@ func TestResolveImportPath(t *testing.T) {
 		{
 			name:       "Simple import",
 			importPath: "catalog/base",
-			expected:   "/tmp/stacks/catalog/base.yaml",
+			expected:   filepath.Join(tmpDir, "catalog", "base.yaml"),
 		},
 		{
 			name:       "Import with .yaml extension",
 			importPath: "catalog/base.yaml",
-			expected:   "/tmp/stacks/catalog/base.yaml",
+			expected:   filepath.Join(tmpDir, "catalog", "base.yaml"),
 		},
 		{
 			name:       "Import with .yml extension",
 			importPath: "catalog/base.yml",
-			expected:   "/tmp/stacks/catalog/base.yml",
+			expected:   filepath.Join(tmpDir, "catalog", "base.yml"),
 		},
 		{
 			name:       "Nested import",
 			importPath: "catalog/network/vpc",
-			expected:   "/tmp/stacks/catalog/network/vpc.yaml",
+			expected:   filepath.Join(tmpDir, "catalog", "network", "vpc.yaml"),
 		},
 	}
 
 	atmosConfig := &schema.AtmosConfiguration{
-		StacksBaseAbsolutePath: "/tmp/stacks",
+		StacksBaseAbsolutePath: tmpDir,
 	}
 
 	for _, tt := range tests {
@@ -979,14 +988,17 @@ vars:
 
 // TestBuildImportTreeFromChain_LongChain tests processing of long import chains.
 func TestBuildImportTreeFromChain_LongChain(t *testing.T) {
+	// Use t.TempDir() to get an OS-appropriate temp directory.
+	tmpDir := t.TempDir()
+
 	atmosConfig := &schema.AtmosConfiguration{
-		StacksBaseAbsolutePath: "/tmp/stacks",
+		StacksBaseAbsolutePath: tmpDir,
 	}
 
-	// Create a chain with 10 imports.
-	importChain := []string{"/tmp/stacks/parent.yaml"}
+	// Create a chain with 10 imports using strconv.Itoa for proper number formatting.
+	importChain := []string{filepath.Join(tmpDir, "parent.yaml")}
 	for i := 1; i <= 10; i++ {
-		importChain = append(importChain, "/tmp/stacks/import"+string(rune('0'+i))+".yaml")
+		importChain = append(importChain, filepath.Join(tmpDir, "import"+strconv.Itoa(i)+".yaml"))
 	}
 
 	nodes := buildImportTreeFromChain(importChain, atmosConfig)
@@ -994,9 +1006,9 @@ func TestBuildImportTreeFromChain_LongChain(t *testing.T) {
 	// Should have 10 nodes (skipping first element which is parent).
 	assert.Len(t, nodes, 10)
 
-	// Verify paths are correctly stripped.
+	// Verify paths are correctly stripped (relative, extensionless, forward-slash format).
 	for i, node := range nodes {
-		expected := "import" + string(rune('0'+i+1))
+		expected := "import" + strconv.Itoa(i+1)
 		assert.Equal(t, expected, node.Path)
 	}
 }
@@ -1047,10 +1059,10 @@ func TestBuildNodesFromImportPaths_LargeImportList(t *testing.T) {
 		StacksBaseAbsolutePath: tmpDir,
 	}
 
-	// Create 20 import paths.
+	// Create 20 import paths using strconv.Itoa for proper number formatting.
 	var imports []string
 	for i := 1; i <= 20; i++ {
-		imports = append(imports, "catalog/import"+string(rune('0'+i)))
+		imports = append(imports, "catalog/import"+strconv.Itoa(i))
 	}
 
 	visited := make(map[string]bool)
@@ -1063,7 +1075,7 @@ func TestBuildNodesFromImportPaths_LargeImportList(t *testing.T) {
 
 	// Verify all imports are present.
 	for i, node := range nodes {
-		expected := "catalog/import" + string(rune('0'+i+1))
+		expected := "catalog/import" + strconv.Itoa(i+1)
 		assert.Equal(t, expected, node.Path)
 	}
 }

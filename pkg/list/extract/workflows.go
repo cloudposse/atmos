@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"go.yaml.in/yaml/v3"
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"

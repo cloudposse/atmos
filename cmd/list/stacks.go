@@ -63,15 +63,19 @@ var stacksCmd = &cobra.Command{
 			Provenance: v.GetBool("provenance"),
 		}
 
-		return listStacksWithOptions(opts)
+		return listStacksWithOptions(cmd, args, opts)
 	},
 }
 
 // columnsCompletionForStacks provides dynamic tab completion for --columns flag.
 // Returns column names from atmos.yaml stacks.list.columns configuration.
 func columnsCompletionForStacks(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	// Load atmos configuration.
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	// Load atmos configuration with CLI flags.
+	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -114,8 +118,12 @@ func init() {
 	}
 }
 
-func listStacksWithOptions(opts *StacksOptions) error {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOptions) error {
+	// Process command line args to get real ConfigAndStacksInfo with CLI flags.
+	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	if err != nil {
+		return err
+	}
 
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
@@ -259,6 +267,7 @@ func getStackColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []strin
 			configs = append(configs, column.Config{
 				Name:  col.Name,
 				Value: col.Value,
+				Width: col.Width,
 			})
 		}
 		return configs

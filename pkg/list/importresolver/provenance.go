@@ -310,17 +310,28 @@ func buildImportTreeFromChain(importChain []string, atmosConfig *schema.AtmosCon
 }
 
 // stripBasePath converts an absolute path to a relative path by removing the base path.
+// Returns a relative, extensionless, forward-slash-normalized path suitable for display.
 func stripBasePath(absolutePath, basePath string) string {
-	// Ensure both paths end with separator for consistent comparison.
-	if !strings.HasSuffix(basePath, string(filepath.Separator)) {
-		basePath += string(filepath.Separator)
+	// Normalize both paths.
+	absolutePath = filepath.Clean(absolutePath)
+	basePath = filepath.Clean(basePath)
+
+	// Try to compute relative path using filepath.Rel.
+	relativePath, err := filepath.Rel(basePath, absolutePath)
+	if err != nil {
+		// Fall back to string prefix removal if Rel fails.
+		if !strings.HasSuffix(basePath, string(filepath.Separator)) {
+			basePath += string(filepath.Separator)
+		}
+		relativePath = strings.TrimPrefix(absolutePath, basePath)
 	}
 
-	relativePath := strings.TrimPrefix(absolutePath, basePath)
-
-	// Remove .yaml extension for cleaner display.
+	// Remove .yaml/.yml extension for cleaner display.
 	relativePath = strings.TrimSuffix(relativePath, yamlExt)
 	relativePath = strings.TrimSuffix(relativePath, ymlExt)
+
+	// Convert to forward slashes for consistent cross-platform display.
+	relativePath = filepath.ToSlash(relativePath)
 
 	return relativePath
 }

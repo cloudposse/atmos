@@ -241,6 +241,7 @@ func getInstanceColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []st
 			columns[i] = column.Config{
 				Name:  col.Name,
 				Value: col.Value,
+				Width: col.Width,
 			}
 		}
 		return columns, nil
@@ -368,16 +369,14 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		return errors.Join(errUtils.ErrParseFlag, err)
 	}
 
-	// Process instances.
-	instances, err := processInstances(&atmosConfig)
-	if err != nil {
-		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
-		return errors.Join(errUtils.ErrProcessInstances, err)
-	}
-
-	// Handle tree format specially.
+	// Handle tree format specially - branch before calling processInstances to avoid double processing.
 	log.Trace("Checking format flag", "format_flag", formatFlag, "format_tree", format.FormatTree, "match", formatFlag == string(format.FormatTree))
 	if formatFlag == string(format.FormatTree) {
+		// Tree format does not support --upload.
+		if upload {
+			return fmt.Errorf("%w: --upload is not supported with --format=tree", errUtils.ErrInvalidFlag)
+		}
+
 		// Enable provenance tracking to capture import chains.
 		atmosConfig.TrackProvenance = true
 
@@ -385,7 +384,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		e.ClearMergeContexts()
 		e.ClearFindStacksMapCache()
 
-		// Get all stacks for provenance-based import resolution.
+		// Get all stacks for provenance-based import resolution (single call).
 		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 		if err != nil {
 			log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
@@ -403,6 +402,13 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		output := format.RenderInstancesTree(importTrees, opts.ShowImports)
 		fmt.Println(output)
 		return nil
+	}
+
+	// For non-tree formats, process instances normally.
+	instances, err := processInstances(&atmosConfig)
+	if err != nil {
+		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
+		return errors.Join(errUtils.ErrProcessInstances, err)
 	}
 
 	// Extract instances into renderer-compatible format with metadata fields.

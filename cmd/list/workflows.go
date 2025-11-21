@@ -188,6 +188,7 @@ func getWorkflowColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []st
 			configs = append(configs, column.Config{
 				Name:  col.Name,
 				Value: col.Value,
+				Width: col.Width,
 			})
 		}
 		return configs
