@@ -128,9 +128,9 @@ atmos auth list
 
 Provisioned identities appear in the tree view alongside manually configured identities. There's no visual distinction—they're treated as first-class identities.
 
-### Manual Override
+### Manual Override and Deep Merge
 
-Provisioned identities can be overridden in your `atmos.yaml`:
+Provisioned identities can be enhanced or overridden in your `atmos.yaml`. Atmos performs **deep merge** of manual configuration with auto-provisioned identities, preserving all fields from both sources:
 
 ```yaml
 # atmos.yaml
@@ -143,13 +143,65 @@ auth:
       auto_provision_identities: true
 
   identities:
-    # Override provisioned identity with custom session duration
+    # Enhance provisioned identity with additional fields
     production/DeployerAccess:
+      default: true        # Mark as default (merged with auto-provisioned fields)
       session:
-        duration: 12h  # Extend from default 1h
+        duration: 12h      # Extend from default 1h
 ```
 
-Manual configuration takes precedence over provisioned configuration due to import order.
+**Deep Merge Behavior:**
+
+When you manually configure an identity that was also auto-provisioned:
+- **All auto-provisioned fields are preserved** (`provider`, `kind`, `via`, `principal`, etc.)
+- **Manual fields are added or override** specific nested values
+- **Result**: Combined identity with fields from both sources
+
+**Example:**
+
+Auto-provisioned identity:
+```yaml
+production/DeployerAccess:
+  provider: sso-prod
+  kind: aws/permission-set
+  via:
+    provider: sso-prod
+  principal:
+    name: DeployerAccess
+    account:
+      name: production
+      id: "123456789012"
+```
+
+Your manual override:
+```yaml
+production/DeployerAccess:
+  default: true
+  session:
+    duration: 12h
+```
+
+Final merged identity:
+```yaml
+production/DeployerAccess:
+  provider: sso-prod           # ✅ From auto-provisioning
+  kind: aws/permission-set     # ✅ From auto-provisioning
+  default: true                # ✅ From manual config
+  via:                         # ✅ From auto-provisioning
+    provider: sso-prod
+  principal:                   # ✅ From auto-provisioning
+    name: DeployerAccess
+    account:
+      name: production
+      id: "123456789012"
+  session:                     # ✅ From manual config
+    duration: 12h
+```
+
+This deep merge allows you to:
+- **Mark provisioned identities as default** without losing auto-discovered metadata
+- **Customize session durations** while keeping all provider/principal information
+- **Add custom fields** (aliases, tags, metadata) without manual duplication
 
 ### Cache Location
 
