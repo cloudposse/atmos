@@ -51,14 +51,6 @@ func (m *MockGitHubAPI) FetchReleases(owner, repo string, limit int) ([]string, 
 	return []string{}, nil
 }
 
-func TestGitHubAPIClient(t *testing.T) {
-	t.Skip("Skipped: GitHubAPIClient moved to pkg/github package")
-	// Test the real GitHub API client (this will make actual HTTP calls)
-	client := NewGitHubAPIClient()
-	assert.NotNil(t, client)
-	// assert.Equal(t, "https://api.github.com", client.baseURL)
-}
-
 func TestMockGitHubAPI(t *testing.T) {
 	mock := NewMockGitHubAPI()
 
@@ -77,13 +69,6 @@ func TestMockGitHubAPI(t *testing.T) {
 	releases, err = mock.FetchReleases("unknown", "repo", 10)
 	require.NoError(t, err)
 	assert.Equal(t, []string{}, releases)
-}
-
-func TestGitHubAPIClientWithCustomBaseURL(t *testing.T) {
-	t.Skip("Skipped: GitHubAPIClient moved to pkg/github package")
-	// client := NewGitHubAPIClientWithBaseURL("http://localhost:8080")
-	// assert.NotNil(t, client)
-	// assert.Equal(t, "http://localhost:8080", client.baseURL)
 }
 
 func TestSetAndResetGitHubAPI(t *testing.T) {
