@@ -133,6 +133,23 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		return nil, err
 	}
 
+	// Merge metadata when inheritance is enabled.
+	// Base component metadata is merged with component metadata, excluding 'inherits'.
+	finalComponentMetadata := result.ComponentMetadata
+	if atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() && len(result.BaseComponentMetadata) > 0 {
+		// Create a copy of base metadata excluding 'inherits' (already excluded during collection).
+		// Then merge with component metadata (component metadata wins on conflicts).
+		finalComponentMetadata, err = m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				result.BaseComponentMetadata,
+				result.ComponentMetadata,
+			})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Build final component map.
 	comp := map[string]any{
 		cfg.VarsSectionName:        finalComponentVars,
@@ -141,7 +158,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		cfg.AuthSectionName:        finalComponentAuth,
 		cfg.CommandSectionName:     finalComponentCommand,
 		cfg.InheritanceSectionName: result.ComponentInheritanceChain,
-		cfg.MetadataSectionName:    result.ComponentMetadata,
+		cfg.MetadataSectionName:    finalComponentMetadata,
 		cfg.OverridesSectionName:   result.ComponentOverrides,
 	}
 
@@ -153,6 +170,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				atmosConfig:                 atmosConfig,
 				component:                   opts.Component,
 				baseComponentName:           result.BaseComponentName,
+				componentMetadata:           finalComponentMetadata,
 				globalBackendType:           opts.GlobalBackendType,
 				globalBackendSection:        opts.GlobalBackendSection,
 				baseComponentBackendType:    result.BaseComponentBackendType,

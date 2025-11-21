@@ -1721,6 +1721,23 @@ func processBaseComponentConfigInternal(
 		}
 		baseComponentConfig.BaseComponentAuth = merged
 
+		// Base component `metadata` (when metadata inheritance is enabled).
+		// Merge all metadata fields except 'inherits' which is per-component.
+		if atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() {
+			baseMetadataForMerge := make(map[string]any)
+			for k, v := range componentMetadata {
+				// Skip 'inherits' - it's the meta-property defining inheritance, not inherited itself.
+				if k != cfg.InheritsSectionName {
+					baseMetadataForMerge[k] = v
+				}
+			}
+			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentMetadata, baseMetadataForMerge})
+			if err != nil {
+				return err
+			}
+			baseComponentConfig.BaseComponentMetadata = merged
+		}
+
 		// Base component `providers`
 		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})
 		if err != nil {
