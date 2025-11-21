@@ -321,164 +321,139 @@ func (f *formatter) Toastf(icon, format string, a ...interface{}) string {
 	return f.Toast(icon, fmt.Sprintf(format, a...))
 }
 
-// trimRightSpaces removes only trailing spaces (not tabs) from an ANSI-coded string while
-// preserving all ANSI escape sequences on the actual content.
-// This is useful for removing Glamour's padding spaces while preserving intentional tabs.
-func trimRightSpaces(s string) string {
-	// Strip ANSI codes to get plain text version
-	stripped := ansi.Strip(s)
+// isANSIStart checks if position i marks the start of an ANSI escape sequence.
+func isANSIStart(s string, i int) bool {
+	return s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '['
+}
 
-	// Trim only trailing spaces from plain text (preserve tabs)
-	trimmed := strings.TrimRight(stripped, " ")
-
-	// If nothing to trim, return original
-	if trimmed == stripped {
-		return s
+// skipANSISequence advances past an ANSI escape sequence starting at position i.
+// Returns the index after the sequence terminator.
+func skipANSISequence(s string, i int) int {
+	i += 2 // Skip ESC and [.
+	for i < len(s) && !isANSITerminator(s[i]) {
+		i++
 	}
-
-	// If completely empty after trim, return empty
-	if trimmed == "" {
-		return ""
+	if i < len(s) {
+		i++ // Skip terminator.
 	}
+	return i
+}
 
-	// Build result by copying characters and ANSI codes up to the length of trimmed content,
-	// then capture any ANSI codes that immediately follow the last character (before whitespace)
-	var result strings.Builder
+// isANSITerminator checks if byte b is an ANSI sequence terminator (A-Z or a-z).
+func isANSITerminator(b byte) bool {
+	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
+}
+
+// copyContentAndANSI copies characters and ANSI codes from s until plainIdx reaches targetLen.
+// Returns the result builder pointer and the final position in s.
+func copyContentAndANSI(s string, targetLen int) (*strings.Builder, int) {
+	result := &strings.Builder{}
 	plainIdx := 0
 	i := 0
 
-	// Copy content and ANSI codes until we've matched all trimmed characters
-	for i < len(s) && plainIdx < len(trimmed) {
-		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
-			// Copy ANSI sequence
+	for i < len(s) && plainIdx < targetLen {
+		if isANSIStart(s, i) {
 			start := i
-			i += 2
-			for i < len(s) && (s[i] < 'A' || s[i] > 'Z') && (s[i] < 'a' || s[i] > 'z') {
-				i++
-			}
-			if i < len(s) {
-				i++
-			}
+			i = skipANSISequence(s, i)
 			result.WriteString(s[start:i])
 		} else {
-			// Copy visible character
 			result.WriteByte(s[i])
 			plainIdx++
 			i++
 		}
 	}
 
-	// Capture any trailing ANSI codes that immediately follow the last character
-	for i < len(s) {
-		if s[i] != '\x1b' || i+1 >= len(s) || s[i+1] != '[' {
-			// Stop at first non-ANSI character (whitespace we're trimming)
-			break
-		}
+	return result, i
+}
+
+// trimRightSpaces removes only trailing spaces (not tabs) from an ANSI-coded string while
+// preserving all ANSI escape sequences on the actual content.
+// This is useful for removing Glamour's padding spaces while preserving intentional tabs.
+func trimRightSpaces(s string) string {
+	stripped := ansi.Strip(s)
+	trimmed := strings.TrimRight(stripped, " ")
+
+	if trimmed == stripped {
+		return s
+	}
+	if trimmed == "" {
+		return ""
+	}
+
+	result, i := copyContentAndANSI(s, len(trimmed))
+
+	// Capture any trailing ANSI codes that immediately follow the last character.
+	for i < len(s) && isANSIStart(s, i) {
 		start := i
-		i += 2
-		for i < len(s) && (s[i] < 'A' || s[i] > 'Z') && (s[i] < 'a' || s[i] > 'z') {
-			i++
-		}
-		if i < len(s) {
-			i++
-		}
+		i = skipANSISequence(s, i)
 		result.WriteString(s[start:i])
 	}
 
 	return result.String()
 }
 
+// isWhitespace checks if byte b is a space or tab.
+func isWhitespace(b byte) bool {
+	return b == ' ' || b == '\t'
+}
+
+// processTrailingANSICodes processes ANSI codes after content, preserving reset codes
+// but not color codes that wrap trailing whitespace.
+func processTrailingANSICodes(s string, i int, result *strings.Builder) {
+	for i < len(s) && isANSIStart(s, i) {
+		start := i
+		i = skipANSISequence(s, i)
+
+		// Check what comes after this ANSI code.
+		if shouldIncludeTrailingANSI(s, i, start, result) {
+			return
+		}
+	}
+}
+
+// shouldIncludeTrailingANSI determines whether to include a trailing ANSI code and stop processing.
+// Returns true if processing should stop.
+func shouldIncludeTrailingANSI(s string, i, start int, result *strings.Builder) bool {
+	// Whitespace or end of string directly after this code - include and stop.
+	if i >= len(s) || isWhitespace(s[i]) {
+		result.WriteString(s[start:i])
+		return true
+	}
+
+	// Another ANSI code follows - peek ahead.
+	if isANSIStart(s, i) {
+		nextEnd := skipANSISequence(s, i)
+		if nextEnd < len(s) && isWhitespace(s[nextEnd]) {
+			// Next code wraps whitespace - include current and stop.
+			result.WriteString(s[start:i])
+			return true
+		}
+		// Next code doesn't wrap whitespace - include and continue.
+		result.WriteString(s[start:i])
+		return false
+	}
+
+	// Other content follows - include the code.
+	result.WriteString(s[start:i])
+	return false
+}
+
 // TrimRight removes trailing whitespace from an ANSI-coded string while
 // preserving all ANSI escape sequences on the actual content.
 // This is useful for removing Glamour's padding spaces that are wrapped in ANSI codes.
 func TrimRight(s string) string {
-	// Strip ANSI codes to get plain text version
 	stripped := ansi.Strip(s)
-
-	// Trim trailing whitespace from plain text
 	trimmed := strings.TrimRight(stripped, " \t")
 
-	// If nothing to trim, return original
 	if trimmed == stripped {
 		return s
 	}
-
-	// If completely empty after trim, return empty
 	if trimmed == "" {
 		return ""
 	}
 
-	// Build result by copying characters and ANSI codes up to the length of trimmed content,
-	// then capture any ANSI codes that immediately follow the last character (before whitespace)
-	var result strings.Builder
-	plainIdx := 0
-	i := 0
-
-	// Copy content and ANSI codes until we've matched all trimmed characters
-	for i < len(s) && plainIdx < len(trimmed) {
-		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
-			// Copy ANSI sequence
-			start := i
-			i += 2
-			for i < len(s) && (s[i] < 'A' || s[i] > 'Z') && (s[i] < 'a' || s[i] > 'z') {
-				i++
-			}
-			if i < len(s) {
-				i++
-			}
-			result.WriteString(s[start:i])
-		} else {
-			// Copy visible character
-			result.WriteByte(s[i])
-			plainIdx++
-			i++
-		}
-	}
-
-	// After matching all content, copy any ANSI codes that come before whitespace
-	// This preserves reset codes like \x1b[0m that follow the last character,
-	// but NOT color codes that wrap trailing whitespace
-ansiLoop:
-	for i < len(s) && s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
-		start := i
-		i += 2
-		for i < len(s) && (s[i] < 'A' || s[i] > 'Z') && (s[i] < 'a' || s[i] > 'z') {
-			i++
-		}
-		if i < len(s) {
-			i++
-		}
-
-		// Check what comes immediately after this ANSI code
-		// If it's directly whitespace, this code ended styling before the whitespace - include it
-		// If it's another ANSI code followed by whitespace, that next code wraps the whitespace - stop here
-		switch {
-		case i >= len(s) || s[i] == ' ' || s[i] == '\t':
-			// Whitespace or end of string directly after this code - include the code and stop loop.
-			result.WriteString(s[start:i])
-			break ansiLoop
-		case s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[':
-			// Another ANSI code follows - peek ahead to see if it wraps whitespace
-			j := i + 2
-			for j < len(s) && (s[j] < 'A' || s[j] > 'Z') && (s[j] < 'a' || s[j] > 'z') {
-				j++
-			}
-			if j < len(s) {
-				j++
-			}
-			// Check if whitespace follows that next code
-			if j < len(s) && (s[j] == ' ' || s[j] == '\t') {
-				// Next code wraps whitespace - include current code but stop loop.
-				result.WriteString(s[start:i])
-				break ansiLoop
-			}
-			// Next code doesn't wrap whitespace - include current and continue loop.
-			result.WriteString(s[start:i])
-		default:
-			// Some other content follows - shouldn't happen after trimmed content, but include the code.
-			result.WriteString(s[start:i])
-		}
-	}
+	result, i := copyContentAndANSI(s, len(trimmed))
+	processTrailingANSICodes(s, i, result)
 
 	return result.String()
 }

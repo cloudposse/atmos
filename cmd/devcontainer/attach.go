@@ -1,3 +1,4 @@
+//nolint:dupl // Cobra command boilerplate - structural similarity with remove.go is intentional.
 package devcontainer
 
 import (

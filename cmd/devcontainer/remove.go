@@ -1,3 +1,4 @@
+//nolint:dupl // Cobra command boilerplate - structural similarity with attach.go is intentional.
 package devcontainer
 
 import (

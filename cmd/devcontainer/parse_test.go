@@ -1,3 +1,4 @@
+//nolint:dupl // Table-driven test boilerplate - structural similarity across parse function tests is intentional.
 package devcontainer
 
 import (

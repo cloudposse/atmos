@@ -12,6 +12,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	flagNew     = "new"
+	flagReplace = "replace"
+)
+
 var shellParser *flags.StandardParser
 
 // ShellOptions contains parsed flags for the shell command.
@@ -186,14 +191,14 @@ func init() {
 		flags.WithStringFlag("instance", "", "default", "Instance name for this devcontainer"),
 		flags.WithIdentityFlag(),
 		flags.WithBoolFlag("pty", "", false, "Experimental: Use PTY mode with masking support (not available on Windows)"),
-		flags.WithBoolFlag("new", "", false, "Create a new instance with auto-generated name"),
-		flags.WithBoolFlag("replace", "", false, "Destroy and recreate the current instance"),
+		flags.WithBoolFlag(flagNew, "", false, "Create a new instance with auto-generated name"),
+		flags.WithBoolFlag(flagReplace, "", false, "Destroy and recreate the current instance"),
 		flags.WithBoolFlag("rm", "", false, "Automatically remove the container when the shell exits"),
 		flags.WithBoolFlag("no-pull", "", false, "Skip pulling the image when using --replace (use cached image)"),
 		flags.WithEnvVars("instance", "ATMOS_DEVCONTAINER_INSTANCE"),
 		flags.WithEnvVars("pty", "ATMOS_DEVCONTAINER_PTY"),
-		flags.WithEnvVars("new", "ATMOS_DEVCONTAINER_NEW"),
-		flags.WithEnvVars("replace", "ATMOS_DEVCONTAINER_REPLACE"),
+		flags.WithEnvVars(flagNew, "ATMOS_DEVCONTAINER_NEW"),
+		flags.WithEnvVars(flagReplace, "ATMOS_DEVCONTAINER_REPLACE"),
 		flags.WithEnvVars("rm", "ATMOS_DEVCONTAINER_RM"),
 		flags.WithEnvVars("no-pull", "ATMOS_DEVCONTAINER_NO_PULL"),
 	)
@@ -201,7 +206,7 @@ func init() {
 	initCommandWithFlags(shellCmd, shellParser)
 
 	// Mark flags as mutually exclusive.
-	shellCmd.MarkFlagsMutuallyExclusive("new", "replace")
+	shellCmd.MarkFlagsMutuallyExclusive(flagNew, flagReplace)
 
 	devcontainerCmd.AddCommand(shellCmd)
 }

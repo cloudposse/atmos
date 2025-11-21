@@ -142,7 +142,7 @@ func TestManager_Remove(t *testing.T) {
 					Return(nil, errors.New("runtime not found"))
 			},
 			expectError: true,
-			errorIs:     errUtils.ErrContainerRuntimeOperation,
+			errorIs:     errUtils.ErrRuntimeNotAvailable,
 		},
 	}
 

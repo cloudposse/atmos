@@ -19,6 +19,89 @@ const (
 	defaultContainerStopTimeout = 10 * time.Second
 )
 
+// buildConfigLoadError builds a standardized error for configuration loading failures.
+func buildConfigLoadError(err error, name string) error {
+	return errUtils.Build(err).
+		WithExplanationf("Failed to load devcontainer configuration for `%s`", name).
+		WithHintf("Verify that the devcontainer is defined in `atmos.yaml` under `components.devcontainer.%s`", name).
+		WithHint("Run `atmos devcontainer list` to see all available devcontainers").
+		WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
+		WithContext("devcontainer_name", name).
+		WithExitCode(2).
+		Err()
+}
+
+// buildRuntimeDetectError builds a standardized error for runtime detection failures.
+func buildRuntimeDetectError(err error, name, runtime string) error {
+	return errUtils.Build(errUtils.ErrRuntimeNotAvailable).
+		WithCause(err).
+		WithExplanation("Failed to detect or initialize container runtime").
+		WithHint("Ensure Docker or Podman is installed and running").
+		WithHint("Run `docker info` or `podman info` to verify the runtime is accessible").
+		WithHint("See Docker installation: https://docs.docker.com/get-docker/").
+		WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
+		WithContext("devcontainer_name", name).
+		WithContext("runtime", runtime).
+		WithExitCode(3).
+		Err()
+}
+
+// buildContainerNameError builds a standardized error for container name generation failures.
+func buildContainerNameError(err error, name, instance string) error {
+	return errUtils.Build(err).
+		WithExplanationf("Failed to generate valid container name from devcontainer `%s` and instance `%s`", name, instance).
+		WithHint("Container names must be lowercase alphanumeric with hyphens only").
+		WithHint("Ensure the devcontainer name and instance follow naming conventions").
+		WithHint("See Docker naming: https://docs.docker.com/engine/reference/commandline/create/#name").
+		WithContext("devcontainer_name", name).
+		WithContext("instance", instance).
+		WithExitCode(2).
+		Err()
+}
+
+// buildContainerListError builds a standardized error for container listing failures.
+func buildContainerListError(err error, name, containerName, runtime string) error {
+	return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+		WithCause(err).
+		WithExplanationf("Failed to list containers with name `%s`", containerName).
+		WithHint("Verify that the container runtime is accessible and running").
+		WithHint("Run `docker ps -a` or `podman ps -a` to check container status").
+		WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
+		WithContext("devcontainer_name", name).
+		WithContext("container_name", containerName).
+		WithContext("runtime", runtime).
+		WithExitCode(3).
+		Err()
+}
+
+// buildContainerInspectError builds a standardized error for container inspect failures.
+func buildContainerInspectError(err error, name, containerName, runtime string) error {
+	return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+		WithCause(err).
+		WithExplanationf("Failed to inspect container `%s`", containerName).
+		WithHint("Check that the container runtime daemon is running").
+		WithHint("Run `docker ps -a` or `podman ps -a` to see all containers").
+		WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/").
+		WithContext("devcontainer_name", name).
+		WithContext("container_name", containerName).
+		WithContext("runtime", runtime).
+		WithExitCode(3).
+		Err()
+}
+
+// buildIdentityInjectionError builds a standardized error for identity injection failures.
+func buildIdentityInjectionError(err error, name, identityName string) error {
+	return errUtils.Build(err).
+		WithExplanationf("Failed to inject identity `%s` into devcontainer environment", identityName).
+		WithHintf("Verify that the identity `%s` is configured in `atmos.yaml`", identityName).
+		WithHint("Run `atmos auth identity list` to see available identities").
+		WithHint("See Atmos docs: https://atmos.tools/cli/commands/auth/auth-identity-configure/").
+		WithContext("devcontainer_name", name).
+		WithContext("identity_name", identityName).
+		WithExitCode(2).
+		Err()
+}
+
 // containerParams holds parameters for container operations.
 type containerParams struct {
 	ctx           context.Context

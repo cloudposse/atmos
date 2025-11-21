@@ -1,3 +1,4 @@
+//nolint:dupl // Table-driven test boilerplate - structural similarity across lifecycle tests is intentional.
 package devcontainer
 
 import (

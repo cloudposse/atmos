@@ -43,7 +43,7 @@ func (e *defaultExecutor) CommandContext(ctx context.Context, name string, args 
 
 // globalExecutor holds the package-level executor instance.
 // Tests can override this to inject mock executors.
-var globalExecutor CommandExecutor = newDefaultExecutor()
+var globalExecutor = newDefaultExecutor()
 
 // setExecutor sets the global executor (for testing).
 func setExecutor(executor CommandExecutor) {

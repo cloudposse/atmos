@@ -1,3 +1,4 @@
+//nolint:dupl // Table-driven test boilerplate - structural similarity across validation tests is intentional.
 package devcontainer
 
 import (

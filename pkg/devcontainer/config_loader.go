@@ -257,7 +257,7 @@ func extractAndValidateSpec(devcontainerMap map[string]any, name string) (*Confi
 		}
 		specRaw = merged
 	} else {
-		log.Debug("Spec type", "name", name, "type", fmt.Sprintf("%T", specRaw))
+		log.Debug("Spec type", logKeyName, name, "type", fmt.Sprintf("%T", specRaw))
 	}
 
 	specMap, ok := specRaw.(map[string]any)
@@ -292,7 +292,7 @@ func extractAndValidateSpec(devcontainerMap map[string]any, name string) (*Confi
 // collectAndMergeSpecList collects indexed spec items and merges them.
 // Returns the merged map or an error if the list is empty or invalid.
 func collectAndMergeSpecList(specList []any, devcontainerMap map[string]any, name string) (map[string]any, error) {
-	log.Debug("Detected list-based spec, collecting indexed items", "name", name, "items", len(specList))
+	log.Debug("Detected list-based spec, collecting indexed items", logKeyName, name, "items", len(specList))
 	maps := make([]map[string]any, 0, len(specList))
 
 	// Collect spec[0], spec[1], etc. which contain the processed YAML functions
@@ -304,7 +304,7 @@ func collectAndMergeSpecList(specList []any, devcontainerMap map[string]any, nam
 		}
 		itemMap, ok := item.(map[string]any)
 		if !ok {
-			log.Warn("Spec list item is not a map", "name", name, "index", i, "type", fmt.Sprintf("%T", item))
+			log.Warn("Spec list item is not a map", logKeyName, name, "index", i, "type", fmt.Sprintf("%T", item))
 			continue
 		}
 		maps = append(maps, itemMap)
@@ -343,10 +343,10 @@ func mergeSpecMaps(maps []map[string]any, name string) (map[string]any, error) {
 		result[k] = v
 	}
 
-	log.Debug("Starting merge", "name", name, "map_count", len(maps), "initial_keys", len(result))
+	log.Debug("Starting merge", logKeyName, name, "map_count", len(maps), "initial_keys", len(result))
 
 	for i := 1; i < len(maps); i++ {
-		log.Debug("Merging map", "name", name, "index", i, "keys", len(maps[i]))
+		log.Debug("Merging map", logKeyName, name, "index", i, "keys", len(maps[i]))
 		if err := mergo.Merge(&result, maps[i], mergo.WithOverride); err != nil {
 			return nil, errUtils.Build(errUtils.ErrInvalidDevcontainerConfig).
 				WithCause(err).
@@ -357,10 +357,10 @@ func mergeSpecMaps(maps []map[string]any, name string) (map[string]any, error) {
 				WithExitCode(2).
 				Err()
 		}
-		log.Debug("After merge", "name", name, "result_keys", len(result))
+		log.Debug("After merge", logKeyName, name, "result_keys", len(result))
 	}
 
-	log.Debug("Final merged result", "name", name, "keys", fmt.Sprintf("%v", getKeys(result)))
+	log.Debug("Final merged result", logKeyName, name, "keys", fmt.Sprintf("%v", getKeys(result)))
 
 	// Fix indexed array keys (e.g., forwardports[0], forwardports[1] → forwardports: [value0, value1])
 	result = consolidateIndexedKeys(result)
