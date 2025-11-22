@@ -9,7 +9,10 @@ Usage:
 
 Flags:
 
-    -h, --help    help for login
+    -h, --help               help for login
+
+    -p, --provider string    Provider name to authenticate with (for SSO
+                             auto-provisioning)
 
 
 Global Flags:

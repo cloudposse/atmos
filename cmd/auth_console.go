@@ -101,13 +101,13 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	// Check if provider supports console access and get the console URL generator.
 	consoleProvider, err := getConsoleProvider(authManager, whoami.Identity)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAuthConsole, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthConsole, err)
 	}
 
 	// Resolve session duration (flag takes precedence over provider config).
 	sessionDuration, err := resolveConsoleDuration(cmd, authManager, whoami.Provider)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAuthConsole, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthConsole, err)
 	}
 
 	// Generate console URL.
