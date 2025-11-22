@@ -22,13 +22,13 @@ require (
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/aws/aws-sdk-go-v2 v1.40.0
-	github.com/aws/aws-sdk-go-v2/config v1.32.0
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.0
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.10
+	github.com/aws/aws-sdk-go-v2/config v1.32.1
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.1
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.11
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.92.0
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.67.3
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.4
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.8
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.9
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.1
 	github.com/aws/smithy-go v1.23.2
 	github.com/bmatcuk/doublestar/v4 v4.9.1
@@ -40,7 +40,7 @@ require (
 	github.com/charmbracelet/log v0.4.2
 	github.com/cockroachdb/errors v1.12.0
 	github.com/creack/pty v1.1.24
-	github.com/editorconfig-checker/editorconfig-checker/v3 v3.4.1
+	github.com/editorconfig-checker/editorconfig-checker/v3 v3.5.0
 	github.com/elewis787/boa v0.1.3
 	github.com/fatih/color v1.18.0
 	github.com/getsentry/sentry-go v0.38.0
@@ -81,7 +81,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/otiai10/copy v1.14.1
 	github.com/pkg/errors v0.9.1
-	github.com/posthog/posthog-go v1.6.12
+	github.com/posthog/posthog-go v1.6.13
 	github.com/redis/go-redis/v9 v9.12.1
 	github.com/samber/lo v1.52.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
@@ -163,7 +163,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.1 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
-	github.com/baulk/chardet v0.1.0 // indirect
 	github.com/bearsh/hid v1.6.0 // indirect
 	github.com/beevik/etree v1.4.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -218,7 +217,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/forPelevin/gomoji v1.3.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.11 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.6.2 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
@@ -363,6 +362,7 @@ require (
 	github.com/valyala/fastjson v1.6.4 // indirect
 	github.com/vbatts/tar-split v0.12.1 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.30 // indirect
+	github.com/wlynxg/chardet v1.0.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect

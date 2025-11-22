@@ -5,6 +5,13 @@ import (
 	"fmt"
 )
 
+const (
+	// ErrWrapFormat is the standard format string for wrapping errors with context.
+	// Use with fmt.Errorf to wrap a sentinel error with an underlying error:
+	//   fmt.Errorf(ErrWrapFormat, errUtils.ErrSentinel, underlyingErr)
+	ErrWrapFormat = "%w: %w"
+)
+
 var (
 	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -40,14 +39,14 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToInitConfig, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
 	}
 	defer perf.Track(&atmosConfig, "cmd.executeAuthLoginCommand")()
 
 	// Create auth manager.
 	authManager, err := createAuthManager(&atmosConfig.Auth)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
 	// Check if --provider flag was provided.
@@ -61,7 +60,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 		// Provider-level authentication (e.g., for SSO auto-provisioning).
 		whoami, err = authManager.AuthenticateProvider(ctx, providerName)
 		if err != nil {
-			return errors.Join(errUtils.ErrAuthenticationFailed, fmt.Errorf("provider=%s: %w", providerName, err))
+			return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
 		}
 	} else {
 		// Identity-level authentication (existing behavior).
@@ -92,14 +91,14 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 		var err error
 		identityName, err = authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
-			return nil, errors.Join(errUtils.ErrDefaultIdentity, err)
+			return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDefaultIdentity, err)
 		}
 	}
 
 	// Perform identity authentication.
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrAuthenticationFailed, fmt.Errorf("identity=%s: %w", identityName, err))
+		return nil, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrAuthenticationFailed, identityName, err)
 	}
 
 	return whoami, nil
