@@ -220,7 +220,7 @@ auth:
 When `discovery.include_tags: true` is enabled, discovered identities include tags from AWS PermissionSets:
 
 ```yaml
-# {XDG_CACHE_HOME}/atmos/aws/sso-prod/discovered-identities.yaml
+# {XDG_CACHE_HOME}/atmos/aws/sso-prod/provisioned-identities.yaml
 auth:
   identities:
     production/AdministratorAccess:
@@ -1031,7 +1031,7 @@ Opening browser to: https://device.sso.us-east-1.amazonaws.com/...
 
 ✓ Authentication successful
 ✓ Discovering available roles... (found 23 permission sets across 5 accounts)
-✓ Generated ~/.cache/atmos/aws/sso-prod/discovered-identities.yaml (23 identities)
+✓ Generated ~/.cache/atmos/aws/sso-prod/provisioned-identities.yaml (23 identities)
 ```
 
 **APIs called** (using bearer token):
@@ -1089,7 +1089,7 @@ $ atmos auth login --provider sso-prod --identity production/AdministratorAccess
   → Retrieving tags for 23 permission sets... (requires sso:ListTagsForResource)
   ✓ Retrieved tags for 18 permission sets
   ⚠ Failed to retrieve tags for 5 permission sets (insufficient permissions)
-✓ Generated ~/.cache/atmos/aws/sso-prod/discovered-identities.yaml (23 identities, 18 with tags)
+✓ Generated ~/.cache/atmos/aws/sso-prod/provisioned-identities.yaml (23 identities, 18 with tags)
 ```
 
 **APIs called**:
@@ -1146,7 +1146,7 @@ $ atmos auth login --provider sso-prod
 ⚠ Warning: Unable to retrieve permission set tags (AccessDeniedException)
   → sso:DescribePermissionSet permission required
   → Continuing without tags...
-✓ Generated ~/.cache/atmos/aws/sso-prod/discovered-identities.yaml (23 identities, no tags)
+✓ Generated ~/.cache/atmos/aws/sso-prod/provisioned-identities.yaml (23 identities, no tags)
 ```
 
 **Option 3: Separate Admin Role for Discovery**
@@ -1293,7 +1293,7 @@ Tags:
 ⚠ Warning: Unable to retrieve permission set tags (AccessDeniedException)
   → Required permissions: sso:DescribePermissionSet, sso:ListTagsForResource
   → Continuing without tags...
-✓ Generated discovered-identities.yaml (23 identities, no tags)
+✓ Generated provisioned-identities.yaml (23 identities, no tags)
 ```
 
 **Scenario 2: Partial Permissions (ListInstances denied)**
@@ -1302,7 +1302,7 @@ Tags:
   → Required permission: sso:ListInstances
   → Cannot retrieve tags without instance ARN
   → Continuing without tags...
-✓ Generated discovered-identities.yaml (23 identities, no tags)
+✓ Generated provisioned-identities.yaml (23 identities, no tags)
 ```
 
 **Scenario 3: Permission Set Not Found**
@@ -1310,7 +1310,7 @@ Tags:
 ⚠ Warning: Permission set 'AdministratorAccess' not found in SSO instance
   → Role may be externally managed or not configured in Identity Center
   → Continuing without tags for this identity...
-✓ Generated discovered-identities.yaml (23 identities, 22 with tags)
+✓ Generated provisioned-identities.yaml (23 identities, 22 with tags)
 ```
 
 ### Summary Table
