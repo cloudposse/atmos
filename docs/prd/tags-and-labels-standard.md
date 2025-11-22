@@ -166,8 +166,8 @@ auth:
         - production
         - aws
         - sso
+      auto_provision_identities: true
       spec:
-        auto_discover_identities: true
         discovery:
           include_tags: true  # NEW: Include tags from AWS PermissionSets
 
@@ -179,8 +179,8 @@ auth:
         - development
         - aws
         - sso
+      auto_provision_identities: true
       spec:
-        auto_discover_identities: true
         discovery:
           include_tags: true
 
@@ -703,8 +703,8 @@ providers:
     kind: aws/iam-identity-center
     start_url: https://my-org.awsapps.com/start
     region: us-east-1
+    auto_provision_identities: true
     spec:
-      auto_discover_identities: true
       instance_arn: "arn:aws:sso:::instance/ssoins-1234567890abcdef"  # Optional: Cache instance ARN
       discovery:
         include_tags: true  # Enable tag discovery
@@ -1159,8 +1159,8 @@ providers:
     kind: aws/iam-identity-center
     start_url: https://my-org.awsapps.com/start
     region: us-east-1
+    auto_provision_identities: true
     spec:
-      auto_discover_identities: true
       discovery:
         include_tags: true
         # Use separate admin identity for tag discovery
