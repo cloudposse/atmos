@@ -28,7 +28,7 @@ const (
 // Note: This function relies on merge contexts being populated during stack processing.
 // Merge contexts are automatically created when ExecuteDescribeStacks processes stack files.
 //
-//nolint:gocognit,revive,funlen // Complexity and length from nested stack/component/import tree resolution (unavoidable pattern).
+//nolint:gocognit,revive // Complexity from nested stack/component/import tree resolution (unavoidable pattern).
 func ResolveImportTreeFromProvenance(
 	stacksMap map[string]interface{},
 	atmosConfig *schema.AtmosConfiguration,
@@ -39,16 +39,6 @@ func ResolveImportTreeFromProvenance(
 	allMergeContexts := e.GetAllMergeContexts()
 
 	log.Trace("Found merge contexts and stacks", "merge_context_count", len(allMergeContexts), "stack_count", len(stacksMap))
-
-	// Build a map of stack names to their components for quick lookup.
-	stackComponents := make(map[string]map[string]bool)
-	for stackName, stackData := range stacksMap {
-		components := extractComponentsFromStackData(stackData)
-		if len(components) > 0 {
-			stackComponents[stackName] = components
-			log.Trace("Stack has components", "stack", stackName, "component_count", len(components))
-		}
-	}
 
 	// Iterate over all merge contexts.
 	// Each merge context corresponds to a stack file and contains the ImportChain.
