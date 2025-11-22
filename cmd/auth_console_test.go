@@ -581,6 +581,8 @@ func TestResolveIdentityName(t *testing.T) {
 }
 
 // mockAuthManagerForProvider implements minimal AuthManager for testing getConsoleProvider.
+// Only GetProviderKindForIdentity is implemented - other methods return ErrNotImplemented
+// because they are not needed by TestGetConsoleProvider.
 type mockAuthManagerForProvider struct {
 	providerKind string
 }
@@ -590,15 +592,15 @@ func (m *mockAuthManagerForProvider) GetProviderKindForIdentity(identityName str
 }
 
 func (m *mockAuthManagerForProvider) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) GetDefaultIdentity(_ bool) (string, error) {
-	return "", errors.New("not implemented")
+	return "", errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) ListIdentities() []string {
@@ -606,11 +608,11 @@ func (m *mockAuthManagerForProvider) ListIdentities() []string {
 }
 
 func (m *mockAuthManagerForProvider) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
-	return errors.New("not implemented")
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) GetIdentity(identityName string) (types.Identity, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) GetFilesDisplayPath(providerName string) string {
@@ -626,11 +628,11 @@ func (m *mockAuthManagerForProvider) GetIdentities() map[string]schema.Identity 
 }
 
 func (m *mockAuthManagerForProvider) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) Validate() error {
-	return errors.New("not implemented")
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) GetProviderForIdentity(identityName string) string {
@@ -650,41 +652,43 @@ func (m *mockAuthManagerForProvider) GetProviders() map[string]schema.Provider {
 }
 
 func (m *mockAuthManagerForProvider) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
-	return errors.New("not implemented")
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) LogoutAll(ctx context.Context, deleteKeychain bool) error {
-	return errors.New("not implemented")
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) GetEnvironmentVariables(identityName string) (map[string]string, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForProvider) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 // mockAuthManagerForIdentity implements minimal AuthManager for testing resolveIdentityName.
+// Only GetDefaultIdentity is implemented - other methods return ErrNotImplemented
+// because they are not needed by TestResolveIdentityName.
 type mockAuthManagerForIdentity struct {
 	defaultIdentity string
 	defaultErr      error
 }
 
 func (m *mockAuthManagerForIdentity) GetProviderKindForIdentity(identityName string) (string, error) {
-	return "", errors.New("not implemented")
+	return "", errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) GetCachedCredentials(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) GetDefaultIdentity(_ bool) (string, error) {
@@ -699,11 +703,11 @@ func (m *mockAuthManagerForIdentity) ListIdentities() []string {
 }
 
 func (m *mockAuthManagerForIdentity) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
-	return errors.New("not implemented")
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) GetIdentity(identityName string) (types.Identity, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) GetFilesDisplayPath(providerName string) string {
@@ -719,11 +723,11 @@ func (m *mockAuthManagerForIdentity) GetIdentities() map[string]schema.Identity 
 }
 
 func (m *mockAuthManagerForIdentity) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) Validate() error {
-	return errors.New("not implemented")
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) GetProviderForIdentity(identityName string) string {
@@ -743,23 +747,23 @@ func (m *mockAuthManagerForIdentity) GetProviders() map[string]schema.Provider {
 }
 
 func (m *mockAuthManagerForIdentity) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
-	return errors.New("not implemented")
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) LogoutAll(ctx context.Context, deleteKeychain bool) error {
-	return errors.New("not implemented")
+	return errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) GetEnvironmentVariables(identityName string) (map[string]string, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func (m *mockAuthManagerForIdentity) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
-	return nil, errors.New("not implemented")
+	return nil, errUtils.ErrNotImplemented
 }
 
 func TestResolveConsoleDuration(t *testing.T) {
