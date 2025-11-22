@@ -111,7 +111,7 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 func (i *permissionSetIdentity) Validate() error {
 	if i.config.Principal == nil {
 		return errUtils.Build(errUtils.ErrMissingPrincipal).
-			WithHintf("Identity '%s' requires principal configuration", i.name).
+			WithExplanationf("Identity '%s' requires principal configuration", i.name).
 			WithHint("Add 'principal' field with 'name' and 'account' to the identity configuration").
 			WithContext("identity", i.name).
 			WithExitCode(2).
@@ -123,7 +123,7 @@ func (i *permissionSetIdentity) Validate() error {
 	var ok bool
 	if permissionSetName, ok = i.config.Principal["name"].(string); !ok || permissionSetName == "" {
 		return errUtils.Build(errUtils.ErrMissingPermissionSet).
-			WithHintf("Missing permission set name for identity '%s'", i.name).
+			WithExplanationf("Missing permission set name for identity '%s'", i.name).
 			WithHint("Add 'name' field to the identity's principal configuration").
 			WithHint("Example: principal: { name: 'DevAccess', account: { id: '123456789012' } }").
 			WithContext("identity", i.name).
@@ -135,7 +135,7 @@ func (i *permissionSetIdentity) Validate() error {
 	var accountSpec map[string]interface{}
 	if accountSpec, ok = i.config.Principal["account"].(map[string]interface{}); !ok {
 		return errUtils.Build(errUtils.ErrMissingAccountSpec).
-			WithHintf("Missing account specification for identity '%s'", i.name).
+			WithExplanationf("Missing account specification for identity '%s'", i.name).
 			WithHint("Add 'account' field with 'name' or 'id' to the identity's principal configuration").
 			WithHint("Example: principal: { name: 'DevAccess', account: { id: '123456789012' } }").
 			WithContext("identity", i.name).
@@ -147,7 +147,7 @@ func (i *permissionSetIdentity) Validate() error {
 	accountID, okID := accountSpec["id"].(string)
 	if !okName && !okID {
 		return errUtils.Build(errUtils.ErrMissingAccountSpec).
-			WithHintf("Account name or ID is required for identity '%s'", i.name).
+			WithExplanationf("Account name or ID is required for identity '%s'", i.name).
 			WithHint("Add 'name' or 'id' to the account configuration").
 			WithHint("Example: account: { id: '123456789012' } or account: { name: 'production' }").
 			WithContext("identity", i.name).
@@ -156,7 +156,7 @@ func (i *permissionSetIdentity) Validate() error {
 	}
 	if accountName == "" && accountID == "" {
 		return errUtils.Build(errUtils.ErrMissingAccountSpec).
-			WithHintf("Account name or ID cannot be empty for identity '%s'", i.name).
+			WithExplanationf("Account name or ID cannot be empty for identity '%s'", i.name).
 			WithHint("Provide a valid account name or ID").
 			WithContext("identity", i.name).
 			WithExitCode(2).

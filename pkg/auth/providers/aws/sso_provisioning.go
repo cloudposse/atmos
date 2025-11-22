@@ -41,7 +41,7 @@ func (p *ssoProvider) ProvisionIdentities(ctx context.Context, creds authTypes.I
 	awsCreds, ok := creds.(*authTypes.AWSCredentials)
 	if !ok {
 		return nil, errUtils.Build(errUtils.ErrSSOProvisioningFailed).
-			WithHintf("Invalid credentials type for SSO identity provisioning").
+			WithExplanation("Invalid credentials type for SSO identity provisioning").
 			WithHint("Ensure the provider successfully authenticated before provisioning identities").
 			WithHint("Check your AWS SSO configuration in atmos.yaml").
 			WithContext("provider", p.name).
@@ -69,7 +69,7 @@ func (p *ssoProvider) provisionIdentitiesWithClient(ctx context.Context, ssoClie
 	accounts, err := p.listAccountsWithClient(ctx, ssoClient, accessToken)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrSSOAccountListFailed).
-			WithHintf("Failed to list AWS SSO accounts for identity provisioning").
+			WithExplanation("Failed to list AWS SSO accounts for identity provisioning").
 			WithHint("Verify your AWS SSO session is still active with 'aws sso login'").
 			WithHint("Ensure your SSO user has permissions to list accounts").
 			WithHintf("Check that the SSO start URL '%s' is correct", p.startURL).

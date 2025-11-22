@@ -895,3 +895,67 @@ func TestSSOProvider_PrepareEnvironment(t *testing.T) {
 	assert.Equal(t, testRegion, resultEnv["AWS_REGION"], "AWS_REGION should be set from provider config")
 	assert.NotEmpty(t, resultEnv["AWS_REGION"], "AWS_REGION should not be empty")
 }
+
+// TestSSOProvider_Validate_ErrorCases tests validation error paths.
+func TestSSOProvider_Validate_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      *schema.Provider
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "missing start_url",
+			config: &schema.Provider{
+				Kind:   testSSOKind,
+				Region: testRegion,
+			},
+			expectError: true,
+			errorMsg:    "start_url",
+		},
+		{
+			name: "missing region",
+			config: &schema.Provider{
+				Kind:     testSSOKind,
+				StartURL: testStartURL,
+			},
+			expectError: true,
+			errorMsg:    "region",
+		},
+		{
+			name: "empty start_url",
+			config: &schema.Provider{
+				Kind:     testSSOKind,
+				Region:   testRegion,
+				StartURL: "",
+			},
+			expectError: true,
+			errorMsg:    "start_url",
+		},
+		{
+			name: "empty region",
+			config: &schema.Provider{
+				Kind:     testSSOKind,
+				StartURL: testStartURL,
+				Region:   "",
+			},
+			expectError: true,
+			errorMsg:    "region",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider, err := NewSSOProvider(testProviderName, tt.config)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				require.NoError(t, err)
+				err = provider.Validate()
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

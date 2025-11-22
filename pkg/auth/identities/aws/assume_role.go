@@ -158,7 +158,7 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.I
 	awsBase, ok := baseCreds.(*types.AWSCredentials)
 	if !ok {
 		return nil, errUtils.Build(errUtils.ErrInvalidIdentityConfig).
-			WithHintf("Invalid credentials type for assume-role identity '%s'", i.name).
+			WithExplanationf("Invalid credentials type for assume-role identity '%s'", i.name).
 			WithHint("Base credentials must be AWS credentials or OIDC credentials").
 			WithHint("Verify the authentication chain is configured correctly in atmos.yaml").
 			WithContext("identity", i.name).
@@ -179,11 +179,11 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.I
 	result, err := stsClient.AssumeRole(ctx, assumeRoleInput)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
-			WithHintf("Failed to assume IAM role '%s'", i.roleArn).
+			WithExplanationf("Failed to assume IAM role '%s'", i.roleArn).
 			WithHint("Verify the role ARN is correct in your atmos.yaml configuration").
 			WithHint("Ensure your AWS account has permissions to assume this role").
 			WithHint("Check that the role's trust policy allows the source identity to assume it").
-			WithHintf("If using external_id, verify it matches the role's trust policy").
+			WithHint("If using external_id, verify it matches the role's trust policy").
 			WithContext("identity", i.name).
 			WithContext("role_arn", i.roleArn).
 			WithContext("region", i.region).
@@ -260,11 +260,11 @@ func (i *assumeRoleIdentity) assumeRoleWithWebIdentity(ctx context.Context, oidc
 	result, err := stsClient.AssumeRoleWithWebIdentity(ctx, input)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
-			WithHintf("Failed to assume IAM role '%s' using web identity (OIDC)", i.roleArn).
+			WithExplanationf("Failed to assume IAM role '%s' using web identity (OIDC)", i.roleArn).
 			WithHint("Verify the role ARN is correct in your atmos.yaml configuration").
 			WithHint("Ensure the OIDC token is valid and not expired").
 			WithHint("Check that the role's trust policy allows the OIDC provider").
-			WithHintf("For GitHub Actions OIDC, verify the repository and workflow are authorized").
+			WithHint("For GitHub Actions OIDC, verify the repository and workflow are authorized").
 			WithContext("identity", i.name).
 			WithContext("role_arn", i.roleArn).
 			WithContext("region", i.region).
@@ -328,7 +328,7 @@ func (i *assumeRoleIdentity) toAWSCredentialsFromWebIdentity(result *sts.AssumeR
 func (i *assumeRoleIdentity) Validate() error {
 	if i.config.Principal == nil {
 		return errUtils.Build(errUtils.ErrMissingPrincipal).
-			WithHintf("Identity '%s' requires principal configuration", i.name).
+			WithExplanationf("Identity '%s' requires principal configuration", i.name).
 			WithHint("Add 'principal' field with 'assume_role' to the identity configuration").
 			WithContext("identity", i.name).
 			WithExitCode(2).
@@ -340,7 +340,7 @@ func (i *assumeRoleIdentity) Validate() error {
 	var ok bool
 	if roleArn, ok = i.config.Principal["assume_role"].(string); !ok || roleArn == "" {
 		return errUtils.Build(errUtils.ErrMissingAssumeRole).
-			WithHintf("Missing 'assume_role' configuration for identity '%s'", i.name).
+			WithExplanationf("Missing 'assume_role' configuration for identity '%s'", i.name).
 			WithHint("Add 'assume_role' field to the identity's principal configuration").
 			WithHint("Example: principal: { assume_role: 'arn:aws:iam::123456789012:role/MyRole' }").
 			WithContext("identity", i.name).

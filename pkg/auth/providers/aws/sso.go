@@ -115,7 +115,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	// Check if we're in a headless environment - SSO device flow requires user interaction.
 	if !isInteractive() {
 		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
-			WithHintf("AWS SSO device flow requires an interactive terminal (TTY) for user authorization").
+			WithExplanation("AWS SSO device flow requires an interactive terminal (TTY) for user authorization").
 			WithHint("Use 'aws sso login' to authenticate before running Atmos in headless environments").
 			WithHint("For CI/CD pipelines, use AWS environment credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)").
 			WithHint("For GitHub Actions, use OIDC authentication with aws/assume-role identity").
@@ -145,7 +145,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrLoadAwsConfig).
-			WithHintf("Failed to load AWS configuration for SSO authentication in region '%s'", p.region).
+			WithExplanationf("Failed to load AWS configuration for SSO authentication in region '%s'", p.region).
 			WithHint("Verify that the AWS region is valid and accessible").
 			WithHint("Check your network connectivity and AWS service availability").
 			WithContext("provider", p.name).
@@ -167,7 +167,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	})
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
-			WithHintf("Failed to register SSO client with AWS IAM Identity Center").
+			WithExplanation("Failed to register SSO client with AWS IAM Identity Center").
 			WithHint("Verify your AWS SSO configuration in atmos.yaml is correct").
 			WithHintf("Ensure the start_url '%s' is valid and accessible", p.startURL).
 			WithHint("Check that AWS SSO is enabled in your AWS account").
@@ -188,7 +188,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	})
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrSSODeviceAuthFailed).
-			WithHintf("Failed to initiate AWS SSO device authorization flow").
+			WithExplanation("Failed to initiate AWS SSO device authorization flow").
 			WithHint("Verify your AWS SSO session is active with 'aws sso login'").
 			WithHintf("Check that the SSO start URL '%s' is correct in your atmos.yaml", p.startURL).
 			WithHint("Ensure your AWS account has SSO enabled and configured").
@@ -444,7 +444,7 @@ func (p *ssoProvider) pollForAccessTokenWithSpinner(ctx context.Context, oidcCli
 	finalSpinner := finalModel.(spinnerModel)
 	if finalSpinner.result == nil {
 		return "", time.Time{}, errUtils.Build(errUtils.ErrAuthenticationFailed).
-			WithHintf("AWS SSO authentication did not complete").
+			WithExplanation("AWS SSO authentication did not complete").
 			WithHint("The authentication flow was interrupted unexpectedly").
 			WithHint("Try running the authentication again").
 			WithContext("provider", p.name).
@@ -576,7 +576,7 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 		}
 
 		return "", time.Time{}, errUtils.Build(errUtils.ErrSSOTokenCreationFailed).
-			WithHintf("Failed to create AWS SSO access token").
+			WithExplanation("Failed to create AWS SSO access token").
 			WithHint("Ensure you completed the device authorization in your browser").
 			WithHint("The verification code may have expired - try authenticating again").
 			WithContext("provider", p.name).
@@ -587,9 +587,9 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooid
 
 	if accessToken == "" {
 		return "", time.Time{}, errUtils.Build(errUtils.ErrSSOTokenCreationFailed).
-			WithHintf("AWS SSO authentication timed out waiting for browser confirmation").
+			WithExplanation("AWS SSO authentication timed out waiting for browser confirmation").
 			WithHint("Complete the device authorization in your browser within the time limit").
-			WithHintf("Visit the verification URL and enter the code displayed earlier").
+			WithHint("Visit the verification URL and enter the code displayed earlier").
 			WithHint("Try running 'aws sso login' to verify your SSO configuration").
 			WithContext("provider", p.name).
 			WithContext("start_url", p.startURL).
