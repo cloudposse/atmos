@@ -23,7 +23,7 @@ func TestIsColorEnabled(t *testing.T) {
 			description: "NO_COLOR always wins and disables color",
 		},
 		{
-			name:        "NO_COLOR empty string is considered set",
+			name:        "NO_COLOR empty string treated as unset",
 			noColor:     "",
 			expected:    nil,
 			description: "Empty NO_COLOR should not disable color",
@@ -95,13 +95,7 @@ func TestIsColorEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original environment
-			origNoColor := getEnv("NO_COLOR")
-			origCLIColor := getEnv("CLICOLOR")
-			origCLIColorForce := getEnv("CLICOLOR_FORCE")
-			origForceColor := getEnv("FORCE_COLOR")
-
-			// Clear all environment variables
+			// Clear all environment variables (t.Setenv handles cleanup automatically)
 			t.Setenv("NO_COLOR", "")
 			t.Setenv("CLICOLOR", "")
 			t.Setenv("CLICOLOR_FORCE", "")
@@ -131,12 +125,6 @@ func TestIsColorEnabled(t *testing.T) {
 					assert.Equal(t, *tt.expected, *result, tt.description)
 				}
 			}
-
-			// Restore original environment (t.Setenv handles cleanup automatically)
-			_ = origNoColor
-			_ = origCLIColor
-			_ = origCLIColorForce
-			_ = origForceColor
 		})
 	}
 }
@@ -144,9 +132,4 @@ func TestIsColorEnabled(t *testing.T) {
 // boolPtr returns a pointer to a bool value.
 func boolPtr(b bool) *bool {
 	return &b
-}
-
-// getEnv safely gets an environment variable, returning empty string if not set.
-func getEnv(key string) string {
-	return ""
 }
