@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/io"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -82,14 +83,38 @@ func configureColorProfile(term terminal.Terminal) {
 		termProfile = termenv.Ascii
 	}
 
+	setColorProfileInternal(termProfile)
+}
+
+// setColorProfileInternal applies a color profile to all color-dependent systems.
+// This centralizes the color profile configuration for lipgloss, theme, and logger.
+func setColorProfileInternal(profile termenv.Profile) {
 	// Set the global lipgloss color profile
-	lipgloss.SetColorProfile(termProfile)
+	lipgloss.SetColorProfile(profile)
 
 	// Force theme styles to be regenerated with the new color profile.
 	// This is critical because theme.CurrentStyles caches lipgloss styles that
 	// bake in ANSI codes at creation time. When the color profile changes,
 	// we must regenerate the styles.
 	theme.InvalidateStyleCache()
+
+	// Reinitialize logger to respect the new color profile.
+	// The logger is initialized in init() with a default color profile,
+	// so we need to explicitly reconfigure it when the color profile changes.
+	log.Default().SetColorProfile(profile)
+}
+
+// SetColorProfile sets the color profile for all UI systems (lipgloss, theme, logger).
+// This is primarily intended for testing when environment variables are set after
+// package initialization. For normal operation, color profiles are automatically
+// configured during InitFormatter() based on terminal capabilities.
+//
+// Example usage in tests:
+//
+//	t.Setenv("NO_COLOR", "1")
+//	ui.SetColorProfile(termenv.Ascii)
+func SetColorProfile(profile termenv.Profile) {
+	setColorProfileInternal(profile)
 }
 
 // getFormatter returns the global formatter instance.

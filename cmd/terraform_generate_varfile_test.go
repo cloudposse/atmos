@@ -8,11 +8,10 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -94,8 +93,8 @@ func TestTerraformGenerateVarfileCmdNoColor(t *testing.T) {
 
 	// Force color profile reset to ensure NO_COLOR is respected.
 	// This is necessary because previous tests may have initialized colors.
-	lipgloss.SetColorProfile(termenv.Ascii)
-	theme.InvalidateStyleCache()
+	// SetColorProfile handles lipgloss, theme, and logger configuration.
+	ui.SetColorProfile(termenv.Ascii)
 
 	// Capture stderr.
 	oldStderr := os.Stderr
