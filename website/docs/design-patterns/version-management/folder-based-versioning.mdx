@@ -205,6 +205,16 @@ Atmos auto-generates `workspace_key_prefix` for [backend configuration](/core-co
 
 By setting `metadata.name` in your base component, you ensure stable workspace keys across version upgrades. The `metadata.name` is inherited by all derived components, so you only need to define it once.
 
+:::tip Convention: metadata.name from Top-Level Folder
+By convention, set `metadata.name` to the **first-level component folder** (relative to component base path):
+
+- `vpc/v2/` → `metadata.name: vpc` (NOT `vpc/v2`)
+- `account/stable/` → `metadata.name: account`
+- `eks-cluster/2024/` → `metadata.name: eks-cluster`
+
+This makes the pattern predictable: your logical component identity is always the top-level folder.
+:::
+
 ## Migration Strategies
 
 ### Gradual Migration

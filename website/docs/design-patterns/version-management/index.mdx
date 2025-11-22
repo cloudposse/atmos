@@ -229,17 +229,30 @@ The right pattern depends on your organization's needs and culture. Consider the
 Regardless of the pattern you choose:
 
 ### 1. Keep `workspace_key_prefix` Stable
-Never include version information in the `workspace_key_prefix` setting. This ensures Terraform state remains stable when switching versions or patterns.
+
+Use `metadata.name` to ensure Terraform state remains stable when switching versions:
 
 ```yaml
-# WRONG: Version in workspace key
-settings:
-  workspace_key_prefix: "prod/vpc/v2"
+# RECOMMENDED: Use metadata.name for stable keys
+# stacks/catalog/vpc.yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+        name: vpc              # Convention: top-level folder (stable)
+        component: vpc/v2      # Version can change freely
 
-# CORRECT: Stable workspace key
+# WRONG: Manual workspace_key_prefix (error-prone)
 settings:
-  workspace_key_prefix: "vpc"
+  workspace_key_prefix: "vpc/v2"  # Breaks when upgrading to v3
+
+# WRONG: Including version in workspace key
+settings:
+  workspace_key_prefix: "prod/vpc/v2"  # State path changes with version
 ```
+
+See [folder-based versioning](/design-patterns/version-management/folder-based-versioning) for the complete pattern.
 
 ### 2. Document Version Decisions
 Maintain clear documentation about which patterns you're using for which components and why. This helps new team members understand the versioning strategy.

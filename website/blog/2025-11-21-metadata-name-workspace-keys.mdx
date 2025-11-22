@@ -47,4 +47,14 @@ vpc/defaults:
 
 All environments inherit the change. No state migration needed.
 
+## Convention: Top-Level Component Folder
+
+By convention, `metadata.name` should be the **first-level component folder** relative to your component base path:
+
+- `components/terraform/vpc/v2/` → `metadata.name: vpc`
+- `components/terraform/account/stable/` → `metadata.name: account`
+- `components/terraform/eks-cluster/2024/` → `metadata.name: eks-cluster`
+
+This convention makes the pattern predictable—the logical identity is always the top-level folder, regardless of how you organize versions underneath.
+
 See [folder-based versioning](/design-patterns/version-management/folder-based-versioning) for the complete pattern.
