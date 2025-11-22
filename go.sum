@@ -219,6 +219,8 @@ github.com/aymanbagabas/go-udiff v0.3.1 h1:LV+qyBQ2pqe0u42ZsUEtPiCaUoqgA9gYRDs3v
 github.com/aymanbagabas/go-udiff v0.3.1/go.mod h1:G0fsKmG+P6ylD0r6N/KgQD/nWzgfnl8ZBcNLgcbrw8E=
 github.com/aymerick/douceur v0.2.0 h1:Mv+mAeH1Q+n9Fr+oyamOlAkUNPWPlA8PPGR0QAaYuPk=
 github.com/aymerick/douceur v0.2.0/go.mod h1:wlT5vV2O3h55X9m7iVYN0TBM0NH/MmbLnd30/FjWUq4=
+github.com/baulk/chardet v0.1.0 h1:6/r5nPMikB9OG1Njs10VfVHZTDMFH6BdybHPISpfUVA=
+github.com/baulk/chardet v0.1.0/go.mod h1:0ibN6068qswel5Hv54U7GNJUU57njfzPJrLIq7Y8xas=
 github.com/bearsh/hid v1.3.0/go.mod h1:KbQByg8WfPr92v7aaKAHTtZUEVG7e2XRpcF8+TopQv8=
 github.com/bearsh/hid v1.6.0 h1:eOBSuF2pg+SCytKGuGjOzZx73xQ72gevJ5IlFvzgfGE=
 github.com/bearsh/hid v1.6.0/go.mod h1:7JhM3r/tm4ALu4WWFqshda+Q6aIcnGRpUR08sx/dHdc=
@@ -377,8 +379,8 @@ github.com/dustin/gojson v0.0.0-20160307161227-2e71ec9dd5ad/go.mod h1:mPKfmRa823
 github.com/dvsekhvalnov/jose2go v1.6.0 h1:Y9gnSnP4qEI0+/uQkHvFXeD2PLPJeXEL+ySMEA2EjTY=
 github.com/dvsekhvalnov/jose2go v1.6.0/go.mod h1:QsHjhyTlD/lAVqn/NSbVZmSCGeDehTB/mPZadG+mhXU=
 github.com/dvyukov/go-fuzz v0.0.0-20210103155950-6a8e9d1f2415/go.mod h1:11Gm+ccJnvAhCNLlf5+cS9KjtbaD5I5zaZpFMsTHWTw=
-github.com/editorconfig-checker/editorconfig-checker/v3 v3.5.0 h1:80dngfyyOXmfCJz+76na0TYPppQKwvkW8vxgcMR+ckk=
-github.com/editorconfig-checker/editorconfig-checker/v3 v3.5.0/go.mod h1:MHZFQ0/L+fPpt8Vb7dRuwMkV+JB4NkOAH4bW5Pq/pXU=
+github.com/editorconfig-checker/editorconfig-checker/v3 v3.4.1 h1:QKVnZM7v0YkU0N/UcJXSpPMBejEnA5guuwY0CTNAof0=
+github.com/editorconfig-checker/editorconfig-checker/v3 v3.4.1/go.mod h1:av07gmDV7LOuJCYlmZHbhJEEhNM5hgBzKIKl36jFYXE=
 github.com/editorconfig/editorconfig-core-go/v2 v2.6.3 h1:XVUp6qW3BIkmM3/1EkrHpa6bL56APOynfXcZEmIgOhs=
 github.com/editorconfig/editorconfig-core-go/v2 v2.6.3/go.mod h1:ThHVc+hqbUsmE1wmK/MASpQEhCleWu1JDJDNhUOMy0c=
 github.com/elazarl/goproxy v1.7.2 h1:Y2o6urb7Eule09PjlhQRGNsqRfPmYI3KKQLFpCAV3+o=
@@ -1085,8 +1087,6 @@ github.com/vektah/gqlparser/v2 v2.5.30/go.mod h1:D1/VCZtV3LPnQrcPBeR/q5jkSQIPti0
 github.com/versent/saml2aws/v2 v2.36.19 h1:LrELOG9AA4migQQMfihmmJ++H8bGevElRNzoNA2XflY=
 github.com/versent/saml2aws/v2 v2.36.19/go.mod h1:ti3sEknT847HYw3rY2MdQcpf8WzHCNTTsGjkGZW7a1w=
 github.com/vmihailenco/msgpack v3.3.3+incompatible/go.mod h1:fy3FlTQTDXWkZ7Bh6AcGMlsjHatGryHQYUTf1ShIgkk=
-github.com/wlynxg/chardet v1.0.4 h1:hkI71Dx8v3RiAz3XKV5lJEh9QfKo7xXKUmYJQeIMlpo=
-github.com/wlynxg/chardet v1.0.4/go.mod h1:HLQMNsa0w4MkH2e7waQaFD+Yh85riFFTLhFtP8fsdbQ=
 github.com/xanzy/ssh-agent v0.3.3 h1:+/15pJfg/RsTxqYcX6fHqOXZwwMP+2VyYWJeWM2qQFM=
 github.com/xanzy/ssh-agent v0.3.3/go.mod h1:6dzNDKs0J9rVPHPhaGCukekBHKqfl+L3KghI1Bc68Uw=
 github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f/go.mod h1:N2zxlSyiKSe5eX1tZViRH5QA0qijqEDrYZiPEAiq3wU=
