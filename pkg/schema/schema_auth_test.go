@@ -256,3 +256,12 @@ func TestConsoleConfig_Structure(t *testing.T) {
 
 	assert.Equal(t, "8h", console.SessionDuration)
 }
+
+func TestPrincipal_ToMap_Nil(t *testing.T) {
+	// Test that ToMap handles nil receiver gracefully.
+	var principal *Principal
+	result := principal.ToMap()
+
+	assert.NotNil(t, result, "ToMap should return empty map for nil principal")
+	assert.Empty(t, result, "ToMap should return empty map for nil principal")
+}

@@ -77,8 +77,12 @@ type Account struct {
 	ID   string `yaml:"id,omitempty" json:"id,omitempty" mapstructure:"id"`
 }
 
-// ToPrincipalMap converts a Principal struct to a map[string]interface{} for use in Identity.Principal.
+// ToMap converts a Principal struct to a map[string]interface{} for use in Identity.Principal.
 func (p *Principal) ToMap() map[string]interface{} {
+	if p == nil {
+		return make(map[string]interface{})
+	}
+
 	result := make(map[string]interface{})
 	if p.Name != "" {
 		result["name"] = p.Name
