@@ -220,6 +220,64 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	return m.buildWhoamiInfo(identityName, finalCreds), nil
 }
 
+// AuthenticateProvider performs authentication directly with a provider.
+// This is used for provider-level operations like SSO auto-provisioning where
+// you want to authenticate to a provider without specifying a particular identity.
+func (m *manager) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
+	defer perf.Track(nil, "auth.Manager.AuthenticateProvider")()
+
+	log.Debug("Starting provider authentication", logKeyProvider, providerName)
+
+	// Resolve provider name case-insensitively.
+	resolvedProviderName := ""
+	for name := range m.providers {
+		if strings.EqualFold(name, providerName) {
+			resolvedProviderName = name
+			break
+		}
+	}
+
+	if resolvedProviderName == "" {
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrProviderNotFound, fmt.Sprintf(backtickedFmt, providerName))
+	}
+
+	// Use resolved name for authentication.
+	providerName = resolvedProviderName
+
+	// Authenticate with the provider.
+	credentials, err := m.authenticateWithProvider(ctx, providerName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build chain with just the provider.
+	m.chain = []string{providerName}
+
+	// Build and return whoami info for the provider.
+	return m.buildProviderWhoamiInfo(providerName, credentials), nil
+}
+
+// buildProviderWhoamiInfo builds WhoamiInfo for a provider (without an identity).
+func (m *manager) buildProviderWhoamiInfo(providerName string, creds types.ICredentials) *types.WhoamiInfo {
+	info := &types.WhoamiInfo{
+		Provider: providerName,
+		Identity: "", // No identity for provider-only auth.
+	}
+
+	// Add provider-specific fields if available.
+	if awsCreds, ok := creds.(*types.AWSCredentials); ok {
+		info.Region = awsCreds.Region
+		// Parse expiration string to time.Time if present.
+		if awsCreds.Expiration != "" {
+			if expTime, err := time.Parse(time.RFC3339, awsCreds.Expiration); err == nil {
+				info.Expiration = &expTime
+			}
+		}
+	}
+
+	return info
+}
+
 // GetChain returns the most recently built authentication chain.
 // The chain is in the format: [providerName, identity1, identity2, ..., targetIdentity].
 func (m *manager) GetChain() []string {
@@ -908,8 +966,118 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 		log.Debug("Cached provider credentials", "providerName", providerName)
 	}
 
+	// Run provisioning if provider supports it (non-fatal).
+	m.provisionIdentities(ctx, providerName, provider, credentials)
+
 	log.Debug("Provider authenticated", "provider", providerName)
 	return credentials, nil
+}
+
+// provisionIdentities runs identity provisioning if the provider supports it.
+// This is a non-fatal operation - failures are logged but don't block authentication.
+func (m *manager) provisionIdentities(ctx context.Context, providerName string, provider types.Provider, credentials types.ICredentials) {
+	defer perf.Track(nil, "auth.Manager.provisionIdentities")()
+
+	// Set up auth-specific logging and restore on exit.
+	defer m.setupAuthLogging()()
+
+	// Check if provider implements the Provisioner interface.
+	provisioner, ok := provider.(types.Provisioner)
+	if !ok {
+		log.Debug("Provider does not support provisioning, skipping", logKeyProvider, providerName)
+		return
+	}
+
+	// Run provisioning.
+	log.Debug("Running identity provisioning", logKeyProvider, providerName)
+	result, err := provisioner.ProvisionIdentities(ctx, credentials)
+	if err != nil {
+		log.Warn("Failed to provision identities, skipping", logKeyProvider, providerName, "error", err)
+		return
+	}
+
+	// Skip if no identities provisioned.
+	if result == nil || len(result.Identities) == 0 {
+		log.Debug("No identities provisioned", logKeyProvider, providerName)
+		return
+	}
+
+	// Guard against nil Counts to prevent panic from incomplete ProvisioningResult implementations.
+	accounts := 0
+	roles := 0
+	if result.Metadata.Counts != nil {
+		accounts = result.Metadata.Counts.Accounts
+		roles = result.Metadata.Counts.Roles
+	}
+
+	log.Debug("Provisioned identities from provider",
+		logKeyProvider, providerName,
+		"accounts", accounts,
+		"roles", roles,
+		"identities", len(result.Identities))
+
+	// Write provisioned identities to cache.
+	if err := m.writeProvisionedIdentities(result); err != nil {
+		log.Warn("Failed to write provisioned identities, skipping", logKeyProvider, providerName, "error", err)
+		return
+	}
+
+	log.Debug("Successfully provisioned and cached identities", logKeyProvider, providerName, "count", len(result.Identities))
+}
+
+// setupAuthLogging configures auth-specific logging (prefix and level).
+// Returns a cleanup function that restores the original settings.
+func (m *manager) setupAuthLogging() func() {
+	// Save current state.
+	currentLevel := log.GetLevel()
+
+	// Set auth prefix.
+	log.SetPrefix("atmos-auth")
+
+	// Set auth log level from config if specified.
+	if m.config != nil && m.config.Logs.Level != "" {
+		if authLogLevel, err := log.ParseLogLevel(m.config.Logs.Level); err == nil {
+			// Convert Atmos LogLevel string to charm.Level.
+			switch authLogLevel {
+			case log.LogLevelTrace:
+				log.SetLevel(log.TraceLevel)
+			case log.LogLevelDebug:
+				log.SetLevel(log.DebugLevel)
+			case log.LogLevelInfo:
+				log.SetLevel(log.InfoLevel)
+			case log.LogLevelWarning:
+				log.SetLevel(log.WarnLevel)
+			case log.LogLevelError:
+				log.SetLevel(log.ErrorLevel)
+			case log.LogLevelOff:
+				log.SetLevel(log.FatalLevel)
+			}
+		}
+	}
+
+	// Return cleanup function.
+	return func() {
+		log.SetLevel(currentLevel)
+		log.SetPrefix("")
+	}
+}
+
+// writeProvisionedIdentities writes provisioned identities to the cache directory.
+func (m *manager) writeProvisionedIdentities(result *types.ProvisioningResult) error {
+	defer perf.Track(nil, "auth.Manager.writeProvisionedIdentities")()
+
+	writer, err := types.NewProvisioningWriter()
+	if err != nil {
+		return fmt.Errorf("failed to create provisioning writer: %w", err)
+	}
+
+	filePath, err := writer.Write(result)
+	if err != nil {
+		return fmt.Errorf("failed to write provisioned identities: %w", err)
+	}
+
+	log.Debug("Wrote provisioned identities to cache", "path", filePath)
+	return nil
 }
 
 // Helper functions for logging.
