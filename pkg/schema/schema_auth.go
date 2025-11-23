@@ -19,19 +19,20 @@ type KeyringConfig struct {
 
 // Provider defines an authentication provider configuration.
 type Provider struct {
-	Kind                  string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
-	StartURL              string                 `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
-	URL                   string                 `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
-	Region                string                 `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
-	Username              string                 `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
-	Password              string                 `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`
-	Driver                string                 `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
-	ProviderType          string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type"` // Deprecated: use driver.
-	DownloadBrowserDriver bool                   `yaml:"download_browser_driver,omitempty" json:"download_browser_driver,omitempty" mapstructure:"download_browser_driver"`
-	Session               *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
-	Console               *ConsoleConfig         `yaml:"console,omitempty" json:"console,omitempty" mapstructure:"console"`
-	Default               bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
-	Spec                  map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
+	Kind                    string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
+	StartURL                string                 `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
+	URL                     string                 `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
+	Region                  string                 `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
+	Username                string                 `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
+	Password                string                 `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`
+	Driver                  string                 `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
+	ProviderType            string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type"` // Deprecated: use driver.
+	DownloadBrowserDriver   bool                   `yaml:"download_browser_driver,omitempty" json:"download_browser_driver,omitempty" mapstructure:"download_browser_driver"`
+	AutoProvisionIdentities *bool                  `yaml:"auto_provision_identities,omitempty" json:"auto_provision_identities,omitempty" mapstructure:"auto_provision_identities"`
+	Session                 *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+	Console                 *ConsoleConfig         `yaml:"console,omitempty" json:"console,omitempty" mapstructure:"console"`
+	Default                 bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	Spec                    map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
 }
 
 // SessionConfig defines session configuration for providers.
@@ -48,8 +49,9 @@ type ConsoleConfig struct {
 type Identity struct {
 	Kind        string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
 	Default     bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	Provider    string                 `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"` // Provider name for direct provider association (for provisioned identities).
 	Via         *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
-	Principal   map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"`
+	Principal   map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"` // Principal information (role name, account, etc.). For AWS permission sets: {name: string, account: {name: string, id: string}}.
 	Credentials map[string]interface{} `yaml:"credentials,omitempty" json:"credentials,omitempty" mapstructure:"credentials"`
 	Alias       string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
 	Env         []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
@@ -60,6 +62,44 @@ type Identity struct {
 type IdentityVia struct {
 	Provider string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"`
 	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+}
+
+// Principal defines the principal information for an identity (for provisioned identities).
+// This is a helper struct for creating provisioned identities programmatically.
+type Principal struct {
+	Name    string   `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+	Account *Account `yaml:"account,omitempty" json:"account,omitempty" mapstructure:"account"`
+}
+
+// Account defines account information for a principal.
+type Account struct {
+	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+	ID   string `yaml:"id,omitempty" json:"id,omitempty" mapstructure:"id"`
+}
+
+// ToMap converts a Principal struct to a map[string]interface{} for use in Identity.Principal.
+func (p *Principal) ToMap() map[string]interface{} {
+	if p == nil {
+		return make(map[string]interface{})
+	}
+
+	result := make(map[string]interface{})
+	if p.Name != "" {
+		result["name"] = p.Name
+	}
+	if p.Account != nil {
+		account := make(map[string]interface{})
+		if p.Account.Name != "" {
+			account["name"] = p.Account.Name
+		}
+		if p.Account.ID != "" {
+			account["id"] = p.Account.ID
+		}
+		if len(account) > 0 {
+			result["account"] = account
+		}
+	}
+	return result
 }
 
 // EnvironmentVariable defines an environment variable with preserved case sensitivity.

@@ -61,14 +61,14 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAtmosConfig, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
 	atmosConfigPtr := &atmosConfig
 
 	// Create auth manager.
 	authManager, err := createAuthManager(&atmosConfig.Auth)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
 	// Get identity from extracted flag or use default.
@@ -91,7 +91,7 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 	if identityName == "" || forceSelect {
 		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
-			return fmt.Errorf("%w: %w", errUtils.ErrAuthenticationFailed, err)
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoDefaultIdentity, err)
 		}
 		identityName = defaultIdentity
 	}
@@ -109,7 +109,7 @@ func executeAuthShellCommandCore(cmd *cobra.Command, args []string) error {
 			if errors.Is(err, errUtils.ErrUserAborted) {
 				return errUtils.ErrUserAborted
 			}
-			return fmt.Errorf("%w: %w", errUtils.ErrAuthenticationFailed, err)
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthenticationFailed, err)
 		}
 	}
 
