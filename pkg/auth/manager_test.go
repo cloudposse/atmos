@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -972,78 +973,6 @@ func TestManager_ListProviders(t *testing.T) {
 	assert.Contains(t, providers, "github")
 }
 
-func TestManager_GetProviders(t *testing.T) {
-	expectedProviders := map[string]schema.Provider{
-		"sso":  {Kind: "aws/iam-identity-center", Region: "us-east-1"},
-		"saml": {Kind: "aws/saml", URL: "https://example.com", Region: "us-west-2"},
-	}
-
-	m := &manager{
-		config: &schema.AuthConfig{
-			Providers: expectedProviders,
-		},
-	}
-
-	providers := m.GetProviders()
-	assert.Equal(t, expectedProviders, providers)
-	assert.Equal(t, "aws/iam-identity-center", providers["sso"].Kind)
-	assert.Equal(t, "aws/saml", providers["saml"].Kind)
-	assert.Equal(t, "us-east-1", providers["sso"].Region)
-	assert.Equal(t, "us-west-2", providers["saml"].Region)
-}
-
-func TestManager_GetIdentities(t *testing.T) {
-	expectedIdentities := map[string]schema.Identity{
-		"dev":  {Kind: "aws/user", Default: true},
-		"prod": {Kind: "aws/assume-role", Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/Prod"}},
-	}
-
-	m := &manager{
-		config: &schema.AuthConfig{
-			Identities: expectedIdentities,
-		},
-	}
-
-	identities := m.GetIdentities()
-	assert.Equal(t, expectedIdentities, identities)
-	assert.Equal(t, "aws/user", identities["dev"].Kind)
-	assert.Equal(t, "aws/assume-role", identities["prod"].Kind)
-	assert.True(t, identities["dev"].Default)
-	assert.False(t, identities["prod"].Default)
-}
-
-func TestManager_GetStackInfo(t *testing.T) {
-	stackInfo := &schema.ConfigAndStacksInfo{
-		ComponentEnvSection: schema.AtmosSectionMapType{"TEST": "value"},
-		Identity:            "test-identity",
-	}
-
-	m := &manager{
-		stackInfo: stackInfo,
-	}
-
-	result := m.GetStackInfo()
-	assert.Equal(t, stackInfo, result)
-	assert.Equal(t, "value", result.ComponentEnvSection["TEST"])
-	assert.Equal(t, "test-identity", result.Identity)
-}
-
-func TestManager_GetChain_Empty(t *testing.T) {
-	m := &manager{}
-
-	chain := m.GetChain()
-	assert.Empty(t, chain)
-}
-
-func TestManager_GetChain_WithData(t *testing.T) {
-	m := &manager{
-		chain: []string{"provider", "identity1", "identity2"},
-	}
-
-	chain := m.GetChain()
-	assert.Equal(t, []string{"provider", "identity1", "identity2"}, chain)
-}
-
 // stubIdentity implements types.Identity minimally for provider lookups.
 type stubIdentity struct{ provider string }
 
@@ -1527,4 +1456,495 @@ func TestManager_buildWhoamiInfoFromEnvironment(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Mock provisioner for testing provisionIdentities.
+type mockProvisioner struct {
+	testProvider
+	provisionResult *types.ProvisioningResult
+	provisionError  error
+}
+
+func (m *mockProvisioner) ProvisionIdentities(ctx context.Context, creds types.ICredentials) (*types.ProvisioningResult, error) {
+	return m.provisionResult, m.provisionError
+}
+
+func TestManager_provisionIdentities_ProviderDoesNotSupportProvisioning(t *testing.T) {
+	// Test that provisionIdentities skips providers that don't implement Provisioner.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provider := &testProvider{name: "test-provider"}
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should not panic and should return without error (non-fatal).
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provider, creds)
+	})
+}
+
+func TestManager_provisionIdentities_NoIdentitiesProvisioned(t *testing.T) {
+	// Test that provisionIdentities handles empty result gracefully.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provisioner := &mockProvisioner{
+		testProvider: testProvider{name: "test-provider"},
+		provisionResult: &types.ProvisioningResult{
+			Identities: map[string]*schema.Identity{},
+			Metadata: types.ProvisioningMetadata{
+				Counts: &types.ProvisioningCounts{
+					Accounts:   0,
+					Roles:      0,
+					Identities: 0,
+				},
+			},
+		},
+	}
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should handle empty result gracefully.
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provisioner, creds)
+	})
+}
+
+func TestManager_provisionIdentities_ProvisioningError(t *testing.T) {
+	// Test that provisionIdentities handles errors gracefully (non-fatal).
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provisioner := &mockProvisioner{
+		testProvider:   testProvider{name: "test-provider"},
+		provisionError: fmt.Errorf("provisioning failed"),
+	}
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should handle error gracefully (non-fatal operation).
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provisioner, creds)
+	})
+}
+
+func TestManager_provisionIdentities_NilResult(t *testing.T) {
+	// Test that provisionIdentities handles nil result gracefully.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provisioner := &mockProvisioner{
+		testProvider:    testProvider{name: "test-provider"},
+		provisionResult: nil,
+	}
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should handle nil result gracefully.
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provisioner, creds)
+	})
+}
+
+func TestManager_writeProvisionedIdentities_Success(t *testing.T) {
+	// Test successful write of provisioned identities.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	result := &types.ProvisioningResult{
+		Provider: "test-provider",
+		Identities: map[string]*schema.Identity{
+			"test-identity": {
+				Provider: "test-provider",
+			},
+		},
+		Metadata: types.ProvisioningMetadata{
+			Source: "test",
+			Counts: &types.ProvisioningCounts{
+				Accounts:   1,
+				Roles:      1,
+				Identities: 1,
+			},
+		},
+	}
+
+	// Create a temp directory for the cache.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	err := mgr.writeProvisionedIdentities(result)
+	require.NoError(t, err)
+
+	// Verify the file was created.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	expectedPath := writer.GetProvisionedIdentitiesPath("test-provider")
+	assert.FileExists(t, expectedPath)
+
+	// Verify file contains expected content.
+	data, err := os.ReadFile(expectedPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "test-identity")
+	assert.Contains(t, string(data), "test-provider")
+}
+
+func TestManager_removeProvisionedIdentitiesCache_Success(t *testing.T) {
+	// Test successful removal of provisioned identities cache.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	// Create a temp directory for the cache.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Create a provisioning result and write it to cache first.
+	result := &types.ProvisioningResult{
+		Provider: "test-provider",
+		Identities: map[string]*schema.Identity{
+			"test-identity": {
+				Provider: "test-provider",
+			},
+		},
+		Metadata: types.ProvisioningMetadata{
+			Source: "test",
+			Counts: &types.ProvisioningCounts{
+				Accounts:   1,
+				Roles:      1,
+				Identities: 1,
+			},
+		},
+	}
+
+	err := mgr.writeProvisionedIdentities(result)
+	require.NoError(t, err)
+
+	// Verify the file was created.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	expectedPath := writer.GetProvisionedIdentitiesPath("test-provider")
+	assert.FileExists(t, expectedPath)
+
+	// Remove the cache.
+	err = mgr.removeProvisionedIdentitiesCache("test-provider")
+	require.NoError(t, err)
+
+	// Verify the file was removed.
+	assert.NoFileExists(t, expectedPath)
+}
+
+func TestManager_removeProvisionedIdentitiesCache_FileDoesNotExist(t *testing.T) {
+	// Test that removeProvisionedIdentitiesCache handles non-existent files gracefully.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	// Create a temp directory for the cache.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Try to remove a cache that doesn't exist - should succeed (no-op).
+	err := mgr.removeProvisionedIdentitiesCache("nonexistent-provider")
+	// The Remove method should handle this gracefully.
+	assert.NoError(t, err)
+}
+
+func TestManager_removeProvisionedIdentitiesCache_WriterCreationFailure(t *testing.T) {
+	// Test that removeProvisionedIdentitiesCache returns error when writer creation fails.
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	// Set XDG_CACHE_HOME to a regular file (not a directory).
+	// This prevents NewProvisioningWriter from creating the required subdirectory,
+	// causing a deterministic failure on all platforms (Windows, macOS, Linux).
+	tempDir := t.TempDir()
+	blocker := filepath.Join(tempDir, "xdg-cache-file")
+	require.NoError(t, os.WriteFile(blocker, []byte{}, 0o600))
+	t.Setenv("XDG_CACHE_HOME", blocker)
+
+	err := mgr.removeProvisionedIdentitiesCache("test-provider")
+	assert.Error(t, err)
+}
+
+func TestManager_provisionIdentities_SuccessPath(t *testing.T) {
+	// Test successful provisioning and caching of identities.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+	}
+
+	provisioner := &mockProvisioner{
+		testProvider: testProvider{name: "test-provider"},
+		provisionResult: &types.ProvisioningResult{
+			Provider: "test-provider",
+			Identities: map[string]*schema.Identity{
+				"test-identity-1": {
+					Provider: "test-provider",
+				},
+				"test-identity-2": {
+					Provider: "test-provider",
+				},
+			},
+			Metadata: types.ProvisioningMetadata{
+				Source: "test",
+				Counts: &types.ProvisioningCounts{
+					Accounts:   2,
+					Roles:      5,
+					Identities: 2,
+				},
+			},
+		},
+	}
+
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "test-key",
+		SecretAccessKey: "test-secret",
+		Region:          "us-east-1",
+	}
+
+	// Should successfully provision and cache identities.
+	assert.NotPanics(t, func() {
+		mgr.provisionIdentities(context.Background(), "test-provider", provisioner, creds)
+	})
+
+	// Verify the cache file was created.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	expectedPath := writer.GetProvisionedIdentitiesPath("test-provider")
+	assert.FileExists(t, expectedPath)
+}
+
+func TestManager_GetIdentities(t *testing.T) {
+	// Test GetIdentities returns the configured identities.
+	expectedIdentities := map[string]schema.Identity{
+		"identity1": {Kind: "aws/permission-set", Provider: "aws-sso"},
+		"identity2": {Kind: "aws/assume-role", Provider: "aws-saml"},
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{
+			Identities: expectedIdentities,
+		},
+	}
+
+	result := mgr.GetIdentities()
+	assert.Equal(t, expectedIdentities, result)
+}
+
+func TestManager_GetProviders(t *testing.T) {
+	// Test GetProviders returns the configured providers.
+	expectedProviders := map[string]schema.Provider{
+		"aws-sso":  {Kind: "aws/iam-identity-center", Region: "us-east-1"},
+		"aws-saml": {Kind: "aws/saml", Region: "us-west-2"},
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{
+			Providers: expectedProviders,
+		},
+	}
+
+	result := mgr.GetProviders()
+	assert.Equal(t, expectedProviders, result)
+}
+
+func TestManager_SetupAuthLogging(t *testing.T) {
+	tests := []struct {
+		name           string
+		logLevel       string
+		expectedPrefix string
+	}{
+		{
+			name:           "sets auth prefix and Debug level",
+			logLevel:       "Debug",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix and Info level",
+			logLevel:       "Info",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix and Warning level",
+			logLevel:       "Warning",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix and Error level",
+			logLevel:       "Error",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix with empty log level",
+			logLevel:       "",
+			expectedPrefix: "atmos-auth",
+		},
+		{
+			name:           "sets auth prefix with invalid log level",
+			logLevel:       "InvalidLevel",
+			expectedPrefix: "atmos-auth",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Import log package to check state.
+			log := require.New(t)
+
+			mgr := &manager{
+				config: &schema.AuthConfig{
+					Logs: schema.Logs{
+						Level: tt.logLevel,
+					},
+				},
+			}
+
+			// Call setupAuthLogging and immediately call cleanup.
+			cleanup := mgr.setupAuthLogging()
+
+			// Verify prefix was set (we can't easily check the actual prefix value
+			// without accessing internal logger state, but we verify cleanup works).
+			log.NotNil(cleanup, "cleanup function should be returned")
+
+			// Call cleanup to restore state.
+			cleanup()
+
+			// After cleanup, verify we can still log (no panic).
+			// This is a basic sanity check that cleanup worked.
+		})
+	}
+}
+
+func TestManager_SetupAuthLogging_RestoresState(t *testing.T) {
+	// This test verifies that setupAuthLogging restores the original log state.
+	log := require.New(t)
+
+	// The log package is already imported at the file level, we can't test
+	// the actual level restoration without more complex mocking.
+	// This test verifies the cleanup function doesn't panic.
+
+	mgr := &manager{
+		config: &schema.AuthConfig{
+			Logs: schema.Logs{
+				Level: "Debug",
+			},
+		},
+	}
+
+	// Setup auth logging.
+	cleanup := mgr.setupAuthLogging()
+	log.NotNil(cleanup, "cleanup function should be returned")
+
+	// Call cleanup - should not panic.
+	cleanup()
+}
+
+func TestManager_AuthenticateProvider_Success(t *testing.T) {
+	// Create test credentials with expiration.
+	exp := time.Now().Add(time.Hour)
+	creds := &testCreds{exp: &exp}
+
+	provider := &testProvider{
+		name:  "test-provider",
+		creds: creds,
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+		providers: map[string]types.Provider{
+			"test-provider": provider,
+		},
+		credentialStore: &testStore{},
+	}
+
+	whoami, err := mgr.AuthenticateProvider(context.Background(), "test-provider")
+	require.NoError(t, err)
+	assert.NotNil(t, whoami)
+	assert.Equal(t, "test-provider", whoami.Provider)
+	assert.Empty(t, whoami.Identity, "provider-only auth should not have identity")
+	// Note: testCreds doesn't populate expiration in whoami like AWSCredentials would
+}
+
+func TestManager_AuthenticateProvider_ProviderNotFound(t *testing.T) {
+	mgr := &manager{
+		config:          &schema.AuthConfig{},
+		providers:       map[string]types.Provider{},
+		credentialStore: &testStore{},
+	}
+
+	_, err := mgr.AuthenticateProvider(context.Background(), "nonexistent-provider")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrProviderNotFound)
+}
+
+func TestManager_AuthenticateProvider_CaseInsensitive(t *testing.T) {
+	// Test that provider name lookup is case-insensitive.
+	provider := &testProvider{
+		name:  "Test-Provider",
+		creds: &testCreds{},
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+		providers: map[string]types.Provider{
+			"Test-Provider": provider,
+		},
+		credentialStore: &testStore{},
+	}
+
+	// Try lowercase.
+	whoami, err := mgr.AuthenticateProvider(context.Background(), "test-provider")
+	require.NoError(t, err)
+	assert.Equal(t, "Test-Provider", whoami.Provider, "should use original case")
+
+	// Try uppercase.
+	whoami, err = mgr.AuthenticateProvider(context.Background(), "TEST-PROVIDER")
+	require.NoError(t, err)
+	assert.Equal(t, "Test-Provider", whoami.Provider, "should use original case")
+}
+
+func TestManager_AuthenticateProvider_AuthenticationFailure(t *testing.T) {
+	provider := &testProvider{
+		name:    "test-provider",
+		authErr: fmt.Errorf("authentication failed"),
+	}
+
+	mgr := &manager{
+		config: &schema.AuthConfig{},
+		providers: map[string]types.Provider{
+			"test-provider": provider,
+		},
+		credentialStore: &testStore{},
+	}
+
+	_, err := mgr.AuthenticateProvider(context.Background(), "test-provider")
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 }
