@@ -1,4 +1,4 @@
-package cmd
+package terraform
 
 import (
 	"errors"
@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -120,8 +121,6 @@ func TestCheckTerraformFlags(t *testing.T) {
 // read from viper and potentially get the IdentityFlagSelectValue ("__SELECT__"),
 // which would trigger the TTY check and fail in CI environments.
 func TestTerraformIdentityFlagHandling(t *testing.T) {
-	_ = NewTestKit(t) // Cleanup happens automatically via tb.Cleanup()
-
 	tests := []struct {
 		name             string
 		args             []string
@@ -180,7 +179,7 @@ func TestTerraformIdentityFlagHandling(t *testing.T) {
 			// Add the identity flag (matching terraform commands setup).
 			cmd.Flags().StringP("identity", "i", "", "Specify identity")
 			if identityFlag := cmd.Flags().Lookup("identity"); identityFlag != nil {
-				identityFlag.NoOptDefVal = IdentityFlagSelectValue
+				identityFlag.NoOptDefVal = cfg.IdentityFlagSelectValue
 			}
 
 			// Parse the test args.
@@ -198,7 +197,7 @@ func TestTerraformIdentityFlagHandling(t *testing.T) {
 				// Verify flag was set to __SELECT__.
 				flagValue, err := cmd.Flags().GetString("identity")
 				assert.NoError(t, err)
-				assert.Equal(t, IdentityFlagSelectValue, flagValue, "Flag should be set to __SELECT__")
+				assert.Equal(t, cfg.IdentityFlagSelectValue, flagValue, "Flag should be set to __SELECT__")
 			} else {
 				assert.NoError(t, err, "Flag parsing should succeed")
 
@@ -209,7 +208,7 @@ func TestTerraformIdentityFlagHandling(t *testing.T) {
 
 					if tc.args[0] == "--identity" && len(tc.args) == 1 {
 						// --identity without value → should be __SELECT__.
-						assert.Equal(t, IdentityFlagSelectValue, flagValue)
+						assert.Equal(t, cfg.IdentityFlagSelectValue, flagValue)
 					} else if len(tc.args) > 0 && tc.args[0] == "--identity=flag-identity" {
 						// --identity with value → should be the value.
 						assert.Equal(t, "flag-identity", flagValue)

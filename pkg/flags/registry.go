@@ -123,16 +123,23 @@ func CommonFlags() *FlagRegistry {
 }
 
 // TerraformFlags returns a registry with flags specific to Terraform commands.
-// Includes common flags plus Terraform-specific flags like:
-//   - upload-status: Upload plan status to Atmos Pro
-//   - skip-init: Skip terraform init
-//   - from-plan: Apply from previously generated plan
+// Includes common flags plus Terraform-specific flags.
 func TerraformFlags() *FlagRegistry {
 	defer perf.Track(nil, "flags.TerraformFlags")()
 
 	registry := CommonFlags()
 
-	// Upload status flag (optional bool - can be --upload-status or --upload-status=false)
+	// Identity flag with NoOptDefVal for interactive selection support.
+	registry.Register(&StringFlag{
+		Name:        "identity",
+		Shorthand:   "i",
+		Default:     "",
+		Description: "Specify the identity to authenticate to before running Terraform commands. Use without value to interactively select.",
+		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
+		NoOptDefVal: "__SELECT__",
+	})
+
+	// Upload status flag (optional bool - can be --upload-status or --upload-status=false).
 	registry.Register(&BoolFlag{
 		Name:        "upload-status",
 		Shorthand:   "",
@@ -141,7 +148,7 @@ func TerraformFlags() *FlagRegistry {
 		EnvVars:     []string{"ATMOS_UPLOAD_STATUS"},
 	})
 
-	// Skip init flag
+	// Skip init flag.
 	registry.Register(&BoolFlag{
 		Name:        "skip-init",
 		Shorthand:   "",
@@ -150,13 +157,142 @@ func TerraformFlags() *FlagRegistry {
 		EnvVars:     []string{"ATMOS_SKIP_INIT"},
 	})
 
-	// From plan flag
+	// From plan flag.
 	registry.Register(&StringFlag{
 		Name:        "from-plan",
 		Shorthand:   "",
 		Default:     "",
 		Description: "Apply from previously generated plan file",
 		EnvVars:     []string{"ATMOS_FROM_PLAN"},
+	})
+
+	// Init pass vars flag (OpenTofu feature).
+	registry.Register(&BoolFlag{
+		Name:        "init-pass-vars",
+		Shorthand:   "",
+		Default:     false,
+		Description: "Pass the generated varfile to terraform init using --var-file flag (OpenTofu feature)",
+		EnvVars:     []string{"ATMOS_INIT_PASS_VARS"},
+	})
+
+	// Append user agent flag.
+	registry.Register(&StringFlag{
+		Name:        "append-user-agent",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Customize User-Agent string in Terraform provider requests (sets TF_APPEND_USER_AGENT)",
+		EnvVars:     []string{"ATMOS_APPEND_USER_AGENT"},
+	})
+
+	// Process templates flag.
+	registry.Register(&BoolFlag{
+		Name:        "process-templates",
+		Shorthand:   "",
+		Default:     true,
+		Description: "Enable/disable Go template processing in Atmos stack manifests",
+		EnvVars:     []string{"ATMOS_PROCESS_TEMPLATES"},
+	})
+
+	// Process functions flag.
+	registry.Register(&BoolFlag{
+		Name:        "process-functions",
+		Shorthand:   "",
+		Default:     true,
+		Description: "Enable/disable YAML functions processing in Atmos stack manifests",
+		EnvVars:     []string{"ATMOS_PROCESS_FUNCTIONS"},
+	})
+
+	// Skip YAML functions flag.
+	registry.Register(&StringSliceFlag{
+		Name:        "skip",
+		Shorthand:   "",
+		Default:     nil,
+		Description: "Skip executing specific YAML functions in the Atmos stack manifests",
+		EnvVars:     []string{"ATMOS_SKIP"},
+	})
+
+	// Query flag.
+	registry.Register(&StringFlag{
+		Name:        "query",
+		Shorthand:   "q",
+		Default:     "",
+		Description: "Execute atmos terraform <command> on components filtered by a YQ expression",
+		EnvVars:     []string{"ATMOS_QUERY"},
+	})
+
+	// Components filter flag.
+	registry.Register(&StringSliceFlag{
+		Name:        "components",
+		Shorthand:   "",
+		Default:     nil,
+		Description: "Filter by specific components",
+		EnvVars:     []string{"ATMOS_COMPONENTS"},
+	})
+
+	return registry
+}
+
+// TerraformAffectedFlags returns a registry with flags for affected component detection.
+// These flags are used by commands that support --affected mode.
+func TerraformAffectedFlags() *FlagRegistry {
+	defer perf.Track(nil, "flags.TerraformAffectedFlags")()
+
+	registry := NewFlagRegistry()
+
+	registry.Register(&StringFlag{
+		Name:        "repo-path",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Filesystem path to the already cloned target repository with which to compare the current branch",
+		EnvVars:     []string{"ATMOS_REPO_PATH"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:        "ref",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Git reference with which to compare the current branch",
+		EnvVars:     []string{"ATMOS_REF"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:        "sha",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Git commit SHA with which to compare the current branch",
+		EnvVars:     []string{"ATMOS_SHA"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:        "ssh-key",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Path to PEM-encoded private key to clone private repos using SSH",
+		EnvVars:     []string{"ATMOS_SSH_KEY"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:        "ssh-key-password",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block",
+		EnvVars:     []string{"ATMOS_SSH_KEY_PASSWORD"},
+	})
+
+	registry.Register(&BoolFlag{
+		Name:        "include-dependents",
+		Shorthand:   "",
+		Default:     false,
+		Description: "For each affected component, detect the dependent components and process them in the dependency order",
+		EnvVars:     []string{"ATMOS_INCLUDE_DEPENDENTS"},
+	})
+
+	registry.Register(&BoolFlag{
+		Name:        "clone-target-ref",
+		Shorthand:   "",
+		Default:     false,
+		Description: "Clone the target reference with which to compare the current branch",
+		EnvVars:     []string{"ATMOS_CLONE_TARGET_REF"},
 	})
 
 	return registry

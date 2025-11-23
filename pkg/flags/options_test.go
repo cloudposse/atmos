@@ -81,12 +81,16 @@ func TestWithTerraformFlags(t *testing.T) {
 	opt := WithTerraformFlags()
 	opt(cfg)
 
-	// Should have exactly 5 flags: stack, dry-run, upload-status, skip-init, from-plan
-	// Global flags (identity, etc.) are inherited from RootCmd, not in registry
-	assert.Equal(t, 5, cfg.registry.Count())
+	// TerraformFlags includes CommonFlags (stack, dry-run) plus terraform-specific flags:
+	// identity, upload-status, skip-init, from-plan, init-pass-vars, append-user-agent,
+	// process-templates, process-functions, skip, query, components
+	// Total: 2 (common) + 11 (terraform) = 13
+	assert.Equal(t, 13, cfg.registry.Count())
 	assert.NotNil(t, cfg.registry.Get("upload-status"))
 	assert.NotNil(t, cfg.registry.Get("stack"))
-	assert.Nil(t, cfg.registry.Get("identity"), "identity should be inherited from RootCmd")
+	assert.NotNil(t, cfg.registry.Get("process-templates"))
+	assert.NotNil(t, cfg.registry.Get("query"))
+	assert.NotNil(t, cfg.registry.Get("identity"), "identity should be in TerraformFlags for terraform commands")
 }
 
 func TestWithHelmfileFlags(t *testing.T) {

@@ -211,6 +211,17 @@ func WithPackerFlags() Option {
 	}
 }
 
+// WithTerraformAffectedFlags adds flags for affected component detection.
+func WithTerraformAffectedFlags() Option {
+	defer perf.Track(nil, "flags.WithTerraformAffectedFlags")()
+
+	return func(cfg *parserConfig) {
+		for _, flag := range TerraformAffectedFlags().All() {
+			cfg.registry.Register(flag)
+		}
+	}
+}
+
 // WithEnvVars adds environment variable bindings to a flag.
 // Must be called after the flag is added.
 //

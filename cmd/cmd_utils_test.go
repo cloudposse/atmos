@@ -428,7 +428,7 @@ func TestStackFlagCompletion(t *testing.T) {
 	}
 
 	// Call the completion function.
-	completions, directive := stackFlagCompletion(cmd, []string{}, "")
+	completions, directive := StackFlagCompletion(cmd, []string{}, "")
 
 	// Verify we got some completions.
 	assert.NotEmpty(t, completions, "Should have stack completions")

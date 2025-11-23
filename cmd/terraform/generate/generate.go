@@ -1,15 +1,14 @@
-package cmd
+package generate
 
 import (
 	"github.com/spf13/cobra"
-
-	"github.com/cloudposse/atmos/cmd/terraform/generate/varfile"
 )
 
-// terraformGenerateCmd generates configurations for terraform components
-var terraformGenerateCmd = &cobra.Command{
+// GenerateCmd is the parent command for all terraform generate subcommands.
+// It is exported so the terraform package can add it as a subcommand.
+var GenerateCmd = &cobra.Command{
 	Use:   "generate",
-	Short: "Generate Terraform configuration files for Atmos components and stacks.",
+	Short: "Generate Terraform configuration files for Atmos components and stacks",
 	Long: `The 'atmos terraform generate' command is used to generate Terraform configuration files
 for specific components and stacks within your Atmos setup.
 
@@ -17,14 +16,8 @@ This command supports the following subcommands:
 - 'backend' to generate a backend configuration file for an Atmos component in a stack.
 - 'backends' to generate backend configuration files for all Atmos components in all stacks.
 - 'varfile' to generate a variable file (varfile) for an Atmos component in a stack.
-- 'varfiles' to generate varfiles for all Atmos components in all stacks.`,
+- 'varfiles' to generate varfiles for all Atmos components in all stacks.
+- 'planfile' to generate a planfile for an Atmos component in a stack.`,
 	Args:               cobra.NoArgs,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-}
-
-func init() {
-	// Add modern varfile command.
-	terraformGenerateCmd.AddCommand(varfile.NewVarfileCommand())
-
-	terraformCmd.AddCommand(terraformGenerateCmd)
 }

@@ -804,6 +804,12 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	return errUtils.WithExitCode(err, 1)
 }
 
+// GetConfigAndStacksInfo processes the CLI config and stacks.
+// Exported for use by command packages (e.g., terraform package).
+func GetConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
+	return getConfigAndStacksInfo(commandName, cmd, args)
+}
+
 // getConfigAndStacksInfo processes the CLI config and stacks.
 // Returns error instead of calling os.Exit for better testability.
 func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
@@ -976,7 +982,10 @@ func showUsageExample(cmd *cobra.Command, details string) {
 	errUtils.CheckErrorPrintAndExit(errors.New(details), "Incorrect Usage", suggestion)
 }
 
-func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+// StackFlagCompletion provides shell completion for the --stack flag.
+// If a component was provided as the first positional argument, it filters stacks
+// to only those containing that component.
+func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// If a component was provided as the first argument, filter stacks by that component.
 	if len(args) > 0 && args[0] != "" {
 		component := args[0]
@@ -1118,7 +1127,7 @@ func AddStackCompletion(cmd *cobra.Command) {
 	if cmd.Flag("stack") == nil {
 		cmd.PersistentFlags().StringP("stack", "s", "", stackHint)
 	}
-	cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
+	cmd.RegisterFlagCompletionFunc("stack", StackFlagCompletion)
 }
 
 // identityFlagCompletion provides shell completion for identity flags by fetching
