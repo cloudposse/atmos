@@ -97,6 +97,16 @@ type Provider interface {
 	GetFilesDisplayPath() string
 }
 
+// Provisioner is an optional interface that providers can implement
+// to auto-provision identities from external sources (e.g., AWS SSO permission sets).
+// Provisioning is run after successful provider authentication and is non-fatal.
+type Provisioner interface {
+	// ProvisionIdentities provisions identities from the external source.
+	// Returns provisioned identities and metadata, or error if provisioning fails.
+	// Implementations should be non-fatal - errors are logged but don't block authentication.
+	ProvisionIdentities(ctx context.Context, creds ICredentials) (*ProvisioningResult, error)
+}
+
 // PostAuthenticateParams contains parameters for PostAuthenticate method.
 type PostAuthenticateParams struct {
 	AuthContext  *schema.AuthContext
@@ -174,6 +184,14 @@ type AuthManager interface {
 	// This may trigger interactive authentication flows (SSO device prompts, etc.).
 	// Use this when you want to force fresh authentication (e.g., `auth login` command).
 	Authenticate(ctx context.Context, identityName string) (*WhoamiInfo, error)
+
+	// AuthenticateProvider performs authentication directly with a provider.
+	// This is used for provider-level operations like SSO auto-provisioning where
+	// you want to authenticate to a provider without specifying a particular identity.
+	// If the provider has auto_provision_identities enabled, this will trigger
+	// automatic discovery and provisioning of all available identities.
+	// Use this when you want to authenticate to a provider (e.g., `auth login --provider sso-prod`).
+	AuthenticateProvider(ctx context.Context, providerName string) (*WhoamiInfo, error)
 
 	// Whoami returns information about the specified identity's credentials.
 	// First checks for cached credentials, then falls back to chain authentication

@@ -344,7 +344,7 @@ By default, `atmos auth logout` clears **session data only**:
    - Keyring entries for authentication chain (`aws-sso`, `dev-org-admin`) are **preserved**
    - Other identity credentials remain intact
 
-**Next login** (`atmos auth login dev-admin`):
+**Next login** (`atmos auth login --identity dev-admin`):
 - Uses preserved keychain credentials instantly
 - No need to re-enter IAM user access keys
 - No need to re-authenticate service accounts
@@ -363,7 +363,7 @@ Adding `--keychain` permanently deletes credentials from system keychain:
    - Service account credentials are permanently deleted
 3. Clears session data (same as default logout)
 
-**Next login** (`atmos auth login dev-admin`):
+**Next login** (`atmos auth login --identity dev-admin`):
 - Requires re-entering IAM user access keys
 - Requires re-authenticating service accounts
 - Full authentication flow (no shortcuts)
@@ -647,7 +647,7 @@ When switching between different identities or environments, logout first to ens
 
 ```shell
 atmos auth logout dev-admin
-atmos auth login prod-admin
+atmos auth login --identity prod-admin
 ```
 
 ### 2. Logout at End of Work Session

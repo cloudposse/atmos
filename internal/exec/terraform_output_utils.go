@@ -92,6 +92,12 @@ func (a *authContextWrapper) Authenticate(ctx context.Context, identityName stri
 	panic("authContextWrapper.Authenticate should not be called")
 }
 
+func (a *authContextWrapper) AuthenticateProvider(ctx context.Context, providerName string) (*auth_types.WhoamiInfo, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.AuthenticateProvider")()
+
+	return nil, fmt.Errorf("%w: authContextWrapper.AuthenticateProvider for template context", errUtils.ErrNotImplemented)
+}
+
 func (a *authContextWrapper) Whoami(ctx context.Context, identityName string) (*auth_types.WhoamiInfo, error) {
 	defer perf.Track(nil, "exec.authContextWrapper.Whoami")()
 

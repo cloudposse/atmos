@@ -112,8 +112,7 @@ func LoadINIFile(path string) (*ini.File, error) {
 // Precedence: 1) basePath parameter from provider spec, 2) XDG config directory.
 //
 // Default path follows XDG Base Directory Specification:
-//   - Linux: $XDG_CONFIG_HOME/atmos/aws (default: ~/.config/atmos/aws)
-//   - macOS: ~/Library/Application Support/atmos/aws
+//   - Linux/macOS: $XDG_CONFIG_HOME/atmos/aws (default: ~/.config/atmos/aws)
 //   - Windows: %APPDATA%\atmos\aws
 //
 // Respects ATMOS_XDG_CONFIG_HOME and XDG_CONFIG_HOME environment variables.

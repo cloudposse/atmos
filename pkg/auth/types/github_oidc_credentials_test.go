@@ -90,10 +90,15 @@ func TestOIDCCredentials_BuildWhoamiInfo(t *testing.T) {
 }
 
 func TestOIDCCredentials_Validate(t *testing.T) {
-	// Validate is not implemented for OIDC credentials.
-	c := &OIDCCredentials{Token: "test-token"}
-	info, err := c.Validate(context.TODO())
-	assert.Nil(t, info)
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, errUtils.ErrNotImplemented))
+	// Validate is not implemented for OIDC credentials - should return ErrNotImplemented.
+	c := &OIDCCredentials{
+		Token:    "test-token",
+		Provider: "github",
+		Audience: "https://github.com/example",
+	}
+
+	info, err := c.Validate(context.Background())
+	assert.Nil(t, info, "Should not return validation info")
+	assert.Error(t, err, "Should return error")
+	assert.True(t, errors.Is(err, errUtils.ErrNotImplemented), "Should return ErrNotImplemented")
 }

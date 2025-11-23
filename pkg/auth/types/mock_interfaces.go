@@ -186,6 +186,45 @@ func (mr *MockProviderMockRecorder) Validate() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockProvider)(nil).Validate))
 }
 
+// MockProvisioner is a mock of Provisioner interface.
+type MockProvisioner struct {
+	ctrl     *gomock.Controller
+	recorder *MockProvisionerMockRecorder
+	isgomock struct{}
+}
+
+// MockProvisionerMockRecorder is the mock recorder for MockProvisioner.
+type MockProvisionerMockRecorder struct {
+	mock *MockProvisioner
+}
+
+// NewMockProvisioner creates a new mock instance.
+func NewMockProvisioner(ctrl *gomock.Controller) *MockProvisioner {
+	mock := &MockProvisioner{ctrl: ctrl}
+	mock.recorder = &MockProvisionerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockProvisioner) EXPECT() *MockProvisionerMockRecorder {
+	return m.recorder
+}
+
+// ProvisionIdentities mocks base method.
+func (m *MockProvisioner) ProvisionIdentities(ctx context.Context, creds ICredentials) (*ProvisioningResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProvisionIdentities", ctx, creds)
+	ret0, _ := ret[0].(*ProvisioningResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProvisionIdentities indicates an expected call of ProvisionIdentities.
+func (mr *MockProvisionerMockRecorder) ProvisionIdentities(ctx, creds any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProvisionIdentities", reflect.TypeOf((*MockProvisioner)(nil).ProvisionIdentities), ctx, creds)
+}
+
 // MockIdentity is a mock of Identity interface.
 type MockIdentity struct {
 	ctrl     *gomock.Controller
@@ -408,6 +447,21 @@ func (m *MockAuthManager) Authenticate(ctx context.Context, identityName string)
 func (mr *MockAuthManagerMockRecorder) Authenticate(ctx, identityName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authenticate", reflect.TypeOf((*MockAuthManager)(nil).Authenticate), ctx, identityName)
+}
+
+// AuthenticateProvider mocks base method.
+func (m *MockAuthManager) AuthenticateProvider(ctx context.Context, providerName string) (*WhoamiInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AuthenticateProvider", ctx, providerName)
+	ret0, _ := ret[0].(*WhoamiInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AuthenticateProvider indicates an expected call of AuthenticateProvider.
+func (mr *MockAuthManagerMockRecorder) AuthenticateProvider(ctx, providerName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthenticateProvider", reflect.TypeOf((*MockAuthManager)(nil).AuthenticateProvider), ctx, providerName)
 }
 
 // GetCachedCredentials mocks base method.
