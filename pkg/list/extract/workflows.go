@@ -9,6 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	perf "github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
@@ -18,6 +19,8 @@ import (
 //
 //nolint:gocognit,nestif,revive,funlen // Complexity and length from file handling and manifest parsing (unavoidable pattern).
 func Workflows(atmosConfig *schema.AtmosConfiguration, fileFilter string) ([]map[string]any, error) {
+	defer perf.Track(atmosConfig, "list.workflows.extract")()
+
 	var workflows []map[string]any
 
 	// If a specific file is provided, validate and load it.
@@ -93,6 +96,8 @@ func Workflows(atmosConfig *schema.AtmosConfiguration, fileFilter string) ([]map
 
 // extractFromManifest extracts workflow data from a single manifest.
 func extractFromManifest(manifest schema.WorkflowManifest) []map[string]any {
+	defer perf.Track(nil, "list.workflows.extractFromManifest")()
+
 	var workflows []map[string]any
 
 	if manifest.Workflows == nil {

@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
+	perf "github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -86,6 +87,8 @@ var componentsCmd = &cobra.Command{
 // columnsCompletionForComponents provides dynamic tab completion for --columns flag.
 // Returns column names from atmos.yaml components.list.columns configuration.
 func columnsCompletionForComponents(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "list.components.columnsCompletionForComponents")()
+
 	// Load atmos configuration.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
@@ -134,6 +137,8 @@ func init() {
 }
 
 func listComponentsWithOptions(opts *ComponentsOptions) error {
+	defer perf.Track(nil, "list.components.listComponentsWithOptions")()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
@@ -188,6 +193,8 @@ func listComponentsWithOptions(opts *ComponentsOptions) error {
 
 // buildComponentFilters creates filters based on command options.
 func buildComponentFilters(opts *ComponentsOptions) []filter.Filter {
+	defer perf.Track(nil, "list.components.buildComponentFilters")()
+
 	var filters []filter.Filter
 
 	// Stack filter (glob pattern).
@@ -198,9 +205,12 @@ func buildComponentFilters(opts *ComponentsOptions) []filter.Filter {
 		}
 	}
 
-	// Type filter.
+	// Type filter (authoritative when provided, targets component_type field).
 	if opts.Type != "" && opts.Type != "all" {
-		filters = append(filters, filter.NewColumnFilter("type", opts.Type))
+		filters = append(filters, filter.NewColumnFilter("component_type", opts.Type))
+	} else if opts.Type == "" && !opts.Abstract {
+		// Only apply default abstract filter when Type is not set.
+		filters = append(filters, filter.NewColumnFilter("component_type", "real"))
 	}
 
 	// Enabled filter (tri-state: nil = all, true = enabled only, false = disabled only).
@@ -213,16 +223,13 @@ func buildComponentFilters(opts *ComponentsOptions) []filter.Filter {
 		filters = append(filters, filter.NewBoolFilter("locked", opts.Locked))
 	}
 
-	// Abstract filter (show real components only by default).
-	if !opts.Abstract {
-		filters = append(filters, filter.NewColumnFilter("component_type", "real"))
-	}
-
 	return filters
 }
 
 // getComponentColumns returns column configuration.
 func getComponentColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) []column.Config {
+	defer perf.Track(nil, "list.components.getComponentColumns")()
+
 	// If --columns flag is provided, parse it and return.
 	if len(columnsFlag) > 0 {
 		return parseColumnsFlag(columnsFlag)
@@ -251,6 +258,8 @@ func getComponentColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []s
 
 // buildComponentSorters creates sorters from sort specification.
 func buildComponentSorters(sortSpec string) ([]*listSort.Sorter, error) {
+	defer perf.Track(nil, "list.components.buildComponentSorters")()
+
 	if sortSpec == "" {
 		// Default sort: by component ascending.
 		return []*listSort.Sorter{
@@ -265,6 +274,8 @@ func buildComponentSorters(sortSpec string) ([]*listSort.Sorter, error) {
 //
 //nolint:unparam // columnsFlag will be used when column parsing is implemented
 func parseColumnsFlag(columnsFlag []string) []column.Config {
+	defer perf.Track(nil, "list.components.parseColumnsFlag")()
+
 	// TODO: Implement parsing of column specifications from CLI.
 	// For now, return default columns as placeholder.
 	// The flag is registered but parsing is not yet implemented.

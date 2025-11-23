@@ -9,6 +9,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/list/tree"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	perf "github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"gopkg.in/yaml.v3"
 )
@@ -33,6 +34,8 @@ func ResolveImportTreeFromProvenance(
 	stacksMap map[string]interface{},
 	atmosConfig *schema.AtmosConfiguration,
 ) (map[string]map[string][]*tree.ImportNode, error) {
+	defer perf.Track(nil, "list.importresolver.ResolveImportTreeFromProvenance")()
+
 	result := make(map[string]map[string][]*tree.ImportNode)
 
 	// Get all merge contexts (keyed by stack file path).
@@ -106,6 +109,8 @@ func findStacksForFilePath(
 	stacksMap map[string]interface{},
 	atmosConfig *schema.AtmosConfiguration,
 ) map[string]map[string]bool {
+	defer perf.Track(nil, "list.importresolver.findStacksForFilePath")()
+
 	result := make(map[string]map[string]bool)
 
 	// Normalize the file path for comparison.
@@ -184,6 +189,8 @@ func findStacksForFilePath(
 // extractComponentFolders extracts component folder paths from stack data.
 // Returns a map of componentName -> componentFolder.
 func extractComponentFolders(stackData interface{}) map[string]string {
+	defer perf.Track(nil, "list.importresolver.extractComponentFolders")()
+
 	folders := make(map[string]string)
 
 	stackMap, ok := stackData.(map[string]interface{})
@@ -232,6 +239,8 @@ func extractComponentFolders(stackData interface{}) map[string]string {
 
 // extractComponentsFromStackData extracts component names from stack data.
 func extractComponentsFromStackData(stackData interface{}) map[string]bool {
+	defer perf.Track(nil, "list.importresolver.extractComponentsFromStackData")()
+
 	components := make(map[string]bool)
 
 	stackMap, ok := stackData.(map[string]interface{})
@@ -265,6 +274,8 @@ func extractComponentsFromStackData(stackData interface{}) map[string]bool {
 // ImportChain[0] = parent stack file
 // ImportChain[1..N] = imported files in merge order.
 func buildImportTreeFromChain(importChain []string, atmosConfig *schema.AtmosConfiguration) []*tree.ImportNode {
+	defer perf.Track(nil, "list.importresolver.buildImportTreeFromChain")()
+
 	if len(importChain) <= 1 {
 		// No imports (just the stack file itself).
 		return nil
@@ -337,6 +348,8 @@ func resolveImportFileImports(
 	visited map[string]bool,
 	cache map[string][]string,
 ) []*tree.ImportNode {
+	defer perf.Track(nil, "list.importresolver.resolveImportFileImports")()
+
 	// Check cache first.
 	if imports, ok := cache[importFilePath]; ok {
 		return buildNodesFromImportPaths(imports, importFilePath, atmosConfig, visited, cache)
@@ -363,6 +376,8 @@ func buildNodesFromImportPaths(
 	visited map[string]bool,
 	cache map[string][]string,
 ) []*tree.ImportNode {
+	defer perf.Track(nil, "list.importresolver.buildNodesFromImportPaths")()
+
 	var children []*tree.ImportNode
 
 	for _, importPath := range imports {
@@ -392,8 +407,25 @@ func buildNodesFromImportPaths(
 }
 
 // resolveImportPath converts a relative import path to an absolute file path.
-func resolveImportPath(importPath, _ string, atmosConfig *schema.AtmosConfiguration) string {
-	// Import paths are relative to the stacks base path.
+func resolveImportPath(importPath, parentFilePath string, atmosConfig *schema.AtmosConfiguration) string {
+	defer perf.Track(nil, "list.importresolver.resolveImportPath")()
+
+	// Check if this is a relative import (starts with . or ..).
+	if strings.HasPrefix(importPath, ".") {
+		// Resolve relative to parent file's directory.
+		parentDir := filepath.Dir(parentFilePath)
+		absolutePath := filepath.Join(parentDir, importPath)
+		absolutePath = filepath.Clean(absolutePath)
+
+		// Add .yaml extension if not present.
+		if !strings.HasSuffix(absolutePath, yamlExt) && !strings.HasSuffix(absolutePath, ymlExt) {
+			absolutePath += yamlExt
+		}
+
+		return absolutePath
+	}
+
+	// Non-relative imports are resolved against stacks base path.
 	basePath := atmosConfig.StacksBaseAbsolutePath
 
 	// Add .yaml extension if not present.
@@ -406,6 +438,8 @@ func resolveImportPath(importPath, _ string, atmosConfig *schema.AtmosConfigurat
 
 // readImportsFromYAMLFile reads the import/imports array from a YAML file.
 func readImportsFromYAMLFile(filePath string) ([]string, error) {
+	defer perf.Track(nil, "list.importresolver.readImportsFromYAMLFile")()
+
 	// Read the file.
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -437,6 +471,8 @@ func readImportsFromYAMLFile(filePath string) ([]string, error) {
 
 // extractImportStringsHelper extracts import strings from an interface{} (can be string or []interface{}).
 func extractImportStringsHelper(val interface{}) []string {
+	defer perf.Track(nil, "list.importresolver.extractImportStringsHelper")()
+
 	var results []string
 
 	switch v := val.(type) {

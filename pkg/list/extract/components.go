@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	perf "github.com/cloudposse/atmos/pkg/perf"
 )
 
 const (
@@ -15,6 +16,8 @@ const (
 // Components transforms stacksMap into structured component data.
 // Returns []map[string]any suitable for the renderer pipeline.
 func Components(stacksMap map[string]any) ([]map[string]any, error) {
+	defer perf.Track(nil, "list.extract.Components")()
+
 	if stacksMap == nil {
 		return nil, errUtils.ErrStackNotFound
 	}
@@ -45,6 +48,8 @@ func Components(stacksMap map[string]any) ([]map[string]any, error) {
 
 // extractComponentType extracts components of a specific type from a stack.
 func extractComponentType(stackName, componentType string, componentsMap map[string]any) []map[string]any {
+	defer perf.Track(nil, "list.extract.extractComponentType")()
+
 	typeComponents, ok := componentsMap[componentType].(map[string]any)
 	if !ok {
 		return nil
@@ -71,6 +76,8 @@ func buildBaseComponent(componentName, stackName, componentType string) map[stri
 
 // enrichComponentWithMetadata adds metadata fields to a component map.
 func enrichComponentWithMetadata(comp map[string]any, componentData any) {
+	defer perf.Track(nil, "list.extract.enrichComponentWithMetadata")()
+
 	compMap, ok := componentData.(map[string]any)
 	if !ok {
 		return
@@ -119,6 +126,8 @@ func getStringWithDefault(m map[string]any, key string, defaultValue string) str
 
 // ComponentsForStack extracts components for a specific stack only.
 func ComponentsForStack(stackName string, stacksMap map[string]any) ([]map[string]any, error) {
+	defer perf.Track(nil, "list.extract.ComponentsForStack")()
+
 	stackData, ok := stacksMap[stackName]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrStackNotFound, stackName)

@@ -246,8 +246,8 @@ func TestBuildComponentFilters(t *testing.T) {
 			opts: &ComponentsOptions{
 				Type: "terraform",
 			},
-			expectedCount: 2, // Type filter + abstract filter
-			description:   "Type filter + abstract filter",
+			expectedCount: 1, // Type filter only (authoritative)
+			description:   "Type filter is authoritative",
 		},
 		{
 			name: "Enabled filter true",
@@ -289,7 +289,7 @@ func TestBuildComponentFilters(t *testing.T) {
 				Enabled: &enabledTrue,
 				Locked:  &lockedTrue,
 			},
-			expectedCount: 5, // Stack + Type + Enabled + Locked + abstract filter
+			expectedCount: 4, // Stack + Type + Enabled + Locked (no abstract filter when Type is set)
 			description:   "All filters combined",
 		},
 		{
@@ -297,8 +297,8 @@ func TestBuildComponentFilters(t *testing.T) {
 			opts: &ComponentsOptions{
 				Type: "all",
 			},
-			expectedCount: 1, // Type='all' is not added as filter, only abstract filter
-			description:   "Type='all' is ignored",
+			expectedCount: 0, // Type='all' is not added as filter, and no abstract filter either
+			description:   "Type='all' is ignored and no abstract filter",
 		},
 	}
 

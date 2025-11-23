@@ -171,9 +171,10 @@ func listVendorWithOptions(opts *VendorOptions) error {
 func buildVendorFilters(opts *VendorOptions) []filter.Filter {
 	var filters []filter.Filter
 
-	// Stack filter (glob pattern on stack field).
+	// Component filter (glob pattern on component field).
+	// Vendor rows contain: component, type, manifest, folder.
 	if opts.Stack != "" {
-		globFilter, err := filter.NewGlobFilter("stack", opts.Stack)
+		globFilter, err := filter.NewGlobFilter("component", opts.Stack)
 		if err == nil {
 			filters = append(filters, globFilter)
 		}
