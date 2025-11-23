@@ -164,46 +164,46 @@ func TestValidateIdentity_ErrorCases(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		identity *schema.Identity
-		wantErr  bool
-		errMsg   string
+		name        string
+		identity    *schema.Identity
+		wantErr     bool
+		expectedErr error
 	}{
 		{
-			name:     "unknown identity kind",
-			identity: &schema.Identity{Kind: "unknown/kind"},
-			wantErr:  true,
-			errMsg:   "invalid identity kind",
+			name:        "unknown identity kind",
+			identity:    &schema.Identity{Kind: "unknown/kind"},
+			wantErr:     true,
+			expectedErr: errUtils.ErrInvalidIdentityKind,
 		},
 		{
-			name:     "assume role missing principal",
-			identity: &schema.Identity{Kind: "aws/assume-role", Via: &schema.IdentityVia{Provider: "aws-sso"}},
-			wantErr:  true,
-			errMsg:   "principal is required",
+			name:        "assume role missing principal",
+			identity:    &schema.Identity{Kind: "aws/assume-role", Via: &schema.IdentityVia{Provider: "aws-sso"}},
+			wantErr:     true,
+			expectedErr: errUtils.ErrMissingPrincipal,
 		},
 		{
-			name:     "assume role missing assume_role in principal",
-			identity: &schema.Identity{Kind: "aws/assume-role", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{}},
-			wantErr:  true,
-			errMsg:   "assume_role is required",
+			name:        "assume role missing assume_role in principal",
+			identity:    &schema.Identity{Kind: "aws/assume-role", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{}},
+			wantErr:     true,
+			expectedErr: errUtils.ErrMissingAssumeRole,
 		},
 		{
-			name:     "permission set missing principal",
-			identity: &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}},
-			wantErr:  true,
-			errMsg:   "principal is required",
+			name:        "permission set missing principal",
+			identity:    &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}},
+			wantErr:     true,
+			expectedErr: errUtils.ErrMissingPrincipal,
 		},
 		{
-			name:     "permission set missing name in principal",
-			identity: &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{}},
-			wantErr:  true,
-			errMsg:   "name is required",
+			name:        "permission set missing name in principal",
+			identity:    &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{}},
+			wantErr:     true,
+			expectedErr: errUtils.ErrMissingPermissionSet,
 		},
 		{
-			name:     "permission set missing account in principal",
-			identity: &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{"name": "DevAccess"}},
-			wantErr:  true,
-			errMsg:   "account specification is required",
+			name:        "permission set missing account in principal",
+			identity:    &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{"name": "DevAccess"}},
+			wantErr:     true,
+			expectedErr: errUtils.ErrMissingAccountSpec,
 		},
 	}
 
@@ -212,7 +212,8 @@ func TestValidateIdentity_ErrorCases(t *testing.T) {
 			err := v.ValidateIdentity("test-identity", tt.identity, providers)
 			if tt.wantErr {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errMsg)
+				// Use sentinel error checking instead of string comparison.
+				assert.ErrorIs(t, err, tt.expectedErr)
 			} else {
 				assert.NoError(t, err)
 			}

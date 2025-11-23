@@ -527,15 +527,15 @@ All global flags can be set using environment variables. The precedence order is
     <dt>`ATMOS_XDG_CACHE_HOME` / `XDG_CACHE_HOME`</dt>
     <dd>
         Override the default XDG cache directory for Atmos.
-        - Default: `~/.cache` on Linux/Unix, `~/Library/Caches` on macOS, `%LOCALAPPDATA%` on Windows
-        - Used for: Cache files (`cache.yaml`)
+        - Default: `~/.cache` on Linux/Unix/macOS, `%LOCALAPPDATA%\cache` on Windows
+        - Used for: Cache files (`cache.yaml`), auth provisioning cache
         - Example: `ATMOS_XDG_CACHE_HOME=/custom/cache atmos describe stacks`
     </dd>
 
     <dt>`ATMOS_XDG_DATA_HOME` / `XDG_DATA_HOME`</dt>
     <dd>
         Override the default XDG data directory for Atmos.
-        - Default: `~/.local/share` on Linux/Unix, `~/Library/Application Support` on macOS, `%LOCALAPPDATA%` on Windows
+        - Default: `~/.local/share` on Linux/Unix/macOS, `%LOCALAPPDATA%` on Windows
         - Used for: File-based keyring storage
         - Example: `ATMOS_XDG_DATA_HOME=/custom/data atmos auth login`
     </dd>
@@ -543,7 +543,7 @@ All global flags can be set using environment variables. The precedence order is
     <dt>`ATMOS_XDG_CONFIG_HOME` / `XDG_CONFIG_HOME`</dt>
     <dd>
         Override the default XDG config directory for Atmos.
-        - Default: `~/.config` on Linux/Unix, `~/Library/Application Support` on macOS, `%APPDATA%` on Windows
+        - Default: `~/.config` on Linux/Unix/macOS, `%APPDATA%` on Windows
         - Reserved for future use
         - Example: `ATMOS_XDG_CONFIG_HOME=/custom/config`
     </dd>
