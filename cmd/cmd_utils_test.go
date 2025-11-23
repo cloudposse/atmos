@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"sort"
@@ -752,14 +753,17 @@ func TestErrorWrappingInGetConfigAndStacksInfo(t *testing.T) {
 	}
 
 	_, err := getConfigAndStacksInfo("terraform", cmd, []string{})
-	if err != nil {
-		// Verify error can be checked with errors.Is()
-		// This tests that we're using proper error wrapping
-		t.Logf("Error properly wrapped: %v", err)
 
-		// Verify error contains useful context
-		assert.NotEmpty(t, err.Error(), "Error should have a message")
-	}
+	// Should always return an error in test environment (config/stacks not found).
+	require.Error(t, err, "Expected error when stacks directory doesn't exist")
+
+	// Verify error can be checked with errors.Is() - this tests proper error wrapping.
+	// The function should return ErrStacksDirectoryDoesNotExist from validateAtmosConfig.
+	assert.True(t, errors.Is(err, errUtils.ErrStacksDirectoryDoesNotExist),
+		"Error should wrap ErrStacksDirectoryDoesNotExist, got: %v", err)
+
+	// Verify error contains useful context.
+	assert.NotEmpty(t, err.Error(), "Error should have a message")
 }
 
 // TestDetermineComponentTypeFromCommand tests component type detection from command hierarchy.

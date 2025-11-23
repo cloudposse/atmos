@@ -408,14 +408,13 @@ func TestValidateComponentInStack_MultipleMatches(t *testing.T) {
 	resolver := NewResolver(mockLoader)
 	atmosConfig := newTestAtmosConfig()
 
-	// In non-TTY environment, should return ambiguous error.
+	// In test environment (non-TTY), should always return ambiguous error.
+	// Tests run without a TTY, so interactive selection is not available.
 	result, err := resolver.validateComponentInStack(atmosConfig, "vpc", "dev", "terraform")
 
-	// Either succeeds with first match or fails with ambiguous error (depends on TTY).
-	if err != nil {
-		assert.ErrorIs(t, err, errUtils.ErrAmbiguousComponentPath)
-	} else {
-		// If it didn't error, it should have picked one.
-		assert.Contains(t, []string{"vpc-dev", "vpc-staging"}, result)
-	}
+	// Must return error in non-TTY environment.
+	require.Error(t, err, "Expected error for ambiguous component path in non-TTY environment")
+	assert.ErrorIs(t, err, errUtils.ErrAmbiguousComponentPath,
+		"Error should be ErrAmbiguousComponentPath, got: %v", err)
+	assert.Empty(t, result, "Result should be empty when error is returned")
 }

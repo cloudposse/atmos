@@ -427,7 +427,7 @@ func TestGetWorkflowsBasePath(t *testing.T) {
 					BasePath: "/absolute/workflows",
 				},
 			},
-			checkAbs: false, // Already absolute.
+			checkAbs: true, // Path is made absolute (cross-platform).
 		},
 		{
 			name: "empty path returns empty",
@@ -449,7 +449,7 @@ func TestGetWorkflowsBasePath(t *testing.T) {
 				assert.Empty(t, result)
 			case tt.checkAbs:
 				assert.NotEmpty(t, result)
-				assert.True(t, filepath.IsAbs(result))
+				assert.True(t, filepath.IsAbs(result), "Expected absolute path, got: %s", result)
 			default:
 				assert.Equal(t, tt.atmosConfig.Workflows.BasePath, result)
 			}
@@ -463,25 +463,24 @@ func TestResolveBasePath(t *testing.T) {
 		name     string
 		basePath string
 		wantAbs  bool
-		wantSame bool
 	}{
 		{
 			name:     "empty path returns empty",
 			basePath: "",
 			wantAbs:  false,
-			wantSame: true,
 		},
 		{
-			name:     "absolute path unchanged",
+			name:     "unix-style path becomes absolute",
 			basePath: "/absolute/path",
 			wantAbs:  true,
-			wantSame: true,
+			// Note: On Windows, "/absolute/path" is NOT absolute (lacks drive letter),
+			// so filepath.Abs() converts it to "D:\absolute\path".
+			// On Unix, it's already absolute and returned unchanged.
 		},
 		{
 			name:     "relative path becomes absolute",
 			basePath: "relative/path",
 			wantAbs:  true,
-			wantSame: false,
 		},
 	}
 
@@ -490,12 +489,10 @@ func TestResolveBasePath(t *testing.T) {
 			result := resolveBasePath(tt.basePath)
 
 			if tt.basePath == "" {
-				assert.Empty(t, result)
+				assert.Empty(t, result, "Empty path should return empty string")
 			} else if tt.wantAbs {
-				assert.True(t, filepath.IsAbs(result))
-			}
-			if tt.wantSame {
-				assert.Equal(t, tt.basePath, result)
+				assert.True(t, filepath.IsAbs(result),
+					"Expected absolute path for input %q, got: %s", tt.basePath, result)
 			}
 		})
 	}
