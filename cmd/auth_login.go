@@ -79,6 +79,12 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// CreateAuthManager creates a new auth manager with all required dependencies.
+// Exported for use by command packages (e.g., terraform package).
+func CreateAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
+	return createAuthManager(authConfig)
+}
+
 // createAuthManager creates a new auth manager with all required dependencies.
 func createAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
 	credStore := credentials.NewCredentialStore()

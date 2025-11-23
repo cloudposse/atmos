@@ -1,0 +1,31 @@
+package terraform
+
+import (
+	"github.com/spf13/cobra"
+)
+
+// destroyCmd represents the terraform destroy command.
+var destroyCmd = &cobra.Command{
+	Use:   "destroy",
+	Short: "Destroy previously-created infrastructure",
+	Long: `Destroy all the infrastructure managed by Terraform, removing resources as defined in the state file.
+
+For complete Terraform/OpenTofu documentation, see:
+  https://developer.hashicorp.com/terraform/cli/commands/destroy
+  https://opentofu.org/docs/cli/commands/destroy`,
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return terraformRun(terraformCmd, cmd, args)
+	},
+}
+
+func init() {
+	// Set custom help to show terraform native flags.
+	setCustomHelp(destroyCmd, DestroyCompatFlagDescriptions())
+
+	// Register completions for destroy command.
+	RegisterTerraformCompletions(destroyCmd)
+
+	// Attach to parent terraform command.
+	terraformCmd.AddCommand(destroyCmd)
+}
