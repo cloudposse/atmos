@@ -65,30 +65,37 @@ The S3 backend provisioner applies hardcoded security best practices:
 
 These settings aren't configurable—they're opinionated defaults that follow AWS security best practices.
 
-## Compatible with Terraform Management
+## Solves the Terraform Bootstrap Problem
 
-Automatic provisioning is **fully compatible with Terraform-managed backends**. The provisioned S3 buckets use standard AWS resources that can be imported and managed by Terraform when you need fine-grained control.
+Automatic provisioning is **fully compatible with Terraform-managed backends**. In fact, it solves a classic chicken-and-egg problem: "How do I manage my state backend with Terraform when I need that backend to exist before Terraform can run?"
 
-**Development workflow:**
-```bash
-atmos terraform plan vpc -s dev  # Backend auto-provisioned
-```
+**The traditional workaround:**
+1. Use local state temporarily
+2. Create S3 bucket with Terraform using local state
+3. Switch backend configuration to S3
+4. Import the bucket into the S3-backed state
+5. Delete local state files
 
-**Production migration:**
+**With Atmos automatic provisioning:**
+1. Enable `provision.backend.enabled: true`
+2. Run `atmos terraform plan` - bucket auto-created with secure defaults
+3. Import the bucket into Terraform (no local state dance needed)
+4. Disable `provision.backend.enabled: false`
+5. Done - everything managed by Terraform
 
-When you're ready to manage the backend with Terraform, import the automatically provisioned bucket:
+**Import the provisioned backend:**
 
 ```hcl
 import {
   to = aws_s3_bucket.terraform_state
-  id = "my-terraform-state-prod"
+  id = "my-terraform-state"
 }
 
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "my-terraform-state-prod"
+  bucket = "my-terraform-state"
 }
 
-# Add production-specific features
+# Add any additional configuration
 resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
 
@@ -101,23 +108,17 @@ resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
     }
   }
 }
-
-resource "aws_s3_bucket_replication_configuration" "terraform_state" {
-  bucket = aws_s3_bucket.terraform_state.id
-  # ... cross-region replication for disaster recovery
-}
 ```
 
-Then disable automatic provisioning:
+Then disable automatic provisioning since Terraform now manages it:
 
 ```yaml
-# stacks/prod.yaml
 provision:
   backend:
-    enabled: false  # Now managed by Terraform
+    enabled: false  # Terraform manages this now
 ```
 
-This gives you the **best of both worlds**: fast iteration during development with automatic provisioning, and full Terraform control in production when you need advanced features like lifecycle policies, replication, or custom KMS encryption.
+This **eliminates the bootstrap hack** and makes it easier to manage everything with Terraform, not harder. The provisioner creates standard AWS resources that Terraform can import and manage - no special handling required.
 
 ## Cross-Account Support
 
