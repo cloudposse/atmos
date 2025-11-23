@@ -121,6 +121,7 @@ components:
         bucket: acme-terraform-state-dev
         key: vpc/terraform.tfstate
         region: us-east-1
+        use_lockfile: true  # Enable native S3 locking (Terraform 1.10+)
 
       provision:
         backend:
@@ -223,6 +224,7 @@ backend:
   bucket: my-terraform-state     # Required
   key: component/terraform.tfstate
   region: us-east-1              # Required
+  use_lockfile: true             # Enable native S3 locking (Terraform 1.10+)
 ```
 
 **Cross-Account Support:**
@@ -230,6 +232,7 @@ backend:
 backend:
   bucket: my-terraform-state
   region: us-east-1
+  use_lockfile: true  # Enable native S3 locking (Terraform 1.10+)
   assume_role:
     role_arn: arn:aws:iam::999999999999:role/TerraformStateAdmin
 ```
