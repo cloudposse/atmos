@@ -51,44 +51,7 @@ All automatically. No manual intervention required.
 
 ## Configuration Flexibility
 
-The `provision.backend` configuration supports Atmos's inheritance system, allowing you to set defaults at any level in your stack hierarchy.
-
-**Enable for all development environments:**
-
-```yaml
-# stacks/orgs/acme/plat/dev/_defaults.yaml
-terraform:
-  provision:
-    backend:
-      enabled: true  # All dev components inherit this
-```
-
-**Disable for production:**
-
-```yaml
-# stacks/orgs/acme/plat/prod/_defaults.yaml
-terraform:
-  provision:
-    backend:
-      enabled: false  # Production uses pre-provisioned backends
-```
-
-**Override per component:**
-
-```yaml
-components:
-  terraform:
-    vpc:
-      provision:
-        backend:
-          enabled: false  # Component-level override
-```
-
-Components automatically inherit these settings through Atmos's deep-merge system. This gives you maximum flexibility:
-- Set defaults at organization or environment level
-- Override for specific components when needed
-- Use catalog inheritance for reusable patterns
-- Different policies for dev/staging (auto-provision) vs prod (pre-provisioned)
+The `provision.backend` configuration works with Atmos's inheritance system, allowing you to set defaults at any level (organization, environment, component) and override when needed. For example, enable automatic provisioning for all development environments while keeping production backends pre-provisioned.
 
 ## Secure by Default
 
@@ -102,35 +65,59 @@ The S3 backend provisioner applies hardcoded security best practices:
 
 These settings aren't configurable—they're opinionated defaults that follow AWS security best practices.
 
-## Perfect for Development, Ready for Production
+## Compatible with Terraform Management
 
-The automatic provisioning feature is designed for **development and testing workflows**, where you need backends quickly without manual setup. For production environments, we recommend:
+Automatic provisioning is **fully compatible with Terraform-managed backends**. The provisioned S3 buckets use standard AWS resources that can be imported and managed by Terraform when you need fine-grained control.
 
-1. Start with automatic provisioning during development
-2. Use `atmos provision backend` to create the backend
-3. Import the provisioned backend into Terraform for production management:
+**Development workflow:**
+```bash
+atmos terraform plan vpc -s dev  # Backend auto-provisioned
+```
+
+**Production migration:**
+
+When you're ready to manage the backend with Terraform, import the automatically provisioned bucket:
 
 ```hcl
 import {
   to = aws_s3_bucket.terraform_state
-  id = "my-terraform-state"
+  id = "my-terraform-state-prod"
 }
 
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "my-terraform-state"
+  bucket = "my-terraform-state-prod"
 }
 
-# Add your production-specific settings
+# Add production-specific features
 resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
-  # ... lifecycle policies
+  bucket = aws_s3_bucket.terraform_state.id
+
+  rule {
+    id     = "delete-old-versions"
+    status = "Enabled"
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
 }
 
 resource "aws_s3_bucket_replication_configuration" "terraform_state" {
-  # ... cross-region replication
+  bucket = aws_s3_bucket.terraform_state.id
+  # ... cross-region replication for disaster recovery
 }
 ```
 
-This provides a **migration path** from development to production while maintaining infrastructure-as-code principles.
+Then disable automatic provisioning:
+
+```yaml
+# stacks/prod.yaml
+provision:
+  backend:
+    enabled: false  # Now managed by Terraform
+```
+
+This gives you the **best of both worlds**: fast iteration during development with automatic provisioning, and full Terraform control in production when you need advanced features like lifecycle policies, replication, or custom KMS encryption.
 
 ## Cross-Account Support
 
