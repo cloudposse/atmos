@@ -80,8 +80,7 @@ Automatic provisioning is **fully compatible with Terraform-managed backends**. 
 1. Enable `provision.backend.enabled: true`
 2. Run `atmos terraform plan` - bucket auto-created with secure defaults
 3. Import the bucket into Terraform (no local state dance needed)
-4. Disable `provision.backend.enabled: false`
-5. Done - everything managed by Terraform
+4. Done - everything managed by Terraform
 
 **Import the provisioned backend:**
 
@@ -110,15 +109,9 @@ resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
 }
 ```
 
-Then disable automatic provisioning since Terraform now manages it:
-
-```yaml
-provision:
-  backend:
-    enabled: false  # Terraform manages this now
-```
-
 This **eliminates the bootstrap hack** and makes it easier to manage everything with Terraform, not harder. The provisioner creates standard AWS resources that Terraform can import and manage - no special handling required.
+
+**Note:** You can leave `provision.backend.enabled: true` even after importing to Terraform. The provisioner is idempotent - it will detect the bucket exists and skip creation, causing no conflicts with Terraform management.
 
 ## Cross-Account Support
 
