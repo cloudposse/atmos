@@ -15,7 +15,7 @@ Atmos organizes Terraform state by component, grouping all instances of a compon
 
 When you organize components in versioned folders (`vpc/v1`, `vpc/v2`), upgrading from v2 to v3 changed the state path. Terraform couldn't find your existing state—your infrastructure looked like it was never created.
 
-The workaround was manually setting `backend.s3.workspace_key_prefix` on every component. This was error-prone and tedious. Plus, [metadata wasn't inherited](/blog/metadata-inheritance) for legacy reasons, so you couldn't define it once in a base component.
+The workaround was manually setting `backend.s3.workspace_key_prefix` on every component. This was error-prone and tedious. Plus, [metadata wasn't inherited](/changelog/metadata-inheritance) for legacy reasons, so you couldn't define it once in a base component.
 
 ## The Solution
 
