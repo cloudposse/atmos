@@ -134,10 +134,11 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	}
 
 	// Merge metadata when inheritance is enabled.
-	// Base component metadata is merged with component metadata, excluding 'inherits'.
+	// Base component metadata is merged with component metadata.
+	// Excluded from inheritance: 'inherits' and 'type: abstract'.
 	finalComponentMetadata := result.ComponentMetadata
 	if atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() && len(result.BaseComponentMetadata) > 0 {
-		// Create a copy of base metadata excluding 'inherits' (already excluded during collection).
+		// Create a copy of base metadata excluding 'inherits' and 'type: abstract' (already excluded during collection).
 		// Then merge with component metadata (component metadata wins on conflicts).
 		finalComponentMetadata, err = m.Merge(
 			atmosConfig,

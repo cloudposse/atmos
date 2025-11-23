@@ -106,7 +106,7 @@ When `stacks.inherit.metadata: true` (the default):
 
 | Field | Inherited? | Notes |
 |-------|-----------|-------|
-| `metadata.type` | Yes | Can override in derived component |
+| `metadata.type` | **Partial** | Inherited UNLESS value is `abstract` (base component designation) |
 | `metadata.enabled` | Yes | Can override in derived component |
 | `metadata.component` | Yes | Can override in derived component |
 | `metadata.name` | Yes | NEW field - logical component identity |
@@ -116,7 +116,9 @@ When `stacks.inherit.metadata: true` (the default):
 | `metadata.custom` | Yes | Deep-merged like other sections |
 | `metadata.inherits` | **No** | Meta-property - defines what to inherit FROM |
 
-The `metadata.inherits` field is intentionally excluded from inheritance because it is the mechanism that defines inheritance relationships. Inheriting it would create confusing circular dependencies.
+**Special exclusions from inheritance:**
+- `metadata.inherits` - This is the meta-property that defines inheritance relationships. Inheriting it would create confusing circular dependencies.
+- `metadata.type: abstract` - The `abstract` type is a base component designation that indicates the component is not deployable. This should not be inherited by child components, which are concrete implementations. Other `type` values (e.g., `real`, custom types) ARE inherited normally.
 
 ### New Field: `metadata.name`
 
@@ -294,9 +296,9 @@ When `stacks.inherit.metadata: true` (the new default):
 1. Most users don't set metadata in abstract base components (since it wasn't inherited before)
 2. Derived components can override any inherited value
 3. The most common metadata fields (`component`, `inherits`) are typically set per-component anyway
+4. `metadata.type: abstract` is automatically excluded from inheritance to prevent child components from becoming abstract
 
 **Potential issues:**
-- A base component with `type: abstract` would cause derived components to be abstract (if not overridden)
 - A base component with `enabled: false` would disable derived components (if not overridden)
 - A base component with `locked: true` would lock derived components (if not overridden)
 
@@ -318,8 +320,8 @@ vpc-prod:
   metadata:
     inherits:
       - vpc/defaults
-    type: real      # Override inherited type
     enabled: true   # Override inherited enabled
+    locked: false   # Override inherited locked
 ```
 
 ## Implementation
