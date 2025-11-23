@@ -545,7 +545,8 @@ func TestEnableEncryption_Success(t *testing.T) {
 	assert.Equal(t, "test-bucket", *capturedInput.Bucket)
 	require.Len(t, capturedInput.ServerSideEncryptionConfiguration.Rules, 1)
 	assert.Equal(t, types.ServerSideEncryptionAes256, capturedInput.ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm)
-	assert.True(t, *capturedInput.ServerSideEncryptionConfiguration.Rules[0].BucketKeyEnabled)
+	// BucketKeyEnabled should not be set for AES-256 (only applies to SSE-KMS).
+	assert.Nil(t, capturedInput.ServerSideEncryptionConfiguration.Rules[0].BucketKeyEnabled)
 }
 
 func TestEnableEncryption_Failure(t *testing.T) {

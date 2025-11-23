@@ -318,7 +318,7 @@ func enableEncryption(ctx context.Context, client S3ClientAPI, bucket string) er
 					ApplyServerSideEncryptionByDefault: &types.ServerSideEncryptionByDefault{
 						SSEAlgorithm: types.ServerSideEncryptionAes256,
 					},
-					BucketKeyEnabled: aws.Bool(true),
+					// Note: BucketKeyEnabled only applies to SSE-KMS, not AES-256.
 				},
 			},
 		},
