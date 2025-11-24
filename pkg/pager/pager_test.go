@@ -6,8 +6,21 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
-	"go.uber.org/mock/gomock"
+
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 )
+
+// setupTestWriter initializes I/O context and data writer for tests.
+// This ensures tests that may trigger data.Write() operations don't depend on globals.
+func setupTestWriter(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		t.Fatalf("Failed to initialize I/O context: %v", err)
+	}
+	data.InitWriter(ioCtx)
+}
 
 func TestPageCreator_Run(t *testing.T) {
 	tests := []struct {
@@ -18,7 +31,6 @@ func TestPageCreator_Run(t *testing.T) {
 		contentFitsTerminal  bool
 		expectedError        error
 		expectTeaProgramCall bool
-		writerError          error
 	}{
 		{
 			name:                 "no TTY support - prints content directly",
@@ -44,42 +56,20 @@ func TestPageCreator_Run(t *testing.T) {
 			contentFitsTerminal:  false,
 			expectTeaProgramCall: true,
 		},
-		{
-			name:                 "writer error - returns error",
-			title:                "Test Title",
-			content:              "Test content",
-			isTTYSupported:       false,
-			contentFitsTerminal:  true,
-			expectTeaProgramCall: false,
-			writerError:          errors.New("mock write error"),
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockWriter := NewMockWriter(ctrl)
+			setupTestWriter(t)
 
 			// Track whether newTeaProgram was called and capture the model.
 			teaProgramCalled := false
 			var capturedModel *model
 			var capturedOpts []tea.ProgramOption
 
-			// Set up writer expectations
-			if !tt.expectTeaProgramCall {
-				if tt.writerError != nil {
-					mockWriter.EXPECT().Write(tt.content).Return(tt.writerError)
-				} else {
-					mockWriter.EXPECT().Write(tt.content).Return(nil)
-				}
-			}
-
 			// Create pageCreator with mocked dependencies
 			pc := &pageCreator{
 				enablePager: true, // Enable pager for testing
-				writer:      mockWriter,
 				newTeaProgram: func(modelObj tea.Model, opts ...tea.ProgramOption) *tea.Program {
 					teaProgramCalled = true
 
@@ -104,16 +94,16 @@ func TestPageCreator_Run(t *testing.T) {
 				isTTYSupportForStdout: func() bool {
 					return tt.isTTYSupported
 				},
+				isTTYAccessible: func() bool {
+					return true // Mock /dev/tty as accessible
+				},
 			}
 
 			// Execute the test
 			err := pc.Run(tt.title, tt.content)
 
 			// Verify results
-			if tt.writerError != nil {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "failed to write content")
-			} else if tt.expectedError != nil {
+			if tt.expectedError != nil {
 				assert.Error(t, err)
 				assert.Equal(t, tt.expectedError.Error(), err.Error())
 			} else {
@@ -147,6 +137,8 @@ func (m *simpleTestModel) View() string {
 }
 
 func TestPageCreator_Run_WithError(t *testing.T) {
+	setupTestWriter(t)
+
 	// Test error handling by creating a pageCreator that simulates an error
 	expectedErr := errors.New("simulated tea program error")
 
@@ -162,6 +154,10 @@ func TestPageCreator_Run_WithError(t *testing.T) {
 		isTTYSupportForStdout: func() bool {
 			return true
 		},
+		isTTYAccessible: func() bool {
+			return true // Mock /dev/tty as accessible
+		},
+		enablePager: true,
 	}
 
 	err := pc.Run("Test", "Content")
@@ -196,7 +192,6 @@ func TestNew(t *testing.T) {
 	// Cast to concrete type to verify internal structure
 	concretePC, ok := pc.(*pageCreator)
 	assert.True(t, ok, "New() should return *pageCreator")
-	assert.NotNil(t, concretePC.writer)
 	assert.NotNil(t, concretePC.newTeaProgram)
 	assert.NotNil(t, concretePC.contentFitsTerminal)
 	assert.NotNil(t, concretePC.isTTYSupportForStdout)
@@ -220,10 +215,7 @@ func TestNewWithAtmosConfig(t *testing.T) {
 }
 
 func TestPageCreator_Run_ModelCreation(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockWriter := NewMockWriter(ctrl)
+	setupTestWriter(t)
 
 	title := "Test Title"
 	content := "Test Content"
@@ -233,7 +225,6 @@ func TestPageCreator_Run_ModelCreation(t *testing.T) {
 	var capturedOpts []tea.ProgramOption
 
 	pc := &pageCreator{
-		writer: mockWriter,
 		newTeaProgram: func(modelObj tea.Model, opts ...tea.ProgramOption) *tea.Program {
 			capturedModel = modelObj.(*model)
 			capturedOpts = opts
@@ -244,6 +235,9 @@ func TestPageCreator_Run_ModelCreation(t *testing.T) {
 		},
 		isTTYSupportForStdout: func() bool {
 			return true
+		},
+		isTTYAccessible: func() bool {
+			return true // Mock /dev/tty as accessible
 		},
 		enablePager: true,
 	}
@@ -268,44 +262,49 @@ func TestPageCreator_Run_ModelCreation(t *testing.T) {
 func TestPageCreator_Run_WithoutPager(t *testing.T) {
 	// Test scenarios where pager is not used
 	testCases := []struct {
-		name         string
-		enablePager  bool
-		ttySupported bool
-		contentFits  bool
+		name          string
+		enablePager   bool
+		ttySupported  bool
+		ttyAccessible bool
+		contentFits   bool
 	}{
 		{
-			name:         "pager disabled",
-			enablePager:  false,
-			ttySupported: true,
-			contentFits:  false,
+			name:          "pager disabled",
+			enablePager:   false,
+			ttySupported:  true,
+			ttyAccessible: true,
+			contentFits:   false,
 		},
 		{
-			name:         "no TTY support",
-			enablePager:  true,
-			ttySupported: false,
-			contentFits:  false,
+			name:          "no TTY support",
+			enablePager:   true,
+			ttySupported:  false,
+			ttyAccessible: true,
+			contentFits:   false,
 		},
 		{
-			name:         "TTY supported but content fits",
-			enablePager:  true,
-			ttySupported: true,
-			contentFits:  true,
+			name:          "TTY supported but content fits",
+			enablePager:   true,
+			ttySupported:  true,
+			ttyAccessible: true,
+			contentFits:   true,
+		},
+		{
+			name:          "TTY supported but not accessible - skips pager",
+			enablePager:   true,
+			ttySupported:  true,
+			ttyAccessible: false,
+			contentFits:   false,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockWriter := NewMockWriter(ctrl)
-			mockWriter.EXPECT().Write("Content").Return(nil)
-
+			setupTestWriter(t)
 			teaProgramCalled := false
 
 			pc := &pageCreator{
 				enablePager: tc.enablePager,
-				writer:      mockWriter,
 				newTeaProgram: func(model tea.Model, opts ...tea.ProgramOption) *tea.Program {
 					teaProgramCalled = true
 					return tea.NewProgram(&simpleTestModel{}, tea.WithInput(nil), tea.WithOutput(nil))
@@ -316,6 +315,9 @@ func TestPageCreator_Run_WithoutPager(t *testing.T) {
 				isTTYSupportForStdout: func() bool {
 					return tc.ttySupported
 				},
+				isTTYAccessible: func() bool {
+					return tc.ttyAccessible
+				},
 			}
 
 			err := pc.Run("Test", "Content")
@@ -323,19 +325,4 @@ func TestPageCreator_Run_WithoutPager(t *testing.T) {
 			assert.False(t, teaProgramCalled, "Tea program should not be called when content should be printed directly")
 		})
 	}
-}
-
-func TestPageCreator_Run_NilWriter(t *testing.T) {
-	// Test that nil writer falls back to fmt.Print without panicking
-	pc := &pageCreator{
-		enablePager: false,
-		writer:      nil, // Nil writer
-		isTTYSupportForStdout: func() bool {
-			return false
-		},
-	}
-
-	// This should not panic and should fall back to fmt.Print
-	err := pc.Run("Test", "Content")
-	assert.NoError(t, err)
 }

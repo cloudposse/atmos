@@ -99,7 +99,7 @@ For more advanced examples, check out the `!terraform.output` YAML function docu
 
 ###  Function: `!terraform.state`
 
-The [`!terraform.state`](/functions/yaml/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, bypassing the `terraform output` or `tofu output` pipeline — it’s **very fast**, doesn’t require provider initialization, and currently supports [S3 and local backends](/core-concepts/components/terraform/backends) for accessing [remote state](/core-concepts/share-data/remote-state).
+The [`!terraform.state`](/functions/yaml/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, bypassing the `terraform output` or `tofu output` pipeline — it's **very fast**, doesn't require provider initialization, and currently supports [S3 and local backends](/core-concepts/components/terraform/backends#supported-terraform-backends) for accessing [remote state](/core-concepts/share-data/remote-state).
 
 For example, we can read the `vpc_id` output of the `vpc` component in the current stack:
 
@@ -227,7 +227,7 @@ They can be fetched from any of the following schemes supported by Gomplate:
 
 :::tip On-the-Fly Root Modules
 
-When you combine data sources with [vendoring](/core-concepts/vendor), [terraform backends](/core-concepts/components/terraform/backends) and [provider](/core-concepts/components/terraform/providers) generation, you can leverage any Terraform module as a "root module" and provision it as a component with Atmos.
+When you combine data sources with [vendoring](/core-concepts/vendor), [terraform backends](/core-concepts/components/terraform/backends#supported-terraform-backends) and [provider](/core-concepts/components/terraform/providers#dynamic-provider-configuration) generation, you can leverage any Terraform module as a "root module" and provision it as a component with Atmos.
 :::
 
 Configure your data sources in `atmos.yaml`, then leverage them inside stack configurations.

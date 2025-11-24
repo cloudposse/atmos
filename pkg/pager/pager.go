@@ -1,7 +1,7 @@
 package pager
 
 import (
-	"fmt"
+	"os"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -69,6 +69,7 @@ type pageCreator struct {
 	newTeaProgram         func(model tea.Model, opts ...tea.ProgramOption) *tea.Program
 	contentFitsTerminal   func(content string) bool
 	isTTYSupportForStdout func() bool
+	isTTYAccessible       func() bool
 }
 
 func NewWithAtmosConfig(enablePager bool) PageCreator {
@@ -84,31 +85,61 @@ func New() PageCreator {
 		newTeaProgram:         tea.NewProgram,
 		contentFitsTerminal:   ContentFitsTerminal,
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
+		isTTYAccessible:       isTTYAccessible,
 	}
 }
 
+// isTTYAccessible checks if /dev/tty can be opened.
+func isTTYAccessible() bool {
+	tty, err := os.Open("/dev/tty")
+	if err != nil {
+		return false
+	}
+	tty.Close()
+	return true
+}
+
 func (p *pageCreator) Run(title, content string) error {
+	// Always print content directly if pager is disabled or no TTY support.
 	if !(p.enablePager) || !p.isTTYSupportForStdout() {
 		return p.writeContent(content)
 	}
-	// Count visible lines (taking word wrapping into account).
-	contentFits := p.contentFitsTerminal(content)
-	// If content exceeds terminal height, use pager.
-	if !contentFits {
-		if _, err := p.newTeaProgram(
-			&model{
-				title:    title,
-				content:  content,
-				ready:    false,
-				viewport: viewport.New(0, 0),
-			},
-			tea.WithAltScreen(), // use the full size of the terminal in its "alternate screen buffer"
-		).Run(); err != nil {
-			return err
-		}
-	} else {
+
+	// Check if /dev/tty is accessible before trying to use alternate screen.
+	// The alternate screen mode requires opening /dev/tty for input, which may not
+	// be available in CI/test environments even if stdout is a TTY.
+	if !isTTYAccessible() {
+		// /dev/tty not accessible, print directly without pager.
+		// This is an expected condition in non-interactive environments, not an error.
+		log.Trace("Pager disabled: /dev/tty not accessible")
 		return p.writeContent(content)
 	}
+
+	// Count visible lines (taking word wrapping into account)
+	contentFits := p.contentFitsTerminal(content)
+
+	// If content fits in terminal, print it directly without pager.
+	if contentFits {
+		return p.writeContent(content)
+	}
+
+	// Content doesn't fit - use the pager with alternate screen.
+	_, pagerErr := p.newTeaProgram(
+		&model{
+			title:    title,
+			content:  content,
+			ready:    false,
+			viewport: viewport.New(0, 0),
+		},
+		tea.WithAltScreen(), // use the full size of the terminal in its "alternate screen buffer".
+	).Run()
+	if pagerErr != nil {
+		// Pager failed, fall back to direct print.
+		// This is a graceful fallback, not a critical error.
+		log.Trace("Pager failed, falling back to direct print", "error", pagerErr)
+		return p.writeContent(content)
+	}
+
 	return nil
 }
 
