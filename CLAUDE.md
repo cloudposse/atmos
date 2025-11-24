@@ -764,10 +764,11 @@ Reply to threads: Use `gh api graphql` with `addPullRequestReviewThreadReply`
   ---
   import Screengrab from '@site/src/components/Screengrab'
   import Terminal from '@site/src/components/Terminal'
+  import Intro from '@site/src/components/Intro'
 
-  :::note Purpose
-  Use this command to [describe purpose with links to concepts].
-  :::
+  <Intro>
+  Use this command to [action]. See existing docs for examples.
+  </Intro>
 
   <Screengrab title="atmos command subcommand --help" slug="atmos-command-subcommand--help" />
 
@@ -786,7 +787,7 @@ Reply to threads: Use `gh api graphql` with `addPullRequestReviewThreadReply`
 
 - **File location**: `website/docs/cli/commands/<command>/<subcommand>.mdx`
 - **Link to core concepts** using `/core-concepts/` paths
-- **Include purpose note** and help screengrab
+- **Include intro** and help screengrab
 - **Use consistent section ordering**: Usage → Examples → Arguments → Flags
 
 ### Website Documentation Build (MANDATORY)
