@@ -15,6 +15,18 @@ atmos --help
 atmos atlantis --help
 atmos atlantis generate --help
 atmos atlantis generate repo-config --help
+atmos auth --help
+atmos auth console --help
+atmos auth env --help
+atmos auth exec --help
+atmos auth list --help
+atmos auth login --help
+atmos auth logout --help
+atmos auth shell --help
+atmos auth user --help
+atmos auth user configure --help
+atmos auth validate --help
+atmos auth whoami --help
 atmos aws --help
 atmos aws eks --help
 atmos aws eks update-kubeconfig --help
@@ -31,32 +43,60 @@ atmos describe dependents --help
 atmos describe stacks --help
 atmos describe workflows --help
 atmos docs --help
+atmos docs generate --help
+atmos list --help
+atmos list components --help
+atmos list metadata --help
+atmos list settings --help
+atmos list stacks --help
+atmos list values --help
+atmos list vars --help
+atmos list workflows --help
 atmos pro lock --help
 atmos pro unlock --help
 atmos terraform --help
 atmos terraform apply --help
 atmos terraform clean --help
+atmos terraform console --help
 atmos terraform deploy --help
 atmos terraform destroy --help
+atmos terraform fmt --help
+atmos terraform force-unlock --help
 atmos terraform generate --help
-atmos terraform import --help
-atmos terraform init --help
-atmos terraform output --help
-atmos terraform plan --help
-atmos terraform refresh --help
-atmos terraform state --help
 atmos terraform generate backend --help
 atmos terraform generate backends --help
 atmos terraform generate planfile --help
 atmos terraform generate varfile --help
 atmos terraform generate varfiles --help
+atmos terraform get --help
+atmos terraform graph --help
+atmos terraform import --help
+atmos terraform init --help
+atmos terraform login --help
+atmos terraform logout --help
+atmos terraform metadata --help
+atmos terraform modules --help
+atmos terraform output --help
+atmos terraform plan --help
+atmos terraform plan-diff --help
+atmos terraform providers --help
+atmos terraform refresh --help
 atmos terraform shell --help
+atmos terraform show --help
+atmos terraform state --help
+atmos terraform taint --help
+atmos terraform test --help
+atmos terraform untaint --help
+atmos terraform validate --help
+atmos terraform version --help
 atmos terraform workspace --help
 atmos theme --help
 atmos theme list --help
 atmos theme show --help
 atmos validate --help
 atmos validate component --help
+atmos validate editorconfig --help
+atmos validate schema --help
 atmos validate stacks --help
 atmos vendor --help
 atmos vendor pull --help

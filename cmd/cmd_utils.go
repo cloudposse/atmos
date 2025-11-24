@@ -749,8 +749,7 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 		}
 	}
 	showUsageExample(cmd, unknownCommand)
-	errUtils.Exit(1)
-	return nil
+	return errUtils.WithExitCode(err, 1)
 }
 
 // getConfigAndStacksInfo processes the CLI config and stacks.

@@ -31,8 +31,10 @@ tests:
       diff: []
       stdout:
         - "Validate the authentication configuration in atmos.yaml"
-        - "Usage:"
+        - "USAGE"
         - "atmos auth validate"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   # Auth Whoami Tests
@@ -50,8 +52,10 @@ tests:
       diff: []
       stdout:
         - "Display information about the current effective authentication principal."
-        - "Usage:"
+        - "USAGE"
         - "atmos auth whoami"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos auth whoami --identity test-user
@@ -87,12 +91,14 @@ tests:
       diff: []
       stdout:
         - "Outputs environment variables for the assumed identity"
-        - "Usage:"
+        - "USAGE"
         - "atmos auth env"
         - "--format"
         - "bash"
         - "json"
         - "dotenv"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos auth env --format json --identity test-user
@@ -167,9 +173,11 @@ tests:
       diff: []
       stdout:
         - "Execute a command with the authenticated identity's environment variables set."
-        - "Usage:"
+        - "USAGE"
         - "atmos auth exec"
         - "--identity"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos auth exec --identity test-user -- echo hello
@@ -207,9 +215,11 @@ tests:
       diff: []
       stdout:
         - "Authenticate to cloud providers using an identity defined in atmos.yaml"
-        - "Usage:"
+        - "USAGE"
         - "atmos auth login"
         - "--identity"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos auth login --identity test-user
@@ -246,8 +256,10 @@ tests:
       stdout:
         - "Configure static AWS user credentials"
         - "stored securely in keyring"
-        - "Usage:"
+        - "USAGE"
         - "atmos auth user configure"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   # Error Cases

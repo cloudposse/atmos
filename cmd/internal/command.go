@@ -1,6 +1,11 @@
 package internal
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
+)
 
 // CommandAlias represents an alias for a command or subcommand under a different parent.
 type CommandAlias struct {
@@ -47,6 +52,18 @@ type CommandAlias struct {
 //	    return "Other Commands"
 //	}
 //
+//	func (a *AboutCommandProvider) GetFlagsBuilder() flags.Builder {
+//	    return nil
+//	}
+//
+//	func (a *AboutCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+//	    return nil
+//	}
+//
+//	func (a *AboutCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+//	    return nil
+//	}
+//
 //	func (a *AboutCommandProvider) GetAliases() []CommandAlias {
 //	    return nil // No aliases
 //	}
@@ -74,6 +91,18 @@ type CommandProvider interface {
 	//   - "Pro Features"             (auth, pro)
 	//   - "Other Commands"           (about, completion, version, support)
 	GetGroup() string
+
+	// GetFlagsBuilder returns the flags builder for this command.
+	// Return nil if the command has no flags.
+	GetFlagsBuilder() flags.Builder
+
+	// GetPositionalArgsBuilder returns the positional args builder for this command.
+	// Return nil if the command has no positional arguments.
+	GetPositionalArgsBuilder() *flags.PositionalArgsBuilder
+
+	// GetCompatibilityFlags returns compatibility flags for this command.
+	// Return nil if the command has no compatibility flags.
+	GetCompatibilityFlags() map[string]compat.CompatibilityFlag
 
 	// GetAliases returns a list of command aliases to register.
 	// Aliases allow the same command to be accessible under different parent commands.
