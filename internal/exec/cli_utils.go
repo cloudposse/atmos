@@ -213,10 +213,6 @@ func processArgsAndFlags(
 	var globalOptions []string
 	var indexesToRemove []int
 
-	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "clean" {
-		info.SubCommand = inputArgsAndFlags[0]
-	}
-
 	// For commands like `atmos terraform plan`, show the command help
 	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] != "version" && info.SubCommand == "" {
 		info.SubCommand = inputArgsAndFlags[0]

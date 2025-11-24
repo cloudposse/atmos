@@ -3,83 +3,58 @@ package exec
 import (
 	"errors"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/spf13/cobra"
-
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteTerraformGenerateVarfileCmd executes `terraform generate varfile` command.
-func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error {
-	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfileCmd")()
+// ExecuteGenerateVarfile generates a varfile for a terraform component.
+func ExecuteGenerateVarfile(
+	component, stack, file string,
+	processTemplates, processFunctions bool,
+	skip []string,
+	atmosConfig *schema.AtmosConfiguration,
+) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteGenerateVarfile")()
 
-	if len(args) != 1 {
-		return errors.New("invalid arguments. The command requires one argument `component`")
+	log.Debug("ExecuteGenerateVarfile called",
+		"component", component,
+		"stack", stack,
+		"file", file,
+		"processTemplates", processTemplates,
+		"processFunctions", processFunctions,
+		"skip", skip,
+	)
+
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: component,
+		Stack:            stack,
+		StackFromArg:     stack,
+		ComponentType:    "terraform",
+		CliArgs:          []string{"terraform", "generate", "varfile"},
 	}
 
-	flags := cmd.Flags()
-
-	stack, err := flags.GetString("stack")
+	// Process stacks to get component configuration.
+	info, err := ProcessStacks(atmosConfig, info, true, processTemplates, processFunctions, skip, nil)
 	if err != nil {
 		return err
 	}
 
-	processTemplates, err := flags.GetBool("process-templates")
-	if err != nil {
-		return err
-	}
-
-	processYamlFunctions, err := flags.GetBool("process-functions")
-	if err != nil {
-		return err
-	}
-
-	skip, err := flags.GetStringSlice("skip")
-	if err != nil {
-		return err
-	}
-
-	component := args[0]
-
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
-	if err != nil {
-		return err
-	}
-
-	info.ComponentFromArg = component
-	info.Stack = stack
-	info.ComponentType = "terraform"
-	info.CliArgs = []string{"terraform", "generate", "varfile"}
-
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return err
-	}
-
-	info, err = ProcessStacks(&atmosConfig, info, true, processTemplates, processYamlFunctions, skip, nil)
-	if err != nil {
-		return err
-	}
-
-	var varFileNameFromArg string
+	// Determine varfile path.
 	var varFilePath string
-
-	varFileNameFromArg, err = flags.GetString("file")
-	if err != nil {
-		varFileNameFromArg = ""
-	}
-
-	if len(varFileNameFromArg) > 0 {
-		varFilePath = varFileNameFromArg
+	if len(file) > 0 {
+		varFilePath = file
 	} else {
-		varFilePath = constructTerraformComponentVarfilePath(&atmosConfig, &info)
+		varFilePath = constructTerraformComponentVarfilePath(atmosConfig, &info)
 	}
 
 	// Print the component variables
-	log.Debug("Generating varfile for variables", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
+	log.Debug("Generating varfile for variables",
+		"component", info.ComponentFromArg,
+		"stack", info.Stack,
+		"variables", info.ComponentVarsSection,
+	)
 
 	// Write the variables to a file.
 	log.Debug("Writing the variables to file", "file", varFilePath)
@@ -92,4 +67,10 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 	}
 
 	return nil
+}
+
+// ExecuteTerraformGenerateVarfileCmd executes `terraform generate varfile` command.
+// Deprecated: Use ExecuteGenerateVarfile with typed parameters instead.
+func ExecuteTerraformGenerateVarfileCmd(cmd interface{}, args []string) error {
+	return errors.New("ExecuteTerraformGenerateVarfileCmd is deprecated and should not be called")
 }

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -58,58 +57,9 @@ func checkBackendTypeAfterProcessing(backendType string) error {
 }
 
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command.
-func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
-	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendsCmd")()
-
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
-	if err != nil {
-		return err
-	}
-
-	info.CliArgs = []string{"terraform", "generate", "backends"}
-
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return err
-	}
-
-	flags := cmd.Flags()
-
-	fileTemplate, err := flags.GetString("file-template")
-	if err != nil {
-		return err
-	}
-
-	stacksCsv, err := flags.GetString("stacks")
-	if err != nil {
-		return err
-	}
-	var stacks []string
-	if stacksCsv != "" {
-		stacks = strings.Split(stacksCsv, ",")
-	}
-
-	componentsCsv, err := flags.GetString("components")
-	if err != nil {
-		return err
-	}
-	var components []string
-	if componentsCsv != "" {
-		components = strings.Split(componentsCsv, ",")
-	}
-
-	format, err := flags.GetString("format")
-	if err != nil {
-		return err
-	}
-	if format != "" && format != "json" && format != "hcl" && format != "backend-config" {
-		return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'hcl', 'json', and 'backend-config'", format)
-	}
-	if format == "" {
-		format = "hcl"
-	}
-
-	return ExecuteTerraformGenerateBackends(&atmosConfig, fileTemplate, format, stacks, components)
+// Deprecated: Use ExecuteTerraformGenerateBackends with typed parameters instead.
+func ExecuteTerraformGenerateBackendsCmd(cmd interface{}, args []string) error {
+	return errors.New("ExecuteTerraformGenerateBackendsCmd is deprecated and should not be called")
 }
 
 // ExecuteTerraformGenerateBackends generates backend configs for all terraform components.

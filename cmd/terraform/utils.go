@@ -63,6 +63,7 @@ func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
 func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
 	// Get compatibility flags for this subcommand.
 	subCommand := actualCmd.Name()
+	log.Debug("terraformRun entry", "subCommand", subCommand, "args", args)
 	compatFlags := GetCompatFlagsForCommand(subCommand)
 
 	// Create translator to separate Atmos flags from terraform pass-through flags.
@@ -79,8 +80,13 @@ func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []str
 		return err
 	}
 
+	log.Debug("After parser.Parse", "PositionalArgs", parsedConfig.PositionalArgs, "SeparatedArgs", parsedConfig.SeparatedArgs)
+
 	// Build info from parsed config.
-	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, parentCmd, parsedConfig.PositionalArgs, parsedConfig.SeparatedArgs)
+	// Prepend subcommand to positional args so ProcessCommandLineArgs can set info.SubCommand correctly.
+	argsWithSubCommand := append([]string{subCommand}, parsedConfig.PositionalArgs...)
+	log.Debug("argsWithSubCommand", "args", argsWithSubCommand)
+	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, parentCmd, argsWithSubCommand, nil)
 	if err != nil {
 		return err
 	}
@@ -144,13 +150,16 @@ func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []str
 	// `--components c1,c2`
 	// `--query <yq-expression>`
 	// `--stack` (and the `component` argument is not passed)
+	log.Debug("terraformRun routing decision", "All", info.All, "Components", info.Components, "Query", info.Query, "Stack", info.Stack, "ComponentFromArg", info.ComponentFromArg, "SubCommand", info.SubCommand)
 	if info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "") {
+		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")
 		err = e.ExecuteTerraformQuery(&info)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
 
 	// Execute `atmos terraform <sub-command> <component> --stack <stack>`
+	log.Debug("Routing to ExecuteTerraform (single-component)")
 	err = e.ExecuteTerraform(info)
 	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences
 	// So if we get here, it means there were no differences or there was an error

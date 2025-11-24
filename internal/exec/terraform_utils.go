@@ -68,21 +68,6 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 	}
 }
 
-func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
-	shouldProcessStacks := true
-	shouldCheckStack := true
-
-	if info.SubCommand == "clean" {
-		if info.ComponentFromArg == "" {
-			shouldProcessStacks = false
-		}
-		shouldCheckStack = info.Stack != ""
-
-	}
-
-	return shouldProcessStacks, shouldCheckStack
-}
-
 func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	// Auto-generate backend file
 	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {

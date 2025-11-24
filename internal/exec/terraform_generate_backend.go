@@ -5,63 +5,42 @@ import (
 	"path/filepath"
 
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteTerraformGenerateBackendCmd executes `terraform generate backend` command.
-func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error {
-	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendCmd")()
+// ExecuteGenerateBackend generates backend config for a terraform component.
+func ExecuteGenerateBackend(
+	component, stack string,
+	processTemplates, processFunctions bool,
+	skip []string,
+	atmosConfig *schema.AtmosConfiguration,
+) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteGenerateBackend")()
 
-	if len(args) != 1 {
-		return errors.New("invalid arguments. The command requires one argument `component`")
+	log.Debug("ExecuteGenerateBackend called",
+		"component", component,
+		"stack", stack,
+		"processTemplates", processTemplates,
+		"processFunctions", processFunctions,
+		"skip", skip,
+	)
+
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: component,
+		Stack:            stack,
+		StackFromArg:     stack,
+		ComponentType:    "terraform",
+		CliArgs:          []string{"terraform", "generate", "backend"},
 	}
 
-	flags := cmd.Flags()
-
-	stack, err := flags.GetString("stack")
-	if err != nil {
-		return err
-	}
-
-	processTemplates, err := flags.GetBool("process-templates")
-	if err != nil {
-		return err
-	}
-
-	processYamlFunctions, err := flags.GetBool("process-functions")
-	if err != nil {
-		return err
-	}
-
-	skip, err := flags.GetStringSlice("skip")
-	if err != nil {
-		return err
-	}
-
-	component := args[0]
-
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
-	if err != nil {
-		return err
-	}
-
-	info.ComponentFromArg = component
-	info.Stack = stack
-	info.ComponentType = "terraform"
-	info.CliArgs = []string{"terraform", "generate", "backend"}
-
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return err
-	}
-
-	info, err = ProcessStacks(&atmosConfig, info, true, processTemplates, processYamlFunctions, skip, nil)
+	// Process stacks to get component configuration.
+	info, err := ProcessStacks(atmosConfig, info, true, processTemplates, processFunctions, skip, nil)
 	if err != nil {
 		return err
 	}
@@ -114,4 +93,10 @@ func ExecuteTerraformGenerateBackendCmd(cmd *cobra.Command, args []string) error
 	}
 
 	return nil
+}
+
+// ExecuteTerraformGenerateBackendCmd executes `terraform generate backend` command.
+// Deprecated: Use ExecuteGenerateBackend with typed parameters instead.
+func ExecuteTerraformGenerateBackendCmd(cmd interface{}, args []string) error {
+	return errors.New("ExecuteTerraformGenerateBackendCmd is deprecated and should not be called")
 }

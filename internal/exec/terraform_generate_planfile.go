@@ -36,8 +36,54 @@ type PlanfileOptions struct {
 	Skip                 []string
 }
 
+// ExecuteGeneratePlanfile generates a planfile for a terraform component.
+func ExecuteGeneratePlanfile(
+	component, stack, file, format string,
+	processTemplates, processFunctions bool,
+	skip []string,
+	atmosConfig *schema.AtmosConfiguration,
+) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteGeneratePlanfile")()
+
+	log.Debug("ExecuteGeneratePlanfile called",
+		"component", component,
+		"stack", stack,
+		"file", file,
+		"format", format,
+		"processTemplates", processTemplates,
+		"processFunctions", processFunctions,
+		"skip", skip,
+	)
+
+	options := &PlanfileOptions{
+		Component:            component,
+		Stack:                stack,
+		Format:               format,
+		File:                 file,
+		ProcessTemplates:     processTemplates,
+		ProcessYamlFunctions: processFunctions,
+		Skip:                 skip,
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: component,
+		Stack:            stack,
+		StackFromArg:     stack,
+		ComponentType:    "terraform",
+		CliArgs:          []string{"terraform", "generate", "planfile"},
+	}
+
+	return ExecuteTerraformGeneratePlanfile(options, info)
+}
+
 // ExecuteTerraformGeneratePlanfileCmd executes `terraform generate planfile` command.
-func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) error {
+// Deprecated: Use ExecuteGeneratePlanfile with typed parameters instead.
+func ExecuteTerraformGeneratePlanfileCmd(cmd interface{}, args []string) error {
+	return errors.New("ExecuteTerraformGeneratePlanfileCmd is deprecated and should not be called")
+}
+
+// ExecuteTerraformGeneratePlanfileOld executes `terraform generate planfile` command.
+func ExecuteTerraformGeneratePlanfileOld(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfileCmd")()
 
 	if len(args) == 0 {
