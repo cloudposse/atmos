@@ -1479,7 +1479,14 @@ func initCobraConfig() {
 			command.Example = exampleContent.Content
 		}
 
-		if !(Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")) {
+		// Check if help was explicitly requested via os.Args, args parameter, or via the help flag.
+		helpRequested := Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h") ||
+			Contains(args, "help") || Contains(args, "--help") || Contains(args, "-h")
+		if helpFlag := command.Flag("help"); helpFlag != nil && helpFlag.Changed {
+			helpRequested = true
+		}
+
+		if !helpRequested {
 			// Get actual arguments (handles DisableFlagParsing=true case).
 			arguments := flags.GetActualArgs(command, os.Args)
 			showUsageAndExit(command, arguments)

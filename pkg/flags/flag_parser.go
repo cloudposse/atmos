@@ -1,6 +1,7 @@
 package flags
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -307,7 +308,9 @@ func (p *AtmosFlagParser) parseAndBindFlags(atmosArgs []string) error {
 	p.cmd.SetArgs(atmosArgs)
 
 	// Execute Cobra parsing (this populates cmd.Flags()).
-	if err := p.cmd.ParseFlags(atmosArgs); err != nil {
+	// Ignore pflag.ErrHelp to allow help flag processing to continue.
+	// The help flag will be handled by Cobra's help system later in the execution flow.
+	if err := p.cmd.ParseFlags(atmosArgs); err != nil && !errors.Is(err, pflag.ErrHelp) {
 		return err
 	}
 

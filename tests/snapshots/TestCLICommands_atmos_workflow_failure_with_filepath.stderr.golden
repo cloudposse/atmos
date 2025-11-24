@@ -2,15 +2,19 @@
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 ℹ Executing command: atmos terraform plan mock -s idontexist
 
-# Error
+# Incorrect Usage
 
-**Error:** invalid component
+**Error:** The command atmos terraform plan is not valid usage
 
-## Explanation
+## Usage Examples:
 
-Could not find the component mock in the stack idontexist. Check that all the
-context variables are correctly defined in the stack manifests. Are the
-component and stack names correct? Did you forget an import?
+– Execute a terraform plan
+
+  $ atmos terraform plan <component-name> -s <stack-name>
+
+## Hints
+
+💡 https://atmos.tools/cli/commands/terraform/usage
 
 
 
