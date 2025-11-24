@@ -1,0 +1,18 @@
+# Stack file that imports the catalog and tries to override
+import:
+  - catalog/blob-defaults
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    # Test case: The problematic case - import and override
+    blob-with-list:
+      vars:
+        # Try to override the list from catalog with empty list
+        # This previously caused: "cannot override two slices with different type"
+        foo_list: []
+        # Try to merge maps - should merge, not overwrite
+        foo_map:
+          a: 1

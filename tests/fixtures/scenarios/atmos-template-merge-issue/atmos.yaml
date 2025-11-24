@@ -1,0 +1,18 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "../../components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "catalog/**/*"
+
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
