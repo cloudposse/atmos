@@ -6,17 +6,15 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	e "github.com/cloudposse/atmos/internal/exec"
 	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var (
-	// planDiffParser handles flag parsing for plan-diff command.
-	planDiffParser *flags.StandardParser
-)
+// planDiffParser handles flag parsing for plan-diff command.
+var planDiffParser *flags.StandardParser
 
 // planDiffCmd represents the terraform plan-diff command (custom Atmos command).
 var planDiffCmd = &cobra.Command{

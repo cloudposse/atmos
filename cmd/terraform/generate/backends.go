@@ -7,16 +7,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var (
-	// backendsParser handles flag parsing for backends command.
-	backendsParser *flags.StandardParser
-)
+// backendsParser handles flag parsing for backends command.
+var backendsParser *flags.StandardParser
 
 // backendsCmd generates backend configs for all terraform components.
 var backendsCmd = &cobra.Command{
