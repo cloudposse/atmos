@@ -1,29 +1,15 @@
 package backend
 
 import (
-	"errors"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
-	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provision"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var listParser *flags.StandardParser
-
-// ListOptions contains parsed flags for the list command.
-type ListOptions struct {
-	global.Flags
-	Stack    string
-	Identity string
-	Format   string
-}
 
 var listCmd = &cobra.Command{
 	Use:     "list",
@@ -34,33 +20,27 @@ var listCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "backend.list.RunE")()
 
-		// Parse flags using StandardParser with Viper precedence.
+		// Parse flags.
 		v := viper.GetViper()
 		if err := listParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
 
-		opts := &ListOptions{
-			Flags:    flags.ParseGlobalFlags(cmd, v),
-			Stack:    v.GetString("stack"),
-			Identity: v.GetString("identity"),
-			Format:   v.GetString("format"),
-		}
-
-		if opts.Stack == "" {
-			return errUtils.ErrRequiredFlagNotProvided
-		}
-
-		// Load atmos configuration.
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
-			Stack: opts.Stack,
-		}, false)
+		opts, err := ParseCommonFlags(cmd, listParser)
 		if err != nil {
-			return errors.Join(errUtils.ErrFailedToInitConfig, err)
+			return err
+		}
+
+		format := v.GetString("format")
+
+		// Initialize config (no component needed for list).
+		atmosConfig, _, err := InitConfigAndAuth("", opts.Stack, opts.Identity)
+		if err != nil {
+			return err
 		}
 
 		// Execute list command using pkg/provision.
-		return provision.ListBackends(&atmosConfig, opts)
+		return provision.ListBackends(atmosConfig, map[string]string{"format": format})
 	},
 }
 

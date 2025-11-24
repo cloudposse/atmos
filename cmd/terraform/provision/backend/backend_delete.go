@@ -1,30 +1,15 @@
-//nolint:dupl // CRUD commands share similar structure intentionally - standard command pattern.
 package backend
 
 import (
-	"errors"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
-	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provision"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var deleteParser *flags.StandardParser
-
-// DeleteOptions contains parsed flags for the delete command.
-type DeleteOptions struct {
-	global.Flags
-	Stack    string
-	Identity string
-	Force    bool
-}
 
 var deleteCmd = &cobra.Command{
 	Use:   "delete <component>",
@@ -40,34 +25,28 @@ Requires the --force flag for safety. The backend must be empty
 
 		component := args[0]
 
-		// Parse flags using StandardParser with Viper precedence.
+		// Parse flags.
 		v := viper.GetViper()
 		if err := deleteParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
 
-		opts := &DeleteOptions{
-			Flags:    flags.ParseGlobalFlags(cmd, v),
-			Stack:    v.GetString("stack"),
-			Identity: v.GetString("identity"),
-			Force:    v.GetBool("force"),
-		}
-
-		if opts.Stack == "" {
-			return errUtils.ErrRequiredFlagNotProvided
-		}
-
-		// Load atmos configuration.
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
-			ComponentFromArg: component,
-			Stack:            opts.Stack,
-		}, false)
+		opts, err := ParseCommonFlags(cmd, deleteParser)
 		if err != nil {
-			return errors.Join(errUtils.ErrFailedToInitConfig, err)
+			return err
+		}
+
+		force := v.GetBool("force")
+
+		// Initialize config.
+		atmosConfig, _, err := InitConfigAndAuth(component, opts.Stack, opts.Identity)
+		if err != nil {
+			return err
 		}
 
 		// Execute delete command using pkg/provision.
-		return provision.DeleteBackend(&atmosConfig, component, opts)
+		// Pass force flag in a simple map.
+		return provision.DeleteBackend(atmosConfig, component, map[string]bool{"force": force})
 	},
 }
 

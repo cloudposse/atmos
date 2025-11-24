@@ -1,30 +1,15 @@
-//nolint:dupl // CRUD commands share similar structure intentionally - standard command pattern.
 package backend
 
 import (
-	"errors"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
-	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provision"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 var describeParser *flags.StandardParser
-
-// DescribeOptions contains parsed flags for the describe command.
-type DescribeOptions struct {
-	global.Flags
-	Stack    string
-	Identity string
-	Format   string
-}
 
 var describeCmd = &cobra.Command{
 	Use:   "describe <component>",
@@ -47,28 +32,22 @@ This includes backend settings, variables, and metadata from the stack manifest.
 			return err
 		}
 
-		opts := &DescribeOptions{
-			Flags:    flags.ParseGlobalFlags(cmd, v),
-			Stack:    v.GetString("stack"),
-			Identity: v.GetString("identity"),
-			Format:   v.GetString("format"),
-		}
-
-		if opts.Stack == "" {
-			return errUtils.ErrRequiredFlagNotProvided
-		}
-
-		// Load atmos configuration.
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
-			ComponentFromArg: component,
-			Stack:            opts.Stack,
-		}, false)
+		opts, err := ParseCommonFlags(cmd, describeParser)
 		if err != nil {
-			return errors.Join(errUtils.ErrFailedToInitConfig, err)
+			return err
+		}
+
+		format := v.GetString("format")
+
+		// Initialize config.
+		atmosConfig, _, err := InitConfigAndAuth(component, opts.Stack, opts.Identity)
+		if err != nil {
+			return err
 		}
 
 		// Execute describe command using pkg/provision.
-		return provision.DescribeBackend(&atmosConfig, component, opts)
+		// Pass format in a simple map since opts interface{} accepts anything.
+		return provision.DescribeBackend(atmosConfig, component, map[string]string{"format": format})
 	},
 }
 
