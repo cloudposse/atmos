@@ -317,6 +317,8 @@ func buildImportTreeFromChain(importChain []string, atmosConfig *schema.AtmosCon
 // stripBasePath converts an absolute path to a relative path by removing the base path.
 // Returns a relative, extensionless, forward-slash-normalized path suitable for display.
 func stripBasePath(absolutePath, basePath string) string {
+	defer perf.Track(nil, "list.importresolver.stripBasePath")()
+
 	// Normalize both paths.
 	absolutePath = filepath.Clean(absolutePath)
 	basePath = filepath.Clean(basePath)

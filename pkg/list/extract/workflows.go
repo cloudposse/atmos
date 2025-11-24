@@ -27,15 +27,15 @@ func Workflows(atmosConfig *schema.AtmosConfiguration, fileFilter string) ([]map
 	if fileFilter != "" {
 		cleanPath := filepath.Clean(fileFilter)
 		if !utils.IsYaml(cleanPath) {
-			return nil, fmt.Errorf("%w: invalid workflow file extension: %s", errUtils.ErrParseFile, fileFilter)
+			return nil, fmt.Errorf("%w: invalid workflow file extension: %s", errUtils.ErrParseFile, cleanPath)
 		}
 
-		if _, err := os.Stat(fileFilter); os.IsNotExist(err) {
-			return nil, errors.Join(errUtils.ErrParseFile, fmt.Errorf("workflow file not found: %s", fileFilter))
+		if _, err := os.Stat(cleanPath); os.IsNotExist(err) {
+			return nil, errors.Join(errUtils.ErrParseFile, fmt.Errorf("workflow file not found: %s", cleanPath))
 		}
 
 		// Read and parse the workflow file.
-		data, err := os.ReadFile(fileFilter)
+		data, err := os.ReadFile(cleanPath)
 		if err != nil {
 			return nil, errors.Join(errUtils.ErrParseFile, err)
 		}
@@ -45,7 +45,7 @@ func Workflows(atmosConfig *schema.AtmosConfiguration, fileFilter string) ([]map
 			return nil, errors.Join(errUtils.ErrParseFile, err)
 		}
 
-		manifest.Name = fileFilter
+		manifest.Name = cleanPath
 		workflows = append(workflows, extractFromManifest(manifest)...)
 		return workflows, nil
 	}

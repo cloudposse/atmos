@@ -67,6 +67,8 @@ func extractComponentType(stackName, componentType string, componentsMap map[str
 
 // buildBaseComponent creates the base component map with required fields.
 func buildBaseComponent(componentName, stackName, componentType string) map[string]any {
+	defer perf.Track(nil, "list.extract.buildBaseComponent")()
+
 	return map[string]any{
 		"component": componentName,
 		"stack":     stackName,
@@ -96,6 +98,8 @@ func enrichComponentWithMetadata(comp map[string]any, componentData any) {
 
 // extractMetadataFields extracts common metadata fields to top level.
 func extractMetadataFields(comp map[string]any, metadata map[string]any) {
+	defer perf.Track(nil, "list.extract.extractMetadataFields")()
+
 	comp[metadataEnabled] = getBoolWithDefault(metadata, metadataEnabled, true)
 	comp[metadataLocked] = getBoolWithDefault(metadata, metadataLocked, false)
 	comp["component_type"] = getStringWithDefault(metadata, "type", "real")
@@ -103,6 +107,8 @@ func extractMetadataFields(comp map[string]any, metadata map[string]any) {
 
 // setDefaultMetadataFields sets default values for metadata fields.
 func setDefaultMetadataFields(comp map[string]any) {
+	defer perf.Track(nil, "list.extract.setDefaultMetadataFields")()
+
 	comp[metadataEnabled] = true
 	comp[metadataLocked] = false
 	comp["component_type"] = "real"
@@ -110,6 +116,8 @@ func setDefaultMetadataFields(comp map[string]any) {
 
 // getBoolWithDefault safely extracts a bool value or returns the default.
 func getBoolWithDefault(m map[string]any, key string, defaultValue bool) bool {
+	defer perf.Track(nil, "list.extract.getBoolWithDefault")()
+
 	if val, ok := m[key].(bool); ok {
 		return val
 	}
@@ -118,6 +126,8 @@ func getBoolWithDefault(m map[string]any, key string, defaultValue bool) bool {
 
 // getStringWithDefault safely extracts a string value or returns the default.
 func getStringWithDefault(m map[string]any, key string, defaultValue string) string {
+	defer perf.Track(nil, "list.extract.getStringWithDefault")()
+
 	if val, ok := m[key].(string); ok {
 		return val
 	}

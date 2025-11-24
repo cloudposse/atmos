@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
+	perf "github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -67,6 +68,8 @@ var vendorCmd = &cobra.Command{
 // columnsCompletionForVendor provides dynamic tab completion for --columns flag.
 // Returns column names from atmos.yaml vendor.list.columns configuration.
 func columnsCompletionForVendor(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "list.vendor.columnsCompletionForVendor")()
+
 	// Load atmos configuration.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
@@ -114,6 +117,8 @@ func init() {
 }
 
 func listVendorWithOptions(opts *VendorOptions) error {
+	defer perf.Track(nil, "list.vendor.listVendorWithOptions")()
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
@@ -169,6 +174,8 @@ func listVendorWithOptions(opts *VendorOptions) error {
 
 // buildVendorFilters creates filters based on command options.
 func buildVendorFilters(opts *VendorOptions) []filter.Filter {
+	defer perf.Track(nil, "list.vendor.buildVendorFilters")()
+
 	var filters []filter.Filter
 
 	// Component filter (glob pattern on component field).
@@ -185,6 +192,8 @@ func buildVendorFilters(opts *VendorOptions) []filter.Filter {
 
 // getVendorColumns returns column configuration.
 func getVendorColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) []column.Config {
+	defer perf.Track(nil, "list.vendor.getVendorColumns")()
+
 	// If --columns flag is provided, parse it and return.
 	if len(columnsFlag) > 0 {
 		return parseColumnsFlag(columnsFlag)
@@ -214,6 +223,8 @@ func getVendorColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []stri
 
 // buildVendorSorters creates sorters from sort specification.
 func buildVendorSorters(sortSpec string) ([]*listSort.Sorter, error) {
+	defer perf.Track(nil, "list.vendor.buildVendorSorters")()
+
 	if sortSpec == "" {
 		// Default sort: by component ascending.
 		return []*listSort.Sorter{
