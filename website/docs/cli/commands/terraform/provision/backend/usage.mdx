@@ -1,69 +1,114 @@
 ---
-title: atmos provision backend
+title: atmos terraform provision backend
 sidebar_label: backend
 sidebar_class_name: command
 id: backend
-description: Provision Terraform state backend infrastructure before running Terraform commands
+description: Manage Terraform state backend infrastructure
 ---
 
 import Screengrab from '@site/src/components/Screengrab'
 
 :::note Purpose
-Use this command to provision S3 Terraform state backends before running Terraform commands. This eliminates the manual bootstrapping step of creating state storage infrastructure.
+Use these commands to manage Terraform state backend infrastructure. This solves the Terraform bootstrap problem by automatically provisioning backend storage with secure defaults, making it compatible with any Terraform-managed backend.
 :::
 
 ## Usage
 
 ```shell
-atmos provision backend <component> --stack <stack>
+atmos terraform provision backend <subcommand> [options]
 ```
 
-This command provisions the backend infrastructure for a component in a specific stack. The backend must have `provision.backend.enabled: true` in its stack configuration.
+## Available Subcommands
+
+<dl>
+  <dt>`create <component>`</dt>
+  <dd>Provision backend infrastructure for a component</dd>
+
+  <dt>`list`</dt>
+  <dd>List all backends in a stack</dd>
+
+  <dt>`describe <component>`</dt>
+  <dd>Show backend configuration from stack</dd>
+
+  <dt>`update <component>`</dt>
+  <dd>Update backend configuration (idempotent)</dd>
+
+  <dt>`delete <component>`</dt>
+  <dd>Delete backend infrastructure (requires --force)</dd>
+</dl>
+
+## Creating Backends
+
+Provision backend infrastructure for a component in a specific stack:
+
+```shell
+atmos terraform provision backend create <component> --stack <stack>
+```
+
+The backend must have `provision.backend.enabled: true` in its stack configuration.
 
 ## Examples
 
-### Provision S3 Backend
+### Create Backend
+
+Provision an S3 bucket with secure defaults:
 
 ```shell
-atmos provision backend vpc --stack dev
+atmos terraform provision backend create vpc --stack dev
 ```
 
-This provisions an S3 bucket (if it doesn't exist) with secure defaults:
+This creates an S3 bucket (if it doesn't exist) with:
 - Versioning enabled
 - AES-256 encryption
 - Public access blocked
 - Resource tags applied
 
-### Provision for Multiple Components
+### List Backends
+
+Show all backend configurations in a stack:
 
 ```shell
-atmos provision backend vpc --stack dev
-atmos provision backend eks --stack dev
-atmos provision backend rds --stack dev
+atmos terraform provision backend list --stack dev
 ```
 
-### CI/CD Pipeline Usage
+### Describe Backend Configuration
 
-```yaml
-# GitHub Actions example
-- name: Provision Backends
-  run: |
-    atmos provision backend vpc --stack dev
-    atmos provision backend eks --stack dev
-  # Pipeline fails if provisioning fails
+View a component's backend configuration from the stack:
 
-- name: Deploy Infrastructure
-  run: |
-    atmos terraform apply vpc --stack dev
-    atmos terraform apply eks --stack dev
-  # Only runs if provisioning succeeded
+```shell
+atmos terraform provision backend describe vpc --stack dev
+atmos terraform provision backend describe vpc --stack dev --format json
+```
+
+### Update Backend
+
+Apply configuration changes to existing backend (idempotent):
+
+```shell
+atmos terraform provision backend update vpc --stack dev
+```
+
+### Delete Backend
+
+Remove backend infrastructure (requires --force for safety):
+
+```shell
+atmos terraform provision backend delete vpc --stack dev --force
+```
+
+### Provision Multiple Backends
+
+```shell
+atmos terraform provision backend create vpc --stack dev
+atmos terraform provision backend create eks --stack dev
+atmos terraform provision backend create rds --stack dev
 ```
 
 ## Arguments
 
 <dl>
   <dt>`component`</dt>
-  <dd>The Atmos component name (as defined in stack manifests)</dd>
+  <dd>The Atmos component name (required for create, describe, update, delete)</dd>
 </dl>
 
 ## Flags
@@ -71,11 +116,22 @@ atmos provision backend rds --stack dev
 <dl>
   <dt>`--stack` / `-s`</dt>
   <dd>Atmos stack name (required). Can also be set via `ATMOS_STACK` environment variable</dd>
+
+  <dt>`--identity` / `-i`</dt>
+  <dd>Identity to use for authentication. Use without value to select interactively</dd>
+
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format for list and describe commands: `table`, `yaml`, `json` (default: varies by command)</dd>
+
+  <dt>`--force`</dt>
+  <dd>Force deletion without confirmation (delete command only)</dd>
 </dl>
 
 ## How It Works
 
-When you run `atmos provision backend`:
+### Manual Provisioning
+
+When you run `atmos terraform provision backend create`:
 
 1. **Load Configuration** - Atmos loads the component's stack configuration
 2. **Check Provisioning** - Verifies `provision.backend.enabled: true` is set
@@ -84,7 +140,7 @@ When you run `atmos provision backend`:
 5. **Provision** - Creates backend with hardcoded security defaults if needed
 6. **Apply Settings** - Configures versioning, encryption, access controls, and tags
 
-## Automatic Provisioning
+### Automatic Provisioning
 
 Backends are also provisioned **automatically** when running Terraform commands if `provision.backend.enabled: true`:
 
@@ -105,6 +161,17 @@ Terraform Init
   ↓
 Terraform Command
 ```
+
+### Solving the Terraform Bootstrap Problem
+
+Terraform has a chicken-and-egg problem: you need infrastructure to store state, but you need state to manage infrastructure. Atmos solves this by:
+
+1. **Automatic Detection** - Reads backend configuration from stack manifests
+2. **Secure Defaults** - Creates backend with hardcoded security settings
+3. **Idempotent Operations** - Safe to run multiple times
+4. **Terraform Compatible** - Works with any Terraform-managed backend
+
+This eliminates manual backend setup and makes Terraform backends work like any other infrastructure resource.
 
 ## Configuration
 
@@ -323,29 +390,24 @@ For cross-account provisioning, also add:
 }
 ```
 
-## Development vs Production
+## Migrating to Terraform-Managed Backends
 
-### Development Workflow
+Once your backend is provisioned, you can import it into Terraform for advanced management:
 
-Perfect for quick iteration and testing:
+### Step 1: Provision the Backend
 
-```yaml
-# Automatic provisioning for development
-provision:
-  backend:
-    enabled: true  # Fast setup, secure defaults
-```
+Use Atmos to create the backend with secure defaults:
 
 ```shell
-atmos terraform plan vpc -s dev  # Backend created automatically
+atmos terraform provision backend create vpc --stack prod
 ```
 
-### Production Migration
+### Step 2: Import into Terraform
 
-For production environments, import the provisioned backend into Terraform:
+Add the backend to your Terraform configuration and import it:
 
 ```hcl
-# Import provisioned backend
+# Import the provisioned backend
 import {
   to = aws_s3_bucket.terraform_state
   id = "acme-terraform-state-prod"
@@ -354,8 +416,14 @@ import {
 resource "aws_s3_bucket" "terraform_state" {
   bucket = "acme-terraform-state-prod"
 }
+```
 
-# Add production-specific features
+### Step 3: Add Advanced Features
+
+Extend the backend with production-specific features:
+
+```hcl
+# Add lifecycle rules
 resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
 
@@ -369,6 +437,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
   }
 }
 
+# Add replication
 resource "aws_s3_bucket_replication_configuration" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
   role   = aws_iam_role.replication.arn
@@ -385,16 +454,17 @@ resource "aws_s3_bucket_replication_configuration" "terraform_state" {
 }
 ```
 
-Then disable automatic provisioning for production:
+### Step 4: Disable Automatic Provisioning
+
+Once Terraform manages the backend, disable automatic provisioning:
 
 ```yaml
-# Production: Managed by terraform-aws-tfstate-backend module
 provision:
   backend:
-    enabled: false  # Backend managed by Terraform
+    enabled: false  # Backend now managed by Terraform
 ```
 
-See the [Development vs Production](/core-concepts/components/terraform/backends#automatic-backend-provisioning) section in Backend Configuration for migration patterns.
+See the [Backend Configuration](/core-concepts/components/terraform/backends#automatic-backend-provisioning) docs for more migration patterns.
 
 ## Idempotent Operations
 
@@ -414,11 +484,12 @@ S3 bucket 'acme-terraform-state-dev' already exists (idempotent)
 
 ## Related Commands
 
-- `atmos terraform init` - Initialize Terraform (auto-provisions if enabled)
-- `atmos terraform plan` - Plan Terraform changes (auto-provisions if enabled)
-- `atmos terraform apply` - Apply Terraform changes (auto-provisions if enabled)
+- [`atmos terraform init`](/cli/commands/terraform/usage) - Initialize Terraform (auto-provisions if enabled)
+- [`atmos terraform plan`](/cli/commands/terraform/usage) - Plan Terraform changes (auto-provisions if enabled)
+- [`atmos terraform apply`](/cli/commands/terraform/usage) - Apply Terraform changes (auto-provisions if enabled)
 
 ## Related Concepts
 
 - [Stack Configuration](/core-concepts/stacks)
 - [Backend Configuration](/core-concepts/components/terraform/backends)
+- [Authentication and Identity](/core-concepts/components/authentication)
