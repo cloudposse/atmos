@@ -15,15 +15,18 @@ import (
 func PrintMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 	defer perf.Track(nil, "utils.PrintMessageToUpgradeToAtmosLatestRelease")()
 
+	// Get current theme styles that respect the active color profile.
+	styles := theme.GetCurrentStyles()
+
 	// Define content
 	message := lipgloss.NewStyle().
 		Render(fmt.Sprintf("Update available! %s » %s",
-			theme.Styles.VersionNumber.Render(version.Version),
-			theme.Styles.NewVersion.Render(latestVersion)))
+			styles.VersionNumber.Render(version.Version),
+			styles.NewVersion.Render(latestVersion)))
 
 	links := []string{
-		lipgloss.NewStyle().Render(fmt.Sprintf("Atmos Releases: %s", theme.Styles.Link.Render("https://github.com/cloudposse/atmos/releases"))),
-		lipgloss.NewStyle().Render(fmt.Sprintf("Install Atmos: %s", theme.Styles.Link.Render("https://atmos.tools/install"))),
+		lipgloss.NewStyle().Render(fmt.Sprintf("Atmos Releases: %s", styles.Link.Render("https://github.com/cloudposse/atmos/releases"))),
+		lipgloss.NewStyle().Render(fmt.Sprintf("Install Atmos: %s", styles.Link.Render("https://atmos.tools/install"))),
 	}
 
 	messageLines := append([]string{message}, links...)

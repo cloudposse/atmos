@@ -5,6 +5,8 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/markdown"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -54,6 +56,21 @@ func (d *DevcontainerCommandProvider) GetName() string {
 // GetGroup returns the command group for help organization.
 func (d *DevcontainerCommandProvider) GetGroup() string {
 	return "Workflow Commands"
+}
+
+// GetFlagsBuilder returns the flags builder for this command.
+func (d *DevcontainerCommandProvider) GetFlagsBuilder() flags.Builder {
+	return nil
+}
+
+// GetPositionalArgsBuilder returns the positional args builder for this command.
+func (d *DevcontainerCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+// GetCompatibilityFlags returns compatibility flags for this command.
+func (d *DevcontainerCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }
 
 // GetAliases returns command aliases (none for devcontainer).

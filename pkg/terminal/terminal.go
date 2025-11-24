@@ -421,7 +421,7 @@ func buildConfig() *Config {
 //
 //nolint:revive // Cyclomatic complexity acceptable for priority-based configuration logic.
 func (c *Config) ShouldUseColor(isTTY bool) bool {
-	// 1. NO_COLOR always wins
+	// 1. NO_COLOR env var always wins
 	if c.EnvNoColor {
 		return false
 	}
@@ -431,7 +431,7 @@ func (c *Config) ShouldUseColor(isTTY bool) bool {
 		return false
 	}
 
-	// 3. CLICOLOR_FORCE overrides TTY detection
+	// 3. CLICOLOR_FORCE env var overrides TTY detection
 	if c.EnvCLIColorForce {
 		return true
 	}
