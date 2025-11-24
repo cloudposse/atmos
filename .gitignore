@@ -107,3 +107,4 @@ performance-optimization/
 .scratch/
 TEST_FAILURE_ANALYSIS.md
 scratch/
+*.ansi
