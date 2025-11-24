@@ -1,0 +1,120 @@
+---
+title: atmos terraform import
+sidebar_label: import
+sidebar_class_name: command
+id: import
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to import existing infrastructure resources into the Terraform state for an Atmos component in a stack.
+</Intro>
+
+<Screengrab title="atmos terraform import --help" slug="atmos-terraform-import--help" />
+
+## Usage
+
+Execute the `terraform import` command like this:
+
+```shell
+atmos terraform import <component> <ADDRESS> <ID> -s <stack> [options]
+```
+
+This command imports existing infrastructure into your Terraform state. This allows you to bring resources created outside of Terraform under Terraform management. Atmos automatically sets AWS_REGION if a region variable is found.
+
+:::info Atmos Enhancements
+Atmos provides several enhancements for the import command:
+- Automatic `terraform init` before importing
+- Workspace selection and management
+- Variable file generation and passing
+- **Automatic AWS_REGION environment variable** setting based on the component's region variable
+- Component locking support (blocks import if `metadata.locked: true`)
+:::
+## Examples
+
+### Basic Import
+
+```shell
+# Import an AWS instance
+atmos terraform import vpc -s dev aws_instance.web i-1234567890abcdef0
+```
+
+### Import with ID Containing Spaces
+
+```shell
+# Import resources with complex IDs
+atmos terraform import vpc -s dev 'aws_iam_role_policy.example' 'role-name:policy-name'
+```
+
+### Import to Specific Index
+
+```shell
+# Import to a specific index in a list
+atmos terraform import app -s dev 'aws_instance.web[0]' i-1234567890abcdef0
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+
+    <dt>`ADDRESS` <em>(required)</em></dt>
+    <dd>
+        Terraform resource address to import to. This follows the format `[module.]resource_type.resource_name[index]`. Examples:
+        - `aws_instance.web` - Simple resource
+        - `module.vpc.aws_subnet.private` - Resource in a module
+        - `aws_instance.web[0]` - Resource with index
+        - `module.app["prod"].aws_instance.web` - Module with key
+    </dd>
+
+    <dt>`ID` <em>(required)</em></dt>
+    <dd>
+        Provider-specific resource ID to import. This is the unique identifier from your cloud provider. Examples:
+        - `i-1234567890abcdef0` - AWS instance ID
+        - `role-name:policy-name` - AWS IAM role policy (composite ID)
+        - `projects/my-project/zones/us-central1-a/instances/my-instance` - GCP instance ID
+        Note: Quote the ID if it contains spaces or special characters.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform import vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform import vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform import` flags such as `-input=false` to disable interactive input, `-var` to set variables, `-var-file` to specify variable files.
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory
