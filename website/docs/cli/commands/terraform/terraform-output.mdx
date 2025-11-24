@@ -1,0 +1,131 @@
+---
+title: atmos terraform output
+sidebar_label: output
+sidebar_class_name: command
+id: output
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to read Terraform output values for an Atmos component in a stack from the state file.
+</Intro>
+
+<Screengrab title="atmos terraform output --help" slug="atmos-terraform-output--help" />
+
+## Usage
+
+Execute the `terraform output` command like this:
+
+```shell
+atmos terraform output <component> -s <stack> [options]
+```
+
+This command reads output values from the Terraform state file and prints them. Output values are useful for passing information between different Terraform configurations or to external systems.
+
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init`, workspace selection, and variable file generation. The output retrieval itself is handled by native Terraform.
+:::
+## Examples
+
+### Show All Outputs
+
+```shell
+# Display all outputs for a component
+atmos terraform output vpc -s dev
+```
+
+### Get Specific Output
+
+```shell
+# Get a specific output value
+atmos terraform output vpc -s dev vpc_id
+```
+
+### JSON Format
+
+```shell
+# Get outputs in JSON format
+atmos terraform output vpc -s dev -json
+```
+
+### Raw Output
+
+```shell
+# Get raw output value (useful for scripts)
+atmos terraform output vpc -s dev -raw vpc_id
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform output vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform output vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+<dl>
+    <dt>`-json`</dt>
+    <dd>
+        Output in JSON format.
+
+        ```shell
+        atmos terraform output vpc -s dev -json
+        ```
+    </dd>
+
+    <dt>`-raw`</dt>
+    <dd>
+        Output raw string value (for single outputs).
+
+        ```shell
+        atmos terraform output vpc -s dev -raw vpc_id
+        ```
+    </dd>
+
+    <dt>`-state=PATH`</dt>
+    <dd>
+        Path to the state file to read.
+
+        ```shell
+        atmos terraform output vpc -s dev -state=terraform.tfstate
+        ```
+    </dd>
+</dl>
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory
