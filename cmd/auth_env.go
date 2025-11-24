@@ -81,7 +81,7 @@ var authEnvCmd = &cobra.Command{
 						return errUtils.ErrUserAborted
 					}
 					// Wrap with ErrAuthenticationFailed sentinel while preserving original error.
-					return fmt.Errorf("%w: %w", errUtils.ErrAuthenticationFailed, err)
+					return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthenticationFailed, err)
 				}
 			}
 

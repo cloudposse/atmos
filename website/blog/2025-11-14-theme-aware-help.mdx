@@ -1,0 +1,67 @@
+---
+slug: theme-aware-help
+title: "Help Text Now Respects Your Terminal Theme"
+authors: [osterman]
+tags: [enhancement]
+---
+
+Atmos help text now automatically adapts to your configured theme, providing a consistent and visually cohesive experience across all commands. Whether you're using a dark theme like Dracula or a light theme like GitHub, help output will match your terminal's color scheme.
+
+<!--truncate-->
+
+## What Changed
+
+Previously, help text used a fixed color scheme that didn't respect your terminal theme settings. Now, when you run any `--help` command, the output automatically uses colors from your configured theme.
+
+## How It Works
+
+The theme system applies to all help output:
+
+```bash
+# Help text uses your configured theme
+atmos terraform plan --help
+atmos describe stacks --help
+atmos --help
+```
+
+If you have a theme configured in `atmos.yaml` or via the `ATMOS_THEME` environment variable, all help text will automatically use those colors for syntax highlighting, headings, and examples.
+
+## Force Color Output
+
+For screenshot generation or CI/CD environments, you can force colored output even when not connected to a TTY:
+
+```bash
+# Force color output for screenshots
+atmos --help --force-color
+
+# Or use environment variable
+ATMOS_FORCE_COLOR=true atmos terraform plan --help
+```
+
+This ensures consistent, colorful output regardless of the execution environment.
+
+## Configuration
+
+Set your theme in `atmos.yaml`:
+
+```yaml
+settings:
+  terminal:
+    theme: dracula
+```
+
+Or use an environment variable:
+
+```bash
+export ATMOS_THEME=solarized-dark
+```
+
+## Learn More
+
+- [Terminal themes](/cli/commands/theme/usage) - Complete theme documentation
+- [Browse themes](/cli/commands/theme/browse) - Visual gallery of 350+ themes
+- [Force color flag](/cli/global-flags) - Command-line options
+
+## Get Involved
+
+- Share your feedback in the [Atmos Community Slack](https://cloudposse.com/slack)

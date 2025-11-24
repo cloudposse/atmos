@@ -258,7 +258,7 @@ settings:
   list_merge_strategy: replace
   terminal:
     max_width: 120
-    pager: "0"
+    pager: "false"
     unicode: true
     syntax_highlighting:
       enabled: true

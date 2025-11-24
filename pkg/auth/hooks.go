@@ -56,7 +56,6 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 
 	// Skip if no auth config (check the merged config, not the original).
 	if len(authConfig.Providers) == 0 && len(authConfig.Identities) == 0 {
-		log.Debug("No auth configuration found, skipping authentication")
 		return nil
 	}
 

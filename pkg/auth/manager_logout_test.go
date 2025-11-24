@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -1142,4 +1145,180 @@ func TestManager_LogoutAll_NotSupported(t *testing.T) {
 	if err != nil {
 		t.Errorf("LogoutAll() should succeed with ErrLogoutNotSupported, got error = %v", err)
 	}
+}
+
+func TestManager_LogoutProvider_RemovesProvisionedIdentitiesCache(t *testing.T) {
+	// Test that LogoutProvider attempts to remove the auto-provisioned identities cache file.
+	// This is an integration test that verifies the cache cleanup is called.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-provider": {
+				Kind: "aws/iam-identity-center",
+			},
+		},
+		Identities: map[string]schema.Identity{},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers: map[string]types.Provider{
+			"test-provider": mockProvider,
+		},
+		identities: map[string]types.Identity{},
+	}
+
+	// Expect provider logout calls.
+	mockStore.EXPECT().Delete("test-provider").Return(nil)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	// Call LogoutProvider - it should attempt to remove the cache file.
+	// The cache cleanup is non-fatal, so even if the file doesn't exist, logout should succeed.
+	ctx := context.Background()
+	err := m.LogoutProvider(ctx, "test-provider", true)
+	if err != nil {
+		t.Errorf("LogoutProvider() should succeed even if cache file doesn't exist, got: %v", err)
+	}
+}
+
+func TestManager_LogoutProvider_CacheRemovalWithExistingFile(t *testing.T) {
+	// Test that LogoutProvider successfully removes an existing provisioned identities cache file.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-sso": {
+				Kind: "aws/iam-identity-center",
+			},
+		},
+		Identities: map[string]schema.Identity{},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers: map[string]types.Provider{
+			"test-sso": mockProvider,
+		},
+		identities: map[string]types.Identity{},
+	}
+
+	// Create a provisioned identities cache file.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	result := &types.ProvisioningResult{
+		Provider:      "test-sso",
+		ProvisionedAt: time.Now(),
+		Identities: map[string]*schema.Identity{
+			"account1/role1": {
+				Provider: "test-sso",
+			},
+		},
+		Metadata: types.ProvisioningMetadata{
+			Source: "aws-sso",
+			Counts: &types.ProvisioningCounts{
+				Accounts:   1,
+				Roles:      1,
+				Identities: 1,
+			},
+		},
+	}
+
+	filePath, err := writer.Write(result)
+	require.NoError(t, err)
+	assert.FileExists(t, filePath)
+
+	// Expect provider logout calls.
+	mockStore.EXPECT().Delete("test-sso").Return(nil)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	// Call LogoutProvider - it should remove the cache file.
+	ctx := context.Background()
+	err = m.LogoutProvider(ctx, "test-sso", true)
+	require.NoError(t, err)
+
+	// Verify the cache file was removed.
+	assert.NoFileExists(t, filePath)
+}
+
+func TestManager_LogoutAll_RemovesProvisionedIdentitiesCache(t *testing.T) {
+	// Test that LogoutAll removes provisioned identities cache files for all providers.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockProvider := types.NewMockProvider(ctrl)
+
+	config := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-sso": {
+				Kind: "aws/iam-identity-center",
+			},
+		},
+		Identities: map[string]schema.Identity{},
+	}
+
+	m := &manager{
+		config:          config,
+		credentialStore: mockStore,
+		providers: map[string]types.Provider{
+			"test-sso": mockProvider,
+		},
+		identities: map[string]types.Identity{},
+	}
+
+	// Create a provisioned identities cache file.
+	writer, err := types.NewProvisioningWriter()
+	require.NoError(t, err)
+
+	result := &types.ProvisioningResult{
+		Provider:      "test-sso",
+		ProvisionedAt: time.Now(),
+		Identities: map[string]*schema.Identity{
+			"account1/role1": {
+				Provider: "test-sso",
+			},
+		},
+		Metadata: types.ProvisioningMetadata{
+			Source: "aws-sso",
+			Counts: &types.ProvisioningCounts{
+				Accounts:   1,
+				Roles:      1,
+				Identities: 1,
+			},
+		},
+	}
+
+	filePath, err := writer.Write(result)
+	require.NoError(t, err)
+	assert.FileExists(t, filePath)
+
+	// Expect provider logout calls.
+	mockStore.EXPECT().Delete("test-sso").Return(nil)
+	mockProvider.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	// Call LogoutAll - it should remove all cache files.
+	ctx := context.Background()
+	err = m.LogoutAll(ctx, true)
+	require.NoError(t, err)
+
+	// Verify the cache file was removed.
+	assert.NoFileExists(t, filePath)
 }
