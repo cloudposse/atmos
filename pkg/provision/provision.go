@@ -117,3 +117,30 @@ func ProvisionWithParams(params *ProvisionParams) error {
 	_ = ui.Success(fmt.Sprintf("Successfully provisioned %s '%s' in stack '%s'", params.ProvisionerType, params.Component, params.Stack))
 	return nil
 }
+
+// ListBackends lists all backends in a stack.
+func ListBackends(atmosConfig *schema.AtmosConfiguration, opts interface{}) error {
+	defer perf.Track(atmosConfig, "provision.ListBackends")()
+
+	_ = ui.Info("Listing backends")
+	_ = ui.Warning("List functionality not yet implemented")
+	return nil
+}
+
+// DescribeBackend returns the backend configuration from stack.
+func DescribeBackend(atmosConfig *schema.AtmosConfiguration, component string, opts interface{}) error {
+	defer perf.Track(atmosConfig, "provision.DescribeBackend")()
+
+	_ = ui.Info(fmt.Sprintf("Describing backend for component '%s'", component))
+	_ = ui.Warning("Describe functionality not yet implemented")
+	return nil
+}
+
+// DeleteBackend deletes a backend.
+func DeleteBackend(atmosConfig *schema.AtmosConfiguration, component string, opts interface{}) error {
+	defer perf.Track(atmosConfig, "provision.DeleteBackend")()
+
+	_ = ui.Info(fmt.Sprintf("Deleting backend for component '%s'", component))
+	_ = ui.Warning("Delete functionality not yet implemented - this command is a placeholder")
+	return nil
+}

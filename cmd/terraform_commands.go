@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cloudposse/atmos/cmd/terraform/provision"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
@@ -301,6 +302,9 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 	parentCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch: atmos terraform <sub-command> --affected --clone-target-ref=true\n"+
 		"If set to 'false' (default), the target reference will be checked out instead\n"+
 		"This requires that the target reference is already cloned by Git, and the information about it exists in the '.git' directory")
+
+	// Add provision subcommand to terraform.
+	parentCmd.AddCommand(provision.GetProvisionCommand())
 
 	commands := getTerraformCommands()
 
