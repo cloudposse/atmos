@@ -1,10 +1,10 @@
 
-# Error
+# Incorrect Usage
 
-**Error:** locked component cannot be provisioned
+**Error:** The command atmos terraform deploy is not valid usage
 
-## Explanation
+## Hints
 
-component 'mock' cannot be modified (metadata.locked: true)
+💡 Run atmos terraform deploy --help for usage
 
 
