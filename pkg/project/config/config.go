@@ -22,6 +22,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/cloudposse/atmos/pkg/generator/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Color constants for consistent styling using lipgloss named colors.
@@ -67,6 +68,8 @@ type Config map[string]interface{}
 
 // LoadScaffoldConfigFromContent loads scaffold configuration from YAML content.
 func LoadScaffoldConfigFromContent(content string) (*ScaffoldConfig, error) {
+	defer perf.Track(nil, "config.LoadScaffoldConfigFromContent")()
+
 	var scaffoldConfig ScaffoldConfig
 	if err := yaml.Unmarshal([]byte(content), &scaffoldConfig); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal scaffold config: %w", err)
@@ -77,6 +80,8 @@ func LoadScaffoldConfigFromContent(content string) (*ScaffoldConfig, error) {
 
 // LoadScaffoldConfigFromFile loads scaffold configuration schema from the specified YAML file using Viper, returning a pointer to ScaffoldConfig and an error on read or unmarshal failures.
 func LoadScaffoldConfigFromFile(configPath string) (*ScaffoldConfig, error) {
+	defer perf.Track(nil, "config.LoadScaffoldConfigFromFile")()
+
 	// Create a new Viper instance for this specific config file
 	v := viper.New()
 	v.SetConfigFile(configPath)
@@ -98,6 +103,8 @@ func LoadScaffoldConfigFromFile(configPath string) (*ScaffoldConfig, error) {
 
 // LoadUserValues loads user values from the .atmos/scaffold.yaml file within the provided scaffoldPath and returns them as a map along with any error encountered; returns an empty map and nil error if the file does not exist; returns a wrapped error on read or unmarshal failures.
 func LoadUserValues(scaffoldPath string) (map[string]interface{}, error) {
+	defer perf.Track(nil, "config.LoadUserValues")()
+
 	// Create .atmos directory path
 	atmosDir := filepath.Join(scaffoldPath, ScaffoldConfigDir)
 	valuesPath := filepath.Join(atmosDir, ScaffoldConfigFileName)
@@ -128,17 +135,23 @@ func LoadUserValues(scaffoldPath string) (map[string]interface{}, error) {
 
 // SaveUserValues saves the provided values to the .atmos/scaffold.yaml file within scaffoldPath using the new format structure and returns an error on failure.
 func SaveUserValues(scaffoldPath string, values map[string]interface{}) error {
+	defer perf.Track(nil, "config.SaveUserValues")()
+
 	// Always save with new format structure, even if template_id is empty
 	return SaveUserConfig(scaffoldPath, "", values)
 }
 
 // SaveUserConfig saves user configuration with the provided templateID and values to scaffoldPath and returns an error on failure.
 func SaveUserConfig(scaffoldPath string, templateID string, values map[string]interface{}) error {
+	defer perf.Track(nil, "config.SaveUserConfig")()
+
 	return SaveUserConfigWithBaseRef(scaffoldPath, templateID, "", values)
 }
 
 // SaveUserConfigWithBaseRef saves user configuration with the provided templateID, baseRef, and values to scaffoldPath and returns an error on failure.
 func SaveUserConfigWithBaseRef(scaffoldPath string, templateID string, baseRef string, values map[string]interface{}) error {
+	defer perf.Track(nil, "config.SaveUserConfigWithBaseRef")()
+
 	// Create .atmos directory path
 	atmosDir := filepath.Join(scaffoldPath, ScaffoldConfigDir)
 	valuesPath := filepath.Join(atmosDir, ScaffoldConfigFileName)
@@ -179,6 +192,8 @@ func SaveUserConfigWithBaseRef(scaffoldPath string, templateID string, baseRef s
 
 // LoadUserConfig loads user configuration from .atmos/scaffold.yaml within the specified scaffoldPath, returning a pointer to UserConfig and an error; returns nil, nil if the config file does not exist.
 func LoadUserConfig(scaffoldPath string) (*UserConfig, error) {
+	defer perf.Track(nil, "config.LoadUserConfig")()
+
 	atmosDir := filepath.Join(scaffoldPath, ScaffoldConfigDir)
 	valuesPath := filepath.Join(atmosDir, ScaffoldConfigFileName)
 
@@ -204,6 +219,8 @@ func LoadUserConfig(scaffoldPath string) (*UserConfig, error) {
 
 // DeepMerge merges scaffold configuration defaults with user values.
 func DeepMerge(scaffoldConfig *ScaffoldConfig, userValues map[string]interface{}) map[string]interface{} {
+	defer perf.Track(nil, "config.DeepMerge")()
+
 	merged := make(map[string]interface{})
 
 	// Start with scaffold defaults
@@ -221,6 +238,8 @@ func DeepMerge(scaffoldConfig *ScaffoldConfig, userValues map[string]interface{}
 
 // GetConfigPath returns the path where the config directory should be stored based on the user's home directory and returns an error if the user home directory cannot be determined.
 func GetConfigPath() (string, error) {
+	defer perf.Track(nil, "config.GetConfigPath")()
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get user home directory: %w", err)
@@ -231,6 +250,8 @@ func GetConfigPath() (string, error) {
 
 // PromptForScaffoldConfig prompts the user for scaffold configuration values using a dynamic form built from the provided ScaffoldConfig; userValues supplies initial values and is populated with results; returns an error on failure.
 func PromptForScaffoldConfig(scaffoldConfig *ScaffoldConfig, userValues map[string]interface{}) error {
+	defer perf.Track(nil, "config.PromptForScaffoldConfig")()
+
 	// Initialize form values with user values and defaults
 	formValues := initializeFormValues(scaffoldConfig, userValues)
 
@@ -477,6 +498,8 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 
 // GetConfigurationSummary returns table rows and header representing scaffold configuration, merged values, and their sources.
 func GetConfigurationSummary(scaffoldConfig *ScaffoldConfig, mergedValues map[string]interface{}, valueSources map[string]string) ([][]string, []string) {
+	defer perf.Track(nil, "config.GetConfigurationSummary")()
+
 	// Prepare table rows
 	var rows [][]string
 	for key := range scaffoldConfig.Fields {
@@ -510,6 +533,8 @@ func GetConfigurationSummary(scaffoldConfig *ScaffoldConfig, mergedValues map[st
 
 // ReadScaffoldConfig reads scaffold configuration from atmos.yaml at the provided targetPath; returns an empty map and nil error when the file does not exist; returns a wrapped error when reading or parsing fails.
 func ReadScaffoldConfig(targetPath string) (map[string]interface{}, error) {
+	defer perf.Track(nil, "config.ReadScaffoldConfig")()
+
 	configPath := filepath.Join(targetPath, "atmos.yaml")
 
 	// Check if atmos.yaml exists
@@ -537,6 +562,8 @@ func ReadScaffoldConfig(targetPath string) (map[string]interface{}, error) {
 // this functionality will be integrated into the main atmos configuration handling
 // system which has robust support for reading and validating atmos.yaml files.
 func ReadAtmosScaffoldSection(targetPath string) (map[string]interface{}, error) {
+	defer perf.Track(nil, "config.ReadAtmosScaffoldSection")()
+
 	configPath := filepath.Join(targetPath, "atmos.yaml")
 
 	// Check if atmos.yaml exists
@@ -570,6 +597,8 @@ func ReadAtmosScaffoldSection(targetPath string) (map[string]interface{}, error)
 
 // HasScaffoldConfig checks if a configuration contains a scaffold.yaml file.
 func HasScaffoldConfig(files []types.File) bool {
+	defer perf.Track(nil, "config.HasScaffoldConfig")()
+
 	for _, file := range files {
 		if file.Path == ScaffoldConfigFileName {
 			return true
@@ -580,6 +609,8 @@ func HasScaffoldConfig(files []types.File) bool {
 
 // HasUserConfig checks if a scaffold template directory at the specified scaffoldPath contains a user configuration file, returning true if the file exists.
 func HasUserConfig(scaffoldPath string) bool {
+	defer perf.Track(nil, "config.HasUserConfig")()
+
 	userConfigPath := filepath.Join(scaffoldPath, ScaffoldConfigDir, ScaffoldConfigFileName)
 	_, err := os.Stat(userConfigPath)
 	return err == nil

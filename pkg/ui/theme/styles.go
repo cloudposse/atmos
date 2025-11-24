@@ -370,6 +370,23 @@ func InitializeStylesFromTheme(themeName string) error {
 	return nil
 }
 
+// InvalidateStyleCache clears the cached styles, forcing them to be regenerated.
+// This is needed when the terminal color profile changes (e.g., NO_COLOR is set)
+// because lipgloss styles bake in ANSI codes at creation time.
+//
+// Note: This also regenerates the deprecated theme.Styles global variable
+// to ensure backward compatibility with code still using the legacy API.
+func InvalidateStyleCache() {
+	CurrentStyles = nil
+	currentThemeName = ""
+	lastColorScheme = nil
+
+	// Force regeneration of legacy Styles global variable.
+	// This is needed because some code still uses theme.Styles.Checkmark/XMark
+	// which have ANSI codes baked in at creation time.
+	refreshLegacyStyles()
+}
+
 // getActiveThemeName determines the active theme name from configuration or environment.
 func getActiveThemeName() string {
 	// Bind environment variables on demand to ensure they're available

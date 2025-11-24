@@ -7,9 +7,11 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/io"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -18,6 +20,9 @@ const (
 	// Character constants.
 	newline = "\n"
 	tab     = "\t"
+
+	// ANSI escape sequences.
+	clearLine = "\r\x1b[K" // Carriage return + clear from cursor to end of line
 
 	// Format templates.
 	iconMessageFormat = "%s %s"
@@ -47,10 +52,69 @@ func InitFormatter(ioCtx io.Context) {
 	// terminal.Write() → io.Write(UIStream) → masking → stderr
 	globalTerminal = terminal.New(terminal.WithIO(termWriter))
 
+	// Configure lipgloss global color profile based on terminal capabilities.
+	// This ensures that all lipgloss styles (including theme.Styles) respect
+	// terminal color settings like NO_COLOR.
+	configureColorProfile(globalTerminal)
+
 	// Create formatter with I/O context and terminal
 	// Note: Formatter still gets terminal for terminal capability detection (color profile, width, etc.)
 	globalFormatter = NewFormatter(ioCtx, globalTerminal).(*formatter)
 	Format = globalFormatter // Also expose for advanced use
+}
+
+// configureColorProfile sets the global lipgloss color profile based on terminal capabilities.
+// This ensures all lipgloss styles respect NO_COLOR and other terminal color settings.
+func configureColorProfile(term terminal.Terminal) {
+	profile := term.ColorProfile()
+
+	// Map terminal color profile to termenv profile for lipgloss
+	var termProfile termenv.Profile
+	switch profile {
+	case terminal.ColorNone:
+		termProfile = termenv.Ascii
+	case terminal.Color16:
+		termProfile = termenv.ANSI
+	case terminal.Color256:
+		termProfile = termenv.ANSI256
+	case terminal.ColorTrue:
+		termProfile = termenv.TrueColor
+	default:
+		termProfile = termenv.Ascii
+	}
+
+	setColorProfileInternal(termProfile)
+}
+
+// setColorProfileInternal applies a color profile to all color-dependent systems.
+// This centralizes the color profile configuration for lipgloss, theme, and logger.
+func setColorProfileInternal(profile termenv.Profile) {
+	// Set the global lipgloss color profile
+	lipgloss.SetColorProfile(profile)
+
+	// Force theme styles to be regenerated with the new color profile.
+	// This is critical because theme.CurrentStyles caches lipgloss styles that
+	// bake in ANSI codes at creation time. When the color profile changes,
+	// we must regenerate the styles.
+	theme.InvalidateStyleCache()
+
+	// Reinitialize logger to respect the new color profile.
+	// The logger is initialized in init() with a default color profile,
+	// so we need to explicitly reconfigure it when the color profile changes.
+	log.Default().SetColorProfile(profile)
+}
+
+// SetColorProfile sets the color profile for all UI systems (lipgloss, theme, logger).
+// This is primarily intended for testing when environment variables are set after
+// package initialization. For normal operation, color profiles are automatically
+// configured during InitFormatter() based on terminal capabilities.
+//
+// Example usage in tests:
+//
+//	t.Setenv("NO_COLOR", "1")
+//	ui.SetColorProfile(termenv.Ascii)
+func SetColorProfile(profile termenv.Profile) {
+	setColorProfileInternal(profile)
 }
 
 // getFormatter returns the global formatter instance.
@@ -274,6 +338,33 @@ func Writef(format string, a ...interface{}) error {
 // Flow: ui.Writeln() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Writeln(text string) error {
 	return Write(text + newline)
+}
+
+// ClearLine clears the current line in the terminal and returns cursor to the beginning.
+// Respects NO_COLOR and terminal capabilities - uses ANSI escape sequences only when supported.
+// When colors are disabled, only writes carriage return to move cursor to start of line.
+// This is useful for replacing spinner messages or other dynamic output with final status messages.
+// Flow: ui.ClearLine() → ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+//
+// Example usage:
+//
+//	// Clear spinner line and show success message
+//	_ = ui.ClearLine()
+//	_ = ui.Success("Operation completed successfully")
+func ClearLine() error {
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+
+	if globalTerminal == nil {
+		return errUtils.ErrUIFormatterNotInitialized
+	}
+
+	// Only use ANSI clear sequence if terminal supports colors.
+	// When NO_COLOR=1 or color is disabled, just use carriage return.
+	if globalTerminal.ColorProfile() != terminal.ColorNone {
+		return Write(clearLine) // \r\x1b[K - carriage return + clear to EOL
+	}
+	return Write("\r") // Just carriage return when colors disabled
 }
 
 // Format exposes the global formatter for advanced use cases.

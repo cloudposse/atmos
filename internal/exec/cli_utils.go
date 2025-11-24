@@ -72,7 +72,7 @@ var commonFlags = []string{
 	cfg.ProfilerTypeFlag,
 	cfg.HeatmapFlag,
 	cfg.HeatmapModeFlag,
-	cfg.AuthProfileFlag,
+	cfg.AtmosProfileFlag,
 }
 
 // ProcessCommandLineArgs processes command-line args.
@@ -126,11 +126,12 @@ func ProcessCommandLineArgs(
 	if len(profiles) == 0 {
 		//nolint:forbidigo // Must use os.Getenv: profile is processed before Viper configuration loads.
 		if envProfiles := os.Getenv("ATMOS_PROFILE"); envProfiles != "" {
-			// Split comma-separated profiles from env var.
-			profiles = strings.Split(envProfiles, ",")
-			// Trim whitespace from each profile name.
-			for i := range profiles {
-				profiles[i] = strings.TrimSpace(profiles[i])
+			// Split comma-separated profiles from env var and filter out empty entries.
+			raw := strings.Split(envProfiles, ",")
+			for _, p := range raw {
+				if v := strings.TrimSpace(p); v != "" {
+					profiles = append(profiles, v)
+				}
 			}
 		}
 	}

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -40,16 +39,45 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToInitConfig, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
 	}
 	defer perf.Track(&atmosConfig, "cmd.executeAuthLoginCommand")()
 
 	// Create auth manager.
 	authManager, err := createAuthManager(&atmosConfig.Auth)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
+	// Check if --provider flag was provided.
+	providerName, _ := cmd.Flags().GetString("provider")
+
+	// Perform authentication based on whether provider or identity was specified.
+	ctx := context.Background()
+	var whoami *authTypes.WhoamiInfo
+
+	if providerName != "" {
+		// Provider-level authentication (e.g., for SSO auto-provisioning).
+		whoami, err = authManager.AuthenticateProvider(ctx, providerName)
+		if err != nil {
+			return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
+		}
+	} else {
+		// Identity-level authentication (existing behavior).
+		whoami, err = authenticateIdentity(ctx, cmd, authManager)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Display success message using Atmos theme.
+	displayAuthSuccess(whoami)
+
+	return nil
+}
+
+// authenticateIdentity handles identity-level authentication with default and interactive selection.
+func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager auth.AuthManager) (*authTypes.WhoamiInfo, error) {
 	// Get identity from flag or use default.
 	// Use centralized function that handles Cobra's NoOptDefVal quirk correctly.
 	identityName := GetIdentityFromFlags(cmd, os.Args)
@@ -60,23 +88,20 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	// If no identity specified, get the default identity (which prompts if needed).
 	// If --identity flag was used without value, forceSelect will be true.
 	if identityName == "" || forceSelect {
+		var err error
 		identityName, err = authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
-			return errors.Join(errUtils.ErrDefaultIdentity, err)
+			return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDefaultIdentity, err)
 		}
 	}
 
-	// Perform authentication.
-	ctx := context.Background()
+	// Perform identity authentication.
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
-		return errors.Join(errUtils.ErrAuthenticationFailed, fmt.Errorf("identity=%s: %w", identityName, err))
+		return nil, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrAuthenticationFailed, identityName, err)
 	}
 
-	// Display success message using Atmos theme.
-	displayAuthSuccess(whoami)
-
-	return nil
+	return whoami, nil
 }
 
 // createAuthManager creates a new auth manager with all required dependencies.
@@ -165,5 +190,6 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 }
 
 func init() {
+	authLoginCmd.Flags().StringP("provider", "p", "", "Provider name to authenticate with (for SSO auto-provisioning)")
 	authCmd.AddCommand(authLoginCmd)
 }

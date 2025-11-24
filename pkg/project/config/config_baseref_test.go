@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -11,9 +10,7 @@ import (
 
 func TestSaveAndLoadUserConfigWithBaseRef(t *testing.T) {
 	// Create temp directory
-	tmpDir, err := os.MkdirTemp("", "config-baseref-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Test data
 	templateID := "simple"
@@ -24,7 +21,7 @@ func TestSaveAndLoadUserConfigWithBaseRef(t *testing.T) {
 	}
 
 	// Save config with base ref
-	err = SaveUserConfigWithBaseRef(tmpDir, templateID, baseRef, values)
+	err := SaveUserConfigWithBaseRef(tmpDir, templateID, baseRef, values)
 	require.NoError(t, err)
 
 	// Verify file was created
@@ -45,9 +42,7 @@ func TestSaveAndLoadUserConfigWithBaseRef(t *testing.T) {
 
 func TestSaveUserConfigWithBaseRef_EmptyBaseRef(t *testing.T) {
 	// Create temp directory
-	tmpDir, err := os.MkdirTemp("", "config-baseref-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Test data with empty base ref
 	templateID := "simple"
@@ -57,7 +52,7 @@ func TestSaveUserConfigWithBaseRef_EmptyBaseRef(t *testing.T) {
 	}
 
 	// Save config with empty base ref
-	err = SaveUserConfigWithBaseRef(tmpDir, templateID, baseRef, values)
+	err := SaveUserConfigWithBaseRef(tmpDir, templateID, baseRef, values)
 	require.NoError(t, err)
 
 	// Load config back
@@ -73,9 +68,7 @@ func TestSaveUserConfigWithBaseRef_EmptyBaseRef(t *testing.T) {
 
 func TestLoadUserConfig_NonexistentFile(t *testing.T) {
 	// Create temp directory without config file
-	tmpDir, err := os.MkdirTemp("", "config-baseref-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Load config from directory without file
 	userConfig, err := LoadUserConfig(tmpDir)
@@ -85,9 +78,7 @@ func TestLoadUserConfig_NonexistentFile(t *testing.T) {
 
 func TestSaveUserConfig_BackwardsCompatibility(t *testing.T) {
 	// Test that SaveUserConfig (without base ref) still works
-	tmpDir, err := os.MkdirTemp("", "config-baseref-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	templateID := "simple"
 	values := map[string]interface{}{
@@ -95,7 +86,7 @@ func TestSaveUserConfig_BackwardsCompatibility(t *testing.T) {
 	}
 
 	// Save config without base ref (backwards compatibility)
-	err = SaveUserConfig(tmpDir, templateID, values)
+	err := SaveUserConfig(tmpDir, templateID, values)
 	require.NoError(t, err)
 
 	// Load config back
