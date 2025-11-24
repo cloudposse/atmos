@@ -1,11 +1,11 @@
 ---
 slug: automatic-backend-provisioning
-title: "Automatic Backend Provisioning: Simplify Your Terraform State Management"
+title: "Solving the Terraform Bootstrap Problem with Automatic Backend Provisioning"
 authors: [osterman]
 tags: [feature, terraform, backend, s3, automation]
 ---
 
-We're excited to introduce **automatic backend provisioning** in Atmos, a feature that eliminates the chicken-and-egg problem of managing Terraform state backends. No more manual S3 bucket creation, no more separate Terraform modules just to bootstrap your state storage—Atmos now handles it automatically.
+We're excited to introduce **automatic backend provisioning** in Atmos, a feature that solves the Terraform bootstrap problem. No more manual S3 bucket creation, no more chicken-and-egg workarounds—Atmos provisions your state backend automatically with secure defaults, making it fully compatible with Terraform-managed infrastructure.
 
 <!--truncate-->
 
@@ -51,7 +51,7 @@ All automatically. No manual intervention required.
 
 ## Configuration Flexibility
 
-The `provision.backend` configuration works with Atmos's inheritance system, allowing you to set defaults at any level (organization, environment, component) and override when needed. For example, enable automatic provisioning for all development environments while keeping production backends pre-provisioned.
+The `provision.backend` configuration works with Atmos's inheritance system, allowing you to set defaults at any level (organization, environment, component) and override when needed.
 
 ## Secure by Default
 
@@ -136,15 +136,15 @@ The provisioner automatically assumes the role to create the bucket in the targe
 
 ## CLI Command
 
-For manual provisioning or CI/CD pipelines, use the new `atmos provision` command:
+For manual provisioning or CI/CD pipelines, use the `atmos terraform provision backend` command:
 
 ```bash
 # Provision backend explicitly
-atmos provision backend vpc --stack dev
+atmos terraform provision backend create vpc --stack dev
 
 # Automatic in CI/CD
-atmos provision backend vpc --stack dev
-atmos provision backend eks --stack dev
+atmos terraform provision backend create vpc --stack dev
+atmos terraform provision backend create eks --stack dev
 atmos terraform apply vpc --stack dev  # Only runs if provisioning succeeded
 ```
 
@@ -194,7 +194,7 @@ atmos terraform plan vpc -s dev
 ```
 
 For more information:
-- [CLI Documentation](/cli/commands/provision/backend)
+- [CLI Documentation](/cli/commands/terraform/provision/backend/usage)
 - [Backend Configuration](/core-concepts/components/terraform/backends)
 
 ## Community Feedback

@@ -685,12 +685,12 @@ terraform:
 
 Configure different provisioning policies per environment:
 
-<Terminal title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+<Terminal title="stacks/orgs/acme/plat/staging/_defaults.yaml">
 ```yaml
 terraform:
   provision:
     backend:
-      enabled: false  # Production uses pre-provisioned backends
+      enabled: false  # Override for specific environment
 ```
 </Terminal>
 
@@ -732,10 +732,11 @@ components:
 ```
 </Terminal>
 
-**Typical Pattern:**
-- **Dev/Staging**: Enable at environment level (`terraform.provision.backend.enabled: true`)
-- **Production**: Disable at environment level, use pre-provisioned backends managed by Terraform
-- **Per-Component**: Override when specific components need different behavior
+**Deep-Merge Behavior:** Atmos combines configurations from all levels, giving you maximum flexibility:
+- Set defaults at organization or environment level
+- Override per component when needed
+- Use catalog inheritance for reusable patterns
+- Component-level configuration has highest precedence
 
 ### Supported Backend Types
 
@@ -792,7 +793,7 @@ You can also provision backends explicitly using the CLI:
 <Terminal>
 ```shell
 # Provision backend before Terraform execution
-atmos provision backend vpc --stack dev
+atmos terraform provision backend create vpc --stack dev
 
 # Then run Terraform
 atmos terraform apply vpc --stack dev
@@ -806,7 +807,7 @@ This is useful for:
 - Batch provisioning for multiple components
 - Pre-provisioning before large-scale deployments
 
-See [`atmos provision backend`](/cli/commands/provision/backend) for complete CLI documentation.
+See [`atmos terraform provision backend`](/cli/commands/terraform/provision/backend/usage) for complete CLI documentation.
 
 ### Required IAM Permissions
 
@@ -846,31 +847,44 @@ For cross-account provisioning, also add:
 ```
 </Terminal>
 
-### Development vs Production
+### Solving the Terraform Bootstrap Problem
 
-**Development Workflow** - Perfect for quick iteration:
+Automatic provisioning is **fully compatible with Terraform-managed backends**. It solves a classic chicken-and-egg problem: "How do I manage my state backend with Terraform when I need that backend to exist before Terraform can run?"
 
-<Terminal title="stacks/dev.yaml">
-```yaml
-provision:
-  backend:
-    enabled: true  # Automatic provisioning for fast development
-```
-</Terminal>
+**Traditional Workaround:**
+1. Use local state temporarily
+2. Create S3 bucket with Terraform using local state
+3. Switch backend configuration to S3
+4. Import the bucket into the S3-backed state
+5. Delete local state files
+
+**With Atmos Automatic Provisioning:**
+1. Enable `provision.backend.enabled: true`
+2. Run `atmos terraform plan` - backend auto-created with secure defaults
+3. Import the bucket into Terraform (no local state dance needed)
+4. Done - everything managed by Terraform
+
+### Migrating to Terraform-Managed Backends
+
+Once your backend is provisioned, you can import it into Terraform for advanced management:
+
+**Step 1: Provision the Backend**
+
+Use Atmos to create the backend with secure defaults:
 
 <Terminal>
 ```shell
-atmos terraform plan vpc -s dev  # Backend created automatically
+atmos terraform provision backend create vpc --stack prod
 ```
 </Terminal>
 
-**Production Migration** - Import provisioned backend into Terraform:
+**Step 2: Import into Terraform**
 
-For production environments, import the automatically provisioned backend into Terraform for full lifecycle management:
+Add the backend to your Terraform configuration and import it:
 
-<Terminal title="components/terraform/vpc/backend-import.tf">
+<Terminal title="components/terraform/backend-state/main.tf">
 ```hcl
-# Import the provisioned backend into Terraform
+# Import the provisioned backend
 import {
   to = aws_s3_bucket.terraform_state
   id = "acme-terraform-state-prod"
@@ -880,7 +894,7 @@ resource "aws_s3_bucket" "terraform_state" {
   bucket = "acme-terraform-state-prod"
 }
 
-# Add production-specific features
+# Add lifecycle rules
 resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
 
@@ -894,6 +908,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
   }
 }
 
+# Add replication for disaster recovery
 resource "aws_s3_bucket_replication_configuration" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
   role   = aws_iam_role.replication.arn
@@ -911,7 +926,9 @@ resource "aws_s3_bucket_replication_configuration" "terraform_state" {
 ```
 </Terminal>
 
-Then disable automatic provisioning:
+**Step 3: Optionally Disable Automatic Provisioning**
+
+Once Terraform manages the backend, you can optionally disable automatic provisioning:
 
 <Terminal title="stacks/prod.yaml">
 ```yaml
@@ -921,7 +938,9 @@ provision:
 ```
 </Terminal>
 
-Alternatively, use the [`terraform-aws-tfstate-backend`](https://github.com/cloudposse/terraform-aws-tfstate-backend) module for production backends with advanced features like cross-region replication, lifecycle policies, and custom KMS keys.
+**Note:** You can leave `provision.backend.enabled: true` even after importing to Terraform. The provisioner is idempotent - it will detect the bucket exists and skip creation, causing no conflicts with Terraform management.
+
+Alternatively, use the [`terraform-aws-tfstate-backend`](https://github.com/cloudposse/terraform-aws-tfstate-backend) module for backends with advanced features like cross-region replication, lifecycle policies, and custom KMS keys.
 
 ### Idempotent Operations
 
@@ -929,10 +948,10 @@ Backend provisioning is idempotent—running it multiple times is safe:
 
 <Terminal>
 ```shell
-$ atmos provision backend vpc --stack dev
+$ atmos terraform provision backend create vpc --stack dev
 ✓ Created S3 bucket 'acme-terraform-state-dev'
 
-$ atmos provision backend vpc --stack dev
+$ atmos terraform provision backend create vpc --stack dev
 S3 bucket 'acme-terraform-state-dev' already exists (idempotent)
 ✓ Backend provisioning completed
 ```
