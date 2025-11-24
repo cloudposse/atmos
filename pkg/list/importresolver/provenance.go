@@ -333,12 +333,12 @@ func stripBasePath(absolutePath, basePath string) string {
 		relativePath = strings.TrimPrefix(absolutePath, basePath)
 	}
 
-	// Remove .yaml/.yml extension for cleaner display.
-	relativePath = strings.TrimSuffix(relativePath, yamlExt)
-	relativePath = strings.TrimSuffix(relativePath, ymlExt)
-
 	// Convert to forward slashes for consistent cross-platform display.
 	relativePath = filepath.ToSlash(relativePath)
+
+	// Remove .yaml/.yml extension for cleaner display (after ToSlash for consistency).
+	relativePath = strings.TrimSuffix(relativePath, ".yaml")
+	relativePath = strings.TrimSuffix(relativePath, ".yml")
 
 	return relativePath
 }
