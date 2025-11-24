@@ -6,16 +6,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var (
-	// cleanParser handles flag parsing for clean command.
-	cleanParser *flags.StandardParser
-)
+// cleanParser handles flag parsing for clean command.
+var cleanParser *flags.StandardParser
 
 // cleanCmd represents the terraform clean command (custom Atmos command).
 var cleanCmd = &cobra.Command{

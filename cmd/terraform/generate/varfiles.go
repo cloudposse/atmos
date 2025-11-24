@@ -7,16 +7,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var (
-	// varfilesParser handles flag parsing for varfiles command.
-	varfilesParser *flags.StandardParser
-)
+// varfilesParser handles flag parsing for varfiles command.
+var varfilesParser *flags.StandardParser
 
 // varfilesCmd generates varfiles for all terraform components in all stacks.
 var varfilesCmd = &cobra.Command{

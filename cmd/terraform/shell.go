@@ -6,16 +6,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var (
-	// shellParser handles flag parsing for shell command.
-	shellParser *flags.StandardParser
-)
+// shellParser handles flag parsing for shell command.
+var shellParser *flags.StandardParser
 
 // shellCmd represents the terraform shell command (custom Atmos command).
 var shellCmd = &cobra.Command{

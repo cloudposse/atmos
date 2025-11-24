@@ -6,16 +6,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var (
-	// planfileParser handles flag parsing for planfile command.
-	planfileParser *flags.StandardParser
-)
+// planfileParser handles flag parsing for planfile command.
+var planfileParser *flags.StandardParser
 
 // planfileCmd generates planfile for a terraform component.
 var planfileCmd = &cobra.Command{
