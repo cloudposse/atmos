@@ -6,7 +6,21 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 )
+
+// setupTestWriter initializes I/O context and data writer for tests.
+// This ensures tests that may trigger data.Write() operations don't depend on globals.
+func setupTestWriter(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		t.Fatalf("Failed to initialize I/O context: %v", err)
+	}
+	data.InitWriter(ioCtx)
+}
 
 func TestPageCreator_Run(t *testing.T) {
 	tests := []struct {
@@ -46,6 +60,8 @@ func TestPageCreator_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			setupTestWriter(t)
+
 			// Track whether newTeaProgram was called and capture the model.
 			teaProgramCalled := false
 			var capturedModel *model
@@ -77,6 +93,9 @@ func TestPageCreator_Run(t *testing.T) {
 				},
 				isTTYSupportForStdout: func() bool {
 					return tt.isTTYSupported
+				},
+				isTTYAccessible: func() bool {
+					return true // Mock /dev/tty as accessible
 				},
 			}
 
@@ -118,6 +137,8 @@ func (m *simpleTestModel) View() string {
 }
 
 func TestPageCreator_Run_WithError(t *testing.T) {
+	setupTestWriter(t)
+
 	// Test error handling by creating a pageCreator that simulates an error
 	expectedErr := errors.New("simulated tea program error")
 
@@ -133,6 +154,10 @@ func TestPageCreator_Run_WithError(t *testing.T) {
 		isTTYSupportForStdout: func() bool {
 			return true
 		},
+		isTTYAccessible: func() bool {
+			return true // Mock /dev/tty as accessible
+		},
+		enablePager: true,
 	}
 
 	err := pc.Run("Test", "Content")
@@ -190,6 +215,8 @@ func TestNewWithAtmosConfig(t *testing.T) {
 }
 
 func TestPageCreator_Run_ModelCreation(t *testing.T) {
+	setupTestWriter(t)
+
 	title := "Test Title"
 	content := "Test Content"
 
@@ -208,6 +235,9 @@ func TestPageCreator_Run_ModelCreation(t *testing.T) {
 		},
 		isTTYSupportForStdout: func() bool {
 			return true
+		},
+		isTTYAccessible: func() bool {
+			return true // Mock /dev/tty as accessible
 		},
 		enablePager: true,
 	}
@@ -232,33 +262,45 @@ func TestPageCreator_Run_ModelCreation(t *testing.T) {
 func TestPageCreator_Run_WithoutPager(t *testing.T) {
 	// Test scenarios where pager is not used
 	testCases := []struct {
-		name         string
-		enablePager  bool
-		ttySupported bool
-		contentFits  bool
+		name          string
+		enablePager   bool
+		ttySupported  bool
+		ttyAccessible bool
+		contentFits   bool
 	}{
 		{
-			name:         "pager disabled",
-			enablePager:  false,
-			ttySupported: true,
-			contentFits:  false,
+			name:          "pager disabled",
+			enablePager:   false,
+			ttySupported:  true,
+			ttyAccessible: true,
+			contentFits:   false,
 		},
 		{
-			name:         "no TTY support",
-			enablePager:  true,
-			ttySupported: false,
-			contentFits:  false,
+			name:          "no TTY support",
+			enablePager:   true,
+			ttySupported:  false,
+			ttyAccessible: true,
+			contentFits:   false,
 		},
 		{
-			name:         "TTY supported but content fits",
-			enablePager:  true,
-			ttySupported: true,
-			contentFits:  true,
+			name:          "TTY supported but content fits",
+			enablePager:   true,
+			ttySupported:  true,
+			ttyAccessible: true,
+			contentFits:   true,
+		},
+		{
+			name:          "TTY supported but not accessible - skips pager",
+			enablePager:   true,
+			ttySupported:  true,
+			ttyAccessible: false,
+			contentFits:   false,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			setupTestWriter(t)
 			teaProgramCalled := false
 
 			pc := &pageCreator{
@@ -272,6 +314,9 @@ func TestPageCreator_Run_WithoutPager(t *testing.T) {
 				},
 				isTTYSupportForStdout: func() bool {
 					return tc.ttySupported
+				},
+				isTTYAccessible: func() bool {
+					return tc.ttyAccessible
 				},
 			}
 
