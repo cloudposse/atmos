@@ -1,9 +1,21 @@
 package generate
 
 import (
-	"github.com/spf13/cobra"
+	"fmt"
+	"strings"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+var (
+	// backendsParser handles flag parsing for backends command.
+	backendsParser *flags.StandardParser
 )
 
 // backendsCmd generates backend configs for all terraform components.
@@ -11,30 +23,72 @@ var backendsCmd = &cobra.Command{
 	Use:                "backends",
 	Short:              "Generate backend configurations for all Terraform components",
 	Long:               "This command generates the backend configuration files for all Terraform components in the Atmos environment.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		err := e.ExecuteTerraformGenerateBackendsCmd(cmd, args)
-		return err
+		// Use Viper to respect precedence (flag > env > config > default)
+		v := viper.GetViper()
+
+		// Bind backends-specific flags to Viper
+		if err := backendsParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Get flag values from Viper
+		fileTemplate := v.GetString("file-template")
+		stacksCsv := v.GetString("stacks")
+		componentsCsv := v.GetString("components")
+		format := v.GetString("format")
+
+		// Parse CSV values
+		var stacks []string
+		if stacksCsv != "" {
+			stacks = strings.Split(stacksCsv, ",")
+		}
+
+		var components []string
+		if componentsCsv != "" {
+			components = strings.Split(componentsCsv, ",")
+		}
+
+		// Validate format
+		if format != "" && format != "json" && format != "hcl" && format != "backend-config" {
+			return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'hcl', 'json', and 'backend-config'", format)
+		}
+		if format == "" {
+			format = "hcl"
+		}
+
+		// Initialize Atmos configuration
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		if err != nil {
+			return err
+		}
+
+		return e.ExecuteTerraformGenerateBackends(&atmosConfig, fileTemplate, format, stacks, components)
 	},
 }
 
 func init() {
-	backendsCmd.DisableFlagParsing = false
-
-	backendsCmd.PersistentFlags().String("file-template", "",
-		"Template for generating backend configuration files, supporting absolute/relative paths and context tokens (e.g., {tenant}, {environment}, {component}). Subdirectories are created automatically. If not specified, files are written to corresponding Terraform component folders.",
+	// Create parser with backends-specific flags using functional options.
+	backendsParser = flags.NewStandardParser(
+		flags.WithStringFlag("file-template", "", "", "Template for generating backend configuration files"),
+		flags.WithStringFlag("stacks", "", "", "Only process the specified stacks (comma-separated)"),
+		flags.WithStringFlag("components", "", "", "Only generate backend files for specified components (comma-separated)"),
+		flags.WithStringFlag("format", "", "hcl", "Output format: hcl, json, or backend-config"),
+		flags.WithEnvVars("file-template", "ATMOS_TERRAFORM_GENERATE_BACKENDS_FILE_TEMPLATE"),
+		flags.WithEnvVars("stacks", "ATMOS_STACKS"),
+		flags.WithEnvVars("components", "ATMOS_COMPONENTS"),
+		flags.WithEnvVars("format", "ATMOS_FORMAT"),
 	)
 
-	backendsCmd.PersistentFlags().String("stacks", "",
-		"Only process the specified stacks (comma-separated values), supporting top-level stack manifest paths or derived Atmos stack names",
-	)
+	// Register flags with the command.
+	backendsParser.RegisterFlags(backendsCmd)
 
-	backendsCmd.PersistentFlags().String("components", "",
-		"Only generate the backend files for the specified `atmos` components (comma-separated values).",
-	)
-
-	backendsCmd.PersistentFlags().String("format", "hcl", "Specify the output format. Supported formats: `hcl`, `json`, `backend-config` (`hcl` is default).")
+	// Bind flags to Viper for environment variable support.
+	if err := backendsParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	GenerateCmd.AddCommand(backendsCmd)
 }
