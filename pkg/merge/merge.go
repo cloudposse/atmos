@@ -19,17 +19,56 @@ const (
 	ListMergeStrategyMerge   = "merge"
 )
 
-// templateTagTransformer is a custom mergo transformer that allows !template strings
-// to be overridden by any type during merge. This is necessary because !template tags
-// are processed AFTER merging, so during merge they are still strings, but after
-// processing they become the actual type (list, map, etc.).
-type templateTagTransformer struct{}
+// yamlFunctionTransformer is a custom mergo transformer that allows Atmos YAML function strings
+// to be overridden by any type during merge. This is necessary because most YAML functions
+// are processed AFTER merging (except !include and !include.raw), so during merge they are
+// still strings, but after processing they become the actual type (list, map, etc.).
+//
+// YAML functions processed AFTER merging (need special handling):
+// - !template - processes JSON strings to native types
+// - !terraform.output - gets Terraform outputs
+// - !terraform.state - gets Terraform state
+// - !store.get / !store - gets values from stores
+// - !exec - executes commands
+// - !env - gets environment variables
+//
+// YAML functions processed BEFORE merging (don't need special handling):
+// - !include - includes file content during YAML loading
+// - !include.raw - includes raw file content during YAML loading.
+type yamlFunctionTransformer struct{}
+
+// isAtmosYAMLFunction checks if a string starts with any Atmos YAML function tag
+// that is processed AFTER merging.
+func isAtmosYAMLFunction(s string) bool {
+	if s == "" {
+		return false
+	}
+
+	// YAML functions processed after merging (need special handling during merge).
+	postMergeFunctions := []string{
+		"!template",
+		"!terraform.output",
+		"!terraform.state",
+		"!store.get",
+		"!store",
+		"!exec",
+		"!env",
+	}
+
+	for _, fn := range postMergeFunctions {
+		if strings.HasPrefix(s, fn) {
+			return true
+		}
+	}
+
+	return false
+}
 
 // Transformer implements the mergo.Transformers interface.
-// It allows strings starting with "!template" to be overridden by any type.
-func (t *templateTagTransformer) Transformer(typ reflect.Type) func(dst, src reflect.Value) error {
+// It allows strings starting with Atmos YAML functions to be overridden by any type.
+func (t *yamlFunctionTransformer) Transformer(typ reflect.Type) func(dst, src reflect.Value) error {
 	return func(dst, src reflect.Value) error {
-		// Only intervene if there's a TYPE MISMATCH and one side is a !template string.
+		// Only intervene if there's a TYPE MISMATCH and one side is an Atmos YAML function string.
 		// This prevents breaking normal merging when types match.
 
 		// Check if types match - if so, let mergo handle normally.
@@ -37,31 +76,31 @@ func (t *templateTagTransformer) Transformer(typ reflect.Type) func(dst, src ref
 			return nil
 		}
 
-		// Types don't match - check if one side is a !template string.
+		// Types don't match - check if one side is an Atmos YAML function string.
 
-		// Case 1: Destination is a !template string, source is a different type (e.g., list/map).
-		// This happens when importing a catalog with !template, then overriding with a concrete value.
-		if dst.Kind() == reflect.String && dst.String() != "" && strings.HasPrefix(dst.String(), "!template") {
-			// Allow source to override the !template string.
+		// Case 1: Destination is a YAML function string, source is a different type (e.g., list/map).
+		// This happens when importing a catalog with YAML function, then overriding with a concrete value.
+		if dst.Kind() == reflect.String && isAtmosYAMLFunction(dst.String()) {
+			// Allow source to override the YAML function string.
 			if dst.CanSet() {
 				dst.Set(src)
 			}
-			// Return an error to signal mergo that we handled this field.
+			// Return nil to signal mergo that we handled this field.
 			return nil
 		}
 
-		// Case 2: Source is a !template string, destination is a different type.
-		// This happens when importing a component with a concrete value, then overriding with !template.
-		if src.Kind() == reflect.String && src.String() != "" && strings.HasPrefix(src.String(), "!template") {
-			// Allow !template string to override destination.
+		// Case 2: Source is a YAML function string, destination is a different type.
+		// This happens when importing a component with a concrete value, then overriding with YAML function.
+		if src.Kind() == reflect.String && isAtmosYAMLFunction(src.String()) {
+			// Allow YAML function string to override destination.
 			if dst.CanSet() {
 				dst.Set(src)
 			}
-			// Return an error to signal mergo that we handled this field.
+			// Return nil to signal mergo that we handled this field.
 			return nil
 		}
 
-		// Type mismatch but neither side is !template - let mergo handle (will error with WithTypeCheck).
+		// Type mismatch but neither side is a YAML function - let mergo handle (will error with WithTypeCheck).
 		return nil
 	}
 }
@@ -410,7 +449,7 @@ func MergeWithOptions(
 		}
 
 		var opts []func(*mergo.Config)
-		opts = append(opts, mergo.WithOverride, mergo.WithTypeCheck, mergo.WithTransformers(&templateTagTransformer{}))
+		opts = append(opts, mergo.WithOverride, mergo.WithTypeCheck, mergo.WithTransformers(&yamlFunctionTransformer{}))
 
 		// This was fixed/broken in https://github.com/imdario/mergo/pull/231/files
 		// It was released in https://github.com/imdario/mergo/releases/tag/v0.3.14
