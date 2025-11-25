@@ -292,13 +292,9 @@ func (s *GSMStore) GetKey(key string) (interface{}, error) {
 		return nil, ErrEmptyKey
 	}
 
-	// Use the key directly as the secret name
+	// Use the key directly as the secret name without any prefix transformation.
+	// This allows !store.get to access arbitrary keys as-is, per documentation.
 	secretName := key
-
-	// If prefix is set, prepend it to the key
-	if s.prefix != "" {
-		secretName = s.prefix + "_" + key
-	}
 
 	// Construct the full secret name
 	fullSecretName := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", s.projectID, secretName)

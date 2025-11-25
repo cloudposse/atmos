@@ -158,13 +158,9 @@ func (s *RedisStore) GetKey(key string) (interface{}, error) {
 		return nil, ErrEmptyKey
 	}
 
-	// Use the key directly as the Redis key
+	// Use the key directly as the Redis key without any prefix transformation.
+	// This allows !store.get to access arbitrary keys as-is, per documentation.
 	redisKey := key
-
-	// If prefix is set, prepend it to the key
-	if s.prefix != "" {
-		redisKey = s.prefix + ":" + key
-	}
 
 	// Get the value from Redis
 	resp := s.redisClient.Get(context.Background(), redisKey)
