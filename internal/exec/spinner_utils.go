@@ -46,7 +46,8 @@ func (m modelSpinner) View() string {
 // NewSpinner initializes a spinner and returns a pointer to a tea.Program.
 func NewSpinner(message string) *tea.Program {
 	s := spinner.New()
-	s.Style = theme.Styles.Link
+	styles := theme.GetCurrentStyles()
+	s.Style = styles.Link
 
 	var opts []tea.ProgramOption
 	if !term.IsTTYSupportForStdout() {

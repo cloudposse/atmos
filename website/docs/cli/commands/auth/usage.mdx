@@ -82,6 +82,9 @@ auth:
       region: us-east-1
       start_url: https://mycompany.awsapps.com/start
 
+      # Optional: Enable auto-provisioning of identities
+      auto_provision_identities: true  # Automatically discover and provision permission sets
+
       # Optional: Configure session durations
       session:
         duration: 1h  # Credential lifetime for auth shell/env/exec
@@ -104,6 +107,7 @@ auth:
 Notes:
 
 - Region is required for the GitHub OIDC provider and is validated at construction time.
+- **Auto-provisioning** (`auto_provision_identities: true`) is supported for AWS SSO providers. When enabled, Atmos automatically discovers all available permission sets during authentication and makes them available as identities. See [Auto-Provisioning](#auto-provisioning-identities) below.
 
 ### 2. Validate Configuration
 
@@ -190,6 +194,213 @@ identities:
       assume_role: arn:aws:iam::999999999999:role/ProductionAdmin
       session_name: atmos-prod-access
 ```
+
+## Auto-Provisioning Identities
+
+Auto-provisioning automatically discovers and configures identities from your authentication provider, eliminating manual configuration. This feature is currently supported for AWS SSO (IAM Identity Center).
+
+### Overview
+
+When you enable `auto_provision_identities: true` on a provider, Atmos automatically:
+
+1. **Discovers available resources** during authentication (accounts, permission sets, roles)
+2. **Provisions identities** for each discovered resource
+3. **Writes configuration** to `~/.cache/atmos/auth/{provider}/provisioned-identities.yaml`
+4. **Auto-imports** provisioned identities during config loading
+
+Provisioned identities work alongside manual identities. Your manual configuration takes precedence over provisioned configuration.
+
+### Benefits
+
+- **Zero configuration** for new team members - authenticate once and all roles are available
+- **Always up-to-date** - new accounts and roles appear automatically after re-authentication
+- **No hardcoding** - identity names are discovered from your AWS environment
+- **Time savings** - from 10+ minutes to &lt;2 minutes for first authentication
+
+### AWS SSO Example
+
+Enable auto-provisioning for AWS SSO:
+
+```yaml
+auth:
+  providers:
+    sso-prod:
+      kind: aws/iam-identity-center
+      start_url: https://my-org.awsapps.com/start
+      region: us-east-1
+      auto_provision_identities: true  # Enable auto-provisioning
+```
+
+Authenticate to trigger provisioning:
+
+```bash
+atmos auth login --provider sso-prod
+# ✓ Provisioned 47 identities across 12 accounts (2.3s)
+```
+
+View all available identities (manual + provisioned):
+
+```bash
+atmos auth list
+# Authentication Configuration
+# └──sso-prod (aws/iam-identity-center)
+#    └──Identities
+#       ├──● production/AdministratorAccess (sso-prod) 11h58m
+#       ├──● production/PowerUserAccess (sso-prod) 11h58m
+#       ├──● staging/AdministratorAccess (sso-prod) 11h58m
+#       └──... (44 more)
+```
+
+Use any provisioned identity:
+
+```bash
+atmos terraform plan --identity production/AdministratorAccess
+atmos terraform plan --identity staging/PowerUserAccess
+atmos terraform plan --identity dev/ReadOnly
+```
+
+### Identity Naming Convention
+
+Provisioned identities use the naming convention:
+
+```
+{account-name}/{permission-set-name}
+```
+
+Examples:
+- `production/AdministratorAccess`
+- `staging/PowerUserAccess`
+- `dev-us-east-1/ReadOnly`
+
+### Manual Override and Deep Merge
+
+Provisioned identities can be enhanced or overridden in your `atmos.yaml`. Atmos performs **deep merge** of manual configuration with auto-provisioned identities, preserving all fields from both sources:
+
+```yaml
+auth:
+  providers:
+    sso-prod:
+      kind: aws/iam-identity-center
+      start_url: https://my-org.awsapps.com/start
+      region: us-east-1
+      auto_provision_identities: true
+
+  identities:
+    # Enhance provisioned identity with additional fields
+    production/AdministratorAccess:
+      default: true        # Mark as default (merged with auto-provisioned fields)
+      session:
+        duration: 12h      # Extend from default 1h
+```
+
+**Deep Merge Behavior:**
+
+When you manually configure an identity that was also auto-provisioned:
+- **All auto-provisioned fields are preserved** (`provider`, `kind`, `via`, `principal`, etc.)
+- **Manual fields are added or override** specific nested values
+- **Result**: Combined identity with fields from both sources
+
+**Example:**
+
+Auto-provisioned identity:
+```yaml
+production/AdministratorAccess:
+  provider: sso-prod
+  kind: aws/permission-set
+  via:
+    provider: sso-prod
+  principal:
+    name: AdministratorAccess
+    account:
+      name: production
+      id: "123456789012"
+```
+
+Your manual override:
+```yaml
+production/AdministratorAccess:
+  default: true
+  session:
+    duration: 12h
+```
+
+Final merged identity:
+```yaml
+production/AdministratorAccess:
+  provider: sso-prod           # ✅ From auto-provisioning
+  kind: aws/permission-set     # ✅ From auto-provisioning
+  default: true                # ✅ From manual config
+  via:                         # ✅ From auto-provisioning
+    provider: sso-prod
+  principal:                   # ✅ From auto-provisioning
+    name: AdministratorAccess
+    account:
+      name: production
+      id: "123456789012"
+  session:                     # ✅ From manual config
+    duration: 12h
+```
+
+This deep merge allows you to:
+- **Mark provisioned identities as default** without losing auto-discovered metadata
+- **Customize session durations** while keeping all provider/principal information
+- **Add custom fields** (aliases, tags, metadata) without manual duplication
+
+### Cache Management
+
+Provisioned identities are cached following [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html):
+
+```
+$XDG_CACHE_HOME/atmos/auth/{provider-name}/provisioned-identities.yaml
+```
+
+By default, this resolves to `~/.cache/atmos/auth/` on Linux/macOS and `%LOCALAPPDATA%\cache\atmos\auth\` on Windows.
+
+To force re-provisioning:
+
+```bash
+# Logout to clear cache
+atmos auth logout --provider sso-prod
+
+# Re-authenticate
+atmos auth login --provider sso-prod
+```
+
+### How It Works
+
+**Phase 1: Authentication & Provisioning**
+1. User authenticates with `atmos auth login --provider {provider}`
+2. Provider calls AWS SSO `ListAccounts` API
+3. For each account, calls `ListAccountRoles` API
+4. Creates identity for each permission set
+5. Writes to cache: `~/.cache/atmos/auth/{provider}/provisioned-identities.yaml`
+
+**Phase 2: Config Loading**
+1. Config loader automatically discovers provisioned identity files
+2. Provisioned files are imported BEFORE manual configuration
+3. Manual imports process after (allowing overrides)
+4. All identities are available for use
+
+### Supported Providers
+
+Currently supported:
+- **AWS IAM Identity Center (SSO)**: Uses `ListAccounts` and `ListAccountRoles` APIs
+
+Planned support:
+- Okta
+- Azure AD
+- Google Workspace
+
+### Troubleshooting
+
+**Provisioned identities not appearing:**
+1. Verify `auto_provision_identities: true` is set
+2. Check cache exists: `ls ~/.cache/atmos/auth/{provider}/`
+3. Re-authenticate: `atmos auth login --provider {provider}`
+4. Enable debug logging: `atmos auth login --provider {provider} --log-level debug`
+
+**Provisioning fails but authentication succeeds:**
+This is expected behavior. Provisioning is non-fatal—if it fails, authentication still succeeds and you can use manually configured identities.
 
 ## Configuration Examples
 

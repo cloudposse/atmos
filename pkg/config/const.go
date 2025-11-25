@@ -145,6 +145,6 @@ const (
 	HeatmapFlag         = "--heatmap"
 	HeatmapModeFlag     = "--heatmap-mode"
 
-	// Auth profile flags.
-	AuthProfileFlag = "--profile"
+	// AtmosProfileFlag is the CLI flag for specifying Atmos profiles.
+	AtmosProfileFlag = "--profile"
 )

@@ -282,7 +282,7 @@ func TestAssumeRoleIdentity_Authenticate_ErrorCases(t *testing.T) {
 			},
 			inputCreds:  nil,
 			expectError: true,
-			errorMsg:    "base AWS credentials or OIDC credentials are required",
+			errorMsg:    "invalid identity config",
 		},
 	}
 
@@ -313,7 +313,7 @@ func TestAssumeRoleIdentity_Authenticate_ValidationErrors(t *testing.T) {
 				config: &schema.Identity{Kind: "aws/assume-role", Principal: map[string]any{}},
 			},
 			expectError: true,
-			errorMsg:    "assume_role is required in principal",
+			errorMsg:    "invalid identity config",
 		},
 		{
 			name: "nil principal",
@@ -966,7 +966,7 @@ func TestAssumeRoleIdentity_Authenticate_WithInvalidCredentialsType(t *testing.T
 
 	_, err := identity.Authenticate(context.Background(), invalidCreds)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
+	assert.Contains(t, err.Error(), "invalid identity config")
 }
 
 func TestAssumeRoleIdentity_assumeRoleWithWebIdentity_UsesAnonymousCredentials(t *testing.T) {

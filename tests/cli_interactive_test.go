@@ -119,10 +119,12 @@ func TestInteractiveIdentitySelection(t *testing.T) {
 			"Should not show selector in CI environment")
 
 		// Should fail with appropriate error.
+		// Normalize output by removing newlines for comparison (error formatter may wrap text).
+		normalizedOutput := strings.ReplaceAll(combinedOutput, "\n", " ")
 		assert.True(t,
-			strings.Contains(combinedOutput, "no default identity") ||
-				strings.Contains(combinedOutput, "authentication") ||
-				strings.Contains(combinedOutput, "requires a TTY"),
+			strings.Contains(normalizedOutput, "no default identity") ||
+				strings.Contains(normalizedOutput, "authentication") ||
+				strings.Contains(normalizedOutput, "requires a TTY"),
 			"Should fail with identity error in CI, got: %s", combinedOutput)
 
 		t.Logf("Output:\n%s", combinedOutput)
@@ -237,10 +239,12 @@ func TestCIEnvironmentDetection(t *testing.T) {
 				"Should not show selector in %s", ciEnv.desc)
 
 			// Should fail with appropriate error.
+			// Normalize output by removing newlines for comparison (error formatter may wrap text).
+			normalizedOutput := strings.ReplaceAll(combinedOutput, "\n", " ")
 			assert.True(t,
-				strings.Contains(combinedOutput, "no default identity") ||
-					strings.Contains(combinedOutput, "authentication") ||
-					strings.Contains(combinedOutput, "requires a TTY"),
+				strings.Contains(normalizedOutput, "no default identity") ||
+					strings.Contains(normalizedOutput, "authentication") ||
+					strings.Contains(normalizedOutput, "requires a TTY"),
 				"Should fail with identity error in %s, got: %s", ciEnv.desc, combinedOutput)
 
 			t.Logf("%s output:\n%s", ciEnv.name, combinedOutput)

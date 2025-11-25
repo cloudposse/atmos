@@ -1,0 +1,78 @@
+---
+slug: terraform-command-documentation
+title: "Comprehensive Documentation for Terraform Commands"
+authors: [osterman]
+tags: [feature]
+---
+
+We've added comprehensive documentation for all 35 Terraform commands in Atmos, making it easier to understand how to orchestrate Terraform with stack-based configurations. Each command now has dedicated documentation with usage examples, arguments, flags, and integration details.
+
+<!--truncate-->
+
+## What's New
+
+Every `atmos terraform` command now has its own documentation page with:
+
+- **Command overview** - What the command does and when to use it
+- **Usage examples** - Real-world scenarios and patterns
+- **Arguments** - Required and optional command arguments
+- **Flags** - Available command-line flags and options
+- **Stack integration** - How the command works with stack configurations
+
+## Core Commands
+
+Essential Terraform workflow commands are now fully documented:
+
+- **[terraform plan](/cli/commands/terraform/plan)** - Generate execution plans with stack context
+- **[terraform apply](/cli/commands/terraform/apply)** - Apply infrastructure changes
+- **[terraform deploy](/cli/commands/terraform/deploy)** - Combined init, plan, and apply workflow
+- **[terraform destroy](/cli/commands/terraform/destroy)** - Destroy infrastructure safely
+
+## Advanced Commands
+
+Documentation for advanced Terraform operations:
+
+- **[terraform generate planfile](/cli/commands/terraform/generate-planfile)** - Generate planfiles for GitOps workflows
+- **[terraform generate backend](/cli/commands/terraform/generate-backend)** - Generate backend configurations
+- **[terraform generate varfile](/cli/commands/terraform/generate-varfile)** - Generate variable files from stack configs
+- **[terraform metadata](/cli/commands/terraform/metadata)** - Extract component metadata
+
+## State Management
+
+Complete documentation for Terraform state operations:
+
+- **[terraform state](/cli/commands/terraform/state)** - Advanced state manipulation
+- **[terraform import](/cli/commands/terraform/import)** - Import existing resources
+- **[terraform workspace](/cli/commands/terraform/workspace)** - Manage Terraform workspaces
+
+## Development Commands
+
+Commands for Terraform module development and testing:
+
+- **[terraform fmt](/cli/commands/terraform/fmt)** - Format Terraform code
+- **[terraform validate](/cli/commands/terraform/validate)** - Validate configuration syntax
+- **[terraform test](/cli/commands/terraform/test)** - Run Terraform tests
+- **[terraform console](/cli/commands/terraform/console)** - Interactive console for debugging
+
+## Browse All Commands
+
+View the complete list of Terraform commands:
+
+- **[Terraform command reference](/cli/commands/terraform/usage)** - Full command listing
+- **[Global flags](/cli/global-flags)** - Flags available to all commands
+- **[Stack configuration](/core-concepts/stacks)** - How stacks integrate with Terraform
+
+## Visual Documentation
+
+Each command page includes:
+
+- **Syntax-highlighted code examples** - With your configured theme
+- **Terminal output screenshots** - Showing real command execution
+- **Table of arguments and flags** - Quick reference for all options
+
+## Get Involved
+
+Found missing details or have suggestions for improving the documentation?
+
+- [Open an issue](https://github.com/cloudposse/atmos/issues/new) on GitHub
+- Share feedback in the [Atmos Community Slack](https://cloudposse.com/slack)

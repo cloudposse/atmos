@@ -51,7 +51,7 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAtmosConfig, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
 
 	defer perf.Track(&atmosConfig, "cmd.executeAuthLogoutCommand")()
@@ -59,7 +59,7 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	// Create auth manager.
 	authManager, err := createAuthManager(&atmosConfig.Auth)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAuthManager, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthManager, err)
 	}
 
 	// Get flags.

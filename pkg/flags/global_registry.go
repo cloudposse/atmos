@@ -141,6 +141,7 @@ func GlobalFlagsRegistry() *FlagRegistry {
 	// Register all flag categories.
 	registerWorkingDirectoryFlags(registry)
 	registerLoggingFlags(registry)
+	registerTerminalFlags(registry)
 	registerAuthenticationFlags(registry)
 	registerProfilingFlags(registry)
 	registerPerformanceFlags(registry)
@@ -282,6 +283,43 @@ func registerProfilingFlags(registry *FlagRegistry) {
 		Default:     "cpu",
 		Description: "Type of profile to collect (cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace)",
 		EnvVars:     []string{"ATMOS_PROFILE_TYPE"},
+	})
+}
+
+// registerTerminalFlags registers terminal and I/O configuration flags.
+func registerTerminalFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "flags.registerTerminalFlags")()
+
+	registry.Register(&BoolFlag{
+		Name:        "force-color",
+		Shorthand:   "",
+		Default:     false,
+		Description: "Force color output even when not a TTY (useful for screenshots)",
+		EnvVars:     []string{"ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"},
+	})
+
+	registry.Register(&BoolFlag{
+		Name:        "force-tty",
+		Shorthand:   "",
+		Default:     false,
+		Description: "Force TTY mode with sane defaults (width=120, height=40) when terminal detection fails",
+		EnvVars:     []string{"ATMOS_FORCE_TTY"},
+	})
+
+	registry.Register(&BoolFlag{
+		Name:        "mask",
+		Shorthand:   "",
+		Default:     true,
+		Description: "Enable automatic masking of secrets in output",
+		EnvVars:     []string{"ATMOS_MASK"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:        "redirect-stderr",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Redirect stderr to file",
+		EnvVars:     []string{"ATMOS_REDIRECT_STDERR"},
 	})
 }
 
