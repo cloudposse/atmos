@@ -84,3 +84,117 @@ func TestDescribeComponentCmd_ProvenanceWithFileOutput(t *testing.T) {
 		assert.NotContains(tk, err.Error(), "invalid flag", "Should not fail due to invalid flag")
 	}
 }
+
+func TestDescribeComponentCmd_PathResolution(t *testing.T) {
+	tk := NewTestKit(t)
+
+	stacksPath := "examples/quick-start-advanced"
+
+	// Skip if examples directory doesn't exist
+	if _, err := os.Stat(stacksPath); os.IsNotExist(err) {
+		tk.Skipf("Skipping test: %s directory not found", stacksPath)
+	}
+
+	tk.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	tk.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	tests := []struct {
+		name      string
+		component string
+		stack     string
+	}{
+		{
+			name:      "component name resolution",
+			component: "vpc",
+			stack:     "plat-ue2-dev",
+		},
+		{
+			name:      "component name with slash",
+			component: "vpc/security",
+			stack:     "plat-ue2-dev",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tk := NewTestKit(t)
+
+			// Set flags.
+			require.NoError(tk, describeComponentCmd.PersistentFlags().Set("stack", tt.stack))
+
+			err := describeComponentCmd.RunE(describeComponentCmd, []string{tt.component})
+			// The command might fail due to missing component or stack in test environment.
+			// We're testing that path resolution logic is executed without panicking.
+			if err != nil {
+				// Should not fail due to path resolution issues for non-path components.
+				assert.NotContains(tk, err.Error(), "path resolution", "Non-path component should not trigger path resolution errors")
+			}
+		})
+	}
+}
+
+func TestDescribeComponentCmd_ConfigLoadError(t *testing.T) {
+	tests := []struct {
+		name         string
+		component    string
+		shouldError  bool
+		errorPattern string
+	}{
+		{
+			name:        "non-path component with invalid config",
+			component:   "vpc",
+			shouldError: true,
+		},
+		{
+			name:        "path component with invalid config",
+			component:   "./components/terraform/vpc",
+			shouldError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tk := NewTestKit(t)
+
+			// Set invalid config path to trigger config load error.
+			tk.Setenv("ATMOS_CLI_CONFIG_PATH", "/nonexistent/path")
+
+			// Set flags.
+			require.NoError(tk, describeComponentCmd.PersistentFlags().Set("stack", "test-stack"))
+
+			// Run command - both should fail due to config load error.
+			err := describeComponentCmd.RunE(describeComponentCmd, []string{tt.component})
+			if tt.shouldError {
+				assert.Error(tk, err, "Command should fail with invalid config")
+			}
+		})
+	}
+}
+
+func TestDescribeComponentCmd_AuthManager(t *testing.T) {
+	tk := NewTestKit(t)
+
+	stacksPath := "examples/quick-start-advanced"
+
+	// Skip if examples directory doesn't exist.
+	if _, err := os.Stat(stacksPath); os.IsNotExist(err) {
+		tk.Skipf("Skipping test: %s directory not found", stacksPath)
+	}
+
+	tk.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	tk.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	// Set flags.
+	require.NoError(tk, describeComponentCmd.PersistentFlags().Set("stack", "plat-ue2-dev"))
+
+	// Run command - this will create auth manager from identity flags.
+	// The command might fail for other reasons, but we're testing that
+	// auth manager creation doesn't panic.
+	err := describeComponentCmd.RunE(describeComponentCmd, []string{"vpc"})
+	// We're mainly checking that auth manager creation path is exercised.
+	// The actual auth validation is tested elsewhere.
+	if err != nil {
+		// Should not fail due to auth manager creation for tests without identity flag.
+		assert.NotContains(tk, err.Error(), "auth manager creation failed")
+	}
+}
