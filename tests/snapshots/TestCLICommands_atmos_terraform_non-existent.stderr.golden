@@ -26,6 +26,7 @@ Valid subcommands are:
 • plan-diff
 • providers
 • provision
+• provision
 • refresh
 • shell
 • show
