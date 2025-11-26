@@ -131,7 +131,17 @@ jobs:
           # Pre-configure it globally so git doesn't need the -c flag.
           echo "Configuring git to work around -c flag parsing issue..."
           git --version
-          git config --global advice.detachedHead false
+
+          # Test if git accepts this config key
+          if git config --global advice.detachedHead false; then
+            echo "✓ Successfully configured advice.detachedHead"
+          else
+            echo "✗ Failed to configure advice.detachedHead (git version doesn't support it)"
+            # Try alternative approach - just accept the error
+          fi
+
+          # Show current git config
+          git config --global --list | grep advice || echo "No advice.* configs found"
 
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
