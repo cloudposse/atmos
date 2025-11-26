@@ -123,19 +123,15 @@ jobs:
       # and they'll all be compiled into the same custom-gcl binary.
       - name: Build custom golangci-lint with lintroller plugin
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GIT_TERMINAL_PROMPT: "0"
           GOFLAGS: "-buildvcs=false"
         run: |
           set -e  # Exit on any error
 
-          # Configure git to use GITHUB_TOKEN for authentication to avoid rate limits
-          # This allows golangci-lint custom to clone the golangci-lint repo without hitting
-          # GitHub's unauthenticated API rate limit (60 req/hour)
-          git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+          # Fix HOME directory for git operations in GitHub Actions
+          # See: https://github.com/golangci/golangci-lint-action/discussions/1312
+          export HOME=$(eval echo ~$(whoami))
 
           # Add workspace as git safe directory to avoid "exit status 128" errors
-          # See: https://github.com/golangci/golangci-lint/discussions/5972
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global --add safe.directory '*'
 
