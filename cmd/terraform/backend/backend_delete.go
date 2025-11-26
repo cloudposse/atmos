@@ -6,7 +6,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provision"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 )
 
 var deleteParser *flags.StandardParser
@@ -38,15 +38,14 @@ Requires the --force flag for safety. The backend must be empty
 
 		force := v.GetBool("force")
 
-		// Initialize config.
-		atmosConfig, _, err := InitConfigAndAuth(component, opts.Stack, opts.Identity)
+		// Initialize config and auth.
+		atmosConfig, authManager, err := InitConfigAndAuth(component, opts.Stack, opts.Identity)
 		if err != nil {
 			return err
 		}
 
-		// Execute delete command using pkg/provision.
-		// Pass force flag in a simple map.
-		return provision.DeleteBackend(atmosConfig, component, map[string]bool{"force": force})
+		// Execute delete command using pkg/provisioner.
+		return provisioner.DeleteBackend(atmosConfig, component, opts.Stack, force, CreateDescribeComponentFunc(authManager), authManager)
 	},
 }
 

@@ -6,7 +6,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provision"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 )
 
 var listParser *flags.StandardParser
@@ -39,8 +39,8 @@ var listCmd = &cobra.Command{
 			return err
 		}
 
-		// Execute list command using pkg/provision.
-		return provision.ListBackends(atmosConfig, map[string]string{"format": format})
+		// Execute list command using pkg/provisioner.
+		return provisioner.ListBackends(atmosConfig, map[string]string{"format": format})
 	},
 }
 

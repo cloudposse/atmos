@@ -6,7 +6,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provision"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 )
 
 var describeParser *flags.StandardParser
@@ -45,9 +45,9 @@ This includes backend settings, variables, and metadata from the stack manifest.
 			return err
 		}
 
-		// Execute describe command using pkg/provision.
+		// Execute describe command using pkg/provisioner.
 		// Pass format in a simple map since opts interface{} accepts anything.
-		return provision.DescribeBackend(atmosConfig, component, map[string]string{"format": format})
+		return provisioner.DescribeBackend(atmosConfig, component, map[string]string{"format": format})
 	},
 }
 

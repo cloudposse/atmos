@@ -52,6 +52,7 @@ The S3 Backend Provisioner automatically creates AWS S3 buckets for Terraform st
 4. ✅ **Cross-Account Support**: Provision buckets via role assumption
 5. ✅ **Zero Configuration**: No options beyond `enabled: true`
 6. ✅ **Fast Implementation**: ~1 week timeline
+7. ✅ **Backend Deletion**: Delete backend infrastructure with safety checks
 
 ### Non-Goals
 
@@ -90,6 +91,85 @@ When `provision.backend.enabled: true` and bucket doesn't exist:
 - ❌ Access logging bucket
 - ❌ Object lock/WORM
 - ❌ Bucket policies (beyond public access block)
+
+---
+
+## Backend Deletion
+
+### Delete Command
+
+The `atmos terraform backend delete` command permanently removes backend infrastructure.
+
+```shell
+# Delete empty backend
+atmos terraform backend delete vpc --stack dev --force
+
+# Command will error if bucket contains objects (unless --force)
+```
+
+### Safety Mechanisms
+
+#### Force Flag Required
+
+The `--force` flag is **always required** for deletion to prevent accidental removal:
+
+```shell
+# This command requires --force
+atmos terraform backend delete vpc --stack dev --force
+```
+
+#### Non-Empty Bucket Handling
+
+**Default behavior (no --force is not allowed):**
+- The command ALWAYS requires `--force` flag
+- If bucket contains objects, deletion proceeds with warning
+- If bucket contains `.tfstate` files, count is shown in output
+- User must acknowledge data loss risk by using `--force`
+
+**With --force flag:**
+- Lists all objects and versions in bucket
+- Shows count of objects and state files to be deleted
+- Deletes all objects (including versions)
+- Deletes bucket itself
+- Operation is irreversible
+
+### Delete Process
+
+When you run `atmos terraform backend delete --force`:
+
+1. **Validate Configuration** - Load component's stack configuration
+2. **Check Backend Type** - Verify supported backend type (s3, gcs, azurerm)
+3. **List Objects** - Enumerate all objects and versions in bucket
+4. **Detect State Files** - Count `.tfstate` files for warning message
+5. **Warn User** - Display count of objects and state files to be deleted
+6. **Delete Objects** - Remove all objects and versions (batch operations)
+7. **Delete Bucket** - Remove the empty bucket
+8. **Confirm Success** - Report completion
+
+### Error Scenarios
+
+- **Bucket Not Found**: Error if backend doesn't exist
+- **Permission Denied**: AWS IAM permissions insufficient
+- **Deletion Failure**: Partial delete (objects removed but bucket remains)
+- **Force Required**: User didn't provide `--force` flag
+
+### Best Practices
+
+1. **Backup State Files**: Download `.tfstate` files before deletion
+2. **Verify Component**: Use `describe` to confirm correct backend
+3. **Check Stack**: Ensure you're targeting the right environment
+4. **Document Deletion**: Record why backend was deleted
+5. **Cross-Account**: Ensure role assumption permissions for delete operations
+
+### What Gets Deleted
+
+- ✅ S3 bucket and all objects
+- ✅ All object versions (if versioning enabled)
+- ✅ Terraform state files (`.tfstate`)
+- ✅ Delete markers
+- ❌ DynamoDB tables (not created by provisioner)
+- ❌ KMS keys (not created by provisioner)
+- ❌ IAM roles/policies (not created by provisioner)
 
 ---
 

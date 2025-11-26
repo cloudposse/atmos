@@ -13,7 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provision"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -101,6 +101,6 @@ func ExecuteProvisionCommand(cmd *cobra.Command, args []string, parser *flags.St
 		return err
 	}
 
-	// Execute provision command using pkg/provision.
-	return provision.Provision(atmosConfig, "backend", component, opts.Stack, CreateDescribeComponentFunc(authManager), authManager)
+	// Execute provision command using pkg/provisioner.
+	return provisioner.Provision(atmosConfig, "backend", component, opts.Stack, CreateDescribeComponentFunc(authManager), authManager)
 }

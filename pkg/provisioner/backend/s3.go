@@ -18,7 +18,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/aws_utils"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -36,6 +35,9 @@ type S3ClientAPI interface {
 	PutBucketEncryption(ctx context.Context, params *s3.PutBucketEncryptionInput, optFns ...func(*s3.Options)) (*s3.PutBucketEncryptionOutput, error)
 	PutPublicAccessBlock(ctx context.Context, params *s3.PutPublicAccessBlockInput, optFns ...func(*s3.Options)) (*s3.PutPublicAccessBlockOutput, error)
 	PutBucketTagging(ctx context.Context, params *s3.PutBucketTaggingInput, optFns ...func(*s3.Options)) (*s3.PutBucketTaggingOutput, error)
+	ListObjectVersions(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error)
+	DeleteObjects(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
+	DeleteBucket(ctx context.Context, params *s3.DeleteBucketInput, optFns ...func(*s3.Options)) (*s3.DeleteBucketOutput, error)
 }
 
 // s3Config holds S3 backend configuration.
@@ -46,11 +48,13 @@ type s3Config struct {
 }
 
 func init() {
-	// Register S3 backend provisioner.
-	RegisterBackendProvisioner("s3", ProvisionS3Backend)
+	// Register S3 backend create function.
+	RegisterBackendCreate("s3", CreateS3Backend)
+	// Register S3 backend delete function.
+	RegisterBackendDelete("s3", DeleteS3Backend)
 }
 
-// ProvisionS3Backend provisions an S3 backend with opinionated, hardcoded defaults.
+// CreateS3Backend creates an S3 backend with opinionated, hardcoded defaults.
 //
 // Hardcoded features:
 // - Versioning: ENABLED (always)
@@ -61,13 +65,13 @@ func init() {
 //
 // No configuration options beyond enabled: true.
 // For production use, migrate to terraform-aws-tfstate-backend module.
-func ProvisionS3Backend(
+func CreateS3Backend(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	backendConfig map[string]any,
 	authContext *schema.AuthContext,
 ) error {
-	defer perf.Track(atmosConfig, "backend.ProvisionS3Backend")()
+	defer perf.Track(atmosConfig, "backend.CreateS3Backend")()
 
 	// Extract and validate required configuration.
 	config, err := extractS3Config(backendConfig)
@@ -80,7 +84,7 @@ func ProvisionS3Backend(
 	// Load AWS configuration with auth context.
 	awsConfig, err := loadAWSConfigWithAuth(ctx, config.region, config.roleArn, authContext)
 	if err != nil {
-		return errUtils.Build(provisioner.ErrLoadAWSConfig).
+		return errUtils.Build(errUtils.ErrLoadAWSConfig).
 			WithHint("Check AWS credentials are configured correctly").
 			WithHintf("Verify AWS region '%s' is valid", config.region).
 			WithHint("If using --identity flag, ensure the identity is authenticated").
@@ -101,7 +105,7 @@ func ProvisionS3Backend(
 	// Apply hardcoded defaults.
 	// If bucket already existed, warn that settings may be overwritten.
 	if err := applyS3BucketDefaults(ctx, client, config.bucket, bucketAlreadyExisted); err != nil {
-		return fmt.Errorf(errFormat, provisioner.ErrApplyBucketDefaults, err)
+		return fmt.Errorf(errFormat, errUtils.ErrApplyBucketDefaults, err)
 	}
 
 	_ = ui.Success(fmt.Sprintf("S3 backend provisioned successfully: %s", config.bucket))
@@ -113,13 +117,13 @@ func extractS3Config(backendConfig map[string]any) (*s3Config, error) {
 	// Extract bucket name.
 	bucketVal, ok := backendConfig["bucket"].(string)
 	if !ok || bucketVal == "" {
-		return nil, fmt.Errorf("%w", provisioner.ErrBucketRequired)
+		return nil, fmt.Errorf("%w", errUtils.ErrBucketRequired)
 	}
 
 	// Extract region.
 	regionVal, ok := backendConfig["region"].(string)
 	if !ok || regionVal == "" {
-		return nil, fmt.Errorf("%w", provisioner.ErrRegionRequired)
+		return nil, fmt.Errorf("%w", errUtils.ErrRegionRequired)
 	}
 
 	// Extract role ARN if specified (optional).
@@ -142,7 +146,7 @@ func extractS3Config(backendConfig map[string]any) (*s3Config, error) {
 func ensureBucket(ctx context.Context, client S3ClientAPI, bucket, region string) (bool, error) {
 	exists, err := bucketExists(ctx, client, bucket)
 	if err != nil {
-		return false, fmt.Errorf(errFormat, provisioner.ErrCheckBucketExist, err)
+		return false, fmt.Errorf(errFormat, errUtils.ErrCheckBucketExist, err)
 	}
 
 	if exists {
@@ -152,7 +156,7 @@ func ensureBucket(ctx context.Context, client S3ClientAPI, bucket, region string
 
 	// Create bucket.
 	if err := createBucket(ctx, client, bucket, region); err != nil {
-		return false, fmt.Errorf(errFormat, provisioner.ErrCreateBucket, err)
+		return false, fmt.Errorf(errFormat, errUtils.ErrCreateBucket, err)
 	}
 	_ = ui.Success(fmt.Sprintf("Created S3 bucket: %s", bucket))
 	return false, nil
@@ -223,7 +227,7 @@ func bucketExists(ctx context.Context, client S3ClientAPI, bucket string) (bool,
 		}
 
 		// Network or other transient error.
-		return false, errUtils.Build(provisioner.ErrCheckBucketExist).
+		return false, errUtils.Build(errUtils.ErrCheckBucketExist).
 			WithHint("Check network connectivity to AWS S3").
 			WithHint("Verify AWS region is correct").
 			WithHintf("Try again - this may be a transient network issue").
@@ -274,24 +278,24 @@ func applyS3BucketDefaults(ctx context.Context, client S3ClientAPI, bucket strin
 
 	// 1. Enable versioning (ALWAYS).
 	if err := enableVersioning(ctx, client, bucket); err != nil {
-		return fmt.Errorf(errFormat, provisioner.ErrEnableVersioning, err)
+		return fmt.Errorf(errFormat, errUtils.ErrEnableVersioning, err)
 	}
 
 	// 2. Enable encryption with AES-256 (ALWAYS).
 	// NOTE: This replaces any existing encryption configuration, including KMS.
 	if err := enableEncryption(ctx, client, bucket); err != nil {
-		return fmt.Errorf(errFormat, provisioner.ErrEnableEncryption, err)
+		return fmt.Errorf(errFormat, errUtils.ErrEnableEncryption, err)
 	}
 
 	// 3. Block public access (ALWAYS).
 	if err := blockPublicAccess(ctx, client, bucket); err != nil {
-		return fmt.Errorf(errFormat, provisioner.ErrBlockPublicAccess, err)
+		return fmt.Errorf(errFormat, errUtils.ErrBlockPublicAccess, err)
 	}
 
 	// 4. Apply standard tags (ALWAYS).
 	// NOTE: This replaces the entire tag set. Existing tags are not preserved.
 	if err := applyTags(ctx, client, bucket); err != nil {
-		return fmt.Errorf(errFormat, provisioner.ErrApplyTags, err)
+		return fmt.Errorf(errFormat, errUtils.ErrApplyTags, err)
 	}
 
 	return nil

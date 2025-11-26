@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/provisioner"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -17,10 +17,10 @@ import (
 func resetBackendRegistry() {
 	registryMu.Lock()
 	defer registryMu.Unlock()
-	backendProvisioners = make(map[string]BackendProvisionerFunc)
+	backendCreators = make(map[string]BackendCreateFunc)
 }
 
-func TestRegisterBackendProvisioner(t *testing.T) {
+func TestRegisterBackendCreate(t *testing.T) {
 	// Reset registry before test.
 	resetBackendRegistry()
 
@@ -28,21 +28,21 @@ func TestRegisterBackendProvisioner(t *testing.T) {
 		return nil
 	}
 
-	RegisterBackendProvisioner("s3", mockProvisioner)
+	RegisterBackendCreate("s3", mockProvisioner)
 
-	provisioner := GetBackendProvisioner("s3")
+	provisioner := GetBackendCreate("s3")
 	assert.NotNil(t, provisioner)
 }
 
-func TestGetBackendProvisioner_NotFound(t *testing.T) {
+func TestGetBackendCreate_NotFound(t *testing.T) {
 	// Reset registry before test.
 	resetBackendRegistry()
 
-	provisioner := GetBackendProvisioner("nonexistent")
+	provisioner := GetBackendCreate("nonexistent")
 	assert.Nil(t, provisioner)
 }
 
-func TestGetBackendProvisioner_MultipleTypes(t *testing.T) {
+func TestGetBackendCreate_MultipleTypes(t *testing.T) {
 	// Reset registry before test.
 	resetBackendRegistry()
 
@@ -54,12 +54,12 @@ func TestGetBackendProvisioner_MultipleTypes(t *testing.T) {
 		return nil
 	}
 
-	RegisterBackendProvisioner("s3", s3Provisioner)
-	RegisterBackendProvisioner("gcs", gcsProvisioner)
+	RegisterBackendCreate("s3", s3Provisioner)
+	RegisterBackendCreate("gcs", gcsProvisioner)
 
-	assert.NotNil(t, GetBackendProvisioner("s3"))
-	assert.NotNil(t, GetBackendProvisioner("gcs"))
-	assert.Nil(t, GetBackendProvisioner("azurerm"))
+	assert.NotNil(t, GetBackendCreate("s3"))
+	assert.NotNil(t, GetBackendCreate("gcs"))
+	assert.Nil(t, GetBackendCreate("azurerm"))
 }
 
 func TestProvisionBackend_NoProvisioningConfiguration(t *testing.T) {
@@ -159,7 +159,7 @@ func TestProvisionBackend_MissingBackendConfiguration(t *testing.T) {
 
 	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provisioner.ErrBackendNotFound)
+	assert.ErrorIs(t, err, errUtils.ErrBackendNotFound)
 	assert.Contains(t, err.Error(), "backend configuration not found")
 }
 
@@ -182,7 +182,7 @@ func TestProvisionBackend_MissingBackendType(t *testing.T) {
 
 	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provisioner.ErrBackendTypeRequired)
+	assert.ErrorIs(t, err, errUtils.ErrBackendTypeRequired)
 	assert.Contains(t, err.Error(), "backend_type not specified")
 }
 
@@ -208,7 +208,7 @@ func TestProvisionBackend_UnsupportedBackendType(t *testing.T) {
 
 	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provisioner.ErrNoProvisionerFound)
+	assert.ErrorIs(t, err, errUtils.ErrCreateNotImplemented)
 	assert.Contains(t, err.Error(), "unsupported")
 }
 
@@ -230,7 +230,7 @@ func TestProvisionBackend_Success(t *testing.T) {
 		return nil
 	}
 
-	RegisterBackendProvisioner("s3", mockProvisioner)
+	RegisterBackendCreate("s3", mockProvisioner)
 
 	componentConfig := map[string]any{
 		"backend_type": "s3",
@@ -268,7 +268,7 @@ func TestProvisionBackend_WithAuthContext(t *testing.T) {
 		return nil
 	}
 
-	RegisterBackendProvisioner("s3", mockProvisioner)
+	RegisterBackendCreate("s3", mockProvisioner)
 
 	componentConfig := map[string]any{
 		"backend_type": "s3",
@@ -309,7 +309,7 @@ func TestProvisionBackend_ProvisionerFailure(t *testing.T) {
 		return errors.New("bucket creation failed: permission denied")
 	}
 
-	RegisterBackendProvisioner("s3", mockProvisioner)
+	RegisterBackendCreate("s3", mockProvisioner)
 
 	componentConfig := map[string]any{
 		"backend_type": "s3",
@@ -350,8 +350,8 @@ func TestProvisionBackend_MultipleBackendTypes(t *testing.T) {
 		return nil
 	}
 
-	RegisterBackendProvisioner("s3", mockS3Provisioner)
-	RegisterBackendProvisioner("gcs", mockGCSProvisioner)
+	RegisterBackendCreate("s3", mockS3Provisioner)
+	RegisterBackendCreate("gcs", mockGCSProvisioner)
 
 	// Test S3 backend.
 	componentConfigS3 := map[string]any{
@@ -413,7 +413,7 @@ func TestConcurrentBackendProvisioning(t *testing.T) {
 		return nil
 	}
 
-	RegisterBackendProvisioner("s3", mockProvisioner)
+	RegisterBackendCreate("s3", mockProvisioner)
 
 	componentConfig := map[string]any{
 		"backend_type": "s3",
@@ -487,7 +487,7 @@ func TestProvisionBackend_EnabledWrongType(t *testing.T) {
 				return nil
 			}
 
-			RegisterBackendProvisioner("s3", mockProvisioner)
+			RegisterBackendCreate("s3", mockProvisioner)
 
 			componentConfig := map[string]any{
 				"backend_type": "s3",
@@ -507,9 +507,4 @@ func TestProvisionBackend_EnabledWrongType(t *testing.T) {
 			assert.Equal(t, tt.shouldProvision, provisionerCalled)
 		})
 	}
-}
-
-func TestBeforeTerraformInitEventConstant(t *testing.T) {
-	// Verify the constant value.
-	assert.Equal(t, "before.terraform.init", beforeTerraformInitEvent)
 }

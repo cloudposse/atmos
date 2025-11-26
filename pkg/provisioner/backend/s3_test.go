@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/provisioner"
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 //nolint:dupl // Mock struct intentionally mirrors S3ClientAPI interface for testing.
@@ -23,6 +23,9 @@ type mockS3Client struct {
 	putBucketEncryptionFunc  func(ctx context.Context, params *s3.PutBucketEncryptionInput, optFns ...func(*s3.Options)) (*s3.PutBucketEncryptionOutput, error)
 	putPublicAccessBlockFunc func(ctx context.Context, params *s3.PutPublicAccessBlockInput, optFns ...func(*s3.Options)) (*s3.PutPublicAccessBlockOutput, error)
 	putBucketTaggingFunc     func(ctx context.Context, params *s3.PutBucketTaggingInput, optFns ...func(*s3.Options)) (*s3.PutBucketTaggingOutput, error)
+	listObjectVersionsFunc   func(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error)
+	deleteObjectsFunc        func(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
+	deleteBucketFunc         func(ctx context.Context, params *s3.DeleteBucketInput, optFns ...func(*s3.Options)) (*s3.DeleteBucketOutput, error)
 }
 
 func (m *mockS3Client) HeadBucket(ctx context.Context, params *s3.HeadBucketInput, optFns ...func(*s3.Options)) (*s3.HeadBucketOutput, error) {
@@ -67,6 +70,27 @@ func (m *mockS3Client) PutBucketTagging(ctx context.Context, params *s3.PutBucke
 	return &s3.PutBucketTaggingOutput{}, nil
 }
 
+func (m *mockS3Client) ListObjectVersions(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error) {
+	if m.listObjectVersionsFunc != nil {
+		return m.listObjectVersionsFunc(ctx, params, optFns...)
+	}
+	return &s3.ListObjectVersionsOutput{}, nil
+}
+
+func (m *mockS3Client) DeleteObjects(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error) {
+	if m.deleteObjectsFunc != nil {
+		return m.deleteObjectsFunc(ctx, params, optFns...)
+	}
+	return &s3.DeleteObjectsOutput{}, nil
+}
+
+func (m *mockS3Client) DeleteBucket(ctx context.Context, params *s3.DeleteBucketInput, optFns ...func(*s3.Options)) (*s3.DeleteBucketOutput, error) {
+	if m.deleteBucketFunc != nil {
+		return m.deleteBucketFunc(ctx, params, optFns...)
+	}
+	return &s3.DeleteBucketOutput{}, nil
+}
+
 func TestExtractS3Config(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -109,7 +133,7 @@ func TestExtractS3Config(t *testing.T) {
 				"region": "us-west-2",
 			},
 			want:    nil,
-			wantErr: provisioner.ErrBucketRequired,
+			wantErr: errUtils.ErrBucketRequired,
 		},
 		{
 			name: "empty bucket",
@@ -118,7 +142,7 @@ func TestExtractS3Config(t *testing.T) {
 				"region": "us-west-2",
 			},
 			want:    nil,
-			wantErr: provisioner.ErrBucketRequired,
+			wantErr: errUtils.ErrBucketRequired,
 		},
 		{
 			name: "missing region",
@@ -126,7 +150,7 @@ func TestExtractS3Config(t *testing.T) {
 				"bucket": "my-terraform-state",
 			},
 			want:    nil,
-			wantErr: provisioner.ErrRegionRequired,
+			wantErr: errUtils.ErrRegionRequired,
 		},
 		{
 			name: "empty region",
@@ -135,7 +159,7 @@ func TestExtractS3Config(t *testing.T) {
 				"region": "",
 			},
 			want:    nil,
-			wantErr: provisioner.ErrRegionRequired,
+			wantErr: errUtils.ErrRegionRequired,
 		},
 		{
 			name: "invalid bucket type",
@@ -144,7 +168,7 @@ func TestExtractS3Config(t *testing.T) {
 				"region": "us-west-2",
 			},
 			want:    nil,
-			wantErr: provisioner.ErrBucketRequired,
+			wantErr: errUtils.ErrBucketRequired,
 		},
 		{
 			name: "invalid region type",
@@ -153,7 +177,7 @@ func TestExtractS3Config(t *testing.T) {
 				"region": 12345,
 			},
 			want:    nil,
-			wantErr: provisioner.ErrRegionRequired,
+			wantErr: errUtils.ErrRegionRequired,
 		},
 		{
 			name: "assume_role with empty role_arn",
@@ -222,7 +246,7 @@ func TestExtractS3Config(t *testing.T) {
 
 func TestS3ProvisionerRegistration(t *testing.T) {
 	// Test that S3 provisioner is registered in init().
-	provisioner := GetBackendProvisioner("s3")
+	provisioner := GetBackendCreate("s3")
 	assert.NotNil(t, provisioner, "S3 provisioner should be registered")
 }
 
@@ -322,15 +346,10 @@ func TestExtractS3Config_BucketNameValidation(t *testing.T) {
 				assert.NoError(t, err)
 			} else {
 				assert.Error(t, err)
-				assert.ErrorIs(t, err, provisioner.ErrBucketRequired)
+				assert.ErrorIs(t, err, errUtils.ErrBucketRequired)
 			}
 		})
 	}
-}
-
-func TestBeforeTerraformInitConstant(t *testing.T) {
-	// Verify the constant matches expected value.
-	assert.Equal(t, "before.terraform.init", beforeTerraformInitEvent)
 }
 
 func TestErrFormatConstant(t *testing.T) {
@@ -391,7 +410,7 @@ func TestBucketExists_NetworkError(t *testing.T) {
 	exists, err := bucketExists(ctx, mockClient, "test-bucket")
 	require.Error(t, err)
 	assert.False(t, exists)
-	// Error wraps provisioner.ErrCheckBucketExist.
+	// Error wraps errUtils.ErrCheckBucketExist.
 	assert.Contains(t, err.Error(), "failed to check bucket existence")
 }
 
@@ -483,7 +502,7 @@ func TestEnsureBucket_HeadBucketError(t *testing.T) {
 
 	_, err := ensureBucket(ctx, mockClient, "test-bucket", "us-west-2")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provisioner.ErrCheckBucketExist)
+	assert.ErrorIs(t, err, errUtils.ErrCheckBucketExist)
 }
 
 func TestEnsureBucket_CreateBucketError(t *testing.T) {
@@ -499,7 +518,7 @@ func TestEnsureBucket_CreateBucketError(t *testing.T) {
 
 	_, err := ensureBucket(ctx, mockClient, "new-bucket", "us-west-2")
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provisioner.ErrCreateBucket)
+	assert.ErrorIs(t, err, errUtils.ErrCreateBucket)
 }
 
 func TestEnableVersioning_Success(t *testing.T) {
@@ -710,7 +729,7 @@ func TestApplyS3BucketDefaults_VersioningFails(t *testing.T) {
 
 	err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provisioner.ErrEnableVersioning)
+	assert.ErrorIs(t, err, errUtils.ErrEnableVersioning)
 }
 
 func TestApplyS3BucketDefaults_EncryptionFails(t *testing.T) {
@@ -726,7 +745,7 @@ func TestApplyS3BucketDefaults_EncryptionFails(t *testing.T) {
 
 	err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provisioner.ErrEnableEncryption)
+	assert.ErrorIs(t, err, errUtils.ErrEnableEncryption)
 }
 
 func TestApplyS3BucketDefaults_PublicAccessFails(t *testing.T) {
@@ -745,7 +764,7 @@ func TestApplyS3BucketDefaults_PublicAccessFails(t *testing.T) {
 
 	err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provisioner.ErrBlockPublicAccess)
+	assert.ErrorIs(t, err, errUtils.ErrBlockPublicAccess)
 }
 
 func TestApplyS3BucketDefaults_TaggingFails(t *testing.T) {
@@ -767,7 +786,7 @@ func TestApplyS3BucketDefaults_TaggingFails(t *testing.T) {
 
 	err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provisioner.ErrApplyTags)
+	assert.ErrorIs(t, err, errUtils.ErrApplyTags)
 }
 
 // Verify mock implements interface.

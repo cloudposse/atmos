@@ -5,61 +5,76 @@ import (
 	"fmt"
 	"sync"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-const (
-	// BeforeTerraformInitEvent is the hook event name for backend provisioners.
-	// This matches the constant defined in internal/exec/terraform.go and pkg/hooks/event.go (hooks.BeforeTerraformInit).
-	// We use a local constant here to avoid import cycles.
-	beforeTerraformInitEvent = "before.terraform.init"
-)
-
-func init() {
-	// Register backend provisioner to run before Terraform initialization.
-	// This ensures the backend exists before Terraform tries to configure it.
-	provisioner.RegisterProvisioner(provisioner.Provisioner{
-		Type:      "backend",
-		HookEvent: provisioner.HookEvent(beforeTerraformInitEvent),
-		Func:      ProvisionBackend,
-	})
-}
-
-// BackendProvisionerFunc is a function that provisions a Terraform backend.
-type BackendProvisionerFunc func(
+// BackendCreateFunc is a function that creates a Terraform backend.
+type BackendCreateFunc func(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	backendConfig map[string]any,
 	authContext *schema.AuthContext,
 ) error
 
+// BackendDeleteFunc is a function that deletes a Terraform backend.
+type BackendDeleteFunc func(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	backendConfig map[string]any,
+	authContext *schema.AuthContext,
+	force bool,
+) error
+
 var (
-	// BackendProvisioners maps backend type (s3, gcs, azurerm) to provisioner function.
-	backendProvisioners = make(map[string]BackendProvisionerFunc)
-	registryMu          sync.RWMutex
+	// BackendCreators maps backend type (s3, gcs, azurerm) to create function.
+	backendCreators = make(map[string]BackendCreateFunc)
+	// BackendDeleters maps backend type (s3, gcs, azurerm) to delete function.
+	backendDeleters = make(map[string]BackendDeleteFunc)
+	registryMu      sync.RWMutex
 )
 
-// RegisterBackendProvisioner registers a backend provisioner for a specific backend type.
-func RegisterBackendProvisioner(backendType string, fn BackendProvisionerFunc) {
-	defer perf.Track(nil, "backend.RegisterBackendProvisioner")()
+// RegisterBackendCreate registers a backend create function for a specific backend type.
+func RegisterBackendCreate(backendType string, fn BackendCreateFunc) {
+	defer perf.Track(nil, "backend.RegisterBackendCreate")()
 
 	registryMu.Lock()
 	defer registryMu.Unlock()
 
-	backendProvisioners[backendType] = fn
+	backendCreators[backendType] = fn
 }
 
-// GetBackendProvisioner returns the provisioner function for a backend type.
-// Returns nil if no provisioner is registered for the type.
-func GetBackendProvisioner(backendType string) BackendProvisionerFunc {
-	defer perf.Track(nil, "backend.GetBackendProvisioner")()
+// GetBackendCreate returns the create function for a backend type.
+// Returns nil if no create function is registered for the type.
+func GetBackendCreate(backendType string) BackendCreateFunc {
+	defer perf.Track(nil, "backend.GetBackendCreate")()
 
 	registryMu.RLock()
 	defer registryMu.RUnlock()
 
-	return backendProvisioners[backendType]
+	return backendCreators[backendType]
+}
+
+// RegisterBackendDelete registers a backend delete function for a specific backend type.
+func RegisterBackendDelete(backendType string, fn BackendDeleteFunc) {
+	defer perf.Track(nil, "backend.RegisterBackendDelete")()
+
+	registryMu.Lock()
+	defer registryMu.Unlock()
+
+	backendDeleters[backendType] = fn
+}
+
+// GetBackendDelete returns the delete function for a backend type.
+// Returns nil if no delete function is registered for the type.
+func GetBackendDelete(backendType string) BackendDeleteFunc {
+	defer perf.Track(nil, "backend.GetBackendDelete")()
+
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+
+	return backendDeleters[backendType]
 }
 
 // ProvisionBackend provisions a backend if provisioning is enabled.
@@ -91,20 +106,20 @@ func ProvisionBackend(
 	// Get backend configuration.
 	backendConfig, ok := componentConfig["backend"].(map[string]any)
 	if !ok {
-		return fmt.Errorf("%w: backend configuration not found", provisioner.ErrBackendNotFound)
+		return fmt.Errorf("%w: backend configuration not found", errUtils.ErrBackendNotFound)
 	}
 
 	backendType, ok := componentConfig["backend_type"].(string)
 	if !ok {
-		return fmt.Errorf("%w: backend_type not specified", provisioner.ErrBackendTypeRequired)
+		return fmt.Errorf("%w: backend_type not specified", errUtils.ErrBackendTypeRequired)
 	}
 
-	// Get provisioner for backend type.
-	prov := GetBackendProvisioner(backendType)
-	if prov == nil {
-		return fmt.Errorf("%w: %s", provisioner.ErrNoProvisionerFound, backendType)
+	// Get create function for backend type.
+	createFunc := GetBackendCreate(backendType)
+	if createFunc == nil {
+		return fmt.Errorf("%w: %s", errUtils.ErrCreateNotImplemented, backendType)
 	}
 
-	// Execute provisioner.
-	return prov(ctx, atmosConfig, backendConfig, authContext)
+	// Execute create function.
+	return createFunc(ctx, atmosConfig, backendConfig, authContext)
 }
