@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -72,6 +73,13 @@ func TestParseValidateComponentFlags(t *testing.T) {
 }
 
 func TestResolvePathBasedComponent_WithPath(t *testing.T) {
+	// Use platform-specific absolute path.
+	absolutePath := "/path/to/components/terraform/vpc"
+	if filepath.Separator == '\\' {
+		// Windows absolute path.
+		absolutePath = "C:\\path\\to\\components\\terraform\\vpc"
+	}
+
 	tests := []struct {
 		name              string
 		component         string
@@ -81,7 +89,7 @@ func TestResolvePathBasedComponent_WithPath(t *testing.T) {
 	}{
 		{
 			name:              "resolve absolute path",
-			component:         "/path/to/components/terraform/vpc",
+			component:         absolutePath,
 			stack:             "prod-us-east-1",
 			expectedComponent: "vpc",
 			expectError:       false,
