@@ -125,17 +125,26 @@ jobs:
         run: |
           set -e  # Exit on any error
 
-          # Debug: Test if we can clone ANY public repo
-          echo "Testing git clone of public repository..."
-          if git clone --depth 1 https://github.com/golangci/golangci-lint.git /tmp/test-clone; then
-            echo "✓ Git clone works"
+          # Debug: Test exact git clone command that golangci-lint custom uses
+          echo "Testing exact git clone command that golangci-lint custom uses..."
+          if git clone --branch v2.5.0 --single-branch --depth 1 -c advice.detachedHead=false -q https://github.com/golangci/golangci-lint.git /tmp/test-clone; then
+            echo "✓ Exact git clone command works"
             rm -rf /tmp/test-clone
           else
-            echo "✗ Git clone failed with exit code $?"
-            echo "Git version:"
-            git --version
-            echo "Network test:"
-            curl -I https://github.com 2>&1 | head -5
+            EXIT_CODE=$?
+            echo "✗ Exact git clone command failed with exit code $EXIT_CODE"
+
+            # Test each flag individually to find the culprit
+            echo ""
+            echo "Testing without -q (quiet)..."
+            git clone --branch v2.5.0 --single-branch --depth 1 -c advice.detachedHead=false https://github.com/golangci/golangci-lint.git /tmp/test-clone-2 2>&1 || echo "Still fails"
+            rm -rf /tmp/test-clone-2
+
+            echo ""
+            echo "Testing without -c advice.detachedHead=false..."
+            git clone --branch v2.5.0 --single-branch --depth 1 -q https://github.com/golangci/golangci-lint.git /tmp/test-clone-3 2>&1 || echo "Still fails"
+            rm -rf /tmp/test-clone-3
+
             exit 1
           fi
 
