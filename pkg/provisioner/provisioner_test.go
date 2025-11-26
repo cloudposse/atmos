@@ -27,7 +27,7 @@ func TestProvisionWithParams_NilDescribeComponent(t *testing.T) {
 		Component:         "vpc",
 		Stack:             "dev",
 		DescribeComponent: nil,
-		AuthManager:       nil,
+		AuthContext:       nil,
 	}
 
 	err := ProvisionWithParams(params)
@@ -53,7 +53,7 @@ func TestProvisionWithParams_UnsupportedProvisionerType(t *testing.T) {
 		Component:         "vpc",
 		Stack:             "dev",
 		DescribeComponent: mockDescribe,
-		AuthManager:       nil,
+		AuthContext:       nil,
 	}
 
 	err := ProvisionWithParams(params)
@@ -74,7 +74,7 @@ func TestProvisionWithParams_DescribeComponentFailure(t *testing.T) {
 		Component:         "vpc",
 		Stack:             "dev",
 		DescribeComponent: mockDescribe,
-		AuthManager:       nil,
+		AuthContext:       nil,
 	}
 
 	err := ProvisionWithParams(params)
@@ -127,7 +127,7 @@ func TestProvisionWithParams_BackendProvisioningSuccess(t *testing.T) {
 		Component:         "vpc",
 		Stack:             "dev",
 		DescribeComponent: mockDescribe,
-		AuthManager:       nil,
+		AuthContext:       nil,
 	}
 
 	err := ProvisionWithParams(params)
@@ -165,7 +165,7 @@ func TestProvisionWithParams_BackendProvisioningFailure(t *testing.T) {
 		Component:         "vpc",
 		Stack:             "dev",
 		DescribeComponent: mockDescribe,
-		AuthManager:       nil,
+		AuthContext:       nil,
 	}
 
 	err := ProvisionWithParams(params)
@@ -211,10 +211,10 @@ func TestProvision_DelegatesToProvisionWithParams(t *testing.T) {
 	assert.True(t, mockProvisionerCalled, "Backend provisioner should have been called")
 }
 
-func TestProvisionWithParams_WithAuthManager(t *testing.T) {
-	// This test verifies that when an AuthManager is provided, provisioning still works correctly.
+func TestProvisionWithParams_WithAuthContext(t *testing.T) {
+	// This test verifies that when an AuthContext is provided, provisioning still works correctly.
 	// Note: The current implementation passes nil authContext to the backend provisioner
-	// and relies on AWS SDK credential chain to pick up credentials written by AuthManager.
+	// and relies on AWS SDK credential chain to pick up credentials written by authentication.
 
 	mockDescribe := func(component string, stack string) (map[string]any, error) {
 		return map[string]any{
@@ -247,7 +247,7 @@ func TestProvisionWithParams_WithAuthManager(t *testing.T) {
 		Component:         "vpc",
 		Stack:             "dev",
 		DescribeComponent: mockDescribe,
-		AuthManager:       nil, // In real usage, this would be a valid AuthManager.
+		AuthContext:       nil, // In real usage, this would be a valid AuthContext.
 	}
 
 	err := ProvisionWithParams(params)
@@ -312,7 +312,7 @@ func TestProvisionWithParams_BackendTypeValidation(t *testing.T) {
 				Component:         "vpc",
 				Stack:             "dev",
 				DescribeComponent: mockDescribe,
-				AuthManager:       nil,
+				AuthContext:       nil,
 			}
 
 			err := ProvisionWithParams(params)

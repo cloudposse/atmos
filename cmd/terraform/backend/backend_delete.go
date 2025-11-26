@@ -38,14 +38,17 @@ Requires the --force flag for safety. The backend must be empty
 
 		force := v.GetBool("force")
 
-		// Initialize config and auth.
-		atmosConfig, authManager, err := InitConfigAndAuth(component, opts.Stack, opts.Identity)
+		// Initialize config and auth (now returns AuthContext instead of AuthManager).
+		atmosConfig, authContext, err := InitConfigAndAuth(component, opts.Stack, opts.Identity)
 		if err != nil {
 			return err
 		}
 
+		// Create describe component callback.
+		describeFunc := CreateDescribeComponentFunc(nil) // Auth already handled in InitConfigAndAuth
+
 		// Execute delete command using pkg/provisioner.
-		return provisioner.DeleteBackend(atmosConfig, component, opts.Stack, force, CreateDescribeComponentFunc(authManager), authManager)
+		return provisioner.DeleteBackend(atmosConfig, component, opts.Stack, force, describeFunc, authContext)
 	},
 }
 

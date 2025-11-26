@@ -2,6 +2,7 @@ package backend
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -45,8 +46,10 @@ func ParseCommonFlags(cmd *cobra.Command, parser *flags.StandardParser) (*Common
 }
 
 // InitConfigAndAuth initializes Atmos configuration and optional authentication.
-// Returns atmosConfig, authManager, and error.
-func InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfiguration, auth.AuthManager, error) {
+// Returns atmosConfig, authContext, and error.
+// It loads component configuration, merges component-level auth with global auth,
+// and creates an AuthContext that respects component's default identity settings.
+func InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
 	// Load atmos configuration.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
 		ComponentFromArg: component,
@@ -56,16 +59,41 @@ func InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfigur
 		return nil, nil, errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
 
-	// Create AuthManager from identity flag if provided.
-	var authManager auth.AuthManager
-	if identity != "" {
-		authManager, err = auth.CreateAndAuthenticateManager(identity, &atmosConfig.Auth, cfg.IdentityFlagSelectValue)
-		if err != nil {
-			return nil, nil, err
+	// Load component configuration to get component-level auth settings.
+	componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
+		Skip:                 nil,
+		AuthManager:          nil, // Don't need auth to describe component
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load component config: %w", err)
+	}
+
+	// Merge component auth with global auth (component auth takes precedence).
+	mergedAuthConfig, err := auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, &atmosConfig, cfg.AuthSectionName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to merge component auth: %w", err)
+	}
+
+	// Create AuthManager with merged config (auto-selects component's default identity if present).
+	authManager, err := auth.CreateAndAuthenticateManager(identity, mergedAuthConfig, cfg.IdentityFlagSelectValue)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Get AuthContext from AuthManager.
+	var authContext *schema.AuthContext
+	if authManager != nil {
+		stackInfo := authManager.GetStackInfo()
+		if stackInfo != nil {
+			authContext = stackInfo.AuthContext
 		}
 	}
 
-	return &atmosConfig, authManager, nil
+	return &atmosConfig, authContext, nil
 }
 
 // CreateDescribeComponentFunc creates a describe component function with the given authManager.
@@ -95,12 +123,26 @@ func ExecuteProvisionCommand(cmd *cobra.Command, args []string, parser *flags.St
 		return err
 	}
 
-	// Initialize config and auth.
-	atmosConfig, authManager, err := InitConfigAndAuth(component, opts.Stack, opts.Identity)
+	// Initialize config and auth (now returns AuthContext instead of AuthManager).
+	atmosConfig, authContext, err := InitConfigAndAuth(component, opts.Stack, opts.Identity)
 	if err != nil {
 		return err
 	}
 
+	// Create describe component callback.
+	// Note: We don't need to pass authContext to the describe function for backend provisioning
+	// since we already loaded the component config in InitConfigAndAuth.
+	describeFunc := func(component, stack string) (map[string]any, error) {
+		return e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+			Component:            component,
+			Stack:                stack,
+			ProcessTemplates:     false,
+			ProcessYamlFunctions: false,
+			Skip:                 nil,
+			AuthManager:          nil, // Auth already handled
+		})
+	}
+
 	// Execute provision command using pkg/provisioner.
-	return provisioner.Provision(atmosConfig, "backend", component, opts.Stack, CreateDescribeComponentFunc(authManager), authManager)
+	return provisioner.Provision(atmosConfig, "backend", component, opts.Stack, describeFunc, authContext)
 }

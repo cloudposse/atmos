@@ -7,7 +7,6 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -31,7 +30,7 @@ type ProvisionParams struct {
 	Component         string
 	Stack             string
 	DescribeComponent ExecuteDescribeComponentFunc
-	AuthManager       auth.AuthManager
+	AuthContext       *schema.AuthContext
 }
 
 // Provision provisions infrastructure resources.
@@ -44,7 +43,7 @@ func Provision(
 	component string,
 	stack string,
 	describeComponent ExecuteDescribeComponentFunc,
-	authManager auth.AuthManager,
+	authContext *schema.AuthContext,
 ) error {
 	//revive:enable:argument-limit
 	defer perf.Track(atmosConfig, "provision.Provision")()
@@ -55,7 +54,7 @@ func Provision(
 		Component:         component,
 		Stack:             stack,
 		DescribeComponent: describeComponent,
-		AuthManager:       authManager,
+		AuthContext:       authContext,
 	})
 }
 
@@ -89,22 +88,11 @@ func ProvisionWithParams(params *ProvisionParams) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	// Create AuthContext from AuthManager if provided.
-	// This allows manual `atmos provision backend` commands to benefit from Atmos-managed auth (--identity, SSO).
-	// The AuthManager handles authentication and writes credentials to files, which the backend provisioner
-	// can then use via the AWS SDK's standard credential chain.
-	//
-	// TODO: In the future, we should populate a schema.AuthContext and pass it to ProvisionBackend
-	// to enable in-process SDK calls with Atmos-managed credentials. For now, passing nil causes
-	// the provisioner to fall back to the standard AWS SDK credential chain, which will pick up
-	// the credentials written by AuthManager.
-	var authContext *schema.AuthContext
-	if params.AuthManager != nil {
-		// Authentication already happened in cmd/provision/provision.go via CreateAndAuthenticateManager.
-		// Credentials are available in files, so AWS SDK will pick them up automatically.
-		// For now, pass nil and rely on AWS SDK credential chain.
-		authContext = nil
-	}
+	// Pass AuthContext from params directly to backend provisioner.
+	// This enables in-process SDK calls with Atmos-managed credentials.
+	// The AuthContext was populated by the command layer through InitConfigAndAuth,
+	// which merges component-level auth with global auth and respects default identity settings.
+	authContext := params.AuthContext
 
 	err = backend.ProvisionBackend(ctx, params.AtmosConfig, componentConfig, authContext)
 	if err != nil {
@@ -144,7 +132,7 @@ func DeleteBackend(
 	stack string,
 	force bool,
 	describeComponent ExecuteDescribeComponentFunc,
-	authManager auth.AuthManager,
+	authContext *schema.AuthContext,
 ) error {
 	//revive:enable:argument-limit
 	defer perf.Track(atmosConfig, "provision.DeleteBackend")()
@@ -178,8 +166,7 @@ func DeleteBackend(
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	// Pass authentication context to backend delete function.
-	var authContext *schema.AuthContext
-
+	// Pass authContext directly to backend delete function.
+	// The AuthContext was populated by the command layer and contains provider-specific credentials.
 	return deleteFunc(ctx, atmosConfig, backendConfig, authContext, force)
 }
