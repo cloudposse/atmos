@@ -124,6 +124,21 @@ jobs:
       - name: Build custom golangci-lint with lintroller plugin
         run: |
           set -e  # Exit on any error
+
+          # Debug: Test if we can clone ANY public repo
+          echo "Testing git clone of public repository..."
+          if git clone --depth 1 https://github.com/golangci/golangci-lint.git /tmp/test-clone; then
+            echo "✓ Git clone works"
+            rm -rf /tmp/test-clone
+          else
+            echo "✗ Git clone failed with exit code $?"
+            echo "Git version:"
+            git --version
+            echo "Network test:"
+            curl -I https://github.com 2>&1 | head -5
+            exit 1
+          fi
+
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
 
