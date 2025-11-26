@@ -1,0 +1,82 @@
+---
+slug: terraform-command-registry-pattern
+title: "Improved Terraform Command Architecture for Better Validation and Help"
+authors: [osterman]
+tags: [enhancement]
+---
+
+Atmos terraform commands now use a modern registry pattern that improves flag validation, provides better help text, and sets the foundation for enhanced developer experience across all terraform subcommands.
+
+<!--truncate-->
+
+## What Changed
+
+The terraform command infrastructure has been refactored to use Atmos's command registry pattern. This architectural change brings terraform commands in line with other Atmos commands, enabling better tooling and user experience improvements.
+
+## Why This Matters
+
+### Better Flag Validation
+
+The new architecture provides stronger type safety and validation for command flags:
+
+```bash
+# Flags are validated before execution
+atmos terraform plan my-component -s my-stack --invalid-flag
+# Error: unknown flag: --invalid-flag
+```
+
+Previously, invalid flags could sometimes pass through silently or produce confusing error messages.
+
+### Improved Help Text
+
+Help output is now more consistent and automatically respects your terminal theme:
+
+```bash
+# Clear, themed help for all terraform commands
+atmos terraform --help
+atmos terraform plan --help
+atmos terraform generate varfile --help
+```
+
+All help text now uses proper markdown rendering with syntax highlighting, making documentation easier to read directly in your terminal.
+
+### Foundation for Future Enhancements
+
+This refactoring enables upcoming improvements:
+
+- **Auto-completion** - Shell completion for terraform subcommands and flags
+- **Better error messages** - Contextual help when commands fail
+- **Consistent patterns** - Terraform commands work like all other Atmos commands
+
+## What Stays the Same
+
+All existing terraform commands continue to work exactly as before:
+
+```bash
+# All your existing commands work unchanged
+atmos terraform plan my-component -s my-stack
+atmos terraform apply my-component -s my-stack
+atmos terraform generate varfile my-component -s my-stack
+```
+
+The changes are entirely internal - your workflows, scripts, and CI/CD pipelines are unaffected.
+
+## Technical Details
+
+The refactoring:
+
+1. Migrates terraform commands to the `CommandProvider` interface pattern
+2. Implements proper flag parsing and validation infrastructure
+3. Unifies help text rendering across all terraform subcommands
+4. Preserves backward compatibility with existing command behavior
+
+## Learn More
+
+- [Command Registry Pattern PRD](/docs/prd/command-registry-pattern.md) - Technical architecture details
+- [Terraform Commands](/cli/commands/terraform/usage) - Complete command reference
+- [Global Flags](/cli/global-flags) - Flags available to all commands
+
+## Get Involved
+
+- Share your feedback in the [Atmos Community Slack](https://cloudposse.com/slack)
+- [Report issues](https://github.com/cloudposse/atmos/issues/new) on GitHub
