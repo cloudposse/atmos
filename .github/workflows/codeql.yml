@@ -126,6 +126,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e  # Exit on any error
+
+          # Configure git to use GITHUB_TOKEN for authentication to avoid rate limits
+          # This allows golangci-lint custom to clone the golangci-lint repo without hitting
+          # GitHub's unauthenticated API rate limit (60 req/hour)
+          git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
 
