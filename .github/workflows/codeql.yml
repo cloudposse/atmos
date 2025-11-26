@@ -122,19 +122,8 @@ jobs:
       # This approach allows multiple custom linters - just add them to .custom-gcl.yml
       # and they'll all be compiled into the same custom-gcl binary.
       - name: Build custom golangci-lint with lintroller plugin
-        env:
-          GOFLAGS: "-buildvcs=false"
         run: |
           set -e  # Exit on any error
-
-          # Fix HOME directory for git operations in GitHub Actions
-          # See: https://github.com/golangci/golangci-lint-action/discussions/1312
-          export HOME=$(eval echo ~$(whoami))
-
-          # Add workspace as git safe directory to avoid "exit status 128" errors
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global --add safe.directory '*'
-
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
 
