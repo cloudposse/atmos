@@ -15,7 +15,7 @@ var listCmd = &cobra.Command{
 	Use:     "list",
 	Short:   "List all backends in stack",
 	Long:    `Show all provisioned backends and their status for a given stack.`,
-	Example: `  atmos terraform provision backend list --stack dev`,
+	Example: `  atmos terraform backend list --stack dev`,
 	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "backend.list.RunE")()

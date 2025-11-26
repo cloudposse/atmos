@@ -1,8 +1,8 @@
 ---
-title: atmos terraform provision backend
+title: atmos terraform backend
 sidebar_label: backend
 sidebar_class_name: command
-id: terraform-provision-backend
+id: terraform-backend
 description: Manage Terraform state backend infrastructure
 ---
 
@@ -15,7 +15,7 @@ Use these commands to manage Terraform state backend infrastructure. This solves
 ## Usage
 
 ```shell
-atmos terraform provision backend <subcommand> [options]
+atmos terraform backend <subcommand> [options]
 ```
 
 ## Available Subcommands
@@ -42,7 +42,7 @@ atmos terraform provision backend <subcommand> [options]
 Provision backend infrastructure for a component in a specific stack:
 
 ```shell
-atmos terraform provision backend create <component> --stack <stack>
+atmos terraform backend create <component> --stack <stack>
 ```
 
 The backend must have `provision.backend.enabled: true` in its stack configuration.
@@ -54,7 +54,7 @@ The backend must have `provision.backend.enabled: true` in its stack configurati
 Provision an S3 bucket with secure defaults:
 
 ```shell
-atmos terraform provision backend create vpc --stack dev
+atmos terraform backend create vpc --stack dev
 ```
 
 This creates an S3 bucket (if it doesn't exist) with:
@@ -68,7 +68,7 @@ This creates an S3 bucket (if it doesn't exist) with:
 Show all backend configurations in a stack:
 
 ```shell
-atmos terraform provision backend list --stack dev
+atmos terraform backend list --stack dev
 ```
 
 ### Describe Backend Configuration
@@ -76,8 +76,8 @@ atmos terraform provision backend list --stack dev
 View a component's backend configuration from the stack:
 
 ```shell
-atmos terraform provision backend describe vpc --stack dev
-atmos terraform provision backend describe vpc --stack dev --format json
+atmos terraform backend describe vpc --stack dev
+atmos terraform backend describe vpc --stack dev --format json
 ```
 
 ### Update Backend
@@ -85,7 +85,7 @@ atmos terraform provision backend describe vpc --stack dev --format json
 Apply configuration changes to existing backend (idempotent):
 
 ```shell
-atmos terraform provision backend update vpc --stack dev
+atmos terraform backend update vpc --stack dev
 ```
 
 ### Delete Backend
@@ -93,15 +93,15 @@ atmos terraform provision backend update vpc --stack dev
 Remove backend infrastructure (requires --force for safety):
 
 ```shell
-atmos terraform provision backend delete vpc --stack dev --force
+atmos terraform backend delete vpc --stack dev --force
 ```
 
 ### Provision Multiple Backends
 
 ```shell
-atmos terraform provision backend create vpc --stack dev
-atmos terraform provision backend create eks --stack dev
-atmos terraform provision backend create rds --stack dev
+atmos terraform backend create vpc --stack dev
+atmos terraform backend create eks --stack dev
+atmos terraform backend create rds --stack dev
 ```
 
 ## Arguments
@@ -131,7 +131,7 @@ atmos terraform provision backend create rds --stack dev
 
 ### Manual Provisioning
 
-When you run `atmos terraform provision backend create`:
+When you run `atmos terraform backend create`:
 
 1. **Load Configuration** - Atmos loads the component's stack configuration
 2. **Check Provisioning** - Verifies `provision.backend.enabled: true` is set
@@ -399,7 +399,7 @@ Once your backend is provisioned, you can import it into Terraform for advanced 
 Use Atmos to create the backend with secure defaults:
 
 ```shell
-atmos terraform provision backend create vpc --stack prod
+atmos terraform backend create vpc --stack prod
 ```
 
 ### Step 2: Import into Terraform
@@ -471,12 +471,12 @@ See the [Backend Configuration](/core-concepts/components/terraform/backends#aut
 The provision command is **idempotent**—running it multiple times is safe:
 
 ```shell
-$ atmos provision backend vpc --stack dev
+$ atmos terraform backend create vpc --stack dev
 Running backend provisioner...
 Creating S3 bucket 'acme-terraform-state-dev'...
 ✓ Successfully provisioned backend
 
-$ atmos provision backend vpc --stack dev
+$ atmos terraform backend create vpc --stack dev
 Running backend provisioner...
 S3 bucket 'acme-terraform-state-dev' already exists (idempotent)
 ✓ Backend provisioning completed

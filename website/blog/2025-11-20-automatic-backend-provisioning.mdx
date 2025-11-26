@@ -136,15 +136,15 @@ The provisioner automatically assumes the role to create the bucket in the targe
 
 ## CLI Command
 
-For manual provisioning or CI/CD pipelines, use the `atmos terraform provision backend` command:
+For manual provisioning or CI/CD pipelines, use the `atmos terraform backend` command:
 
 ```bash
 # Provision backend explicitly
-atmos terraform provision backend create vpc --stack dev
+atmos terraform backend create vpc --stack dev
 
 # Automatic in CI/CD
-atmos terraform provision backend create vpc --stack dev
-atmos terraform provision backend create eks --stack dev
+atmos terraform backend create vpc --stack dev
+atmos terraform backend create eks --stack dev
 atmos terraform apply vpc --stack dev  # Only runs if provisioning succeeded
 ```
 
@@ -194,7 +194,7 @@ atmos terraform plan vpc -s dev
 ```
 
 For more information:
-- [CLI Documentation](/cli/commands/terraform/terraform-provision-backend)
+- [CLI Documentation](/cli/commands/terraform/terraform-backend)
 - [Backend Configuration](/core-concepts/components/terraform/backends)
 
 ## Community Feedback

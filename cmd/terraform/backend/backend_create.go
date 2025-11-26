@@ -13,7 +13,7 @@ var createCmd = &cobra.Command{
 	Use:     "<component>",
 	Short:   "Provision backend infrastructure",
 	Long:    `Create or update S3 backend with secure defaults (versioning, encryption, public access blocking). This operation is idempotent.`,
-	Example: `  atmos terraform provision backend vpc --stack dev`,
+	Example: `  atmos terraform backend create vpc --stack dev`,
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return ExecuteProvisionCommand(cmd, args, createParser, "backend.create.RunE")

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cloudposse/atmos/cmd/terraform/provision"
+	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
@@ -303,8 +303,8 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 		"If set to 'false' (default), the target reference will be checked out instead\n"+
 		"This requires that the target reference is already cloned by Git, and the information about it exists in the '.git' directory")
 
-	// Add provision subcommand to terraform.
-	parentCmd.AddCommand(provision.GetProvisionCommand())
+	// Add backend subcommand to terraform.
+	parentCmd.AddCommand(backend.GetBackendCommand())
 
 	commands := getTerraformCommands()
 

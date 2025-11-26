@@ -18,7 +18,7 @@ var deleteCmd = &cobra.Command{
 
 Requires the --force flag for safety. The backend must be empty
 (no state files) before it can be deleted.`,
-	Example: `  atmos terraform provision backend delete vpc --stack dev --force`,
+	Example: `  atmos terraform backend delete vpc --stack dev --force`,
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "backend.delete.RunE")()

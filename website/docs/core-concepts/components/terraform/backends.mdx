@@ -793,7 +793,7 @@ You can also provision backends explicitly using the CLI:
 <Terminal>
 ```shell
 # Provision backend before Terraform execution
-atmos terraform provision backend create vpc --stack dev
+atmos terraform backend create vpc --stack dev
 
 # Then run Terraform
 atmos terraform apply vpc --stack dev
@@ -807,7 +807,7 @@ This is useful for:
 - Batch provisioning for multiple components
 - Pre-provisioning before large-scale deployments
 
-See [`atmos terraform provision backend`](/cli/commands/terraform/terraform-provision-backend) for complete CLI documentation.
+See [`atmos terraform backend`](/cli/commands/terraform/terraform-backend) for complete CLI documentation.
 
 ### Required IAM Permissions
 
@@ -874,7 +874,7 @@ Use Atmos to create the backend with secure defaults:
 
 <Terminal>
 ```shell
-atmos terraform provision backend create vpc --stack prod
+atmos terraform backend create vpc --stack prod
 ```
 </Terminal>
 
@@ -948,10 +948,10 @@ Backend provisioning is idempotent—running it multiple times is safe:
 
 <Terminal>
 ```shell
-$ atmos terraform provision backend create vpc --stack dev
+$ atmos terraform backend create vpc --stack dev
 ✓ Created S3 bucket 'acme-terraform-state-dev'
 
-$ atmos terraform provision backend create vpc --stack dev
+$ atmos terraform backend create vpc --stack dev
 S3 bucket 'acme-terraform-state-dev' already exists (idempotent)
 ✓ Backend provisioning completed
 ```

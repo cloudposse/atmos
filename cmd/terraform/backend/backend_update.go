@@ -16,7 +16,7 @@ var updateCmd = &cobra.Command{
 
 This operation is idempotent and will update backend settings like
 versioning, encryption, and public access blocking to match secure defaults.`,
-	Example: `  atmos terraform provision backend update vpc --stack dev`,
+	Example: `  atmos terraform backend update vpc --stack dev`,
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return ExecuteProvisionCommand(cmd, args, updateParser, "backend.update.RunE")

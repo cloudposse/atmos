@@ -971,7 +971,7 @@ Explicitly provision backend before Terraform execution:
 
 ```bash
 # Provision S3 backend explicitly
-atmos provision backend vpc --stack dev
+atmos terraform backend create vpc --stack dev
 
 # Then run Terraform
 atmos terraform apply vpc --stack dev
@@ -1008,9 +1008,9 @@ jobs:
 
       - name: Provision Backend
         run: |
-          atmos provision backend vpc --stack dev
-          atmos provision backend eks --stack dev
-          atmos provision backend rds --stack dev
+          atmos terraform backend create vpc --stack dev
+          atmos terraform backend create eks --stack dev
+          atmos terraform backend create rds --stack dev
         # If any provisioning fails, workflow stops here
 
       - name: Deploy Infrastructure
@@ -1031,7 +1031,7 @@ stages:
 provision_backend:
   stage: provision
   script:
-    - atmos provision backend vpc --stack dev
+    - atmos terraform backend create vpc --stack dev
   # Pipeline fails if exit code != 0
 
 deploy_infrastructure:
@@ -1046,7 +1046,7 @@ deploy_infrastructure:
 **Provisioning failure stops execution:**
 
 ```bash
-$ atmos provision backend vpc --stack dev
+$ atmos terraform backend create vpc --stack dev
 
 Running backend provisioner...
 Creating S3 bucket 'acme-terraform-state-dev'...
@@ -1079,7 +1079,7 @@ Exit code: 2
 **Success output:**
 
 ```bash
-$ atmos provision backend vpc --stack dev
+$ atmos terraform backend create vpc --stack dev
 
 Running backend provisioner...
 Creating S3 bucket 'acme-terraform-state-dev' with secure defaults...
@@ -1095,7 +1095,7 @@ Exit code: 0
 **Idempotent operation:**
 
 ```bash
-$ atmos provision backend vpc --stack dev
+$ atmos terraform backend create vpc --stack dev
 
 Running backend provisioner...
 S3 bucket 'acme-terraform-state-dev' already exists (idempotent)

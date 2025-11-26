@@ -18,8 +18,8 @@ var describeCmd = &cobra.Command{
 
 Returns the actual stack configuration for the backend, not a schema.
 This includes backend settings, variables, and metadata from the stack manifest.`,
-	Example: `  atmos terraform provision backend describe vpc --stack dev
-  atmos terraform provision backend describe vpc --stack dev --format json`,
+	Example: `  atmos terraform backend describe vpc --stack dev
+  atmos terraform backend describe vpc --stack dev --format json`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "backend.describe.RunE")()
