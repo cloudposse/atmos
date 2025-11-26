@@ -38,7 +38,6 @@ type ProvisionParams struct {
 // It validates the provisioner type, loads component configuration, and executes the provisioner.
 //
 //revive:disable:argument-limit
-//nolint:lintroller // This is a wrapper function that delegates to ProvisionWithParams, which has perf tracking.
 func Provision(
 	atmosConfig *schema.AtmosConfiguration,
 	provisionerType string,
@@ -48,6 +47,8 @@ func Provision(
 	authManager auth.AuthManager,
 ) error {
 	//revive:enable:argument-limit
+	defer perf.Track(atmosConfig, "provision.Provision")()
+
 	return ProvisionWithParams(&ProvisionParams{
 		AtmosConfig:       atmosConfig,
 		ProvisionerType:   provisionerType,
@@ -60,16 +61,12 @@ func Provision(
 
 // ProvisionWithParams provisions infrastructure resources using a params struct.
 // It validates the provisioner type, loads component configuration, and executes the provisioner.
-//
-//nolint:lintroller // Perf tracking is added after nil check to avoid dereferencing nil params.
 func ProvisionWithParams(params *ProvisionParams) error {
-	// Note: We validate params before calling perf.Track to avoid nil pointer dereference.
-	// The perf tracking is added after validation.
+	defer perf.Track(nil, "provision.ProvisionWithParams")()
+
 	if params == nil {
 		return fmt.Errorf("%w: provision params", errUtils.ErrNilParam)
 	}
-
-	defer perf.Track(params.AtmosConfig, "provision.ProvisionWithParams")()
 
 	if params.DescribeComponent == nil {
 		return fmt.Errorf("%w: DescribeComponent callback", errUtils.ErrNilParam)
