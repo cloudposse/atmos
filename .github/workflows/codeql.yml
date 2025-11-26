@@ -125,30 +125,25 @@ jobs:
         run: |
           set -e  # Exit on any error
 
+          # Workaround for git config issue in golangci-lint custom
+          # The runner's git version doesn't support advice.detachedHead config key
+          # Pre-configure it globally so git clone -c doesn't fail
+          echo "Configuring git to work around advice.detachedHead issue..."
+          git --version
+          git config --global advice.detachedHead false 2>/dev/null || {
+            echo "Git doesn't support advice.detachedHead - this is expected on older git versions"
+            echo "golangci-lint custom will fail with -c advice.detachedHead=false"
+            echo "This is a golangci-lint bug - it should detect git version compatibility"
+          }
+
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
 
-          # Run golangci-lint custom with verbose output to see what it's doing
-          echo "Running golangci-lint custom with verbose output..."
-          golangci-lint custom -v 2>&1 | tee /tmp/golangci-custom-output.log || {
-            echo ""
-            echo "===== golangci-lint custom failed ====="
-            echo "Full output:"
-            cat /tmp/golangci-custom-output.log
-            echo ""
-            echo "Current directory: $(pwd)"
-            echo "Which git: $(which git)"
-            echo "Git version: $(git --version)"
-            echo "HOME: $HOME"
-            echo "TMPDIR: ${TMPDIR:-not set}"
-            echo ""
-            echo "Disk space:"
-            df -h /tmp
-            echo ""
-            echo "Contents of /tmp:"
-            ls -la /tmp | head -20
+          # Build custom golangci-lint with plugins
+          if ! golangci-lint custom; then
+            echo "Error: golangci-lint custom build failed" >&2
             exit 1
-          }
+          fi
 
           # Verify the custom binary was created and is executable
           if [[ ! -f ./custom-gcl ]]; then
