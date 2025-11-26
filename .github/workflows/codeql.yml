@@ -125,16 +125,13 @@ jobs:
         run: |
           set -e  # Exit on any error
 
-          # Workaround for git config issue in golangci-lint custom
-          # The runner's git version doesn't support advice.detachedHead config key
-          # Pre-configure it globally so git clone -c doesn't fail
-          echo "Configuring git to work around advice.detachedHead issue..."
+          # Workaround for git -c flag parsing issue in golangci-lint custom
+          # golangci-lint custom passes -c advice.detachedHead=false but git sees it with
+          # a leading space: " advice.detachedHead" which is invalid.
+          # Pre-configure it globally so git doesn't need the -c flag.
+          echo "Configuring git to work around -c flag parsing issue..."
           git --version
-          git config --global advice.detachedHead false 2>/dev/null || {
-            echo "Git doesn't support advice.detachedHead - this is expected on older git versions"
-            echo "golangci-lint custom will fail with -c advice.detachedHead=false"
-            echo "This is a golangci-lint bug - it should detect git version compatibility"
-          }
+          git config --global advice.detachedHead false
 
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
