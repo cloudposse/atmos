@@ -43,7 +43,7 @@ jobs:
           go install mvdan.cc/gofumpt@latest
 
           # Install golangci-lint v2
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.2
 
           # Add Go bin to PATH
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
