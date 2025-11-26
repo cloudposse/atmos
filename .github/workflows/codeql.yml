@@ -125,37 +125,30 @@ jobs:
         run: |
           set -e  # Exit on any error
 
-          # Debug: Test exact git clone command that golangci-lint custom uses
-          echo "Testing exact git clone command that golangci-lint custom uses..."
-          if git clone --branch v2.5.0 --single-branch --depth 1 -c advice.detachedHead=false -q https://github.com/golangci/golangci-lint.git /tmp/test-clone; then
-            echo "✓ Exact git clone command works"
-            rm -rf /tmp/test-clone
-          else
-            EXIT_CODE=$?
-            echo "✗ Exact git clone command failed with exit code $EXIT_CODE"
-
-            # Test each flag individually to find the culprit
-            echo ""
-            echo "Testing without -q (quiet)..."
-            git clone --branch v2.5.0 --single-branch --depth 1 -c advice.detachedHead=false https://github.com/golangci/golangci-lint.git /tmp/test-clone-2 2>&1 || echo "Still fails"
-            rm -rf /tmp/test-clone-2
-
-            echo ""
-            echo "Testing without -c advice.detachedHead=false..."
-            git clone --branch v2.5.0 --single-branch --depth 1 -q https://github.com/golangci/golangci-lint.git /tmp/test-clone-3 2>&1 || echo "Still fails"
-            rm -rf /tmp/test-clone-3
-
-            exit 1
-          fi
-
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
 
-          # Build custom golangci-lint with plugins
-          if ! golangci-lint custom; then
-            echo "Error: golangci-lint custom build failed" >&2
+          # Run golangci-lint custom with verbose output to see what it's doing
+          echo "Running golangci-lint custom with verbose output..."
+          golangci-lint custom -v 2>&1 | tee /tmp/golangci-custom-output.log || {
+            echo ""
+            echo "===== golangci-lint custom failed ====="
+            echo "Full output:"
+            cat /tmp/golangci-custom-output.log
+            echo ""
+            echo "Current directory: $(pwd)"
+            echo "Which git: $(which git)"
+            echo "Git version: $(git --version)"
+            echo "HOME: $HOME"
+            echo "TMPDIR: ${TMPDIR:-not set}"
+            echo ""
+            echo "Disk space:"
+            df -h /tmp
+            echo ""
+            echo "Contents of /tmp:"
+            ls -la /tmp | head -20
             exit 1
-          fi
+          }
 
           # Verify the custom binary was created and is executable
           if [[ ! -f ./custom-gcl ]]; then
