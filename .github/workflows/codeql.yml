@@ -125,6 +125,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GIT_TERMINAL_PROMPT: "0"
+          GOFLAGS: "-buildvcs=false"
         run: |
           set -e  # Exit on any error
 
@@ -133,15 +134,10 @@ jobs:
           # GitHub's unauthenticated API rate limit (60 req/hour)
           git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
 
-          # Test that git authentication works
-          echo "Testing git authentication..."
-          if ! git ls-remote https://github.com/golangci/golangci-lint.git refs/tags/v2.6.2 >/dev/null 2>&1; then
-            echo "Error: Unable to access golangci-lint repository with authentication" >&2
-            echo "Attempting without authentication to diagnose..." >&2
-            git ls-remote https://github.com/golangci/golangci-lint.git refs/tags/v2.6.2 || true
-            exit 1
-          fi
-          echo "Git authentication successful"
+          # Add workspace as git safe directory to avoid "exit status 128" errors
+          # See: https://github.com/golangci/golangci-lint/discussions/5972
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory '*'
 
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
