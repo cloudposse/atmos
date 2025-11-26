@@ -184,7 +184,7 @@ golangci-lint custom  # Reads .custom-gcl.yml
 
 **`.custom-gcl.yml`** - Defines which plugins to compile into the binary:
 ```yaml
-version: v2.6.2
+version: v2.5.0
 plugins:
   - module: 'github.com/cloudposse/atmos/tools/lintroller'
     import: 'github.com/cloudposse/atmos/tools/lintroller'
@@ -250,7 +250,7 @@ The custom binary integrates with GitHub Actions via `golangci-lint-action`:
 
 ```yaml
 - name: Install golangci-lint v2
-  run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.2
+  run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
 
 - name: Build custom golangci-lint with plugins
   run: |

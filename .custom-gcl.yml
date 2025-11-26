@@ -19,7 +19,7 @@
 # - Module plugin docs: https://golangci-lint.run/docs/plugins/module-plugins/
 # - Plugin interface: github.com/golangci/plugin-module-register/register
 
-version: v2.6.2
+version: v2.5.0
 plugins:
   # Lintroller: Atmos-specific rules for test files
   # Detects: os.MkdirTemp (use t.TempDir), os.Setenv (use t.Setenv), t.Setenv in defer
