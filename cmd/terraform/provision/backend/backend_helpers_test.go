@@ -108,9 +108,9 @@ func TestCreateDescribeComponentFunc(t *testing.T) {
 		// Verify it returns a non-nil function.
 		assert.NotNil(t, describeFunc)
 
-		// Note: We cannot test the actual execution without mocking ExecuteDescribeComponent,
-		// which would require significant test infrastructure. This test verifies the function
-		// creation logic works correctly.
+		// Note: We cannot test the actual execution without mocking ExecuteDescribeComponent.
+		// This would require significant test infrastructure.
+		// This test verifies the function creation logic works correctly.
 	})
 }
 

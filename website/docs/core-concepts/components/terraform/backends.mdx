@@ -645,12 +645,12 @@ Enable automatic provisioning in your stack manifests using the `provision.backe
 components:
   terraform:
     vpc:
+      backend_type: s3
       backend:
         bucket: acme-terraform-state-dev
         key: vpc/terraform.tfstate
         region: us-east-1
         use_lockfile: true  # Enable native S3 locking (Terraform 1.10+)
-        backend_type: s3
 
       provision:
         backend:
@@ -754,12 +754,12 @@ The S3 backend provisioner creates buckets with hardcoded security best practice
 
 <Terminal title="stacks/catalog/vpc.yaml">
 ```yaml
+backend_type: s3
 backend:
   bucket: my-terraform-state     # Required
   key: vpc/terraform.tfstate
   region: us-east-1              # Required
   use_lockfile: true             # Enable native S3 locking (Terraform 1.10+)
-  backend_type: s3
 
 provision:
   backend:
