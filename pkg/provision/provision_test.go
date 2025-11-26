@@ -329,3 +329,65 @@ func TestProvisionWithParams_BackendTypeValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestListBackends(t *testing.T) {
+	t.Run("returns no error for placeholder implementation", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{}
+		opts := map[string]string{"format": "table"}
+
+		err := ListBackends(atmosConfig, opts)
+		assert.NoError(t, err, "ListBackends should not error")
+	})
+
+	t.Run("accepts nil opts", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{}
+		err := ListBackends(atmosConfig, nil)
+		assert.NoError(t, err, "ListBackends should accept nil opts")
+	})
+}
+
+func TestDescribeBackend(t *testing.T) {
+	t.Run("returns no error for placeholder implementation", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{}
+		component := "vpc"
+		opts := map[string]string{"format": "yaml"}
+
+		err := DescribeBackend(atmosConfig, component, opts)
+		assert.NoError(t, err, "DescribeBackend should not error")
+	})
+
+	t.Run("accepts nil opts", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{}
+		err := DescribeBackend(atmosConfig, "vpc", nil)
+		assert.NoError(t, err, "DescribeBackend should accept nil opts")
+	})
+
+	t.Run("accepts empty component", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{}
+		err := DescribeBackend(atmosConfig, "", map[string]string{"format": "json"})
+		assert.NoError(t, err, "DescribeBackend should accept empty component")
+	})
+}
+
+func TestDeleteBackend(t *testing.T) {
+	t.Run("returns no error for placeholder implementation", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{}
+		component := "vpc"
+		opts := map[string]bool{"force": true}
+
+		err := DeleteBackend(atmosConfig, component, opts)
+		assert.NoError(t, err, "DeleteBackend should not error")
+	})
+
+	t.Run("accepts nil opts", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{}
+		err := DeleteBackend(atmosConfig, "vpc", nil)
+		assert.NoError(t, err, "DeleteBackend should accept nil opts")
+	})
+
+	t.Run("accepts empty component", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{}
+		err := DeleteBackend(atmosConfig, "", map[string]bool{"force": false})
+		assert.NoError(t, err, "DeleteBackend should accept empty component")
+	})
+}
