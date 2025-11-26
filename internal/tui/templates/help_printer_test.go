@@ -96,6 +96,28 @@ func (b *boolValue) String() string   { return "false" }
 func (b *boolValue) Set(string) error { return nil }
 func (b *boolValue) Type() string     { return "bool" }
 
+// assertErrorCase is a helper function to assert error cases in NewHelpFlagPrinter tests.
+func assertErrorCase(t *testing.T, err error, printer *HelpFlagPrinter, expectedMsg string) {
+	t.Helper()
+	assert.Error(t, err)
+	assert.Nil(t, printer)
+	if expectedMsg != "" {
+		assert.Contains(t, err.Error(), expectedMsg)
+	}
+}
+
+// assertSuccessCase is a helper function to assert success cases in NewHelpFlagPrinter tests.
+func assertSuccessCase(t *testing.T, err error, printer *HelpFlagPrinter, wrapLimit uint) {
+	t.Helper()
+	assert.NoError(t, err)
+	assert.NotNil(t, printer)
+	if wrapLimit < minWidth {
+		assert.Equal(t, uint(minWidth), printer.wrapLimit)
+	} else {
+		assert.Equal(t, wrapLimit, printer.wrapLimit)
+	}
+}
+
 func TestNewHelpFlagPrinter(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -149,20 +171,11 @@ func TestNewHelpFlagPrinter(t *testing.T) {
 			printer, err := NewHelpFlagPrinter(out, tt.wrapLimit, tt.flags)
 
 			if tt.expectError {
-				assert.Error(t, err)
-				assert.Nil(t, printer)
-				if tt.expectedMsg != "" {
-					assert.Contains(t, err.Error(), tt.expectedMsg)
-				}
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, printer)
-				if tt.wrapLimit < minWidth {
-					assert.Equal(t, uint(minWidth), printer.wrapLimit)
-				} else {
-					assert.Equal(t, tt.wrapLimit, printer.wrapLimit)
-				}
+				assertErrorCase(t, err, printer, tt.expectedMsg)
+				return
 			}
+
+			assertSuccessCase(t, err, printer, tt.wrapLimit)
 		})
 	}
 }

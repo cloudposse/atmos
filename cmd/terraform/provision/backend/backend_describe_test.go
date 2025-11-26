@@ -7,47 +7,18 @@ import (
 )
 
 func TestDescribeCmd_Structure(t *testing.T) {
-	t.Run("command is properly configured", func(t *testing.T) {
-		assert.NotNil(t, describeCmd)
-		assert.Equal(t, "describe <component>", describeCmd.Use)
-		assert.Equal(t, "Describe backend configuration", describeCmd.Short)
-		assert.NotEmpty(t, describeCmd.Long)
-		assert.NotEmpty(t, describeCmd.Example)
-		assert.False(t, describeCmd.DisableFlagParsing)
+	testCommandStructure(t, commandTestParams{
+		cmd:           describeCmd,
+		parser:        describeParser,
+		expectedUse:   "describe <component>",
+		expectedShort: "Describe backend configuration",
+		requiredFlags: []string{"format"},
 	})
 
-	t.Run("parser is configured with required flags", func(t *testing.T) {
-		assert.NotNil(t, describeParser)
-
-		// Verify format flag exists.
+	t.Run("format flag is string", func(t *testing.T) {
 		formatFlag := describeCmd.Flags().Lookup("format")
 		assert.NotNil(t, formatFlag, "format flag should be registered")
 		assert.Equal(t, "string", formatFlag.Value.Type())
-
-		// Verify stack flag exists.
-		stackFlag := describeCmd.Flags().Lookup("stack")
-		assert.NotNil(t, stackFlag, "stack flag should be registered")
-
-		// Verify identity flag exists.
-		identityFlag := describeCmd.Flags().Lookup("identity")
-		assert.NotNil(t, identityFlag, "identity flag should be registered")
-	})
-
-	t.Run("command requires exactly one argument", func(t *testing.T) {
-		// The Args field should be set to cobra.ExactArgs(1).
-		assert.NotNil(t, describeCmd.Args)
-
-		// Test with no args.
-		err := describeCmd.Args(describeCmd, []string{})
-		assert.Error(t, err, "should error with no arguments")
-
-		// Test with one arg.
-		err = describeCmd.Args(describeCmd, []string{"vpc"})
-		assert.NoError(t, err, "should accept exactly one argument")
-
-		// Test with multiple args.
-		err = describeCmd.Args(describeCmd, []string{"vpc", "extra"})
-		assert.Error(t, err, "should error with multiple arguments")
 	})
 }
 
