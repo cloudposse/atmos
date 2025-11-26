@@ -74,6 +74,15 @@ func NewStandardFlagParser(opts ...Option) *StandardFlagParser {
 	}
 }
 
+// Registry returns the underlying flag registry.
+// This allows access to the registry for operations like SetCompletionFunc()
+// that need to modify flags after parser creation.
+func (p *StandardFlagParser) Registry() *FlagRegistry {
+	defer perf.Track(nil, "flags.StandardFlagParser.Registry")()
+
+	return p.registry
+}
+
 // SetPositionalArgs configures positional argument extraction and validation.
 //
 // Parameters:
@@ -302,12 +311,9 @@ func (p *StandardFlagParser) registerCompletions(cmd *cobra.Command) {
 }
 
 // registerPersistentCompletions automatically registers shell completion functions
-// for persistent flags that have valid values configured.
+// for persistent flags that have valid values OR custom completion functions configured.
 func (p *StandardFlagParser) registerPersistentCompletions(cmd *cobra.Command) {
-	if len(p.validValues) == 0 {
-		return
-	}
-
+	// Register static completions (valid values).
 	for flagName, validValues := range p.validValues {
 		// Only register if the flag actually exists.
 		if cmd.PersistentFlags().Lookup(flagName) == nil {
@@ -319,6 +325,29 @@ func (p *StandardFlagParser) registerPersistentCompletions(cmd *cobra.Command) {
 		_ = cmd.RegisterFlagCompletionFunc(flagName, func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			return values, cobra.ShellCompDirectiveNoFileComp
 		})
+	}
+
+	// Register custom completion functions.
+	// For persistent flags, we need to register completion on both the parent command
+	// and recursively on all child commands because Cobra doesn't automatically
+	// propagate completion functions from parent to children.
+	for _, flag := range p.registry.All() {
+		flagName := flag.GetName()
+
+		// Only register if the flag actually exists.
+		if cmd.PersistentFlags().Lookup(flagName) == nil {
+			continue
+		}
+
+		// Only register if the flag has a custom completion function.
+		if completionFunc := flag.GetCompletionFunc(); completionFunc != nil {
+			_ = cmd.RegisterFlagCompletionFunc(flagName, completionFunc)
+
+			// Recursively register on all child commands.
+			for _, child := range cmd.Commands() {
+				_ = child.RegisterFlagCompletionFunc(flagName, completionFunc)
+			}
+		}
 	}
 }
 

@@ -32,6 +32,11 @@ func init() {
 		flags.WithTerraformAffectedFlags(),
 	)
 
+	// Set stack completion function on the flag registry to avoid import cycle.
+	// This must be done before RegisterPersistentFlags() so the completion
+	// function is registered when the flag is registered.
+	terraformParser.Registry().SetCompletionFunc("stack", stackFlagCompletion)
+
 	// Register as persistent flags (inherited by subcommands).
 	terraformParser.RegisterPersistentFlags(terraformCmd)
 
@@ -43,7 +48,7 @@ func init() {
 	// Add generate subcommand from the generate subpackage.
 	terraformCmd.AddCommand(generate.GenerateCmd)
 
-	// Register shell completion for persistent flags.
+	// Register other completion functions (component args, identity).
 	RegisterTerraformCompletions(terraformCmd)
 
 	// Register this command with the registry.
