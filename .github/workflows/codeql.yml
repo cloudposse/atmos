@@ -126,34 +126,51 @@ jobs:
           set -e  # Exit on any error
 
           # Workaround for golangci-lint custom's broken -c flag usage
-          # Create a git wrapper that strips the problematic -c advice.detachedHead=false flag
-          echo "Creating git wrapper to filter out broken -c flag..."
+          # The issue: golangci-lint v2.5.0 passes `-c  advice.detachedHead=false`
+          # (note the leading space before "advice") which git rejects as invalid.
+          # Solution: Replace /usr/bin/git with wrapper that strips ALL -c flags.
+          # Since we can't fix the malformed flag, we remove it entirely.
+          echo "Installing git wrapper to strip broken -c flags from golangci-lint..."
 
-          mkdir -p ~/bin
-          cat > ~/bin/git << 'EOF'
+          # Backup original git
+          sudo mv /usr/bin/git /usr/bin/git.real
+
+          # Create wrapper that logs arguments for debugging and strips -c flags
+          sudo tee /usr/bin/git > /dev/null << 'WRAPPER_EOF'
           #!/bin/bash
-          args=()
+          # Log original arguments for debugging
+          echo "[git wrapper] Original args: $@" >&2
+
+          # Filter out -c flags and their values
+          filtered_args=()
           skip_next=false
           for arg in "$@"; do
             if [ "$skip_next" = true ]; then
+              echo "[git wrapper] Skipping -c value: '$arg'" >&2
               skip_next=false
               continue
             fi
-            if [[ "$arg" == "-c" ]]; then
+            if [ "$arg" = "-c" ]; then
+              echo "[git wrapper] Found -c flag, will skip next arg" >&2
               skip_next=true
               continue
             fi
-            args+=("$arg")
+            filtered_args+=("$arg")
           done
-          exec /usr/bin/git "${args[@]}"
-          EOF
 
-          chmod +x ~/bin/git
-          export PATH=~/bin:$PATH
+          echo "[git wrapper] Filtered args: ${filtered_args[@]}" >&2
+          exec /usr/bin/git.real "${filtered_args[@]}"
+          WRAPPER_EOF
 
-          echo "Git wrapper installed, testing..."
-          which git
+          sudo chmod +x /usr/bin/git
+
+          echo "Git wrapper installed and configured"
+          echo "Testing wrapper:"
           git --version
+
+          # Test the -c flag filtering
+          echo "Testing -c flag filtering:"
+          git -c test.value=true --version 2>&1 | head -5
 
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
