@@ -365,6 +365,7 @@ func (p *StandardFlagParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Viper
 	// This is critical when commands use viper.New() instead of viper.GetViper().
 	p.viper = v
 
+	// First, bind flags from this parser's registry.
 	for _, flag := range p.registry.All() {
 		viperKey := p.getViperKey(flag.GetName())
 
@@ -383,6 +384,21 @@ func (p *StandardFlagParser) BindFlagsToViper(cmd *cobra.Command, v *viper.Viper
 			return fmt.Errorf("failed to bind flag %s to viper: %w", flag.GetName(), err)
 		}
 	}
+
+	// Also bind inherited flags (persistent flags from parent commands like RootCmd).
+	// These are global flags that all commands inherit but aren't in this parser's registry.
+	// Use InheritedFlags() to get flags inherited from parent commands.
+	// Only bind if not already bound by the registry above.
+	cmd.InheritedFlags().VisitAll(func(flag *pflag.Flag) {
+		// Skip if already in registry (avoid duplicate binding).
+		if p.registry.Get(flag.Name) != nil {
+			return
+		}
+
+		// Bind inherited flag to Viper using its name as the key.
+		// Errors are ignored to match the behavior of the main loop above.
+		_ = v.BindPFlag(flag.Name, flag)
+	})
 
 	return nil
 }
