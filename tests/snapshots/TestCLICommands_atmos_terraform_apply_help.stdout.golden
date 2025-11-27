@@ -1,8 +1,14 @@
 
 👽 test linux/amd64
 
-Apply the changes required to reach the desired state of the configuration. This
-will prompt for confirmation before making changes.                             
+Apply the changes required to reach the desired state of the configuration.     
+                                                                                
+This will prompt for confirmation before making changes unless -auto-approve is 
+used.                                                                           
+                                                                                
+For complete Terraform/OpenTofu documentation, see:                             
+https://developer.hashicorp.com/terraform/cli/commands/apply                    
+https://opentofu.org/docs/cli/commands/apply                                    
 
 USAGE
 
@@ -34,23 +40,15 @@ FLAGS
 
 GLOBAL FLAGS
 
-      --                          Use double dashes to separate Atmos-specific options from native arguments and flags
-                                  for the command.
-
-      --append-user-agent string  Sets the TF_APPEND_USER_AGENT environment variable to customize the User-Agent string
-                                  in Terraform provider requests. Example: Atmos/test (Cloud Posse;
-                                  +https://atmos.tools). This flag works with almost all commands.
+      --append-user-agent string  Customize User-Agent string in Terraform provider requests (sets
+                                  TF_APPEND_USER_AGENT)
 
       --base-path string          Base path for Atmos project
 
   -C, --chdir string              Change working directory before executing the command (run as if Atmos started in
                                   this directory)
 
-      --clone-target-ref          Clone the target reference with which to compare the current branch: atmos terraform
-                                   --affected --clone-target-ref=true
-                                  If set to 'false' (default), the target reference will be checked out instead
-                                  This requires that the target reference is already cloned by Git, and the
-                                  information about it exists in the '.git' directory
+      --clone-target-ref          Clone the target reference with which to compare the current branch
 
       --components strings        Filter by specific components
 
@@ -58,7 +56,7 @@ GLOBAL FLAGS
 
       --config-path strings       Paths to search for Atmos configuration (comma-separated or repeated flag)
 
-      --dry-run                   Simulate the command without making any changes
+      --dry-run                   Perform dry run without making actual changes
 
       --force-color               Force color output even when not a TTY (useful for screenshots)
 
@@ -75,11 +73,9 @@ GLOBAL FLAGS
                                   without value to interactively select.
 
       --include-dependents        For each affected component, detect the dependent components and process them in the
-                                  dependency order, recursively: atmos terraform  --affected --include-
-                                  dependents
+                                  dependency order
 
-      --init-pass-vars            Pass the generated varfile to terraform init using the --var-file flag. OpenTofu
-                                  supports passing a varfile to init to dynamically configure backends
+      --init-pass-vars            Pass the generated varfile to terraform init using --var-file flag (OpenTofu feature)
 
       --logs-file string          The file to write Atmos logs to. Logs can be written to any file or any standard
                                   file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
@@ -96,11 +92,9 @@ GLOBAL FLAGS
       --pager string              Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --
                                   pager=less to use specific pager)
 
-      --process-functions         Enable/disable YAML functions processing in Atmos stack manifests when executing
-                                  terraform commands (default true)
+      --process-functions         Enable/disable YAML functions processing in Atmos stack manifests (default true)
 
-      --process-templates         Enable/disable Go template processing in Atmos stack manifests when executing
-                                  terraform commands (default true)
+      --process-templates         Enable/disable Go template processing in Atmos stack manifests (default true)
 
       --profile strings           Activate configuration profiles (comma-separated or repeated flag)
 
@@ -115,36 +109,30 @@ GLOBAL FLAGS
 
       --profiler-port int         Port for pprof profiling server (default 6060)
 
-  -q, --query string              Execute atmos terraform <command> on the components filtered by a YQ expression,
-                                  in all stacks or in a specific stack
+  -q, --query string              Execute atmos terraform  on components filtered by a YQ expression
 
       --redirect-stderr string    File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                   standard file descriptor (including '/dev/null')
 
-      --ref string                Git reference with which to compare the current branch: atmos terraform  --
-                                  affected --ref refs/heads/main. Refer to https://git-scm.com/book/en/v2/Git-Internals-Git-
-                                  References for more details
+      --ref string                Git reference with which to compare the current branch
 
       --repo-path string          Filesystem path to the already cloned target repository with which to compare the
-                                  current branch: atmos terraform  --affected --repo-path
-                                  <path_to_already_cloned_repo>
+                                  current branch
 
-      --sha string                Git commit SHA with which to compare the current branch: atmos terraform  --affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
+      --sha string                Git commit SHA with which to compare the current branch
 
-      --skip strings              Skip executing specific YAML functions in the Atmos stack manifests when executing
-                                  terraform commands
+      --skip strings              Skip executing specific YAML functions in the Atmos stack manifests
 
-      --skip-init                 Skip running terraform init before executing terraform commands
+      --skip-init                 Skip terraform init before running command
 
-      --ssh-key string            Path to PEM-encoded private key to clone private repos using SSH: atmos terraform
-                                   --affected --ssh-key <path_to_ssh_key>
+      --ssh-key string            Path to PEM-encoded private key to clone private repos using SSH
 
       --ssh-key-password string   Encryption password for the PEM-encoded private key if the key contains a password-
-                                  encrypted PEM block: atmos terraform  --affected --ssh-key <path_to_ssh_key> --
-                                  ssh-key-password
+                                  encrypted PEM block
 
-  -s, --stack string              The stack flag specifies the environment or configuration set for deployment in
-                                  Atmos CLI.
+  -s, --stack string              Stack name
+
+      --upload-status             Upload plan status to Atmos Pro
 
   -v, --verbose                   Enable verbose error output with full context, stack traces, and detailed
                                   information
@@ -152,3 +140,25 @@ GLOBAL FLAGS
       --version                   Display the Atmos CLI version
 
 
+
+Terraform/OpenTofu Native Flags:
+  These flags are passed through to the underlying terraform/tofu command.
+
+      -auto-approve      Skip interactive approval of plan before applying
+      -backup            Path to backup the existing state file
+      -compact-warnings  Show warnings in a more compact form
+      -destroy           Destroy all remote objects managed by the configuration
+      -input             Ask for input for variables if not directly set (default: true)
+      -json              Output apply results in JSON format
+      -lock              Lock the state file when locking is supported (default: true)
+      -lock-timeout      Duration to retry a state lock (default: 0s)
+      -no-color          Disable color output in the command output
+      -parallelism       Limit the number of concurrent operations (default: 10)
+      -refresh           Update state prior to checking for differences (default: true)
+      -refresh-only      Update state only, no resource changes
+      -replace           Force replacement of a particular resource instance
+      -state             Path to read and save state
+      -state-out         Path to write updated state
+      -target            Target specific resources for planning/applying
+      -var               Set a value for one of the input variables
+      -var-file          Load variable values from the given file

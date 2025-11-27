@@ -83,8 +83,10 @@ func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []str
 	log.Debug("After parser.Parse", "PositionalArgs", parsedConfig.PositionalArgs, "SeparatedArgs", parsedConfig.SeparatedArgs)
 
 	// Build info from parsed config.
-	// Prepend subcommand to positional args so ProcessCommandLineArgs can set info.SubCommand correctly.
+	// Prepend subcommand to positional args, then append separated args (component name).
+	// The separated args contain the component which was extracted by the flag parser.
 	argsWithSubCommand := append([]string{subCommand}, parsedConfig.PositionalArgs...)
+	argsWithSubCommand = append(argsWithSubCommand, parsedConfig.SeparatedArgs...)
 	log.Debug("argsWithSubCommand", "args", argsWithSubCommand)
 	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, parentCmd, argsWithSubCommand, nil)
 	if err != nil {
