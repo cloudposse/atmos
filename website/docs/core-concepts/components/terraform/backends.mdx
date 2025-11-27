@@ -173,10 +173,26 @@ components:
 ```
 </Terminal>
 
-Note that this is optional. If you don’t add `backend.s3.workspace_key_prefix` to the component manifest, the Atmos component name will be used
-automatically (which is this example is `vpc`). `/` (slash) in the Atmos component name will be replaced with `-` (dash).
+Note that this is optional. If you don't add `backend.s3.workspace_key_prefix` to the component manifest, Atmos auto-generates it using this priority:
 
-We usually don’t specify `workspace_key_prefix` for each component and let Atmos use the component name as `workspace_key_prefix`.
+1. `metadata.name` (logical component name)
+2. `metadata.component` (physical path to Terraform code)
+3. Atmos component name (YAML key)
+
+In all cases, `/` (slash) is replaced with `-` (dash).
+
+:::tip Using metadata.name for versioned components
+When using [versioned component folders](/design-patterns/version-management/folder-based-versioning), set `metadata.name` to the logical component name (without version). This prevents version changes from affecting state paths:
+
+```yaml
+vpc/defaults:
+  metadata:
+    name: vpc           # Logical name → workspace_key_prefix: vpc
+    component: vpc/v2   # Physical path (version can change)
+```
+
+See [Terraform Workspaces](/core-concepts/components/terraform/workspaces#using-metadataname-for-stable-state-paths) for details.
+:::
 
 Once all the above is configured, when you run the commands `atmos terraform plan vpc -s <stack>`
 or `atmos terraform apply vpc -s <stack>`, before executing the Terraform commands, Atmos will [deep-merge](#backend-inheritance)
