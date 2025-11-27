@@ -125,28 +125,40 @@ jobs:
         run: |
           set -e  # Exit on any error
 
-          # Workaround for git -c flag parsing issue in golangci-lint custom
-          # golangci-lint custom passes -c advice.detachedHead=false but git sees it with
-          # a leading space: " advice.detachedHead" which is invalid.
-          # Pre-configure it globally so git doesn't need the -c flag.
-          echo "Configuring git to work around -c flag parsing issue..."
+          # Workaround for golangci-lint custom's broken -c flag usage
+          # Create a git wrapper that strips the problematic -c advice.detachedHead=false flag
+          echo "Creating git wrapper to filter out broken -c flag..."
+
+          mkdir -p ~/bin
+          cat > ~/bin/git << 'EOF'
+          #!/bin/bash
+          args=()
+          skip_next=false
+          for arg in "$@"; do
+            if [ "$skip_next" = true ]; then
+              skip_next=false
+              continue
+            fi
+            if [[ "$arg" == "-c" ]]; then
+              skip_next=true
+              continue
+            fi
+            args+=("$arg")
+          done
+          exec /usr/bin/git "${args[@]}"
+          EOF
+
+          chmod +x ~/bin/git
+          export PATH=~/bin:$PATH
+
+          echo "Git wrapper installed, testing..."
+          which git
           git --version
-
-          # Test if git accepts this config key
-          if git config --global advice.detachedHead false; then
-            echo "✓ Successfully configured advice.detachedHead"
-          else
-            echo "✗ Failed to configure advice.detachedHead (git version doesn't support it)"
-            # Try alternative approach - just accept the error
-          fi
-
-          # Show current git config
-          git config --global --list | grep advice || echo "No advice.* configs found"
 
           # Ensure lintroller module is ready
           cd tools/lintroller && go mod tidy && cd ../..
 
-          # Build custom golangci-lint with plugins
+          # Build custom golangci-lint with plugins using our git wrapper
           if ! golangci-lint custom; then
             echo "Error: golangci-lint custom build failed" >&2
             exit 1
