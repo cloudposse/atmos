@@ -245,6 +245,12 @@ commands:
               exit 1
             fi
 
+            # Check if actions-cache extension is installed
+            if ! gh actions-cache --help &> /dev/null; then
+              echo "📦 Installing gh actions-cache extension..."
+              gh extension install actions/gh-actions-cache
+            fi
+
             # Get cache entries over 1GB
             CACHE_ENTRIES=$(gh actions-cache list -R cloudposse/atmos | grep GB)
 
@@ -288,6 +294,12 @@ commands:
             if ! gh auth status &> /dev/null; then
               echo "❌ Not authenticated with GitHub. Please run: gh auth login"
               exit 1
+            fi
+
+            # Check if actions-cache extension is installed
+            if ! gh actions-cache --help &> /dev/null; then
+              echo "📦 Installing gh actions-cache extension..."
+              gh extension install actions/gh-actions-cache
             fi
 
             # Get cache entries over 1GB
