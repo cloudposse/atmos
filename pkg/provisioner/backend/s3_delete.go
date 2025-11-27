@@ -38,6 +38,7 @@ import (
 // This operation is irreversible. State files will be permanently lost.
 //
 //revive:disable:cyclomatic,function-length
+//nolint:funlen
 func DeleteS3Backend(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
@@ -46,6 +47,11 @@ func DeleteS3Backend(
 	force bool,
 ) error {
 	defer perf.Track(atmosConfig, "backend.DeleteS3Backend")()
+
+	// Require force flag to prevent accidental deletion.
+	if !force {
+		return fmt.Errorf("%w: use --force flag to confirm deletion", errUtils.ErrForceRequired)
+	}
 
 	// Extract and validate required configuration.
 	config, err := extractS3Config(backendConfig)
