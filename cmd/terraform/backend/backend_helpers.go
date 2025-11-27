@@ -1,5 +1,7 @@
 package backend
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=backend_helpers.go -destination=mock_backend_helpers_test.go -package=backend
+
 import (
 	"errors"
 	"fmt"
@@ -17,6 +19,69 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// ConfigInitializer abstracts configuration and auth initialization for testability.
+type ConfigInitializer interface {
+	InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfiguration, *schema.AuthContext, error)
+}
+
+// Provisioner abstracts provisioning operations for testability.
+type Provisioner interface {
+	CreateBackend(atmosConfig *schema.AtmosConfiguration, component, stack string, describeFunc func(string, string) (map[string]any, error), authContext *schema.AuthContext) error
+	DeleteBackend(atmosConfig *schema.AtmosConfiguration, component, stack string, force bool, describeFunc func(string, string) (map[string]any, error), authContext *schema.AuthContext) error
+	DescribeBackend(atmosConfig *schema.AtmosConfiguration, component string, opts interface{}) error
+	ListBackends(atmosConfig *schema.AtmosConfiguration, opts interface{}) error
+}
+
+// defaultConfigInitializer implements ConfigInitializer using production code.
+type defaultConfigInitializer struct{}
+
+func (d *defaultConfigInitializer) InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
+	return InitConfigAndAuth(component, stack, identity)
+}
+
+// defaultProvisioner implements Provisioner using production code.
+type defaultProvisioner struct{}
+
+func (d *defaultProvisioner) CreateBackend(atmosConfig *schema.AtmosConfiguration, component, stack string, describeFunc func(string, string) (map[string]any, error), authContext *schema.AuthContext) error {
+	return provisioner.Provision(atmosConfig, "backend", component, stack, describeFunc, authContext)
+}
+
+//revive:disable:argument-limit
+func (d *defaultProvisioner) DeleteBackend(atmosConfig *schema.AtmosConfiguration, component, stack string, force bool, describeFunc func(string, string) (map[string]any, error), authContext *schema.AuthContext) error {
+	//revive:enable:argument-limit
+	return provisioner.DeleteBackend(atmosConfig, component, stack, force, describeFunc, authContext)
+}
+
+func (d *defaultProvisioner) DescribeBackend(atmosConfig *schema.AtmosConfiguration, component string, opts interface{}) error {
+	return provisioner.DescribeBackend(atmosConfig, component, opts)
+}
+
+func (d *defaultProvisioner) ListBackends(atmosConfig *schema.AtmosConfiguration, opts interface{}) error {
+	return provisioner.ListBackends(atmosConfig, opts)
+}
+
+// Package-level dependencies for production use. These can be overridden in tests.
+var (
+	configInit ConfigInitializer = &defaultConfigInitializer{}
+	prov       Provisioner       = &defaultProvisioner{}
+)
+
+// SetConfigInitializer sets the config initializer (for testing).
+func SetConfigInitializer(ci ConfigInitializer) {
+	configInit = ci
+}
+
+// SetProvisioner sets the provisioner (for testing).
+func SetProvisioner(p Provisioner) {
+	prov = p
+}
+
+// ResetDependencies resets dependencies to production defaults (for test cleanup).
+func ResetDependencies() {
+	configInit = &defaultConfigInitializer{}
+	prov = &defaultProvisioner{}
+}
 
 // CommonOptions contains the standard flags shared by all backend commands.
 type CommonOptions struct {
@@ -123,8 +188,8 @@ func ExecuteProvisionCommand(cmd *cobra.Command, args []string, parser *flags.St
 		return err
 	}
 
-	// Initialize config and auth (now returns AuthContext instead of AuthManager).
-	atmosConfig, authContext, err := InitConfigAndAuth(component, opts.Stack, opts.Identity)
+	// Initialize config and auth using injected dependency.
+	atmosConfig, authContext, err := configInit.InitConfigAndAuth(component, opts.Stack, opts.Identity)
 	if err != nil {
 		return err
 	}
@@ -143,6 +208,6 @@ func ExecuteProvisionCommand(cmd *cobra.Command, args []string, parser *flags.St
 		})
 	}
 
-	// Execute provision command using pkg/provisioner.
-	return provisioner.Provision(atmosConfig, "backend", component, opts.Stack, describeFunc, authContext)
+	// Execute provision command using injected provisioner.
+	return prov.CreateBackend(atmosConfig, component, opts.Stack, describeFunc, authContext)
 }

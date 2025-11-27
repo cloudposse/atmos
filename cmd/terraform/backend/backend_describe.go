@@ -6,7 +6,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provisioner"
 )
 
 var describeParser *flags.StandardParser
@@ -39,15 +38,15 @@ This includes backend settings, variables, and metadata from the stack manifest.
 
 		format := v.GetString("format")
 
-		// Initialize config.
-		atmosConfig, _, err := InitConfigAndAuth(component, opts.Stack, opts.Identity)
+		// Initialize config using injected dependency.
+		atmosConfig, _, err := configInit.InitConfigAndAuth(component, opts.Stack, opts.Identity)
 		if err != nil {
 			return err
 		}
 
-		// Execute describe command using pkg/provisioner.
+		// Execute describe command using injected provisioner.
 		// Pass format in a simple map since opts interface{} accepts anything.
-		return provisioner.DescribeBackend(atmosConfig, component, map[string]string{"format": format})
+		return prov.DescribeBackend(atmosConfig, component, map[string]string{"format": format})
 	},
 }
 

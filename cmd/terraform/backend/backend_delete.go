@@ -6,7 +6,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provisioner"
 )
 
 var deleteParser *flags.StandardParser
@@ -38,8 +37,8 @@ Requires the --force flag for safety. The backend must be empty
 
 		force := v.GetBool("force")
 
-		// Initialize config and auth (now returns AuthContext instead of AuthManager).
-		atmosConfig, authContext, err := InitConfigAndAuth(component, opts.Stack, opts.Identity)
+		// Initialize config and auth using injected dependency.
+		atmosConfig, authContext, err := configInit.InitConfigAndAuth(component, opts.Stack, opts.Identity)
 		if err != nil {
 			return err
 		}
@@ -47,8 +46,8 @@ Requires the --force flag for safety. The backend must be empty
 		// Create describe component callback.
 		describeFunc := CreateDescribeComponentFunc(nil) // Auth already handled in InitConfigAndAuth
 
-		// Execute delete command using pkg/provisioner.
-		return provisioner.DeleteBackend(atmosConfig, component, opts.Stack, force, describeFunc, authContext)
+		// Execute delete command using injected provisioner.
+		return prov.DeleteBackend(atmosConfig, component, opts.Stack, force, describeFunc, authContext)
 	},
 }
 

@@ -6,7 +6,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provisioner"
 )
 
 var listParser *flags.StandardParser
@@ -33,14 +32,14 @@ var listCmd = &cobra.Command{
 
 		format := v.GetString("format")
 
-		// Initialize config (no component needed for list).
-		atmosConfig, _, err := InitConfigAndAuth("", opts.Stack, opts.Identity)
+		// Initialize config using injected dependency (no component needed for list).
+		atmosConfig, _, err := configInit.InitConfigAndAuth("", opts.Stack, opts.Identity)
 		if err != nil {
 			return err
 		}
 
-		// Execute list command using pkg/provisioner.
-		return provisioner.ListBackends(atmosConfig, map[string]string{"format": format})
+		// Execute list command using injected provisioner.
+		return prov.ListBackends(atmosConfig, map[string]string{"format": format})
 	},
 }
 
