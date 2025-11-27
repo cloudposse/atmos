@@ -454,7 +454,7 @@ vars:
 ## Testing
 
 ### Test Fixture
-Created comprehensive test fixture at `tests/fixtures/scenarios/atmos-template-merge-issue/`:
+Created comprehensive test fixture at `tests/fixtures/scenarios/atmos-yaml-functions-merge/`:
 
 ```yaml
 # atmos.yaml
@@ -621,7 +621,6 @@ vars:
   stage: "production"     # Overrides env var
   vpc_ids: ["vpc-custom"] # Overrides terraform output
 ```
-```
 
 ## Implementation Checklist
 
@@ -635,7 +634,7 @@ vars:
 - [ ] Integrate into stack processing pipeline
 
 ### Phase 2: Testing
-- [x] Create test fixture at `tests/fixtures/scenarios/atmos-template-merge-issue/`
+- [x] Create test fixture at `tests/fixtures/scenarios/atmos-yaml-functions-merge/`
 - [ ] Add unit tests for deferred merge logic
 - [ ] Add integration tests for all YAML function types
 - [ ] Test deep-merge scenarios (map merging with YAML functions)
@@ -650,14 +649,14 @@ vars:
 - [ ] Update stack inheritance documentation
 - [ ] Add deep-merge examples to documentation
 - [ ] Document merge behavior by type
-- [ ] Add troubleshooting section
+- [ ] Add a troubleshooting section
 - [ ] Add examples to Atmos examples repository
 
 ### Phase 4: Release
 - [ ] Code review
 - [ ] Update CHANGELOG
-- [ ] Consider blog post announcement
-- [ ] Create GitHub release
+- [ ] Consider a blog post announcement
+- [ ] Create a GitHub release
 
 ## Next Steps
 
@@ -705,7 +704,7 @@ vars:
 - YAML Functions Documentation: https://atmos.tools/functions/yaml/
 - Mergo Library: https://github.com/imdario/mergo
 - Related Code: `pkg/merge/merge.go`, `internal/exec/yaml_func_template.go`
-- Test Fixture: `tests/fixtures/scenarios/atmos-template-merge-issue/`
+- Test Fixture: `tests/fixtures/scenarios/atmos-yaml-functions-merge/`
 - User Report: Love Eklund's bug report about `!template` merge issues
 
 ## Future Considerations
