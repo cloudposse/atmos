@@ -481,6 +481,8 @@ func ExecuteClean(
 
 // HandleCleanSubCommand handles the 'clean' subcommand logic.
 func HandleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string, atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "exec.HandleCleanSubCommand")()
+
 	log.Debug("HandleCleanSubCommand called", "SubCommand", info.SubCommand)
 	if info.SubCommand != "clean" {
 		return nil
