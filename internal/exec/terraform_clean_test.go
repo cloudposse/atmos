@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/require"
 )
@@ -71,11 +72,14 @@ func TestCLITerraformClean(t *testing.T) {
 	if !exists {
 		t.Fatalf("Expected file does not exist: %s", missingFile)
 	}
-	var cleanInfo schema.ConfigAndStacksInfo
-	cleanInfo.SubCommand = "clean"
-	cleanInfo.ComponentType = "terraform"
-	cleanInfo.AdditionalArgsAndFlags = []string{"--force"}
-	err = ExecuteTerraform(cleanInfo)
+
+	// Initialize atmosConfig for ExecuteClean
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Call ExecuteClean directly with typed parameters (no component, no stack, force=true)
+	// This cleans ALL components since component="" and stack=""
+	err = ExecuteClean("", "", true, false, false, &atmosConfig)
 	require.NoError(t, err)
 	// Verify that files were deleted after clean
 	deleted, existingFile := verifyFileDeleted(t, files)

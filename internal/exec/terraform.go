@@ -131,12 +131,18 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// to access the same authenticated session without re-prompting for credentials.
 	info.AuthManager = authManager
 
-	info, err = ProcessStacks(&atmosConfig, info, true, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
-	if err != nil {
-		return err
+	// Determine whether to process stacks and check stack configuration.
+	shouldProcess, shouldCheckStack := shouldProcessStacks(&info)
+
+	if shouldProcess {
+		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
+		if err != nil {
+			return err
+		}
 	}
 
-	if len(info.Stack) < 1 {
+	// Only enforce stack requirement if shouldCheckStack is true.
+	if shouldCheckStack && len(info.Stack) < 1 {
 		return errUtils.ErrMissingStack
 	}
 

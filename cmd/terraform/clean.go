@@ -1,8 +1,6 @@
 package terraform
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -53,11 +51,6 @@ Common use cases:
 		force := v.GetBool("force")
 		everything := v.GetBool("everything")
 		skipLockFile := v.GetBool("skip-lock-file")
-
-		// Validate required flags
-		if component != "" && stack == "" {
-			return fmt.Errorf("stack is required when cleaning a specific component (use --stack or -s)")
-		}
 
 		// Initialize Atmos configuration
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)

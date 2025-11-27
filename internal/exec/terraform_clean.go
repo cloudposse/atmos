@@ -434,15 +434,16 @@ func ExecuteClean(
 
 	log.Debug("ExecuteClean called", "component", component, "stack", stack, "force", force, "everything", everything, "skipLockFile", skipLockFile)
 
-	// Build ConfigAndStacksInfo for HandleCleanSubCommand
+	// Build ConfigAndStacksInfo for HandleCleanSubCommand.
 	info := schema.ConfigAndStacksInfo{
 		ComponentFromArg: component,
 		Stack:            stack,
 		StackFromArg:     stack,
 		SubCommand:       "clean",
+		ComponentType:    "terraform",
 	}
 
-	// Build AdditionalArgsAndFlags for backward compatibility with HandleCleanSubCommand
+	// Build AdditionalArgsAndFlags for backward compatibility with HandleCleanSubCommand.
 	if force {
 		info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, forceFlag)
 	}
@@ -453,16 +454,26 @@ func ExecuteClean(
 		info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag)
 	}
 
-	// Determine component path
-	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, component)
+	// Resolve component name via ProcessStacks when a component is provided.
+	// This matches the behavior from main where clean went through ExecuteTerraform() -> ProcessStacks().
+	// ProcessStacks resolves Atmos component names (e.g., "mycomponent") to actual Terraform
+	// component directories (e.g., "mock") via the metadata.component field in stack config.
+	componentPath := atmosConfig.TerraformDirAbsolutePath
 	if component != "" {
-		// Check if component exists
-		if _, err := os.Stat(componentPath); os.IsNotExist(err) {
-			return fmt.Errorf("component path does not exist: %s", componentPath)
+		// shouldCheckStack = only require stack if explicitly provided (matching main's behavior).
+		shouldCheckStack := stack != ""
+		resolvedInfo, err := ProcessStacks(atmosConfig, info, shouldCheckStack, false, false, nil, nil)
+		if err != nil {
+			return err
 		}
-	} else {
-		// Cleaning all components
-		componentPath = atmosConfig.TerraformDirAbsolutePath
+		info = resolvedInfo
+
+		// Use resolved terraform component path.
+		terraformComponent := info.Context.BaseComponent
+		if terraformComponent == "" {
+			terraformComponent = component
+		}
+		componentPath = filepath.Join(atmosConfig.TerraformDirAbsolutePath, terraformComponent)
 	}
 
 	return HandleCleanSubCommand(info, componentPath, atmosConfig)

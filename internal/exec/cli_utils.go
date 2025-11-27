@@ -213,14 +213,20 @@ func processArgsAndFlags(
 	var globalOptions []string
 	var indexesToRemove []int
 
+	// Commands that can run without additional arguments (don't show help).
+	standaloneCommands := map[string]bool{
+		"version": true,
+		"clean":   true,
+	}
+
 	// For commands like `atmos terraform plan`, show the command help
-	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] != "version" && info.SubCommand == "" {
+	if len(inputArgsAndFlags) == 1 && !standaloneCommands[inputArgsAndFlags[0]] && info.SubCommand == "" {
 		info.SubCommand = inputArgsAndFlags[0]
 		info.NeedHelp = true
 		return info, nil
 	}
 
-	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "version" {
+	if len(inputArgsAndFlags) == 1 && standaloneCommands[inputArgsAndFlags[0]] {
 		info.SubCommand = inputArgsAndFlags[0]
 		return info, nil
 	}
