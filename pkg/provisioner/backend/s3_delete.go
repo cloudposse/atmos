@@ -37,8 +37,7 @@ import (
 //
 // This operation is irreversible. State files will be permanently lost.
 //
-//revive:disable:cyclomatic,function-length
-//nolint:funlen
+//revive:disable:cyclomatic
 func DeleteS3Backend(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
@@ -86,23 +85,9 @@ func DeleteS3Backend(
 		return err
 	}
 
-	// Show warning about what will be deleted.
-	if objectCount > 0 {
-		msg := fmt.Sprintf("⚠ Deleting backend will permanently remove %d object(s) from bucket '%s'",
-			objectCount, config.bucket)
-		if stateFileCount > 0 {
-			msg += fmt.Sprintf(" (including %d Terraform state file(s))", stateFileCount)
-		}
-		_ = ui.Warning(msg)
-		_ = ui.Warning("This action cannot be undone")
-	}
-
-	// Delete all objects and versions.
-	if objectCount > 0 {
-		if err := deleteAllObjects(ctx, client, config.bucket); err != nil {
-			return err
-		}
-		_ = ui.Success(fmt.Sprintf("Deleted %d object(s) from bucket '%s'", objectCount, config.bucket))
+	// Show warning and delete all contents.
+	if err := deleteBackendContents(ctx, client, config.bucket, objectCount, stateFileCount); err != nil {
+		return err
 	}
 
 	// Delete the bucket itself.
@@ -114,7 +99,36 @@ func DeleteS3Backend(
 	return nil
 }
 
-//revive:enable:cyclomatic,function-length
+//revive:enable:cyclomatic
+
+// deleteBackendContents displays warnings and deletes all objects from a bucket.
+func deleteBackendContents(ctx context.Context, client S3ClientAPI, bucket string, objectCount, stateFileCount int) error {
+	if objectCount == 0 {
+		return nil
+	}
+
+	// Show warning about what will be deleted.
+	showDeletionWarning(bucket, objectCount, stateFileCount)
+
+	// Delete all objects and versions.
+	if err := deleteAllObjects(ctx, client, bucket); err != nil {
+		return err
+	}
+
+	_ = ui.Success(fmt.Sprintf("Deleted %d object(s) from bucket '%s'", objectCount, bucket))
+	return nil
+}
+
+// showDeletionWarning displays a warning message about pending deletion.
+func showDeletionWarning(bucket string, objectCount, stateFileCount int) {
+	msg := fmt.Sprintf("⚠ Deleting backend will permanently remove %d object(s) from bucket '%s'",
+		objectCount, bucket)
+	if stateFileCount > 0 {
+		msg += fmt.Sprintf(" (including %d Terraform state file(s))", stateFileCount)
+	}
+	_ = ui.Warning(msg)
+	_ = ui.Warning("This action cannot be undone")
+}
 
 // listAllObjects lists all objects and versions in a bucket, returning counts.
 func listAllObjects(ctx context.Context, client S3ClientAPI, bucket string) (totalObjects int, stateFiles int, err error) {

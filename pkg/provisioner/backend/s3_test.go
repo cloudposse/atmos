@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	//nolint:depguard
+	"github.com/aws/aws-sdk-go-v2/aws"
+	//nolint:depguard
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	//nolint:depguard
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -13,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 //nolint:dupl // Mock struct intentionally mirrors S3ClientAPI interface for testing.
@@ -833,6 +836,271 @@ func TestCreateBucket_AllRegions(t *testing.T) {
 	}
 }
 
+// Tests for DeleteS3Backend.
+
+func TestDeleteS3Backend_ForceRequired(t *testing.T) {
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+	backendConfig := map[string]any{
+		"bucket": "test-bucket",
+		"region": "us-west-2",
+	}
+
+	// Test that force=false returns error.
+	err := DeleteS3Backend(ctx, atmosConfig, backendConfig, nil, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrForceRequired)
+	assert.Contains(t, err.Error(), "--force flag")
+}
+
+func TestDeleteS3Backend_MissingBucket(t *testing.T) {
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+	backendConfig := map[string]any{
+		"region": "us-west-2",
+	}
+
+	err := DeleteS3Backend(ctx, atmosConfig, backendConfig, nil, true)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrBucketRequired)
+}
+
+func TestDeleteS3Backend_MissingRegion(t *testing.T) {
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+	backendConfig := map[string]any{
+		"bucket": "test-bucket",
+	}
+
+	err := DeleteS3Backend(ctx, atmosConfig, backendConfig, nil, true)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrRegionRequired)
+}
+
+// TestDeleteS3Backend_BucketNotFound is tested via integration tests since it requires AWS SDK calls.
+
+func TestListAllObjects_EmptyBucket(t *testing.T) {
+	ctx := context.Background()
+	mockClient := &mockS3Client{
+		listObjectVersionsFunc: func(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error) {
+			return &s3.ListObjectVersionsOutput{
+				Versions:      []types.ObjectVersion{},
+				DeleteMarkers: []types.DeleteMarkerEntry{},
+				IsTruncated:   aws.Bool(false),
+			}, nil
+		},
+	}
+
+	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket")
+	require.NoError(t, err)
+	assert.Equal(t, 0, totalObjects)
+	assert.Equal(t, 0, stateFiles)
+}
+
+func TestListAllObjects_WithObjects(t *testing.T) {
+	ctx := context.Background()
+	mockClient := &mockS3Client{
+		listObjectVersionsFunc: func(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error) {
+			return &s3.ListObjectVersionsOutput{
+				Versions: []types.ObjectVersion{
+					{Key: aws.String("file1.txt"), VersionId: aws.String("v1")},
+					{Key: aws.String("terraform.tfstate"), VersionId: aws.String("v2")},
+					{Key: aws.String("env/prod/terraform.tfstate"), VersionId: aws.String("v3")},
+				},
+				DeleteMarkers: []types.DeleteMarkerEntry{
+					{Key: aws.String("deleted.txt"), VersionId: aws.String("d1")},
+				},
+				IsTruncated: aws.Bool(false),
+			}, nil
+		},
+	}
+
+	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket")
+	require.NoError(t, err)
+	assert.Equal(t, 4, totalObjects) // 3 versions + 1 delete marker.
+	assert.Equal(t, 2, stateFiles)   // 2 files ending with .tfstate.
+}
+
+func TestListAllObjects_Pagination(t *testing.T) {
+	ctx := context.Background()
+	callCount := 0
+	mockClient := &mockS3Client{
+		listObjectVersionsFunc: func(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error) {
+			callCount++
+			if callCount == 1 {
+				// First page.
+				return &s3.ListObjectVersionsOutput{
+					Versions: []types.ObjectVersion{
+						{Key: aws.String("file1.txt"), VersionId: aws.String("v1")},
+					},
+					IsTruncated:         aws.Bool(true),
+					NextKeyMarker:       aws.String("file1.txt"),
+					NextVersionIdMarker: aws.String("v1"),
+				}, nil
+			}
+			// Second page.
+			return &s3.ListObjectVersionsOutput{
+				Versions: []types.ObjectVersion{
+					{Key: aws.String("file2.txt"), VersionId: aws.String("v2")},
+				},
+				IsTruncated: aws.Bool(false),
+			}, nil
+		},
+	}
+
+	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket")
+	require.NoError(t, err)
+	assert.Equal(t, 2, totalObjects)
+	assert.Equal(t, 0, stateFiles)
+	assert.Equal(t, 2, callCount, "Should make 2 API calls for pagination")
+}
+
+func TestDeleteAllObjects_Success(t *testing.T) {
+	ctx := context.Background()
+	var deletedObjects []types.ObjectIdentifier
+	mockClient := &mockS3Client{
+		listObjectVersionsFunc: func(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error) {
+			return &s3.ListObjectVersionsOutput{
+				Versions: []types.ObjectVersion{
+					{Key: aws.String("file1.txt"), VersionId: aws.String("v1")},
+					{Key: aws.String("file2.txt"), VersionId: aws.String("v2")},
+				},
+				DeleteMarkers: []types.DeleteMarkerEntry{
+					{Key: aws.String("deleted.txt"), VersionId: aws.String("d1")},
+				},
+				IsTruncated: aws.Bool(false),
+			}, nil
+		},
+		deleteObjectsFunc: func(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error) {
+			deletedObjects = params.Delete.Objects
+			return &s3.DeleteObjectsOutput{}, nil
+		},
+	}
+
+	err := deleteAllObjects(ctx, mockClient, "test-bucket")
+	require.NoError(t, err)
+	assert.Len(t, deletedObjects, 3, "Should delete 2 versions + 1 delete marker")
+}
+
+func TestDeleteBucket_Success(t *testing.T) {
+	ctx := context.Background()
+	var deletedBucket string
+	mockClient := &mockS3Client{
+		deleteBucketFunc: func(ctx context.Context, params *s3.DeleteBucketInput, optFns ...func(*s3.Options)) (*s3.DeleteBucketOutput, error) {
+			deletedBucket = *params.Bucket
+			return &s3.DeleteBucketOutput{}, nil
+		},
+	}
+
+	err := deleteBucket(ctx, mockClient, "test-bucket")
+	require.NoError(t, err)
+	assert.Equal(t, "test-bucket", deletedBucket)
+}
+
+func TestDeleteBucket_Failure(t *testing.T) {
+	ctx := context.Background()
+	mockClient := &mockS3Client{
+		deleteBucketFunc: func(ctx context.Context, params *s3.DeleteBucketInput, optFns ...func(*s3.Options)) (*s3.DeleteBucketOutput, error) {
+			return nil, errors.New("bucket not empty")
+		},
+	}
+
+	err := deleteBucket(ctx, mockClient, "test-bucket")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDeleteBucket)
+}
+
 // Note: Integration tests for S3 bucket operations (bucketExists, createBucket, etc.)
 // with real AWS credentials would be placed in tests/ directory.
+// Tests for deleteBackendContents helper function.
+
+func TestDeleteBackendContents_EmptyBucket(t *testing.T) {
+	ctx := context.Background()
+	mockClient := &mockS3Client{}
+
+	// With objectCount=0, function should return nil without doing anything.
+	err := deleteBackendContents(ctx, mockClient, "test-bucket", 0, 0)
+	require.NoError(t, err)
+}
+
+func TestDeleteBackendContents_Success(t *testing.T) {
+	tests := []struct {
+		name            string
+		objectCount     int
+		stateFileCount  int
+		objectKey       string
+		expectedSuccess bool
+	}{
+		{
+			name:            "with regular objects",
+			objectCount:     1,
+			stateFileCount:  0,
+			objectKey:       "file1.txt",
+			expectedSuccess: true,
+		},
+		{
+			name:            "with state files",
+			objectCount:     1,
+			stateFileCount:  1,
+			objectKey:       "terraform.tfstate",
+			expectedSuccess: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			mockClient := &mockS3Client{
+				listObjectVersionsFunc: func(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error) {
+					return &s3.ListObjectVersionsOutput{
+						Versions: []types.ObjectVersion{
+							{Key: aws.String(tt.objectKey), VersionId: aws.String("v1")},
+						},
+						IsTruncated: aws.Bool(false),
+					}, nil
+				},
+				deleteObjectsFunc: func(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error) {
+					return &s3.DeleteObjectsOutput{}, nil
+				},
+			}
+
+			err := deleteBackendContents(ctx, mockClient, "test-bucket", tt.objectCount, tt.stateFileCount)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestDeleteBackendContents_DeleteError(t *testing.T) {
+	ctx := context.Background()
+	mockClient := &mockS3Client{
+		listObjectVersionsFunc: func(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error) {
+			return &s3.ListObjectVersionsOutput{
+				Versions: []types.ObjectVersion{
+					{Key: aws.String("file1.txt"), VersionId: aws.String("v1")},
+				},
+				IsTruncated: aws.Bool(false),
+			}, nil
+		},
+		deleteObjectsFunc: func(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error) {
+			return nil, errors.New("delete failed")
+		},
+	}
+
+	err := deleteBackendContents(ctx, mockClient, "test-bucket", 1, 0)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDeleteObjects)
+}
+
+// Tests for showDeletionWarning helper function.
+
+func TestShowDeletionWarning_WithoutStateFiles(t *testing.T) {
+	// This function only produces UI output, so we just verify it doesn't panic.
+	showDeletionWarning("test-bucket", 5, 0)
+}
+
+func TestShowDeletionWarning_WithStateFiles(t *testing.T) {
+	// This function only produces UI output, so we just verify it doesn't panic.
+	showDeletionWarning("test-bucket", 10, 3)
+}
+
 // The tests above provide comprehensive unit test coverage using mocked S3 client.
