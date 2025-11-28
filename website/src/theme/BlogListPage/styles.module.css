@@ -1,0 +1,53 @@
+/* Full-width layout for changelog page */
+.changelogPageFullWidth {
+  /* Override default Docusaurus layout to use full width */
+}
+
+.changelogContainer {
+  max-width: 1400px;
+  padding-top: 2rem;
+  padding-bottom: 4rem;
+}
+
+.changelogHeader {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.changelogTitle {
+  font-size: 3rem;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(-45deg, #eb1a1a, #583ce7, #2ec8ff, #23d5ab);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradient 15s ease infinite;
+}
+
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@media (max-width: 768px) {
+  .changelogTitle {
+    font-size: 2rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .changelogTitle {
+    animation: none;
+    background: var(--ifm-color-primary);
+    -webkit-text-fill-color: currentColor;
+  }
+}
