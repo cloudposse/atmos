@@ -1,23 +1,28 @@
 ---
-title: State Backend Configuration
+title: Terraform Remote State
 sidebar_position: 3
-sidebar_label: Backend Configuration
-id: state-backend
+sidebar_label: Remote State
+description: Configure remote state access for reading other components' outputs.
+id: remote-state
 ---
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Atmos supports configuring [Terraform/OpenTofu Backends](/core-concepts/components/terraform/backends)
-to define where [Terraform](https://developer.hashicorp.com/terraform/language/state) and [OpenTofu](https://opentofu.org/docs/language/state/) store its state,
-and [Remote State](/core-concepts/share-data/remote-state) to get the outputs of a [Terraform/OpenTofu component](/core-concepts/components),
-provisioned in the same or a different [Atmos stack](/core-concepts/stacks), and use the outputs as inputs to another Atmos component.
+Atmos supports configuring remote state access to read the outputs of other
+[Terraform components](/core-concepts/components) provisioned in the same or different
+[Atmos stacks](/core-concepts/stacks), and use those outputs as inputs to another component.
 </Intro>
 
-Bear in mind that Atmos is simply managing the configuration of the Backend;
-provisioning the backend resources themselves is the responsibility of a Terraform/OpenTofu component.
+:::tip Related Documentation
+- [Terraform Backends](/core-concepts/components/terraform/backends) - Configure where state is stored
+- [Backend Provisioning](/core-concepts/components/terraform/backend-provisioning) - Auto-create backends
+- [Remote State Data Sharing](/core-concepts/share-data/remote-state) - Using remote state in components
+:::
 
-Atmos also supports Remote State Backends (in the `remote_state_backend` section), which can be used to configure the
-following:
+## Remote State Backend Configuration
+
+Atmos supports the `remote_state_backend` section which can be used to configure how components access the remote state
+of other components. This is useful for:
 
 - Override [Terraform Backend](/core-concepts/components/terraform/backends) configuration to access the
   remote state of a component (e.g. override the IAM role to assume, which in this case can be a read-only role)
@@ -25,10 +30,7 @@ following:
 - Configure a remote state of type `static` which can be used to provide configurations for
   [Brownfield development](https://en.wikipedia.org/wiki/Brownfield_(software_development))
 
-## Override Terraform Backend Configuration to Access Remote State
-
-Atmos supports the `remote_state_backend` section which can be used to provide configuration to access the remote state
-of components.
+## Override Backend Configuration for Remote State Access
 
 To access the remote state of components, you can override
 any [Terraform Backend](/core-concepts/components/terraform/backends)
@@ -86,3 +88,10 @@ deep-merges the `remote_state_backend` section with the `backend` section).
 
 When working with Terraform backends and writing/updating the state, the `terraform-backend-read-write` role will be
 used. But when reading the remote state of components, the `terraform-backend-read-only` role will be used.
+
+## References
+
+- [Terraform Backends](/core-concepts/components/terraform/backends) - Configure backend storage
+- [Backend Provisioning](/core-concepts/components/terraform/backend-provisioning) - Auto-create backends
+- [Remote State Data Sharing](/core-concepts/share-data/remote-state) - Using remote state in components
+- [Terraform Remote State](https://developer.hashicorp.com/terraform/language/state/remote-state-data)

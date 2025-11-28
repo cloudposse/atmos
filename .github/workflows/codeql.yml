@@ -111,14 +111,6 @@ jobs:
           # https://github.com/golangci/golangci-lint/pull/6206
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@101ccaca0df22b2e36dd917ed5d0be423baa6298
 
-      # Configure Git to use GitHub token for authenticated cloning.
-      # The `golangci-lint custom` command internally runs `git clone` to fetch
-      # the golangci-lint source code. Without authentication, this hits GitHub's
-      # rate limits. This step configures git to automatically inject the token.
-      - name: Configure Git credentials for custom build
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
-
       # Build a custom golangci-lint binary with our lintroller plugin compiled in.
       - name: Build custom golangci-lint with lintroller plugin
         run: |
