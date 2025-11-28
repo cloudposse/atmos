@@ -7,6 +7,8 @@ id: backends
 ---
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 <Intro>
 Backends define where [Terraform](https://developer.hashicorp.com/terraform/language/state) and
@@ -18,7 +20,10 @@ Backends define where [Terraform](https://developer.hashicorp.com/terraform/lang
 - [Backend Provisioning](/core-concepts/components/terraform/backend-provisioning) - Auto-create backends
 :::
 
-Atmos supports all the backends supported by Terraform:
+Atmos supports all backends supported by Terraform and OpenTofu:
+
+<Tabs>
+<TabItem value="terraform" label="Terraform" default>
 
 - [local](https://developer.hashicorp.com/terraform/language/settings/backends/local)
 - [s3](https://developer.hashicorp.com/terraform/language/settings/backends/s3)
@@ -33,7 +38,8 @@ Atmos supports all the backends supported by Terraform:
 - [pg](https://developer.hashicorp.com/terraform/language/settings/backends/pg)
 - [cloud](https://developer.hashicorp.com/terraform/cli/cloud/settings)
 
-Atmos supports all the backends supported by OpenTofu:
+</TabItem>
+<TabItem value="opentofu" label="OpenTofu">
 
 - [local](https://opentofu.org/docs/language/settings/backends/local)
 - [s3](https://opentofu.org/docs/language/settings/backends/s3)
@@ -46,6 +52,9 @@ Atmos supports all the backends supported by OpenTofu:
 - [kubernetes](https://opentofu.org/docs/language/settings/backends/kubernetes)
 - [oss](https://opentofu.org/docs/language/settings/backends/oss)
 - [pg](https://opentofu.org/docs/language/settings/backends/pg)
+
+</TabItem>
+</Tabs>
 
 ## Local Backend
 
