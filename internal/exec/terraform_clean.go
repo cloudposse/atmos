@@ -427,12 +427,12 @@ func IsValidDataDir(tfDataDir string) error {
 // It accepts typed parameters instead of using AdditionalArgsAndFlags pattern.
 func ExecuteClean(
 	component, stack string,
-	force, everything, skipLockFile bool,
+	force, everything, skipLockFile, dryRun bool,
 	atmosConfig *schema.AtmosConfiguration,
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteClean")()
 
-	log.Debug("ExecuteClean called", "component", component, "stack", stack, "force", force, "everything", everything, "skipLockFile", skipLockFile)
+	log.Debug("ExecuteClean called", "component", component, "stack", stack, "force", force, "everything", everything, "skipLockFile", skipLockFile, "dryRun", dryRun)
 
 	// Build ConfigAndStacksInfo for HandleCleanSubCommand.
 	info := schema.ConfigAndStacksInfo{
@@ -441,6 +441,7 @@ func ExecuteClean(
 		StackFromArg:     stack,
 		SubCommand:       "clean",
 		ComponentType:    "terraform",
+		DryRun:           dryRun,
 	}
 
 	// Build AdditionalArgsAndFlags for backward compatibility with HandleCleanSubCommand.
@@ -585,6 +586,33 @@ func HandleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	}
 
 	if total > 0 {
+		// In dry-run mode, print what would be deleted and exit.
+		if info.DryRun {
+			u.PrintMessage("Dry run mode: the following files would be deleted:")
+			for _, folder := range folders {
+				for _, file := range folder.Files {
+					fileRel, err := getRelativePath(atmosConfig.BasePath, file.FullPath)
+					if err != nil {
+						fileRel = file.Name
+					}
+					u.PrintMessage(fmt.Sprintf("  %s", fileRel))
+				}
+			}
+			if len(tfDataDirFolders) > 0 {
+				for _, folder := range tfDataDirFolders {
+					for _, file := range folder.Files {
+						fileRel, err := getRelativePath(atmosConfig.BasePath, file.FullPath)
+						if err != nil {
+							fileRel = file.Name
+						}
+						u.PrintMessage(fmt.Sprintf("  %s", fileRel))
+					}
+				}
+			}
+			u.PrintMessage(fmt.Sprintf("\nTotal: %d files would be deleted", total))
+			return nil
+		}
+
 		if !force {
 			if len(tfDataDirFolders) > 0 {
 				u.PrintMessage(fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))

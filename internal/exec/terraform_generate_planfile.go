@@ -77,9 +77,13 @@ func ExecuteGeneratePlanfile(
 }
 
 // ExecuteTerraformGeneratePlanfileCmd executes `terraform generate planfile` command.
+//
 // Deprecated: Use ExecuteGeneratePlanfile with typed parameters instead.
-func ExecuteTerraformGeneratePlanfileCmd(cmd interface{}, args []string) error {
-	return errors.New("ExecuteTerraformGeneratePlanfileCmd is deprecated and should not be called")
+// This function will be removed in a future release.
+func ExecuteTerraformGeneratePlanfileCmd(_ interface{}, _ []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfileCmd")()
+
+	return errors.New("ExecuteTerraformGeneratePlanfileCmd is deprecated: use ExecuteGeneratePlanfile instead")
 }
 
 // ExecuteTerraformGeneratePlanfileOld executes `terraform generate planfile` command.

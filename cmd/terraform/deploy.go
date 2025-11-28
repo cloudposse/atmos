@@ -2,9 +2,14 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/pkg/flags"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 )
+
+// deployParser handles flag parsing for deploy command.
+var deployParser *flags.StandardParser
 
 // deployCmd represents the terraform deploy command (custom Atmos command).
 var deployCmd = &cobra.Command{
@@ -23,16 +28,29 @@ This ensures that the changes defined in your Terraform configuration are applie
 }
 
 func init() {
-	// Command-specific flags for deploy
-	deployCmd.PersistentFlags().Bool("deploy-run-init", false, "If set atmos will run `terraform init` before executing the command")
-	deployCmd.PersistentFlags().Bool("from-plan", false, "If set atmos will use the previously generated plan file")
-	deployCmd.PersistentFlags().String("planfile", "", "Set the plan file to use")
-	deployCmd.PersistentFlags().Bool("affected", false, "Deploy the affected components in dependency order")
-	deployCmd.PersistentFlags().Bool("all", false, "Deploy all components in all stacks")
+	// Create parser with deploy-specific flags using functional options.
+	deployParser = flags.NewStandardParser(
+		flags.WithBoolFlag("deploy-run-init", "", false, "If set atmos will run `terraform init` before executing the command"),
+		flags.WithBoolFlag("from-plan", "", false, "If set atmos will use the previously generated plan file"),
+		flags.WithStringFlag("planfile", "", "", "Set the plan file to use"),
+		flags.WithBoolFlag("affected", "", false, "Deploy the affected components in dependency order"),
+		flags.WithBoolFlag("all", "", false, "Deploy all components in all stacks"),
+		flags.WithEnvVars("deploy-run-init", "ATMOS_TERRAFORM_DEPLOY_RUN_INIT"),
+		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_DEPLOY_FROM_PLAN"),
+		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_DEPLOY_PLANFILE"),
+	)
 
-	// Disable flag parsing to allow pass-through of Terraform native flags
+	// Register deploy-specific flags with Cobra.
+	deployParser.RegisterFlags(deployCmd)
 
-	// Attach to parent terraform command
+	// Bind flags to Viper for environment variable support.
+	if err := deployParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Set custom help to show terraform native flags (deploy uses apply flags).
+	setCustomHelp(deployCmd, ApplyCompatFlagDescriptions())
+
 	// Register completions for deployCmd.
 	RegisterTerraformCompletions(deployCmd)
 

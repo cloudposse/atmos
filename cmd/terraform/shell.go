@@ -47,6 +47,7 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 		processTemplates := v.GetBool("process-templates")
 		processFunctions := v.GetBool("process-functions")
 		skip := v.GetStringSlice("skip")
+		dryRun := v.GetBool("dry-run")
 
 		// Validate required flags
 		if stack == "" {
@@ -59,7 +60,7 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 			return err
 		}
 
-		return e.ExecuteTerraformShell(component, stack, processTemplates, processFunctions, skip, &atmosConfig)
+		return e.ExecuteTerraformShell(component, stack, processTemplates, processFunctions, skip, dryRun, &atmosConfig)
 	},
 }
 

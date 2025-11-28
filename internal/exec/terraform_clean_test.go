@@ -77,9 +77,9 @@ func TestCLITerraformClean(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Call ExecuteClean directly with typed parameters (no component, no stack, force=true)
+	// Call ExecuteClean directly with typed parameters (no component, no stack, force=true, dryRun=false)
 	// This cleans ALL components since component="" and stack=""
-	err = ExecuteClean("", "", true, false, false, &atmosConfig)
+	err = ExecuteClean("", "", true, false, false, false, &atmosConfig)
 	require.NoError(t, err)
 	// Verify that files were deleted after clean
 	deleted, existingFile := verifyFileDeleted(t, files)

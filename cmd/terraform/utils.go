@@ -6,7 +6,6 @@ import (
 	"os"
 	"sort"
 
-	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -23,17 +22,13 @@ import (
 )
 
 func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
-	// Process args (split on --) and get config
-	var argsAfterDoubleDash []string
+	// Build args for ProcessCommandLineArgs.
+	// Note: Double-dash processing is handled by AtmosFlagParser in terraformRun (RunE).
+	// Hooks run in PostRunE after terraformRun has already parsed and executed.
+	// Hooks only need component/stack info, not separated args for terraform.
 	finalArgs := append([]string{cmd_.Name()}, args...)
 
-	doubleDashIndex := lo.IndexOf(finalArgs, "--")
-	if doubleDashIndex > 0 {
-		finalArgs = lo.Slice(finalArgs, 0, doubleDashIndex)
-		argsAfterDoubleDash = lo.Slice(finalArgs, doubleDashIndex+1, len(finalArgs))
-	}
-
-	info, err := e.ProcessCommandLineArgs("terraform", cmd_, finalArgs, argsAfterDoubleDash)
+	info, err := e.ProcessCommandLineArgs("terraform", cmd_, finalArgs, nil)
 	if err != nil {
 		return err
 	}
@@ -245,8 +240,7 @@ func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
 }
 
 // enableHeatmapIfRequested checks os.Args for --heatmap flag and enables performance tracking.
-// This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
-// where Cobra doesn't parse the flags, so PersistentPreRun can't detect them.
+// This is needed because --heatmap must be detected before flag parsing occurs.
 // We only enable tracking if --heatmap is present; --heatmap-mode is only relevant when --heatmap is set.
 func enableHeatmapIfRequested() {
 	for _, arg := range os.Args {

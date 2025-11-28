@@ -230,8 +230,7 @@ func WorkspaceCompatFlags() map[string]compat.CompatibilityFlag {
 }
 
 // ProvidersCompatFlags returns compatibility flags specific to terraform providers.
+// Note: terraform providers has no special flags beyond standard terraform flags.
 func ProvidersCompatFlags() map[string]compat.CompatibilityFlag {
-	return map[string]compat.CompatibilityFlag{
-		"-test-directory": {Behavior: compat.AppendToSeparated},
-	}
+	return map[string]compat.CompatibilityFlag{}
 }

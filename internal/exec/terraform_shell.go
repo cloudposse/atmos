@@ -12,6 +12,7 @@ func ExecuteTerraformShell(
 	component, stack string,
 	processTemplates, processFunctions bool,
 	skip []string,
+	dryRun bool,
 	atmosConfig *schema.AtmosConfiguration,
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteShell")()
@@ -22,6 +23,7 @@ func ExecuteTerraformShell(
 		"processTemplates", processTemplates,
 		"processFunctions", processFunctions,
 		"skip", skip,
+		"dryRun", dryRun,
 	)
 
 	info := schema.ConfigAndStacksInfo{
@@ -30,6 +32,7 @@ func ExecuteTerraformShell(
 		StackFromArg:     stack,
 		ComponentType:    "terraform",
 		SubCommand:       "shell",
+		DryRun:           dryRun,
 	}
 
 	// Process stacks to get component configuration.
@@ -50,13 +53,23 @@ func ExecuteTerraformShell(
 	// Get the varfile name.
 	varFile := constructTerraformComponentVarfileName(&info)
 
-	// Write variables to varfile if not in dry run mode.
-	if !info.DryRun {
-		varFilePath := constructTerraformComponentVarfilePath(atmosConfig, &info)
-		err := u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
-		if err != nil {
-			return err
-		}
+	// In dry-run mode, print information and exit without executing.
+	if info.DryRun {
+		u.PrintMessage("Dry run mode: shell would be started with the following configuration:")
+		u.PrintMessage("  Component: " + info.ComponentFromArg)
+		u.PrintMessage("  Stack: " + info.Stack)
+		u.PrintMessage("  Working directory: " + workingDir)
+		u.PrintMessage("  Terraform workspace: " + info.TerraformWorkspace)
+		u.PrintMessage("  Component path: " + componentPath)
+		u.PrintMessage("  Varfile: " + varFile)
+		return nil
+	}
+
+	// Write variables to varfile.
+	varFilePath := constructTerraformComponentVarfilePath(atmosConfig, &info)
+	err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
+	if err != nil {
+		return err
 	}
 
 	// Execute the shell command.
