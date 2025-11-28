@@ -245,7 +245,7 @@ Atmos evaluates the template and sets the Terraform workspace to `ue2-dev-ALPHA`
 
 ## How Workspaces Relate to State Paths
 
-Terraform workspaces work together with backend configuration to determine where state files are stored. For remote backends like S3, state files are organized in a two-level hierarchy:
+Terraform [workspaces](https://developer.hashicorp.com/terraform/cli/workspaces) work together with [backend configuration](https://developer.hashicorp.com/terraform/language/backend/s3) to determine where state files are stored. For remote backends like S3, state files are organized in a two-level hierarchy:
 
 ```
 s3://bucket/
@@ -255,21 +255,21 @@ s3://bucket/
 ```
 
 :::note Workspace NAME vs Workspace KEY PREFIX
-These are two separate, independent settings that work together to create the full state path:
+These are two separate, independent Terraform concepts that work together to create the full state path:
 
-- **Workspace NAME** (`{workspace}` in path): The Terraform workspace name, controlled by:
+- **Workspace NAME** (`{workspace}` in path): The [Terraform workspace](https://developer.hashicorp.com/terraform/cli/workspaces) name, controlled by:
   - `terraform_workspace_template` (Go templates - full power)
   - `terraform_workspace_pattern` (limited token replacement)
   - `terraform_workspace` (static string)
   - Auto-generated from stack context (default)
 
-- **Workspace KEY PREFIX** (`{workspace_key_prefix}` in path): The backend storage grouping, controlled by:
+- **Workspace KEY PREFIX** (`{workspace_key_prefix}` in path): The S3 backend's [`workspace_key_prefix`](https://developer.hashicorp.com/terraform/language/backend/s3#workspace_key_prefix) parameter for organizing state files, controlled by:
   - Explicit backend config (`backend.s3.workspace_key_prefix`)
   - `metadata.name` (recommended - stable logical identity)
   - `metadata.component` (physical path)
   - Atmos component name (default)
 
-Each serves a different purpose in organizing your Terraform state.
+Each serves a different purpose in organizing your Terraform state. See the official Terraform documentation for [workspaces](https://developer.hashicorp.com/terraform/language/state/workspaces) and [S3 backend configuration](https://developer.hashicorp.com/terraform/language/backend/s3).
 :::
 
 - **workspace_key_prefix**: Groups all deployments of a component together. Your VPC in dev, staging, and prod all share the same prefix.

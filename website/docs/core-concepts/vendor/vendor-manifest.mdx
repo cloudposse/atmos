@@ -558,7 +558,7 @@ When vendoring multiple versions of the same component, you need to ensure the T
 
 #### How Atmos Calculates `workspace_key_prefix`
 
-Atmos automatically generates the `workspace_key_prefix` (S3), `prefix` (GCS), or `key` (Azure) for your backend using this priority order:
+Atmos automatically generates the [`workspace_key_prefix`](https://developer.hashicorp.com/terraform/language/backend/s3#workspace_key_prefix) (S3), `prefix` (GCS), or `key` (Azure) for your backend using this priority order:
 
 | Priority | Source | Example | When to Use |
 |----------|--------|---------|-------------|
