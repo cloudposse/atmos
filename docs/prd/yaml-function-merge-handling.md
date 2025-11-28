@@ -8,6 +8,7 @@
 ## Problem Statement
 
 ### User-Reported Issue
+
 When importing Atmos stack files that contain YAML functions (like `!template`) and attempting to override those values
 with concrete types, the merge operation fails with a type mismatch error:
 
@@ -16,6 +17,7 @@ Error: cannot override two slices with different type ([]interface {}, string)
 ```
 
 ### Example Scenario
+
 ```yaml
 # catalog/blob-defaults.yaml
 components:
@@ -39,6 +41,7 @@ components:
 ```
 
 ### Root Cause
+
 Atmos processes YAML in a specific order:
 
 1. **Load** - YAML files are loaded from disk
@@ -51,6 +54,7 @@ The problem occurs because most YAML functions are processed **AFTER** merging (
 ## YAML Functions Classification
 
 ### Post-Merge Functions (Require Special Handling)
+
 These functions are processed **AFTER** merging, so during merge they appear as strings:
 
 - `!template` - Processes JSON strings to native types
@@ -61,6 +65,7 @@ These functions are processed **AFTER** merging, so during merge they appear as 
 - `!env` - Gets environment variables
 
 ### Pre-Merge Functions (No Special Handling Needed)
+
 These functions are processed **BEFORE** merging, during YAML loading:
 
 - `!include` - Includes file content during YAML loading
@@ -69,6 +74,7 @@ These functions are processed **BEFORE** merging, during YAML loading:
 ## Attempted Solution: Mergo Transformer
 
 ### Implementation Approach (v1.0 - ABANDONED)
+
 Initially attempted to use a **custom `mergo` transformer** that allows type mismatches when one side is an Atmos YAML function string.
 
 ### Why This Approach Failed
@@ -705,14 +711,9 @@ vars:
 - Mergo Library: https://github.com/imdario/mergo
 - Related Code: `pkg/merge/merge.go`, `internal/exec/yaml_func_template.go`
 - Test Fixture: `tests/fixtures/scenarios/atmos-yaml-functions-merge/`
-- User Report: Love Eklund's bug report about `!template` merge issues
+- User Report: bug report about `!template` merge issues
 
 ## Future Considerations
-
-### Performance Optimizations
-- Lazy evaluation of YAML functions (only process if accessed)
-- Caching of processed YAML function results
-- Parallel processing of independent YAML functions
 
 ### Extended Functionality
 - Support for conditional merge (merge only if condition met)
