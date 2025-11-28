@@ -9,7 +9,6 @@ on:
 
 jobs:
   pr-size-labeler:
-    name: PR Size Labeler
     runs-on: ubuntu-latest
     permissions:
       contents: read
