@@ -8,6 +8,7 @@ id: workspaces
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import PillBox from '@site/src/components/PillBox'
 
 <Intro>
 In Terraform, a [workspace](https://developer.hashicorp.com/terraform/language/state/workspaces) is a feature that allows
@@ -191,7 +192,9 @@ For more information on Atmos base and derived components, and to understand the
 refer to [Atmos Component Inheritance](/core-concepts/stacks/inheritance)
 :::
 
-### Advanced: Using Go Templates for Workspace Names
+### Using Go Templates for Workspace Names
+
+<PillBox>Advanced</PillBox>
 
 For more complex workspace naming requirements, use `metadata.terraform_workspace_template` which supports full [Go template](https://pkg.go.dev/text/template) syntax with access to [Sprig functions](http://masterminds.github.io/sprig/), [Gomplate functions](https://docs.gomplate.ca/functions/), and [Atmos template functions](/core-concepts/stacks/templates).
 
