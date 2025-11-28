@@ -3,8 +3,6 @@ package terraform
 import (
 	"os"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 // NOTE: The TestTerraformRun1/2/3 tests were removed during the refactoring to
@@ -13,21 +11,26 @@ import (
 // reimplemented as integration tests or using a different pattern.
 
 func TestTerraformHeatmapFlag(t *testing.T) {
-	// Test that --heatmap flag is properly detected and enables tracking
-	// even though DisableFlagParsing=true for terraform commands.
+	// Test that --heatmap flag is properly detected and enables tracking.
+	// Terraform commands use FParseErrWhitelist{UnknownFlags: true} to allow
+	// pass-through of unknown flags to terraform/tofu.
+	//
+	// Note: This test requires os.Args manipulation because enableHeatmapIfRequested()
+	// scans os.Args directly before flag parsing occurs. This is intentional and
+	// cannot use cmd.SetArgs().
 
-	// Save original os.Args
+	// Save original os.Args.
+	//nolint:lintroller // os.Args manipulation required - enableHeatmapIfRequested() scans os.Args directly.
 	oldArgs := os.Args
+	//nolint:lintroller // os.Args manipulation required - enableHeatmapIfRequested() scans os.Args directly.
 	defer func() { os.Args = oldArgs }()
 
-	// Simulate command line with --heatmap flag
+	// Simulate command line with --heatmap flag.
+	//nolint:lintroller // os.Args manipulation required - enableHeatmapIfRequested() scans os.Args directly.
 	os.Args = []string{"atmos", "terraform", "plan", "vpc", "-s", "uw2-prod", "--heatmap"}
 
-	// Call enableHeatmapIfRequested which should detect --heatmap in os.Args
+	// Call enableHeatmapIfRequested which should detect --heatmap in os.Args.
+	// We verify the function doesn't panic - actual heatmap output is tested in integration tests.
+	// Note: perf.EnableTracking state is not directly testable without exposing internal state.
 	enableHeatmapIfRequested()
-
-	// Verify that tracking was enabled (we can't directly check perf.EnableTracking state,
-	// but we can verify the function doesn't panic).
-	// The actual heatmap output will be tested in integration tests.
-	assert.True(t, true, "enableHeatmapIfRequested should execute without error")
 }

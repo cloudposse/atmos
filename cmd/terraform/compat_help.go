@@ -231,10 +231,9 @@ func WorkspaceCompatFlagDescriptions() []CompatFlagDescription {
 }
 
 // ProvidersCompatFlagDescriptions returns descriptions for providers-specific compatibility flags.
+// Note: terraform providers has no special flags beyond standard terraform flags.
 func ProvidersCompatFlagDescriptions() []CompatFlagDescription {
-	return []CompatFlagDescription{
-		{Flag: "-test-directory", Description: "Directory containing test files"},
-	}
+	return []CompatFlagDescription{}
 }
 
 // FormatCompatFlagsHelp formats compatibility flag descriptions for help output.

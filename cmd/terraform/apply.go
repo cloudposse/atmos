@@ -8,8 +8,8 @@ import (
 	h "github.com/cloudposse/atmos/pkg/hooks"
 )
 
-// applyRegistry holds apply-specific flags.
-var applyRegistry *flags.FlagRegistry
+// applyParser handles flag parsing for apply command.
+var applyParser *flags.StandardParser
 
 // applyCmd represents the terraform apply command.
 var applyCmd = &cobra.Command{
@@ -32,30 +32,21 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Create flag registry for apply-specific flags.
-	applyRegistry = flags.NewFlagRegistry()
-	applyRegistry.Register(&flags.BoolFlag{
-		Name:        "from-plan",
-		Description: "If set atmos will use the previously generated plan file",
-	})
-	applyRegistry.Register(&flags.StringFlag{
-		Name:        "planfile",
-		Description: "Set the plan file to use",
-	})
-	applyRegistry.Register(&flags.BoolFlag{
-		Name:        "affected",
-		Description: "Apply the affected components in dependency order",
-	})
-	applyRegistry.Register(&flags.BoolFlag{
-		Name:        "all",
-		Description: "Apply all components in all stacks",
-	})
+	// Create parser with apply-specific flags using functional options.
+	applyParser = flags.NewStandardParser(
+		flags.WithBoolFlag("from-plan", "", false, "If set atmos will use the previously generated plan file"),
+		flags.WithStringFlag("planfile", "", "", "Set the plan file to use"),
+		flags.WithBoolFlag("affected", "", false, "Apply the affected components in dependency order"),
+		flags.WithBoolFlag("all", "", false, "Apply all components in all stacks"),
+		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_APPLY_FROM_PLAN"),
+		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_APPLY_PLANFILE"),
+	)
 
 	// Register apply-specific flags with Cobra.
-	applyRegistry.RegisterFlags(applyCmd)
+	applyParser.RegisterFlags(applyCmd)
 
-	// Bind flags to Viper.
-	if err := applyRegistry.BindToViper(viper.GetViper()); err != nil {
+	// Bind flags to Viper for environment variable support.
+	if err := applyParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
 

@@ -51,6 +51,7 @@ Common use cases:
 		force := v.GetBool("force")
 		everything := v.GetBool("everything")
 		skipLockFile := v.GetBool("skip-lock-file")
+		dryRun := v.GetBool("dry-run")
 
 		// Initialize Atmos configuration
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
@@ -58,7 +59,7 @@ Common use cases:
 			return err
 		}
 
-		return e.ExecuteClean(component, stack, force, everything, skipLockFile, &atmosConfig)
+		return e.ExecuteClean(component, stack, force, everything, skipLockFile, dryRun, &atmosConfig)
 	},
 }
 

@@ -7,8 +7,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 )
 
-// planRegistry holds plan-specific flags.
-var planRegistry *flags.FlagRegistry
+// planParser handles flag parsing for plan command.
+var planParser *flags.StandardParser
 
 // planCmd represents the terraform plan command.
 var planCmd = &cobra.Command{
@@ -30,30 +30,21 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Create flag registry for plan-specific flags.
-	planRegistry = flags.NewFlagRegistry()
-	planRegistry.Register(&flags.BoolFlag{
-		Name:        "upload-status",
-		Description: "If set atmos will upload the plan result to the pro API",
-	})
-	planRegistry.Register(&flags.BoolFlag{
-		Name:        "affected",
-		Description: "Plan the affected components in dependency order",
-	})
-	planRegistry.Register(&flags.BoolFlag{
-		Name:        "all",
-		Description: "Plan all components in all stacks",
-	})
-	planRegistry.Register(&flags.BoolFlag{
-		Name:        "skip-planfile",
-		Description: "Skip writing the plan to a file by not passing the `-out` flag to Terraform",
-	})
+	// Create parser with plan-specific flags using functional options.
+	planParser = flags.NewStandardParser(
+		flags.WithBoolFlag("upload-status", "", false, "If set atmos will upload the plan result to the pro API"),
+		flags.WithBoolFlag("affected", "", false, "Plan the affected components in dependency order"),
+		flags.WithBoolFlag("all", "", false, "Plan all components in all stacks"),
+		flags.WithBoolFlag("skip-planfile", "", false, "Skip writing the plan to a file by not passing the `-out` flag to Terraform"),
+		flags.WithEnvVars("upload-status", "ATMOS_TERRAFORM_PLAN_UPLOAD_STATUS"),
+		flags.WithEnvVars("skip-planfile", "ATMOS_TERRAFORM_PLAN_SKIP_PLANFILE"),
+	)
 
 	// Register plan-specific flags with Cobra.
-	planRegistry.RegisterFlags(planCmd)
+	planParser.RegisterFlags(planCmd)
 
-	// Bind flags to Viper.
-	if err := planRegistry.BindToViper(viper.GetViper()); err != nil {
+	// Bind flags to Viper for environment variable support.
+	if err := planParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
 
