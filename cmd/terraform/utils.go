@@ -61,6 +61,12 @@ func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []str
 	log.Debug("terraformRun entry", "subCommand", subCommand, "args", args)
 	compatFlags := GetCompatFlagsForCommand(subCommand)
 
+	// Extract original args from os.Args since Cobra consumes unknown flags.
+	// With FParseErrWhitelist{UnknownFlags: true}, Cobra silently drops unknown flags.
+	// We need to parse os.Args to get terraform pass-through flags like -out, -var, etc.
+	originalArgs := extractSubcommandArgs(subCommand)
+	log.Debug("originalArgs from os.Args", "args", originalArgs)
+
 	// Create translator to separate Atmos flags from terraform pass-through flags.
 	translator := compat.NewCompatibilityFlagTranslator(compatFlags)
 
@@ -69,8 +75,9 @@ func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []str
 	// the parser will use the command's existing flags.
 	parser := flags.NewAtmosFlagParser(actualCmd, viper.GetViper(), translator, nil)
 
-	// Parse args using the unified parser.
-	parsedConfig, err := parser.Parse(args)
+	// Parse original args using the unified parser.
+	// This ensures we capture all flags including terraform pass-through flags.
+	parsedConfig, err := parser.Parse(originalArgs)
 	if err != nil {
 		return err
 	}
@@ -78,12 +85,12 @@ func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []str
 	log.Debug("After parser.Parse", "PositionalArgs", parsedConfig.PositionalArgs, "SeparatedArgs", parsedConfig.SeparatedArgs)
 
 	// Build info from parsed config.
-	// Prepend subcommand to positional args, then append separated args (component name).
-	// The separated args contain the component which was extracted by the flag parser.
+	// Prepend subcommand to positional args for ProcessCommandLineArgs.
+	// SeparatedArgs contain terraform pass-through flags (e.g., -out=<file>, -var, etc.)
+	// and must be passed as the 4th argument (additionalArgsAndFlags).
 	argsWithSubCommand := append([]string{subCommand}, parsedConfig.PositionalArgs...)
-	argsWithSubCommand = append(argsWithSubCommand, parsedConfig.SeparatedArgs...)
-	log.Debug("argsWithSubCommand", "args", argsWithSubCommand)
-	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, parentCmd, argsWithSubCommand, nil)
+	log.Debug("argsWithSubCommand", "args", argsWithSubCommand, "separatedArgs", parsedConfig.SeparatedArgs)
+	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, parentCmd, argsWithSubCommand, parsedConfig.SeparatedArgs)
 	if err != nil {
 		return err
 	}
@@ -249,6 +256,32 @@ func enableHeatmapIfRequested() {
 			return
 		}
 	}
+}
+
+// extractSubcommandArgs extracts the arguments for a specific terraform subcommand from os.Args.
+// This is needed because Cobra consumes unknown flags even with FParseErrWhitelist{UnknownFlags: true}.
+// We need to parse os.Args directly to capture terraform pass-through flags like -out, -var, etc.
+//
+// Example: os.Args = ["atmos", "terraform", "plan", "component-1", "-s", "nonprod", "-out=/tmp/plan"]
+// Returns: ["component-1", "-s", "nonprod", "-out=/tmp/plan"]
+func extractSubcommandArgs(subCommand string) []string {
+	args := os.Args
+
+	// Find the index of the subcommand.
+	subCmdIndex := -1
+	for i, arg := range args {
+		if arg == subCommand {
+			subCmdIndex = i
+			break
+		}
+	}
+
+	if subCmdIndex == -1 || subCmdIndex >= len(args)-1 {
+		return []string{}
+	}
+
+	// Return everything after the subcommand.
+	return args[subCmdIndex+1:]
 }
 
 // identityFlagCompletion provides shell completion for identity flags by fetching

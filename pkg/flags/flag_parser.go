@@ -253,8 +253,19 @@ func NormalizeShorthandWithEquals(cmd *cobra.Command, arg string) (normalized st
 // This handles the case where: user runs "atmos auth exec --identity=prod -- sh -c echo"
 // -> Cobra parses --identity=prod and strips -- -> RunE receives ["sh", "-c", "echo"]
 // -> We need to treat these as separated args, not as flags to parse.
+//
+// IMPORTANT: This adjustment only applies to commands WITHOUT FParseErrWhitelist.UnknownFlags.
+// Commands with UnknownFlags=true (like terraform subcommands) preserve the -- separator
+// in args, so we should NOT move all args to separated. The remaining args are positional
+// (e.g., component name), not pass-through args.
 func (p *AtmosFlagParser) adjustForCobraParsing(argsBeforeSep, argsAfterSep []string) ([]string, []string) {
 	defer perf.Track(nil, "flags.FlagParser.adjustForCobraParsing")()
+
+	// Skip this adjustment for commands with FParseErrWhitelist.UnknownFlags=true.
+	// These commands preserve -- in args, so positional args should stay as positional.
+	if p.cmd.FParseErrWhitelist.UnknownFlags {
+		return argsBeforeSep, argsAfterSep
+	}
 
 	if len(argsAfterSep) == 0 && len(argsBeforeSep) > 0 {
 		// No -- separator found, check if Cobra already parsed flags.
