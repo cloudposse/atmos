@@ -3,7 +3,7 @@ slug: path-based-component-resolution
 title: "Path-Based Component Resolution for Terraform, Helmfile, Packer, Describe, and Validate Commands"
 authors: [osterman]
 tags: [feature, terraform, helmfile, packer, ux]
-date: 2025-11-08
+date: 2025-11-28
 ---
 
 Atmos now supports using filesystem paths instead of component names for all component commands. Navigate to any component directory and use `.` to reference it - no need to remember exact component names.
@@ -47,35 +47,52 @@ This works with all Terraform, Helmfile, and Packer commands that accept a compo
 ### Terraform Commands
 
 ```bash
+# Current directory
 cd components/terraform/vpc
 atmos terraform plan . --stack dev
-atmos terraform apply . --stack prod
-atmos terraform output . --stack staging
+
+# Relative path from repo root
+atmos terraform apply ./components/terraform/vpc --stack prod
+
+# Relative path to sibling component
+cd components/terraform/vpc
+atmos terraform output ../eks --stack staging
 ```
 
 ### Describe Component
 
 ```bash
+# Current directory with options
 cd components/terraform/infra/vpc
-atmos describe component . --stack dev
 atmos describe component . --stack dev --format json
-atmos describe component . --stack dev --provenance
+
+# Relative path
+atmos describe component ./components/terraform/rds --stack dev --provenance
+
+# Absolute path
+atmos describe component /Users/dev/myproject/components/terraform/vpc --stack prod
 ```
 
 ### Validate Component
 
 ```bash
+# Current directory
 cd components/terraform/vpc
 atmos validate component . --stack dev
-atmos validate component . --stack dev --schema-path vpc-schema.json --schema-type jsonschema
+
+# Relative path with schema validation
+atmos validate component ./components/terraform/eks --stack dev --schema-path eks-schema.json --schema-type jsonschema
 ```
 
 ### Helmfile Commands
 
 ```bash
+# Current directory
 cd components/helmfile/my-app
 atmos helmfile diff . --stack dev
-atmos helmfile apply . --stack prod
+
+# Relative path to another helmfile component
+atmos helmfile apply ../nginx-ingress --stack prod
 ```
 
 ## Handling Multiple Component Instances

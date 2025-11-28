@@ -244,8 +244,8 @@ func TestDefaultComponentResolver_ResolveComponentPath(t *testing.T) {
 	resolver := &DefaultComponentResolver{}
 	assert.NotNil(tk, resolver)
 
-	// The actual resolution requires a valid atmos config, which is tested
-	// in integration tests. Here we just verify the interface is implemented.
+	// The actual resolution requires a valid atmos config, which is tested in integration tests.
+	// Here we just verify the interface is implemented.
 	_, ok := interface{}(resolver).(ComponentResolver)
 	assert.True(tk, ok, "DefaultComponentResolver should implement ComponentResolver")
 }
