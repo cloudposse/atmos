@@ -21,9 +21,6 @@ This command shows what Terraform will do when you run 'apply'. It helps you ver
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/plan
   https://opentofu.org/docs/cli/commands/plan`,
-	// FParseErrWhitelist allows unknown flags to pass through to Terraform/OpenTofu.
-	// The AtmosFlagParser handles separation of Atmos flags from terraform native flags.
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return terraformRun(terraformCmd, cmd, args)
 	},

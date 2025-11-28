@@ -20,9 +20,6 @@ var terraformCmd = &cobra.Command{
 	Aliases: []string{"tf"},
 	Short:   "Execute Terraform commands using Atmos stack configurations",
 	Long:    `This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.`,
-	// FParseErrWhitelist allows unknown flags to pass through to Terraform/OpenTofu.
-	// Unlike DisableFlagParsing, this still allows Cobra to parse known Atmos flags.
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 }
 
 func init() {
@@ -87,9 +84,10 @@ func (t *TerraformCommandProvider) GetPositionalArgsBuilder() *flags.PositionalA
 }
 
 // GetCompatibilityFlags returns compatibility flags for this command.
-// Terraform command has no compatibility flags.
+// Returns all terraform compatibility flags (combined from all subcommands) to enable
+// preprocessing in Execute() to separate pass-through flags before Cobra parses.
 func (t *TerraformCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
-	return nil
+	return AllTerraformCompatFlags()
 }
 
 // GetAliases returns command aliases.

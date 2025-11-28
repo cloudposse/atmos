@@ -15,7 +15,6 @@ The output is in the DOT format, which can be used by GraphViz to generate chart
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/graph
   https://opentofu.org/docs/cli/commands/graph`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return terraformRun(terraformCmd, cmd, args)
 	},

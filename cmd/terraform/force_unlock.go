@@ -15,7 +15,6 @@ This will not modify your infrastructure. This command removes the lock on the s
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/force-unlock
   https://opentofu.org/docs/cli/commands/force-unlock`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return terraformRun(terraformCmd, cmd, args)
 	},

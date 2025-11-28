@@ -234,3 +234,41 @@ func WorkspaceCompatFlags() map[string]compat.CompatibilityFlag {
 func ProvidersCompatFlags() map[string]compat.CompatibilityFlag {
 	return map[string]compat.CompatibilityFlag{}
 }
+
+// AllTerraformCompatFlags returns a combined set of all terraform compatibility flags.
+// This is used for preprocessing in Execute() to identify terraform pass-through flags
+// before Cobra parses the command line. By combining all possible flags, we can
+// correctly separate pass-through flags regardless of which subcommand is being called.
+func AllTerraformCompatFlags() map[string]compat.CompatibilityFlag {
+	flags := make(map[string]compat.CompatibilityFlag)
+
+	// Merge all subcommand-specific flags.
+	mergeFlags := func(src map[string]compat.CompatibilityFlag) {
+		for k, v := range src {
+			flags[k] = v
+		}
+	}
+
+	mergeFlags(TerraformCompatFlags())
+	mergeFlags(PlanCompatFlags())
+	mergeFlags(ApplyCompatFlags())
+	mergeFlags(DestroyCompatFlags())
+	mergeFlags(InitCompatFlags())
+	mergeFlags(ValidateCompatFlags())
+	mergeFlags(RefreshCompatFlags())
+	mergeFlags(OutputCompatFlags())
+	mergeFlags(ShowCompatFlags())
+	mergeFlags(StateCompatFlags())
+	mergeFlags(ImportCompatFlags())
+	mergeFlags(TaintCompatFlags())
+	mergeFlags(UntaintCompatFlags())
+	mergeFlags(FmtCompatFlags())
+	mergeFlags(GraphCompatFlags())
+	mergeFlags(ForceUnlockCompatFlags())
+	mergeFlags(GetCompatFlags())
+	mergeFlags(TestCompatFlags())
+	mergeFlags(ConsoleCompatFlags())
+	mergeFlags(WorkspaceCompatFlags())
+
+	return flags
+}
