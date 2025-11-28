@@ -13,7 +13,6 @@ var consoleCmd = &cobra.Command{
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/console
   https://opentofu.org/docs/cli/commands/console`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return terraformRun(terraformCmd, cmd, args)
 	},

@@ -13,7 +13,6 @@ var outputCmd = &cobra.Command{
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/output
   https://opentofu.org/docs/cli/commands/output`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return terraformRun(terraformCmd, cmd, args)
 	},

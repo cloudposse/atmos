@@ -13,7 +13,6 @@ var fmtCmd = &cobra.Command{
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/fmt
   https://opentofu.org/docs/cli/commands/fmt`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return terraformRun(terraformCmd, cmd, args)
 	},

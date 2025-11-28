@@ -16,7 +16,6 @@ Note: Atmos will automatically call init for you when running plan and apply com
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/init
   https://opentofu.org/docs/cli/commands/init`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return terraformRun(terraformCmd, cmd, args)
 	},

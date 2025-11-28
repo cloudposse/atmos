@@ -13,7 +13,6 @@ var taintCmd = &cobra.Command{
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/taint
   https://opentofu.org/docs/cli/commands/taint`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return terraformRun(terraformCmd, cmd, args)
 	},

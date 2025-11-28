@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 // Context keys for passing values through cobra command context.
@@ -236,4 +237,18 @@ func Reset() {
 	defer registry.mu.Unlock()
 
 	registry.providers = make(map[string]CommandProvider)
+}
+
+// GetCompatFlagsForCommand returns compatibility flags for a command provider.
+// The providerName should match the top-level command (e.g., "terraform").
+// Returns nil if the provider is not found or has no compatibility flags.
+//
+// This is used during arg preprocessing in Execute() to separate Atmos flags
+// from pass-through flags before Cobra parses.
+func GetCompatFlagsForCommand(providerName string) map[string]compat.CompatibilityFlag {
+	provider, ok := GetProvider(providerName)
+	if !ok {
+		return nil
+	}
+	return provider.GetCompatibilityFlags()
 }

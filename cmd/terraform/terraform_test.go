@@ -12,8 +12,8 @@ import (
 
 func TestTerraformHeatmapFlag(t *testing.T) {
 	// Test that --heatmap flag is properly detected and enables tracking.
-	// Terraform commands use FParseErrWhitelist{UnknownFlags: true} to allow
-	// pass-through of unknown flags to terraform/tofu.
+	// Terraform pass-through flags are separated during preprocessing in Execute()
+	// via the command registry's CompatibilityFlagTranslator.
 	//
 	// Note: This test requires os.Args manipulation because enableHeatmapIfRequested()
 	// scans os.Args directly before flag parsing occurs. This is intentional and

@@ -18,7 +18,6 @@ var deployCmd = &cobra.Command{
 	Long: `Deploys infrastructure by running the Terraform apply command with automatic approval.
 
 This ensures that the changes defined in your Terraform configuration are applied without requiring manual confirmation, streamlining the deployment process.`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return terraformRun(terraformCmd, cmd, args)
 	},

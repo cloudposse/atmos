@@ -22,7 +22,6 @@ This will prompt for confirmation before making changes unless -auto-approve is 
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/apply
   https://opentofu.org/docs/cli/commands/apply`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return terraformRun(terraformCmd, cmd, args)
 	},

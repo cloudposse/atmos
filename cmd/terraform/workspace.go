@@ -23,7 +23,6 @@ This ensures that the workspace is properly set up for Terraform operations.
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/workspace
   https://opentofu.org/docs/cli/commands/workspace`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return terraformRun(terraformCmd, cmd, args)
 	},
