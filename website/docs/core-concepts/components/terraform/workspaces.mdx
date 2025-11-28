@@ -257,16 +257,16 @@ s3://bucket/
           └── terraform.tfstate
 ```
 
-:::note Workspace NAME vs Workspace KEY PREFIX
+:::note Workspace Name vs Workspace Key Prefix
 These are two separate, independent Terraform concepts that work together to create the full state path:
 
-- **Workspace NAME** (`{workspace}` in path): The [Terraform workspace](https://developer.hashicorp.com/terraform/cli/workspaces) name, controlled by:
+- **Workspace name** (`{workspace}` in path): The [Terraform workspace](https://developer.hashicorp.com/terraform/cli/workspaces) name, controlled by:
   - `terraform_workspace_template` (Go templates - full power)
   - `terraform_workspace_pattern` (limited token replacement)
   - `terraform_workspace` (static string)
   - Auto-generated from stack context (default)
 
-- **Workspace KEY PREFIX** (`{workspace_key_prefix}` in path): The S3 backend's [`workspace_key_prefix`](https://developer.hashicorp.com/terraform/language/backend/s3#workspace_key_prefix) parameter for organizing state files, controlled by:
+- **Workspace key prefix** (`{workspace_key_prefix}` in path): The S3 backend's [`workspace_key_prefix`](https://developer.hashicorp.com/terraform/language/backend/s3#workspace_key_prefix) parameter for organizing state files, controlled by:
   - Explicit backend config (`backend.s3.workspace_key_prefix`)
   - `metadata.name` (recommended - stable logical identity)
   - `metadata.component` (physical path)
