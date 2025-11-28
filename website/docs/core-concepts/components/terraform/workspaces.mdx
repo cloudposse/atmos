@@ -191,6 +191,58 @@ For more information on Atmos base and derived components, and to understand the
 refer to [Atmos Component Inheritance](/core-concepts/stacks/inheritance)
 :::
 
+### Advanced: Using Go Templates for Workspace Names
+
+For more complex workspace naming requirements, use `metadata.terraform_workspace_template` which supports full [Go template](https://pkg.go.dev/text/template) syntax with access to [Sprig functions](http://masterminds.github.io/sprig/), [Gomplate functions](https://docs.gomplate.ca/functions/), and [Atmos template functions](/core-concepts/stacks/templates).
+
+<File title="stacks/ue2-dev.yaml">
+```yaml
+vars:
+  environment: ue2
+  stage: dev
+  custom_suffix: "alpha"
+
+components:
+  terraform:
+    vpc/3:
+      metadata:
+        component: vpc
+        # Use Go template for dynamic workspace name
+        terraform_workspace_template: "{{ .vars.environment }}-{{ .vars.stage }}-{{ .vars.custom_suffix | upper }}"
+```
+</File>
+
+When you provision the component:
+
+<Terminal>
+    ```shell
+    atmos terraform apply vpc/3 -s ue2-dev
+    ```
+</Terminal>
+
+Atmos evaluates the template and sets the Terraform workspace to `ue2-dev-ALPHA`.
+
+**Priority order for workspace configuration:**
+1. `metadata.terraform_workspace_template` (highest) - Full Go template syntax
+2. `metadata.terraform_workspace_pattern` - Limited token replacement
+3. `metadata.terraform_workspace` - Static string
+4. Auto-generated from stack context (lowest) - Default behavior
+
+:::tip When to Use Templates vs Patterns
+- **Use `terraform_workspace_template`** when you need:
+  - String manipulation (upper/lower case, substring, etc.)
+  - Conditional logic
+  - Access to Sprig/Gomplate functions
+  - Complex naming rules
+
+- **Use `terraform_workspace_pattern`** when you need:
+  - Simple token replacement with context variables
+  - Straightforward naming patterns
+
+- **Use `terraform_workspace`** when you need:
+  - A fixed, static workspace name
+:::
+
 ## How Workspaces Relate to State Paths
 
 Terraform workspaces work together with backend configuration to determine where state files are stored. For remote backends like S3, state files are organized in a two-level hierarchy:
@@ -201,6 +253,24 @@ s3://bucket/
       └── {workspace}/             # Stack context (e.g., "ue2-dev")
           └── terraform.tfstate
 ```
+
+:::note Workspace NAME vs Workspace KEY PREFIX
+These are two separate, independent settings that work together to create the full state path:
+
+- **Workspace NAME** (`{workspace}` in path): The Terraform workspace name, controlled by:
+  - `terraform_workspace_template` (Go templates - full power)
+  - `terraform_workspace_pattern` (limited token replacement)
+  - `terraform_workspace` (static string)
+  - Auto-generated from stack context (default)
+
+- **Workspace KEY PREFIX** (`{workspace_key_prefix}` in path): The backend storage grouping, controlled by:
+  - Explicit backend config (`backend.s3.workspace_key_prefix`)
+  - `metadata.name` (recommended - stable logical identity)
+  - `metadata.component` (physical path)
+  - Atmos component name (default)
+
+Each serves a different purpose in organizing your Terraform state.
+:::
 
 - **workspace_key_prefix**: Groups all deployments of a component together. Your VPC in dev, staging, and prod all share the same prefix.
 - **workspace**: The Terraform workspace name (derived from the stack) that keeps each environment's state separate.

@@ -136,7 +136,7 @@ There are two ways of doing this:
       key                  = "terraform.tfstate"
       region               = "your-aws-region"
       role_arn             = "arn:aws:iam::<your account ID>:role/<IAM Role with permissions to access the Terraform backend>"
-      workspace_key_prefix = "<component name, e.g. `vpc` or `vpc-flow-logs-bucket`>"
+      workspace_key_prefix = "vpc"  # Or any stable identifier for your component
     }
   }
   ```
