@@ -78,28 +78,35 @@ Here's a simplified example:
 ```hcl
 terraform {
   backend "s3" {
-    acl            = "bucket-owner-full-control"
-    bucket         = "your-s3-bucket-name"
-    key            = "path/to/terraform.tfstate"
-    region         = "your-aws-region"
-    encrypt        = true
-    dynamodb_table = "terraform_locks"
+    acl          = "bucket-owner-full-control"
+    bucket       = "your-s3-bucket-name"
+    key          = "path/to/terraform.tfstate"
+    region       = "your-aws-region"
+    encrypt      = true
+    use_lockfile = true  # Native S3 locking (Terraform 1.10+)
   }
 }
 ```
 </File>
 
-In the example, `terraform_locks` is a DynamoDB table used for state locking. DynamoDB is recommended for locking when using the S3 backend to ensure
-safe concurrent access.
+:::note Native S3 Locking
+Terraform 1.10+ and OpenTofu 1.8+ support native S3 locking via `use_lockfile: true`, eliminating the need for a
+DynamoDB table. For older versions, see [legacy DynamoDB locking](https://developer.hashicorp.com/terraform/language/settings/backends/s3#dynamodb-state-locking).
+:::
 
 ## Provision Terraform S3 Backend
 
-Before using Terraform S3 backend, a backend S3 bucket and DynamoDB table need to be provisioned.
+Before using Terraform S3 backend, a backend S3 bucket needs to be provisioned.
 
-You can provision them using the [tfstate-backend](https://github.com/cloudposse/terraform-aws-tfstate-backend) Terraform module and
+:::tip Automatic Backend Provisioning
+Atmos can automatically provision S3 backends with secure defaults. See [Backend Provisioning](/core-concepts/components/terraform/backend-provisioning)
+for the fastest way to get started.
+:::
+
+Alternatively, you can provision the S3 bucket using the [tfstate-backend](https://github.com/cloudposse/terraform-aws-tfstate-backend) Terraform module and
 [tfstate-backend](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/tfstate-backend) Terraform component (root module).
 
-Note that the [tfstate-backend](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/tfstate-backend) Terraform component
+The [tfstate-backend](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/tfstate-backend) Terraform component
 can be added to the `components/terraform` folder, the configuration for the component can be added to the `stacks`, and the component itself
 can be provisioned with Atmos.
 
@@ -121,7 +128,7 @@ components:
 
 ## Configure Terraform S3 Backend
 
-Once the S3 bucket and DynamoDB table are provisioned, you can start using them to store Terraform state for the Terraform components.
+Once the S3 bucket is provisioned, you can start using it to store Terraform state for the Terraform components.
 There are two ways of doing this:
 
 - Manually create `backend.tf` file in each component's folder with the following content:
@@ -131,12 +138,12 @@ There are two ways of doing this:
     backend "s3" {
       acl                  = "bucket-owner-full-control"
       bucket               = "your-s3-bucket-name"
-      dynamodb_table       = "your-dynamodb-table-name"
       encrypt              = true
       key                  = "terraform.tfstate"
       region               = "your-aws-region"
       role_arn             = "arn:aws:iam::<your account ID>:role/<IAM Role with permissions to access the Terraform backend>"
       workspace_key_prefix = "<component name, e.g. `vpc` or `vpc-flow-logs-bucket`>"
+      use_lockfile         = true
     }
   }
   ```
@@ -185,10 +192,10 @@ Configuring Terraform S3 backend with Atmos consists of the three steps:
         acl: "bucket-owner-full-control"
         encrypt: true
         bucket: "your-s3-bucket-name"
-        dynamodb_table: "your-dynamodb-table-name"
         key: "terraform.tfstate"
         region: "your-aws-region"
         role_arn: "arn:aws:iam::<your account ID>:role/<IAM Role with permissions to access the Terraform backend>"
+        use_lockfile: true
   ```
   </File>
 
@@ -230,11 +237,11 @@ similar to the following example:
       "s3": {
         "acl": "bucket-owner-full-control",
         "bucket": "your-s3-bucket-name",
-        "dynamodb_table": "your-dynamodb-table-name",
         "encrypt": true,
         "key": "terraform.tfstate",
         "region": "your-aws-region",
         "role_arn": "arn:aws:iam::<your account ID>:role/<IAM Role with permissions to access the Terraform backend>",
+        "use_lockfile": true,
         "workspace_key_prefix": "vpc"
       }
     }
@@ -250,11 +257,11 @@ by executing the command [atmos terraform generate backends](/cli/commands/terra
 ## Terraform Backend Inheritance
 
 In the previous section, we configured the S3 backend for the entire Organization by adding the `terraform.backend.s3` section to
-the `stacks/orgs/acme/_defaults.yaml` stack manifest. The same backend configuration (S3 bucket, DynamoDB table, and IAM role) will be used for all
+the `stacks/orgs/acme/_defaults.yaml` stack manifest. The same backend configuration (S3 bucket and IAM role) will be used for all
 OUs, accounts and regions.
 
 Suppose that for security and audit reasons, you want to use different Terraform backends for the `dev`, `staging` and `prod` accounts. Each account
-needs to have a separate S3 bucket, DynamoDB table, and IAM role with different permissions (for example, the `development` Team should be able to
+needs to have a separate S3 bucket and IAM role with different permissions (for example, the `development` Team should be able to
 access the Terraform backend only in the `dev` account, but not in `staging` and `prod`).
 
 Atmos supports this use-case by using deep-merging of stack manifests, [Imports](/core-concepts/stacks/imports)
@@ -273,6 +280,7 @@ Add the following config to the Organization stack manifest in `stacks/orgs/acme
         encrypt: true
         key: "terraform.tfstate"
         region: "your-aws-region"
+        use_lockfile: true
   ```
   </File>
 
@@ -285,7 +293,6 @@ Add the following config to the `dev` stack manifest in `stacks/orgs/acme/plat/d
     backend:
       s3:
         bucket: "your-dev-s3-bucket-name"
-        dynamodb_table: "your-dev-dynamodb-table-name"
         role_arn: "<IAM Role with permissions to access the `dev` Terraform backend>"
   ```
   </File>
@@ -298,7 +305,6 @@ Add the following config to the `staging` stack manifest in `stacks/orgs/acme/pl
     backend:
       s3:
         bucket: "your-staging-s3-bucket-name"
-        dynamodb_table: "your-staging-dynamodb-table-name"
         role_arn: "<IAM Role with permissions to access the `staging` Terraform backend>"
   ```
   </File>
@@ -312,7 +318,6 @@ Add the following config to the `prod` stack manifest in `stacks/orgs/acme/plat/
     backend:
       s3:
         bucket: "your-prod-s3-bucket-name"
-        dynamodb_table: "your-prod-dynamodb-table-name"
         role_arn: "<IAM Role with permissions to access the `prod` Terraform backend>"
   ```
   </File>
@@ -329,11 +334,11 @@ add `workspace_key_prefix` for the component, generating the following final dee
       "s3": {
         "acl": "bucket-owner-full-control",
         "bucket": "your-dev-s3-bucket-name",
-        "dynamodb_table": "your-dev-dynamodb-table-name",
         "encrypt": true,
         "key": "terraform.tfstate",
         "region": "your-aws-region",
         "role_arn": "<IAM Role with permissions to access the `dev` Terraform backend>",
+        "use_lockfile": true,
         "workspace_key_prefix": "vpc"
       }
     }
@@ -430,11 +435,11 @@ For example, when the command `atmos terraform apply vpc/1 -s plat-ue2-dev` is e
       "s3": {
         "acl": "bucket-owner-full-control",
         "bucket": "your-dev-s3-bucket-name",
-        "dynamodb_table": "your-dev-dynamodb-table-name",
         "encrypt": true,
         "key": "terraform.tfstate",
         "region": "your-aws-region",
         "role_arn": "<IAM Role with permissions to access the `dev` Terraform backend>",
+        "use_lockfile": true,
         "workspace_key_prefix": "vpc-1"
       }
     }
@@ -454,11 +459,11 @@ Similarly, when the command `atmos terraform apply vpc/2 -s plat-ue2-dev` is exe
       "s3": {
         "acl": "bucket-owner-full-control",
         "bucket": "your-dev-s3-bucket-name",
-        "dynamodb_table": "your-dev-dynamodb-table-name",
         "encrypt": true,
         "key": "terraform.tfstate",
         "region": "your-aws-region",
         "role_arn": "<IAM Role with permissions to access the `dev` Terraform backend>",
+        "use_lockfile": true,
         "workspace_key_prefix": "vpc-2"
       }
     }

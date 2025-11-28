@@ -49,10 +49,10 @@ terraform:
       acl: "bucket-owner-full-control"
       encrypt: true
       bucket: "your-s3-bucket-name"
-      dynamodb_table: "your-dynamodb-table-name"
       key: "terraform.tfstate"
       region: "your-aws-region"
       role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-write"
+      use_lockfile: true
 ```
 
 Let's say we also have a read-only IAM role, and we want to use it to access the remote state instead of the read-write
@@ -70,10 +70,10 @@ terraform:
       acl: "bucket-owner-full-control"
       encrypt: true
       bucket: "your-s3-bucket-name"
-      dynamodb_table: "your-dynamodb-table-name"
       key: "terraform.tfstate"
       region: "your-aws-region"
       role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-write"
+      use_lockfile: true
 
   remote_state_backend_type: s3 # s3, remote, vault, azurerm, gcs, cloud, static
   remote_state_backend:
