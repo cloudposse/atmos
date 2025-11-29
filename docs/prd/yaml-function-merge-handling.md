@@ -49,7 +49,9 @@ Atmos processes YAML in a specific order:
 3. **Process Templates** - Go templates are rendered
 4. **Process YAML Functions** - YAML functions are evaluated
 
-The problem occurs because most YAML functions are processed **AFTER** merging (step 4), but during merge (step 2) they are still represented as strings. When `mergo` encounters a type mismatch (string vs list, string vs map), it throws an error because it has strict type checking enabled.
+The problem occurs because most YAML functions are processed **AFTER** merging (step 4), but during merge (step 2) they
+are still represented as strings. When `mergo` encounters a type mismatch (string vs. list, string vs. map), it throws
+an error because it has strict type checking enabled.
 
 ## YAML Functions Classification
 
@@ -81,7 +83,8 @@ Initially attempted to use a **custom `mergo` transformer** that allows type mis
 
 **Critical Issue**: The transformer interferes with normal deep-merging of nested structures.
 
-When `mergo` calls a transformer function and it returns `nil`, mergo interprets this as "field handled, skip further processing" - even if the transformer didn't actually modify anything. This breaks deep-merging of maps like `vars`, `settings`, etc.
+When `mergo` calls a transformer function and it returns `nil`, mergo interprets this as "field handled, skip further
+processing" - even if the transformer didn't actually modify anything. This breaks deep-merging of maps like `vars`, `settings`, etc.
 
 **Example of the problem**:
 ```yaml
@@ -97,9 +100,11 @@ vars:
     key2: value2
 ```
 
-With the transformer, when it sees both `vars` are maps and returns `nil` (thinking mergo will continue), mergo actually STOPS processing that field, preventing the deep-merge of `config`. Result: `.vars.stage` disappears, causing template errors.
+With the transformer, when it sees both `vars` are maps and returns `nil` (thinking `mergo` will continue),
+`mergo` actually STOPS processing that field, preventing the deep-merge of `config`. Result: `.vars.stage` disappears, causing template errors.
 
-**Conclusion**: The mergo transformer pattern is fundamentally incompatible with our needs because we cannot reliably signal "I didn't handle this, please continue with normal processing."
+**Conclusion**: The `mergo` transformer pattern is fundamentally incompatible with our needs because we cannot reliably
+signal "I didn't handle this, please continue with normal processing."
 
 ## Proposed Solution: Deferred Merge (v2.0)
 
@@ -120,7 +125,7 @@ Instead of trying to merge YAML functions during the initial merge phase, **defe
 - Replace YAML function with a placeholder to avoid type conflicts
 
 **Phase 2: Normal Merge**
-- Perform standard mergo merge without YAML functions (no type conflicts)
+- Perform standard `mergo` merge without YAML functions (no type conflicts)
 - Placeholders merge normally
 
 **Phase 3: Process and Re-Merge**
@@ -339,6 +344,7 @@ func MergeDeferredValues(values []*DeferredValue) (interface{}, error) {
 ## Deep-Merge Capability with Deferred Merge
 
 ### How Deferred Merge Solves the Problem
+
 The deferred merge approach **enables deep-merging with YAML functions**:
 
 ```yaml
@@ -448,7 +454,7 @@ vars:
   config: !template.merge '{{ toJson .settings.base }}'
 ```
 
-**Why rejected**: Requires users to understand implementation details, violates principle of least surprise
+**Why rejected**: Requires users to understand implementation details, violates the principle of least surprise
 
 #### Option 3: Current Approach (Deferred Merge)
 **Why selected**:
