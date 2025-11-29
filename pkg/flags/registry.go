@@ -178,11 +178,11 @@ func TerraformFlags() *FlagRegistry {
 	})
 
 	// From plan flag.
-	registry.Register(&StringFlag{
+	registry.Register(&BoolFlag{
 		Name:        "from-plan",
 		Shorthand:   "",
-		Default:     "",
-		Description: "Apply from previously generated plan file",
+		Default:     false,
+		Description: "Use previously generated plan file from deterministic location",
 		EnvVars:     []string{"ATMOS_FROM_PLAN"},
 	})
 

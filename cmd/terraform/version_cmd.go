@@ -20,8 +20,7 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Register completions for versionCmd_.
-	RegisterTerraformCompletions(versionCmd_)
+	// Note: No RegisterTerraformCompletions call - version command doesn't use components.
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(versionCmd_)

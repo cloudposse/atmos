@@ -19,8 +19,7 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Register completions for logoutCmd.
-	RegisterTerraformCompletions(logoutCmd)
+	// Note: No RegisterTerraformCompletions call - logout command doesn't use components.
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(logoutCmd)
