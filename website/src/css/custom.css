@@ -115,17 +115,8 @@ div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
     color: black;
 }
 
-html[data-theme='dark'] body {
-    background-image: url("/static/img/cloudposse-opaque.svg");
-}
-
 body {
     background-color: var(--ifm-background-color);
-    background-image: url("/static/img/cloudposse-light.svg");
-    background-position: 98% 98%;
-    background-repeat: no-repeat;
-    background-size: 15em;
-    background-attachment: fixed;
     font-family: 'Optimistic Text', -apple-system, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     font-size: 17px;
     line-height: 30px;
