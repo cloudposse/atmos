@@ -72,6 +72,7 @@ Example usage:
 			ComponentFromArg: component,
 			Stack:            stack,
 			SubCommand:       "plan-diff",
+			ComponentType:    cfg.TerraformComponentType,
 		}
 
 		// Store plan file paths in AdditionalArgsAndFlags for backward compatibility
