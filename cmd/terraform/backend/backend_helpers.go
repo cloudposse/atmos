@@ -204,7 +204,7 @@ func ExecuteProvisionCommand(cmd *cobra.Command, args []string, parser *flags.St
 			ProcessTemplates:     false,
 			ProcessYamlFunctions: false,
 			Skip:                 nil,
-			AuthManager:          nil, // Auth already handled
+			AuthManager:          nil, // Auth already handled.
 		})
 	}
 
