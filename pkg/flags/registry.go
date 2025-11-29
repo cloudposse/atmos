@@ -177,12 +177,14 @@ func TerraformFlags() *FlagRegistry {
 		EnvVars:     []string{"ATMOS_SKIP_INIT"},
 	})
 
-	// From plan flag.
-	registry.Register(&BoolFlag{
+	// From plan flag - accepts optional planfile path.
+	// If provided without value or with empty string, uses deterministic location.
+	// If provided with a path, uses that specific planfile.
+	registry.Register(&StringFlag{
 		Name:        "from-plan",
 		Shorthand:   "",
-		Default:     false,
-		Description: "Use previously generated plan file from deterministic location",
+		Default:     "",
+		Description: "Apply from plan file (uses deterministic location if path not specified)",
 		EnvVars:     []string{"ATMOS_FROM_PLAN"},
 	})
 

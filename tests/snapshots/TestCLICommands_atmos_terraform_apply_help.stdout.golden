@@ -27,15 +27,15 @@ EXAMPLES
 
 FLAGS
 
-      --affected         Apply the affected components in dependency order
+      --affected          Apply the affected components in dependency order
 
-      --all              Apply all components in all stacks
+      --all               Apply all components in all stacks
 
-      --from-plan        If set atmos will use the previously generated plan file
+      --from-plan string  Apply from plan file (uses deterministic location if path not specified)
 
-  -h, --help             help for apply
+  -h, --help              help for apply
 
-      --planfile string  Set the plan file to use
+      --planfile string   Set the plan file to use
 
 
 GLOBAL FLAGS

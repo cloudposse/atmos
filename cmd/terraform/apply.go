@@ -33,7 +33,7 @@ For complete Terraform/OpenTofu documentation, see:
 func init() {
 	// Create parser with apply-specific flags using functional options.
 	applyParser = flags.NewStandardParser(
-		flags.WithBoolFlag("from-plan", "", false, "If set atmos will use the previously generated plan file"),
+		flags.WithStringFlag("from-plan", "", "", "Apply from plan file (uses deterministic location if path not specified)"),
 		flags.WithStringFlag("planfile", "", "", "Set the plan file to use"),
 		flags.WithBoolFlag("affected", "", false, "Apply the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Apply all components in all stacks"),
