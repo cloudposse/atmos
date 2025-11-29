@@ -1,0 +1,28 @@
+# Base catalog with YAML functions
+# This simulates a reusable catalog that uses YAML functions
+
+components:
+  terraform:
+    base-component:
+      metadata:
+        type: abstract
+        component: yaml-function-test
+      vars:
+        # YAML function that will be overridden
+        template_config: !template '{{ toJson .settings.base_config }}'
+
+        # YAML function that returns a list
+        vpc_ids: !terraform.output vpc test vpc_ids
+
+        # YAML function that returns a map
+        network_config: !terraform.state network test config
+
+        # Regular values for comparison
+        environment: "base"
+        region: "us-east-1"
+
+      settings:
+        base_config:
+          enabled: true
+          timeout: 30
+          retries: 3
