@@ -56,6 +56,12 @@ atmos pro lock --help
 atmos pro unlock --help
 atmos terraform --help
 atmos terraform apply --help
+atmos terraform backend --help
+atmos terraform backend create --help
+atmos terraform backend delete --help
+atmos terraform backend describe --help
+atmos terraform backend list --help
+atmos terraform backend update --help
 atmos terraform clean --help
 atmos terraform console --help
 atmos terraform deploy --help
