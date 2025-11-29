@@ -2,7 +2,7 @@
  * Custom BlogSidebar/Desktop that adds a collapsible sidebar.
  * Collapsed by default to give more screen real estate to content.
  */
-import React, { memo, useState, useEffect } from 'react';
+import React, { memo, useState } from 'react';
 import clsx from 'clsx';
 import { translate } from '@docusaurus/Translate';
 import {
@@ -30,14 +30,6 @@ const ListComponent: BlogSidebarContentProps['ListComponent'] = ({ items }) => {
 function BlogSidebarDesktop({ sidebar }: Props) {
   const items = useVisibleBlogSidebarItems(sidebar.items);
   const [isCollapsed, setIsCollapsed] = useState(true);
-
-  // Auto-expand after a delay when user lands on page.
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      // Don't auto-expand - let user control it.
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, []);
 
   return (
     <aside
