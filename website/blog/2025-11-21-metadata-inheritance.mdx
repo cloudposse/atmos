@@ -11,22 +11,32 @@ Metadata now inherits from base components, just like `vars` and `settings`.
 
 ## The Problem
 
-You define a base component with governance settings, but every derived component still needs to repeat them:
+When managing infrastructure at scale, you want to enforce consistent governance policies across your components. Lock production components to prevent accidental changes. Use standardized workspace naming patterns. Apply the same metadata settings everywhere.
+
+But before this release, `metadata` didn't inherit from base components. Even though you could inherit `vars` and `settings`, you had to copy-paste metadata configuration to every derived component:
 
 ```yaml
-# You want to define this once...
+# You defined governance once...
 vpc/defaults:
   metadata:
     locked: true
     terraform_workspace_pattern: "{tenant}-{environment}-{stage}"
 
-# ...but you had to copy it everywhere
+# ...but had to repeat it everywhere
 vpc-prod:
   metadata:
     inherits: [vpc/defaults]
-    locked: true                        # Copy-pasted
-    terraform_workspace_pattern: "..."  # Copy-pasted
+    locked: true                        # Repeated
+    terraform_workspace_pattern: "..."  # Repeated
+
+vpc-staging:
+  metadata:
+    inherits: [vpc/defaults]
+    locked: true                        # Repeated again
+    terraform_workspace_pattern: "..."  # Repeated again
 ```
+
+This made governance settings harder to maintain and easier to forget.
 
 ## The Solution
 
