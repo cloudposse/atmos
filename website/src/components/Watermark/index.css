@@ -1,0 +1,47 @@
+/* Cloud Posse Logo - Fixed position in bottom right corner */
+.cloudposse-logo {
+  position: fixed;
+  bottom: 2%;
+  right: 2%;
+  width: 15em;
+  z-index: 100;
+  opacity: 0.5;
+  transition: opacity 0.2s ease-in-out;
+  text-decoration: none;
+}
+
+.cloudposse-logo:hover {
+  opacity: 0.8;
+}
+
+.cloudposse-logo img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Theme-based logo switching */
+/* Light mode: show light logo, hide dark logo */
+.cloudposse-logo__light {
+  display: block;
+}
+
+.cloudposse-logo__dark {
+  display: none;
+}
+
+/* Dark mode: show dark logo, hide light logo */
+html[data-theme='dark'] .cloudposse-logo__light {
+  display: none;
+}
+
+html[data-theme='dark'] .cloudposse-logo__dark {
+  display: block;
+}
+
+/* Hide on mobile to avoid interfering with content */
+@media (max-width: 768px) {
+  .cloudposse-logo {
+    display: none;
+  }
+}
