@@ -19,8 +19,8 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags
-	setCustomHelp(consoleCmd, ConsoleCompatFlagDescriptions())
+	// Set custom help to show terraform native flags.
+	setCustomHelp(consoleCmd)
 
 	// Register completions for consoleCmd.
 	RegisterTerraformCompletions(consoleCmd)

@@ -50,7 +50,7 @@ func init() {
 	}
 
 	// Set custom help to show terraform native flags.
-	setCustomHelp(applyCmd, ApplyCompatFlagDescriptions())
+	setCustomHelp(applyCmd)
 
 	// Register completions for apply command.
 	RegisterTerraformCompletions(applyCmd)

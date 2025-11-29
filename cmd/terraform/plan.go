@@ -46,7 +46,7 @@ func init() {
 	}
 
 	// Set custom help to show terraform native flags.
-	setCustomHelp(planCmd, PlanCompatFlagDescriptions())
+	setCustomHelp(planCmd)
 
 	// Register completions for plan command.
 	RegisterTerraformCompletions(planCmd)
