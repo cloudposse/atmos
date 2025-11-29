@@ -157,8 +157,7 @@ tests:
         - "## Explanation"
         - "The --from-step flag was set to dne, but this step does not exist in workflow"
         - "pass"
-        - "## Hints"
-        - "Available steps:"
+        - "### Available steps:"
         - "step1"
       exit_code: 1
 

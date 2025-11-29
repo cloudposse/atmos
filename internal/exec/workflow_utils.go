@@ -119,8 +119,7 @@ func ExecuteWorkflow(
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
 			return errUtils.Build(ErrInvalidFromStep).
 				WithTitle(WorkflowErrTitle).
-				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.", fromStep, workflow).
-				WithHintf("Available steps:\n%s", FormatList(stepNames)).
+				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.\n\n### Available steps:\n\n%s", fromStep, workflow, FormatList(stepNames)).
 				WithContext("from_step", fromStep).
 				WithContext("workflow", workflow).
 				WithExitCode(1).
