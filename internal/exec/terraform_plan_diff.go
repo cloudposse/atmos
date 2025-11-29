@@ -41,6 +41,15 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		return err
 	}
 
+	// Process stacks to resolve component info (FinalComponent, ComponentFolderPrefix, etc.)
+	// before using them to construct paths.
+	resolvedInfo, err := ProcessStacks(atmosConfig, *info, true, false, false, nil, nil)
+	if err != nil {
+		return err
+	}
+	// Update the info pointer with resolved values.
+	*info = resolvedInfo
+
 	// Create a temporary directory for all temporary files
 	tmpDir, err := os.MkdirTemp("", "atmos-terraform-plan-diff")
 	if err != nil {
