@@ -19,8 +19,7 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Register completions for metadataCmd.
-	RegisterTerraformCompletions(metadataCmd)
+	// Note: No RegisterTerraformCompletions call - metadata command doesn't use components.
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(metadataCmd)

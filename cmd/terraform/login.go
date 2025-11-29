@@ -19,8 +19,7 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Register completions for loginCmd.
-	RegisterTerraformCompletions(loginCmd)
+	// Note: No RegisterTerraformCompletions call - login command doesn't use components.
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(loginCmd)

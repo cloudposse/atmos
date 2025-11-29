@@ -36,7 +36,11 @@ func GetSeparated() []string {
 
 	separatedMu.RLock()
 	defer separatedMu.RUnlock()
-	return globalSeparatedArgs
+	if globalSeparatedArgs == nil {
+		return nil
+	}
+	// Return a defensive copy to prevent data races.
+	return append([]string{}, globalSeparatedArgs...)
 }
 
 // ResetSeparated clears the separated args. Used for testing.

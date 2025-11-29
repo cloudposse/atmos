@@ -15,8 +15,8 @@ import (
 
 const commandStr = "command"
 
-// shouldProcessStacks determines whether to process stacks and check stack configuration
-// based on the command type and provided arguments.
+// shouldProcessStacks determines whether to process stacks and check stack configuration.
+// Based on the command type and provided arguments.
 func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (shouldProcess bool, shouldCheckStack bool) {
 	// For clean command, special logic applies.
 	if info.SubCommand == "clean" {

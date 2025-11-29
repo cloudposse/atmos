@@ -2,12 +2,15 @@ package terraform
 
 import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // TerraformCompatFlags returns the compatibility flags for terraform commands.
 // These flags are NOT parsed by Cobra but are passed through to terraform/tofu.
 // They are documented in help output to inform users about available options.
 func TerraformCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.TerraformCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		// Common terraform flags that should pass through.
 		"-var":              {Behavior: compat.AppendToSeparated, Description: "Set a value for one of the input variables"},
@@ -25,6 +28,8 @@ func TerraformCompatFlags() map[string]compat.CompatibilityFlag {
 
 // PlanCompatFlags returns compatibility flags specific to terraform plan.
 func PlanCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.PlanCompatFlags")()
+
 	flags := TerraformCompatFlags()
 	// Plan-specific flags.
 	flags["-destroy"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Create a plan to destroy all remote objects"}
@@ -39,6 +44,8 @@ func PlanCompatFlags() map[string]compat.CompatibilityFlag {
 
 // ApplyCompatFlags returns compatibility flags specific to terraform apply.
 func ApplyCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.ApplyCompatFlags")()
+
 	flags := TerraformCompatFlags()
 	// Apply-specific flags.
 	flags["-auto-approve"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Skip interactive approval of plan before applying"}
@@ -54,6 +61,8 @@ func ApplyCompatFlags() map[string]compat.CompatibilityFlag {
 
 // DestroyCompatFlags returns compatibility flags specific to terraform destroy.
 func DestroyCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.DestroyCompatFlags")()
+
 	flags := TerraformCompatFlags()
 	// Destroy-specific flags.
 	flags["-auto-approve"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Skip interactive approval before destroying"}
@@ -66,6 +75,8 @@ func DestroyCompatFlags() map[string]compat.CompatibilityFlag {
 
 // InitCompatFlags returns compatibility flags specific to terraform init.
 func InitCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.InitCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		"-backend":               {Behavior: compat.AppendToSeparated, Description: "Configure backend for this configuration (default: true)"},
 		"-backend-config":        {Behavior: compat.AppendToSeparated, Description: "Backend configuration to merge with configuration file"},
@@ -87,6 +98,8 @@ func InitCompatFlags() map[string]compat.CompatibilityFlag {
 
 // ValidateCompatFlags returns compatibility flags specific to terraform validate.
 func ValidateCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.ValidateCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		"-json":           {Behavior: compat.AppendToSeparated, Description: "Output validation results in JSON format"},
 		"-no-color":       {Behavior: compat.AppendToSeparated, Description: "Disable color output"},
@@ -97,6 +110,8 @@ func ValidateCompatFlags() map[string]compat.CompatibilityFlag {
 
 // RefreshCompatFlags returns compatibility flags specific to terraform refresh.
 func RefreshCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.RefreshCompatFlags")()
+
 	flags := TerraformCompatFlags()
 	flags["-backup"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to backup the existing state file"}
 	flags["-state"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to read and save state"}
@@ -106,6 +121,8 @@ func RefreshCompatFlags() map[string]compat.CompatibilityFlag {
 
 // OutputCompatFlags returns compatibility flags specific to terraform output.
 func OutputCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.OutputCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		"-json":     {Behavior: compat.AppendToSeparated, Description: "Output in JSON format"},
 		"-raw":      {Behavior: compat.AppendToSeparated, Description: "Output raw string value without quotes"},
@@ -116,6 +133,8 @@ func OutputCompatFlags() map[string]compat.CompatibilityFlag {
 
 // ShowCompatFlags returns compatibility flags specific to terraform show.
 func ShowCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.ShowCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		"-json":     {Behavior: compat.AppendToSeparated, Description: "Output in JSON format"},
 		"-no-color": {Behavior: compat.AppendToSeparated, Description: "Disable color output"},
@@ -124,6 +143,8 @@ func ShowCompatFlags() map[string]compat.CompatibilityFlag {
 
 // StateCompatFlags returns compatibility flags specific to terraform state commands.
 func StateCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.StateCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		"-state":        {Behavior: compat.AppendToSeparated, Description: "Path to the state file"},
 		"-state-out":    {Behavior: compat.AppendToSeparated, Description: "Path to write updated state"},
@@ -135,6 +156,8 @@ func StateCompatFlags() map[string]compat.CompatibilityFlag {
 
 // ImportCompatFlags returns compatibility flags specific to terraform import.
 func ImportCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.ImportCompatFlags")()
+
 	flags := TerraformCompatFlags()
 	flags["-config"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to directory of Terraform configuration files"}
 	flags["-allow-missing-config"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Allow import when no resource configuration block exists"}
@@ -145,6 +168,8 @@ func ImportCompatFlags() map[string]compat.CompatibilityFlag {
 
 // TaintCompatFlags returns compatibility flags specific to terraform taint.
 func TaintCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.TaintCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		"-allow-missing": {Behavior: compat.AppendToSeparated, Description: "Succeed even if the resource is missing"},
 		"-lock":          {Behavior: compat.AppendToSeparated, Description: "Lock the state file"},
@@ -156,11 +181,15 @@ func TaintCompatFlags() map[string]compat.CompatibilityFlag {
 
 // UntaintCompatFlags returns compatibility flags specific to terraform untaint.
 func UntaintCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.UntaintCompatFlags")()
+
 	return TaintCompatFlags() // Same flags as taint.
 }
 
 // FmtCompatFlags returns compatibility flags specific to terraform fmt.
 func FmtCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.FmtCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		"-list":      {Behavior: compat.AppendToSeparated, Description: "List files with formatting differences (default: true)"},
 		"-write":     {Behavior: compat.AppendToSeparated, Description: "Write formatted files (default: true)"},
@@ -173,6 +202,8 @@ func FmtCompatFlags() map[string]compat.CompatibilityFlag {
 
 // GraphCompatFlags returns compatibility flags specific to terraform graph.
 func GraphCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.GraphCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		"-type":         {Behavior: compat.AppendToSeparated, Description: "Type of graph to output (plan, plan-refresh-only, plan-destroy, apply)"},
 		"-draw-cycles":  {Behavior: compat.AppendToSeparated, Description: "Highlight cycles in the graph"},
@@ -183,6 +214,8 @@ func GraphCompatFlags() map[string]compat.CompatibilityFlag {
 
 // ForceUnlockCompatFlags returns compatibility flags specific to terraform force-unlock.
 func ForceUnlockCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.ForceUnlockCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		"-force": {Behavior: compat.AppendToSeparated, Description: "Don't ask for confirmation"},
 	}
@@ -190,6 +223,8 @@ func ForceUnlockCompatFlags() map[string]compat.CompatibilityFlag {
 
 // GetCompatFlags returns compatibility flags specific to terraform get.
 func GetCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.GetCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		"-update":         {Behavior: compat.AppendToSeparated, Description: "Check for and download updated modules"},
 		"-no-color":       {Behavior: compat.AppendToSeparated, Description: "Disable color output"},
@@ -199,6 +234,8 @@ func GetCompatFlags() map[string]compat.CompatibilityFlag {
 
 // TestCompatFlags returns compatibility flags specific to terraform test.
 func TestCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.TestCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		"-filter":         {Behavior: compat.AppendToSeparated, Description: "Filter test files to run"},
 		"-json":           {Behavior: compat.AppendToSeparated, Description: "Output results in JSON format"},
@@ -212,6 +249,8 @@ func TestCompatFlags() map[string]compat.CompatibilityFlag {
 
 // ConsoleCompatFlags returns compatibility flags specific to terraform console.
 func ConsoleCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.ConsoleCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		"-state":    {Behavior: compat.AppendToSeparated, Description: "Path to the state file"},
 		"-var":      {Behavior: compat.AppendToSeparated, Description: "Set a variable in the console"},
@@ -222,6 +261,8 @@ func ConsoleCompatFlags() map[string]compat.CompatibilityFlag {
 
 // WorkspaceCompatFlags returns compatibility flags specific to terraform workspace commands.
 func WorkspaceCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.WorkspaceCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{
 		"-lock":         {Behavior: compat.AppendToSeparated, Description: "Lock the state file"},
 		"-lock-timeout": {Behavior: compat.AppendToSeparated, Description: "Duration to retry state lock"},
@@ -232,6 +273,8 @@ func WorkspaceCompatFlags() map[string]compat.CompatibilityFlag {
 // ProvidersCompatFlags returns compatibility flags specific to terraform providers.
 // Note: terraform providers has no special flags beyond standard terraform flags.
 func ProvidersCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.ProvidersCompatFlags")()
+
 	return map[string]compat.CompatibilityFlag{}
 }
 
@@ -240,6 +283,8 @@ func ProvidersCompatFlags() map[string]compat.CompatibilityFlag {
 // before Cobra parses the command line. By combining all possible flags, we can
 // correctly separate pass-through flags regardless of which subcommand is being called.
 func AllTerraformCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.AllTerraformCompatFlags")()
+
 	flags := make(map[string]compat.CompatibilityFlag)
 
 	// Merge all subcommand-specific flags.
@@ -269,6 +314,7 @@ func AllTerraformCompatFlags() map[string]compat.CompatibilityFlag {
 	mergeFlags(TestCompatFlags())
 	mergeFlags(ConsoleCompatFlags())
 	mergeFlags(WorkspaceCompatFlags())
+	mergeFlags(ProvidersCompatFlags())
 
 	return flags
 }
