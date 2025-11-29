@@ -10,15 +10,16 @@ import styles from './styles.module.css';
 const LINK_CLASS_NAME = 'table-of-contents__link toc-highlight';
 const LINK_ACTIVE_CLASS_NAME = 'table-of-contents__link--active';
 
-// Safe hook to get blog post metadata.
-// biome-ignore lint/correctness/useHookAtTopLevel: safe conditional import for optional blog plugin
-function useBlogPostSafe() {
-  try {
-    const { useBlogPost } = require('@docusaurus/plugin-content-blog/client');
-    return useBlogPost();
-  } catch {
-    return null;
-  }
+// Try to import the blog hook at module scope. If the blog plugin isn't
+// available, we fall back to a no-op hook that returns null.
+let useBlogPost: () => { frontMatter?: Record<string, unknown> } | null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const blogClient = require('@docusaurus/plugin-content-blog/client');
+  useBlogPost = blogClient.useBlogPost;
+} catch {
+  // Blog plugin not available - provide a no-op hook.
+  useBlogPost = () => null;
 }
 
 function ReleaseBadge({ release }: { release: string }): JSX.Element {
@@ -43,7 +44,9 @@ function ReleaseBadge({ release }: { release: string }): JSX.Element {
 }
 
 export default function TOC({ className, ...props }: Props): JSX.Element {
-  const blogPost = useBlogPostSafe();
+  // Hook is always called unconditionally - useBlogPost is either the real
+  // hook or a no-op that returns null (set at module scope).
+  const blogPost = useBlogPost();
   const release = blogPost?.frontMatter?.release as string | undefined;
 
   return (
