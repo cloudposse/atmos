@@ -1,2 +1,94 @@
-{}
+acme-platform-dev:
+  components:
+    terraform:
+      mock:
+        atmos_component: mock
+        atmos_manifest: orgs/acme/platform/dev
+        atmos_stack: acme-platform-dev
+        atmos_stack_file: orgs/acme/platform/dev
+        auth: {}
+        backend: {}
+        backend_type: ""
+        command: terraform
+        component: mock
+        env: {}
+        hooks: {}
+        inheritance: []
+        metadata: {}
+        overrides: {}
+        providers: {}
+        remote_state_backend: {}
+        remote_state_backend_type: ""
+        settings: {}
+        stack: acme-platform-dev
+        vars:
+          bar: bar dev override
+          baz: baz catalog default
+          foo: foo dev override
+          namespace: acme
+          stage: dev
+          tenant: platform
+        workspace: acme-platform-dev
+acme-platform-prod:
+  components:
+    terraform:
+      mock:
+        atmos_component: mock
+        atmos_manifest: orgs/acme/platform/prod
+        atmos_stack: acme-platform-prod
+        atmos_stack_file: orgs/acme/platform/prod
+        auth: {}
+        backend: {}
+        backend_type: ""
+        command: terraform
+        component: mock
+        env: {}
+        hooks: {}
+        inheritance: []
+        metadata: {}
+        overrides: {}
+        providers: {}
+        remote_state_backend: {}
+        remote_state_backend_type: ""
+        settings: {}
+        stack: acme-platform-prod
+        vars:
+          bar: bar prod override
+          baz: baz catalog default
+          foo: foo prod override
+          namespace: acme
+          stage: prod
+          tenant: platform
+        workspace: acme-platform-prod
+acme-platform-staging:
+  components:
+    terraform:
+      mock:
+        atmos_component: mock
+        atmos_manifest: orgs/acme/platform/staging
+        atmos_stack: acme-platform-staging
+        atmos_stack_file: orgs/acme/platform/staging
+        auth: {}
+        backend: {}
+        backend_type: ""
+        command: terraform
+        component: mock
+        env: {}
+        hooks: {}
+        inheritance: []
+        metadata: {}
+        overrides: {}
+        providers: {}
+        remote_state_backend: {}
+        remote_state_backend_type: ""
+        settings: {}
+        stack: acme-platform-staging
+        vars:
+          bar: bar staging override
+          baz: baz catalog default
+          foo: foo staging override
+          namespace: acme
+          stage: staging
+          tenant: platform
+        workspace: acme-platform-staging
 

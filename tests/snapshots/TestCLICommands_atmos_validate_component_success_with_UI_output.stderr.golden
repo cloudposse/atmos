@@ -1,27 +1,4 @@
 
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 Validating Atmos Component: test/test-component-override
-
-x Component validation failed
-
-# Error
-
-**Error:** invalid stack manifest
-
-## Explanation
-
-template: catalog/terraform/service-iam-role/defaults.tmpl:5:40: executing
-"catalog/terraform/service-iam-role/defaults.tmpl" at <.service_environment>:
-map
-has no entry for key "service_environment"
-
- File being processed: catalog/terraform/service-iam-role/defaults.tmpl
- Import chain:
-   → orgs/cp/tenant2/prod/us-east-2.yaml
-     → catalog/terraform/service-iam-role/webservices/prod.yaml
-     → catalog/terraform/service-iam-role/webservices/prod.defaults.tmpl
-     → catalog/terraform/service-iam-role/webservices/defaults.tmpl
-     → catalog/terraform/service-iam-role/defaults.tmpl
- stack manifest 'catalog/terraform/service-iam-role/defaults.tmpl'
-
-
+✓ Component validated successfully

@@ -1,12 +1,10 @@
 
 # Error
 
-**Error:** invalid component
+**Error:** locked component cannot be provisioned
 
 ## Explanation
 
-Could not find the component mock in the stack prod. Check that all the context
-variables are correctly defined in the stack manifests. Are the component and
-stack names correct? Did you forget an import?
+component 'mock' cannot be modified (metadata.locked: true)
 
 
