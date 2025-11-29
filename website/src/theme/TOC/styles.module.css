@@ -16,7 +16,12 @@
 }
 
 .releaseContainer {
-  margin-bottom: 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.25rem;
+  background: var(--ifm-background-color);
 }
 
 .releaseBadge {
