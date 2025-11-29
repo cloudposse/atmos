@@ -20,7 +20,7 @@ For complete Terraform/OpenTofu documentation, see:
 
 func init() {
 	// Set custom help to show terraform native flags.
-	setCustomHelp(destroyCmd, DestroyCompatFlagDescriptions())
+	setCustomHelp(destroyCmd)
 
 	// Register completions for destroy command.
 	RegisterTerraformCompletions(destroyCmd)

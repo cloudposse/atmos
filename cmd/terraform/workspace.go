@@ -29,8 +29,8 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags
-	setCustomHelp(workspaceCmd, WorkspaceCompatFlagDescriptions())
+	// Set custom help to show terraform native flags.
+	setCustomHelp(workspaceCmd)
 
 	// Register completions for workspaceCmd.
 	RegisterTerraformCompletions(workspaceCmd)

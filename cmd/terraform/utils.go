@@ -273,8 +273,8 @@ func addIdentityCompletion(cmd *cobra.Command) {
 }
 
 // setCustomHelp sets up a custom help function for a terraform subcommand that includes
-// compatibility flags documentation in the help output.
-func setCustomHelp(cmd *cobra.Command, descriptions []CompatFlagDescription) {
+// compatibility flags documentation. Flags are automatically looked up by command name.
+func setCustomHelp(cmd *cobra.Command) {
 	cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
 		// Get parent help function at runtime (not captured during init).
 		// This ensures we use the properly initialized RootCmd help function.
@@ -283,9 +283,9 @@ func setCustomHelp(cmd *cobra.Command, descriptions []CompatFlagDescription) {
 		// Call parent help to render standard help template.
 		parentHelp(c, args)
 
-		// Append compatibility flags section.
-		if len(descriptions) > 0 {
-			fmt.Print(FormatCompatFlagsHelp(descriptions))
+		// Auto-lookup flags by command name and append to help.
+		if flags := GetCompatFlagsForCommand(c.Name()); len(flags) > 0 {
+			fmt.Print(FormatCompatFlagsHelpFromMap(flags))
 		}
 	})
 }
