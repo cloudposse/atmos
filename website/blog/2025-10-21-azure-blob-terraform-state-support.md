@@ -1,10 +1,14 @@
 ---
 slug: azure-blob-terraform-state-support
-title: "Azure Blob Storage Support for !terraform.state Function"
-sidebar_label: "Azure Blob Storage for !terraform.state"
-authors: [jamengual]
-tags: [feature, terraform]
-date: 2025-10-21
+title: Azure Blob Storage Support for !terraform.state Function
+sidebar_label: Azure Blob Storage for !terraform.state
+authors:
+  - jamengual
+tags:
+  - feature
+  - terraform
+date: 2025-10-21T00:00:00.000Z
+release: v1.196.0
 ---
 
 Atmos now supports Azure Blob Storage backends in the `!terraform.state` YAML function. Read Terraform outputs directly from Azure-backed state files without initializing Terraform—bringing the same blazing-fast performance to Azure that S3 users already enjoy.

@@ -1,8 +1,14 @@
 ---
 slug: safe-logout-preserves-keychain
-title: "Safe Logout: Preserve Keychain Credentials by Default"
-authors: [osterman]
-tags: [atmos, authentication, ux, breaking-changes]
+title: 'Safe Logout: Preserve Keychain Credentials by Default'
+authors:
+  - osterman
+tags:
+  - atmos
+  - authentication
+  - ux
+  - breaking-changes
+release: v1.199.0
 ---
 
 `atmos auth logout` now preserves keychain credentials by default for faster re-authentication. Only session data is cleared. Use `--keychain` to permanently delete credentials.

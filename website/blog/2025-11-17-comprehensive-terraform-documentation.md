@@ -1,8 +1,13 @@
 ---
 slug: comprehensive-terraform-documentation
 title: Comprehensive Terraform Documentation and Enhanced Help System
-authors: [osterman]
-tags: [terraform, documentation, contributors]
+authors:
+  - osterman
+tags:
+  - terraform
+  - documentation
+  - contributors
+release: v1.200.0
 ---
 
 We're excited to announce major improvements to Atmos documentation, making it easier than ever to understand and use Terraform commands with Atmos. This release focuses on comprehensive command documentation, automated screengrab generation, and an improved help system.

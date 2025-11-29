@@ -1,9 +1,13 @@
 ---
 slug: pro-instances-api-query-params
-title: "Atmos Pro: Instances API Migration to Query Parameters"
-authors: [atmos]
-tags: [bugfix, enhancement]
-date: 2025-10-28
+title: 'Atmos Pro: Instances API Migration to Query Parameters'
+authors:
+  - atmos
+tags:
+  - bugfix
+  - enhancement
+date: 2025-10-28T00:00:00.000Z
+release: v1.196.0
 ---
 
 Updated the Atmos Pro integration to use query parameters for the instances API endpoint, fixing issues with stack and component names containing slashes and improving API compatibility.

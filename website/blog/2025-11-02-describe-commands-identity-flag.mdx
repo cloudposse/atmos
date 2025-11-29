@@ -1,8 +1,13 @@
 ---
 slug: describe-commands-identity-flag
-title: "Identity Flag Support for Describe Commands"
-authors: [atmos]
-tags: [feature, auth, describe-commands]
+title: Identity Flag Support for Describe Commands
+authors:
+  - atmos
+tags:
+  - feature
+  - auth
+  - describe-commands
+release: v1.197.0
 ---
 
 The `atmos describe` family of commands now supports the `--identity` flag, enabling runtime authentication when processing YAML template functions that access remote resources. This ensures that `!terraform.state` and `!terraform.output` functions work seamlessly without relying on ambient credentials.

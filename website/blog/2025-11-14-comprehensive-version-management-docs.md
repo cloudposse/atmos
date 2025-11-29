@@ -1,8 +1,15 @@
 ---
 slug: comprehensive-version-management-documentation
-title: "New Comprehensive Version Management Documentation"
-authors: [osterman]
-tags: [atmos, documentation, version-management, versioning, deployment-strategies]
+title: New Comprehensive Version Management Documentation
+authors:
+  - osterman
+tags:
+  - atmos
+  - documentation
+  - version-management
+  - versioning
+  - deployment-strategies
+release: v1.199.0
 ---
 
 There's no one-size-fits-all approach to version management. Through years of experience implementing infrastructure across hundreds of organizations, we've seen different versioning patterns work better depending on what you want to optimize for—whether that's simplicity, control, regulatory compliance, or development velocity.

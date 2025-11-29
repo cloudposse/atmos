@@ -1,9 +1,15 @@
 ---
 slug: auth-and-utility-commands-no-longer-require-stacks
 title: Auth and Utility Commands No Longer Require Stack Configurations
-authors: [atmos]
-tags: [atmos, enhancement, dx, auth]
-date: 2025-10-26
+authors:
+  - atmos
+tags:
+  - atmos
+  - enhancement
+  - dx
+  - auth
+date: 2025-10-26T00:00:00.000Z
+release: v1.196.0
 ---
 
 Atmos auth, documentation, and workflow management commands now work independently of stack configurations, making it easier to use Atmos in CI/CD pipelines and alongside "native" Terraform workflows.

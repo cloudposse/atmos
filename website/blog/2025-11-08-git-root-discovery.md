@@ -1,9 +1,15 @@
 ---
 slug: git-root-discovery
-title: "Run Atmos from Any Subdirectory"
-authors: [osterman]
-tags: [atmos, cli, productivity, developer-experience]
-date: 2025-11-08
+title: Run Atmos from Any Subdirectory
+authors:
+  - osterman
+tags:
+  - atmos
+  - cli
+  - productivity
+  - developer-experience
+date: 2025-11-08T00:00:00.000Z
+release: v1.198.0
 ---
 
 Atmos now automatically discovers your repository root and runs from there, just like Git. No more `cd`-ing back to the root directory.

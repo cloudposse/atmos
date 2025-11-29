@@ -1,0 +1,51 @@
+/**
+ * Styles for the release version badge in blog post headers.
+ */
+
+.headerWrapper {
+  position: relative;
+}
+
+.releaseContainer {
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.releaseBadge {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 4px;
+  background-color: var(--ifm-color-primary-lightest);
+  color: var(--ifm-color-primary-darkest);
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+.releaseBadge:hover {
+  background-color: var(--ifm-color-primary-light);
+  text-decoration: none;
+  color: var(--ifm-color-primary-darkest);
+}
+
+.releaseBadge.unreleased {
+  background-color: var(--ifm-color-gray-300);
+  color: var(--ifm-color-gray-700);
+  cursor: default;
+}
+
+/* Dark mode adjustments */
+[data-theme='dark'] .releaseBadge {
+  background-color: var(--ifm-color-primary-dark);
+  color: var(--ifm-color-white);
+}
+
+[data-theme='dark'] .releaseBadge:hover {
+  background-color: var(--ifm-color-primary);
+}
+
+[data-theme='dark'] .releaseBadge.unreleased {
+  background-color: var(--ifm-color-gray-700);
+  color: var(--ifm-color-gray-300);
+}

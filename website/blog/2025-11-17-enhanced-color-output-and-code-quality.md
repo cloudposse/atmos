@@ -1,8 +1,12 @@
 ---
 slug: enhanced-color-output-and-code-quality
 title: Enhanced Color Output Support and Code Quality Improvements
-authors: [osterman]
-tags: [cli, contributors]
+authors:
+  - osterman
+tags:
+  - cli
+  - contributors
+release: v1.200.0
 ---
 
 This release brings powerful enhancements to color output in CI/CD environments and significant code quality improvements that make Atmos more maintainable and performant.
