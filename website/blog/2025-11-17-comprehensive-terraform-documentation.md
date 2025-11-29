@@ -10,7 +10,7 @@ tags:
 release: v1.200.0
 ---
 
-We're excited to announce major improvements to Atmos documentation, making it easier than ever to understand and use Terraform commands with Atmos. This release focuses on comprehensive command documentation, automated screengrab generation, and an improved help system.
+This release brings documentation improvements to Atmos, making it easier to understand and use Terraform commands. We've focused on comprehensive command documentation and automated screengrab generation.
 
 <!-- truncate -->
 
@@ -30,20 +30,6 @@ Key additions include:
 - Best practices for using Terraform with Atmos.
 
 [View Terraform Documentation](/cli/commands/terraform/usage)
-
-## Improved Help System
-
-The help system has been completely refactored for better maintainability and user experience:
-
-- **Reduced cognitive complexity** - Large functions split into smaller, testable units
-- **Consistent formatting** - All help text now uses proper markdown rendering
-- **Better color profiles** - Automatic detection with TrueColor, ANSI256, and ASCII fallbacks
-- **Performance tracking** - Built-in instrumentation for monitoring command execution
-
-Example improvements:
-- `renderFlags()` function reduced from 94 lines to focused 20-line implementation
-- `configureWriter()` split into 5 specialized functions
-- Added comprehensive unit tests for help rendering logic
 
 ## Screengrab Generation Infrastructure
 
@@ -65,14 +51,6 @@ Numerous documentation improvements including:
 - Updated helmfile sync description to accurately reflect behavior
 - Added security warnings for credential handling in planfiles
 - Improved Markdown formatting consistency
-
-## Upgrade Notes
-
-This release maintains backward compatibility. To take advantage of the new features:
-
-1. Update to the latest Atmos version
-2. Review the new [Terraform documentation](/cli/commands/terraform/usage)
-3. Check your workflows against the updated command descriptions
 
 ## Contributors
 
