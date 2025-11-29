@@ -11,7 +11,7 @@ Metadata now inherits from base components, just like `vars` and `settings`.
 
 ## The Problem
 
-When managing infrastructure at scale, you want to enforce consistent governance policies across your components. Lock critical infrastructure to prevent accidental changes. Use standardized workspace naming patterns. Document component ownership. Apply the same metadata settings everywhere.
+When managing infrastructure at scale, you want to enforce consistent governance policies across your components. Pin all instances to the same component version. Lock critical infrastructure to prevent accidental changes. Use standardized workspace naming patterns. Document component ownership.
 
 But before this release, `metadata` didn't inherit from base components. Even though you could inherit `vars` and `settings`, you had to copy-paste metadata configuration to every derived component:
 
@@ -19,16 +19,18 @@ But before this release, `metadata` didn't inherit from base components. Even th
 # You defined governance once...
 vpc/defaults:
   metadata:
+    type: abstract
+    component: vpc/v2                                             # Pin to version
     locked: true
     terraform_workspace_pattern: "{tenant}-{environment}-{stage}"
     description: "Virtual Private Cloud network configuration"
     owner: "platform-team"
 
-# ...but had to repeat it for every VPC instance
+# ...but had to repeat EVERYTHING for each instance
 vpc/primary:
   metadata:
     inherits: [vpc/defaults]
-    component: vpc
+    component: vpc/v2                                             # Repeated
     locked: true                                                  # Repeated
     terraform_workspace_pattern: "{tenant}-{environment}-{stage}" # Repeated
     description: "Virtual Private Cloud network configuration"    # Repeated
@@ -37,14 +39,14 @@ vpc/primary:
 vpc/secondary:
   metadata:
     inherits: [vpc/defaults]
-    component: vpc
+    component: vpc/v2                                             # Repeated again
     locked: true                                                  # Repeated again
     terraform_workspace_pattern: "{tenant}-{environment}-{stage}" # Repeated again
     description: "Virtual Private Cloud network configuration"    # Repeated again
     owner: "platform-team"                                        # Repeated again
 ```
 
-This made governance settings harder to maintain and easier to forget.
+The biggest pain? When upgrading to `vpc/v3`, you had to update the component version in every single instance. Miss one, and you'd have components running different versions with no indication why.
 
 ## The Solution
 
@@ -54,6 +56,7 @@ Now it just works:
 vpc/defaults:
   metadata:
     type: abstract
+    component: vpc/v2                                             # Define version once
     locked: true
     terraform_workspace_pattern: "{tenant}-{environment}-{stage}"
     description: "Virtual Private Cloud network configuration"
@@ -62,15 +65,15 @@ vpc/defaults:
 vpc/primary:
   metadata:
     inherits: [vpc/defaults]
-    component: vpc
-    # locked, terraform_workspace_pattern, description, and owner are all inherited
+    # component, locked, terraform_workspace_pattern, description, and owner are all inherited
 
 vpc/secondary:
   metadata:
     inherits: [vpc/defaults]
-    component: vpc
     # All governance settings inherited - no repetition needed
 ```
+
+Want to upgrade to `vpc/v3`? Change it once in `vpc/defaults`, and all instances inherit the new version automatically.
 
 The only field that doesn't inherit is `metadata.inherits` itself.
 
