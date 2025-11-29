@@ -590,8 +590,22 @@ func processArgsAndFlags(
 			}
 		}
 
+		// Handle --from-plan with optional planfile path.
+		// --from-plan (no value): uses deterministic location.
+		// --from-plan=<path>: uses specified planfile.
+		// --from-plan <path>: uses specified planfile (if next arg doesn't start with -).
 		if arg == cfg.FromPlanFlag {
 			info.UseTerraformPlan = true
+			// Check if next argument is the planfile path (not another flag).
+			if len(inputArgsAndFlags) > (i+1) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
+				info.PlanFile = inputArgsAndFlags[i+1]
+			}
+		} else if strings.HasPrefix(arg, cfg.FromPlanFlag+"=") {
+			info.UseTerraformPlan = true
+			planFilePath := strings.TrimPrefix(arg, cfg.FromPlanFlag+"=")
+			if planFilePath != "" {
+				info.PlanFile = planFilePath
+			}
 		}
 
 		if arg == cfg.DryRunFlag {

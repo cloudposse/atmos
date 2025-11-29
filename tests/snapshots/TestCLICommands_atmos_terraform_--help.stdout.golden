@@ -69,7 +69,7 @@ FLAGS
 
       --dry-run                   Perform dry run without making actual changes
 
-      --from-plan string          Apply from previously generated plan file
+      --from-plan string          Apply from plan file (uses deterministic location if path not specified)
 
   -h, --help                      help for terraform
 
