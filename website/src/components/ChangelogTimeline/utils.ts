@@ -85,17 +85,6 @@ export function compareVersionsDescending(a: string, b: string): number {
 }
 
 /**
- * Sorts blog posts by release version (unreleased first, then descending semver).
- */
-export function sortByReleaseVersion(items: BlogPostItem[]): BlogPostItem[] {
-  return [...items].sort((a, b) => {
-    const releaseA = a.content.frontMatter?.release || 'unreleased';
-    const releaseB = b.content.frontMatter?.release || 'unreleased';
-    return compareVersionsDescending(releaseA, releaseB);
-  });
-}
-
-/**
  * Groups blog posts by release version, sorted with unreleased first then descending.
  */
 export function groupBlogPostsByRelease(items: BlogPostItem[]): ReleaseGroup[] {
