@@ -12,9 +12,13 @@ tags:
 release: v1.199.0
 ---
 
-There's no one-size-fits-all approach to version management. Through years of experience implementing infrastructure across hundreds of organizations, we've seen different versioning patterns work better depending on what you want to optimize for—whether that's simplicity, control, regulatory compliance, or development velocity.
+When you deploy infrastructure across multiple environments—dev, staging, production—you need a way to manage which version of each component runs where. Maybe your VPC module in dev is testing new CIDR ranges, while production stays on the stable version until you're confident the changes work.
 
-This new documentation captures the versioning patterns we've implemented, seen in production, and refined with teams ranging from small startups to large enterprises. Each pattern has trade-offs, and the right choice depends on your organization's needs and constraints.
+That's **version management**: deciding how different versions of your infrastructure components flow through your environments.
+
+The obvious answer—pin every version in every environment—turns out to optimize for the wrong thing. Strict pinning creates divergence by default: environments drift apart unless you constantly update pins. It weakens feedback loops because lower environments stay on old versions, hiding cross-environment impacts. And at scale, you face PR storms from automated dependency updates.
+
+So what's the right approach? It depends. We've documented these strategies as **design patterns**—proven approaches that optimize for different goals. Some prioritize convergence and fast feedback; others prioritize control and reproducibility. The best choice depends on your organization's culture, team size, and how you already think about software delivery.
 
 <!--truncate-->
 
@@ -37,7 +41,7 @@ All version management patterns are fully documented under a unified [Version Ma
 
 #### Deployment Strategies
 
-**[Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment)** - The recommended trunk-based approach where all environments converge to the same version through automated progressive rollout. Perfect for teams embracing modern DevOps practices with strong CI/CD automation.
+**[Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment)** - The recommended trunk-based approach where all environments converge to the same version through automated progressive rollout. As LaunchDarkly puts it, "Decoupling deploy from release increases speed and stability when delivering software." Atmos achieves this through CI/CD gates that control when environments receive changes.
 
 **[Git Flow: Branches as Channels](/design-patterns/version-management/git-flow-branches-as-channels)** - Long-lived branches map to release channels for teams that need prolonged divergence or already practice Git Flow workflows. Use when you need version control to represent current state versus desired state.
 
@@ -71,20 +75,6 @@ The documentation includes clear guidance on choosing the right pattern for your
 - You're comfortable with cherry-picking and merge strategies
 - You want version control to represent current vs. desired state
 
-### 🔍 Industry Context
-
-The documentation frames Atmos's approach within industry best practices:
-
-> Decoupling deploy from release increases speed and stability when delivering software.
->
-> — LaunchDarkly
-
-> More-frequent deployments reduce the risk associated with change, while business stakeholders retain control over when features are released to end users.
->
-> — Thoughtworks Technology Radar
-
-Atmos achieves decoupling through **progressive deployment automation** where CI/CD gates control when environments receive changes, and comprehensive plan previews enable informed release decisions.
-
 ### 🛠️ Practical Improvements
 
 Throughout the documentation, you'll find:
@@ -116,7 +106,9 @@ The documentation includes:
 
 ## Key Takeaway
 
-**The best approach is what your engineering organization already follows.** If your team has established Git Flow practices, extending them to infrastructure management keeps the mental model consistent. If you're building modern cloud-native infrastructure with strong automation, Continuous Version Deployment provides the simplest path forward.
+**The best strategy is one that follows how your team already thinks about software delivery.** As the Thoughtworks Technology Radar notes, "More-frequent deployments reduce the risk associated with change, while business stakeholders retain control over when features are released."
+
+If your team has established Git Flow practices, extend them to infrastructure—keeping the mental model consistent matters. If you embrace trunk-based development with strong automation, Continuous Version Deployment is your simplest path forward.
 
 Ready to explore? Check out the new [Version Management documentation](/design-patterns/version-management) today!
 
