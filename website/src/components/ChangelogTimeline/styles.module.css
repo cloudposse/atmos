@@ -131,9 +131,6 @@
   z-index: 10;
   text-align: center;
   margin: 3rem 0 2rem;
-  /* Background to cover timeline line when sticky */
-  background: var(--ifm-background-color);
-  padding: 0.5rem 0;
 }
 
 .yearText {
