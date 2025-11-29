@@ -11,15 +11,32 @@ const LINK_CLASS_NAME = 'table-of-contents__link toc-highlight';
 const LINK_ACTIVE_CLASS_NAME = 'table-of-contents__link--active';
 
 // Try to import the blog hook at module scope. If the blog plugin isn't
-// available, we fall back to a no-op hook that returns null.
-let useBlogPost: () => { frontMatter?: Record<string, unknown> } | null;
+// available, we use a no-op hook.
+let useBlogPostRaw: (() => { frontMatter?: Record<string, unknown> }) | null =
+  null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const blogClient = require('@docusaurus/plugin-content-blog/client');
-  useBlogPost = blogClient.useBlogPost;
+  useBlogPostRaw = blogClient.useBlogPost;
 } catch {
-  // Blog plugin not available - provide a no-op hook.
-  useBlogPost = () => null;
+  // Blog plugin not available.
+}
+
+// Safe wrapper hook that handles both missing plugin and missing provider.
+// This is always called unconditionally in the component to satisfy Rules of Hooks.
+function useBlogPostSafe(): { frontMatter?: Record<string, unknown> } | null {
+  // If the blog plugin isn't available, return null.
+  if (!useBlogPostRaw) {
+    return null;
+  }
+
+  // Call the hook - it may throw if BlogPostProvider is missing (non-blog pages).
+  try {
+    return useBlogPostRaw();
+  } catch {
+    // No BlogPostProvider in the React tree (e.g., docs pages).
+    return null;
+  }
 }
 
 function ReleaseBadge({ release }: { release: string }): JSX.Element {
@@ -44,9 +61,9 @@ function ReleaseBadge({ release }: { release: string }): JSX.Element {
 }
 
 export default function TOC({ className, ...props }: Props): JSX.Element {
-  // Hook is always called unconditionally - useBlogPost is either the real
-  // hook or a no-op that returns null (set at module scope).
-  const blogPost = useBlogPost();
+  // Always call the safe hook unconditionally to satisfy Rules of Hooks.
+  // Returns null on non-blog pages or if the blog plugin is unavailable.
+  const blogPost = useBlogPostSafe();
   const release = blogPost?.frontMatter?.release as string | undefined;
 
   return (
