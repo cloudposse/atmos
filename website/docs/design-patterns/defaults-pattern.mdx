@@ -209,8 +209,8 @@ vars:
 terraform:
   backend:
     s3:
-      bucket: "acme-terraform-state"
-      dynamodb_table: "acme-terraform-state-lock"
+      bucket: "acme-gbl-root-tfstate"
+      use_lockfile: true
 ```
 
 ```yaml title="stacks/orgs/acme/plat/_defaults.yaml"

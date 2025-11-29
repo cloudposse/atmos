@@ -235,7 +235,7 @@ components:
       backend_type: s3  # Must be at component level
 
       backend:
-        bucket: acme-terraform-state-dev
+        bucket: acme-ue1-dev-tfstate
         key: vpc/terraform.tfstate
         region: us-east-1
         use_lockfile: true  # Enable native S3 locking (Terraform 1.10+)
@@ -402,8 +402,8 @@ Error: failed to create bucket: BucketAlreadyExists
 
 Hint: S3 bucket names are globally unique across all AWS accounts
 Try a different bucket name:
-  - acme-terraform-state-dev-123456789012 (add account ID)
-  - acme-terraform-state-dev-us-east-1 (add region)
+  - acme-ue1-dev-tfstate-123456789012 (add account ID)
+  - acme-ue1-dev-tfstate-randomsuffix (add random suffix)
 ```
 
 ## Required IAM Permissions
@@ -460,11 +460,11 @@ Add the backend to your Terraform configuration and import it:
 # Import the provisioned backend
 import {
   to = aws_s3_bucket.terraform_state
-  id = "acme-terraform-state-prod"
+  id = "acme-ue1-prod-tfstate"
 }
 
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "acme-terraform-state-prod"
+  bucket = "acme-ue1-prod-tfstate"
 }
 ```
 
@@ -523,12 +523,12 @@ The provision command is **idempotent**—running it multiple times is safe:
 ```shell
 $ atmos terraform backend create vpc --stack dev
 Running backend provisioner...
-Creating S3 bucket 'acme-terraform-state-dev'...
+Creating S3 bucket 'acme-ue1-dev-tfstate'...
 ✓ Successfully provisioned backend
 
 $ atmos terraform backend create vpc --stack dev
 Running backend provisioner...
-S3 bucket 'acme-terraform-state-dev' already exists (idempotent)
+S3 bucket 'acme-ue1-dev-tfstate' already exists (idempotent)
 ✓ Backend provisioning completed
 ```
 

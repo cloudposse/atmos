@@ -1,6 +1,6 @@
 ---
 title: Automatic Backend Provisioning
-sidebar_position: 4
+sidebar_position: 3
 sidebar_label: Backend Provisioning
 description: Automatically provision Terraform backend infrastructure with Atmos.
 id: backend-provisioning
@@ -30,7 +30,7 @@ components:
     vpc:
       backend_type: s3
       backend:
-        bucket: acme-terraform-state-dev
+        bucket: acme-ue1-dev-tfstate
         key: vpc/terraform.tfstate
         region: us-east-1
         use_lockfile: true  # Enable native S3 locking (Terraform 1.10+)
@@ -270,11 +270,11 @@ Add the backend to your Terraform configuration and import it:
 # Import the provisioned backend
 import {
   to = aws_s3_bucket.terraform_state
-  id = "acme-terraform-state-prod"
+  id = "acme-ue1-prod-tfstate"
 }
 
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "acme-terraform-state-prod"
+  bucket = "acme-ue1-prod-tfstate"
 }
 
 # Add lifecycle rules
@@ -332,10 +332,10 @@ Backend provisioning is idempotent—running it multiple times is safe:
 <Terminal>
 ```shell
 $ atmos terraform backend create vpc --stack dev
-✓ Created S3 bucket 'acme-terraform-state-dev'
+✓ Created S3 bucket 'acme-ue1-dev-tfstate'
 
 $ atmos terraform backend create vpc --stack dev
-S3 bucket 'acme-terraform-state-dev' already exists (idempotent)
+S3 bucket 'acme-ue1-dev-tfstate' already exists (idempotent)
 ✓ Backend provisioning completed
 ```
 </Terminal>

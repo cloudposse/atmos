@@ -65,15 +65,17 @@ Atmos provides **one consistent way to manage backends** - both configuration AN
 Atmos generates `backend.tf.json` dynamically from your stack manifests:
 
 - **DRY Configuration**: Define backend defaults once at the org level, override per environment using [inheritance](#backend-inheritance)
+- **Reuse Root Modules Across Environments**: Deploy the same module to dev, staging, and prod with different backend configurations
 - **Use ANY Module as a Root Module**: Your Terraform modules don't need `backend.tf` files - Atmos generates them
 - **Works with Terraform AND OpenTofu**: Same stack configuration works with either runtime
 
 ### Provision Backends
 
-Atmos can create the backend infrastructure (S3 buckets) automatically:
+Atmos can create backend infrastructure automatically. Currently supports S3 (AWS), with more backends planned:
 
 - **Solves the Bootstrap Problem**: No chicken-and-egg with state storage
 - **Secure Defaults**: Versioning, encryption, public access blocked
+- **Cross-Account Support**: Use `assume_role` to provision backends in different AWS accounts
 - **See [Backend Provisioning](/core-concepts/components/terraform/backend-provisioning)** for details
 
 This is the fastest way to get up and running with Terraform state management.
