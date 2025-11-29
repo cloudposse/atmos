@@ -2,7 +2,7 @@
 slug: auth-and-utility-commands-no-longer-require-stacks
 title: Auth and Utility Commands No Longer Require Stack Configurations
 authors:
-  - atmos
+  - osterman
 tags:
   - atmos
   - enhancement

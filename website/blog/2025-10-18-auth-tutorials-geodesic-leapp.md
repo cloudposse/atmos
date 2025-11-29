@@ -3,7 +3,7 @@ slug: auth-tutorials-geodesic-leapp
 title: 'New Guides for Atmos Auth: Leapp Migration and Geodesic Integration'
 sidebar_label: Atmos Auth Guides
 authors:
-  - Benbentwo
+  - osterman
 tags:
   - feature
   - cloud-architecture

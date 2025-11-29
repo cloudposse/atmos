@@ -11,6 +11,7 @@ const LINK_CLASS_NAME = 'table-of-contents__link toc-highlight';
 const LINK_ACTIVE_CLASS_NAME = 'table-of-contents__link--active';
 
 // Safe hook to get blog post metadata.
+// biome-ignore lint/correctness/useHookAtTopLevel: safe conditional import for optional blog plugin
 function useBlogPostSafe() {
   try {
     const { useBlogPost } = require('@docusaurus/plugin-content-blog/client');

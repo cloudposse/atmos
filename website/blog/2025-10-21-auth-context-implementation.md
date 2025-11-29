@@ -2,7 +2,7 @@
 slug: auth-context-implementation
 title: 'Auth Context: Centralizing Authentication State in Atmos'
 authors:
-  - atmos
+  - osterman
 tags:
   - contributors
   - atmos-core

@@ -2,7 +2,7 @@
 slug: pro-instances-api-query-params
 title: 'Atmos Pro: Instances API Migration to Query Parameters'
 authors:
-  - atmos
+  - osterman
 tags:
   - bugfix
   - enhancement

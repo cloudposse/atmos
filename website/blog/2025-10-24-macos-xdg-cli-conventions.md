@@ -2,7 +2,7 @@
 slug: macos-xdg-cli-conventions
 title: 'Breaking Change: macOS Now Uses ~/.config for XDG Paths'
 authors:
-  - atmos
+  - osterman
 tags:
   - breaking-change
   - enhancement
