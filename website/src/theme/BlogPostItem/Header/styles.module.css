@@ -6,10 +6,6 @@
   position: relative;
 }
 
-.releaseContainer {
-  display: none;
-}
-
 .releaseBadge {
   display: inline-block;
   padding: 0.25rem 0.6rem;

@@ -49,10 +49,11 @@ export interface ReleaseGroup {
 
 /**
  * Parses a semver version string (e.g., "v1.200.0") into comparable parts.
- * Returns null for invalid versions.
+ * Only matches exact vX.Y.Z or X.Y.Z formats. Prerelease suffixes (e.g.,
+ * "v1.2.3-rc1") and other non-standard formats return null.
  */
 function parseVersion(version: string): [number, number, number] | null {
-  const match = version.match(/^v?(\d+)\.(\d+)\.(\d+)/);
+  const match = version.match(/^v?(\d+)\.(\d+)\.(\d+)$/);
   if (!match) return null;
   return [parseInt(match[1], 10), parseInt(match[2], 10), parseInt(match[3], 10)];
 }
