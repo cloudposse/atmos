@@ -10,9 +10,3 @@
 Workflow no-steps is empty and requires at least one step to execute.
 
 
-
-# Error
-
-**Error:** workflow has no steps defined
-
-
