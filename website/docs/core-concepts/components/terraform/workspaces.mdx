@@ -231,7 +231,7 @@ Atmos evaluates the template and sets the Terraform workspace to `ue2-dev-ALPHA`
 3. `metadata.terraform_workspace` - Static string
 4. Auto-generated from stack context (lowest) - Default behavior
 
-:::tip When to Use Templates vs Patterns
+:::tip When to Use Templates vs. Patterns
 - **Use `terraform_workspace_template`** when you need:
   - String manipulation (upper/lower case, substring, etc.)
   - Conditional logic
@@ -239,11 +239,11 @@ Atmos evaluates the template and sets the Terraform workspace to `ue2-dev-ALPHA`
   - Complex naming rules
 
 - **Use `terraform_workspace_pattern`** when you need:
-  - Simple token replacement with context variables
-  - Straightforward naming patterns
+  - Simple token replacement with context variables.
+  - Straightforward naming patterns.
 
 - **Use `terraform_workspace`** when you need:
-  - A fixed, static workspace name
+  - A fixed, static workspace name.
 :::
 
 ## How Workspaces Relate to State Paths

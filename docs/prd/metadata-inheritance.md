@@ -351,7 +351,7 @@ vpc-prod:
 1. Modify `internal/exec/stack_processor_utils.go`:
    - Check `atmosConfig.Stacks.Inherit.Metadata` setting
    - When true, include metadata in inheritance processing
-   - Exclude `metadata.inherits` from being inherited
+   - Exclude `metadata.inherits` from being inherited.
 
 2. Modify `internal/exec/stack_processor_merge.go`:
    - Add metadata merging logic (similar to vars/settings)
