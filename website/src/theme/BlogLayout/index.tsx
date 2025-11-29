@@ -22,7 +22,7 @@ function BlogLayoutContent({
   // When sidebar is collapsed, give main content more space
   // Expanded: sidebar (3) + main (7) + toc (2) = 12
   // Collapsed: sidebar takes fixed 48px, main uses flex-grow to fill remaining space
-  const mainColClass = clsx('col', {
+  const mainColClass = clsx('col', styles.mainContent, {
     'col--7': hasSidebar && !isCollapsed,
     [styles.mainExpanded]: hasSidebar && isCollapsed,
     'col--9 col--offset-1': !hasSidebar,
@@ -36,7 +36,7 @@ function BlogLayoutContent({
           <main className={mainColClass}>
             {children}
           </main>
-          {toc && <div className="col col--2">{toc}</div>}
+          {toc && <div className={clsx('col col--2', styles.tocWrapper)}>{toc}</div>}
         </div>
       </div>
     </Layout>

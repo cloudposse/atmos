@@ -7,3 +7,15 @@
   width: auto !important;
   max-width: none !important;
 }
+
+/* Main content transition for smooth sidebar expand/collapse */
+.mainContent {
+  transition: flex 0.3s ease, max-width 0.3s ease;
+}
+
+/* TOC container - anchored to right side, never moves */
+.tocWrapper {
+  flex: 0 0 calc(100% * 2 / 12) !important;
+  max-width: calc(100% * 2 / 12) !important;
+  margin-left: auto !important;
+}

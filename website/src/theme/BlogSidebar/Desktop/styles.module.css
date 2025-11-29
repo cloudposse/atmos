@@ -4,17 +4,19 @@
 
 .sidebarContainer {
   position: relative;
-  transition: opacity 0.3s ease;
-  overflow: visible;
+  overflow: hidden;
+  transition: flex 0.3s ease, width 0.3s ease;
 }
 
 .sidebarCollapsed {
   width: 48px;
-  flex-shrink: 0;
+  flex: 0 0 48px !important;
 }
 
 .sidebarCollapsed .sidebar {
-  display: none;
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
 }
 
 .toggleButton {
@@ -55,7 +57,9 @@
   position: sticky;
   top: calc(var(--ifm-navbar-height) + 2rem);
   padding-right: 1rem;
-  transition: opacity 0.3s ease;
+  width: 100%;
+  opacity: 1;
+  transition: width 0.3s ease, opacity 0.3s ease;
 }
 
 .sidebarItemTitle {
