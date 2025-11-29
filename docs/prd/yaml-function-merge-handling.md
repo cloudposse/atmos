@@ -294,8 +294,8 @@ func ApplyDeferredMerges(ctx *MergeContext, result map[string]interface{}, atmos
 			}
 		}
 
-		// Merge all values for this path
-		merged, err := MergeDeferredValues(deferredValues)
+		// Merge all values for this path (respects list_merge_strategy)
+		merged, err := MergeDeferredValues(deferredValues, atmosConfig)
 		if err != nil {
 			return fmt.Errorf("failed to merge deferred values at %s: %w", pathKey, err)
 		}
@@ -310,7 +310,7 @@ func ApplyDeferredMerges(ctx *MergeContext, result map[string]interface{}, atmos
 }
 
 // MergeDeferredValues merges all values for a single field path.
-func MergeDeferredValues(values []*DeferredValue) (interface{}, error) {
+func MergeDeferredValues(values []*DeferredValue, atmosConfig schema.AtmosConfiguration) (interface{}, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -318,9 +318,14 @@ func MergeDeferredValues(values []*DeferredValue) (interface{}, error) {
 	// Start with first value
 	result := values[0].Value
 
-	// For simple types (string, number, bool) and slices: just override with highest precedence
-	if !isMap(result) {
+	// For simple types (string, number, bool): just override with highest precedence
+	if !isMap(result) && !isSlice(result) {
 		return values[len(values)-1].Value, nil
+	}
+
+	// For slices: respect list_merge_strategy
+	if isSlice(result) {
+		return mergeSlices(values, atmosConfig.Settings.ListMergeStrategy)
 	}
 
 	// For maps: deep-merge all values
@@ -338,6 +343,65 @@ func MergeDeferredValues(values []*DeferredValue) (interface{}, error) {
 	}
 
 	return resultMap, nil
+}
+
+// mergeSlices merges slice values according to the configured list merge strategy.
+func mergeSlices(values []*DeferredValue, strategy string) (interface{}, error) {
+	switch strategy {
+	case "replace":
+		// Default: latest value wins
+		return values[len(values)-1].Value, nil
+
+	case "append":
+		// Concatenate all lists in precedence order
+		var result []interface{}
+		for _, dv := range values {
+			if slice, ok := dv.Value.([]interface{}); ok {
+				result = append(result, slice...)
+			} else {
+				// Type mismatch - use latest value
+				return dv.Value, nil
+			}
+		}
+		return result, nil
+
+	case "merge":
+		// Deep-merge list items by index position
+		result := values[0].Value.([]interface{})
+		for i := 1; i < len(values); i++ {
+			sourceSlice, ok := values[i].Value.([]interface{})
+			if !ok {
+				// Type mismatch - use source value
+				return values[i].Value, nil
+			}
+
+			// Merge items up to length of source slice
+			for idx := 0; idx < len(sourceSlice) && idx < len(result); idx++ {
+				// Deep-merge if both items are maps, otherwise override
+				if srcMap, ok := sourceSlice[idx].(map[string]interface{}); ok {
+					if dstMap, ok := result[idx].(map[string]interface{}); ok {
+						if err := mergo.Merge(&dstMap, srcMap, mergo.WithOverride); err != nil {
+							return nil, err
+						}
+						result[idx] = dstMap
+						continue
+					}
+				}
+				// Override with source value
+				result[idx] = sourceSlice[idx]
+			}
+
+			// Append remaining source items if source is longer
+			if len(sourceSlice) > len(result) {
+				result = append(result, sourceSlice[len(result):]...)
+			}
+		}
+		return result, nil
+
+	default:
+		// Unknown strategy - fall back to replace
+		return values[len(values)-1].Value, nil
+	}
 }
 ```
 
@@ -376,8 +440,23 @@ vars:
 - Example: `stage: "dev"` overrides `stage: !env STAGE`
 
 **Lists/Slices**:
-- Latest value wins (override behavior)
-- Example: `vpc_ids: ["vpc-1"]` overrides `vpc_ids: !terraform.output vpc_ids`
+- Behavior depends on `settings.list_merge_strategy` in `atmos.yaml`
+- Configurable via:
+  - `atmos.yaml`: `settings.list_merge_strategy`
+  - Environment variable: `ATMOS_SETTINGS_LIST_MERGE_STRATEGY`
+  - Command-line flag: `--settings-list-merge-strategy`
+
+**Available strategies**:
+1. **`replace`** (default): Latest list wins (override behavior)
+   - Example: `vpc_ids: ["vpc-1"]` overrides `vpc_ids: !terraform.output vpc_ids`
+
+2. **`append`**: Lists are concatenated in import order
+   - Example: `[1, 2]` + `[3, 4]` = `[1, 2, 3, 4]`
+
+3. **`merge`**: List items are deep-merged by index position
+   - Items in source list take precedence
+   - Processes up to length of source list
+   - Remaining destination items preserved if destination is longer
 
 **Maps**:
 - Deep-merge all values in precedence order
@@ -402,6 +481,74 @@ vars:
 - Additional pass over data structures
 - Memory overhead for storing deferred values
 - May need optimization for large configurations
+
+**5. List Merge Strategy Integration**:
+- Must respect `settings.list_merge_strategy` from `atmos.yaml`
+- Strategy can be overridden via environment variable or CLI flag
+- Default strategy is `replace` for backward compatibility
+
+## Configuration
+
+### List Merge Strategy
+
+The deferred merge implementation must respect the configured list merge strategy:
+
+```yaml
+# atmos.yaml
+settings:
+  # Specifies how lists are merged in Atmos stack manifests
+  # Can also be set using 'ATMOS_SETTINGS_LIST_MERGE_STRATEGY' environment variable
+  # or '--settings-list-merge-strategy' command-line argument
+  list_merge_strategy: replace  # Options: replace, append, merge
+```
+
+**Strategy Details**:
+
+1. **`replace`** (default):
+   - Most recent list imported wins
+   - Complete override behavior
+   - Fastest performance
+   - Example: `[1, 2]` + `[3, 4]` = `[3, 4]`
+
+2. **`append`**:
+   - Lists are concatenated in import order
+   - Useful for accumulating values across imports
+   - Example: `[1, 2]` + `[3, 4]` = `[1, 2, 3, 4]`
+
+3. **`merge`**:
+   - List items are deep-merged by index position
+   - Items in source list take precedence
+   - Processes up to length of source list
+   - Remaining destination items preserved if destination is longer
+   - Example:
+     ```yaml
+     # Base: [{"a": 1}, {"b": 2}]
+     # Override: [{"a": 10, "c": 3}]
+     # Result: [{"a": 10, "c": 3}, {"b": 2}]
+     ```
+
+**Interaction with YAML Functions**:
+
+When YAML functions return lists, the merge strategy applies to the processed result:
+
+```yaml
+# catalog/base.yaml
+vars:
+  items: !template '{{ toJson .settings.base_items }}'  # Returns [{"id": 1}]
+
+# stacks/prod.yaml
+import:
+  - catalog/base
+
+settings:
+  list_merge_strategy: append  # or merge
+
+vars:
+  items:
+    - id: 2  # With append: [{"id": 1}, {"id": 2}]
+             # With merge:  [{"id": 2}] (override first item)
+             # With replace: [{"id": 2}] (default)
+```
 
 ## Implementation Strategy
 
@@ -641,9 +788,11 @@ vars:
 - [ ] Implement `WalkAndDeferYAMLFunctions` in `pkg/merge/merge.go`
 - [ ] Modify `MergeSections` to use merge context
 - [ ] Implement `ApplyDeferredMerges` in `internal/exec/stack_processor.go`
-- [ ] Add helper functions (`SetValueAtPath`, `MergeDeferredValues`, `isMap`)
+- [ ] Add helper functions (`SetValueAtPath`, `MergeDeferredValues`, `isMap`, `isSlice`)
+- [ ] Implement `mergeSlices` with support for all three list merge strategies
 - [ ] Handle all 7 post-merge YAML functions
 - [ ] Integrate into stack processing pipeline
+- [ ] Ensure `list_merge_strategy` setting is respected
 
 ### Phase 2: Testing
 - [x] Create test fixture at `tests/fixtures/scenarios/atmos-yaml-functions-merge/`
@@ -651,6 +800,8 @@ vars:
 - [ ] Add integration tests for all YAML function types
 - [ ] Test deep-merge scenarios (map merging with YAML functions)
 - [ ] Test override scenarios (simple types, lists)
+- [ ] Test list merge strategies (`replace`, `append`, `merge`)
+- [ ] Test list merge with YAML functions for all three strategies
 - [ ] Test edge cases (circular refs, nested YAML functions)
 - [ ] Performance benchmarks with large configurations
 - [ ] Verify no breaking changes to existing functionality
