@@ -19,3 +19,21 @@
   max-width: calc(100% * 2 / 12) !important;
   margin-left: auto !important;
 }
+
+/* Mobile responsive styles */
+@media (max-width: 996px) {
+  .mainContent {
+    flex: 1 1 100% !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .mainExpanded {
+    flex: 1 1 100% !important;
+    max-width: 100% !important;
+  }
+
+  .tocWrapper {
+    display: none !important;
+  }
+}
