@@ -1,0 +1,587 @@
+/* ==================== */
+/* MAIN CONTAINER       */
+/* ==================== */
+
+.changelogTimeline {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+/* ==================== */
+/* FILTER BAR           */
+/* ==================== */
+
+.filterBar {
+  margin-bottom: 2rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--ifm-card-background-color);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(128, 128, 128, 0.15);
+}
+
+.filterRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.yearFilters {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.filterPill {
+  padding: 0.5rem 1rem;
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 2rem;
+  background: transparent;
+  color: var(--ifm-font-color-base);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.filterPill:hover {
+  background: rgba(128, 128, 128, 0.1);
+  border-color: rgba(128, 128, 128, 0.3);
+}
+
+.filterPillActive {
+  background: var(--ifm-color-primary);
+  border-color: var(--ifm-color-primary);
+  color: white;
+}
+
+.filterPillActive:hover {
+  background: var(--ifm-color-primary-dark);
+  border-color: var(--ifm-color-primary-dark);
+}
+
+.tagFilter {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tagFilterLabel {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.tagSelect {
+  min-width: 150px;
+  padding: 0.5rem 1rem;
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 0.5rem;
+  background: var(--ifm-background-color);
+  color: var(--ifm-font-color-base);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.tagSelect:focus {
+  outline: none;
+  border-color: var(--ifm-color-primary);
+}
+
+/* ==================== */
+/* TIMELINE CONTAINER   */
+/* ==================== */
+
+.timeline {
+  position: relative;
+  padding: 2rem 0 4rem;
+}
+
+/* Central vertical line */
+.timelineLine {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    var(--ifm-color-primary) 5%,
+    var(--ifm-color-primary) 95%,
+    transparent 100%
+  );
+  transform: translateX(-50%);
+  box-shadow: 0 0 15px var(--ifm-color-primary-light);
+}
+
+/* ==================== */
+/* YEAR MARKERS         */
+/* ==================== */
+
+.yearSection {
+  position: relative;
+}
+
+.yearMarker {
+  position: relative;
+  z-index: 10;
+  text-align: center;
+  margin: 3rem 0 2rem;
+}
+
+.yearText {
+  display: inline-block;
+  padding: 0.75rem 2.5rem;
+  background: var(--ifm-color-primary);
+  color: white;
+  font-size: 1.5rem;
+  font-weight: bold;
+  border-radius: 50px;
+  box-shadow: 0 4px 20px rgba(53, 120, 229, 0.4);
+}
+
+/* ==================== */
+/* MONTH SEPARATORS     */
+/* ==================== */
+
+.monthGroup {
+  position: relative;
+}
+
+.monthSeparator {
+  text-align: center;
+  margin: 2rem 0 1.5rem;
+  position: relative;
+}
+
+.monthText {
+  display: inline-block;
+  padding: 0.25rem 1.5rem;
+  background: var(--ifm-background-color);
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 20px;
+  position: relative;
+  z-index: 5;
+}
+
+/* ==================== */
+/* ENTRIES CONTAINER    */
+/* ==================== */
+
+.entriesContainer {
+  position: relative;
+}
+
+/* ==================== */
+/* INDIVIDUAL ENTRY     */
+/* ==================== */
+
+.entry {
+  position: relative;
+  width: 45%;
+  margin-bottom: 2rem;
+}
+
+.entryLeft {
+  margin-right: auto;
+  padding-right: 2.5rem;
+}
+
+.entryRight {
+  margin-left: auto;
+  padding-left: 2.5rem;
+}
+
+/* Timeline node (circle) - sits ON the center line */
+.entryNode {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: var(--ifm-color-primary);
+  border: 3px solid var(--ifm-background-color);
+  border-radius: 50%;
+  top: 1.5rem;
+  z-index: 5;
+  box-shadow: 0 0 0 4px var(--ifm-color-primary-lightest);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Position nodes on the center timeline */
+.entryLeft .entryNode {
+  left: calc(111.11% - 8px);
+}
+
+.entryRight .entryNode {
+  left: calc(-11.11% - 8px);
+}
+
+/* Connector line from card to node */
+.entryConnector {
+  position: absolute;
+  height: 2px;
+  background: var(--ifm-color-primary-light);
+  top: calc(1.5rem + 7px);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.entryLeft .entryConnector {
+  /* Extend from card edge (after subtracting padding) to center of timeline */
+  left: calc(100% - 2.5rem);
+  width: calc(11.11% + 8px + 2.5rem);
+}
+
+.entryRight .entryConnector {
+  /* Extend from center of timeline to card edge */
+  left: calc(-11.11% - 8px);
+  width: calc(11.11% + 8px + 2.5rem);
+}
+
+/* ==================== */
+/* ENTRY CARD           */
+/* ==================== */
+
+.entryCard {
+  background: var(--ifm-card-background-color);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid rgba(128, 128, 128, 0.15);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.entryCard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+}
+
+/* Hover effect: light up node inner bullet and connector */
+.entry:hover .entryNode {
+  background: var(--ifm-color-primary-lighter);
+}
+
+.entry:hover .entryConnector {
+  background: var(--ifm-color-primary);
+  box-shadow: 0 0 10px var(--ifm-color-primary);
+}
+
+/* Entry header with date and tags */
+.entryHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.entryDate {
+  font-size: 0.875rem;
+  color: var(--ifm-color-emphasis-600);
+  font-weight: 500;
+}
+
+/* Entry title */
+.entryTitle {
+  text-decoration: none !important;
+  color: inherit;
+  display: block;
+  border: none !important;
+}
+
+.entryTitle::after,
+.entryTitle::before {
+  display: none !important;
+  content: none !important;
+  border: none !important;
+}
+
+.entryTitle:hover {
+  text-decoration: none !important;
+  border: none !important;
+}
+
+.entryTitle:hover::after,
+.entryTitle:hover::before {
+  display: none !important;
+  content: none !important;
+  border: none !important;
+}
+
+.entryTitle h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+  line-height: 1.4;
+  font-weight: 600;
+  border: none !important;
+  border-bottom: none !important;
+  padding-bottom: 0 !important;
+  background: none !important;
+  color: inherit;
+  transition: color 0.2s ease;
+}
+
+.entryTitle h3::after,
+.entryTitle h3::before {
+  display: none !important;
+  content: none !important;
+  border: none !important;
+}
+
+.entryTitle:hover h3 {
+  color: var(--ifm-color-primary-lighter) !important;
+  text-decoration: none !important;
+  border: none !important;
+  border-bottom: none !important;
+}
+
+.entryTitle:hover h3::after,
+.entryTitle:hover h3::before {
+  display: none !important;
+  content: none !important;
+  border: none !important;
+}
+
+/* Entry excerpt/description - shows full abstract (content before <!--truncate-->) */
+.entryExcerpt {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.6;
+}
+
+/* ==================== */
+/* TAGS                 */
+/* ==================== */
+
+.entryTags {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tag {
+  display: inline-block;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+
+.tagFeature {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+}
+
+.tagEnhancement {
+  background: rgba(33, 150, 243, 0.15);
+  color: #2196f3;
+}
+
+.tagBugfix {
+  background: rgba(244, 67, 54, 0.15);
+  color: #f44336;
+}
+
+.tagContributors {
+  background: rgba(156, 39, 176, 0.15);
+  color: #9c27b0;
+}
+
+.tagDefault {
+  background: rgba(158, 158, 158, 0.15);
+  color: #757575;
+}
+
+/* ==================== */
+/* EMPTY STATE          */
+/* ==================== */
+
+.emptyState {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--ifm-color-emphasis-600);
+}
+
+.emptyState p {
+  margin: 0 0 1.5rem;
+  font-size: 1.125rem;
+}
+
+.resetButton {
+  padding: 0.75rem 1.5rem;
+  background: var(--ifm-color-primary);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.resetButton:hover {
+  background: var(--ifm-color-primary-dark);
+}
+
+/* ==================== */
+/* DARK MODE            */
+/* ==================== */
+
+:global([data-theme='dark']) .monthText {
+  background: var(--ifm-background-color);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:global([data-theme='dark']) .entryCard {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:global([data-theme='dark']) .entryExcerpt {
+  color: var(--ifm-color-emphasis-600);
+}
+
+:global([data-theme='dark']) .tagFeature {
+  background: rgba(76, 175, 80, 0.25);
+}
+
+:global([data-theme='dark']) .tagEnhancement {
+  background: rgba(33, 150, 243, 0.25);
+}
+
+:global([data-theme='dark']) .tagBugfix {
+  background: rgba(244, 67, 54, 0.25);
+}
+
+:global([data-theme='dark']) .tagContributors {
+  background: rgba(156, 39, 176, 0.25);
+}
+
+:global([data-theme='dark']) .filterBar {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:global([data-theme='dark']) .filterPill {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:global([data-theme='dark']) .filterPill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+:global([data-theme='dark']) .tagSelect {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: var(--ifm-background-surface-color);
+}
+
+/* ==================== */
+/* MOBILE RESPONSIVE    */
+/* ==================== */
+
+@media (max-width: 768px) {
+  .timelineLine {
+    left: 24px;
+  }
+
+  .entry {
+    width: calc(100% - 60px);
+    margin-left: 60px !important;
+    margin-right: 0 !important;
+    padding-left: 1.5rem !important;
+    padding-right: 0 !important;
+  }
+
+  .entryLeft .entryNode,
+  .entryRight .entryNode {
+    left: -52px;
+    right: auto;
+    transform: none;
+  }
+
+  .entryLeft .entryConnector,
+  .entryRight .entryConnector {
+    left: -36px;
+    right: auto;
+    width: 1.5rem;
+  }
+
+  .yearText {
+    font-size: 1.25rem;
+    padding: 0.5rem 1.5rem;
+  }
+
+  .entryHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .filterRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tagFilter {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .tagSelect {
+    width: 100%;
+  }
+
+  .yearFilters {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 0.5rem;
+  }
+}
+
+/* ==================== */
+/* ACCESSIBILITY        */
+/* ==================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .entryCard {
+    transition: none;
+  }
+
+  .entryCard:hover {
+    transform: none;
+  }
+
+  .filterPill {
+    transition: none;
+  }
+}
+
+/* Focus states for keyboard navigation */
+.entryTitle:focus-visible h3 {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.filterPill:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.tagSelect:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.resetButton:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}

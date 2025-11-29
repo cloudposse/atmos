@@ -918,3 +918,19 @@ a[class*="table-of-contents__link"] {
 }
 
 /* Let TOC use natural width on all screen sizes */
+
+/* ==================== */
+/* CHANGELOG FULL WIDTH */
+/* ==================== */
+
+/* Hide sidebar on changelog/blog list page to use full width */
+.blog-list-page aside.theme-doc-sidebar-container,
+.blog-list-page [class*="sidebar"],
+.blog-list-page [class*="BlogSidebar"] {
+    display: none !important;
+}
+
+.blog-list-page main {
+    width: 100%;
+    max-width: none;
+}
