@@ -14,6 +14,7 @@
  */
 import React from 'react';
 import clsx from 'clsx';
+import { useLocation } from '@docusaurus/router';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 import TOCItems from '@theme/TOCItems';
 import type { Props } from '@theme/TOC';
@@ -64,34 +65,65 @@ function isBlogPostPath(pathname: string): boolean {
 }
 
 /**
- * Client-side component wrapper that renders the blog release badge.
- * This is rendered inside BrowserOnly to avoid SSG issues.
+ * Error boundary to catch errors from BlogReleaseBadge (e.g., missing BlogPostProvider).
+ * Returns null on error to gracefully degrade without breaking the TOC.
  */
-function ClientSideBlogReleaseBadge(): JSX.Element | null {
-  // Check if we're on a blog post page
-  if (!isBlogPostPath(window.location.pathname)) {
-    return null;
+class BlogBadgeErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
   }
 
-  // Dynamically import and render the blog release badge component.
-  // We use require here to avoid static analysis pulling in the blog client
-  // dependencies during SSG bundling.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const BlogReleaseBadge = require('./BlogReleaseBadge').default;
-    return <BlogReleaseBadge />;
-  } catch (error) {
-    // If there's an error (e.g., not in BlogPostProvider context), silently fail
-    console.warn('Failed to render BlogReleaseBadge:', error);
-    return null;
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true };
+  }
+
+  render(): React.ReactNode {
+    if (this.state.hasError) {
+      return null;
+    }
+    return this.props.children;
   }
 }
 
+/**
+ * Client-side component wrapper that renders the blog release badge.
+ * This is rendered inside BrowserOnly to avoid SSG issues.
+ *
+ * Uses React.lazy for proper code splitting and Suspense for loading state.
+ * Wrapped in an error boundary to handle cases where BlogPostProvider is unavailable.
+ */
+const LazyBlogReleaseBadge = React.lazy(() => import('./BlogReleaseBadge'));
+
+function ClientSideBlogReleaseBadge({
+  pathname,
+}: {
+  pathname: string;
+}): JSX.Element | null {
+  if (!isBlogPostPath(pathname)) {
+    return null;
+  }
+
+  return (
+    <BlogBadgeErrorBoundary>
+      <React.Suspense fallback={null}>
+        <LazyBlogReleaseBadge />
+      </React.Suspense>
+    </BlogBadgeErrorBoundary>
+  );
+}
+
 export default function TOC({ className, ...props }: Props): JSX.Element {
+  // useLocation re-renders the component on client-side navigation.
+  const { pathname } = useLocation();
+
   return (
     <div className={clsx(styles.tableOfContents, 'thin-scrollbar', className)}>
       <BrowserOnly>
-        {() => <ClientSideBlogReleaseBadge />}
+        {() => <ClientSideBlogReleaseBadge pathname={pathname} />}
       </BrowserOnly>
       <TOCItems
         {...props}
