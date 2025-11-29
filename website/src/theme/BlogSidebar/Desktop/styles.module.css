@@ -1,0 +1,98 @@
+/**
+ * Collapsible Blog Sidebar styles.
+ */
+
+.sidebarContainer {
+  position: relative;
+  transition: width 0.3s ease, min-width 0.3s ease, opacity 0.3s ease;
+  width: 25%;
+  min-width: 250px;
+  flex-shrink: 0;
+}
+
+.sidebarCollapsed {
+  width: 48px;
+  min-width: 48px;
+}
+
+.sidebarCollapsed .sidebar {
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.toggleButton {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.toggleButton:hover {
+  background: var(--ifm-color-emphasis-100);
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+.toggleIcon {
+  transition: transform 0.3s ease;
+}
+
+.toggleIconCollapsed {
+  transform: rotate(180deg);
+}
+
+.sidebar {
+  max-height: calc(100vh - (var(--ifm-navbar-height) + 2rem));
+  overflow-y: auto;
+  position: sticky;
+  top: calc(var(--ifm-navbar-height) + 2rem);
+  padding-right: 1rem;
+  transition: opacity 0.3s ease;
+}
+
+.sidebarItemTitle {
+  font-size: var(--ifm-h3-font-size);
+  font-weight: var(--ifm-font-weight-bold);
+}
+
+.sidebarItemList {
+  font-size: 0.9rem;
+}
+
+.sidebarItem {
+  margin-top: 0.7rem;
+}
+
+.sidebarItemLink {
+  color: var(--ifm-font-color-base);
+  display: block;
+}
+
+.sidebarItemLink:hover {
+  text-decoration: none;
+}
+
+.sidebarItemLinkActive {
+  color: var(--ifm-color-primary) !important;
+}
+
+@media (max-width: 996px) {
+  .sidebarContainer {
+    display: none;
+  }
+}
+
+.yearGroupHeading {
+  margin-top: 1.6rem;
+  margin-bottom: 0.4rem;
+}
