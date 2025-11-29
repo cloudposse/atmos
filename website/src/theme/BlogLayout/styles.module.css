@@ -1,29 +1,9 @@
 /**
- * Blog layout styles using flexbox for collapsible sidebar support.
+ * BlogLayout styles for dynamic content width based on sidebar state.
  */
 
-.blogLayoutRow {
-  display: flex;
-  gap: 2rem;
-}
-
-.blogMain {
-  flex: 1;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.blogToc {
-  width: 200px;
-  flex-shrink: 0;
-}
-
-@media (max-width: 996px) {
-  .blogLayoutRow {
-    flex-direction: column;
-  }
-
-  .blogToc {
-    display: none;
-  }
+.mainExpanded {
+  flex: 1 1 0 !important;
+  width: auto !important;
+  max-width: none !important;
 }

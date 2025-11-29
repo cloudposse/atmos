@@ -2,7 +2,7 @@
  * Custom BlogSidebar/Desktop that adds a collapsible sidebar.
  * Collapsed by default to give more screen real estate to content.
  */
-import React, { memo, useState } from 'react';
+import React from 'react';
 import clsx from 'clsx';
 import { translate } from '@docusaurus/Translate';
 import {
@@ -12,6 +12,7 @@ import {
 import BlogSidebarContent from '@theme/BlogSidebar/Content';
 import type { Props as BlogSidebarContentProps } from '@theme/BlogSidebar/Content';
 import type { Props } from '@theme/BlogSidebar/Desktop';
+import { useSidebarCollapsed } from '../context';
 
 import styles from './styles.module.css';
 
@@ -29,13 +30,13 @@ const ListComponent: BlogSidebarContentProps['ListComponent'] = ({ items }) => {
 
 function BlogSidebarDesktop({ sidebar }: Props) {
   const items = useVisibleBlogSidebarItems(sidebar.items);
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const { isCollapsed, setIsCollapsed } = useSidebarCollapsed();
 
   return (
     <aside
       className={clsx(
         styles.sidebarContainer,
-        isCollapsed && styles.sidebarCollapsed
+        isCollapsed ? styles.sidebarCollapsed : 'col col--3'
       )}
     >
       <button
@@ -77,4 +78,4 @@ function BlogSidebarDesktop({ sidebar }: Props) {
   );
 }
 
-export default memo(BlogSidebarDesktop);
+export default BlogSidebarDesktop;

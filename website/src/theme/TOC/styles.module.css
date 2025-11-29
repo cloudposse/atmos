@@ -1,0 +1,64 @@
+/**
+ * TOC styles with release badge.
+ */
+
+.tableOfContents {
+  max-height: calc(100vh - (var(--ifm-navbar-height) + 2rem));
+  overflow-y: auto;
+  position: sticky;
+  top: calc(var(--ifm-navbar-height) + 1rem);
+}
+
+@media (max-width: 996px) {
+  .tableOfContents {
+    display: none;
+  }
+}
+
+.releaseContainer {
+  margin-bottom: 1rem;
+}
+
+.releaseBadge {
+  display: inline-block;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 6px;
+  background-color: var(--ifm-color-primary);
+  color: white;
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+.releaseBadge:hover {
+  background-color: var(--ifm-color-primary-dark);
+  text-decoration: none;
+  color: white;
+}
+
+.unreleased {
+  background-color: var(--ifm-color-gray-500);
+  cursor: default;
+}
+
+.unreleased:hover {
+  background-color: var(--ifm-color-gray-500);
+}
+
+/* Dark mode */
+[data-theme='dark'] .releaseBadge {
+  background-color: var(--ifm-color-primary);
+}
+
+[data-theme='dark'] .releaseBadge:hover {
+  background-color: var(--ifm-color-primary-light);
+}
+
+[data-theme='dark'] .unreleased {
+  background-color: var(--ifm-color-gray-600);
+}
+
+[data-theme='dark'] .unreleased:hover {
+  background-color: var(--ifm-color-gray-600);
+}

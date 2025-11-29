@@ -1,11 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import FilterBar from './FilterBar';
-import TimelineYear from './TimelineYear';
+import TimelineRelease from './TimelineRelease';
 import {
-  groupBlogPostsByYearMonth,
-  extractYears,
+  groupBlogPostsByRelease,
   extractTags,
-  filterBlogPosts,
+  filterBlogPostsByTag,
   type BlogPostItem,
 } from './utils';
 import styles from './styles.module.css';
@@ -17,43 +16,49 @@ interface ChangelogTimelineProps {
 export default function ChangelogTimeline({
   items,
 }: ChangelogTimelineProps): JSX.Element {
-  const [selectedYear, setSelectedYear] = useState<string | null>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
-  // Extract available years and tags for the filter.
-  const years = useMemo(() => extractYears(items), [items]);
+  // Extract available tags for the filter.
   const tags = useMemo(() => extractTags(items), [items]);
 
-  // Filter and group items.
+  // Filter by tag, then group by release version.
   const filteredItems = useMemo(
-    () => filterBlogPosts(items, selectedYear, selectedTag),
-    [items, selectedYear, selectedTag]
+    () => filterBlogPostsByTag(items, selectedTag),
+    [items, selectedTag]
   );
 
   const groupedItems = useMemo(
-    () => groupBlogPostsByYearMonth(filteredItems),
+    () => groupBlogPostsByRelease(filteredItems),
     [filteredItems]
   );
 
   const hasResults = groupedItems.length > 0;
 
+  // Calculate running index for alternating positions across releases.
+  let runningIndex = 0;
+
   return (
     <div className={styles.changelogTimeline}>
       <FilterBar
-        years={years}
         tags={tags}
-        selectedYear={selectedYear}
         selectedTag={selectedTag}
-        onYearChange={setSelectedYear}
         onTagChange={setSelectedTag}
       />
 
       {hasResults ? (
         <div className={styles.timeline}>
           <div className={styles.timelineLine} aria-hidden="true" />
-          {groupedItems.map((yearGroup) => (
-            <TimelineYear key={yearGroup.year} yearGroup={yearGroup} />
-          ))}
+          {groupedItems.map((releaseGroup) => {
+            const startIndex = runningIndex;
+            runningIndex += releaseGroup.items.length;
+            return (
+              <TimelineRelease
+                key={releaseGroup.release}
+                releaseGroup={releaseGroup}
+                startIndex={startIndex}
+              />
+            );
+          })}
         </div>
       ) : (
         <div className={styles.emptyState}>
@@ -61,7 +66,6 @@ export default function ChangelogTimeline({
           <button
             className={styles.resetButton}
             onClick={() => {
-              setSelectedYear(null);
               setSelectedTag(null);
             }}
           >

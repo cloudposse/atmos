@@ -3,6 +3,11 @@
  * Adapted from website/src/theme/BlogSidebar/Content/index.tsx
  */
 
+export interface BlogPostFrontMatter {
+  release?: string;
+  [key: string]: unknown;
+}
+
 export interface BlogPostMetadata {
   permalink: string;
   title: string;
@@ -18,9 +23,11 @@ export interface BlogPostMetadata {
   }>;
 }
 
+// Docusaurus BlogPostContent structure: content has both metadata and frontMatter as siblings.
 export interface BlogPostItem {
   content: {
     metadata: BlogPostMetadata;
+    frontMatter: BlogPostFrontMatter;
   };
 }
 
@@ -33,6 +40,82 @@ export interface MonthGroup {
 export interface YearGroup {
   year: string;
   months: MonthGroup[];
+}
+
+export interface ReleaseGroup {
+  release: string;
+  items: BlogPostItem[];
+}
+
+/**
+ * Parses a semver version string (e.g., "v1.200.0") into comparable parts.
+ * Returns null for invalid versions.
+ */
+function parseVersion(version: string): [number, number, number] | null {
+  const match = version.match(/^v?(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return null;
+  return [parseInt(match[1], 10), parseInt(match[2], 10), parseInt(match[3], 10)];
+}
+
+/**
+ * Compares two version strings for sorting (descending order).
+ * "unreleased" comes first, then versions in descending semver order.
+ */
+export function compareVersionsDescending(a: string, b: string): number {
+  // Unreleased always comes first.
+  if (a === 'unreleased' && b === 'unreleased') return 0;
+  if (a === 'unreleased') return -1;
+  if (b === 'unreleased') return 1;
+
+  const versionA = parseVersion(a);
+  const versionB = parseVersion(b);
+
+  // If either version is invalid, fall back to string comparison.
+  if (!versionA && !versionB) return b.localeCompare(a);
+  if (!versionA) return 1;
+  if (!versionB) return -1;
+
+  // Compare major, minor, patch in descending order.
+  for (let i = 0; i < 3; i++) {
+    if (versionB[i] !== versionA[i]) {
+      return versionB[i] - versionA[i];
+    }
+  }
+  return 0;
+}
+
+/**
+ * Sorts blog posts by release version (unreleased first, then descending semver).
+ */
+export function sortByReleaseVersion(items: BlogPostItem[]): BlogPostItem[] {
+  return [...items].sort((a, b) => {
+    const releaseA = a.content.frontMatter?.release || 'unreleased';
+    const releaseB = b.content.frontMatter?.release || 'unreleased';
+    return compareVersionsDescending(releaseA, releaseB);
+  });
+}
+
+/**
+ * Groups blog posts by release version, sorted with unreleased first then descending.
+ */
+export function groupBlogPostsByRelease(items: BlogPostItem[]): ReleaseGroup[] {
+  const releaseMap = new Map<string, BlogPostItem[]>();
+
+  items.forEach((item) => {
+    const release = item.content.frontMatter?.release || 'unreleased';
+    if (!releaseMap.has(release)) {
+      releaseMap.set(release, []);
+    }
+    releaseMap.get(release)!.push(item);
+  });
+
+  // Sort releases: unreleased first, then by version descending.
+  const sortedReleases = Array.from(releaseMap.keys()).sort(compareVersionsDescending);
+
+  return sortedReleases.map((release) => ({
+    release,
+    items: releaseMap.get(release)!,
+  }));
 }
 
 /**
@@ -146,6 +229,21 @@ export function filterBlogPosts(
     }
 
     return true;
+  });
+}
+
+/**
+ * Filters blog posts by tag only.
+ */
+export function filterBlogPostsByTag(
+  items: BlogPostItem[],
+  selectedTag: string | null
+): BlogPostItem[] {
+  if (!selectedTag) return items;
+
+  return items.filter((item) => {
+    const metadata = item.content.metadata;
+    return metadata.tags?.some((tag) => tag.label === selectedTag);
   });
 }
 

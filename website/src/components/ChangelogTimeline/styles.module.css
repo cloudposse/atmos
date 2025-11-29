@@ -400,6 +400,24 @@
   color: #757575;
 }
 
+.tagRelease {
+  background: var(--ifm-color-primary-lightest);
+  color: var(--ifm-color-primary-darkest);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.tagRelease:hover {
+  background: var(--ifm-color-primary-light);
+  text-decoration: none;
+}
+
+.tagUnreleased {
+  background: rgba(158, 158, 158, 0.15);
+  color: #757575;
+  cursor: default;
+}
+
 /* ==================== */
 /* EMPTY STATE          */
 /* ==================== */
@@ -464,6 +482,20 @@
   background: rgba(156, 39, 176, 0.25);
 }
 
+:global([data-theme='dark']) .tagRelease {
+  background: var(--ifm-color-primary-dark);
+  color: var(--ifm-color-white);
+}
+
+:global([data-theme='dark']) .tagRelease:hover {
+  background: var(--ifm-color-primary);
+}
+
+:global([data-theme='dark']) .tagUnreleased {
+  background: rgba(158, 158, 158, 0.25);
+  color: #9e9e9e;
+}
+
 :global([data-theme='dark']) .filterBar {
   border-color: rgba(255, 255, 255, 0.08);
 }
@@ -492,25 +524,25 @@
   }
 
   .entry {
-    width: calc(100% - 60px);
-    margin-left: 60px !important;
+    width: calc(100% - 48px);
+    margin-left: 48px !important;
     margin-right: 0 !important;
-    padding-left: 1.5rem !important;
+    padding-left: 0 !important;
     padding-right: 0 !important;
   }
 
   .entryLeft .entryNode,
   .entryRight .entryNode {
-    left: -52px;
+    left: -32px;
     right: auto;
     transform: none;
   }
 
   .entryLeft .entryConnector,
   .entryRight .entryConnector {
-    left: -36px;
+    left: -24px;
     right: auto;
-    width: 1.5rem;
+    width: 24px;
   }
 
   .yearText {
