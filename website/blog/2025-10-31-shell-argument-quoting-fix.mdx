@@ -1,9 +1,13 @@
 ---
 slug: shell-argument-quoting-fix
-title: "Critical Fix: Proper Shell Argument Quoting in Custom Commands"
-authors: [atmos]
-tags: [atmos, bugfix, security, custom-commands]
-date: 2025-10-31
+title: 'Critical Fix: Proper Shell Argument Quoting in Custom Commands'
+authors:
+  - osterman
+tags:
+  - bugfix
+  - security
+date: 2025-10-31T00:00:00.000Z
+release: v1.197.0
 ---
 
 We've fixed a critical bug in how Atmos handles arguments passed to custom commands via `{{ .TrailingArgs }}`. This fix improves security and ensures whitespace and special characters are preserved correctly.

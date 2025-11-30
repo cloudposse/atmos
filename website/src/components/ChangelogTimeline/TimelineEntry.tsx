@@ -14,6 +14,7 @@ export default function TimelineEntry({
   item,
   position,
 }: TimelineEntryProps): JSX.Element {
+  // Docusaurus provides metadata and frontMatter as siblings on content.
   const { metadata } = item.content;
   const { title, permalink, date, tags = [], description } = metadata;
 
