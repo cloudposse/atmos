@@ -14,7 +14,7 @@ var (
 // SetSeparated stores the separated args (pass-through flags for terraform, etc.).
 // Called once during preprocessing in Execute() before Cobra parses.
 //
-// Separated args are flags that should be passed through to the underlying command
+// Separated args are flags that should be passed through to the underlying command,
 // (e.g., terraform -out=/tmp/plan, -var=foo=bar) rather than being parsed by Atmos.
 // These are identified by the CompatibilityFlagTranslator during preprocessing.
 func SetSeparated(separatedArgs []string) {
@@ -28,7 +28,7 @@ func SetSeparated(separatedArgs []string) {
 // GetSeparated returns the separated args (terraform pass-through flags like -out, -var).
 // Returns nil if no separated args were set during preprocessing.
 //
-// Usage in RunE:
+// Usage in RunE.
 //
 //	separatedArgs := compat.GetSeparated()
 func GetSeparated() []string {

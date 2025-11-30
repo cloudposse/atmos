@@ -80,8 +80,8 @@ func (r *FlagRegistry) Count() int {
 
 // SetCompletionFunc sets a custom completion function for a flag.
 // This is used to set completion functions after flag registration to avoid import cycles.
-// For example, cmd/terraform can set the stack completion function without pkg/flags
-// needing to import internal/exec.
+// For example, cmd/terraform can set the stack completion function without pkg/flags needing
+// to import internal/exec.
 func (r *FlagRegistry) SetCompletionFunc(name string, fn func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)) {
 	defer perf.Track(nil, "flags.FlagRegistry.SetCompletionFunc")()
 
