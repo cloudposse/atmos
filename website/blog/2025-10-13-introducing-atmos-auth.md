@@ -6,7 +6,6 @@ authors:
   - Benbentwo
 tags:
   - feature
-  - cloud-architecture
 date: 2025-10-13T00:00:00.000Z
 release: v1.196.0
 ---

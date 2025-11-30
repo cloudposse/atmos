@@ -4,8 +4,7 @@ title: Welcome to the Atmos Changelog
 authors:
   - aknysh
 tags:
-  - atmos
-  - announcements
+  - documentation
 date: 2025-10-12T00:00:00.000Z
 release: v1.195.0
 ---

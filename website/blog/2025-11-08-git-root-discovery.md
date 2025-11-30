@@ -4,10 +4,8 @@ title: Run Atmos from Any Subdirectory
 authors:
   - osterman
 tags:
-  - atmos
-  - cli
-  - productivity
-  - developer-experience
+  - feature
+  - dx
 date: 2025-11-08T00:00:00.000Z
 release: v1.198.0
 ---

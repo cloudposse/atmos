@@ -5,10 +5,8 @@ sidebar_label: Pager Default Behavior
 authors:
   - osterman
 tags:
-  - atmos
   - bugfix
   - breaking-change
-  - dx
 date: 2025-10-15T00:00:00.000Z
 release: v1.195.0
 ---

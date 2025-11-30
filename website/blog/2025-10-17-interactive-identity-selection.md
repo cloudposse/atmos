@@ -6,7 +6,6 @@ authors:
   - osterman
 tags:
   - enhancement
-  - auth
 release: v1.196.0
 ---
 

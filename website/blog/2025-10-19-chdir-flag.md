@@ -5,10 +5,8 @@ sidebar_label: Introducing --chdir Flag
 authors:
   - osterman
 tags:
-  - atmos
-  - cli
-  - productivity
-  - developer-experience
+  - feature
+  - dx
 date: 2025-10-19T00:00:00.000Z
 release: v1.195.0
 ---

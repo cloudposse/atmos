@@ -5,11 +5,7 @@ sidebar_label: Introducing atmos auth list
 authors:
   - osterman
 tags:
-  - atmos
-  - authentication
-  - providers
-  - identities
-  - cli
+  - feature
 release: v1.196.0
 ---
 

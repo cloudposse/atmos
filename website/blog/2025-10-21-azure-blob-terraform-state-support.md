@@ -6,7 +6,6 @@ authors:
   - jamengual
 tags:
   - feature
-  - terraform
 date: 2025-10-21T00:00:00.000Z
 release: v1.196.0
 ---

@@ -238,6 +238,40 @@ export function filterBlogPostsByTag(
 }
 
 /**
+ * Filters blog posts by multiple years and/or tags.
+ * Years are OR'd (post matches if in any selected year).
+ * Tags are OR'd (post matches if has any selected tag).
+ * Years and tags are AND'd together.
+ */
+export function filterBlogPostsMulti(
+  items: BlogPostItem[],
+  selectedYears: string[],
+  selectedTags: string[]
+): BlogPostItem[] {
+  return items.filter((item) => {
+    const metadata = item.content.metadata;
+
+    // Filter by years (OR logic - match any selected year).
+    if (selectedYears.length > 0) {
+      const date = new Date(metadata.date);
+      if (isNaN(date.getTime())) return false;
+      const itemYear = `${date.getFullYear()}`;
+      if (!selectedYears.includes(itemYear)) return false;
+    }
+
+    // Filter by tags (OR logic - match any selected tag).
+    if (selectedTags.length > 0) {
+      const hasMatchingTag = metadata.tags?.some((tag) =>
+        selectedTags.includes(tag.label)
+      );
+      if (!hasMatchingTag) return false;
+    }
+
+    return true;
+  });
+}
+
+/**
  * Returns the CSS class for a tag based on its type.
  */
 export function getTagColorClass(tagLabel: string): string {
@@ -250,8 +284,18 @@ export function getTagColorClass(tagLabel: string): string {
     case 'bugfix':
     case 'bug fix':
       return 'tagBugfix';
-    case 'contributors':
-      return 'tagContributors';
+    case 'dx':
+      return 'tagDx';
+    case 'breaking-change':
+      return 'tagBreakingChange';
+    case 'security':
+      return 'tagSecurity';
+    case 'documentation':
+      return 'tagDocumentation';
+    case 'core':
+      return 'tagCore';
+    case 'deprecation':
+      return 'tagDeprecation';
     default:
       return 'tagDefault';
   }

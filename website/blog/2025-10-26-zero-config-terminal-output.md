@@ -1,20 +1,13 @@
 ---
 title: 'Zero-Configuration Terminal Output: Write Once, Works Everywhere'
-description: >-
-  Atmos now features intelligent terminal output that automatically adapts to
-  any environment - from rich interactive terminals to plain CI logs - without
-  any code changes or capability checking
 slug: zero-config-terminal-output
 authors:
   - osterman
 tags:
   - feature
-  - enhancement
-  - contributors
+  - dx
 release: v1.198.0
 ---
-
-# Zero-Configuration Terminal Output: Write Once, Works Everywhere
 
 Atmos now features intelligent terminal output that adapts to any environment automatically. Developers can write code assuming a full-featured terminal, and Atmos handles the rest - capability detection, color adaptation, and secret masking happen transparently. No more capability checking, manual color detection, or masking code. Just write clean, simple output code and it works everywhere.
 

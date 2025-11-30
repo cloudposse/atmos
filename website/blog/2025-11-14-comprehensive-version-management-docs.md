@@ -4,11 +4,7 @@ title: New Comprehensive Version Management Documentation
 authors:
   - osterman
 tags:
-  - atmos
   - documentation
-  - version-management
-  - versioning
-  - deployment-strategies
 release: v1.199.0
 ---
 

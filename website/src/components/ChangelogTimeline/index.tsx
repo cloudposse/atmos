@@ -4,7 +4,8 @@ import TimelineRelease from './TimelineRelease';
 import {
   groupBlogPostsByRelease,
   extractTags,
-  filterBlogPostsByTag,
+  extractYears,
+  filterBlogPostsMulti,
   type BlogPostItem,
 } from './utils';
 import styles from './styles.module.css';
@@ -16,15 +17,17 @@ interface ChangelogTimelineProps {
 export default function ChangelogTimeline({
   items,
 }: ChangelogTimelineProps): JSX.Element {
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [selectedYears, setSelectedYears] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
-  // Extract available tags for the filter.
+  // Extract available years and tags for the filters.
+  const years = useMemo(() => extractYears(items), [items]);
   const tags = useMemo(() => extractTags(items), [items]);
 
-  // Filter by tag, then group by release version.
+  // Filter by years and tags, then group by release version.
   const filteredItems = useMemo(
-    () => filterBlogPostsByTag(items, selectedTag),
-    [items, selectedTag]
+    () => filterBlogPostsMulti(items, selectedYears, selectedTags),
+    [items, selectedYears, selectedTags]
   );
 
   const groupedItems = useMemo(
@@ -40,9 +43,12 @@ export default function ChangelogTimeline({
   return (
     <div className={styles.changelogTimeline}>
       <FilterBar
+        years={years}
+        selectedYears={selectedYears}
+        onYearsChange={setSelectedYears}
         tags={tags}
-        selectedTag={selectedTag}
-        onTagChange={setSelectedTag}
+        selectedTags={selectedTags}
+        onTagsChange={setSelectedTags}
       />
 
       {hasResults ? (
@@ -66,7 +72,8 @@ export default function ChangelogTimeline({
           <button
             className={styles.resetButton}
             onClick={() => {
-              setSelectedTag(null);
+              setSelectedYears([]);
+              setSelectedTags([]);
             }}
           >
             Clear filters

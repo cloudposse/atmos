@@ -4,10 +4,8 @@ title: Auth and Utility Commands No Longer Require Stack Configurations
 authors:
   - osterman
 tags:
-  - atmos
   - enhancement
   - dx
-  - auth
 date: 2025-10-26T00:00:00.000Z
 release: v1.196.0
 ---

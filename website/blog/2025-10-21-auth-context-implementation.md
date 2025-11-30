@@ -4,9 +4,7 @@ title: 'Auth Context: Centralizing Authentication State in Atmos'
 authors:
   - osterman
 tags:
-  - contributors
-  - atmos-core
-  - refactoring
+  - core
 release: v1.196.0
 ---
 

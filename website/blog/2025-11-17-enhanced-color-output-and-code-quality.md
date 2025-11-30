@@ -4,8 +4,8 @@ title: Enhanced Color Output Support and Code Quality Improvements
 authors:
   - osterman
 tags:
-  - cli
-  - contributors
+  - enhancement
+  - core
 release: v1.200.0
 ---
 

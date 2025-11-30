@@ -136,12 +136,6 @@ function BlogSidebarContent({items, yearGroupHeadingClassName, ListComponent}: {
   const releaseData = globalData['blog-release-data']?.default as {releaseMap: Record<string, string>} | undefined;
   const releaseMap = releaseData?.releaseMap || {};
 
-  // Debug logging - find items that don't have a release mapping
-  const unmapped = items.filter(item => !releaseMap[item.permalink]);
-  if (unmapped.length > 0) {
-    console.log('Unmapped permalinks:', unmapped.map(i => i.permalink));
-  }
-
   const groupedByRelease = groupBlogSidebarItemsByRelease(items, releaseMap);
 
   return (

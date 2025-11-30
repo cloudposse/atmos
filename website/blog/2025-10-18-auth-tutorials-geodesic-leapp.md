@@ -5,8 +5,7 @@ sidebar_label: Atmos Auth Guides
 authors:
   - osterman
 tags:
-  - feature
-  - cloud-architecture
+  - documentation
 date: 2025-10-18T00:00:00.000Z
 release: v1.196.0
 ---

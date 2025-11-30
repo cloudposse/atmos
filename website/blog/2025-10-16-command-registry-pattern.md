@@ -5,9 +5,7 @@ sidebar_label: Command Registry Pattern
 authors:
   - osterman
 tags:
-  - contributors
-  - atmos-core
-  - refactoring
+  - core
 date: 2025-10-16T00:00:00.000Z
 release: v1.195.0
 ---

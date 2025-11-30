@@ -6,7 +6,6 @@ authors:
   - osterman
 tags:
   - feature
-  - authentication
   - security
 release: v1.196.0
 ---

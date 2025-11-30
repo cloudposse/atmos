@@ -6,9 +6,6 @@ authors:
   - osterman
 tags:
   - feature
-  - auth
-  - aws
-  - cloud-architecture
 release: v1.196.0
 ---
 
