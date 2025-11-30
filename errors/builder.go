@@ -64,7 +64,7 @@ func (b *ErrorBuilder) WithExample(example string) *ErrorBuilder {
 
 // WithContext adds safe structured context to the error.
 // This is PII-safe and will be included in error reporting.
-// Context is displayed in verbose mode and sent to Sentry.
+// Context is displayed only in verbose mode (--verbose flag) and sent to Sentry.
 func (b *ErrorBuilder) WithContext(key string, value interface{}) *ErrorBuilder {
 	if b.context == nil {
 		b.context = make(map[string]interface{})

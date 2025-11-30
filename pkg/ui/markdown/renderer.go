@@ -231,7 +231,8 @@ func (r *Renderer) Render(content string) (string, error) {
 			result = append(result, " "+styled)
 		} else {
 			// Keep all lines including blank lines for proper markdown paragraph spacing.
-			result = append(result, line)
+			// But remove trailing whitespace that glamour adds for padding.
+			result = append(result, strings.TrimRight(line, " \t"))
 		}
 	}
 
