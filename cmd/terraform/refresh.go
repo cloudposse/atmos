@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // refreshCmd represents the terraform refresh command.
@@ -19,11 +21,11 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags.
-	setCustomHelp(refreshCmd)
-
 	// Register completions for refreshCmd.
 	RegisterTerraformCompletions(refreshCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "refresh", RefreshCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(refreshCmd)

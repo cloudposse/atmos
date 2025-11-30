@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // showCmd represents the terraform show command.
@@ -19,11 +21,11 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags.
-	setCustomHelp(showCmd)
-
 	// Register completions for showCmd.
 	RegisterTerraformCompletions(showCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "show", ShowCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(showCmd)

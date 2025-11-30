@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 )
 
@@ -45,11 +46,11 @@ func init() {
 		panic(err)
 	}
 
-	// Set custom help to show terraform native flags.
-	setCustomHelp(planCmd)
-
 	// Register completions for plan command.
 	RegisterTerraformCompletions(planCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "plan", PlanCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(planCmd)

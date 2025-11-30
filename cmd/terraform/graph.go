@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // graphCmd represents the terraform graph command.
@@ -21,11 +23,11 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags.
-	setCustomHelp(graphCmd)
-
 	// Register completions for graphCmd.
 	RegisterTerraformCompletions(graphCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "graph", GraphCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(graphCmd)

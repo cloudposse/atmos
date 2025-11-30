@@ -583,3 +583,35 @@ tests:
       sanitize:
         "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
+  # Global terraform compatibility flags tests
+  - name: atmos terraform -version passthrough
+    enabled: true
+    snapshot: true
+    description: "'atmos terraform -version' should pass -version to terraform directly"
+    workdir: "./"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: atmos
+    args:
+      - "terraform"
+      - "-version"
+    expect:
+      stdout_contains:
+        - "Terraform v"
+      exit_code: 0
+  - name: atmos terraform -help passthrough
+    enabled: true
+    snapshot: true
+    description: "'atmos terraform -help' should pass -help to terraform directly"
+    workdir: "./"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: atmos
+    args:
+      - "terraform"
+      - "-help"
+    expect:
+      stdout_contains:
+        - "Usage: terraform"
+        - "Main commands:"
+      exit_code: 0

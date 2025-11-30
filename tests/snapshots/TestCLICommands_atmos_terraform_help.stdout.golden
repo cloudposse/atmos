@@ -126,6 +126,7 @@ Use double-dash -- to pass additional flags to terraform:
 USAGE
 
                                              
+    $ atmos terraform [flags]                
     $ atmos terraform [sub-command] [flags]  
                                              
 
@@ -300,6 +301,14 @@ GLOBAL FLAGS
 
       --version                 Display the Atmos CLI version
 
+
+COMPATIBILITY FLAGS
+
+  These flags are passed through to the underlying terraform/tofu command.
+
+      -chdir    Switch to a different working directory before executing the given subcommand
+      -help     Show terraform help output
+      -version  Show terraform version
 
 
 Use atmos terraform [command] --help for more information about a command.

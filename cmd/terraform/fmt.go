@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // fmtCmd represents the terraform fmt command.
@@ -19,11 +21,11 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags.
-	setCustomHelp(fmtCmd)
-
 	// Register completions for fmtCmd.
 	RegisterTerraformCompletions(fmtCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "fmt", FmtCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(fmtCmd)

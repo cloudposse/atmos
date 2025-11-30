@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // untaintCmd represents the terraform untaint command.
@@ -19,11 +21,11 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags.
-	setCustomHelp(untaintCmd)
-
 	// Register completions for untaintCmd.
 	RegisterTerraformCompletions(untaintCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "untaint", UntaintCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(untaintCmd)

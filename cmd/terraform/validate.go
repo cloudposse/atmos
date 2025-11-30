@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // validateCmd represents the terraform validate command.
@@ -19,11 +21,11 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags.
-	setCustomHelp(validateCmd)
-
 	// Register completions for validateCmd.
 	RegisterTerraformCompletions(validateCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "validate", ValidateCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(validateCmd)

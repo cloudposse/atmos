@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // taintCmd represents the terraform taint command.
@@ -19,11 +21,11 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags.
-	setCustomHelp(taintCmd)
-
 	// Register completions for taintCmd.
 	RegisterTerraformCompletions(taintCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "taint", TaintCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(taintCmd)
