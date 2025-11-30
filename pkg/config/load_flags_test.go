@@ -229,7 +229,7 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			// Setup Viper (for tests that still need it)
 			tt.setupViper()
 
-			// Save original os.Args and restore after test
+			// Save original os.Args and restore after test.
 			originalArgs := os.Args
 			t.Cleanup(func() {
 				os.Args = originalArgs

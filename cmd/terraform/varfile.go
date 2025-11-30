@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	// varfileParser handles flag parsing for varfile command.
+	// VarfileParser handles flag parsing for varfile command.
 	varfileParser *flags.StandardParser
-	// writeVarfileParser handles flag parsing for write varfile command.
+	// WriteVarfileParser handles flag parsing for write varfile command.
 	writeVarfileParser *flags.StandardParser
 )
 

@@ -639,7 +639,7 @@ func findProviderName(cmd *cobra.Command) string {
 }
 
 // renderCompatFlags renders compatibility flags with proper styling and alignment.
-// flagStyle is used for the flag name (cyan), argTypeStyle for any type annotations, descStyle for descriptions.
+// FlagStyle is used for the flag name (cyan), argTypeStyle for any type annotations, descStyle for descriptions.
 func renderCompatFlags(w io.Writer, flags map[string]compat.CompatibilityFlag, flagStyle, argTypeStyle, descStyle lipgloss.Style) {
 	defer perf.Track(nil, "cmd.renderCompatFlags")()
 

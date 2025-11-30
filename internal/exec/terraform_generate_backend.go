@@ -98,5 +98,7 @@ func ExecuteGenerateBackend(
 // ExecuteTerraformGenerateBackendCmd executes `terraform generate backend` command.
 // Deprecated: Use ExecuteGenerateBackend with typed parameters instead.
 func ExecuteTerraformGenerateBackendCmd(cmd interface{}, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendCmd")()
+
 	return errors.New("ExecuteTerraformGenerateBackendCmd is deprecated and should not be called")
 }

@@ -72,5 +72,7 @@ func ExecuteGenerateVarfile(
 // ExecuteTerraformGenerateVarfileCmd executes `terraform generate varfile` command.
 // Deprecated: Use ExecuteGenerateVarfile with typed parameters instead.
 func ExecuteTerraformGenerateVarfileCmd(cmd interface{}, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfileCmd")()
+
 	return errors.New("ExecuteTerraformGenerateVarfileCmd is deprecated and should not be called")
 }
