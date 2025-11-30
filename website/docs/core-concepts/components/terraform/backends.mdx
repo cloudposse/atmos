@@ -192,6 +192,19 @@ When you run `atmos terraform plan vpc -s <stack>` or `atmos terraform apply vpc
 ```
 </Terminal>
 
+:::tip Should I commit backend.tf.json?
+**Generally, no.** Atmos generates `backend.tf.json` dynamically for each component and stack,
+so committing it adds noise to version control and can cause merge conflicts.
+
+Add it to `.gitignore`:
+```
+**/backend.tf.json
+```
+
+Some external automation systems (Atlantis, Spacelift, etc.) may require committed backend files
+to detect changes. Consult your automation tool's documentation for guidance.
+:::
+
 You can also generate backend files manually using [atmos terraform generate backend](/cli/commands/terraform/generate-backend)
 or [atmos terraform generate backends](/cli/commands/terraform/generate-backends).
 
