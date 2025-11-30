@@ -133,6 +133,10 @@ tests:
       - "non-existent"
     expect:
       exit_code: 1
+      # Normalize the base path in error messages to match repo path
+      # The error message shows both full pattern and base+cleanPattern separately
+      sanitize:
+        "/absolute/path/to/external": "/absolute/path/to/repo"
   - name: atmos terraform plan non-existent in workspace
     enabled: true
     snapshot: true
@@ -599,6 +603,11 @@ tests:
       stdout_contains:
         - "Terraform v"
       exit_code: 0
+      # Normalize terraform version output which varies by environment
+      sanitize:
+        "Terraform v[0-9]+\\.[0-9]+\\.[0-9]+": "Terraform vX.X.X"
+        "on (darwin|linux|windows)_(arm64|amd64|386)": "on linux_amd64"
+        "is [0-9]+\\.[0-9]+\\.[0-9]+": "is X.X.X"
   - name: atmos terraform -help passthrough
     enabled: true
     snapshot: true
@@ -615,3 +624,6 @@ tests:
         - "Usage: terraform"
         - "Main commands:"
       exit_code: 0
+      # Filter out lines that vary between terraform versions
+      diff:
+        - "^\\s+test\\s+"  # Test command description varies between versions
