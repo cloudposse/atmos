@@ -625,6 +625,8 @@ func printCompatibilityFlags(w io.Writer, cmd *cobra.Command, styles *helpStyles
 // findProviderName walks up the command tree to find the top-level command name.
 // For example, for "atmos terraform apply", this returns "terraform".
 func findProviderName(cmd *cobra.Command) string {
+	defer perf.Track(nil, "cmd.findProviderName")()
+
 	// Walk up to find the first non-root parent.
 	for c := cmd; c != nil; c = c.Parent() {
 		parent := c.Parent()
@@ -639,6 +641,8 @@ func findProviderName(cmd *cobra.Command) string {
 // renderCompatFlags renders compatibility flags with proper styling and alignment.
 // flagStyle is used for the flag name (cyan), argTypeStyle for any type annotations, descStyle for descriptions.
 func renderCompatFlags(w io.Writer, flags map[string]compat.CompatibilityFlag, flagStyle, argTypeStyle, descStyle lipgloss.Style) {
+	defer perf.Track(nil, "cmd.renderCompatFlags")()
+
 	// Collect and sort flag names for consistent output.
 	type flagEntry struct {
 		name        string

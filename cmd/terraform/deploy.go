@@ -30,7 +30,7 @@ func init() {
 	// Create parser with deploy-specific flags using functional options.
 	deployParser = flags.NewStandardParser(
 		flags.WithBoolFlag("deploy-run-init", "", false, "If set atmos will run `terraform init` before executing the command"),
-		flags.WithStringFlag("from-plan", "", "", "Apply from plan file (uses deterministic location if path not specified)"),
+		flags.WithStringFlag("from-plan", "", "", "Apply from plan file (e.g., atmos terraform deploy <component> -s <stack> --from-plan)"),
 		flags.WithStringFlag("planfile", "", "", "Set the plan file to use"),
 		flags.WithBoolFlag("affected", "", false, "Deploy the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Deploy all components in all stacks"),

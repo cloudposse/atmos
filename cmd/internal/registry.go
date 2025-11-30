@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Context keys for passing values through cobra command context.
@@ -246,6 +247,8 @@ func Reset() {
 // This is used during arg preprocessing in Execute() to separate Atmos flags
 // from pass-through flags before Cobra parses.
 func GetCompatFlagsForCommand(providerName string) map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "internal.GetCompatFlagsForCommand")()
+
 	provider, ok := GetProvider(providerName)
 	if !ok {
 		return nil
@@ -267,6 +270,8 @@ var commandCompatFlagsRegistry = struct {
 // The subcommand is the specific command (e.g., "plan", "apply", or "terraform" for the parent).
 // Each subcommand registers its own flags in init(), eliminating the need for switch statements.
 func RegisterCommandCompatFlags(providerName, subcommand string, flags map[string]compat.CompatibilityFlag) {
+	defer perf.Track(nil, "internal.RegisterCommandCompatFlags")()
+
 	commandCompatFlagsRegistry.mu.Lock()
 	defer commandCompatFlagsRegistry.mu.Unlock()
 
@@ -281,6 +286,8 @@ func RegisterCommandCompatFlags(providerName, subcommand string, flags map[strin
 // The subcommand is the name of the subcommand (e.g., "apply", "plan").
 // Returns nil if no flags are registered for the provider/subcommand combination.
 func GetSubcommandCompatFlags(providerName, subcommand string) map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "internal.GetSubcommandCompatFlags")()
+
 	commandCompatFlagsRegistry.mu.RLock()
 	defer commandCompatFlagsRegistry.mu.RUnlock()
 

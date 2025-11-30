@@ -774,3 +774,26 @@ func TestProcessCommandLineArgs_ProfileFlagTakesPrecedenceOverEnv(t *testing.T) 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"flag-profile"}, result.ProfilesFromArg, "Flag should take precedence over env var")
 }
+
+// TestProcessCommandLineArgs_FromPlanBeforeComponent verifies that placing --from-plan
+// before the component name results in an error rather than silent misinterpretation.
+// This tests the edge case where --from-plan is misplaced in the argument order.
+//
+// Correct usage: atmos terraform apply <component> -s <stack> --from-plan
+// Incorrect usage: atmos terraform apply --from-plan <component> -s <stack>
+func TestProcessCommandLineArgs_FromPlanBeforeComponent(t *testing.T) {
+	// Create a test command simulating terraform apply with global flags.
+	cmd := newTestCommandWithGlobalFlags("terraform")
+	cmd.Flags().String("stack", "", "stack name")
+
+	// Test case: --from-plan before component name should result in an error.
+	// The flag parser sees --from-plan as an unknown flag because it's processed
+	// before the flag handling code recognizes it in the proper position.
+	args := []string{"apply", "--from-plan", "component-name", "-s", "test-stack"}
+
+	_, err := ProcessCommandLineArgs("terraform", cmd, args, []string{})
+
+	// The function should return an error - this prevents silent misinterpretation
+	// where the component name could be mistakenly used as the plan file path.
+	require.Error(t, err, "ProcessCommandLineArgs should return error when --from-plan precedes component name")
+}
