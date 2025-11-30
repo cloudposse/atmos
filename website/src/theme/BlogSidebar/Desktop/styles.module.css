@@ -4,27 +4,25 @@
 
 .sidebarContainer {
   position: relative;
-  transition: width 0.3s ease, min-width 0.3s ease, opacity 0.3s ease;
-  width: 25%;
-  min-width: 250px;
-  flex-shrink: 0;
+  overflow: hidden;
+  transition: flex 0.3s ease, width 0.3s ease;
 }
 
 .sidebarCollapsed {
   width: 48px;
-  min-width: 48px;
+  flex: 0 0 48px !important;
 }
 
 .sidebarCollapsed .sidebar {
+  width: 0;
   opacity: 0;
-  pointer-events: none;
   overflow: hidden;
 }
 
 .toggleButton {
   position: absolute;
   top: 0;
-  right: 0;
+  left: 0;
   z-index: 10;
   width: 32px;
   height: 32px;
@@ -32,10 +30,11 @@
   align-items: center;
   justify-content: center;
   background: var(--ifm-background-surface-color);
-  border: 1px solid var(--ifm-color-emphasis-200);
+  border: 1px solid var(--ifm-color-emphasis-300);
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .toggleButton:hover {
@@ -45,10 +44,11 @@
 
 .toggleIcon {
   transition: transform 0.3s ease;
+  transform: rotate(180deg);
 }
 
 .toggleIconCollapsed {
-  transform: rotate(180deg);
+  transform: rotate(0deg);
 }
 
 .sidebar {
@@ -57,7 +57,9 @@
   position: sticky;
   top: calc(var(--ifm-navbar-height) + 2rem);
   padding-right: 1rem;
-  transition: opacity 0.3s ease;
+  width: 100%;
+  opacity: 1;
+  transition: width 0.3s ease, opacity 0.3s ease;
 }
 
 .sidebarItemTitle {
@@ -67,6 +69,7 @@
 
 .sidebarItemList {
   font-size: 0.9rem;
+  padding-left: 1em;
 }
 
 .sidebarItem {

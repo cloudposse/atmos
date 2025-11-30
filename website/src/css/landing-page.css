@@ -132,12 +132,16 @@ html[data-theme="dark"] .hero__description {
   color: #ccc;
 }
 
+/* Title line displays as block so animated word goes on next line */
+.hero__title-line {
+  display: block;
+}
+
 /* Fixed-width container for typing animation to prevent layout shift */
 .typing-container {
   display: inline-block;
-  width: 380px;
-  text-align: left;
-  vertical-align: bottom;
+  min-width: 280px;
+  text-align: center;
 }
 
 .landing-page .hero img {
@@ -194,7 +198,28 @@ html[data-theme="light"] .hero--full-height::before {
   gap: 1rem;
   justify-content: center;
   display: flex;
+  align-items: center;
   margin-top: 2rem;
+}
+
+/* Hero text link style (for "Learn More") - subtle secondary action */
+.hero__link {
+  color: #666;
+  font-size: 0.95em;
+  text-decoration: none;
+}
+
+.hero__link:hover {
+  text-decoration: underline;
+  color: var(--ifm-color-primary);
+}
+
+html[data-theme="dark"] .hero__link {
+  color: #999;
+}
+
+html[data-theme="dark"] .hero__link:hover {
+  color: #72a1ed;
 }
 
 /* Hero demo section - appears on scroll */
@@ -517,19 +542,60 @@ html[data-theme="dark"] .feature-card p {
     padding: 1.5rem;
   }
 
-  .typing-container {
-    width: 280px;
+  /* Title sized to fit on 2 lines */
+  .landing-page .intro h1 {
+    font-size: 2.25rem;
+    line-height: 1.2;
+    padding: 0 1rem;
   }
 
-  .landing-page .intro h1 {
-    font-size: 2.5em;
+  /* Keep typing container block with min-width to prevent layout shift */
+  .typing-container {
+    display: block;
+    min-width: 200px;
+    text-align: center;
   }
 
   .hero__description {
     font-size: 1.1em;
+    padding: 0 1rem;
+  }
+
+  /* Stack CTA vertically, center aligned */
+  .hero__cta {
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  /* Remove main-wrapper margins on mobile */
+  .landing-page .main-wrapper {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  /* Wider demo section on mobile - remove left/right padding/margin */
+  .hero-demo {
+    padding-left: 0;
+    padding-right: 0;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .hero-demo-intro {
+    max-width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .hero-demo .screenshot-container {
+    padding: 0 1rem;
   }
 
   .hero-demo img.screenshot {
-    max-width: 95%;
+    max-width: 100%;
+    width: 100%;
   }
 }

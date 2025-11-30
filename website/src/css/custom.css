@@ -122,6 +122,14 @@ body {
     line-height: 30px;
 }
 
+/* Hide Cloud Posse watermark on mobile */
+@media (max-width: 996px) {
+    body,
+    html[data-theme='dark'] body {
+        background-image: none;
+    }
+}
+
 .language-console pre > code, .language-text pre > code {
     line-height: 1.26em;
 }
@@ -881,9 +889,8 @@ a[class*="sidebarItemLink"] {
     border-radius: var(--ifm-global-radius);
     display: block;
     max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    word-wrap: break-word;
 }
 
 .theme-blog-sidebar-item a:hover,
