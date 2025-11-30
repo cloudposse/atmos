@@ -1,0 +1,531 @@
+---
+title: Scaffold Schema Reference
+sidebar_position: 10
+sidebar_label: Schema
+description: Complete schema reference for scaffold.yaml configuration files.
+---
+
+This document provides the complete schema reference for `scaffold.yaml` configuration files used in Atmos scaffold templates.
+
+## Schema Overview
+
+The `scaffold.yaml` file defines the structure, metadata, and user prompts for a scaffold template.
+
+```yaml
+name: string                    # Required
+description: string             # Required
+version: string                 # Required
+author: string                  # Optional
+prompts: []Prompt              # Optional
+files: []FileConfig            # Optional
+```
+
+## Top-Level Fields
+
+### `name`
+
+**Type:** `string` (required)
+
+**Description:** Unique identifier for the scaffold template.
+
+**Constraints:**
+- Must be lowercase
+- Alphanumeric and hyphens only
+- Must start with a letter
+
+**Example:**
+```yaml
+name: aws-vpc-template
+```
+
+### `description`
+
+**Type:** `string` (required)
+
+**Description:** Human-readable description of what the template provides.
+
+**Example:**
+```yaml
+description: Multi-region AWS VPC template with public and private subnets
+```
+
+### `version`
+
+**Type:** `string` (required)
+
+**Description:** Semantic version of the template.
+
+**Example:**
+```yaml
+version: 1.2.0
+```
+
+### `author`
+
+**Type:** `string` (optional)
+
+**Description:** Template author information.
+
+**Example:**
+```yaml
+author: Your Name <your.email@example.com>
+```
+
+### `prompts`
+
+**Type:** `[]Prompt` (optional)
+
+**Description:** Array of user prompts for collecting template values.
+
+See [Prompts Schema](#prompts-schema) for details.
+
+### `files`
+
+**Type:** `[]FileConfig` (optional)
+
+**Description:** File-specific configuration and exclusions.
+
+See [Files Schema](#files-schema) for details.
+
+## Prompts Schema
+
+### Prompt Types
+
+#### Input Prompt
+
+Free-form text input.
+
+```yaml
+- name: string              # Required: Variable name
+  type: input               # Required
+  message: string           # Required: Prompt message
+  required: bool            # Optional: Default false
+  default: string           # Optional: Default value
+  pattern: string           # Optional: Regex validation
+  validation_message: string # Optional: Error message
+```
+
+**Example:**
+```yaml
+prompts:
+  - name: project_name
+    type: input
+    message: "Enter your project name:"
+    required: true
+    pattern: "^[a-z][a-z0-9-]*$"
+    validation_message: "Must start with letter, lowercase alphanumeric and hyphens only"
+    default: "my-project"
+```
+
+#### Select Prompt
+
+Single choice from predefined options.
+
+```yaml
+- name: string              # Required
+  type: select              # Required
+  message: string           # Required
+  options: []string         # Required: List of choices
+  default: string           # Optional: Default selection
+```
+
+**Example:**
+```yaml
+prompts:
+  - name: environment
+    type: select
+    message: "Select environment:"
+    options:
+      - dev
+      - staging
+      - production
+    default: dev
+```
+
+#### Multi-Select Prompt
+
+Multiple choices from predefined options.
+
+```yaml
+- name: string              # Required
+  type: multiselect         # Required
+  message: string           # Required
+  options: []string         # Required: List of choices
+  required: bool            # Optional: At least one required
+```
+
+**Example:**
+```yaml
+prompts:
+  - name: regions
+    type: multiselect
+    message: "Select deployment regions (space to select, enter to confirm):"
+    options:
+      - us-east-1
+      - us-west-2
+      - eu-west-1
+      - ap-southeast-1
+    required: true
+```
+
+#### Confirm Prompt
+
+Boolean yes/no question.
+
+```yaml
+- name: string              # Required
+  type: confirm             # Required
+  message: string           # Required
+  default: bool             # Optional: Default true/false
+```
+
+**Example:**
+```yaml
+prompts:
+  - name: enable_monitoring
+    type: confirm
+    message: "Enable monitoring and alerting?"
+    default: true
+```
+
+### Common Prompt Fields
+
+#### `name`
+
+**Type:** `string` (required)
+
+**Description:** Variable name used to access the value in templates via `.values.<name>`.
+
+**Constraints:**
+- Must be valid Go template variable name
+- Convention: snake_case
+
+#### `type`
+
+**Type:** `string` (required)
+
+**Description:** Type of prompt to display.
+
+**Valid Values:**
+- `input` - Free-form text
+- `select` - Single choice
+- `multiselect` - Multiple choices
+- `confirm` - Yes/no
+
+#### `message`
+
+**Type:** `string` (required)
+
+**Description:** Question or instruction shown to the user.
+
+#### `required`
+
+**Type:** `bool` (optional, default: `false`)
+
+**Description:** Whether a value must be provided.
+
+**Behavior:**
+- `input`: Must not be empty
+- `select`: Must make a selection
+- `multiselect`: Must select at least one option
+- `confirm`: Always has a value (true/false)
+
+#### `default`
+
+**Type:** Varies by prompt type (optional)
+
+**Description:** Default value if user doesn't provide input.
+
+**Type-Specific:**
+- `input`: string
+- `select`: string (must match an option)
+- `multiselect`: Not supported
+- `confirm`: bool
+
+#### `pattern`
+
+**Type:** `string` (optional, `input` only)
+
+**Description:** Regular expression for validation.
+
+**Example:**
+```yaml
+pattern: "^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+```
+
+#### `validation_message`
+
+**Type:** `string` (optional, requires `pattern`)
+
+**Description:** Error message displayed when pattern validation fails.
+
+### Conditional Prompts
+
+#### `when`
+
+**Type:** `string` (optional)
+
+**Description:** Go template expression that determines if prompt should be shown.
+
+**Example:**
+```yaml
+prompts:
+  - name: deployment_type
+    type: select
+    message: "Deployment type:"
+    options:
+      - single-region
+      - multi-region
+
+  - name: regions
+    type: multiselect
+    message: "Select regions:"
+    when: '{{ eq .values.deployment_type "multi-region" }}'
+    options:
+      - us-east-1
+      - us-west-2
+```
+
+## Files Schema
+
+Configure file-specific behavior and exclusions.
+
+```yaml
+files:
+  - path: string            # File or directory path
+    exclude: bool           # Exclude from generation
+    executable: bool        # Set executable permission
+    template: bool          # Process as template (default: true for *.tmpl)
+```
+
+### Fields
+
+#### `path`
+
+**Type:** `string` (required)
+
+**Description:** Relative path from template `files/` directory.
+
+**Supports:**
+- Exact paths: `README.md`
+- Directories: `scripts/`
+- Glob patterns: `*.sh`
+
+#### `exclude`
+
+**Type:** `bool` (optional, default: `false`)
+
+**Description:** Exclude file/directory from generation.
+
+**Use Cases:**
+- Conditional file inclusion based on prompts
+- Excluding template-only files
+
+#### `executable`
+
+**Type:** `bool` (optional, default: `false`)
+
+**Description:** Set executable permission (chmod +x).
+
+**Example:**
+```yaml
+files:
+  - path: scripts/*.sh
+    executable: true
+```
+
+#### `template`
+
+**Type:** `bool` (optional, default: `true` for `*.tmpl`)
+
+**Description:** Process file as Go template.
+
+**Example:**
+```yaml
+files:
+  - path: LICENSE
+    template: false  # Copy as-is, don't process as template
+```
+
+## Template Variables
+
+Variables available in template files and `when` conditions:
+
+### `.values`
+
+User-provided values from prompts.
+
+```yaml
+{{ .values.project_name }}
+{{ .values.environment }}
+{{ .values.enable_monitoring }}
+```
+
+### `.template`
+
+Template metadata.
+
+```yaml
+{{ .template.name }}        # Template name
+{{ .template.description }} # Template description
+{{ .template.version }}     # Template version
+{{ .template.author }}      # Template author
+```
+
+## Complete Example
+
+```yaml
+name: full-stack-app
+description: Complete full-stack application template with frontend, backend, and infrastructure
+version: 2.1.0
+author: DevOps Team <devops@example.com>
+
+prompts:
+  # Basic Configuration
+  - name: app_name
+    type: input
+    message: "Application name:"
+    required: true
+    pattern: "^[a-z][a-z0-9-]*$"
+    validation_message: "Must start with letter, lowercase alphanumeric and hyphens only"
+
+  - name: description
+    type: input
+    message: "Application description:"
+    default: "My awesome application"
+
+  # Environment Configuration
+  - name: environment
+    type: select
+    message: "Target environment:"
+    options:
+      - dev
+      - staging
+      - production
+    default: dev
+
+  # Infrastructure Configuration
+  - name: cloud_provider
+    type: select
+    message: "Cloud provider:"
+    options:
+      - aws
+      - azure
+      - gcp
+    default: aws
+
+  - name: deployment_type
+    type: select
+    message: "Deployment type:"
+    options:
+      - single-region
+      - multi-region
+    default: single-region
+
+  - name: regions
+    type: multiselect
+    message: "Select regions:"
+    when: '{{ eq .values.deployment_type "multi-region" }}'
+    options:
+      - us-east-1
+      - us-west-2
+      - eu-west-1
+      - ap-southeast-1
+    required: true
+
+  # Features
+  - name: include_frontend
+    type: confirm
+    message: "Include frontend application?"
+    default: true
+
+  - name: frontend_framework
+    type: select
+    message: "Frontend framework:"
+    when: '{{ .values.include_frontend }}'
+    options:
+      - react
+      - vue
+      - angular
+    default: react
+
+  - name: include_backend
+    type: confirm
+    message: "Include backend API?"
+    default: true
+
+  - name: include_database
+    type: confirm
+    message: "Include database?"
+    default: true
+
+  - name: database_type
+    type: select
+    message: "Database type:"
+    when: '{{ .values.include_database }}'
+    options:
+      - postgresql
+      - mysql
+      - mongodb
+    default: postgresql
+
+  # Monitoring & Observability
+  - name: enable_monitoring
+    type: confirm
+    message: "Enable monitoring and metrics?"
+    default: true
+
+  - name: enable_logging
+    type: confirm
+    message: "Enable centralized logging?"
+    default: true
+
+  - name: enable_tracing
+    type: confirm
+    message: "Enable distributed tracing?"
+    default: false
+
+files:
+  # Scripts should be executable
+  - path: scripts/
+    executable: true
+
+  # Exclude frontend if not selected
+  - path: frontend/
+    exclude: '{{ not .values.include_frontend }}'
+
+  # Exclude backend if not selected
+  - path: backend/
+    exclude: '{{ not .values.include_backend }}'
+
+  # Exclude database if not selected
+  - path: infrastructure/database/
+    exclude: '{{ not .values.include_database }}'
+
+  # License file should not be templated
+  - path: LICENSE
+    template: false
+```
+
+## Validation
+
+Validate your scaffold configuration:
+
+```shell
+atmos scaffold validate path/to/template
+```
+
+Common validation errors:
+
+1. **Invalid prompt type**: Must be input, select, multiselect, or confirm
+2. **Missing required fields**: name, type, message must be present
+3. **Pattern syntax error**: Invalid regex pattern
+4. **Invalid default**: Default value not in options list
+5. **Circular dependency**: When conditions create circular references
+
+## Related Documentation
+
+- [Scaffold Templates](/core-concepts/scaffold-templates) - Template concepts
+- [Creating Scaffold Templates](/guides/creating-scaffold-templates) - Template creation guide
+- [Template Functions](/core-concepts/template-functions) - Available template functions
+- [`atmos scaffold validate`](/cli/commands/scaffold/validate) - Validation command

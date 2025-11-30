@@ -14,10 +14,12 @@ Valid subcommands are:
 • docs
 • helmfile
 • help
+• init
 • list
 • packer
 • pro
 • profile
+• scaffold
 • show
 • support
 • terraform

@@ -1,0 +1,183 @@
+---
+title: Scaffold Templates
+sidebar_position: 10
+sidebar_label: Scaffold Templates
+description: Scaffold templates provide reusable project structures for quickly initializing Atmos configurations and components.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Scaffold templates are pre-configured project structures that help you quickly bootstrap Atmos configurations, components, and entire projects with best practices baked in. Use templates to standardize your infrastructure patterns across teams and projects.
+</Intro>
+
+## What are Scaffold Templates?
+
+Scaffold templates are reusable templates that generate files and directory structures for Atmos projects. They combine static files with Go template directives to create dynamic, customizable scaffolds.
+
+A scaffold template can include:
+- Atmos configuration files (`atmos.yaml`)
+- Stack definitions and configurations
+- Terraform component modules
+- Documentation and README files
+- Git and editor configurations
+
+## Built-in Templates
+
+Atmos includes several built-in templates:
+
+### `demo-library`
+A minimal template demonstrating the component library pattern with a reusable VPC component.
+
+### `demo-stacks`
+A complete example showing stack inheritance, imports, and component configurations across multiple environments.
+
+### `demo-custom-command`
+Template for creating custom Atmos commands with examples.
+
+### `rich-project`
+A comprehensive template with advanced features including:
+- Multi-region support
+- Environment-specific configurations
+- Monitoring and logging setup
+- Template-driven variable configuration
+
+## Template Structure
+
+Each scaffold template follows this structure:
+
+```
+template-name/
+├── scaffold.yaml           # Template configuration and prompts
+├── files/                  # Template files and directories
+│   ├── atmos.yaml.tmpl    # Go template files
+│   ├── components/
+│   └── stacks/
+└── README.md              # Template documentation
+```
+
+### scaffold.yaml
+
+The `scaffold.yaml` file defines:
+- Template metadata (name, description, author)
+- Interactive prompts for user input
+- Template variables and their validation
+- File exclusions and permissions
+
+Example:
+```yaml
+name: my-template
+description: My custom Atmos template
+version: 1.0.0
+
+prompts:
+  - name: project_name
+    type: input
+    message: "What is your project name?"
+    required: true
+
+  - name: environment
+    type: select
+    message: "Select environment:"
+    options:
+      - dev
+      - staging
+      - prod
+    default: dev
+```
+
+## Using Templates
+
+### Initialize from Template
+
+Use [`atmos init`](/cli/commands/init) to create a new project from a template:
+
+```shell
+# Interactive mode (prompts for template and inputs)
+atmos init
+
+# Direct template specification
+atmos init demo-stacks --target-dir ./my-project
+
+# Non-interactive with values
+atmos init rich-project \
+  --target-dir ./my-project \
+  --non-interactive \
+  --values name=myapp,environment=production
+```
+
+### Generate from Scaffold
+
+Use [`atmos scaffold generate`](/cli/commands/scaffold/generate) to generate files from a scaffold configuration:
+
+```shell
+# Generate a new component
+atmos scaffold generate component vpc
+
+# Generate with custom values
+atmos scaffold generate component vpc \
+  --values region=us-west-2,environment=prod
+```
+
+## Template Features
+
+### Go Template Directives
+
+Templates use [Go template syntax](https://pkg.go.dev/text/template) with access to user-provided values:
+
+```yaml
+# atmos.yaml.tmpl
+base_path: {{ .values.base_path | default "." }}
+
+components:
+  terraform:
+    base_path: components/terraform
+    {{ if .values.auto_approve }}
+    apply_auto_approve: true
+    {{ end }}
+```
+
+### Conditional File Generation
+
+Control which files are generated based on user input:
+
+```yaml
+# scaffold.yaml
+prompts:
+  - name: include_monitoring
+    type: confirm
+    message: "Include monitoring setup?"
+    default: false
+
+# Files in monitoring/ directory only generated if include_monitoring is true
+```
+
+### Variable Validation
+
+Validate user input before generating files:
+
+```yaml
+prompts:
+  - name: project_name
+    type: input
+    message: "Project name:"
+    required: true
+    pattern: "^[a-z][a-z0-9-]*$"
+    validation_message: "Must start with letter, lowercase alphanumeric and hyphens only"
+```
+
+## Creating Custom Templates
+
+See [Creating Scaffold Templates](/guides/creating-scaffold-templates) for a complete guide on building your own templates.
+
+## Related Commands
+
+- [`atmos init`](/cli/commands/init) - Initialize new Atmos projects from templates
+- [`atmos scaffold generate`](/cli/commands/scaffold/generate) - Generate files from scaffolds
+- [`atmos scaffold list`](/cli/commands/scaffold/list) - List available scaffolds
+- [`atmos scaffold validate`](/cli/commands/scaffold/validate) - Validate scaffold configurations
+
+## Related Concepts
+
+- [Components](/core-concepts/components) - Building blocks that templates can generate
+- [Stacks](/core-concepts/stacks) - Stack configurations that templates can scaffold
+- [Template Functions](/core-concepts/template-functions) - Functions available in template rendering

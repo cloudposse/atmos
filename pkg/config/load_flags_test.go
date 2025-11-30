@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -228,13 +227,6 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 
 			// Setup Viper (for tests that still need it)
 			tt.setupViper()
-
-			// Save original os.Args and restore after test
-			originalArgs := os.Args
-			t.Cleanup(func() {
-				os.Args = originalArgs
-			})
-			os.Args = tt.osArgs
 
 			// Setup environment variables using t.Setenv for automatic cleanup
 			if tt.setupEnv != nil {

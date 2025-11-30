@@ -28,10 +28,12 @@ AVAILABLE COMMANDS
       docs [command]        Open Atmos documentation or display component-specific docs
       helmfile [command]    Manage Helmfile-based Kubernetes deployments
       help                  Help about any command
+      init                  Initialize a new Atmos project from a template
       list [command]        List available stacks and components
       packer [command]      Manage packer-based machine images for multiple platforms
       pro [command]         Access premium features integrated with atmos-pro.com
       profile [command]     Manage configuration profiles
+      scaffold [command]    Generate code from scaffold templates
       support               Show Atmos support options
       terraform [command]   Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
       theme [command]       Manage terminal themes for Atmos CLI
