@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -31,6 +32,7 @@ type PlanfileOptions struct {
 	Stack                string
 	Format               string
 	File                 string
+	Dir                  string
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
@@ -52,6 +54,11 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 	}
 
 	file, err := flags.GetString("file")
+	if err != nil {
+		return err
+	}
+
+	dir, err := flags.GetString("dir")
 	if err != nil {
 		return err
 	}
@@ -85,11 +92,16 @@ func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) erro
 
 	component := args[0]
 
+	if file != "" && dir != "" {
+		return errUtils.ErrMutuallyExclusiveFlags
+	}
+
 	options := PlanfileOptions{
 		Component:            component,
 		Stack:                stack,
 		Format:               format,
 		File:                 file,
+		Dir:                  dir,
 		ProcessTemplates:     processTemplates,
 		ProcessYamlFunctions: processYamlFunctions,
 		Skip:                 skip,
@@ -111,6 +123,10 @@ func ExecuteTerraformGeneratePlanfile(
 
 	if err := validateComponent(options.Component); err != nil {
 		return err
+	}
+
+	if options.File != "" && options.Dir != "" {
+		return errUtils.ErrMutuallyExclusiveFlags
 	}
 
 	info.ComponentFromArg = options.Component
@@ -160,7 +176,7 @@ func ExecuteTerraformGeneratePlanfile(
 	}
 
 	// Resolve the planfile path based on options. If a custom file is specified, use that. Otherwise, use the default path.
-	planFilePath, err := resolvePlanfilePath(componentPath, options.Format, options.File, info, &atmosConfig)
+	planFilePath, err := resolvePlanfilePath(componentPath, options, info, &atmosConfig)
 	if err != nil {
 		return err
 	}
@@ -197,16 +213,33 @@ func validateComponent(component string) error {
 }
 
 // resolvePlanfilePath determines the final path for the planfile based on options.
-func resolvePlanfilePath(componentPath, format string, customFile string, info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) (string, error) {
+// It resolves paths using three modes:
+// - When options.File is set: uses the specified file path (absolute or relative to componentPath).
+// - When options.Dir is set: constructs the default filename in the specified directory (absolute or relative to componentPath).
+// - When neither is set: uses atmos configuration defaults.
+func resolvePlanfilePath(componentPath string, options *PlanfileOptions, info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) (string, error) {
+	if options == nil {
+		return "", errUtils.ErrNilParam
+	}
+
 	var planFilePath string
-	if customFile != "" {
-		if filepath.IsAbs(customFile) {
-			planFilePath = customFile
+	switch {
+	case options.File != "":
+		if filepath.IsAbs(options.File) {
+			planFilePath = options.File
 		} else {
-			planFilePath = filepath.Join(componentPath, customFile)
+			planFilePath = filepath.Join(componentPath, options.File)
 		}
-	} else {
-		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), format)
+	case options.Dir != "":
+		destinationDir := options.Dir
+		if !filepath.IsAbs(destinationDir) {
+			destinationDir = filepath.Join(componentPath, destinationDir)
+		}
+
+		defaultFileName := fmt.Sprintf("%s.%s", constructTerraformComponentPlanfileName(info), options.Format)
+		planFilePath = filepath.Join(destinationDir, defaultFileName)
+	default:
+		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), options.Format)
 	}
 
 	err := u.EnsureDir(planFilePath)
