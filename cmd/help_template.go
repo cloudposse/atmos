@@ -666,8 +666,8 @@ func renderCompatFlags(w io.Writer, flags map[string]compat.CompatibilityFlag, f
 
 	// Calculate available width for description.
 	termWidth := getTerminalWidth()
-	// Layout: 6 spaces padding + flag name + 2 spaces + description
-	descColStart := 6 + maxLen + 2
+	// Layout: commandListLeftPad padding + flag name + commandDescriptionSpacing + description
+	descColStart := commandListLeftPad + maxLen + commandDescriptionSpacing
 	descWidth := termWidth - descColStart
 	if descWidth < minDescriptionWidth {
 		descWidth = minDescriptionWidth

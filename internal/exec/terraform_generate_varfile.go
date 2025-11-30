@@ -1,8 +1,7 @@
 package exec
 
 import (
-	"errors"
-
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -74,5 +73,5 @@ func ExecuteGenerateVarfile(
 func ExecuteTerraformGenerateVarfileCmd(cmd interface{}, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfileCmd")()
 
-	return errors.New("ExecuteTerraformGenerateVarfileCmd is deprecated and should not be called")
+	return errUtils.ErrDeprecatedCmdNotCallable
 }

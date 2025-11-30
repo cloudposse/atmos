@@ -306,7 +306,7 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 }
 
 // listTerraformComponents lists all terraform components.
-func listTerraformComponents(cmd *cobra.Command) ([]string, error) {
+func listTerraformComponents(_ *cobra.Command) ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {

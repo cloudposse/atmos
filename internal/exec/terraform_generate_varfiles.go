@@ -21,7 +21,7 @@ import (
 func ExecuteTerraformGenerateVarfilesCmd(cmd interface{}, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfilesCmd")()
 
-	return errors.New("ExecuteTerraformGenerateVarfilesCmd is deprecated and should not be called")
+	return errUtils.ErrDeprecatedCmdNotCallable
 }
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks.

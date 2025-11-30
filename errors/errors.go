@@ -238,6 +238,9 @@ var (
 	ErrOriginalPlanFileNotExist         = errors.New("original plan file does not exist")
 	ErrNewPlanFileNotExist              = errors.New("new plan file does not exist")
 	ErrTerraformGenerateBackendArgument = errors.New("invalid arguments")
+	ErrFileTemplateRequired             = errors.New("file-template is required")
+	ErrInteractiveNotAvailable          = errors.New("interactive confirmation not available in non-TTY environment")
+	ErrDeprecatedCmdNotCallable         = errors.New("deprecated command should not be called")
 
 	ErrMissingPackerTemplate = errors.New("packer template is required")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")

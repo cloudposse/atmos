@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -40,7 +41,7 @@ var varfilesCmd = &cobra.Command{
 
 		// Validate required flags
 		if fileTemplate == "" {
-			return fmt.Errorf("file-template is required (use --file-template)")
+			return errUtils.ErrFileTemplateRequired
 		}
 
 		// Parse CSV values
@@ -56,7 +57,7 @@ var varfilesCmd = &cobra.Command{
 
 		// Validate format
 		if format != "" && format != "json" && format != "hcl" {
-			return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'hcl' and 'json'", format)
+			return fmt.Errorf("%w: '%s'. Valid values are 'hcl' and 'json'", errUtils.ErrInvalidFlag, format)
 		}
 		if format == "" {
 			format = "hcl"

@@ -61,7 +61,7 @@ func checkBackendTypeAfterProcessing(backendType string) error {
 func ExecuteTerraformGenerateBackendsCmd(cmd interface{}, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendsCmd")()
 
-	return errors.New("ExecuteTerraformGenerateBackendsCmd is deprecated and should not be called")
+	return errUtils.ErrDeprecatedCmdNotCallable
 }
 
 // ExecuteTerraformGenerateBackends generates backend configs for all terraform components.
