@@ -286,8 +286,9 @@ func MergeDeferredValues(values []*DeferredValue, atmosConfig *schema.AtmosConfi
 //	    return nil, err
 //	}
 //
-//	// After all sections are merged, apply deferred merges:
-//	if err := m.ApplyDeferredMerges(dctx, finalVars, atmosConfig); err != nil {
+//	// After all sections are merged, apply deferred merges with YAML function processor:
+//	processor := &YAMLProcessor{...} // Implement YAMLFunctionProcessor interface
+//	if err := m.ApplyDeferredMerges(dctx, finalVars, atmosConfig, processor); err != nil {
 //	    return nil, err
 //	}
 //
@@ -319,10 +320,40 @@ func MergeWithDeferred(
 	return result, dctx, nil
 }
 
+// processYAMLFunctions processes YAML functions in deferred values using the provided processor.
+func processYAMLFunctions(deferredValues []*DeferredValue, processor YAMLFunctionProcessor, pathKey string) error {
+	for _, dv := range deferredValues {
+		if !dv.IsFunction {
+			continue
+		}
+
+		// Process the YAML function string (e.g., "!template '{{ .settings.vpc_cidr }}'").
+		valueStr, ok := dv.Value.(string)
+		if !ok {
+			// Not a string, keep as-is.
+			continue
+		}
+
+		processedValue, err := processor.ProcessYAMLFunctionString(valueStr)
+		if err != nil {
+			return fmt.Errorf("failed to process YAML function at %s: %w", pathKey, err)
+		}
+
+		// Update the deferred value with the processed result.
+		dv.Value = processedValue
+		dv.IsFunction = false
+	}
+
+	return nil
+}
+
 // ApplyDeferredMerges processes all deferred YAML functions and applies them to the result.
 // This function is called after the initial merge to handle YAML functions that were deferred
 // to avoid type conflicts during merging.
-func ApplyDeferredMerges(dctx *DeferredMergeContext, result map[string]interface{}, atmosConfig *schema.AtmosConfiguration) error {
+//
+// If processor is nil, YAML function strings are kept as-is (for testing or when processing is not needed).
+// If processor is provided, YAML functions are processed to their actual values before merging.
+func ApplyDeferredMerges(dctx *DeferredMergeContext, result map[string]interface{}, atmosConfig *schema.AtmosConfiguration, processor YAMLFunctionProcessor) error {
 	defer perf.Track(atmosConfig, "merge.ApplyDeferredMerges")()
 
 	if dctx == nil || !dctx.HasDeferredValues() {
@@ -347,17 +378,12 @@ func ApplyDeferredMerges(dctx *DeferredMergeContext, result map[string]interface
 			return deferredValues[i].Precedence < deferredValues[j].Precedence
 		})
 
-		// TODO: Process YAML functions to get actual values.
-		// This requires integration with internal/exec YAML function processors:
-		// - !template: processTagTemplate()
-		// - !terraform.output: processTerraformOutput()
-		// - !terraform.state: processTerraformState()
-		// - !store.get, !store: processStore()
-		// - !exec: processExec()
-		// - !env: processEnv()
-		//
-		// For now, we keep the YAML function strings as-is.
-		// In the next phase, we'll add a processor interface that can handle each type.
+		// Process YAML functions to get actual values if processor is provided.
+		if processor != nil {
+			if err := processYAMLFunctions(deferredValues, processor, pathKey); err != nil {
+				return err
+			}
+		}
 
 		// Merge all values for this path (respects list_merge_strategy).
 		merged, err := MergeDeferredValues(deferredValues, cfgPtr)

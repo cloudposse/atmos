@@ -80,9 +80,9 @@ func ExampleMergeWithDeferred() {
 	}
 
 	// Apply deferred merges.
-	// Note: In production, this would process YAML functions.
-	// For this example, they remain as strings since processing is TODO.
-	err = ApplyDeferredMerges(dctx, result, cfg)
+	// Note: In production, this would process YAML functions by passing a processor.
+	// For this example, they remain as strings since no processor is provided (nil).
+	err = ApplyDeferredMerges(dctx, result, cfg, nil)
 	if err != nil {
 		fmt.Printf("Apply error: %v\n", err)
 		return

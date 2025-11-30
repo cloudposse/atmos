@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -640,13 +641,20 @@ func TestYamlFuncTemplate_Regression(t *testing.T) {
 		m, ok := result.(map[string]interface{})
 		assert.True(t, ok, "Should decode deep structure")
 
-		// Navigate to deepest level
-		a := m["a"].(map[string]interface{})
-		b := a["b"].(map[string]interface{})
-		c := b["c"].(map[string]interface{})
-		d := c["d"].(map[string]interface{})
-		e := d["e"].(map[string]interface{})
-		f := e["f"].(map[string]interface{})
+		// Navigate to deepest level using require guards to prevent panics on type mismatch.
+		a, ok := m["a"].(map[string]interface{})
+		require.True(t, ok, "a should be a map")
+		b, ok := a["b"].(map[string]interface{})
+		require.True(t, ok, "b should be a map")
+		c, ok := b["c"].(map[string]interface{})
+		require.True(t, ok, "c should be a map")
+		d, ok := c["d"].(map[string]interface{})
+		require.True(t, ok, "d should be a map")
+		e, ok := d["e"].(map[string]interface{})
+		require.True(t, ok, "e should be a map")
+		f, ok := e["f"].(map[string]interface{})
+		require.True(t, ok, "f should be a map")
+
 		assert.Equal(t, "deep", f["g"])
 	})
 
@@ -721,4 +729,256 @@ func BenchmarkProcessTagTemplate_InvalidJSON(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		processTagTemplate(input)
 	}
+}
+
+// TestProcessTemplateTagsOnly tests the ProcessTemplateTagsOnly function with various input structures.
+func TestProcessTemplateTagsOnly(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		expected map[string]any
+	}{
+		{
+			name:     "nil input",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name:     "empty map",
+			input:    map[string]any{},
+			expected: map[string]any{},
+		},
+		{
+			name: "simple string without template tag",
+			input: map[string]any{
+				"key": "value",
+			},
+			expected: map[string]any{
+				"key": "value",
+			},
+		},
+		{
+			name: "template tag with JSON string",
+			input: map[string]any{
+				"key": `!template "hello"`,
+			},
+			expected: map[string]any{
+				"key": "hello",
+			},
+		},
+		{
+			name: "template tag with JSON number",
+			input: map[string]any{
+				"count": "!template 42",
+			},
+			expected: map[string]any{
+				"count": float64(42),
+			},
+		},
+		{
+			name: "template tag with JSON boolean",
+			input: map[string]any{
+				"enabled": "!template true",
+			},
+			expected: map[string]any{
+				"enabled": true,
+			},
+		},
+		{
+			name: "template tag with JSON array",
+			input: map[string]any{
+				"tags": `!template ["tag1", "tag2", "tag3"]`,
+			},
+			expected: map[string]any{
+				"tags": []any{"tag1", "tag2", "tag3"},
+			},
+		},
+		{
+			name: "template tag with JSON object",
+			input: map[string]any{
+				"config": `!template {"name": "test", "count": 5}`,
+			},
+			expected: map[string]any{
+				"config": map[string]any{
+					"name":  "test",
+					"count": float64(5),
+				},
+			},
+		},
+		{
+			name: "nested map with template tags",
+			input: map[string]any{
+				"outer": map[string]any{
+					"inner": `!template "nested-value"`,
+				},
+			},
+			expected: map[string]any{
+				"outer": map[string]any{
+					"inner": "nested-value",
+				},
+			},
+		},
+		{
+			name: "array with template tags",
+			input: map[string]any{
+				"items": []any{
+					`!template "item1"`,
+					`!template 42`,
+					`!template true`,
+				},
+			},
+			expected: map[string]any{
+				"items": []any{
+					"item1",
+					float64(42),
+					true,
+				},
+			},
+		},
+		{
+			name: "mixed structure with template tags",
+			input: map[string]any{
+				"string":           "plain",
+				"number":           42,
+				"boolean":          true,
+				"templated_string": `!template "from-template"`,
+				"templated_number": "!template 100",
+				"nested": map[string]any{
+					"value": `!template ["a", "b", "c"]`,
+				},
+				"array": []any{
+					"plain",
+					`!template "templated"`,
+					map[string]any{
+						"key": `!template {"nested": "object"}`,
+					},
+				},
+			},
+			expected: map[string]any{
+				"string":           "plain",
+				"number":           42,
+				"boolean":          true,
+				"templated_string": "from-template",
+				"templated_number": float64(100),
+				"nested": map[string]any{
+					"value": []any{"a", "b", "c"},
+				},
+				"array": []any{
+					"plain",
+					"templated",
+					map[string]any{
+						"key": map[string]any{"nested": "object"},
+					},
+				},
+			},
+		},
+		{
+			name: "non-template YAML functions left unchanged",
+			input: map[string]any{
+				"terraform_output": "!terraform.output vpc_id",
+				"store_value":      "!store.get secret/key",
+				"exec_result":      "!exec echo hello",
+			},
+			expected: map[string]any{
+				"terraform_output": "!terraform.output vpc_id",
+				"store_value":      "!store.get secret/key",
+				"exec_result":      "!exec echo hello",
+			},
+		},
+		{
+			name: "template tag with plain string (no JSON)",
+			input: map[string]any{
+				"simple": "!template plain-value",
+			},
+			expected: map[string]any{
+				"simple": "plain-value",
+			},
+		},
+		{
+			name: "deeply nested structures",
+			input: map[string]any{
+				"level1": map[string]any{
+					"level2": map[string]any{
+						"level3": []any{
+							map[string]any{
+								"value": `!template "deep"`,
+							},
+						},
+					},
+				},
+			},
+			expected: map[string]any{
+				"level1": map[string]any{
+					"level2": map[string]any{
+						"level3": []any{
+							map[string]any{
+								"value": "deep",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "array of maps with template tags",
+			input: map[string]any{
+				"items": []any{
+					map[string]any{
+						"name":  `!template "item1"`,
+						"count": "!template 10",
+					},
+					map[string]any{
+						"name":  `!template "item2"`,
+						"count": "!template 20",
+					},
+				},
+			},
+			expected: map[string]any{
+				"items": []any{
+					map[string]any{
+						"name":  "item1",
+						"count": float64(10),
+					},
+					map[string]any{
+						"name":  "item2",
+						"count": float64(20),
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ProcessTemplateTagsOnly(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestProcessTemplateTagsOnly_PreservesOriginal verifies that the original input is not modified.
+func TestProcessTemplateTagsOnly_PreservesOriginal(t *testing.T) {
+	original := map[string]any{
+		"key": `!template "value"`,
+		"nested": map[string]any{
+			"inner": "!template 42",
+		},
+	}
+
+	// Make a copy to compare later.
+	originalCopy := map[string]any{
+		"key": `!template "value"`,
+		"nested": map[string]any{
+			"inner": "!template 42",
+		},
+	}
+
+	result := ProcessTemplateTagsOnly(original)
+
+	// Verify original is unchanged.
+	assert.Equal(t, originalCopy, original)
+
+	// Verify result has processed templates.
+	assert.Equal(t, "value", result["key"])
+	assert.Equal(t, map[string]any{"inner": float64(42)}, result["nested"])
 }

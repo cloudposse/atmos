@@ -1,6 +1,8 @@
 package merge
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -115,9 +117,11 @@ func TestWalkAndDeferYAMLFunctions(t *testing.T) {
 
 		result := WalkAndDeferYAMLFunctions(dctx, input, []string{})
 
-		// Navigate to nested value.
-		level1 := result["level1"].(map[string]interface{})
-		level2 := level1["level2"].(map[string]interface{})
+		// Navigate to nested value using require guards to prevent panics on type mismatch.
+		level1, ok := result["level1"].(map[string]interface{})
+		require.True(t, ok, "level1 should be a map")
+		level2, ok := level1["level2"].(map[string]interface{})
+		require.True(t, ok, "level2 should be a map")
 
 		assert.Nil(t, level2["template"])
 		assert.Equal(t, "string", level2["regular"])
@@ -593,14 +597,14 @@ func TestMergeWithDeferred(t *testing.T) {
 func TestApplyDeferredMerges(t *testing.T) {
 	t.Run("returns nil error when context is nil", func(t *testing.T) {
 		result := map[string]interface{}{}
-		err := ApplyDeferredMerges(nil, result, nil)
+		err := ApplyDeferredMerges(nil, result, nil, nil)
 		assert.NoError(t, err)
 	})
 
 	t.Run("returns nil error when no deferred values", func(t *testing.T) {
 		dctx := NewDeferredMergeContext()
 		result := map[string]interface{}{}
-		err := ApplyDeferredMerges(dctx, result, nil)
+		err := ApplyDeferredMerges(dctx, result, nil, nil)
 		assert.NoError(t, err)
 	})
 
@@ -613,16 +617,16 @@ func TestApplyDeferredMerges(t *testing.T) {
 
 		dctx := NewDeferredMergeContext()
 		// Simulate deferred YAML function strings.
-		// Note: These won't be processed (TODO in ApplyDeferredMerges),
+		// Note: These won't be processed (processor is nil),
 		// but will be merged as strings.
 		dctx.AddDeferred([]string{"config"}, "!template 'value'")
 
 		result := map[string]interface{}{}
 
-		err := ApplyDeferredMerges(dctx, result, cfg)
+		err := ApplyDeferredMerges(dctx, result, cfg, nil)
 
 		require.NoError(t, err)
-		// The value should be set (as the string, since processing is TODO).
+		// The value should be set (as the string, since no processor was provided).
 		assert.Equal(t, "!template 'value'", result["config"])
 	})
 
@@ -644,7 +648,7 @@ func TestApplyDeferredMerges(t *testing.T) {
 
 		result := map[string]interface{}{}
 
-		err := ApplyDeferredMerges(dctx, result, cfg)
+		err := ApplyDeferredMerges(dctx, result, cfg, nil)
 
 		require.NoError(t, err)
 		// With replace strategy, last (highest precedence) should win.
@@ -663,12 +667,16 @@ func TestApplyDeferredMerges(t *testing.T) {
 
 		result := map[string]interface{}{}
 
-		err := ApplyDeferredMerges(dctx, result, cfg)
+		err := ApplyDeferredMerges(dctx, result, cfg, nil)
 
 		require.NoError(t, err)
 
-		level1 := result["level1"].(map[string]interface{})
-		level2 := level1["level2"].(map[string]interface{})
+		// Use require guards for type assertions to provide clear test failures instead of panics.
+		level1, ok := result["level1"].(map[string]interface{})
+		require.True(t, ok, "level1 should be a map")
+		level2, ok := level1["level2"].(map[string]interface{})
+		require.True(t, ok, "level2 should be a map")
+
 		assert.Equal(t, "value", level2["key"])
 	})
 
@@ -680,10 +688,153 @@ func TestApplyDeferredMerges(t *testing.T) {
 
 		result := map[string]interface{}{}
 
-		err := ApplyDeferredMerges(dctx, result, nil)
+		err := ApplyDeferredMerges(dctx, result, nil, nil)
 
 		require.NoError(t, err)
 		// Default is replace strategy, so last value wins.
 		assert.Equal(t, []interface{}{3, 4}, result["key"])
 	})
+}
+
+// TestProcessYAMLFunctions tests the processYAMLFunctions helper function.
+func TestProcessYAMLFunctions(t *testing.T) {
+	t.Run("processes YAML functions successfully", func(t *testing.T) {
+		// Create a mock processor.
+		processor := &mockYAMLProcessor{
+			processFunc: func(value string) (any, error) {
+				// Simple processor that converts "!template X" to uppercase.
+				if strings.HasPrefix(value, "!template ") {
+					return strings.ToUpper(strings.TrimPrefix(value, "!template ")), nil
+				}
+				return value, nil
+			},
+		}
+
+		deferredValues := []*DeferredValue{
+			{Value: "!template hello", IsFunction: true},
+			{Value: "!template world", IsFunction: true},
+		}
+
+		err := processYAMLFunctions(deferredValues, processor, "test.path")
+
+		require.NoError(t, err)
+		assert.Equal(t, "HELLO", deferredValues[0].Value)
+		assert.False(t, deferredValues[0].IsFunction)
+		assert.Equal(t, "WORLD", deferredValues[1].Value)
+		assert.False(t, deferredValues[1].IsFunction)
+	})
+
+	t.Run("skips non-function values", func(t *testing.T) {
+		processor := &mockYAMLProcessor{
+			processFunc: func(value string) (any, error) {
+				t.Fatal("processor should not be called for non-function values")
+				return nil, nil
+			},
+		}
+
+		deferredValues := []*DeferredValue{
+			{Value: "regular string", IsFunction: false},
+			{Value: 123, IsFunction: false},
+		}
+
+		err := processYAMLFunctions(deferredValues, processor, "test.path")
+
+		require.NoError(t, err)
+		assert.Equal(t, "regular string", deferredValues[0].Value)
+		assert.Equal(t, 123, deferredValues[1].Value)
+	})
+
+	t.Run("skips non-string function values", func(t *testing.T) {
+		processor := &mockYAMLProcessor{
+			processFunc: func(value string) (any, error) {
+				t.Fatal("processor should not be called for non-string values")
+				return nil, nil
+			},
+		}
+
+		deferredValues := []*DeferredValue{
+			{Value: 123, IsFunction: true},           // Non-string but marked as function.
+			{Value: []string{"a"}, IsFunction: true}, // Non-string but marked as function.
+		}
+
+		err := processYAMLFunctions(deferredValues, processor, "test.path")
+
+		require.NoError(t, err)
+		// Values should remain unchanged.
+		assert.Equal(t, 123, deferredValues[0].Value)
+		assert.Equal(t, []string{"a"}, deferredValues[1].Value)
+	})
+
+	t.Run("returns error on processing failure", func(t *testing.T) {
+		processor := &mockYAMLProcessor{
+			processFunc: func(value string) (any, error) {
+				return nil, errors.New("processing failed")
+			},
+		}
+
+		deferredValues := []*DeferredValue{
+			{Value: "!template error", IsFunction: true},
+		}
+
+		err := processYAMLFunctions(deferredValues, processor, "test.path")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to process YAML function at test.path")
+		assert.Contains(t, err.Error(), "processing failed")
+	})
+
+	t.Run("processes mixed values correctly", func(t *testing.T) {
+		processCount := 0
+		processor := &mockYAMLProcessor{
+			processFunc: func(value string) (any, error) {
+				processCount++
+				return "processed", nil
+			},
+		}
+
+		deferredValues := []*DeferredValue{
+			{Value: "!template func1", IsFunction: true}, // Should process.
+			{Value: "regular", IsFunction: false},        // Should skip.
+			{Value: "!template func2", IsFunction: true}, // Should process.
+			{Value: 123, IsFunction: true},               // Should skip (non-string).
+		}
+
+		err := processYAMLFunctions(deferredValues, processor, "test.path")
+
+		require.NoError(t, err)
+		assert.Equal(t, 2, processCount, "should process exactly 2 values")
+		assert.Equal(t, "processed", deferredValues[0].Value)
+		assert.False(t, deferredValues[0].IsFunction)
+		assert.Equal(t, "regular", deferredValues[1].Value)
+		assert.Equal(t, "processed", deferredValues[2].Value)
+		assert.False(t, deferredValues[2].IsFunction)
+		assert.Equal(t, 123, deferredValues[3].Value)
+	})
+
+	t.Run("handles empty deferred values", func(t *testing.T) {
+		processor := &mockYAMLProcessor{
+			processFunc: func(value string) (any, error) {
+				t.Fatal("processor should not be called for empty slice")
+				return nil, nil
+			},
+		}
+
+		var deferredValues []*DeferredValue
+
+		err := processYAMLFunctions(deferredValues, processor, "test.path")
+
+		require.NoError(t, err)
+	})
+}
+
+// mockYAMLProcessor is a mock implementation of YAMLFunctionProcessor for testing.
+type mockYAMLProcessor struct {
+	processFunc func(value string) (any, error)
+}
+
+func (m *mockYAMLProcessor) ProcessYAMLFunctionString(value string) (any, error) {
+	if m.processFunc != nil {
+		return m.processFunc(value)
+	}
+	return value, nil
 }

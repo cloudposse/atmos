@@ -1,4 +1,4 @@
-# PRD: YAML Function Merge Handling
+# PRD: Deferred YAML Functions Evaluation in Merge
 
 ## Status
 **Current**: ✅ Implemented and Tested

@@ -52,12 +52,12 @@ func TestDeferredMergeWithYAMLFunctions(t *testing.T) {
 		assert.Equal(t, "override", result["regular_value"])
 
 		// Apply deferred merges.
-		err = merge.ApplyDeferredMerges(dctx, result, cfg)
+		err = merge.ApplyDeferredMerges(dctx, result, cfg, nil)
 		require.NoError(t, err)
 
 		// After applying, the deferred YAML function string should be merged in.
-		// Note: Actual YAML function processing is TODO, so it remains as string.
-		// In a full implementation, this would process the YAML function and merge the result.
+		// Note: No processor is provided (nil), so it remains as string.
+		// In production, a processor would process the YAML function and merge the result.
 		assert.NotNil(t, result["template_config"])
 	})
 
@@ -94,7 +94,7 @@ func TestDeferredMergeWithYAMLFunctions(t *testing.T) {
 		assert.Equal(t, 2, deferred[2].Precedence)
 
 		// Apply deferred merges (with replace strategy, last wins).
-		err = merge.ApplyDeferredMerges(dctx, result, cfg)
+		err = merge.ApplyDeferredMerges(dctx, result, cfg, nil)
 		require.NoError(t, err)
 
 		assert.Equal(t, "!template 'value3'", result["config"])
@@ -261,12 +261,12 @@ func TestDeferredMergeWithYAMLFunctions(t *testing.T) {
 		assert.True(t, dctx.HasDeferredValues())
 
 		// Apply deferred merges.
-		err = merge.ApplyDeferredMerges(dctx, result, cfg)
+		err = merge.ApplyDeferredMerges(dctx, result, cfg, nil)
 		require.NoError(t, err)
 
 		// The deferred YAML function is applied.
-		// Note: Since YAML function processing is TODO, the string is merged as-is.
-		// In practice, the YAML function would be processed first, then merged.
+		// Note: Since no processor is provided (nil), the string is merged as-is.
+		// In production, the YAML function would be processed first, then merged.
 		assert.NotNil(t, result["config"])
 	})
 }
@@ -296,7 +296,7 @@ func TestDeferredMergeNilHandling(t *testing.T) {
 	t.Run("applies deferred merges with nil context", func(t *testing.T) {
 		result := map[string]interface{}{"key": "value"}
 
-		err := merge.ApplyDeferredMerges(nil, result, nil)
+		err := merge.ApplyDeferredMerges(nil, result, nil, nil)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "value", result["key"])
