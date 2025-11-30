@@ -59,6 +59,8 @@ func checkBackendTypeAfterProcessing(backendType string) error {
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command.
 // Deprecated: Use ExecuteTerraformGenerateBackends with typed parameters instead.
 func ExecuteTerraformGenerateBackendsCmd(cmd interface{}, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendsCmd")()
+
 	return errors.New("ExecuteTerraformGenerateBackendsCmd is deprecated and should not be called")
 }
 

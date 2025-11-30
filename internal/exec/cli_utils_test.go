@@ -779,8 +779,8 @@ func TestProcessCommandLineArgs_ProfileFlagTakesPrecedenceOverEnv(t *testing.T) 
 // before the component name results in an error rather than silent misinterpretation.
 // This tests the edge case where --from-plan is misplaced in the argument order.
 //
-// Correct usage: atmos terraform apply <component> -s <stack> --from-plan
-// Incorrect usage: atmos terraform apply --from-plan <component> -s <stack>
+// Correct usage: atmos terraform apply <component> -s <stack> --from-plan.
+// Incorrect usage: atmos terraform apply --from-plan <component> -s <stack>.
 func TestProcessCommandLineArgs_FromPlanBeforeComponent(t *testing.T) {
 	// Create a test command simulating terraform apply with global flags.
 	cmd := newTestCommandWithGlobalFlags("terraform")

@@ -20,13 +20,10 @@ func TestTerraformHeatmapFlag(t *testing.T) {
 	// cannot use cmd.SetArgs().
 
 	// Save original os.Args.
-	//nolint:lintroller // os.Args manipulation required - enableHeatmapIfRequested() scans os.Args directly.
 	oldArgs := os.Args
-	//nolint:lintroller // os.Args manipulation required - enableHeatmapIfRequested() scans os.Args directly.
 	defer func() { os.Args = oldArgs }()
 
 	// Simulate command line with --heatmap flag.
-	//nolint:lintroller // os.Args manipulation required - enableHeatmapIfRequested() scans os.Args directly.
 	os.Args = []string{"atmos", "terraform", "plan", "vpc", "-s", "uw2-prod", "--heatmap"}
 
 	// Call enableHeatmapIfRequested which should detect --heatmap in os.Args.
