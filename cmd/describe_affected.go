@@ -1,14 +1,16 @@
 package cmd
 
 import (
-	log "github.com/cloudposse/atmos/pkg/logger"
+	"os"
+
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/internal/exec"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits
+// describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits.
 var describeAffectedCmd = &cobra.Command{
 	Use:                "affected",
 	Short:              "List Atmos components and stacks affected by two Git commits",
@@ -69,6 +71,14 @@ func getRunnableDescribeAffectedCmd(
 				props.CLIConfig.Logs.Level = u.LogLevelDebug
 			}
 		}
+
+		// Get identity from flag and create AuthManager if provided.
+		identityName := GetIdentityFromFlags(cmd, os.Args)
+		authManager, err := CreateAuthManagerFromIdentity(identityName, &props.CLIConfig.Auth)
+		if err != nil {
+			return err
+		}
+		props.AuthManager = authManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 

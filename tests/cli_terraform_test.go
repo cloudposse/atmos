@@ -20,33 +20,17 @@ func TestCLITerraformClean(t *testing.T) {
 	assert.NoError(t, err, "Unset 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
 	err = os.Unsetenv("ATMOS_BASE_PATH")
 	assert.NoError(t, err, "Unset 'ATMOS_BASE_PATH' environment variable should execute without error")
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
 
 	// Define the work directory and change to it
 	workDir := "fixtures/scenarios/basic"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
-	// Force clean everything
+	// Force clean everything (no TTY available in CI)
 	runTerraformCleanCommand(t, "--force")
-	// Clean everything
-	runTerraformCleanCommand(t)
-	// Clean specific component
-	runTerraformCleanCommand(t, "mycomponent")
-	// Clean component with stack
-	runTerraformCleanCommand(t, "mycomponent", "-s", "nonprod")
+	// Clean specific component with force (no TTY available in CI)
+	runTerraformCleanCommand(t, "mycomponent", "--force")
+	// Clean component with stack with force (no TTY available in CI)
+	runTerraformCleanCommand(t, "mycomponent", "-s", "nonprod", "--force")
 
 	// Run terraform apply for prod environment
 	runTerraformApply(t, "prod")
@@ -82,7 +66,12 @@ func runTerraformApply(t *testing.T, environment string) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
-	t.Log(stdout.String())
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("Terraform stdout:\n%s", stdout.String())
+			t.Logf("Terraform stderr:\n%s", stderr.String())
+		}
+	})
 	if err != nil {
 		t.Fatalf("Failed to run terraform apply mycomponent -s %s: %v", environment, stderr.String())
 	}

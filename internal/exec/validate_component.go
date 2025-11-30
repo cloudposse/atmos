@@ -5,14 +5,15 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mitchellh/mapstructure"
-	"github.com/pkg/errors"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -31,7 +32,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 	}
 
 	if len(args) != 1 {
-		return "", "", errors.New("invalid arguments. The command requires one argument 'componentName'")
+		return "", "", errUtils.ErrInvalidComponentArgument
 	}
 
 	componentName := args[0]
@@ -74,8 +75,11 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 
 	_, err = ExecuteValidateComponent(&atmosConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
 	if err != nil {
+		u.PrintfMessageToTUI("\r%s Component validation failed\n", theme.Styles.XMark)
 		return "", "", err
 	}
+	u.PrintfMessageToTUI("\r%s Component validated successfully\n", theme.Styles.Checkmark)
+	log.Debug("Component validation completed", "component", componentName, "stack", stack)
 
 	return componentName, stack, nil
 }

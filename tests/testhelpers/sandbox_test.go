@@ -153,9 +153,7 @@ func TestSandboxMultipleComponentTypes(t *testing.T) {
 func TestSandboxExcludesArtifacts(t *testing.T) {
 	// Test that sandbox correctly excludes terraform and other artifacts.
 	// First, create a test scenario with artifacts.
-	tempWorkdir, err := os.MkdirTemp("", "sandbox-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempWorkdir)
+	tempWorkdir := t.TempDir()
 
 	// Create a component structure with artifacts that should be excluded.
 	componentDir := filepath.Join(tempWorkdir, "components", "terraform", "test-component")
@@ -210,9 +208,7 @@ components:
 
 func TestSandboxWithSymlinks(t *testing.T) {
 	// Test sandbox handling of symlinks.
-	tempWorkdir, err := os.MkdirTemp("", "sandbox-symlink-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempWorkdir)
+	tempWorkdir := t.TempDir()
 
 	// Create a component.
 	componentDir := filepath.Join(tempWorkdir, "components", "terraform", "test")
@@ -222,7 +218,7 @@ func TestSandboxWithSymlinks(t *testing.T) {
 	// Create a symlink to another component.
 	targetDir := filepath.Join(tempWorkdir, "components", "terraform", "linked")
 	require.NoError(t, os.MkdirAll(filepath.Dir(targetDir), 0o755))
-	err = os.Symlink(componentDir, targetDir)
+	err := os.Symlink(componentDir, targetDir)
 	if err != nil {
 		t.Skipf("Skipping symlink test: %v", err)
 	}
@@ -352,9 +348,7 @@ components:
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create temp directory with atmos.yaml.
-			tempDir, err := os.MkdirTemp("", "extract-test-*")
-			require.NoError(t, err)
-			defer os.RemoveAll(tempDir)
+			tempDir := t.TempDir()
 
 			atmosFile := filepath.Join(tempDir, "atmos.yaml")
 			require.NoError(t, os.WriteFile(atmosFile, []byte(tc.atmosYAML), 0o644))
@@ -376,9 +370,7 @@ components:
 
 func TestSandboxWithInvalidAtmosYAML(t *testing.T) {
 	// Test sandbox with invalid atmos.yaml - should fall back to defaults.
-	tempDir, err := os.MkdirTemp("", "invalid-atmos-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create invalid atmos.yaml.
 	atmosFile := filepath.Join(tempDir, "atmos.yaml")
@@ -417,9 +409,7 @@ func TestSandboxWithLargeComponentTree(t *testing.T) {
 		t.Skip("Skipping large component tree test in short mode")
 	}
 
-	tempWorkdir, err := os.MkdirTemp("", "sandbox-large-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempWorkdir)
+	tempWorkdir := t.TempDir()
 
 	// Create many components.
 	const numComponents = 50
@@ -456,9 +446,7 @@ components:
 
 func TestSandboxPermissionsPreserved(t *testing.T) {
 	// Test that file permissions are preserved in sandbox.
-	tempWorkdir, err := os.MkdirTemp("", "sandbox-perms-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempWorkdir)
+	tempWorkdir := t.TempDir()
 
 	// Create a component with specific permissions.
 	componentDir := filepath.Join(tempWorkdir, "components", "terraform", "test")
@@ -512,9 +500,7 @@ components:
 
 func TestSandboxWithNestedComponents(t *testing.T) {
 	// Test sandbox with nested component structures.
-	tempWorkdir, err := os.MkdirTemp("", "sandbox-nested-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempWorkdir)
+	tempWorkdir := t.TempDir()
 
 	// Create nested component structure.
 	nestedPaths := []string{
@@ -634,9 +620,7 @@ func TestSandboxComponentIsolation(t *testing.T) {
 // absolute paths in component configurations without path duplication.
 func TestSandboxWithAbsoluteComponentPaths(t *testing.T) {
 	// Create a temporary directory to use as an absolute path.
-	tempDir, err := os.MkdirTemp("", "sandbox-absolute-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create component structure.
 	componentDir := filepath.Join(tempDir, "mycomponents", "terraform")
@@ -648,9 +632,7 @@ func TestSandboxWithAbsoluteComponentPaths(t *testing.T) {
 	require.NoError(t, os.WriteFile(componentFile, []byte("# Test component"), 0o644))
 
 	// Create workdir with atmos.yaml pointing to absolute path.
-	workdir, err := os.MkdirTemp("", "sandbox-workdir-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(workdir)
+	workdir := t.TempDir()
 
 	// Write atmos.yaml with absolute path.
 	// On Windows, we need to escape backslashes in the YAML

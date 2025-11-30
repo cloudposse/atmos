@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -18,11 +19,15 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/open-policy-agent/opa/sdk"
 	opaTestServer "github.com/open-policy-agent/opa/sdk/test"
-	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	u "github.com/cloudposse/atmos/pkg/utils"
+)
+
+// Error format constants.
+const (
+	errContextFormat = "%w: %s"
 )
 
 // ValidateWithJsonSchema validates the data structure using the provided JSON Schema document.
@@ -62,7 +67,7 @@ func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (boo
 			if err2 != nil {
 				return false, err2
 			}
-			return false, errors.New(string(b))
+			return false, errors.Join(errUtils.ErrValidation, fmt.Errorf("%s", string(b)))
 		default:
 			return false, err
 		}
@@ -91,8 +96,6 @@ func ValidateWithOpa(
 	timeoutErrorMessage := "Timeout evaluating the OPA policy. Please check the following:\n" +
 		"1. Rego syntax\n" +
 		"2. If 're_match' function is used and the regex pattern contains a backslash to escape special chars, the backslash itself must be escaped with another backslash"
-
-	invalidRegoPolicyErrorMessage := fmt.Sprintf("invalid Rego policy in the file '%s'", schemaPath)
 
 	// https://stackoverflow.com/questions/17573190/how-to-multiply-duration-by-integer
 	ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
@@ -142,26 +145,26 @@ func ValidateWithOpa(
 	rs, err := query.Eval(ctx, rego.EvalInput(input))
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			err = fmt.Errorf("%s: %w", timeoutErrorMessage, err)
+			return false, errors.Join(errUtils.ErrOPATimeout, fmt.Errorf("%s", timeoutErrorMessage))
 		}
 		return false, err
 	}
 
 	if len(rs) < 1 {
-		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidOPAPolicy, invalidRegoPolicyErrorMessage)
+		return false, fmt.Errorf(errContextFormat, errUtils.ErrInvalidRegoPolicy, schemaPath)
 	}
 
 	if len(rs[0].Expressions) < 1 {
-		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidOPAPolicy, invalidRegoPolicyErrorMessage)
+		return false, fmt.Errorf(errContextFormat, errUtils.ErrInvalidRegoPolicy, schemaPath)
 	}
 
 	// Check the query evaluation result (if the `errors` output array has any items).
 	ers, ok := rs[0].Expressions[0].Value.([]any)
 	if !ok {
-		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrInvalidOPAPolicy, invalidRegoPolicyErrorMessage)
+		return false, fmt.Errorf(errContextFormat, errUtils.ErrInvalidRegoPolicy, schemaPath)
 	}
 	if len(ers) > 0 {
-		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		return false, fmt.Errorf(errContextFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
 	}
 
 	return true, nil
@@ -234,7 +237,7 @@ func ValidateWithOpaLegacy(
 	})
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			err = fmt.Errorf("%s: %w", timeoutErrorMessage, err)
+			return false, errors.Join(errUtils.ErrOPATimeout, fmt.Errorf("%s", timeoutErrorMessage))
 		}
 		return false, err
 	}
@@ -247,14 +250,14 @@ func ValidateWithOpaLegacy(
 		Input: dataFromJson,
 	}); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			err = fmt.Errorf("%s: %w", timeoutErrorMessage, err)
+			return false, errors.Join(errUtils.ErrOPATimeout, fmt.Errorf("%s", timeoutErrorMessage))
 		}
 		return false, err
 	}
 
 	ers, ok := result.Result.([]any)
 	if ok && len(ers) > 0 {
-		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
+		return false, fmt.Errorf(errContextFormat, errUtils.ErrOPAPolicyViolations, strings.Join(u.SliceOfInterfacesToSliceOfStrings(ers), "\n"))
 	}
 
 	return true, nil
@@ -269,8 +272,15 @@ func ValidateWithCue(data any, schemaName string, schemaText string) (bool, erro
 }
 
 // isWindowsOPALoadError checks if the error is likely a Windows-specific OPA loading issue.
+//
+// NOTE: This function was introduced in PR #1540 (commit 9e43f19cf) as a workaround for
+// rego.Load() failing on Windows despite path normalization attempts (lines 114-118 above).
+// We don't fully understand why the path normalization doesn't work or why this Windows-specific
+// fallback is necessary. The function detects file-not-found errors on Windows and triggers
+// a fallback to validateWithOpaFallback() which uses the legacy OPA validation method.
+// If you understand why this is needed, please update this comment.
 func isWindowsOPALoadError(err error) bool {
-	if runtime.GOOS != "windows" {
+	if err == nil || runtime.GOOS != "windows" {
 		return false
 	}
 
@@ -293,7 +303,7 @@ func validateWithOpaFallback(data any, schemaPath string, timeoutSeconds int) (b
 	// Read the policy file content directly.
 	policyContent, err := os.ReadFile(schemaPath)
 	if err != nil {
-		return false, fmt.Errorf(errUtils.ErrStringWrappingFormat, errUtils.ErrReadFile, fmt.Sprintf("reading OPA policy file %s: %v", schemaPath, err))
+		return false, errors.Join(errUtils.ErrReadFile, fmt.Errorf("reading OPA policy file %s: %w", schemaPath, err))
 	}
 
 	// Use the legacy validation method with inline content.

@@ -8,10 +8,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
+	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	log "github.com/cloudposse/atmos/pkg/logger"
-
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -19,6 +18,7 @@ import (
 const (
 	DefaultFileMode os.FileMode = 0o644
 	forwardSlash                = "/"
+	uncPathPrefix               = "//" // UNC paths after filepath.ToSlash on Windows
 )
 
 func removeTempDir(path string) {
@@ -29,22 +29,40 @@ func removeTempDir(path string) {
 }
 
 // printOrWriteToFile takes the output format (`yaml` or `json`) and a file name,
-// and prints the data to the console or to a file (if file is specified)
+// and prints the data to the console or to a file (if file is specified).
+// Uses fast-path formatting (without syntax highlighting) when output is not a TTY.
 func printOrWriteToFile(
 	atmosConfig *schema.AtmosConfiguration,
 	format string,
 	file string,
 	data any,
 ) error {
+	defer perf.Track(atmosConfig, "exec.printOrWriteToFile")()
+
+	// Determine if we should use expensive formatting (syntax highlighting).
+	// Only use highlighting when outputting to a TTY (terminal).
+	// For files or pipes, use simple formatting without highlighting.
+	isTTY := file == "" && tuiTerm.IsTTYSupportForStdout()
+
 	switch format {
 	case "yaml":
-
 		if file == "" {
-			err := u.PrintAsYAML(atmosConfig, data)
-			if err != nil {
-				return err
+			// Output to stdout.
+			if isTTY {
+				// TTY: use expensive highlighting for better readability.
+				err := u.PrintAsYAML(atmosConfig, data)
+				if err != nil {
+					return err
+				}
+			} else {
+				// Non-TTY (pipe): use fast-path without highlighting.
+				err := u.PrintAsYAMLSimple(atmosConfig, data)
+				if err != nil {
+					return err
+				}
 			}
 		} else {
+			// Output to file: use simple formatting without highlighting.
 			err := u.WriteToFileAsYAMLWithConfig(atmosConfig, file, data, DefaultFileMode)
 			if err != nil {
 				return err
@@ -53,11 +71,22 @@ func printOrWriteToFile(
 
 	case "json":
 		if file == "" {
-			err := u.PrintAsJSON(atmosConfig, data)
-			if err != nil {
-				return err
+			// Output to stdout.
+			if isTTY {
+				// TTY: use expensive highlighting for better readability.
+				err := u.PrintAsJSON(atmosConfig, data)
+				if err != nil {
+					return err
+				}
+			} else {
+				// Non-TTY (pipe): use fast-path without highlighting.
+				err := u.PrintAsJSONSimple(atmosConfig, data)
+				if err != nil {
+					return err
+				}
 			}
 		} else {
+			// Output to file: use simple formatting without highlighting.
 			err := u.WriteToFileAsJSON(file, data, DefaultFileMode)
 			if err != nil {
 				return err
@@ -112,10 +141,17 @@ func toFileScheme(localPath string) string {
 	pathSlashed := filepath.ToSlash(localPath)
 
 	if runtime.GOOS == "windows" {
-		// If pathSlashed is "/D:/Temp/foo.json", remove the leading slash => "D:/Temp/foo.json"
-		// Then prepend "file://"
-		pathSlashed = strings.TrimPrefix(pathSlashed, forwardSlash)
+		// Handle UNC paths: \\server\share becomes //server/share after ToSlash
+		// Per RFC 8089, should become file://server/share (server as authority)
+		if strings.HasPrefix(pathSlashed, uncPathPrefix) {
+			// Remove both leading slashes for UNC paths
+			pathSlashed = strings.TrimPrefix(pathSlashed, uncPathPrefix)
+			return "file://" + pathSlashed // e.g. "file://server/share/file.txt"
+		}
 
+		// Regular Windows paths: D:\path becomes D:/path after ToSlash
+		// Should become file://D:/path
+		pathSlashed = strings.TrimPrefix(pathSlashed, forwardSlash)
 		return "file://" + pathSlashed // e.g. "file://D:/Temp/foo.json"
 	}
 

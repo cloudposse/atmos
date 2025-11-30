@@ -121,6 +121,9 @@ func (s *AzureKeyVaultStore) Set(stack string, component string, key string, val
 	if key == "" {
 		return ErrEmptyKey
 	}
+	if value == nil {
+		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
+	}
 
 	secretName, err := s.getKey(stack, component, key)
 	if err != nil {

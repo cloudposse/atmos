@@ -15,6 +15,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -86,10 +87,22 @@ func ShellRunner(command string, name string, dir string, env []string, out io.W
 		return err
 	}
 
-	return runner.Run(context.TODO(), parser)
+	err = runner.Run(context.Background(), parser)
+	if err != nil {
+		// Check if the error is an interp.ExitStatus and preserve the exit code.
+		// Return a typed error that preserves the exit code.
+		// main.go will check for this type and exit with the correct code.
+		var exitErr interp.ExitStatus
+		if errors.As(err, &exitErr) {
+			return errUtils.ExitCodeError{Code: int(exitErr)}
+		}
+		return err
+	}
+
+	return nil
 }
 
-// GetNextShellLevel increments the ATMOS_SHLVL and returns the new value or an error if maximum depth is exceeded .
+// GetNextShellLevel increments the ATMOS_SHLVL and returns the new value or an error if maximum depth is exceeded.
 func GetNextShellLevel() (int, error) {
 	defer perf.Track(nil, "utils.GetNextShellLevel")()
 
@@ -104,7 +117,7 @@ func GetNextShellLevel() (int, error) {
 	if atmosShellLvl != "" {
 		val, err := strconv.Atoi(atmosShellLvl)
 		if err != nil {
-			return 0, fmt.Errorf("%w: %w", ErrConvertingShellLevel, err)
+			return 0, fmt.Errorf("%w: %s", ErrConvertingShellLevel, err)
 		}
 		shellVal = val
 	}

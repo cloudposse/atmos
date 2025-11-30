@@ -45,12 +45,78 @@ Atmos follows a clear precedence order for terminal settings, with command-line 
 5. **Configuration File** (lowest priority): `settings.terminal.pager: true`
 
 ### Color Configuration Precedence
-1. **CLI Flags** (highest priority): `--no-color`
-2. **NO_COLOR Environment Variable**: `NO_COLOR=1` (standard CLI convention)
-3. **ATMOS_NO_COLOR Environment Variable**: `ATMOS_NO_COLOR=true`
-4. **ATMOS_COLOR Environment Variable**: `ATMOS_COLOR=false`
-5. **COLOR Environment Variable**: `COLOR=false`
-6. **Configuration File** (lowest priority): `settings.terminal.color: false`
+1. **NO_COLOR Environment Variable** (highest priority): `NO_COLOR=1` (disables all color)
+2. **CLICOLOR=0**: `CLICOLOR=0` (disables color unless forced)
+3. **CLICOLOR_FORCE**: `CLICOLOR_FORCE=1` (forces color even for non-TTY)
+4. **Force Flags**: `--force-color` or `ATMOS_FORCE_COLOR=true` (forces TrueColor)
+5. **Disable Flags**: `--no-color` or `ATMOS_NO_COLOR=true` (disables color)
+6. **Enable Flags**: `--color` or `ATMOS_COLOR=true` (enables color **only if TTY**)
+7. **Configuration File** (lowest priority): `settings.terminal.color: true` (enables color **only if TTY**)
+8. **Default**: Automatically detects TTY and terminal capabilities
+
+## Force Flags for Screenshot Generation
+
+Atmos provides force flags to generate consistent terminal output regardless of the environment. These are particularly useful for screenshot generation, documentation, and testing.
+
+### `--force-tty` and `ATMOS_FORCE_TTY`
+
+Force TTY mode with sane defaults when terminal detection fails:
+- Forces `IsTTY()` to return `true` even when not connected to a terminal
+- Uses default dimensions: **width=120**, **height=40**
+- Enables all TTY-dependent features (colors, icons, formatting)
+
+**Use cases:**
+- Screenshot generation for documentation
+- Recording terminal sessions with tools like `vhs`
+- CI/CD environments where TTY detection fails
+
+**Example:**
+```bash
+# Generate screenshot with consistent output
+atmos terraform plan --force-tty --force-color | screenshot.sh
+
+# Using environment variables
+ATMOS_FORCE_TTY=true ATMOS_FORCE_COLOR=true atmos describe stacks | vhs record.tape
+```
+
+### `--force-color`, `ATMOS_FORCE_COLOR`, and `CLICOLOR_FORCE`
+
+Force TrueColor (24-bit) output even when not a TTY:
+- `ATMOS_FORCE_COLOR` and `CLICOLOR_FORCE` are equivalent and both fully supported
+- `CLICOLOR_FORCE` is a standard environment variable ([CLI Colors](https://bixense.com/clicolors/))
+- Forces TrueColor profile regardless of terminal detection
+- Overrides automatic color degradation
+- Useful when piping to tools that preserve ANSI codes
+
+**Important distinction:**
+- `--color` / `ATMOS_COLOR` - Enables color **only if TTY** (respects terminal capabilities)
+- `--force-color` / `ATMOS_FORCE_COLOR` / `CLICOLOR_FORCE` - Forces TrueColor **even for non-TTY** (for screenshots)
+
+**Example:**
+```bash
+# Normal piped output - automatically disables color
+atmos terraform output | jq .vpc_id
+
+# Force color when piping to color-aware tool
+atmos describe stacks --force-color | bat
+
+# Screenshot generation
+atmos describe config --force-tty --force-color > screenshot.ansi
+```
+
+## Automatic Color Degradation
+
+Atmos automatically degrades color output based on terminal capabilities:
+
+1. **TrueColor** (24-bit, 16 million colors) - Modern terminals (iTerm2, Windows Terminal)
+2. **256 colors** - Terminals with `TERM=*-256color`
+3. **16 colors** (ANSI) - Basic terminals with `TERM=xterm`
+4. **No color** - Non-TTY, piped output, or when color is disabled
+
+**Automatic behavior:**
+- When piping output: `atmos describe stacks | grep vpc` - color automatically disabled
+- When redirecting: `atmos terraform output > file.txt` - color automatically disabled
+- When using `--force-color`: Color preserved even when piping
 
 ## Syntax Highlighting
 

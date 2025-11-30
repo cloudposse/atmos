@@ -1,16 +1,15 @@
 package exec
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -package=exec -destination=mock_storer_test.go github.com/go-git/go-git/v5/storage Storer
+
 import (
 	"errors"
 	"testing"
 
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/format/index"
-	"github.com/go-git/go-git/v5/plumbing/storer"
-	"github.com/go-git/go-git/v5/storage"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -335,94 +334,26 @@ func TestExecuteDescribeAffected(t *testing.T) {
 func createMockRepoWithHead(t *testing.T) *git.Repository {
 	t.Helper()
 
+	ctrl := gomock.NewController(t)
+	mockStorer := NewMockStorer(ctrl)
+
+	// Configure mock to return HEAD reference.
+	head := plumbing.NewReferenceFromStrings(
+		"refs/heads/master",
+		"0123456789abcdef0123456789abcdef01234567",
+	)
+	mockStorer.EXPECT().
+		Reference(plumbing.HEAD).
+		Return(head, nil).
+		AnyTimes()
+
+	// Configure mock to return error for EncodedObject (triggers "not implemented" error path).
+	mockStorer.EXPECT().
+		EncodedObject(gomock.Any(), gomock.Any()).
+		Return(nil, errors.New("not implemented")).
+		AnyTimes()
+
 	return &git.Repository{
-		Storer: &mockStorer{
-			head: plumbing.NewReferenceFromStrings(
-				"refs/heads/master",
-				"0123456789abcdef0123456789abcdef01234567",
-			),
-		},
+		Storer: mockStorer,
 	}
-}
-
-// Mock storer implementation.
-type mockStorer struct {
-	head *plumbing.Reference
-}
-
-// Reference-related methods.
-func (s *mockStorer) Reference(name plumbing.ReferenceName) (*plumbing.Reference, error) {
-	if name == plumbing.HEAD {
-		return s.head, nil
-	}
-	return nil, errors.New("reference not found")
-}
-
-func (s *mockStorer) SetReference(*plumbing.Reference) error                              { return nil }
-func (s *mockStorer) CheckAndSetReference(*plumbing.Reference, *plumbing.Reference) error { return nil }
-func (s *mockStorer) RemoveReference(plumbing.ReferenceName) error                        { return nil }
-func (s *mockStorer) CountLooseRefs() (int, error)                                        { return 0, nil }
-func (s *mockStorer) PackRefs() error                                                     { return nil }
-func (s *mockStorer) IterReferences() (storer.ReferenceIter, error)                       { return nil, nil }
-
-// Object-related methods.
-func (s *mockStorer) NewEncodedObject() plumbing.EncodedObject {
-	return nil
-}
-
-func (s *mockStorer) SetEncodedObject(obj plumbing.EncodedObject) (plumbing.Hash, error) {
-	return plumbing.ZeroHash, errors.New("not implemented")
-}
-
-func (s *mockStorer) EncodedObject(t plumbing.ObjectType, h plumbing.Hash) (plumbing.EncodedObject, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (s *mockStorer) IterEncodedObjects(t plumbing.ObjectType) (storer.EncodedObjectIter, error) {
-	return nil, errors.New("not implemented")
-}
-
-// Added missing object-related methods.
-func (s *mockStorer) HasEncodedObject(h plumbing.Hash) error {
-	return errors.New("not implemented")
-}
-
-func (s *mockStorer) EncodedObjectSize(h plumbing.Hash) (int64, error) {
-	return 0, errors.New("not implemented")
-}
-
-// Index-related methods.
-func (s *mockStorer) SetIndex(object *index.Index) error {
-	return nil
-}
-
-func (s *mockStorer) Index() (*index.Index, error) {
-	return nil, errors.New("not implemented")
-}
-
-// Config-related methods.
-func (s *mockStorer) Config() (*config.Config, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (s *mockStorer) SetConfig(config *config.Config) error {
-	return nil
-}
-
-// Shallow-related methods.
-func (s *mockStorer) Shallow() ([]plumbing.Hash, error) {
-	return nil, nil
-}
-
-func (s *mockStorer) SetShallow([]plumbing.Hash) error {
-	return nil
-}
-
-// Module-related methods.
-func (s *mockStorer) Module(name string) (storage.Storer, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (s *mockStorer) AddAlternate(remote string) error {
-	return errors.New("not implemented")
 }

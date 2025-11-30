@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestAtmosConfigurationWorksWithOpa(t *testing.T) {
@@ -42,20 +42,23 @@ func TestIsColorEnabled(t *testing.T) {
 		name    string
 		color   bool
 		noColor bool
+		isTTY   bool
 		expect  bool
 	}{
-		{"Color true, NoColor false should enable color", true, false, true},
-		{"Color false, NoColor false should disable color", false, false, false},
-		{"Color true, NoColor true should disable color (NoColor takes precedence)", true, true, false},
-		{"Color false, NoColor true should disable color", false, true, false},
+		{"Color=true, NoColor=false should force enable", true, false, false, true},
+		{"Color=true, NoColor=false should force enable (even non-TTY)", true, false, false, true},
+		{"Color=false, NoColor=false, isTTY=true should use TTY default", false, false, true, true},
+		{"Color=false, NoColor=false, isTTY=false should use TTY default", false, false, false, false},
+		{"NoColor=true should force disable (NoColor takes precedence)", true, true, true, false},
+		{"NoColor=true should force disable even if Color=true", true, true, true, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			term := &Terminal{Color: tt.color, NoColor: tt.noColor}
-			result := term.IsColorEnabled()
+			result := term.IsColorEnabled(tt.isTTY)
 			if result != tt.expect {
-				t.Errorf("IsColorEnabled() for Color=%v, NoColor=%v: expected %v, got %v", tt.color, tt.noColor, tt.expect, result)
+				t.Errorf("IsColorEnabled(%v) for Color=%v, NoColor=%v: expected %v, got %v", tt.isTTY, tt.color, tt.noColor, tt.expect, result)
 			}
 		})
 	}

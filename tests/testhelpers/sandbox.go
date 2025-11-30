@@ -8,9 +8,10 @@ import (
 	"runtime"
 	"testing"
 
+	"go.yaml.in/yaml/v3"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"gopkg.in/yaml.v3"
 )
 
 // SandboxEnvironment holds the state for a sandboxed test.

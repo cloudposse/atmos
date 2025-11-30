@@ -1,19 +1,20 @@
 package cmd
 
 import (
-	"os"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestSetFlagInDescribeWorkflow(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Initialize test cases
 	tests := []struct {
 		name        string
@@ -60,6 +61,8 @@ func TestSetFlagInDescribeWorkflow(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
 			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 			fs.StringP("format", "f", "yaml", "Specify the output format (`yaml` is default)")
 			fs.StringP("output", "o", "list", "Specify the output type (`list` is default)")
@@ -78,9 +81,14 @@ func TestSetFlagInDescribeWorkflow(t *testing.T) {
 }
 
 func TestDescribeWorkflows(t *testing.T) {
+	_ = NewTestKit(t)
+
 	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	describeWorkflowsMock := exec.NewMockDescribeWorkflowsExec(ctrl)
 	describeWorkflowsMock.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
 	run := getRunnableDescribeWorkflowsCmd(
 		func(opts ...AtmosValidateOption) {},
 		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
@@ -91,26 +99,24 @@ func TestDescribeWorkflows(t *testing.T) {
 		},
 		describeWorkflowsMock,
 	)
+
 	describeWorkflowsCmd.Flags().StringP("pager", "p", "", "Specify a pager to use for output (e.g., `less`, `more`)")
-	run(describeWorkflowsCmd, []string{})
-	ctrl.Finish()
+
+	err := run(describeWorkflowsCmd, []string{})
+
+	// Verify command executed without errors. The mock expectations verify
+	// that Execute() was called with the correct arguments.
+	assert.NoError(t, err, "describeWorkflowsCmd should execute without error")
 }
 
 func TestDescribeWorkflowsCmd_Error(t *testing.T) {
+	_ = NewTestKit(t)
+
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
-
-	err = describeWorkflowsCmd.RunE(describeWorkflowsCmd, []string{"--invalid-flag"})
+	err := describeWorkflowsCmd.RunE(describeWorkflowsCmd, []string{"--invalid-flag"})
 	assert.Error(t, err, "describe workflows command should return an error when called with invalid flags")
 }

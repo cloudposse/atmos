@@ -134,7 +134,7 @@ func (p *Server) startFileBasedProfiling() error {
 	var err error
 	p.profFile, err = os.Create(p.config.File)
 	if err != nil {
-		return fmt.Errorf("%w: %s: %w", ErrCreateProfileFile, p.config.File, err)
+		return errors.Join(ErrCreateProfileFile, fmt.Errorf("%s: %w", p.config.File, err))
 	}
 
 	if err := p.startProfileByType(); err != nil {

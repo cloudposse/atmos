@@ -72,6 +72,7 @@ const (
 	PackerSectionName                 = "packer"
 	PackerTemplateSectionName         = "template"
 	WorkspaceSectionName              = "workspace"
+	AuthSectionName                   = "auth"
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"
@@ -89,6 +90,8 @@ const (
 	BackendTypeGCS                    = "gcs"
 	BackendTypeCloud                  = "cloud"
 	ComponentPathSectionName          = "component_path"
+	InheritsSectionName               = "inherits"
+	AbstractSectionName               = "abstract"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
@@ -117,4 +120,18 @@ const (
 
 	ComponentStr = "component"
 	StackStr     = "stack"
+
+	// Auth flags.
+	IdentityFlag              = "--identity"
+	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
+	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
+
+	// Performance profiling flags.
+	ProfilerEnabledFlag = "--profiler-enabled"
+	ProfilerHostFlag    = "--profiler-host"
+	ProfilerPortFlag    = "--profiler-port"
+	ProfilerFileFlag    = "--profiler-file"
+	ProfilerTypeFlag    = "--profiler-type"
+	HeatmapFlag         = "--heatmap"
+	HeatmapModeFlag     = "--heatmap-mode"
 )

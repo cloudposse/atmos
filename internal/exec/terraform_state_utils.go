@@ -25,6 +25,7 @@ var terraformStateCache = sync.Map{}
 //   - component: Component identifier
 //   - output: Output variable key to retrieve
 //   - skipCache: Flag to bypass cache lookup
+//   - authContext: Optional auth context containing Atmos-managed credentials
 //
 // Returns the output value or nil if the component is not provisioned.
 func GetTerraformState(
@@ -34,6 +35,7 @@ func GetTerraformState(
 	component string,
 	output string,
 	skipCache bool,
+	authContext *schema.AuthContext,
 ) (any, error) {
 	defer perf.Track(atmosConfig, "exec.GetTerraformState")()
 
@@ -58,7 +60,14 @@ func GetTerraformState(
 		}
 	}
 
-	componentSections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
+	componentSections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	if err != nil {
 		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		return nil, er
@@ -72,12 +81,19 @@ func GetTerraformState(
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		result := GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		result, exists, err := GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		if err != nil {
+			return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
+		}
+		if !exists {
+			return nil, fmt.Errorf("%w: output `%s` does not exist for component `%s` in stack `%s`\nin YAML function: `%s`", errUtils.ErrReadTerraformState, output, component, stack, yamlFunc)
+		}
+		// result may be nil if the output is legitimately null
 		return result, nil
 	}
 
 	// Read Terraform backend.
-	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections)
+	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, authContext)
 	if err != nil {
 		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		return nil, er

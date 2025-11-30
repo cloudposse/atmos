@@ -163,15 +163,18 @@ Each workflow definition must confirm to the following schema:
     stack: <Atmos stack> # optional
     steps:
       - command: <Atmos command to execute>
-        name: <step name>>  # optional
+        name: <step name>  # optional
         type: atmos  # optional
         stack: <Atmos stack> # optional
+        identity: <identity name> # optional
       - command: <Atmos command to execute>
-        name: <step name>>  # optional
+        name: <step name>  # optional
         stack: <Atmos stack> # optional
+        identity: <identity name> # optional
       - command: <shell script>
-        name: <step name>>  # optional
+        name: <step name>  # optional
         type: shell  # required for the steps of type `shell`
+        identity: <identity name> # optional
 ```
 
 ### Schema Definitions
@@ -197,6 +200,9 @@ Each workflow definition must confirm to the following schema:
 
   <dt>`stack`</dt>
   <dd>Step-level Atmos stack (optional). If specified, the `command` will be executed for this Atmos stack. It overrides the workflow-level `stack` attribute, and can itself be overridden on the command line by using the `--stack` flag (`-s` for shorthand)</dd>
+
+  <dt>`identity`</dt>
+  <dd>Step-level identity for authentication (optional). If specified, Atmos will authenticate using this identity before executing the step. The subprocess will receive environment variables pointing to temporary credential files (e.g., `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`). See [Authentication](/cli/commands/auth/usage) for more details</dd>
 </dl>
 
 :::note
@@ -448,3 +454,108 @@ commands, etc.).
 While this provides a great flexibility in defining the stack for workflow commands, we recommend creating generic workflows without defining
 stacks in the workflow itself (the stack should be provided on the command line). This way, the workflow can be executed for any stack without any
 modifications and without dealing with multiple workflows that are similar but differ only by the environment where the resources are provisioned.
+
+## Using Authentication with Workflows
+
+Workflow steps can specify an `identity` to authenticate before execution. This is useful when different steps require different levels of access or need to operate under different cloud accounts.
+
+When an identity is specified, Atmos will:
+1. Authenticate using the specified identity (prompting for MFA if required)
+2. Write temporary credentials to a file
+3. Set environment variables pointing to the credential files (`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`, etc.)
+4. Execute the command with these environment variables
+
+### Example: Workflow with Authentication
+
+```yaml title="stacks/workflows/deploy.yaml"
+workflows:
+  deploy-with-auth:
+    description: Deploy infrastructure with different identities
+    steps:
+      # Deploy foundation resources as superadmin
+      - command: terraform apply vpc -s plat-ue2-prod
+        identity: superadmin
+        name: deploy-vpc
+
+      # Deploy application resources as developer
+      - command: terraform apply app -s plat-ue2-prod
+        identity: developer
+        name: deploy-app
+
+      # Run a shell script with authentication
+      - command: |
+          echo "Current AWS identity:"
+          aws sts get-caller-identity
+        type: shell
+        identity: superadmin
+        name: verify-identity
+```
+
+To execute this workflow:
+
+```console
+atmos workflow deploy-with-auth -f deploy
+```
+
+### Mixed Authentication
+
+Different steps can use different identities, or no identity at all:
+
+```yaml title="stacks/workflows/mixed-auth.yaml"
+workflows:
+  mixed-auth-workflow:
+    description: Workflow with mixed authentication
+    steps:
+      # Step without authentication (uses ambient credentials)
+      - command: terraform plan vpc -s plat-ue2-dev
+        name: plan-without-auth
+
+      # Step with superadmin identity
+      - command: terraform apply vpc -s plat-ue2-prod
+        identity: superadmin
+        name: apply-with-superadmin
+
+      # Step with different identity
+      - command: terraform apply monitoring -s plat-ue2-prod
+        identity: monitoring-admin
+        name: apply-with-monitoring-admin
+```
+
+:::tip
+Configure identities in your [`atmos.yaml`](/cli/configuration) under the `auth` section. See the [Authentication documentation](/cli/commands/auth/usage) for configuration details.
+:::
+
+### Setting a Default Identity for All Steps
+
+You can use the `--identity` flag to set a default identity for all workflow steps that don't specify their own:
+
+```shell
+# Apply superadmin identity to all steps without their own identity
+atmos workflow deploy-all -f workflows --identity superadmin
+```
+
+**Precedence**: Step-level `identity` field > `--identity` flag > no authentication
+
+**Example**:
+```yaml
+workflows:
+  deploy-mixed:
+    steps:
+      # This step uses the --identity flag value (if provided)
+      - command: terraform plan vpc
+        name: plan-vpc
+
+      # This step ALWAYS uses developer identity (overrides --identity flag)
+      - command: terraform apply app
+        identity: developer
+        name: apply-app
+
+      # This step uses the --identity flag value (if provided)
+      - command: terraform apply monitoring
+        name: apply-monitoring
+```
+
+Running `atmos workflow deploy-mixed -f workflows --identity superadmin` will:
+- Execute `plan-vpc` step as `superadmin`
+- Execute `apply-app` step as `developer` (step-level identity overrides)
+- Execute `apply-monitoring` step as `superadmin`

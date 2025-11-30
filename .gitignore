@@ -18,8 +18,8 @@
 **/kubeconfig.yaml
 **/*.planfile.json
 
-# Atmos binary
-atmos
+# Atmos binary (only in root directory)
+/atmos
 
 # Module directory
 .terraform
@@ -40,6 +40,9 @@ atmos
 # Nix
 .envrc
 .direnv/
+
+# Tool version managers
+.tool-versions
 
 # Ignore cache files
 **/.atmos/cache.yaml
@@ -65,5 +68,37 @@ coverage/
 .gocoverdir/
 tests.test
 
+# Test binaries
+*.test
+**/*.test
+
 **/llms.txt
 **/llms-full.txt
+
+# Test quality documentation (local tracking only)
+FUTURE_IMPROVEMENTS.md
+PHASE_4_*.md
+TEST_QUALITY_*.md
+
+# Lintroller and other custom tools
+/lintroller
+/.lintroller
+tools/lintroller/.lintroller
+/custom-gcl
+tools/gomodcheck/.gomodcheck
+
+# Claude Code and Hive Mind development tools
+.claude-flow/
+.hive-mind/
+
+performance-optimization/
+
+# Merge conflict artifacts and backup files
+*.orig
+*.rej
+*.bak
+*.go.bak
+**/*.go.bak
+
+# Scratch/temporary analysis files
+.scratch/

@@ -4,14 +4,28 @@ This document defines the logging levels in Atmos and provides guidance on when 
 
 ## Core Principle: Logging is Not UI
 
-Logging is for diagnostics, debugging, and telemetry. It is not for user interface.
-User-facing output goes through TextUI (`utils.PrintfMessageToTUI`), never through logs.
+**Logging** is for diagnostics and debugging. **UI output** is for user interaction.
 
-The terminal window is effectively a text-based user interface (TextUI) for our CLI. Anything intended for user interaction—menus, prompts, animations, progress indicators—should be rendered to the terminal as UI output.
+**Key distinction:**
+- **UI output is required** - Without it, the user can't use the command
+- **Logging is optional metadata** - Adds diagnostic context but user doesn't need it
 
-Logging is different: logs are structured records of what the program is doing. They help developers debug issues and feed into telemetry or monitoring systems. Treat logging like sending messages to the developer console in a browser, not to the UI seen by the user.
+**Don't use `logger.Info()` for user messages** - users won't see them if logging is disabled. Use UI output instead.
 
-Atmos provides `utils.PrintfMessageToTUI` for writing TextUI messages. It always writes to `stderr` so that `stdout` can remain a clean data stream (for example, JSON output that may be piped to another command). Avoid using `fmt.Println` or `fmt.Printf` for UI output because they default to `stdout` and can corrupt piped data. Log functions such as `log.Info` or `log.Error` are not meant for TextUI and may be silenced via log level configuration.
+**Quick test:** "What happens if I disable logging (`--logs-level=Off`)?"
+- Breaks user experience → It's UI output, use `ui.Success()`, `ui.Error()`, `data.Write()`
+- User unaffected → It's logging, use `log.Debug()`, `log.Trace()`
+
+**Examples:**
+
+```go
+// ❌ WRONG - using logger for user-facing output
+log.Info("Configuration loaded successfully")
+
+// ✅ CORRECT - UI for user, logging for diagnostics
+ui.Success("Configuration loaded")
+log.Debug("config.LoadAtmosYAML: loaded 42 stacks from atmos.yaml")
+```
 
 ---
 
@@ -19,7 +33,7 @@ Atmos provides `utils.PrintfMessageToTUI` for writing TextUI messages. It always
 
 ### Trace
 
-**Purpose**: Execution flow tracing and detailed debugging.
+**Purpose**: Execution flow tracing, detailed debugging, and squelched error logging.
 
 #### When to Use
 
@@ -29,6 +43,7 @@ Atmos provides `utils.PrintfMessageToTUI` for writing TextUI messages. It always
 - Loop iterations in complex algorithms.
 - Template expansion steps.
 - Detailed state at each step of multi-stage operations.
+- **Squelched errors** - errors that are intentionally ignored but should be recorded.
 
 #### Characteristics
 
@@ -43,6 +58,9 @@ Atmos provides `utils.PrintfMessageToTUI` for writing TextUI messages. It always
 - "Entering ProcessStackConfig with stack=dev, component=vpc"
 - "Template evaluation: input={...}, context={...}, output={...}"
 - "Cache lookup: key=stack-dev-vpc, found=true, age=2.3s"
+- "Failed to close temporary file during cleanup" (squelched error)
+- "Failed to remove temporary directory during cleanup" (squelched error)
+- "Failed to bind environment variable" (squelched error)
 
 ---
 
@@ -183,6 +201,111 @@ Even these examples are borderline - they could arguably be Debug or Warning dep
 
 ---
 
+## Squelched Errors
+
+### What Are Squelched Errors?
+
+Squelched errors are errors that are intentionally ignored because they don't affect the critical path of execution. Common examples include:
+- Cleanup operations (removing temporary files, closing file handles)
+- Non-critical configuration binding (environment variables, flags)
+- Resource unlocking in defer statements
+- UI rendering errors
+
+### When to Squelch Errors
+
+Errors should only be squelched when:
+1. **The error is non-critical** - failure doesn't prevent the operation from succeeding
+2. **Recovery is impossible** - we're in cleanup/defer code where we can't do anything about the error
+3. **The operation is best-effort** - like optional environment variable binding
+
+### The Golden Rule: Always Log Squelched Errors
+
+Even when errors are intentionally ignored, they **must** be logged at Trace level. This ensures errors are never truly lost and can be investigated during debugging.
+
+### Pattern: Squelched Error Logging
+
+**Wrong**: Silent error squelching
+```go
+// ❌ WRONG: Error is completely lost
+_ = os.Remove(tempFile)
+_ = file.Close()
+_ = viper.BindEnv("OPTIONAL_VAR", "VAR")
+```
+
+**Right**: Log squelched errors at Trace level
+```go
+// ✅ CORRECT: Cleanup with trace logging
+if err := os.Remove(tempFile); err != nil && !os.IsNotExist(err) {
+    log.Trace("Failed to remove temporary file during cleanup", "error", err, "file", tempFile)
+}
+
+// ✅ CORRECT: Resource closing with trace logging
+if err := file.Close(); err != nil {
+    log.Trace("Failed to close file", "error", err, "file", file.Name())
+}
+
+// ✅ CORRECT: Non-critical configuration with trace logging
+if err := viper.BindEnv("OPTIONAL_VAR", "VAR"); err != nil {
+    log.Trace("Failed to bind environment variable", "error", err, "var", "OPTIONAL_VAR")
+}
+```
+
+### Special Cases
+
+#### Defer Statements
+When squelching errors in defer statements, capture them in a closure:
+
+```go
+defer func() {
+    if err := lock.Unlock(); err != nil {
+        log.Trace("Failed to unlock", "error", err, "path", lockPath)
+    }
+}()
+```
+
+#### File Existence Checks
+When removing files, check for `os.IsNotExist` to avoid logging expected conditions:
+
+```go
+if err := os.Remove(tempFile); err != nil && !os.IsNotExist(err) {
+    log.Trace("Failed to remove file", "error", err, "file", tempFile)
+}
+```
+
+#### Log File Cleanup
+When cleaning up log files, use stderr instead of the logger to avoid recursion:
+
+```go
+func cleanupLogFile() {
+    if logFileHandle != nil {
+        if err := logFileHandle.Sync(); err != nil {
+            // Don't use logger here as we're cleaning up the log file
+            fmt.Fprintf(os.Stderr, "Warning: failed to sync log file: %v\n", err)
+        }
+    }
+}
+```
+
+### Why This Matters
+
+1. **Debugging**: When investigating issues, trace logs reveal the full story, including non-critical failures
+2. **Metrics**: Aggregate trace logs to identify patterns (e.g., frequent cleanup failures might indicate disk issues)
+3. **Auditing**: Complete error trail for compliance and security reviews
+4. **Transparency**: No hidden errors - everything is recorded somewhere
+
+### Common Squelched Error Categories
+
+| Category | Examples | Trace Logging Required |
+|----------|----------|----------------------|
+| File cleanup | `os.Remove()`, `os.RemoveAll()` | ✅ Yes |
+| Resource closing | `file.Close()`, `client.Close()` | ✅ Yes |
+| Lock operations | `lock.Unlock()` | ✅ Yes |
+| Config binding | `viper.BindEnv()`, `viper.BindPFlag()` | ✅ Yes |
+| UI rendering | `fmt.Fprint()` to UI buffers | ✅ Yes |
+| Command help | `cmd.Help()` | ✅ Yes |
+
+---
+
 ## Common Anti-Patterns
 
 ### Using Logging as UI
@@ -197,9 +320,9 @@ log.Info("Validation passed")
 
 **Right**: Separate UI from logging
 ```go
-// User feedback via TextUI
-utils.PrintfMessageToTUI("Deploying component 'vpc'...\n")
-utils.PrintfMessageToTUI("✓ Component deployed successfully!\n")
+// User feedback via UI package (stderr)
+ui.Write("Deploying component 'vpc'...\n")
+ui.Success("Component deployed successfully!")
 
 // Diagnostic logging at appropriate level
 log.Debug("Component deployment started", "component", "vpc", "stack", stack)
@@ -207,7 +330,7 @@ log.Debug("Component deployment completed", "component", "vpc", "duration", dura
 ```
 
 This separation ensures:
-- Users see progress and status (via TextUI).
+- Users see progress and status (via UI output to stderr).
 - Developers can debug issues (via logs).
 - Logs can be disabled without breaking the user experience.
 - Log aggregation systems don't get polluted with UI elements.
@@ -243,8 +366,8 @@ log.Info("Processing 3 of 10...")
 
 **Right**: Progress belongs in UI, summary in logs
 ```go
-// Show progress to user
-utils.PrintfMessageToTUI("Processing components: 3/10\r")
+// Show progress to user (stderr)
+ui.Write(fmt.Sprintf("Processing components: 3/10\r"))
 
 // Log the summary once
 log.Debug("Component processing completed", "total", 10, "duration", totalTime)
@@ -257,7 +380,7 @@ log.Debug("Component processing completed", "total", 10, "duration", totalTime)
 ### The Litmus Test
 
 Ask yourself: "Is this something the user needs to see to use the tool?"
-- Yes → Use TextUI output
+- Yes → Use UI output (ui.Success, ui.Error, ui.Write, data.Write)
 - No → It's logging
 
 Then ask: "Would hiding this information impact operations or debugging?"
@@ -282,11 +405,11 @@ These are all Debug level (diagnostic details):
 
 The user doesn't need to know any of these things - they just want the tool to work. If you're struggling to justify why something should be Info instead of Debug, it should be Debug.
 
-These are NOT logging at all (user interface):
-- "✓ Successfully deployed"
-- "Press Enter to continue"
-- "Deploying component..."
-- Progress bars or percentages
+These are NOT logging at all (terminal UI output):
+- "✓ Successfully deployed" (use `ui.Success()`)
+- "Press Enter to continue" (use `ui.Write()`)
+- "Deploying component..." (use `ui.Write()`)
+- Progress bars or percentages (use `ui.Write()` with carriage returns)
 
 ---
 
@@ -311,7 +434,7 @@ Proper log levels mean:
 ### For Users
 
 Correct separation means:
-- They see what they need to see (via TextUI).
+- They see what they need to see (via terminal UI output to stderr).
 - They don't see what they don't need (logs).
 - `--logs-level=Off` doesn't break their experience.
 - Error messages are actionable, not buried in noise.

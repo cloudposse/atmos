@@ -15,15 +15,18 @@ in Atmos stack manifests. It retrieves outputs directly from the configured [bac
 without the overhead of initializing Terraform, downloading providers, or generating configuration files - making it significantly faster than `!terraform.output`.
 </Intro>
 
-:::note Backend Support
-Currently supports `local` and `s3` backends. For other backends, use [__`!store`__](/functions/yaml/store) or [__`!terraform.output`__](/functions/yaml/terraform.output).
-:::
-
-**Supported Backend Types:**
+:::note Supported Backend Types
+The `!terraform.state` YAML function supports the following backend types:
 - `local` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/local) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/local))
 - `s3` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/s3) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/s3))
+- `gcs` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/gcs) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/gcs))
+- `azurerm` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/azurerm) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/azurerm))
 
-As support for additional backend types is added (e.g. `azurerm`, `gcs`), this document will be updated accordingly.
+As support for new backend types is added, this document will be updated accordingly.
+
+For other backends, use [__`!store`__](/functions/yaml/store) or [__`!terraform.output`__](/functions/yaml/terraform.output) to read remote state
+and [share data between components](/connections).
+:::
 
 ## Usage
 
@@ -116,6 +119,10 @@ For more details, review the following docs:
 
 - [YQ Guide](https://mikefarah.gitbook.io/yq)
 - [YQ Recipes](https://mikefarah.gitbook.io/yq/recipes)
+
+## Handling YQ Expressions with Bracket Notation and Quotes
+
+`!terraform.state` shares the same parser as `!terraform.output`, so the quoting rules are identical. When you need double quotes inside a YQ expression (for example, to reference `["github-dependabot"]`), wrap the entire expression in single quotes. Refer to the [!terraform.output guidance](/functions/yaml/terraform.output#handling-yq-expressions-with-bracket-notation-and-quotes) for detailed examples and escape rules.
 
 ## Using YQ Expressions to provide a default value
 
@@ -352,6 +359,49 @@ The YAML function `!terraform.state` is executed three times (once for each tag)
 After the first execution, Atmos caches the result in memory,
 and reuses it in the next two calls to the function. The caching makes the stack processing much faster.
 In a production environment where many components are used, the speedup can be significant.
+
+## Using `!terraform.state` with GCS backend
+
+The GCS backend support allows you to read Terraform state files stored in Google Cloud Storage buckets. Here's an example configuration:
+
+<File title="stacks/gcp/dev.yaml">
+```yaml
+components:
+  terraform:
+    my_component:
+      backend_type: gcs
+      backend:
+        gcs:
+          bucket: "my-terraform-state"
+          prefix: "terraform/state"
+          credentials: "/path/to/service-account-key.json"
+      vars:
+        # Read state from another component
+        vpc_id: !terraform.state vpc dev vpc_id
+        subnet_ids: !terraform.state subnets dev subnet_ids
+        # Use YQ expression to get specific subnet
+        public_subnet_id: !terraform.state subnets dev .subnet_ids[0]
+```
+</File>
+
+### GCS Backend Authentication
+
+The GCS backend supports multiple authentication methods:
+
+1. **Service Account Key File**: Specify the path to a service account JSON key file using the `credentials` parameter.
+2. **Default Credentials**: When no credentials are specified, the Google Cloud SDK default credentials are used.
+3. **Workload Identity** (GKE): Automatically uses the workload identity when running in GKE with Workload Identity enabled.
+
+### GCS Backend Configuration Parameters
+
+- `bucket`: The GCS bucket name where Terraform state files are stored
+- `prefix`: Optional prefix for the state file path within the bucket
+- `credentials`: Optional path to a service account JSON key file
+- `state_file`: Optional custom name for the state file (defaults to `default.tfstate`)
+
+:::note Current Limitations
+The `impersonate_service_account` parameter is parsed but not yet implemented. This feature is planned for a future release.
+:::
 
 ## Using `!terraform.state` with `static` remote state backend
 

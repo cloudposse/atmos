@@ -1,0 +1,95 @@
+---
+title: atmos auth login
+sidebar_label: login
+sidebar_class_name: command
+sidebar_position: 3
+id: login
+description: Authenticate to cloud providers using an identity defined in atmos.yaml.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Authenticate with a configured identity using SSO, SAML, OIDC, or static credentials. Atmos retrieves and caches short-lived credentials so they can be reused until expiration, avoiding repeated logins for each command.
+</Intro>
+
+<Screengrab title="atmos auth login --help" slug="atmos-auth-login--help" />
+
+## Usage
+
+```shell
+atmos auth login [--identity <name>]
+```
+
+## Examples
+
+```shell
+# Use default identity (prompts if no default is configured)
+atmos auth login
+
+# Interactively select identity (even if default is configured)
+atmos auth login --identity
+
+# Use specific identity
+atmos auth login --identity admin
+
+# Use short form of identity flag
+atmos auth login -i admin
+
+# Interactive selection with short form
+atmos auth login -i
+```
+
+## Arguments
+
+<dl>
+  <dt>n/a</dt>
+  <dd>No positional arguments.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    Specify the identity to authenticate. This flag has three modes:
+
+    - **With value** (`--identity admin`): Use the specified identity
+    - **Without value** (`--identity`): Force interactive selector, even if a default identity is configured
+    - **Omitted**: Automatic behavior based on configuration:
+      - **Exactly one default identity**: Use it automatically
+      - **No default identities** (interactive): Show selector with all available identities
+      - **Multiple default identities** (interactive): Show selector with only the default identities
+      - **No/multiple defaults** (CI/non-interactive): Return an error
+
+    **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
+  </dd>
+</dl>
+
+## Interactive Identity Selection
+
+Atmos provides an interactive identity selector in two scenarios:
+
+1. **No default configured**: When no `--identity` flag is provided and no default identity is configured
+2. **Explicit request**: When using `--identity` without a value (e.g., `atmos auth login --identity`)
+
+This allows you to:
+- Quickly choose an identity without remembering exact names
+- Override the default identity temporarily without changing configuration
+- Browse all available identities and make an informed selection
+
+The interactive selector displays all configured identities with arrow key navigation and Enter to confirm. In CI/CD pipelines or non-interactive environments, you must either:
+
+- Configure a default identity in your `atmos.yaml`
+- Explicitly specify the identity using `--identity <name>` or environment variable
+
+## Notes
+
+- Prints provider, identity, account, region, and expiration when successful.
+- Credentials are cached to avoid repeated logins until expiration.
+- The interactive selector uses arrow keys for navigation and Enter to confirm selection.
+- Using `--identity` without a value is useful when:
+  - You have a default identity configured but want to temporarily use a different one
+  - You want to browse available identities before selecting
+  - You're working in a team environment with multiple configured identities
+- For AWS SSO (IAM Identity Center), you will see a **verification code** displayed in the terminal. This is a device authorization user code (e.g., "WDDD-HRQV") that AWS generates for the device flow - **this is NOT an MFA token**. The code is displayed so you can visually verify it matches what AWS shows in the browser. Any MFA prompts will appear in the browser during authentication.

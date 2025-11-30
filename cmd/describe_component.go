@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"errors"
+	"os"
 
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // describeComponentCmd describes configuration for components
@@ -61,7 +64,28 @@ var describeComponentCmd = &cobra.Command{
 			return err
 		}
 
+		provenance, err := flags.GetBool("provenance")
+		if err != nil {
+			return err
+		}
+
 		component := args[0]
+
+		// Load atmos configuration to get auth config.
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+			ComponentFromArg: component,
+			Stack:            stack,
+		}, false)
+		if err != nil {
+			return errors.Join(errUtils.ErrFailedToInitConfig, err)
+		}
+
+		// Get identity from flag and create AuthManager if provided.
+		identityName := GetIdentityFromFlags(cmd, os.Args)
+		authManager, err := CreateAuthManagerFromIdentity(identityName, &atmosConfig.Auth)
+		if err != nil {
+			return err
+		}
 
 		err = e.NewDescribeComponentExec().ExecuteDescribeComponentCmd(e.DescribeComponentParams{
 			Component:            component,
@@ -72,6 +96,8 @@ var describeComponentCmd = &cobra.Command{
 			Query:                query,
 			Format:               format,
 			File:                 file,
+			Provenance:           provenance,
+			AuthManager:          authManager,
 		})
 		return err
 	},
@@ -86,6 +112,7 @@ func init() {
 	describeComponentCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 	describeComponentCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
+	describeComponentCmd.PersistentFlags().Bool("provenance", false, "Enable provenance tracking to show where configuration values originated")
 
 	err := describeComponentCmd.MarkPersistentFlagRequired("stack")
 	if err != nil {

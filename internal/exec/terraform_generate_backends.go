@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -96,6 +96,7 @@ func ExecuteTerraformGenerateBackends(
 	var settingsSection map[string]any
 	var envSection map[string]any
 	var providersSection map[string]any
+	var authSection map[string]any
 	var hooksSection map[string]any
 	var overridesSection map[string]any
 	var backendSection map[string]any
@@ -157,6 +158,10 @@ func ExecuteTerraformGenerateBackends(
 					providersSection = map[string]any{}
 				}
 
+				if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+					authSection = map[string]any{}
+				}
+
 				if hooksSection, ok = componentSection[cfg.HooksSectionName].(map[string]any); !ok {
 					hooksSection = map[string]any{}
 				}
@@ -186,6 +191,7 @@ func ExecuteTerraformGenerateBackends(
 					ComponentVarsSection:      varsSection,
 					ComponentSettingsSection:  settingsSection,
 					ComponentEnvSection:       envSection,
+					ComponentAuthSection:      authSection,
 					ComponentProvidersSection: providersSection,
 					ComponentHooksSection:     hooksSection,
 					ComponentOverridesSection: overridesSection,
@@ -233,6 +239,10 @@ func ExecuteTerraformGenerateBackends(
 				configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
 				configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
 
+				// Populate context and stack name for YAML/template processing
+				configAndStacksInfo.Context = context
+				configAndStacksInfo.Stack = stackName
+
 				// Process `Go` templates
 				componentSectionStr, err := u.ConvertToYAML(componentSection)
 				if err != nil {
@@ -270,7 +280,7 @@ func ExecuteTerraformGenerateBackends(
 					errUtils.CheckErrorPrintAndExit(err, "", "")
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil)
+				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil, &configAndStacksInfo)
 				if err != nil {
 					return err
 				}

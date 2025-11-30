@@ -7,15 +7,16 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pkg/errors"
+	"go.yaml.in/yaml/v3"
+
 	"github.com/cloudposse/atmos/internal/exec"
+	term "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
-	"github.com/pkg/errors"
-	"golang.org/x/term"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -73,7 +74,7 @@ func formatVendorOutput(rows []map[string]interface{}, customHeaders []string, o
 	formatOpts := format.FormatOptions{
 		Format:        format.Format(options.FormatStr),
 		Delimiter:     options.Delimiter,
-		TTY:           term.IsTerminal(int(os.Stdout.Fd())),
+		TTY:           term.IsTTYSupportForStdout(),
 		CustomHeaders: customHeaders,
 		MaxColumns:    0,
 	}
@@ -312,7 +313,7 @@ func processComponent(atmosConfig *schema.AtmosConfiguration, componentName stri
 func findComponentManifests(atmosConfig *schema.AtmosConfiguration) ([]VendorInfo, error) {
 	var vendorInfos []VendorInfo
 
-	stacksMap, err := exec.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	stacksMap, err := exec.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error describing stacks: %w", err)
 	}

@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -79,7 +80,7 @@ func ExecutePackerOutput(
 
 	manifestContent, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrReadFile, err)
+		return nil, errors.Join(errUtils.ErrReadFile, err)
 	}
 
 	data, err := u.ConvertFromJSON(string(manifestContent))

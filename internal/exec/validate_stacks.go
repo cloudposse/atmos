@@ -19,6 +19,7 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -61,7 +62,13 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	err = ValidateStacks(&atmosConfig)
-	return err
+	if err != nil {
+		u.PrintfMessageToTUI("\r%s Stack validation failed\n", theme.Styles.XMark)
+		return err
+	}
+	u.PrintfMessageToTUI("\r%s All stacks validated successfully\n", theme.Styles.Checkmark)
+	log.Debug("Stack validation completed")
+	return nil
 }
 
 // ValidateStacks validates Atmos stack configuration.
@@ -272,6 +279,7 @@ func createComponentStackMap(
 	var settingsSection map[string]any
 	var envSection map[string]any
 	var providersSection map[string]any
+	var authSection map[string]any
 	var overridesSection map[string]any
 	var backendSection map[string]any
 	var backendTypeSection string
@@ -306,6 +314,10 @@ func createComponentStackMap(
 						envSection = map[string]any{}
 					}
 
+					if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+						authSection = map[string]any{}
+					}
+
 					if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 						providersSection = map[string]any{}
 					}
@@ -330,6 +342,7 @@ func createComponentStackMap(
 						ComponentSettingsSection:  settingsSection,
 						ComponentEnvSection:       envSection,
 						ComponentProvidersSection: providersSection,
+						ComponentAuthSection:      authSection,
 						ComponentOverridesSection: overridesSection,
 						ComponentBackendSection:   backendSection,
 						ComponentBackendType:      backendTypeSection,
@@ -338,6 +351,7 @@ func createComponentStackMap(
 							cfg.MetadataSectionName:    metadataSection,
 							cfg.SettingsSectionName:    settingsSection,
 							cfg.EnvSectionName:         envSection,
+							cfg.AuthSectionName:        authSection,
 							cfg.ProvidersSectionName:   providersSection,
 							cfg.OverridesSectionName:   overridesSection,
 							cfg.BackendSectionName:     backendSection,
@@ -386,7 +400,14 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 				// If the configs are different, add it to the errors
 				var componentConfigs []map[string]any
 				for _, stackManifestName := range stackManifests {
-					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, false, false, nil)
+					componentConfig, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+						Component:            componentName,
+						Stack:                stackManifestName,
+						ProcessTemplates:     false,
+						ProcessYamlFunctions: false,
+						Skip:                 nil,
+						AuthManager:          nil,
+					})
 					if err != nil {
 						return nil, err
 					}

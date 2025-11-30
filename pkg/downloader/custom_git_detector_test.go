@@ -2,9 +2,6 @@ package downloader
 
 import (
 	"net/url"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -141,30 +138,5 @@ func TestDetect_UnsupportedHost(t *testing.T) {
 	}
 }
 
-func TestRemoveSymlinks(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping symlink tests on Windows: symlinks require special privileges")
-	}
-	tempDir, err := os.MkdirTemp("", "symlinktest")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tempDir)
-	filePath := filepath.Join(tempDir, "file.txt")
-	if err := os.WriteFile(filePath, []byte("data"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	symlinkPath := filepath.Join(tempDir, "link.txt")
-	if err := os.Symlink(filePath, symlinkPath); err != nil {
-		t.Fatal(err)
-	}
-	if err := removeSymlinks(tempDir); err != nil {
-		t.Fatalf("removeSymlinks error: %v", err)
-	}
-	if _, err := os.Lstat(symlinkPath); !os.IsNotExist(err) {
-		t.Errorf("Expected symlink to be removed, but it exists")
-	}
-	if _, err := os.Stat(filePath); err != nil {
-		t.Errorf("Expected regular file to exist, but got error: %v", err)
-	}
-}
+// Unix-specific test moved to custom_git_detector_unix_test.go:
+// - TestRemoveSymlinks

@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/spf13/viper"
 )
 
 // DisplayDocs displays component documentation directly through the terminal or
@@ -21,11 +22,17 @@ func DisplayDocs(componentDocs string, usePager bool) error {
 		return nil
 	}
 
-	pagerCmd := os.Getenv("PAGER") //nolint:forbidigo // Standard Unix PAGER variable for display purposes
+	// Try to get pager from Viper configuration first, then fall back to environment variable.
+	pagerCmd := viper.GetString("pager")
+	if pagerCmd == "" {
+		pagerCmd = os.Getenv("PAGER") //nolint:forbidigo // Standard Unix PAGER variable for display purposes
+	}
 	if pagerCmd == "" {
 		pagerCmd = "less -r"
 	}
 
+	// Trim whitespace and split into args.
+	pagerCmd = strings.TrimSpace(pagerCmd)
 	args := strings.Fields(pagerCmd)
 	if len(args) == 0 {
 		return errUtils.ErrInvalidPagerCommand

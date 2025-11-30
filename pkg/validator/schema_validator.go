@@ -4,15 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/xeipuuv/gojsonschema"
+	"go.yaml.in/yaml/v3"
+
 	"github.com/cloudposse/atmos/pkg/datafetcher"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/xeipuuv/gojsonschema"
-	"gopkg.in/yaml.v3"
 )
 
 var ErrSchemaNotFound = errors.New("failed to fetch schema")
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type Validator interface {
 	ValidateYAMLSchema(schema, sourceFile string) ([]gojsonschema.ResultError, error)
 }

@@ -20,12 +20,102 @@ import Note from '@site/src/components/Note';
 These flags are available for every Atmos command:
 
 <dl>
+    <dt>`--chdir` / `-C`</dt>
+    <dd>
+        Change the working directory before Atmos runs. Equivalent to running `cd <directory>` before executing `atmos`.
+
+        **Use Cases:**
+        - **Development workflow**: Test local Atmos builds against different infrastructure repos
+        - **CI/CD**: Run Atmos from a build directory while operating on infrastructure elsewhere
+        - **Multi-repo operations**: Execute commands across multiple repos without changing your shell
+        - **Scripting**: Simplify scripts that operate on different directories
+
+        **Basic Usage:**
+        ```bash
+        # Run as if you did: cd /path/to/infra && atmos terraform plan
+        atmos -C /path/to/infra terraform plan vpc -s prod
+
+        # Use environment variable
+        ATMOS_CHDIR=/infrastructure atmos list components
+        ```
+
+        <details>
+        <summary><strong>How it differs from <code>--base-path</code></strong></summary>
+
+        **`--chdir`**: Changes the **process working directory** (calls `os.Chdir()`)
+        - Like running `cd` before `atmos`
+        - ALL file operations use the new directory
+        - Happens **before** any configuration loading
+
+        **`--base-path`**: Provides a **path prefix** for configuration (just a string)
+        - Does **not** change the working directory
+        - Used when joining paths: `filepath.Join(basePath, componentPath)`
+        - Processed **after** `--chdir`
+
+        **Examples showing the difference:**
+        ```bash
+        # Without any flags (current directory: /home/user)
+        atmos terraform plan
+        # Looks for atmos.yaml in: /home/user/atmos.yaml
+        # Resolves components from: /home/user/components/terraform/
+
+        # With --chdir (changes working directory)
+        atmos --chdir=/infra terraform plan
+        # Working directory changed to: /infra
+        # Looks for atmos.yaml in: /infra/atmos.yaml
+        # Resolves components from: /infra/components/terraform/
+
+        # With --base-path (working directory unchanged)
+        atmos --base-path=/infra terraform plan
+        # Working directory still: /home/user
+        # Base path prefix: /infra
+        # Looks for atmos.yaml using: /infra prefix
+        # Relative paths in config resolve from: /home/user
+
+        # With both flags
+        atmos --chdir=/home/user --base-path=/infra terraform plan
+        # First: changes working directory to /home/user
+        # Then: uses /infra as base path prefix
+        # Result: paths like /infra are resolved relative to /home/user
+        ```
+        </details>
+    </dd>
+
     <dt>`--base-path`</dt>
     <dd>
-        Base path for the Atmos project. This is the root directory where Atmos will look for configuration files,
-        stacks, and components.
-        - Can also use `ATMOS_BASE_PATH` environment variable
+        Specify the Atmos project root directory. Use this when your `atmos.yaml` and components are in a non-standard location.
+
+        **When to use it:**
+        - Your `atmos.yaml` and components are in a subdirectory
+        - Using Atmos programmatically (like the Terraform provider)
+        - Non-standard project layout where the Atmos root isn't the current directory
+
+        **Basic Usage:**
+        ```bash
+        # Look for atmos.yaml and components using /custom/path as the base
+        atmos --base-path=/custom/path terraform plan vpc -s prod
+
+        # Combine with --chdir
+        atmos --chdir=/infra --base-path=./custom describe stacks
+        ```
+
+        <details>
+        <summary><strong>Technical details</strong></summary>
+
+        **What it does internally:**
+        - Sets `atmosConfig.BasePath` (a configuration value, not a directory change)
+        - Used as a prefix when joining paths: `filepath.Join(basePath, componentPath)`
+        - Constructs paths to: stacks, terraform components, helmfile components, packer components
+        - Does **not** call `os.Chdir()` or change the working directory
+
+        **Path resolution:**
         - Supports both absolute and relative paths
+        - Relative paths resolved using `filepath.Abs()` from current working directory
+        - If `--chdir` was used, relative paths resolve from the NEW working directory
+        - Can also use `ATMOS_BASE_PATH` environment variable
+
+        See `--chdir` section above for detailed comparison of how these flags interact.
+        </details>
     </dd>
 
     <dt>`--config`</dt>
@@ -64,6 +154,28 @@ These flags are available for every Atmos command:
         - Useful for CI/CD environments or when piping output
         - Can also use `ATMOS_NO_COLOR` or `NO_COLOR` environment variables
         - The `NO_COLOR` env var follows the standard from https://no-color.org/
+        - **Takes highest precedence**: Overrides `--force-color`, `--color`, and all other color settings
+    </dd>
+
+    <dt>`--force-tty`</dt>
+    <dd>
+        Force TTY mode with sane defaults when terminal detection fails.
+        - Useful for screenshot generation and documentation
+        - Uses default terminal dimensions (width=120, height=40)
+        - Forces `IsTTY()` to return `true` even when not a TTY
+        - Can also use `ATMOS_FORCE_TTY` environment variable
+        - Example: `atmos terraform plan --force-tty --force-color | screenshot.sh`
+    </dd>
+
+    <dt>`--force-color`</dt>
+    <dd>
+        Force TrueColor output even when not a TTY.
+        - Useful for screenshot generation and documentation
+        - Forces 24-bit TrueColor profile regardless of terminal detection
+        - Overrides automatic color degradation
+        - Can also use `ATMOS_FORCE_COLOR` environment variable
+        - **Note**: The `NO_COLOR` environment variable or `--no-color` flag takes precedence and will disable color even when `--force-color` is set
+        - Example: `ATMOS_FORCE_COLOR=true atmos describe stacks | vhs record.tape`
     </dd>
 
     <dt>`--pager`</dt>
@@ -97,6 +209,17 @@ These flags are available for every Atmos command:
         Redirect stderr to a file or file descriptor.
         - Can redirect to any file path or standard file descriptor
         - Example: `--redirect-stderr=/dev/null` to suppress error output
+    </dd>
+
+    <dt>`--version`</dt>
+    <dd>
+        Print a minimal single-line Atmos CLI version and exit.
+        - Outputs a simple `atmos &lt;version&gt;` format without styling or additional information
+        - Does not perform update checks or support `--check`/`--format` flags
+        - Available as a persistent flag on all commands
+        - Always displays the **Atmos version**, not the version of underlying tools (Terraform, Helmfile, etc.)
+        - For richer output and additional flags, use the [`atmos version`](/cli/commands/version/usage) command
+        - Example: `atmos --version`
     </dd>
 </dl>
 
@@ -237,6 +360,14 @@ All global flags can be set using environment variables. The precedence order is
 ### Core Environment Variables
 
 <dl>
+    <dt>`ATMOS_CHDIR`</dt>
+    <dd>
+        Change to the specified directory before executing any command.
+        - Equivalent to the `--chdir` / `-C` flag
+        - CLI flag takes precedence over this environment variable
+        - Useful for CI/CD pipelines and scripting
+    </dd>
+
     <dt>`ATMOS_BASE_PATH`</dt>
     <dd>Sets the base path for the Atmos project</dd>
 
@@ -259,8 +390,29 @@ All global flags can be set using environment variables. The precedence order is
         Disable colored output (any non-empty value disables color).
         - `NO_COLOR` is a standard environment variable supported by many CLI tools (https://no-color.org/)
         - Maintained for portability across different systems and CI/CD environments
-        - Takes precedence over `ATMOS_COLOR`/`COLOR` settings
+        - **Highest precedence**: Takes precedence over `ATMOS_FORCE_COLOR`, `CLICOLOR_FORCE`, `ATMOS_COLOR`, and `COLOR` settings
+        - Overrides `--force-color` flag
         - Both `ATMOS_NO_COLOR` and `NO_COLOR` are fully supported
+    </dd>
+
+    <dt>`ATMOS_FORCE_TTY`</dt>
+    <dd>
+        Force TTY mode with sane defaults when terminal detection fails.
+        - Useful for screenshot generation and documentation
+        - Uses default terminal dimensions (width=120, height=40)
+        - Example: `ATMOS_FORCE_TTY=true atmos describe stacks`
+    </dd>
+
+    <dt>`ATMOS_FORCE_COLOR` / `CLICOLOR_FORCE`</dt>
+    <dd>
+        Force TrueColor output even when not a TTY.
+        - Both `ATMOS_FORCE_COLOR` and `CLICOLOR_FORCE` are equivalent and fully supported
+        - `CLICOLOR_FORCE` is a standard environment variable (https://bixense.com/clicolors/)
+        - Useful for screenshot generation and piping to color-aware tools
+        - Forces 24-bit TrueColor profile regardless of terminal detection
+        - **Note**: `NO_COLOR` environment variable takes precedence and will disable color even when this is set
+        - Example: `ATMOS_FORCE_COLOR=true atmos describe config | bat`
+        - Example: `CLICOLOR_FORCE=1 atmos terraform plan`
     </dd>
 
     <dt>`ATMOS_PAGER` / `PAGER`</dt>
@@ -284,6 +436,34 @@ All global flags can be set using environment variables. The precedence order is
 
     <dt>`ATMOS_PROFILE_TYPE`</dt>
     <dd>Set the profile type for file-based profiling (cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace)</dd>
+</dl>
+
+### XDG Base Directory Environment Variables
+
+<dl>
+    <dt>`ATMOS_XDG_CACHE_HOME` / `XDG_CACHE_HOME`</dt>
+    <dd>
+        Override the default XDG cache directory for Atmos.
+        - Default: `~/.cache` on Linux/Unix, `~/Library/Caches` on macOS, `%LOCALAPPDATA%` on Windows
+        - Used for: Cache files (`cache.yaml`)
+        - Example: `ATMOS_XDG_CACHE_HOME=/custom/cache atmos describe stacks`
+    </dd>
+
+    <dt>`ATMOS_XDG_DATA_HOME` / `XDG_DATA_HOME`</dt>
+    <dd>
+        Override the default XDG data directory for Atmos.
+        - Default: `~/.local/share` on Linux/Unix, `~/Library/Application Support` on macOS, `%LOCALAPPDATA%` on Windows
+        - Used for: File-based keyring storage
+        - Example: `ATMOS_XDG_DATA_HOME=/custom/data atmos auth login`
+    </dd>
+
+    <dt>`ATMOS_XDG_CONFIG_HOME` / `XDG_CONFIG_HOME`</dt>
+    <dd>
+        Override the default XDG config directory for Atmos.
+        - Default: `~/.config` on Linux/Unix, `~/Library/Application Support` on macOS, `%APPDATA%` on Windows
+        - Reserved for future use
+        - Example: `ATMOS_XDG_CONFIG_HOME=/custom/config`
+    </dd>
 </dl>
 
 ## Portability Notes
@@ -311,6 +491,33 @@ atmos --base-path=/infrastructure \
       --config=base.yaml \
       --config=override.yaml \
       terraform plan vpc -s prod
+```
+
+### Directory Change Examples
+
+```bash
+# Change to infrastructure directory before running command
+atmos --chdir=/path/to/infrastructure describe stacks
+
+# Use short form (-C) for brevity
+atmos -C /infra terraform plan vpc -s prod
+
+# Relative path from current directory
+atmos --chdir=../other-repo list components
+
+# Use with other flags - chdir processes first
+atmos -C /infra --base-path=./config describe component vpc -s dev
+
+# Environment variable for scripting
+export ATMOS_CHDIR=/infrastructure
+atmos terraform apply vpc -s prod
+
+# Development workflow - point dev binary at different repo
+./build/atmos -C ~/projects/my-infrastructure describe stacks
+
+# CI/CD pipeline example
+cd /build
+atmos --chdir=/infrastructure terraform plan vpc -s prod
 ```
 
 ### Pager Control Examples

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -55,11 +55,13 @@ type AtmosConfiguration struct {
 	// Stores is never read from yaml, it is populated in processStoreConfig and it's used to pass to the populated store
 	// registry through to the yaml parsing functions when !store is run and to pass the registry to the hooks
 	// functions to be able to call stores from within hooks.
-	Stores        store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
-	CliConfigPath string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
-	Import        []string            `yaml:"import" json:"import" mapstructure:"import"`
-	Docs          Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
-	Profiler      profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
+	Stores          store.StoreRegistry `yaml:"stores_registry,omitempty" json:"stores_registry,omitempty" mapstructure:"stores_registry"`
+	CliConfigPath   string              `yaml:"cli_config_path" json:"cli_config_path,omitempty" mapstructure:"cli_config_path"`
+	Import          []string            `yaml:"import" json:"import" mapstructure:"import"`
+	Docs            Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
+	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -211,6 +213,17 @@ type Terminal struct {
 	Color              bool               `yaml:"color" json:"color" mapstructure:"color"`
 	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"` // Deprecated in config, use Color instead
 	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
+	Title              bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
+	Alerts             bool               `yaml:"alerts,omitempty" json:"alerts,omitempty" mapstructure:"alerts"`
+	Mask               MaskSettings       `yaml:"mask,omitempty" json:"mask,omitempty" mapstructure:"mask"`
+}
+
+// MaskSettings contains configuration for sensitive data masking.
+type MaskSettings struct {
+	Enabled     bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Replacement string   `yaml:"replacement,omitempty" json:"replacement,omitempty" mapstructure:"replacement"` // Custom replacement string (default: ***MASKED***)
+	Patterns    []string `yaml:"patterns,omitempty" json:"patterns,omitempty" mapstructure:"patterns"`          // Custom regex patterns to mask
+	Literals    []string `yaml:"literals,omitempty" json:"literals,omitempty" mapstructure:"literals"`          // Custom literal values to mask
 }
 
 // IsPagerEnabled reports whether a pager should be used based on Terminal.Pager.
@@ -228,13 +241,18 @@ func (t *Terminal) IsPagerEnabled() bool {
 }
 
 // IsColorEnabled determines if color output should be enabled.
-func (t *Terminal) IsColorEnabled() bool {
-	// Check deprecated NoColor field for backward compatibility
+// The isTTY parameter provides the default when Color is not explicitly set.
+func (t *Terminal) IsColorEnabled(isTTY bool) bool {
+	// NoColor takes precedence - force disable.
 	if t.NoColor {
 		return false
 	}
-	// Use Color setting (defaults to true if not explicitly set)
-	return t.Color
+	// If Color is explicitly set to true, force enable.
+	if t.Color {
+		return true
+	}
+	// Otherwise, fall back to TTY detection.
+	return isTTY
 }
 
 type SyntaxHighlighting struct {
@@ -255,6 +273,7 @@ type AtmosSettings struct {
 	InjectGithubToken    bool             `yaml:"inject_github_token,omitempty" mapstructure:"inject_github_token"`
 	GithubToken          string           `yaml:"github_token,omitempty" mapstructure:"github_token"`
 	AtmosGithubToken     string           `yaml:"atmos_github_token,omitempty" mapstructure:"atmos_github_token"`
+	GithubUsername       string           `yaml:"github_username,omitempty" mapstructure:"github_username"`
 	InjectBitbucketToken bool             `yaml:"inject_bitbucket_token,omitempty" mapstructure:"inject_bitbucket_token"`
 	BitbucketToken       string           `yaml:"bitbucket_token,omitempty" mapstructure:"bitbucket_token"`
 	AtmosBitbucketToken  string           `yaml:"atmos_bitbucket_token,omitempty" mapstructure:"atmos_bitbucket_token"`
@@ -353,9 +372,37 @@ type Packer struct {
 }
 
 type Components struct {
+	// Built-in component types (legacy - will migrate to plugin model in future phases).
 	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
 	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
 	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
+
+	// Dynamic plugin component types.
+	// Uses mapstructure:",remain" to capture all unmapped fields from the YAML/JSON.
+	// This allows new component types (like mock, pulumi, cdk) to be added without schema changes.
+	Plugins map[string]any `yaml:",inline" json:",inline" mapstructure:",remain"`
+}
+
+// GetComponentConfig retrieves configuration for any component type.
+// It first checks built-in types (terraform, helmfile, packer) for type-safe access,
+// then falls back to the Plugins map for dynamic component types.
+//
+// Returns the configuration and true if found, nil and false otherwise.
+func (c *Components) GetComponentConfig(componentType string) (any, bool) {
+	switch componentType {
+	case "terraform":
+		return c.Terraform, true
+	case "helmfile":
+		return c.Helmfile, true
+	case "packer":
+		return c.Packer, true
+	default:
+		// Check plugin types.
+		if config, ok := c.Plugins[componentType]; ok {
+			return config, true
+		}
+		return nil, false
+	}
 }
 
 type Stacks struct {
@@ -452,6 +499,46 @@ type ArgsAndFlagsInfo struct {
 	Query                     string
 	Affected                  bool
 	All                       bool
+	Identity                  string
+}
+
+// AuthContext holds active authentication credentials for multiple providers.
+// This is the SINGLE SOURCE OF TRUTH for auth credentials, populated by the
+// auth system during PostAuthenticate().
+//
+// AuthContext is used by:
+// 1. In-process SDK calls (e.g., !terraform.state reading from S3)
+// 2. Deriving ComponentEnvSection/ComponentEnvList for spawned processes
+//
+// It enables multiple cloud provider identities to be active simultaneously
+// (e.g., AWS + GitHub credentials in the same component).
+type AuthContext struct {
+	// AWS holds AWS credentials if an AWS identity is active.
+	AWS *AWSAuthContext `json:"aws,omitempty" yaml:"aws,omitempty"`
+
+	// Future: Add other cloud providers as needed
+	// Azure *AzureAuthContext `json:"azure,omitempty" yaml:"azure,omitempty"`
+	// GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty"`
+	// GitHub *GitHubAuthContext `json:"github,omitempty" yaml:"github,omitempty"`
+}
+
+// AWSAuthContext holds AWS-specific authentication context.
+// This is populated by the AWS auth system and consumed by AWS SDK calls.
+type AWSAuthContext struct {
+	// CredentialsFile is the absolute path to the AWS credentials file managed by Atmos.
+	// Example: /home/user/.atmos/auth/aws-sso/credentials
+	CredentialsFile string `json:"credentials_file" yaml:"credentials_file"`
+
+	// ConfigFile is the absolute path to the AWS config file managed by Atmos.
+	// Example: /home/user/.atmos/auth/aws-sso/config
+	ConfigFile string `json:"config_file" yaml:"config_file"`
+
+	// Profile is the AWS profile name to use from the credentials file.
+	// This corresponds to the identity name in Atmos auth config.
+	Profile string `json:"profile" yaml:"profile"`
+
+	// Region is the AWS region (optional, may be empty if not specified in identity).
+	Region string `json:"region,omitempty" yaml:"region,omitempty"`
 }
 
 type ConfigAndStacksInfo struct {
@@ -476,61 +563,67 @@ type ConfigAndStacksInfo struct {
 	ComponentProvidersSection     AtmosSectionMapType
 	ComponentHooksSection         AtmosSectionMapType
 	ComponentEnvSection           AtmosSectionMapType
+	ComponentAuthSection          AtmosSectionMapType
 	ComponentEnvList              []string
 	ComponentBackendSection       AtmosSectionMapType
-	ComponentBackendType          string
-	AdditionalArgsAndFlags        []string
-	GlobalOptions                 []string
-	BasePath                      string
-	VendorBasePathFlag            string
-	TerraformCommand              string
-	TerraformDir                  string
-	HelmfileCommand               string
-	HelmfileDir                   string
-	PackerCommand                 string
-	PackerDir                     string
-	ConfigDir                     string
-	StacksDir                     string
-	WorkflowsDir                  string
-	Context                       Context
-	ContextPrefix                 string
-	DeployRunInit                 string
-	InitRunReconfigure            string
-	InitPassVars                  string
-	PlanSkipPlanfile              string
-	AutoGenerateBackendFile       string
-	UseTerraformPlan              bool
-	PlanFile                      string
-	DryRun                        bool
-	SkipInit                      bool
-	ComponentInheritanceChain     []string
-	ComponentImportsSection       []string
-	NeedHelp                      bool
-	ComponentIsAbstract           bool
-	ComponentIsEnabled            bool
-	ComponentIsLocked             bool
-	ComponentMetadataSection      AtmosSectionMapType
-	TerraformWorkspace            string
-	JsonSchemaDir                 string
-	OpaDir                        string
-	CueDir                        string
-	AtmosManifestJsonSchema       string
-	AtmosCliConfigPath            string
-	AtmosBasePath                 string
-	RedirectStdErr                string
-	LogsLevel                     string
-	LogsFile                      string
-	SettingsListMergeStrategy     string
-	Query                         string
-	AtmosConfigFilesFromArg       []string
-	AtmosConfigDirsFromArg        []string
-	ProcessTemplates              bool
-	ProcessFunctions              bool
-	Skip                          []string
-	CliArgs                       []string
-	Affected                      bool
-	All                           bool
-	Components                    []string
+	// AuthContext holds active authentication credentials for cloud providers.
+	// This is the SINGLE SOURCE OF TRUTH for auth credentials.
+	// ComponentEnvSection/ComponentEnvList are derived from this context.
+	AuthContext               *AuthContext
+	ComponentBackendType      string
+	AdditionalArgsAndFlags    []string
+	GlobalOptions             []string
+	BasePath                  string
+	VendorBasePathFlag        string
+	TerraformCommand          string
+	TerraformDir              string
+	HelmfileCommand           string
+	HelmfileDir               string
+	PackerCommand             string
+	PackerDir                 string
+	ConfigDir                 string
+	StacksDir                 string
+	WorkflowsDir              string
+	Context                   Context
+	ContextPrefix             string
+	DeployRunInit             string
+	InitRunReconfigure        string
+	InitPassVars              string
+	PlanSkipPlanfile          string
+	AutoGenerateBackendFile   string
+	UseTerraformPlan          bool
+	PlanFile                  string
+	DryRun                    bool
+	SkipInit                  bool
+	ComponentInheritanceChain []string
+	ComponentImportsSection   []string
+	NeedHelp                  bool
+	ComponentIsAbstract       bool
+	ComponentIsEnabled        bool
+	ComponentIsLocked         bool
+	ComponentMetadataSection  AtmosSectionMapType
+	TerraformWorkspace        string
+	JsonSchemaDir             string
+	OpaDir                    string
+	CueDir                    string
+	AtmosManifestJsonSchema   string
+	AtmosCliConfigPath        string
+	AtmosBasePath             string
+	RedirectStdErr            string
+	LogsLevel                 string
+	LogsFile                  string
+	SettingsListMergeStrategy string
+	Query                     string
+	AtmosConfigFilesFromArg   []string
+	AtmosConfigDirsFromArg    []string
+	ProcessTemplates          bool
+	ProcessFunctions          bool
+	Skip                      []string
+	CliArgs                   []string
+	Affected                  bool
+	All                       bool
+	Components                []string
+	Identity                  string
 }
 
 type BackoffStrategy string
@@ -630,6 +723,7 @@ type BaseComponentConfig struct {
 	BaseComponentVars                      AtmosSectionMapType
 	BaseComponentSettings                  AtmosSectionMapType
 	BaseComponentEnv                       AtmosSectionMapType
+	BaseComponentAuth                      AtmosSectionMapType
 	BaseComponentProviders                 AtmosSectionMapType
 	BaseComponentHooks                     AtmosSectionMapType
 	FinalBaseComponentName                 string

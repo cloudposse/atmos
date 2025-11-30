@@ -169,3 +169,138 @@ Short versions of all command-line arguments can be used:
 atmos tofu plan eks -s ue2-dev
 atmos tofu apply eks -s ue2-dev
 ```
+
+## OpenTofu 1.8+ Module Source Interpolation
+
+OpenTofu 1.8.0 introduced support for variable interpolation in module source attributes, enabling dynamic module paths based on configuration. This feature is **OpenTofu-specific** and is not supported in HashiCorp Terraform.
+
+### Automatic Support
+
+Atmos automatically detects when you're using OpenTofu (by checking if your `command` contains "tofu" or by executing the version command) and handles OpenTofu-specific syntax gracefully. No additional configuration is required.
+
+### Example: Dynamic Module Sources
+
+```hcl title="components/terraform/my-component/main.tf"
+variable "context" {
+  type = object({
+    build = object({
+      module_path    = string
+      module_version = string
+    })
+  })
+  description = "Context for dynamic module loading"
+}
+
+module "dynamic_module" {
+  source = "${var.context.build.module_path}"
+
+  # Module inputs
+  name = "example"
+}
+```
+
+```yaml title="stacks/catalog/my-component.yaml"
+components:
+  terraform:
+    my-component:
+      vars:
+        context:
+          build:
+            module_path: "./modules/example"
+            module_version: "v1.0.0"
+```
+
+### How It Works
+
+When you configure `command: "tofu"` in your `atmos.yaml`, Atmos:
+
+1. **Auto-detects OpenTofu** using a two-tier strategy:
+   - **Fast path**: Checks if the executable basename contains "tofu"
+   - **Slow path**: Executes `<command> version` and checks for "OpenTofu"
+   - **Caches** results for performance
+
+2. **Skips incompatible validation** for known OpenTofu-specific features:
+   - Module source variable interpolation
+   - Other OpenTofu 1.8+ syntax extensions
+
+3. **Still catches real errors** - Only skips validation for known OpenTofu patterns, ensuring actual syntax errors are still reported
+
+### Supported Command Patterns
+
+Atmos recognizes OpenTofu through any of these command configurations:
+
+- `command: "tofu"` - Simple executable name
+- `command: "/usr/bin/tofu"` - Absolute path
+- `command: "/opt/homebrew/bin/tofu"` - Homebrew installation
+- `command: "/Users/user/.asdf/shims/tofu"` - asdf-managed
+- `command: "/path/to/custom/tofu"` - Custom installation
+
+### Requirements for Module Source Interpolation
+
+To use variable interpolation in module sources with OpenTofu, you must:
+
+1. **Configure the OpenTofu command**:
+   ```yaml title="atmos.yaml"
+   components:
+     terraform:
+       command: "tofu"  # or any path containing "tofu"
+   ```
+
+2. **Enable passing variables to init** (required for module source interpolation):
+   ```yaml title="atmos.yaml"
+   components:
+     terraform:
+       init:
+         pass_vars: true
+   ```
+
+3. **Use OpenTofu 1.8.0 or later**
+
+### Migration from Terraform
+
+If migrating from HashiCorp Terraform to OpenTofu and want to use module source interpolation:
+
+**Before (Terraform - not supported)**:
+```hcl
+# This will fail in Terraform
+module "example" {
+  source = "${var.module_path}"  # Error: Variables not allowed
+}
+```
+
+**After (OpenTofu 1.8+  - works automatically)**:
+```hcl
+# This works in OpenTofu 1.8+ with Atmos auto-detection
+module "example" {
+  source = "${var.module_path}"  # Automatically supported
+}
+```
+
+No configuration changes needed in Atmos - the auto-detection handles it automatically when `command: "tofu"` is configured.
+
+### Troubleshooting
+
+If you encounter validation errors with OpenTofu-specific syntax:
+
+1. **Verify OpenTofu detection**:
+   ```console
+   tofu version
+   # Should output: OpenTofu v1.8.x
+   ```
+
+2. **Check Atmos configuration**:
+   ```yaml
+   components:
+     terraform:
+       command: "tofu"  # Must contain "tofu" or be a path to tofu
+       init:
+         pass_vars: true  # Required for module source interpolation
+   ```
+
+3. **Enable debug logging** to see detection details:
+   ```console
+   export ATMOS_LOGS_LEVEL=Trace
+   atmos terraform plan my-component -s my-stack
+   ```
+
+For more details on this feature, see the [OpenTofu 1.8.0 release notes](https://opentofu.org/blog/opentofu-1-8-0/).

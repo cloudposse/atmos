@@ -97,9 +97,15 @@ func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, cu
 		if retParams.defaultValue != nil {
 			return *retParams.defaultValue
 		}
-		er := fmt.Errorf("failed to execute YAML function %s. %w %s: %w", input, ErrGetKeyFailed, retParams.key, err)
+		er := fmt.Errorf("%w: failed to execute YAML function %s for key %s: %s", ErrGetKeyFailed, input, retParams.key, err)
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 		return nil
+	}
+
+	// Check if the retrieved value is nil and use default if provided.
+	// This handles the case where nil was stored (e.g., from rate limit failures).
+	if value == nil && retParams.defaultValue != nil {
+		return *retParams.defaultValue
 	}
 
 	// Execute the YQ expression if provided.

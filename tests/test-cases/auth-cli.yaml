@@ -1,0 +1,327 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  # Auth Validate Tests
+  - name: atmos auth validate
+    enabled: true
+    snapshot: true
+    description: "Test auth validate command with valid configuration"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "validate"
+    expect:
+      diff: []
+      stdout:
+        - "Authentication configuration is valid"
+      exit_code: 0
+
+  - name: atmos auth validate --help
+    enabled: true
+    snapshot: true
+    description: "Test auth validate help output"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "validate"
+      - "--help"
+    expect:
+      diff: []
+      stdout:
+        - "Validate the authentication configuration in atmos.yaml"
+        - "Usage:"
+        - "atmos auth validate"
+      exit_code: 0
+
+  # Auth Whoami Tests
+  - name: atmos auth whoami --help
+    enabled: true
+    snapshot: true
+    description: "Test auth whoami help output"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "whoami"
+      - "--help"
+    expect:
+      diff: []
+      stdout:
+        - "Display information about the current effective authentication principal."
+        - "Usage:"
+        - "atmos auth whoami"
+      exit_code: 0
+
+  - name: atmos auth whoami --identity test-user
+    enabled: false # need mocks
+    snapshot: true
+    description: "Test auth whoami with specific identity"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "whoami"
+      - "--identity"
+      - "test-user"
+    expect:
+      diff: []
+      stderr:
+        - "No active authentication session found."
+        - "Run `atmos auth login` to authenticate."
+      exit_code: 1
+
+  # Auth Env Tests
+  - name: atmos auth env --help
+    enabled: true
+    snapshot: true
+    description: "Test auth env help output"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+      - "--help"
+    expect:
+      diff: []
+      stdout:
+        - "Outputs environment variables for the assumed identity"
+        - "Usage:"
+        - "atmos auth env"
+        - "--format"
+        - "bash"
+        - "json"
+        - "dotenv"
+      exit_code: 0
+
+  - name: atmos auth env --format json --identity test-user
+    enabled: false # need mocks
+    snapshot: true
+    description: "Test auth env with JSON format"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+      - "--format"
+      - "json"
+      - "--identity"
+      - "test-user"
+    expect:
+      diff: []
+      stderr:
+        - "failed to retrieve AWS User credentials"
+      exit_code: 1
+
+  - name: atmos auth env --format bash --identity test-user
+    enabled: false # need mocks
+    snapshot: true
+    description: "Test auth env with bash format"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+      - "--format"
+      - "bash"
+      - "--identity"
+      - "test-user"
+    expect:
+      diff: []
+      stderr:
+        - "failed to retrieve AWS User credentials"
+      exit_code: 1
+
+  - name: atmos auth env --format dotenv --identity test-user
+    enabled: false # need mocks
+    snapshot: true
+    description: "Test auth env with dotenv format"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+      - "--format"
+      - "dotenv"
+      - "--identity"
+      - "test-user"
+    expect:
+      diff: []
+      stderr:
+        - "failed to retrieve AWS User credentials"
+      exit_code: 1
+
+  # Auth Exec Tests
+  - name: atmos auth exec --help
+    enabled: true
+    snapshot: true
+    description: "Test auth exec help output"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "exec"
+      - "--help"
+    expect:
+      diff: []
+      stdout:
+        - "Execute a command with the authenticated identity's environment variables set."
+        - "Usage:"
+        - "atmos auth exec"
+        - "--identity"
+      exit_code: 0
+
+  - name: atmos auth exec --identity test-user -- echo hello
+    enabled: false # need mocks
+    snapshot: true
+    description: "Test auth exec with simple command"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "exec"
+      - "--identity"
+      - "test-user"
+      - "--"
+      - "echo"
+      - "hello"
+    expect:
+      diff: []
+      stderr:
+        - "failed to retrieve AWS User credentials"
+      exit_code: 1
+
+  # Auth Login Tests
+  - name: atmos auth login --help
+    enabled: true
+    snapshot: true
+    description: "Test auth login help output"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "login"
+      - "--help"
+    expect:
+      diff: []
+      stdout:
+        - "Authenticate to cloud providers using an identity defined in atmos.yaml"
+        - "Usage:"
+        - "atmos auth login"
+        - "--identity"
+      exit_code: 0
+
+  - name: atmos auth login --identity test-user
+    enabled: false # need mocks
+    snapshot: true
+    description: "Test auth login with AWS user identity"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "login"
+      - "--identity"
+      - "test-user"
+    expect:
+      diff: []
+      stderr:
+        - "failed to retrieve AWS User credentials"
+      exit_code: 1
+
+  # Auth User Configure Tests
+  - name: atmos auth user configure --help
+    enabled: true
+    snapshot: true
+    description: "Test auth user configure help output"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "user"
+      - "configure"
+      - "--help"
+    expect:
+      diff: []
+      stdout:
+        - "Configure static AWS user credentials"
+        - "stored securely in keyring"
+        - "Usage:"
+        - "atmos auth user configure"
+      exit_code: 0
+
+  # Error Cases
+  - name: atmos auth invalid-command
+    enabled: true
+    snapshot: true
+    description: "Test invalid auth subcommand"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "invalid-command"
+    expect:
+      diff: []
+      stderr:
+        - "Unknown command"
+        - "--help"
+      exit_code: 1
+
+  - name: atmos auth env --format invalid
+    enabled: true
+    snapshot: true
+    description: "Test auth env with invalid format"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "env"
+      - "--format"
+      - "invalid"
+    expect:
+      diff: []
+      stderr:
+        - "invalid argument"
+      exit_code: 1
+
+  - name: atmos auth whoami --identity nonexistent
+    enabled: true
+    snapshot: true
+    description: "Test auth whoami with nonexistent identity"
+    workdir: "fixtures/scenarios/atmos-auth/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "whoami"
+      - "--identity"
+      - "nonexistent"
+    expect:
+      ignore_trailing_whitespace: true
+      diff: []
+      # Correctly rejects nonexistent identity immediately instead of falling back to default.
+      stderr:
+        - "identity not found"
+      exit_code: 1
+
+  # Mock Provider Tests (enabled with mock authentication)
+  # Note: auth login succeeds with mock provider, but other commands fail
+  # because credentials are not persisted to keyring in the test environment.
+
+  - name: atmos auth login --identity mock-identity
+    enabled: true
+    snapshot: true
+    description: "Test auth login with mock identity (succeeds)"
+    workdir: "fixtures/scenarios/atmos-auth-mock/"
+    command: "atmos"
+    args:
+      - "auth"
+      - "login"
+      - "--identity"
+      - "mock-identity"
+    expect:
+      diff: []
+      ignore_trailing_whitespace: true  # Lipgloss table padding varies by platform/terminal width
+      stderr:
+        - "Authentication successful"
+        - "mock-identity"
+      exit_code: 0

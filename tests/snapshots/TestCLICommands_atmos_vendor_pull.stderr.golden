@@ -1,7 +1,0 @@
-Vendoring from 'vendor.yaml'
-No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
-✓ github/stargazers (main)
-✓ weather (main)
-✓ ipinfo (main)
-Vendored 3 components.
-

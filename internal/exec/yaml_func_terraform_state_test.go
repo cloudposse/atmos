@@ -29,12 +29,6 @@ func TestYamlFuncTerraformState(t *testing.T) {
 
 	stack := "nonprod"
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
 	defer func() {
 		// Delete the generated files and folders after the test
 		err := os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", ".terraform"))
@@ -42,18 +36,11 @@ func TestYamlFuncTerraformState(t *testing.T) {
 
 		err = os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", "terraform.tfstate.d"))
 		assert.NoError(t, err)
-
-		// Change back to the original working directory after the test
-		if err = os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
 	}()
 
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
@@ -74,22 +61,23 @@ func TestYamlFuncTerraformState(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	assert.NoError(t, err)
 
-	d := processTagTerraformState(&atmosConfig, "!terraform.state component-1 foo", stack)
+	d := processTagTerraformState(&atmosConfig, "!terraform.state component-1 foo", stack, nil)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 bar", stack)
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 bar", stack, nil)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 nonprod baz", "")
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 nonprod baz", "", nil)
 	assert.Equal(t, "component-1-c", d)
 
-	res, err := ExecuteDescribeComponent(
-		"component-2",
-		stack,
-		true,
-		true,
-		nil,
-	)
+	res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            "component-2",
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	assert.NoError(t, err)
 
 	y, err := u.ConvertToYAML(res)
@@ -114,22 +102,23 @@ func TestYamlFuncTerraformState(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 foo", stack)
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 foo", stack, nil)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod bar", stack)
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod bar", stack, nil)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod baz", "")
+	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod baz", "", nil)
 	assert.Equal(t, "component-1-c", d)
 
-	res, err = ExecuteDescribeComponent(
-		"component-3",
-		stack,
-		true,
-		true,
-		nil,
-	)
+	res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            "component-3",
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	assert.NoError(t, err)
 
 	y, err = u.ConvertToYAML(res)

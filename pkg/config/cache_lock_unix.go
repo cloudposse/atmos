@@ -3,10 +3,12 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/gofrs/flock"
 	"github.com/spf13/viper"
 )
@@ -21,32 +23,34 @@ func withCacheFileLockUnix(cacheFile string, fn func() error) error {
 	// Use a dedicated lock file to prevent lock loss during atomic rename.
 	lockPath := cacheFile + ".lock"
 	lock := flock.New(lockPath)
-	// Try to acquire lock but don't retry too many times
-	// This prevents hanging tests on systems with different locking semantics.
-	const maxRetries = 3 // Only retry 3 times with 10ms between
+	// Try to acquire lock with reasonable retries for concurrent access.
+	// This allows concurrent operations to succeed while preventing indefinite blocking.
+	const maxRetries = 50 // Retry up to 50 times with 10ms between (500ms total).
 	var locked bool
 	var err error
 
 	for i := 0; i < maxRetries; i++ {
 		locked, err = lock.TryLock()
 		if err != nil {
-			return fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheLocked, err)
+			return errors.Join(errUtils.ErrCacheLocked, err)
 		}
 		if locked {
 			break
 		}
-		// Wait a very short time before retrying.
+		// Wait a short time before retrying.
 		time.Sleep(10 * time.Millisecond)
 	}
 
 	if !locked {
-		// If we can't get lock quickly, skip the cache operation
+		// If we can't get lock after retries, skip the cache operation.
 		// Cache is not critical for functionality.
 		return fmt.Errorf("%w: cache file is locked by another process", errUtils.ErrCacheLocked)
 	}
 
 	defer func() {
-		_ = lock.Unlock()
+		if err := lock.Unlock(); err != nil {
+			log.Trace("Failed to unlock cache file", "error", err, "path", lockPath)
+		}
 	}()
 	return fn()
 }
@@ -61,7 +65,7 @@ func loadCacheWithReadLockUnix(cacheFile string) (CacheConfig, error) {
 	lock := flock.New(lockPath)
 	locked, err := lock.TryRLock()
 	if err != nil {
-		return cfg, fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheLocked, err)
+		return cfg, errors.Join(errUtils.ErrCacheLocked, err)
 	}
 	if !locked {
 		// If we can't get the lock immediately, return empty config
@@ -69,7 +73,9 @@ func loadCacheWithReadLockUnix(cacheFile string) (CacheConfig, error) {
 		return cfg, nil
 	}
 	defer func() {
-		_ = lock.Unlock()
+		if err := lock.Unlock(); err != nil {
+			log.Trace("Failed to unlock cache file during read", "error", err, "path", lockPath)
+		}
 	}()
 
 	v := viper.New()
@@ -80,10 +86,10 @@ func loadCacheWithReadLockUnix(cacheFile string) (CacheConfig, error) {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			return cfg, nil
 		}
-		return cfg, fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheRead, err)
+		return cfg, errors.Join(errUtils.ErrCacheRead, err)
 	}
 	if err := v.Unmarshal(&cfg); err != nil {
-		return cfg, fmt.Errorf(errUtils.ErrValueWrappingFormat, errUtils.ErrCacheUnmarshal, err)
+		return cfg, errors.Join(errUtils.ErrCacheUnmarshal, err)
 	}
 	return cfg, nil
 }

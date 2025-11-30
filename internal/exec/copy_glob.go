@@ -1,14 +1,16 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -47,43 +49,79 @@ type CopyContext struct {
 	Included []string
 }
 
+// FileCopier provides file copying operations with injectable dependencies for testing.
+type FileCopier struct {
+	fs     filesystem.FileSystem
+	glob   filesystem.GlobMatcher
+	ioCopy filesystem.IOCopier
+}
+
+// NewFileCopier creates a new FileCopier with the given dependencies.
+func NewFileCopier(fs filesystem.FileSystem, glob filesystem.GlobMatcher, ioCopy filesystem.IOCopier) *FileCopier {
+	return &FileCopier{
+		fs:     fs,
+		glob:   glob,
+		ioCopy: ioCopy,
+	}
+}
+
+// defaultFileCopier is the default instance used by package-level functions.
+var defaultFileCopier = NewFileCopier(
+	filesystem.NewOSFileSystem(),
+	filesystem.NewOSGlobMatcher(),
+	filesystem.NewOSIOCopier(),
+)
+
 // copyFile copies a single file from src to dst while preserving file permissions.
+// This is a convenience wrapper around the default FileCopier.
 func copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
+	return defaultFileCopier.copyFile(src, dst)
+}
+
+// copyFile copies a single file from src to dst while preserving file permissions.
+func (fc *FileCopier) copyFile(src, dst string) error {
+	sourceFile, err := fc.fs.Open(src)
 	if err != nil {
-		return fmt.Errorf("opening source file %q: %w", src, err)
+		return errors.Join(errUtils.ErrOpenFile, fmt.Errorf("opening source file %q: %w", src, err))
 	}
 	defer sourceFile.Close()
-
-	if err := os.MkdirAll(filepath.Dir(dst), os.ModePerm); err != nil {
-		return fmt.Errorf("creating destination directory for %q: %w", dst, err)
+	if err := fc.fs.MkdirAll(filepath.Dir(dst), os.ModePerm); err != nil {
+		return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("creating destination directory for %q: %w", dst, err))
 	}
 
-	destinationFile, err := os.Create(dst)
+	destinationFile, err := fc.fs.Create(dst)
 	if err != nil {
-		return fmt.Errorf("creating destination file %q: %w", dst, err)
+		return errors.Join(errUtils.ErrOpenFile, fmt.Errorf("creating destination file %q: %w", dst, err))
 	}
 	defer destinationFile.Close()
 
-	if _, err := io.Copy(destinationFile, sourceFile); err != nil {
+	// COVERAGE NOTE: Now testable via IOCopier mock - see copy_glob_error_paths_test.go.
+	if _, err := fc.ioCopy.Copy(destinationFile, sourceFile); err != nil {
 		return fmt.Errorf("copying content from %q to %q: %w", src, dst, err)
 	}
 
-	info, err := os.Stat(src)
+	// COVERAGE NOTE: Now testable via FileSystem mock - see copy_glob_error_paths_test.go.
+	info, err := fc.fs.Stat(src)
 	if err != nil {
-		return fmt.Errorf("getting file info for %q: %w", src, err)
+		return errors.Join(errUtils.ErrStatFile, fmt.Errorf("getting file info for %q: %w", src, err))
 	}
-	if err := os.Chmod(dst, info.Mode()); err != nil {
-		return fmt.Errorf("setting permissions on %q: %w", dst, err)
+	// COVERAGE NOTE: Now testable via FileSystem mock - see copy_glob_error_paths_test.go.
+	if err := fc.fs.Chmod(dst, info.Mode()); err != nil {
+		return errors.Join(errUtils.ErrSetPermissions, fmt.Errorf("setting permissions on %q: %w", dst, err))
 	}
 	return nil
 }
 
 // shouldExcludePath checks exclusion patterns for a given relative path and file info.
 func shouldExcludePath(info os.FileInfo, relPath string, excluded []string) bool {
+	return defaultFileCopier.shouldExcludePath(info, relPath, excluded)
+}
+
+// shouldExcludePath checks exclusion patterns for a given relative path and file info.
+func (fc *FileCopier) shouldExcludePath(info os.FileInfo, relPath string, excluded []string) bool {
 	for _, pattern := range excluded {
 		// Check plain relative path.
-		matched, err := u.PathMatch(pattern, relPath)
+		matched, err := fc.glob.PathMatch(pattern, relPath)
 		if err != nil {
 			log.Debug("Error matching exclusion pattern", logKeyPath, relPath, logKeyError, err)
 			continue
@@ -94,7 +132,7 @@ func shouldExcludePath(info os.FileInfo, relPath string, excluded []string) bool
 		}
 		// If a directory, also check with a trailing slash.
 		if info.IsDir() {
-			matched, err = u.PathMatch(pattern, relPath+"/")
+			matched, err = fc.glob.PathMatch(pattern, relPath+"/")
 			if err != nil {
 				log.Debug("Error matching exclusion pattern with trailing slash", logKeyPattern, pattern, logKeyPath, relPath+"/", logKeyError, err)
 				continue
@@ -110,12 +148,17 @@ func shouldExcludePath(info os.FileInfo, relPath string, excluded []string) bool
 
 // shouldIncludePath checks whether a file should be included based on inclusion patterns.
 func shouldIncludePath(info os.FileInfo, relPath string, included []string) bool {
+	return defaultFileCopier.shouldIncludePath(info, relPath, included)
+}
+
+// shouldIncludePath checks whether a file should be included based on inclusion patterns.
+func (fc *FileCopier) shouldIncludePath(info os.FileInfo, relPath string, included []string) bool {
 	// Directories are generally handled by recursion.
 	if len(included) == 0 || info.IsDir() {
 		return true
 	}
 	for _, pattern := range included {
-		matched, err := u.PathMatch(pattern, relPath)
+		matched, err := fc.glob.PathMatch(pattern, relPath)
 		if err != nil {
 			log.Debug("Error matching inclusion pattern", logKeyPattern, pattern, logKeyPath, relPath, logKeyError, err)
 			continue
@@ -156,7 +199,7 @@ func processDirEntry(entry os.DirEntry, ctx *CopyContext) error {
 
 	info, err := entry.Info()
 	if err != nil {
-		return fmt.Errorf("getting info for %q: %w", srcPath, err)
+		return errors.Join(errUtils.ErrStatFile, fmt.Errorf("getting info for %q: %w", srcPath, err))
 	}
 
 	if shouldSkipEntry(info, srcPath, ctx.BaseDir, ctx.Excluded, ctx.Included) {
@@ -172,7 +215,7 @@ func processDirEntry(entry os.DirEntry, ctx *CopyContext) error {
 
 	if info.IsDir() {
 		if err := os.MkdirAll(dstPath, info.Mode()); err != nil {
-			return fmt.Errorf("creating directory %q: %w", dstPath, err)
+			return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("creating directory %q: %w", dstPath, err))
 		}
 		// Recurse with the same context but with updated source and destination directories.
 		newCtx := &CopyContext{
@@ -191,7 +234,7 @@ func processDirEntry(entry os.DirEntry, ctx *CopyContext) error {
 func copyDirRecursive(ctx *CopyContext) error {
 	entries, err := os.ReadDir(ctx.SrcDir)
 	if err != nil {
-		return fmt.Errorf("reading directory %q: %w", ctx.SrcDir, err)
+		return errors.Join(errUtils.ErrReadDirectory, fmt.Errorf("reading directory %q: %w", ctx.SrcDir, err))
 	}
 	for _, entry := range entries {
 		if err := processDirEntry(entry, ctx); err != nil {
@@ -236,7 +279,7 @@ func processPrefixEntry(entry os.DirEntry, ctx *PrefixCopyContext) error {
 
 	info, err := entry.Info()
 	if err != nil {
-		return fmt.Errorf("getting info for %q: %w", srcPath, err)
+		return errors.Join(errUtils.ErrStatFile, fmt.Errorf("getting info for %q: %w", srcPath, err))
 	}
 
 	if entry.Name() == ".git" {
@@ -250,7 +293,7 @@ func processPrefixEntry(entry os.DirEntry, ctx *PrefixCopyContext) error {
 
 	if info.IsDir() {
 		if err := os.MkdirAll(dstPath, info.Mode()); err != nil {
-			return fmt.Errorf("creating directory %q: %w", dstPath, err)
+			return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("creating directory %q: %w", dstPath, err))
 		}
 		newCtx := &PrefixCopyContext{
 			SrcDir:     srcPath,
@@ -268,7 +311,7 @@ func processPrefixEntry(entry os.DirEntry, ctx *PrefixCopyContext) error {
 func copyDirRecursiveWithPrefix(ctx *PrefixCopyContext) error {
 	entries, err := os.ReadDir(ctx.SrcDir)
 	if err != nil {
-		return fmt.Errorf("reading directory %q: %w", ctx.SrcDir, err)
+		return errors.Join(errUtils.ErrReadDirectory, fmt.Errorf("reading directory %q: %w", ctx.SrcDir, err))
 	}
 	for _, entry := range entries {
 		if err := processPrefixEntry(entry, ctx); err != nil {
@@ -280,8 +323,13 @@ func copyDirRecursiveWithPrefix(ctx *PrefixCopyContext) error {
 
 // getMatchesForPattern returns files/directories matching a pattern relative to sourceDir.
 func getMatchesForPattern(sourceDir, pattern string) ([]string, error) {
+	return defaultFileCopier.getMatchesForPattern(sourceDir, pattern)
+}
+
+// getMatchesForPattern returns files/directories matching a pattern relative to sourceDir.
+func (fc *FileCopier) getMatchesForPattern(sourceDir, pattern string) ([]string, error) {
 	fullPattern := filepath.Join(sourceDir, pattern)
-	matches, err := u.GetGlobMatches(fullPattern)
+	matches, err := fc.glob.GetGlobMatches(fullPattern)
 	if err != nil {
 		return nil, fmt.Errorf("error getting glob matches for %q: %w", fullPattern, err)
 	}
@@ -297,7 +345,7 @@ func getMatchesForPattern(sourceDir, pattern string) ([]string, error) {
 		}
 		recursivePattern := strings.TrimSuffix(pattern, shallowCopySuffix) + "/**"
 		fullRecursivePattern := filepath.Join(sourceDir, recursivePattern)
-		matches, err = u.GetGlobMatches(fullRecursivePattern)
+		matches, err = fc.glob.GetGlobMatches(fullRecursivePattern)
 		if err != nil {
 			return nil, fmt.Errorf("error getting glob matches for recursive pattern %q: %w", fullRecursivePattern, err)
 		}
@@ -321,11 +369,11 @@ func isShallowPattern(pattern string) bool {
 func processMatch(sourceDir, targetPath, file string, shallow bool, excluded []string) error {
 	info, err := os.Stat(file)
 	if err != nil {
-		return fmt.Errorf("stating file %q: %w", file, err)
+		return errors.Join(errUtils.ErrStatFile, fmt.Errorf("stating file %q: %w", file, err))
 	}
 	relPath, err := filepath.Rel(sourceDir, file)
 	if err != nil {
-		return fmt.Errorf("computing relative path for %q: %w", file, err)
+		return errors.Join(errUtils.ErrComputeRelativePath, fmt.Errorf("computing relative path for %q: %w", file, err))
 	}
 	relPath = filepath.ToSlash(relPath)
 	if shouldExcludePath(info, relPath, excluded) {
@@ -380,21 +428,21 @@ func initFinalTarget(sourceDir, targetPath string, sourceIsLocalFile bool) (stri
 func getLocalFinalTarget(sourceDir, targetPath string) (string, error) {
 	if filepath.Ext(targetPath) == "" {
 		if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
-			return "", fmt.Errorf("creating target directory %q: %w", targetPath, err)
+			return "", errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("creating target directory %q: %w", targetPath, err))
 		}
 		return filepath.Join(targetPath, SanitizeFileName(filepath.Base(sourceDir))), nil
 	}
 
 	parent := filepath.Dir(targetPath)
 	if err := os.MkdirAll(parent, os.ModePerm); err != nil {
-		return "", fmt.Errorf("creating parent directory %q: %w", parent, err)
+		return "", errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("creating parent directory %q: %w", parent, err))
 	}
 	return targetPath, nil
 }
 
 func getNonLocalFinalTarget(targetPath string) (string, error) {
 	if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
-		return "", fmt.Errorf("creating target directory %q: %w", targetPath, err)
+		return "", errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("creating target directory %q: %w", targetPath, err))
 	}
 	return targetPath, nil
 }
@@ -464,7 +512,7 @@ func ComponentOrMixinsCopy(sourceFile, finalTarget string) error {
 		parent := filepath.Dir(dest)
 		if err := os.MkdirAll(parent, os.ModePerm); err != nil {
 			log.Debug("ComponentOrMixinsCopy: error creating parent directory", "parent", parent, "error", err)
-			return fmt.Errorf("creating parent directory %q: %w", parent, err)
+			return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("creating parent directory %q: %w", parent, err))
 		}
 		log.Debug("ComponentOrMixinsCopy: file-to-file copy", "sourceFile", sourceFile, "destination", dest)
 	}

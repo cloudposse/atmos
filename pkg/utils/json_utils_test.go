@@ -148,3 +148,69 @@ func TestConvertToJson(t *testing.T) {
 		})
 	}
 }
+
+// TestPrintAsJSONSimple tests the fast-path JSON printing without syntax highlighting.
+func TestPrintAsJSONSimple(t *testing.T) {
+	tests := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		data        interface{}
+		wantErr     bool
+	}{
+		{
+			name: "simple map data",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{},
+			},
+			data: map[string]any{
+				"key": "value",
+			},
+			wantErr: false,
+		},
+		{
+			name: "nested data structure",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{},
+			},
+			data: map[string]interface{}{
+				"string": "value",
+				"number": 42,
+				"nested": map[string]interface{}{
+					"array": []string{"one", "two", "three"},
+					"bool":  true,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "nil data",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{},
+			},
+			data:    nil,
+			wantErr: false,
+		},
+		{
+			name: "complex array",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{},
+			},
+			data: []map[string]any{
+				{"id": 1, "name": "first"},
+				{"id": 2, "name": "second"},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := PrintAsJSONSimple(tt.atmosConfig, tt.data)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

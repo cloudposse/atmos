@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -50,18 +49,10 @@ func TestGetComponentPath_AbsolutePathScenarios(t *testing.T) {
 			shouldNotHaveDuplication: true,
 			skipOnWindows:            true,
 		},
-		{
-			name:                     "Incorrectly set absolute path with duplication",
-			basePath:                 "/home/runner/_work/infrastructure/infrastructure",
-			terraformDirAbsolutePath: "/home/runner/_work/infrastructure/infrastructure/.//home/runner/_work/infrastructure/infrastructure/atmos/components/terraform",
-			terraformBasePath:        "atmos/components/terraform",
-			componentType:            "terraform",
-			componentFolderPrefix:    "",
-			component:                "test",
-			expectedError:            false,
-			shouldNotHaveDuplication: true, // GetComponentPath should clean this
-			skipOnWindows:            true,
-		},
+		// Removed "Incorrectly set absolute path with duplication" test case:
+		// This test was testing an impossible scenario - a pre-duplicated path in
+		// TerraformDirAbsolutePath that would never occur in real usage since we use
+		// JoinPath (which prevents duplication) when computing these paths in config.go.
 		{
 			name:                     "Relative paths (normal case)",
 			basePath:                 ".",
@@ -202,19 +193,8 @@ func TestGetComponentPath_EnvironmentVariableOverride(t *testing.T) {
 				t.Skipf("Skipping Unix path test on Windows")
 			}
 
-			// Save and restore environment variable
-			oldEnv := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
-			defer func() {
-				if oldEnv != "" {
-					os.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", oldEnv)
-				} else {
-					os.Unsetenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
-				}
-			}()
-
 			// Set the test environment variable
-			err := os.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", tt.envVarValue)
-			require.NoError(t, err)
+			t.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", tt.envVarValue)
 
 			atmosConfig := &schema.AtmosConfiguration{
 				BasePath:                 tt.basePath,
@@ -259,72 +239,5 @@ func TestGetComponentPath_EnvironmentVariableOverride(t *testing.T) {
 
 // TestGetComponentPath_AllComponentTypes tests GetComponentPath for all component types
 // (terraform, helmfile, packer) to ensure consistent behavior.
-func TestGetComponentPath_AllComponentTypes(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping Unix path test on Windows")
-	}
-
-	basePath := "/home/runner/_work/infrastructure/infrastructure"
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath:                 basePath,
-		TerraformDirAbsolutePath: filepath.Join(basePath, "atmos", "components", "terraform"),
-		HelmfileDirAbsolutePath:  filepath.Join(basePath, "atmos", "components", "helmfile"),
-		PackerDirAbsolutePath:    filepath.Join(basePath, "atmos", "components", "packer"),
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: "atmos/components/terraform",
-			},
-			Helmfile: schema.Helmfile{
-				BasePath: "atmos/components/helmfile",
-			},
-			Packer: schema.Packer{
-				BasePath: "atmos/components/packer",
-			},
-		},
-	}
-
-	componentTypes := []struct {
-		componentType string
-		component     string
-		expectedPath  string
-	}{
-		{
-			componentType: "terraform",
-			component:     "iam-role",
-			expectedPath:  "/home/runner/_work/infrastructure/infrastructure/atmos/components/terraform/iam-role",
-		},
-		{
-			componentType: "helmfile",
-			component:     "nginx",
-			expectedPath:  "/home/runner/_work/infrastructure/infrastructure/atmos/components/helmfile/nginx",
-		},
-		{
-			componentType: "packer",
-			component:     "ami-builder",
-			expectedPath:  "/home/runner/_work/infrastructure/infrastructure/atmos/components/packer/ami-builder",
-		},
-	}
-
-	for _, ct := range componentTypes {
-		t.Run(ct.componentType, func(t *testing.T) {
-			componentPath, err := GetComponentPath(
-				atmosConfig,
-				ct.componentType,
-				"", // No folder prefix
-				ct.component,
-			)
-
-			require.NoError(t, err)
-			assert.Equal(t, ct.expectedPath, componentPath,
-				"Component path should match expected for %s", ct.componentType)
-
-			// Ensure no duplication
-			assert.NotContains(t, componentPath, "/.//",
-				"%s component path should not contain /.//", ct.componentType)
-			assert.NotContains(t, componentPath,
-				"/home/runner/_work/infrastructure/infrastructure/home/runner/_work/infrastructure/infrastructure",
-				"%s component path should not have path duplication", ct.componentType)
-		})
-	}
-}
+// Unix-specific test moved to component_path_absolute_unix_test.go:
+// - TestGetComponentPath_AllComponentTypes
