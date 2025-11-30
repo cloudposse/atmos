@@ -10,9 +10,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/huh"
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
@@ -22,6 +26,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -35,6 +41,8 @@ var (
 	ErrWorkflowNoWorkflow      = errors.New("no workflow found")
 	ErrWorkflowFileNotFound    = errors.New("workflow file not found")
 	ErrInvalidWorkflowManifest = errors.New("invalid workflow manifest")
+	ErrNoWorkflowFilesToSelect = errors.New("no workflow files to select from")
+	ErrNonTTYWorkflowSelection = errors.New("interactive workflow selection not available in non-TTY or CI environments")
 
 	KnownWorkflowErrors = []error{
 		ErrWorkflowNoSteps,
@@ -81,12 +89,12 @@ func ExecuteWorkflow(
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
-		errUtils.CheckErrorAndPrint(
-			ErrWorkflowNoSteps,
-			WorkflowErrTitle,
-			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", workflow),
-		)
-		return ErrWorkflowNoSteps
+		return errUtils.Build(ErrWorkflowNoSteps).
+			WithTitle(WorkflowErrTitle).
+			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", workflow).
+			WithContext("workflow", workflow).
+			WithExitCode(1).
+			Err()
 	}
 
 	// Check if the workflow steps have the `name` attribute
@@ -109,12 +117,13 @@ func ExecuteWorkflow(
 
 		if len(steps) == 0 {
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
-			errUtils.CheckErrorAndPrint(
-				ErrInvalidFromStep,
-				WorkflowErrTitle,
-				fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s", fromStep, workflow, FormatList(stepNames)),
-			)
-			return ErrInvalidFromStep
+			return errUtils.Build(ErrInvalidFromStep).
+				WithTitle(WorkflowErrTitle).
+				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.\n\n### Available steps:\n\n%s", fromStep, workflow, FormatList(stepNames)).
+				WithContext("from_step", fromStep).
+				WithContext("workflow", workflow).
+				WithExitCode(1).
+				Err()
 		}
 	}
 
@@ -234,17 +243,16 @@ func ExecuteWorkflow(
 				log.Debug("Using stack", "stack", finalStack)
 			}
 
-			u.PrintfMessageToTUI("Executing command: `atmos %s`\n", command)
+			_ = ui.Infof("Executing command: `atmos %s`", command)
 			err = retry.With7Params(context.Background(), step.Retry,
 				ExecuteShellCommand,
 				atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
 		} else {
-			errUtils.CheckErrorAndPrint(
-				ErrInvalidWorkflowStepType,
-				WorkflowErrTitle,
-				fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s", commandType, FormatList([]string{"atmos", "shell"})),
-			)
-			return ErrInvalidWorkflowStepType
+			return errUtils.Build(ErrInvalidWorkflowStepType).
+				WithHintf("Step type '%s' is not supported", commandType).
+				WithHint("Each step must specify a valid type: 'atmos' or 'shell'").
+				WithExitCode(1).
+				Err()
 		}
 
 		if err != nil {
@@ -258,7 +266,7 @@ func ExecuteWorkflow(
 			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
 
 			resumeCommand := fmt.Sprintf(
-				"%s workflow %s -f %s --from-step %s",
+				"%s workflow %s -f %s --from-step '%s'",
 				config.AtmosCommand,
 				workflow,
 				workflowFileName,
@@ -267,7 +275,7 @@ func ExecuteWorkflow(
 
 			// Add stack parameter to resume command if a stack was used
 			if finalStack != "" {
-				resumeCommand = fmt.Sprintf("%s -s %s", resumeCommand, finalStack)
+				resumeCommand = fmt.Sprintf("%s -s '%s'", resumeCommand, finalStack)
 			}
 
 			failedCmd := command
@@ -275,20 +283,30 @@ func ExecuteWorkflow(
 				failedCmd = config.AtmosCommand + " " + command
 				// Add stack parameter to failed command if a stack was used
 				if finalStack != "" {
-					failedCmd = fmt.Sprintf("%s -s %s", failedCmd, finalStack)
+					failedCmd = fmt.Sprintf("%s -s '%s'", failedCmd, finalStack)
 				}
 			}
 
-			errUtils.CheckErrorAndPrint(
-				ErrWorkflowStepFailed,
-				WorkflowErrTitle,
-				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
-			)
-			// Return joined error to preserve classification and exit-code unwrapping.
-			// Returning only the underlying err drops ErrWorkflowStepFailed from the error chain,
-			// which can hinder classification and checks. Join both so callers can use
-			// errors.Is(err, ErrWorkflowStepFailed) and still unwrap ExitCodeError for proper exit codes.
-			return errors.Join(ErrWorkflowStepFailed, err)
+			// Build error with context about the failed command.
+			// Use fmt.Errorf with %w to wrap the underlying error while adding ErrWorkflowStepFailed to the chain.
+			// This preserves both the error sentinel for errors.Is() checks and the underlying error's exit code.
+			wrappedErr := fmt.Errorf("%w: %w", ErrWorkflowStepFailed, err)
+
+			// Now build the error with hints using the wrapped error.
+			// This preserves the error chain while adding formatted hints.
+			// Commands are wrapped in code fences for proper formatting and copy-paste.
+			// Single quotes are used for shell safety (step names and stacks can contain spaces).
+			builder := errUtils.Build(wrappedErr).
+				WithTitle("Workflow Error").
+				WithHintf("The following command failed to execute:\n\n```shell\n%s\n```", failedCmd).
+				WithHintf("To resume the workflow from this step, run:\n\n```shell\n%s\n```", resumeCommand)
+
+			// Extract exit code from the underlying error if available
+			if exitCode := errUtils.GetExitCode(err); exitCode != 0 {
+				builder = builder.WithExitCode(exitCode)
+			}
+
+			return builder.Err()
 		}
 	}
 
@@ -347,16 +365,22 @@ func ExecuteDescribeWorkflows(
 
 		fileContent, err := os.ReadFile(workflowPath)
 		if err != nil {
-			return nil, nil, nil, err
+			// Skip files that can't be read (permission issues, etc.).
+			log.Warn("Skipping workflow file", "file", f, "error", err)
+			continue
 		}
 
 		workflowManifest, err := u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
+			// Skip files that can't be parsed as YAML.
+			log.Warn("Skipping invalid workflow file", "file", f, "error", err)
+			continue
 		}
 
 		if workflowManifest.Workflows == nil {
-			return nil, nil, nil, fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)
+			// Skip files without the workflows key.
+			log.Warn("Skipping workflow file without 'workflows:' key", "file", f)
+			continue
 		}
 
 		workflowConfig := workflowManifest.Workflows
@@ -383,6 +407,104 @@ func ExecuteDescribeWorkflows(
 	}
 
 	return listResult, mapResult, allResult, nil
+}
+
+// WorkflowMatch represents a workflow found during auto-discovery.
+type WorkflowMatch struct {
+	File        string // Workflow file name (e.g., "networking.yaml")
+	Name        string // Workflow name (e.g., "deploy-all")
+	Description string // Workflow description (if available)
+}
+
+// findWorkflowAcrossFiles searches for a workflow by name across all workflow files.
+// Returns a list of matching workflows with their file locations.
+func findWorkflowAcrossFiles(workflowName string, atmosConfig *schema.AtmosConfiguration) ([]WorkflowMatch, error) {
+	defer perf.Track(atmosConfig, "exec.findWorkflowAcrossFiles")()
+
+	listResult, _, allWorkflows, err := ExecuteDescribeWorkflows(*atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	var matches []WorkflowMatch
+	for _, item := range listResult {
+		if item.Workflow == workflowName {
+			// Get description if available.
+			description := ""
+			if manifest, ok := allWorkflows[item.File]; ok {
+				if workflowDef, ok := manifest.Workflows[workflowName]; ok {
+					description = workflowDef.Description
+				}
+			}
+
+			matches = append(matches, WorkflowMatch{
+				File:        item.File,
+				Name:        workflowName,
+				Description: description,
+			})
+		}
+	}
+
+	return matches, nil
+}
+
+// promptForWorkflowFile shows an interactive selector for choosing a workflow file.
+// Uses the Huh library with Atmos theme (same pattern as identity selector).
+func promptForWorkflowFile(matches []WorkflowMatch) (string, error) {
+	if len(matches) == 0 {
+		return "", ErrNoWorkflowFilesToSelect
+	}
+
+	// Check if we're in a TTY environment.
+	if !term.IsTTYSupportForStdin() || telemetry.IsCI() {
+		return "", ErrNonTTYWorkflowSelection
+	}
+
+	// Sort matches alphabetically by file name for consistent ordering.
+	sortedMatches := make([]WorkflowMatch, len(matches))
+	copy(sortedMatches, matches)
+	sort.Slice(sortedMatches, func(i, j int) bool {
+		return sortedMatches[i].File < sortedMatches[j].File
+	})
+
+	// Build options for the selector.
+	// Each option shows the file name with description if available.
+	options := make([]huh.Option[string], len(sortedMatches))
+	for i, match := range sortedMatches {
+		label := match.File
+		if match.Description != "" {
+			label = fmt.Sprintf("%s - %s", match.File, match.Description)
+		}
+		options[i] = huh.NewOption(label, match.File)
+	}
+
+	var selectedFile string
+
+	// Create custom keymap that adds ESC to quit keys.
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "quit"),
+	)
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(fmt.Sprintf("Multiple workflows found with name '%s'. Please choose:", sortedMatches[0].Name)).
+				Description("Press ctrl+c or esc to exit").
+				Options(options...).
+				Value(&selectedFile),
+		),
+	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
+
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return "", errUtils.ErrUserAborted
+		}
+		return "", fmt.Errorf("workflow selection failed: %w", err)
+	}
+
+	return selectedFile, nil
 }
 
 func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefinition) {
