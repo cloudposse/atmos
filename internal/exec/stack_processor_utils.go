@@ -1721,6 +1721,32 @@ func processBaseComponentConfigInternal(
 		}
 		baseComponentConfig.BaseComponentAuth = merged
 
+		// Base component `metadata` (when metadata inheritance is enabled).
+		// Merge all metadata fields except 'inherits' and 'type' (when type is 'abstract').
+		// - 'inherits' is the meta-property defining inheritance, not inherited itself.
+		// - 'type: abstract' should not be inherited because child components are concrete.
+		if atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() {
+			baseMetadataForMerge := make(map[string]any)
+			for k, v := range componentMetadata {
+				// Skip 'inherits' - it's the meta-property defining inheritance, not inherited itself.
+				if k == cfg.InheritsSectionName {
+					continue
+				}
+				// Skip 'type: abstract' - abstract is a base component designation, not inherited.
+				if k == "type" {
+					if typeStr, ok := v.(string); ok && typeStr == "abstract" {
+						continue
+					}
+				}
+				baseMetadataForMerge[k] = v
+			}
+			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentMetadata, baseMetadataForMerge})
+			if err != nil {
+				return err
+			}
+			baseComponentConfig.BaseComponentMetadata = merged
+		}
+
 		// Base component `providers`
 		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})
 		if err != nil {
