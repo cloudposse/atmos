@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 )
@@ -49,11 +50,11 @@ func init() {
 		panic(err)
 	}
 
-	// Set custom help to show terraform native flags.
-	setCustomHelp(applyCmd)
-
 	// Register completions for apply command.
 	RegisterTerraformCompletions(applyCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "apply", ApplyCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(applyCmd)

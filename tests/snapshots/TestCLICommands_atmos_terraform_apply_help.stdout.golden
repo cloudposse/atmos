@@ -140,8 +140,8 @@ GLOBAL FLAGS
       --version                   Display the Atmos CLI version
 
 
+COMPATIBILITY FLAGS
 
-Terraform/OpenTofu Native Flags:
   These flags are passed through to the underlying terraform/tofu command.
 
       -auto-approve      Skip interactive approval of plan before applying
@@ -162,3 +162,4 @@ Terraform/OpenTofu Native Flags:
       -target            Target specific resources for planning/applying
       -var               Set a value for one of the input variables
       -var-file          Load variable values from the given file
+

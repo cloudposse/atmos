@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // importCmd represents the terraform import command.
@@ -30,11 +32,11 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags.
-	setCustomHelp(importCmd)
-
 	// Register completions for importCmd.
 	RegisterTerraformCompletions(importCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "import", ImportCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(importCmd)

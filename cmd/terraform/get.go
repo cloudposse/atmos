@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // getCmd represents the terraform get command.
@@ -19,11 +21,11 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags.
-	setCustomHelp(getCmd)
-
 	// Register completions for getCmd.
 	RegisterTerraformCompletions(getCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "get", GetCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(getCmd)

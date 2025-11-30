@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // testCmd represents the terraform test command.
@@ -19,11 +21,11 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags.
-	setCustomHelp(testCmd)
-
 	// Register completions for testCmd.
 	RegisterTerraformCompletions(testCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "test", TestCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(testCmd)

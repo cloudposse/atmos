@@ -5,14 +5,26 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// TerraformCompatFlags returns the compatibility flags for terraform commands.
+// TerraformGlobalCompatFlags returns TRUE global terraform flags.
+// These can be used before any subcommand (e.g., `terraform -chdir=./foo plan`).
 // These flags are NOT parsed by Cobra but are passed through to terraform/tofu.
-// They are documented in help output to inform users about available options.
-func TerraformCompatFlags() map[string]compat.CompatibilityFlag {
-	defer perf.Track(nil, "terraform.TerraformCompatFlags")()
+func TerraformGlobalCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.TerraformGlobalCompatFlags")()
 
 	return map[string]compat.CompatibilityFlag{
-		// Common terraform flags that should pass through.
+		"-chdir":   {Behavior: compat.AppendToSeparated, Description: "Switch to a different working directory before executing the given subcommand"},
+		"-help":    {Behavior: compat.AppendToSeparated, Description: "Show terraform help output"},
+		"-version": {Behavior: compat.AppendToSeparated, Description: "Show terraform version"},
+	}
+}
+
+// CommonSubcommandFlags returns flags that are common across many terraform subcommands.
+// These are NOT global terraform options - they only apply to specific subcommands like plan, apply, destroy.
+// These flags are NOT parsed by Cobra but are passed through to terraform/tofu.
+func CommonSubcommandFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.CommonSubcommandFlags")()
+
+	return map[string]compat.CompatibilityFlag{
 		"-var":              {Behavior: compat.AppendToSeparated, Description: "Set a value for one of the input variables"},
 		"-var-file":         {Behavior: compat.AppendToSeparated, Description: "Load variable values from the given file"},
 		"-target":           {Behavior: compat.AppendToSeparated, Description: "Target specific resources for planning/applying"},
@@ -30,7 +42,7 @@ func TerraformCompatFlags() map[string]compat.CompatibilityFlag {
 func PlanCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.PlanCompatFlags")()
 
-	flags := TerraformCompatFlags()
+	flags := CommonSubcommandFlags()
 	// Plan-specific flags.
 	flags["-destroy"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Create a plan to destroy all remote objects"}
 	flags["-refresh-only"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Create a plan to update state only (no resource changes)"}
@@ -46,7 +58,7 @@ func PlanCompatFlags() map[string]compat.CompatibilityFlag {
 func ApplyCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.ApplyCompatFlags")()
 
-	flags := TerraformCompatFlags()
+	flags := CommonSubcommandFlags()
 	// Apply-specific flags.
 	flags["-auto-approve"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Skip interactive approval of plan before applying"}
 	flags["-backup"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to backup the existing state file"}
@@ -63,7 +75,7 @@ func ApplyCompatFlags() map[string]compat.CompatibilityFlag {
 func DestroyCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.DestroyCompatFlags")()
 
-	flags := TerraformCompatFlags()
+	flags := CommonSubcommandFlags()
 	// Destroy-specific flags.
 	flags["-auto-approve"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Skip interactive approval before destroying"}
 	flags["-backup"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to backup the existing state file"}
@@ -112,7 +124,7 @@ func ValidateCompatFlags() map[string]compat.CompatibilityFlag {
 func RefreshCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.RefreshCompatFlags")()
 
-	flags := TerraformCompatFlags()
+	flags := CommonSubcommandFlags()
 	flags["-backup"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to backup the existing state file"}
 	flags["-state"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to read and save state"}
 	flags["-state-out"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to write updated state"}
@@ -158,7 +170,7 @@ func StateCompatFlags() map[string]compat.CompatibilityFlag {
 func ImportCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.ImportCompatFlags")()
 
-	flags := TerraformCompatFlags()
+	flags := CommonSubcommandFlags()
 	flags["-config"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to directory of Terraform configuration files"}
 	flags["-allow-missing-config"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Allow import when no resource configuration block exists"}
 	flags["-state"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to read and save state"}
@@ -294,7 +306,9 @@ func AllTerraformCompatFlags() map[string]compat.CompatibilityFlag {
 		}
 	}
 
-	mergeFlags(TerraformCompatFlags())
+	// Include global terraform flags (-chdir, -help, -version).
+	mergeFlags(TerraformGlobalCompatFlags())
+	mergeFlags(CommonSubcommandFlags())
 	mergeFlags(PlanCompatFlags())
 	mergeFlags(ApplyCompatFlags())
 	mergeFlags(DestroyCompatFlags())

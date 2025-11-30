@@ -47,9 +47,6 @@ func init() {
 		panic(err)
 	}
 
-	// Set custom help to show terraform native flags.
-	setCustomHelp(deployCmd)
-
 	// Register completions for deployCmd.
 	RegisterTerraformCompletions(deployCmd)
 

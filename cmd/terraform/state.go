@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // stateCmd represents the terraform state command.
@@ -19,11 +21,11 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags.
-	setCustomHelp(stateCmd)
-
 	// Register completions for stateCmd.
 	RegisterTerraformCompletions(stateCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "state", StateCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(stateCmd)

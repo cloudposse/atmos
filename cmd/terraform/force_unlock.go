@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // forceUnlockCmd represents the terraform force-unlock command.
@@ -21,11 +23,11 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags.
-	setCustomHelp(forceUnlockCmd)
-
 	// Register completions for forceUnlockCmd.
 	RegisterTerraformCompletions(forceUnlockCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "force-unlock", ForceUnlockCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(forceUnlockCmd)

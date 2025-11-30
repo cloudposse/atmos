@@ -252,3 +252,41 @@ func GetCompatFlagsForCommand(providerName string) map[string]compat.Compatibili
 	}
 	return provider.GetCompatibilityFlags()
 }
+
+// commandCompatFlagsRegistry stores compat flags per command (provider/subcommand).
+// This replaces the callback-based approach with direct registration.
+var commandCompatFlagsRegistry = struct {
+	mu    sync.RWMutex
+	flags map[string]map[string]map[string]compat.CompatibilityFlag // provider -> subcommand -> flags
+}{
+	flags: make(map[string]map[string]map[string]compat.CompatibilityFlag),
+}
+
+// RegisterCommandCompatFlags registers compat flags for a specific command.
+// The providerName is the top-level command (e.g., "terraform").
+// The subcommand is the specific command (e.g., "plan", "apply", or "terraform" for the parent).
+// Each subcommand registers its own flags in init(), eliminating the need for switch statements.
+func RegisterCommandCompatFlags(providerName, subcommand string, flags map[string]compat.CompatibilityFlag) {
+	commandCompatFlagsRegistry.mu.Lock()
+	defer commandCompatFlagsRegistry.mu.Unlock()
+
+	if commandCompatFlagsRegistry.flags[providerName] == nil {
+		commandCompatFlagsRegistry.flags[providerName] = make(map[string]map[string]compat.CompatibilityFlag)
+	}
+	commandCompatFlagsRegistry.flags[providerName][subcommand] = flags
+}
+
+// GetSubcommandCompatFlags returns compatibility flags for a specific subcommand.
+// The providerName should match the top-level command (e.g., "terraform").
+// The subcommand is the name of the subcommand (e.g., "apply", "plan").
+// Returns nil if no flags are registered for the provider/subcommand combination.
+func GetSubcommandCompatFlags(providerName, subcommand string) map[string]compat.CompatibilityFlag {
+	commandCompatFlagsRegistry.mu.RLock()
+	defer commandCompatFlagsRegistry.mu.RUnlock()
+
+	providerFlags, ok := commandCompatFlagsRegistry.flags[providerName]
+	if !ok {
+		return nil
+	}
+	return providerFlags[subcommand]
+}

@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // workspaceCmd represents the terraform workspace command.
@@ -29,11 +31,11 @@ For complete Terraform/OpenTofu documentation, see:
 }
 
 func init() {
-	// Set custom help to show terraform native flags.
-	setCustomHelp(workspaceCmd)
-
 	// Register completions for workspaceCmd.
 	RegisterTerraformCompletions(workspaceCmd)
+
+	// Register compat flags for this subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "workspace", WorkspaceCompatFlags())
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(workspaceCmd)

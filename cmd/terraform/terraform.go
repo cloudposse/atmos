@@ -1,13 +1,17 @@
 package terraform
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/generate"
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // terraformParser handles flag parsing for shared terraform flags.
@@ -20,6 +24,18 @@ var terraformCmd = &cobra.Command{
 	Aliases: []string{"tf"},
 	Short:   "Execute Terraform commands using Atmos stack configurations",
 	Long:    `This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.`,
+	// RunE handles global terraform flags (-version, -help, -chdir) when no subcommand is provided.
+	// These flags should be passed directly to terraform without requiring component/stack context.
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Check if we have global terraform flags in separated args.
+		separated := compat.GetSeparated()
+		if len(separated) > 0 && hasGlobalOnlyFlags(separated) {
+			// Run terraform directly with these global flags.
+			return runTerraformGlobal(separated)
+		}
+		// No global flags or mixed with other args - show help (default behavior for parent command).
+		return cmd.Help()
+	},
 }
 
 func init() {
@@ -48,6 +64,10 @@ func init() {
 
 	// Register other completion functions (component args, identity).
 	RegisterTerraformCompletions(terraformCmd)
+
+	// Register global terraform compat flags (shown on `atmos terraform --help`).
+	// These are TRUE GLOBAL terraform flags that can be used before any subcommand.
+	internal.RegisterCommandCompatFlags("terraform", "terraform", TerraformGlobalCompatFlags())
 
 	// Register this command with the registry.
 	internal.Register(&TerraformCommandProvider{})
@@ -93,4 +113,39 @@ func (t *TerraformCommandProvider) GetCompatibilityFlags() map[string]compat.Com
 // GetAliases returns command aliases.
 func (t *TerraformCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil // No aliases for terraform command
+}
+
+// globalOnlyFlags are terraform flags that can be used without a subcommand.
+// These flags don't require component/stack context - they're passed directly to terraform.
+var globalOnlyFlags = map[string]bool{
+	"-version": true,
+	"-help":    true,
+	"-chdir":   true,
+}
+
+// hasGlobalOnlyFlags checks if the separated args contain only global terraform flags.
+// Returns true if all flags in the args are global-only flags.
+func hasGlobalOnlyFlags(args []string) bool {
+	for _, arg := range args {
+		// Check the flag name (handle both -flag and -flag=value forms).
+		flagName := arg
+		if idx := strings.Index(arg, "="); idx > 0 {
+			flagName = arg[:idx]
+		}
+		if !globalOnlyFlags[flagName] {
+			return false
+		}
+	}
+	return true
+}
+
+// runTerraformGlobal executes terraform with global flags directly.
+// This is used for commands like `atmos terraform -version` that don't need component/stack context.
+func runTerraformGlobal(args []string) error {
+	// For global flags, we just need to run terraform directly.
+	// No component/stack context is needed.
+	// Use "terraform" as the default command - atmos config would typically
+	// specify whether to use terraform or tofu, but for -version/-help
+	// we can just use the default.
+	return exec.ExecuteShellCommand(schema.AtmosConfiguration{}, "terraform", args, "", nil, false, "")
 }
