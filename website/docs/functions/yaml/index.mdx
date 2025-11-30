@@ -75,6 +75,9 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!repo-root`__](/functions/yaml/repo-root) YAML function is used to retrieve the
    root directory of the Atmos repository
 
+ - The [__`!random`__](/functions/yaml/random) YAML function generates a cryptographically secure random integer
+   within a specified range, useful for generating random port numbers or IDs
+
 :::tip
 You can combine [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) with Atmos YAML functions within the same stack configuration.
 Atmos processes templates first, followed by YAML functions, enabling you to dynamically provide parameters to the YAML functions.
@@ -148,6 +151,9 @@ components:
         # Download a remote JSON file with .json extension and query data using YQ
         # Note: URLs without extensions are treated as text, so use URLs with appropriate extensions
         github_data: !include ./github-meta.json .api
+
+        # Generate a random port number between 1024 and 65535
+        app_port: !random 1024 65535
 ```
 </File>
 
