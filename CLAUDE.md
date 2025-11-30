@@ -393,7 +393,7 @@ All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` 
 **Common mistakes:** Using command name vs. filename, not checking slug frontmatter, guessing URLs.
 
 ### Documentation Requirements (MANDATORY)
-Use `<dl>` for arguments/flags. Follow Docusaurus conventions: frontmatter, purpose note, screengrab, usage/examples/arguments/flags sections. File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
+Use `<dl>` for arguments/flags. Follow Docusaurus conventions: frontmatter, `<Intro>` component, screengrab, usage/examples/arguments/flags sections. Import with `import Intro from '@site/src/components/Intro'`. File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
 
 ### Website Build (MANDATORY)
 ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken links, missing images, MDX component rendering.
