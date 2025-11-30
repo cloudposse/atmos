@@ -1142,7 +1142,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/charmbracelet/x/term
     License: MIT
-    URL: https://github.com/charmbracelet/x/blob/term/v0.2.1/term/LICENSE
+    URL: https://github.com/charmbracelet/x/blob/term/v0.2.2/term/LICENSE
 
   - github.com/clipperhouse/uax29/v2
     License: MIT
