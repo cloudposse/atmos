@@ -40,6 +40,8 @@ func isAtmosYAMLFunction(s string) bool {
 // WalkAndDeferYAMLFunctions walks through a map and defers any YAML functions.
 // Returns a new map with YAML functions replaced by nil placeholders.
 func WalkAndDeferYAMLFunctions(dctx *DeferredMergeContext, data map[string]interface{}, basePath []string) map[string]interface{} {
+	defer perf.Track(nil, "merge.WalkAndDeferYAMLFunctions")()
+
 	if data == nil {
 		return nil
 	}
@@ -88,6 +90,8 @@ func isSlice(v interface{}) bool {
 // SetValueAtPath sets a value at a specific path in a nested map structure.
 // Creates intermediate maps as needed.
 func SetValueAtPath(data map[string]interface{}, path []string, value interface{}) error {
+	defer perf.Track(nil, "merge.SetValueAtPath")()
+
 	if len(path) == 0 {
 		return errUtils.ErrEmptyPath
 	}
@@ -121,6 +125,7 @@ func SetValueAtPath(data map[string]interface{}, path []string, value interface{
 }
 
 // mergeSlicesAppendStrategy concatenates all slice values in precedence order.
+// Non-slice values are silently skipped to handle type mismatches gracefully.
 func mergeSlicesAppendStrategy(values []*DeferredValue) []interface{} {
 	var result []interface{}
 	for _, dv := range values {
@@ -240,6 +245,8 @@ func mergeDeferredMaps(values []*DeferredValue) (interface{}, error) {
 
 // MergeDeferredValues merges all values for a single field path.
 func MergeDeferredValues(values []*DeferredValue, atmosConfig *schema.AtmosConfiguration) (interface{}, error) {
+	defer perf.Track(atmosConfig, "merge.MergeDeferredValues")()
+
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -316,6 +323,8 @@ func MergeWithDeferred(
 // This function is called after the initial merge to handle YAML functions that were deferred
 // to avoid type conflicts during merging.
 func ApplyDeferredMerges(dctx *DeferredMergeContext, result map[string]interface{}, atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "merge.ApplyDeferredMerges")()
+
 	if dctx == nil || !dctx.HasDeferredValues() {
 		return nil
 	}

@@ -12,7 +12,7 @@
 When importing Atmos stack files that contain YAML functions (like `!template`) and attempting to override those values
 with concrete types, the merge operation fails with a type mismatch error:
 
-```
+```text
 Error: cannot override two slices with different type ([]interface {}, string)
 ```
 
