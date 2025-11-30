@@ -78,7 +78,11 @@ var logFileHandle *os.File
 // This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
 // where Cobra doesn't parse flags before PersistentPreRun is called.
 func parseChdirFromArgs() string {
-	args := os.Args
+	return parseChdirFromArgList(os.Args)
+}
+
+// parseChdirFromArgList manually parses --chdir or -C flag from the given argument list.
+func parseChdirFromArgList(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
@@ -1110,6 +1114,7 @@ func Execute() error {
 		if err := handleConfigInitError(initErr, &atmosConfig); err != nil {
 			return err
 		}
+		log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 	}
 
 	// Initialize markdown renderers only if config loaded successfully

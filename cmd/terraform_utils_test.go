@@ -256,3 +256,70 @@ func TestUserAbortExitCode(t *testing.T) {
 	assert.True(t, exitCalled, "Exit should have been called when user aborts")
 	assert.Equal(t, errUtils.ExitCodeSIGINT, exitCode, "Exit code should be ExitCodeSIGINT (POSIX SIGINT: 128 + 2)")
 }
+
+func TestCheckTerraformFlags_ComponentWithQuery(t *testing.T) {
+	tk := NewTestKit(t)
+
+	// Test component with query flag.
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "test-component",
+		Query:            ".components.test",
+	}
+
+	err := checkTerraformFlags(info)
+	assert.ErrorIs(tk, err, errUtils.ErrInvalidTerraformComponentWithMultiComponentFlags)
+}
+
+func TestCheckTerraformFlags_AllEdgeCases(t *testing.T) {
+	tests := []struct {
+		name          string
+		info          *schema.ConfigAndStacksInfo
+		expectedError error
+	}{
+		{
+			name: "plan-file with query",
+			info: &schema.ConfigAndStacksInfo{
+				PlanFile: "plan.tfplan",
+				Query:    ".components.test",
+			},
+			expectedError: errUtils.ErrInvalidTerraformSingleComponentAndMultiComponentFlags,
+		},
+		{
+			name: "plan-file with components",
+			info: &schema.ConfigAndStacksInfo{
+				PlanFile:   "plan.tfplan",
+				Components: []string{"comp1"},
+			},
+			expectedError: errUtils.ErrInvalidTerraformSingleComponentAndMultiComponentFlags,
+		},
+		{
+			name: "use-terraform-plan with all",
+			info: &schema.ConfigAndStacksInfo{
+				UseTerraformPlan: true,
+				All:              true,
+			},
+			expectedError: errUtils.ErrInvalidTerraformSingleComponentAndMultiComponentFlags,
+		},
+		{
+			name: "use-terraform-plan with query",
+			info: &schema.ConfigAndStacksInfo{
+				UseTerraformPlan: true,
+				Query:            ".components.test",
+			},
+			expectedError: errUtils.ErrInvalidTerraformSingleComponentAndMultiComponentFlags,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tk := NewTestKit(t)
+
+			err := checkTerraformFlags(tt.info)
+			if tt.expectedError != nil {
+				assert.ErrorIs(tk, err, tt.expectedError)
+			} else {
+				assert.NoError(tk, err)
+			}
+		})
+	}
+}

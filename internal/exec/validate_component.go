@@ -214,19 +214,26 @@ func validateComponentInternal(
 	}
 
 	// Check if the file pointed to by 'schemaPath' exists.
-	// If not, join it with the schemas `base_path` from the CLI config
+	// If not, join it with the schemas `base_path` from the CLI config.
+	// Use BasePathAbsolute instead of BasePath to ensure correct resolution
+	// when base_path is relative (e.g., when using ATMOS_CLI_CONFIG_PATH).
 	var filePath string
 	if u.FileExists(schemaPath) {
 		filePath = schemaPath
 	} else {
+		basePathToUse := atmosConfig.BasePathAbsolute
+		if basePathToUse == "" {
+			// Fallback to BasePath if BasePathAbsolute is not set (for backward compatibility).
+			basePathToUse = atmosConfig.BasePath
+		}
 		switch schemaType {
 		case "jsonschema":
 			{
-				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("jsonschema").BasePath, schemaPath)
+				filePath = filepath.Join(basePathToUse, atmosConfig.GetResourcePath("jsonschema").BasePath, schemaPath)
 			}
 		case "opa":
 			{
-				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("opa").BasePath, schemaPath)
+				filePath = filepath.Join(basePathToUse, atmosConfig.GetResourcePath("opa").BasePath, schemaPath)
 			}
 		}
 
@@ -256,7 +263,14 @@ func validateComponentInternal(
 		}
 	case "opa":
 		{
-			modulePathsAbsolute, err := u.JoinPaths(filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
+			// Use BasePathAbsolute for module path resolution to ensure correct paths
+			// when base_path is relative (e.g., when using ATMOS_CLI_CONFIG_PATH).
+			basePathToUse := atmosConfig.BasePathAbsolute
+			if basePathToUse == "" {
+				// Fallback to BasePath if BasePathAbsolute is not set (for backward compatibility).
+				basePathToUse = atmosConfig.BasePath
+			}
+			modulePathsAbsolute, err := u.JoinPaths(filepath.Join(basePathToUse, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
 			if err != nil {
 				return false, err
 			}

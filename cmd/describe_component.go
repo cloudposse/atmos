@@ -8,8 +8,10 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // describeComponentCmd describes configuration for components
@@ -21,7 +23,9 @@ var describeComponentCmd = &cobra.Command{
 	Args:               cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfigE(); err != nil {
+			return err
+		}
 
 		if len(args) != 1 {
 			return errors.New("invalid arguments. The command requires one argument `component`")
@@ -71,13 +75,48 @@ var describeComponentCmd = &cobra.Command{
 
 		component := args[0]
 
+		// Determine if we need path resolution.
+		// Only resolve as a filesystem path if the argument explicitly indicates a path.
+		// Otherwise, treat it as a component name (even if it contains slashes).
+		needsPathResolution := comp.IsExplicitComponentPath(component)
+
 		// Load atmos configuration to get auth config.
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
 			ComponentFromArg: component,
 			Stack:            stack,
 		}, false)
 		if err != nil {
+			// If config loading failed and we're trying to resolve a path,
+			// try to give a more specific error about the path.
+			if needsPathResolution {
+				// Try to determine if the path is outside component directories.
+				// Since we don't have config, we can't determine base paths,
+				// so we just indicate that path resolution requires valid config.
+				pathErr := errUtils.Build(errUtils.ErrPathResolutionFailed).
+					WithHintf("Failed to initialize config for path: `%s`\n\nPath resolution requires valid Atmos configuration", component).
+					WithHint("Verify `atmos.yaml` exists in your repository root or `.atmos/` directory\nRun `atmos describe config` to validate your configuration").
+					WithContext("component_arg", component).
+					WithContext("stack", stack).
+					WithContext("config_error", err.Error()).
+					WithExitCode(2).
+					Err()
+				return pathErr
+			}
 			return errors.Join(errUtils.ErrFailedToInitConfig, err)
+		}
+
+		// Resolve path-based component arguments to component names
+		if needsPathResolution {
+			// We don't know the component type yet - describe component detects it.
+			// Extract component info from path without type checking or stack validation.
+			// Stack validation will happen later in ExecuteDescribeComponent.
+			componentInfo, err := u.ExtractComponentInfoFromPath(&atmosConfig, component)
+			if err != nil {
+				// Return the error directly to preserve detailed hints and exit codes.
+				// ExtractComponentInfoFromPath already provides detailed error messages with hints.
+				return err
+			}
+			component = componentInfo.FullComponent
 		}
 
 		// Get identity from flag and create AuthManager if provided.
