@@ -1,21 +1,25 @@
 ---
 slug: deferred-yaml-functions-evaluation-in-merge
-title: "Deferred YAML Function Evaluation in Merge: Solving Type Conflicts in Configuration Processing"
+title: "Deferred YAML Function Evaluation in Merge"
 authors: [aknysh]
 tags: [feature, atmos-core, configuration, yaml-functions]
 date: 2025-11-29
 ---
 
-We've improved how Atmos processes YAML functions. Atmos now defers their evaluation until after structural merges,
-eliminating the type conflicts that previously occurred when templates or other functions were used in layered stack configurations.
+We've improved how Atmos merges YAML functions across configuration layers.
+Atmos now defers merging YAML functions (which have different types than concrete values) until after the standard
+merge completes, eliminating the type conflicts that previously occurred when templates or other functions were used in
+layered stack configurations.
 
 <!--truncate-->
 
 ## The Problem: Type Conflicts During Merge
 
-Atmos couldn't determine the final type of YAML functions (like `!template`, `!terraform.output`, `!store.get`,
-and others) until after evaluation, but deep merges happened first. This mismatch in timing produced incompatible types
-during merging, especially across nested stack layers.
+YAML functions (like `!template`, `!terraform.output`, `!store.get`, and others) are represented as strings during
+configuration loading, but they resolve to different types after evaluation.
+When Atmos tried to merge a concrete value (like a string `"10.0.0.0/16"`) with a YAML function string
+(like `!template '{{ .settings.vpc_cidr }}'`), it encountered type conflicts. The standard merge process couldn't
+handle merging these different representations across nested stack layers.
 
 Consider this common scenario across multiple stack files:
 
@@ -76,13 +80,7 @@ These functions are temporarily replaced with `nil` placeholders and stored in a
 
 ### Phase 2: Merge Without Conflicts
 
-With YAML functions deferred, all values are simple types (strings, numbers, maps, lists). The normal merge process completes without type conflicts:
-
-```yaml
-# After deferral, both are simple types that merge cleanly
-cidr_block: nil  # From base (deferred)
-cidr_block: nil  # From override (deferred)
-```
+With YAML functions deferred, all values are simple types (strings, numbers, maps, lists). The normal merge process completes without type conflicts.
 
 ### Phase 3: Apply Deferred Merges
 
@@ -203,53 +201,8 @@ listeners:
     protocol: HTTPS  # Override wins
 ```
 
-## Performance Impact
-
-The deferred merge infrastructure adds minimal overhead to stack processing:
-
-- **Typical components**: ~10% increase in merge time (1ms → 1.1ms)
-- **Complex configurations**: ~15% increase for 100+ deferred values
-- **Zero overhead** when no YAML functions are present
-
-Performance testing shows negligible impact on real-world workloads.
-
-## Current Status and Next Steps
-
-The deferred merge infrastructure is **fully implemented and tested** with:
-
-✅ **Core functionality**
-- Detects all seven post-merge YAML function types
-- Defers functions before merge
-- Applies deferred values after merge
-- Handles nested structures (maps, lists, mixed)
-
-✅ **List merge strategies**
-- Replace strategy (default)
-- Append strategy
-- Merge strategy with deep merging
-
-✅ **Error handling**
-- Path navigation errors
-- Type mismatch handling
-- Empty path validation
-- Unknown strategy detection
-
-✅ **Test coverage**
-- 76 unit tests across all scenarios
-- 89.9% code coverage
-- Integration tests with real fixtures
-- Example tests for documentation
-
-### Integration with Stack Processor
-
-The next phase involves integrating the deferred merge with Atmos's stack processor:
-
-1. **Modify YAML function processing** - Keep YAML functions as strings during initial load
-2. **Update stack processor** - Use `MergeWithDeferred()` instead of `Merge()`
-3. **Process deferred functions** - Call `ApplyDeferredMerges()` after all merging completes
-4. **Template rendering** - Execute templates with full merged context
-
-For technical details on the implementation, see the [YAML Function Merge Handling PRD](https://github.com/cloudposse/atmos/blob/main/docs/prd/yaml-function-merge-handling.md).
+For technical details on the implementation, see
+the [Deferred YAML Function Merge Handling PRD](https://github.com/cloudposse/atmos/blob/main/docs/prd/deferred-yaml-functions-evaluation-in-merge.md).
 
 ## Get Involved
 
@@ -263,5 +216,5 @@ Share your feedback in [GitHub Discussions](https://github.com/cloudposse/atmos/
 
 ## Learn More
 
-- [YAML Function Merge Handling PRD](https://github.com/cloudposse/atmos/blob/main/docs/prd/deferred-yaml-functions-evaluation-in-merge.md) - Complete technical specification and implementation details
+- [Deferred YAML Function Merge Handling PRD](https://github.com/cloudposse/atmos/blob/main/docs/prd/deferred-yaml-functions-evaluation-in-merge.md) - Complete technical specification and implementation details
 - [Atmos YAML Functions Documentation](https://atmos.tools/functions/yaml/) - Guide to using YAML functions in stack configurations

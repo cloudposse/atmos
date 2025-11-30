@@ -1,4 +1,4 @@
-# PRD: Deferred YAML Functions Evaluation in Merge
+# PRD: Deferred YAML Function Evaluation in Merge
 
 ## Status
 **Current**: ✅ Implemented and Tested
@@ -110,11 +110,13 @@ signal "I didn't handle this, please continue with normal processing."
 
 ### Core Concept
 
-Instead of trying to merge YAML functions during the initial merge phase, **defer them** and merge after processing:
+Instead of trying to merge YAML function strings with concrete values during the initial merge phase, **defer the merge of YAML functions** until after they are processed:
 
-1. **During merge**: Detect YAML functions, store all values for affected fields, replace with placeholders
-2. **After YAML function processing**: Re-merge the processed values with stored overrides
-3. **Result**: Full deep-merge capability while avoiding type conflicts
+1. **During initial merge**: Detect YAML functions, defer them (replace with placeholders), store for later merging
+2. **After YAML function evaluation**: Merge the deferred YAML function values with the standard merge result
+3. **Result**: Full deep-merge capability while avoiding type conflicts during the initial merge
+
+**Key Insight**: We defer **merging** YAML functions, not their **evaluation**. YAML functions are still evaluated as the last step in Atmos's processing pipeline (as they always were). What changed is that YAML function values are now merged separately from concrete values to avoid type mismatches.
 
 ### How It Works
 
