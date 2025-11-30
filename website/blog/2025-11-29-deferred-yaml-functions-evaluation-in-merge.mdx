@@ -355,14 +355,15 @@ func ApplyDeferredMerges(
     dctx *DeferredMergeContext,
     result map[string]interface{},
     atmosConfig *schema.AtmosConfiguration,
+    processor YAMLFunctionProcessor,
 ) error
 ```
 
 **Process:**
 1. Sorts deferred values by precedence
-2. Merges multiple values per path using `list_merge_strategy`
-3. Applies final values to result map
-4. TODO: Process YAML functions (next phase)
+2. Processes YAML functions using the provided processor (if not nil)
+3. Merges multiple values per path using `list_merge_strategy`
+4. Applies final values to result map
 
 ### SetValueAtPath
 

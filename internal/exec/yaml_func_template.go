@@ -31,8 +31,8 @@ func processTagTemplate(
 }
 
 // ProcessTemplateTagsOnly processes only !template tags in a data structure, recursively.
-// This is used before merging to ensure !template strings are decoded to their actual types,
-// avoiding type conflicts during merge (e.g., string vs list).
+// It is used before merging to ensure !template strings are decoded to their actual types.
+// This avoids type conflicts during merge (e.g., string vs list).
 func ProcessTemplateTagsOnly(input map[string]any) map[string]any {
 	defer perf.Track(nil, "exec.ProcessTemplateTagsOnly")()
 
