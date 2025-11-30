@@ -20,13 +20,13 @@ func TestDeferredMergeWithYAMLFunctions(t *testing.T) {
 			},
 		}
 
-		// Simulate base catalog with !template
+		// Simulate base catalog with !template.
 		base := map[string]any{
 			"template_config": "!template '{{ toJson .settings.base }}'",
 			"regular_value":   "base",
 		}
 
-		// Override with concrete value (would cause type conflict without deferred merge)
+		// Override with concrete value (would cause type conflict without deferred merge).
 		override := map[string]any{
 			"template_config": map[string]interface{}{
 				"custom_key": "value",
@@ -242,12 +242,12 @@ func TestDeferredMergeWithYAMLFunctions(t *testing.T) {
 			},
 		}
 
-		// Base has YAML function (will return list after processing)
+		// Base has YAML function (will return list after processing).
 		base := map[string]any{
 			"config": "!terraform.output vpc ids",
 		}
 
-		// Override with concrete map (type conflict without deferred merge)
+		// Override with concrete map (type conflict without deferred merge).
 		override := map[string]any{
 			"config": map[string]interface{}{
 				"custom": "value",

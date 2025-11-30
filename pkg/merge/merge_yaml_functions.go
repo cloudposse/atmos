@@ -89,6 +89,7 @@ func isSlice(v interface{}) bool {
 
 // SetValueAtPath sets a value at a specific path in a nested map structure.
 // Creates intermediate maps as needed.
+// Precondition: data must be a non-nil map (panics if nil).
 func SetValueAtPath(data map[string]interface{}, path []string, value interface{}) error {
 	defer perf.Track(nil, "merge.SetValueAtPath")()
 

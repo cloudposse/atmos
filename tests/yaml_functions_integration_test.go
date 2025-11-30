@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -241,7 +242,7 @@ func TestYAMLFunctionsDeferredMerge(t *testing.T) {
 		)
 
 		// If component doesn't exist, skip this test
-		if err != nil && assert.Contains(t, err.Error(), "Could not find the component") {
+		if err != nil && strings.Contains(err.Error(), "Could not find the component") {
 			t.Skip("test-multiple-yaml-functions component not found in fixture")
 		}
 

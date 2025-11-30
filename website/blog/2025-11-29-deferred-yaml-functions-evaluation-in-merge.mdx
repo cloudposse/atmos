@@ -2,11 +2,14 @@
 slug: deferred-yaml-functions-evaluation-in-merge
 title: "Deferred YAML Function Evaluation in Merge"
 authors: [aknysh]
-tags: [feature, atmos-core, configuration, yaml-functions]
+tags: [feature]
 date: 2025-11-29
 ---
 
-We’ve improved how Atmos handles YAML functions during merges across configuration layers.
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+We've improved how Atmos handles YAML functions during merges across configuration layers.
 Atmos now postpones merging YAML functions until after the regular merge is done. This avoids the type conflicts that used to happen when a stack layer replaced a plain value—like a string, map, or list—with a YAML function such as a template or an output reference.
 
 <!--truncate-->
@@ -148,7 +151,8 @@ components:
 
 The deferred merge system fully respects Atmos's `list_merge_strategy` setting:
 
-### Replace Strategy (Default)
+<Tabs>
+<TabItem value="replace" label="Replace (Default)" default>
 
 ```yaml
 # Base
@@ -161,7 +165,8 @@ tags: !template '{{ .settings.override_tags }}'
 tags: !template '{{ .settings.override_tags }}'
 ```
 
-### Append Strategy
+</TabItem>
+<TabItem value="append" label="Append">
 
 ```yaml
 settings:
@@ -177,7 +182,8 @@ security_groups: !template '{{ .settings.additional_sgs }}'
 security_groups: [sg-base1, sg-base2, sg-add1, sg-add2]
 ```
 
-### Merge Strategy
+</TabItem>
+<TabItem value="merge" label="Merge">
 
 ```yaml
 settings:
@@ -198,6 +204,9 @@ listeners:
   - port: 443        # Override wins
     protocol: HTTPS  # Override wins
 ```
+
+</TabItem>
+</Tabs>
 
 For technical details on the implementation, see
 the [Deferred YAML Function Merge Handling PRD](https://github.com/cloudposse/atmos/blob/main/docs/prd/deferred-yaml-functions-evaluation-in-merge.md).
