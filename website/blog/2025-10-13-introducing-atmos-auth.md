@@ -185,7 +185,7 @@ We're continuing to expand authentication capabilities:
 Authentication is critical infrastructure for platform teams. If you have feedback, feature requests, or want to contribute:
 
 - Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues)
-- Share your use cases in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
+- Share your use cases in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
 - Contribute provider implementations or enhancements
 
 ---

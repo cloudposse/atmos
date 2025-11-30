@@ -266,7 +266,7 @@ atmos version show
 ## Get Involved
 
 We're building Atmos in the open and welcome your feedback:
-- 💬 **Discuss** - Share thoughts in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
+- 💬 **Discuss** - Share thoughts in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
 - 🐛 **Report Issues** - Found a bug? [Open an issue](https://github.com/cloudposse/atmos/issues)
 - 🚀 **Contribute** - Want to add features? Review our [contribution guide](https://atmos.tools/community/contributing).
 

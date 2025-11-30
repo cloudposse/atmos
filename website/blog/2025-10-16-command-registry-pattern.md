@@ -133,7 +133,7 @@ The `about` command has been migrated as a proof-of-concept in this PR, demonstr
 ## Get Involved
 
 We're building this in the open and welcome contributions from the community:
-- 💬 **Discuss** - Share your thoughts in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
+- 💬 **Discuss** - Share your thoughts in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
 - 🐛 **Report Issues** - Found a bug? [Open an issue](https://github.com/cloudposse/atmos/issues)
 - 🚀 **Contribute** - Help migrate commands in future PRs
 

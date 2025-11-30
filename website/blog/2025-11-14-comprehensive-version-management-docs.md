@@ -110,4 +110,4 @@ Ready to explore? Check out the new [Version Management documentation](/design-p
 
 ## Share Your Experience
 
-Have you found another versioning strategy that works well for your organization? We'd love to hear about it! Share your approach in our [GitHub Discussions](https://github.com/cloudposse/atmos/discussions) or [open an issue](https://github.com/cloudposse/atmos/issues) to help us expand this documentation with real-world patterns from the community.
+Have you found another versioning strategy that works well for your organization? We'd love to hear about it! Share your approach in our [GitHub Discussions](https://github.com/orgs/cloudposse/discussions) or [open an issue](https://github.com/cloudposse/atmos/issues) to help us expand this documentation with real-world patterns from the community.

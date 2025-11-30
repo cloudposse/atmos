@@ -79,7 +79,7 @@ Using `atmos auth` provides several advantages over external credential managers
 These guides are designed to be practical and actionable. If you encounter issues, find gaps in the documentation, or have suggestions for improvement:
 
 - Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues)
-- Share your experience in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
+- Share your experience in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
 - Contribute improvements via pull request
 
 ---

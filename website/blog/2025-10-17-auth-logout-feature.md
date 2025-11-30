@@ -402,7 +402,7 @@ atmos auth logout --help
 
 We'd love to hear how you're using `atmos auth logout`:
 
-- 💬 **Discuss** - Share your thoughts in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
+- 💬 **Discuss** - Share your thoughts in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
 - 🐛 **Report Issues** - Found a bug? [Open an issue](https://github.com/cloudposse/atmos/issues)
 - 🚀 **Contribute** - Submit PRs for improvements
 
