@@ -11,11 +11,11 @@ components:
         # YAML function that will be overridden
         template_config: !template '{{ toJson .settings.base_config }}'
 
-        # YAML function that returns a list
-        vpc_ids: !terraform.output vpc test vpc_ids
+        # YAML function that returns a list (using template)
+        vpc_ids: !template '{{ list "vpc-111" "vpc-222" "vpc-333" | toJson }}'
 
-        # YAML function that returns a map
-        network_config: !terraform.state network test config
+        # YAML function that returns a map (using template)
+        network_config: !template '{{ dict "vpc_id" "vpc-base" "region" .vars.region | toJson }}'
 
         # Regular values for comparison
         environment: "base"
