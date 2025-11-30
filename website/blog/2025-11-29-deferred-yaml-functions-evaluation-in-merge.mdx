@@ -6,10 +6,8 @@ tags: [feature, atmos-core, configuration, yaml-functions]
 date: 2025-11-29
 ---
 
-We've improved how Atmos merges YAML functions across configuration layers.
-Atmos now defers merging YAML functions (which have different types than concrete values) until after the standard
-merge completes, eliminating the type conflicts that previously occurred when templates or other functions were used in
-layered stack configurations.
+We’ve improved how Atmos handles YAML functions during merges across configuration layers.
+Atmos now postpones merging YAML functions until after the regular merge is done. This avoids the type conflicts that used to happen when a stack layer replaced a plain value—like a string, map, or list—with a YAML function such as a template or an output reference.
 
 <!--truncate-->
 
