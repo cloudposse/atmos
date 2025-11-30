@@ -112,16 +112,15 @@ func TestCommonFlags(t *testing.T) {
 func TestTerraformFlags(t *testing.T) {
 	registry := TerraformFlags()
 
-	// Should have common flags (stack, dry-run) + Terraform-specific flags
-	// Identity and other global flags are inherited from RootCmd, not in registry
-	assert.GreaterOrEqual(t, registry.Count(), 5)
+	// Should have common flags (stack, dry-run) + Terraform-specific flags including identity
+	assert.GreaterOrEqual(t, registry.Count(), 13)
 
 	// Should include common flags
 	assert.True(t, registry.Has("stack"))
 	assert.True(t, registry.Has("dry-run"))
 
-	// Should NOT include global flags (they're inherited from RootCmd)
-	assert.False(t, registry.Has("identity"), "identity should be inherited from RootCmd")
+	// Should include identity flag for terraform commands
+	assert.True(t, registry.Has("identity"), "identity should be in TerraformFlags for terraform commands")
 
 	// Should include Terraform-specific flags
 	assert.True(t, registry.Has("upload-status"))

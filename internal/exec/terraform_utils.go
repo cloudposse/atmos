@@ -15,6 +15,22 @@ import (
 
 const commandStr = "command"
 
+// shouldProcessStacks determines whether to process stacks and check stack configuration.
+// Based on the command type and provided arguments.
+func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (shouldProcess bool, shouldCheckStack bool) {
+	// For clean command, special logic applies.
+	if info.SubCommand == "clean" {
+		// Only process if component is provided.
+		shouldProcess = info.ComponentFromArg != ""
+		// Only check stack if stack is provided.
+		shouldCheckStack = info.Stack != ""
+		return shouldProcess, shouldCheckStack
+	}
+
+	// For all other commands, always process and check stack.
+	return true, true
+}
+
 func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 	if len(atmosConfig.Components.Terraform.BasePath) < 1 {
 		return errors.New("Base path to terraform components must be provided in 'components.terraform.base_path' config or " +
@@ -66,21 +82,6 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 	} else {
 		log.Debug("Error checking Terraform environment file.", "file", filePath, "error", err)
 	}
-}
-
-func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
-	shouldProcessStacks := true
-	shouldCheckStack := true
-
-	if info.SubCommand == "clean" {
-		if info.ComponentFromArg == "" {
-			shouldProcessStacks = false
-		}
-		shouldCheckStack = info.Stack != ""
-
-	}
-
-	return shouldProcessStacks, shouldCheckStack
 }
 
 func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {

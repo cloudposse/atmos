@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
+	"golang.org/x/term"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/utils"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -298,7 +300,15 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 }
 
 // confirmDeletion prompts the user for confirmation before deletion.
+// If not in a TTY (e.g., CI/CD, tests), returns false to prevent deletion without explicit --force flag.
 func confirmDeletion() (bool, error) {
+	// Check if stdin is a TTY
+	// In non-interactive environments (tests, CI/CD), we should require --force flag
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		log.Debug("Not a TTY, skipping interactive confirmation (use --force to bypass)")
+		return false, fmt.Errorf("interactive confirmation not available in non-TTY environment (use --force flag)")
+	}
+
 	message := "Are you sure?"
 	confirm, err := confirmDeleteTerraformLocal(message)
 	if err != nil {
@@ -413,11 +423,73 @@ func IsValidDataDir(tfDataDir string) error {
 	return nil
 }
 
-// handleCleanSubCommand handles the 'clean' subcommand logic.
-func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string, atmosConfig *schema.AtmosConfiguration) error {
+// ExecuteClean cleans up Terraform state and artifacts for a component.
+// It accepts typed parameters instead of using AdditionalArgsAndFlags pattern.
+func ExecuteClean(
+	component, stack string,
+	force, everything, skipLockFile, dryRun bool,
+	atmosConfig *schema.AtmosConfiguration,
+) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteClean")()
+
+	log.Debug("ExecuteClean called", "component", component, "stack", stack, "force", force, "everything", everything, "skipLockFile", skipLockFile, "dryRun", dryRun)
+
+	// Build ConfigAndStacksInfo for HandleCleanSubCommand.
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: component,
+		Stack:            stack,
+		StackFromArg:     stack,
+		SubCommand:       "clean",
+		ComponentType:    "terraform",
+		DryRun:           dryRun,
+	}
+
+	// Build AdditionalArgsAndFlags for backward compatibility with HandleCleanSubCommand.
+	if force {
+		info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, forceFlag)
+	}
+	if everything {
+		info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, everythingFlag)
+	}
+	if skipLockFile {
+		info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag)
+	}
+
+	// Resolve component name via ProcessStacks when a component is provided.
+	// This matches the behavior from main where clean went through ExecuteTerraform() -> ProcessStacks().
+	// ProcessStacks resolves Atmos component names (e.g., "mycomponent") to actual Terraform
+	// component directories (e.g., "mock") via the metadata.component field in stack config.
+	componentPath := atmosConfig.TerraformDirAbsolutePath
+	if component != "" {
+		// shouldCheckStack = only require stack if explicitly provided (matching main's behavior).
+		shouldCheckStack := stack != ""
+		resolvedInfo, err := ProcessStacks(atmosConfig, info, shouldCheckStack, false, false, nil, nil)
+		if err != nil {
+			return err
+		}
+		info = resolvedInfo
+
+		// Use resolved terraform component path.
+		terraformComponent := info.Context.BaseComponent
+		if terraformComponent == "" {
+			terraformComponent = component
+		}
+		componentPath = filepath.Join(atmosConfig.TerraformDirAbsolutePath, terraformComponent)
+	}
+
+	return HandleCleanSubCommand(info, componentPath, atmosConfig)
+}
+
+// HandleCleanSubCommand handles the 'clean' subcommand logic.
+func HandleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string, atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "exec.HandleCleanSubCommand")()
+
+	log.Debug("HandleCleanSubCommand called", "SubCommand", info.SubCommand)
 	if info.SubCommand != "clean" {
 		return nil
 	}
+
+	log.Debug("HandleCleanSubCommand entry", "ComponentFromArg", info.ComponentFromArg, "FinalComponent", info.FinalComponent, "SubCommand", info.SubCommand, "Stack", info.Stack, "StackFromArg", info.StackFromArg)
 
 	cleanPath := componentPath
 	if info.ComponentFromArg != "" && info.StackFromArg == "" {
@@ -440,19 +512,41 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 
 	force := u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)
 	filesToClear := initializeFilesToClear(info, atmosConfig)
-	var FilterComponents []string
+
+	// When cleaning a specific component, use the component path directly instead of calling ExecuteDescribeStacks
+	// to avoid processing other components (which may have validation or duplicate errors)
+	var allComponentsRelativePaths []string
 	if info.ComponentFromArg != "" {
-		FilterComponents = append(FilterComponents, info.ComponentFromArg)
+		// Use the component from the command line argument.
+		// Note: When ProcessStacks is skipped (for clean), FinalComponent won't be set,
+		// so we use ComponentFromArg or Context.BaseComponent as fallback.
+		componentToClean := info.FinalComponent
+		if componentToClean == "" && info.Context.BaseComponent != "" {
+			componentToClean = info.Context.BaseComponent
+		}
+		if componentToClean == "" {
+			componentToClean = info.ComponentFromArg
+		}
+		log.Debug("Clean: Using component from arg", "ComponentFromArg", info.ComponentFromArg, "FinalComponent", info.FinalComponent, "BaseComponent", info.Context.BaseComponent, "componentToClean", componentToClean)
+		allComponentsRelativePaths = []string{componentToClean}
+	} else {
+		log.Debug("Clean: No component from arg, calling ExecuteDescribeStacks", "StackFromArg", info.StackFromArg)
+		// When cleaning all components, we need to call ExecuteDescribeStacks
+		var FilterComponents []string
+		if info.ComponentFromArg != "" {
+			FilterComponents = append(FilterComponents, info.ComponentFromArg)
+		}
+		stacksMap, err := ExecuteDescribeStacks(
+			atmosConfig,
+			info.StackFromArg,
+			FilterComponents,
+			nil, nil, false, false, false, false, nil, nil)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrDescribeStack, err)
+		}
+		allComponentsRelativePaths = getAllStacksComponentsPaths(stacksMap)
 	}
-	stacksMap, err := ExecuteDescribeStacks(
-		atmosConfig,
-		info.StackFromArg,
-		FilterComponents,
-		nil, nil, false, false, false, false, nil, nil)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrDescribeStack, err)
-	}
-	allComponentsRelativePaths := getAllStacksComponentsPaths(stacksMap)
+
 	folders, err := CollectComponentsDirectoryObjects(atmosConfig.TerraformDirAbsolutePath, allComponentsRelativePaths, filesToClear)
 	if err != nil {
 		log.Debug("error collecting folders and files", "error", err)
@@ -492,6 +586,33 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 	}
 
 	if total > 0 {
+		// In dry-run mode, print what would be deleted and exit.
+		if info.DryRun {
+			u.PrintMessage("Dry run mode: the following files would be deleted:")
+			for _, folder := range folders {
+				for _, file := range folder.Files {
+					fileRel, err := getRelativePath(atmosConfig.BasePath, file.FullPath)
+					if err != nil {
+						fileRel = file.Name
+					}
+					u.PrintMessage(fmt.Sprintf("  %s", fileRel))
+				}
+			}
+			if len(tfDataDirFolders) > 0 {
+				for _, folder := range tfDataDirFolders {
+					for _, file := range folder.Files {
+						fileRel, err := getRelativePath(atmosConfig.BasePath, file.FullPath)
+						if err != nil {
+							fileRel = file.Name
+						}
+						u.PrintMessage(fmt.Sprintf("  %s", fileRel))
+					}
+				}
+			}
+			u.PrintMessage(fmt.Sprintf("\nTotal: %d files would be deleted", total))
+			return nil
+		}
+
 		if !force {
 			if len(tfDataDirFolders) > 0 {
 				u.PrintMessage(fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))

@@ -26,7 +26,7 @@ tests:
       - "terraform"
       - "plan"
       - "myapp"
-      - "--stack"
+      - "--stack="
     expect:
       diff: []
       stdout:
@@ -43,7 +43,7 @@ tests:
       - "terraform"
       - "plan"
       - "vpc"
-      - "--stack"
+      - "--stack="
     expect:
       diff: []
       stdout:
