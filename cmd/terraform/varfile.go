@@ -1,11 +1,10 @@
 package terraform
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -32,7 +31,7 @@ var varfileCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		component := args[0]
 
-		ui.Warning("'terraform varfile' is deprecated, use 'terraform generate varfile' instead")
+		_ = ui.Warning("'terraform varfile' is deprecated, use 'terraform generate varfile' instead")
 
 		// Use Viper to respect precedence (flag > env > config > default)
 		v := viper.GetViper()
@@ -56,7 +55,7 @@ var varfileCmd = &cobra.Command{
 
 		// Validate required flags
 		if stack == "" {
-			return fmt.Errorf("stack is required (use --stack or -s)")
+			return errUtils.ErrMissingStack
 		}
 
 		// Initialize Atmos configuration
@@ -81,7 +80,7 @@ var writeVarfileCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		component := args[0]
 
-		ui.Warning("'terraform write varfile' is deprecated, use 'terraform generate varfile' instead")
+		_ = ui.Warning("'terraform write varfile' is deprecated, use 'terraform generate varfile' instead")
 
 		// Use Viper to respect precedence (flag > env > config > default)
 		v := viper.GetViper()
@@ -105,7 +104,7 @@ var writeVarfileCmd = &cobra.Command{
 
 		// Validate required flags
 		if stack == "" {
-			return fmt.Errorf("stack is required (use --stack or -s)")
+			return errUtils.ErrMissingStack
 		}
 
 		// Initialize Atmos configuration

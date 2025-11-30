@@ -151,10 +151,10 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 
 	// Print the diff
 	if hasDiff {
-		data.Writeln("\nDiff Output")
-		data.Writeln("===========")
-		data.Writeln("")
-		data.Writeln(diff)
+		_ = data.Writeln("\nDiff Output")
+		_ = data.Writeln("===========")
+		_ = data.Writeln("")
+		_ = data.Writeln(diff)
 
 		// Print the error message
 		errUtils.CheckErrorAndPrint(errUtils.ErrPlanHasDiff, "", "")
@@ -164,7 +164,7 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 		return nil // This line will never be reached
 	}
 
-	data.Writeln("The planfiles are identical")
+	_ = data.Writeln("The planfiles are identical")
 	return nil
 }
 

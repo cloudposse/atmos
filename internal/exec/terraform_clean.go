@@ -306,7 +306,7 @@ func confirmDeletion() (bool, error) {
 	// In non-interactive environments (tests, CI/CD), we should require --force flag
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		log.Debug("Not a TTY, skipping interactive confirmation (use --force to bypass)")
-		return false, fmt.Errorf("interactive confirmation not available in non-TTY environment (use --force flag)")
+		return false, errUtils.ErrInteractiveNotAvailable
 	}
 
 	message := "Are you sure?"
@@ -542,7 +542,7 @@ func HandleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 			FilterComponents,
 			nil, nil, false, false, false, false, nil, nil)
 		if err != nil {
-			return fmt.Errorf("%w: %v", ErrDescribeStack, err)
+			return fmt.Errorf("%w: %w", ErrDescribeStack, err)
 		}
 		allComponentsRelativePaths = getAllStacksComponentsPaths(stacksMap)
 	}

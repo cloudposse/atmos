@@ -6,12 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -83,7 +83,7 @@ func ExecuteGeneratePlanfile(
 func ExecuteTerraformGeneratePlanfileCmd(_ interface{}, _ []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfileCmd")()
 
-	return errors.New("ExecuteTerraformGeneratePlanfileCmd is deprecated: use ExecuteGeneratePlanfile instead")
+	return errUtils.ErrDeprecatedCmdNotCallable
 }
 
 // ExecuteTerraformGeneratePlanfileOld executes `terraform generate planfile` command.

@@ -866,7 +866,7 @@ func AddStackCompletion(cmd *cobra.Command) {
 	if cmd.Flag("stack") == nil {
 		cmd.PersistentFlags().StringP("stack", "s", "", stackHint)
 	}
-	cmd.RegisterFlagCompletionFunc("stack", StackFlagCompletion)
+	_ = cmd.RegisterFlagCompletionFunc("stack", StackFlagCompletion)
 }
 
 // identityFlagCompletion provides shell completion for identity flags by fetching

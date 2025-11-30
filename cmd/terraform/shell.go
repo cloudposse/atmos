@@ -1,11 +1,10 @@
 package terraform
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -51,7 +50,7 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 
 		// Validate required flags
 		if stack == "" {
-			return fmt.Errorf("stack is required (use --stack or -s)")
+			return errUtils.ErrMissingStack
 		}
 
 		// Initialize Atmos configuration

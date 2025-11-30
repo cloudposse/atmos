@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -51,7 +52,7 @@ var backendsCmd = &cobra.Command{
 
 		// Validate format
 		if format != "" && format != "json" && format != "hcl" && format != "backend-config" {
-			return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'hcl', 'json', and 'backend-config'", format)
+			return fmt.Errorf("%w: '%s'. Valid values are 'hcl', 'json', and 'backend-config'", errUtils.ErrInvalidFlag, format)
 		}
 		if format == "" {
 			format = "hcl"

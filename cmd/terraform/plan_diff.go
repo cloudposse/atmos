@@ -1,8 +1,6 @@
 package terraform
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -55,10 +53,10 @@ Example usage:
 
 		// Validate required flags
 		if stack == "" {
-			return fmt.Errorf("stack is required (use --stack or -s)")
+			return errUtils.ErrMissingStack
 		}
 		if orig == "" {
-			return fmt.Errorf("original plan file is required (use --orig)")
+			return errUtils.ErrOriginalPlanFileRequired
 		}
 
 		// Initialize Atmos configuration
