@@ -190,6 +190,9 @@ endpoint: !terraform.output services '.endpoints["my-service"]["production"].url
 
 # Combine with stack templating
 token: !terraform.output identity {{ .stack }} '.tokens["github-actions"].value'
+
+# Escape single quotes by doubling them when needed inside the expression
+app_name: !terraform.output config '.apps["app''s-name"].display_name'
 ```
 
 **Quote escaping rules**
