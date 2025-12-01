@@ -48,6 +48,81 @@ The command does the following:
 Run `atmos terraform shell --help` to see all the available options
 :::
 
+## Configuration
+
+Configure shell behavior in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Auto-generate backend configuration
+    auto_generate_backend_file: true
+
+    # Run 'terraform init -reconfigure' when entering shell
+    init_run_reconfigure: true
+
+    # Enable workspace management
+    workspaces_enabled: true
+
+    # Customize the shell prompt using Go template syntax
+    shell:
+      prompt: "atmos [{{.Stack}}] {{.Component}} $ "
+```
+
+### Shell Prompt Customization
+
+The `shell.prompt` configuration supports Go template syntax with the following variables:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{{.Component}}` | The Atmos component name | `vpc`, `eks`, `database` |
+| `{{.Stack}}` | The Atmos stack name | `tenant1-ue2-dev`, `prod-us-west-2` |
+
+Shell-native format specifiers are preserved and will be expanded by your shell:
+- **Bash**: Escape sequences like `\u` (username), `\h` (hostname), `\w` (working directory), `\[` `\]` (color codes)
+- **Zsh**: Percent sequences like `%n` (username), `%m` (hostname), `%~` (directory), `%F{color}` (colors)
+
+**Example prompts:**
+
+```yaml
+# Basic: Show stack and component
+shell:
+  prompt: "atmos [{{.Stack}}] {{.Component}} $ "
+# Output: atmos [tenant1-ue2-dev] vpc $
+
+# Bash: With username and hostname
+shell:
+  prompt: '\u@\h [{{.Stack}}] {{.Component}} $ '
+# Output: erik@macbook [tenant1-ue2-dev] vpc $
+
+# Bash: With colors
+shell:
+  prompt: '\[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]{{.Stack}}\[\e[0m\] [{{.Component}}] \$ '
+# Output: (colored) erik@macbook:tenant1-ue2-dev [vpc] $
+
+# Zsh: With username and colors
+shell:
+  prompt: '%F{cyan}%n@%m%f:%F{blue}{{.Stack}}%f [{{.Component}}] %# '
+# Output: (colored) erik@macbook:tenant1-ue2-dev [vpc] %
+
+# Minimal
+shell:
+  prompt: "[{{.Component}}] $ "
+# Output: [vpc] $
+
+# Emoji
+shell:
+  prompt: "🚀 {{.Component}} @ {{.Stack}} $ "
+# Output: 🚀 vpc @ tenant1-ue2-dev $
+```
+
+These settings can also be controlled via environment variables:
+```shell
+export ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=true
+export ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=true
+export ATMOS_COMPONENTS_TERRAFORM_WORKSPACES_ENABLED=true
+```
+
 ## Examples
 
 ```shell

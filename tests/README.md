@@ -7,8 +7,13 @@ Smoke tests are implemented to verify the basic functionality and expected behav
 ## Quick Start
 
 ```bash
-# Run all tests (will skip if preconditions not met)
+# Run quick tests only (skip long-running tests >2s)
+go test -short ./...
+make test-short
+
+# Run all tests including long-running ones (will skip if preconditions not met)
 go test ./...
+make testacc
 
 # Run with verbose output to see skips
 go test -v ./...
@@ -16,9 +21,26 @@ go test -v ./...
 # Bypass all precondition checks
 export ATMOS_TEST_SKIP_PRECONDITION_CHECKS=true
 go test ./...
+```
 
-# Run tests with make
-make test
+## Short Mode
+
+Run quick tests only, skipping tests that take more than 2 seconds:
+
+```bash
+go test -short ./...
+make test-short
+```
+
+Long tests include:
+- Network I/O (vendor pulls, OCI registry)
+- Git operations (cloning, checkouts)
+- Heavy processing (Atlantis config generation)
+
+To run all tests including long ones:
+```bash
+go test ./...
+make testacc
 ```
 
 ## Understanding Test Skips
@@ -59,10 +81,11 @@ curl https://api.github.com/rate_limit
 ```
 
 ### Binary Tests
-Require atmos binary built in repository:
-```bash
-make build
-```
+Tests automatically build a temporary atmos binary for each test run:
+- When coverage is **disabled** (default): Builds a regular binary
+- When coverage is **enabled** (GOCOVERDIR set): Builds with coverage instrumentation
+
+This ensures tests always run with the latest code changes without requiring manual rebuilds.
 
 ### OCI Registry Tests
 Require GitHub token for pulling OCI images:
@@ -85,8 +108,9 @@ export ATMOS_GITHUB_TOKEN=<your-token>
 │   │   └── relative-paths/                          # Test configurations for relative imports
 │   └── schemas/                                     # Schemas used for JSON validation
 ├── snapshots/                                       # Golden snapshots (what we expect output to look like)
-│   ├── TestCLICommands.stderr.golden
-│   └── TestCLICommands_which_atmos.stdout.golden
+│   ├── TestCLICommands.stderr.golden                # stderr snapshot for non-TTY test
+│   ├── TestCLICommands_which_atmos.stdout.golden    # stdout snapshot for non-TTY test
+│   └── TestCLICommands_atmos_list.tty.golden        # Combined snapshot for TTY test
 └── test-cases/
     ├── complete.yaml
     ├── core.yaml
@@ -188,6 +212,57 @@ See [Testing Strategy PRD](../docs/prd/testing-strategy.md) for the complete des
 
 Our convention is to implement a test-case configuration file per scenario. Then place all smoke tests related to that scenario in the file.
 
+### Snapshot Files
+
+The test framework uses three types of snapshot files to capture expected output:
+
+#### 1. `.stdout.golden` - Standard Output (Non-TTY)
+Used when `tty: false`. Contains only stdout data (results meant for piping, JSON output, CSV data).
+
+**Example**: `TestCLICommands_atmos_list_components.stdout.golden`
+
+#### 2. `.stderr.golden` - Standard Error (Non-TTY)
+Used when `tty: false`. Contains only stderr data (UI messages, warnings, progress indicators).
+
+**Example**: `TestCLICommands_atmos_list_components.stderr.golden`
+
+#### 3. `.tty.golden` - TTY Output (Combined)
+Used when `tty: true`. Contains **both stdout and stderr merged** as they appear in a real terminal.
+
+**Example**: `TestCLICommands_atmos_list_components.tty.golden`
+
+#### Why Different Snapshot Types?
+
+**PTY/TTY Behavior**: When `tty: true`, the test uses a pseudo-terminal (PTY) that **merges stderr and stdout into a single stream**. This mimics how real terminals work - there's no separate "stderr screen" and "stdout screen". Everything appears on the same display.
+
+**Non-TTY Behavior**: When `tty: false`, the test uses standard pipes where stdout and stderr remain separate. This enables proper piping and redirection (e.g., `atmos list components | jq`).
+
+#### Example Test Configuration
+
+```yaml
+tests:
+  # TTY mode: single .tty.golden file
+  - name: atmos list instances
+    tty: true                         # Uses PTY (combines streams)
+    snapshot: true
+    # Creates: TestCLICommands_atmos_list_instances.tty.golden
+    # Contains: telemetry notices (stderr) + table output (stdout)
+
+  # Non-TTY mode: separate .stdout.golden and .stderr.golden files
+  - name: atmos list instances no tty
+    tty: false                        # Uses pipes (keeps streams separate)
+    snapshot: true
+    # Creates: TestCLICommands_atmos_list_instances_no_tty.stdout.golden
+    #          TestCLICommands_atmos_list_instances_no_tty.stderr.golden
+```
+
+#### Important Notes
+
+- **TTY tests** only create `.tty.golden` (no `.stdout.golden` or `.stderr.golden`)
+- **Non-TTY tests** create both `.stdout.golden` and `.stderr.golden` (no `.tty.golden`)
+- The snapshot type is automatically determined by the `tty:` flag in the test case
+- When regenerating snapshots, old files from the wrong type are **not** automatically deleted
+
 ### Environment Variables
 
 The tests will automatically set some environment variables:
@@ -224,6 +299,122 @@ After generating new golden snapshots, don't forget to add them.
 ```shell
 git add tests/snapshots/*
 ```
+
+### Line Ending Normalization
+
+Golden snapshots always use Unix line endings (LF: `\n`) regardless of the platform they're generated on. The test infrastructure automatically normalizes line endings to ensure cross-platform consistency:
+
+- **CRLF (`\r\n`)** is converted to **LF (`\n`)** when writing and comparing snapshots
+- **Standalone CR (`\r`)** characters are preserved for spinner and progress indicator output
+- This ensures developers on Windows, macOS, and Linux see consistent test results
+
+**What gets normalized:**
+- Windows line endings: `"line1\r\nline2\r\n"` → `"line1\nline2\n"`
+- Mixed endings: `"line1\r\nline2\n"` → `"line1\nline2\n"`
+
+**What stays the same:**
+- Unix line endings: `"line1\nline2\n"` → `"line1\nline2\n"` (unchanged)
+- Spinner output: `"Progress\rDone\r"` → `"Progress\rDone\r"` (preserved)
+
+This normalization happens automatically in:
+- `updateSnapshot()` - when writing snapshots
+- `readSnapshot()` - when reading snapshots
+- `verifySnapshot()` - when comparing actual output to snapshots
+
+See `tests/cli_snapshot_test.go` for comprehensive tests of this behavior.
+
+### Custom Output Sanitization
+
+The test framework automatically sanitizes test output to ensure consistent snapshots across different environments. Standard sanitization includes:
+
+- Repository absolute paths → `/absolute/path/to/repo/`
+- Request IDs → `<REDACTED>`
+- Timestamps → normalized values
+- PostHog tokens → `phc_TEST_TOKEN_PLACEHOLDER`
+- Temporary file paths → normalized paths
+
+For **test-specific sanitization** that doesn't need to be global, use the `sanitize` field in your test's `expect` section. This accepts a map of regex patterns to replacement strings.
+
+#### When to Use Custom Sanitization
+
+Use the `sanitize` field for one-off cases that are specific to individual tests:
+
+- Session IDs, request IDs, or transaction IDs that vary between runs
+- Build timestamps or version numbers in output
+- User-specific identifiers (emails, usernames)
+- Random tokens or UUIDs generated during test execution
+- Environment-specific values that don't fit global patterns
+
+**Don't use it for:**
+- Values that should be sanitized globally (add to `sanitizeOutput()` function instead)
+- Values that appear across many tests (add to standard sanitization)
+
+#### Example: Sanitizing Session IDs and Timestamps
+
+```yaml
+tests:
+  - name: deploy with session tracking
+    enabled: true
+    workdir: "fixtures/scenarios/complete/"
+    command: "atmos"
+    args: ["terraform", "plan", "component", "-s", "stack"]
+    snapshot: true
+    expect:
+      exit_code: 0
+      stdout:
+        - "Session session-12345 started"
+        - "Build build-2025-01-01-0000 deployed"
+      # Custom sanitization for this test only
+      sanitize:
+        "session-[0-9]+": "session-12345"              # Normalize session IDs
+        "build-\\d{4}-\\d{2}-\\d{2}-\\d+": "build-2025-01-01-0000"  # Normalize build IDs
+```
+
+#### Example: Sanitizing User-Specific Output
+
+```yaml
+tests:
+  - name: user authentication flow
+    enabled: true
+    workdir: "fixtures/scenarios/auth/"
+    command: "atmos"
+    args: ["auth", "login"]
+    snapshot: true
+    expect:
+      exit_code: 0
+      stdout:
+        - "User user@example.com logged in"
+        - "Token: token-REDACTED"
+      # Sanitize user-specific details
+      sanitize:
+        "[a-z.]+@[a-z.]+\\.[a-z]+": "user@example.com"  # Normalize email addresses
+        "token-[a-zA-Z0-9]+": "token-REDACTED"          # Redact tokens
+```
+
+#### How It Works
+
+1. **Standard sanitization runs first** - All global patterns (paths, request IDs, etc.) are applied
+2. **Custom sanitization runs second** - Your test-specific patterns are applied
+3. **Patterns are regular expressions** - Use Go regex syntax (see [regexp package](https://pkg.go.dev/regexp/syntax))
+4. **Invalid patterns cause test failures** - Helpful error messages indicate which pattern failed
+
+#### Tips for Regex Patterns
+
+- **Escape special characters**: Use `\\d` for digits, `\\s` for whitespace
+- **Use character classes**: `[0-9]+` for numbers, `[a-zA-Z]+` for letters
+- **Escape dollar signs in replacements**: Use `$$` to include a literal `$` in the replacement string
+- **Test your patterns**: Run tests with `-v` flag to see sanitization in action
+
+#### Debugging Sanitization
+
+If your snapshots aren't matching, check:
+
+1. Run test with `-v` to see actual vs expected output
+2. Verify your regex pattern is correct (test at [regex101.com](https://regex101.com/))
+3. Check if pattern is already handled by standard sanitization
+4. Regenerate snapshot: `go test ./tests -run 'TestName' -regenerate-snapshots`
+
+See `tests/cli_sanitize_test.go` for comprehensive examples of sanitization patterns.
 
 ### Example Configuration
 
@@ -264,4 +455,7 @@ tests:
       stderr:                                 # Expected output to stderr;
         - "^$"                                # Expect no output
       exit_code: 0                            # Expected exit code
+      sanitize:                               # Optional: Custom sanitization rules (pattern -> replacement)
+        "session-[0-9]+": "session-12345"    # Replace session IDs with fixed value
+        "temp_[a-z0-9]+": "temp_xyz"          # Replace temp identifiers
 ```

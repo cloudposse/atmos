@@ -1,11 +1,14 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -18,12 +21,14 @@ func ExecutePackerOutput(
 	info *schema.ConfigAndStacksInfo,
 	packerFlags *PackerFlags,
 ) (any, error) {
+	defer perf.Track(nil, "exec.ExecutePackerOutput")()
+
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return nil, err
 	}
 
-	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil)
+	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +80,7 @@ func ExecutePackerOutput(
 
 	manifestContent, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrReadFile, err)
+		return nil, errors.Join(errUtils.ErrReadFile, err)
 	}
 
 	data, err := u.ConvertFromJSON(string(manifestContent))

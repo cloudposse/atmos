@@ -4,19 +4,35 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/charmbracelet/log"
-
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // processTagTerraformState processes `!terraform.state` YAML tag.
+//
+//nolint:unparam // stackInfo is used via processTagTerraformStateWithContext
 func processTagTerraformState(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	currentStack string,
+	stackInfo *schema.ConfigAndStacksInfo,
 ) any {
+	return processTagTerraformStateWithContext(atmosConfig, input, currentStack, nil, stackInfo)
+}
+
+// processTagTerraformStateWithContext processes `!terraform.state` YAML tag with cycle detection.
+func processTagTerraformStateWithContext(
+	atmosConfig *schema.AtmosConfiguration,
+	input string,
+	currentStack string,
+	resolutionCtx *ResolutionContext,
+	stackInfo *schema.ConfigAndStacksInfo,
+) any {
+	defer perf.Track(atmosConfig, "exec.processTagTerraformStateWithContext")()
+
 	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformState)
@@ -52,7 +68,33 @@ func processTagTerraformState(
 		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
-	value, err := GetTerraformState(atmosConfig, input, stack, component, output, false)
+	// Check for circular dependencies if resolution context is provided.
+	if resolutionCtx != nil {
+		node := DependencyNode{
+			Component:    component,
+			Stack:        stack,
+			FunctionType: "terraform.state",
+			FunctionCall: input,
+		}
+
+		// Check and record this dependency.
+		if err := resolutionCtx.Push(atmosConfig, node); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+
+		// Defer pop to ensure we clean up even if there's an error.
+		defer resolutionCtx.Pop(atmosConfig)
+	}
+
+	// Extract authContext and authManager from stackInfo if available.
+	var authContext *schema.AuthContext
+	var authManager any
+	if stackInfo != nil {
+		authContext = stackInfo.AuthContext
+		authManager = stackInfo.AuthManager
+	}
+
+	value, err := stateGetter.GetState(atmosConfig, input, stack, component, output, false, authContext, authManager)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 	return value
 }

@@ -24,6 +24,10 @@ Execute the `atmos describe component` command like this:
 atmos describe component <component> -s <stack>
 ```
 
+:::info YAML Functions and Authentication
+By default, `atmos describe component` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during component processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
+:::
+
 :::tip
 Run `atmos describe component --help` to see all the available options
 :::
@@ -58,6 +62,18 @@ atmos describe component vpc -s plat-ue2-prod --query .vars.tags
 atmos describe component vpc -s plat-ue2-prod -q .settings
 
 atmos describe component vpc -s plat-ue2-prod --pager=more
+
+atmos describe component vpc -s tenant1-ue2-dev --provenance
+
+# Authenticate before describing (when YAML functions require credentials)
+atmos describe component vpc -s tenant1-ue2-dev --identity my-aws-identity
+
+atmos describe component vpc -s tenant1-ue2-dev --identity # Interactive selection
+
+# Disable authentication (use AWS SDK defaults)
+atmos describe component vpc -s tenant1-ue2-dev --identity=false
+
+atmos describe component vpc -s tenant1-ue2-dev -i my-aws-identity
 ```
 
 ## Arguments
@@ -91,8 +107,37 @@ atmos describe component vpc -s plat-ue2-prod --pager=more
   <dt>`--query` / `-q` <em>(optional)</em></dt>
   <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe component <c> -s <stack> --query .vars.tags`<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
 
+  <dt>`--provenance` <em>(optional)</em></dt>
+  <dd>
+    Enable provenance tracking to show where configuration values originated.
+    <br/><br/>
+    <strong>YAML format on TTY:</strong>
+    <ul>
+      <li>Inline comments with file path, line number, and column</li>
+      <li>Symbol-based inheritance indicators: ● (defined/overridden), ○ (inherited), ∴ (computed/templated)</li>
+      <li>Depth tracking with <code>[N]</code> notation: <code>[1]</code> for parent stack, <code>[2+]</code> for deeper imports</li>
+      <li>Color-coded depth indicators: cyan (depth 1), green (depth 2), orange (depth 3), red (depth 4+)</li>
+      <li>Two-column side-by-side layout (Configuration │ Provenance)</li>
+    </ul>
+    <strong>YAML format non-TTY (pipes):</strong>
+    <ul>
+      <li>Inline comments without color codes</li>
+      <li>Single-column layout (preserves valid YAML)</li>
+    </ul>
+    <strong>JSON format:</strong>
+    <ul>
+      <li>Provenance embedded as <code>__atmos_provenance</code> metadata fields</li>
+      <li>Structure: <code>{'{"file": "path", "line": N, "column": N, "type": "import|inline|override|computed", "depth": N}'}</code></li>
+      <li>No inline comments (JSON doesn't support comments)</li>
+    </ul>
+    <code>atmos describe component &lt;c&gt; -s &lt;stack&gt; --provenance</code>
+  </dd>
+
   <dt>`--pager` <em>(optional)</em></dt>
   <dd>Disable/Enable the paging user experience.</dd>
+
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before describing the component.<br/>This is required when YAML template functions (e.g., `!terraform.state`, `!terraform.output`)<br/>need to access remote resources requiring authentication.<br/>Use without a value for interactive identity selection:<br/>`atmos describe component <c> -s <stack> --identity` (interactive)<br/>`atmos describe component <c> -s <stack> --identity my-aws-identity` (specific identity)<br/><br/>For more details, refer to [Authentication](/cli/commands/auth/usage).</dd>
 </dl>
 
 ## Output

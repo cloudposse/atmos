@@ -3,15 +3,19 @@ package exec
 import (
 	"errors"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteHelmfileGenerateVarfileCmd executes `helmfile generate varfile` command
+// ExecuteHelmfileGenerateVarfileCmd executes `helmfile generate varfile` command.
 func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteHelmfileGenerateVarfileCmd")()
+
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `component`")
 	}
@@ -40,7 +44,7 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 		return err
 	}
 
-	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil)
+	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil, nil)
 	if err != nil {
 		return err
 	}

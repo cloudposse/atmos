@@ -1,0 +1,22 @@
+# atmos.yaml for hierarchical-imports test scenario
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}-{environment}-{region}"
+
+logs:
+  level: Info
+
+schemas:
+  atmos:
+    manifest: "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"

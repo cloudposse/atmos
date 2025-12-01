@@ -26,6 +26,7 @@ workflows:
           echo "This should fail"
           exit 1
         type: shell
+
   shell-command-not-found:
     description: |
       Run a shell command that doesn't exist.
@@ -51,3 +52,10 @@ workflows:
     stack: prod
     steps:
       - command: terraform plan idontexist
+
+  shell-with-path:
+    description: |
+      Run a shell command that requires PATH to be set.
+    steps:
+      - command: env | grep PATH
+        type: shell

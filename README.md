@@ -154,6 +154,32 @@ Find all documentation at: [atmos.tools](https://atmos.tools)
 
 
 
+## Developer Tools
+
+### Testing Atmos in Geodesic
+
+The `scripts/test-geodesic-prebuilt.sh` script allows you to quickly test Atmos changes inside a Geodesic container without rebuilding the entire Geodesic image.
+
+**Usage:**
+```bash
+./scripts/test-geodesic-prebuilt.sh <path-to-infrastructure>
+```
+
+**Example:**
+```bash
+./scripts/test-geodesic-prebuilt.sh ~/Dev/cloudposse/infra/infra-live
+```
+
+**What it does:**
+1. Builds Atmos for Linux (cross-compiles if needed for your architecture)
+2. Launches a Geodesic container with:
+   - The pre-built Atmos binary mounted to `/usr/local/bin/atmos`
+   - Your infrastructure directory mounted to `/workspace`
+   - Atmos-managed AWS credentials from `~/.config/atmos/` (following XDG conventions)
+   - Standard XDG environment variables configured
+
+This workflow is much faster than rebuilding Geodesic images during development and allows you to iterate quickly on Atmos changes while testing in a realistic containerized environment.
+
 ## ✨ Contributing
 
 This project is under active development, and we encourage contributions from our community.

@@ -3,7 +3,7 @@ package exec
 import (
 	"sync"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hairyhenderson/gomplate/v3/data"
 )
 

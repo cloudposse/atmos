@@ -3,11 +3,11 @@ package cmd
 import (
 	"errors"
 
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // ValidateSchemaCmd represents the 'atmos validate schema' command.
@@ -59,12 +59,12 @@ and are compliant with expected formats, reducing configuration drift and runtim
 
 		if key == "" && schema != "" {
 			log.Error("key not provided for the schema to be used")
-			u.OsExit(1)
+			errUtils.OsExit(1)
 		}
 
 		if err := exec.NewAtmosValidatorExecutor(&atmosConfig).ExecuteAtmosValidateSchemaCmd(key, schema); err != nil {
 			if errors.Is(err, exec.ErrInvalidYAML) {
-				u.OsExit(1)
+				errUtils.OsExit(1)
 			}
 			return err
 		}

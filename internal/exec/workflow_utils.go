@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,13 +10,16 @@ import (
 	"sort"
 	"strings"
 
-	log "github.com/charmbracelet/log"
-	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/validation"
 	"github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -44,7 +48,15 @@ var (
 )
 
 // IsKnownWorkflowError returns true if the error matches any known workflow error.
+// This includes ExitCodeError which indicates a subcommand failure that's already been reported.
 func IsKnownWorkflowError(err error) bool {
+	// Check if it's an ExitCodeError - these are already reported by the subcommand
+	var exitCodeErr errUtils.ExitCodeError
+	if errors.As(err, &exitCodeErr) {
+		return true
+	}
+
+	// Check known workflow errors
 	for _, knownErr := range KnownWorkflowErrors {
 		if errors.Is(err, knownErr) {
 			return true
@@ -62,7 +74,10 @@ func ExecuteWorkflow(
 	dryRun bool,
 	commandLineStack string,
 	fromStep string,
+	commandLineIdentity string,
 ) error {
+	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflow")()
+
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
@@ -103,9 +118,39 @@ func ExecuteWorkflow(
 		}
 	}
 
+	// Create auth manager if any step has an identity or if command-line identity is specified.
+	// We check once upfront to avoid repeated initialization.
+	var authManager auth.AuthManager
+	var authStackInfo *schema.ConfigAndStacksInfo
+	needsAuth := commandLineIdentity != "" || lo.SomeBy(steps, func(step schema.WorkflowStep) bool {
+		return strings.TrimSpace(step.Identity) != ""
+	})
+	if needsAuth {
+		// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
+		// This enables YAML template functions to access authenticated credentials.
+		authStackInfo = &schema.ConfigAndStacksInfo{
+			AuthContext: &schema.AuthContext{},
+		}
+
+		credStore := credentials.NewCredentialStore()
+		validator := validation.NewValidator()
+		var err error
+		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
+		if err != nil {
+			return fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
+		}
+	}
+
 	for stepIdx, step := range steps {
 		command := strings.TrimSpace(step.Command)
 		commandType := strings.TrimSpace(step.Type)
+		stepIdentity := strings.TrimSpace(step.Identity)
+
+		// If step doesn't specify identity, use command-line identity (if provided).
+		if stepIdentity == "" && commandLineIdentity != "" {
+			stepIdentity = commandLineIdentity
+		}
+
 		finalStack := ""
 
 		log.Debug("Executing workflow step", "step", stepIdx, "name", step.Name, "command", command)
@@ -114,10 +159,48 @@ func ExecuteWorkflow(
 			commandType = "atmos"
 		}
 
+		// Prepare environment variables if identity is specified for this step.
+		var stepEnv []string
+		if stepIdentity != "" {
+			if authManager == nil {
+				return fmt.Errorf("identity %q specified for step %q but auth manager is not initialized", stepIdentity, step.Name)
+			}
+
+			ctx := context.Background()
+
+			// Try to use cached credentials first (passive check, no prompts).
+			// Only authenticate if cached credentials are not available or expired.
+			_, err := authManager.GetCachedCredentials(ctx, stepIdentity)
+			if err != nil {
+				log.Debug("No valid cached credentials found, authenticating", "identity", stepIdentity, "error", err)
+				// No valid cached credentials - perform full authentication.
+				_, err = authManager.Authenticate(ctx, stepIdentity)
+				if err != nil {
+					// Check for user cancellation - return clean error without wrapping.
+					if errors.Is(err, errUtils.ErrUserAborted) {
+						return errUtils.ErrUserAborted
+					}
+					return fmt.Errorf("%w for identity %q in step %q: %w", errUtils.ErrAuthenticationFailed, stepIdentity, step.Name, err)
+				}
+			}
+
+			// Prepare shell environment with authentication credentials.
+			// Start with current OS environment and let PrepareShellEnvironment configure auth.
+			stepEnv, err = authManager.PrepareShellEnvironment(ctx, stepIdentity, os.Environ())
+			if err != nil {
+				return fmt.Errorf("failed to prepare shell environment for identity %q in step %q: %w", stepIdentity, step.Name, err)
+			}
+
+			log.Debug("Prepared environment with identity", "identity", stepIdentity, "step", step.Name)
+		} else {
+			// No identity specified, use empty environment (subprocess inherits from parent).
+			stepEnv = []string{}
+		}
+
 		var err error
 		if commandType == "shell" {
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = ExecuteShell(command, commandName, ".", []string{}, dryRun)
+			err = ExecuteShell(command, commandName, ".", stepEnv, dryRun)
 		} else if commandType == "atmos" {
 			args := strings.Fields(command)
 
@@ -154,7 +237,7 @@ func ExecuteWorkflow(
 			u.PrintfMessageToTUI("Executing command: `atmos %s`\n", command)
 			err = retry.With7Params(context.Background(), step.Retry,
 				ExecuteShellCommand,
-				atmosConfig, "atmos", args, ".", []string{}, dryRun, "")
+				atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
 		} else {
 			errUtils.CheckErrorAndPrint(
 				ErrInvalidWorkflowStepType,
@@ -201,7 +284,11 @@ func ExecuteWorkflow(
 				WorkflowErrTitle,
 				fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```", failedCmd, resumeCommand),
 			)
-			return ErrWorkflowStepFailed
+			// Return joined error to preserve classification and exit-code unwrapping.
+			// Returning only the underlying err drops ErrWorkflowStepFailed from the error chain,
+			// which can hinder classification and checks. Join both so callers can use
+			// errors.Is(err, ErrWorkflowStepFailed) and still unwrap ExitCodeError for proper exit codes.
+			return errors.Join(ErrWorkflowStepFailed, err)
 		}
 	}
 
@@ -221,12 +308,14 @@ func FormatList(items []string) string {
 func ExecuteDescribeWorkflows(
 	atmosConfig schema.AtmosConfiguration,
 ) ([]schema.DescribeWorkflowsItem, map[string][]string, map[string]schema.WorkflowManifest, error) {
+	defer perf.Track(&atmosConfig, "exec.ExecuteDescribeWorkflows")()
+
 	listResult := []schema.DescribeWorkflowsItem{}
 	mapResult := make(map[string][]string)
 	allResult := make(map[string]schema.WorkflowManifest)
 
 	if atmosConfig.Workflows.BasePath == "" {
-		return nil, nil, nil, errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
+		return nil, nil, nil, errUtils.ErrWorkflowBasePathNotConfigured
 	}
 
 	// If `workflows.base_path` is a relative path, join it with `stacks.base_path`
@@ -320,6 +409,8 @@ func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefini
 }
 
 func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, string, error) {
+	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflowUI")()
+
 	_, _, allWorkflows, err := ExecuteDescribeWorkflows(atmosConfig)
 	if err != nil {
 		return "", "", "", err

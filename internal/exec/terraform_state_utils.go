@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"sync"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -23,6 +26,8 @@ var terraformStateCache = sync.Map{}
 //   - component: Component identifier
 //   - output: Output variable key to retrieve
 //   - skipCache: Flag to bypass cache lookup
+//   - authContext: Optional auth context containing Atmos-managed credentials
+//   - authManager: Optional auth manager for nested operations that need authentication
 //
 // Returns the output value or nil if the component is not provisioned.
 func GetTerraformState(
@@ -32,7 +37,11 @@ func GetTerraformState(
 	component string,
 	output string,
 	skipCache bool,
+	authContext *schema.AuthContext,
+	authManager any,
 ) (any, error) {
+	defer perf.Track(atmosConfig, "exec.GetTerraformState")()
+
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
 	// If the result for the component in the stack already exists in the cache, return it.
@@ -54,7 +63,39 @@ func GetTerraformState(
 		}
 	}
 
-	componentSections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
+	// Cast authManager from 'any' to auth.AuthManager if provided.
+	var parentAuthMgr auth.AuthManager
+	if authManager != nil {
+		var ok bool
+		parentAuthMgr, ok = authManager.(auth.AuthManager)
+		if !ok {
+			return nil, fmt.Errorf("%w: expected auth.AuthManager", errUtils.ErrInvalidAuthManagerType)
+		}
+	}
+
+	// Resolve AuthManager for this nested component.
+	// Checks if component has auth config defined:
+	//   - If yes: creates component-specific AuthManager with merged auth config
+	//   - If no: uses parent AuthManager (inherits authentication)
+	// This enables each nested level to optionally override auth settings.
+	resolvedAuthMgr, err := resolveAuthManagerForNestedComponent(atmosConfig, component, stack, parentAuthMgr)
+	if err != nil {
+		log.Debug("Auth does not exist for nested component, using parent AuthManager",
+			"component", component,
+			"stack", stack,
+			"error", err,
+		)
+		resolvedAuthMgr = parentAuthMgr
+	}
+
+	componentSections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          resolvedAuthMgr, // Use resolved AuthManager (may be component-specific or inherited)
+	})
 	if err != nil {
 		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		return nil, er
@@ -68,12 +109,19 @@ func GetTerraformState(
 	if remoteStateBackendStaticTypeOutputs != nil {
 		// Cache the result
 		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		result := GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		result, exists, err := GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
+		if err != nil {
+			return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
+		}
+		if !exists {
+			return nil, fmt.Errorf("%w: output `%s` does not exist for component `%s` in stack `%s`\nin YAML function: `%s`", errUtils.ErrReadTerraformState, output, component, stack, yamlFunc)
+		}
+		// result may be nil if the output is legitimately null
 		return result, nil
 	}
 
 	// Read Terraform backend.
-	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections)
+	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, authContext)
 	if err != nil {
 		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		return nil, er

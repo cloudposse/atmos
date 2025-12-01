@@ -3,15 +3,19 @@ package exec
 import (
 	"errors"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteTerraformGenerateVarfileCmd executes `terraform generate varfile` command
+// ExecuteTerraformGenerateVarfileCmd executes `terraform generate varfile` command.
 func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfileCmd")()
+
 	if len(args) != 1 {
 		return errors.New("invalid arguments. The command requires one argument `component`")
 	}
@@ -55,7 +59,7 @@ func ExecuteTerraformGenerateVarfileCmd(cmd *cobra.Command, args []string) error
 		return err
 	}
 
-	info, err = ProcessStacks(&atmosConfig, info, true, processTemplates, processYamlFunctions, skip)
+	info, err = ProcessStacks(&atmosConfig, info, true, processTemplates, processYamlFunctions, skip, nil)
 	if err != nil {
 		return err
 	}

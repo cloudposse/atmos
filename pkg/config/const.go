@@ -8,6 +8,15 @@ const (
 	SystemDirConfigFilePath = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar    = "LOCALAPPDATA"
 
+	// Config file names for local configuration detection.
+	AtmosConfigFileName    = "atmos.yaml"
+	DotAtmosConfigFileName = ".atmos.yaml"
+
+	// Config directory names for local configuration detection.
+	AtmosConfigDirName            = ".atmos"
+	AtmosDefaultImportsDirName    = "atmos.d"
+	DotAtmosDefaultImportsDirName = ".atmos.d"
+
 	// GlobalOptionsFlag is a custom flag to specify helmfile `GLOBAL OPTIONS`
 	// https://github.com/roboll/helmfile#cli-reference
 	GlobalOptionsFlag = "--global-options"
@@ -72,11 +81,15 @@ const (
 	PackerSectionName                 = "packer"
 	PackerTemplateSectionName         = "template"
 	WorkspaceSectionName              = "workspace"
+	AuthSectionName                   = "auth"
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"
-	TerraformCliVarsSectionName       = "tf_cli_vars"
+	ProcessEnvSectionName             = "process_env"
 	CliArgsSectionName                = "cli_args"
+	TerraformCliVarsSectionName       = "tf_cli_vars"
+	TerraformCliArgsEnvSectionName    = "env_tf_cli_args"
+	TerraformCliVarsEnvSectionName    = "env_tf_cli_vars"
 	ComponentTypeSectionName          = "component_type"
 	OutputsSectionName                = "outputs"
 	StaticSectionName                 = "static"
@@ -86,6 +99,8 @@ const (
 	BackendTypeGCS                    = "gcs"
 	BackendTypeCloud                  = "cloud"
 	ComponentPathSectionName          = "component_path"
+	InheritsSectionName               = "inherits"
+	AbstractSectionName               = "abstract"
 
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
@@ -114,4 +129,22 @@ const (
 
 	ComponentStr = "component"
 	StackStr     = "stack"
+
+	// Auth flags.
+	IdentityFlagName          = "identity" // Flag name without prefix.
+	IdentityFlag              = "--identity"
+	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
+	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
+
+	// Performance profiling flags.
+	ProfilerEnabledFlag = "--profiler-enabled"
+	ProfilerHostFlag    = "--profiler-host"
+	ProfilerPortFlag    = "--profiler-port"
+	ProfilerFileFlag    = "--profiler-file"
+	ProfilerTypeFlag    = "--profiler-type"
+	HeatmapFlag         = "--heatmap"
+	HeatmapModeFlag     = "--heatmap-mode"
+
+	// AtmosProfileFlag is the CLI flag for specifying Atmos profiles.
+	AtmosProfileFlag = "--profile"
 )

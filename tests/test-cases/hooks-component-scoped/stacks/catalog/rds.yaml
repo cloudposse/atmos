@@ -1,0 +1,18 @@
+# RDS component catalog entry
+components:
+  terraform:
+    rds:
+      metadata:
+        component: rds
+      vars:
+        name: "rds"
+      hooks:
+        rds-store-outputs:
+          events:
+            - after-terraform-apply
+          command: store
+          name: prod/ssm
+          outputs:
+            cluster_endpoint: .cluster_endpoint
+            cluster_id: .cluster_id
+            database_name: .database_name

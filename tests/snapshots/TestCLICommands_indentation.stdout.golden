@@ -1,68 +1,70 @@
 base_path: ./
 components:
-  terraform:
-    base_path: components/terraform
-    apply_auto_approve: false
-    append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
-    deploy_run_init: true
-    init_run_reconfigure: true
-    auto_generate_backend_file: false
-    command: ""
-    shell:
-      prompt: ""
-    init:
-      pass_vars: false
-    plan:
-      skip_planfile: false
-  helmfile:
-    base_path: ""
-    use_eks: true
-    kubeconfig_path: ""
-    helm_aws_profile_pattern: ""
-    cluster_name_pattern: ""
-    command: ""
-  packer:
-    base_path: ""
-    command: ""
+    terraform:
+        base_path: components/terraform
+        apply_auto_approve: false
+        append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
+        deploy_run_init: true
+        init_run_reconfigure: true
+        auto_generate_backend_file: false
+        command: ""
+        shell:
+            prompt: ""
+        init:
+            pass_vars: false
+        plan:
+            skip_planfile: false
+    helmfile:
+        base_path: ""
+        use_eks: true
+        kubeconfig_path: ""
+        helm_aws_profile_pattern: ""
+        cluster_name_pattern: ""
+        command: ""
+    packer:
+        base_path: ""
+        command: ""
 stacks:
-  base_path: stacks
-  included_paths:
-    - deploy/**/*
-  excluded_paths: []
-  name_pattern: '{stage}'
-  name_template: ""
+    base_path: stacks
+    included_paths:
+        - deploy/**/*
+    excluded_paths: []
+    name_pattern: '{stage}'
+    name_template: ""
 logs:
-  file: /dev/stderr
-  level: Info
+    file: /dev/stderr
+    level: Info
 settings:
-  list_merge_strategy: ""
-  terminal:
-    max_width: 0
-    pager: more
-    unicode: false
-    syntax_highlighting:
-      enabled: false
-      lexer: ""
-      formatter: ""
-      theme: ""
-      line_numbers: false
-      wrap: false
-    color: true
-    no_color: false
-    tab_width: 4
-  inject_github_token: true
-  pro:
-    base_url: https://atmos-pro.com
-    endpoint: api/v1
-  telemetry:
-    enabled: true
-    endpoint: https://us.i.posthog.com
-    token: phc_TEST_TOKEN_PLACEHOLDER
-    logging: false
+    list_merge_strategy: ""
+    terminal:
+        max_width: 0
+        pager: more
+        unicode: false
+        syntax_highlighting:
+            enabled: false
+            lexer: ""
+            formatter: ""
+            theme: ""
+            line_numbers: false
+            wrap: false
+        color: true
+        no_color: false
+        tab_width: 4
+    inject_github_token: true
+    inject_bitbucket_token: true
+    inject_gitlab_token: true
+    pro:
+        base_url: https://atmos-pro.com
+        endpoint: api/v1
+    telemetry:
+        enabled: true
+        endpoint: https://us.i.posthog.com
+        token: phc_TEST_TOKEN_PLACEHOLDER
+        logging: false
 initialized: true
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation/stacks
 includeStackAbsolutePaths:
-  - /absolute/path/to/repo/tests/fixtures/scenarios/indentation/stacks/deploy/**/*
+    - /absolute/path/to/repo/tests/fixtures/scenarios/indentation/stacks/deploy/**/*
 terraformDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation/components/terraform
 helmfileDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 packerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
@@ -70,9 +72,9 @@ default: false
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 import: []
 docs:
-  max-width: 0
-  pagination: false
-  generate:
-    readme:
-      output: ./README.md
+    max-width: 0
+    pagination: false
+    generate:
+        readme:
+            output: ./README.md
 

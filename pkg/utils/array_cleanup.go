@@ -102,45 +102,57 @@ func RebuildArrayFromIndexedKeys(m map[string]interface{}) map[string]interface{
 	result := make(map[string]interface{})
 	arrayBuilders := make(map[string]map[int]interface{})
 
-	// Process all keys
+	// Process all keys.
 	for key, value := range m {
-		if baseField, index, isIndexed := GetArrayBaseFieldName(key); isIndexed {
-			// This is an indexed key
-			if _, hasArray := m[baseField]; !hasArray {
-				// No array exists, collect indexed values
-				if arrayBuilders[baseField] == nil {
-					arrayBuilders[baseField] = make(map[int]interface{})
-				}
-				arrayBuilders[baseField][index] = CleanupArrayIndexKeys(value)
-			} else {
-				// Array exists, skip indexed key
-				continue
-			}
-		} else {
-			// Regular key, clean and copy
+		baseField, index, isIndexed := GetArrayBaseFieldName(key)
+		if !isIndexed {
+			// Regular key, clean and copy.
 			result[key] = CleanupArrayIndexKeys(value)
-		}
-	}
-
-	// Rebuild arrays from collected indexed values
-	for baseField, indexedValues := range arrayBuilders {
-		// Find the maximum index
-		maxIndex := -1
-		for index := range indexedValues {
-			if index > maxIndex {
-				maxIndex = index
-			}
+			continue
 		}
 
-		// Build the array
-		if maxIndex >= 0 {
-			array := make([]interface{}, maxIndex+1)
-			for index, value := range indexedValues {
-				array[index] = value
-			}
-			result[baseField] = array
+		// This is an indexed key.
+		if _, hasArray := m[baseField]; hasArray {
+			// Array exists, skip indexed key.
+			continue
 		}
+
+		// No array exists, collect indexed values.
+		if arrayBuilders[baseField] == nil {
+			arrayBuilders[baseField] = make(map[int]interface{})
+		}
+		arrayBuilders[baseField][index] = CleanupArrayIndexKeys(value)
 	}
+
+	// Rebuild arrays from collected indexed values.
+	rebuildArrays(result, arrayBuilders)
 
 	return result
+}
+
+// rebuildArrays constructs arrays from indexed value maps and adds them to the result.
+func rebuildArrays(result map[string]interface{}, arrayBuilders map[string]map[int]interface{}) {
+	for baseField, indexedValues := range arrayBuilders {
+		maxIndex := findMaxIndex(indexedValues)
+		if maxIndex < 0 {
+			continue
+		}
+
+		array := make([]interface{}, maxIndex+1)
+		for index, value := range indexedValues {
+			array[index] = value
+		}
+		result[baseField] = array
+	}
+}
+
+// findMaxIndex returns the maximum index in the map, or -1 if empty.
+func findMaxIndex(indexedValues map[int]interface{}) int {
+	maxIndex := -1
+	for index := range indexedValues {
+		if index > maxIndex {
+			maxIndex = index
+		}
+	}
+	return maxIndex
 }

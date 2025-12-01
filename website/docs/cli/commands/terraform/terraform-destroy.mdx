@@ -1,0 +1,133 @@
+---
+title: atmos terraform destroy
+sidebar_label: destroy
+sidebar_class_name: command
+id: destroy
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to destroy Terraform-managed infrastructure for an Atmos component in a stack. This operation removes all resources managed by the component.
+</Intro>
+
+<Screengrab title="atmos terraform destroy --help" slug="atmos-terraform-destroy--help" />
+
+## Usage
+
+Execute the `terraform destroy` command like this:
+
+```shell
+atmos terraform destroy <component> -s <stack> [options]
+```
+
+This command creates a plan to destroy all resources managed by the given configuration and state, and then applies that plan.
+
+:::info Atmos Enhancements
+Atmos enhances the destroy command with:
+- Automatic `terraform init` before destroying
+- Workspace selection and management
+- **Automatic variable file generation and passing**
+- Backend configuration
+- Component validation and locking support
+:::
+## Examples
+
+### Basic Destroy
+
+```shell
+# Destroy a component in a stack (will prompt for confirmation)
+atmos terraform destroy vpc -s dev
+```
+
+### Auto-Approve Destroy
+
+```shell
+# Destroy without confirmation prompt (use with caution!)
+atmos terraform destroy vpc -s dev -auto-approve
+```
+
+### Targeted Destroy
+
+```shell
+# Destroy specific resources only
+atmos terraform destroy vpc -s dev -target=aws_instance.web
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform destroy vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform destroy vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+<dl>
+    <dt>`-auto-approve`</dt>
+    <dd>
+        Skip interactive approval before destroying.
+
+        ```shell
+        atmos terraform destroy vpc -s dev -auto-approve
+        ```
+
+        :::warning
+        Use `-auto-approve` with extreme caution, especially in production environments.
+        :::
+    </dd>
+
+    <dt>`-target=RESOURCE`</dt>
+    <dd>
+        Destroy only the specified resource. Can be used multiple times.
+
+        ```shell
+        atmos terraform destroy vpc -s dev -target=aws_instance.web -target=aws_instance.db
+        ```
+    </dd>
+
+    <dt>`-parallelism=N`</dt>
+    <dd>
+        Limit the number of concurrent operations (default: 10).
+
+        ```shell
+        atmos terraform destroy vpc -s dev -parallelism=5
+        ```
+    </dd>
+</dl>
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

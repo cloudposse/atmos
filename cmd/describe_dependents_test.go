@@ -1,22 +1,36 @@
 package cmd
 
 import (
-	"os"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestDescribeDependents(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Reset Viper to clear any environment variable bindings from previous tests.
+	// This prevents ATMOS_IDENTITY or IDENTITY env vars from interfering with the test.
+	viper.Reset()
+
+	// Clear identity environment variables to prevent Viper from reading them.
+	// In CI, these might be set and cause auth validation to fail when no auth is configured.
+	t.Setenv("ATMOS_IDENTITY", "")
+	t.Setenv("IDENTITY", "")
+
 	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	describeDependentsMock := exec.NewMockDescribeDependentsExec(ctrl)
 	describeDependentsMock.EXPECT().Execute(gomock.Any()).Return(nil)
+
 	run := getRunnableDescribeDependentsCmd(func(opts ...AtmosValidateOption) {},
 		func(componentType string, cmd *cobra.Command, args, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 			return schema.ConfigAndStacksInfo{}, nil
@@ -27,10 +41,17 @@ func TestDescribeDependents(t *testing.T) {
 		func(atmosConfig *schema.AtmosConfiguration) exec.DescribeDependentsExec {
 			return describeDependentsMock
 		})
-	run(describeDependentsCmd, []string{"component"})
+
+	err := run(describeDependentsCmd, []string{"component"})
+
+	// Verify command executed without errors. The mock expectations verify
+	// that Execute() was called with the correct arguments.
+	assert.NoError(t, err, "describeDependentsCmd should execute without error")
 }
 
 func TestSetFlagInDescribeDependents(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Initialize test cases
 	tests := []struct {
 		name        string
@@ -71,6 +92,8 @@ func TestSetFlagInDescribeDependents(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
 			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
 			fs.StringP("format", "f", "yaml", "Specify the output format (`yaml` is default)")
 			fs.StringP("output", "o", "list", "Specify the output type (`list` is default)")
@@ -89,20 +112,13 @@ func TestSetFlagInDescribeDependents(t *testing.T) {
 }
 
 func TestDescribeDependentsCmd_Error(t *testing.T) {
+	_ = NewTestKit(t)
+
 	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
 
-	err := os.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err = os.Setenv("ATMOS_BASE_PATH", stacksPath)
-	assert.NoError(t, err, "Setting 'ATMOS_BASE_PATH' environment variable should execute without error")
-
-	// Unset ENV variables after testing
-	defer func() {
-		os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-		os.Unsetenv("ATMOS_BASE_PATH")
-	}()
-
-	err = describeDependentsCmd.RunE(describeDependentsCmd, []string{"invalid-component"})
+	err := describeDependentsCmd.RunE(describeDependentsCmd, []string{"invalid-component"})
 	assert.Error(t, err, "describe dependents command should return an error when called with invalid component")
 }

@@ -10,10 +10,18 @@ components:
     vpc:
       metadata:
         component: mock
+      vars:
+        # Add !env function to detect if this stack is being processed
+        env_test_vpc_uw2: '!env ATMOS_TEST_VPC_UW2'
 
     tgw/attachment:
       metadata:
         component: mock
+        # Disable the component so it doesn't get included in the affected and dependent lists
+        enabled: false
+      vars:
+        # Add !env function to detect if this stack is being processed
+        env_test_tgw_attachment_uw2: '!env ATMOS_TEST_TGW_ATTACHMENT_UW2'
       settings:
         depends_on:
           1:
@@ -29,6 +37,9 @@ components:
         component: mock
         # Lock the component so it doesn't get included in the affected list
         locked: true
+      vars:
+        # Add !env function to detect if this stack is being processed
+        env_test_tgw_cross_region_uw2: '!env ATMOS_TEST_TGW_CROSS_REGION_UW2'
       settings:
         depends_on:
           1:

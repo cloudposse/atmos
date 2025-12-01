@@ -1,0 +1,56 @@
+---
+slug: disable-identity-authentication
+title: Disable Identity Authentication with --identity=false
+authors:
+  - osterman
+tags:
+  - feature
+release: v1.198.0
+---
+
+You can now disable Atmos identity authentication by setting `--identity=false`, allowing you to use cloud provider SDK credential resolution instead.
+
+<!--truncate-->
+
+## What Changed
+
+The `--identity` flag now accepts `false` as a value to skip Atmos authentication entirely. When disabled, Atmos falls back to standard cloud provider SDK credential resolution.
+
+## Why This Matters
+
+CI/CD environments often use their own authentication mechanisms (like GitHub Actions OIDC). Previously, you had to use workarounds like `yq` commands to remove auth configuration or maintain separate config files. Now you can simply disable Atmos authentication when needed.
+
+## How to Use It
+
+```bash
+# Via CLI flag
+atmos terraform plan mycomponent --stack=dev --identity=false
+
+# Via environment variable
+export ATMOS_IDENTITY=false
+atmos terraform plan mycomponent --stack=dev
+```
+
+## Example: GitHub Actions
+
+```yaml
+- name: Configure AWS credentials via OIDC
+  uses: aws-actions/configure-aws-credentials@v4
+  with:
+    role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsRole
+    aws-region: us-east-1
+
+- name: Deploy with Atmos
+  env:
+    ATMOS_IDENTITY: false
+  run: atmos terraform apply mycomponent --stack=prod
+```
+
+## Accepted Values
+
+All of these disable authentication: `false`, `0`, `no`, `off` (case-insensitive)
+
+## Get Involved
+
+- [GitHub Pull Request](https://github.com/cloudposse/atmos/pull/1765)
+- Share your feedback in the [Atmos Community Slack](https://cloudposse.com/slack)

@@ -1,0 +1,14 @@
+# RDS component using DRY pattern - only defines outputs
+components:
+  terraform:
+    rds-dry:
+      metadata:
+        component: rds
+      vars:
+        name: "rds-dry"
+      hooks:
+        store-outputs:
+          outputs:
+            cluster_endpoint: .cluster_endpoint
+            cluster_id: .cluster_id
+            database_name: .database_name

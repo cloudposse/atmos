@@ -1,0 +1,13 @@
+# VPC component using DRY pattern - only defines outputs
+components:
+  terraform:
+    vpc-dry:
+      metadata:
+        component: vpc
+      vars:
+        name: "vpc-dry"
+      hooks:
+        store-outputs:
+          outputs:
+            vpc_id: .vpc_id
+            vpc_cidr_block: .vpc_cidr_block

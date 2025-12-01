@@ -1,0 +1,10 @@
+# This is an example of another YAML file that might be in the same directory
+# This could potentially confuse the vendor pull process
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: vendor-test-config
+  description: Test configuration
+spec:
+  imports: []
+  sources: []

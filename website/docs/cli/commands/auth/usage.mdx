@@ -1,0 +1,1163 @@
+---
+title: atmos auth
+sidebar_label: auth
+sidebar_class_name: command
+description: Atmos Authentication Commands
+---
+
+import DocCardList from '@theme/DocCardList';
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos Auth gives you a single, consistent way to authenticate with multiple cloud providers. It supports SAML, SSO, OIDC, GitHub Actions, and static user identities. By consolidating these flows into one system, you no longer need to juggle separate tools or browser plugins, just to try to login. And because it’s built into Atmos, it works seamlessly with stacks, components, workflows, shells, and even custom commands.
+</Intro>
+
+## Usage
+
+<Screengrab title="atmos auth --help" slug="atmos-auth--help" />
+
+## Examples
+
+```shell
+# Validate configuration
+atmos auth validate
+
+# Authenticate with the default identity
+atmos auth login
+
+# Authenticate with a specific identity
+atmos auth login --identity admin
+
+# Print environment variables in JSON
+atmos auth env --format json
+
+# Execute a command with authentication context
+atmos auth exec -- terraform plan
+
+# Show current authentication status
+atmos auth whoami
+```
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    Specify the identity to use for authentication. Can be:
+    <ul>
+      <li>An identity name (e.g., <code>--identity admin</code>)</li>
+      <li>Empty for interactive selection (e.g., <code>--identity</code>)</li>
+      <li><code>false</code> to disable authentication (e.g., <code>--identity=false</code>)</li>
+    </ul>
+    When set to <code>false</code>, Atmos skips identity authentication and uses standard AWS credential resolution.
+  </dd>
+</dl>
+
+## Subcommands
+
+<DocCardList/>
+
+
+## Overview
+
+Atmos Auth provides a unified authentication system for cloud providers, supporting complex identity chaining and credential management. This guide will help you get started with configuring and using Atmos Auth for your infrastructure projects.
+
+## Quick Start
+
+### 1. Basic Configuration
+
+Add authentication configuration to your `atmos.yaml`:
+
+```yaml
+auth:
+  # Configure logging
+  ## Optional, defaults to Atmos log level
+  logs:
+    level: Info
+
+  providers:
+    my-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://mycompany.awsapps.com/start
+
+      # Optional: Enable auto-provisioning of identities
+      auto_provision_identities: true  # Automatically discover and provision permission sets
+
+      # Optional: Configure session durations
+      session:
+        duration: 1h  # Credential lifetime for auth shell/env/exec
+
+      console:
+        session_duration: 12h  # Web console session duration (max 12h for AWS)
+
+  identities:
+    admin:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: my-sso
+      principal:
+        name: AdminAccess
+        account:
+          name: production
+```
+
+Notes:
+
+- Region is required for the GitHub OIDC provider and is validated at construction time.
+- **Auto-provisioning** (`auto_provision_identities: true`) is supported for AWS SSO providers. When enabled, Atmos automatically discovers all available permission sets during authentication and makes them available as identities. See [Auto-Provisioning](#auto-provisioning-identities) below.
+
+### 2. Validate Configuration
+
+```bash
+atmos auth validate
+```
+
+### 3. Authenticate
+
+```bash
+# Use default identity
+atmos auth login
+
+# Use specific identity
+atmos auth login --identity admin
+```
+
+### 4. Check Authentication Status
+
+```bash
+atmos auth whoami
+```
+
+### 5. Use with Terraform
+
+```bash
+# Atmos automatically handles authentication
+atmos terraform plan mycomponent -s dev
+```
+
+## Authentication Concepts
+
+### Providers
+
+**Providers** are the upstream systems that Atmos Auth uses to obtain initial credentials:
+
+- **AWS SSO**: `aws/iam-identity-center`
+- **AWS SAML**: `aws/saml`
+- **GitHub OIDC**: `github/oidc`
+
+### Identities
+
+**Identities** represent the user accounts or roles available from provider credentials, such as:
+
+- **AWS Permission Set**: `aws/permission-set`
+- **AWS Assume Role**: `aws/assume-role`
+- **AWS User**: `aws/user`
+
+### Identity Chaining
+
+Identity chaining (often called *role chaining*) is when one identity is used to obtain another, forming a sequence of temporary credentials.
+
+For example, you might:
+1. Start with an SSO login to obtain base credentials.
+2. Use those credentials to assume a cross-account role.
+3. Optionally, chain again into another role with more limited or specialized permissions.
+
+This allows you to:
+- Access multiple accounts or environments without long-lived keys.
+- Follow least-privilege practices by escalating only as needed.
+- Automate complex authentication flows while still relying on short-lived credentials.
+
+
+You can chain identities to create complex authentication flows like this:
+
+```yaml
+identities:
+  # Base permission set from SSO
+  base-admin:
+    kind: aws/permission-set
+    via:
+      provider: my-sso
+    principal:
+      name: AdminAccess
+      account:
+        name: core-identity
+
+  # Cross-account role using base permissions
+  prod-admin:
+    kind: aws/assume-role
+    via:
+      identity: base-admin # Chain through another identity
+    principal:
+      assume_role: arn:aws:iam::999999999999:role/ProductionAdmin
+      session_name: atmos-prod-access
+```
+
+## Auto-Provisioning Identities
+
+Auto-provisioning automatically discovers and configures identities from your authentication provider, eliminating manual configuration. This feature is currently supported for AWS SSO (IAM Identity Center).
+
+### Overview
+
+When you enable `auto_provision_identities: true` on a provider, Atmos automatically:
+
+1. **Discovers available resources** during authentication (accounts, permission sets, roles)
+2. **Provisions identities** for each discovered resource
+3. **Writes configuration** to `~/.cache/atmos/auth/{provider}/provisioned-identities.yaml`
+4. **Auto-imports** provisioned identities during config loading
+
+Provisioned identities work alongside manual identities. Your manual configuration takes precedence over provisioned configuration.
+
+### Benefits
+
+- **Zero configuration** for new team members - authenticate once and all roles are available
+- **Always up-to-date** - new accounts and roles appear automatically after re-authentication
+- **No hardcoding** - identity names are discovered from your AWS environment
+- **Time savings** - from 10+ minutes to &lt;2 minutes for first authentication
+
+### AWS SSO Example
+
+Enable auto-provisioning for AWS SSO:
+
+```yaml
+auth:
+  providers:
+    sso-prod:
+      kind: aws/iam-identity-center
+      start_url: https://my-org.awsapps.com/start
+      region: us-east-1
+      auto_provision_identities: true  # Enable auto-provisioning
+```
+
+Authenticate to trigger provisioning:
+
+```bash
+atmos auth login --provider sso-prod
+# ✓ Provisioned 47 identities across 12 accounts (2.3s)
+```
+
+View all available identities (manual + provisioned):
+
+```bash
+atmos auth list
+# Authentication Configuration
+# └──sso-prod (aws/iam-identity-center)
+#    └──Identities
+#       ├──● production/AdministratorAccess (sso-prod) 11h58m
+#       ├──● production/PowerUserAccess (sso-prod) 11h58m
+#       ├──● staging/AdministratorAccess (sso-prod) 11h58m
+#       └──... (44 more)
+```
+
+Use any provisioned identity:
+
+```bash
+atmos terraform plan --identity production/AdministratorAccess
+atmos terraform plan --identity staging/PowerUserAccess
+atmos terraform plan --identity dev/ReadOnly
+```
+
+### Identity Naming Convention
+
+Provisioned identities use the naming convention:
+
+```
+{account-name}/{permission-set-name}
+```
+
+Examples:
+- `production/AdministratorAccess`
+- `staging/PowerUserAccess`
+- `dev-us-east-1/ReadOnly`
+
+### Manual Override and Deep Merge
+
+Provisioned identities can be enhanced or overridden in your `atmos.yaml`. Atmos performs **deep merge** of manual configuration with auto-provisioned identities, preserving all fields from both sources:
+
+```yaml
+auth:
+  providers:
+    sso-prod:
+      kind: aws/iam-identity-center
+      start_url: https://my-org.awsapps.com/start
+      region: us-east-1
+      auto_provision_identities: true
+
+  identities:
+    # Enhance provisioned identity with additional fields
+    production/AdministratorAccess:
+      default: true        # Mark as default (merged with auto-provisioned fields)
+      session:
+        duration: 12h      # Extend from default 1h
+```
+
+**Deep Merge Behavior:**
+
+When you manually configure an identity that was also auto-provisioned:
+- **All auto-provisioned fields are preserved** (`provider`, `kind`, `via`, `principal`, etc.)
+- **Manual fields are added or override** specific nested values
+- **Result**: Combined identity with fields from both sources
+
+**Example:**
+
+Auto-provisioned identity:
+```yaml
+production/AdministratorAccess:
+  provider: sso-prod
+  kind: aws/permission-set
+  via:
+    provider: sso-prod
+  principal:
+    name: AdministratorAccess
+    account:
+      name: production
+      id: "123456789012"
+```
+
+Your manual override:
+```yaml
+production/AdministratorAccess:
+  default: true
+  session:
+    duration: 12h
+```
+
+Final merged identity:
+```yaml
+production/AdministratorAccess:
+  provider: sso-prod           # ✅ From auto-provisioning
+  kind: aws/permission-set     # ✅ From auto-provisioning
+  default: true                # ✅ From manual config
+  via:                         # ✅ From auto-provisioning
+    provider: sso-prod
+  principal:                   # ✅ From auto-provisioning
+    name: AdministratorAccess
+    account:
+      name: production
+      id: "123456789012"
+  session:                     # ✅ From manual config
+    duration: 12h
+```
+
+This deep merge allows you to:
+- **Mark provisioned identities as default** without losing auto-discovered metadata
+- **Customize session durations** while keeping all provider/principal information
+- **Add custom fields** (aliases, tags, metadata) without manual duplication
+
+### Cache Management
+
+Provisioned identities are cached following [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html):
+
+```
+$XDG_CACHE_HOME/atmos/auth/{provider-name}/provisioned-identities.yaml
+```
+
+By default, this resolves to `~/.cache/atmos/auth/` on Linux/macOS and `%LOCALAPPDATA%\cache\atmos\auth\` on Windows.
+
+To force re-provisioning:
+
+```bash
+# Logout to clear cache
+atmos auth logout --provider sso-prod
+
+# Re-authenticate
+atmos auth login --provider sso-prod
+```
+
+### How It Works
+
+**Phase 1: Authentication & Provisioning**
+1. User authenticates with `atmos auth login --provider {provider}`
+2. Provider calls AWS SSO `ListAccounts` API
+3. For each account, calls `ListAccountRoles` API
+4. Creates identity for each permission set
+5. Writes to cache: `~/.cache/atmos/auth/{provider}/provisioned-identities.yaml`
+
+**Phase 2: Config Loading**
+1. Config loader automatically discovers provisioned identity files
+2. Provisioned files are imported BEFORE manual configuration
+3. Manual imports process after (allowing overrides)
+4. All identities are available for use
+
+### Supported Providers
+
+Currently supported:
+- **AWS IAM Identity Center (SSO)**: Uses `ListAccounts` and `ListAccountRoles` APIs
+
+Planned support:
+- Okta
+- Azure AD
+- Google Workspace
+
+### Troubleshooting
+
+**Provisioned identities not appearing:**
+1. Verify `auto_provision_identities: true` is set
+2. Check cache exists: `ls ~/.cache/atmos/auth/{provider}/`
+3. Re-authenticate: `atmos auth login --provider {provider}`
+4. Enable debug logging: `atmos auth login --provider {provider} --log-level debug`
+
+**Provisioning fails but authentication succeeds:**
+This is expected behavior. Provisioning is non-fatal—if it fails, authentication still succeeds and you can use manually configured identities.
+
+## Configuration Examples
+
+### AWS SSO with Permission Sets
+
+AWS Permission Set identities assume roles via AWS IAM Identity Center (SSO). The `account` field specifies which AWS account contains the permission set.
+
+**Account Specification Options:**
+
+You can specify the account using either:
+
+- `account.name` - Account name/alias (resolved via SSO ListAccounts API)
+- `account.id` - Numeric account ID (used directly, no lookup required)
+
+**Using account names is recommended** as it's more readable and maintainable. Account names match the account names/aliases configured in AWS Organizations.
+
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start
+
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: company-sso
+      principal:
+        name: AdminAccess
+        account:
+          name: development
+          # OR use account ID directly:
+          # id: "123456789012"
+
+    prod-readonly:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: ReadOnlyAccess
+        account:
+          name: production
+```
+
+### AWS SAML Authentication
+
+:::note
+The `aws/saml` provider requires the next identity to be of kind `aws/assume-role`. This is because the `assume_role` is the chosen role to sign into after the SAML authentication.
+:::
+
+```yaml
+auth:
+  providers:
+    okta-saml:
+      kind: aws/saml
+      region: us-east-1
+      url: https://company.okta.com/app/amazon_aws/abc123/sso/saml
+      idp_arn: arn:aws:iam::123456789012:saml-provider/okta-saml
+      # Optional: Specify SAML driver (Browser, GoogleApps, Okta, ADFS).
+      # Note: provider_type is deprecated; use driver instead.
+      # If not specified, Atmos automatically selects the best driver based on:
+      # 1. Browser (if Playwright drivers are installed)
+      # 2. Provider-specific fallback (GoogleApps for Google, Okta for Okta, ADFS for ADFS)
+      # 3. Browser with auto-download
+      driver: Browser
+
+  identities:
+    saml-admin:
+      kind: aws/assume-role
+      default: true
+      via:
+        provider: okta-saml
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/AdminRole
+```
+
+#### SAML Driver Options
+
+The `driver` field controls how Atmos authenticates with your SAML identity provider:
+
+- **`Browser`** (recommended): Opens your system browser for authentication. Requires Playwright drivers to be installed or enables auto-download when supported.
+  ```bash
+  # Install Playwright drivers
+  go run github.com/playwright-community/playwright-go/cmd/playwright@latest install
+  ```
+
+- **`GoogleApps`**: Uses Google Apps SAML API (no browser needed)
+- **`Okta`**: Uses Okta SAML API (no browser needed)
+- **`ADFS`**: Uses Active Directory Federation Services API (no browser needed)
+
+If `driver` is not specified, Atmos automatically selects the best option based on your SAML URL and available drivers.
+
+### GitHub Actions OIDC
+
+```yaml
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      region: us-east-1 # Required
+      spec:
+        audience: sts.us-east-1.amazonaws.com
+
+  identities:
+    github-deploy:
+      kind: aws/assume-role
+      default: true
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
+```
+
+### AWS User (Break-glass)
+
+AWS User identities support static IAM user credentials with optional multi-factor authentication (MFA).
+
+#### Basic Configuration
+
+```yaml
+auth:
+  identities:
+    emergency-user:
+      kind: aws/user
+      credentials:
+        access_key_id: !env EMERGENCY_AWS_ACCESS_KEY_ID
+        secret_access_key: !env EMERGENCY_AWS_SECRET_ACCESS_KEY
+        region: us-east-1
+```
+
+Alternatively, store credentials in the system keychain:
+
+```yaml
+auth:
+  identities:
+    emergency-user:
+      kind: aws/user
+      credentials:
+        region: us-east-1
+```
+
+Then run `atmos auth user configure` to configure the credentials on the keychain. See [user configure](/cli/commands/auth/auth-user-configure) for details.
+
+#### Multi-Factor Authentication (MFA) for AWS
+
+AWS User identities support MFA devices for enhanced security. When an MFA device ARN is configured, Atmos will prompt for a time-based one-time password (TOTP) during authentication.
+
+:::note
+This section describes MFA implementation for AWS IAM users. Other cloud providers will have their own MFA implementations in future releases.
+:::
+
+**Configuration with MFA:**
+
+```yaml
+auth:
+  identities:
+    emergency-user:
+      kind: aws/user
+      credentials:
+        access_key_id: !env EMERGENCY_AWS_ACCESS_KEY_ID
+        secret_access_key: !env EMERGENCY_AWS_SECRET_ACCESS_KEY
+        mfa_arn: arn:aws:iam::123456789012:mfa/username
+        region: us-east-1
+```
+
+The `mfa_arn` can be specified in several ways:
+
+```yaml
+# Direct ARN (suitable for shared team configurations)
+mfa_arn: arn:aws:iam::123456789012:mfa/username
+
+# Environment variable reference (suitable for personal configurations)
+mfa_arn: !env AWS_MFA_ARN
+
+# Stored in keychain (via atmos auth user configure)
+# The mfa_arn field can be omitted from YAML if stored in keychain
+```
+
+**Finding Your MFA Device ARN:**
+
+1. Log into AWS Console
+2. Navigate to IAM → Users → [Your Username]
+3. Click the "Security credentials" tab
+4. Find "Assigned MFA device" section
+5. Copy the ARN (format: `arn:aws:iam::ACCOUNT_ID:mfa/USERNAME`)
+
+**Authentication Flow with MFA:**
+
+When you authenticate with an MFA-enabled identity:
+
+```bash
+$ atmos auth login --identity emergency-user
+╭─────────────────────────────────────────────────────╮
+│ Enter MFA Token                                     │
+├─────────────────────────────────────────────────────┤
+│ MFA Device: arn:aws:iam::123456789012:mfa/user     │
+│                                                     │
+│ ┌──────────────────────────────────────────────┐   │
+│ │ 123456                                       │   │
+│ └──────────────────────────────────────────────┘   │
+╰─────────────────────────────────────────────────────╯
+```
+
+Atmos will:
+1. Read your long-lived credentials (access key + secret)
+2. Prompt for a 6-digit TOTP code from your authenticator app
+3. Call AWS STS `GetSessionToken` with MFA device ARN and TOTP code
+4. Store temporary session credentials (valid for configured duration, default: 12h)
+5. Use session credentials for subsequent AWS API calls
+
+**Security Notes:**
+
+- **MFA Device ARN is not a secret** - It's safe to store in YAML configuration files
+- **TOTP codes are never stored** - You must enter them each time you authenticate
+- **Session tokens are cached** - Valid for 12 hours by default (configurable up to 36h with MFA), avoiding repeated MFA prompts
+- **Long-lived credentials remain secure** - Stored in OS keychain, not in plain text
+
+**When to Use MFA:**
+
+- Compliance requirements mandate MFA for privileged access
+- Break-glass/emergency access accounts requiring extra security
+- Production environment access
+- Any scenario where you want defense-in-depth authentication
+
+**Troubleshooting:**
+
+- **"MFA token must be 6 digits"** - Ensure you're entering exactly 6 digits from your authenticator app
+- **"Invalid MFA token"** - Check that your device's clock is synchronized (TOTP is time-based)
+- **"MFA device not found"** - Verify the MFA ARN matches your AWS IAM configuration
+- **Repeated MFA prompts** - Session tokens expire after the configured duration (default: 12h); re-authentication is required
+
+## CLI Commands
+
+### Authentication Commands
+
+```bash
+# Validate auth configuration
+atmos auth validate
+atmos auth validate --verbose
+
+# Login (authenticate and cache credentials)
+atmos auth login
+atmos auth login --identity prod-admin
+
+# Check current authentication status
+atmos auth whoami
+atmos auth whoami --identity dev-admin
+
+# Get environment variables
+atmos auth env
+atmos auth env --identity prod-admin --format bash
+atmos auth env --format json
+atmos auth env --format dotenv
+
+# Execute command with authentication
+atmos auth exec --identity prod-admin -- aws sts get-caller-identity
+atmos auth exec -- terraform plan
+
+# Configure AWS user credentials
+atmos auth user configure
+```
+
+## Component-Level Configuration
+
+Override authentication settings for specific components:
+
+```yaml
+# In your component configuration
+components:
+  terraform:
+    myapp:
+      auth:
+        identities:
+          custom-role:
+            kind: aws/assume-role
+            via:
+              provider: my-sso
+            principal:
+              assume_role: arn:aws:iam::123456789012:role/MyAppRole
+```
+
+## Environment Variable Formats
+
+### Bash Format
+
+```bash
+atmos auth env --format bash
+# Output:
+export AWS_ACCESS_KEY_ID="AKIA..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_SESSION_TOKEN="..."
+```
+
+### JSON Format
+
+```bash
+atmos auth env --format json
+# Output:
+{
+  "AWS_ACCESS_KEY_ID": "AKIA...",
+  "AWS_SECRET_ACCESS_KEY": "...",
+  "AWS_SESSION_TOKEN": "..."
+}
+```
+
+### Dotenv Format
+
+```bash
+atmos auth env --format dotenv
+# Output:
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
+AWS_SESSION_TOKEN=...
+```
+
+## Default Identity Handling
+
+A **default identity** is the one Atmos Auth will use automatically when no specific identity is requested.
+
+- If you configure a single identity and mark it as `default: true`, Atmos will always use it without requiring you to pass `--identity`.
+- If multiple identities are defined, you can still mark one as default, but you’ll need to explicitly choose another when you don’t want the default.
+- If no default is set and multiple identities exist, Atmos will require you to specify which identity to use.
+
+This makes workflows simpler because you can avoid passing extra flags for the identity you use most often.
+
+### Single Default
+
+When you have one default identity, it's used automatically:
+
+```yaml
+identities:
+  admin:
+    kind: aws/permission-set
+    default: true # This will be used by default
+```
+
+### Multiple Defaults
+
+When multiple defaults exist, Atmos behavior depends on the environment:
+
+**Interactive Mode**: Prompts you to choose
+
+```bash
+$ atmos auth whoami
+? Multiple default identities found. Please choose one:
+  ▸ dev-admin
+    prod-admin
+    staging-admin
+```
+
+### No Defaults
+
+**Interactive Mode**: Shows all available identities
+
+```bash
+$ atmos auth whoami
+? No default identity configured. Please choose an identity:
+  ▸ dev-admin
+    prod-admin
+    staging-admin
+```
+
+## Disabling Identity Authentication
+
+In some scenarios (e.g., CI/CD environments), you may want to **explicitly disable** Atmos-managed identity authentication and use standard AWS credential resolution instead.
+
+### When to Disable Authentication
+
+- **CI/CD pipelines** using GitHub Actions OIDC or other native cloud provider authentication
+- **Development environments** where you want to use local AWS profiles temporarily
+- **Testing scenarios** where you want to bypass Atmos authentication
+- **Mixed environments** where some contexts use Atmos auth and others don't
+
+### How to Disable
+
+You can disable identity authentication by setting the `--identity` flag to `false` (or equivalent boolean false values):
+
+```bash
+# Disable via CLI flag
+atmos terraform plan mycomponent --stack=dev --identity=false
+
+# Disable via environment variable
+export ATMOS_IDENTITY=false
+atmos terraform plan mycomponent --stack=dev
+```
+
+### Supported Disable Values
+
+The following values are recognized as "disable authentication":
+
+- `false`, `False`, `FALSE` (case-insensitive)
+- `0` (zero)
+- `no`, `No`, `NO` (case-insensitive)
+- `off`, `Off`, `OFF` (case-insensitive)
+
+### Behavior When Disabled
+
+When authentication is disabled:
+
+1. **Atmos skips all identity authentication** - No providers are initialized, no identities are loaded
+2. **Uses standard credential resolution** - Falls back to cloud provider SDK defaults (e.g., for AWS: environment variables, shared credentials file, instance metadata, web identity tokens)
+3. **No configuration required** - Works even when `atmos.yaml` has identity configurations
+
+### GitHub Actions Example
+
+```yaml
+name: Deploy Infrastructure
+on: [push]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsRole
+          aws-region: us-east-1
+
+      - name: Deploy with Atmos (using GitHub OIDC credentials)
+        env:
+          ATMOS_IDENTITY: false  # Disable Atmos auth, use GitHub-provided credentials
+        run: |
+          atmos terraform apply mycomponent --stack=prod
+```
+
+### Local Development Example
+
+```bash
+# Use your personal cloud provider profile temporarily (e.g., AWS profile)
+export AWS_PROFILE=my-personal-profile
+atmos terraform plan mycomponent --stack=dev --identity=false
+
+# Or inline
+AWS_PROFILE=my-personal-profile atmos terraform plan mycomponent --stack=dev --identity=false
+```
+
+### Precedence
+
+When both Atmos identity and `--identity=false` are configured:
+
+1. `--identity=false` flag (highest priority)
+2. `ATMOS_IDENTITY=false` environment variable
+3. Default identity from `atmos.yaml`
+
+The disable flag **always takes precedence**, even over configured default identities.
+
+## Credential Storage
+
+Atmos supports three keyring backends for storing authentication credentials, selectable via configuration:
+
+### System Keyring (Default)
+
+Uses your operating system's native secure credential storage:
+
+- **macOS**: Keychain
+- **Linux**: Secret Service (GNOME Keyring, KDE Wallet)
+- **Windows**: Windows Credential Manager
+
+```yaml
+# atmos.yaml (optional - this is the default)
+auth:
+  keyring:
+    type: system
+```
+
+**Best for**: Personal workstations with OS-level security integration
+
+### File Keyring
+
+AES-256 encrypted file-based storage with interactive password prompting:
+
+```yaml
+# atmos.yaml
+auth:
+  keyring:
+    type: file
+    spec:
+      path: ~/.atmos/keyring  # Optional: custom path
+      password_env: ATMOS_KEYRING_PASSWORD  # Optional: env var name
+```
+
+**Best for**: Shared environments, servers, or CI/CD pipelines
+
+**Default storage location**:
+- Follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
+- Default: `$XDG_DATA_HOME/atmos/keyring` (typically `~/.local/share/atmos/keyring` on Linux/Unix and macOS)
+- Can be overridden via `ATMOS_XDG_DATA_HOME` or `XDG_DATA_HOME` environment variables
+- Custom path can be specified via `spec.path` configuration
+
+**Password resolution order**:
+1. Environment variable (`ATMOS_KEYRING_PASSWORD` or custom from `password_env`)
+2. Interactive prompt (if TTY available)
+3. Error if neither available
+
+```bash
+# Interactive mode - prompts for password
+atmos auth login --identity prod-admin
+
+# Automation mode - password from environment
+export ATMOS_KEYRING_PASSWORD="my-secure-password"
+atmos auth login --identity prod-admin
+
+# Custom XDG data directory
+export ATMOS_XDG_DATA_HOME=/custom/data
+atmos auth login --identity prod-admin
+```
+
+### Memory Keyring
+
+In-memory storage with no persistence (credentials lost on exit):
+
+```yaml
+# atmos.yaml
+auth:
+  keyring:
+    type: memory
+```
+
+**Best for**: Unit tests, integration tests, and temporary credential caching
+
+**Note**: Can also be set via `ATMOS_KEYRING_TYPE` environment variable
+
+### Credential Expiration
+
+- Credentials are automatically refreshed when expired
+- You can check expiration with `atmos auth whoami`
+- Manual refresh: `atmos auth login --identity <name>`
+
+## AWS File Management
+
+Atmos manages AWS credential files separately from your personal AWS configuration, following the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html).
+
+This design avoids common problems:
+
+1. **No risk of overwriting personal config**: Atmos never modifies `~/.aws/credentials` or `~/.aws/config`. This prevents accidental overrides of credentials you manage yourself and keeps your personal AWS setup intact.
+
+2. **Provider isolation**: Each provider's credentials live under the Atmos namespace (e.g., `~/.config/atmos/aws/<provider>/` on Linux), making it safe and easy to switch between SSO, SAML, OIDC, or static identities without conflicts.
+
+3. **Seamless SDK integration**: Under the hood, Atmos sets the standard AWS SDK environment variables (`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`) so tools that already rely on the AWS SDK (like Terraform, AWS CLI, CDK) just work without extra setup.
+
+4. **Project convenience**: Since all configuration lives under Atmos, every project is self-contained. You don't have to share custom AWS config steps with teammates, and you can cleanly delete all credentials or config associated with a profile at any time.
+
+5. **XDG compliance**: Atmos follows platform conventions, storing credentials in standard locations that respect `$XDG_CONFIG_HOME` and `$ATMOS_XDG_CONFIG_HOME` environment variables.
+
+This makes authentication more secure, more portable across projects, and less error-prone in day-to-day development.
+
+### File Locations
+
+Atmos-managed AWS credentials are stored following the XDG Base Directory Specification:
+
+**Linux:**
+- Credentials: `~/.config/atmos/aws/<provider>/credentials`
+- Config: `~/.config/atmos/aws/<provider>/config`
+
+**macOS:**
+- Credentials: `~/.config/atmos/aws/<provider>/credentials`
+- Config: `~/.config/atmos/aws/<provider>/config`
+
+**Windows:**
+- Credentials: `%APPDATA%\atmos\aws\<provider>\credentials`
+- Config: `%APPDATA%\atmos\aws\<provider>\config`
+
+**Custom Locations:**
+
+You can override the default location using environment variables:
+
+```bash
+# Override for Atmos only
+export ATMOS_XDG_CONFIG_HOME=/custom/path
+
+# Override for all XDG-compliant tools
+export XDG_CONFIG_HOME=/custom/path
+```
+
+Or configure per-provider in `atmos.yaml`:
+
+```yaml
+auth:
+  providers:
+    my-sso:
+      kind: aws/iam-identity-center
+      # ... other config ...
+      spec:
+        files:
+          base_path: /custom/path/aws
+```
+
+### Environment Variables
+
+- Your files remain untouched
+- Your existing `~/.aws/credentials` and `~/.aws/config` are never modified
+- Atmos uses separate files to avoid conflicts
+- Standard AWS environment variables are set to point to Atmos-managed files
+
+## Troubleshooting
+
+### Common Issues
+
+**Configuration Validation Errors**
+
+```bash
+atmos auth validate --verbose
+```
+
+**Authentication Failures**
+
+```bash
+# Check current status
+atmos auth whoami
+
+# Re-authenticate
+atmos auth login --identity <name>
+
+# Check with verbose output
+atmos auth login --identity <name> --verbose
+```
+
+**Permission Errors**
+
+```bash
+# Verify identity configuration
+atmos auth validate
+
+# Check assumed role/permissions
+atmos auth exec --identity <name> -- aws sts get-caller-identity
+```
+
+**Environment Variable Issues**
+
+```bash
+# Check what variables are set
+atmos auth env --identity <name>
+
+# Test environment
+atmos auth exec --identity <name> -- env | grep AWS
+```
+
+### Debug Mode
+
+Enable debug logging for detailed troubleshooting:
+
+```bash
+# Verbose CLI output
+atmos auth validate --verbose
+atmos auth login --identity <name> --verbose
+
+# Set log level explicitly
+ATMOS_LOG_LEVEL=Debug atmos auth whoami
+```
+
+### Logs Configuration
+
+Configure logging in `atmos.yaml`:
+
+```yaml
+auth:
+  logs:
+    level: Debug # Debug, Info, Warn, Error
+    file: /tmp/atmos-auth.log
+```
+
+## Workflows Integration
+
+Use Atmos Auth in workflows:
+
+```yaml
+# atmos.yaml workflows section
+workflows:
+  deploy:
+    description: Deploy with authentication
+    steps:
+      - name: validate-auth
+        command: atmos auth validate
+      - name: deploy-dev
+        command: atmos terraform apply myapp -s dev
+        identity: dev-admin
+      - name: deploy-prod
+        command: atmos terraform apply myapp -s prod
+        identity: prod-admin
+```
+
+## CI/CD Integration
+
+### GitHub Actions
+
+```yaml
+- name: Configure AWS credentials
+  run: |
+    # Atmos handles authentication automatically in CI
+    atmos auth whoami
+
+- name: Deploy infrastructure
+  run: |
+    atmos terraform apply myapp -s prod
+```
+
+### GitLab CI
+
+```yaml
+deploy:
+  script:
+    - atmos auth validate
+    - atmos terraform apply myapp -s prod
+```
+
+## Security Best Practices
+
+### Credential Management
+
+- Never commit credentials to version control
+- Use environment variables for sensitive data: `!env VAR_NAME`
+- Regularly rotate credentials
+- Use least-privilege access
+
+### Session Duration
+
+Configure session durations based on your security requirements:
+
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      session:
+        duration: "8h"  # Balance security and usability
+
+  identities:
+    prod-admin:
+      kind: aws/user
+      session:
+        duration: "1h"  # Shorter for high-security environments
+```
+
+**Supported formats**: Integers (seconds), Go durations (`"1h"`, `"8h"`), or days (`"1d"`)
+**IAM user limits**: 15m-12h (no MFA) or 15m-36h (with MFA)
+
+Shorter sessions are more secure but require more frequent re-authentication.
+
+### Configuration Security
+
+- Validate configurations regularly: `atmos auth validate`
+- Use specific account IDs in permission sets
+- Implement proper session naming for audit trails
+- Monitor authentication logs
+
+### Environment Isolation
+
+- Use different identities for different environments
+- Separate providers for different security domains
+- Implement proper identity chaining for cross-account access

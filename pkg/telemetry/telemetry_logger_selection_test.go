@@ -4,9 +4,9 @@ import (
 	"testing"
 
 	mock_telemetry "github.com/cloudposse/atmos/pkg/telemetry/mock"
-	"github.com/golang/mock/gomock"
 	"github.com/posthog/posthog-go"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 )
 
 // TestTelemetryLoggerSelectionBasedOnFlag tests that the correct logger is selected

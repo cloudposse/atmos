@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -17,6 +17,9 @@ import (
 // InitCliConfig finds and merges CLI configurations in the following order: system dir, home dir, current dir, ENV vars, command-line arguments
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
+//
+// NOTE: Global flags (like --profile) must be synced to Viper before calling this function.
+// This is done by syncGlobalFlagsToViper() in cmd/root.go PersistentPreRun.
 //
 // TODO: Change configAndStacksInfo to pointer.
 // Temporarily suppressing gocritic warnings; refactoring InitCliConfig would require extensive changes.
@@ -44,10 +47,13 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		return atmosConfig, err
 	}
 
-	err = atmosConfigAbsolutePaths(&atmosConfig)
+	err = AtmosConfigAbsolutePaths(&atmosConfig)
 	if err != nil {
 		return atmosConfig, err
 	}
+
+	// Set log config BEFORE processing stacks so pre-hooks (including auth) see the correct log level.
+	setLogConfig(&atmosConfig)
 
 	if processStacks {
 		err = processStackConfigs(&atmosConfig, &configAndStacksInfo, atmosConfig.IncludeStackAbsolutePaths, atmosConfig.ExcludeStackAbsolutePaths)
@@ -55,7 +61,6 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 			return atmosConfig, err
 		}
 	}
-	setLogConfig(&atmosConfig)
 
 	atmosConfig.Initialized = true
 	return atmosConfig, nil
@@ -106,10 +111,20 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	if os.Getenv("NO_PAGER") != "" {
 		// Check if --pager flag was explicitly provided
 		if _, hasPagerFlag := flagKeyValue["pager"]; !hasPagerFlag {
-			// NO_PAGER is set and no explicit --pager flag was provided, disable the pager
+			// NO_PAGER is set, and no explicit --pager flag was provided, disable the pager
 			atmosConfig.Settings.Terminal.Pager = "false"
 		}
 	}
+
+	// Configure the global logger with the log level from flags/env/config.
+	// This ensures auth pre-hooks (executed during processStackConfigs) respect the log level.
+	// Parse and convert log level using existing utilities for consistency.
+	logLevel, err := log.ParseLogLevel(atmosConfig.Logs.Level)
+	if err != nil {
+		// Default to Warning on parse error.
+		logLevel = log.LogLevelWarning
+	}
+	log.SetLevel(log.ConvertLogLevel(logLevel))
 }
 
 // TODO: This function works well, but we should generally avoid implementing manual flag parsing,
@@ -120,7 +135,12 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 
 // Function to manually parse flags with double dash "--" like Cobra.
 func parseFlags() map[string]string {
-	args := os.Args
+	return parseFlagsFromArgs(os.Args)
+}
+
+// parseFlagsFromArgs parses flags from the given args slice.
+// This function is exposed for testing purposes.
+func parseFlagsFromArgs(args []string) map[string]string {
 	flags := make(map[string]string)
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -175,9 +195,12 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 }
 
 // atmosConfigAbsolutePaths converts paths to absolute paths.
-func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
+// AtmosConfigAbsolutePaths converts all base paths in the configuration to absolute paths.
+// This function sets TerraformDirAbsolutePath, HelmfileDirAbsolutePath, PackerDirAbsolutePath,
+// StacksBaseAbsolutePath, IncludeStackAbsolutePaths, and ExcludeStackAbsolutePaths.
+func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	// Convert stacks base path to an absolute path
-	stacksBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+	stacksBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
 	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
 	if err != nil {
 		return err
@@ -185,21 +208,21 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.StacksBaseAbsolutePath = stacksBaseAbsPath
 
 	// Convert the included stack paths to absolute paths
-	includeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, atmosConfig.Stacks.IncludedPaths)
+	includeStackAbsPaths, err := u.JoinPaths(stacksBaseAbsPath, atmosConfig.Stacks.IncludedPaths)
 	if err != nil {
 		return err
 	}
 	atmosConfig.IncludeStackAbsolutePaths = includeStackAbsPaths
 
 	// Convert the excluded stack paths to absolute paths
-	excludeStackAbsPaths, err := u.JoinAbsolutePathWithPaths(stacksBaseAbsPath, atmosConfig.Stacks.ExcludedPaths)
+	excludeStackAbsPaths, err := u.JoinPaths(stacksBaseAbsPath, atmosConfig.Stacks.ExcludedPaths)
 	if err != nil {
 		return err
 	}
 	atmosConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
 	// Convert Terraform dir to an absolute path.
-	terraformBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath)
+	terraformBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath)
 	terraformDirAbsPath, err := filepath.Abs(terraformBasePath)
 	if err != nil {
 		return err
@@ -207,7 +230,7 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// Convert Helmfile dir to an absolute path.
-	helmfileBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
+	helmfileBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
 	helmfileDirAbsPath, err := filepath.Abs(helmfileBasePath)
 	if err != nil {
 		return err
@@ -215,7 +238,7 @@ func atmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
 	// Convert Packer dir to an absolute path.
-	packerBasePath := filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
+	packerBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
 	packerDirAbsPath, err := filepath.Abs(packerBasePath)
 	if err != nil {
 		return err

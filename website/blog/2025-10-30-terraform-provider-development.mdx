@@ -1,0 +1,140 @@
+---
+slug: terraform-provider-development
+title: Testing Custom Terraform Providers with Atmos Components
+authors:
+  - osterman
+tags:
+  - feature
+date: 2025-10-30T00:00:00.000Z
+release: v1.197.0
+---
+
+If you develop Terraform providers, you can now test them locally with Atmos-managed components using Terraform's development overrides feature. This enables rapid iteration without publishing development versions to a registry.
+
+<!--truncate-->
+
+## Overview
+
+When developing Terraform providers, you need to test them with real infrastructure code. Terraform's development overrides let you point to locally-built provider binaries instead of downloading from a registry. This works with Atmos components.
+
+## How It Works
+
+Development overrides use two separate mechanisms that work together:
+
+### 1. Provider Binary Location (Terraform CLI Config)
+
+Create a `.terraformrc` file in your component directory:
+
+```hcl
+provider_installation {
+  dev_overrides {
+    "registry.terraform.io/myorg/myprovider" = "/absolute/path/to/provider/bin"
+  }
+  direct {}
+}
+```
+
+This tells Terraform where to find your locally-built provider binary instead of downloading it from a registry.
+
+### 2. Provider Configuration (Atmos Stack Manifests)
+
+Configure provider behavior using the `providers` section in your stack manifests as usual:
+
+```yaml
+components:
+  terraform:
+    myapp:
+      providers:
+        myprovider:
+          endpoint: "https://api.example.com"
+          api_token: "{{ .settings.api_token }}"
+
+      env:
+        TF_CLI_CONFIG_FILE: ".terraformrc"
+```
+
+Atmos continues to generate `providers_override.tf.json` for provider configuration, while Terraform uses your local binary via `dev_overrides`.
+
+## Setup
+
+**1. Create `.terraformrc` in your component directory**
+
+Place the file in your component folder (e.g., `components/terraform/myapp/.terraformrc`):
+
+```hcl
+provider_installation {
+  dev_overrides {
+    "registry.terraform.io/myorg/myprovider" = "/absolute/path/to/provider/bin"
+  }
+  direct {}
+}
+```
+
+Atmos executes Terraform from the component directory, so the file must be there.
+
+**2. Configure the environment variable**
+
+In your stack manifest:
+
+```yaml
+components:
+  terraform:
+    myapp:
+      env:
+        TF_CLI_CONFIG_FILE: ".terraformrc"
+```
+
+**3. Build and test your provider**
+
+```bash
+# Build provider
+cd providers/terraform-provider-myprovider
+go build -o bin/terraform-provider-myprovider
+
+# Test with Atmos
+cd ../../
+atmos terraform plan myapp -s dev
+```
+
+Terraform uses your local binary. Atmos handles configuration.
+
+## Workflow
+
+```bash
+# Edit provider code
+vim providers/terraform-provider-myprovider/provider.go
+
+# Rebuild
+cd providers/terraform-provider-myprovider
+go build -o bin/terraform-provider-myprovider
+
+# Test with Atmos
+cd ../../
+atmos terraform plan myapp -s dev
+```
+
+Changes are available immediately without publishing.
+
+## Key Points
+
+**File location**: The `.terraformrc` file goes in the component directory (e.g., `components/terraform/myapp/.terraformrc`), not the repository root. Add it to your component's `.gitignore`.
+
+**Template for teams**: Provide `.terraformrc.example` with placeholder paths that team members update for their environment.
+
+**CLI configuration only**: The `provider_installation` block must be in a Terraform CLI config file, not in `.tf` files.
+
+**Absolute paths**: Use absolute paths to the directory containing the provider binary.
+
+**Warning message**: Terraform shows "Warning: Provider development overrides are in effect" when using local providers.
+
+## Documentation
+
+Full documentation includes setup instructions, team collaboration patterns, and troubleshooting:
+
+- [Provider Configuration Guide](/core-concepts/components/terraform/providers)
+- [Provider Development Pattern](/design-patterns/provider-development)
+
+## Related
+
+- [GitHub Issue #1726](https://github.com/cloudposse/atmos/issues/1726)
+- [Documentation PR #1730](https://github.com/cloudposse/atmos/pull/1730)

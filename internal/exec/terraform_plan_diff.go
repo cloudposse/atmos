@@ -12,8 +12,8 @@ import (
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // Static errors.
@@ -32,6 +32,8 @@ type PlanFileOptions struct {
 
 // TerraformPlanDiff represents the plan-diff command implementation.
 func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(atmosConfig, "exec.TerraformPlanDiff")()
+
 	// Extract flags and setup paths
 	origPlanFile, newPlanFile, err := parsePlanDiffFlags(info.AdditionalArgsAndFlags)
 	if err != nil {
@@ -157,7 +159,7 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 		errUtils.CheckErrorAndPrint(errUtils.ErrPlanHasDiff, "", "")
 
 		// Exit with code 2 to indicate that the plans are different
-		u.OsExit(2)
+		errUtils.OsExit(2)
 		return nil // This line will never be reached
 	}
 

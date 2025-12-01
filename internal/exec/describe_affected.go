@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	log "github.com/charmbracelet/log"
 	"github.com/go-git/go-git/v5/plumbing"
 	giturl "github.com/kubescape/go-git-url"
 	"github.com/spf13/cobra"
@@ -12,8 +11,11 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -45,9 +47,10 @@ type DescribeAffectedCmdArgs struct {
 	ProcessYamlFunctions        bool
 	Skip                        []string
 	ExcludeLocked               bool
+	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DescribeAffectedExec interface {
 	Execute(*DescribeAffectedCmdArgs) error
 }
@@ -98,6 +101,7 @@ type describeAffectedExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
+		onlyInStack string,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -113,6 +117,8 @@ type describeAffectedExec struct {
 func NewDescribeAffectedExec(
 	atmosConfig *schema.AtmosConfiguration,
 ) DescribeAffectedExec {
+	defer perf.Track(atmosConfig, "exec.NewDescribeAffectedExec")()
+
 	return &describeAffectedExec{
 		atmosConfig: atmosConfig,
 		executeDescribeAffectedWithTargetRepoPath:    ExecuteDescribeAffectedWithTargetRepoPath,
@@ -127,6 +133,8 @@ func NewDescribeAffectedExec(
 
 // ParseDescribeAffectedCliArgs parses the command-line arguments of the `atmos describe affected` command.
 func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAffectedCmdArgs, error) {
+	defer perf.Track(nil, "exec.ParseDescribeAffectedCliArgs")()
+
 	var atmosConfig schema.AtmosConfiguration
 	if info, err := ProcessCommandLineArgs("", cmd, args, nil); err != nil {
 		return DescribeAffectedCmdArgs{}, err
@@ -156,6 +164,8 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 
 // SetDescribeAffectedFlagValueInCliArgs sets the flag values in CLI arguments.
 func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *DescribeAffectedCmdArgs) {
+	defer perf.Track(nil, "exec.SetDescribeAffectedFlagValueInCliArgs")()
+
 	flagsKeyValue := map[string]any{
 		"ref":                            &describe.Ref,
 		"sha":                            &describe.SHA,
@@ -213,6 +223,8 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 
 // Execute executes `describe affected` command.
 func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
+	defer perf.Track(nil, "exec.Execute")()
+
 	var affected []schema.Affected
 	var headHead, baseHead *plumbing.Reference
 	var repoUrl string
@@ -264,9 +276,9 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 		return err
 	}
 
-	// Add dependent components and stacks for each affected component
+	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack)
 		if err != nil {
 			return err
 		}

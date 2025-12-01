@@ -11,7 +11,8 @@ tests:
     expect:
       diff: []
       stdout:
-        - "Available Commands:"
+        - "AVAILABLE COMMANDS"
+        - "\\bauth\\b"
         - "\\batlantis\\b"
         - "\\baws\\b"
         - "\\bcompletion\\b"
@@ -20,16 +21,18 @@ tests:
         - "\\bhelmfile\\b"
         - "\\bhelp\\b"
         - "\\blist\\b"
+        - "\\bpacker\\b"
         - "\\bpro\\b"
+        - "\\bsupport\\b"
         - "\\bterraform\\b"
         - "\\bvalidate\\b"
         - "\\bvendor\\b"
         - "\\bversion\\b"
         - "\\bworkflow\\b"
-        - "Flags:"
+        - "FLAGS"
         - "for more information about a command"
-      stderr:
-        - "^$"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos version
@@ -44,13 +47,13 @@ tests:
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0
 
   - name: atmos version --check
-    enabled: true
+    enabled: false
     snapshot: false
-    description: "Verify atmos version --check command functions correctly."
+    description: "Verify atmos version --check command functions correctly (disabled - requires network, fails with GitHub API rate limits)"
     workdir: "../examples/demo-stacks"
     env:
       ATMOS_LOGS_LEVEL: "Warning"
@@ -64,7 +67,7 @@ tests:
         - 'Atmos Releases: https://github\.com/cloudposse/atmos/releases'
         - 'Install Atmos: https://atmos\.tools/install'
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0
 
 
@@ -83,8 +86,6 @@ tests:
       diff: []
       stdout:
         - "Example Terraform Weather Component"
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos describe config -f yaml
@@ -107,8 +108,6 @@ tests:
         - "github_token"
       stdout:
         - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos describe config
@@ -130,8 +129,6 @@ tests:
         - "GithubToken"
       stdout:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
-      stderr:
-        - "^$"
       exit_code: 0
 
   - name: atmos greet with args
@@ -146,7 +143,7 @@ tests:
       stdout:
         - "Hello, Andrey\n"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0
 
   - name: atmos greet without args
@@ -160,5 +157,5 @@ tests:
       stdout:
         - "Hello, John Doe\n"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0

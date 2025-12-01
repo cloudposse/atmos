@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -24,7 +25,7 @@ func TestListComponents(t *testing.T) {
 	require.NoError(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil,
-		nil, false, true, true, false, nil)
+		nil, false, true, true, false, nil, nil)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListComponents("", stacksMap)
@@ -35,7 +36,15 @@ func TestListComponents(t *testing.T) {
 	// Add assertions to validate the output structure
 	assert.NotNil(t, dependentsYaml)
 	assert.Greater(t, len(dependentsYaml), 0)
-	t.Log(dependentsYaml)
+	t.Cleanup(func() {
+		if t.Failed() {
+			if dependentsYaml != "" {
+				t.Logf("Components list:\n%s", dependentsYaml)
+			} else {
+				t.Logf("Components list (raw): %+v", output)
+			}
+		}
+	})
 }
 
 func TestListComponentsWithStack(t *testing.T) {
@@ -45,7 +54,7 @@ func TestListComponentsWithStack(t *testing.T) {
 	require.NoError(t, err)
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, testStack, nil, nil,
-		nil, false, true, true, false, nil)
+		nil, false, true, true, false, nil, nil)
 	assert.Nil(t, err)
 
 	output, err := FilterAndListComponents(testStack, stacksMap)
@@ -80,7 +89,7 @@ func TestGetStackComponents(t *testing.T) {
 	t.Run("invalid stack data", func(t *testing.T) {
 		_, err := getStackComponents("not a map")
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrParseStacks))
+		assert.True(t, errors.Is(err, errUtils.ErrParseStacks))
 	})
 
 	t.Run("missing components", func(t *testing.T) {
@@ -88,7 +97,7 @@ func TestGetStackComponents(t *testing.T) {
 			"not-components": map[string]any{},
 		})
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrParseComponents))
+		assert.True(t, errors.Is(err, errUtils.ErrParseComponents))
 	})
 }
 
@@ -137,7 +146,7 @@ func TestGetComponentsForSpecificStack(t *testing.T) {
 	t.Run("non-existent stack", func(t *testing.T) {
 		_, err := getComponentsForSpecificStack("non-existent-stack", stacksMap)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrStackNotFound))
+		assert.True(t, errors.Is(err, errUtils.ErrStackNotFound))
 		assert.Contains(t, err.Error(), "non-existent-stack")
 	})
 
@@ -147,7 +156,7 @@ func TestGetComponentsForSpecificStack(t *testing.T) {
 		}
 		_, err := getComponentsForSpecificStack("invalid-stack", invalidStacksMap)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrProcessStack))
+		assert.True(t, errors.Is(err, errUtils.ErrProcessStack))
 		assert.Contains(t, err.Error(), "invalid-stack")
 	})
 }
@@ -250,25 +259,42 @@ func TestFilterAndListComponents(t *testing.T) {
 		assert.ElementsMatch(t, []string{"vpc", "eks", "rds", "s3", "test", "elasticache"}, components)
 	})
 
+	// Test no components found
+	t.Run("no components", func(t *testing.T) {
+		emptyStacks := map[string]any{
+			"stack1": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{},
+					"helmfile":  map[string]any{},
+					"packer":    map[string]any{},
+				},
+			},
+		}
+
+		components, err := FilterAndListComponents("", emptyStacks)
+		require.NoError(t, err)
+		assert.Empty(t, components)
+	})
+
 	// Test error cases
 	t.Run("non-existent stack", func(t *testing.T) {
 		_, err := FilterAndListComponents("non-existent-stack", stacksMap)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrStackNotFound))
+		assert.True(t, errors.Is(err, errUtils.ErrStackNotFound))
 	})
 
 	// Test with nil stacks map
 	t.Run("nil stacks map", func(t *testing.T) {
 		_, err := FilterAndListComponents("stack1", nil)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrStackNotFound))
+		assert.True(t, errors.Is(err, errUtils.ErrStackNotFound))
 	})
 
 	// Test with empty stacks map
 	t.Run("empty stacks map", func(t *testing.T) {
 		_, err := FilterAndListComponents("stack1", map[string]any{})
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrStackNotFound))
+		assert.True(t, errors.Is(err, errUtils.ErrStackNotFound))
 	})
 }
 
@@ -282,12 +308,12 @@ func TestFilterAndListComponentsIntegration(t *testing.T) {
 	// Test with invalid stack name
 	t.Run("invalid stack name", func(t *testing.T) {
 		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil,
-			nil, false, false, false, false, nil)
+			nil, false, false, false, false, nil, nil)
 		require.NoError(t, err)
 
 		_, err = FilterAndListComponents("non-existent-stack", stacksMap)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, ErrStackNotFound))
+		assert.True(t, errors.Is(err, errUtils.ErrStackNotFound))
 		assert.Contains(t, err.Error(), "non-existent-stack")
 	})
 }

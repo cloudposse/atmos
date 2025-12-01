@@ -1,0 +1,309 @@
+---
+slug: describe-commands-identity-flag
+title: Identity Flag Support for Describe Commands
+authors:
+  - osterman
+tags:
+  - feature
+release: v1.197.0
+---
+
+The `atmos describe` family of commands now supports the `--identity` flag, enabling runtime authentication when processing YAML template functions that access remote resources. This ensures that `!terraform.state` and `!terraform.output` functions work seamlessly without relying on ambient credentials.
+
+<!--truncate-->
+
+## What Changed
+
+All `atmos describe` subcommands now accept the `--identity` flag for runtime authentication:
+
+- `atmos describe stacks --identity <name>`
+- `atmos describe component <component> -s <stack> --identity <name>`
+- `atmos describe affected --identity <name>`
+- `atmos describe dependents <component> -s <stack> --identity <name>`
+
+This brings feature parity with `atmos terraform` and `atmos workflow` commands, which already support identity-based authentication.
+
+## The Problem We Solved
+
+By default, all `atmos describe` commands execute YAML template functions (`!terraform.state`, `!terraform.output`) and Go templates during stack processing. When these functions access remote Terraform state backends (S3, Azure Blob, GCS), they require authenticated cloud provider credentials.
+
+**Before this change**, users had to:
+1. Manually run `atmos auth login --identity <identity>` before describe commands
+2. Rely on ambient AWS credentials (environment variables, `~/.aws/credentials`)
+3. Use EC2 instance profiles (not applicable for local development)
+
+**The failure scenario looked like this:**
+
+```bash
+# Stack configuration contains YAML function
+# components:
+#   terraform:
+#     app:
+#       vars:
+#         vpc_id: !terraform.output vpc.vpc_id
+
+# Command fails with timeout
+$ atmos describe component app -s prod
+Error: context deadline exceeded (accessing S3 without credentials)
+```
+
+## How It Works
+
+The `--identity` flag is now available on all describe commands via the parent `atmos describe` command. When specified, Atmos:
+
+1. **Authenticates** using the specified identity before processing stacks
+2. **Populates AuthContext** with cloud provider credentials
+3. **Propagates credentials** to YAML function processors
+4. **Executes template functions** with proper authentication
+
+The flag supports two modes:
+
+**Explicit identity:**
+```bash
+atmos describe stacks --identity my-aws-identity
+```
+
+**Interactive selection:**
+```bash
+atmos describe stacks --identity
+# Shows interactive selector to choose from configured identities
+```
+
+## Examples
+
+### Basic Usage
+
+```bash
+# Describe stacks with specific identity
+atmos describe stacks --identity my-aws-identity
+
+# Describe component with identity (shorthand)
+atmos describe component vpc -s prod -i dev-admin
+
+# Describe affected components with authentication
+atmos describe affected --ref main --identity prod-readonly
+
+# Describe dependents with identity
+atmos describe dependents vpc -s prod --identity my-aws-identity
+```
+
+### Interactive Selection
+
+```bash
+# Use --identity without a value for interactive selection
+$ atmos describe stacks --identity
+
+# Atmos shows selector:
+> dev-admin
+  prod-readonly
+  staging-deploy
+```
+
+### Combining with Other Flags
+
+```bash
+# Authenticate and filter results
+atmos describe stacks --identity my-aws-identity --stack prod-use1 --format yaml
+
+# Authenticate and query specific values
+atmos describe component vpc -s prod -i dev-admin --query .vars.cidr_block
+
+# Authenticate when describing affected components
+atmos describe affected --identity prod-readonly --include-dependents --format json
+```
+
+## Disabling YAML Functions
+
+If you want to see stack configurations **before** YAML functions are processed (without authentication), use the processing flags:
+
+```bash
+# Disable YAML function processing
+atmos describe stacks --process-functions=false
+
+# Disable Go template processing
+atmos describe stacks --process-templates=false
+
+# Disable both
+atmos describe stacks --process-functions=false --process-templates=false
+```
+
+## Use Cases
+
+### 1. Multi-Account Development
+
+When working across multiple AWS accounts, authenticate with the appropriate identity:
+
+```bash
+# Development environment
+atmos describe component app -s dev-use1 --identity dev-admin
+
+# Production environment (read-only)
+atmos describe component app -s prod-use1 --identity prod-readonly
+```
+
+### 2. CI/CD Pipelines
+
+Authenticate in CI/CD before describing affected components:
+
+```bash
+# In GitHub Actions, GitLab CI, etc.
+atmos describe affected \
+  --identity "$ATMOS_IDENTITY" \
+  --ref "$BASE_BRANCH" \
+  --format json > affected.json
+```
+
+### 3. Debugging State Access
+
+When YAML functions access remote state, authenticate to avoid timeouts:
+
+```bash
+# Component references outputs from another component
+# vars:
+#   vpc_id: !terraform.output vpc.vpc_id
+
+# Describe with authentication
+atmos describe component app -s prod --identity my-aws-identity
+```
+
+### 4. Stack Introspection
+
+Describe entire stacks with authentication for complete configuration:
+
+```bash
+# Get all stack configurations with resolved YAML functions
+atmos describe stacks --identity my-aws-identity --format yaml > stacks.yaml
+```
+
+## Migration Guide
+
+**No migration required!** This is a backward-compatible enhancement:
+
+✅ **Existing workflows continue to work:**
+- Commands without `--identity` use ambient credentials (environment variables, AWS profiles)
+- Default identity configuration is respected
+- CI/CD pipelines are unaffected
+
+✅ **Opt-in when needed:**
+- Add `--identity` flag when YAML functions require specific credentials
+- Use interactive selection for convenience during local development
+- Specify explicit identities in automation scripts
+
+## Important Notes
+
+### Default Behavior
+
+**By default, all `atmos describe` commands execute:**
+- ✅ YAML template functions (`!terraform.state`, `!terraform.output`, etc.)
+- ✅ Go templates (Gomplate functions, Atmos functions)
+
+**To disable processing:**
+- Use `--process-functions=false` to skip YAML functions
+- Use `--process-templates=false` to skip Go templates
+
+### Error Handling
+
+**When authentication is not configured:**
+
+If your `atmos.yaml` does not have an `auth` section or has no identities configured, the behavior depends on whether you use the `--identity` flag:
+
+✅ **Without `--identity` flag** - Commands work normally using ambient credentials (environment variables, AWS profiles, instance metadata)
+
+```bash
+# Works when auth not configured - uses ambient credentials
+atmos describe stacks
+```
+
+❌ **With `--identity` flag** - Commands fail with a clear error message
+
+```bash
+# Fails when auth not configured but --identity provided
+atmos describe stacks --identity my-identity
+# Error: authentication not configured in atmos.yaml
+#        the --identity flag requires authentication to be configured in atmos.yaml with at least one identity
+```
+
+This prevents confusing authentication failures and guides you to configure the `auth` section before using identity-based authentication.
+
+### Authentication Flow
+
+When you specify `--identity`:
+
+1. **Identity lookup** - Atmos finds the identity configuration in `atmos.yaml`
+2. **Authentication** - Authenticates using the provider's method (AWS SSO, OIDC, etc.)
+3. **Credential storage** - Stores temporary credentials in XDG-compliant locations
+4. **Context propagation** - Makes credentials available to YAML functions
+5. **Stack processing** - Executes describe operations with authenticated access
+
+### CI/CD Considerations
+
+**For CI/CD pipelines**, we recommend:
+- Set `ATMOS_IDENTITY` environment variable instead of using `--identity` flag
+- Use explicit identity names (not interactive selection)
+- Ensure identity has appropriate permissions (read-only for describe operations)
+
+```bash
+# Good: CI/CD with explicit identity
+export ATMOS_IDENTITY=ci-readonly
+atmos describe affected --ref main
+
+# Better: Use flag for clarity
+atmos describe affected --identity ci-readonly --ref main
+```
+
+## Technical Details
+
+### Implementation
+
+The `--identity` flag is implemented as a **PersistentFlag** on the parent `atmos describe` command, which means it automatically inherits to all subcommands:
+
+```bash
+# These are equivalent:
+atmos describe stacks --identity my-aws-identity
+atmos describe --identity my-aws-identity stacks
+```
+
+### AuthManager Propagation
+
+When `--identity` is specified:
+
+1. Command layer creates `AuthManager` with identity configuration
+2. Authenticates and populates `AuthContext` with credentials
+3. Passes `AuthManager` to execution functions
+4. Execution functions propagate `AuthContext` to `ConfigAndStacksInfo`
+5. YAML function processors access credentials from context
+
+This ensures that `!terraform.state` and `!terraform.output` functions can access remote backends with proper authentication.
+
+### Performance
+
+Authentication adds minimal overhead:
+- **First run**: ~2-3 seconds for AWS SSO authentication (with browser)
+- **Subsequent runs**: `<100ms` (uses cached credentials)
+- **Credential refresh**: Automatic when credentials expire
+
+## Related Documentation
+
+- [Authentication Overview](/cli/commands/auth/usage)
+- [`atmos describe stacks` command](/cli/commands/describe/stacks)
+- [`atmos describe component` command](/cli/commands/describe/component)
+- [`atmos describe affected` command](/cli/commands/describe/affected)
+- [`atmos describe dependents` command](/cli/commands/describe/dependents)
+- [YAML Functions](/functions/yaml)
+
+## Get Started
+
+Try it out with your existing Atmos configuration:
+
+```bash
+# Interactive identity selection
+atmos describe stacks --identity
+
+# Specific identity
+atmos describe component <your-component> -s <your-stack> --identity <your-identity>
+
+# In CI/CD
+atmos describe affected --identity $ATMOS_IDENTITY --ref main
+```
+
+Questions or feedback? Open an issue on [GitHub](https://github.com/cloudposse/atmos) or join our [community Slack](https://slack.cloudposse.com).

@@ -1,0 +1,29 @@
+# Level 2: Account mixin for dev
+
+import:
+  - catalog/base/defaults
+
+vars:
+  import_order_test: "level-2-account-dev"
+
+  # Account-specific configuration
+  stage: "dev"
+  account_name: "acme-dev"
+  account_id: "111111111111"
+
+  # Environment-specific settings
+  instance_type: "t3.small"
+  min_size: 1
+  max_size: 3
+
+  tags:
+    Stage: "dev"
+    Account: "acme-dev"
+    Source: "level-2-account-dev"
+
+settings:
+  import_order_test: "level-2-account-dev-settings"
+  account:
+    name: "acme-dev"
+    id: "111111111111"
+    stage: "dev"

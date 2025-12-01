@@ -180,9 +180,13 @@ based on the context in which they're executed.
 
 When Atmos runs a command, it supplies an input object to OPA policies that contains detailed contextual information, such as:
 
+- `process_env`: a map of the environment variables in the current process
 - `cli_args`: a list of the command line arguments and flags (e.g., executing the `atmos terraform apply` command will generate the `["terraform", "apply"]` list)
+- `tf_cli_vars`: a map of variables with proper type conversion from the command-line `-var` arguments
+- `env_tf_cli_args`: a list of arguments from the [`TF_CLI_ARGS`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_cli_args-and-tf_cli_args_name) environment variable
+- `env_tf_cli_vars`: a map of variables with proper type conversion from the [`TF_CLI_ARGS`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_cli_args-and-tf_cli_args_name) environment variable
 - `vars`: a map of variables passed to the command, either via the stack config files or [CLI flags](/core-concepts/validate/terraform-variables)
-- other contextual attributes such as the stack and component names
+- other contextual attributes that are returned from the [`atmos describe component`](/cli/commands/describe/component) command for a component in a stack
 
 ### Policy Execution Context Example
 
@@ -228,3 +232,304 @@ the component can't be applied if the 'foo' variable is set to 'foo'
 exit status 1
 ```
 </Terminal>
+
+### Environment and Process Context Examples
+
+The following examples demonstrate how to use the process environment and Terraform CLI context in OPA policies for advanced governance scenarios.
+
+#### Process Environment Variables (`process_env`)
+
+Access environment variables from the current process to enforce security and compliance policies.
+
+<File title="validate-environment.rego">
+```rego
+package atmos
+
+# Block operations if running in production without proper approval
+errors[message] {
+  input.process_env.ENVIRONMENT == "production"
+  not input.process_env.DEPLOYMENT_APPROVED
+  message = "Production deployments require DEPLOYMENT_APPROVED environment variable"
+}
+
+# Ensure required environment variables are set
+errors[message] {
+  required_vars := ["AWS_REGION", "AWS_PROFILE"]
+  missing_var := required_vars[_]
+  not input.process_env[missing_var]
+  message = sprintf("Required environment variable '%s' is not set", [missing_var])
+}
+
+# Validate AWS region restrictions
+errors[message] {
+  input.process_env.AWS_REGION
+  not input.process_env.AWS_REGION in ["us-east-1", "us-west-2", "eu-west-1"]
+  message = sprintf("AWS region '%s' is not allowed. Use: us-east-1, us-west-2, or eu-west-1", [input.process_env.AWS_REGION])
+}
+```
+</File>
+
+#### Terraform CLI Variables (`tf_cli_vars`)
+
+Validate variables passed via command-line `-var` arguments with proper type handling and JSON parsing.
+
+<File title="validate-cli-vars.rego">
+```rego
+package atmos
+
+# Validate instance types passed via CLI
+errors[message] {
+  input.tf_cli_vars.instance_type
+  not input.tf_cli_vars.instance_type in ["t3.micro", "t3.small", "t3.medium"]
+  message = sprintf("Instance type '%s' not allowed via CLI. Use t3.micro, t3.small, or t3.medium", [input.tf_cli_vars.instance_type])
+}
+
+# Validate JSON configuration passed via CLI
+errors[message] {
+  input.tf_cli_vars.config
+  is_object(input.tf_cli_vars.config)
+  input.tf_cli_vars.config.encryption_enabled != true
+  message = "Configuration passed via CLI must have encryption_enabled set to true"
+}
+
+# Ensure sensitive variables are not passed via CLI
+errors[message] {
+  sensitive_vars := ["password", "secret", "api_key", "token"]
+  cli_var := sensitive_vars[_]
+  input.tf_cli_vars[cli_var]
+  message = sprintf("Sensitive variable '%s' should not be passed via command line", [cli_var])
+}
+
+# Validate numeric ranges for CLI variables
+errors[message] {
+  input.tf_cli_vars.max_instances
+  is_number(input.tf_cli_vars.max_instances)
+  input.tf_cli_vars.max_instances > 10
+  message = sprintf("max_instances cannot exceed 10, got %d", [input.tf_cli_vars.max_instances])
+}
+```
+</File>
+
+#### TF_CLI_ARGS Environment (`env_tf_cli_args`)
+
+Parse and validate arguments from the `TF_CLI_ARGS` environment variable.
+
+<File title="validate-tf-cli-args.rego">
+```rego
+package atmos
+
+# Block dangerous flags in TF_CLI_ARGS
+errors[message] {
+  dangerous_flags := ["-auto-approve", "-force", "-lock=false"]
+  flag := dangerous_flags[_]
+  flag in input.env_tf_cli_args
+  input.process_env.ENVIRONMENT == "production"
+  message = sprintf("Flag '%s' is not allowed in production via TF_CLI_ARGS", [flag])
+}
+
+# Require planfile for apply (positional, not a flag)
+errors[message] {
+  some i
+  input.cli_args[i] == "apply"
+  # next token exists and is not a flag -> planfile path
+  i+1 < count(input.cli_args)
+  not startswith(input.cli_args[i+1], "-")
+  # Optionally, enforce a prefix/dir policy for plan files
+  not allowed_planfile(input.cli_args[i+1])
+  message = "Apply must use an approved plan file generated by 'terraform plan -out=...'"
+}
+
+allowed_planfile(p) {
+  startswith(p, "plans/")
+}
+
+# Validate parallelism settings
+errors[message] {
+  some i
+  # equals form: -parallelism=50
+  startswith(input.env_tf_cli_args[i], "-parallelism=")
+  parallelism := to_number(replace(input.env_tf_cli_args[i], "-parallelism=", ""))
+  parallelism > 20
+  message = sprintf("Parallelism cannot exceed 20, got %d", [parallelism])
+}
+
+errors[message] {
+  some i
+  # space form: -parallelism 50
+  input.env_tf_cli_args[i] == "-parallelism"
+  i + 1 < count(input.env_tf_cli_args)
+  parallelism := to_number(input.env_tf_cli_args[i+1])
+  parallelism > 20
+  message = sprintf("Parallelism cannot exceed 20, got %d", [parallelism])
+}
+```
+</File>
+
+#### TF_CLI_ARGS Variables (`env_tf_cli_vars`)
+
+Access and validate variables extracted from `TF_CLI_ARGS` with JSON type conversion.
+
+<File title="validate-env-cli-vars.rego">
+```rego
+package atmos
+
+# Validate environment-specific constraints
+errors[message] {
+  input.env_tf_cli_vars.environment == "production"
+  input.env_tf_cli_vars.instance_count
+  is_number(input.env_tf_cli_vars.instance_count)
+  input.env_tf_cli_vars.instance_count < 2
+  message = "Production environment requires at least 2 instances"
+}
+
+# Validate complex JSON configurations from TF_CLI_ARGS
+errors[message] {
+  input.env_tf_cli_vars.networking_config
+  is_object(input.env_tf_cli_vars.networking_config)
+  not input.env_tf_cli_vars.networking_config.vpc_id
+  message = "Networking configuration must include vpc_id"
+}
+
+# Cross-validate CLI args and environment variables
+errors[message] {
+  input.env_tf_cli_vars.region
+  input.process_env.AWS_REGION
+  input.env_tf_cli_vars.region != input.process_env.AWS_REGION
+  message = sprintf("Region mismatch: TF_CLI_ARGS region '%s' != AWS_REGION '%s'", [
+    input.env_tf_cli_vars.region,
+    input.process_env.AWS_REGION
+  ])
+}
+
+# Validate resource naming conventions from environment variables
+errors[message] {
+  input.env_tf_cli_vars.resource_name
+  not regex.match("^[a-z][a-z0-9-]*[a-z0-9]$", input.env_tf_cli_vars.resource_name)
+  message = sprintf("Resource name '%s' must be lowercase alphanumeric with hyphens", [input.env_tf_cli_vars.resource_name])
+}
+
+# Ensure cost controls are in place
+errors[message] {
+  input.env_tf_cli_vars.instance_type
+  expensive_types := ["m5.large", "m5.xlarge", "c5.large", "c5.xlarge"]
+  input.env_tf_cli_vars.instance_type in expensive_types
+  not input.env_tf_cli_vars.cost_center
+  message = sprintf("Expensive instance type '%s' requires cost_center to be specified", [input.env_tf_cli_vars.instance_type])
+}
+```
+</File>
+
+### Combined Context Validation
+
+Leverage multiple context sources for comprehensive governance policies.
+
+<File title="validate-comprehensive.rego">
+```rego
+package atmos
+
+# Comprehensive validation combining all context sources
+errors[message] {
+  # Check if this is a production apply operation
+  "apply" in input.cli_args
+  (input.process_env.ENVIRONMENT == "production" or
+   input.vars.environment == "production" or
+   input.tf_cli_vars.environment == "production" or
+   input.env_tf_cli_vars.environment == "production")
+
+  # Ensure proper approval workflow
+  not production_approved
+  message = "Production deployments require proper approval workflow"
+}
+
+# Helper rule for production approval
+production_approved {
+  input.process_env.DEPLOYMENT_APPROVED == "true"
+  input.process_env.APPROVED_BY
+  input.process_env.APPROVAL_TICKET
+}
+
+# Validate consistency across all variable sources
+errors[message] {
+  sources := [
+    object.get(input.vars, "environment", null),
+    object.get(input.tf_cli_vars, "environment", null),
+    object.get(input.env_tf_cli_vars, "environment", null),
+    object.get(input.process_env, "ATMOS_ENVIRONMENT", null)
+  ]
+
+  # Remove null/undefined values
+  defined_envs := [env | env := sources[_]; env != null; env != ""]
+
+  # Check if all defined environments match
+  count(defined_envs) > 1
+  not all_equal(defined_envs)
+  message = sprintf("Environment mismatch across sources: %v", [defined_envs])
+}
+
+# Helper function to check if all elements in array are equal
+all_equal(arr) {
+  count(arr) <= 1
+}
+
+all_equal(arr) {
+  count(arr) > 1
+  first := arr[0]
+  all_match := [x | x := arr[_]; x == first]
+  count(all_match) == count(arr)
+}
+
+# Validate resource limits based on environment context
+errors[message] {
+  environment := get_environment
+  environment == "development"
+  total_instances := get_total_instances
+  total_instances > 5
+  message = sprintf("Development environment limited to 5 instances, requested %d", [total_instances])
+}
+
+# Helper to get environment from any source
+get_environment := env {
+  env := input.vars.environment
+  env != null
+  env != ""
+}
+
+get_environment := env {
+  env := input.tf_cli_vars.environment
+  env != null
+  env != ""
+}
+
+get_environment := env {
+  env := input.env_tf_cli_vars.environment
+  env != null
+  env != ""
+}
+
+get_environment := env {
+  env := input.process_env.ATMOS_ENVIRONMENT
+  env != null
+  env != ""
+}
+
+# Helper to calculate total instances from all sources
+get_total_instances := total {
+  instance_counts := [
+    object.get(input.vars, "instance_count", null),
+    object.get(input.tf_cli_vars, "instance_count", null),
+    object.get(input.env_tf_cli_vars, "instance_count", null)
+  ]
+  valid_counts := [n | n := instance_counts[_]; is_number(n)]
+  total := sum(valid_counts)
+}
+```
+</File>
+
+### Best Practices for Context-Aware Policies
+
+1. **Environment Consistency**: Always validate that environment settings are consistent across all input sources
+2. **Security First**: Use `process_env` to enforce security requirements like required credentials and approval workflows
+3. **Type Safety**: Leverage Rego's type checking functions (`is_number`, `is_object`, etc.) when working with parsed JSON from CLI variables
+4. **Graceful Handling**: Check for null/undefined values before processing to avoid policy evaluation errors
+5. **Clear Messages**: Provide specific error messages that indicate which context source triggered the violation
+6. **Separation of Concerns**: Create focused policies for different aspects (security, compliance, cost control) rather than monolithic rules

@@ -3,17 +3,19 @@
 package utils
 
 import (
-	"fmt"
+	"errors"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var (
-	ErrURIEmpty                      = fmt.Errorf("URI cannot be empty")
-	ErrURIExceedsMaxLength           = fmt.Errorf("URI exceeds maximum length of 2048 characters")
-	ErrURICannotContainPathTraversal = fmt.Errorf("URI cannot contain path traversal sequences")
-	ErrURICannotContainSpaces        = fmt.Errorf("URI cannot contain spaces")
-	ErrUnsupportedURIScheme          = fmt.Errorf("unsupported URI scheme")
-	ErrInvalidOCIURIFormat           = fmt.Errorf("invalid OCI URI format")
+	ErrURIEmpty                      = errors.New("URI cannot be empty")
+	ErrURIExceedsMaxLength           = errors.New("URI exceeds maximum length of 2048 characters")
+	ErrURICannotContainPathTraversal = errors.New("URI cannot contain path traversal sequences")
+	ErrURICannotContainSpaces        = errors.New("URI cannot contain spaces")
+	ErrUnsupportedURIScheme          = errors.New("unsupported URI scheme")
+	ErrInvalidOCIURIFormat           = errors.New("invalid OCI URI format")
 )
 var schemeSeparator = "://"
 
@@ -21,6 +23,8 @@ const MaxURISize = 2048
 
 // ValidateURI validates URIs.
 func ValidateURI(uri string) error {
+	defer perf.Track(nil, "utils.ValidateURI")()
+
 	if uri == "" {
 		return ErrURIEmpty
 	}
@@ -51,6 +55,8 @@ func ValidateURI(uri string) error {
 
 // IsValidScheme checks if the URL scheme is valid.
 func IsValidScheme(scheme string) bool {
+	defer perf.Track(nil, "utils.IsValidScheme")()
+
 	validSchemes := map[string]bool{
 		"http":       true,
 		"https":      true,

@@ -20,7 +20,6 @@ const config = {
     url: 'https://atmos.tools',
     baseUrl: `${BASE_URL}/`,
     onBrokenLinks: 'throw',
-    onBrokenMarkdownLinks: 'warn',
     favicon: 'img/atmos-logo.png',
 
     // GitHub pages deployment config.
@@ -45,10 +44,22 @@ const config = {
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
-
+                    {
+                        from: '/blog',
+                        to: '/changelog'
+                    },
                     {
                         from: '/reference/terraform-limitations',
                         to: '/introduction/why-atmos'
+                    },
+                    // Component Catalog redirects for reorganization
+                    {
+                        from: '/design-patterns/component-catalog-with-mixins',
+                        to: '/design-patterns/component-catalog/with-mixins'
+                    },
+                    {
+                        from: '/design-patterns/component-catalog-template',
+                        to: '/design-patterns/component-catalog/template'
                     },
                     // Redirects for template functions moved to /functions/template/
                     {
@@ -123,11 +134,10 @@ const config = {
             },
         ],
         [
-            '@grnet/docusaurus-terminology', {
+            path.resolve(__dirname, './plugins/glossary-tooltips'), {
                 docsDir: './docs/',
-                termsDir: './reference/glossary/',
-                glossaryFilepath: './docs/reference/glossary/index.mdx',
-                glossaryComponentPath: '../../../src/components/glossary/Glossary.tsx'
+                termsDir: './docs/glossary/',
+                glossaryFilepath: './docs/glossary/index.mdx',
         }],
         [
             'custom-loaders', {}
@@ -154,6 +164,18 @@ const config = {
         ],
         [
             path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'blog-release-data'), {}
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'docusaurus-plugin-llms-txt'),
+            {
+                generateLlmsTxt: true,
+                generateLlmsFullTxt: true,
+                llmsTxtFilename: 'llms.txt',
+                llmsFullTxtFilename: 'llms-full.txt',
+            },
         ]
     ],
 
@@ -171,11 +193,21 @@ const config = {
                     exclude: ['README.md'],
                 },
                 blog: {
+                    routeBasePath: 'changelog',
                     showReadingTime: true,
+                    postsPerPage: 'ALL',
+                    blogSidebarCount: 'ALL',
+                    blogSidebarTitle: 'All posts',
+                    blogTitle: 'Atmos Changelog',
+                    blogDescription: 'Release notes for Atmos',
+                    include: ['**/*.{md,mdx}'],
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
                     exclude: ['README.md'],
+                    blogSidebarTitle: 'Recent Changes',
+                    blogSidebarCount: 'ALL',
+                    showReadingTime: true,
                 },
                 theme: {
                     customCss: require.resolve('./src/css/custom.css'),
@@ -225,6 +257,11 @@ const config = {
                         label: 'Community',
                         position: 'left',
                         to: '/community'
+                    },
+                    {
+                        label: 'Changelog',
+                        position: 'left',
+                        to: '/changelog'
                     },
                     // Algolia search configuration
                     {
@@ -303,6 +340,9 @@ const config = {
 
     markdown: {
         mermaid: true,
+        hooks: {
+            onBrokenMarkdownLinks: 'warn',
+        },
     },
 
     themes: ['@docusaurus/theme-mermaid']

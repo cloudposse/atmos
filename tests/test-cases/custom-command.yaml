@@ -19,5 +19,5 @@ tests:
         - "Cobra Args: \\[Name\\]"
         - "Trailing Args: \\[-this --is trailing - arg\\]"
       stderr:
-        - "^$"
+        - "Telemetry Enabled"
       exit_code: 0

@@ -9,10 +9,12 @@ tests:
       - "pull"
     expect:
       stderr:
-        - "Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/"
+        - "# Error"
+        - "\\*\\*Error:\\*\\* Vendoring is not configured"
       exit_code: 1
 
   - name: atmos_vendor_pull
+    short: false
     enabled: true
     description: "Ensure atmos vendor pull command executes without errors and files are present."
     workdir: "fixtures/scenarios/vendor"
@@ -20,6 +22,8 @@ tests:
     args:
       - "vendor"
       - "pull"
+    preconditions:
+      - "github_token"
     expect:
       file_exists:
         - "./components/terraform/github/stargazers/main/main.tf"
@@ -42,6 +46,7 @@ tests:
       exit_code: 0
 
   - name: atmos_vendor_pull_oci
+    short: false
     enabled: true
     description: "Ensure 'atmos vendor pull --tags' command executes without errors and files are present."
     workdir: "fixtures/scenarios/vendor"
@@ -51,6 +56,8 @@ tests:
       - "vendor"
       - "pull"
       - "--tags=oci"
+    preconditions:
+      - "github_token"
     expect:
       file_exists:
         # From ghcr.io/cloudposse/atmos/tests/fixtures/components/terraform/mock:v0

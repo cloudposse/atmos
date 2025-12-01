@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"sync"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/samber/lo"
 
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -16,6 +17,7 @@ var componentFuncSyncMap = sync.Map{}
 
 func componentFunc(
 	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	component string,
 	stack string,
 ) (any, error) {
@@ -41,7 +43,20 @@ func componentFunc(
 		return existingSections, nil
 	}
 
-	sections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
+	// Create AuthManager wrapper from configAndStacksInfo to propagate auth context.
+	var authMgr auth.AuthManager
+	if configAndStacksInfo != nil && configAndStacksInfo.AuthContext != nil {
+		authMgr = newAuthContextWrapper(configAndStacksInfo.AuthContext)
+	}
+
+	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          authMgr,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -58,8 +73,12 @@ func componentFunc(
 			// Return the static backend outputs
 			terraformOutputs = remoteStateBackendStaticTypeOutputs
 		} else {
-			// Execute `terraform output`
-			terraformOutputs, err = execTerraformOutput(atmosConfig, component, stack, sections)
+			// Execute `terraform output` with authContext from configAndStacksInfo (populated by --identity flag).
+			var authContext *schema.AuthContext
+			if configAndStacksInfo != nil {
+				authContext = configAndStacksInfo.AuthContext
+			}
+			terraformOutputs, err = execTerraformOutput(atmosConfig, component, stack, sections, authContext)
 			if err != nil {
 				return nil, err
 			}

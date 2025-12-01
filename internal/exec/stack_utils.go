@@ -6,12 +6,15 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // BuildTerraformWorkspace builds Terraform workspace.
 func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
+	defer perf.Track(atmosConfig, "exec.BuildTerraformWorkspace")()
+
 	// Return 'default' workspace if workspaces are disabled
 	// Terraform always operates in the `default` workspace when multiple workspaces are unsupported or disabled,
 	// preventing switching or creating additional workspaces.
@@ -24,7 +27,7 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 	var tmpl string
 
 	if atmosConfig.Stacks.NameTemplate != "" {
-		tmpl, err = ProcessTmpl("terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return "", err
 		}
@@ -43,7 +46,7 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 
 	// Terraform workspace can be overridden per component using `metadata.terraform_workspace_pattern` or `metadata.terraform_workspace_template` or `metadata.terraform_workspace`
 	if terraformWorkspaceTemplate, terraformWorkspaceTemplateExist := componentMetadata["terraform_workspace_template"].(string); terraformWorkspaceTemplateExist {
-		tmpl, err = ProcessTmpl("terraform-workspace-template", terraformWorkspaceTemplate, configAndStacksInfo.ComponentSection, false)
+		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-template", terraformWorkspaceTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return "", err
 		}
@@ -67,6 +70,8 @@ func ProcessComponentMetadata(
 	component string,
 	componentSection map[string]any,
 ) (map[string]any, string, bool, bool, bool) {
+	defer perf.Track(nil, "exec.ProcessComponentMetadata")()
+
 	baseComponentName := ""
 	componentIsAbstract := false
 	componentIsEnabled := true
@@ -118,6 +123,8 @@ func BuildDependentStackNameFromDependsOnLegacy(
 	componentNamesInCurrentStack []string,
 	currentComponentName string,
 ) (string, error) {
+	defer perf.Track(nil, "exec.BuildDependentStackNameFromDependsOnLegacy")()
+
 	var dependentStackName string
 
 	dep := strings.Replace(dependsOn, "/", "-", -1)
@@ -148,6 +155,8 @@ func BuildDependentStackNameFromDependsOn(
 	dependsOnStackName string,
 	allStackNames []string,
 ) (string, error) {
+	defer perf.Track(nil, "exec.BuildDependentStackNameFromDependsOn")()
+
 	dep := strings.Replace(fmt.Sprintf("%s-%s", dependsOnStackName, dependsOnComponentName), "/", "-", -1)
 
 	if u.SliceContainsString(allStackNames, dep) {
@@ -171,6 +180,8 @@ func BuildComponentPath(
 	componentSectionMap *map[string]any,
 	componentType string,
 ) string {
+	defer perf.Track(atmosConfig, "exec.BuildComponentPath")()
+
 	var componentPath string
 
 	if stackComponentSection, ok := (*componentSectionMap)[cfg.ComponentSectionName].(string); ok {
@@ -194,11 +205,15 @@ func GetStackNamePattern(atmosConfig *schema.AtmosConfiguration) string {
 
 // GetStackNameTemplate returns the stack name template.
 func GetStackNameTemplate(atmosConfig *schema.AtmosConfiguration) string {
+	defer perf.Track(atmosConfig, "exec.GetStackNameTemplate")()
+
 	return atmosConfig.Stacks.NameTemplate
 }
 
-// IsComponentAbstract returns 'true' if the component is abstract
+// IsComponentAbstract returns 'true' if the component is abstract.
 func IsComponentAbstract(metadataSection map[string]any) bool {
+	defer perf.Track(nil, "exec.IsComponentAbstract")()
+
 	if metadataType, ok := metadataSection["type"].(string); ok {
 		if metadataType == "abstract" {
 			return true
@@ -209,6 +224,8 @@ func IsComponentAbstract(metadataSection map[string]any) bool {
 
 // IsComponentEnabled returns 'true' if the component is enabled.
 func IsComponentEnabled(varsSection map[string]any) bool {
+	defer perf.Track(nil, "exec.IsComponentEnabled")()
+
 	if enabled, ok := varsSection["enabled"].(bool); ok {
 		if enabled == false {
 			return false

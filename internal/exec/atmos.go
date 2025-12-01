@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/charmbracelet/log"
+	"github.com/cloudposse/atmos/pkg/perf"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/samber/lo"
 
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
@@ -13,8 +15,10 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteAtmosCmd executes `atmos` command
+// ExecuteAtmosCmd executes `atmos` command.
 func ExecuteAtmosCmd() error {
+	defer perf.Track(nil, "exec.ExecuteAtmosCmd")()
+
 	commands := []string{
 		"terraform plan",
 		"terraform apply",
@@ -40,7 +44,7 @@ func ExecuteAtmosCmd() error {
 
 	// Get a map of stacks and components in the stacks
 	// Don't process `Go` templates and YAML functions in Atmos stack manifests since we just need to display the stack and component names in the TUI
-	stacksMap, err := ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil)
+	stacksMap, err := ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -99,7 +103,14 @@ func ExecuteAtmosCmd() error {
 	log.Info("Executing", "command", c)
 
 	if selectedCommand == "describe component" {
-		data, err := ExecuteDescribeComponent(selectedComponent, selectedStack, true, true, nil)
+		data, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			Component:            selectedComponent,
+			Stack:                selectedStack,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+			Skip:                 nil,
+			AuthManager:          nil,
+		})
 		if err != nil {
 			return err
 		}
@@ -111,7 +122,15 @@ func ExecuteAtmosCmd() error {
 	}
 
 	if selectedCommand == "describe dependents" {
-		data, err := ExecuteDescribeDependents(&atmosConfig, selectedComponent, selectedStack, false, true, true, nil)
+		data, err := ExecuteDescribeDependents(&atmosConfig, &DescribeDependentsArgs{
+			Component:            selectedComponent,
+			Stack:                selectedStack,
+			IncludeSettings:      false,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+			Skip:                 nil,
+			OnlyInStack:          "",
+		})
 		if err != nil {
 			return err
 		}

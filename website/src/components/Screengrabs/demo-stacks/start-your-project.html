@@ -5,6 +5,7 @@
 
 <span style="font-weight:bold;color:#005f87;">.</span>/
 ├── atmos.yaml
+├── component.yaml
 ├── <span style="font-weight:bold;color:#005f87;">components</span>/
 │   └── <span style="font-weight:bold;color:#005f87;">terraform</span>/
 │       └── <span style="font-weight:bold;color:#005f87;">myapp</span>/
@@ -17,7 +18,7 @@
         ├── prod.yaml
         └── staging.yaml
 
-6 directories, 6 files
+7 directories, 7 files
 
 
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
@@ -26,7 +27,6 @@
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # where to find the stacks.
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> cat atmos.yaml
-
 
      File: <span style="font-weight:bold;">atmos.yaml</span>
 <span style="color:#404040;">   1</span> <span style="color:#5faf5f;">base_path</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">./</span><span style="color:#005f87;">&quot;</span>
@@ -38,7 +38,7 @@
 <span style="color:#404040;">   7</span> <span style="color:#2a2a2a;">    </span><span style="color:#5faf5f;">deploy_run_init</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#0087af;">true</span>
 <span style="color:#404040;">   8</span> <span style="color:#2a2a2a;">    </span><span style="color:#5faf5f;">init_run_reconfigure</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#0087af;">true</span>
 <span style="color:#404040;">   9</span> <span style="color:#2a2a2a;">    </span><span style="color:#5faf5f;">auto_generate_backend_file</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#0087af;">false</span>
-<span style="color:#404040;">  10</span> <span style="color:#2a2a2a;">  </span>
+<span style="color:#404040;">  10</span> 
 <span style="color:#404040;">  11</span> <span style="color:#5faf5f;">stacks</span><span style="color:#2a2a2a;">:</span>
 <span style="color:#404040;">  12</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">base_path</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">stacks</span><span style="color:#005f87;">&quot;</span>
 <span style="color:#404040;">  13</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">included_paths</span><span style="color:#2a2a2a;">:</span>
@@ -48,8 +48,7 @@
 <span style="color:#404040;">  17</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">name_pattern</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">{stage}</span><span style="color:#005f87;">&quot;</span>
 <span style="color:#404040;">  18</span> 
 <span style="color:#404040;">  19</span> <span style="color:#5faf5f;">logs</span><span style="color:#2a2a2a;">:</span>
-<span style="color:#404040;">  20</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">file</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">/dev/stdout</span><span style="color:#005f87;">&quot;</span>
+<span style="color:#404040;">  20</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">file</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">&quot;</span><span style="color:#005f87;">/dev/stderr</span><span style="color:#005f87;">&quot;</span>
 <span style="color:#404040;">  21</span> <span style="color:#2a2a2a;">  </span><span style="color:#5faf5f;">level</span><span style="color:#2a2a2a;">:</span><span style="color:#2a2a2a;"> </span><span style="color:#005f87;">Info</span>
-
 
 

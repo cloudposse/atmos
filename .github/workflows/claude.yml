@@ -1,0 +1,38 @@
+name: Claude Quality Checks
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'CLAUDE.md'
+      - '.claude/agents/**'
+      - '.github/workflows/claude.yml'
+      - '.github/actions/check-claude-md-size/**'
+
+jobs:
+  claude-md-size:
+    name: Check CLAUDE.md size
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check modified CLAUDE.md size
+        uses: ./.github/actions/check-claude-md-size
+        with:
+          file-patterns: 'CLAUDE.md'
+          max-size: 40000
+          github-token: ${{ github.token }}
+
+  agent-size:
+    name: Check agent file sizes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check modified agent files
+        uses: ./.github/actions/check-claude-md-size
+        with:
+          file-patterns: '.claude/agents/*.md'
+          max-size: 25000
+          github-token: ${{ github.token }}

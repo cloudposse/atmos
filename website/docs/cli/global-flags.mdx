@@ -4,13 +4,15 @@ sidebar_position: 3
 description: Complete reference for all global command-line flags available in Atmos
 ---
 
+
 import Intro from '@site/src/components/Intro';
 import Note from '@site/src/components/Note';
 
 # Global Flags
 
 <Intro>
-Global flags are available for all Atmos commands and control the overall behavior of the CLI. These flags take precedence over environment variables and configuration files.
+    Global flags are available for all Atmos commands and control the overall behavior of the CLI. These flags take
+    precedence over environment variables and configuration files.
 </Intro>
 
 ## Core Global Flags
@@ -18,82 +20,281 @@ Global flags are available for all Atmos commands and control the overall behavi
 These flags are available for every Atmos command:
 
 <dl>
-  <dt>`--base-path`</dt>
-  <dd>
-    Base path for the Atmos project. This is the root directory where Atmos will look for configuration files, stacks, and components.
-    - Can also use `ATMOS_BASE_PATH` environment variable
-    - Supports both absolute and relative paths
-  </dd>
+    <dt>`--chdir` / `-C`</dt>
+    <dd>
+        Change the working directory before Atmos runs. Equivalent to running `cd <directory>` before executing `atmos`.
 
-  <dt>`--config`</dt>
-  <dd>
-    Path to a specific Atmos configuration file.
-    - Can be used multiple times for deep merging (later files override earlier ones)
-    - Example: `--config=base.yaml --config=override.yaml`
-  </dd>
+        **Use Cases:**
+        - **Development workflow**: Test local Atmos builds against different infrastructure repos
+        - **CI/CD**: Run Atmos from a build directory while operating on infrastructure elsewhere
+        - **Multi-repo operations**: Execute commands across multiple repos without changing your shell
+        - **Scripting**: Simplify scripts that operate on different directories
 
-  <dt>`--config-path`</dt>
-  <dd>
-    Path to a directory containing Atmos configuration files.
-    - Can be used multiple times
-    - Atmos looks for `atmos.yaml`, `.atmos.yaml`, `atmos.yml`, or `.atmos.yml` in these directories
-  </dd>
+        **Basic Usage:**
+        ```bash
+        # Run as if you did: cd /path/to/infra && atmos terraform plan
+        atmos -C /path/to/infra terraform plan vpc -s prod
 
-  <dt>`--logs-level`</dt>
-  <dd>
-    Set the logging level for Atmos operations.
-    - Options: `Trace`, `Debug`, `Info`, `Warning`, `Off`
-    - Default: `Warning`
-    - Can also use `ATMOS_LOGS_LEVEL` environment variable
-  </dd>
+        # Use environment variable
+        ATMOS_CHDIR=/infrastructure atmos list components
+        ```
 
-  <dt>`--logs-file`</dt>
-  <dd>
-    File to write Atmos logs to.
-    - Default: `/dev/stderr`
-    - Can be any file path or standard file descriptor (`/dev/stdout`, `/dev/stderr`, `/dev/null`)
-    - Can also use `ATMOS_LOGS_FILE` environment variable
-  </dd>
+        <details>
+        <summary><strong>How it differs from <code>--base-path</code></strong></summary>
 
-  <dt>`--no-color`</dt>
-  <dd>
-    Disable colored terminal output.
-    - Useful for CI/CD environments or when piping output
-    - Can also use `ATMOS_NO_COLOR` or `NO_COLOR` environment variables
-    - The `NO_COLOR` env var follows the standard from https://no-color.org/
-  </dd>
+        **`--chdir`**: Changes the **process working directory** (calls `os.Chdir()`)
+        - Like running `cd` before `atmos`
+        - ALL file operations use the new directory
+        - Happens **before** any configuration loading
 
-  <dt>`--pager`</dt>
-  <dd>
-    Configure pager behavior for command output.
-    - `--pager` (no value): Enable pager with default settings
-    - `--pager=true` or `--pager=on`: Explicitly enable pager
-    - `--pager=false` or `--pager=off`: Explicitly disable pager
-    - Any non-boolean value is treated as a pager command (first token) with following tokens as arguments
+        **`--base-path`**: Provides a **path prefix** for configuration (just a string)
+        - Does **not** change the working directory
+        - Used when joining paths: `filepath.Join(basePath, componentPath)`
+        - Processed **after** `--chdir`
 
-    **Examples:**
-    - `--pager='less -R'`: Use less with raw control chars
-    - `--pager="less --RAW-CONTROL-CHARS"`: Alternative syntax for less with options
-    - `export ATMOS_PAGER='less -R +Gg'` or `export PAGER='less -R'`: Set via environment variables
+        **Examples showing the difference:**
+        ```bash
+        # Without any flags (current directory: /home/user)
+        atmos terraform plan
+        # Looks for atmos.yaml in: /home/user/atmos.yaml
+        # Resolves components from: /home/user/components/terraform/
 
-    **Environment Variables:**
-    - `NO_PAGER`: Standard CLI convention to disable pager (e.g., `NO_PAGER=1`)
-    - `ATMOS_PAGER`: Atmos-specific pager configuration
-    - `PAGER`: System default pager (fallback)
+        # With --chdir (changes working directory)
+        atmos --chdir=/infra terraform plan
+        # Working directory changed to: /infra
+        # Looks for atmos.yaml in: /infra/atmos.yaml
+        # Resolves components from: /infra/components/terraform/
 
-    **Precedence**: `--pager` flag > `NO_PAGER` > `ATMOS_PAGER` > `PAGER` > config file
+        # With --base-path (working directory unchanged)
+        atmos --base-path=/infra terraform plan
+        # Working directory still: /home/user
+        # Base path prefix: /infra
+        # Looks for atmos.yaml using: /infra prefix
+        # Relative paths in config resolve from: /home/user
 
-    **Default**: Pager is disabled unless explicitly enabled
+        # With both flags
+        atmos --chdir=/home/user --base-path=/infra terraform plan
+        # First: changes working directory to /home/user
+        # Then: uses /infra as base path prefix
+        # Result: paths like /infra are resolved relative to /home/user
+        ```
+        </details>
+    </dd>
 
-    **Note**: Use quotes around the value to preserve spaces and prevent shell splitting when passing pager arguments. The `NO_PAGER` environment variable follows the standard CLI convention for disabling pagers.
-  </dd>
+    <dt>`--base-path`</dt>
+    <dd>
+        Specify the Atmos project root directory. Use this when your `atmos.yaml` and components are in a non-standard location.
 
-  <dt>`--redirect-stderr`</dt>
-  <dd>
-    Redirect stderr to a file or file descriptor.
-    - Can redirect to any file path or standard file descriptor
-    - Example: `--redirect-stderr=/dev/null` to suppress error output
-  </dd>
+        **When to use it:**
+        - Your `atmos.yaml` and components are in a subdirectory
+        - Using Atmos programmatically (like the Terraform provider)
+        - Non-standard project layout where the Atmos root isn't the current directory
+
+        **Basic Usage:**
+        ```bash
+        # Look for atmos.yaml and components using /custom/path as the base
+        atmos --base-path=/custom/path terraform plan vpc -s prod
+
+        # Combine with --chdir
+        atmos --chdir=/infra --base-path=./custom describe stacks
+        ```
+
+        <details>
+        <summary><strong>Technical details</strong></summary>
+
+        **What it does internally:**
+        - Sets `atmosConfig.BasePath` (a configuration value, not a directory change)
+        - Used as a prefix when joining paths: `filepath.Join(basePath, componentPath)`
+        - Constructs paths to: stacks, terraform components, helmfile components, packer components
+        - Does **not** call `os.Chdir()` or change the working directory
+
+        **Path resolution:**
+        - Supports both absolute and relative paths
+        - Relative paths resolved using `filepath.Abs()` from current working directory
+        - If `--chdir` was used, relative paths resolve from the NEW working directory
+        - Can also use `ATMOS_BASE_PATH` environment variable
+
+        See `--chdir` section above for detailed comparison of how these flags interact.
+        </details>
+    </dd>
+
+    <dt>`--config`</dt>
+    <dd>
+        Path to a specific Atmos configuration file.
+        - Can be used multiple times for deep merging (later files override earlier ones)
+        - Example: `--config=base.yaml --config=override.yaml`
+    </dd>
+
+    <dt>`--config-path`</dt>
+    <dd>
+        Path to a directory containing Atmos configuration files.
+        - Can be used multiple times
+        - Atmos looks for `atmos.yaml`, `.atmos.yaml`, `atmos.yml`, or `.atmos.yml` in these directories
+    </dd>
+
+    <dt>`--profile`</dt>
+    <dd>
+        Activate configuration profiles for environment-specific settings.
+
+        **Use Cases:**
+        - **Development workflow**: Use debug logging and wider terminal output during development
+        - **CI/CD**: Disable interactive features and use plain text output in CI environments
+        - **Team collaboration**: Share consistent settings across team members via profiles
+        - **Multi-environment**: Different settings for staging vs production deployments
+
+        **Basic Usage:**
+        ```bash
+        # Activate a single profile
+        atmos --profile developer terraform plan vpc -s prod
+
+        # Use environment variable
+        ATMOS_PROFILE=developer atmos terraform plan vpc -s prod
+
+        # Activate multiple profiles (comma-separated, applied left-to-right)
+        atmos --profile ci,security terraform plan vpc -s prod
+        ATMOS_PROFILE="developer,debug" atmos describe stacks
+
+        # Flag takes precedence over environment variable
+        ATMOS_PROFILE=ci atmos --profile developer describe config
+        # Uses: developer profile (flag wins)
+        ```
+
+        **Profile Configuration:**
+
+        Profiles are defined in your `atmos.yaml` or in separate profile directories. Each profile can override any Atmos configuration setting:
+
+        ```yaml
+        # atmos.yaml
+        profiles:
+          developer:
+            logs:
+              level: Debug
+            settings:
+              terminal:
+                max_width: 120
+
+          ci:
+            logs:
+              level: Info
+            settings:
+              terminal:
+                color: false
+                pager: false
+        ```
+
+        Or use separate profile directories for better organization:
+
+        ```
+        profiles/
+        ├── developer/
+        │   ├── atmos.yaml      # Developer-specific config
+        │   └── auth.yaml       # Developer auth settings
+        ├── ci/
+        │   ├── atmos.yaml      # CI-specific config
+        │   └── auth.yaml       # CI auth settings
+        └── production/
+            ├── atmos.yaml      # Production config
+            └── auth.yaml       # Production auth settings
+        ```
+
+        **Available via:**
+        - `--profile` flag
+        - `ATMOS_PROFILE` environment variable
+
+        <Note>
+            Profiles are loaded early in Atmos initialization (before stack processing) and can override any configuration setting including logging, terminal settings, and authentication.
+        </Note>
+    </dd>
+
+    <dt>`--logs-level`</dt>
+    <dd>
+        Set the logging level for Atmos operations.
+        - Options: `Trace`, `Debug`, `Info`, `Warning`, `Off`
+        - Default: `Warning`
+        - Can also use `ATMOS_LOGS_LEVEL` environment variable
+    </dd>
+
+    <dt>`--logs-file`</dt>
+    <dd>
+        File to write Atmos logs to.
+        - Default: `/dev/stderr`
+        - Can be any file path or standard file descriptor (`/dev/stdout`, `/dev/stderr`, `/dev/null`)
+        - Can also use `ATMOS_LOGS_FILE` environment variable
+    </dd>
+
+    <dt>`--no-color`</dt>
+    <dd>
+        Disable colored terminal output.
+        - Useful for CI/CD environments or when piping output
+        - Can also use `ATMOS_NO_COLOR` or `NO_COLOR` environment variables
+        - The `NO_COLOR` env var follows the standard from https://no-color.org/
+        - **Takes highest precedence**: Overrides `--force-color`, `--color`, and all other color settings
+    </dd>
+
+    <dt>`--force-tty`</dt>
+    <dd>
+        Force TTY mode with sane defaults when terminal detection fails.
+        - Useful for screenshot generation and documentation
+        - Uses default terminal dimensions (width=120, height=40)
+        - Forces `IsTTY()` to return `true` even when not a TTY
+        - Can also use `ATMOS_FORCE_TTY` environment variable
+        - Example: `atmos terraform plan --force-tty --force-color | screenshot.sh`
+    </dd>
+
+    <dt>`--force-color`</dt>
+    <dd>
+        Force TrueColor output even when not a TTY.
+        - Useful for screenshot generation and documentation
+        - Forces 24-bit TrueColor profile regardless of terminal detection
+        - Overrides automatic color degradation
+        - Can also use `ATMOS_FORCE_COLOR` environment variable
+        - **Note**: The `NO_COLOR` environment variable or `--no-color` flag takes precedence and will disable color even when `--force-color` is set
+        - Example: `ATMOS_FORCE_COLOR=true atmos describe stacks | vhs record.tape`
+    </dd>
+
+    <dt>`--pager`</dt>
+    <dd>
+        Configure pager behavior for command output.
+        - `--pager` (no value): Enable pager with default settings
+        - `--pager=true` or `--pager=on`: Explicitly enable pager
+        - `--pager=false` or `--pager=off`: Explicitly disable pager
+        - Any non-boolean value is treated as a pager command (first token) with following tokens as arguments
+
+        **Examples:**
+        - `--pager='less -R'`: Use less with raw control chars
+        - `--pager="less --RAW-CONTROL-CHARS"`: Alternative syntax for less with options
+        - `export ATMOS_PAGER='less -R +Gg'` or `export PAGER='less -R'`: Set via environment variables
+
+        **Environment Variables:**
+        - `NO_PAGER`: Standard CLI convention to disable pager (e.g., `NO_PAGER=1`)
+        - `ATMOS_PAGER`: Atmos-specific pager configuration
+        - `PAGER`: System default pager (fallback)
+
+        **Precedence**: `--pager` flag > `NO_PAGER` > `ATMOS_PAGER` > `PAGER` > config file
+
+        **Default**: Pager is disabled unless explicitly enabled
+
+        **Note**: Use quotes around the value to preserve spaces and prevent shell splitting when passing pager
+        arguments. The `NO_PAGER` environment variable follows the standard CLI convention for disabling pagers.
+    </dd>
+
+    <dt>`--redirect-stderr`</dt>
+    <dd>
+        Redirect stderr to a file or file descriptor.
+        - Can redirect to any file path or standard file descriptor
+        - Example: `--redirect-stderr=/dev/null` to suppress error output
+    </dd>
+
+    <dt>`--version`</dt>
+    <dd>
+        Print a minimal single-line Atmos CLI version and exit.
+        - Outputs a simple `atmos &lt;version&gt;` format without styling or additional information
+        - Does not perform update checks or support `--check`/`--format` flags
+        - Available as a persistent flag on all commands
+        - Always displays the **Atmos version**, not the version of underlying tools (Terraform, Helmfile, etc.)
+        - For richer output and additional flags, use the [`atmos version`](/cli/commands/version/usage) command
+        - Example: `atmos --version`
+    </dd>
 </dl>
 
 ## Command-Specific Flags
@@ -103,59 +304,129 @@ These flags are available across multiple commands but not universally:
 ### Processing Flags
 
 <dl>
-  <dt>`--process-templates`</dt>
-  <dd>
-    Enable or disable Go template processing in Atmos manifests.
-    - Default: `true`
-    - Available in: `describe stacks`, `list`, `validate` commands
-  </dd>
+    <dt>`--process-templates`</dt>
+    <dd>
+        Enable or disable Go template processing in Atmos manifests.
+        - Default: `true`
+        - Available in: `describe stacks`, `list`, `validate` commands
+    </dd>
 
-  <dt>`--process-functions`</dt>
-  <dd>
-    Enable or disable YAML function processing in Atmos manifests.
-    - Default: `true`
-    - Available in: `describe stacks`, `list`, `validate` commands
-  </dd>
+    <dt>`--process-functions`</dt>
+    <dd>
+        Enable or disable YAML function processing in Atmos manifests.
+        - Default: `true`
+        - Available in: `describe stacks`, `list`, `validate` commands
+    </dd>
 
-  <dt>`--skip`</dt>
-  <dd>
-    Skip processing specific Atmos functions in manifests.
-    - Can be used multiple times
-    - Example: `--skip=terraform.output --skip=include`
-    - Available in: `describe` commands
-  </dd>
+    <dt>`--skip`</dt>
+    <dd>
+        Skip processing specific Atmos functions in manifests.
+        - Can be used multiple times
+        - Example: `--skip=terraform.output --skip=include`
+        - Available in: `describe` commands
+    </dd>
 </dl>
 
 ### Output Flags
 
 <dl>
-  <dt>`--format` / `-f`</dt>
-  <dd>
-    Specify the output format.
-    - Common values: `yaml`, `json`, `table`, `csv`
-    - Available in: `describe`, `list`, `validate` commands
-  </dd>
+    <dt>`--format` / `-f`</dt>
+    <dd>
+        Specify the output format.
+        - Common values: `yaml`, `json`, `table`, `csv`
+        - Available in: `describe`, `list`, `validate` commands
+    </dd>
 
-  <dt>`--file`</dt>
-  <dd>
-    Write output to a file instead of stdout.
-    - Available in: `describe`, `generate` commands
-  </dd>
+    <dt>`--file`</dt>
+    <dd>
+        Write output to a file instead of stdout.
+        - Available in: `describe`, `generate` commands
+    </dd>
 
-  <dt>`--query` / `-q`</dt>
-  <dd>
-    Query output using JSONPath or yq expressions.
-    - Example: `--query='.components.vpc.vars'`
-    - Available in: `describe` commands
-  </dd>
+    <dt>`--query` / `-q`</dt>
+    <dd>
+        Query output using JSONPath or yq expressions.
+        - Example: `--query='.components.vpc.vars'`
+        - Available in: `describe` commands
+    </dd>
 </dl>
 
+### Profiling Flags
+
+<dl>
+    <dt>`--profiler-enabled`</dt>
+    <dd>
+        Enable the pprof HTTP profiling server.
+        - Default: `false`
+        - When enabled, starts an HTTP server for interactive profiling
+        - Can also use `ATMOS_PROFILER_ENABLED` environment variable
+    </dd>
+
+    <dt>`--profiler-host`</dt>
+    <dd>
+        Host address for the profiling server.
+        - Default: `localhost`
+        - Use `0.0.0.0` to allow external connections (security consideration)
+        - Can also use `ATMOS_PROFILER_HOST` environment variable
+    </dd>
+
+    <dt>`--profiler-port`</dt>
+    <dd>
+        Port for the profiling server.
+        - Default: `6060`
+        - Can also use `ATMOS_PROFILER_PORT` environment variable
+    </dd>
+
+    <dt>`--profile-file`</dt>
+    <dd>
+        Write profiling data to the specified file (enables profiling automatically).
+        - When specified, enables file-based profiling instead of server-based
+        - File extension should match profile type (e.g., `.prof` for CPU, `.out` for trace)
+        - Can also use `ATMOS_PROFILE_FILE` environment variable
+    </dd>
+
+    <dt>`--profile-type`</dt>
+    <dd>
+        Type of profile to collect when using `--profile-file`.
+        - Options: `cpu`, `heap`, `allocs`, `goroutine`, `block`, `mutex`, `threadcreate`, `trace`
+        - Default: `cpu`
+        - Only used with `--profile-file`, ignored for server-based profiling
+        - Can also use `ATMOS_PROFILE_TYPE` environment variable
+    </dd>
+</dl>
+
+
+### Performance Heatmap Flags
+
+<dl>
+    <dt>`--heatmap`</dt>
+    <dd>
+        Display performance heatmap visualization after command execution.
+        - Default: `false`
+        - Shows function call counts, execution times, and performance metrics
+        - Automatically tracks function execution with microsecond precision
+        - Includes P95 latency calculations using High Dynamic Range histograms
+        - Displays interactive TUI if terminal is available, otherwise static output
+    </dd>
+
+    <dt>`--heatmap-mode`</dt>
+    <dd>
+        Visualization mode for the performance heatmap.
+        - Options: `bar`, `ascii`, `sparkline`, `table`
+        - Default: `bar`
+        - `bar`: Colored horizontal bar chart with function names and durations
+        - `ascii`: Color-coded ASCII bars (Red &gt;1ms, Orange &gt;500µs, Yellow &gt;100µs, Green &lt;100µs)
+        - `sparkline`: Compact sparklines showing relative performance
+        - `table`: Interactive table with sortable columns
+        - Only used with `--heatmap` flag
+    </dd>
+</dl>
 
 ## Environment Variables
 
 All global flags can be set using environment variables. The precedence order is:
 
-1. Command-line flags (highest priority)
+1. Command-line flags (the highest priority)
 2. Environment variables
 3. Configuration file (`atmos.yaml`)
 4. Default values (lowest priority)
@@ -163,38 +434,119 @@ All global flags can be set using environment variables. The precedence order is
 ### Core Environment Variables
 
 <dl>
-  <dt>`ATMOS_BASE_PATH`</dt>
-  <dd>Sets the base path for the Atmos project</dd>
+    <dt>`ATMOS_CHDIR`</dt>
+    <dd>
+        Change to the specified directory before executing any command.
+        - Equivalent to the `--chdir` / `-C` flag
+        - CLI flag takes precedence over this environment variable
+        - Useful for CI/CD pipelines and scripting
+    </dd>
 
-  <dt>`ATMOS_LOGS_LEVEL`</dt>
-  <dd>Sets the logging level</dd>
+    <dt>`ATMOS_BASE_PATH`</dt>
+    <dd>Sets the base path for the Atmos project</dd>
 
-  <dt>`ATMOS_LOGS_FILE`</dt>
-  <dd>Sets the log file location</dd>
+    <dt>`ATMOS_PROFILE`</dt>
+    <dd>
+        Activate configuration profiles (comma-separated).
+        - Equivalent to the `--profile` flag
+        - CLI flag takes precedence over this environment variable
+        - Supports multiple profiles: `ATMOS_PROFILE="developer,debug"`
+        - Example: `ATMOS_PROFILE=ci atmos terraform plan vpc -s prod`
+    </dd>
 
-  <dt>`ATMOS_COLOR` / `COLOR`</dt>
-  <dd>
-    Enable or disable colored output.
-    - Set to `true` to enable color (default)
-    - Set to `false` to disable color
-    - Both `ATMOS_COLOR` and `COLOR` are supported for maximum portability
-  </dd>
+    <dt>`ATMOS_LOGS_LEVEL`</dt>
+    <dd>Sets the logging level</dd>
 
-  <dt>`ATMOS_NO_COLOR` / `NO_COLOR`</dt>
-  <dd>
-    Disable colored output (any non-empty value disables color).
-    - `NO_COLOR` is a standard environment variable supported by many CLI tools (https://no-color.org/)
-    - Maintained for portability across different systems and CI/CD environments
-    - Takes precedence over `ATMOS_COLOR`/`COLOR` settings
-    - Both `ATMOS_NO_COLOR` and `NO_COLOR` are fully supported
-  </dd>
+    <dt>`ATMOS_LOGS_FILE`</dt>
+    <dd>Sets the log file location</dd>
 
-  <dt>`ATMOS_PAGER` / `PAGER`</dt>
-  <dd>
-    Configure pager settings.
-    - `PAGER` is a standard Unix environment variable maintained for portability
-    - Both `ATMOS_PAGER` and `PAGER` are supported to ensure compatibility across different systems
-  </dd>
+    <dt>`ATMOS_COLOR` / `COLOR`</dt>
+    <dd>
+        Enable or disable colored output.
+        - Set to `true` to enable color (default)
+        - Set to `false` to disable color
+        - Both `ATMOS_COLOR` and `COLOR` are supported for maximum portability
+    </dd>
+
+    <dt>`ATMOS_NO_COLOR` / `NO_COLOR`</dt>
+    <dd>
+        Disable colored output (any non-empty value disables color).
+        - `NO_COLOR` is a standard environment variable supported by many CLI tools (https://no-color.org/)
+        - Maintained for portability across different systems and CI/CD environments
+        - **Highest precedence**: Takes precedence over `ATMOS_FORCE_COLOR`, `CLICOLOR_FORCE`, `ATMOS_COLOR`, and `COLOR` settings
+        - Overrides `--force-color` flag
+        - Both `ATMOS_NO_COLOR` and `NO_COLOR` are fully supported
+    </dd>
+
+    <dt>`ATMOS_FORCE_TTY`</dt>
+    <dd>
+        Force TTY mode with sane defaults when terminal detection fails.
+        - Useful for screenshot generation and documentation
+        - Uses default terminal dimensions (width=120, height=40)
+        - Example: `ATMOS_FORCE_TTY=true atmos describe stacks`
+    </dd>
+
+    <dt>`ATMOS_FORCE_COLOR` / `CLICOLOR_FORCE`</dt>
+    <dd>
+        Force TrueColor output even when not a TTY.
+        - Both `ATMOS_FORCE_COLOR` and `CLICOLOR_FORCE` are equivalent and fully supported
+        - `CLICOLOR_FORCE` is a standard environment variable (https://bixense.com/clicolors/)
+        - Useful for screenshot generation and piping to color-aware tools
+        - Forces 24-bit TrueColor profile regardless of terminal detection
+        - **Note**: `NO_COLOR` environment variable takes precedence and will disable color even when this is set
+        - Example: `ATMOS_FORCE_COLOR=true atmos describe config | bat`
+        - Example: `CLICOLOR_FORCE=1 atmos terraform plan`
+    </dd>
+
+    <dt>`ATMOS_PAGER` / `PAGER`</dt>
+    <dd>
+        Configure pager settings.
+        - `PAGER` is a standard Unix environment variable maintained for portability
+        - Both `ATMOS_PAGER` and `PAGER` are supported to ensure compatibility across different systems
+    </dd>
+
+    <dt>`ATMOS_PROFILER_ENABLED`</dt>
+    <dd>Enable the pprof HTTP profiling server</dd>
+
+    <dt>`ATMOS_PROFILER_HOST`</dt>
+    <dd>Set the host address for the profiling server</dd>
+
+    <dt>`ATMOS_PROFILER_PORT`</dt>
+    <dd>Set the port for the profiling server</dd>
+
+    <dt>`ATMOS_PROFILE_FILE`</dt>
+    <dd>Set the file path for file-based profiling</dd>
+
+    <dt>`ATMOS_PROFILE_TYPE`</dt>
+    <dd>Set the profile type for file-based profiling (cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace)</dd>
+</dl>
+
+### XDG Base Directory Environment Variables
+
+<dl>
+    <dt>`ATMOS_XDG_CACHE_HOME` / `XDG_CACHE_HOME`</dt>
+    <dd>
+        Override the default XDG cache directory for Atmos.
+        - Default: `~/.cache` on Linux/Unix/macOS, `%LOCALAPPDATA%\cache` on Windows
+        - Used for: Cache files (`cache.yaml`), auth provisioning cache
+        - Example: `ATMOS_XDG_CACHE_HOME=/custom/cache atmos describe stacks`
+    </dd>
+
+    <dt>`ATMOS_XDG_DATA_HOME` / `XDG_DATA_HOME`</dt>
+    <dd>
+        Override the default XDG data directory for Atmos.
+        - Default: `~/.local/share` on Linux/Unix/macOS, `%LOCALAPPDATA%` on Windows
+        - Used for: File-based keyring storage
+        - Example: `ATMOS_XDG_DATA_HOME=/custom/data atmos auth login`
+    </dd>
+
+    <dt>`ATMOS_XDG_CONFIG_HOME` / `XDG_CONFIG_HOME`</dt>
+    <dd>
+        Override the default XDG config directory for Atmos.
+        - Default: `~/.config` on Linux/Unix/macOS, `%APPDATA%` on Windows
+        - Reserved for future use
+        - Example: `ATMOS_XDG_CONFIG_HOME=/custom/config`
+    </dd>
 </dl>
 
 ## Portability Notes
@@ -222,6 +574,33 @@ atmos --base-path=/infrastructure \
       --config=base.yaml \
       --config=override.yaml \
       terraform plan vpc -s prod
+```
+
+### Directory Change Examples
+
+```bash
+# Change to infrastructure directory before running command
+atmos --chdir=/path/to/infrastructure describe stacks
+
+# Use short form (-C) for brevity
+atmos -C /infra terraform plan vpc -s prod
+
+# Relative path from current directory
+atmos --chdir=../other-repo list components
+
+# Use with other flags - chdir processes first
+atmos -C /infra --base-path=./config describe component vpc -s dev
+
+# Environment variable for scripting
+export ATMOS_CHDIR=/infrastructure
+atmos terraform apply vpc -s prod
+
+# Development workflow - point dev binary at different repo
+./build/atmos -C ~/projects/my-infrastructure describe stacks
+
+# CI/CD pipeline example
+cd /build
+atmos --chdir=/infrastructure terraform plan vpc -s prod
 ```
 
 ### Pager Control Examples
@@ -285,6 +664,32 @@ export ATMOS_LOGS_FILE=/var/log/atmos.log
 atmos terraform apply --auto-approve
 ```
 
+### Profiling Examples
+
+```bash
+# File-based CPU profiling (default profile type)
+atmos terraform plan vpc -s prod --profile-file=cpu.prof
+
+# File-based memory heap profiling
+atmos terraform plan vpc -s prod --profile-file=heap.prof --profile-type=heap
+
+# File-based execution trace profiling
+atmos terraform plan vpc -s prod --profile-file=trace.out --profile-type=trace
+
+# Server-based profiling for interactive analysis
+atmos terraform apply vpc -s prod --profiler-enabled --profiler-port=8080
+
+# Environment variable configuration
+export ATMOS_PROFILE_FILE=debug.prof
+export ATMOS_PROFILE_TYPE=goroutine
+atmos describe stacks
+
+# Multiple profile types for comprehensive analysis
+atmos terraform plan vpc -s prod --profile-file=cpu.prof --profile-type=cpu
+atmos terraform plan vpc -s prod --profile-file=heap.prof --profile-type=heap
+atmos terraform plan vpc -s prod --profile-file=trace.out --profile-type=trace
+```
+
 ### CI/CD Portability Example
 
 ```bash
@@ -299,12 +704,13 @@ kubectl get pods
 ```
 
 <Note>
-When output is piped to another command, Atmos automatically disables color output and pager to ensure compatibility:
+    When output is piped to another command, Atmos automatically disables color output and pager to ensure
+    compatibility:
 
-```bash
-# Color and pager automatically disabled
-atmos describe stacks | grep production
-```
+    ```bash
+    # Color and pager automatically disabled
+    atmos describe stacks | grep production
+    ```
 </Note>
 
 ## See Also

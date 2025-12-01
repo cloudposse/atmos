@@ -21,8 +21,8 @@ func TestPreprocessAtmosYamlFunc(t *testing.T) {
 		{
 			name: "sequence of mappings with same key",
 			setup: func(t *testing.T) (string, func()) {
-				os.Setenv("TEST_SERVER_1_NAME", "a")
-				os.Setenv("TEST_SERVER_2_NAME", "b")
+				t.Setenv("TEST_SERVER_1_NAME", "a")
+				t.Setenv("TEST_SERVER_2_NAME", "b")
 				yamlContent := `
 servers:
   - name: !env TEST_SERVER_1_NAME
@@ -40,12 +40,28 @@ servers:
 			wantErr: false,
 		},
 		{
+			name: "process !env directive with empty value",
+			yamlStr: `
+key: !env TEST_EMPTY_VAR
+`,
+			setup: func(t *testing.T) (string, func()) {
+				t.Setenv("TEST_EMPTY_VAR", "")
+				return `
+key: !env TEST_EMPTY_VAR
+`, func() {}
+			},
+			expected: map[string]interface{}{
+				"key": "",
+			},
+			wantErr: false,
+		},
+		{
 			name: "process !env directive",
 			yamlStr: `
 key: !env TEST_ENV_VAR
 `,
 			setup: func(t *testing.T) (string, func()) {
-				os.Setenv("TEST_ENV_VAR", "test_value")
+				t.Setenv("TEST_ENV_VAR", "test_value")
 				return `
 key: !env TEST_ENV_VAR
 `, func() { os.Unsetenv("TEST_ENV_VAR") }
@@ -62,6 +78,16 @@ key: !exec "echo hello"
 `,
 			expected: map[string]interface{}{
 				"key": "hello",
+			},
+			wantErr: false,
+		},
+		{
+			name: "process !exec directive with empty output",
+			yamlStr: `
+key: !exec "echo ''"
+`,
+			expected: map[string]interface{}{
+				"key": "",
 			},
 			wantErr: false,
 		},
@@ -92,6 +118,30 @@ key: !exec "echo hello"
 			wantErr: false,
 		},
 		{
+			name:    "process !include directive with empty file",
+			yamlStr: `key: !include %s`, // Format string placeholder
+			setup: func(t *testing.T) (string, func()) {
+				tmpfile, err := os.CreateTemp("", "include-empty-*.yaml")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer tmpfile.Close()
+
+				// Write empty content
+				if _, err := tmpfile.Write([]byte("")); err != nil {
+					t.Fatal(err)
+				}
+
+				// Generate the dynamic YAML with the temp file path
+				dynamicYAML := fmt.Sprintf("key: !include %s", tmpfile.Name())
+				return dynamicYAML, func() { os.Remove(tmpfile.Name()) }
+			},
+			expected: map[string]interface{}{
+				// Empty file results in no key being set
+			},
+			wantErr: false,
+		},
+		{
 			name: "nested mappings and sequences",
 			yamlStr: `
 parent:
@@ -101,7 +151,7 @@ parent:
     - !include %s
 `,
 			setup: func(t *testing.T) (string, func()) {
-				os.Setenv("NESTED_ENV_VAR", "nested_value")
+				t.Setenv("NESTED_ENV_VAR", "nested_value")
 
 				tmpfile, err := os.CreateTemp("", "nested-include-*.yaml")
 				if err != nil {

@@ -6,14 +6,17 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteAwsEksUpdateKubeconfigCommand")()
+
 	flags := cmd.Flags()
 
 	stack, err := flags.GetString("stack")
@@ -82,9 +85,11 @@ func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) err
 	return ExecuteAwsEksUpdateKubeconfig(executeAwsEksUpdateKubeconfigContext)
 }
 
-// ExecuteAwsEksUpdateKubeconfig executes 'aws eks update-kubeconfig'
+// ExecuteAwsEksUpdateKubeconfig executes 'aws eks update-kubeconfig'.
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html
 func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconfigContext) error {
+	defer perf.Track(nil, "exec.ExecuteAwsEksUpdateKubeconfig")()
+
 	// AWS profile to authenticate to the cluster
 	profile := kubeconfigContext.Profile
 
@@ -157,11 +162,11 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		configAndStacksInfo.Stack = kubeconfigContext.Stack
 
 		configAndStacksInfo.ComponentType = "terraform"
-		configAndStacksInfo, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
+		configAndStacksInfo, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 		shellCommandWorkingDir = filepath.Join(atmosConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 		if err != nil {
 			configAndStacksInfo.ComponentType = "helmfile"
-			configAndStacksInfo, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
+			configAndStacksInfo, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 			shellCommandWorkingDir = filepath.Join(atmosConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 			if err != nil {
 				return err

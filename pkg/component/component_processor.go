@@ -1,11 +1,12 @@
 package component
 
 import (
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -16,6 +17,8 @@ func ProcessComponentInStack(
 	atmosCliConfigPath string,
 	atmosBasePath string,
 ) (map[string]any, error) {
+	defer perf.Track(nil, "component.ProcessComponentInStack")()
+
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.Stack = stack
@@ -29,13 +32,13 @@ func ProcessComponentInStack(
 	}
 
 	configAndStacksInfo.ComponentType = cfg.TerraformComponentType
-	configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
+	configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 	if err != nil {
 		configAndStacksInfo.ComponentType = cfg.HelmfileComponentType
-		configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
+		configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 		if err != nil {
 			configAndStacksInfo.ComponentType = cfg.PackerComponentType
-			configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
+			configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 			if err != nil {
 				log.Error(err)
 				return nil, err
@@ -56,6 +59,8 @@ func ProcessComponentFromContext(
 	atmosCliConfigPath string,
 	atmosBasePath string,
 ) (map[string]any, error) {
+	defer perf.Track(nil, "component.ProcessComponentFromContext")()
+
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = component
 	configAndStacksInfo.AtmosCliConfigPath = atmosCliConfigPath
@@ -83,7 +88,7 @@ func ProcessComponentFromContext(
 			},
 		}
 
-		stack, err = e.ProcessTmpl("name-template-from-context", stackNameTemplate, ctx, false)
+		stack, err = e.ProcessTmpl(&atmosConfig, "name-template-from-context", stackNameTemplate, ctx, false)
 		if err != nil {
 			log.Error(err)
 			return nil, err

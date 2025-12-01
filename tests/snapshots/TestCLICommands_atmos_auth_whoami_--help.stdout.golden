@@ -1,0 +1,77 @@
+
+👽 test linux/amd64
+
+Display information about the current effective authentication principal.
+
+USAGE
+
+                                 
+    $ atmos auth whoami [flags]  
+                                 
+
+FLAGS
+
+  -h, --help           help for whoami
+
+  -o, --output string  Output format (json)
+
+
+GLOBAL FLAGS
+
+      --base-path string        Base path for Atmos project
+
+  -C, --chdir string            Change working directory before executing the command (run as if Atmos started in this
+                                directory)
+
+      --config strings          Paths to configuration files (comma-separated or repeated flag)
+
+      --config-path strings     Paths to search for Atmos configuration (comma-separated or repeated flag)
+
+      --force-color             Force color output even when not a TTY (useful for screenshots)
+
+      --force-tty               Force TTY mode with sane defaults when terminal detection fails (useful for
+                                screenshots)
+
+      --heatmap                 Show performance heatmap visualization after command execution (includes P95 latency)
+
+      --heatmap-mode string     Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI) (default
+                                bar)
+
+  -i, --identity string         Specify the target identity to assume. Use without value to interactively select.
+
+      --logs-file string        The file to write Atmos logs to. Logs can be written to any file or any standard file
+                                descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
+                                /dev/stderr)
+
+      --logs-level string       Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log
+                                level is set to Off, Atmos will not log any messages (default Warning)
+
+      --mask                    Enable automatic masking of sensitive data in output (use --mask=false to disable)
+                                (default true)
+
+      --no-color                Disable color output
+
+      --pager string            Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --
+                                pager=less to use specific pager)
+
+      --profile strings         Activate configuration profiles (comma-separated or repeated flag)
+
+      --profile-file string     Write profiling data to file instead of starting server
+
+      --profile-type string     Type of profile to collect when using --profile-file. Options: cpu, heap, allocs,
+                                goroutine, block, mutex, threadcreate, trace (default cpu)
+
+      --profiler-enabled        Enable pprof profiling server
+
+      --profiler-host string    Host for pprof profiling server (default localhost)
+
+      --profiler-port int       Port for pprof profiling server (default 6060)
+
+      --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
+                                standard file descriptor (including '/dev/null')
+
+  -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
+
+      --version                 Display the Atmos CLI version
+
+

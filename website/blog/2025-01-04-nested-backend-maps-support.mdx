@@ -1,0 +1,60 @@
+---
+slug: nested-backend-maps-support
+title: 'Fixed: Nested Maps in Terraform Backend Configurations'
+authors:
+  - osterman
+tags:
+  - bugfix
+date: 2025-01-04T00:00:00.000Z
+release: v1.198.0
+---
+
+Atmos now properly handles nested maps in Terraform backend configurations when using HCL format. This fixes an issue where complex backend settings like `assume_role` were silently dropped.
+
+<!--truncate-->
+
+## The Problem
+
+When generating backend configurations with `atmos terraform generate backends --format hcl`, nested maps were missing from the output. For example:
+
+```yaml
+terraform:
+  backend:
+    s3:
+      bucket: "my-terraform-states"
+      assume_role:
+        role_arn: "arn:aws:iam::123456789012:role/terraform"
+        session_name: "terraform-backend"
+```
+
+The generated `backend.tf` was missing the `assume_role` configuration entirely.
+
+## The Fix
+
+We added a recursive type converter that handles nested maps, arrays, and all Go types when generating HCL output. The JSON and `backend-config` formats already worked correctly.
+
+## Example
+
+Now all nested configurations are properly preserved:
+
+```hcl
+terraform {
+  backend "s3" {
+    bucket = "my-terraform-states"
+    assume_role = {
+      role_arn     = "arn:aws:iam::123456789012:role/terraform"
+      session_name = "terraform-backend"
+    }
+  }
+}
+```
+
+## Usage
+
+Upgrade Atmos and regenerate your backend configurations:
+
+```bash
+atmos terraform generate backends --format hcl
+```
+
+All three formats (HCL, JSON, backend-config) now correctly handle nested structures.

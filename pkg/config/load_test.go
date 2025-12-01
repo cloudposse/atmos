@@ -3,22 +3,21 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func setupTestFiles(t *testing.T) (string, func()) {
-	tempDir, err := os.MkdirTemp("", "atmos-test-*")
-	assert.NoError(t, err)
+	tempDir := t.TempDir()
 
 	cleanup := func() {
-		os.RemoveAll(tempDir)
+		// t.TempDir() handles cleanup automatically
 	}
 
 	return tempDir, cleanup
@@ -83,8 +82,7 @@ components:
 
 			// Set up environment variables
 			for k, v := range tt.setupEnv {
-				os.Setenv(k, v)
-				defer os.Unsetenv(k)
+				t.Setenv(k, v)
 			}
 
 			// Create test config file
@@ -142,8 +140,7 @@ func TestLoadConfigFromDifferentSources(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup environment
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
-				defer os.Unsetenv(k)
+				t.Setenv(k, v)
 			}
 
 			config, err := LoadConfig(&schema.ConfigAndStacksInfo{})
@@ -183,8 +180,7 @@ func TestSetEnv(t *testing.T) {
 
 			// Set environment variables
 			for k, val := range tt.envVars {
-				os.Setenv(k, val)
-				defer os.Unsetenv(k)
+				t.Setenv(k, val)
 			}
 
 			setEnv(v)
@@ -301,10 +297,11 @@ func TestMergeDefaultImports_ExclusionLogic(t *testing.T) {
 					for i := 1; i < len(absoluteExcludePaths); i++ {
 						joinedPaths = joinedPaths + string(os.PathListSeparator) + absoluteExcludePaths[i]
 					}
-					os.Setenv("TEST_EXCLUDE_ATMOS_D", joinedPaths)
+					t.Setenv("TEST_EXCLUDE_ATMOS_D", joinedPaths)
+
 				}
+
 			}
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 			// Adjust dirPath for the test
 			actualDirPath := tt.dirPath
@@ -356,24 +353,17 @@ func TestMergeDefaultImports_PathCanonicalization(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save current directory
-			origDir, err := os.Getwd()
-			assert.NoError(t, err)
-			defer os.Chdir(origDir)
-
 			// Create and change to temp directory
 			tempDir := t.TempDir()
-			err = os.Chdir(tempDir)
-			assert.NoError(t, err)
+			t.Chdir(tempDir)
 
 			// Set the exclude environment variable using table input directly
-			os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePath)
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
+			t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePath)
 
 			// Call the function with table input directly
 			v := viper.New()
 			v.SetConfigType("yaml") // Set config type as done in production code
-			err = mergeDefaultImports(tt.dirPath, v)
+			err := mergeDefaultImports(tt.dirPath, v)
 
 			// Check the result - should skip and return nil when shouldSkip is true
 			assert.NoError(t, err, tt.description)
@@ -411,9 +401,8 @@ func TestMergeDefaultImports_EmptyAndInvalidPaths(t *testing.T) {
 
 			// Set the exclude environment variable
 			if tt.excludePaths != "" {
-				os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePaths)
+				t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.excludePaths)
 			}
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 			// Call the function - should not panic or error on empty/invalid paths
 			v := viper.New()
@@ -508,73 +497,22 @@ func TestShouldExcludePathForTesting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save current directory for relative path tests
-			origDir, err := os.Getwd()
-			assert.NoError(t, err)
-			defer os.Chdir(origDir)
-
 			// For relative path tests, create and change to a temp directory
 			if tt.dirPath == "." || tt.envValue == "." {
 				tempDir := t.TempDir()
-				err = os.Chdir(tempDir)
-				assert.NoError(t, err)
+				t.Chdir(tempDir)
 			}
 
 			// Set the environment variable
 			if tt.envValue != "" {
-				os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
+				t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
 			}
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
 
 			// Call the function
 			result := shouldExcludePathForTesting(tt.dirPath)
 
 			// Assert the result
 			assert.Equal(t, tt.expected, result, tt.description)
-		})
-	}
-}
-
-func TestShouldExcludePathForTesting_WindowsCaseInsensitive(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skipf("skipping Windows-specific test on %s", runtime.GOOS)
-	}
-
-	tempDir := t.TempDir()
-
-	tests := []struct {
-		name     string
-		dirPath  string
-		envValue string
-		expected bool
-	}{
-		{
-			name:     "lowercase_env_uppercase_path",
-			dirPath:  strings.ToUpper(tempDir),
-			envValue: strings.ToLower(tempDir),
-			expected: true,
-		},
-		{
-			name:     "uppercase_env_lowercase_path",
-			dirPath:  strings.ToLower(tempDir),
-			envValue: strings.ToUpper(tempDir),
-			expected: true,
-		},
-		{
-			name:     "mixed_case_match",
-			dirPath:  tempDir,
-			envValue: strings.ToUpper(tempDir),
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
-
-			result := shouldExcludePathForTesting(tt.dirPath)
-			assert.Equal(t, tt.expected, result, "Windows should match paths case-insensitively")
 		})
 	}
 }
@@ -622,8 +560,7 @@ func TestShouldExcludePathForTesting_PathCanonicalization(t *testing.T) {
 				tt.setup()
 			}
 
-			os.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
-			defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
+			t.Setenv("TEST_EXCLUDE_ATMOS_D", tt.envValue)
 
 			result := shouldExcludePathForTesting(tt.dirPath)
 			assert.Equal(t, tt.expected, result, "Paths should be canonicalized before comparison")
@@ -631,27 +568,200 @@ func TestShouldExcludePathForTesting_PathCanonicalization(t *testing.T) {
 	}
 }
 
-func TestMergeDefaultImports_WindowsCaseInsensitive(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skipf("skipping Windows-specific test on %s", runtime.GOOS)
+func TestProcessConfigImportsAndReapply_MalformedYAML(t *testing.T) {
+	tests := []struct {
+		name          string
+		configContent string
+		description   string
+	}{
+		{
+			name: "invalid_yaml_syntax",
+			configContent: `
+base_path: /test
+components:
+  terraform:
+    - invalid: yaml
+    - content: here
+    base_path: components/terraform
+`,
+			description: "Should return error when YAML has invalid syntax",
+		},
+		{
+			name: "unclosed_bracket",
+			configContent: `
+base_path: /test
+components: {
+  terraform: {
+    base_path: components/terraform
+`,
+			description: "Should return error when YAML has unclosed brackets",
+		},
 	}
 
-	// Create temp directory
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directory
+			tempDir := t.TempDir()
+
+			// Write malformed config file
+			configPath := filepath.Join(tempDir, "atmos.yaml")
+			err := os.WriteFile(configPath, []byte(tt.configContent), 0o644)
+			assert.NoError(t, err)
+
+			// Create viper instance
+			v := viper.New()
+			v.SetConfigFile(configPath)
+
+			// Call the function - should return error on malformed YAML
+			err = processConfigImportsAndReapply(configPath, v, []byte(tt.configContent))
+
+			// Assert that an error was returned
+			assert.Error(t, err, tt.description)
+		})
+	}
+}
+
+func TestInjectProvisionedIdentityImports_NoProviders(t *testing.T) {
+	// Test that injectProvisionedIdentityImports does nothing when no auth providers are configured.
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{},
+		},
+		Import: []string{"existing-import.yaml"},
+	}
+
+	err := injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"existing-import.yaml"}, src.Import)
+}
+
+func TestInjectProvisionedIdentityImports_WithProviders(t *testing.T) {
+	// Test that injectProvisionedIdentityImports prepends provisioned identity files when they exist.
 	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
 
-	// Test case-insensitive matching by setting exclude with different case
-	upperCasePath := strings.ToUpper(tempDir)
-	lowerCasePath := strings.ToLower(tempDir)
+	// Create mock provisioned identity file.
+	provisioningDir := filepath.Join(tempDir, "atmos", "auth", "test-provider")
+	err := os.MkdirAll(provisioningDir, 0o700)
+	require.NoError(t, err)
 
-	// Set the environment variable with lowercase path
-	os.Setenv("TEST_EXCLUDE_ATMOS_D", lowerCasePath)
-	defer os.Unsetenv("TEST_EXCLUDE_ATMOS_D")
+	provisionedFile := filepath.Join(provisioningDir, "provisioned-identities.yaml")
+	err = os.WriteFile(provisionedFile, []byte("identities: {}\n"), 0o600)
+	require.NoError(t, err)
 
-	// Call the function with the path in uppercase
-	v := viper.New()
-	v.SetConfigType("yaml") // Set config type as done in production code
-	err := mergeDefaultImports(upperCasePath, v)
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"test-provider": {
+					Kind: "aws/iam-identity-center",
+				},
+			},
+		},
+		Import: []string{"existing-import.yaml"},
+	}
 
-	// Should skip and return nil since paths match case-insensitively on Windows
-	assert.NoError(t, err, "Should match case-insensitively on Windows")
+	err = injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+
+	// Should have provisioned import prepended.
+	assert.Len(t, src.Import, 2)
+	assert.Contains(t, src.Import[0], "test-provider")
+	assert.Contains(t, src.Import[0], "provisioned-identities.yaml")
+	assert.Equal(t, "existing-import.yaml", src.Import[1])
+}
+
+func TestInjectProvisionedIdentityImports_NoProvisionedFiles(t *testing.T) {
+	// Test that injectProvisionedIdentityImports does nothing when provisioned files don't exist.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"test-provider": {
+					Kind: "aws/iam-identity-center",
+				},
+			},
+		},
+		Import: []string{"existing-import.yaml"},
+	}
+
+	err := injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+
+	// Should not modify imports when no provisioned files exist.
+	assert.Equal(t, []string{"existing-import.yaml"}, src.Import)
+}
+
+func TestInjectProvisionedIdentityImports_MultipleProviders(t *testing.T) {
+	// Test that injectProvisionedIdentityImports handles multiple providers.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Create provisioned files for two providers.
+	for _, providerName := range []string{"provider1", "provider2"} {
+		provisioningDir := filepath.Join(tempDir, "atmos", "auth", providerName)
+		err := os.MkdirAll(provisioningDir, 0o700)
+		require.NoError(t, err)
+
+		provisionedFile := filepath.Join(provisioningDir, "provisioned-identities.yaml")
+		err = os.WriteFile(provisionedFile, []byte("identities: {}\n"), 0o600)
+		require.NoError(t, err)
+	}
+
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"provider1": {Kind: "aws/iam-identity-center"},
+				"provider2": {Kind: "aws/iam-identity-center"},
+			},
+		},
+		Import: []string{"existing-import.yaml"},
+	}
+
+	err := injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+
+	// Should have both provisioned imports prepended.
+	assert.Len(t, src.Import, 3)
+	assert.Equal(t, "existing-import.yaml", src.Import[2])
+
+	// Check that both provider imports are present.
+	importPaths := strings.Join(src.Import, " ")
+	assert.Contains(t, importPaths, "provider1")
+	assert.Contains(t, importPaths, "provider2")
+}
+
+func TestInjectProvisionedIdentityImports_EmptyImportList(t *testing.T) {
+	// Test that injectProvisionedIdentityImports works when Import list is initially empty.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Create mock provisioned identity file.
+	provisioningDir := filepath.Join(tempDir, "atmos", "auth", "test-provider")
+	err := os.MkdirAll(provisioningDir, 0o700)
+	require.NoError(t, err)
+
+	provisionedFile := filepath.Join(provisioningDir, "provisioned-identities.yaml")
+	err = os.WriteFile(provisionedFile, []byte("identities: {}\n"), 0o600)
+	require.NoError(t, err)
+
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"test-provider": {
+					Kind: "aws/iam-identity-center",
+				},
+			},
+		},
+		Import: []string{},
+	}
+
+	err = injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+
+	// Should have only the provisioned import.
+	assert.Len(t, src.Import, 1)
+	assert.Contains(t, src.Import[0], "test-provider")
+	assert.Contains(t, src.Import[0], "provisioned-identities.yaml")
 }

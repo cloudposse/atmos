@@ -33,7 +33,6 @@ func TestProcessImports(t *testing.T) {
 
 	// Step 2: Create temporary base directory and files
 	baseDir := t.TempDir()
-	defer os.Remove(baseDir)
 	// Step 2.1: Create a directory for recursive imports
 	configDir := filepath.Join(baseDir, "configs.d")
 	err = os.MkdirAll(configDir, 0o755)
@@ -103,9 +102,7 @@ func TestProcessImportNested(t *testing.T) {
 	assert.NoError(t, err, "Unset 'ATMOS_BASE_PATH' environment variable should execute without error")
 	err = os.Unsetenv("ATMOS_LOGS_LEVEL")
 	assert.NoError(t, err, "Unset 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
-	baseDir, err := os.MkdirTemp("", "config-test")
-	assert.NoError(t, err)
-	defer os.RemoveAll(baseDir)
+	baseDir := t.TempDir()
 
 	// Setting up test files
 	_, err = setupTestFile(`
@@ -136,9 +133,7 @@ import:
 	defer server.Close()
 
 	t.Run("Test remote import processing", func(t *testing.T) {
-		tempDir, err := os.MkdirTemp("", "config-test")
-		assert.NoError(t, err)
-		defer os.RemoveAll(tempDir)
+		tempDir := t.TempDir()
 		importPaths := []string{server.URL + "/config.yaml"}
 		resolved, err := processImports(baseDir, importPaths, tempDir, 1, 5)
 		assert.NoError(t, err)
@@ -146,9 +141,7 @@ import:
 	})
 
 	t.Run("Test local import processing", func(t *testing.T) {
-		tempDir, err := os.MkdirTemp("", "config-test")
-		assert.NoError(t, err)
-		defer os.RemoveAll(tempDir)
+		tempDir := t.TempDir()
 		importPaths := []string{"local.yaml"}
 		imported, err := processImports(baseDir, importPaths, tempDir, 1, 5)
 		assert.NoError(t, err)
@@ -160,9 +153,7 @@ import:
 	})
 
 	t.Run("Test mixed imports with depth limit", func(t *testing.T) {
-		tempDir, err := os.MkdirTemp("", "config-test")
-		assert.NoError(t, err)
-		defer os.RemoveAll(tempDir)
+		tempDir := t.TempDir()
 		importPaths := []string{
 			"local.yaml",
 			server.URL + "/config.yaml",
@@ -171,4 +162,140 @@ import:
 		assert.Error(t, err, "should return an error when maxDepth is exceeded")
 		assert.Nil(t, resolved, "no resolved paths should be returned on depth limit breach")
 	})
+}
+
+func TestSanitizeImport(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "HTTP URL with credentials",
+			input:    "https://user:password@github.com/org/repo.git",
+			expected: "https://github.com/org/repo.git",
+		},
+		{
+			name:     "HTTPS URL with username only",
+			input:    "https://user@example.com/path/to/file.yaml",
+			expected: "https://example.com/path/to/file.yaml",
+		},
+		{
+			name:     "Git HTTPS with credentials",
+			input:    "git::https://user:token@github.com/org/repo.git",
+			expected: "git::https://github.com/org/repo.git",
+		},
+		{
+			name:     "Git SSH with user",
+			input:    "git::ssh://git@github.com/org/repo.git",
+			expected: "git::ssh://github.com/org/repo.git",
+		},
+		{
+			name:     "URL with query parameters",
+			input:    "https://example.com/file.yaml?token=secret123&key=value",
+			expected: "https://example.com/file.yaml",
+		},
+		{
+			name:     "URL with credentials and query params",
+			input:    "https://user:pass@example.com/path?token=secret",
+			expected: "https://example.com/path",
+		},
+		{
+			name:     "S3 URL with query parameters",
+			input:    "s3::https://s3.amazonaws.com/bucket/file.tar.gz?aws_access_key_id=AKIA&aws_secret_access_key=secret",
+			expected: "s3::https://s3.amazonaws.com/bucket/file.tar.gz",
+		},
+		{
+			name:     "OCI URL with credentials",
+			input:    "oci://user:pass@registry.example.com/namespace/image:tag",
+			expected: "oci://registry.example.com/namespace/image:tag",
+		},
+		{
+			name:     "Mercurial with credentials",
+			input:    "hg::https://user:pass@bitbucket.org/repo",
+			expected: "hg::https://bitbucket.org/repo",
+		},
+		{
+			name:     "Local path - absolute",
+			input:    "/absolute/path/to/file.yaml",
+			expected: "/absolute/path/to/file.yaml",
+		},
+		{
+			name:     "Local path - relative",
+			input:    "./relative/path/to/file.yaml",
+			expected: "./relative/path/to/file.yaml",
+		},
+		{
+			name:     "SCP-style git URL",
+			input:    "git@github.com:org/repo.git",
+			expected: "git@github.com:org/repo.git",
+		},
+		{
+			name:     "URL without credentials or query params",
+			input:    "https://github.com/org/repo/archive/main.tar.gz",
+			expected: "https://github.com/org/repo/archive/main.tar.gz",
+		},
+		{
+			name:     "Empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "GCS URL with query parameters",
+			input:    "gcs::https://storage.googleapis.com/bucket/file?access_token=secret",
+			expected: "gcs::https://storage.googleapis.com/bucket/file",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sanitizeImport(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestProcessLocalImport_OutsideBaseDirectory verifies that imports outside the base directory
+// work correctly and only log at trace level (not warning level).
+func TestProcessLocalImport_OutsideBaseDirectory(t *testing.T) {
+	// Create a parent directory and a subdirectory.
+	parentDir := t.TempDir()
+	subDir := filepath.Join(parentDir, "repo")
+	err := os.Mkdir(subDir, 0o755)
+	assert.NoError(t, err)
+
+	// Create a config file in the parent directory.
+	parentConfigContent := `
+base_path: ../
+settings:
+  from_parent: true
+`
+	parentConfigPath := filepath.Join(parentDir, "atmos.yaml")
+	err = os.WriteFile(parentConfigPath, []byte(parentConfigContent), 0o644)
+	assert.NoError(t, err)
+
+	// Create a config in subdirectory that imports from parent.
+	subConfigContent := `
+base_path: ./
+import:
+  - ../atmos.yaml
+settings:
+  from_sub: true
+`
+	subConfigPath := filepath.Join(subDir, "atmos.yaml")
+	err = os.WriteFile(subConfigPath, []byte(subConfigContent), 0o644)
+	assert.NoError(t, err)
+
+	// Process the import from the subdirectory (base path).
+	// This simulates the case where .github/atmos.yaml imports ../atmos.yaml.
+	tempDir := t.TempDir()
+	resolvedPaths, err := processLocalImport(subDir, "../atmos.yaml", tempDir, 1, 10)
+
+	// Verify that the import resolves successfully.
+	assert.NoError(t, err)
+	assert.NotEmpty(t, resolvedPaths)
+	assert.Equal(t, parentConfigPath, resolvedPaths[0].filePath)
+
+	// The import should work despite being outside base directory.
+	// The message is now logged at Trace level, not Warn level.
 }

@@ -245,6 +245,12 @@ commands:
               exit 1
             fi
 
+            # Check if actions-cache extension is installed
+            if ! gh actions-cache --help &> /dev/null; then
+              echo "📦 Installing gh actions-cache extension..."
+              gh extension install actions/gh-actions-cache
+            fi
+
             # Get cache entries over 1GB
             CACHE_ENTRIES=$(gh actions-cache list -R cloudposse/atmos | grep GB)
 
@@ -288,6 +294,12 @@ commands:
             if ! gh auth status &> /dev/null; then
               echo "❌ Not authenticated with GitHub. Please run: gh auth login"
               exit 1
+            fi
+
+            # Check if actions-cache extension is installed
+            if ! gh actions-cache --help &> /dev/null; then
+              echo "📦 Installing gh actions-cache extension..."
+              gh extension install actions/gh-actions-cache
             fi
 
             # Get cache entries over 1GB
@@ -403,3 +415,28 @@ commands:
             go tool cover -html=coverage.out -o coverage.html
             echo "✅ Coverage report generated: coverage.html"
             echo "   Run 'open coverage.html' to view in browser"
+
+      - name: codecov-validate
+        description: Validate codecov.yml configuration
+        steps:
+          - |
+            echo "🔍 Validating codecov.yml configuration..."
+
+            if [ ! -f codecov.yml ]; then
+              echo "❌ codecov.yml not found"
+              exit 1
+            fi
+
+            RESULT=$(curl --silent --data-binary @codecov.yml https://codecov.io/validate 2>&1)
+
+            if echo "$RESULT" | grep -q "Valid"; then
+              echo "✅ codecov.yml is valid"
+              echo ""
+              echo "$RESULT" | grep -E "(Valid|Error)"
+              exit 0
+            else
+              echo "❌ codecov.yml validation failed"
+              echo ""
+              echo "$RESULT"
+              exit 1
+            fi

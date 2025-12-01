@@ -2,7 +2,7 @@ tests:
   - name: terraform output function
     enabled: true
     tty: true
-    sandbox: true
+    sandbox: "atmos-functions"
     description: "Ensure the !terraform.output function works."
     workdir: "fixtures/scenarios/atmos-functions/"
     command: "atmos"
@@ -19,8 +19,8 @@ tests:
       os: !not windows
     expect:
       exit_code: 0
-      # This will output in stdout because of the way our tty simulator works.
-      stdout:
+      tty:
+        - "Telemetry Enabled"
         - "Fetching baz output from component-3 in nonprod"
         - "Fetching foo output from component-1 in nonprod"
         - "Fetching bar output from component-2 in nonprod"
@@ -28,7 +28,7 @@ tests:
   - name: terraform output function (no tty)
     enabled: true
     tty: false
-    sandbox: true
+    sandbox: "atmos-functions"
     description: "Ensure the !terraform.output function works."
     workdir: "fixtures/scenarios/atmos-functions/"
     command: "atmos"
@@ -43,6 +43,7 @@ tests:
     expect:
       exit_code: 0
       stderr:
+        - "Telemetry Enabled"
         - "Fetching baz output from component-3 in nonprod"
         - "Fetching foo output from component-1 in nonprod"
         - "Fetching bar output from component-2 in nonprod"
@@ -50,6 +51,7 @@ tests:
   - name: "!env function test"
     enabled: true
     tty: false
+    sandbox: "atmos-functions"
     description: "Ensure the !env function works."
     workdir: "fixtures/scenarios/atmos-functions/"
     command: "atmos"
@@ -69,6 +71,7 @@ tests:
   - name: "!terraform.output from component with !env function test"
     enabled: true
     tty: false
+    sandbox: "atmos-functions"
     description: "Ensure !terraform.output from component with !env function works."
     workdir: "fixtures/scenarios/atmos-functions/"
     command: "atmos"
@@ -79,6 +82,7 @@ tests:
       - "-s"
       - "nonprod"
     env:
+      ATMOS_TEST_1: "test-env-and-terraform-output-functions"
       # The ENV variables will not be set in the child process (that executes the functions from `terraform-exec`)
       # (because they are prohibited in the `terraform-exec` library)
       TF_VAR_spacelift_stack: "test"

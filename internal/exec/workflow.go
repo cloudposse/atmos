@@ -11,12 +11,15 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ExecuteWorkflowCmd executes an Atmos workflow
+// ExecuteWorkflowCmd executes an Atmos workflow.
 func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteWorkflowCmd")()
+
 	var workflowName string
 	var workflowFile string
 	var fromStep string
@@ -75,6 +78,11 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	commandLineIdentity, err := flags.GetString("identity")
+	if err != nil {
+		return err
 	}
 
 	var workflowPath string
@@ -142,7 +150,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		workflowDefinition = i
 	}
 
-	err = ExecuteWorkflow(atmosConfig, workflowName, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep)
+	err = ExecuteWorkflow(atmosConfig, workflowName, workflowPath, &workflowDefinition, dryRun, commandLineStack, fromStep, commandLineIdentity)
 	if err != nil {
 		return err
 	}

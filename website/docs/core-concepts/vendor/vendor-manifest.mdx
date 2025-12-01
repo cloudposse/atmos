@@ -68,6 +68,7 @@ To vendor remote artifacts, create a `vendor.yaml` file similar to the example b
       # `source` supports the following protocols: local paths (absolute and relative), OCI (https://opencontainers.org),
       # Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
       # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.
+      # See https://atmos.tools/core-concepts/vendor/url-syntax for complete URL syntax documentation.
       # In 'source' and 'targets', Golang templates are supported  https://pkg.go.dev/text/template.
       # Currently the fields '{{.Component}}' and '{{.Version}}' are supported.
       # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html).
@@ -92,7 +93,7 @@ To vendor remote artifacts, create a `vendor.yaml` file similar to the example b
           - test
           - networking
       - component: "vpc-flow-logs-bucket"
-        source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+        source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref={{.Version}}"
         version: "1.323.0"
         targets:
           - "components/terraform/infra/{{.Component}}/{{.Version}}"
@@ -180,20 +181,136 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
   <dd>
     The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all the URL and archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from [OCI registries](https://opencontainers.org).
 
+    See [Vendor URL Syntax](/core-concepts/vendor/url-syntax) for complete documentation on supported URL formats, authentication, and subdirectory syntax.
+
     **IMPORTANT:** Include the `{{ .Version }}` parameter in your `source` URI to ensure the correct version of the artifact is downloaded.
 
     For example, for `http` and `https` sources, use the following format:
 
     ```yaml
-    source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+    source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref={{.Version}}"
     ```
 
-    For private Git repositories, prepend the URI with `git::` and use the following format to pass a environment variable with the GitHub token:
+    ### Authenticating to Private Git Repositories
 
+    Atmos provides **automatic token injection** for private repositories on GitHub, GitLab, and Bitbucket. This is the recommended approach for most users.
+
+    :::tip Automatic Token Injection (Recommended)
+    The easiest and most secure way to authenticate to private Git repositories is to use Atmos's automatic token injection.
+
+    **Step 1:** Set the authentication token as an environment variable:
+    ```bash
+    export GITHUB_TOKEN="your-personal-access-token"
+    # or
+    export ATMOS_GITHUB_TOKEN="your-personal-access-token"
+    ```
+
+    **Step 2:** Use simple URLs in your `vendor.yaml` (no manual credentials):
     ```yaml
-    source: "git::https://{{env "GITHUB_TOKEN"}}@github.com/some-org/some-private-repo/terraform/vpc.git?ref={{.Version}}"
+    sources:
+      - component: "vpc"
+        source: "github.com/your-org/private-repo.git//terraform/vpc?ref={{.Version}}"
+        version: "1.0.0"
+        targets:
+          - "components/terraform/vpc"
     ```
-    Note, that `GITHUB_TOKEN` provided by GitHub Actions are only valid for the current repository, or repositories marked as `internal` within GitHub Enterprise organizations. For cross-repository access, make sure you provision a [fine grained token](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens?apiVersion=2022-11-28) with the necessary permissions.
+
+    **Step 3:** Atmos automatically injects the token when downloading.
+
+    Supported environment variables:
+    - **GitHub:** `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`
+    - **GitLab:** `ATMOS_GITLAB_TOKEN` or `GITLAB_TOKEN`
+    - **Bitbucket:** `ATMOS_BITBUCKET_TOKEN` or `BITBUCKET_TOKEN`
+
+    **Token injection settings in `atmos.yaml`:**
+    - `inject_github_token: true` (default: **true**) - Enables automatic GitHub token injection
+    - `inject_gitlab_token: true` (default: **false**) - Enables automatic GitLab token injection
+    - `inject_bitbucket_token: true` (default: **false**) - Enables automatic Bitbucket token injection
+
+    GitHub token injection is enabled by default. To disable it:
+    ```yaml
+    settings:
+      inject_github_token: false
+    ```
+
+    To enable GitLab or Bitbucket token injection:
+    ```yaml
+    settings:
+      inject_gitlab_token: true
+      inject_bitbucket_token: true
+    ```
+    :::
+
+    :::note GitHub Actions Token Scope
+    The `GITHUB_TOKEN` provided by GitHub Actions is only valid for the current repository, or repositories marked as `internal` within GitHub Enterprise organizations. For cross-repository access, provision a [fine grained personal access token](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens?apiVersion=2022-11-28) with the necessary permissions.
+    :::
+
+    <details>
+    <summary><strong>Advanced: Manual Token Injection with Templates</strong></summary>
+
+    For custom Git hosts or scenarios where you need explicit control over authentication, you can manually inject credentials using Go templates.
+
+    **For GitHub (use correct authentication format):**
+    ```yaml
+    sources:
+      - component: "vpc"
+        source: 'git::https://x-access-token:{{getenv "GITHUB_TOKEN"}}@github.com/org/private-repo.git?ref={{.Version}}'
+        version: "1.0.0"
+        targets:
+          - "components/terraform/vpc"
+    ```
+
+    **For custom Git hosts:**
+    ```yaml
+    sources:
+      - component: "vpc"
+        source: 'git::https://{{getenv "CUSTOM_GIT_TOKEN"}}@custom-git-host.com/org/repo.git?ref={{.Version}}'
+        version: "1.0.0"
+        targets:
+          - "components/terraform/vpc"
+    ```
+
+    :::important YAML Quoting with Template Functions
+    When using Go template functions like `{{getenv "TOKEN"}}` that contain double quotes, you have **two options** to avoid YAML parsing errors:
+
+    **Option 1: Single-quoted YAML string (recommended)**
+    ```yaml
+    source: 'git::https://x-access-token:{{getenv "GITHUB_TOKEN"}}@github.com/org/repo.git?ref={{.Version}}'
+    ```
+
+    **Option 2: YAML folded scalar**
+    ```yaml
+    source: >-
+      git::https://x-access-token:{{getenv "GITHUB_TOKEN"}}@github.com/org/repo.git?ref={{.Version}}
+    ```
+
+    **What doesn't work:**
+    ```yaml
+    source: "git::https://x-access-token:{{getenv "GITHUB_TOKEN"}}@github.com/org/repo.git?ref={{.Version}}"
+    ```
+
+    This is because YAML parsers interpret nested double quotes as string terminators. Template processing happens **after** YAML parsing, so the YAML must be valid before templates are evaluated.
+
+    **Note:** Atmos v1.194.0+ upgraded the YAML parser from v3.0.1 to v3.0.4, which enforces YAML spec compliance more strictly. Configurations with nested double quotes that may have worked in earlier versions (v1.193.x and below) will now fail YAML validation. Use single quotes or folded scalars as shown above.
+    :::
+
+    :::note GitHub Authentication Format
+    GitHub requires the username to be `x-access-token` and the token to be the password:
+    ```
+    https://x-access-token:YOUR_TOKEN@github.com/...
+    ```
+
+    While `https://YOUR_TOKEN@github.com/...` (token as username) may work with Git, using the documented format ensures compatibility.
+    :::
+
+    **Why automatic injection is recommended:**
+    - No need to manually specify `x-access-token:` username format
+    - Works automatically for GitHub, GitLab, and Bitbucket
+    - No YAML quoting complications
+    - Credentials are managed centrally via environment variables
+    - Easier to audit and rotate tokens
+
+    </details>
 
     <dl>
       <dt>`ref`</dt>
@@ -229,6 +346,15 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
   <dd>
   The `source` and `targets` attributes support [Go templates](https://pkg.go.dev/text/template) and [Sprig Functions](http://masterminds.github.io/sprig/). This can be used to templatise the `source` and `targets` paths with the component name specified in the `component` attribute and artifact versions specified in the `version` attribute.
 
+    :::note Template Evaluation Order
+    Templates in `source` and `targets` are evaluated **after** YAML parsing. This means:
+    - The `vendor.yaml` file itself must be valid YAML before template processing
+    - Only the **values** of `source` and `targets` fields are processed as templates
+    - The file structure is **not** a template - it's parsed as standard YAML first
+
+    When using template functions that require double quotes (like `{{getenv "VAR"}}`), wrap the entire YAML string value in single quotes to avoid nested double quote issues.
+    :::
+
     Here's an advanced example showcasing how templates and Sprig functions can be used together with `targets`:
 
     ```yaml
@@ -256,7 +382,7 @@ The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config to de
   spec:
     sources:
       - component: "vpc-flow-logs-bucket"
-        source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+        source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref={{.Version}}"
         version: "1.323.0"
         targets:
           - "components/terraform/vpc-flow-logs-bucket"
@@ -307,12 +433,7 @@ targets:
   - "components/terraform/{{ .Component }}/{{ (first 2 (splitList \".\" .Version)) | join \".\" }}"
 ```
 
-Or to access an environment variable in the `source` attribute, use the following template:
-
-```yaml
-source: "git::https://{{env "GITHUB_TOKEN"}}@github.com/some-org/some-private-repo/terraform/{{ .Component }}/{{ .Version }}.git?ref={{.Version}}"
-```
-This will enable vendoring to download the component into a versioned folder from a private repository, by reading the GitHub token from the `GITHUB_TOKEN` environment variable.
+For accessing environment variables in templates, the most common use case is authentication to private Git repositories. **We strongly recommend using Atmos's automatic token injection** (see [Authenticating to Private Git Repositories](#authenticating-to-private-git-repositories) above) instead of manually injecting credentials with `{{getenv}}`. Automatic injection is simpler, more secure, and works without YAML quoting complications.
 
 
 ## Hierarchical Imports in Vendoring Manifests
@@ -352,7 +473,7 @@ spec:
       targets:
         - "components/terraform/infra/vpc3"
     - component: "vpc-flow-logs-bucket"
-      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}"
+      source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref={{.Version}}"
       version: "1.323.0"
       targets:
         - "components/terraform/infra/vpc-flow-logs-bucket/{{.Version}}"
@@ -393,7 +514,7 @@ spec:
 
   sources:
     - component: "my-vpc4"
-      source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
+      source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref={{.Version}}"
       version: "1.319.0"
       targets:
         - "components/terraform/infra/my-vpc4"
@@ -415,13 +536,13 @@ are defined:
 > atmos vendor pull
 
 Processing vendor config file 'vendor.yaml'
-Pulling sources for the component 'my-vpc6' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.315.0' into 'components/terraform/infra/my-vpc6'
-Pulling sources for the component 'my-vpc5' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.317.0' into 'components/terraform/infra/my-vpc5'
-Pulling sources for the component 'my-vpc4' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.319.0' into 'components/terraform/infra/my-vpc4'
+Pulling sources for the component 'my-vpc6' from 'github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.315.0' into 'components/terraform/infra/my-vpc6'
+Pulling sources for the component 'my-vpc5' from 'github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.317.0' into 'components/terraform/infra/my-vpc5'
+Pulling sources for the component 'my-vpc4' from 'github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.319.0' into 'components/terraform/infra/my-vpc4'
 Pulling sources for the component 'my-vpc1' from 'public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:1.0.2' into 'components/terraform/infra/my-vpc1'
-Pulling sources for the component 'my-vpc2' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.320.0' into 'components/terraform/infra/my-vpc2'
+Pulling sources for the component 'my-vpc2' from 'github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.320.0' into 'components/terraform/infra/my-vpc2'
 Pulling sources for the component 'vpc' from 'public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest' into 'components/terraform/infra/vpc3'
-Pulling sources for the component 'vpc-flow-logs-bucket' from 'github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref=1.323.0' into 'components/terraform/infra/vpc-flow-logs-bucket/1.323.0'
+Pulling sources for the component 'vpc-flow-logs-bucket' from 'github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref=1.323.0' into 'components/terraform/infra/vpc-flow-logs-bucket/1.323.0'
 ```
 </Terminal>
 
@@ -460,6 +581,52 @@ To specify a repository in an OCI registry, use the `oci://<registry>/<repositor
 
 Artifacts from OCI repositories are downloaded as Docker image tarballs, then all the layers are processed, un-tarred and un-compressed,
 and the files are written into the directories specified by the `targets` attribute of each `source`.
+
+### OCI Authentication
+
+Atmos uses the following precedence order for OCI registry authentication:
+
+1. **Docker credentials** (highest precedence) - Credentials from `docker login` stored in `~/.docker/config.json`
+2. **Environment variables** - For GitHub Container Registry (ghcr.io):
+   - **Token:** `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`
+   - **Username:** `ATMOS_GITHUB_USERNAME`, `GITHUB_ACTOR`, or `GITHUB_USERNAME`
+3. **Anonymous** - Fallback for public images
+
+#### GitHub Container Registry (ghcr.io) Requirements
+
+Unlike Git repository authentication, **GitHub Container Registry requires both a username and a token**:
+
+- **Username** must be your actual GitHub username (not `x-access-token`)
+- **Token** should be a GitHub Personal Access Token (PAT) or `GITHUB_TOKEN`
+- Without a username, authentication will fail even if the token is set
+
+**Authentication methods:**
+
+```bash
+# Method 1: Use docker login (recommended for local development)
+docker login ghcr.io -u YOUR_USERNAME
+# Enter your GitHub token when prompted
+
+# Method 2: Use environment variables
+export GITHUB_TOKEN=ghp_your_token
+export GITHUB_ACTOR=your_username  # Or ATMOS_GITHUB_USERNAME
+
+# Method 3: Configure in atmos.yaml
+# settings:
+#   github_username: "your_username"
+```
+
+**GitHub Actions setup:**
+
+In GitHub Actions, both `GITHUB_TOKEN` and `GITHUB_ACTOR` are automatically available:
+
+```yaml
+- name: Vendor from GHCR
+  run: atmos vendor pull -c vpc
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    # GITHUB_ACTOR is automatically set by GitHub Actions
+```
 
 For example, to vendor the `vpc` component from the `public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc`
 [AWS public ECR registry](https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html), use the following `source`:

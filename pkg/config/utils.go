@@ -8,9 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/charmbracelet/log"
-
-	"github.com/cloudposse/atmos/pkg/logger"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -116,6 +115,8 @@ func FindAllStackConfigsInPaths(
 	includeStackPaths []string,
 	excludeStackPaths []string,
 ) ([]string, []string, error) {
+	defer perf.Track(atmosConfig, "config.FindAllStackConfigsInPaths")()
+
 	var absolutePaths []string
 	var relativePaths []string
 
@@ -177,6 +178,8 @@ func FindAllStackConfigsInPaths(
 }
 
 func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "config.processEnvVars")()
+
 	foundEnvVarMessage := "Found ENV variable"
 
 	basePath := os.Getenv("ATMOS_BASE_PATH")
@@ -419,7 +422,14 @@ func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) err
 	}
 
 	if len(atmosConfig.Logs.Level) > 0 {
-		if _, err := logger.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+		if _, err := log.ParseLogLevel(atmosConfig.Logs.Level); err != nil {
+			// Extract explanation from error message (format: "sentinel\nexplanation").
+			errMsg := err.Error()
+			parts := strings.SplitN(errMsg, "\n", 2)
+			if len(parts) > 1 {
+				// Return error with explanation preserved.
+				return fmt.Errorf("%w\n%s", log.ErrInvalidLogLevel, parts[1])
+			}
 			return err
 		}
 	}
@@ -430,6 +440,8 @@ func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) err
 const cmdLineArg = "Set using command line argument"
 
 func processCommandLineArgs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(atmosConfig, "config.processCommandLineArgs")()
+
 	if err := setBasePaths(atmosConfig, configAndStacksInfo); err != nil {
 		return err
 	}
@@ -585,12 +597,13 @@ func setSchemaDirs(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *
 
 func setLoggingConfig(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	if len(configAndStacksInfo.LogsLevel) > 0 {
-		if _, err := logger.ParseLogLevel(configAndStacksInfo.LogsLevel); err != nil {
+		normalizedLevel, err := log.ParseLogLevel(configAndStacksInfo.LogsLevel)
+		if err != nil {
 			return err
 		}
-		// Only set the log level if validation passes
-		atmosConfig.Logs.Level = configAndStacksInfo.LogsLevel
-		log.Debug(cmdLineArg, LogsLevelFlag, configAndStacksInfo.LogsLevel)
+		// Set the normalized log level (title case, with aliases resolved)
+		atmosConfig.Logs.Level = string(normalizedLevel)
+		log.Debug(cmdLineArg, LogsLevelFlag, atmosConfig.Logs.Level)
 	}
 	if len(configAndStacksInfo.LogsFile) > 0 {
 		atmosConfig.Logs.File = configAndStacksInfo.LogsFile
@@ -823,6 +836,8 @@ func getStackFilePatterns(basePath string, includeTemplates bool) []string {
 
 // matchesStackFilePattern checks if a file path matches any of the valid stack file patterns.
 func matchesStackFilePattern(filePath, stackName string) bool {
+	defer perf.Track(nil, "config.matchesStackFilePattern")()
+
 	// Always include template files for normal operations (imports, etc.)
 	patterns := getStackFilePatterns(stackName, true)
 	for _, pattern := range patterns {
@@ -834,6 +849,8 @@ func matchesStackFilePattern(filePath, stackName string) bool {
 }
 
 func getConfigFilePatterns(path string, forGlobMatch bool) []string {
+	defer perf.Track(nil, "config.getConfigFilePatterns")()
+
 	if path == "" {
 		return []string{}
 	}

@@ -1,66 +1,87 @@
 
-Notice: Atmos now collects completely anonymous telemetry regarding usage.
-This information is used to shape Atmos roadmap and prioritize features.
-You can learn more, including how to opt-out if you'd not like to participate in this anonymous program,
-by visiting the following URL: https://atmos.tools/cli/telemetry
+👽 test linux/amd64
 
-This command generates configuration files to automate and streamline Terraform workflows with Atlantis.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
+This command generates configuration files to automate and streamline Terraform 
+workflows with Atlantis.                                                        
 
-Usage:
+USAGE
 
-  atmos atlantis generate [sub-command] [flags]
+                                                     
+    $ atmos atlantis generate [sub-command] [flags]  
+                                                     
 
+AVAILABLE COMMANDS
 
-Available Commands:
+      repo-config  Generate repository configuration for Atlantis
 
-  repo-config                    Generate repository configuration for Atlantis
+FLAGS
 
-
-Flags:
-
-    -h, --help    help for generate
+  -h, --help  help for generate
 
 
-Global Flags:
+GLOBAL FLAGS
 
-        --base-path string           Base path for Atmos project
+      --                        Use double dashes to separate Atmos-specific options from native arguments and flags
+                                for the command.
 
-        --config stringSlice         Paths to configuration files
-                                     (comma-separated or repeated flag) (default
-                                     [])
+      --base-path string        Base path for Atmos project
 
-        --config-path stringSlice    Paths to configuration directories
-                                     (comma-separated or repeated flag) (default
-                                     [])
+  -C, --chdir string            Change working directory before executing the command (run as if Atmos started in this
+                                directory)
 
-        --logs-file string           The file to write Atmos logs to. Logs can
-                                     be written to any file or any standard file
-                                     descriptor, including '/dev/stdout',
-                                     '/dev/stderr' and '/dev/null' (default
-                                     /dev/stderr)
+      --config strings          Paths to configuration files (comma-separated or repeated flag)
 
-        --logs-level string          Logs level. Supported log levels are Trace,
-                                     Debug, Info, Warning, Off. If the log level
-                                     is set to Off, Atmos will not log any
-                                     messages (default Info)
+      --config-path strings     Paths to search for Atmos configuration (comma-separated or repeated flag)
 
-        --no-color                   Disable color output (default false)
+      --force-color             Force color output even when not a TTY (useful for screenshots)
 
-        --pager string               Enable pager for output (--pager or
-                                     --pager=true to enable, --pager=false to
-                                     disable, --pager=less to use specific
-                                     pager)
+      --force-tty               Force TTY mode with sane defaults when terminal detection fails (useful for
+                                screenshots)
 
-        --redirect-stderr string     File descriptor to redirect stderr to.
-                                     Errors can be redirected to any file or any
-                                     standard file descriptor (including
-                                     /dev/null)
+      --heatmap                 Show performance heatmap visualization after command execution (includes P95 latency)
 
-        --                           Use double dashes to separate
-                                     Atmos-specific options from native
-                                     arguments and flags for the command.
+      --heatmap-mode string     Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI) (default
+                                bar)
+
+      --identity string         Identity to use for authentication. Use --identity to select interactively, --
+                                identity=NAME to specify
+
+      --logs-file string        The file to write Atmos logs to. Logs can be written to any file or any standard file
+                                descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
+                                /dev/stderr)
+
+      --logs-level string       Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log
+                                level is set to Off, Atmos will not log any messages (default Warning)
+
+      --mask                    Enable automatic masking of sensitive data in output (use --mask=false to disable)
+                                (default true)
+
+      --no-color                Disable color output
+
+      --pager string            Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --
+                                pager=less to use specific pager)
+
+      --profile strings         Activate configuration profiles (comma-separated or repeated flag)
+
+      --profile-file string     Write profiling data to file instead of starting server
+
+      --profile-type string     Type of profile to collect when using --profile-file. Options: cpu, heap, allocs,
+                                goroutine, block, mutex, threadcreate, trace (default cpu)
+
+      --profiler-enabled        Enable pprof profiling server
+
+      --profiler-host string    Host for pprof profiling server (default localhost)
+
+      --profiler-port int       Port for pprof profiling server (default 6060)
+
+      --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
+                                standard file descriptor (including '/dev/null')
+
+  -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
+
+      --version                 Display the Atmos CLI version
 
 
-Use atmos atlantis generate [subcommand] --help for more information about a command.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
 
-
+Use atmos atlantis generate [command] --help for more information about a       
+command.                                                                        

@@ -40,6 +40,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos terraform --help
     enabled: true
@@ -58,6 +60,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos terraform apply --help
     enabled: true
@@ -77,6 +81,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos terraform apply help
     enabled: true
@@ -96,6 +102,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos terraform non-existent
     enabled: true
@@ -177,6 +185,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos helmfile --help
     enabled: true
@@ -195,6 +205,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos helmfile apply non-existent
     enabled: true
@@ -240,6 +252,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos helmfile apply --help
     enabled: true
@@ -259,6 +273,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis
     enabled: true
@@ -289,6 +305,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis --help
     enabled: true
@@ -307,6 +325,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos atlantis generate
@@ -340,6 +360,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis generate --help
     enabled: true
@@ -359,6 +381,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis generate repo-config
     enabled: true
@@ -398,6 +422,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis generate repo-config --help
     enabled: true
@@ -419,11 +445,11 @@ tests:
         - "Atmos Releases:"
         - "Install Atmos:"
       stdout:
-        - "Flags:"
+        - "FLAGS"
         - "--affected-only"
         - "--config-template"
-      stderr:
-        - "^$"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis generate repo-config non-existent
     enabled: true
@@ -457,6 +483,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos validate editorconfig --help
     enabled: true
@@ -476,6 +504,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos validate editorconfig non-existent
     enabled: true
@@ -520,6 +550,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos version --check --non-existent
     enabled: true
@@ -547,4 +579,6 @@ tests:
       - "terraform"
       - "--help"
     expect:
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
