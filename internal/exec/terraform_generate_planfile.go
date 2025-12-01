@@ -13,6 +13,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tf "github.com/cloudposse/atmos/pkg/terraform"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -25,55 +26,32 @@ var (
 	ErrNoComponent                        = errors.New("no component specified")
 )
 
-// PlanfileOptions holds the options for generating a Terraform planfile.
-type PlanfileOptions struct {
-	Component            string
-	Stack                string
-	Format               string
-	File                 string
-	ProcessTemplates     bool
-	ProcessYamlFunctions bool
-	Skip                 []string
-}
+// PlanfileOptions is an alias to pkg/terraform.PlanfileOptions for backwards compatibility.
+type PlanfileOptions = tf.PlanfileOptions
 
 // ExecuteGeneratePlanfile generates a planfile for a terraform component.
-func ExecuteGeneratePlanfile(
-	component, stack, file, format string,
-	processTemplates, processFunctions bool,
-	skip []string,
-	atmosConfig *schema.AtmosConfiguration,
-) error {
+func ExecuteGeneratePlanfile(opts *PlanfileOptions, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteGeneratePlanfile")()
 
 	log.Debug("ExecuteGeneratePlanfile called",
-		"component", component,
-		"stack", stack,
-		"file", file,
-		"format", format,
-		"processTemplates", processTemplates,
-		"processFunctions", processFunctions,
-		"skip", skip,
+		"component", opts.Component,
+		"stack", opts.Stack,
+		"file", opts.File,
+		"format", opts.Format,
+		"processTemplates", opts.ProcessTemplates,
+		"processFunctions", opts.ProcessYamlFunctions,
+		"skip", opts.Skip,
 	)
 
-	options := &PlanfileOptions{
-		Component:            component,
-		Stack:                stack,
-		Format:               format,
-		File:                 file,
-		ProcessTemplates:     processTemplates,
-		ProcessYamlFunctions: processFunctions,
-		Skip:                 skip,
-	}
-
 	info := &schema.ConfigAndStacksInfo{
-		ComponentFromArg: component,
-		Stack:            stack,
-		StackFromArg:     stack,
+		ComponentFromArg: opts.Component,
+		Stack:            opts.Stack,
+		StackFromArg:     opts.Stack,
 		ComponentType:    "terraform",
 		CliArgs:          []string{"terraform", "generate", "planfile"},
 	}
 
-	return ExecuteTerraformGeneratePlanfile(options, info)
+	return ExecuteTerraformGeneratePlanfile(opts, info)
 }
 
 // ExecuteTerraformGeneratePlanfileCmd executes `terraform generate planfile` command.

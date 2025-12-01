@@ -9,41 +9,36 @@ import (
 )
 
 // ExecuteGenerateVarfile generates a varfile for a terraform component.
-func ExecuteGenerateVarfile(
-	component, stack, file string,
-	processTemplates, processFunctions bool,
-	skip []string,
-	atmosConfig *schema.AtmosConfiguration,
-) error {
+func ExecuteGenerateVarfile(opts *VarfileOptions, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteGenerateVarfile")()
 
 	log.Debug("ExecuteGenerateVarfile called",
-		"component", component,
-		"stack", stack,
-		"file", file,
-		"processTemplates", processTemplates,
-		"processFunctions", processFunctions,
-		"skip", skip,
+		"component", opts.Component,
+		"stack", opts.Stack,
+		"file", opts.File,
+		"processTemplates", opts.ProcessTemplates,
+		"processFunctions", opts.ProcessFunctions,
+		"skip", opts.Skip,
 	)
 
 	info := schema.ConfigAndStacksInfo{
-		ComponentFromArg: component,
-		Stack:            stack,
-		StackFromArg:     stack,
+		ComponentFromArg: opts.Component,
+		Stack:            opts.Stack,
+		StackFromArg:     opts.Stack,
 		ComponentType:    "terraform",
 		CliArgs:          []string{"terraform", "generate", "varfile"},
 	}
 
 	// Process stacks to get component configuration.
-	info, err := ProcessStacks(atmosConfig, info, true, processTemplates, processFunctions, skip, nil)
+	info, err := ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, nil)
 	if err != nil {
 		return err
 	}
 
 	// Determine varfile path.
 	var varFilePath string
-	if len(file) > 0 {
-		varFilePath = file
+	if len(opts.File) > 0 {
+		varFilePath = opts.File
 	} else {
 		varFilePath = constructTerraformComponentVarfilePath(atmosConfig, &info)
 	}

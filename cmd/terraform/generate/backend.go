@@ -49,7 +49,16 @@ var backendCmd = &cobra.Command{
 			return err
 		}
 
-		return e.ExecuteGenerateBackend(component, stack, processTemplates, processFunctions, skip, &atmosConfig)
+		opts := &e.GenerateBackendOptions{
+			Component: component,
+			Stack:     stack,
+			ProcessingOptions: e.ProcessingOptions{
+				ProcessTemplates: processTemplates,
+				ProcessFunctions: processFunctions,
+				Skip:             skip,
+			},
+		}
+		return e.ExecuteGenerateBackend(opts, &atmosConfig)
 	},
 }
 

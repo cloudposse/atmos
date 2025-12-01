@@ -19,6 +19,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// EnvTFDataDir is the environment variable name for TF_DATA_DIR.
+const EnvTFDataDir = "TF_DATA_DIR"
+
 var (
 	ErrParseTerraformComponents  = errors.New("could not parse Terraform components")
 	ErrParseComponentsAttributes = errors.New("could not parse component attributes")
@@ -36,6 +39,7 @@ var (
 	ErrRefusingToDelete          = errors.New("refusing to delete directory containing")
 	ErrRootPath                  = errors.New("root path cannot be empty")
 	ErrUserAborted               = errors.New("mission aborted")
+	ErrComponentNotFound         = errors.New("could not find component")
 )
 
 type ObjectInfo struct {
@@ -360,7 +364,7 @@ func deleteFolders(folders []Directory, relativePath string, atmosConfig *schema
 
 // handleTFDataDir handles the deletion of the TF_DATA_DIR if specified.
 func handleTFDataDir(componentPath string, relativePath string) {
-	tfDataDir := os.Getenv("TF_DATA_DIR")
+	tfDataDir := os.Getenv(EnvTFDataDir) //nolint:forbidigo // TF_DATA_DIR is a Terraform runtime env var, not an Atmos config option.
 	if tfDataDir == "" {
 		return
 	}
@@ -369,11 +373,11 @@ func handleTFDataDir(componentPath string, relativePath string) {
 		return
 	}
 	if _, err := os.Stat(filepath.Join(componentPath, tfDataDir)); os.IsNotExist(err) {
-		log.Debug("TF_DATA_DIR does not exist", "TF_DATA_DIR", tfDataDir, "error", err)
+		log.Debug("TF_DATA_DIR does not exist", EnvTFDataDir, tfDataDir, "error", err)
 		return
 	}
 	if err := DeletePathTerraform(filepath.Join(componentPath, tfDataDir), filepath.Join(relativePath, tfDataDir)); err != nil {
-		log.Debug("Error deleting TF_DATA_DIR", "TF_DATA_DIR", tfDataDir, "error", err)
+		log.Debug("Error deleting TF_DATA_DIR", EnvTFDataDir, tfDataDir, "error", err)
 	}
 }
 
@@ -424,34 +428,36 @@ func IsValidDataDir(tfDataDir string) error {
 }
 
 // ExecuteClean cleans up Terraform state and artifacts for a component.
-// It accepts typed parameters instead of using AdditionalArgsAndFlags pattern.
-func ExecuteClean(
-	component, stack string,
-	force, everything, skipLockFile, dryRun bool,
-	atmosConfig *schema.AtmosConfiguration,
-) error {
+func ExecuteClean(opts *CleanOptions, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteClean")()
 
-	log.Debug("ExecuteClean called", "component", component, "stack", stack, "force", force, "everything", everything, "skipLockFile", skipLockFile, "dryRun", dryRun)
+	log.Debug("ExecuteClean called",
+		"component", opts.Component,
+		"stack", opts.Stack,
+		"force", opts.Force,
+		"everything", opts.Everything,
+		"skipLockFile", opts.SkipLockFile,
+		"dryRun", opts.DryRun,
+	)
 
 	// Build ConfigAndStacksInfo for HandleCleanSubCommand.
 	info := schema.ConfigAndStacksInfo{
-		ComponentFromArg: component,
-		Stack:            stack,
-		StackFromArg:     stack,
+		ComponentFromArg: opts.Component,
+		Stack:            opts.Stack,
+		StackFromArg:     opts.Stack,
 		SubCommand:       "clean",
 		ComponentType:    "terraform",
-		DryRun:           dryRun,
+		DryRun:           opts.DryRun,
 	}
 
 	// Build AdditionalArgsAndFlags for backward compatibility with HandleCleanSubCommand.
-	if force {
+	if opts.Force {
 		info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, forceFlag)
 	}
-	if everything {
+	if opts.Everything {
 		info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, everythingFlag)
 	}
-	if skipLockFile {
+	if opts.SkipLockFile {
 		info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag)
 	}
 
@@ -460,9 +466,9 @@ func ExecuteClean(
 	// ProcessStacks resolves Atmos component names (e.g., "mycomponent") to actual Terraform
 	// component directories (e.g., "mock") via the metadata.component field in stack config.
 	componentPath := atmosConfig.TerraformDirAbsolutePath
-	if component != "" {
+	if opts.Component != "" {
 		// shouldCheckStack = only require stack if explicitly provided (matching main's behavior).
-		shouldCheckStack := stack != ""
+		shouldCheckStack := opts.Stack != ""
 		resolvedInfo, err := ProcessStacks(atmosConfig, info, shouldCheckStack, false, false, nil, nil)
 		if err != nil {
 			return err
@@ -472,54 +478,52 @@ func ExecuteClean(
 		// Use resolved terraform component path.
 		terraformComponent := info.Context.BaseComponent
 		if terraformComponent == "" {
-			terraformComponent = component
+			terraformComponent = opts.Component
 		}
 		componentPath = filepath.Join(atmosConfig.TerraformDirAbsolutePath, terraformComponent)
 	}
 
-	return HandleCleanSubCommand(info, componentPath, atmosConfig)
+	return HandleCleanSubCommand(&info, componentPath, atmosConfig)
 }
 
-// HandleCleanSubCommand handles the 'clean' subcommand logic.
-func HandleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string, atmosConfig *schema.AtmosConfiguration) error {
-	defer perf.Track(atmosConfig, "exec.HandleCleanSubCommand")()
+// CleanContext holds the context for clean operations.
+type CleanContext struct {
+	Info          *schema.ConfigAndStacksInfo
+	AtmosConfig   *schema.AtmosConfiguration
+	ComponentPath string
+	CleanPath     string
+	RelativePath  string
+	Force         bool
+	FilesToClear  []string
+}
 
-	log.Debug("HandleCleanSubCommand called", "SubCommand", info.SubCommand)
-	if info.SubCommand != "clean" {
-		return nil
-	}
-
-	log.Debug("HandleCleanSubCommand entry", "ComponentFromArg", info.ComponentFromArg, "FinalComponent", info.FinalComponent, "SubCommand", info.SubCommand, "Stack", info.Stack, "StackFromArg", info.StackFromArg)
-
-	cleanPath := componentPath
+// buildCleanPath determines the path to clean based on component info.
+func buildCleanPath(info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
 	if info.ComponentFromArg != "" && info.StackFromArg == "" {
 		if info.Context.BaseComponent == "" {
-			return fmt.Errorf("could not find the component '%s'", info.ComponentFromArg)
+			return "", fmt.Errorf("%w: %s", ErrComponentNotFound, info.ComponentFromArg)
 		}
-		cleanPath = filepath.Join(componentPath, info.Context.BaseComponent)
+		return filepath.Join(componentPath, info.Context.BaseComponent), nil
 	}
+	return componentPath, nil
+}
 
-	relativePath, err := getRelativePath(atmosConfig.BasePath, componentPath)
+// buildRelativePath creates the relative path for display purposes.
+func buildRelativePath(basePath, componentPath string, baseComponent string) (string, error) {
+	relativePath, err := getRelativePath(basePath, componentPath)
 	if err != nil {
-		return err
+		return "", err
 	}
-	if info.Context.BaseComponent != "" {
-		// remove the base component from the relative path
-		relativePath = strings.Replace(relativePath, info.Context.BaseComponent, "", 1)
-		// remove the leading slash
+	if baseComponent != "" {
+		relativePath = strings.Replace(relativePath, baseComponent, "", 1)
 		relativePath = strings.TrimPrefix(relativePath, "/")
 	}
+	return relativePath, nil
+}
 
-	force := u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)
-	filesToClear := initializeFilesToClear(info, atmosConfig)
-
-	// When cleaning a specific component, use the component path directly instead of calling ExecuteDescribeStacks
-	// to avoid processing other components (which may have validation or duplicate errors)
-	var allComponentsRelativePaths []string
+// getComponentsToClean determines which components should be cleaned.
+func getComponentsToClean(info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) ([]string, error) {
 	if info.ComponentFromArg != "" {
-		// Use the component from the command line argument.
-		// Note: When ProcessStacks is skipped (for clean), FinalComponent won't be set,
-		// so we use ComponentFromArg or Context.BaseComponent as fallback.
 		componentToClean := info.FinalComponent
 		if componentToClean == "" && info.Context.BaseComponent != "" {
 			componentToClean = info.Context.BaseComponent
@@ -528,119 +532,177 @@ func HandleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 			componentToClean = info.ComponentFromArg
 		}
 		log.Debug("Clean: Using component from arg", "ComponentFromArg", info.ComponentFromArg, "FinalComponent", info.FinalComponent, "BaseComponent", info.Context.BaseComponent, "componentToClean", componentToClean)
-		allComponentsRelativePaths = []string{componentToClean}
-	} else {
-		log.Debug("Clean: No component from arg, calling ExecuteDescribeStacks", "StackFromArg", info.StackFromArg)
-		// When cleaning all components, we need to call ExecuteDescribeStacks
-		var FilterComponents []string
-		if info.ComponentFromArg != "" {
-			FilterComponents = append(FilterComponents, info.ComponentFromArg)
+		return []string{componentToClean}, nil
+	}
+
+	log.Debug("Clean: No component from arg, calling ExecuteDescribeStacks", "StackFromArg", info.StackFromArg)
+	var filterComponents []string
+	if info.ComponentFromArg != "" {
+		filterComponents = append(filterComponents, info.ComponentFromArg)
+	}
+	stacksMap, err := ExecuteDescribeStacks(
+		atmosConfig,
+		info.StackFromArg,
+		filterComponents,
+		nil, nil, false, false, false, false, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrDescribeStack, err)
+	}
+	return getAllStacksComponentsPaths(stacksMap), nil
+}
+
+// collectTFDataDirFolders collects folders from TF_DATA_DIR environment variable.
+func collectTFDataDirFolders(cleanPath string) ([]Directory, string) {
+	tfDataDir := os.Getenv(EnvTFDataDir) //nolint:forbidigo // TF_DATA_DIR is a Terraform runtime env var, not an Atmos config option.
+	if tfDataDir == "" {
+		return nil, ""
+	}
+
+	if err := IsValidDataDir(tfDataDir); err != nil {
+		log.Debug("error validating TF_DATA_DIR", "error", err)
+		return nil, tfDataDir
+	}
+
+	folders, err := CollectDirectoryObjects(cleanPath, []string{tfDataDir})
+	if err != nil {
+		log.Debug("error collecting folder of ENV TF_DATA_DIR", "error", err)
+		return nil, tfDataDir
+	}
+	return folders, tfDataDir
+}
+
+// countFilesToDelete counts the total number of files to delete.
+func countFilesToDelete(folders []Directory, tfDataDirFolders []Directory) int {
+	count := 0
+	for _, folder := range folders {
+		count += len(folder.Files)
+	}
+	return count + len(tfDataDirFolders)
+}
+
+// printDryRunOutput prints what would be deleted in dry-run mode.
+func printDryRunOutput(folders []Directory, tfDataDirFolders []Directory, basePath string, total int) {
+	u.PrintMessage("Dry run mode: the following files would be deleted:")
+	printFolderFiles(folders, basePath)
+	printFolderFiles(tfDataDirFolders, basePath)
+	u.PrintMessage(fmt.Sprintf("\nTotal: %d files would be deleted", total))
+}
+
+// printFolderFiles prints files from a list of folders.
+func printFolderFiles(folders []Directory, basePath string) {
+	for _, folder := range folders {
+		for _, file := range folder.Files {
+			fileRel, err := getRelativePath(basePath, file.FullPath)
+			if err != nil {
+				fileRel = file.Name
+			}
+			u.PrintMessage(fmt.Sprintf("  %s", fileRel))
 		}
-		stacksMap, err := ExecuteDescribeStacks(
-			atmosConfig,
-			info.StackFromArg,
-			FilterComponents,
-			nil, nil, false, false, false, false, nil, nil)
-		if err != nil {
-			return fmt.Errorf("%w: %w", ErrDescribeStack, err)
-		}
-		allComponentsRelativePaths = getAllStacksComponentsPaths(stacksMap)
+	}
+}
+
+// buildConfirmationMessage builds the confirmation message for deletion.
+func buildConfirmationMessage(info *schema.ConfigAndStacksInfo, total int) string {
+	if info.ComponentFromArg == "" {
+		return fmt.Sprintf("This will delete %v local terraform state files affecting all components", total)
+	}
+	if info.Component != "" && info.Stack != "" {
+		return fmt.Sprintf("This will delete %v local terraform state files for component '%s' in stack '%s'", total, info.Component, info.Stack)
+	}
+	if info.ComponentFromArg != "" {
+		return fmt.Sprintf("This will delete %v local terraform state files for component '%s'", total, info.ComponentFromArg)
+	}
+	return "This will delete selected terraform state files"
+}
+
+// promptForConfirmation prompts user for confirmation and returns true if confirmed.
+func promptForConfirmation(tfDataDirFolders []Directory, tfDataDir string, message string) (bool, error) {
+	if len(tfDataDirFolders) > 0 {
+		u.PrintMessage(fmt.Sprintf("Found ENV var %s=%s", EnvTFDataDir, tfDataDir))
+		u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
+	}
+	u.PrintMessage(message)
+	println()
+	return confirmDeletion()
+}
+
+// collectAllFolders collects all folders to clean including stack-specific folders.
+func collectAllFolders(info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration, cleanPath string, filesToClear []string) ([]Directory, error) {
+	allComponentsRelativePaths, err := getComponentsToClean(info, atmosConfig)
+	if err != nil {
+		return nil, err
 	}
 
 	folders, err := CollectComponentsDirectoryObjects(atmosConfig.TerraformDirAbsolutePath, allComponentsRelativePaths, filesToClear)
 	if err != nil {
 		log.Debug("error collecting folders and files", "error", err)
-		return err
+		return nil, err
 	}
+
 	if info.Component != "" && info.Stack != "" {
-		stackFolders, err := getStackTerraformStateFolder(cleanPath, info.Stack)
-		if err != nil {
+		if stackFolders, err := getStackTerraformStateFolder(cleanPath, info.Stack); err != nil {
 			log.Debug("error getting stack terraform state folders", "error", err)
-		}
-		if stackFolders != nil {
+		} else if stackFolders != nil {
 			folders = append(folders, stackFolders...)
 		}
 	}
-	tfDataDir := os.Getenv("TF_DATA_DIR")
+	return folders, nil
+}
 
-	var tfDataDirFolders []Directory
-	if tfDataDir != "" {
-		if err := IsValidDataDir(tfDataDir); err != nil {
-			log.Debug("error validating TF_DATA_DIR", "error", err)
-		} else {
-			tfDataDirFolders, err = CollectDirectoryObjects(cleanPath, []string{tfDataDir})
-			if err != nil {
-				log.Debug("error collecting folder of ENV TF_DATA_DIR", "error", err)
-			}
-		}
+// executeCleanDeletion performs the actual deletion of folders.
+func executeCleanDeletion(folders []Directory, tfDataDirFolders []Directory, relativePath string, atmosConfig *schema.AtmosConfiguration) {
+	deleteFolders(folders, relativePath, atmosConfig)
+	if len(tfDataDirFolders) > 0 {
+		handleTFDataDir(tfDataDirFolders[0].FullPath, relativePath)
 	}
-	objectCount := 0
-	for _, folder := range folders {
-		objectCount += len(folder.Files)
+}
+
+// HandleCleanSubCommand handles the 'clean' subcommand logic.
+func HandleCleanSubCommand(info *schema.ConfigAndStacksInfo, componentPath string, atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "exec.HandleCleanSubCommand")()
+
+	if info.SubCommand != "clean" {
+		return nil
 	}
-	total := objectCount + len(tfDataDirFolders)
+
+	cleanPath, err := buildCleanPath(info, componentPath)
+	if err != nil {
+		return err
+	}
+
+	relativePath, err := buildRelativePath(atmosConfig.BasePath, componentPath, info.Context.BaseComponent)
+	if err != nil {
+		return err
+	}
+
+	force := u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)
+	filesToClear := initializeFilesToClear(*info, atmosConfig)
+
+	folders, err := collectAllFolders(info, atmosConfig, cleanPath, filesToClear)
+	if err != nil {
+		return err
+	}
+
+	tfDataDirFolders, tfDataDir := collectTFDataDirFolders(cleanPath)
+	total := countFilesToDelete(folders, tfDataDirFolders)
 
 	if total == 0 {
 		u.PrintfMessageToTUI("\n%s Nothing to delete\n\n", theme.Styles.Checkmark)
 		return nil
 	}
 
-	if total > 0 {
-		// In dry-run mode, print what would be deleted and exit.
-		if info.DryRun {
-			u.PrintMessage("Dry run mode: the following files would be deleted:")
-			for _, folder := range folders {
-				for _, file := range folder.Files {
-					fileRel, err := getRelativePath(atmosConfig.BasePath, file.FullPath)
-					if err != nil {
-						fileRel = file.Name
-					}
-					u.PrintMessage(fmt.Sprintf("  %s", fileRel))
-				}
-			}
-			if len(tfDataDirFolders) > 0 {
-				for _, folder := range tfDataDirFolders {
-					for _, file := range folder.Files {
-						fileRel, err := getRelativePath(atmosConfig.BasePath, file.FullPath)
-						if err != nil {
-							fileRel = file.Name
-						}
-						u.PrintMessage(fmt.Sprintf("  %s", fileRel))
-					}
-				}
-			}
-			u.PrintMessage(fmt.Sprintf("\nTotal: %d files would be deleted", total))
-			return nil
-		}
+	if info.DryRun {
+		printDryRunOutput(folders, tfDataDirFolders, atmosConfig.BasePath, total)
+		return nil
+	}
 
-		if !force {
-			if len(tfDataDirFolders) > 0 {
-				u.PrintMessage(fmt.Sprintf("Found ENV var TF_DATA_DIR=%s", tfDataDir))
-				u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
-			}
-			var message string
-			if info.ComponentFromArg == "" {
-				message = fmt.Sprintf("This will delete %v local terraform state files affecting all components", total)
-			} else if info.Component != "" && info.Stack != "" {
-				message = fmt.Sprintf("This will delete %v local terraform state files for component '%s' in stack '%s'", total, info.Component, info.Stack)
-			} else if info.ComponentFromArg != "" {
-				message = fmt.Sprintf("This will delete %v local terraform state files for component '%s'", total, info.ComponentFromArg)
-			} else {
-				message = "This will delete selected terraform state files"
-			}
-			u.PrintMessage(message)
-			println()
-			if confirm, err := confirmDeletion(); err != nil || !confirm {
-				return err
-			}
-		}
-
-		deleteFolders(folders, relativePath, atmosConfig)
-		if len(tfDataDirFolders) > 0 {
-			tfDataDirFolder := tfDataDirFolders[0]
-			handleTFDataDir(tfDataDirFolder.FullPath, relativePath)
+	if !force {
+		message := buildConfirmationMessage(info, total)
+		if confirmed, err := promptForConfirmation(tfDataDirFolders, tfDataDir, message); err != nil || !confirmed {
+			return err
 		}
 	}
 
+	executeCleanDeletion(folders, tfDataDirFolders, relativePath, atmosConfig)
 	return nil
 }

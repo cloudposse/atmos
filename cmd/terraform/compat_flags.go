@@ -5,6 +5,29 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// Terraform flag name constants.
+const (
+	tfFlagJSON        = "-json"
+	tfFlagNoColor     = "-no-color"
+	tfFlagState       = "-state"
+	tfFlagStateOut    = "-state-out"
+	tfFlagBackup      = "-backup"
+	tfFlagLock        = "-lock"
+	tfFlagLockTimeout = "-lock-timeout"
+)
+
+// Terraform flag description constants.
+const (
+	descDisableColorOutput  = "Disable color output"
+	descPathToStateFile     = "Path to the state file"
+	descPathToReadSaveState = "Path to read and save state"
+	descPathToWriteState    = "Path to write updated state"
+	descPathToBackupState   = "Path to backup the existing state file"
+	descLockStateFile       = "Lock the state file"
+	descDurationRetryLock   = "Duration to retry state lock"
+	descOutputJSONFormat    = "Output in JSON format"
+)
+
 // TerraformGlobalCompatFlags returns TRUE global terraform flags.
 // These can be used before any subcommand (e.g., `terraform -chdir=./foo plan`).
 // These flags are NOT parsed by Cobra but are passed through to terraform/tofu.
@@ -50,7 +73,7 @@ func PlanCompatFlags() map[string]compat.CompatibilityFlag {
 	flags["-out"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Write the plan to the given path"}
 	flags["-detailed-exitcode"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Return detailed exit codes (0=success, 1=error, 2=changes)"}
 	flags["-generate-config-out"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Write HCL for resources to import"}
-	flags["-json"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Output plan in a machine-readable JSON format"}
+	flags[tfFlagJSON] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Output plan in a machine-readable JSON format"}
 	return flags
 }
 
@@ -61,13 +84,13 @@ func ApplyCompatFlags() map[string]compat.CompatibilityFlag {
 	flags := CommonSubcommandFlags()
 	// Apply-specific flags.
 	flags["-auto-approve"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Skip interactive approval of plan before applying"}
-	flags["-backup"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to backup the existing state file"}
+	flags[tfFlagBackup] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: descPathToBackupState}
 	flags["-destroy"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Destroy all remote objects managed by the configuration"}
 	flags["-refresh-only"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Update state only, no resource changes"}
 	flags["-replace"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Force replacement of a particular resource instance"}
-	flags["-json"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Output apply results in JSON format"}
-	flags["-state"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to read and save state"}
-	flags["-state-out"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to write updated state"}
+	flags[tfFlagJSON] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Output apply results in JSON format"}
+	flags[tfFlagState] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: descPathToReadSaveState}
+	flags[tfFlagStateOut] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: descPathToWriteState}
 	return flags
 }
 
@@ -78,10 +101,10 @@ func DestroyCompatFlags() map[string]compat.CompatibilityFlag {
 	flags := CommonSubcommandFlags()
 	// Destroy-specific flags.
 	flags["-auto-approve"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Skip interactive approval before destroying"}
-	flags["-backup"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to backup the existing state file"}
-	flags["-json"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Output destroy results in JSON format"}
-	flags["-state"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to read and save state"}
-	flags["-state-out"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to write updated state"}
+	flags[tfFlagBackup] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: descPathToBackupState}
+	flags[tfFlagJSON] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Output destroy results in JSON format"}
+	flags[tfFlagState] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: descPathToReadSaveState}
+	flags[tfFlagStateOut] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: descPathToWriteState}
 	return flags
 }
 
@@ -96,9 +119,9 @@ func InitCompatFlags() map[string]compat.CompatibilityFlag {
 		"-from-module":           {Behavior: compat.AppendToSeparated, Description: "Copy contents of the given module into the target directory"},
 		"-get":                   {Behavior: compat.AppendToSeparated, Description: "Download any modules for this configuration (default: true)"},
 		"-input":                 {Behavior: compat.AppendToSeparated, Description: "Ask for input if necessary (default: true)"},
-		"-lock":                  {Behavior: compat.AppendToSeparated, Description: "Lock the state file (default: true)"},
-		"-lock-timeout":          {Behavior: compat.AppendToSeparated, Description: "Duration to retry a state lock"},
-		"-no-color":              {Behavior: compat.AppendToSeparated, Description: "Disable color output"},
+		tfFlagLock:               {Behavior: compat.AppendToSeparated, Description: "Lock the state file (default: true)"},
+		tfFlagLockTimeout:        {Behavior: compat.AppendToSeparated, Description: descDurationRetryLock},
+		tfFlagNoColor:            {Behavior: compat.AppendToSeparated, Description: descDisableColorOutput},
 		"-plugin-dir":            {Behavior: compat.AppendToSeparated, Description: "Directory containing plugin binaries"},
 		"-reconfigure":           {Behavior: compat.AppendToSeparated, Description: "Reconfigure backend, ignoring any saved configuration"},
 		"-migrate-state":         {Behavior: compat.AppendToSeparated, Description: "Migrate state to new backend"},
@@ -113,8 +136,8 @@ func ValidateCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.ValidateCompatFlags")()
 
 	return map[string]compat.CompatibilityFlag{
-		"-json":           {Behavior: compat.AppendToSeparated, Description: "Output validation results in JSON format"},
-		"-no-color":       {Behavior: compat.AppendToSeparated, Description: "Disable color output"},
+		tfFlagJSON:        {Behavior: compat.AppendToSeparated, Description: "Output validation results in JSON format"},
+		tfFlagNoColor:     {Behavior: compat.AppendToSeparated, Description: descDisableColorOutput},
 		"-no-tests":       {Behavior: compat.AppendToSeparated, Description: "Skip test file validation"},
 		"-test-directory": {Behavior: compat.AppendToSeparated, Description: "Directory containing test files"},
 	}
@@ -125,9 +148,9 @@ func RefreshCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.RefreshCompatFlags")()
 
 	flags := CommonSubcommandFlags()
-	flags["-backup"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to backup the existing state file"}
-	flags["-state"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to read and save state"}
-	flags["-state-out"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to write updated state"}
+	flags[tfFlagBackup] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: descPathToBackupState}
+	flags[tfFlagState] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: descPathToReadSaveState}
+	flags[tfFlagStateOut] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: descPathToWriteState}
 	return flags
 }
 
@@ -136,10 +159,10 @@ func OutputCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.OutputCompatFlags")()
 
 	return map[string]compat.CompatibilityFlag{
-		"-json":     {Behavior: compat.AppendToSeparated, Description: "Output in JSON format"},
-		"-raw":      {Behavior: compat.AppendToSeparated, Description: "Output raw string value without quotes"},
-		"-no-color": {Behavior: compat.AppendToSeparated, Description: "Disable color output"},
-		"-state":    {Behavior: compat.AppendToSeparated, Description: "Path to the state file"},
+		tfFlagJSON:    {Behavior: compat.AppendToSeparated, Description: descOutputJSONFormat},
+		"-raw":        {Behavior: compat.AppendToSeparated, Description: "Output raw string value without quotes"},
+		tfFlagNoColor: {Behavior: compat.AppendToSeparated, Description: descDisableColorOutput},
+		tfFlagState:   {Behavior: compat.AppendToSeparated, Description: descPathToStateFile},
 	}
 }
 
@@ -148,8 +171,8 @@ func ShowCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.ShowCompatFlags")()
 
 	return map[string]compat.CompatibilityFlag{
-		"-json":     {Behavior: compat.AppendToSeparated, Description: "Output in JSON format"},
-		"-no-color": {Behavior: compat.AppendToSeparated, Description: "Disable color output"},
+		tfFlagJSON:    {Behavior: compat.AppendToSeparated, Description: descOutputJSONFormat},
+		tfFlagNoColor: {Behavior: compat.AppendToSeparated, Description: descDisableColorOutput},
 	}
 }
 
@@ -158,11 +181,11 @@ func StateCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.StateCompatFlags")()
 
 	return map[string]compat.CompatibilityFlag{
-		"-state":        {Behavior: compat.AppendToSeparated, Description: "Path to the state file"},
-		"-state-out":    {Behavior: compat.AppendToSeparated, Description: "Path to write updated state"},
-		"-backup":       {Behavior: compat.AppendToSeparated, Description: "Path to backup state file"},
-		"-lock":         {Behavior: compat.AppendToSeparated, Description: "Lock the state file"},
-		"-lock-timeout": {Behavior: compat.AppendToSeparated, Description: "Duration to retry state lock"},
+		tfFlagState:       {Behavior: compat.AppendToSeparated, Description: descPathToStateFile},
+		tfFlagStateOut:    {Behavior: compat.AppendToSeparated, Description: descPathToWriteState},
+		tfFlagBackup:      {Behavior: compat.AppendToSeparated, Description: descPathToBackupState},
+		tfFlagLock:        {Behavior: compat.AppendToSeparated, Description: descLockStateFile},
+		tfFlagLockTimeout: {Behavior: compat.AppendToSeparated, Description: descDurationRetryLock},
 	}
 }
 
@@ -173,8 +196,8 @@ func ImportCompatFlags() map[string]compat.CompatibilityFlag {
 	flags := CommonSubcommandFlags()
 	flags["-config"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to directory of Terraform configuration files"}
 	flags["-allow-missing-config"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Allow import when no resource configuration block exists"}
-	flags["-state"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to read and save state"}
-	flags["-state-out"] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: "Path to write updated state"}
+	flags[tfFlagState] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: descPathToReadSaveState}
+	flags[tfFlagStateOut] = compat.CompatibilityFlag{Behavior: compat.AppendToSeparated, Description: descPathToWriteState}
 	return flags
 }
 
@@ -183,11 +206,11 @@ func TaintCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.TaintCompatFlags")()
 
 	return map[string]compat.CompatibilityFlag{
-		"-allow-missing": {Behavior: compat.AppendToSeparated, Description: "Succeed even if the resource is missing"},
-		"-lock":          {Behavior: compat.AppendToSeparated, Description: "Lock the state file"},
-		"-lock-timeout":  {Behavior: compat.AppendToSeparated, Description: "Duration to retry state lock"},
-		"-state":         {Behavior: compat.AppendToSeparated, Description: "Path to the state file"},
-		"-state-out":     {Behavior: compat.AppendToSeparated, Description: "Path to write updated state"},
+		"-allow-missing":  {Behavior: compat.AppendToSeparated, Description: "Succeed even if the resource is missing"},
+		tfFlagLock:        {Behavior: compat.AppendToSeparated, Description: descLockStateFile},
+		tfFlagLockTimeout: {Behavior: compat.AppendToSeparated, Description: descDurationRetryLock},
+		tfFlagState:       {Behavior: compat.AppendToSeparated, Description: descPathToStateFile},
+		tfFlagStateOut:    {Behavior: compat.AppendToSeparated, Description: descPathToWriteState},
 	}
 }
 
@@ -203,12 +226,12 @@ func FmtCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.FmtCompatFlags")()
 
 	return map[string]compat.CompatibilityFlag{
-		"-list":      {Behavior: compat.AppendToSeparated, Description: "List files with formatting differences (default: true)"},
-		"-write":     {Behavior: compat.AppendToSeparated, Description: "Write formatted files (default: true)"},
-		"-diff":      {Behavior: compat.AppendToSeparated, Description: "Display differences"},
-		"-check":     {Behavior: compat.AppendToSeparated, Description: "Return non-zero exit code if formatting needed"},
-		"-no-color":  {Behavior: compat.AppendToSeparated, Description: "Disable color output"},
-		"-recursive": {Behavior: compat.AppendToSeparated, Description: "Process files in subdirectories"},
+		"-list":       {Behavior: compat.AppendToSeparated, Description: "List files with formatting differences (default: true)"},
+		"-write":      {Behavior: compat.AppendToSeparated, Description: "Write formatted files (default: true)"},
+		"-diff":       {Behavior: compat.AppendToSeparated, Description: "Display differences"},
+		"-check":      {Behavior: compat.AppendToSeparated, Description: "Return non-zero exit code if formatting needed"},
+		tfFlagNoColor: {Behavior: compat.AppendToSeparated, Description: descDisableColorOutput},
+		"-recursive":  {Behavior: compat.AppendToSeparated, Description: "Process files in subdirectories"},
 	}
 }
 
@@ -239,7 +262,7 @@ func GetCompatFlags() map[string]compat.CompatibilityFlag {
 
 	return map[string]compat.CompatibilityFlag{
 		"-update":         {Behavior: compat.AppendToSeparated, Description: "Check for and download updated modules"},
-		"-no-color":       {Behavior: compat.AppendToSeparated, Description: "Disable color output"},
+		tfFlagNoColor:     {Behavior: compat.AppendToSeparated, Description: descDisableColorOutput},
 		"-test-directory": {Behavior: compat.AppendToSeparated, Description: "Directory containing test files"},
 	}
 }
@@ -250,8 +273,8 @@ func TestCompatFlags() map[string]compat.CompatibilityFlag {
 
 	return map[string]compat.CompatibilityFlag{
 		"-filter":         {Behavior: compat.AppendToSeparated, Description: "Filter test files to run"},
-		"-json":           {Behavior: compat.AppendToSeparated, Description: "Output results in JSON format"},
-		"-no-color":       {Behavior: compat.AppendToSeparated, Description: "Disable color output"},
+		tfFlagJSON:        {Behavior: compat.AppendToSeparated, Description: "Output results in JSON format"},
+		tfFlagNoColor:     {Behavior: compat.AppendToSeparated, Description: descDisableColorOutput},
 		"-test-directory": {Behavior: compat.AppendToSeparated, Description: "Directory containing test files"},
 		"-var":            {Behavior: compat.AppendToSeparated, Description: "Set a variable in the test"},
 		"-var-file":       {Behavior: compat.AppendToSeparated, Description: "Load variable values from the given file"},
@@ -264,7 +287,7 @@ func ConsoleCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.ConsoleCompatFlags")()
 
 	return map[string]compat.CompatibilityFlag{
-		"-state":    {Behavior: compat.AppendToSeparated, Description: "Path to the state file"},
+		tfFlagState: {Behavior: compat.AppendToSeparated, Description: descPathToStateFile},
 		"-var":      {Behavior: compat.AppendToSeparated, Description: "Set a variable in the console"},
 		"-var-file": {Behavior: compat.AppendToSeparated, Description: "Load variable values from the given file"},
 		"-plan":     {Behavior: compat.AppendToSeparated, Description: "Use the given plan file"},
@@ -276,9 +299,9 @@ func WorkspaceCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.WorkspaceCompatFlags")()
 
 	return map[string]compat.CompatibilityFlag{
-		"-lock":         {Behavior: compat.AppendToSeparated, Description: "Lock the state file"},
-		"-lock-timeout": {Behavior: compat.AppendToSeparated, Description: "Duration to retry state lock"},
-		"-state":        {Behavior: compat.AppendToSeparated, Description: "Path to the state file"},
+		tfFlagLock:        {Behavior: compat.AppendToSeparated, Description: descLockStateFile},
+		tfFlagLockTimeout: {Behavior: compat.AppendToSeparated, Description: descDurationRetryLock},
+		tfFlagState:       {Behavior: compat.AppendToSeparated, Description: descPathToStateFile},
 	}
 }
 

@@ -14,13 +14,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// cmdNameTerraform is the command name for terraform operations.
+const cmdNameTerraform = "terraform"
+
 // terraformParser handles flag parsing for shared terraform flags.
 // These persistent flags are inherited by all terraform subcommands.
 var terraformParser *flags.StandardParser
 
 // terraformCmd represents the base command for all terraform sub-commands.
 var terraformCmd = &cobra.Command{
-	Use:     "terraform",
+	Use:     cmdNameTerraform,
 	Aliases: []string{"tf"},
 	Short:   "Execute Terraform commands using Atmos stack configurations",
 	Long:    `This command allows you to execute Terraform commands, such as plan, apply, and destroy, using Atmos stack configurations for consistent infrastructure management.`,
@@ -41,9 +44,10 @@ var terraformCmd = &cobra.Command{
 func init() {
 	// Create parser with shared terraform flags using functional options.
 	// These flags are inherited by all terraform subcommands.
+	// Use local WithTerraformFlags/WithTerraformAffectedFlags from cmd/terraform/flags.go.
 	terraformParser = flags.NewStandardParser(
-		flags.WithTerraformFlags(),
-		flags.WithTerraformAffectedFlags(),
+		WithTerraformFlags(),
+		WithTerraformAffectedFlags(),
 	)
 
 	// Set stack completion function on the flag registry to avoid import cycle.
@@ -67,7 +71,7 @@ func init() {
 
 	// Register global terraform compat flags (shown on `atmos terraform --help`).
 	// These are TRUE GLOBAL terraform flags that can be used before any subcommand.
-	internal.RegisterCommandCompatFlags("terraform", "terraform", TerraformGlobalCompatFlags())
+	internal.RegisterCommandCompatFlags(cmdNameTerraform, cmdNameTerraform, TerraformGlobalCompatFlags())
 
 	// Register this command with the registry.
 	internal.Register(&TerraformCommandProvider{})
@@ -83,7 +87,7 @@ func (t *TerraformCommandProvider) GetCommand() *cobra.Command {
 
 // GetName returns the command name.
 func (t *TerraformCommandProvider) GetName() string {
-	return "terraform"
+	return cmdNameTerraform
 }
 
 // GetGroup returns the command group for help organization.
@@ -147,5 +151,5 @@ func runTerraformGlobal(args []string) error {
 	// Use "terraform" as the default command - atmos config would typically
 	// specify whether to use terraform or tofu, but for -version/-help
 	// we can just use the default.
-	return exec.ExecuteShellCommand(schema.AtmosConfiguration{}, "terraform", args, "", nil, false, "")
+	return exec.ExecuteShellCommand(schema.AtmosConfiguration{}, cmdNameTerraform, args, "", nil, false, "")
 }

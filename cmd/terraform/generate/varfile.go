@@ -50,7 +50,17 @@ var varfileCmd = &cobra.Command{
 			return err
 		}
 
-		return e.ExecuteGenerateVarfile(component, stack, file, processTemplates, processFunctions, skip, &atmosConfig)
+		opts := &e.VarfileOptions{
+			Component: component,
+			Stack:     stack,
+			File:      file,
+			ProcessingOptions: e.ProcessingOptions{
+				ProcessTemplates: processTemplates,
+				ProcessFunctions: processFunctions,
+				Skip:             skip,
+			},
+		}
+		return e.ExecuteGenerateVarfile(opts, &atmosConfig)
 	},
 }
 

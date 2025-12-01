@@ -75,24 +75,6 @@ func TestWithDryRunFlag(t *testing.T) {
 	assert.NotNil(t, flag)
 }
 
-func TestWithTerraformFlags(t *testing.T) {
-	cfg := &parserConfig{registry: NewFlagRegistry()}
-
-	opt := WithTerraformFlags()
-	opt(cfg)
-
-	// TerraformFlags includes CommonFlags (stack, dry-run) plus terraform-specific flags:
-	// identity, upload-status, skip-init, from-plan, init-pass-vars, append-user-agent,
-	// process-templates, process-functions, skip, query, components
-	// Total: 2 (common) + 11 (terraform) = 13
-	assert.Equal(t, 13, cfg.registry.Count())
-	assert.NotNil(t, cfg.registry.Get("upload-status"))
-	assert.NotNil(t, cfg.registry.Get("stack"))
-	assert.NotNil(t, cfg.registry.Get("process-templates"))
-	assert.NotNil(t, cfg.registry.Get("query"))
-	assert.NotNil(t, cfg.registry.Get("identity"), "identity should be in TerraformFlags for terraform commands")
-}
-
 func TestWithHelmfileFlags(t *testing.T) {
 	cfg := &parserConfig{registry: NewFlagRegistry()}
 

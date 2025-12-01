@@ -1,10 +1,7 @@
 package exec
 
 import (
-	"fmt"
 	"path/filepath"
-
-	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -14,43 +11,60 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// validateBackendConfig validates the backend configuration for the component.
+func validateBackendConfig(info *schema.ConfigAndStacksInfo) error {
+	if info.ComponentBackendType == "" {
+		return errUtils.ErrMissingTerraformBackendType
+	}
+	if info.ComponentBackendSection == nil {
+		return errUtils.ErrMissingTerraformBackendConfig
+	}
+	return nil
+}
+
+// validateBackendTypeRequirements validates backend-type-specific requirements.
+func validateBackendTypeRequirements(info *schema.ConfigAndStacksInfo) error {
+	switch info.ComponentBackendType {
+	case cfg.BackendTypeS3:
+		if _, ok := info.ComponentBackendSection["workspace_key_prefix"].(string); !ok {
+			return errUtils.ErrMissingTerraformWorkspaceKeyPrefix
+		}
+	case cfg.BackendTypeGCS:
+		if _, ok := info.ComponentBackendSection["bucket"].(string); !ok {
+			return errUtils.ErrGCSBucketRequired
+		}
+	}
+	return nil
+}
+
 // ExecuteGenerateBackend generates backend config for a terraform component.
-func ExecuteGenerateBackend(
-	component, stack string,
-	processTemplates, processFunctions bool,
-	skip []string,
-	atmosConfig *schema.AtmosConfiguration,
-) error {
+func ExecuteGenerateBackend(opts *GenerateBackendOptions, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteGenerateBackend")()
 
 	log.Debug("ExecuteGenerateBackend called",
-		"component", component,
-		"stack", stack,
-		"processTemplates", processTemplates,
-		"processFunctions", processFunctions,
-		"skip", skip,
+		"component", opts.Component,
+		"stack", opts.Stack,
+		"processTemplates", opts.ProcessTemplates,
+		"processFunctions", opts.ProcessFunctions,
+		"skip", opts.Skip,
 	)
 
 	info := schema.ConfigAndStacksInfo{
-		ComponentFromArg: component,
-		Stack:            stack,
-		StackFromArg:     stack,
+		ComponentFromArg: opts.Component,
+		Stack:            opts.Stack,
+		StackFromArg:     opts.Stack,
 		ComponentType:    "terraform",
 		CliArgs:          []string{"terraform", "generate", "backend"},
 	}
 
 	// Process stacks to get component configuration.
-	info, err := ProcessStacks(atmosConfig, info, true, processTemplates, processFunctions, skip, nil)
+	info, err := ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, nil)
 	if err != nil {
 		return err
 	}
 
-	if info.ComponentBackendType == "" {
-		return fmt.Errorf("'backend_type' is missing for the '%s' component", component)
-	}
-
-	if info.ComponentBackendSection == nil {
-		return fmt.Errorf("could not find 'backend' config for the '%s' component", component)
+	if err := validateBackendConfig(&info); err != nil {
+		return err
 	}
 
 	componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace, info.AuthContext)
@@ -60,21 +74,15 @@ func ExecuteGenerateBackend(
 
 	log.Debug("Component backend", "config", componentBackendConfig)
 
-	// Check if the `backend` section has `workspace_key_prefix` when `backend_type` is `s3`
-	if info.ComponentBackendType == cfg.BackendTypeS3 {
-		if _, ok := info.ComponentBackendSection["workspace_key_prefix"].(string); !ok {
-			return fmt.Errorf("backend config for the '%s' component is missing 'workspace_key_prefix'", component)
-		}
+	if err := validateBackendTypeRequirements(&info); err != nil {
+		return err
 	}
 
-	// Check if the `backend` section has `bucket` when `backend_type` is `gcs`
-	if info.ComponentBackendType == cfg.BackendTypeGCS {
-		if _, ok := info.ComponentBackendSection["bucket"].(string); !ok {
-			return errUtils.ErrGCSBucketRequired
-		}
-	}
+	return writeBackendConfigFile(atmosConfig, &info, componentBackendConfig)
+}
 
-	// Write the backend config to a file
+// writeBackendConfigFile writes the backend config to a file.
+func writeBackendConfigFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, config map[string]any) error {
 	backendFilePath := filepath.Join(
 		atmosConfig.BasePath,
 		atmosConfig.Components.Terraform.BasePath,
@@ -85,14 +93,10 @@ func ExecuteGenerateBackend(
 
 	log.Debug("Writing the backend config to file", "file", backendFilePath)
 
-	if !info.DryRun {
-		err = u.WriteToFileAsJSON(backendFilePath, componentBackendConfig, 0o644)
-		if err != nil {
-			return err
-		}
+	if info.DryRun {
+		return nil
 	}
-
-	return nil
+	return u.WriteToFileAsJSON(backendFilePath, config, filePermissions)
 }
 
 // ExecuteTerraformGenerateBackendCmd executes `terraform generate backend` command.
@@ -100,5 +104,5 @@ func ExecuteGenerateBackend(
 func ExecuteTerraformGenerateBackendCmd(cmd interface{}, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendCmd")()
 
-	return errors.New("ExecuteTerraformGenerateBackendCmd is deprecated and should not be called")
+	return errUtils.ErrDeprecatedCmdNotCallable
 }

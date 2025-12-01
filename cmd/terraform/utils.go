@@ -54,6 +54,60 @@ func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
 	return nil
 }
 
+// populateInfoFromViper populates info fields from Viper configuration.
+func populateInfoFromViper(info *schema.ConfigAndStacksInfo) {
+	v := viper.GetViper()
+	info.ProcessTemplates = v.GetBool("process-templates")
+	info.ProcessFunctions = v.GetBool("process-functions")
+	info.Skip = v.GetStringSlice("skip")
+	info.Components = v.GetStringSlice("components")
+	info.DryRun = v.GetBool("dry-run")
+}
+
+// executeAffectedCommand handles the --affected flag execution flow.
+func executeAffectedCommand(parentCmd *cobra.Command, args []string, info *schema.ConfigAndStacksInfo) error {
+	// Add these flags because `atmos describe affected` needs them, but `atmos terraform --affected` does not define them.
+	parentCmd.PersistentFlags().String("file", "", "")
+	parentCmd.PersistentFlags().String("format", "yaml", "")
+	parentCmd.PersistentFlags().Bool("verbose", false, "")
+	parentCmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "")
+	parentCmd.PersistentFlags().Bool("include-settings", false, "")
+	parentCmd.PersistentFlags().Bool("upload", false, "")
+
+	a, err := e.ParseDescribeAffectedCliArgs(parentCmd, args)
+	if err != nil {
+		return err
+	}
+
+	a.IncludeSpaceliftAdminStacks = false
+	a.IncludeSettings = false
+	a.Upload = false
+	a.OutputFile = ""
+
+	err = e.ExecuteTerraformAffected(&a, info)
+	errUtils.CheckErrorPrintAndExit(err, "", "")
+	return nil
+}
+
+// isMultiComponentExecution checks if the command should be routed to multi-component execution.
+func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
+	return info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "")
+}
+
+// executeSingleComponent executes terraform for a single component.
+func executeSingleComponent(info *schema.ConfigAndStacksInfo) error {
+	log.Debug("Routing to ExecuteTerraform (single-component)")
+	err := e.ExecuteTerraform(*info)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrPlanHasDiff) {
+			errUtils.CheckErrorAndPrint(err, "", "")
+			return err
+		}
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+	return nil
+}
+
 func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
 	subCommand := actualCmd.Name()
 	log.Debug("terraformRun entry", "subCommand", subCommand, "args", args)
@@ -81,12 +135,7 @@ func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []str
 	}
 
 	// Get flag values from Viper (respects precedence: flag > env > config > default).
-	v := viper.GetViper()
-	info.ProcessTemplates = v.GetBool("process-templates")
-	info.ProcessFunctions = v.GetBool("process-functions")
-	info.Skip = v.GetStringSlice("skip")
-	info.Components = v.GetStringSlice("components")
-	info.DryRun = v.GetBool("dry-run")
+	populateInfoFromViper(&info)
 
 	// Handle --identity flag for interactive selection.
 	// ProcessCommandLineArgs already parsed the identity value correctly via processArgsAndFlags.
@@ -99,81 +148,58 @@ func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []str
 	}
 	// Otherwise, info.Identity already has the correct value from ProcessCommandLineArgs
 	// (either from --identity <value>, ATMOS_IDENTITY env var, or empty string).
-	// Check Terraform Single-Component and Multi-Component flags
+
+	// Check Terraform Single-Component and Multi-Component flags.
 	err = checkTerraformFlags(&info)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
-	// Execute `atmos terraform <sub-command> --affected` or `atmos terraform <sub-command> --affected --stack <stack>`
+	// Execute `atmos terraform <sub-command> --affected` or `atmos terraform <sub-command> --affected --stack <stack>`.
 	if info.Affected {
-		// Add these flags because `atmos describe affected` needs them, but `atmos terraform --affected` does not define them
-		parentCmd.PersistentFlags().String("file", "", "")
-		parentCmd.PersistentFlags().String("format", "yaml", "")
-		parentCmd.PersistentFlags().Bool("verbose", false, "")
-		parentCmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "")
-		parentCmd.PersistentFlags().Bool("include-settings", false, "")
-		parentCmd.PersistentFlags().Bool("upload", false, "")
-
-		a, err := e.ParseDescribeAffectedCliArgs(parentCmd, args)
-		if err != nil {
-			return err
-		}
-
-		a.IncludeSpaceliftAdminStacks = false
-		a.IncludeSettings = false
-		a.Upload = false
-		a.OutputFile = ""
-
-		err = e.ExecuteTerraformAffected(&a, &info)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return nil
+		return executeAffectedCommand(parentCmd, args, &info)
 	}
 
-	// Execute `atmos terraform <sub-command>` with the filters if any of the following flags are specified:
-	// `--all`
-	// `--components c1,c2`
-	// `--query <yq-expression>`
-	// `--stack` (and the `component` argument is not passed)
+	// Execute `atmos terraform <sub-command>` with filters if multi-component flags are specified.
 	log.Debug("terraformRun routing decision", "All", info.All, "Components", info.Components, "Query", info.Query, "Stack", info.Stack, "ComponentFromArg", info.ComponentFromArg, "SubCommand", info.SubCommand)
-	if info.All || len(info.Components) > 0 || info.Query != "" || (info.Stack != "" && info.ComponentFromArg == "") {
+	if isMultiComponentExecution(&info) {
 		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")
 		err = e.ExecuteTerraformQuery(&info)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
 
-	// Execute `atmos terraform <sub-command> <component> --stack <stack>`
-	log.Debug("Routing to ExecuteTerraform (single-component)")
-	err = e.ExecuteTerraform(info)
-	// For plan-diff, ExecuteTerraform will call OsExit directly if there are differences
-	// So if we get here, it means there were no differences or there was an error
-	if err != nil {
-		if errors.Is(err, errUtils.ErrPlanHasDiff) {
-			// Print the error message but return the error to be handled by main.go
-			errUtils.CheckErrorAndPrint(err, "", "")
-			return err
-		}
-		// For other errors, continue with existing behavior
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
-	return nil
+	// Execute `atmos terraform <sub-command> <component> --stack <stack>`.
+	return executeSingleComponent(&info)
+}
+
+// hasMultiComponentFlags checks if any multi-component flags are set.
+func hasMultiComponentFlags(info *schema.ConfigAndStacksInfo) bool {
+	return info.All || info.Affected || len(info.Components) > 0 || info.Query != ""
+}
+
+// hasNonAffectedMultiFlags checks if multi-component flags (excluding --affected) are set.
+func hasNonAffectedMultiFlags(info *schema.ConfigAndStacksInfo) bool {
+	return info.All || len(info.Components) > 0 || info.Query != ""
+}
+
+// hasSingleComponentFlags checks if single-component flags are set.
+func hasSingleComponentFlags(info *schema.ConfigAndStacksInfo) bool {
+	return info.PlanFile != "" || info.UseTerraformPlan
 }
 
 // checkTerraformFlags checks the usage of the Single-Component and Multi-Component flags.
 func checkTerraformFlags(info *schema.ConfigAndStacksInfo) error {
-	// Check Multi-Component flags
-	// 1. Specifying the `component` argument is not allowed with the Multi-Component flags
-	if info.ComponentFromArg != "" && (info.All || info.Affected || len(info.Components) > 0 || info.Query != "") {
+	// Check Multi-Component flags.
+	// 1. Specifying the `component` argument is not allowed with the Multi-Component flags.
+	if info.ComponentFromArg != "" && hasMultiComponentFlags(info) {
 		return fmt.Errorf("component `%s`: %w", info.ComponentFromArg, errUtils.ErrInvalidTerraformComponentWithMultiComponentFlags)
 	}
-	// 2. `--affected` is not allowed with the other Multi-Component flags
-	if info.Affected && (info.All || len(info.Components) > 0 || info.Query != "") {
+	// 2. `--affected` is not allowed with the other Multi-Component flags.
+	if info.Affected && hasNonAffectedMultiFlags(info) {
 		return errUtils.ErrInvalidTerraformFlagsWithAffectedFlag
 	}
 
-	// Single-Component and Multi-Component flags are not allowed together
-	singleComponentFlagPassed := info.PlanFile != "" || info.UseTerraformPlan
-	multiComponentFlagPassed := info.Affected || info.All || len(info.Components) > 0 || info.Query != ""
-	if singleComponentFlagPassed && multiComponentFlagPassed {
+	// Single-Component and Multi-Component flags are not allowed together.
+	if hasSingleComponentFlags(info) && hasMultiComponentFlags(info) {
 		return errUtils.ErrInvalidTerraformSingleComponentAndMultiComponentFlags
 	}
 
@@ -356,18 +382,30 @@ func listStacksForComponent(component string) ([]string, error) {
 	// Filter stacks that contain the specified component.
 	var stacks []string
 	for stackName, stackData := range stacksMap {
-		if stackMap, ok := stackData.(map[string]any); ok {
-			if components, ok := stackMap["components"].(map[string]any); ok {
-				if terraform, ok := components["terraform"].(map[string]any); ok {
-					if _, hasComponent := terraform[component]; hasComponent {
-						stacks = append(stacks, stackName)
-					}
-				}
-			}
+		if stackContainsComponent(stackData, component) {
+			stacks = append(stacks, stackName)
 		}
 	}
 	sort.Strings(stacks)
 	return stacks, nil
+}
+
+// stackContainsComponent checks if a stack contains the specified terraform component.
+func stackContainsComponent(stackData any, component string) bool {
+	stackMap, ok := stackData.(map[string]any)
+	if !ok {
+		return false
+	}
+	components, ok := stackMap["components"].(map[string]any)
+	if !ok {
+		return false
+	}
+	terraform, ok := components["terraform"].(map[string]any)
+	if !ok {
+		return false
+	}
+	_, hasComponent := terraform[component]
+	return hasComponent
 }
 
 // listAllStacks returns all stacks.
