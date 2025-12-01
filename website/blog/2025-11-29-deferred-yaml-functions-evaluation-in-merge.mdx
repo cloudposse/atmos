@@ -1,0 +1,227 @@
+---
+slug: deferred-yaml-functions-evaluation-in-merge
+title: "Deferred YAML Function Evaluation in Merge"
+authors: [aknysh]
+tags: [feature]
+date: 2025-11-29
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+We've improved how Atmos handles YAML functions during merges across configuration layers.
+Atmos now postpones merging YAML functions until after the regular merge is done. This avoids the type conflicts that used to happen when a stack layer replaced a plain value—like a string, map, or list—with a YAML function such as a template or an output reference.
+
+<!--truncate-->
+
+## The Problem: Type Conflicts During Merge
+
+YAML functions (like `!template`, `!terraform.output`, `!store.get`, and others) are represented as strings during
+configuration loading, but they resolve to different types after evaluation.
+When Atmos tried to merge a concrete value (like a string `"10.0.0.0/16"`) with a YAML function string
+(like `!template '{{ .settings.vpc_cidr }}'`), it encountered type conflicts. The standard merge process couldn't
+handle merging these different representations across nested stack layers.
+
+Consider this common scenario across multiple stack files:
+
+**Base catalog (`catalog/vpc/defaults.yaml`):**
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+        enable_dns: true
+```
+
+**Environment-specific override (`stacks/prod/networking.yaml`):**
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: !template '{{ .settings.vpc_cidr }}'  # Template function
+        availability_zones: 3
+```
+
+When Atmos processed these files, it would:
+1. Load the base configuration with `cidr_block` as a string
+2. Try to merge with the override where `cidr_block` is a template function (different type)
+3. Encounter a type conflict: string vs. template function
+
+The fundamental issue: **YAML functions were being processed before merging**, creating type mismatches that broke the merge operation.
+
+### Why This Matters
+
+This problem appeared in several real-world scenarios:
+
+- **Multi-environment deployments** where production uses templates for dynamic values while dev uses static strings
+- **Team-specific configurations** where some teams use `!store.get` for secrets while others hardcode values
+- **Gradual migrations** from static to templated configurations
+- **Mixed configuration sources** combining vendored components (static) with custom overrides (templated)
+
+## The Solution: Defer, Merge, Then Process
+
+The new deferred merge infrastructure introduces a three-phase approach:
+
+### Phase 1: Defer YAML Functions
+
+Before merging, Atmos walks through each configuration file and identifies YAML functions:
+- `!template` - Go template rendering
+- `!terraform.output` - Output from other components
+- `!terraform.state` - State file queries
+- `!store.get` / `!store` - Store lookups
+- `!exec` - Command execution
+- `!env` - Environment variable expansion
+
+These functions are temporarily replaced with `nil` placeholders and stored in a **deferred merge context** with their:
+- Original value
+- Path in the configuration tree
+- Precedence order (which file they came from)
+
+### Phase 2: Merge Without Conflicts
+
+With YAML functions deferred, all values are simple types (strings, numbers, maps, lists). The normal merge process completes without type conflicts.
+
+### Phase 3: Apply Deferred Merges
+
+After the standard merge completes, Atmos processes the deferred functions:
+- Sorts them by precedence (based on import order - base configurations have lower precedence, overrides have higher precedence)
+- Merges multiple values for the same path
+- Applies the final merged values back to the configuration
+
+The result: YAML functions work correctly across inheritance hierarchies without type conflicts.
+
+## Real-World Example
+
+Here's a complete example showing the deferred merge in action:
+
+**Catalog defaults:**
+```yaml
+# catalog/database/defaults.yaml
+components:
+  terraform:
+    rds:
+      vars:
+        engine: postgres
+        storage: 100
+        config:
+          max_connections: !template '{{ .settings.db_connections }}'
+```
+
+**Production override:**
+```yaml
+# stacks/prod/databases.yaml
+import:
+  - catalog/database/defaults
+
+components:
+  terraform:
+    rds:
+      vars:
+        storage: !template '{{ .settings.prod_storage }}'
+        config:
+          max_connections: !template '{{ .settings.prod_connections }}'
+          backup_retention: 30
+```
+
+**Processing flow:**
+
+1. **Deferral phase:**
+   - Catalog: `max_connections` → deferred (precedence 0)
+   - Override: `storage` → deferred (precedence 1)
+   - Override: `max_connections` → deferred (precedence 1)
+
+2. **Merge phase:**
+   ```yaml
+   vars:
+     engine: postgres          # Simple value, merged normally
+     storage: nil              # Deferred, no conflict
+     config:
+       max_connections: nil    # Deferred, no conflict
+       backup_retention: 30    # Simple value, merged normally
+   ```
+
+3. **Apply deferred phase:**
+   - `storage` has one deferred value → applied directly
+   - `max_connections` has two deferred values → precedence 1 (override) wins
+   - Result: All templates preserved, hierarchy respected
+
+## List Merge Strategy Support
+
+The deferred merge system fully respects Atmos's `list_merge_strategy` setting:
+
+<Tabs>
+<TabItem value="replace" label="Replace (Default)" default>
+
+```yaml
+# Base
+tags: !template '{{ .settings.base_tags }}'
+
+# Override
+tags: !template '{{ .settings.override_tags }}'
+
+# Result: Override wins
+tags: !template '{{ .settings.override_tags }}'
+```
+
+</TabItem>
+<TabItem value="append" label="Append">
+
+```yaml
+settings:
+  list_merge_strategy: append
+
+# Base
+security_groups: !template '{{ .settings.base_sgs }}'
+
+# Override
+security_groups: !template '{{ .settings.additional_sgs }}'
+
+# Result: Both templates evaluated and concatenated
+security_groups: [sg-base1, sg-base2, sg-add1, sg-add2]
+```
+
+</TabItem>
+<TabItem value="merge" label="Merge">
+
+```yaml
+settings:
+  list_merge_strategy: merge
+
+# Base
+listeners:
+  - port: !template '{{ .settings.http_port }}'
+    protocol: HTTP
+
+# Override
+listeners:
+  - port: !template '{{ .settings.https_port }}'
+    protocol: HTTPS
+
+# Result: Deep merge by index
+listeners:
+  - port: 443        # Override wins
+    protocol: HTTPS  # Override wins
+```
+
+</TabItem>
+</Tabs>
+
+For technical details on the implementation, see
+the [Deferred YAML Function Merge Handling PRD](https://github.com/cloudposse/atmos/blob/main/docs/prd/deferred-yaml-functions-evaluation-in-merge.md).
+
+## Get Involved
+
+This infrastructure improvement enables more flexible configuration patterns in Atmos. We'd love to hear about:
+
+- Real-world scenarios where type conflicts prevented you from using YAML functions
+- Performance impact on your large-scale configurations
+- Use cases we should prioritize for the stack processor integration
+
+Share your feedback in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions) or open an issue for bugs or feature requests.
+
+## Learn More
+
+- [Deferred YAML Function Merge Handling PRD](https://github.com/cloudposse/atmos/blob/main/docs/prd/deferred-yaml-functions-evaluation-in-merge.md) - Complete technical specification and implementation details
+- [Atmos YAML Functions Documentation](https://atmos.tools/functions/yaml/) - Guide to using YAML functions in stack configurations

@@ -1,0 +1,108 @@
+---
+slug: env-function-stack-manifest-support
+title: '!env Function Now Reads from Stack Manifest env Sections'
+authors:
+  - osterman
+tags:
+  - feature
+date: 2025-11-14T00:00:00.000Z
+release: v1.199.0
+---
+
+The `!env` YAML function now supports reading environment variables from `env` sections defined in your stack manifests and Atmos configuration. This makes it easy to set defaults for environment variables and reference values from your infrastructure configuration.
+
+<!--truncate-->
+
+## What's New
+
+The `!env` function has been enhanced to check stack manifest `env` sections before falling back to OS environment variables. This gives you complete control over environment variable resolution in your stack configurations.
+
+## How It Works
+
+The `!env` function now looks up environment variables in this order:
+
+1. **Component `env` section** from stack manifests (new!)
+2. **OS environment variables** (fallback)
+3. **Default value** (if provided in the function call)
+
+This hierarchy gives you maximum flexibility: define defaults in your stack configuration, override with OS environment variables when needed, or provide fallback values inline.
+
+## Use Cases
+
+### Setting Environment Variable Defaults
+
+Define default values for environment variables in your stack manifests:
+
+```yaml
+# stacks/catalog/myapp.yaml
+components:
+  terraform:
+    myapp:
+      env:
+        LOG_LEVEL: info
+        AWS_REGION: us-east-1
+        ENVIRONMENT: production
+      vars:
+        # References the env section above
+        log_level: !env LOG_LEVEL
+        region: !env AWS_REGION
+```
+
+### Referencing Other Environment Variables
+
+Use the `env` section to compose environment variables from other stack values:
+
+```yaml
+# stacks/ue1-prod.yaml
+components:
+  terraform:
+    vpc:
+      env:
+        CLUSTER_NAME: !terraform.output eks prod cluster_name
+        VPC_ID: !terraform.output vpc prod vpc_id
+      vars:
+        # Use env vars in your configuration
+        cluster: !env CLUSTER_NAME
+        vpc: !env VPC_ID
+```
+
+### Providing Fallback Values
+
+Combine stack defaults with inline fallbacks:
+
+```yaml
+components:
+  terraform:
+    app:
+      env:
+        LOG_LEVEL: debug  # Default for this component
+      vars:
+        # Falls back to 'info' if not in env section or OS env
+        log_level: !env LOG_LEVEL info
+
+        # Not defined in env section, uses OS env or fallback
+        region: !env AWS_REGION us-west-2
+```
+
+## Why This Matters
+
+This enhancement brings several benefits:
+
+1. **Centralized defaults** - Define environment variable defaults once in your stack configuration
+2. **Better testability** - Override values in stack manifests without changing OS environment
+3. **Composition** - Reference other Atmos functions in `env` sections to build complex configurations
+4. **Consistency** - Same environment variable resolution across all components in a stack
+5. **Flexibility** - Override stack defaults with OS environment variables when needed
+
+## Related Documentation
+
+- [YAML Functions Documentation](/functions/yaml)
+- [!env Function](/functions/yaml/env)
+- [Stack Configuration](/core-concepts/stacks)
+- [Stack Manifest Templating](/core-concepts/stacks/templates)
+
+## Get Started
+
+Start using `env` sections in your stack manifests today to centralize your environment variable defaults and improve configuration management. No changes to existing `!env` usage required - this enhancement is fully backward compatible.
+
+For questions or feedback, join the discussion in our [GitHub Discussions](https://github.com/orgs/cloudposse/discussions).

@@ -1,0 +1,20 @@
+# Stack that tests env inheritance
+import:
+  - globals
+  - catalog/test-component
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    test-component-dev:
+      metadata:
+        component: test-component
+      env:
+        STACK_ENV_VAR: "stack-value"
+        COMPONENT_ENV_VAR: "overridden-by-stack"
+        TF_OVERRIDE_TEST: "from-stack"
+        GLOBAL_OVERRIDE_TEST: "overridden-by-stack"
+      vars:
+        stage: "dev"

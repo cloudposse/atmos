@@ -1,9 +1,13 @@
 ---
 slug: version-list-show-commands
-title: "Browse and Explore Atmos Releases from Your Terminal"
-authors: [atmos]
-tags: [feature, atmos-core]
-date: 2025-10-17
+title: Browse and Explore Atmos Releases from Your Terminal
+sidebar_label: Browse Atmos Releases
+authors:
+  - osterman
+tags:
+  - feature
+date: 2025-10-17T00:00:00.000Z
+release: v1.95.0
 ---
 
 We're introducing two new commands for exploring Atmos releases: `atmos version list` and `atmos version show`. Browse release history with date filtering, inspect artifacts, and keep your infrastructure tooling up-to-date—all from your terminal with beautiful formatted output.
@@ -262,7 +266,7 @@ atmos version show
 ## Get Involved
 
 We're building Atmos in the open and welcome your feedback:
-- 💬 **Discuss** - Share thoughts in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
+- 💬 **Discuss** - Share thoughts in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
 - 🐛 **Report Issues** - Found a bug? [Open an issue](https://github.com/cloudposse/atmos/issues)
 - 🚀 **Contribute** - Want to add features? Review our [contribution guide](https://atmos.tools/community/contributing).
 

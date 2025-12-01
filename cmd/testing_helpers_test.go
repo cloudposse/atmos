@@ -4,7 +4,11 @@ import (
 	"os"
 	"reflect"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/spf13/pflag"
+
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // flagSnapshot stores the state of a flag for restoration.
@@ -15,9 +19,10 @@ type flagSnapshot struct {
 
 // cmdStateSnapshot stores the complete state of RootCmd for restoration.
 type cmdStateSnapshot struct {
-	args   []string
-	osArgs []string
-	flags  map[string]flagSnapshot
+	args         []string
+	osArgs       []string
+	flags        map[string]flagSnapshot
+	colorProfile termenv.Profile // Lipgloss color profile
 }
 
 // snapshotRootCmdState captures the current state of RootCmd including all flag values.
@@ -25,9 +30,10 @@ type cmdStateSnapshot struct {
 // preventing test pollution without needing to maintain a hardcoded list of flags.
 func snapshotRootCmdState() *cmdStateSnapshot {
 	snapshot := &cmdStateSnapshot{
-		args:   make([]string, len(RootCmd.Flags().Args())),
-		osArgs: make([]string, len(os.Args)),
-		flags:  make(map[string]flagSnapshot),
+		args:         make([]string, len(RootCmd.Flags().Args())),
+		osArgs:       make([]string, len(os.Args)),
+		flags:        make(map[string]flagSnapshot),
+		colorProfile: lipgloss.ColorProfile(),
 	}
 
 	// Copy args.
@@ -106,4 +112,9 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 
 	restoreFlags(RootCmd.Flags())
 	restoreFlags(RootCmd.PersistentFlags())
+
+	// Restore lipgloss color profile and regenerate theme styles.
+	// This prevents test pollution from color settings.
+	lipgloss.SetColorProfile(snapshot.colorProfile)
+	theme.InvalidateStyleCache()
 }

@@ -48,6 +48,9 @@
 **/.atmos/cache.yaml
 **/cache.*.txt
 
+# Conductor workspace uses pnpm, but project uses npm
+website/pnpm-lock.yaml
+
 # Development configs - track only specific files
 .atmos.d/*
 !.atmos.d/dev.yaml
@@ -102,3 +105,6 @@ performance-optimization/
 
 # Scratch/temporary analysis files
 .scratch/
+TEST_FAILURE_ANALYSIS.md
+scratch/
+*.ansi

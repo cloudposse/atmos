@@ -4,6 +4,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // Formatter provides text formatting with automatic degradation.
@@ -22,12 +23,17 @@ import (
 //
 // Uses io.Terminal for capability detection and theme.StyleSet for styling.
 type Formatter interface {
+	// Toast formatting - flexible toast notifications with custom icons and multiline support
+	// Automatically handles newlines with proper indentation
+	Toast(icon, message string) string                   // Returns "{icon} {message}" with multiline support
+	Toastf(icon, format string, a ...interface{}) string // Returns formatted toast
+
 	// Status message formatting - standardized output with icons
 	// This is the foundational method used by Success/Error/Warning/Info
 	StatusMessage(icon string, style *lipgloss.Style, text string) string
 
 	// Semantic formatting - returns styled strings with automatic icons (uses theme.StyleSet)
-	// These methods use StatusMessage internally with predefined icons
+	// These methods use Toast internally with predefined icons and colors
 	Success(text string) string                      // Returns "✓ {text}" in green
 	Successf(format string, a ...interface{}) string // Returns "✓ {formatted}" in green
 	Warning(text string) string                      // Returns "⚠ {text}" in yellow
@@ -44,7 +50,7 @@ type Formatter interface {
 	Label(text string) string   // Returns label-styled text
 
 	// Theme access
-	Styles() *StyleSet // Access to full StyleSet
+	Styles() *theme.StyleSet // Access to full theme-aware StyleSet
 
 	// Capability queries (delegates to terminal.Terminal)
 	ColorProfile() terminal.ColorProfile
@@ -53,25 +59,4 @@ type Formatter interface {
 	// Markdown rendering - returns rendered markdown string (pure function, no I/O)
 	// For writing markdown to channels, use package-level ui.Markdown() or ui.MarkdownMessage()
 	Markdown(content string) (string, error)
-}
-
-// StyleSet provides pre-configured lipgloss styles for common UI elements.
-// This is a simplified version that will be replaced by PR #1433's full theme system.
-type StyleSet struct {
-	// Text styles
-	Title   lipgloss.Style
-	Heading lipgloss.Style
-	Body    lipgloss.Style
-	Muted   lipgloss.Style
-
-	// Status styles
-	Success lipgloss.Style
-	Warning lipgloss.Style
-	Error   lipgloss.Style
-	Info    lipgloss.Style
-
-	// UI element styles
-	Link    lipgloss.Style
-	Command lipgloss.Style
-	Label   lipgloss.Style
 }

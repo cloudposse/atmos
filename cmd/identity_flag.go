@@ -1,18 +1,12 @@
 package cmd
 
 import (
-	"context"
-	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
-	"github.com/cloudposse/atmos/pkg/auth/credentials"
-	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -24,6 +18,7 @@ import (
 // Returns:
 //   - identity value if explicitly provided
 //   - cfg.IdentityFlagSelectValue if --identity was used without a value (interactive selection)
+//   - cfg.IdentityFlagDisabledValue if --identity=false (authentication disabled)
 //   - value from ATMOS_IDENTITY env var if flag not provided
 //   - empty string if no identity specified anywhere
 //
@@ -32,6 +27,8 @@ import (
 //	identity := GetIdentityFromFlags(cmd, os.Args)
 //	if identity == cfg.IdentityFlagSelectValue {
 //	    // Show interactive selector
+//	} else if identity == cfg.IdentityFlagDisabledValue {
+//	    // Skip authentication
 //	} else if identity != "" {
 //	    // Use explicit identity
 //	}
@@ -44,20 +41,38 @@ func GetIdentityFromFlags(cmd *cobra.Command, osArgs []string) string {
 		// Only trust this value if it's not the NoOptDefVal issue.
 		// If we got "__SELECT__" but there might be a real value in os.Args, check os.Args.
 		if value != cfg.IdentityFlagSelectValue {
-			return value
+			return normalizeIdentityValue(value)
 		}
 		// Got __SELECT__ - check if os.Args has an actual value.
 		identity := extractIdentityFromArgs(osArgs)
 		if identity != "" && identity != cfg.IdentityFlagSelectValue {
 			// Found actual value in os.Args - use that instead.
-			return identity
+			return normalizeIdentityValue(identity)
 		}
 		// No value in os.Args either - return __SELECT__.
 		return value
 	}
 
 	// Flag not changed - fall back to environment variable.
-	return viper.GetString(IdentityFlagName)
+	envValue := viper.GetString(IdentityFlagName)
+	return normalizeIdentityValue(envValue)
+}
+
+// normalizeIdentityValue converts boolean false representations to the disabled sentinel value.
+// Recognizes: false, False, FALSE, 0, no, No, NO, off, Off, OFF.
+// All other values are returned unchanged.
+func normalizeIdentityValue(value string) string {
+	if value == "" {
+		return ""
+	}
+
+	// Check if value represents boolean false.
+	switch strings.ToLower(value) {
+	case "false", "0", "no", "off":
+		return cfg.IdentityFlagDisabledValue
+	default:
+		return value
+	}
 }
 
 // extractIdentityFromArgs manually parses os.Args to find --identity flag and its value.
@@ -112,45 +127,12 @@ func extractIdentityFromArgs(args []string) string {
 // Returns nil if identityName is empty (no authentication requested).
 // Returns error if identityName is provided but auth is not configured in atmos.yaml.
 // This helper reduces nested complexity in describe commands.
+//
+// This function delegates to auth.CreateAndAuthenticateManager to ensure consistent
+// authentication behavior across CLI commands and internal execution logic.
 func CreateAuthManagerFromIdentity(
 	identityName string,
 	authConfig *schema.AuthConfig,
 ) (auth.AuthManager, error) {
-	if identityName == "" {
-		return nil, nil
-	}
-
-	// Check if auth is configured when --identity flag is provided.
-	if authConfig == nil || len(authConfig.Identities) == 0 {
-		return nil, fmt.Errorf("%w: the --identity flag requires authentication to be configured in atmos.yaml with at least one identity", errUtils.ErrAuthNotConfigured)
-	}
-
-	// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
-	authStackInfo := &schema.ConfigAndStacksInfo{
-		AuthContext: &schema.AuthContext{},
-	}
-
-	credStore := credentials.NewCredentialStore()
-	validator := validation.NewValidator()
-	authManager, err := auth.NewAuthManager(authConfig, credStore, validator, authStackInfo)
-	if err != nil {
-		return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
-	}
-
-	// Handle interactive selection.
-	forceSelect := identityName == IdentityFlagSelectValue
-	if forceSelect {
-		identityName, err = authManager.GetDefaultIdentity(forceSelect)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Authenticate.
-	_, err = authManager.Authenticate(context.Background(), identityName)
-	if err != nil {
-		return nil, err
-	}
-
-	return authManager, nil
+	return auth.CreateAndAuthenticateManager(identityName, authConfig, IdentityFlagSelectValue)
 }

@@ -34,6 +34,10 @@ func (s *stubAuthManager) GetCachedCredentials(ctx context.Context, identityName
 	return s.whoami, nil
 }
 
+func (s *stubAuthManager) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+
 func (s *stubAuthManager) Validate() error { return nil }
 func (s *stubAuthManager) GetDefaultIdentity(_ bool) (string, error) {
 	return s.defaultIdentity, s.defaultErr
@@ -57,15 +61,15 @@ func (s *stubAuthManager) GetProviders() map[string]schema.Provider {
 	return map[string]schema.Provider{}
 }
 
-func (s *stubAuthManager) Logout(ctx context.Context, identityName string) error {
+func (s *stubAuthManager) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
 	return nil
 }
 
-func (s *stubAuthManager) LogoutProvider(ctx context.Context, providerName string) error {
+func (s *stubAuthManager) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
 	return nil
 }
 
-func (s *stubAuthManager) LogoutAll(ctx context.Context) error {
+func (s *stubAuthManager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	return nil
 }
 

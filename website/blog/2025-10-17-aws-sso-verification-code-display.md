@@ -1,9 +1,16 @@
 ---
 slug: aws-sso-verification-code-display
-title: "Enhanced AWS SSO Authentication: Better UX with Styled Dialogs and Graceful Cancellation"
-authors: [atmos]
-tags: [enhancement, aws, authentication, dx]
-date: 2025-10-17
+title: >-
+  Enhanced AWS SSO Authentication: Better UX with Styled Dialogs and Graceful
+  Cancellation
+sidebar_label: Enhanced AWS SSO Authentication
+authors:
+  - osterman
+tags:
+  - enhancement
+  - dx
+date: 2025-10-17T00:00:00.000Z
+release: v1.196.0
 ---
 
 We've significantly improved the AWS SSO authentication experience with styled verification code dialogs, animated status indicators, and proper Ctrl+C handling.

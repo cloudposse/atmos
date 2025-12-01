@@ -23,6 +23,32 @@ type Describe struct {
 	Settings DescribeSettings `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
 }
 
+// ProfilesConfig defines configuration for the profiles system.
+type ProfilesConfig struct {
+	// BasePath is the custom directory for profile storage.
+	// If relative, resolved from atmos.yaml directory.
+	// If absolute, used as-is.
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+}
+
+// ConfigMetadata contains metadata about a configuration file or profile.
+type ConfigMetadata struct {
+	// Name is the name of the configuration or profile.
+	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+
+	// Description is a human-readable description.
+	Description string `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
+
+	// Version is the semantic version of the configuration.
+	Version string `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
+
+	// Tags are labels for filtering and organization.
+	Tags []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
+
+	// Deprecated indicates if this configuration should no longer be used.
+	Deprecated bool `yaml:"deprecated,omitempty" json:"deprecated,omitempty" mapstructure:"deprecated"`
+}
+
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
@@ -30,6 +56,7 @@ type AtmosConfiguration struct {
 	Stacks                        Stacks             `yaml:"stacks" json:"stacks" mapstructure:"stacks"`
 	Workflows                     Workflows          `yaml:"workflows,omitempty" json:"workflows,omitempty" mapstructure:"workflows"`
 	Logs                          Logs               `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+	Errors                        ErrorsConfig       `yaml:"errors,omitempty" json:"errors,omitempty" mapstructure:"errors"`
 	Commands                      []Command          `yaml:"commands,omitempty" json:"commands,omitempty" mapstructure:"commands"`
 	CommandAliases                CommandAliases     `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
 	Integrations                  Integrations       `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
@@ -62,6 +89,8 @@ type AtmosConfiguration struct {
 	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
 	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
+	Profiles        ProfilesConfig      `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
+	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -212,10 +241,12 @@ type Terminal struct {
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
 	Color              bool               `yaml:"color" json:"color" mapstructure:"color"`
 	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"` // Deprecated in config, use Color instead
+	ForceColor         bool               `yaml:"-" json:"-" mapstructure:"force_color"`            // ENV-only: ATMOS_FORCE_COLOR
 	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
 	Title              bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
 	Alerts             bool               `yaml:"alerts,omitempty" json:"alerts,omitempty" mapstructure:"alerts"`
 	Mask               MaskSettings       `yaml:"mask,omitempty" json:"mask,omitempty" mapstructure:"mask"`
+	Theme              string             `yaml:"theme,omitempty" json:"theme,omitempty" mapstructure:"theme"`
 }
 
 // MaskSettings contains configuration for sensitive data masking.
@@ -423,6 +454,29 @@ type Logs struct {
 	Level string `yaml:"level" json:"level" mapstructure:"level"`
 }
 
+// ErrorsConfig contains configuration for error handling.
+type ErrorsConfig struct {
+	Format ErrorFormatConfig `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`
+	Sentry SentryConfig      `yaml:"sentry,omitempty" json:"sentry,omitempty" mapstructure:"sentry"`
+}
+
+// ErrorFormatConfig contains formatting options for errors.
+type ErrorFormatConfig struct {
+	Verbose bool `yaml:"verbose,omitempty" json:"verbose,omitempty" mapstructure:"verbose"`
+}
+
+// SentryConfig contains Sentry error reporting configuration.
+type SentryConfig struct {
+	Enabled             bool              `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	DSN                 string            `yaml:"dsn" json:"dsn" mapstructure:"dsn"`
+	Environment         string            `yaml:"environment,omitempty" json:"environment,omitempty" mapstructure:"environment"`
+	Release             string            `yaml:"release,omitempty" json:"release,omitempty" mapstructure:"release"`
+	SampleRate          float64           `yaml:"sample_rate,omitempty" json:"sample_rate,omitempty" mapstructure:"sample_rate"`
+	Debug               bool              `yaml:"debug,omitempty" json:"debug,omitempty" mapstructure:"debug"`
+	Tags                map[string]string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
+	CaptureStackContext bool              `yaml:"capture_stack_context,omitempty" json:"capture_stack_context,omitempty" mapstructure:"capture_stack_context"`
+}
+
 type Context struct {
 	Namespace          string `yaml:"namespace" json:"namespace" mapstructure:"namespace"`
 	Tenant             string `yaml:"tenant" json:"tenant" mapstructure:"tenant"`
@@ -516,8 +570,10 @@ type AuthContext struct {
 	// AWS holds AWS credentials if an AWS identity is active.
 	AWS *AWSAuthContext `json:"aws,omitempty" yaml:"aws,omitempty"`
 
+	// Azure holds Azure credentials if an Azure identity is active.
+	Azure *AzureAuthContext `json:"azure,omitempty" yaml:"azure,omitempty"`
+
 	// Future: Add other cloud providers as needed
-	// Azure *AzureAuthContext `json:"azure,omitempty" yaml:"azure,omitempty"`
 	// GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty"`
 	// GitHub *GitHubAuthContext `json:"github,omitempty" yaml:"github,omitempty"`
 }
@@ -539,6 +595,27 @@ type AWSAuthContext struct {
 
 	// Region is the AWS region (optional, may be empty if not specified in identity).
 	Region string `json:"region,omitempty" yaml:"region,omitempty"`
+}
+
+// AzureAuthContext holds Azure-specific authentication context.
+// This is populated by the Azure auth system and consumed by Azure SDK calls.
+type AzureAuthContext struct {
+	// CredentialsFile is the absolute path to the Azure credentials file managed by Atmos.
+	// Example: /home/user/.azure/atmos/azure-oidc/credentials.json
+	CredentialsFile string `json:"credentials_file" yaml:"credentials_file"`
+
+	// Profile is the Azure profile name to use from the credentials file.
+	// This corresponds to the identity name in Atmos auth config.
+	Profile string `json:"profile" yaml:"profile"`
+
+	// SubscriptionID is the Azure subscription ID.
+	SubscriptionID string `json:"subscription_id" yaml:"subscription_id"`
+
+	// TenantID is the Azure Active Directory tenant ID.
+	TenantID string `json:"tenant_id" yaml:"tenant_id"`
+
+	// Location is the Azure region/location (optional, e.g., "eastus").
+	Location string `json:"location,omitempty" yaml:"location,omitempty"`
 }
 
 type ConfigAndStacksInfo struct {
@@ -569,7 +646,17 @@ type ConfigAndStacksInfo struct {
 	// AuthContext holds active authentication credentials for cloud providers.
 	// This is the SINGLE SOURCE OF TRUTH for auth credentials.
 	// ComponentEnvSection/ComponentEnvList are derived from this context.
-	AuthContext               *AuthContext
+	AuthContext *AuthContext
+	// AuthManager holds the authentication manager instance used to create AuthContext.
+	// This is needed for nested operations (e.g., nested !terraform.state functions)
+	// that require re-authentication or access to the original authentication chain.
+	//
+	// Type is 'any' to avoid circular dependency:
+	//   - Using auth.AuthManager would require importing pkg/auth
+	//   - pkg/auth already imports pkg/schema (for ConfigAndStacksInfo)
+	//   - This would create: schema → auth → schema (circular dependency error)
+	//   - Type assertions are used at usage sites to recover type safety
+	AuthManager               any
 	ComponentBackendType      string
 	AdditionalArgsAndFlags    []string
 	GlobalOptions             []string
@@ -609,6 +696,7 @@ type ConfigAndStacksInfo struct {
 	AtmosManifestJsonSchema   string
 	AtmosCliConfigPath        string
 	AtmosBasePath             string
+	ProfilesFromArg           []string
 	RedirectStdErr            string
 	LogsLevel                 string
 	LogsFile                  string
@@ -624,6 +712,15 @@ type ConfigAndStacksInfo struct {
 	All                       bool
 	Components                []string
 	Identity                  string
+}
+
+// GetComponentEnvSection returns the component's env section map.
+// This implements the utils.EnvVarContext interface.
+func (c *ConfigAndStacksInfo) GetComponentEnvSection() map[string]any {
+	if c == nil {
+		return nil
+	}
+	return c.ComponentEnvSection
 }
 
 type BackoffStrategy string

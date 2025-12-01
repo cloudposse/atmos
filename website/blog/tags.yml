@@ -1,83 +1,45 @@
 # Blog Post Tags Configuration
-# This file documents official tags for Atmos blog posts.
-# Tags help readers find relevant content based on their needs.
+# This file defines the official tags for Atmos changelog posts.
+# Each post should have 1-2 tags from this list.
 
-# PRIMARY AUDIENCE TAGS (required)
-# Use exactly one of these to indicate the primary audience:
+# USER-FACING TAGS
+# Use these for posts that directly affect Atmos users:
 
 feature:
   label: Feature
-  description: New user-facing features and capabilities
+  description: New capabilities and functionality
 
 enhancement:
   label: Enhancement
-  description: Improvements to existing user-facing features
+  description: Improvements to existing features
 
 bugfix:
   label: Bug Fix
-  description: Important bug fixes that affect users
+  description: Bug fixes
 
-contributors:
-  label: Contributors
-  description: Internal changes for Atmos contributors and core developers (zero user impact)
+dx:
+  label: DX
+  description: Developer experience improvements
 
-# SECONDARY TAGS - For Contributor Posts
-# Use these with 'contributors' tag to describe the technical area:
+breaking-change:
+  label: Breaking Change
+  description: Breaking changes requiring user action
 
-atmos-core:
-  label: Atmos Core
-  description: Changes to Atmos codebase internals and architecture
+security:
+  label: Security
+  description: Security-related changes
 
-refactoring:
-  label: Refactoring
-  description: Code restructuring and internal improvements
+documentation:
+  label: Documentation
+  description: Documentation improvements
 
-testing:
-  label: Testing
-  description: Test infrastructure and coverage improvements
+deprecation:
+  label: Deprecation
+  description: Deprecated features scheduled for removal
 
-ci-cd:
-  label: CI/CD
-  description: Continuous integration and deployment pipeline changes
+# CONTRIBUTOR TAG
+# Use for internal changes with zero user impact:
 
-developer-experience:
-  label: Developer Experience
-  description: Developer tooling and workflow improvements
-
-# SECONDARY TAGS - For User Posts
-# Use these with feature/enhancement/bugfix tags:
-
-terraform:
-  label: Terraform
-  description: Terraform-specific features and functionality
-
-helmfile:
-  label: Helmfile
-  description: Helmfile-specific features and functionality
-
-workflows:
-  label: Workflows
-  description: Workflow orchestration features
-
-validation:
-  label: Validation
-  description: Configuration validation and policy features
-
-performance:
-  label: Performance
-  description: Performance improvements and optimizations
-
-cloud-architecture:
-  label: Cloud Architecture
-  description: Cloud architecture patterns and best practices (user-facing)
-
-# GENERAL TAGS
-# Use these for special announcements:
-
-announcements:
-  label: Announcements
-  description: Major project announcements and milestones
-
-breaking-changes:
-  label: Breaking Changes
-  description: Changes requiring user migration or configuration updates
+core:
+  label: Core
+  description: Internal changes for Atmos contributors and core developers

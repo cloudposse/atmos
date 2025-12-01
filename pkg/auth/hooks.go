@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -42,6 +43,12 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 	log.SetPrefix("atmos-auth")
 	defer log.SetPrefix("")
 
+	// Check if authentication has been explicitly disabled BEFORE doing any auth setup.
+	if isAuthenticationDisabled(stackInfo.Identity) {
+		log.Debug("Authentication explicitly disabled, skipping identity authentication")
+		return nil
+	}
+
 	authConfig, err := decodeAuthConfigFromStack(stackInfo)
 	if err != nil {
 		return err
@@ -49,7 +56,6 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 
 	// Skip if no auth config (check the merged config, not the original).
 	if len(authConfig.Providers) == 0 && len(authConfig.Identities) == 0 {
-		log.Debug("No auth configuration found, skipping authentication")
 		return nil
 	}
 
@@ -64,6 +70,7 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 	if err != nil {
 		return err
 	}
+
 	if err := authenticateAndWriteEnv(context.Background(), authManager, targetIdentityName, atmosConfig, stackInfo); err != nil {
 		return err
 	}
@@ -96,8 +103,13 @@ func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManage
 	return name, nil
 }
 
+// isAuthenticationDisabled checks if authentication has been explicitly disabled.
+func isAuthenticationDisabled(identityName string) bool {
+	return identityName == cfg.IdentityFlagDisabledValue
+}
+
 func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager, identityName string, atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
-	log.Info("Authenticating with identity", "identity", identityName)
+	log.Debug("Authenticating with identity", "identity", identityName)
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
 		return fmt.Errorf("failed to authenticate with identity %q: %w", identityName, err)

@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsAuth "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
+	azureAuth "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -100,13 +101,13 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	// Check if provider supports console access and get the console URL generator.
 	consoleProvider, err := getConsoleProvider(authManager, whoami.Identity)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAuthConsole, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthConsole, err)
 	}
 
 	// Resolve session duration (flag takes precedence over provider config).
 	sessionDuration, err := resolveConsoleDuration(cmd, authManager, whoami.Provider)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAuthConsole, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthConsole, err)
 	}
 
 	// Generate console URL.
@@ -210,8 +211,10 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 		// Return AWS console URL generator with default HTTP client.
 		generator := awsAuth.NewConsoleURLGenerator(nil)
 		return generator, nil
-	case types.ProviderKindAzureOIDC:
-		return nil, fmt.Errorf("%w: Azure console access not yet implemented (coming soon)", errUtils.ErrProviderNotSupported)
+	case types.ProviderKindAzureOIDC, types.ProviderKindAzureCLI, types.ProviderKindAzureDeviceCode:
+		// Return Azure console URL generator.
+		generator := azureAuth.NewConsoleURLGenerator()
+		return generator, nil
 	case types.ProviderKindGCPOIDC:
 		return nil, fmt.Errorf("%w: GCP console access not yet implemented (coming soon)", errUtils.ErrProviderNotSupported)
 	default:

@@ -1,8 +1,12 @@
 ---
 slug: auth-console-web-access
-title: "Cloud Console Access with atmos auth console"
-authors: [atmos]
-tags: [feature, auth, aws, cloud-architecture]
+title: Cloud Console Access with atmos auth console
+sidebar_label: Cloud Console Access
+authors:
+  - osterman
+tags:
+  - feature
+release: v1.196.0
 ---
 
 Atmos now includes `atmos auth console`, a convenience command for opening cloud provider web consoles. Similar to `aws-vault login`, this command uses your authenticated Atmos identities to generate temporary console sign-in URLs and open them in your browser.

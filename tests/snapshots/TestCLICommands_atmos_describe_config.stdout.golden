@@ -55,6 +55,13 @@
     "file": "/dev/stderr",
     "level": "Info"
   },
+  "errors": {
+    "format": {},
+    "sentry": {
+      "enabled": false,
+      "dsn": ""
+    }
+  },
   "integrations": {
     "atlantis": {}
   },
@@ -75,7 +82,7 @@
     "list_merge_strategy": "",
     "terminal": {
       "max_width": 0,
-      "pager": "0",
+      "pager": "false",
       "unicode": false,
       "syntax_highlighting": {
         "enabled": false,
@@ -207,5 +214,7 @@
     "host": "",
     "file": "",
     "profile_type": ""
-  }
+  },
+  "profiles": {},
+  "metadata": {}
 }
