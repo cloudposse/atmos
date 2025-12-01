@@ -618,7 +618,7 @@ func printCompatibilityFlags(w io.Writer, cmd *cobra.Command, styles *helpStyles
 	fmt.Fprintln(w, "  These flags are passed through to the underlying terraform/tofu command.")
 	fmt.Fprintln(w)
 
-	renderCompatFlags(w, flags, styles.commandName, styles.flagName, styles.flagDesc)
+	renderCompatFlags(w, flags, &styles.commandName, &styles.flagName, &styles.flagDesc)
 	fmt.Fprintln(w)
 }
 
@@ -640,7 +640,7 @@ func findProviderName(cmd *cobra.Command) string {
 
 // renderCompatFlags renders compatibility flags with proper styling and alignment.
 // FlagStyle is used for the flag name (cyan), argTypeStyle for any type annotations, descStyle for descriptions.
-func renderCompatFlags(w io.Writer, flags map[string]compat.CompatibilityFlag, flagStyle, argTypeStyle, descStyle lipgloss.Style) {
+func renderCompatFlags(w io.Writer, flags map[string]compat.CompatibilityFlag, flagStyle, argTypeStyle, descStyle *lipgloss.Style) {
 	defer perf.Track(nil, "cmd.renderCompatFlags")()
 
 	// Collect and sort flag names for consistent output.

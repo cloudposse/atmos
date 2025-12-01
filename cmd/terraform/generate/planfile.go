@@ -51,7 +51,16 @@ var planfileCmd = &cobra.Command{
 			return err
 		}
 
-		return e.ExecuteGeneratePlanfile(component, stack, file, format, processTemplates, processFunctions, skip, &atmosConfig)
+		opts := &e.PlanfileOptions{
+			Component:            component,
+			Stack:                stack,
+			File:                 file,
+			Format:               format,
+			ProcessTemplates:     processTemplates,
+			ProcessYamlFunctions: processFunctions,
+			Skip:                 skip,
+		}
+		return e.ExecuteGeneratePlanfile(opts, &atmosConfig)
 	},
 }
 

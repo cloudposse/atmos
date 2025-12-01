@@ -79,7 +79,15 @@ func TestCLITerraformClean(t *testing.T) {
 
 	// Call ExecuteClean directly with typed parameters (no component, no stack, force=true, dryRun=false)
 	// This cleans ALL components since component="" and stack=""
-	err = ExecuteClean("", "", true, false, false, false, &atmosConfig)
+	opts := &CleanOptions{
+		Component:    "",
+		Stack:        "",
+		Force:        true,
+		Everything:   false,
+		SkipLockFile: false,
+		DryRun:       false,
+	}
+	err = ExecuteClean(opts, &atmosConfig)
 	require.NoError(t, err)
 	// Verify that files were deleted after clean
 	deleted, existingFile := verifyFileDeleted(t, files)

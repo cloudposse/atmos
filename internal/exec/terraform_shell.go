@@ -7,85 +7,68 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// filePermissions is the standard file permission mode for generated files.
+const filePermissions = 0o644
+
+// shellConfig holds the configuration needed for shell execution.
+type shellConfig struct {
+	componentPath string
+	workingDir    string
+	varFile       string
+}
+
+// printShellDryRunInfo prints the shell configuration in dry-run mode.
+func printShellDryRunInfo(info *schema.ConfigAndStacksInfo, cfg *shellConfig) {
+	u.PrintMessage("Dry run mode: shell would be started with the following configuration:")
+	u.PrintMessage("  Component: " + info.ComponentFromArg)
+	u.PrintMessage("  Stack: " + info.Stack)
+	u.PrintMessage("  Working directory: " + cfg.workingDir)
+	u.PrintMessage("  Terraform workspace: " + info.TerraformWorkspace)
+	u.PrintMessage("  Component path: " + cfg.componentPath)
+	u.PrintMessage("  Varfile: " + cfg.varFile)
+}
+
 // ExecuteTerraformShell starts an interactive shell configured for a terraform component.
-func ExecuteTerraformShell(
-	component, stack string,
-	processTemplates, processFunctions bool,
-	skip []string,
-	dryRun bool,
-	atmosConfig *schema.AtmosConfiguration,
-) error {
+func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteShell")()
 
 	log.Debug("ExecuteShell called",
-		"component", component,
-		"stack", stack,
-		"processTemplates", processTemplates,
-		"processFunctions", processFunctions,
-		"skip", skip,
-		"dryRun", dryRun,
+		"component", opts.Component, "stack", opts.Stack,
+		"processTemplates", opts.ProcessTemplates, "processFunctions", opts.ProcessFunctions,
+		"skip", opts.Skip, "dryRun", opts.DryRun,
 	)
 
 	info := schema.ConfigAndStacksInfo{
-		ComponentFromArg: component,
-		Stack:            stack,
-		StackFromArg:     stack,
-		ComponentType:    "terraform",
-		SubCommand:       "shell",
-		DryRun:           dryRun,
+		ComponentFromArg: opts.Component, Stack: opts.Stack, StackFromArg: opts.Stack,
+		ComponentType: "terraform", SubCommand: "shell", DryRun: opts.DryRun,
 	}
 
-	// Process stacks to get component configuration.
-	info, err := ProcessStacks(atmosConfig, info, true, processTemplates, processFunctions, skip, nil)
+	info, err := ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, nil)
 	if err != nil {
 		return err
 	}
 
-	// Get the component path.
 	componentPath, err := u.GetComponentPath(atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return err
 	}
 
-	// Get the working directory.
-	workingDir := constructTerraformComponentWorkingDir(atmosConfig, &info)
+	cfg := &shellConfig{
+		componentPath: componentPath,
+		workingDir:    constructTerraformComponentWorkingDir(atmosConfig, &info),
+		varFile:       constructTerraformComponentVarfileName(&info),
+	}
 
-	// Get the varfile name.
-	varFile := constructTerraformComponentVarfileName(&info)
-
-	// In dry-run mode, print information and exit without executing.
 	if info.DryRun {
-		u.PrintMessage("Dry run mode: shell would be started with the following configuration:")
-		u.PrintMessage("  Component: " + info.ComponentFromArg)
-		u.PrintMessage("  Stack: " + info.Stack)
-		u.PrintMessage("  Working directory: " + workingDir)
-		u.PrintMessage("  Terraform workspace: " + info.TerraformWorkspace)
-		u.PrintMessage("  Component path: " + componentPath)
-		u.PrintMessage("  Varfile: " + varFile)
+		printShellDryRunInfo(&info, cfg)
 		return nil
 	}
 
-	// Write variables to varfile.
 	varFilePath := constructTerraformComponentVarfilePath(atmosConfig, &info)
-	err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
-	if err != nil {
+	if err := u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, filePermissions); err != nil {
 		return err
 	}
 
-	// Execute the shell command.
-	err = execTerraformShellCommand(
-		atmosConfig,
-		info.ComponentFromArg,
-		info.Stack,
-		info.ComponentEnvList,
-		varFile,
-		workingDir,
-		info.TerraformWorkspace,
-		componentPath,
-	)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return execTerraformShellCommand(atmosConfig, info.ComponentFromArg, info.Stack,
+		info.ComponentEnvList, cfg.varFile, cfg.workingDir, info.TerraformWorkspace, cfg.componentPath)
 }

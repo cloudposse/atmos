@@ -59,7 +59,15 @@ Common use cases:
 			return err
 		}
 
-		return e.ExecuteClean(component, stack, force, everything, skipLockFile, dryRun, &atmosConfig)
+		opts := &e.CleanOptions{
+			Component:    component,
+			Stack:        stack,
+			Force:        force,
+			Everything:   everything,
+			SkipLockFile: skipLockFile,
+			DryRun:       dryRun,
+		}
+		return e.ExecuteClean(opts, &atmosConfig)
 	},
 }
 

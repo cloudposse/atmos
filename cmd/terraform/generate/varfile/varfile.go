@@ -41,13 +41,15 @@ func executeVarfileCmd(cmd *cobra.Command, args []string) error {
 		return errors.Join(errUtils.ErrInitializeCLIConfig, err)
 	}
 
-	return e.ExecuteGenerateVarfile(
-		component,
-		stack,
-		file,
-		true, // processTemplates
-		true, // processFunctions
-		nil,  // skip
-		&atmosConfig,
-	)
+	opts := &e.VarfileOptions{
+		Component: component,
+		Stack:     stack,
+		File:      file,
+		ProcessingOptions: e.ProcessingOptions{
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+			Skip:             nil,
+		},
+	}
+	return e.ExecuteGenerateVarfile(opts, &atmosConfig)
 }

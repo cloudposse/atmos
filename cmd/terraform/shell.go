@@ -59,7 +59,17 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 			return err
 		}
 
-		return e.ExecuteTerraformShell(component, stack, processTemplates, processFunctions, skip, dryRun, &atmosConfig)
+		opts := &e.ShellOptions{
+			Component: component,
+			Stack:     stack,
+			DryRun:    dryRun,
+			ProcessingOptions: e.ProcessingOptions{
+				ProcessTemplates: processTemplates,
+				ProcessFunctions: processFunctions,
+				Skip:             skip,
+			},
+		}
+		return e.ExecuteTerraformShell(opts, &atmosConfig)
 	},
 }
 

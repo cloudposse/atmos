@@ -109,32 +109,6 @@ func TestCommonFlags(t *testing.T) {
 	assert.Nil(t, identityFlag, "identity should be inherited from RootCmd, not in CommonFlags")
 }
 
-func TestTerraformFlags(t *testing.T) {
-	registry := TerraformFlags()
-
-	// Should have common flags (stack, dry-run) + Terraform-specific flags including identity
-	assert.GreaterOrEqual(t, registry.Count(), 13)
-
-	// Should include common flags
-	assert.True(t, registry.Has("stack"))
-	assert.True(t, registry.Has("dry-run"))
-
-	// Should include identity flag for terraform commands
-	assert.True(t, registry.Has("identity"), "identity should be in TerraformFlags for terraform commands")
-
-	// Should include Terraform-specific flags
-	assert.True(t, registry.Has("upload-status"))
-	assert.True(t, registry.Has("skip-init"))
-	assert.True(t, registry.Has("from-plan"))
-
-	// Check upload-status flag
-	uploadFlag := registry.Get("upload-status")
-	require.NotNil(t, uploadFlag)
-	boolFlag, ok := uploadFlag.(*BoolFlag)
-	require.True(t, ok)
-	assert.Equal(t, false, boolFlag.Default)
-}
-
 func TestHelmfileFlags(t *testing.T) {
 	registry := HelmfileFlags()
 

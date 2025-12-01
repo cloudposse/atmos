@@ -43,6 +43,9 @@ var missingConfigFoundMarkdown string
 // Define a constant for the dot string that appears multiple times.
 const currentDirPath = "."
 
+// FlagStack is the name of the stack flag used across commands.
+const FlagStack = "stack"
+
 // ValidateConfig holds configuration options for Atmos validation.
 // CheckStack determines whether stack configuration validation should be performed.
 type ValidateConfig struct {
@@ -1124,10 +1127,10 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 }
 
 func AddStackCompletion(cmd *cobra.Command) {
-	if cmd.Flag("stack") == nil {
-		cmd.PersistentFlags().StringP("stack", "s", "", stackHint)
+	if cmd.Flag(FlagStack) == nil {
+		cmd.PersistentFlags().StringP(FlagStack, "s", "", stackHint)
 	}
-	_ = cmd.RegisterFlagCompletionFunc("stack", StackFlagCompletion)
+	_ = cmd.RegisterFlagCompletionFunc(FlagStack, StackFlagCompletion)
 }
 
 // identityFlagCompletion provides shell completion for identity flags by fetching
