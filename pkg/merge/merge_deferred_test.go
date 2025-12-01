@@ -2,6 +2,7 @@ package merge
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -824,6 +825,376 @@ func TestProcessYAMLFunctions(t *testing.T) {
 		err := processYAMLFunctions(deferredValues, processor, "test.path")
 
 		require.NoError(t, err)
+	})
+}
+
+// TestGetValueAtPath tests the GetValueAtPath function.
+func TestGetValueAtPath(t *testing.T) {
+	t.Run("gets value at top-level path", func(t *testing.T) {
+		data := map[string]interface{}{
+			"key": "value",
+		}
+		path := []string{"key"}
+
+		value, exists := GetValueAtPath(data, path)
+
+		assert.True(t, exists)
+		assert.Equal(t, "value", value)
+	})
+
+	t.Run("gets value at nested path", func(t *testing.T) {
+		data := map[string]interface{}{
+			"level1": map[string]interface{}{
+				"level2": map[string]interface{}{
+					"key": "nested_value",
+				},
+			},
+		}
+		path := []string{"level1", "level2", "key"}
+
+		value, exists := GetValueAtPath(data, path)
+
+		assert.True(t, exists)
+		assert.Equal(t, "nested_value", value)
+	})
+
+	t.Run("returns false for non-existent path", func(t *testing.T) {
+		data := map[string]interface{}{
+			"key": "value",
+		}
+		path := []string{"nonexistent"}
+
+		value, exists := GetValueAtPath(data, path)
+
+		assert.False(t, exists)
+		assert.Nil(t, value)
+	})
+
+	t.Run("returns false for partial path", func(t *testing.T) {
+		data := map[string]interface{}{
+			"level1": map[string]interface{}{
+				"level2": "value",
+			},
+		}
+		path := []string{"level1", "level2", "level3"}
+
+		value, exists := GetValueAtPath(data, path)
+
+		assert.False(t, exists)
+		assert.Nil(t, value)
+	})
+
+	t.Run("returns false for nil data", func(t *testing.T) {
+		var data map[string]interface{}
+		path := []string{"key"}
+
+		value, exists := GetValueAtPath(data, path)
+
+		assert.False(t, exists)
+		assert.Nil(t, value)
+	})
+
+	t.Run("returns false for empty path", func(t *testing.T) {
+		data := map[string]interface{}{
+			"key": "value",
+		}
+		path := []string{}
+
+		value, exists := GetValueAtPath(data, path)
+
+		assert.False(t, exists)
+		assert.Nil(t, value)
+	})
+
+	t.Run("handles nil values", func(t *testing.T) {
+		data := map[string]interface{}{
+			"key": nil,
+		}
+		path := []string{"key"}
+
+		value, exists := GetValueAtPath(data, path)
+
+		assert.True(t, exists)
+		assert.Nil(t, value)
+	})
+}
+
+// TestGetConfigOrDefault tests the getConfigOrDefault function.
+func TestGetConfigOrDefault(t *testing.T) {
+	t.Run("returns provided config when not nil", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				ListMergeStrategy: "append",
+			},
+		}
+
+		result := getConfigOrDefault(cfg)
+
+		assert.Equal(t, cfg, result)
+		assert.Equal(t, "append", result.Settings.ListMergeStrategy)
+	})
+
+	t.Run("returns default config when nil", func(t *testing.T) {
+		result := getConfigOrDefault(nil)
+
+		assert.NotNil(t, result)
+		assert.Equal(t, "", result.Settings.ListMergeStrategy)
+	})
+}
+
+// TestFindMaxPrecedence tests the findMaxPrecedence function.
+func TestFindMaxPrecedence(t *testing.T) {
+	t.Run("returns max precedence from multiple values", func(t *testing.T) {
+		values := []*DeferredValue{
+			{Precedence: 0},
+			{Precedence: 5},
+			{Precedence: 2},
+			{Precedence: 8},
+			{Precedence: 3},
+		}
+
+		max := findMaxPrecedence(values)
+
+		assert.Equal(t, 8, max)
+	})
+
+	t.Run("returns first precedence when only one value", func(t *testing.T) {
+		values := []*DeferredValue{
+			{Precedence: 42},
+		}
+
+		max := findMaxPrecedence(values)
+
+		assert.Equal(t, 42, max)
+	})
+
+	t.Run("returns zero for empty slice", func(t *testing.T) {
+		values := []*DeferredValue{}
+
+		max := findMaxPrecedence(values)
+
+		assert.Equal(t, 0, max)
+	})
+
+	t.Run("handles all same precedence", func(t *testing.T) {
+		values := []*DeferredValue{
+			{Precedence: 5},
+			{Precedence: 5},
+			{Precedence: 5},
+		}
+
+		max := findMaxPrecedence(values)
+
+		assert.Equal(t, 5, max)
+	})
+}
+
+// TestAddExistingConcreteValue tests the addExistingConcreteValue function.
+func TestAddExistingConcreteValue(t *testing.T) {
+	t.Run("adds existing non-nil value with highest precedence", func(t *testing.T) {
+		result := map[string]interface{}{
+			"key": "existing_value",
+		}
+		deferredValues := []*DeferredValue{
+			{Path: []string{"key"}, Value: "value1", Precedence: 0},
+			{Path: []string{"key"}, Value: "value2", Precedence: 1},
+		}
+
+		updated := addExistingConcreteValue(result, deferredValues)
+
+		assert.Len(t, updated, 3)
+		assert.Equal(t, "existing_value", updated[2].Value)
+		assert.Equal(t, 2, updated[2].Precedence) // maxPrecedence + 1
+		assert.False(t, updated[2].IsFunction)
+	})
+
+	t.Run("returns unchanged when no existing value", func(t *testing.T) {
+		result := map[string]interface{}{}
+		deferredValues := []*DeferredValue{
+			{Path: []string{"key"}, Value: "value1", Precedence: 0},
+		}
+
+		updated := addExistingConcreteValue(result, deferredValues)
+
+		assert.Len(t, updated, 1)
+		assert.Equal(t, deferredValues, updated)
+	})
+
+	t.Run("returns unchanged when existing value is nil", func(t *testing.T) {
+		result := map[string]interface{}{
+			"key": nil,
+		}
+		deferredValues := []*DeferredValue{
+			{Path: []string{"key"}, Value: "value1", Precedence: 0},
+		}
+
+		updated := addExistingConcreteValue(result, deferredValues)
+
+		assert.Len(t, updated, 1)
+		assert.Equal(t, deferredValues, updated)
+	})
+
+	t.Run("handles nested paths", func(t *testing.T) {
+		result := map[string]interface{}{
+			"level1": map[string]interface{}{
+				"level2": "nested_value",
+			},
+		}
+		deferredValues := []*DeferredValue{
+			{Path: []string{"level1", "level2"}, Value: "value1", Precedence: 0},
+			{Path: []string{"level1", "level2"}, Value: "value2", Precedence: 3},
+		}
+
+		updated := addExistingConcreteValue(result, deferredValues)
+
+		assert.Len(t, updated, 3)
+		assert.Equal(t, "nested_value", updated[2].Value)
+		assert.Equal(t, 4, updated[2].Precedence) // maxPrecedence (3) + 1
+	})
+}
+
+// TestProcessDeferredField tests the processDeferredField function.
+func TestProcessDeferredField(t *testing.T) {
+	t.Run("processes field with yaml functions", func(t *testing.T) {
+		result := map[string]interface{}{}
+		deferredValues := []*DeferredValue{
+			{
+				Path:       []string{"config"},
+				Value:      "!template 'value1'",
+				Precedence: 0,
+				IsFunction: true,
+			},
+			{
+				Path:       []string{"config"},
+				Value:      "!template 'value2'",
+				Precedence: 1,
+				IsFunction: true,
+			},
+		}
+		cfg := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				ListMergeStrategy: "replace",
+			},
+		}
+		processor := &mockYAMLProcessor{
+			processFunc: func(value string) (any, error) {
+				// Simulate processing templates.
+				if value == "!template 'value1'" {
+					return "processed1", nil
+				}
+				return "processed2", nil
+			},
+		}
+
+		err := processDeferredField("config", deferredValues, result, cfg, processor)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "processed2", result["config"]) // Higher precedence wins.
+	})
+
+	t.Run("processes field without yaml functions", func(t *testing.T) {
+		result := map[string]interface{}{}
+		deferredValues := []*DeferredValue{
+			{
+				Path:       []string{"config"},
+				Value:      "value1",
+				Precedence: 0,
+				IsFunction: false,
+			},
+			{
+				Path:       []string{"config"},
+				Value:      "value2",
+				Precedence: 1,
+				IsFunction: false,
+			},
+		}
+		cfg := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				ListMergeStrategy: "replace",
+			},
+		}
+
+		err := processDeferredField("config", deferredValues, result, cfg, nil)
+
+		assert.NoError(t, err)
+		assert.Equal(t, "value2", result["config"]) // Higher precedence wins.
+	})
+
+	t.Run("includes existing concrete value", func(t *testing.T) {
+		result := map[string]interface{}{
+			"config": "existing",
+		}
+		deferredValues := []*DeferredValue{
+			{
+				Path:       []string{"config"},
+				Value:      "!template 'deferred'",
+				Precedence: 0,
+				IsFunction: true,
+			},
+		}
+		cfg := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				ListMergeStrategy: "replace",
+			},
+		}
+
+		err := processDeferredField("config", deferredValues, result, cfg, nil)
+
+		assert.NoError(t, err)
+		// Existing concrete value should win (highest precedence).
+		assert.Equal(t, "existing", result["config"])
+	})
+
+	t.Run("handles processor error", func(t *testing.T) {
+		result := map[string]interface{}{}
+		deferredValues := []*DeferredValue{
+			{
+				Path:       []string{"config"},
+				Value:      "!template 'invalid'",
+				Precedence: 0,
+				IsFunction: true,
+			},
+		}
+		cfg := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				ListMergeStrategy: "replace",
+			},
+		}
+		processor := &mockYAMLProcessor{
+			processFunc: func(value string) (any, error) {
+				return nil, fmt.Errorf("template processing failed")
+			},
+		}
+
+		err := processDeferredField("config", deferredValues, result, cfg, processor)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "template processing failed")
+	})
+
+	t.Run("handles path navigation error", func(t *testing.T) {
+		// Create a result where the path cannot be set (non-map intermediate value).
+		result := map[string]interface{}{
+			"level1": "string_value", // This is not a map, so we can't navigate deeper.
+		}
+		deferredValues := []*DeferredValue{
+			{
+				Path:       []string{"level1", "level2", "key"},
+				Value:      "value",
+				Precedence: 0,
+				IsFunction: false,
+			},
+		}
+		cfg := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				ListMergeStrategy: "replace",
+			},
+		}
+
+		err := processDeferredField("level1.level2.key", deferredValues, result, cfg, nil)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to set value at level1.level2.key")
 	})
 }
 

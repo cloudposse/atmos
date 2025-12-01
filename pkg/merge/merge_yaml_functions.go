@@ -125,6 +125,30 @@ func SetValueAtPath(data map[string]interface{}, path []string, value interface{
 	return nil
 }
 
+// GetValueAtPath returns the value at a specific path in a nested map structure.
+func GetValueAtPath(data map[string]interface{}, path []string) (interface{}, bool) {
+	if len(path) == 0 || data == nil {
+		return nil, false
+	}
+
+	current := data
+	for i := 0; i < len(path)-1; i++ {
+		key := path[i]
+		next, exists := current[key]
+		if !exists {
+			return nil, false
+		}
+		nextMap, ok := next.(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+		current = nextMap
+	}
+
+	val, exists := current[path[len(path)-1]]
+	return val, exists
+}
+
 // mergeSlicesAppendStrategy concatenates all slice values in precedence order.
 // Non-slice values are silently skipped to handle type mismatches gracefully.
 func mergeSlicesAppendStrategy(values []*DeferredValue) []interface{} {
@@ -151,7 +175,7 @@ func mergeSliceItems(dst, src interface{}) (interface{}, error) {
 		}
 		// Merge with source using mergo.
 		if err := mergo.Merge(&mergedMap, srcMap, mergo.WithOverride); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: merge slice items: %w", errUtils.ErrMerge, err)
 		}
 		return mergedMap, nil
 	}
@@ -237,7 +261,7 @@ func mergeDeferredMaps(values []*DeferredValue) (interface{}, error) {
 		}
 
 		if err := mergo.Merge(&mergedMap, valueMap, mergo.WithOverride); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: merge deferred maps: %w", errUtils.ErrMerge, err)
 		}
 	}
 
@@ -348,6 +372,77 @@ func processYAMLFunctions(deferredValues []*DeferredValue, processor YAMLFunctio
 	return nil
 }
 
+// getConfigOrDefault returns the provided config or a default if nil.
+func getConfigOrDefault(atmosConfig *schema.AtmosConfiguration) *schema.AtmosConfiguration {
+	if atmosConfig == nil {
+		return &schema.AtmosConfiguration{}
+	}
+	return atmosConfig
+}
+
+// findMaxPrecedence returns the maximum precedence value from a slice of deferred values.
+func findMaxPrecedence(values []*DeferredValue) int {
+	if len(values) == 0 {
+		return 0
+	}
+
+	maxPrecedence := values[0].Precedence
+	for _, dv := range values[1:] {
+		if dv.Precedence > maxPrecedence {
+			maxPrecedence = dv.Precedence
+		}
+	}
+	return maxPrecedence
+}
+
+// addExistingConcreteValue includes an existing concrete value in deferred values with highest precedence.
+func addExistingConcreteValue(result map[string]interface{}, deferredValues []*DeferredValue) []*DeferredValue {
+	existingValue, ok := GetValueAtPath(result, deferredValues[0].Path)
+	if !ok || existingValue == nil {
+		return deferredValues
+	}
+
+	// Find the maximum precedence and add existing value with higher precedence.
+	maxPrecedence := findMaxPrecedence(deferredValues)
+	return append(deferredValues, &DeferredValue{
+		Path:       deferredValues[0].Path,
+		Value:      existingValue,
+		Precedence: maxPrecedence + 1,
+		IsFunction: false,
+	})
+}
+
+// processDeferredField processes a single deferred field and applies it to the result.
+func processDeferredField(pathKey string, deferredValues []*DeferredValue, result map[string]interface{}, cfgPtr *schema.AtmosConfiguration, processor YAMLFunctionProcessor) error {
+	// Include existing concrete value if present.
+	deferredValues = addExistingConcreteValue(result, deferredValues)
+
+	// Sort by precedence (lower first, so higher precedence wins in merge).
+	sort.Slice(deferredValues, func(i, j int) bool {
+		return deferredValues[i].Precedence < deferredValues[j].Precedence
+	})
+
+	// Process YAML functions to get actual values if processor is provided.
+	if processor != nil {
+		if err := processYAMLFunctions(deferredValues, processor, pathKey); err != nil {
+			return err
+		}
+	}
+
+	// Merge all values for this path (respects list_merge_strategy).
+	merged, err := MergeDeferredValues(deferredValues, cfgPtr)
+	if err != nil {
+		return fmt.Errorf("failed to merge deferred values at %s: %w", pathKey, err)
+	}
+
+	// Apply to result at the correct path.
+	if err := SetValueAtPath(result, deferredValues[0].Path, merged); err != nil {
+		return fmt.Errorf("failed to set value at %s: %w", pathKey, err)
+	}
+
+	return nil
+}
+
 // ApplyDeferredMerges processes all deferred YAML functions and applies them to the result.
 // This function is called after the initial merge to handle YAML functions that were deferred
 // to avoid type conflicts during merging.
@@ -361,12 +456,7 @@ func ApplyDeferredMerges(dctx *DeferredMergeContext, result map[string]interface
 		return nil
 	}
 
-	// Default config if nil.
-	var cfg schema.AtmosConfiguration
-	cfgPtr := atmosConfig
-	if atmosConfig == nil {
-		cfgPtr = &cfg
-	}
+	cfgPtr := getConfigOrDefault(atmosConfig)
 
 	// Process each deferred field.
 	for pathKey, deferredValues := range dctx.GetDeferredValues() {
@@ -374,27 +464,8 @@ func ApplyDeferredMerges(dctx *DeferredMergeContext, result map[string]interface
 			continue
 		}
 
-		// Sort by precedence (lower first, so higher precedence wins in merge).
-		sort.Slice(deferredValues, func(i, j int) bool {
-			return deferredValues[i].Precedence < deferredValues[j].Precedence
-		})
-
-		// Process YAML functions to get actual values if processor is provided.
-		if processor != nil {
-			if err := processYAMLFunctions(deferredValues, processor, pathKey); err != nil {
-				return err
-			}
-		}
-
-		// Merge all values for this path (respects list_merge_strategy).
-		merged, err := MergeDeferredValues(deferredValues, cfgPtr)
-		if err != nil {
-			return fmt.Errorf("failed to merge deferred values at %s: %w", pathKey, err)
-		}
-
-		// Apply to result at the correct path.
-		if err := SetValueAtPath(result, deferredValues[0].Path, merged); err != nil {
-			return fmt.Errorf("failed to set value at %s: %w", pathKey, err)
+		if err := processDeferredField(pathKey, deferredValues, result, cfgPtr, processor); err != nil {
+			return err
 		}
 	}
 
