@@ -10,7 +10,7 @@ import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 
 <Intro>
-The `!terraform.state` YAML function is the **fastest** way to read Terraform/OpenTofu outputs ([remote state](/connections/remote-state))
+The `!terraform.state` YAML function is the **fastest** way to read Terraform/OpenTofu outputs ([remote state](/stacks/remote-state))
 in Atmos stack manifests. It retrieves outputs directly from the configured [backends](/components/terraform/backends)
 without the overhead of initializing Terraform, downloading providers, or generating configuration files - making it significantly faster than `!terraform.output`.
 </Intro>
@@ -25,7 +25,7 @@ The `!terraform.state` YAML function supports the following backend types:
 As support for new backend types is added, this document will be updated accordingly.
 
 For other backends, use [__`!store`__](/functions/yaml/store) or [__`!terraform.output`__](/functions/yaml/terraform.output) to read remote state
-and [share data between components](/connections).
+and [share data between components](/stacks/share-data).
 :::
 
 ## Usage

@@ -1,6 +1,6 @@
 ---
 title: Thinking Like Atmos
-sidebar_position: 2
+sidebar_position: 1.5
 sidebar_label: Atmos Mindset
 id: mindset
 ---
@@ -19,7 +19,7 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
     When you design cloud architectures with Atmos, you will first break them apart into pieces called components. Then, you will implement Terraform "root modules" for each of those components. Finally, compose your components in any way you like using stacks, without the need to write any code or messy templates for code generation.
 </Intro>
 
-In this tutorial, we’ll guide you through the thought process of building Terraform "root modules" that are suitable for use as components. To ensure your components are highly reusable, parameterize them with variables.
+In this tutorial, we'll guide you through the thought process of building Terraform "root modules" that are suitable for use as components. To ensure your components are highly reusable, parameterize them with variables.
 Design them to serve a single purpose, making them the smallest possible unit of infrastructure in a typical
 software development lifecycle (SDLC). Group pieces that usually change together, and separate those that change independently.
 
@@ -33,9 +33,9 @@ You're about to discover a new way to think about terraform...
 </Link>
 
 <Link
-    to="/learn/why-atmos"
+    to="/learn/concepts-overview"
     className="button button--lg button--outline button--primary ml20">
-    Learn Atmos
+    Core Concepts
 </Link>
 
 
@@ -43,7 +43,7 @@ You're about to discover a new way to think about terraform...
 
 Start by thinking about your architecture in terms of its logical components.
 
-For example, let’s consider the architecture of a typical modern website. Its components might include a network, a cluster, some applications running on it, a database to store data, a cache, and maybe some object storage.
+For example, let's consider the architecture of a typical modern website. Its components might include a network, a cluster, some applications running on it, a database to store data, a cache, and maybe some object storage.
 
 ```mermaid
 ---
@@ -74,7 +74,7 @@ graph TD
 Each of these logical pieces is a component and typically changes independently.
 
 They are loosely related and this relationship forms a stack. A stack logically combines components without tightly coupling them,
-ensuring each component’s state is separate. This approach minimizes the blast radius of changes, keeps the state separate, and
+ensuring each component's state is separate. This approach minimizes the blast radius of changes, keeps the state separate, and
 allows teams to own components. Plus, it encourages reuse since there is a finite number of ways to express infrastructure.
 
 Then, to implement this architecture with Atmos, you will usually follow these same five steps every time.
@@ -117,7 +117,7 @@ Large root modules are less reusable across teams due to varying requirements, r
 
     For each component in your architecture, write a Terraform root module.
 
-    Use your existing Terraform root modules or create new ones. As your component library grows, you’ll need to write fewer new components, enabling faster development cycles by reusing infrastructure components across projects.
+    Use your existing Terraform root modules or create new ones. As your component library grows, you'll need to write fewer new components, enabling faster development cycles by reusing infrastructure components across projects.
 
     Try to reuse 80% of your components across projects, and only write new ones when necessary.
 
@@ -147,7 +147,7 @@ Large root modules are less reusable across teams due to varying requirements, r
         end
 
     ```
-    <i>Each component stands alone as its own “root module.” Think of them as layers if it helps.</i>
+    <i>Each component stands alone as its own "root module." Think of them as layers if it helps.</i>
 
     What you should end up with are "root modules" for each of these pieces. Something like this...
     <details>
@@ -164,7 +164,7 @@ Large root modules are less reusable across teams due to varying requirements, r
 <Step>
     ### <StepNumber/> Pass Values Between Components
 
-    Use Terraform's native ability to read the remote state or configuration of any other component, for a "loosely coupled" architecture. Atmos provides [methods that make this easy](/connections).
+    Use Terraform's native ability to read the remote state or configuration of any other component, for a "loosely coupled" architecture. Atmos provides [methods that make this easy](/stacks/share-data).
 
     ```mermaid
     classDiagram
@@ -188,7 +188,7 @@ Large root modules are less reusable across teams due to varying requirements, r
 
     <ActionCard>
         Passing state between components is how you build a loosely coupled architecture.
-        <PrimaryCTA to="/connections">Learn How</PrimaryCTA>
+        <PrimaryCTA to="/stacks/share-data">Learn How</PrimaryCTA>
     </ActionCard>
 </Step>
 
@@ -237,7 +237,7 @@ Large root modules are less reusable across teams due to varying requirements, r
 This brief introduction covered the essentials of designing cloud architectures that can be used with Atmos.
 
 Now you can start with your first Atmos project! Try out our [Simple](/quick-start/simple)/[Advanced](/quick-start/advanced) Quick Start,
-or delve deeper into the [syntax and concepts](/learn/why-atmos) used in this tutorial.
+or delve deeper into the [syntax and concepts](/learn/concepts-overview) used in this tutorial.
 
 <Link
     to="/quick-start/simple"
@@ -246,7 +246,7 @@ or delve deeper into the [syntax and concepts](/learn/why-atmos) used in this tu
 </Link>
 
 <Link
-    to="/learn/why-atmos"
+    to="/learn/concepts-overview"
     className="button button--lg button--outline button--primary ml20">
-    Learn Atmos
+    Core Concepts
 </Link>

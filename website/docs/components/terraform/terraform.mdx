@@ -10,25 +10,10 @@ import KeyPoints from '@site/src/components/KeyPoints'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Use Atmos to provision your Terraform root modules and manage their configurations consistently and repeatably
-by leveraging imports and inheritance for DRY configurations and reduced blast radius of changes.
+Atmos manages Terraform root modules as components, handling workspace selection, backend configuration, provider overrides, and variable generation.
 </Intro>
 
-<KeyPoints>
-- Why does Terraform need additional tooling
-- How does Atmos change how you write Terraform code
-- How to use Terraform with Atmos
-</KeyPoints>
-
-Atmos can change how you think about the Terraform modules that you use to build your infrastructure.
-
-When you design cloud architectures with Atmos, you will first break it apart into pieces called components.
-Then, you will implement Terraform "root modules" for each of your components.
-To make them highly reusable, they should serve a "single purpose" so that they are the smallest possible
-unit of infrastructure managed in the software development lifecycle (SDLC).
-Finally, you will connect your components together using stacks, so that everything comes together.
-
-In the [Quick Start](/quick-start/simple) tutorial, we’ll guide you through the thought process of building Terraform "root modules" that are suitable for use as components.
+This reference covers how Atmos integrates with Terraform: backends, workspaces, provider configuration, and brownfield considerations.
 
 
 ## What is Terraform?

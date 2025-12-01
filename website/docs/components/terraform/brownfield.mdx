@@ -7,12 +7,12 @@ id: brownfield
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-There are some considerations you should be aware of when adopting Atmos in a brownfield environment. Atmos works best when you adopt the [Atmos mindset](/quick-start/mindset).
+There are some considerations you should be aware of when adopting Atmos in a brownfield environment. Atmos works best when you adopt the [Atmos mindset](/learn/mindset).
 </Intro>
 
 The term "brownfield" comes from urban planning and refers to the redevelopment of land that was previously used and may need cleaning or modification. As it relates to infrastructure, [Brownfield development](https://en.wikipedia.org/wiki/Brownfield_(software_development)) describes the development and deployment of new software systems in the presence of existing (legacy) software applications/systems. Anytime this happens, new software architectures must take into account and coexist with the existing software.
 
-Atmos is not just a tool; it is a framework that provides a set of opinionated conventions, methodologies, design patterns, and best practices to ensure teams succeed with Terraform from the start. It can be hard to shoehorn existing systems that are not designed according to the [Atmos mindset](/quick-start/mindset).
+Atmos is not just a tool; it is a framework that provides a set of opinionated conventions, methodologies, design patterns, and best practices to ensure teams succeed with Terraform from the start. It can be hard to shoehorn existing systems that are not designed according to the [Atmos mindset](/learn/mindset).
 
 - **Decomposition**: Not only do you have challenges around how to decompose your architecture, but also the difficulty of making changes to live systems.
 - **Technical Debt:** You may have significant technical debt that needs to be addressed
@@ -23,7 +23,7 @@ By understanding these challenges, teams can better prepare for a smooth transit
 ## Brownfield Development in Atmos
 
 Atmos is easier for new organizations or "greenfield" environments because you need to architect Terraform according to
-our [best practices](/best-practices/components) to get all the benefits of Atmos. For example, when using our [Terraform components](https://github.com/cloudposse/terraform-aws-components), we frequently use [Terraform Remote State](/connections/remote-state) to retrieve the outputs from other components.
+our [best practices](/best-practices/components) to get all the benefits of Atmos. For example, when using our [Terraform components](https://github.com/cloudposse/terraform-aws-components), we frequently use [Terraform Remote State](/stacks/remote-state) to retrieve the outputs from other components.
 
 This works well when you use our components but less so when you operate in a "brownfield" environment, for example,
 with an existing VPC, S3 bucket, or IAM role.
@@ -56,7 +56,7 @@ The `vpc` Terraform component needs the outputs from the `vpc-flow-logs-bucket` 
 configure [VPC Flow Logs](https://docs.aws.amazon.com/vpc/latest/userguide/flow-logs.html).
 
 Let's redesign the example with the `vpc` and `vpc-flow-logs-bucket` components described in
-[Terraform Component Remote State](/connections/remote-state) and configure the `static` remote state for
+[Terraform Component Remote State](/stacks/remote-state) and configure the `static` remote state for
 the `vpc-flow-logs-bucket` component to use an existing S3 bucket.
 
 ## Examples

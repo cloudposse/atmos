@@ -378,7 +378,7 @@ To avoid potential pitfalls and maximize efficiency, follow these best practices
 
 1. **Minimize Dependency on Remote Sources**: Avoid referencing resources in your templates that are not highly available or are prone to downtime. Where possible, use static or locally resolvable values.
 2. **Use `Atmos.Component` Sparingly**: While Atmos.Component is powerful, its overuse can significantly degrade performance. Limit its use to scenarios where it is truly necessary, and consider precomputing or caching values to reduce the frequency of evaluations.
-3. **Use Terraform Remote State Directly**: Instead of relying on template functions to retrieve remote state, [use Terraform's native ability to retrieve the remote state](/connections/#using-terraform-remote-state) of other components.
+3. **Use Terraform Remote State Directly**: Instead of relying on template functions to retrieve remote state, [use Terraform's native ability to retrieve the remote state](/stacks/share-data#using-terraform-remote-state) of other components.
 4. **Test for Resilience**: Simulate scenarios where a remote resource becomes unavailable and observe how Atmos behaves. Design your configurations to handle failures gracefully or provide fallbacks where feasible.
 
 
@@ -386,7 +386,7 @@ To avoid potential pitfalls and maximize efficiency, follow these best practices
 
 Atmos supports many different ways of configuring and using `Go` templates:
 
-- In [Atmos Custom Commands](/custom-commands/custom-commands)
+- In [Atmos Custom Commands](/cli/configuration/commands)
 - In [Atmos Vendoring](/vendoring/vendor)
 - In [Atmos Component Vendoring](/vendoring/vendor-manifest)
 - In [Imports](/stacks/imports)
@@ -397,7 +397,7 @@ Atmos supports many different ways of configuring and using `Go` templates:
 
 These templates are processed in different phases and use different context:
 
-- `Go` templates in [Atmos Custom Commands](/custom-commands/custom-commands) are processed when the custom commands are
+- `Go` templates in [Atmos Custom Commands](/cli/configuration/commands) are processed when the custom commands are
   executed. The execution context can be specified by using the `component_config` section. If a custom command defines
   a `component_config` section with `component` and `stack`, Atmos generates the config for the component in the stack
   and makes it available in the `{{ .ComponentConfig.xxx.yyy.zzz }}` template variables,

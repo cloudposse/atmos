@@ -9,7 +9,7 @@ In the previous step, we've decided on the following:
 
 - Use a monorepo to configure and provision two Terraform components into three AWS accounts and two AWS regions
 - The filesystem layout for the infrastructure monorepo
-- To be able to use [Component Remote State](/connections/remote-state), we put the `atmos.yaml` CLI config file
+- To be able to use [Component Remote State](/stacks/remote-state), we put the `atmos.yaml` CLI config file
   into `/usr/local/etc/atmos/atmos.yaml` folder and set the ENV var `ATMOS_BASE_PATH` to point to the absolute path of the root of the repo
 
 Next step is to configure `atmos.yaml`.
@@ -163,7 +163,7 @@ to [CLI Configuration](/cli/configuration).
   <dd>Set to `true` to increase log verbosity. When set to `true`, Atmos prints to the console all the steps it takes to find and process the `atmos.yaml` CLI config file, and all the steps it takes to find the stack and find and process the component in the stack.</dd>
 
   <dt>`commands`</dt>
-  <dd>Configuration for [Atmos Custom Commands](/custom-commands/custom-commands).</dd>
+  <dd>Configuration for [Atmos Custom Commands](/cli/configuration/commands).</dd>
 
   <dt>`schemas`</dt>
   <dd>See [JSON Schema](https://json-schema.org/) and [OPA Policy](https://www.openpolicyagent.org/) configurations for: [Atmos Schema Validation](/cli/schemas), [Atmos Custom Validation](/validation/validating).</dd>

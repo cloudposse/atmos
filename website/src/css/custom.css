@@ -518,6 +518,11 @@ dd.disambiguation a {
     background-color: transparent !important;
 }
 
+.mermaid svg {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
 html[data-theme='dark'] .markdown h3 {
     color: #b1b1b1;
 }
@@ -835,22 +840,13 @@ article header {
     font-weight: 600;
 }
 
-/* Fix sidebar width to prevent unnecessary wrapping and restore sticky positioning */
-.theme-doc-sidebar-container {
-    min-width: 280px !important;
-    width: 280px !important;
+/* Fix sidebar sticky positioning - allow native Docusaurus collapse to work */
+.theme-doc-sidebar-container:not([class*="hidden"]) {
     position: sticky !important;
     top: var(--ifm-navbar-height) !important;
     max-height: calc(100vh - var(--ifm-navbar-height)) !important;
     overflow-y: auto !important;
     padding-top: 0 !important;
-}
-
-@media (min-width: 997px) {
-    .theme-doc-sidebar-container {
-        min-width: 300px !important;
-        width: 300px !important;
-    }
 }
 
 /* Prevent text wrapping in sidebar links */

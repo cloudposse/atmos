@@ -49,6 +49,10 @@ const config = {
                         to: '/changelog'
                     },
                     {
+                        from: '/introduction',
+                        to: '/intro'
+                    },
+                    {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
                     },

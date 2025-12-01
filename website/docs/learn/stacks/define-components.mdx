@@ -9,7 +9,7 @@ import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
 <Intro>
-Stacks are used to compose multiple components together and provide their configuration. The schema is the same for all stacks, but the configuration can be different. Use a combination of [imports](/stacks/imports), [inheritance](/stacks/inheritance), and [catalogs](/stacks/catalogs) for a template-free way to reuse configuration and [override](/stacks/overrides) values when needed.
+Components are configured in the `components` section of stack files. This reference covers the schema for Terraform components, including `vars`, `metadata`, `settings`, and `env`. For Helmfile components, see [Using Helmfiles](/components/helmfile).
 </Intro>
 
 ## Component Schema
@@ -138,66 +138,6 @@ components:
 
 </dl>
 
-
-
-### Helmfile Schema
-
-The schema of an Atmos Helmfile Component in an Atmos Stack is as follows:
-
-```yaml
-components:
-  helmfile:
-    # the slug of the component
-    example:
-
-      # configuration specific to atmos
-      metadata:
-        # Components can be of type "real" (default) or "abstract"
-        type: real
-
-        # This is the directory path of the component.
-        # In this example, we're referencing a component in the `components/terraform/stable/example` folder.
-        component: stable/example
-
-        # We can leverage multiple inheritance to sequentially deep merge multiple configurations
-        inherits:
-          - example-defaults
-
-      # Define the Helmfile variables, which will get deep-merged into the Helmfile configuration.
-      vars:
-        enabled: true
-        release_name: my-release
-        chart_version: "1.2.3"
-```
-
-#### Helmfile Attributes
-
-<dl>
-
-  <dt>`vars` (optional)</dt>
-  <dd>The `vars` section is a free-form map. Use [component validation](/validation/validating) to enforce policies.</dd>
-
-  <dt>`vars.namespace` (optional)</dt>
-  <dd>
-  This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
-
-  The namespace of all stacks. Typically, there will be one namespace for the organization.
-
-  Example:
-
-  ```yaml
-  vars:
-    namespace: acme
-  ```
-  </dd>
-
-  <dt>`metadata` (optional)</dt>
-  <dd>The `metadata` section extends functionality of the component.</dd>
-
-  <dt>`settings`</dt>
-  <dd>The `settings` block is a free-form map used to pass configuration information to [integrations](/integrations).</dd>
-
-</dl>
 
 
 ### Types of Components

@@ -8,10 +8,10 @@ import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-As your stacks grow taller with more and more component configurations, it often makes sense to start splitting them apart into different files. That's why you might want to take advantage of imports. This helps you keep your stack files smaller so they are easier to understand, while reusing their configuration in multiple places.
+Imports let you split stack configurations across multiple files and reuse them. Each import is deep-merged on top of previous imports, building up the final configuration.
 </Intro>
 
-Each import overlays on top of others, and gets deep merged. Then we support [inheritance](/stacks/inheritance) and overrides to manage configuration variations, all without relying on templating. When none of these other methods work for your use-case, we provide an "Escape Hatch" with [templating](/templates).
+Atmos also supports [inheritance](/stacks/inheritance) and [overrides](/stacks/overrides) to manage configuration variations without templating. When those methods don't fit your use-case, [templating](/templates) is available as an escape hatch.
 
 ## Use cases
 

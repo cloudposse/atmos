@@ -1,11 +1,11 @@
 ---
-title: Describe Configuration
-sidebar_position: 5
-sidebar_label: Describe Configuration
-description: Describing your configuration so you understand what's happening.
-id: describing
+title: View Configuration
+sidebar_position: 10
+sidebar_label: View Configuration
+description: View your configuration so you understand what's happening.
+id: view-configuration
+slug: /cli/configuration/view-configuration
 ---
-import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -14,6 +14,7 @@ Atmos is a framework for defining cloud architectures in YAML. To understand wha
 
 In Stacks, you define configurations for all Components, setting up small units of infrastructure like VPCs, Clusters, and Databases. Atmos lets you combine these components into reusable, nestable Stacks using Imports. You can break down everything from simple websites to full-blown multi-account/multi-subscription cloud architectures into components.
 
-In this chapter, you’ll learn to describe all aspects of the fully-deep merged configurations so you can understand what Atmos stacks look like.
+Use the following commands to view your merged configurations:
 
-<DocCardList/>
+- [**`atmos describe stacks`**](/cli/commands/describe/stacks) - View the fully-deep merged stack configurations
+- [**`atmos describe component`**](/cli/commands/describe/component) - View the merged configuration for a specific component

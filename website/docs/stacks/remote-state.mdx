@@ -1,8 +1,9 @@
 ---
 title: Using Remote State
-sidebar_position: 4
+sidebar_position: 8
 sidebar_label: Using Remote State
 id: remote-state
+slug: /stacks/remote-state
 ---
 import Intro from '@site/src/components/Intro'
 import KeyPoints from '@site/src/components/KeyPoints'
@@ -34,7 +35,7 @@ In Atmos, this is solved by using these modules:
 The [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) is implemented in [Go](https://go.dev/) and uses Atmos `Go` modules to work with [Atmos CLI config](/cli/configuration) and [Atmos stacks](/learn/stacks). The provider processes stack configurations to get the final config for an Atmos component in an Atmos stack. The final component config is then used by the [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tree/main/modules/remote-state) Terraform module to return the remote state for the component in the stack.
 
 <Note>
-Terraform remote state is incompatible with the `local` backend type. This is because the local backend is not recommended for production. Review the alternatives [here](/connections), or consider switching to one of the other backend types.
+Terraform remote state is incompatible with the `local` backend type. This is because the local backend is not recommended for production. Review the alternatives [here](/stacks/share-data), or consider switching to one of the other backend types.
 </Note>
 
 

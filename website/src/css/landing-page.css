@@ -210,7 +210,7 @@ html[data-theme="light"] .hero--full-height::before {
 }
 
 .hero__link:hover {
-  text-decoration: underline;
+  text-decoration: none;
   color: var(--ifm-color-primary);
 }
 

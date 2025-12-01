@@ -7,94 +7,13 @@ id: stacks
 slug: /stacks
 ---
 import Intro from '@site/src/components/Intro'
-import ActionCard from '@site/src/components/ActionCard'
-import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import DocCardList from '@theme/DocCardList'
 
 <Intro>
-You've learned the basics of imports, inheritance, and organization. Now let's explore the advanced stack configuration techniques that make Atmos powerful for enterprise-scale infrastructure.
+Stacks are YAML files that configure your environments. They define which components to deploy, with what settings, and how they relate to each other. This is where configuration lives—separate from your Terraform code.
 </Intro>
 
-This section covers advanced topics for power users managing complex, multi-account, multi-region infrastructure.
-
-## What's in This Section
-
-<ActionCard>
-### Advanced Imports
-
-Go beyond basic file imports with templates, context-aware imports, and dynamic configuration:
-
-- **[Advanced Imports](/stacks/imports)** - Templates, filters, and conditional imports
-- Import context and scope control
-- Dynamic import patterns
-- Troubleshooting import issues
-
-<PrimaryCTA to="/stacks/imports">Learn Advanced Imports</PrimaryCTA>
-</ActionCard>
-
-<ActionCard>
-### Multiple Inheritance
-
-Create sophisticated component hierarchies with multiple inheritance and mixins:
-
-- **[Multiple Inheritance](/stacks/inheritance)** - Inherit from multiple base components
-- **[Mixins](/stacks/mixins)** - Cross-cutting concerns and reusable behaviors
-- Inheritance order and precedence
-- Abstract vs real components
-
-<PrimaryCTA to="/stacks/inheritance">Learn Multiple Inheritance</PrimaryCTA>
-</ActionCard>
-
-<ActionCard>
-### Stack Overrides
-
-Selectively replace configuration for special cases:
-
-- **[Overrides](/stacks/overrides)** - Replace instead of merge
-- Override precedence rules
-- Use cases and patterns
-- Troubleshooting override issues
-
-<PrimaryCTA to="/stacks/overrides">Learn Overrides</PrimaryCTA>
-</ActionCard>
-
-<ActionCard>
-### Component Dependencies
-
-Control deployment order and enforce dependencies:
-
-- **[Dependencies](/stacks/dependencies)** - Explicit component ordering
-- Dependency graphs
-- Workflow orchestration
-- Circular dependency detection
-
-<PrimaryCTA to="/stacks/dependencies">Learn Dependencies</PrimaryCTA>
-</ActionCard>
-
-<ActionCard>
-### Hooks
-
-Run custom commands before and after Atmos operations:
-
-- **[Hooks](/stacks/hooks)** - Event-driven automation
-- Pre/post apply/plan hooks
-- Error handling in hooks
-- Real-world hook examples
-
-<PrimaryCTA to="/stacks/hooks">Learn Hooks</PrimaryCTA>
-</ActionCard>
-
-<ActionCard>
-### Component Catalogs
-
-Build reusable component libraries for your organization:
-
-- **[Catalogs](/stacks/catalogs)** - Organizing component blueprints
-- Naming conventions
-- Versioning strategies
-- Sharing across teams
-
-<PrimaryCTA to="/stacks/catalogs">Learn Catalogs</PrimaryCTA>
-</ActionCard>
+<DocCardList />
 
 ## When to Use Advanced Features
 
@@ -127,27 +46,6 @@ Most projects can get very far with just these features.
   <dt>**Catalogs**</dt>
   <dd>When you're building a component library for multiple teams or projects</dd>
 </dl>
-
-## Prerequisites
-
-Before diving into advanced features, make sure you understand:
-
-- **[Components](/learn/concepts-overview)** - What they are and how they work
-- **[Stacks](/learn/concepts-overview)** - Basic stack concepts
-- **[YAML in Atmos](/learn/yaml)** - Scope, deep merge, tags vs templates
-- **[Imports Basics](/learn/imports-basics)** - Simple import patterns
-- **[Inheritance Basics](/learn/inheritance-basics)** - Single inheritance
-
-If you haven't read these yet, **start with the [Learn Atmos](/learn/why-atmos) section first**.
-
-## Related Topics
-
-Advanced stack configuration works hand-in-hand with:
-
-- **[Templates](/templates/)** - Go templates and Gomplate integration
-- **[Workflows](/workflows/)** - Orchestrating multi-component deployments
-- **[Validation](/validation/validating)** - Schema and policy validation
-- **[Functions](/functions/)** - YAML and template functions
 
 ## Example: Advanced Stack Architecture
 
@@ -205,32 +103,3 @@ This single stack configuration demonstrates:
 - Explicit dependencies (vpc, rds must deploy first)
 - Hooks (notifications before/after deployment)
 - Clear component configuration
-
-## Best Practices
-
-As you explore advanced features:
-
-✅ **Start simple** - Add complexity only when needed
-✅ **Document patterns** - Comment your YAML for team understanding
-✅ **Test in dev first** - Validate advanced features in non-prod
-✅ **Review carefully** - Advanced configs can be powerful but complex
-✅ **Use validation** - JSON Schema and OPA policies catch errors
-
-## Get Help
-
-Working with advanced stack configurations? We're here to help:
-
-- **[Slack Community](/community/slack)** - Ask questions about advanced features
-- **[Office Hours](/community/office-hours)** - Live support for complex scenarios
-- **[GitHub Discussions](https://github.com/cloudposse/atmos/discussions)** - Share your patterns
-
-## What's Next
-
-Ready to dive in? Pick a topic that matches your needs:
-
-<div className="button-group">
-  <a href="/stacks/imports" className="button button--primary button--lg">Advanced Imports</a>
-  <a href="/stacks/inheritance" className="button button--secondary button--lg">Multiple Inheritance</a>
-  <a href="/stacks/overrides" className="button button--secondary button--lg">Overrides</a>
-  <a href="/stacks/dependencies" className="button button--secondary button--lg">Dependencies</a>
-</div>

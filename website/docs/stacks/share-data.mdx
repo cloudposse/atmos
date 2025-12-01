@@ -1,10 +1,10 @@
 ---
 title: Share Data Between Components
-sidebar_position: 4
+sidebar_position: 7
 sidebar_label: Share Data Between Components
 description: Share data between loosely-coupled components in Atmos
 id: share-data
-slug: /connections
+slug: /stacks/share-data
 ---
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
@@ -67,7 +67,7 @@ For more advanced examples, check out the `!store` YAML function documentation.
 
 ###  Function: `!terraform.output`
 
-The `!terraform.output` YAML function allows reading the outputs ([remote state](/connections/remote-state))
+The `!terraform.output` YAML function allows reading the outputs ([remote state](/stacks/remote-state))
 of components directly in Atmos stack manifests by internally executing a
 [`terraform output`](https://developer.hashicorp.com/terraform/cli/commands/output) or
 [`tofu output`](https://opentofu.org/docs/cli/commands/output/) command.
@@ -100,7 +100,7 @@ For more advanced examples, check out the `!terraform.output` YAML function docu
 
 ###  Function: `!terraform.state`
 
-The [`!terraform.state`](/functions/yaml/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, bypassing the `terraform output` or `tofu output` pipeline — it's **very fast**, doesn't require provider initialization, and supports [all Terraform/OpenTofu backends](/components/terraform/backends) (local, S3, azurerm, gcs, remote, consul, cos, http, kubernetes, oss, pg, cloud) for accessing [remote state](/connections/remote-state).
+The [`!terraform.state`](/functions/yaml/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, bypassing the `terraform output` or `tofu output` pipeline — it's **very fast**, doesn't require provider initialization, and supports [all Terraform/OpenTofu backends](/components/terraform/backends) (local, S3, azurerm, gcs, remote, consul, cos, http, kubernetes, oss, pg, cloud) for accessing [remote state](/stacks/remote-state).
 
 For example, we can read the `vpc_id` output of the `vpc` component in the current stack:
 
@@ -315,5 +315,5 @@ resource "aws_network_acl" "default" {
 
 <ActionCard>
   Use the Terraform-native `remote-state` module to share data between components.
-  <PrimaryCTA to="/connections/remote-state">Learn How</PrimaryCTA>
+  <PrimaryCTA to="/stacks/remote-state">Learn How</PrimaryCTA>
 </ActionCard>

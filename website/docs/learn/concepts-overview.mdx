@@ -15,16 +15,29 @@ Atmos is built around three core concepts: Components (your infrastructure code)
 
 **Components** are the building blocks of your infrastructure—typically Terraform "root modules" that provision specific pieces of infrastructure.
 
-Think of components like functions in programming: they're self-contained, reusable, and solve a specific problem. Each component does one thing well:
+Think of components like services in a service-oriented architecture: they're self-contained, independently deployable, and solve a specific problem. Each component does one thing well:
 
 - A VPC component manages virtual networks
 - An EKS component provisions Kubernetes clusters
 - An RDS component sets up databases
 
-**Key Principles**:
+### Why Separate Components?
+
+Components typically have their own software development lifecycle (SDLC). The key question is: **what changes together?**
+
+- **Things that change frequently together** should be in the same component
+- **Things that change at different rates** should be separate components
+- **Different team ownership** often means different components
+- **Different permission boundaries** suggest separate components
+
+For example, a VPC rarely changes after initial setup, but the applications running in it change constantly. Keeping them as separate components means you can update applications without risking network infrastructure—and different teams can own each piece.
+
+### Key Principles
+
 - **Generic**: Components work anywhere without environment-specific hardcoded values
 - **Reusable**: The same VPC component deploys to dev, staging, and prod
 - **Focused**: Each component has a single responsibility
+- **Independent**: Components can be deployed, updated, and rolled back independently
 
 Components live in `components/terraform/` and are standard Terraform code—no special syntax or modifications needed.
 

@@ -44,11 +44,11 @@ YAML supports three types of data: core, defined, and user-defined.
 ## Use-cases
 
  - The [__`!terraform.output`__](/functions/yaml/terraform.output) YAML function allows you to
-   [access component outputs (remote state) directly within Atmos stack manifests](/connections/remote-state).
+   [access component outputs (remote state) directly within Atmos stack manifests](/stacks/remote-state).
    Note that this requires initializing each component (`terraform/tofu init`), which initializes all Terraform/OpenTofu
    modules and downloads all Terraform/OpenTofu providers, which may significantly impact performance. Consider using `!store` or `!terraform.state` functions instead, which don't have this performance penalty.
 
- - The [__`!terraform.state`__](/functions/yaml/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, without initializing providers or running Terraform — it's **very fast** and currently supports [S3 and local backends](/components/terraform/backends) for accessing [remote state](/connections/remote-state).
+ - The [__`!terraform.state`__](/functions/yaml/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, without initializing providers or running Terraform — it's **very fast** and currently supports [S3 and local backends](/components/terraform/backends) for accessing [remote state](/stacks/remote-state).
 
  - The [__`!store`__](/functions/yaml/store) YAML function allows reading the values from a
    remote [store](/projects/configuration/stores) (e.g. SSM Parameter Store, Artifactory, etc.)

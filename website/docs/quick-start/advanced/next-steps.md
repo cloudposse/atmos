@@ -18,7 +18,7 @@ Here are some of the major differentiators of Atmos and topics worth exploring i
 * [Component Vendoring](/vendoring/component-manifest)
 * [Imports](/stacks/imports) (mixins, catalogs)
 * [Workflow Automation](/workflows)
-* [Custom Commands](/custom-commands/custom-commands)
+* [Custom Commands](/cli/configuration/commands)
 * [Component Inheritance & Multiple Inheritance](/stacks/inheritance)
 * [JSON Schema & OPA Policy Enforcement](/validation/validating)
 * [Atmos Manifest JSON Schema](/cli/schemas)

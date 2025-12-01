@@ -31,7 +31,7 @@ function Home() {
             <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>
             <div className="hero__cta">
               <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
-              <Link to="/introduction" className="hero__link">Learn More</Link>
+              <Link to="/intro" className="hero__link">Learn More</Link>
             </div>
           </div>
         </header>

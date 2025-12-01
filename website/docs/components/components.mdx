@@ -1,17 +1,17 @@
 ---
 title: Atmos Components
 sidebar_position: 2
-sidebar_label: Build Components
+sidebar_label: Write Components
 description: Components are opinionated building blocks of infrastructure as code that solve one specific problem or use-case.
 slug: /components/components
 ---
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-When you design cloud architectures with Atmos, you start by breaking them apart into pieces called components. Then, you [implement Terraform "root modules"](/components/terraform) for each of those components, and [compose them with Stack configurations](/learn/stacks).
+Components are the building blocks of your infrastructure. Each component is a Terraform root module or Helmfile that does one thing well.
 </Intro>
 
-The most common use case for Atmos is implementing components using [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module). Since Atmos is tool-agnostic, [custom commands](/custom-commands/custom-commands) can implement components for any tooling.
+The most common use case for Atmos is implementing components using [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module). Since Atmos is tool-agnostic, [custom commands](/cli/configuration/commands) can implement components for any tooling.
 
 Components can be as small as you'd like (but we don't recommend too small), or as large as a [Terralith](/terms/terralith) (but we don't recommend that either). See our [best practices for components](/best-practices/components) to get a sense of what we recommend.
 
@@ -33,7 +33,7 @@ Components offer a multitude of applications across various business scenarios. 
 
 ## Flavors of Components
 
-Atmos natively supports two kinds of components, but using [custom commands](/custom-commands/custom-commands), the [CLI](/cli) can be extended to support anything (e.g. `docker`, `packer`, `ansible`, etc.)
+Atmos natively supports two kinds of components, but using [custom commands](/cli/configuration/commands), the [CLI](/cli) can be extended to support anything (e.g. `docker`, `packer`, `ansible`, etc.)
 
 1. [Terraform](/components/terraform): These are stand-alone "root modules" that implement some piece of your infrastructure. For example, typical components might be an
    EKS cluster, RDS cluster, EFS filesystem, S3 bucket, DynamoDB table, etc. You can find

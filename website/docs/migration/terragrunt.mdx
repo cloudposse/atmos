@@ -7,6 +7,10 @@ id: terragrunt
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import TaskList from '@site/src/components/TaskList'
+import Terminal from '@site/src/components/Terminal'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 Terragrunt and Atmos solve similar problems—managing Terraform at scale with DRY configurations. If you're coming from Terragrunt, this guide will help you understand the differences and migrate your infrastructure.
@@ -18,518 +22,864 @@ Terragrunt and Atmos solve similar problems—managing Terraform at scale with D
 |---------|------------|-------|
 | **Configuration Format** | HCL (`terragrunt.hcl`) | YAML (`.yaml`) |
 | **Reuse Mechanism** | `include {}` blocks | `import:` with deep merge |
-| **Dependencies** | `dependency` blocks | Remote state + `atmos.Component()` |
+| **Dependencies** | `dependency` blocks | Remote state + `!terraform.output` |
 | **Variable Passing** | `inputs = {}` | `vars:` with inheritance |
 | **Module Source** | `terraform { source = "..." }` | `metadata.component` |
 | **CLI** | `terragrunt plan/apply` | `atmos terraform plan/apply` |
 | **State Backend** | Per-directory `backend {}` | Centralized in stack config |
 | **Environments** | Directory structure | Stack files (YAML) |
+| **[Units](https://terragrunt.gruntwork.io/docs/getting-started/terminology/)** | Directory with `terragrunt.hcl` | Component instance in a stack |
+| **[Stacks](https://terragrunt.gruntwork.io/docs/features/stacks/)** | Collection of units (`terragrunt.stack.hcl`) | Stack file (e.g., `prod.yaml`) |
 
-## Concept Mapping
+### What Atmos Has That Terragrunt Doesn't
 
-### Terragrunt `include` → Atmos `import`
+Beyond the conceptual differences, Atmos provides several capabilities that don't exist in Terragrunt:
 
-**Terragrunt:**
-<File title="terragrunt.hcl">
-```hcl
-include "root" {
-  path = find_in_parent_folders()
-}
-
-include "envcommon" {
-  path = "${dirname(find_in_parent_folders())}/_envcommon/vpc.hcl"
-  expose = true
-}
-```
-</File>
-
-**Atmos:**
-<File title="stacks/prod.yaml">
-```yaml
-import:
-  - _defaults/globals
-  - _defaults/vpc-defaults
-```
-</File>
-
-Atmos imports are simpler—just list the files. They deep-merge automatically.
-
-### Terragrunt `dependency` → Atmos Remote State
-
-**Terragrunt:**
-<File title="eks/terragrunt.hcl">
-```hcl
-dependency "vpc" {
-  config_path = "../vpc"
-}
-
-inputs = {
-  vpc_id     = dependency.vpc.outputs.vpc_id
-  subnet_ids = dependency.vpc.outputs.private_subnet_ids
-}
-```
-</File>
-
-**Atmos (Option 1: YAML):**
-<File title="stacks/prod.yaml">
-```yaml
-components:
-  terraform:
-    eks:
-      vars:
-        vpc_id: '{{ (atmos.Component "vpc" .stack).outputs.vpc_id }}'
-        subnet_ids: '{{ (atmos.Component "vpc" .stack).outputs.private_subnet_ids }}'
-```
-</File>
-
-**Atmos (Option 2: Terraform):**
-<File title="components/terraform/eks/remote_state.tf">
-```hcl
-module "vpc" {
-  source  = "cloudposse/stack-config/yaml//modules/remote-state"
-  version = "1.5.0"
-
-  component = "vpc"
-  context   = module.this.context
-}
-
-# Use: module.vpc.outputs.vpc_id
-```
-</File>
-
-### Terragrunt `inputs` → Atmos `vars`
-
-**Terragrunt:**
-<File title="vpc/terragrunt.hcl">
-```hcl
-inputs = {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true
-  environment          = "production"
-}
-```
-</File>
-
-**Atmos:**
-<File title="stacks/prod.yaml">
-```yaml
-components:
-  terraform:
-    vpc:
-      vars:
-        cidr_block: "10.0.0.0/16"
-        enable_dns_hostnames: true
-        environment: production
-```
-</File>
-
-### Terragrunt `terraform.source` → Atmos `metadata.component`
-
-**Terragrunt:**
-<File title="vpc/terragrunt.hcl">
-```hcl
-terraform {
-  source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=v5.0.0"
-}
-```
-</File>
-
-**Atmos:**
-<File title="stacks/prod.yaml">
-```yaml
-components:
-  terraform:
-    vpc:
-      metadata:
-        component: vpc  # Points to components/terraform/vpc/
-```
-</File>
-
-With Atmos, you vendor the component locally first:
-
-<File title="vendor.yaml">
-```yaml
-apiVersion: atmos/v1
-kind: ComponentConfig
-spec:
-  sources:
-    - source: "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=v5.0.0"
-      targets:
-        - "components/terraform/vpc"
-```
-</File>
-
-Then run: `atmos vendor pull`
-
-### Terragrunt `generate` → Atmos Auto-Generation
-
-**Terragrunt:**
-<File title="terragrunt.hcl">
-```hcl
-generate "provider" {
-  path      = "provider.tf"
-  if_exists = "overwrite"
-  contents  = <<EOF
-provider "aws" {
-  region = "${local.aws_region}"
-}
-EOF
-}
-```
-</File>
-
-**Atmos:**
-
-Atmos auto-generates backend and provider configuration from stack YAML—no `generate` blocks needed.
-
-<File title="stacks/prod.yaml">
-```yaml
-terraform:
-  backend_type: s3
-  backend:
-    s3:
-      bucket: terraform-state
-      region: us-east-1
-
-components:
-  terraform:
-    vpc:
-      vars:
-        region: us-east-1
-```
-</File>
-
-Atmos creates `backend.tf.json` and passes variables automatically.
+| Feature | Description |
+|---------|-------------|
+| **[Native Authentication](/cli/commands/auth/usage)** | Built-in multi-cloud auth with SAML, SSO, OIDC, and GitHub Actions. No separate tools needed—`atmos auth login` handles it all. |
+| **[Vendoring](/cli/commands/vendor)** | Pull and version external modules locally with `atmos vendor pull`. Customize vendored code while tracking upstream. |
+| **[Custom Commands](/cli/configuration/commands)** | Define your own CLI commands in YAML. No scripting needed—integrate team-specific workflows directly into Atmos. |
+| **[Workflows](/workflows)** | Orchestrate multi-step operations across components and stacks. Chain commands, add conditions, run in parallel. |
+| **[Terraform Shell](/cli/commands/terraform/shell)** | `atmos terraform shell vpc -s prod` drops you into a configured shell for native Terraform debugging. All vars and backend pre-configured. |
+| **[Affected Detection](/cli/commands/describe/affected)** | `atmos describe affected` analyzes Git changes to find impacted components—purpose-built for CI/CD. |
+| **[Component Validation](/cli/commands/validate)** | JSON Schema and OPA policy validation for stack configurations before deployment. |
+| **[Stack Describe](/cli/commands/describe/component)** | `atmos describe component` shows the fully-resolved configuration for any component in any stack. |
+| **[Configuration Provenance](/cli/commands/describe/component)** | `atmos describe component --provenance` traces where every value came from across the import hierarchy. |
 
 ## Directory Structure Comparison
 
-### Terragrunt Typical Structure
+<Tabs>
+  <TabItem value="terragrunt" label="Terragrunt" default>
+    Terragrunt uses HCL syntax for configuration, which might feel familiar if you're accustomed to Terraform—but it can also be confusing since it's *not actually Terraform code*. You're writing HCL that looks like Terraform but behaves differently, with proprietary functions like `find_in_parent_folders()` and `dependency` blocks that don't exist in Terraform.
 
-```
-infrastructure/
-├── terragrunt.hcl                 # Root config
-├── _envcommon/
-│   ├── vpc.hcl
-│   └── eks.hcl
-├── prod/
-│   ├── us-east-1/
-│   │   ├── vpc/
-│   │   │   └── terragrunt.hcl
-│   │   └── eks/
-│   │       └── terragrunt.hcl
-│   └── terragrunt.hcl
-└── dev/
-    └── us-east-1/
-        ├── vpc/
-        │   └── terragrunt.hcl
-        └── eks/
-            └── terragrunt.hcl
-```
+    ```plaintext
+    infrastructure/
+    ├── terragrunt.hcl                 # Root config (HCL, not Terraform)
+    ├── _envcommon/
+    │   ├── vpc.hcl                    # Shared config (HCL, not Terraform)
+    │   └── eks.hcl
+    ├── prod/
+    │   ├── us-east-1/
+    │   │   ├── vpc/
+    │   │   │   └── terragrunt.hcl     # More HCL config
+    │   │   └── eks/
+    │   │       └── terragrunt.hcl
+    │   └── terragrunt.hcl
+    └── dev/
+        └── us-east-1/
+            ├── vpc/
+            │   └── terragrunt.hcl
+            └── eks/
+                └── terragrunt.hcl
+    ```
 
-### Atmos Equivalent Structure
+    **Characteristics:**
+    - HCL config files scattered across directories
+    - Environment structure baked into folder hierarchy
+    - Each component needs its own `terragrunt.hcl`
+    - Easy to confuse Terragrunt HCL with actual Terraform code
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    With Atmos, the distinction is clear: **YAML for configuration, Terraform for code**. Your stack configurations are pure YAML—no Terraform domain knowledge required—while all components are native Terraform modules, unchanged and portable.
 
-```
-infrastructure/
-├── atmos.yaml                     # Atmos config
-├── components/
-│   └── terraform/
-│       ├── vpc/
-│       │   ├── main.tf
-│       │   └── variables.tf
-│       └── eks/
-│           ├── main.tf
-│           └── variables.tf
-└── stacks/
-    ├── _defaults/
-    │   ├── globals.yaml
-    │   └── vpc-defaults.yaml
-    ├── prod-us-east-1.yaml
-    └── dev-us-east-1.yaml
-```
+    ```plaintext
+    infrastructure/
+    ├── atmos.yaml                     # Atmos config (YAML)
+    ├── components/
+    │   └── terraform/
+    │       ├── vpc/
+    │       │   ├── main.tf            # Native Terraform
+    │       │   └── variables.tf       # Native Terraform
+    │       └── eks/
+    │           ├── main.tf
+    │           └── variables.tf
+    └── stacks/
+        ├── _defaults/
+        │   ├── globals.yaml           # Shared defaults
+        │   └── vpc-defaults.yaml
+        ├── dev/
+        │   ├── us-east-1.yaml         # Dev in us-east-1
+        │   └── us-west-2.yaml         # Dev in us-west-2
+        ├── staging/
+        │   └── us-east-1.yaml         # Staging in us-east-1
+        └── prod/
+            ├── us-east-1.yaml         # Prod in us-east-1
+            └── us-west-2.yaml         # Prod in us-west-2
+    ```
 
-**Key difference:** Atmos separates components (code) from stacks (configuration). Terragrunt interleaves them.
+    :::tip Flexible Design Patterns
+    Atmos supports many [design patterns](/design-patterns) for organizing your stacks—from simple flat structures for startups to enterprise-scale patterns with multi-tenant, multi-region hierarchies. Choose the pattern that fits your needs and evolve as you grow.
+    :::
+
+    **Characteristics:**
+    - Code (Terraform) and config (YAML) cleanly separated
+    - One stack file per environment—no per-component config files
+    - Components are native Terraform—work with or without Atmos
+    - Anyone can read YAML; no HCL knowledge needed
+  </TabItem>
+</Tabs>
+
+**Key difference:** Atmos cleanly separates components (native Terraform code) from stacks (YAML configuration). With Terragrunt, HCL configuration files are scattered throughout your directory structure alongside—and sometimes confused with—actual Terraform code.
+
+:::info Configuration Lives in YAML, Not the Filesystem
+Atmos philosophically treats the filesystem as **organization only**—it doesn't influence behavior. All configuration semantics live in YAML stack files and their imports. This means:
+- You can query any component's fully-resolved configuration with `atmos describe component`
+- You can trace where any value came from with `atmos describe component --provenance`
+- You can output configuration as JSON/YAML for tooling integration
+- Directory structure is purely for human organization, not runtime behavior
+
+This is fundamentally different from Terragrunt, where the directory hierarchy *is* the configuration—`path_relative_to_include()` and `find_in_parent_folders()` derive meaning from filesystem location.
+:::
+
+## Concept Mapping
+
+If you're familiar with Terragrunt, the concepts below will help you translate what you already know into Atmos equivalents. Each section shows a side-by-side comparison so you can see exactly how Terragrunt patterns map to Atmos.
+
+### Include → Import
+
+<Tabs>
+  <TabItem value="terragrunt" label="Terragrunt" default>
+    Terragrunt uses `include` blocks with proprietary functions like `find_in_parent_folders()` to locate and merge parent configurations. You must specify whether to `expose` included values, and the path resolution can be complex with nested directory structures.
+
+    <File title="terragrunt.hcl">
+    ```hcl
+    include "root" {
+      path = find_in_parent_folders()
+    }
+
+    include "envcommon" {
+      path = "${dirname(find_in_parent_folders())}/_envcommon/vpc.hcl"
+      expose = true
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos uses simple `import` statements—just list the files you want to include. All imports are automatically deep-merged in order, with later values overriding earlier ones. No special functions or expose flags needed.
+
+    <File title="stacks/prod.yaml">
+    ```yaml
+    import:
+      - _defaults/globals
+      - _defaults/vpc-defaults
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+### Dependency → Remote State
+
+<Tabs>
+  <TabItem value="terragrunt" label="Terragrunt" default>
+    Terragrunt uses `dependency` blocks to reference outputs from other modules. You specify a relative path to the dependent module's directory, and Terragrunt reads its state file to extract outputs. This creates implicit ordering and requires the dependency to be applied first. Since it's all HCL, the line between "configuration" and "business logic" can blur—you're writing code that looks like Terraform but isn't.
+
+    <File title="eks/terragrunt.hcl">
+    ```hcl
+    dependency "vpc" {
+      config_path = "../vpc"
+    }
+
+    inputs = {
+      vpc_id     = dependency.vpc.outputs.vpc_id
+      subnet_ids = dependency.vpc.outputs.private_subnet_ids
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos provides the `!terraform.output` YAML function to read outputs directly from another component's remote state. Simply reference the component name and output—Atmos handles the state backend lookup automatically.
+
+    Because Atmos uses YAML for configuration and keeps Terraform for code, there's a clear separation: **stacks are configuration, components are code**. Your configuration (what to deploy, with what values) stays in YAML. Your business logic (how resources are created) stays in Terraform. This separation makes it easier to reason about your infrastructure.
+
+    <File title="stacks/prod.yaml">
+    ```yaml
+    components:
+      terraform:
+        eks:
+          vars:
+            vpc_id: !terraform.output vpc.vpc_id
+            subnet_ids: !terraform.output vpc.private_subnet_ids
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+### Inputs → Vars
+
+<Tabs>
+  <TabItem value="terragrunt" label="Terragrunt" default>
+    Terragrunt passes variables to Terraform using the `inputs` block. These values become `-var` arguments when Terraform runs. The inputs block uses HCL syntax with equals signs and curly braces.
+
+    <File title="vpc/terragrunt.hcl">
+    ```hcl
+    inputs = {
+      cidr_block           = "10.0.0.0/16"
+      enable_dns_hostnames = true
+      environment          = "production"
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos uses the `vars` section under each component. Variables are defined in YAML and automatically passed to Terraform. You can define vars at multiple levels (global, component) and they deep-merge, allowing inheritance and overrides.
+
+    <File title="stacks/prod.yaml">
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          vars:
+            cidr_block: "10.0.0.0/16"
+            enable_dns_hostnames: true
+            environment: production
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+### Terraform Source → Component + Vendoring
+
+<Tabs>
+  <TabItem value="terragrunt" label="Terragrunt" default>
+    Terragrunt specifies the Terraform module source directly in each `terragrunt.hcl` file. The source is fetched at runtime, and you manage versions by changing the `ref` parameter. Each environment directory needs its own copy of this source reference.
+
+    <File title="vpc/terragrunt.hcl">
+    ```hcl
+    terraform {
+      source = "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=v5.0.0"
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos separates module sourcing from stack configuration using vendoring. You define sources in `vendor.yaml`, pull them locally with `atmos vendor pull`, and reference the local component in stacks. This gives you version control, offline capability, and the ability to customize vendored modules.
+
+    First, define the vendor source:
+
+    <File title="vendor.yaml">
+    ```yaml
+    apiVersion: atmos/v1
+    kind: ComponentConfig
+    spec:
+      sources:
+        - source: "git::https://github.com/terraform-aws-modules/terraform-aws-vpc.git?ref=v5.0.0"
+          targets:
+            - "components/terraform/vpc"
+    ```
+    </File>
+
+    Then pull it: `atmos vendor pull`
+
+    Finally, reference in your stack:
+
+    <File title="stacks/prod.yaml">
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          metadata:
+            component: vpc  # Points to components/terraform/vpc/
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+### Generate Blocks → Purpose-Built Generation
+
+<Tabs>
+  <TabItem value="terragrunt" label="Terragrunt" default>
+    Terragrunt uses `generate` blocks to create arbitrary files before Terraform runs. You write file contents as heredoc strings within HCL, specifying the path and overwrite behavior. This gives you full templating power, but that flexibility comes with complexity—you're essentially writing a code generator in HCL.
+
+    <File title="terragrunt.hcl">
+    ```hcl
+    generate "provider" {
+      path      = "provider.tf"
+      if_exists = "overwrite"
+      contents  = <<EOF
+    provider "aws" {
+      region = "${local.aws_region}"
+    }
+    EOF
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos intentionally does **not** provide full-fledged arbitrary file generation—that approach encourages complexity. Instead, Atmos offers purpose-built generation for the two most common use cases: **backends** and **providers**.
+
+    You express these as YAML in your stack configs. Atmos deep-merges the configuration across imports and generates the required JSON files at runtime. This keeps configuration declarative while solving the real problems.
+
+    <Tabs queryString="atmos-gen">
+      <TabItem value="yaml" label="Stack Config (YAML)" default>
+        Define your backend and provider configuration declaratively in YAML. Atmos deep-merges this configuration across imports and handles all the generation for you.
+
+        <File title="stacks/prod.yaml">
+        ```yaml
+        terraform:
+          backend_type: s3
+          backend:
+            s3:
+              bucket: terraform-state
+              region: us-east-1
+
+        components:
+          terraform:
+            vpc:
+              providers:
+                aws:
+                  region: us-east-1
+        ```
+        </File>
+      </TabItem>
+      <TabItem value="backend" label="Generated backend.tf.json">
+        Atmos generates this file at runtime before running Terraform. The backend configuration is serialized from your YAML stack config into the JSON format Terraform expects.
+
+        <File title="components/terraform/vpc/backend.tf.json">
+        ```json
+        {
+          "terraform": {
+            "backend": {
+              "s3": {
+                "bucket": "terraform-state",
+                "region": "us-east-1",
+                "key": "terraform.tfstate",
+                "workspace_key_prefix": "vpc"
+              }
+            }
+          }
+        }
+        ```
+        </File>
+      </TabItem>
+      <TabItem value="provider" label="Generated providers.tf.json">
+        Provider configuration is also generated at runtime. This ensures your Terraform components remain environment-agnostic while Atmos injects the correct provider settings per stack.
+
+        <File title="components/terraform/vpc/providers.tf.json">
+        ```json
+        {
+          "provider": {
+            "aws": {
+              "region": "us-east-1"
+            }
+          }
+        }
+        ```
+        </File>
+      </TabItem>
+    </Tabs>
+  </TabItem>
+</Tabs>
+
+### Remote State Configuration
+
+<Tabs>
+  <TabItem value="terragrunt" label="Terragrunt" default>
+    Terragrunt configures remote state in the root `terragrunt.hcl` using a `remote_state` block. The `path_relative_to_include()` function dynamically generates state keys based on directory structure. Child configurations inherit this through `include` blocks.
+
+    <File title="terragrunt.hcl (root)">
+    ```hcl
+    remote_state {
+      backend = "s3"
+      config = {
+        bucket         = "terraform-state"
+        region         = "us-east-1"
+        key            = "${path_relative_to_include()}/terraform.tfstate"
+      }
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos centralizes backend configuration in a defaults file that all stacks import. The backend settings are defined once in YAML, and Atmos automatically generates unique state keys based on component and stack names.
+
+    <File title="stacks/_defaults/globals.yaml">
+    ```yaml
+    terraform:
+      backend_type: s3
+      backend:
+        s3:
+          bucket: terraform-state
+          region: us-east-1
+    ```
+    </File>
+
+    Then import in all stacks:
+    <File title="stacks/prod-us-east-1.yaml">
+    ```yaml
+    import:
+      - _defaults/globals
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+### Locals → Vars with Inheritance
+
+<Tabs>
+  <TabItem value="terragrunt" label="Terragrunt" default>
+    Terragrunt uses `locals` blocks for computed values and string interpolation. You define local variables with HCL syntax and reference them using `local.variable_name`. These are scoped to the current file and its includes.
+
+    <File title="terragrunt.hcl">
+    ```hcl
+    locals {
+      account_id   = "123456789012"
+      region       = "us-east-1"
+      cluster_name = "${local.account_id}-${local.region}-eks"
+    }
+
+    inputs = {
+      cluster_name = local.cluster_name
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos uses `vars` with deep-merge inheritance. Define variables at any level—they flow down through imports and can be overridden. For most cases, you don't need string interpolation at all; just pass the individual values to your Terraform module and let Terraform handle the composition.
+
+    <File title="stacks/prod-us-east-1.yaml">
+    ```yaml
+    vars:
+      account_id: "123456789012"
+      region: us-east-1
+
+    components:
+      terraform:
+        eks:
+          vars:
+            # Let Terraform compose these in the module
+            account_id: '{{ .vars.account_id }}'
+            region: '{{ .vars.region }}'
+    ```
+    </File>
+
+    If you truly need string interpolation in YAML, Go templates work but should be used sparingly—they make configurations harder to read and validate.
+  </TabItem>
+</Tabs>
+
+### run_cmd → YAML Functions
+
+<Tabs>
+  <TabItem value="terragrunt" label="Terragrunt" default>
+    Terragrunt's `run_cmd()` function executes shell commands and captures their output. You pass the command and arguments as separate strings, and the result can be assigned to a local variable.
+
+    <File title="terragrunt.hcl">
+    ```hcl
+    locals {
+      account_id = run_cmd("aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text")
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos provides **YAML functions** (like `!exec`) as the preferred way to run commands or fetch dynamic values. YAML functions are validated at parse time, produce readable configurations, and integrate naturally with YAML syntax.
+
+    <File title="stacks/prod-us-east-1.yaml">
+    ```yaml
+    vars:
+      account_id: !exec
+        command: aws sts get-caller-identity --query Account --output text
+    ```
+    </File>
+
+    :::tip Why YAML functions over templates?
+    Atmos also supports Go templates (`{{ exec "..." }}`), but we recommend YAML functions because:
+    - **Validation**: YAML functions are validated at parse time; templates can only be validated after generation
+    - **Readability**: Templates turn YAML into string soup that's hard to read and debug
+    - **Tooling**: YAML functions work with standard YAML tooling; templates break syntax highlighting and linting
+
+    Use templates only as an escape hatch when YAML functions don't cover your use case.
+    :::
+  </TabItem>
+</Tabs>
+
+### extra_arguments → Component Settings
+
+<Tabs>
+  <TabItem value="terragrunt" label="Terragrunt" default>
+    Terragrunt's `extra_arguments` block lets you append additional CLI arguments to Terraform commands. You specify which commands (plan, apply, etc.) receive the extra arguments and what those arguments should be.
+
+    <File title="terragrunt.hcl">
+    ```hcl
+    terraform {
+      extra_arguments "common_vars" {
+        commands = ["plan", "apply"]
+        arguments = ["-var-file=common.tfvars"]
+      }
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos uses the `settings.terraform.args` section to pass additional arguments to Terraform. These arguments are appended to all Terraform commands for that component and can be defined at multiple levels with inheritance.
+
+    <File title="stacks/prod-us-east-1.yaml">
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          settings:
+            terraform:
+              args:
+                - "-var-file=common.tfvars"
+    ```
+    </File>
+  </TabItem>
+</Tabs>
+
+### Units and Stacks
+
+Terragrunt recently introduced formal [Units and Stacks](https://terragrunt.gruntwork.io/docs/getting-started/terminology/) concepts (GA in v0.78.0, May 2025). Here's how they map to Atmos:
+
+<Tabs>
+  <TabItem value="terragrunt" label="Terragrunt" default>
+    In Terragrunt terminology:
+
+    - **Unit**: A directory containing a `terragrunt.hcl` file—a single instance of infrastructure with its own state. Each unit represents one deployment of a Terraform module.
+
+    - **Stack**: A collection of units that can be managed together. Terragrunt supports both *implicit stacks* (directory-based) and *explicit stacks* (defined in `terragrunt.stack.hcl` files).
+
+    <File title="terragrunt.stack.hcl">
+    ```hcl
+    # Explicit stack definition
+    unit "vpc" {
+      source = "../units/vpc"
+      values = {
+        environment = "prod"
+        cidr_block  = "10.0.0.0/16"
+      }
+    }
+
+    unit "eks" {
+      source = "../units/eks"
+      values = {
+        environment  = "prod"
+        cluster_name = "main"
+      }
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos has always had these concepts, just with different names:
+
+    - **Unit → Component Instance**: In Atmos, when you define a component in a stack's `components.terraform` section, that's a unit—a single deployable instance with its own state.
+
+    - **Stack → Stack File**: An Atmos stack file (e.g., `prod-us-east-1.yaml`) is exactly what Terragrunt now calls a stack—a collection of component instances managed together.
+
+    <File title="stacks/prod-us-east-1.yaml">
+    ```yaml
+    # Stack file = collection of component instances (units)
+    components:
+      terraform:
+        vpc:                    # Unit 1: VPC instance
+          vars:
+            environment: prod
+            cidr_block: "10.0.0.0/16"
+
+        eks:                    # Unit 2: EKS instance
+          vars:
+            environment: prod
+            cluster_name: main
+    ```
+    </File>
+
+    The key difference: Atmos has used YAML for this since day one, while Terragrunt's `terragrunt.stack.hcl` is a newer HCL-based approach to the same problem.
+  </TabItem>
+</Tabs>
+
+| Terragrunt Concept | Atmos Equivalent | Notes |
+|--------------------|------------------|-------|
+| Unit (`terragrunt.hcl`) | Component instance in `components.terraform` | Same concept: single deployable with own state |
+| Implicit Stack (directory) | Stack file | Atmos uses explicit YAML files, not directories |
+| Explicit Stack (`terragrunt.stack.hcl`) | Stack file (`.yaml`) | Both define collections of units/components |
+| `unit {}` block | Component entry under `components.terraform` | Atmos uses YAML; Terragrunt uses HCL |
+| `values = {}` | `vars:` | Both pass variables to the underlying module |
+
+:::tip Atmos Was Stack-First From the Start
+Terragrunt evolved from a directory-per-unit model and later added explicit stack support. Atmos was designed stack-first—every deployment is defined in a stack file, making the relationship between components explicit and queryable from day one.
+:::
+
+## Function Mapping
+
+Terragrunt exposes many built-in functions in HCL. Here's how they map to Atmos equivalents:
+
+### Path and Directory Functions
+
+| Terragrunt Function | Atmos Equivalent | Notes |
+|---------------------|------------------|-------|
+| `find_in_parent_folders()` | `import:` | Atmos uses explicit imports instead of searching |
+| `path_relative_to_include()` | Automatic | State keys generated from stack/component names |
+| `path_relative_from_include()` | Automatic | Not needed—Atmos handles paths |
+| `get_terragrunt_dir()` | N/A | Components are always in `components/terraform/` |
+| `get_working_dir()` | N/A | Atmos manages working directories |
+| `get_parent_terragrunt_dir()` | N/A | Flat imports replace hierarchy |
+| `get_repo_root()` | `!repo-root` | YAML function returns repo root path |
+| `get_path_from_repo_root()` | `!repo-root` | Combine with path manipulation |
+
+### Environment and Platform Functions
+
+| Terragrunt Function | Atmos Equivalent | Notes |
+|---------------------|------------------|-------|
+| `get_env("VAR", "default")` | `!env VAR` | YAML function for environment variables |
+| `get_platform()` | N/A | Use `!exec` if needed |
+| `get_aws_account_id()` | `!exec` | `!exec aws sts get-caller-identity --query Account` |
+| `get_aws_account_alias()` | `!exec` | Run AWS CLI command |
+| `get_aws_caller_identity_arn()` | `!exec` | Run AWS CLI command |
+| `get_aws_caller_identity_user_id()` | `!exec` | Run AWS CLI command |
+
+### Command Execution
+
+| Terragrunt Function | Atmos Equivalent | Notes |
+|---------------------|------------------|-------|
+| `run_cmd("cmd", "arg1", ...)` | `!exec` | `!exec cmd arg1` (inline syntax) |
+
+### Configuration Reading
+
+| Terragrunt Function | Atmos Equivalent | Notes |
+|---------------------|------------------|-------|
+| `read_terragrunt_config()` | `import:` | Import other stack configs |
+| `read_tfvars_file()` | `!include` | `vars: !include path/to/file.tfvars` |
+
+### State and Outputs
+
+| Terragrunt Function | Atmos Equivalent | Notes |
+|---------------------|------------------|-------|
+| `dependency.X.outputs.Y` | `!terraform.output` | `!terraform.output component.output_name` |
+| N/A | `!terraform.state` | Read arbitrary state attributes |
+
+### Secret Management
+
+| Terragrunt Function | Atmos Equivalent | Notes |
+|---------------------|------------------|-------|
+| `sops_decrypt_file()` | `!store` | Use store integrations (SSM, Secrets Manager, etc.) |
+
+:::tip YAML Functions vs Templates
+Atmos offers two ways to access dynamic values:
+- **YAML Functions** (`!exec`, `!env`, `!terraform.output`) — Preferred. Validated at parse time, readable, works with YAML tooling.
+- **Go Templates** (`{{ env "VAR" }}`, `{{ exec "cmd" }}`) — Escape hatch. Use when YAML functions don't cover your use case.
+
+See [YAML Functions](/functions/yaml) for the complete reference.
+:::
+
+## CLI Command Comparison
+
+<Tabs>
+  <TabItem value="terragrunt" label="Terragrunt" default>
+    Terragrunt commands are directory-based—you `cd` into a component's directory and run commands there. For multi-component operations, `run-all` traverses the directory tree and executes in dependency order.
+
+    ```bash
+    # Plan a single component
+    cd prod/us-east-1/vpc
+    terragrunt plan
+
+    # Apply a single component
+    cd prod/us-east-1/vpc
+    terragrunt apply
+
+    # Plan all components
+    terragrunt run-all plan
+
+    # Apply all components
+    terragrunt run-all apply
+
+    # Show outputs
+    terragrunt output
+    ```
+  </TabItem>
+  <TabItem value="atmos" label="Atmos">
+    Atmos commands run from **anywhere within a configured Atmos repository**—you never need to `cd` anywhere. Just specify the component and stack, and Atmos finds everything automatically. This makes scripts and CI/CD pipelines simpler and eliminates directory management entirely.
+
+    ```bash
+    # Plan a single component (from repo root)
+    atmos terraform plan vpc -s prod-us-east-1
+
+    # Apply a single component
+    atmos terraform apply vpc -s prod-us-east-1
+
+    # Plan ALL components in ALL stacks
+    atmos terraform plan --all
+
+    # Apply ALL components in ALL stacks
+    atmos terraform apply --all
+
+    # Show outputs
+    atmos terraform output vpc -s prod-us-east-1
+
+    # List all stacks
+    atmos list stacks
+
+    # Describe a component
+    atmos describe component vpc -s prod-us-east-1
+    ```
+
+    **GitOps-native:** Atmos goes beyond simple "run all" with intelligent change detection:
+
+    ```bash
+    # See what changed between commits (compares current branch to main)
+    atmos describe affected
+
+    # Plan ONLY components affected by changes in current branch
+    atmos terraform plan --affected
+
+    # Apply ONLY affected components
+    atmos terraform apply --affected
+
+    # Compare against a specific branch or commit
+    atmos describe affected --ref refs/heads/feature-branch
+    atmos describe affected --sha abc123def
+
+    # Include dependent components (if vpc changed, also plan eks that depends on it)
+    atmos describe affected --include-dependents=true
+    ```
+
+    This is purpose-built for CI/CD: instead of planning everything on every PR, Atmos analyzes Git changes to determine exactly which components and stacks are affected—including changes to stack configs, component code, and even local Terraform modules.
+  </TabItem>
+</Tabs>
 
 ## Migration Steps
 
-### 1. Convert `terragrunt.hcl` to Stack YAML
+### Step 1: Convert terragrunt.hcl to Stack YAML
 
-**Terragrunt:**
-<File title="prod/us-east-1/vpc/terragrunt.hcl">
-```hcl
-include "root" {
-  path = find_in_parent_folders()
-}
+<Tabs>
+  <TabItem value="terragrunt" label="Before (Terragrunt)" default>
+    Each Terragrunt directory has its own `terragrunt.hcl` with include paths, source references, and inputs. The configuration is scattered across the directory tree with implicit relationships based on folder hierarchy.
 
-terraform {
-  source = "../../../../modules/vpc"
-}
+    <File title="prod/us-east-1/vpc/terragrunt.hcl">
+    ```hcl
+    include "root" {
+      path = find_in_parent_folders()
+    }
 
-inputs = {
-  cidr_block  = "10.0.0.0/16"
-  environment = "prod"
-  region      = "us-east-1"
-}
-```
-</File>
+    terraform {
+      source = "../../../../modules/vpc"
+    }
 
-**Atmos:**
-<File title="stacks/prod-us-east-1.yaml">
-```yaml
-import:
-  - _defaults/globals
+    inputs = {
+      cidr_block  = "10.0.0.0/16"
+      environment = "prod"
+      region      = "us-east-1"
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="After (Atmos)">
+    The Atmos stack file consolidates all configuration in one place. Imports bring in shared defaults, vars set environment-level values, and components define what to deploy. Each component points to a local Terraform module.
 
-vars:
-  environment: prod
-  region: us-east-1
+    <File title="stacks/prod-us-east-1.yaml">
+    ```yaml
+    import:
+      - _defaults/globals
 
-components:
-  terraform:
-    vpc:
-      metadata:
-        component: vpc  # Points to components/terraform/vpc
-      vars:
-        cidr_block: "10.0.0.0/16"
-```
-</File>
-
-### 2. Extract Common Configuration
-
-**Terragrunt:**
-<File title="terragrunt.hcl (root)">
-```hcl
-remote_state {
-  backend = "s3"
-  config = {
-    bucket = "terraform-state"
-    region = "us-east-1"
-  }
-}
-```
-</File>
-
-**Atmos:**
-<File title="stacks/_defaults/globals.yaml">
-```yaml
-terraform:
-  backend_type: s3
-  backend:
-    s3:
-      bucket: terraform-state
+    vars:
+      environment: prod
       region: us-east-1
-      dynamodb_table: terraform-lock
-```
-</File>
 
-Then import in all stacks:
-<File title="stacks/prod-us-east-1.yaml">
-```yaml
-import:
-  - _defaults/globals
-```
-</File>
+    components:
+      terraform:
+        vpc:
+          metadata:
+            component: vpc  # Points to components/terraform/vpc
+          vars:
+            cidr_block: "10.0.0.0/16"
+    ```
+    </File>
+  </TabItem>
+</Tabs>
 
-### 3. Convert Dependencies
+### Step 2: Move Terraform Root Modules
 
-**Terragrunt:**
-<File title="eks/terragrunt.hcl">
-```hcl
-dependency "vpc" {
-  config_path = "../vpc"
-}
+:::info What's a Root Module?
+In Terraform, a **root module** is the top-level directory where you run `terraform plan` and `terraform apply`. It has its own state file. **Child modules** are reusable building blocks called from root modules—they don't have their own state.
 
-inputs = {
-  vpc_id = dependency.vpc.outputs.vpc_id
-}
-```
-</File>
+In Atmos terminology, root modules are called **components**. Each component is a self-contained Terraform configuration that gets deployed independently with its own state.
+:::
 
-**Atmos (YAML approach):**
-<File title="stacks/prod-us-east-1.yaml">
-```yaml
-components:
-  terraform:
-    eks:
-      vars:
-        vpc_id: '{{ (atmos.Component "vpc" .stack).outputs.vpc_id }}'
-```
-</File>
+<Tabs>
+  <TabItem value="terragrunt" label="Before (Terragrunt)" default>
+    Terragrunt typically references root modules from a `modules/` directory (or pulls from remote sources). These are standard Terraform root modules that work independently.
 
-**Atmos (Terraform approach):**
-<File title="components/terraform/eks/remote_state.tf">
-```hcl
-module "vpc" {
-  source  = "cloudposse/stack-config/yaml//modules/remote-state"
-  version = "1.5.0"
+    ```plaintext
+    modules/
+    ├── vpc/                    # Root module (has state)
+    │   ├── main.tf
+    │   └── variables.tf
+    └── eks/                    # Root module (has state)
+        ├── main.tf
+        └── variables.tf
+    ```
+  </TabItem>
+  <TabItem value="atmos" label="After (Atmos)">
+    Atmos expects root modules (components) in `components/terraform/`. The modules themselves are unchanged—just move or rename the directory. Your Terraform code remains pure and portable.
 
-  component = "vpc"
-  context   = module.this.context
-}
+    ```plaintext
+    components/terraform/
+    ├── vpc/                    # Component = root module
+    │   ├── main.tf
+    │   └── variables.tf
+    └── eks/                    # Component = root module
+        ├── main.tf
+        └── variables.tf
+    ```
 
-# Use: module.vpc.outputs.vpc_id
-```
-</File>
+    Simply rename `modules/` to `components/terraform/`.
+  </TabItem>
+</Tabs>
 
-### 4. Move Terraform Modules
+### Step 3: Update Backend Configuration
 
-Move your Terraform modules from `modules/` to `components/terraform/`:
+<Tabs>
+  <TabItem value="terragrunt" label="Before (Terragrunt)" default>
+    Terragrunt manages state backend configuration in the root `terragrunt.hcl`. The `path_relative_to_include()` function generates unique state keys based on the directory structure, ensuring each component has its own state file.
 
-```bash
-# Terragrunt structure
-modules/
-├── vpc/
-│   ├── main.tf
-│   └── variables.tf
-└── eks/
-    ├── main.tf
-    └── variables.tf
+    <File title="terragrunt.hcl (root)">
+    ```hcl
+    remote_state {
+      backend = "s3"
+      config = {
+        bucket = "terraform-state"
+        key    = "${path_relative_to_include()}/terraform.tfstate"
+        region = "us-east-1"
+      }
+    }
+    ```
+    </File>
+  </TabItem>
+  <TabItem value="atmos" label="After (Atmos)">
+    Atmos defines backend settings in a shared defaults file. All stacks import this file and automatically get consistent backend configuration. State keys are generated from stack and component names, with optional per-component overrides.
 
-# Atmos structure
-components/terraform/
-├── vpc/
-│   ├── main.tf
-│   └── variables.tf
-└── eks/
-    ├── main.tf
-    └── variables.tf
-```
-
-### 5. Update Backend Configuration
-
-Terragrunt generates backend config per-directory. Atmos centralizes it in stack YAML.
-
-**Remove from Terraform:**
-```hcl
-# Delete backend.tf files
-```
-
-**Add to Atmos stack:**
-<File title="stacks/prod-us-east-1.yaml">
-```yaml
-terraform:
-  backend_type: s3
-  backend:
-    s3:
-      bucket: terraform-state
-      key: terraform.tfstate
-      region: us-east-1
-      workspace_key_prefix: vpc  # Component-specific prefix
-
-components:
-  terraform:
-    vpc:
+    <File title="stacks/_defaults/globals.yaml">
+    ```yaml
+    terraform:
+      backend_type: s3
       backend:
         s3:
-          workspace_key_prefix: vpc
-```
-</File>
+          bucket: terraform-state
+          key: terraform.tfstate
+          region: us-east-1
+    ```
+    </File>
 
-### 6. Update CLI Commands
-
-| Terragrunt | Atmos |
-|------------|-------|
-| `terragrunt plan` | `atmos terraform plan <component> -s <stack>` |
-| `terragrunt apply` | `atmos terraform apply <component> -s <stack>` |
-| `terragrunt run-all plan` | `atmos workflow <workflow> -f <file>` |
-| `terragrunt run-all apply` | `atmos workflow <workflow> -f <file>` |
-
-**Example:**
-```bash
-# Terragrunt
-cd prod/us-east-1/vpc
-terragrunt plan
-
-# Atmos (from repo root)
-atmos terraform plan vpc -s prod-us-east-1
-```
-
-## Advanced Migration
-
-### Migrating `locals`
-
-**Terragrunt:**
-<File title="terragrunt.hcl">
-```hcl
-locals {
-  account_id   = "123456789012"
-  region       = "us-east-1"
-  cluster_name = "${local.account_id}-${local.region}-eks"
-}
-
-inputs = {
-  cluster_name = local.cluster_name
-}
-```
-</File>
-
-**Atmos:**
-<File title="stacks/prod-us-east-1.yaml">
-```yaml
-vars:
-  account_id: "123456789012"
-  region: us-east-1
-  cluster_name: '{{ .vars.account_id }}-{{ .vars.region }}-eks'
-
-components:
-  terraform:
-    eks:
-      vars:
-        cluster_name: '{{ .vars.cluster_name }}'
-```
-</File>
-
-### Migrating `run_cmd`
-
-**Terragrunt:**
-<File title="terragrunt.hcl">
-```hcl
-locals {
-  account_id = run_cmd("aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text")
-}
-```
-</File>
-
-**Atmos:**
-<File title="stacks/prod-us-east-1.yaml">
-```yaml
-vars:
-  account_id: '{{ exec "aws" "sts" "get-caller-identity" "--query" "Account" "--output" "text" }}'
-```
-</File>
-
-### Migrating `extra_arguments`
-
-**Terragrunt:**
-<File title="terragrunt.hcl">
-```hcl
-terraform {
-  extra_arguments "common_vars" {
-    commands = ["plan", "apply"]
-    arguments = ["-var-file=common.tfvars"]
-  }
-}
-```
-</File>
-
-**Atmos:**
-
-Use component-level settings:
-<File title="stacks/prod-us-east-1.yaml">
-```yaml
-components:
-  terraform:
-    vpc:
-      settings:
-        terraform:
-          args:
-            - "-var-file=common.tfvars"
-```
-</File>
+    Component-specific key prefixes:
+    <File title="stacks/prod-us-east-1.yaml">
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          backend:
+            s3:
+              workspace_key_prefix: vpc
+    ```
+    </File>
+  </TabItem>
+</Tabs>
 
 ## Migration Checklist
 
-- [ ] Install Atmos CLI
+<TaskList>
+- [ ] Install Atmos CLI ([Installation Guide](/install))
 - [ ] Create `atmos.yaml` configuration
-- [ ] Move Terraform modules to `components/terraform/`
+- [ ] Move Terraform root modules to `components/terraform/`
 - [ ] Convert `terragrunt.hcl` files to stack YAML
 - [ ] Extract common config to `_defaults/`
 - [ ] Convert `dependency` blocks to remote state
@@ -537,24 +887,25 @@ components:
 - [ ] Test with `atmos terraform plan`
 - [ ] Update CI/CD pipelines
 - [ ] Train team on new commands
+</TaskList>
 
 ## Why Migrate?
 
 ### Advantages of Atmos
 
-✅ **YAML > HCL for config** - More portable, every language can parse it
-✅ **True separation of concerns** - Code and config in different directories
-✅ **Deep merge semantics** - More powerful than `include`
-✅ **Schema validation** - JSON Schema + OPA policies
-✅ **Multi-tool orchestration** - Not just Terraform (Helmfile, Packer, etc.)
-✅ **Powerful templating** - Gomplate functions + custom functions
-✅ **Active development** - Regular releases, responsive community
+- **Clear separation of code and config** - YAML for configuration, native Terraform for code. Components (code) and stacks (config) live in different directories—no "Terraform-like but not Terraform" confusion
+- **Components are pure Terraform** - Your modules work with or without Atmos, no vendor lock-in
+- **YAML is universal** - Every language and tool can parse it; no HCL knowledge needed for configuration
+- **Deep merge semantics** - More powerful than `include` blocks
+- **Schema validation** - JSON Schema + OPA policies for configuration validation
+- **Multi-tool orchestration** - Not just Terraform (Helmfile, Packer, etc.)
+- **Active development** - Regular releases, responsive community
 
 ### When to Stay with Terragrunt
 
-- **Small projects** - If you have 5 Terraform modules, Terragrunt may be simpler
-- **HCL preference** - If your team strongly prefers HCL for everything
-- **Existing investment** - If you have 100+ Terragrunt configs, migration cost may be high
+- **It's working for you** - If your team knows Terragrunt well and has no pain points, there's no reason to change
+- **Strong HCL preference** - If your team prefers HCL over YAML and wants configuration in the same language as Terraform code
+- **Heavy dynamic generation** - If you rely extensively on `generate` blocks to create arbitrary Terraform files dynamically, Terragrunt's full templating power may be necessary
 
 ## Get Help
 
@@ -568,6 +919,8 @@ Migrating a large codebase? We're here to help:
 
 Now that you understand the migration path:
 
+- **[Learn YAML in Atmos](/learn/yaml)** - YAML is more powerful than you might think. Learn how Atmos uses deep merging, scope, and inheritance
+- **[Explore YAML Functions](/functions/yaml)** - YAML functions like `!terraform.output`, `!env`, and `!exec` are first-class YAML features (technically explicit tags) that give your configuration superpowers
 - **[Try the Quick Start](/quick-start/simple)** - Get hands-on with Atmos
 - **[Read Core Concepts](/learn/why-atmos)** - Understand Atmos deeply
 - **[Explore Stack Configuration](/stacks/)** - Advanced YAML features
