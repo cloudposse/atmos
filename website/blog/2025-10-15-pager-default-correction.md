@@ -1,10 +1,14 @@
 ---
 slug: pager-default-correction
 title: Pager Default Behavior Corrected
-sidebar_label: "Pager Default Behavior"
-authors: [osterman]
-tags: [atmos, bugfix, breaking-change, dx]
-date: 2025-10-15
+sidebar_label: Pager Default Behavior
+authors:
+  - osterman
+tags:
+  - bugfix
+  - breaking-change
+date: 2025-10-15T00:00:00.000Z
+release: v1.195.0
 ---
 
 We've identified and corrected a regression in Atmos where the pager was incorrectly enabled by default, contrary to the intended behavior documented in a previous release.

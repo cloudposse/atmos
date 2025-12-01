@@ -1,10 +1,13 @@
 ---
 slug: introducing-atmos-auth
-title: "Introducing Atmos Auth: Native Cloud Authentication for Platform Teams"
-sidebar_label: "Introducing Atmos Auth"
-authors: [Benbentwo]
-tags: [feature, cloud-architecture]
-date: 2025-10-13
+title: 'Introducing Atmos Auth: Native Cloud Authentication for Platform Teams'
+sidebar_label: Introducing Atmos Auth
+authors:
+  - Benbentwo
+tags:
+  - feature
+date: 2025-10-13T00:00:00.000Z
+release: v1.196.0
 ---
 
 We're introducing `atmos auth` - native cloud authentication built directly into Atmos. After years of solving the same authentication problems repeatedly across different tools and teams, we've built a solution that works whether you adopt the entire Atmos framework or just need better credential management.
@@ -182,7 +185,7 @@ We're continuing to expand authentication capabilities:
 Authentication is critical infrastructure for platform teams. If you have feedback, feature requests, or want to contribute:
 
 - Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues)
-- Share your use cases in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
+- Share your use cases in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
 - Contribute provider implementations or enhancements
 
 ---

@@ -22,7 +22,7 @@ function Home() {
             <div className="intro">
               <p className="hero__eyebrow">Infrastructure as Code Framework</p>
               <h1>
-                One Tool to Orchestrate{' '}
+                <span className="hero__title-line">One Tool to Orchestrate</span>
                 <span className="typing-container" aria-hidden="true">
                   <TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile']} />
                 </span>
@@ -31,7 +31,7 @@ function Home() {
             <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>
             <div className="hero__cta">
               <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
-              <Link to="/introduction" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
+              <Link to="/introduction" className="hero__link">Learn More</Link>
             </div>
           </div>
         </header>
