@@ -559,5 +559,5 @@ vars:
 
  - Be mindful of disaster recovery (DR) implications when using it across regions.
 
- - Consider cold-start scenarios: if the dependent component has not yet been provisioned, the `!terraform.state` function will return `null`.
+ - Consider cold-start scenarios: if the referenced component's state file doesn't exist (e.g., not yet provisioned), `!terraform.state` returns `null`.
    Use the YQ `//` operator to provide default values for components that may not be provisioned yet (see [Using YQ Expressions to provide a default value](#using-yq-expressions-to-provide-a-default-value)).
