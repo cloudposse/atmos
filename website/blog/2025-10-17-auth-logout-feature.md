@@ -1,8 +1,13 @@
 ---
 slug: introducing-auth-logout
-title: "Introducing atmos auth logout: Secure Credential Cleanup"
-authors: [atmos]
-tags: [feature, authentication, security]
+title: 'Introducing atmos auth logout: Secure Credential Cleanup'
+sidebar_label: Introducing atmos auth logout
+authors:
+  - osterman
+tags:
+  - feature
+  - security
+release: v1.196.0
 ---
 
 We're excited to announce a new authentication command: **`atmos auth logout`**. This command provides secure, comprehensive cleanup of locally cached credentials, making it easy to switch between identities, end work sessions, and maintain proper security hygiene.
@@ -397,7 +402,7 @@ atmos auth logout --help
 
 We'd love to hear how you're using `atmos auth logout`:
 
-- 💬 **Discuss** - Share your thoughts in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
+- 💬 **Discuss** - Share your thoughts in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
 - 🐛 **Report Issues** - Found a bug? [Open an issue](https://github.com/cloudposse/atmos/issues)
 - 🚀 **Contribute** - Submit PRs for improvements
 

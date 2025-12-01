@@ -10,13 +10,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 // mockCommandProvider is a test implementation of CommandProvider.
 type mockCommandProvider struct {
-	name  string
-	group string
-	cmd   *cobra.Command
+	name    string
+	group   string
+	cmd     *cobra.Command
+	aliases []CommandAlias
 }
 
 func (m *mockCommandProvider) GetCommand() *cobra.Command {
@@ -29,6 +32,22 @@ func (m *mockCommandProvider) GetName() string {
 
 func (m *mockCommandProvider) GetGroup() string {
 	return m.group
+}
+
+func (m *mockCommandProvider) GetFlagsBuilder() flags.Builder {
+	return nil
+}
+
+func (m *mockCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (m *mockCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
+}
+
+func (m *mockCommandProvider) GetAliases() []CommandAlias {
+	return m.aliases
 }
 
 func TestRegister(t *testing.T) {

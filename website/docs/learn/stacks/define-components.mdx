@@ -5,6 +5,8 @@ sidebar_label: Configure Components
 id: define-components
 ---
 import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 Stacks are used to compose multiple components together and provide their configuration. The schema is the same for all stacks, but the configuration can be different. Use a combination of [imports](/stacks/imports), [inheritance](/stacks/inheritance), and [catalogs](/stacks/catalogs) for a template-free way to reuse configuration and [override](/stacks/overrides) values when needed.
@@ -258,3 +260,215 @@ components:
 ```
 
 Using the `metadata.locked` flag helps protect critical infrastructure from unintended modifications while still allowing teams to inspect and review the configuration.
+
+### Versioning Components with `metadata.component`
+
+The `metadata.component` parameter specifies which component implementation to use when provisioning infrastructure. This is how you manage component versions in Atmos—by pointing to different component folders organized by version.
+
+By default, if `metadata.component` is not specified, Atmos uses the component's name as the path. However, you can explicitly reference different versions or implementations by setting this parameter to point to versioned component folders.
+
+#### Continuous Version Deployment
+
+All environments point to the same component folder and converge to the same version. Versions are rolled out to each environment with release controls like approval gates in your deployment pipeline, decoupling release from deployment. This is the recommended default approach.
+
+<Tabs>
+<TabItem value="dev" label="Development">
+
+**Release Control**: Automatically deployed when changes merge to main. No approval required.
+
+```yaml
+# stacks/dev/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      # Points to components/terraform/vpc/
+      vars:
+        name: dev-vpc
+```
+</TabItem>
+
+<TabItem value="staging" label="Staging">
+
+**Release Control**: Deployment approved after successful validation in development environment.
+
+```yaml
+# stacks/staging/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      # Points to components/terraform/vpc/ (same component as dev)
+      vars:
+        name: staging-vpc
+```
+</TabItem>
+
+<TabItem value="prod" label="Production">
+
+**Release Control**: Deployment approved after successful validation in staging environment. Manual approval gate enforced by deployment pipeline.
+
+```yaml
+# stacks/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      # Points to components/terraform/vpc/ (same component as dev and staging)
+      vars:
+        name: prod-vpc
+```
+</TabItem>
+</Tabs>
+
+#### Release Tracks/Channels
+
+Environments subscribe to named release channels. Versions are rolled out to each environment by promoting them through channels (alpha → beta → prod) as they're validated.
+
+<Tabs>
+<TabItem value="dev" label="Development">
+```yaml
+# stacks/dev/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: alpha/vpc  # Subscribe to alpha track
+      vars:
+        name: dev-vpc
+```
+</TabItem>
+
+<TabItem value="staging" label="Staging">
+```yaml
+# stacks/staging/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: beta/vpc  # Subscribe to beta track
+      vars:
+        name: staging-vpc
+```
+</TabItem>
+
+<TabItem value="prod" label="Production">
+```yaml
+# stacks/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: prod/vpc  # Subscribe to production track
+      vars:
+        name: prod-vpc
+```
+</TabItem>
+</Tabs>
+
+#### Environment-Specific Versions
+
+Each environment has its own component folder. Versions are rolled out to each environment independently, allowing complete divergence when needed.
+
+<Tabs>
+<TabItem value="dev" label="Development">
+```yaml
+# stacks/dev/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: dev/vpc  # Development-specific folder
+      vars:
+        name: dev-vpc
+```
+</TabItem>
+
+<TabItem value="staging" label="Staging">
+```yaml
+# stacks/staging/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: staging/vpc  # Staging-specific folder
+      vars:
+        name: staging-vpc
+```
+</TabItem>
+
+<TabItem value="prod" label="Production">
+```yaml
+# stacks/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: prod/vpc  # Production-specific folder
+      vars:
+        name: prod-vpc
+```
+</TabItem>
+</Tabs>
+
+#### Strict Version Pinning
+
+Each environment pins to an explicit version folder (typically using major.minor versioning). Versions are rolled out to each environment by manually updating version pins with release controls in place.
+
+<Tabs>
+<TabItem value="dev" label="Development">
+
+**Release Control**: Manually update version pin in stack configuration, then deploy (with automation).
+
+```yaml
+# stacks/dev/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc/1.3  # Latest version in dev
+      vars:
+        name: dev-vpc
+```
+</TabItem>
+
+<TabItem value="staging" label="Staging">
+
+**Release Control**: Manually update version pin in stack configuration, then deploy (with automation).
+
+```yaml
+# stacks/staging/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc/1.2  # Validated version in staging
+      vars:
+        name: staging-vpc
+```
+</TabItem>
+
+<TabItem value="prod" label="Production">
+
+**Release Control**: Manually update version pin in stack configuration, then deploy (with automation).
+
+```yaml
+# stacks/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc/1.2  # Stable version in production
+      vars:
+        name: prod-vpc
+```
+</TabItem>
+</Tabs>
+
+:::tip Version Management Patterns
+The `metadata.component` parameter is the foundation of [Version Management Patterns](/design-patterns/version-management) in Atmos. By organizing components into folders and using `metadata.component` to reference them, you can implement various versioning strategies:
+
+- **[Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment)** - All environments converge to same component (recommended)
+- **[Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)** - Named channels for progressive rollout
+- **[Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)** - Environment-specific folders
+- **[Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)** - SemVer-based explicit versions
+
+See [Version Management Patterns](/design-patterns/version-management) to learn how to choose and implement the right versioning strategy for your organization.
+:::

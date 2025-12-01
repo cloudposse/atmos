@@ -1,0 +1,5 @@
+# Developer profile authentication settings
+auth:
+  aws:
+    profile: dev-sso
+    region: us-east-1

@@ -152,7 +152,7 @@ var listCmd = &cobra.Command{
 		// Validate format.
 		normalizedFormat := strings.ToLower(listFormat)
 		if normalizedFormat != "table" && normalizedFormat != "json" && normalizedFormat != "yaml" {
-			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrUnsupportedOutputFormat, listFormat)
+			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrInvalidFormat, listFormat)
 		}
 
 		// Parse since date if provided.
@@ -188,7 +188,7 @@ var listCmd = &cobra.Command{
 		case "yaml":
 			return formatReleaseListYAML(releases)
 		default:
-			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrUnsupportedOutputFormat, listFormat)
+			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrInvalidFormat, listFormat)
 		}
 	},
 }

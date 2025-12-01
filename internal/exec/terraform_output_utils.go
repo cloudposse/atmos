@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/samber/lo"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	auth_types "github.com/cloudposse/atmos/pkg/auth/types"
@@ -91,6 +92,12 @@ func (a *authContextWrapper) Authenticate(ctx context.Context, identityName stri
 	panic("authContextWrapper.Authenticate should not be called")
 }
 
+func (a *authContextWrapper) AuthenticateProvider(ctx context.Context, providerName string) (*auth_types.WhoamiInfo, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.AuthenticateProvider")()
+
+	return nil, fmt.Errorf("%w: authContextWrapper.AuthenticateProvider for template context", errUtils.ErrNotImplemented)
+}
+
 func (a *authContextWrapper) Whoami(ctx context.Context, identityName string) (*auth_types.WhoamiInfo, error) {
 	defer perf.Track(nil, "exec.authContextWrapper.Whoami")()
 
@@ -115,7 +122,7 @@ func (a *authContextWrapper) ListProviders() []string {
 	panic("authContextWrapper.ListProviders should not be called")
 }
 
-func (a *authContextWrapper) Logout(ctx context.Context, identityName string) error {
+func (a *authContextWrapper) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
 	defer perf.Track(nil, "exec.authContextWrapper.Logout")()
 
 	panic("authContextWrapper.Logout should not be called")
@@ -163,13 +170,13 @@ func (a *authContextWrapper) GetProviders() map[string]schema.Provider {
 	panic("authContextWrapper.GetProviders should not be called")
 }
 
-func (a *authContextWrapper) LogoutProvider(ctx context.Context, providerName string) error {
+func (a *authContextWrapper) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
 	defer perf.Track(nil, "exec.authContextWrapper.LogoutProvider")()
 
 	panic("authContextWrapper.LogoutProvider should not be called")
 }
 
-func (a *authContextWrapper) LogoutAll(ctx context.Context) error {
+func (a *authContextWrapper) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	defer perf.Track(nil, "exec.authContextWrapper.LogoutAll")()
 
 	panic("authContextWrapper.LogoutAll should not be called")
@@ -270,7 +277,7 @@ func execTerraformOutput(
 				return nil, fmt.Errorf("the component '%s' in the stack '%s' has an invalid 'backend' section", component, stack)
 			}
 
-			componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, terraformWorkspace)
+			componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, terraformWorkspace, authContext)
 			if err != nil {
 				return nil, err
 			}
@@ -291,7 +298,7 @@ func execTerraformOutput(
 
 			log.Debug("Writing provider overrides", "file", providerOverrideFileName)
 
-			providerOverrides := generateComponentProviderOverrides(providersSection)
+			providerOverrides := generateComponentProviderOverrides(providersSection, authContext)
 			err = u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o644)
 			if err != nil {
 				return nil, err
@@ -464,18 +471,32 @@ func execTerraformOutput(
 
 		outputProcessed = lo.MapEntries(outputMeta, func(k string, v tfexec.OutputMeta) (string, any) {
 			s := string(v.Value)
+
+			// Log summary to avoid multiline value formatting issues with concurrent writes.
+			valueSummary := s
+			if strings.Contains(s, "\n") {
+				lineCount := strings.Count(s, "\n") + 1
+				valueSummary = fmt.Sprintf("<multiline: %d lines, %d bytes>", lineCount, len(s))
+			} else if len(s) > 100 {
+				valueSummary = s[:100] + "..."
+			}
 			log.Debug("Converting variable from JSON to Go data type",
 				"variable", k,
-				"value", s,
+				"value_summary", valueSummary,
 			)
 
 			d, err2 := u.ConvertFromJSON(s)
 
 			if err2 != nil {
-				log.Error("failed to convert output", "output", s, "error", err2)
+				log.Error("failed to convert output", "output", valueSummary, "error", err2)
 				return k, nil
 			} else {
-				log.Debug("Converted the variable from JSON to Go data type", "key", k, "value", s, "result", d)
+				// Log result summary for multiline values.
+				resultSummary := fmt.Sprintf("%v", d)
+				if strings.Contains(resultSummary, "\n") || len(resultSummary) > 100 {
+					resultSummary = fmt.Sprintf("<%T>", d)
+				}
+				log.Debug("Converted the variable from JSON to Go data type", "key", k, "result_summary", resultSummary)
 			}
 
 			return k, d
@@ -506,6 +527,7 @@ func execTerraformOutput(
 //   - output: Output variable key to retrieve
 //   - skipCache: Flag to bypass cache lookup
 //   - authContext: Authentication context for credential access (may be nil)
+//   - authManager: Optional auth manager for nested operations that need authentication
 //
 // Returns:
 //   - value: The output value (may be nil if the output exists but has a null value)
@@ -518,6 +540,7 @@ func GetTerraformOutput(
 	output string,
 	skipCache bool,
 	authContext *schema.AuthContext,
+	authManager any,
 ) (any, bool, error) {
 	defer perf.Track(atmosConfig, "exec.GetTerraformOutput")()
 
@@ -539,8 +562,12 @@ func GetTerraformOutput(
 
 	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
 
+	// Use simple log message in debug/trace mode to avoid concurrent stderr writes with logger.
+	// Spinners write to stderr in a separate goroutine, causing misaligned log output.
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
-		// Initialize spinner
+		log.Debug(message, "output", output, "component", component, "stack", stack)
+	} else {
+		// Initialize spinner for normal (non-debug) mode
 		p := NewSpinner(message)
 		spinnerDone := make(chan struct{})
 		// Run spinner in a goroutine
@@ -549,11 +576,35 @@ func GetTerraformOutput(
 		defer StopSpinner(p, spinnerDone)
 	}
 
-	// Create an AuthManager wrapper from authContext to pass credentials to ExecuteDescribeComponent.
+	// Use the provided authManager directly if available.
+	// Otherwise, create an AuthManager wrapper from authContext to pass credentials to ExecuteDescribeComponent.
 	// This enables YAML functions within the component config to access remote resources.
-	var authMgr auth.AuthManager
-	if authContext != nil {
-		authMgr = newAuthContextWrapper(authContext)
+	var parentAuthMgr auth.AuthManager
+	if authManager != nil {
+		// Use the provided authManager (cast from 'any' to auth.AuthManager)
+		var ok bool
+		parentAuthMgr, ok = authManager.(auth.AuthManager)
+		if !ok {
+			return nil, false, fmt.Errorf("%w: expected auth.AuthManager", errUtils.ErrInvalidAuthManagerType)
+		}
+	} else if authContext != nil {
+		// Fallback: create wrapper from authContext
+		parentAuthMgr = newAuthContextWrapper(authContext)
+	}
+
+	// Resolve AuthManager for this nested component.
+	// Checks if component has auth config defined:
+	//   - If yes: creates component-specific AuthManager with merged auth config
+	//   - If no: uses parent AuthManager (inherits authentication)
+	// This enables each nested level to optionally override auth settings.
+	resolvedAuthMgr, err := resolveAuthManagerForNestedComponent(atmosConfig, component, stack, parentAuthMgr)
+	if err != nil {
+		log.Debug("Auth does not exist for nested component, using parent AuthManager",
+			"component", component,
+			"stack", stack,
+			"error", err,
+		)
+		resolvedAuthMgr = parentAuthMgr
 	}
 
 	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
@@ -562,7 +613,7 @@ func GetTerraformOutput(
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
 		Skip:                 nil,
-		AuthManager:          authMgr,
+		AuthManager:          resolvedAuthMgr, // Use resolved AuthManager (may be component-specific or inherited)
 	})
 	if err != nil {
 		u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.XMark, message)

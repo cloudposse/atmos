@@ -20,7 +20,7 @@ At the root of your project, you’ll typically find an `atmos.yaml` configurati
 
 ## Recommended Filesystem Layout
 
-Atmos is fully configurable, and you can organize your project in any way that makes sense for your team by adjusting the paths in [`atmos.yaml`](/projects/configuration). We also provide detailed guidance on organizing your folder structure, whether it’s for a simple project or enterprise-scale architecture in our [Design Patterns](/design-patterns) section. Choose the model that best fits the stage you plan to reach when you complete the project.
+Atmos is fully configurable, and you can organize your project in any way that makes sense for your team by adjusting the paths in [`atmos.yaml`](/projects/configuration). We also provide detailed guidance on organizing your folder structure, whether it's for a simple project or enterprise-scale architecture in our [Design Patterns](/design-patterns) section. For complex organizational structures, see the [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration) pattern. Choose the model that best fits the stage you plan to reach when you complete the project.
 
 Here's a simple layout, if you just have 3 deployments for things like dev, staging, and prod:
 ```plaintext
@@ -84,6 +84,82 @@ To effectively organize an Atmos project, we want to ensure you have specific lo
 ## Components Folder
 
 This folder will contain all your components. Organize the components by toolchain. For example, if you have components for Terraform, place them in a Terraform subfolder (e.g. `components/terraform/vpc`).
+
+### Organizing Components for Version Management
+
+Beyond the basic toolchain organization, you can further structure your components folder to support different [version management patterns](/design-patterns/version-management). The way you organize component folders determines how you manage versions across environments.
+
+**Simple Folder Structure (Continuous Version Deployment)**
+
+All environments reference the same component folder and converge to the same version:
+
+```plaintext
+components/
+└── terraform/
+    ├── vpc/              # Single version for all environments
+    ├── eks/              # Single version for all environments
+    └── rds/              # Single version for all environments
+```
+
+**Release Track/Channel Structure**
+
+Components organized by maturity level or environment stage:
+
+```plaintext
+components/
+└── terraform/
+    ├── alpha/           # Alpha track (development)
+    │   ├── vpc/
+    │   └── eks/
+    ├── beta/            # Beta track (staging)
+    │   ├── vpc/
+    │   └── eks/
+    └── prod/            # Production track
+        ├── vpc/
+        └── eks/
+```
+
+**Versioned Folder Structure**
+
+Components organized by explicit version numbers:
+
+```plaintext
+components/
+└── terraform/
+    └── vpc/
+        ├── 1.2/         # Major.minor version
+        ├── 1.3/         # Major.minor version
+        └── 2.0/         # Breaking change version
+```
+
+**Environment-Specific Structure**
+
+Each environment has its own component implementation:
+
+```plaintext
+components/
+└── terraform/
+    ├── dev/
+    │   ├── vpc/
+    │   └── eks/
+    ├── staging/
+    │   ├── vpc/
+    │   └── eks/
+    └── prod/
+        ├── vpc/
+        └── eks/
+```
+
+:::tip Choose Your Version Management Strategy
+The component folder structure you choose determines how you manage versions across environments. See [Version Management Patterns](/design-patterns/version-management) for detailed guidance on choosing the right approach for your organization:
+
+- **[Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment)** - Recommended default with automatic convergence
+- **[Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)** - Progressive rollout through named channels
+- **[Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)** - Explicit version boundaries
+- **[Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)** - Maximum control with explicit versions
+
+Each pattern has different trade-offs between operational overhead, convergence speed, and rollback capabilities.
+:::
 
 ## Stack Configurations Folder
 

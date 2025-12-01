@@ -56,7 +56,6 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 
 	// Skip if no auth config (check the merged config, not the original).
 	if len(authConfig.Providers) == 0 && len(authConfig.Identities) == 0 {
-		log.Debug("No auth configuration found, skipping authentication")
 		return nil
 	}
 
@@ -110,7 +109,7 @@ func isAuthenticationDisabled(identityName string) bool {
 }
 
 func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager, identityName string, atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
-	log.Info("Authenticating with identity", "identity", identityName)
+	log.Debug("Authenticating with identity", "identity", identityName)
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
 		return fmt.Errorf("failed to authenticate with identity %q: %w", identityName, err)

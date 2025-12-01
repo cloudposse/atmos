@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -29,11 +30,13 @@ const (
 
 // ProcessComponentConfig processes component config sections.
 func ProcessComponentConfig(
+	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
 	stacksMap map[string]any,
 	componentType string,
 	component string,
+	authManager auth.AuthManager,
 ) error {
 	defer perf.Track(nil, "exec.ProcessComponentConfig")()
 
@@ -119,6 +122,12 @@ func ProcessComponentConfig(
 		componentAuthSection = map[string]any{}
 	}
 
+	// Merge global auth config from atmosConfig if component doesn't have auth section.
+	// This ensures profiles with auth config work even when auth.yaml is not explicitly imported.
+	if len(componentAuthSection) == 0 && atmosConfig != nil {
+		componentAuthSection = mergeGlobalAuthConfig(atmosConfig, componentSection)
+	}
+
 	if componentSettingsSection, ok = componentSection[cfg.SettingsSectionName].(map[string]any); !ok {
 		componentSettingsSection = map[string]any{}
 	}
@@ -165,6 +174,14 @@ func ProcessComponentConfig(
 
 	if command != "" {
 		configAndStacksInfo.Command = command
+	}
+
+	// Populate AuthContext from AuthManager if provided (from --identity flag).
+	if authManager != nil {
+		managerStackInfo := authManager.GetStackInfo()
+		if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+			configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+		}
 	}
 
 	return nil
@@ -302,6 +319,7 @@ func ProcessStacks(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	authManager auth.AuthManager,
 ) (schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStacks")()
 
@@ -341,11 +359,13 @@ func ProcessStacks(
 	// Check and process stacks.
 	if atmosConfig.StackType == "Directory" {
 		err = ProcessComponentConfig(
+			atmosConfig,
 			&configAndStacksInfo,
 			configAndStacksInfo.Stack,
 			stacksMap,
 			configAndStacksInfo.ComponentType,
 			configAndStacksInfo.ComponentFromArg,
+			authManager,
 		)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -374,11 +394,13 @@ func ProcessStacks(
 		for stackName := range stacksMap {
 			// Check if we've found the component in the stack.
 			err = ProcessComponentConfig(
+				atmosConfig,
 				&configAndStacksInfo,
 				stackName,
 				stacksMap,
 				configAndStacksInfo.ComponentType,
 				configAndStacksInfo.ComponentFromArg,
+				authManager,
 			)
 			if err != nil {
 				continue
@@ -729,7 +751,7 @@ func ProcessStacks(
 }
 
 // generateComponentBackendConfig generates backend config for components.
-func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string) (map[string]any, error) {
+func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string, _ *schema.AuthContext) (map[string]any, error) {
 	// Generate backend config file for Terraform Cloud.
 	// https://developer.hashicorp.com/terraform/cli/cloud/settings
 	if backendType == "cloud" {
@@ -772,7 +794,7 @@ func generateComponentBackendConfig(backendType string, backendConfig map[string
 }
 
 // generateComponentProviderOverrides generates provider overrides for components.
-func generateComponentProviderOverrides(providerOverrides map[string]any) map[string]any {
+func generateComponentProviderOverrides(providerOverrides map[string]any, _ *schema.AuthContext) map[string]any {
 	return map[string]any{
 		"provider": providerOverrides,
 	}

@@ -9,12 +9,31 @@ Atmos: Go CLI for cloud infrastructure orchestration via Terraform/Helmfile/Pack
 ## Essential Commands
 
 ```bash
-# Build & Test
 make build                   # Build to ./build/atmos
 make testacc                 # Run tests
 make testacc-cover           # Tests with coverage
 make lint                    # golangci-lint on changed files
 ```
+
+## Working with Atmos Agents (RECOMMENDED)
+
+Atmos has **specialized domain experts** in `.claude/agents/` for focused subsystems. **Use agents instead of inline work** for their areas of expertise.
+
+**Available Agents:**
+- **`@agent-developer`** - Creating/maintaining agents, agent architecture
+- **`@tui-expert`** - Terminal UI, theme system, output formatting
+- **`@atmos-errors`** - Error handling patterns, error builder usage
+- **`@flag-handler`** - CLI commands, flag parsing, CommandProvider pattern
+
+**When to delegate:**
+- TUI/theme changes → `@tui-expert`
+- New CLI commands → `@flag-handler`
+- Error handling refactoring → `@atmos-errors`
+- Creating new agents → `@agent-developer`
+
+**Benefits:** Agents are domain experts with deep knowledge of patterns, PRDs, and subsystem architecture. They ensure consistency and best practices.
+
+See `.claude/agents/README.md` for full list and `docs/prd/claude-agent-architecture.md` for architecture.
 
 ## Architecture
 
@@ -44,84 +63,35 @@ Use registry pattern for extensibility and plugin-like architecture. Existing im
 
 **Example:**
 ```go
-// Define interface
 type ComponentLoader interface {
     Load(path string) (*Component, error)
 }
-
-// Implement
-type FileSystemLoader struct{}
-func (f *FileSystemLoader) Load(path string) (*Component, error) { ... }
-
-// Generate mock
 //go:generate go run go.uber.org/mock/mockgen@latest -source=loader.go -destination=mock_loader_test.go
 ```
 
 ### Options Pattern (MANDATORY)
-Avoid functions with many parameters. Use functional options pattern for configuration:
+Avoid functions with many parameters. Use functional options pattern:
 
 ```go
-// Define option type
 type Option func(*Config)
-
-// Provide option builders
-func WithTimeout(d time.Duration) Option {
-    return func(c *Config) { c.Timeout = d }
-}
-
-func WithRetries(n int) Option {
-    return func(c *Config) { c.Retries = n }
-}
-
-// Constructor accepts variadic options
+func WithTimeout(d time.Duration) Option { return func(c *Config) { c.Timeout = d } }
 func NewClient(opts ...Option) *Client {
     cfg := &Config{/* defaults */}
-    for _, opt := range opts {
-        opt(cfg)
-    }
+    for _, opt := range opts { opt(cfg) }
     return &Client{config: cfg}
 }
-
-// Usage
-client := NewClient(
-    WithTimeout(30*time.Second),
-    WithRetries(3),
-)
+// Usage: client := NewClient(WithTimeout(30*time.Second), WithRetries(3))
 ```
 
 **Benefits:** Avoids parameter drilling, provides defaults, extensible without breaking changes.
 
 ### Context Usage (MANDATORY)
-Use `context.Context` for these specific purposes only:
+Use `context.Context` for:
 - **Cancellation signals** - Propagate cancellation across API boundaries
 - **Deadlines/timeouts** - Set operation time limits
 - **Request-scoped values** - Trace IDs, request IDs (sparingly)
 
-**DO NOT use context for:**
-- Passing configuration (use Options pattern)
-- Passing dependencies (use struct fields or DI)
-- Avoiding proper function parameters
-
-**Correct usage:**
-```go
-// IO operations, network calls, long-running tasks
-func FetchData(ctx context.Context, url string) error {
-    req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
-    // ... respects cancellation
-}
-
-// Functions that coordinate multiple operations
-func ProcessAll(ctx context.Context, items []Item) error {
-    for _, item := range items {
-        if err := ctx.Err(); err != nil {
-            return err // Stop if cancelled
-        }
-        if err := processItem(ctx, item); err != nil {
-            return err
-        }
-    }
-}
-```
+**DO NOT use context for:** Configuration (use Options pattern), dependencies (use struct fields/DI), or avoiding proper function parameters.
 
 **Context should be first parameter** in functions that accept it.
 
@@ -132,184 +102,57 @@ Atmos separates I/O (streams) from UI (formatting) for clarity and testability.
 - **I/O Layer** (`pkg/io/`) - Stream access (stdout/stderr/stdin), terminal capabilities, masking
 - **UI Layer** (`pkg/ui/`) - Formatting (colors, styles, markdown rendering)
 
-**Terminal as Text UI:**
-The terminal window is effectively a text-based user interface (TextUI) for our CLI. Anything intended for user interaction—menus, prompts, animations, progress indicators—should be rendered to the terminal as UI output (stderr). Data intended for processing, piping, or machine consumption goes to the data channel (stdout).
+The terminal is a text-based UI (TextUI). User interaction (menus, prompts, animations, progress) → stderr. Data for processing/piping → stdout.
 
-**Access pattern:**
+**Output functions:**
 ```go
-import (
-    iolib "github.com/cloudposse/atmos/pkg/io"
-    "github.com/cloudposse/atmos/pkg/ui"
-)
+// Data channel (stdout) - pipeable output
+data.Write("result") / data.Writef() / data.Writeln()
+data.WriteJSON(structData) / data.WriteYAML(structData)
 
-// I/O context initialized in cmd/root.go PersistentPreRun
-// Available globally after flag parsing via data.Writer() and ui package functions
+// UI channel (stderr) - human messages
+ui.Write() / ui.Writef() / ui.Writeln()              // Plain text, no icon/color
+ui.Success() / ui.Error() / ui.Warning() / ui.Info() // With icons and colors
+ui.Markdown() / ui.MarkdownMessage()                 // Rendered markdown
 ```
 
-**Output functions (use these):**
-```go
-// Data channel (stdout) - for pipeable output
-data.Write("result")                // Plain text to stdout
-data.Writef("value: %s", val)       // Formatted text to stdout
-data.Writeln("result")              // Plain text with newline to stdout
-data.WriteJSON(structData)          // JSON to stdout
-data.WriteYAML(structData)          // YAML to stdout
+**Decision tree:** Pipeable data → `data.*`, Plain UI → `ui.Write*()`, Status messages → `ui.Success/Error/etc()`, Formatted docs → `ui.Markdown*()`
 
-// UI channel (stderr) - for human messages
-ui.Write("Loading configuration...")            // Plain text (no icon, no color, stderr)
-ui.Writef("Processing %d items...", count)      // Formatted text (no icon, no color, stderr)
-ui.Writeln("Done")                              // Plain text with newline (no icon, no color, stderr)
-ui.Success("Deployment complete!")              // ✓ Deployment complete! (green, stderr)
-ui.Error("Configuration failed")                // ✗ Configuration failed (red, stderr)
-ui.Warning("Deprecated feature")                // ⚠ Deprecated feature (yellow, stderr)
-ui.Info("Processing components...")             // ℹ Processing components... (cyan, stderr)
-
-// Markdown rendering
-ui.Markdown("# Help\n\nUsage...")               // Rendered to stdout (data)
-ui.MarkdownMessage("**Error:** Invalid config") // Rendered to stderr (UI)
-```
-
-**Decision tree:**
-```
-What am I outputting?
-
-├─ Pipeable data (JSON, YAML, results)
-│  └─ Use data.Write(), data.Writef(), data.Writeln()
-│     data.WriteJSON(), data.WriteYAML()
-│
-├─ Plain UI messages (no icon, no color)
-│  └─ Use ui.Write(), ui.Writef(), ui.Writeln()
-│
-├─ Status messages (with icons and colors)
-│  └─ Use ui.Success(), ui.Error(), ui.Warning(), ui.Info()
-│
-└─ Formatted documentation
-   ├─ Help text, usage → ui.Markdown() (stdout)
-   └─ Error details → ui.MarkdownMessage() (stderr)
-```
-
-**Anti-patterns (DO NOT use):**
-```go
-// WRONG: Direct stream access
-fmt.Fprintf(os.Stdout, ...)  // Use data.Printf() instead
-fmt.Fprintf(os.Stderr, ...)  // Use ui.Success/Error/etc instead
-fmt.Println(...)             // Use data.Println() instead
-
-// WRONG: Will be blocked by linter
-io := iolib.NewContext()
-fmt.Fprintf(io.Data(), ...)  // Use data.Printf() instead
-```
+**Anti-patterns:** Never use `fmt.Fprintf(os.Stdout/Stderr, ...)`, `fmt.Println()`, or direct stream access. Use `data.*` or `ui.*` instead.
 
 **Why this matters:**
+- **Auto-degradation**: Color (TrueColor→256→16→None), width adaptation, TTY/CI detection, markdown rendering, icon support
+- **Security**: Automatic secret masking (AWS keys, tokens), format-aware, pattern-based
+- **DX**: No capability checking, no manual masking, no stream selection, testable, enforced by linter
+- **UX**: Respects preferences (--no-color, NO_COLOR), pipeline friendly, accessible, consistent
 
-**Zero-Configuration Degradation:**
-Write code assuming a full-featured TTY - the system automatically handles everything:
-- ✅ **Color degradation** - TrueColor → 256 → 16 → None (respects NO_COLOR, CLICOLOR, terminal capability)
-- ✅ **Width adaptation** - Automatically wraps to terminal width or config max_width
-- ✅ **TTY detection** - Piped/redirected output becomes plain text automatically
-- ✅ **CI detection** - Detects CI environments and disables interactivity
-- ✅ **Markdown rendering** - Degrades gracefully from styled to plain text
-- ✅ **Icon support** - Shows icons in capable terminals, omits in others
+**Force Flags (screenshot generation):**
+- `--force-tty` / `ATMOS_FORCE_TTY=true` - Force TTY mode (width=120, height=40)
+- `--force-color` / `ATMOS_FORCE_COLOR=true` - Force TrueColor even for non-TTY
 
-**Security & Reliability:**
-- ✅ **Automatic secret masking** - AWS keys, tokens, passwords masked before output
-- ✅ **Format-aware masking** - Handles JSON/YAML quoted variants
-- ✅ **No leakage** - Secrets never reach stdout/stderr/logs
-- ✅ **Pattern-based** - Detects common secret patterns automatically
-
-**Developer Experience:**
-- ✅ **No capability checking** - Never write `if tty { color() } else { plain() }`
-- ✅ **No manual masking** - Never write `redact(secret)` before output
-- ✅ **No stream selection** - Just use `data.*` (stdout) or `ui.*` (stderr)
-- ✅ **Testable** - Mock data.Writer() and ui functions for unit tests
-- ✅ **Enforced by linter** - Prevents direct fmt.Fprintf usage
-
-**User Experience:**
-- ✅ **Respects preferences** - Honors --no-color, --redirect-stderr, NO_COLOR env
-- ✅ **Pipeline friendly** - `atmos deploy | tee log.txt` works perfectly
-- ✅ **Accessibility** - Works in all terminal environments (screen readers, etc.)
-- ✅ **Consistent** - Same code path for all output, fewer bugs
-
-**Force Flags (for screenshot generation):**
-Use these flags to generate consistent output regardless of environment:
-- `--force-tty` / `ATMOS_FORCE_TTY=true` - Force TTY mode with sane defaults (width=120, height=40) when terminal detection fails
-- `--force-color` / `ATMOS_FORCE_COLOR=true` - Force TrueColor output even when not a TTY
-
-**Flag behavior:**
-- `--color` - Enables color **only if TTY** (respects terminal capabilities)
-- `--force-color` - Forces TrueColor **even for non-TTY** (for screenshots)
-- `--no-color` - Disables all color
-- `terminal.color` in atmos.yaml - Same as `--color` (respects TTY)
-
-**Example:**
-```bash
-# Generate screenshot with consistent output (using flags)
-atmos terraform plan --force-tty --force-color | screenshot.sh
-
-# Generate screenshot with consistent output (using env vars)
-ATMOS_FORCE_TTY=true ATMOS_FORCE_COLOR=true atmos terraform plan | screenshot.sh
-
-# Normal usage - automatically detects terminal
-atmos terraform plan
-
-# Piped output - automatically disables color
-atmos terraform output | jq .vpc_id
-```
-
-See `pkg/io/example_test.go` for comprehensive examples.
+See `pkg/io/example_test.go` for examples.
 
 ### Secret Masking with Gitleaks
 
-Atmos uses Gitleaks pattern library (120+ patterns) for comprehensive secret detection:
+Atmos uses Gitleaks pattern library (120+ patterns):
 
-```yaml
-# atmos.yaml
-settings:
-  terminal:
-    mask:
-      patterns:
-        library: "gitleaks"  # Use Gitleaks patterns (default)
-        categories:
-          aws: true          # Enable AWS secret detection
-          github: true       # Enable GitHub token detection
-```
-
-Disable specific categories to reduce false positives:
 ```yaml
 settings:
   terminal:
     mask:
       patterns:
+        library: "gitleaks"  # default
         categories:
-          generic: false  # Disable generic patterns
+          aws: true / github: true / generic: false
 ```
 
-Disable masking for debugging:
-```bash
-atmos terraform plan --mask=false
-```
+Disable: `atmos terraform plan --mask=false`
 
 ### Package Organization (MANDATORY)
-- **Avoid utils package bloat** - Don't add new functions to `pkg/utils/`
-- **Create purpose-built packages** - New functionality gets its own package in `pkg/`
-- **Well-tested, focused packages** - Each package has clear responsibility
-- **Examples**: `pkg/store/`, `pkg/git/`, `pkg/pro/`, `pkg/filesystem/`
-
-**Anti-pattern:**
-```go
-// WRONG: Adding to utils
-pkg/utils/new_feature.go
-```
-
-**Correct pattern:**
-```go
-// CORRECT: New focused package
-pkg/newfeature/
-  ├── newfeature.go
-  ├── newfeature_test.go
-  ├── interface.go
-  └── mock_interface_test.go
-```
+- **Avoid utils package bloat** - Don't add to `pkg/utils/`
+- **Create purpose-built packages** - New functionality → `pkg/newfeature/`
+- **Well-tested, focused packages** - Clear responsibility
+- Examples: `pkg/store/`, `pkg/git/`, `pkg/pro/`, `pkg/filesystem/`
 
 ## Code Patterns & Conventions
 
@@ -317,38 +160,13 @@ pkg/newfeature/
 All comments must end with periods (enforced by `godot` linter).
 
 ### Comment Preservation (MANDATORY)
-**NEVER delete existing comments without a very strong reason.**
+**NEVER delete existing comments without a very strong reason.** Comments document why/how/what/where.
 
-Comments are documentation that helps developers understand:
-- **Why** code was written a certain way
-- **How** complex algorithms or flows work
-- **What** edge cases or gotchas to be aware of
-- **Where** credentials or configuration come from
+**Guidelines:** Preserve helpful comments, update to match code, refactor for clarity, add context when modifying.
 
-**Guidelines:**
-- **Preserve helpful comments** - Especially those explaining credential resolution, complex logic, or non-obvious behavior
-- **Update comments to match code** - When refactoring, update comments to reflect current implementation
-- **Refactor for clarity** - It's okay to improve comment wording or structure for better readability
-- **Add context when modifying** - If changing code with comments, ensure comments still accurately describe the behavior
+**Acceptable removals:** Factually incorrect, code removed, duplicates obvious code, outdated TODO completed.
 
-**Acceptable reasons to remove comments:**
-- Comment is factually incorrect and cannot be updated
-- Code is completely removed
-- Comment duplicates what the code obviously does (e.g., `// increment counter` above `counter++`)
-- Comment is outdated TODO that has been completed
-
-**Anti-pattern:**
-```go
-// WRONG: Deleting helpful documentation during refactoring
--// LoadAWSConfig looks for credentials in the following order:
--//   1. Environment variables (AWS_ACCESS_KEY_ID, etc.)
--//   2. Shared credentials file (~/.aws/credentials)
--//   3. EC2 Instance Metadata Service (IMDS)
--//   ... (more helpful details)
- func LoadAWSConfig(ctx context.Context) (aws.Config, error) {
-```
-
-**Correct pattern:**
+**Example:**
 ```go
 // CORRECT: Preserving and updating helpful documentation
 -// LoadAWSConfig looks for credentials in the following order:
@@ -358,7 +176,6 @@ Comments are documentation that helps developers understand:
  //   1. Environment variables (AWS_ACCESS_KEY_ID, etc.)
  //   2. Shared credentials file (~/.aws/credentials)
  //   3. EC2 Instance Metadata Service (IMDS)
- //   ... (more helpful details)
 ```
 
 ### Import Organization (MANDATORY)
@@ -375,18 +192,112 @@ Add `defer perf.Track(atmosConfig, "pkg.FuncName")()` + blank line to all public
 ### Configuration Loading
 Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 
-### Error Handling (MANDATORY)
-- Wrap with static errors from `errors/errors.go`
-- Chain errors: `fmt.Errorf("%w: msg", errUtils.ErrFoo)` - creates error chain
-- Join errors: `errors.Join(errUtils.ErrFoo, err)` - combines independent errors
-- Multiple wrapping: `fmt.Errorf("%w: context: %w", errUtils.ErrBase, err)` (valid Go 1.20+)
-- Check: `errors.Is(err, target)`
-- Never dynamic errors or string comparison
+### Flag Handling (MANDATORY)
 
-**Important distinction:**
-- **`fmt.Errorf` with single `%w`**: Creates error **chain** - `errors.Unwrap()` returns next error. Use when error context builds sequentially through call stack. **Prefer this when error chain matters.**
-- **`errors.Join`**: Creates **flat list** - `errors.Unwrap()` returns `nil`, must use `Unwrap() []error` interface. Use for independent errors (parallel operations, multiple validations).
-- **`fmt.Errorf` with multiple `%w`**: Like `errors.Join` but adds format string. Valid Go 1.20+, returns `Unwrap() []error`.
+**CRITICAL: Unified flag parsing infrastructure is FULLY IMPLEMENTED in `pkg/flags/`.**
+
+**Current Architecture:**
+- ✅ `pkg/flags/` package is fully implemented with robust flag parsing infrastructure
+- ✅ Commands MUST use `flags.NewStandardParser()` for command-specific flags
+- ✅ **NEVER call `viper.BindEnv()` or `viper.BindPFlag()` directly** - Forbidigo enforces this
+- ✅ Flag-handler agent provides guidance on correct usage patterns.
+
+**Correct Pattern:**
+```go
+// In cmd/mycommand/mycommand.go
+var (
+    myParser *flags.StandardParser
+)
+
+func init() {
+    // Create parser with command-specific flags
+    myParser = flags.NewStandardParser(
+        flags.WithBoolFlag("check", "c", false, "Enable checking"),
+        flags.WithStringFlag("format", "f", "", "Output format"),
+        flags.WithEnvVars("check", "ATMOS_MY_CHECK"),
+        flags.WithEnvVars("format", "ATMOS_MY_FORMAT"),
+    )
+
+    // Register flags with Cobra command
+    myParser.RegisterFlags(myCmd)
+
+    // Bind to Viper for precedence handling (flags > env > config > defaults)
+    if err := myParser.BindToViper(viper.GetViper()); err != nil {
+        panic(err)
+    }
+}
+```
+
+**In RunE:**
+```go
+RunE: func(cmd *cobra.Command, args []string) error {
+    // Parse flags using Viper (respects precedence)
+    v := viper.GetViper()
+    if err := myParser.BindFlagsToViper(cmd, v); err != nil {
+        return err
+    }
+
+    // Access values via Viper
+    check := v.GetBool("check")
+    format := v.GetString("format")
+
+    return exec.MyCommand(check, format)
+}
+```
+
+**Linter Protection (Forbidigo):**
+- ❌ `viper.BindEnv()` is BANNED outside `pkg/flags/`
+- ❌ `viper.BindPFlag()` is BANNED outside `pkg/flags/`
+- ✅ Consult flag-handler agent for all flag-related work
+- ✅ See `cmd/version/version.go` for reference implementation.
+
+### Error Handling (MANDATORY)
+- **All errors MUST be wrapped using static errors defined in `errors/errors.go`**
+- **Use `errors.Join` for combining multiple errors** - preserves all error chains
+- **Use `fmt.Errorf` with `%w` for adding string context** - when you need formatted strings
+- **Use error builder for complex errors** - adds hints, context, exit codes
+- **Use `errors.Is()` for error checking** - robust against wrapping
+- **NEVER use dynamic errors directly** - triggers linting warnings
+- **See `docs/errors.md`** for complete guide
+
+**Key distinctions:**
+- `fmt.Errorf` with single `%w`: Error chain (sequential call stack)
+- `errors.Join`: Flat list (independent errors, parallel operations)
+- `fmt.Errorf` with multiple `%w`: Like `errors.Join` but with format string (Go 1.20+)
+
+**Examples:**
+```go
+// Combining errors
+return errors.Join(errUtils.ErrFailedToProcess, underlyingErr)
+
+// Adding context
+return fmt.Errorf("%w: component=%s stack=%s", errUtils.ErrInvalidComponent, component, stack)
+
+// Error builder
+err := errUtils.Build(errUtils.ErrLoadAwsConfig).
+    WithHint("Check database credentials in atmos.yaml").
+    WithContext("component", "vpc").
+    WithExitCode(2).
+    Err()
+
+// Checking errors
+if errors.Is(err, context.DeadlineExceeded) { ... }
+
+// Static definitions (errors/errors.go)
+var ErrInvalidComponent = errors.New("invalid component")
+
+// Exit codes
+err := errUtils.WithExitCode(err, 2)
+exitCode := errUtils.GetExitCode(err) // 0 (nil), custom, exec.ExitError, or 1 (default)
+
+// Formatting
+formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+
+// Sentry
+errUtils.InitializeSentry(&atmosConfig.Errors.Sentry)
+defer errUtils.CloseSentry()
+errUtils.CaptureErrorWithContext(err, map[string]string{"component": "vpc"})
+```
 
 ### Testing Strategy (MANDATORY)
 - **Prefer unit tests with mocks** over integration tests
@@ -400,7 +311,14 @@ Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 ALWAYS use `cmd.NewTestKit(t)` for cmd tests. Auto-cleans RootCmd state (flags, args). Required for any test touching RootCmd.
 
 ### Test Quality (MANDATORY)
-Test behavior not implementation. No stub/tautological tests. Use DI for testability. Real scenarios only.
+- Test behavior, not implementation
+- Never test stub functions - implement or remove
+- Avoid tautological tests - don't test hardcoded stubs return hardcoded values
+- Make code testable - use DI to avoid `os.Exit`, `CheckErrorPrintAndExit`, external systems
+- No coverage theater - validate real behavior
+- Remove always-skipped tests - fix or delete
+- Table-driven tests need real scenarios
+- Use `assert.ErrorIs(err, ErrSentinel)` for our/stdlib errors. String matching OK for third-party errors.
 
 ### Mock Generation (MANDATORY)
 Use `go.uber.org/mock/mockgen` with `//go:generate` directives. Never manual mocks.
@@ -431,33 +349,26 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 **Golden Snapshots (MANDATORY):**
 - **NEVER manually edit golden snapshot files** - Always use `-regenerate-snapshots` flag
-- **ALWAYS use the test flag to regenerate** - Manual edits fail due to environment-specific formatting
 - Snapshots capture exact output including invisible formatting (lipgloss padding, ANSI codes, trailing whitespace)
-- Different environments produce different output (terminal width, Unicode support, styling libraries)
+- Different environments produce different output
 
-**Regeneration process:**
+**Regeneration:**
 ```bash
-# Regenerate specific test
 go test ./tests -run 'TestCLICommands/test_name' -regenerate-snapshots
-
-# Verify snapshot
-go test ./tests -run 'TestCLICommands/test_name' -v
-
-# Review changes
-git diff tests/snapshots/
+go test ./tests -run 'TestCLICommands/test_name' -v  # Verify
+git diff tests/snapshots/  # Review
 ```
 
-**Why manual editing fails:**
-- Lipgloss table padding varies by terminal width and environment
-- Trailing whitespace is significant but invisible in editors
-- ANSI color codes may differ between environments
-- Unicode character rendering affects column width calculations
+**Why manual editing fails:** Lipgloss padding varies, trailing whitespace significant, ANSI codes differ, Unicode rendering affects columns.
 
-**When snapshot tests fail in CI:**
-1. Regenerate locally: `go test ./tests -run 'TestName' -regenerate-snapshots`
-2. Verify: `go test ./tests -run 'TestName'`
-3. Commit and push the regenerated snapshot
-4. If still fails: Environment mismatch - contact maintainers
+**CI failures:** Regenerate locally, verify, commit. If still fails: environment mismatch.
+
+**CRITICAL**: Never use pipe redirection (`2>&1`, `| head`, `| tail`) when running tests. Piping breaks TTY detection → ASCII fallback → wrong snapshots.
+
+### Test Data
+Use fixtures in `tests/test-cases/`: `atmos.yaml`, `stacks/`, `components/`.
+
+**NEVER modify `tests/test-cases/` or `tests/testdata/`** unless explicitly instructed. Golden snapshots are sensitive to minor changes.
 
 See `tests/README.md` for details.
 
@@ -466,72 +377,94 @@ See `tests/README.md` for details.
 ### Adding New CLI Command
 
 1. Create `cmd/[command]/` with CommandProvider interface
-2. Add blank import to `cmd/root.go`
+2. Add blank import to `cmd/root.go`: `_ "github.com/cloudposse/atmos/cmd/mycommand"`
 3. Implement in `internal/exec/mycommand.go`
-4. Add tests, Docusaurus docs in `website/docs/cli/commands/`
-5. Build website: `cd website && npm run build`
+4. Add tests in `cmd/mycommand/mycommand_test.go`
+5. Create Docusaurus docs in `website/docs/cli/commands/<command>/<subcommand>.mdx`
+6. Build website: `cd website && npm run build`
 
 See `docs/developing-atmos-commands.md` and `docs/prd/command-registry-pattern.md`
 
 ### Documentation (MANDATORY)
 All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` for args/flags. Build: `cd website && npm run build`
 
-**Verifying Documentation Links (MANDATORY):**
-Before adding links to documentation pages, ALWAYS verify the correct URL:
+**Verifying Links:** Find doc file (`find website/docs/cli/commands -name "*keyword*"`), check slug in frontmatter (`head -10 <file> | grep slug`), verify existing links (`grep -r "<url>" website/docs/`).
 
-```bash
-# Example: Finding the correct URL for auth user configure command
-# Step 1: Find the doc file
-find website/docs/cli/commands -name "*user-configure*"
-# Output: website/docs/cli/commands/auth/auth-user-configure.mdx
+**Common mistakes:** Using command name vs. filename, not checking slug frontmatter, guessing URLs.
 
-# Step 2: Check the slug in frontmatter
-head -10 website/docs/cli/commands/auth/auth-user-configure.mdx | grep slug
-# Output: slug: /cli/commands/auth/auth-user-configure
+### Documentation Requirements (MANDATORY)
+Use `<dl>` for arguments/flags. Follow Docusaurus conventions: frontmatter, purpose note, screengrab, usage/examples/arguments/flags sections. File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
 
-# Step 3: Verify by checking existing links
-grep -r "/cli/commands/auth/auth-user-configure" website/docs/
-```
+### Website Build (MANDATORY)
+ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken links, missing images, MDX component rendering.
 
-**Common mistakes:**
-- Using command name instead of filename (e.g., `/cli/commands/auth/atmos_auth` when file is `usage.mdx`)
-- Not checking the `slug` frontmatter which can override default URLs
-- Guessing URLs instead of verifying against existing documentation structure
+### Regenerating Screengrabs (IMPORTANT)
+**When:** After modifying CLI behavior/help/output, adding commands. NOT for doc-only changes.
 
-**Correct approach:**
-1. Find the target doc file: `find website/docs/cli/commands -name "*keyword*"`
-2. Check for `slug:` in frontmatter: `head -10 <file> | grep slug`
-3. If no slug, URL is path from `docs/` without extension (e.g., `auth-user-configure.mdx` → `/cli/commands/auth/auth-user-configure`)
-4. Verify by searching for existing links: `grep -r "<url>" website/docs/`
+**How (Linux/CI only):**
+1. GitHub Actions: `gh workflow run screengrabs.yaml` (creates PR)
+2. Local Linux: `cd demo/screengrabs && make all`
+3. Docker (macOS): `make -C demo/screengrabs docker-all`
+
+**Notes:** Captures exact output, ANSI→HTML, `script` syntax differs BSD/GNU, regenerate all together, no pipe indirection.
 
 ### PRD Documentation (MANDATORY)
-All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames. Examples: `command-registry-pattern.md`, `error-handling-strategy.md`, `testing-strategy.md`
+All PRDs in `docs/prd/`. Use kebab-case: `command-registry-pattern.md`, `error-handling-strategy.md`, `testing-strategy.md`
 
 ### Pull Requests (MANDATORY)
 Follow template (what/why/references).
 
 **Blog Posts (CI Enforced):**
-- PRs labeled `minor` or `major` MUST include blog post in `website/blog/YYYY-MM-DD-feature-name.mdx`
-- Blog posts must use `.mdx` extension with YAML front matter
-- Include `<!--truncate-->` after intro paragraph
-- Tag `feature`/`enhancement`/`bugfix` (user-facing) or `contributors` (internal changes)
-- CI will fail without blog post
+- PRs labeled `minor`/`major` MUST include blog post: `website/blog/YYYY-MM-DD-feature-name.mdx`
+- Use `.mdx` with YAML front matter, `<!--truncate-->` after intro
+- Tags: User-facing (`feature`/`enhancement`/`bugfix`) or Contributors (`contributors`)
+- Author: committer's GitHub username, add to `website/blog/authors.yml`
 
-**Blog post authorship:**
-- Author should always be the committer (the one who opened the PR)
-- Use GitHub username in authors list, not generic "atmos" or "cloudposse"
-- Add author to `website/blog/authors.yml` if not already present
+**Blog Template:**
+```markdown
+---
+slug: descriptive-slug
+title: "Clear Title"
+authors: [username]
+tags: [primary-tag, secondary-tag]
+---
+Brief intro.
+<!--truncate-->
+## What Changed / Why This Matters / How to Use It / Get Involved
+```
+
+**Tag Reference:**
+- Primary: `feature`, `enhancement`, `bugfix`, `contributors`
+- Technical (contributor): `atmos-core`, `refactoring`, `testing`, `ci-cd`, `developer-experience`
+- Technical (user): `terraform`, `helmfile`, `workflows`, `validation`, `performance`, `cloud-architecture`
+- General: `announcements`, `breaking-changes`
 
 Use `no-release` label for docs-only changes.
 
 ### PR Tools
-Check status: `gh pr checks {pr} --repo cloudposse/atmos`
-Reply to threads: Use `gh api graphql` with `addPullRequestReviewThreadReply`
+```bash
+gh pr checks {pr} --repo cloudposse/atmos
+gh api repos/{owner/repo}/check-runs/{id}/annotations
+gh api repos/{owner/repo}/code-scanning/alerts
+```
 
-### Bug Fixing (MANDATORY)
-1. Write failing test
-2. Fix iteratively
-3. Verify with full test suite
+### Responding to PR Threads (MANDATORY)
+ALWAYS reply to specific threads (not new comments). Use GraphQL API: `gh api graphql -f query='mutation { addPullRequestReviewThreadReply(...) }'`
+
+### Bug Fixing Workflow (MANDATORY)
+1. Write failing test reproducing the bug
+2. Run test to confirm it fails
+3. Fix iteratively until test passes
+4. Verify full test suite
+
+**Example:** Test describes expected behavior, not that it's a bug fix.
+
+### Other Tasks
+**Template Function:** Implement in `internal/exec/template_funcs.go`, register, test, document.
+
+**Store Integration:** Implement interface in `pkg/store/`, add to registry, update schema, test with mocks.
+
+**Stack Processing:** Core logic in `pkg/stack/` and `internal/exec/stack_processor_utils.go`, test inheritance, validate templates, update schema.
 
 ## Critical Development Requirements
 
@@ -563,13 +496,7 @@ Search `internal/exec/` and `pkg/` before implementing. Extend, don't duplicate.
 Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()`, not hardcoded separators.
 
 ### Multi-Provider Registry (MANDATORY)
-Follow registry pattern for extensibility:
-1. Define interface in dedicated package
-2. Implement per provider (separate files)
-3. Register implementations in registry
-4. Generate mocks for testing
-
-**Example**: `pkg/store/` has registry pattern with AWS SSM, Azure Key Vault, Google Secret Manager providers.
+Follow registry pattern: 1) Define interface in dedicated package, 2) Implement per provider, 3) Register implementations, 4) Generate mocks. Example: `pkg/store/` with AWS SSM, Azure Key Vault, Google Secret Manager.
 
 ### Telemetry (MANDATORY)
 Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.CaptureCmd()`. Never capture user data.

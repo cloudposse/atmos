@@ -72,6 +72,7 @@ var commonFlags = []string{
 	cfg.ProfilerTypeFlag,
 	cfg.HeatmapFlag,
 	cfg.HeatmapModeFlag,
+	cfg.AtmosProfileFlag,
 }
 
 // ProcessCommandLineArgs processes command-line args.
@@ -116,6 +117,25 @@ func ProcessCommandLineArgs(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+	// Read profile flag and env var.
+	// Check flag first, then fall back to ATMOS_PROFILE env var if flag not set.
+	profiles, err := cmd.Flags().GetStringSlice("profile")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if len(profiles) == 0 {
+		//nolint:forbidigo // Must use os.Getenv: profile is processed before Viper configuration loads.
+		if envProfiles := os.Getenv("ATMOS_PROFILE"); envProfiles != "" {
+			// Split comma-separated profiles from env var and filter out empty entries.
+			raw := strings.Split(envProfiles, ",")
+			for _, p := range raw {
+				if v := strings.TrimSpace(p); v != "" {
+					profiles = append(profiles, v)
+				}
+			}
+		}
+	}
+	configAndStacksInfo.ProfilesFromArg = profiles
 	finalAdditionalArgsAndFlags := argsAndFlagsInfo.AdditionalArgsAndFlags
 	if len(additionalArgsAndFlags) > 0 {
 		finalAdditionalArgsAndFlags = append(finalAdditionalArgsAndFlags, additionalArgsAndFlags...)

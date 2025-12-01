@@ -11,6 +11,12 @@ Expert in creating and maintaining Claude agents with correct frontmatter, conte
 
 **Use when:** Creating new agents, updating existing agents, or optimizing agent instructions.
 
+### tui-expert
+
+Theme-aware Terminal UI system expert. Use for developing UI components, refactoring to theme-aware patterns, and theme architecture guidance.
+
+**Use when:** Working with theme system, TUI components, or terminal output formatting.
+
 ## Strategic Approach
 
 As Atmos grows, we create focused agents for each major subsystem. This scales development velocity through specialized

@@ -4,11 +4,12 @@ sidebar_label: generate planfile
 sidebar_class_name: command
 id: generate-planfile
 ---
+import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 
-:::note purpose
-Use this command to generate a planfile for an Atmos Terraform/OpenTofu [component](/components/components) in a [stack](/learn/stacks).
-:::
+<Intro>
+Use this command to generate a Terraform planfile for an Atmos [component](/components) in a [stack](/stacks) and convert it to JSON or YAML format for review.
+</Intro>
 
 <Screengrab title="atmos terraform generate planfile --help" slug="atmos-terraform-generate-planfile--help" />
 

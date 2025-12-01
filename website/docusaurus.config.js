@@ -20,7 +20,6 @@ const config = {
     url: 'https://atmos.tools',
     baseUrl: `${BASE_URL}/`,
     onBrokenLinks: 'throw',
-    onBrokenMarkdownLinks: 'warn',
     favicon: 'img/atmos-logo.png',
 
     // GitHub pages deployment config.
@@ -45,10 +44,22 @@ const config = {
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
-
+                    {
+                        from: '/blog',
+                        to: '/changelog'
+                    },
                     {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
+                    },
+                    // Component Catalog redirects for reorganization
+                    {
+                        from: '/design-patterns/component-catalog-with-mixins',
+                        to: '/design-patterns/component-catalog/with-mixins'
+                    },
+                    {
+                        from: '/design-patterns/component-catalog-template',
+                        to: '/design-patterns/component-catalog/template'
                     },
                     // Redirects for template functions moved to /functions/template/
                     {
@@ -259,10 +270,15 @@ const config = {
             path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
         ],
         [
-            'docusaurus-plugin-llms',
+            path.resolve(__dirname, 'plugins', 'blog-release-data'), {}
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'docusaurus-plugin-llms-txt'),
             {
-                generateLLMsTxt: true,
-                generateLLMsFullTxt: true,
+                generateLlmsTxt: true,
+                generateLlmsFullTxt: true,
+                llmsTxtFilename: 'llms.txt',
+                llmsFullTxtFilename: 'llms-full.txt',
                 docsDir: 'docs',
                 includeBlog: true,
                 includeOrder: [
@@ -290,6 +306,7 @@ const config = {
                     exclude: ['README.md'],
                 },
                 blog: {
+                    routeBasePath: 'changelog',
                     showReadingTime: true,
                     postsPerPage: 'ALL',
                     blogSidebarCount: 'ALL',
@@ -301,6 +318,9 @@ const config = {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
                     exclude: ['README.md'],
+                    blogSidebarTitle: 'Recent Changes',
+                    blogSidebarCount: 'ALL',
+                    showReadingTime: true,
                 },
                 theme: {
                     customCss: require.resolve('./src/css/custom.css'),
@@ -354,7 +374,7 @@ const config = {
                     {
                         label: 'Changelog',
                         position: 'left',
-                        to: '/blog'
+                        to: '/changelog'
                     },
                     // Algolia search configuration
                     {
@@ -433,6 +453,9 @@ const config = {
 
     markdown: {
         mermaid: true,
+        hooks: {
+            onBrokenMarkdownLinks: 'warn',
+        },
     },
 
     themes: ['@docusaurus/theme-mermaid']
