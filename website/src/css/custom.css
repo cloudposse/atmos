@@ -115,20 +115,19 @@ div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
     color: black;
 }
 
-html[data-theme='dark'] body {
-    background-image: url("/static/img/cloudposse-opaque.svg");
-}
-
 body {
     background-color: var(--ifm-background-color);
-    background-image: url("/static/img/cloudposse-light.svg");
-    background-position: 98% 98%;
-    background-repeat: no-repeat;
-    background-size: 15em;
-    background-attachment: fixed;
     font-family: 'Optimistic Text', -apple-system, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     font-size: 17px;
     line-height: 30px;
+}
+
+/* Hide Cloud Posse watermark on mobile */
+@media (max-width: 996px) {
+    body,
+    html[data-theme='dark'] body {
+        background-image: none;
+    }
 }
 
 .language-console pre > code, .language-text pre > code {
@@ -890,9 +889,8 @@ a[class*="sidebarItemLink"] {
     border-radius: var(--ifm-global-radius);
     display: block;
     max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    word-wrap: break-word;
 }
 
 .theme-blog-sidebar-item a:hover,
@@ -918,3 +916,19 @@ a[class*="table-of-contents__link"] {
 }
 
 /* Let TOC use natural width on all screen sizes */
+
+/* ==================== */
+/* CHANGELOG FULL WIDTH */
+/* ==================== */
+
+/* Hide sidebar on changelog/blog list page to use full width */
+.blog-list-page aside.theme-doc-sidebar-container,
+.blog-list-page [class*="sidebar"],
+.blog-list-page [class*="BlogSidebar"] {
+    display: none !important;
+}
+
+.blog-list-page main {
+    width: 100%;
+    max-width: none;
+}

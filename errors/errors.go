@@ -148,6 +148,11 @@ var (
 	ErrNilInput         = errors.New("input must not be nil")
 	ErrNonStringElement = errors.New("element is not a string")
 
+	// Merge-related errors.
+	ErrEmptyPath                = errors.New("empty path")
+	ErrCannotNavigatePath       = errors.New("cannot navigate path: field is not a map")
+	ErrUnknownListMergeStrategy = errors.New("unknown list merge strategy")
+
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
 
