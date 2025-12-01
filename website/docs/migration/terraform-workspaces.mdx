@@ -80,12 +80,12 @@ All environments in one state backend means one mistake can affect all environme
 
 ## How Atmos Solves These Problems
 
-Atmos separates **code** (Terraform components) from **configuration** (stack YAML files). This gives you:
+Atmos separates **code** (Terraform components) from **configuration** ([stack YAML files](/stacks/)). This gives you:
 
-✅ **Isolated state** - Each stack has its own backend configuration
+✅ **Isolated state** - Each stack has its own [backend configuration](/stacks/remote-state)
 ✅ **Environment-specific config** - No giant case statements
 ✅ **Visible configuration** - Stacks are files you can search, version, review
-✅ **Component reuse** - Share code, customize config
+✅ **Component reuse** - Share code, customize config via [inheritance](/stacks/inheritance)
 ✅ **Reduced blast radius** - Isolated state backends per environment
 
 ## Migration Strategy
@@ -213,6 +213,8 @@ atmos terraform apply vpc -s dev   # VPC in dev
 ```
 
 No workspace selection. No hidden state. Just explicit, declarative configuration.
+
+Learn more: [`atmos terraform apply`](/cli/commands/terraform/apply) | [`atmos terraform plan`](/cli/commands/terraform/plan)
 
 ## Step-by-Step Migration
 

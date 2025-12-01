@@ -38,12 +38,12 @@ Beyond the conceptual differences, Atmos provides several capabilities that don'
 | Feature | Description |
 |---------|-------------|
 | **[Native Authentication](/cli/commands/auth/usage)** | Built-in multi-cloud auth with SAML, SSO, OIDC, and GitHub Actions. No separate tools needed—`atmos auth login` handles it all. |
-| **[Vendoring](/cli/commands/vendor)** | Pull and version external modules locally with `atmos vendor pull`. Customize vendored code while tracking upstream. |
+| **[Vendoring](/cli/commands/vendor/pull)** | Pull and version external modules locally with `atmos vendor pull`. Customize vendored code while tracking upstream. |
 | **[Custom Commands](/cli/configuration/commands)** | Define your own CLI commands in YAML. No scripting needed—integrate team-specific workflows directly into Atmos. |
 | **[Workflows](/workflows)** | Orchestrate multi-step operations across components and stacks. Chain commands, add conditions, run in parallel. |
 | **[Terraform Shell](/cli/commands/terraform/shell)** | `atmos terraform shell vpc -s prod` drops you into a configured shell for native Terraform debugging. All vars and backend pre-configured. |
 | **[Affected Detection](/cli/commands/describe/affected)** | `atmos describe affected` analyzes Git changes to find impacted components—purpose-built for CI/CD. |
-| **[Component Validation](/cli/commands/validate)** | JSON Schema and OPA policy validation for stack configurations before deployment. |
+| **[Component Validation](/cli/commands/validate/stacks)** | JSON Schema and OPA policy validation for stack configurations before deployment. |
 | **[Stack Describe](/cli/commands/describe/component)** | `atmos describe component` shows the fully-resolved configuration for any component in any stack. |
 | **[Configuration Provenance](/cli/commands/describe/component)** | `atmos describe component --provenance` traces where every value came from across the import hierarchy. |
 
@@ -136,7 +136,7 @@ This is fundamentally different from Terragrunt, where the directory hierarchy *
 
 If you're familiar with Terragrunt, the concepts below will help you translate what you already know into Atmos equivalents. Each section shows a side-by-side comparison so you can see exactly how Terragrunt patterns map to Atmos.
 
-### Include → Import
+### Include → [Import](/stacks/imports)
 
 <Tabs>
   <TabItem value="terragrunt" label="Terragrunt" default>
@@ -168,7 +168,7 @@ If you're familiar with Terragrunt, the concepts below will help you translate w
   </TabItem>
 </Tabs>
 
-### Dependency → Remote State
+### Dependency → [Remote State](/stacks/remote-state)
 
 <Tabs>
   <TabItem value="terragrunt" label="Terragrunt" default>
@@ -188,7 +188,7 @@ If you're familiar with Terragrunt, the concepts below will help you translate w
     </File>
   </TabItem>
   <TabItem value="atmos" label="Atmos">
-    Atmos provides the `!terraform.output` YAML function to read outputs directly from another component's remote state. Simply reference the component name and output—Atmos handles the state backend lookup automatically.
+    Atmos provides the [`!terraform.output`](/functions/yaml/terraform.output) YAML function to read outputs directly from another component's remote state. Simply reference the component name and output—Atmos handles the state backend lookup automatically.
 
     Because Atmos uses YAML for configuration and keeps Terraform for code, there's a clear separation: **stacks are configuration, components are code**. Your configuration (what to deploy, with what values) stays in YAML. Your business logic (how resources are created) stays in Terraform. This separation makes it easier to reason about your infrastructure.
 
@@ -238,7 +238,7 @@ If you're familiar with Terragrunt, the concepts below will help you translate w
   </TabItem>
 </Tabs>
 
-### Terraform Source → Component + Vendoring
+### Terraform Source → Component + [Vendoring](/vendoring/vendor)
 
 <Tabs>
   <TabItem value="terragrunt" label="Terragrunt" default>
@@ -285,7 +285,7 @@ If you're familiar with Terragrunt, the concepts below will help you translate w
   </TabItem>
 </Tabs>
 
-### Generate Blocks → Purpose-Built Generation
+### Generate Blocks → [Purpose-Built Generation](/cli/commands/terraform/generate-backends)
 
 <Tabs>
   <TabItem value="terragrunt" label="Terragrunt" default>
@@ -414,7 +414,7 @@ If you're familiar with Terragrunt, the concepts below will help you translate w
   </TabItem>
 </Tabs>
 
-### Locals → Vars with Inheritance
+### Locals → Vars with [Inheritance](/stacks/inheritance)
 
 <Tabs>
   <TabItem value="terragrunt" label="Terragrunt" default>

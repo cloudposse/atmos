@@ -333,9 +333,11 @@ atmos describe component vpc -s dev
 ```
 </Terminal>
 
+Learn more: [`atmos list`](/cli/commands/list/stacks) | [`atmos describe component`](/cli/commands/describe/component)
+
 ### 2. DRY Configuration
 
-Instead of copying `.tfvars` files, use YAML inheritance:
+Instead of copying `.tfvars` files, use YAML [imports](/stacks/imports) and [inheritance](/stacks/inheritance):
 
 <File title="stacks/_defaults.yaml">
 ```yaml
@@ -386,7 +388,7 @@ Shared settings live in `_defaults.yaml`. Each environment only specifies what's
 
 ### 3. Query Remote State
 
-Pull outputs from other components without custom bash:
+Pull outputs from other components using the [`!terraform.output`](/functions/yaml/terraform.output) function—no custom bash needed:
 
 <File title="stacks/dev.yaml">
 ```yaml
@@ -448,7 +450,7 @@ Atmos auto-generates `backend.tf.json` for you.
 
 These advanced features are there when you need them. You don't need them now.
 
-### Workflows (Replace Your Makefiles)
+### [Workflows](/workflows) (Replace Your Makefiles)
 
 <File title="stacks/workflows/deploy.yaml">
 ```yaml
@@ -467,7 +469,7 @@ atmos workflow deploy-dev -f stacks/workflows/deploy.yaml
 ```
 </Terminal>
 
-### Validation with OPA and JSON Schema
+### [Validation](/validation/validating) with OPA and JSON Schema
 
 Validate your configurations before running Terraform:
 
@@ -478,7 +480,7 @@ atmos validate component vpc -s dev
 ```
 </Terminal>
 
-### Component Inheritance
+### [Component Inheritance](/stacks/inheritance)
 
 Reuse component configurations:
 
