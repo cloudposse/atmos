@@ -28,10 +28,10 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 		IsTTYSupportForStdout: func() bool {
 			return true
 		},
-		executeDescribeComponent: func(component, stack string, processTemplates, processYamlFunctions bool, skip []string) (map[string]any, error) {
+		executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
 			return map[string]any{
-				"component": component,
-				"stack":     stack,
+				"component": params.Component,
+				"stack":     params.Stack,
 			}, nil
 		},
 		initCliConfig: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
@@ -206,13 +206,14 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	component := "c1"
 
 	// `dev`
-	res, err := ExecuteDescribeComponent(
-		component,
-		"dev",
-		true,
-		true,
-		nil,
-	)
+	res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                "dev",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	assert.NoError(t, err)
 
 	y, err := u.ConvertToYAML(res)
@@ -223,13 +224,14 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "d: d")
 
 	// `staging`
-	res, err = ExecuteDescribeComponent(
-		component,
-		"staging",
-		true,
-		true,
-		nil,
-	)
+	res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                "staging",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	assert.NoError(t, err)
 
 	y, err = u.ConvertToYAML(res)
@@ -240,13 +242,14 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "d: d")
 
 	// `prod`
-	res, err = ExecuteDescribeComponent(
-		component,
-		"prod",
-		true,
-		true,
-		nil,
-	)
+	res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                "prod",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	assert.NoError(t, err)
 
 	y, err = u.ConvertToYAML(res)
@@ -257,13 +260,14 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "d: d")
 
 	// `sandbox`
-	res, err = ExecuteDescribeComponent(
-		component,
-		"sandbox",
-		true,
-		true,
-		nil,
-	)
+	res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                "sandbox",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	assert.NoError(t, err)
 
 	y, err = u.ConvertToYAML(res)
@@ -274,13 +278,14 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "d: d")
 
 	// `test`
-	res, err = ExecuteDescribeComponent(
-		component,
-		"test",
-		true,
-		true,
-		nil,
-	)
+	res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                "test",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	assert.NoError(t, err)
 
 	y, err = u.ConvertToYAML(res)
@@ -291,13 +296,14 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "d: d")
 
 	// `test2`
-	res, err = ExecuteDescribeComponent(
-		component,
-		"test2",
-		true,
-		true,
-		nil,
-	)
+	res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                "test2",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	assert.NoError(t, err)
 
 	y, err = u.ConvertToYAML(res)
@@ -308,13 +314,14 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "d: d")
 
 	// `test3`
-	res, err = ExecuteDescribeComponent(
-		component,
-		"test3",
-		true,
-		true,
-		nil,
-	)
+	res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                "test3",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	assert.NoError(t, err)
 
 	y, err = u.ConvertToYAML(res)
@@ -351,13 +358,14 @@ func TestDescribeComponent_Packer(t *testing.T) {
 
 	component := "aws/bastion"
 
-	res, err := ExecuteDescribeComponent(
-		component,
-		"prod",
-		true,
-		true,
-		nil,
-	)
+	res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                "prod",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
 	assert.NoError(t, err)
 
 	val, err := u.EvaluateYqExpression(&atmosConfig, res, ".vars.ami_tags.SourceAMI")

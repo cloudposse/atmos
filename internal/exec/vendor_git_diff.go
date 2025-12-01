@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -116,7 +117,7 @@ func getGitDiffBetweenRefs(atmosConfig *schema.AtmosConfiguration, gitURI string
 	// We'll use the approach of fetching both refs and then diffing
 	tempDir, err := os.MkdirTemp("", "atmos-vendor-diff-*")
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrCreateTempDir, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrCreateTempDir, err)
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -124,13 +125,13 @@ func getGitDiffBetweenRefs(atmosConfig *schema.AtmosConfiguration, gitURI string
 	ctx := context.Background()
 	cmd := exec.CommandContext(ctx, "git", "init", "--bare", tempDir)
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrGitCommandFailed, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrGitCommandFailed, err)
 	}
 
 	// Fetch the specific refs
 	cmd = exec.CommandContext(ctx, "git", "-C", tempDir, "fetch", "--depth=1", gitURI, fromRef+":"+fromRef, toRef+":"+toRef)
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("%w: failed to fetch refs: %s", errUtils.ErrGitCommandFailed, err)
+		return nil, fmt.Errorf("%w: failed to fetch refs: %w", errUtils.ErrGitCommandFailed, err)
 	}
 
 	// Now we can diff
@@ -152,14 +153,15 @@ func getGitDiffBetweenRefs(atmosConfig *schema.AtmosConfiguration, gitURI string
 	cmd = exec.CommandContext(ctx, "git", args...)
 	output, err := cmd.Output()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			// Exit code 1 means differences found (expected)
 			if exitErr.ExitCode() == 1 && len(output) > 0 {
 				return output, nil
 			}
 			return nil, fmt.Errorf("%w: %s", errUtils.ErrGitDiffFailed, string(exitErr.Stderr))
 		}
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrGitDiffFailed, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrGitDiffFailed, err)
 	}
 
 	return output, nil

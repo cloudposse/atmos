@@ -6,13 +6,15 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Logout removes credentials for the specified identity only.
 // Provider and chain credentials are preserved for use by other identities.
-func (m *manager) Logout(ctx context.Context, identityName string) error {
+// If deleteKeychain is true, also removes credentials from system keychain.
+func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
 	defer perf.Track(nil, "auth.Manager.Logout")()
 
 	// Validate identity exists in configuration.
@@ -21,16 +23,20 @@ func (m *manager) Logout(ctx context.Context, identityName string) error {
 		return fmt.Errorf("%w: identity %q", errUtils.ErrIdentityNotInConfig, identityName)
 	}
 
-	log.Debug("Logout identity", logKeyIdentity, identityName)
+	log.Debug("Logout identity", logKeyIdentity, identityName, "deleteKeychain", deleteKeychain)
 
 	var errs []error
 
-	// Step 1: Delete keyring entry for this identity only.
-	if err := m.credentialStore.Delete(identityName); err != nil {
-		log.Debug("Failed to delete keyring entry (may not exist)", logKeyIdentity, identityName, "error", err)
-		errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, identityName, err))
+	// Step 1: Delete keyring entry ONLY if deleteKeychain flag is set.
+	if deleteKeychain {
+		if err := m.credentialStore.Delete(identityName); err != nil {
+			log.Debug("Failed to delete keyring entry (may not exist)", logKeyIdentity, identityName, "error", err)
+			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, identityName, err))
+		} else {
+			log.Debug("Deleted keyring entry", logKeyIdentity, identityName)
+		}
 	} else {
-		log.Debug("Deleted keyring entry", logKeyIdentity, identityName)
+		log.Debug("Skipping keyring deletion (preserving credentials)", logKeyIdentity, identityName)
 	}
 
 	// Step 2: Call identity-specific cleanup (each identity type handles its own file cleanup).
@@ -46,7 +52,7 @@ func (m *manager) Logout(ctx context.Context, identityName string) error {
 		log.Debug("Identity logout succeeded", logKeyIdentity, identityName)
 	}
 
-	log.Info("Logout completed", logKeyIdentity, identityName, "errors", len(errs))
+	log.Info("Logout completed", logKeyIdentity, identityName, "errors", len(errs), "deletedKeychain", deleteKeychain)
 
 	if len(errs) > 0 {
 		return errors.Join(append([]error{errUtils.ErrPartialLogout}, errs...)...)
@@ -98,7 +104,8 @@ func (m *manager) resolveProviderForIdentity(identityName string) string {
 }
 
 // LogoutProvider removes all credentials for the specified provider and all identities that use it.
-func (m *manager) LogoutProvider(ctx context.Context, providerName string) error {
+// If deleteKeychain is true, also removes credentials from system keychain.
+func (m *manager) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error { //nolint:revive
 	defer perf.Track(nil, "auth.Manager.LogoutProvider")()
 
 	// Validate provider exists in configuration.
@@ -107,7 +114,7 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 		return fmt.Errorf("%w: provider %q", errUtils.ErrProviderNotInConfig, providerName)
 	}
 
-	log.Debug("Logout provider", logKeyProvider, providerName)
+	log.Debug("Logout provider", logKeyProvider, providerName, "deleteKeychain", deleteKeychain)
 
 	// Find all identities that use this provider (directly or transitively).
 	var identityNames []string
@@ -123,18 +130,22 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 
 	var errs []error
 
-	// Logout each identity (removes keyring entries and identity-specific files).
+	// Logout each identity (pass deleteKeychain flag).
 	for _, identityName := range identityNames {
-		if err := m.Logout(ctx, identityName); err != nil {
+		if err := m.Logout(ctx, identityName, deleteKeychain); err != nil {
 			log.Debug("Failed to logout identity", logKeyIdentity, identityName, "error", err)
 			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrIdentityLogout, identityName, err))
 		}
 	}
 
-	// Delete provider credentials from keyring.
-	if err := m.credentialStore.Delete(providerName); err != nil {
-		log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, "error", err)
-		errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, providerName, err))
+	// Delete provider credentials from keyring ONLY if deleteKeychain flag is set.
+	if deleteKeychain {
+		if err := m.credentialStore.Delete(providerName); err != nil {
+			log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, "error", err)
+			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, providerName, err))
+		}
+	} else {
+		log.Debug("Skipping provider keyring deletion (preserving credentials)", logKeyProvider, providerName)
 	}
 
 	// Call provider-specific cleanup (deletes all provider files).
@@ -150,7 +161,13 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 		log.Debug("Provider logout succeeded", logKeyProvider, providerName)
 	}
 
-	log.Info("Provider logout completed", logKeyProvider, providerName, "identities", len(identityNames), "errors", len(errs))
+	// Clean up auto-provisioned identities cache file if it exists.
+	if err := m.removeProvisionedIdentitiesCache(providerName); err != nil {
+		log.Debug("Failed to remove provisioned identities cache", logKeyProvider, providerName, "error", err)
+		errs = append(errs, fmt.Errorf("failed to remove provisioned identities cache for provider %q: %w", providerName, err))
+	}
+
+	log.Info("Provider logout completed", logKeyProvider, providerName, "identities", len(identityNames), "errors", len(errs), "deletedKeychain", deleteKeychain)
 
 	if len(errs) > 0 {
 		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
@@ -160,16 +177,17 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string) error
 }
 
 // LogoutAll removes all cached credentials for all identities and providers.
-func (m *manager) LogoutAll(ctx context.Context) error {
+// If deleteKeychain is true, also removes credentials from system keychain.
+func (m *manager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	defer perf.Track(nil, "auth.Manager.LogoutAll")()
 
-	log.Debug("Logout all identities and providers")
+	log.Debug("Logout all identities and providers", "deleteKeychain", deleteKeychain)
 
 	var errs []error
 
-	// Logout each identity.
+	// Logout each identity (pass deleteKeychain flag).
 	for identityName := range m.config.Identities {
-		if err := m.Logout(ctx, identityName); err != nil {
+		if err := m.Logout(ctx, identityName, deleteKeychain); err != nil {
 			log.Debug("Failed to logout identity", logKeyIdentity, identityName, "error", err)
 			errs = append(errs, fmt.Errorf("%w for identity %q: %w", errUtils.ErrIdentityLogout, identityName, err))
 		}
@@ -177,10 +195,14 @@ func (m *manager) LogoutAll(ctx context.Context) error {
 
 	// Logout each provider.
 	for providerName, provider := range m.providers {
-		// Delete provider credentials from keyring.
-		if err := m.credentialStore.Delete(providerName); err != nil {
-			log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, "error", err)
-			errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrKeyringDeletion, providerName, err))
+		// Delete provider credentials from keyring ONLY if deleteKeychain flag is set.
+		if deleteKeychain {
+			if err := m.credentialStore.Delete(providerName); err != nil {
+				log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, "error", err)
+				errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrKeyringDeletion, providerName, err))
+			}
+		} else {
+			log.Debug("Skipping provider keyring deletion (preserving credentials)", logKeyProvider, providerName)
 		}
 
 		// Call provider-specific cleanup (deletes all provider files).
@@ -195,13 +217,40 @@ func (m *manager) LogoutAll(ctx context.Context) error {
 		} else {
 			log.Debug("Provider logout succeeded", logKeyProvider, providerName)
 		}
+
+		// Clean up auto-provisioned identities cache file if it exists.
+		if err := m.removeProvisionedIdentitiesCache(providerName); err != nil {
+			log.Debug("Failed to remove provisioned identities cache", logKeyProvider, providerName, "error", err)
+			errs = append(errs, fmt.Errorf("failed to remove provisioned identities cache for provider %q: %w", providerName, err))
+		}
 	}
 
-	log.Info("Logout all completed", "identities", len(m.config.Identities), "providers", len(m.providers), "errors", len(errs))
+	log.Info("Logout all completed", "identities", len(m.config.Identities), "providers", len(m.providers), "errors", len(errs), "deletedKeychain", deleteKeychain)
 
 	if len(errs) > 0 {
 		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
 	}
 
+	return nil
+}
+
+// removeProvisionedIdentitiesCache removes the auto-provisioned identities cache file for a provider.
+// This is called during provider logout to clean up auto-provisioned identities.
+func (m *manager) removeProvisionedIdentitiesCache(providerName string) error {
+	defer perf.Track(nil, "auth.Manager.removeProvisionedIdentitiesCache")()
+
+	// Create a provisioning writer to get the cache file path.
+	writer, err := types.NewProvisioningWriter()
+	if err != nil {
+		log.Debug("Failed to create provisioning writer", logKeyProvider, providerName, "error", err)
+		return fmt.Errorf("failed to create provisioning writer: %w", err)
+	}
+
+	// Remove the provisioned identities cache file.
+	if err := writer.Remove(providerName); err != nil {
+		return fmt.Errorf("failed to remove provisioned identities cache: %w", err)
+	}
+
+	log.Debug("Removed provisioned identities cache", logKeyProvider, providerName)
 	return nil
 }

@@ -14,6 +14,8 @@ type UnsupportedSourceProvider struct{}
 
 // NewUnsupportedSourceProvider creates a new unsupported source provider.
 func NewUnsupportedSourceProvider() VendorSourceProvider {
+	defer perf.Track(nil, "exec.NewUnsupportedSourceProvider")()
+
 	return &UnsupportedSourceProvider{}
 }
 
@@ -50,5 +52,7 @@ func (u *UnsupportedSourceProvider) GetDiff(
 
 // SupportsOperation implements VendorSourceProvider.SupportsOperation.
 func (u *UnsupportedSourceProvider) SupportsOperation(operation SourceOperation) bool {
+	defer perf.Track(nil, "exec.UnsupportedSourceProvider.SupportsOperation")()
+
 	return false
 }

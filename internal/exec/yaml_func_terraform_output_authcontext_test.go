@@ -62,6 +62,7 @@ func TestAuthContextReachesGetTerraformOutput(t *testing.T) {
 			"bucket_name",
 			false,
 			gomock.Eq(expectedAuthContext), // This is the critical assertion!
+			gomock.Any(),                   // authManager parameter
 		).
 		Return("test-bucket-name", true, nil).
 		Times(1)
@@ -109,6 +110,7 @@ func TestAuthContextNilWhenStackInfoNilForOutput(t *testing.T) {
 			"bucket_name",
 			false,
 			gomock.Nil(), // Should be nil when stackInfo is nil
+			gomock.Any(), // authManager parameter
 		).
 		Return("test-bucket-name", true, nil).
 		Times(1)
@@ -195,6 +197,7 @@ func TestAuthContextWithDifferentAWSConfigurations(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 					gomock.Eq(tt.authContext),
+					gomock.Any(), // authManager parameter
 				).
 				Return("result", true, nil).
 				Times(1)
@@ -247,6 +250,7 @@ func TestAuthContextWithOutputNotExists(t *testing.T) {
 			"missing_output",
 			false,
 			gomock.Eq(expectedAuthContext),
+			gomock.Any(), // authManager parameter
 		).
 		Return(nil, false, nil). // exists=false
 		Times(1)

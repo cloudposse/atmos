@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -19,6 +20,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 const (
@@ -48,10 +50,12 @@ const (
 	skipProviderLogoutKey contextKey = "skipProviderLogout"
 )
 
-// isInteractive checks if we're running in an interactive terminal (has stdin TTY).
-// This is used to determine if we can prompt the user for input.
+// isInteractive checks if we're running in an interactive terminal.
+// Interactive mode requires stdin to be a TTY (for user input) and must not be in CI.
+// We don't check stdout because users should be able to pipe output (e.g., | cat)
+// while still interacting via stdin.
 func isInteractive() bool {
-	return term.IsTTYSupportForStdin()
+	return term.IsTTYSupportForStdin() && !telemetry.IsCI()
 }
 
 // manager implements the AuthManager interface.
@@ -174,11 +178,11 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	m.chain = chain
 	log.Debug("Authentication chain discovered", logKeyIdentity, identityName, "chainLength", len(chain), "chain", chain)
 
-	// Perform hierarchical credential validation (bottom-up).
+	// Perform credential chain authentication (bottom-up).
 	finalCreds, err := m.authenticateChain(ctx, identityName)
 	if err != nil {
-		wrappedErr := fmt.Errorf("%w: failed to authenticate hierarchically for identity %q: %w", errUtils.ErrAuthenticationFailed, identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Hierarchical", "")
+		wrappedErr := fmt.Errorf("%w: failed to authenticate via credential chain for identity %q: %w", errUtils.ErrAuthenticationFailed, identityName, err)
+		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Credential Chain", "")
 		return nil, wrappedErr
 	}
 
@@ -214,6 +218,64 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	}
 
 	return m.buildWhoamiInfo(identityName, finalCreds), nil
+}
+
+// AuthenticateProvider performs authentication directly with a provider.
+// This is used for provider-level operations like SSO auto-provisioning where
+// you want to authenticate to a provider without specifying a particular identity.
+func (m *manager) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
+	defer perf.Track(nil, "auth.Manager.AuthenticateProvider")()
+
+	log.Debug("Starting provider authentication", logKeyProvider, providerName)
+
+	// Resolve provider name case-insensitively.
+	resolvedProviderName := ""
+	for name := range m.providers {
+		if strings.EqualFold(name, providerName) {
+			resolvedProviderName = name
+			break
+		}
+	}
+
+	if resolvedProviderName == "" {
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrProviderNotFound, fmt.Sprintf(backtickedFmt, providerName))
+	}
+
+	// Use resolved name for authentication.
+	providerName = resolvedProviderName
+
+	// Authenticate with the provider.
+	credentials, err := m.authenticateWithProvider(ctx, providerName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build chain with just the provider.
+	m.chain = []string{providerName}
+
+	// Build and return whoami info for the provider.
+	return m.buildProviderWhoamiInfo(providerName, credentials), nil
+}
+
+// buildProviderWhoamiInfo builds WhoamiInfo for a provider (without an identity).
+func (m *manager) buildProviderWhoamiInfo(providerName string, creds types.ICredentials) *types.WhoamiInfo {
+	info := &types.WhoamiInfo{
+		Provider: providerName,
+		Identity: "", // No identity for provider-only auth.
+	}
+
+	// Add provider-specific fields if available.
+	if awsCreds, ok := creds.(*types.AWSCredentials); ok {
+		info.Region = awsCreds.Region
+		// Parse expiration string to time.Time if present.
+		if awsCreds.Expiration != "" {
+			if expTime, err := time.Parse(time.RFC3339, awsCreds.Expiration); err == nil {
+				info.Expiration = &expTime
+			}
+		}
+	}
+
+	return info
 }
 
 // GetChain returns the most recently built authentication chain.
@@ -310,8 +372,14 @@ func (m *manager) Validate() error {
 func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	defer perf.Track(nil, "auth.Manager.GetDefaultIdentity")()
 
-	// If forceSelect is true and we're in interactive mode, always show selector.
-	if forceSelect && isInteractive() {
+	// If forceSelect is true, user explicitly requested identity selection.
+	if forceSelect {
+		// Check if we're in interactive mode (have TTY).
+		if !isInteractive() {
+			// User requested interactive selection but we don't have a TTY.
+			return "", errUtils.ErrIdentitySelectionRequiresTTY
+		}
+		// We have a TTY - show selector.
 		return m.promptForIdentity("Select an identity:", m.ListIdentities())
 	}
 
@@ -359,14 +427,23 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	sort.Strings(sortedIdentities)
 
 	var selectedIdentity string
+
+	// Create custom keymap that adds ESC to quit keys.
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "quit"),
+	)
+
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title(message).
+				Description("Press ctrl+c or esc to exit").
 				Options(huh.NewOptions(sortedIdentities...)...).
 				Value(&selectedIdentity),
 		),
-	)
+	).WithKeyMap(keyMap)
 
 	if err := form.Run(); err != nil {
 		// Check if user aborted (Ctrl+C, ESC, etc.).
@@ -380,13 +457,23 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 	return selectedIdentity, nil
 }
 
-// ListIdentities returns all available identity names.
+// ListIdentities returns all available identity names with their original case.
+// Uses IdentityCaseMap to preserve the original case from YAML config,
+// working around Viper's lowercase conversion of map keys.
 func (m *manager) ListIdentities() []string {
 	defer perf.Track(nil, "auth.Manager.ListIdentities")()
 
 	var names []string
-	for name := range m.config.Identities {
-		names = append(names, name)
+	for lowercaseName := range m.config.Identities {
+		// Use original case from IdentityCaseMap if available, otherwise use lowercase.
+		if m.config.IdentityCaseMap != nil {
+			if originalName, exists := m.config.IdentityCaseMap[lowercaseName]; exists {
+				names = append(names, originalName)
+				continue
+			}
+		}
+		// Fallback to lowercase name if case map not available.
+		names = append(names, lowercaseName)
 	}
 	return names
 }
@@ -521,25 +608,103 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	return "", fmt.Errorf("%w: provider %q not found in configuration", errUtils.ErrInvalidAuthConfig, providerName)
 }
 
-// authenticateChain performs hierarchical authentication with bottom-up validation.
+// ensureIdentityHasManager ensures the identity has the authentication chain context.
+// This is needed when using cached credentials where the chain was not built in this session.
+// Building the chain and setting manager reference allows identity to resolve the root provider.
+func (m *manager) ensureIdentityHasManager(identityName string) error {
+	// If we don't have config, we can't build the chain - skip this step.
+	// This happens in unit tests where manager is created without full config.
+	if m.config == nil {
+		return nil
+	}
+
+	// If chain is already built for this identity, we're good.
+	if len(m.chain) > 0 && m.chain[len(m.chain)-1] == identityName {
+		// Chain exists - still need to ensure identity has manager reference.
+		// Call PostAuthenticate with minimal params to set manager field.
+		return m.setIdentityManager(identityName)
+	}
+
+	// If chain exists, check if the requested identity is part of it.
+	// If the identity is in the chain, we can reuse it. Otherwise, rebuild.
+	if len(m.chain) > 0 {
+		// Check if identityName is present in the existing chain.
+		identityInChain := false
+		for _, chainIdentity := range m.chain {
+			if chainIdentity == identityName {
+				identityInChain = true
+				break
+			}
+		}
+
+		if identityInChain {
+			// Identity is in the existing chain - set manager reference.
+			// This happens when loading cached credentials for an intermediate identity
+			// (e.g., permission set) while authenticating a target identity (e.g., assume role).
+			return m.setIdentityManager(identityName)
+		}
+
+		// Identity is NOT in the existing chain - must rebuild for this identity.
+		// Clear the stale chain and fall through to rebuild.
+		m.chain = nil
+	}
+
+	// Build the authentication chain so GetProviderForIdentity() can resolve the root provider.
+	chain, err := m.buildAuthenticationChain(identityName)
+	if err != nil {
+		return fmt.Errorf("failed to build authentication chain: %w", err)
+	}
+
+	// Store the chain in the manager so GetProviderForIdentity() can use it.
+	m.chain = chain
+
+	// Set manager reference on the identity.
+	return m.setIdentityManager(identityName)
+}
+
+// setIdentityManager sets the manager reference on AWS identities.
+// This allows the identity to use manager.GetProviderForIdentity() to resolve the root provider.
+// For AWS permission set and assume role identities, we can set the manager field directly.
+func (m *manager) setIdentityManager(identityName string) error {
+	identity, exists := m.identities[identityName]
+	if !exists {
+		return nil // Identity not found, skip
+	}
+
+	// Get root provider name from the chain.
+	if len(m.chain) == 0 {
+		return errUtils.ErrAuthenticationChainNotBuilt
+	}
+	rootProviderName := m.chain[0]
+
+	// Type assert to AWS permission set identity and set manager directly.
+	// This is safe because we're only dealing with permission set identities here.
+	type awsIdentityWithManager interface {
+		SetManagerAndProvider(types.AuthManager, string)
+	}
+
+	if awsIdentity, ok := identity.(awsIdentityWithManager); ok {
+		awsIdentity.SetManagerAndProvider(m, rootProviderName)
+	}
+
+	// If identity doesn't implement SetManagerAndProvider, that's OK - it may not need it.
+	return nil
+}
+
+// authenticateChain performs credential chain authentication with bottom-up validation.
 func (m *manager) authenticateChain(ctx context.Context, targetIdentity string) (types.ICredentials, error) {
 	// Step 1: Bottom-up validation - check cached credentials from target to root.
 	validFromIndex := m.findFirstValidCachedCredentials()
 
 	if validFromIndex != -1 {
 		log.Debug("Found valid cached credentials", "validFromIndex", validFromIndex, "chainStep", m.getChainStepName(validFromIndex))
-
-		// If target identity (last element in chain) has valid cached credentials, use them.
-		if validFromIndex == len(m.chain)-1 {
-			last := m.chain[len(m.chain)-1]
-			if cachedCreds, err := m.credentialStore.Retrieve(last); err == nil {
-				log.Debug("Using cached credentials for target identity", logKeyIdentity, targetIdentity)
-				return cachedCreds, nil
-			}
-		}
 	}
 
 	// Step 2: Selective re-authentication from first invalid point down to target.
+	// CRITICAL: Always re-authenticate through the full chain, even if the target identity
+	// has cached credentials. This ensures assume-role identities perform the actual
+	// AssumeRole API call rather than using potentially incorrect cached credentials
+	// (e.g., permission set creds incorrectly cached as assume-role creds).
 	return m.authenticateFromIndex(ctx, validFromIndex)
 }
 
@@ -643,16 +808,20 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 	var err error
 
 	// Determine actual starting point for authentication.
+	// When startIndex is -1 (no valid cached credentials), this returns 0 (start from provider).
+	// When startIndex is >= 0, this returns the same index (valid cached credentials exist).
 	actualStartIndex := m.determineStartingIndex(startIndex)
 
 	// Retrieve cached credentials if starting from a cached point.
-	// Important: if we start from index N (>0) because cached creds exist at that step,
-	// those creds are the OUTPUT of identity N and should be used as the base for the NEXT step (N+1).
-	if actualStartIndex > 0 {
+	// Important: Only fetch cached credentials if we had valid ones (startIndex >= 0).
+	// If startIndex was -1 (no valid cached creds), actualStartIndex becomes 0 but we should NOT
+	// fetch cached credentials - we should start fresh from provider authentication.
+	if startIndex >= 0 && actualStartIndex >= 0 {
 		currentCreds, actualStartIndex = m.fetchCachedCredentials(actualStartIndex)
 	}
 
 	// Step 1: Authenticate with provider if needed.
+	// Only authenticate provider if we don't have cached provider credentials.
 	if actualStartIndex == 0 { //nolint:nestif
 		// Allow provider to inspect the chain and prepare pre-auth preferences.
 		if provider, exists := m.providers[m.chain[0]]; exists {
@@ -673,12 +842,22 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 }
 
 func (m *manager) fetchCachedCredentials(startIndex int) (types.ICredentials, int) {
+	// Guard against nil credential store (can happen in unit tests).
+	if m.credentialStore == nil {
+		log.Debug("No credential store available, starting from provider")
+		return nil, 0
+	}
+
 	currentCreds, err := m.getChainCredentials(m.chain, startIndex)
 	if err != nil {
 		log.Debug("Failed to retrieve cached credentials, starting from provider", "error", err)
 		return nil, 0
 	}
-	// Skip re-authenticating the identity at startIndex, since we already have its output.
+	// Return cached credentials as OUTPUT of step at startIndex, so authentication
+	// continues from the NEXT step (startIndex + 1). The cached credentials become
+	// the input to the next identity in the chain.
+	// Example: If permission set creds are cached at index 1, return them with startIndex=2
+	// so the assume-role identity at index 2 uses the permission set creds as input.
 	return currentCreds, startIndex + 1
 }
 
@@ -731,6 +910,12 @@ func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName 
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrIdentityNotInConfig, identityName)
 	}
 
+	// Ensure the identity has access to manager for resolving provider information.
+	// This builds the authentication chain and sets manager reference so the identity
+	// can resolve the root provider for file-based credentials.
+	// This is best-effort - if it fails, LoadCredentials will fail with a clear error.
+	_ = m.ensureIdentityHasManager(identityName)
+
 	// Delegate to identity's LoadCredentials method.
 	// Each identity type knows how to load its own credentials from storage.
 	loadedCreds, loadErr := identity.LoadCredentials(ctx)
@@ -781,8 +966,118 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 		log.Debug("Cached provider credentials", "providerName", providerName)
 	}
 
+	// Run provisioning if provider supports it (non-fatal).
+	m.provisionIdentities(ctx, providerName, provider, credentials)
+
 	log.Debug("Provider authenticated", "provider", providerName)
 	return credentials, nil
+}
+
+// provisionIdentities runs identity provisioning if the provider supports it.
+// This is a non-fatal operation - failures are logged but don't block authentication.
+func (m *manager) provisionIdentities(ctx context.Context, providerName string, provider types.Provider, credentials types.ICredentials) {
+	defer perf.Track(nil, "auth.Manager.provisionIdentities")()
+
+	// Set up auth-specific logging and restore on exit.
+	defer m.setupAuthLogging()()
+
+	// Check if provider implements the Provisioner interface.
+	provisioner, ok := provider.(types.Provisioner)
+	if !ok {
+		log.Debug("Provider does not support provisioning, skipping", logKeyProvider, providerName)
+		return
+	}
+
+	// Run provisioning.
+	log.Debug("Running identity provisioning", logKeyProvider, providerName)
+	result, err := provisioner.ProvisionIdentities(ctx, credentials)
+	if err != nil {
+		log.Warn("Failed to provision identities, skipping", logKeyProvider, providerName, "error", err)
+		return
+	}
+
+	// Skip if no identities provisioned.
+	if result == nil || len(result.Identities) == 0 {
+		log.Debug("No identities provisioned", logKeyProvider, providerName)
+		return
+	}
+
+	// Guard against nil Counts to prevent panic from incomplete ProvisioningResult implementations.
+	accounts := 0
+	roles := 0
+	if result.Metadata.Counts != nil {
+		accounts = result.Metadata.Counts.Accounts
+		roles = result.Metadata.Counts.Roles
+	}
+
+	log.Debug("Provisioned identities from provider",
+		logKeyProvider, providerName,
+		"accounts", accounts,
+		"roles", roles,
+		"identities", len(result.Identities))
+
+	// Write provisioned identities to cache.
+	if err := m.writeProvisionedIdentities(result); err != nil {
+		log.Warn("Failed to write provisioned identities, skipping", logKeyProvider, providerName, "error", err)
+		return
+	}
+
+	log.Debug("Successfully provisioned and cached identities", logKeyProvider, providerName, "count", len(result.Identities))
+}
+
+// setupAuthLogging configures auth-specific logging (prefix and level).
+// Returns a cleanup function that restores the original settings.
+func (m *manager) setupAuthLogging() func() {
+	// Save current state.
+	currentLevel := log.GetLevel()
+
+	// Set auth prefix.
+	log.SetPrefix("atmos-auth")
+
+	// Set auth log level from config if specified.
+	if m.config != nil && m.config.Logs.Level != "" {
+		if authLogLevel, err := log.ParseLogLevel(m.config.Logs.Level); err == nil {
+			// Convert Atmos LogLevel string to charm.Level.
+			switch authLogLevel {
+			case log.LogLevelTrace:
+				log.SetLevel(log.TraceLevel)
+			case log.LogLevelDebug:
+				log.SetLevel(log.DebugLevel)
+			case log.LogLevelInfo:
+				log.SetLevel(log.InfoLevel)
+			case log.LogLevelWarning:
+				log.SetLevel(log.WarnLevel)
+			case log.LogLevelError:
+				log.SetLevel(log.ErrorLevel)
+			case log.LogLevelOff:
+				log.SetLevel(log.FatalLevel)
+			}
+		}
+	}
+
+	// Return cleanup function.
+	return func() {
+		log.SetLevel(currentLevel)
+		log.SetPrefix("")
+	}
+}
+
+// writeProvisionedIdentities writes provisioned identities to the cache directory.
+func (m *manager) writeProvisionedIdentities(result *types.ProvisioningResult) error {
+	defer perf.Track(nil, "auth.Manager.writeProvisionedIdentities")()
+
+	writer, err := types.NewProvisioningWriter()
+	if err != nil {
+		return fmt.Errorf("failed to create provisioning writer: %w", err)
+	}
+
+	filePath, err := writer.Write(result)
+	if err != nil {
+		return fmt.Errorf("failed to write provisioned identities: %w", err)
+	}
+
+	log.Debug("Wrote provisioned identities to cache", "path", filePath)
+	return nil
 }
 
 // Helper functions for logging.
@@ -791,6 +1086,17 @@ func (m *manager) getChainStepName(index int) string {
 		return m.chain[index]
 	}
 	return "unknown"
+}
+
+// isSessionToken checks if credentials are temporary session tokens.
+// Session tokens are identified by the presence of a SessionToken field.
+// These should not be cached in keyring as they overwrite long-lived credentials.
+func isSessionToken(creds types.ICredentials) bool {
+	if awsCreds, ok := creds.(*types.AWSCredentials); ok {
+		return awsCreds.SessionToken != ""
+	}
+	// Add other credential types as needed.
+	return false
 }
 
 // authenticateIdentityChain performs sequential authentication through an identity chain.
@@ -819,11 +1125,19 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 
 		currentCreds = nextCreds
 
-		// Cache credentials for this level.
-		if err := m.credentialStore.Store(identityStep, currentCreds); err != nil {
-			log.Debug("Failed to cache credentials", "identityStep", identityStep, "error", err)
+		// Cache credentials for this level, but skip session tokens.
+		// Session tokens are already persisted to provider-specific storage (e.g., AWS files)
+		// and can be loaded via identity.LoadCredentials().
+		// Caching session tokens in keyring would overwrite long-lived credentials
+		// that are needed for subsequent authentication attempts.
+		if isSessionToken(currentCreds) {
+			log.Debug("Skipping keyring cache for session tokens", "identityStep", identityStep)
 		} else {
-			log.Debug("Cached credentials", "identityStep", identityStep)
+			if err := m.credentialStore.Store(identityStep, currentCreds); err != nil {
+				log.Debug("Failed to cache credentials", "identityStep", identityStep, "error", err)
+			} else {
+				log.Debug("Cached credentials", "identityStep", identityStep)
+			}
 		}
 
 		log.Debug("Chained identity", "from", m.getChainStepName(i-1), "to", identityStep)
@@ -912,12 +1226,73 @@ func (m *manager) GetEnvironmentVariables(identityName string) (map[string]strin
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
 	}
 
+	// Ensure the identity has access to manager for resolving provider information.
+	// This builds the authentication chain and sets manager reference so the identity
+	// can resolve the root provider for file-based credentials.
+	// This is best-effort - if it fails, the identity will fall back to config-based resolution.
+	_ = m.ensureIdentityHasManager(identityName)
+
 	// Get environment variables from the identity.
 	env, err := identity.Environment()
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get environment variables for identity %q: %w",
-			errUtils.ErrInvalidAuthConfig, identityName, err)
+		return nil, fmt.Errorf("%w: failed to get environment variables: %w", errUtils.ErrAuthManager, err)
 	}
 
 	return env, nil
+}
+
+// PrepareShellEnvironment prepares environment variables for subprocess execution.
+// Takes current environment list and returns it with auth credentials configured.
+// This calls identity.PrepareEnvironment() internally to configure file-based credentials.
+func (m *manager) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
+	defer perf.Track(nil, "auth.Manager.PrepareShellEnvironment")()
+
+	// Verify identity exists.
+	identity, exists := m.identities[identityName]
+	if !exists {
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
+	}
+
+	// Ensure the identity has access to manager for resolving provider information.
+	// This is best-effort - if it fails, the identity will fall back to config-based resolution.
+	_ = m.ensureIdentityHasManager(identityName)
+
+	// Convert input environment list to map for identity.PrepareEnvironment().
+	envMap := environListToMap(currentEnv)
+
+	// Call identity.PrepareEnvironment() to configure auth credentials.
+	// This is provider-specific (AWS sets AWS_SHARED_CREDENTIALS_FILE, AWS_PROFILE, etc.).
+	preparedEnvMap, err := identity.PrepareEnvironment(ctx, envMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare shell environment for identity %q: %w", identityName, err)
+	}
+
+	// Convert map back to list for subprocess execution.
+	return mapToEnvironList(preparedEnvMap), nil
+}
+
+// environListToMap converts environment variable list to map.
+// Input: ["KEY=value", "FOO=bar"]
+// Output: {"KEY": "value", "FOO": "bar"}
+func environListToMap(envList []string) map[string]string {
+	envMap := make(map[string]string, len(envList))
+	for _, envVar := range envList {
+		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
+			key := envVar[:idx]
+			value := envVar[idx+1:]
+			envMap[key] = value
+		}
+	}
+	return envMap
+}
+
+// mapToEnvironList converts environment variable map to list.
+// Input: {"KEY": "value", "FOO": "bar"}
+// Output: ["KEY=value", "FOO=bar"]
+func mapToEnvironList(envMap map[string]string) []string {
+	envList := make([]string, 0, len(envMap))
+	for key, value := range envMap {
+		envList = append(envList, fmt.Sprintf("%s=%s", key, value))
+	}
+	return envList
 }

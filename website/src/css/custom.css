@@ -4,6 +4,26 @@
  * work well for content-centric websites.
  */
 
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* No custom width constraints - let Docusaurus handle responsive layout */
+
+/* Accessibility: Visually hidden but available to screen readers */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 .navbar__title {
     font-size: 2em;
     backdrop-filter: blur(6px) saturate(180%);
@@ -37,6 +57,15 @@ html[data-theme='dark'] a.navbar__item.navbar__link.latest-release-link {
     position: relative;
     bottom: 2px;
     margin-right: 0;
+}
+
+/* Add drop shadow to alien logo in light mode */
+.navbar__logo img {
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+}
+
+html[data-theme='dark'] .navbar__logo img {
+    filter: none;
 }
 
 div.atmos__effect, html[data-theme='dark'] div.navbar__logo {
@@ -83,22 +112,22 @@ div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
 
 ::selection {
     background-color: yellow;
-}
-
-html[data-theme='dark'] body {
-    background-image: url("/static/img/cloudposse-opaque.svg");
+    color: black;
 }
 
 body {
     background-color: var(--ifm-background-color);
-    background-image: url("/static/img/cloudposse-light.svg");
-    background-position: 98% 98%;
-    background-repeat: no-repeat;
-    background-size: 15em;
-    background-attachment: fixed;
     font-family: 'Optimistic Text', -apple-system, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     font-size: 17px;
     line-height: 30px;
+}
+
+/* Hide Cloud Posse watermark on mobile */
+@media (max-width: 996px) {
+    body,
+    html[data-theme='dark'] body {
+        background-image: none;
+    }
 }
 
 .language-console pre > code, .language-text pre > code {
@@ -512,4 +541,394 @@ sub {
 
 .markdown h3 {
     margin-top: 3em;
+}
+
+/* Modern Blog/Changelog Styling */
+
+/* Year headings on ALL blog pages and sidebar - consistent styling */
+.blog-list-page h3,
+.blog-post-page aside h3,
+aside[class*="sidebar"] h3 {
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    margin-top: 2rem !important;
+    margin-bottom: 1.5rem !important;
+    padding-bottom: 0.75rem !important;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1) !important;
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+html[data-theme='light'] .blog-list-page h3,
+html[data-theme='light'] .blog-post-page aside h3,
+html[data-theme='light'] aside[class*="sidebar"] h3 {
+    color: rgba(0, 0, 0, 0.6) !important;
+    border-bottom-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Blog pages use standard Docusaurus layout - minimal overrides only */
+
+/* Reduce blog post titles slightly */
+article header h1 {
+    font-size: 2.5rem !important;
+    line-height: 1.2 !important;
+}
+
+.blog-list-page h2 {
+    line-height: 1.2 !important;
+    margin-bottom: 0.5rem !important;
+}
+
+.blog-list-page h2 a {
+    font-size: 2rem !important;
+    line-height: 1.2 !important;
+    color: inherit !important;
+    text-decoration: none !important;
+    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out !important;
+}
+
+.blog-list-page h2 a:hover {
+    opacity: 0.7 !important;
+    text-decoration: none !important;
+    transform: translateX(4px) !important;
+}
+
+html[data-theme="light"] .blog-list-page h2 a:hover {
+    opacity: 0.6 !important;
+}
+
+/* Blog list - restructure layout to move tags inline with date */
+.theme-blog-post-item {
+    position: relative;
+}
+
+/* Move tags from footer to header area */
+.theme-blog-post-item footer {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+}
+
+/* Create inline date/tags layout for blog list */
+.theme-blog-post-item header > div:last-child {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 1rem !important;
+    flex-wrap: wrap !important;
+    width: 100% !important;
+}
+
+/* Tags on individual blog posts - use absolute positioning to move to header */
+article header {
+    position: relative;
+}
+
+.blog-tags-post-page {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+
+/* Modern tag container - remove default styling */
+.theme-blog-post-item footer .tags_src-theme-BlogTagsListPage-styles-module,
+.blog-list-page .tags_src-theme-BlogTagsListPage-styles-module {
+    display: inline-flex !important;
+    gap: 0.5rem !important;
+    margin: 0 !important;
+    order: 2 !important;
+}
+
+/* Hide "Tags:" text label completely - multiple approaches */
+.blog-list-page .tags_src-theme-BlogTagsListPage-styles-module::before,
+.blog-post-page .blog-tags-post-page::before,
+.theme-blog-post-item footer > span:first-child {
+    display: none !important;
+    visibility: hidden !important;
+    font-size: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+
+/* Hide "Tags:" label on individual blog post pages */
+.blog-post-page .blog-tags-post-page b,
+article .blog-tags-post-page b {
+    display: none !important;
+}
+
+/* Force hide any text node containing "Tags:" */
+.blog-list-page footer::before,
+.theme-blog-post-item footer::before {
+    content: none !important;
+}
+
+/* Individual tag styling - modern subtle badges like Next.js sites */
+html[data-theme="dark"] .tag {
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.375rem;
+    background: rgba(128, 128, 128, 0.2);
+    color: #fff;
+    opacity: 0.8;
+    border: 1px solid rgba(128, 128, 128, 0.15);
+    text-decoration: none;
+    transition: all 0.15s ease;
+    letter-spacing: 0.01em;
+}
+
+html[data-theme="light"] .tag {
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.375rem;
+    color: #1a1d23;
+    background: rgba(0, 0, 0, 0.15);
+    opacity: 0.8;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    text-decoration: none;
+    transition: all 0.15s ease;
+    letter-spacing: 0.01em;
+}
+
+html[data-theme="dark"] .tag:hover {
+    opacity: 1;
+    background: rgba(128, 128, 128, 0.3);
+    border-color: rgba(128, 128, 128, 0.25);
+    color: #fff;
+    text-decoration: none;
+    transform: translateY(-1px);
+}
+
+html[data-theme="light"] .tag:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.2);
+    border-color: rgba(0, 0, 0, 0.18);
+    color: #1a1d23;
+    text-decoration: none;
+    transform: translateY(-1px);
+}
+
+/* Hide the "Tags:" text by setting font-size to 0 on the text content */
+.theme-blog-post-item footer,
+.blog-list-page footer {
+    font-size: 0;
+}
+
+/* Restore font-size for the actual links (not tags) */
+.theme-blog-post-item footer a:not(.tag),
+.blog-list-page footer a:not(.tag) {
+    font-size: 0.9rem;
+}
+
+/* Additional approach - hide any text nodes */
+.theme-blog-post-item footer > *:not(a):not([class*="tags"]) {
+    display: none;
+}
+
+/* Hide text content that says "Tags:" using negative text-indent */
+.theme-blog-post-item footer,
+.blog-list-page footer {
+    text-indent: -9999px;
+}
+
+.theme-blog-post-item footer *,
+.blog-list-page footer * {
+    text-indent: 0;
+}
+
+/* Better author card styling */
+.avatar__photo {
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+}
+
+.avatar__intro {
+    font-size: 0.95rem;
+}
+
+.avatar__name {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.avatar__subtitle {
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+/* Improve blog post spacing */
+.theme-blog-post-item {
+    margin-bottom: 3rem;
+    padding: 2rem !important;
+    border-radius: 0.75rem !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    transition: all 0.2s ease !important;
+}
+
+.theme-blog-post-item:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    transform: translateY(-2px) !important;
+}
+
+html[data-theme='light'] .theme-blog-post-item {
+    background: rgba(0, 0, 0, 0.02) !important;
+    border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+html[data-theme='light'] .theme-blog-post-item:hover {
+    background: rgba(0, 0, 0, 0.03) !important;
+    border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Better date and read time styling */
+.theme-blog-post-item time,
+.theme-blog-post-item .blogPostData_node_modules-\@docusaurus-theme-classic-lib-theme-BlogPostItem-Header-Info-styles-module {
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+/* Blog post header metadata - date and tags inline */
+article header .margin-vert--md {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    flex-wrap: wrap !important;
+}
+
+/* Modern tag styling - smaller, more subtle */
+/* Move tags to header on individual blog post pages */
+.blog-tags-post-page {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+}
+
+/* Make article header relative for absolute positioning */
+article header {
+    position: relative !important;
+}
+
+/* Style tags on individual blog post - use margin-left for spacing */
+.blog-tags-post-page .tag {
+    margin-left: 0.5rem !important;
+}
+
+/* Hide "Tags:" label on individual blog posts */
+.blog-tags-post-page b {
+    display: none !important;
+}
+
+/* Improve blog excerpt */
+.theme-blog-post-item p {
+    font-size: 1.1rem;
+    line-height: 1.7;
+    margin-top: 1rem;
+}
+
+/* Better Read more link */
+.theme-blog-post-item footer a {
+    font-weight: 600;
+}
+
+/* Fix sidebar width to prevent unnecessary wrapping and restore sticky positioning */
+.theme-doc-sidebar-container {
+    min-width: 280px !important;
+    width: 280px !important;
+    position: sticky !important;
+    top: var(--ifm-navbar-height) !important;
+    max-height: calc(100vh - var(--ifm-navbar-height)) !important;
+    overflow-y: auto !important;
+    padding-top: 0 !important;
+}
+
+@media (min-width: 997px) {
+    .theme-doc-sidebar-container {
+        min-width: 300px !important;
+        width: 300px !important;
+    }
+}
+
+/* Prevent text wrapping in sidebar links */
+.menu__link {
+    white-space: normal;
+    line-height: 1.4;
+}
+
+/* Blog sidebar - match docs sidebar appearance exactly */
+.blog-list-page aside,
+.blog-post-page aside,
+aside[class*="sidebar_"] {
+    position: sticky !important;
+    top: var(--ifm-navbar-height) !important;
+    max-height: calc(100vh - var(--ifm-navbar-height)) !important;
+    overflow-y: auto !important;
+    padding-top: 0 !important;
+}
+
+/* Blog sidebar items - match docs sidebar menu items */
+.theme-blog-sidebar-item {
+    margin-bottom: 0;
+}
+
+.theme-blog-sidebar-item li {
+    max-width: 100%;
+}
+
+.theme-blog-sidebar-item a,
+a[class*="sidebarItemLink"] {
+    font-size: var(--ifm-menu-link-font-size);
+    line-height: var(--ifm-menu-link-line-height);
+    padding: var(--ifm-menu-link-padding-vertical) var(--ifm-menu-link-padding-horizontal);
+    color: var(--ifm-menu-color);
+    text-decoration: none;
+    border-radius: var(--ifm-global-radius);
+    display: block;
+    max-width: 100%;
+    white-space: normal;
+    word-wrap: break-word;
+}
+
+.theme-blog-sidebar-item a:hover,
+a[class*="sidebarItemLink"]:hover {
+    background-color: var(--ifm-menu-color-background-hover);
+    color: var(--ifm-menu-color-active);
+}
+
+/* Table of contents - reasonable width with sticky positioning */
+.theme-doc-toc-desktop,
+div[class*="tableOfContents"],
+.thin-scrollbar {
+    min-width: 250px;
+    position: sticky;
+    top: var(--ifm-navbar-height);
+    max-height: calc(100vh - var(--ifm-navbar-height));
+    overflow-y: auto;
+}
+
+a[class*="table-of-contents__link"] {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+}
+
+/* Let TOC use natural width on all screen sizes */
+
+/* ==================== */
+/* CHANGELOG FULL WIDTH */
+/* ==================== */
+
+/* Hide sidebar on changelog/blog list page to use full width */
+.blog-list-page aside.theme-doc-sidebar-container,
+.blog-list-page [class*="sidebar"],
+.blog-list-page [class*="BlogSidebar"] {
+    display: none !important;
+}
+
+.blog-list-page main {
+    width: 100%;
+    max-width: none;
 }

@@ -1,9 +1,13 @@
 ---
 slug: introducing-command-registry-pattern
-title: "Introducing the Command Registry Pattern: Toward Pluggable Commands"
-authors: [atmos]
-tags: [contributors, atmos-core, refactoring]
-date: 2025-10-16
+title: 'Introducing the Command Registry Pattern: Toward Pluggable Commands'
+sidebar_label: Command Registry Pattern
+authors:
+  - osterman
+tags:
+  - core
+date: 2025-10-16T00:00:00.000Z
+release: v1.195.0
 ---
 
 We're excited to announce the first step in a major architectural evolution for Atmos: the **Command Registry Pattern**. This foundational change will eventually enable **pluggable commands**, allowing the community to extend Atmos with custom command packages without modifying the core codebase.
@@ -129,7 +133,7 @@ The `about` command has been migrated as a proof-of-concept in this PR, demonstr
 ## Get Involved
 
 We're building this in the open and welcome contributions from the community:
-- 💬 **Discuss** - Share your thoughts in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
+- 💬 **Discuss** - Share your thoughts in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
 - 🐛 **Report Issues** - Found a bug? [Open an issue](https://github.com/cloudposse/atmos/issues)
 - 🚀 **Contribute** - Help migrate commands in future PRs
 

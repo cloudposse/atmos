@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -14,17 +15,23 @@ type GenericGitSourceProvider struct{}
 
 // NewGenericGitSourceProvider creates a new generic Git source provider.
 func NewGenericGitSourceProvider() VendorSourceProvider {
+	defer perf.Track(nil, "exec.NewGenericGitSourceProvider")()
+
 	return &GenericGitSourceProvider{}
 }
 
 // GetAvailableVersions implements VendorSourceProvider.GetAvailableVersions.
 func (g *GenericGitSourceProvider) GetAvailableVersions(source string) ([]string, error) {
+	defer perf.Track(nil, "exec.GenericGitSourceProvider.GetAvailableVersions")()
+
 	gitURI := extractGitURI(source)
 	return getGitRemoteTags(gitURI)
 }
 
 // VerifyVersion implements VendorSourceProvider.VerifyVersion.
 func (g *GenericGitSourceProvider) VerifyVersion(source string, version string) (bool, error) {
+	defer perf.Track(nil, "exec.GenericGitSourceProvider.VerifyVersion")()
+
 	gitURI := extractGitURI(source)
 	return checkGitRef(gitURI, version)
 }
@@ -42,11 +49,15 @@ func (g *GenericGitSourceProvider) GetDiff(
 	contextLines int,
 	noColor bool,
 ) ([]byte, error) {
+	defer perf.Track(atmosConfig, "exec.GenericGitSourceProvider.GetDiff")()
+
 	return nil, fmt.Errorf("%w: diff functionality is only supported for GitHub sources", errUtils.ErrNotImplemented)
 }
 
 // SupportsOperation implements VendorSourceProvider.SupportsOperation.
 func (g *GenericGitSourceProvider) SupportsOperation(operation SourceOperation) bool {
+	defer perf.Track(nil, "exec.GenericGitSourceProvider.SupportsOperation")()
+
 	switch operation {
 	case OperationListVersions, OperationVerifyVersion, OperationFetchSource:
 		return true

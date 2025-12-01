@@ -18,6 +18,9 @@ import (
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 //
+// NOTE: Global flags (like --profile) must be synced to Viper before calling this function.
+// This is done by syncGlobalFlagsToViper() in cmd/root.go PersistentPreRun.
+//
 // TODO: Change configAndStacksInfo to pointer.
 // Temporarily suppressing gocritic warnings; refactoring InitCliConfig would require extensive changes.
 //
@@ -49,13 +52,15 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		return atmosConfig, err
 	}
 
+	// Set log config BEFORE processing stacks so pre-hooks (including auth) see the correct log level.
+	setLogConfig(&atmosConfig)
+
 	if processStacks {
 		err = processStackConfigs(&atmosConfig, &configAndStacksInfo, atmosConfig.IncludeStackAbsolutePaths, atmosConfig.ExcludeStackAbsolutePaths)
 		if err != nil {
 			return atmosConfig, err
 		}
 	}
-	setLogConfig(&atmosConfig)
 
 	atmosConfig.Initialized = true
 	return atmosConfig, nil
@@ -106,10 +111,20 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	if os.Getenv("NO_PAGER") != "" {
 		// Check if --pager flag was explicitly provided
 		if _, hasPagerFlag := flagKeyValue["pager"]; !hasPagerFlag {
-			// NO_PAGER is set and no explicit --pager flag was provided, disable the pager
+			// NO_PAGER is set, and no explicit --pager flag was provided, disable the pager
 			atmosConfig.Settings.Terminal.Pager = "false"
 		}
 	}
+
+	// Configure the global logger with the log level from flags/env/config.
+	// This ensures auth pre-hooks (executed during processStackConfigs) respect the log level.
+	// Parse and convert log level using existing utilities for consistency.
+	logLevel, err := log.ParseLogLevel(atmosConfig.Logs.Level)
+	if err != nil {
+		// Default to Warning on parse error.
+		logLevel = log.LogLevelWarning
+	}
+	log.SetLevel(log.ConvertLogLevel(logLevel))
 }
 
 // TODO: This function works well, but we should generally avoid implementing manual flag parsing,

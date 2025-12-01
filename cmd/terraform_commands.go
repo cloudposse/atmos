@@ -283,6 +283,9 @@ func attachTerraformCommands(parentCmd *cobra.Command) {
 		identityFlag.NoOptDefVal = IdentityFlagSelectValue
 	}
 
+	// Register shell completion for identity flag.
+	AddIdentityCompletion(parentCmd)
+
 	parentCmd.PersistentFlags().StringP("query", "q", "", "Execute `atmos terraform <command>` on the components filtered by a YQ expression, in all stacks or in a specific stack")
 	parentCmd.PersistentFlags().StringSlice("components", nil, "Filter by specific components")
 	parentCmd.PersistentFlags().Bool("dry-run", false, "Simulate the command without making any changes")

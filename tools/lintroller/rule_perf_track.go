@@ -55,6 +55,7 @@ var excludedPackages = []string{
 	"/mock",          // Mock/test utilities.
 	"/pkg/spacelift", // Spacelift generation is one-shot per command.
 	"/pkg/validator", // Validation runs once per command.
+	"/internal/gcp",  // GCP utilities would create import cycle with pkg/perf (used by pkg/store).
 }
 
 // Receiver types to exclude from perf.Track() checks.

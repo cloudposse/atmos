@@ -1,7 +1,7 @@
 {
   "identities": {
     "mock-identity": {
-      "kind": "mock",
+      "kind": "mock-aws",
       "default": true,
       "via": {
         "provider": "mock-provider"
@@ -13,7 +13,7 @@
       }
     },
     "mock-identity-2": {
-      "kind": "mock",
+      "kind": "mock-aws",
       "via": {
         "provider": "mock-provider"
       },
@@ -26,7 +26,7 @@
   },
   "providers": {
     "mock-provider": {
-      "kind": "mock"
+      "kind": "mock-aws"
     }
   }
 }

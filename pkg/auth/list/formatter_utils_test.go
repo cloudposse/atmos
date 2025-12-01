@@ -2,6 +2,7 @@ package list
 
 import (
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -118,4 +119,51 @@ func containsCharacter(s, char string) bool {
 		}
 	}
 	return false
+}
+
+// TestGetCurrentTime tests the getCurrentTime function with and without ATMOS_TEST_NOW override.
+func TestGetCurrentTime(t *testing.T) {
+	defer perf.Track(nil, "list.TestGetCurrentTime")()
+
+	t.Run("returns time.Now() when ATMOS_TEST_NOW not set", func(t *testing.T) {
+		// Unset the env var to ensure we get real time.
+		t.Setenv("ATMOS_TEST_NOW", "")
+
+		before := time.Now()
+		got := getCurrentTime()
+		after := time.Now()
+
+		// Verify returned time is between before and after.
+		if got.Before(before) || got.After(after) {
+			t.Errorf("getCurrentTime() = %v, want time between %v and %v", got, before, after)
+		}
+	})
+
+	t.Run("returns parsed time when ATMOS_TEST_NOW is set", func(t *testing.T) {
+		testTime := "2025-10-31T20:57:59Z"
+		t.Setenv("ATMOS_TEST_NOW", testTime)
+
+		got := getCurrentTime()
+		expected, err := time.Parse(time.RFC3339, testTime)
+		if err != nil {
+			t.Fatalf("Failed to parse test time %q: %v", testTime, err)
+		}
+
+		if !got.Equal(expected) {
+			t.Errorf("getCurrentTime() = %v, want %v", got, expected)
+		}
+	})
+
+	t.Run("returns time.Now() when ATMOS_TEST_NOW is invalid", func(t *testing.T) {
+		t.Setenv("ATMOS_TEST_NOW", "invalid-time-format")
+
+		before := time.Now()
+		got := getCurrentTime()
+		after := time.Now()
+
+		// Should fall back to time.Now() on parse error.
+		if got.Before(before) || got.After(after) {
+			t.Errorf("getCurrentTime() with invalid env = %v, want fallback to time.Now()", got)
+		}
+	})
 }

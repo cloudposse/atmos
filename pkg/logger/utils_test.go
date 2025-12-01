@@ -1,7 +1,6 @@
 package logger
 
 import (
-	"math"
 	"testing"
 
 	"github.com/charmbracelet/log"
@@ -42,7 +41,7 @@ func TestConvertLogLevel(t *testing.T) {
 		{
 			name:     "Convert Off",
 			input:    LogLevelOff,
-			expected: log.Level(math.MaxInt32), // Off is maximum level
+			expected: FatalLevel + 1, // Off is one level above FatalLevel
 		},
 		{
 			name:     "Convert Unknown (defaults to Info)",
@@ -163,7 +162,7 @@ func TestLogLevelConversion(t *testing.T) {
 		{"warn", LogLevelWarning, WarnLevel},
 		{"warning", LogLevelWarning, WarnLevel},
 		{"error", LogLevelError, ErrorLevel},
-		{"off", LogLevelOff, log.Level(math.MaxInt32)},
+		{"off", LogLevelOff, FatalLevel + 1},
 	}
 
 	for _, tc := range testCases {

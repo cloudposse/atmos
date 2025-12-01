@@ -1,9 +1,12 @@
 ---
 slug: macos-xdg-cli-conventions
-title: "Breaking Change: macOS Now Uses ~/.config for XDG Paths"
-authors: [atmos]
-tags: [breaking-change, enhancement]
-date: 2025-10-24
+title: 'Breaking Change: macOS Now Uses ~/.config for XDG Paths'
+authors:
+  - osterman
+tags:
+  - breaking-change
+date: 2025-10-24T00:00:00.000Z
+release: v1.196.0
 ---
 
 Atmos now follows CLI tool conventions on macOS, using `~/.config`, `~/.cache`, and `~/.local/share` instead of `~/Library/Application Support`. This ensures seamless integration with Geodesic and consistency with other DevOps tools.

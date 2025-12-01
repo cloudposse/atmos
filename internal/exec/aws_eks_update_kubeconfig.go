@@ -6,12 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -163,11 +162,11 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		configAndStacksInfo.Stack = kubeconfigContext.Stack
 
 		configAndStacksInfo.ComponentType = "terraform"
-		configAndStacksInfo, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
+		configAndStacksInfo, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 		shellCommandWorkingDir = filepath.Join(atmosConfig.TerraformDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 		if err != nil {
 			configAndStacksInfo.ComponentType = "helmfile"
-			configAndStacksInfo, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
+			configAndStacksInfo, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 			shellCommandWorkingDir = filepath.Join(atmosConfig.HelmfileDirAbsolutePath, configAndStacksInfo.ComponentFolderPrefix, configAndStacksInfo.FinalComponent)
 			if err != nil {
 				return err

@@ -350,7 +350,7 @@ func ExecuteTerraformGenerateBackends(
 					log.Debug("Writing backend config for the component to file", "component", terraformComponent, "file", backendFilePath)
 
 					if format == "json" {
-						componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, "")
+						componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, "", nil)
 						if err != nil {
 							return err
 						}

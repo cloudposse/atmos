@@ -25,6 +25,8 @@ type GitHubSourceProvider struct {
 
 // NewGitHubSourceProvider creates a new GitHub source provider.
 func NewGitHubSourceProvider() VendorSourceProvider {
+	defer perf.Track(nil, "exec.NewGitHubSourceProvider")()
+
 	return &GitHubSourceProvider{
 		httpClient: &http.Client{
 			Timeout: defaultHTTPTimeout,
@@ -34,6 +36,8 @@ func NewGitHubSourceProvider() VendorSourceProvider {
 
 // GetAvailableVersions implements VendorSourceProvider.GetAvailableVersions.
 func (g *GitHubSourceProvider) GetAvailableVersions(source string) ([]string, error) {
+	defer perf.Track(nil, "exec.GitHubSourceProvider.GetAvailableVersions")()
+
 	// Use existing Git operations to get tags
 	gitURI := extractGitURI(source)
 	return getGitRemoteTags(gitURI)
@@ -41,6 +45,8 @@ func (g *GitHubSourceProvider) GetAvailableVersions(source string) ([]string, er
 
 // VerifyVersion implements VendorSourceProvider.VerifyVersion.
 func (g *GitHubSourceProvider) VerifyVersion(source string, version string) (bool, error) {
+	defer perf.Track(nil, "exec.GitHubSourceProvider.VerifyVersion")()
+
 	gitURI := extractGitURI(source)
 	return checkGitRef(gitURI, version)
 }
@@ -72,7 +78,7 @@ func (g *GitHubSourceProvider) GetDiff(
 
 	req, err := http.NewRequest("GET", compareURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create request: %s", errUtils.ErrGitDiffFailed, err)
+		return nil, fmt.Errorf("%w: failed to create request: %w", errUtils.ErrGitDiffFailed, err)
 	}
 
 	// Add GitHub API headers
@@ -85,7 +91,7 @@ func (g *GitHubSourceProvider) GetDiff(
 
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to fetch diff from GitHub: %s", errUtils.ErrGitDiffFailed, err)
+		return nil, fmt.Errorf("%w: failed to fetch diff from GitHub: %w", errUtils.ErrGitDiffFailed, err)
 	}
 	defer resp.Body.Close()
 
@@ -97,7 +103,7 @@ func (g *GitHubSourceProvider) GetDiff(
 
 	diff, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read diff: %s", errUtils.ErrGitDiffFailed, err)
+		return nil, fmt.Errorf("%w: failed to read diff: %w", errUtils.ErrGitDiffFailed, err)
 	}
 
 	// TODO: Apply file filtering if filePath is specified
@@ -109,6 +115,8 @@ func (g *GitHubSourceProvider) GetDiff(
 
 // SupportsOperation implements VendorSourceProvider.SupportsOperation.
 func (g *GitHubSourceProvider) SupportsOperation(operation SourceOperation) bool {
+	defer perf.Track(nil, "exec.GitHubSourceProvider.SupportsOperation")()
+
 	switch operation {
 	case OperationListVersions, OperationVerifyVersion, OperationGetDiff, OperationFetchSource:
 		return true

@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/terraform/generate/varfile"
 )
 
 // terraformGenerateCmd generates configurations for terraform components
@@ -21,5 +23,8 @@ This command supports the following subcommands:
 }
 
 func init() {
+	// Add modern varfile command.
+	terraformGenerateCmd.AddCommand(varfile.NewVarfileCommand())
+
 	terraformCmd.AddCommand(terraformGenerateCmd)
 }

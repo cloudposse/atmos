@@ -91,7 +91,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 		log.Debug("Writing the backend config to file.", "file", backendFileName)
 
 		if !info.DryRun {
-			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
+			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace, info.AuthContext)
 			if err != nil {
 				return err
 			}
@@ -114,7 +114,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 		log.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
 
 		if !info.DryRun {
-			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
+			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection, info.AuthContext)
 			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o600)
 			return err
 		}

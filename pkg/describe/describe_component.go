@@ -15,5 +15,12 @@ func ExecuteDescribeComponent(
 ) (map[string]any, error) {
 	defer perf.Track(nil, "describe.ExecuteDescribeComponent")()
 
-	return e.ExecuteDescribeComponent(component, stack, processTemplates, processYamlFunctions, skip)
+	return e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     processTemplates,
+		ProcessYamlFunctions: processYamlFunctions,
+		Skip:                 skip,
+		AuthManager:          nil,
+	})
 }

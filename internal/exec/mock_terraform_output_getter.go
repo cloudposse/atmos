@@ -41,9 +41,9 @@ func (m *MockTerraformOutputGetter) EXPECT() *MockTerraformOutputGetterMockRecor
 }
 
 // GetOutput mocks base method.
-func (m *MockTerraformOutputGetter) GetOutput(atmosConfig *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext) (any, bool, error) {
+func (m *MockTerraformOutputGetter) GetOutput(atmosConfig *schema.AtmosConfiguration, stack, component, output string, skipCache bool, authContext *schema.AuthContext, authManager any) (any, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOutput", atmosConfig, stack, component, output, skipCache, authContext)
+	ret := m.ctrl.Call(m, "GetOutput", atmosConfig, stack, component, output, skipCache, authContext, authManager)
 	ret0, _ := ret[0].(any)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
@@ -51,7 +51,7 @@ func (m *MockTerraformOutputGetter) GetOutput(atmosConfig *schema.AtmosConfigura
 }
 
 // GetOutput indicates an expected call of GetOutput.
-func (mr *MockTerraformOutputGetterMockRecorder) GetOutput(atmosConfig, stack, component, output, skipCache, authContext any) *gomock.Call {
+func (mr *MockTerraformOutputGetterMockRecorder) GetOutput(atmosConfig, stack, component, output, skipCache, authContext, authManager any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOutput", reflect.TypeOf((*MockTerraformOutputGetter)(nil).GetOutput), atmosConfig, stack, component, output, skipCache, authContext)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOutput", reflect.TypeOf((*MockTerraformOutputGetter)(nil).GetOutput), atmosConfig, stack, component, output, skipCache, authContext, authManager)
 }

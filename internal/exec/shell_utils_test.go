@@ -461,7 +461,7 @@ func TestExecAuthShellCommand_ExitCodePropagation(t *testing.T) {
 				"TEST_VAR": "test_value",
 			}
 
-			err := ExecAuthShellCommand(nil, "test-identity", envVars, "/bin/sh", tt.shellArgs)
+			err := ExecAuthShellCommand(nil, "test-identity", "test-provider", envVars, "/bin/sh", tt.shellArgs)
 
 			if tt.expectedCode == 0 {
 				assert.NoError(t, err)

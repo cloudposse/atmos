@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -71,6 +72,7 @@ var commonFlags = []string{
 	cfg.ProfilerTypeFlag,
 	cfg.HeatmapFlag,
 	cfg.HeatmapModeFlag,
+	cfg.AtmosProfileFlag,
 }
 
 // ProcessCommandLineArgs processes command-line args.
@@ -84,11 +86,18 @@ func ProcessCommandLineArgs(
 
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 
+	log.Debug("ProcessCommandLineArgs input", "componentType", componentType, "args", args)
+
 	cmd.DisableFlagParsing = false
 
 	err := cmd.ParseFlags(args)
 	if err != nil && !errors.Is(err, pflag.ErrHelp) {
 		return configAndStacksInfo, err
+	}
+
+	// Check what Cobra parsed for identity flag.
+	if identityFlag := cmd.Flag("identity"); identityFlag != nil {
+		log.Debug("After ParseFlags", "identity.Value", identityFlag.Value.String(), "identity.Changed", identityFlag.Changed)
 	}
 
 	argsAndFlagsInfo, err := processArgsAndFlags(componentType, args)
@@ -108,6 +117,25 @@ func ProcessCommandLineArgs(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+	// Read profile flag and env var.
+	// Check flag first, then fall back to ATMOS_PROFILE env var if flag not set.
+	profiles, err := cmd.Flags().GetStringSlice("profile")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if len(profiles) == 0 {
+		//nolint:forbidigo // Must use os.Getenv: profile is processed before Viper configuration loads.
+		if envProfiles := os.Getenv("ATMOS_PROFILE"); envProfiles != "" {
+			// Split comma-separated profiles from env var and filter out empty entries.
+			raw := strings.Split(envProfiles, ",")
+			for _, p := range raw {
+				if v := strings.TrimSpace(p); v != "" {
+					profiles = append(profiles, v)
+				}
+			}
+		}
+	}
+	configAndStacksInfo.ProfilesFromArg = profiles
 	finalAdditionalArgsAndFlags := argsAndFlagsInfo.AdditionalArgsAndFlags
 	if len(additionalArgsAndFlags) > 0 {
 		finalAdditionalArgsAndFlags = append(finalAdditionalArgsAndFlags, additionalArgsAndFlags...)
@@ -537,16 +565,25 @@ func processArgsAndFlags(
 		}
 
 		if arg == cfg.IdentityFlag {
-			if len(inputArgsAndFlags) <= (i + 1) {
-				return info, fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
+			// Check if next arg exists and is not another flag.
+			if len(inputArgsAndFlags) > (i+1) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
+				// Has value: --identity <value>.
+				info.Identity = inputArgsAndFlags[i+1]
+			} else {
+				// No value: --identity (interactive selection).
+				info.Identity = cfg.IdentityFlagSelectValue
 			}
-			info.Identity = inputArgsAndFlags[i+1]
 		} else if strings.HasPrefix(arg+"=", cfg.IdentityFlag) {
 			parts := strings.Split(arg, "=")
 			if len(parts) != 2 {
 				return info, fmt.Errorf("%w: %s", errUtils.ErrInvalidFlag, arg)
 			}
-			info.Identity = parts[1]
+			if parts[1] == "" {
+				// Empty value: --identity= (interactive selection).
+				info.Identity = cfg.IdentityFlagSelectValue
+			} else {
+				info.Identity = parts[1]
+			}
 		}
 
 		if arg == cfg.FromPlanFlag {

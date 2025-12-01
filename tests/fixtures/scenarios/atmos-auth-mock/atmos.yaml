@@ -8,19 +8,19 @@ stacks:
     - "**/*"
   name_pattern: "{stage}"
 
-# Mock authentication provider for testing purposes only.
-# This provider does not require real cloud credentials and is used
-# exclusively for integration testing of authentication features.
+# Mock AWS authentication provider for testing purposes only.
+# This provider simulates AWS authentication without requiring real cloud credentials.
+# Used exclusively for integration testing of AWS-specific authentication features.
 auth:
   providers:
     mock-provider:
-      kind: mock
+      kind: mock-aws
       config:
-        description: "Mock provider for testing"
+        description: "Mock AWS provider for testing"
 
   identities:
     mock-identity:
-      kind: mock
+      kind: mock-aws
       default: true
       via:
         provider: mock-provider
@@ -29,7 +29,7 @@ auth:
           id: "123456789012"
 
     mock-identity-2:
-      kind: mock
+      kind: mock-aws
       via:
         provider: mock-provider
       principal:
@@ -38,3 +38,17 @@ auth:
 
 logs:
   level: Info
+
+commands:
+  - name: test-identity
+    description: Test custom command with identity
+    identity: mock-identity
+    steps:
+      - 'echo "Testing custom command with identity"'
+
+  - name: test-identity-multi
+    description: Test custom command with identity and multiple steps
+    identity: mock-identity-2
+    steps:
+      - 'echo "Step 1 with identity"'
+      - 'echo "Step 2 with identity"'

@@ -20,6 +20,7 @@ type AWSCredentials struct {
 	Region          string `json:"region,omitempty"`
 	Expiration      string `json:"expiration,omitempty"`
 	MfaArn          string `json:"mfa_arn,omitempty"`
+	SessionDuration string `json:"session_duration,omitempty"` // Duration string (e.g., "12h", "24h")
 }
 
 // IsExpired returns true if the credentials are expired.
@@ -44,7 +45,9 @@ func (c *AWSCredentials) GetExpiration() (*time.Time, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed parsing AWS credential expiration: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
-	return &expTime, nil
+	// Convert to local timezone for display to user.
+	localTime := expTime.Local()
+	return &localTime, nil
 }
 
 // BuildWhoamiInfo implements ICredentials for AWSCredentials.

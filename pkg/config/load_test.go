@@ -3,10 +3,12 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -617,4 +619,149 @@ components: {
 			assert.Error(t, err, tt.description)
 		})
 	}
+}
+
+func TestInjectProvisionedIdentityImports_NoProviders(t *testing.T) {
+	// Test that injectProvisionedIdentityImports does nothing when no auth providers are configured.
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{},
+		},
+		Import: []string{"existing-import.yaml"},
+	}
+
+	err := injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"existing-import.yaml"}, src.Import)
+}
+
+func TestInjectProvisionedIdentityImports_WithProviders(t *testing.T) {
+	// Test that injectProvisionedIdentityImports prepends provisioned identity files when they exist.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Create mock provisioned identity file.
+	provisioningDir := filepath.Join(tempDir, "atmos", "auth", "test-provider")
+	err := os.MkdirAll(provisioningDir, 0o700)
+	require.NoError(t, err)
+
+	provisionedFile := filepath.Join(provisioningDir, "provisioned-identities.yaml")
+	err = os.WriteFile(provisionedFile, []byte("identities: {}\n"), 0o600)
+	require.NoError(t, err)
+
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"test-provider": {
+					Kind: "aws/iam-identity-center",
+				},
+			},
+		},
+		Import: []string{"existing-import.yaml"},
+	}
+
+	err = injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+
+	// Should have provisioned import prepended.
+	assert.Len(t, src.Import, 2)
+	assert.Contains(t, src.Import[0], "test-provider")
+	assert.Contains(t, src.Import[0], "provisioned-identities.yaml")
+	assert.Equal(t, "existing-import.yaml", src.Import[1])
+}
+
+func TestInjectProvisionedIdentityImports_NoProvisionedFiles(t *testing.T) {
+	// Test that injectProvisionedIdentityImports does nothing when provisioned files don't exist.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"test-provider": {
+					Kind: "aws/iam-identity-center",
+				},
+			},
+		},
+		Import: []string{"existing-import.yaml"},
+	}
+
+	err := injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+
+	// Should not modify imports when no provisioned files exist.
+	assert.Equal(t, []string{"existing-import.yaml"}, src.Import)
+}
+
+func TestInjectProvisionedIdentityImports_MultipleProviders(t *testing.T) {
+	// Test that injectProvisionedIdentityImports handles multiple providers.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Create provisioned files for two providers.
+	for _, providerName := range []string{"provider1", "provider2"} {
+		provisioningDir := filepath.Join(tempDir, "atmos", "auth", providerName)
+		err := os.MkdirAll(provisioningDir, 0o700)
+		require.NoError(t, err)
+
+		provisionedFile := filepath.Join(provisioningDir, "provisioned-identities.yaml")
+		err = os.WriteFile(provisionedFile, []byte("identities: {}\n"), 0o600)
+		require.NoError(t, err)
+	}
+
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"provider1": {Kind: "aws/iam-identity-center"},
+				"provider2": {Kind: "aws/iam-identity-center"},
+			},
+		},
+		Import: []string{"existing-import.yaml"},
+	}
+
+	err := injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+
+	// Should have both provisioned imports prepended.
+	assert.Len(t, src.Import, 3)
+	assert.Equal(t, "existing-import.yaml", src.Import[2])
+
+	// Check that both provider imports are present.
+	importPaths := strings.Join(src.Import, " ")
+	assert.Contains(t, importPaths, "provider1")
+	assert.Contains(t, importPaths, "provider2")
+}
+
+func TestInjectProvisionedIdentityImports_EmptyImportList(t *testing.T) {
+	// Test that injectProvisionedIdentityImports works when Import list is initially empty.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Create mock provisioned identity file.
+	provisioningDir := filepath.Join(tempDir, "atmos", "auth", "test-provider")
+	err := os.MkdirAll(provisioningDir, 0o700)
+	require.NoError(t, err)
+
+	provisionedFile := filepath.Join(provisioningDir, "provisioned-identities.yaml")
+	err = os.WriteFile(provisionedFile, []byte("identities: {}\n"), 0o600)
+	require.NoError(t, err)
+
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"test-provider": {
+					Kind: "aws/iam-identity-center",
+				},
+			},
+		},
+		Import: []string{},
+	}
+
+	err = injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+
+	// Should have only the provisioned import.
+	assert.Len(t, src.Import, 1)
+	assert.Contains(t, src.Import[0], "test-provider")
+	assert.Contains(t, src.Import[0], "provisioned-identities.yaml")
 }

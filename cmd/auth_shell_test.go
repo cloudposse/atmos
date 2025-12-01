@@ -23,12 +23,12 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 		},
 		{
 			name:          "nonexistent identity",
-			args:          []string{"--identity", "nonexistent"},
+			args:          []string{"--identity=nonexistent"},
 			expectedError: "identity not found",
 		},
 		{
 			name: "valid identity",
-			args: []string{"--identity", "test-user"},
+			args: []string{"--identity=test-user"},
 			// This will fail with auth errors since we don't have real AWS credentials.
 			expectedError: "authentication failed",
 		},
@@ -46,7 +46,7 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 		},
 		{
 			name: "identity with shell args",
-			args: []string{"--identity", "test-user", "--", "-c", "env"},
+			args: []string{"--identity=test-user", "--", "-c", "env"},
 			// This will fail with auth errors since we don't have real AWS credentials.
 			expectedError: "authentication failed",
 		},
@@ -86,13 +86,14 @@ func TestAuthShellCmd_CommandStructure(t *testing.T) {
 	assert.Equal(t, "shell", authShellCmd.Use)
 	assert.True(t, authShellCmd.DisableFlagParsing, "DisableFlagParsing should be true to allow pass-through of shell arguments")
 
-	// Verify identity flag exists.
-	identityFlag := authShellCmd.Flags().Lookup("identity")
-	require.NotNil(t, identityFlag, "identity flag should be registered")
+	// Verify identity flag exists (inherited from parent authCmd).
+	identityFlag := authShellCmd.Flag("identity")
+	require.NotNil(t, identityFlag, "identity flag should be inherited from parent authCmd")
 	assert.Equal(t, "i", identityFlag.Shorthand)
 	assert.Equal(t, "", identityFlag.DefValue)
+	assert.Equal(t, IdentityFlagSelectValue, identityFlag.NoOptDefVal, "NoOptDefVal should be __SELECT__")
 
-	// Verify shell flag exists.
+	// Verify shell flag exists (local flag).
 	shellFlag := authShellCmd.Flags().Lookup("shell")
 	require.NotNil(t, shellFlag, "shell flag should be registered")
 	assert.Equal(t, "", shellFlag.DefValue)
@@ -129,7 +130,7 @@ func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
 	testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
 	// This will fail at authentication but will exercise the env var initialization path.
-	err := executeAuthShellCommandCore(testCmd, []string{"--identity", "test-user"})
+	err := executeAuthShellCommandCore(testCmd, []string{"--identity=test-user"})
 	assert.Error(t, err)
 	// Should contain authentication failed, not nil pointer errors.
 	assert.Contains(t, err.Error(), "authentication failed")
@@ -191,19 +192,19 @@ func TestAuthShellCmd_WithMockProvider(t *testing.T) {
 		{
 			name:          "successful auth with explicit mock identity",
 			shell:         shellFlag,
-			args:          []string{"--identity", "mock-identity", "--shell", shellFlag, "--", exitCmd, "exit 0"},
+			args:          []string{"--identity=mock-identity", "--shell", shellFlag, "--", exitCmd, "exit 0"},
 			expectedError: false,
 		},
 		{
 			name:          "successful auth with second mock identity",
 			shell:         shellFlag,
-			args:          []string{"--identity", "mock-identity-2", "--shell", shellFlag, "--", exitCmd, "exit 0"},
+			args:          []string{"--identity=mock-identity-2", "--shell", shellFlag, "--", exitCmd, "exit 0"},
 			expectedError: false,
 		},
 		{
 			name:          "shell exits with non-zero code",
 			shell:         shellFlag,
-			args:          []string{"--identity", "mock-identity", "--shell", shellFlag, "--", exitCmd, "exit 42"},
+			args:          []string{"--identity=mock-identity", "--shell", shellFlag, "--", exitCmd, "exit 42"},
 			expectedError: true,
 		},
 	}
@@ -253,10 +254,10 @@ func TestAuthShellCmd_MockProviderEnvironmentVariables(t *testing.T) {
 	var args []string
 	if runtime.GOOS == "windows" {
 		// On Windows, use cmd.exe to check for environment variables.
-		args = []string{"--identity", "mock-identity", "--shell", "cmd.exe", "--", "/c", "exit 0"}
+		args = []string{"--identity=mock-identity", "--shell", "cmd.exe", "--", "/c", "exit 0"}
 	} else {
 		// On Unix, use sh with grep to verify credentials are set.
-		args = []string{"--identity", "mock-identity", "--shell", "/bin/sh", "--", "-c", "exit 0"}
+		args = []string{"--identity=mock-identity", "--shell", "/bin/sh", "--", "-c", "exit 0"}
 	}
 
 	err := executeAuthShellCommandCore(testCmd, args)

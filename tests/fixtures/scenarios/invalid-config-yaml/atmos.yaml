@@ -1,0 +1,10 @@
+# Invalid YAML syntax - unclosed bracket
+components:
+  terraform:
+    base_path: "components/terraform"
+
+# Invalid indentation and unclosed structure
+command_aliases:
+  tf: terraform
+    plan: "terraform plan"  # Wrong indentation
+  [invalid

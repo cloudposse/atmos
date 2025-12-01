@@ -265,3 +265,243 @@ settings:
 	assert.False(t, v.IsSet("settings.from_b"))
 	assert.False(t, v.IsSet("settings.from_c"))
 }
+
+func TestMergeConfig_ProvisionedIdentitiesDeepMerge(t *testing.T) {
+	// Test that auto-provisioned identities are deep-merged with manually configured identities.
+	// This verifies the behavior described in pkg/config/load.go:841-844 where provisioned
+	// imports are prepended to allow manual config to take precedence.
+	tempDir := t.TempDir()
+
+	// Isolate XDG cache to prevent loading real user data.
+	cacheDir := filepath.Join(tempDir, "cache")
+	t.Setenv("XDG_CACHE_HOME", cacheDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", cacheDir)
+
+	// Create provisioned identities file in the cache location where injectProvisionedIdentityImports() will find it.
+	// This simulates what auto-provisioning writes to ~/.cache/atmos/auth/{provider}/provisioned-identities.yaml
+	provisionedDir := filepath.Join(cacheDir, "atmos", "auth", "cplive-sso")
+	err := os.MkdirAll(provisionedDir, 0o755)
+	require.NoError(t, err)
+
+	provisionedContent := `
+auth:
+  identities:
+    core-identity/identitymanagersteamaccess:
+      provider: cplive-sso
+      kind: aws/permission-set
+      via:
+        provider: cplive-sso
+      principal:
+        name: identitymanagersteamaccess
+        account:
+          name: core-identity
+          id: "123456789012"
+    core-identity/developeraccess:
+      provider: cplive-sso
+      kind: aws/permission-set
+      via:
+        provider: cplive-sso
+      principal:
+        name: developeraccess
+        account:
+          name: core-identity
+          id: "123456789012"
+  _metadata:
+    provisioned_at: "2025-01-01T12:00:00Z"
+    source: cplive-sso
+    provider: cplive-sso
+    counts:
+      accounts: 1
+      roles: 2
+      identities: 2
+`
+	createConfigFile(t, provisionedDir, "provisioned-identities.yaml", provisionedContent)
+
+	// Create manual config that adds properties to one identity (e.g., setting it as default).
+	// This represents what users configure in their atmos.yaml.
+	// NOTE: No explicit import needed - injectProvisionedIdentityImports() automatically adds it.
+	mainContent := `
+base_path: ./
+auth:
+  providers:
+    cplive-sso:
+      kind: aws/iam-identity-center
+      region: us-east-2
+      auto_provision_identities: true
+  identities:
+    core-identity/identitymanagersteamaccess:
+      default: true
+`
+	createConfigFile(t, tempDir, "atmos.yaml", mainContent)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	err = mergeConfig(v, tempDir, CliConfigFileName, true)
+	assert.NoError(t, err)
+
+	// Verify that the identity has fields from BOTH provisioned and manual config.
+	// This is the key test - manual config should add to provisioned, not replace it.
+
+	// Fields from auto-provisioning should be preserved.
+	assert.Equal(t, "cplive-sso", v.GetString("auth.identities.core-identity/identitymanagersteamaccess.provider"))
+	assert.Equal(t, "aws/permission-set", v.GetString("auth.identities.core-identity/identitymanagersteamaccess.kind"))
+	assert.Equal(t, "cplive-sso", v.GetString("auth.identities.core-identity/identitymanagersteamaccess.via.provider"))
+	assert.Equal(t, "identitymanagersteamaccess", v.GetString("auth.identities.core-identity/identitymanagersteamaccess.principal.name"))
+	assert.Equal(t, "core-identity", v.GetString("auth.identities.core-identity/identitymanagersteamaccess.principal.account.name"))
+	assert.Equal(t, "123456789012", v.GetString("auth.identities.core-identity/identitymanagersteamaccess.principal.account.id"))
+
+	// Field from manual config should be added.
+	assert.True(t, v.GetBool("auth.identities.core-identity/identitymanagersteamaccess.default"))
+
+	// Other auto-provisioned identity should remain completely untouched.
+	assert.Equal(t, "cplive-sso", v.GetString("auth.identities.core-identity/developeraccess.provider"))
+	assert.Equal(t, "aws/permission-set", v.GetString("auth.identities.core-identity/developeraccess.kind"))
+	assert.Equal(t, "developeraccess", v.GetString("auth.identities.core-identity/developeraccess.principal.name"))
+
+	// Verify metadata from provisioning is preserved.
+	assert.Equal(t, "cplive-sso", v.GetString("auth._metadata.provider"))
+	assert.Equal(t, 2, v.GetInt("auth._metadata.counts.identities"))
+}
+
+func TestMergeConfig_ProvisionedIdentitiesNestedFieldOverride(t *testing.T) {
+	// Test that manual config can override specific nested fields in provisioned identities.
+	tempDir := t.TempDir()
+
+	// Isolate XDG cache to prevent loading real user data.
+	cacheDir := filepath.Join(tempDir, "cache")
+	t.Setenv("XDG_CACHE_HOME", cacheDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", cacheDir)
+
+	// Create provisioned identities file in cache.
+	provisionedDir := filepath.Join(cacheDir, "atmos", "auth", "test-sso")
+	err := os.MkdirAll(provisionedDir, 0o755)
+	require.NoError(t, err)
+
+	provisionedContent := `
+auth:
+  identities:
+    test-account/test-role:
+      provider: test-sso
+      kind: aws/permission-set
+      via:
+        provider: test-sso
+        session_duration: 3600
+      principal:
+        name: test-role
+        account:
+          name: test-account
+          id: "999999999999"
+`
+	createConfigFile(t, provisionedDir, "provisioned-identities.yaml", provisionedContent)
+
+	// Manual config that adds to via section and adds new top-level field.
+	mainContent := `
+base_path: ./
+auth:
+  providers:
+    test-sso:
+      kind: aws/iam-identity-center
+      region: us-east-2
+  identities:
+    test-account/test-role:
+      default: true
+      via:
+        region: us-east-2
+        role_arn: arn:aws:iam::999999999999:role/test-role
+`
+	createConfigFile(t, tempDir, "atmos.yaml", mainContent)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	err = mergeConfig(v, tempDir, CliConfigFileName, true)
+	assert.NoError(t, err)
+
+	// Verify deep merge at all nesting levels.
+
+	// Top-level fields from both sources.
+	assert.Equal(t, "test-sso", v.GetString("auth.identities.test-account/test-role.provider"))
+	assert.Equal(t, "aws/permission-set", v.GetString("auth.identities.test-account/test-role.kind"))
+	assert.True(t, v.GetBool("auth.identities.test-account/test-role.default"))
+
+	// Nested via fields from both sources.
+	assert.Equal(t, "test-sso", v.GetString("auth.identities.test-account/test-role.via.provider"))
+	assert.Equal(t, 3600, v.GetInt("auth.identities.test-account/test-role.via.session_duration"))
+	assert.Equal(t, "us-east-2", v.GetString("auth.identities.test-account/test-role.via.region"))
+	assert.Equal(t, "arn:aws:iam::999999999999:role/test-role", v.GetString("auth.identities.test-account/test-role.via.role_arn"))
+
+	// Deeply nested principal fields from provisioning.
+	assert.Equal(t, "test-role", v.GetString("auth.identities.test-account/test-role.principal.name"))
+	assert.Equal(t, "test-account", v.GetString("auth.identities.test-account/test-role.principal.account.name"))
+	assert.Equal(t, "999999999999", v.GetString("auth.identities.test-account/test-role.principal.account.id"))
+}
+
+func TestMergeConfig_ProvisionedIdentitiesWithMultipleProviders(t *testing.T) {
+	// Test that identities from multiple providers can coexist and be independently configured.
+	tempDir := t.TempDir()
+
+	// Isolate XDG cache to prevent loading real user data.
+	cacheDir := filepath.Join(tempDir, "cache")
+	t.Setenv("XDG_CACHE_HOME", cacheDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", cacheDir)
+
+	// First provider's provisioned identities.
+	prodDir := filepath.Join(cacheDir, "atmos", "auth", "prod-sso")
+	err := os.MkdirAll(prodDir, 0o755)
+	require.NoError(t, err)
+
+	provider1Content := `
+auth:
+  identities:
+    prod-account/AdminRole:
+      provider: prod-sso
+      kind: aws/permission-set
+      via:
+        provider: prod-sso
+`
+	createConfigFile(t, prodDir, "provisioned-identities.yaml", provider1Content)
+
+	// Second provider's provisioned identities.
+	devDir := filepath.Join(cacheDir, "atmos", "auth", "dev-sso")
+	err = os.MkdirAll(devDir, 0o755)
+	require.NoError(t, err)
+
+	provider2Content := `
+auth:
+  identities:
+    dev-account/DeveloperRole:
+      provider: dev-sso
+      kind: aws/permission-set
+      via:
+        provider: dev-sso
+`
+	createConfigFile(t, devDir, "provisioned-identities.yaml", provider2Content)
+
+	// Manual config that marks one identity from each provider as default.
+	mainContent := `
+base_path: ./
+auth:
+  providers:
+    prod-sso:
+      kind: aws/iam-identity-center
+    dev-sso:
+      kind: aws/iam-identity-center
+  identities:
+    prod-account/AdminRole:
+      default: true
+    dev-account/DeveloperRole:
+      default: true
+`
+	createConfigFile(t, tempDir, "atmos.yaml", mainContent)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	err = mergeConfig(v, tempDir, CliConfigFileName, true)
+	assert.NoError(t, err)
+
+	// Verify both providers' identities are present with correct fields.
+	assert.Equal(t, "prod-sso", v.GetString("auth.identities.prod-account/AdminRole.provider"))
+	assert.True(t, v.GetBool("auth.identities.prod-account/AdminRole.default"))
+
+	assert.Equal(t, "dev-sso", v.GetString("auth.identities.dev-account/DeveloperRole.provider"))
+	assert.True(t, v.GetBool("auth.identities.dev-account/DeveloperRole.default"))
+}

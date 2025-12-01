@@ -31,7 +31,7 @@ func getGitRemoteTags(gitURI string) ([]string, error) {
 	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--tags", "--refs", gitURI)
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("%w: getGitRemoteTags %s: %s", errUtils.ErrGitLsRemoteFailed, gitURI, err)
+		return nil, fmt.Errorf("%w: getGitRemoteTags %s: %w", errUtils.ErrGitLsRemoteFailed, gitURI, err)
 	}
 
 	// Parse output: each line is "commit_hash\trefs/tags/tag_name".
@@ -94,7 +94,7 @@ func checkGitRef(gitURI string, ref string) (bool, error) {
 	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--tags", gitURI, ref)
 	output, err := cmd.Output()
 	if err != nil {
-		return false, fmt.Errorf("%w: checkGitRef %s %s (tag): %s", errUtils.ErrGitLsRemoteFailed, gitURI, ref, err)
+		return false, fmt.Errorf("%w: checkGitRef %s %s (tag): %w", errUtils.ErrGitLsRemoteFailed, gitURI, ref, err)
 	}
 	if len(strings.TrimSpace(string(output))) > 0 {
 		return true, nil
@@ -104,7 +104,7 @@ func checkGitRef(gitURI string, ref string) (bool, error) {
 	cmd = exec.CommandContext(ctx, "git", "ls-remote", "--heads", gitURI, ref)
 	output, err = cmd.Output()
 	if err != nil {
-		return false, fmt.Errorf("%w: checkGitRef %s %s (branch): %s", errUtils.ErrGitLsRemoteFailed, gitURI, ref, err)
+		return false, fmt.Errorf("%w: checkGitRef %s %s (branch): %w", errUtils.ErrGitLsRemoteFailed, gitURI, ref, err)
 	}
 	if len(strings.TrimSpace(string(output))) > 0 {
 		return true, nil

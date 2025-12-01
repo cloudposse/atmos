@@ -7,8 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -276,12 +280,20 @@ func TestDisplayVersionInFormat(t *testing.T) {
 		{
 			name:          "Invalid format",
 			format:        "xml",
-			expectedError: ErrInvalidFormat,
+			expectedError: errUtils.ErrVersionFormatInvalid,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Initialize I/O context and data writer for tests
+			ioCtx, err := iolib.NewContext()
+			if err != nil {
+				t.Fatalf("Failed to initialize I/O context: %v", err)
+			}
+			data.InitWriter(ioCtx)
+			ui.InitFormatter(ioCtx)
+
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
@@ -295,9 +307,9 @@ func TestDisplayVersionInFormat(t *testing.T) {
 				printMessageToUpgradeToAtmosLatestRelease: mockExec.PrintMessageToUpgradeToAtmosLatestRelease,
 			}
 
-			err := v.displayVersionInFormat(false, tt.format)
+			err = v.displayVersionInFormat(false, tt.format)
 			if tt.expectedError != nil {
-				assert.Equal(t, tt.expectedError, err, "Expected error mismatch")
+				assert.ErrorIs(t, err, tt.expectedError, "Expected error mismatch")
 			} else {
 				assert.NoError(t, err, "Expected no error")
 			}

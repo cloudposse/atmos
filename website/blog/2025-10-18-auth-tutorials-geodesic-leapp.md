@@ -1,9 +1,13 @@
 ---
 slug: auth-tutorials-geodesic-leapp
-title: "New Guides for Atmos Auth: Leapp Migration and Geodesic Integration"
-authors: [atmos]
-tags: [feature, cloud-architecture]
-date: 2025-10-18
+title: 'New Guides for Atmos Auth: Leapp Migration and Geodesic Integration'
+sidebar_label: Atmos Auth Guides
+authors:
+  - osterman
+tags:
+  - documentation
+date: 2025-10-18T00:00:00.000Z
+release: v1.196.0
 ---
 
 We've published two comprehensive guides to help you adopt and integrate `atmos auth` into your workflows: migrating from Leapp and configuring Geodesic for seamless authentication.
@@ -75,7 +79,7 @@ Using `atmos auth` provides several advantages over external credential managers
 These guides are designed to be practical and actionable. If you encounter issues, find gaps in the documentation, or have suggestions for improvement:
 
 - Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues)
-- Share your experience in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions)
+- Share your experience in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
 - Contribute improvements via pull request
 
 ---

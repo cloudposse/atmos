@@ -4,12 +4,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 const (
-	IdentityFlagName        = "identity"
-	IdentityFlagSelectValue = "__SELECT__" // Special value when --identity is used without argument.
+	IdentityFlagName = "identity"
+	// IdentityFlagSelectValue is imported from cfg.IdentityFlagSelectValue.
+	IdentityFlagSelectValue = cfg.IdentityFlagSelectValue
 )
 
 // authCmd groups authentication-related subcommands.
@@ -33,12 +35,12 @@ func init() {
 		identityFlag.NoOptDefVal = IdentityFlagSelectValue
 	}
 
-	// Bind to Viper and env (flags > env > config > defaults).
+	// Bind environment variables but NOT the flag itself.
+	// BindPFlag creates a two-way binding that can cause Viper's value to override
+	// command-line flags during parsing. Instead, commands should read the flag value
+	// first, then fall back to Viper if the flag wasn't provided.
 	if err := viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"); err != nil {
 		log.Trace("Failed to bind identity environment variables", "error", err)
-	}
-	if err := viper.BindPFlag(IdentityFlagName, authCmd.PersistentFlags().Lookup(IdentityFlagName)); err != nil {
-		log.Trace("Failed to bind identity flag", "error", err)
 	}
 
 	// Add completion for identity flag.

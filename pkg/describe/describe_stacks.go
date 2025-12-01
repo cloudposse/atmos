@@ -28,6 +28,7 @@ func ExecuteDescribeStacks(
 		true,
 		true,
 		includeEmptyStacks,
-		nil,
+		nil, // skip
+		nil, // authManager
 	)
 }

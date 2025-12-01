@@ -32,13 +32,13 @@ func ProcessComponentInStack(
 	}
 
 	configAndStacksInfo.ComponentType = cfg.TerraformComponentType
-	configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
+	configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 	if err != nil {
 		configAndStacksInfo.ComponentType = cfg.HelmfileComponentType
-		configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
+		configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 		if err != nil {
 			configAndStacksInfo.ComponentType = cfg.PackerComponentType
-			configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil)
+			configAndStacksInfo, err = e.ProcessStacks(&atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 			if err != nil {
 				log.Error(err)
 				return nil, err

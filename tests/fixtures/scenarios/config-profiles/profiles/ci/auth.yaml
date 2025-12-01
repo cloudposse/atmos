@@ -1,0 +1,5 @@
+# CI profile authentication settings
+auth:
+  aws:
+    role_arn: arn:aws:iam::123456789012:role/GitHubActions
+    region: us-east-1

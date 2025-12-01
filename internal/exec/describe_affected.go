@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -46,6 +47,7 @@ type DescribeAffectedCmdArgs struct {
 	ProcessYamlFunctions        bool
 	Skip                        []string
 	ExcludeLocked               bool
+	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 }
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE

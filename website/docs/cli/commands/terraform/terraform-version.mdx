@@ -1,0 +1,85 @@
+---
+title: atmos terraform version
+sidebar_label: version
+sidebar_class_name: command
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to display the Terraform/OpenTofu version being used for an Atmos component in a stack.
+</Intro>
+
+:::info OpenTofu Support
+When using OpenTofu, this command will display the OpenTofu version instead of Terraform version.
+:::
+
+<Screengrab title="atmos terraform version --help" slug="atmos-terraform-version--help" />
+
+## Usage
+
+Execute the `terraform version` command like this:
+
+```shell
+atmos terraform version <component> -s <stack> [options]
+```
+
+This command displays the Terraform or OpenTofu version, along with the versions of installed providers.
+
+:::info Atmos Behavior
+This is a pure passthrough command. Atmos does not perform any special processing for `terraform version`. The command is executed directly without workspace management or variable generation.
+:::
+## Examples
+
+### Show Version
+
+```shell
+# Display Terraform version
+atmos terraform version vpc -s dev
+```
+
+### Detailed Version Info
+
+```shell
+# Show detailed version information
+atmos terraform version vpc -s dev -json
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform version vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform version` flags such as `-json` for JSON output with detailed version information.
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

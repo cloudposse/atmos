@@ -4,12 +4,13 @@ sidebar_label: deploy
 sidebar_class_name: command
 id: deploy
 ---
+import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 
-:::note purpose
-Use this command to execute `terraform apply -auto-approve` on an Atmos component in an Atmos stack.
-:::
+<Intro>
+Use this command to deploy Terraform changes for an Atmos component in a stack with auto-approval. This combines plan and apply operations in a single command.
+</Intro>
 
 <Screengrab title="atmos terraform deploy --help" slug="atmos-terraform-deploy--help" />
 
@@ -40,6 +41,26 @@ See [all flags](#flags).
 :::tip
 Run `atmos terraform deploy --help` to see all the available options
 :::
+
+## Configuration
+
+Configure default behavior for `terraform deploy` in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Run 'terraform init' before deploy
+    deploy_run_init: true
+
+    # Auto-generate backend configuration
+    auto_generate_backend_file: true
+```
+
+These settings can also be controlled via environment variables:
+```shell
+export ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT=true
+export ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=true
+```
 
 ## Examples
 
@@ -123,10 +144,10 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
 
     <dt>`--planfile` <em>(optional)</em></dt>
     <dd>
-        The path to a planfile. The `--planfile` flag should be used instead of the planfile argument in the native `terraform apply <planfile>` command .
+        The path to a planfile. The `--planfile` flag should be used instead of the planfile argument in the native `terraform apply <planfile>` command.
 
         ```shell
-        atmos terraform apply <component> -s <stack> --planfile <planfile>
+        atmos terraform deploy <component> -s <stack> --planfile <planfile>
         ```
     </dd>
 
@@ -169,6 +190,8 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
 
 The `atmos terraform deploy` command supports all native `terraform apply` options described
 in [Terraform apply options](https://developer.hashicorp.com/terraform/cli/commands/apply#apply-options), with the exception that a planfile argument
-can't be provided on the command line. To use a previously generated planfile, use the `--from-plan` or `--planfile` command-line flags
+can't be provided on the command line. To use a previously generated planfile, use the `--from-plan` or `--planfile` command-line flags.
+
+See [Terraform Planfiles](/core-concepts/terraform/planfiles) for a comprehensive guide on working with planfiles in Atmos.
 
 :::

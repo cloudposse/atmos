@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	charm "github.com/charmbracelet/log"
 	"github.com/go-viper/mapstructure/v2"
@@ -11,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
@@ -41,6 +43,12 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 	log.SetPrefix("atmos-auth")
 	defer log.SetPrefix("")
 
+	// Check if authentication has been explicitly disabled BEFORE doing any auth setup.
+	if isAuthenticationDisabled(stackInfo.Identity) {
+		log.Debug("Authentication explicitly disabled, skipping identity authentication")
+		return nil
+	}
+
 	authConfig, err := decodeAuthConfigFromStack(stackInfo)
 	if err != nil {
 		return err
@@ -48,7 +56,6 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 
 	// Skip if no auth config (check the merged config, not the original).
 	if len(authConfig.Providers) == 0 && len(authConfig.Identities) == 0 {
-		log.Debug("No auth configuration found, skipping authentication")
 		return nil
 	}
 
@@ -63,6 +70,7 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 	if err != nil {
 		return err
 	}
+
 	if err := authenticateAndWriteEnv(context.Background(), authManager, targetIdentityName, atmosConfig, stackInfo); err != nil {
 		return err
 	}
@@ -95,33 +103,57 @@ func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManage
 	return name, nil
 }
 
+// isAuthenticationDisabled checks if authentication has been explicitly disabled.
+func isAuthenticationDisabled(identityName string) bool {
+	return identityName == cfg.IdentityFlagDisabledValue
+}
+
 func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager, identityName string, atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
-	log.Info("Authenticating with identity", "identity", identityName)
+	log.Debug("Authenticating with identity", "identity", identityName)
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
 		return fmt.Errorf("failed to authenticate with identity %q: %w", identityName, err)
 	}
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
 
-	// Get environment variables from the identity and add to ComponentEnvSection.
-	// This is provider-agnostic and works for AWS, Azure, GCP, GitHub, etc.
-	envVars, err := authManager.GetEnvironmentVariables(identityName)
+	// Convert ComponentEnvSection to env list for PrepareShellEnvironment.
+	// This includes any component-specific env vars already set in the stack config.
+	baseEnvList := componentEnvSectionToList(stackInfo.ComponentEnvSection)
+
+	// Prepare shell environment with auth credentials.
+	// This configures file-based credentials (AWS_SHARED_CREDENTIALS_FILE, AWS_PROFILE, etc.).
+	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnvList)
 	if err != nil {
-		return fmt.Errorf("failed to get environment variables: %w", err)
+		return fmt.Errorf("failed to prepare environment variables: %w", err)
 	}
 
-	// Add auth environment variables to ComponentEnvSection which gets passed to Terraform/workflows.
+	// Convert back to ComponentEnvSection map for downstream processing.
 	if stackInfo.ComponentEnvSection == nil {
 		stackInfo.ComponentEnvSection = make(map[string]any)
 	}
-	for k, v := range envVars {
-		stackInfo.ComponentEnvSection[k] = v
+	for _, envVar := range envList {
+		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
+			key := envVar[:idx]
+			value := envVar[idx+1:]
+			stackInfo.ComponentEnvSection[key] = value
+		}
 	}
 
 	if err := utils.PrintAsYAMLToFileDescriptor(atmosConfig, stackInfo.ComponentEnvSection); err != nil {
 		return fmt.Errorf("failed to print component env section: %w", err)
 	}
 	return nil
+}
+
+// componentEnvSectionToList converts ComponentEnvSection map to environment variable list.
+func componentEnvSectionToList(envSection map[string]any) []string {
+	var envList []string
+	for k, v := range envSection {
+		if v != nil {
+			envList = append(envList, fmt.Sprintf("%s=%v", k, v))
+		}
+	}
+	return envList
 }
 
 func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndStacksInfo) (types.AuthManager, error) {

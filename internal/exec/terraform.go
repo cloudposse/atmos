@@ -67,8 +67,71 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Skip stack processing when cleaning with the `--force` flag to allow cleaning without requiring stack configuration.
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
+	// Get component-specific auth config and merge with global auth config.
+	// This allows components to define their own auth identities and defaults in stack configurations.
+	// Start with global config.
+	mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
+
+	// If stack and component are specified, get component config and merge auth section.
+	if info.Stack != "" && info.ComponentFromArg != "" {
+		// Get component configuration from stack.
+		// Use nil AuthManager and disable functions to avoid circular dependency.
+		componentConfig, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			Component:            info.ComponentFromArg,
+			Stack:                info.Stack,
+			ProcessTemplates:     false,
+			ProcessYamlFunctions: false, // Critical: avoid circular dependency with YAML functions that need auth.
+			Skip:                 nil,
+			AuthManager:          nil, // Critical: no AuthManager yet, we're determining which identity to use.
+		})
+		if err != nil {
+			// If component doesn't exist, exit immediately before attempting authentication.
+			// This prevents prompting for identity when the component is invalid.
+			if errors.Is(err, errUtils.ErrInvalidComponent) {
+				return err
+			}
+			// For other errors (e.g., permission issues), continue with global auth config.
+		} else {
+			// Merge component-specific auth with global auth.
+			mergedAuthConfig, err = auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, &atmosConfig, cfg.AuthSectionName)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Create and authenticate AuthManager from --identity flag if specified.
+	// Uses merged auth config that includes both global and component-specific identities/defaults.
+	// This enables YAML template functions like !terraform.state to use authenticated credentials.
+	authManager, err := auth.CreateAndAuthenticateManager(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue)
+	if err != nil {
+		// Special case: If user aborted (Ctrl+C), exit immediately without showing error.
+		if errors.Is(err, errUtils.ErrUserAborted) {
+			errUtils.Exit(errUtils.ExitCodeSIGINT)
+		}
+		return err
+	}
+
+	// If AuthManager was created and identity was auto-detected (info.Identity was empty),
+	// store the authenticated identity back into info.Identity so that hooks can access it.
+	// This prevents TerraformPreHook from prompting for identity selection again.
+	if authManager != nil && info.Identity == "" {
+		chain := authManager.GetChain()
+		if len(chain) > 0 {
+			// The last element in the chain is the authenticated identity.
+			authenticatedIdentity := chain[len(chain)-1]
+			info.Identity = authenticatedIdentity
+			log.Debug("Stored authenticated identity for hooks", "identity", authenticatedIdentity)
+		}
+	}
+
+	// Store AuthManager in configAndStacksInfo for nested operations.
+	// This enables nested YAML functions (e.g., !terraform.state within component configs)
+	// to access the same authenticated session without re-prompting for credentials.
+	info.AuthManager = authManager
+
 	if shouldProcessStacks {
-		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip)
+		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
 		if err != nil {
 			return err
 		}

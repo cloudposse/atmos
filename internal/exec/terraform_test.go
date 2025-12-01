@@ -227,7 +227,11 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 	}
 	output := buf.String()
 
-	t.Log(output)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("Terraform output:\n%s", output)
+		}
+	})
 
 	// Check the output
 	if !strings.Contains(output, "{{ .settings.config.a }}") {
