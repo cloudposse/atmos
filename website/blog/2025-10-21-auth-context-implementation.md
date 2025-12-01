@@ -1,8 +1,11 @@
 ---
 slug: auth-context-implementation
-title: "Auth Context: Centralizing Authentication State in Atmos"
-authors: [atmos]
-tags: [contributors, atmos-core, refactoring]
+title: 'Auth Context: Centralizing Authentication State in Atmos'
+authors:
+  - osterman
+tags:
+  - core
+release: v1.196.0
 ---
 
 We've implemented a centralized authentication context system to enable **concurrent multi-provider identities** - allowing Atmos to manage AWS, GitHub, and other cloud provider credentials simultaneously in a single operation.

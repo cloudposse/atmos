@@ -1,8 +1,11 @@
 ---
 slug: comprehensive-version-management-documentation
-title: "New Comprehensive Version Management Documentation"
-authors: [osterman]
-tags: [atmos, documentation, version-management, versioning, deployment-strategies]
+title: New Comprehensive Version Management Documentation
+authors:
+  - osterman
+tags:
+  - documentation
+release: v1.199.0
 ---
 
 When you deploy infrastructure across multiple environments—dev, staging, production—you need a way to manage which version of each component runs where. Maybe your VPC module in dev is testing new CIDR ranges, while production stays on the stable version until you're confident the changes work.
@@ -107,4 +110,4 @@ Ready to explore? Check out the new [Version Management documentation](/design-p
 
 ## Share Your Experience
 
-Have you found another versioning strategy that works well for your organization? We'd love to hear about it! Share your approach in our [GitHub Discussions](https://github.com/cloudposse/atmos/discussions) or [open an issue](https://github.com/cloudposse/atmos/issues) to help us expand this documentation with real-world patterns from the community.
+Have you found another versioning strategy that works well for your organization? We'd love to hear about it! Share your approach in our [GitHub Discussions](https://github.com/orgs/cloudposse/discussions) or [open an issue](https://github.com/cloudposse/atmos/issues) to help us expand this documentation with real-world patterns from the community.
