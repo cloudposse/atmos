@@ -3,11 +3,16 @@ title: "atmos list vars"
 id: "list-vars"
 sidebar_label: vars
 sidebar_class_name: command
+description: Use this command to list component variables across all stacks
 ---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
 
-# atmos list vars
+<Intro>
+Use this command to list component variables across all stacks in a comparison table. View how Terraform variables vary between environments to quickly identify configuration differences and validate consistency.
+</Intro>
 
-The `atmos list vars` command displays component variables across all stacks where the component is used.
+<Screengrab title="atmos list vars --help" slug="atmos-list-vars--help" />
 
 ## Usage
 
