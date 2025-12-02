@@ -22,7 +22,7 @@ Terragrunt and Atmos solve similar problems—managing Terraform at scale with D
 |---------|------------|-------|
 | **Configuration Format** | HCL (`terragrunt.hcl`) | YAML (`.yaml`) |
 | **Reuse Mechanism** | `include {}` blocks | `import:` with deep merge |
-| **Dependencies** | `dependency` blocks | Remote state + `!terraform.output` |
+| **Dependencies** | `dependency` blocks | [`settings.depends_on`](/stacks/settings) or [`!terraform.output`](/functions/yaml/terraform.output) |
 | **Variable Passing** | `inputs = {}` | `vars:` with inheritance |
 | **Module Source** | `terraform { source = "..." }` | `metadata.component` |
 | **CLI** | `terragrunt plan/apply` | `atmos terraform plan/apply` |

@@ -5,6 +5,7 @@ sidebar_label: From Terraform Workspaces
 description: How to migrate from Terraform Workspaces to Atmos
 id: terraform-workspaces
 ---
+import FAQItem from '@site/src/components/FAQItem'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import KeyTakeaways from '@site/src/components/KeyTakeaways'
@@ -553,17 +554,17 @@ components:
 
 ## Common Questions
 
-### Can I keep using workspaces with Atmos?
-
+<FAQItem question="Can I keep using workspaces with Atmos?">
 Yes! Atmos supports workspace-based backends via `workspace` settings. But we recommend migrating away from workspaces for better isolation.
+</FAQItem>
 
-### Do I need to migrate everything at once?
-
+<FAQItem question="Do I need to migrate everything at once?">
 No. Migrate incrementally—one component at a time. Use workspaces for unmigrated components and Atmos stacks for migrated ones.
+</FAQItem>
 
-### What about Terraform Cloud workspaces?
-
+<FAQItem question="What about Terraform Cloud workspaces?">
 Terraform Cloud workspaces are different from OSS workspaces—they're more similar to Atmos stacks (isolated state, separate config). Migration is similar but simpler.
+</FAQItem>
 
 ## Get Help
 

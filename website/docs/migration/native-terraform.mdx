@@ -5,6 +5,7 @@ sidebar_label: From Native Terraform
 description: How to migrate from vanilla Terraform to Atmos
 id: native-terraform
 ---
+import FAQItem from '@site/src/components/FAQItem'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import TaskList from '@site/src/components/TaskList'
@@ -850,12 +851,11 @@ When you run `atmos terraform plan vpc -s dev`, these environment variables are 
 
 ## Common Questions
 
-### Do I need to change my Terraform code?
-
+<FAQItem question="Do I need to change my Terraform code?">
 **No.** Your Terraform root modules work as-is. Atmos wraps them with orchestration.
+</FAQItem>
 
-### Can I keep using .tfvars files?
-
+<FAQItem question="Can I keep using .tfvars files?">
 **Yes.** Use the `!include` function to import them directly into your stack YAML:
 
 ```yaml
@@ -864,19 +864,20 @@ components:
     vpc:
       vars: !include dev.tfvars
 ```
+</FAQItem>
 
-### Can I keep using TF_VAR_ environment variables?
-
+<FAQItem question="Can I keep using TF_VAR_ environment variables?">
 **Yes.** Define them in the `env:` section of your stack YAML, and Atmos will set them when running Terraform.
+</FAQItem>
 
-### Do I need to learn everything at once?
-
+<FAQItem question="Do I need to learn everything at once?">
 **No.** Start with the basics (this guide). Advanced features are there when you need them.
+</FAQItem>
 
-### What if I'm using Terraform workspaces?
-
+<FAQItem question="What if I'm using Terraform workspaces?">
 See the [Migrating from Terraform Workspaces](/migration/terraform-workspaces) guide.
+</FAQItem>
 
-### What if I'm using Terragrunt?
-
+<FAQItem question="What if I'm using Terragrunt?">
 See the [Migrating from Terragrunt](/migration/terragrunt) guide.
+</FAQItem>
