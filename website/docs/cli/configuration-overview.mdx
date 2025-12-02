@@ -1,0 +1,174 @@
+---
+title: Configuration Overview
+sidebar_position: 0
+sidebar_label: Overview
+id: configuration-overview
+description: Introduction to the types of configuration in Atmos
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos uses multiple types of configuration files, each serving a distinct purpose. Understanding these configuration types is essential for effectively managing your infrastructure.
+</Intro>
+
+## Configuration Types
+
+Atmos organizes configuration into four main categories:
+
+| Configuration Type | File(s) | Purpose |
+|-------------------|---------|---------|
+| **[CLI Configuration](#cli-configuration)** | `atmos.yaml` | Configure the Atmos CLI behavior, paths, and integrations |
+| **[Stack Configuration](#stack-configuration)** | `stacks/**/*.yaml` | Define environments and component configurations |
+| **[Component Configuration](#component-configuration)** | `components/` | Infrastructure code (Terraform, Helmfile, Packer) |
+| **[Vendor Configuration](#vendor-configuration)** | `vendor.yaml` | Define external dependencies to vendor |
+
+## CLI Configuration
+
+The `atmos.yaml` file configures the Atmos CLI itself. It tells Atmos where to find your stacks and components, how to behave, and what integrations to enable.
+
+**Key settings include:**
+- Base paths for components, stacks, and workflows
+- Terraform/Helmfile command configuration
+- Stack naming patterns
+- Template and schema settings
+- Integrations (Atlantis, Spacelift, GitHub Actions)
+
+```yaml
+# atmos.yaml
+base_path: "."
+
+components:
+  terraform:
+    base_path: components/terraform
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "orgs/**/*"
+  name_pattern: "{tenant}-{environment}-{stage}"
+```
+
+[Learn more about CLI Configuration →](/cli/configuration/configuration)
+
+## Stack Configuration
+
+Stack configuration files define your environments and how components are configured within them. Stacks are YAML files that specify which components to deploy and with what settings.
+
+**Key features:**
+- Component definitions with variables and metadata
+- Imports for configuration reuse
+- Inheritance between configurations
+- Environment-specific overrides
+
+```yaml
+# stacks/prod/us-east-1.yaml
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      vars:
+        environment: ue1
+        stage: prod
+        cidr_block: "10.0.0.0/16"
+```
+
+[Learn more about Stack Configuration →](/stacks)
+
+## Component Configuration
+
+Components are the infrastructure-as-code implementations that Atmos orchestrates. Each component type has its own configuration within stacks:
+
+### Terraform Components
+
+Terraform root modules in `components/terraform/`. Stack configuration tells Atmos which module to use and what variables to pass.
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # Points to components/terraform/vpc/
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+
+[Terraform Stack Configuration →](/components/terraform/stack-config)
+
+### Helmfile Components
+
+Helmfile configurations in `components/helmfile/`. Used for deploying Helm charts to Kubernetes.
+
+```yaml
+components:
+  helmfile:
+    nginx-ingress:
+      vars:
+        namespace: ingress
+        chart_version: "4.0.0"
+```
+
+[Helmfile Configuration →](/components/helmfile)
+
+### Packer Components
+
+Packer templates in `components/packer/`. Used for building machine images.
+
+```yaml
+components:
+  packer:
+    ubuntu-base:
+      vars:
+        ami_name: "ubuntu-base"
+        instance_type: "t3.medium"
+```
+
+[Packer Configuration →](/components/packer)
+
+## Vendor Configuration
+
+Vendor manifests define external dependencies that Atmos should download and manage. This enables you to use third-party components, modules, and configurations without copying them into your repository.
+
+```yaml
+# vendor.yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: my-vendor-config
+spec:
+  sources:
+    - component: vpc
+      source: github.com/cloudposse/terraform-aws-components.git//modules/vpc
+      version: 1.300.0
+```
+
+[Learn more about Vendoring →](/vendoring)
+
+## Configuration Hierarchy
+
+These configuration types work together in a hierarchy:
+
+1. **CLI Configuration** (`atmos.yaml`) defines where to find everything
+2. **Vendor Configuration** (`vendor.yaml`) pulls in external dependencies
+3. **Component Configuration** (`components/`) provides the infrastructure code
+4. **Stack Configuration** (`stacks/`) assembles components into deployable environments
+
+```
+atmos.yaml                    # CLI: Where to find things
+├── vendor.yaml               # Vendor: External dependencies
+├── components/               # Components: Infrastructure code
+│   ├── terraform/
+│   ├── helmfile/
+│   └── packer/
+└── stacks/                   # Stacks: Environment definitions
+    ├── catalog/              # Reusable configurations
+    └── orgs/                 # Environment-specific stacks
+```
+
+## Next Steps
+
+- [CLI Configuration](/cli/configuration/configuration) — Configure Atmos behavior
+- [Stack Configuration](/stacks) — Define your environments
+- [Components](/learn/stacks/define-components) — Configure components in stacks
+- [Vendoring](/vendoring) — Manage external dependencies
