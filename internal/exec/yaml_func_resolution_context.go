@@ -2,101 +2,51 @@ package exec
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
-	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/resolution"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // DependencyNode represents a single node in the dependency resolution chain.
+// This is a stack-specific wrapper around resolution.Node that adds component/stack semantics.
 type DependencyNode struct {
 	Component    string
 	Stack        string
-	FunctionType string // "terraform.state", "terraform.output", "atmos.Component"
-	FunctionCall string // Full function call for error reporting
+	FunctionType string // "terraform.state", "terraform.output", "atmos.Component".
+	FunctionCall string // Full function call for error reporting.
 }
 
 // ResolutionContext tracks the call stack during YAML function resolution to detect circular dependencies.
+// This wraps the generic resolution.Context with stack-specific behavior.
 type ResolutionContext struct {
-	CallStack []DependencyNode
-	Visited   map[string]bool // Map of "stack-component" to track visited nodes
+	inner *resolution.Context
 }
-
-// goroutineResolutionContexts maps goroutine IDs to their resolution contexts.
-var goroutineResolutionContexts sync.Map
 
 // NewResolutionContext creates a new resolution context for cycle detection.
 func NewResolutionContext() *ResolutionContext {
 	defer perf.Track(nil, "exec.NewResolutionContext")()
 
 	return &ResolutionContext{
-		CallStack: make([]DependencyNode, 0),
-		Visited:   make(map[string]bool),
+		inner: resolution.NewContext(),
 	}
-}
-
-const (
-	// Initial buffer size for capturing goroutine stack traces.
-	goroutineStackBufSize = 64
-	// Maximum buffer size to prevent unbounded growth.
-	maxGoroutineStackBufSize = 8192
-)
-
-// getGoroutineID returns the current goroutine ID.
-// Returns "unknown" if parsing fails to prevent panics.
-func getGoroutineID() string {
-	// Allocate buffer and grow it if needed to avoid truncation.
-	buf := make([]byte, goroutineStackBufSize)
-	for {
-		n := runtime.Stack(buf, false)
-		if n < len(buf) {
-			// Buffer was large enough.
-			buf = buf[:n]
-			break
-		}
-		// Buffer was too small, double it and try again.
-		if len(buf) >= maxGoroutineStackBufSize {
-			// Safety limit reached.
-			return "unknown"
-		}
-		buf = make([]byte, len(buf)*2)
-	}
-
-	// Format: "goroutine 123 [running]:\n..."
-	// Parse defensively to avoid panics.
-	fields := strings.Fields(string(buf))
-	if len(fields) < 2 {
-		return "unknown"
-	}
-
-	// Extract the number after "goroutine ".
-	return fields[1]
 }
 
 // GetOrCreateResolutionContext gets or creates a resolution context for the current goroutine.
 func GetOrCreateResolutionContext() *ResolutionContext {
 	defer perf.Track(nil, "exec.GetOrCreateResolutionContext")()
 
-	gid := getGoroutineID()
-
-	if ctx, ok := goroutineResolutionContexts.Load(gid); ok {
-		return ctx.(*ResolutionContext)
-	}
-
-	ctx := NewResolutionContext()
-	goroutineResolutionContexts.Store(gid, ctx)
-	return ctx
+	inner := resolution.GetOrCreateContext()
+	return &ResolutionContext{inner: inner}
 }
 
 // ClearResolutionContext clears the resolution context for the current goroutine.
 func ClearResolutionContext() {
 	defer perf.Track(nil, "exec.ClearResolutionContext")()
 
-	gid := getGoroutineID()
-	goroutineResolutionContexts.Delete(gid)
+	resolution.ClearContext()
 }
 
 // scopedResolutionContext creates a new scoped resolution context and returns a restore function.
@@ -106,25 +56,15 @@ func ClearResolutionContext() {
 //	restoreCtx := scopedResolutionContext()
 //	defer restoreCtx()
 func scopedResolutionContext() func() {
-	gid := getGoroutineID()
+	return resolution.ScopedContext()
+}
 
-	// Save the existing context (if any).
-	var savedCtx *ResolutionContext
-	if ctx, ok := goroutineResolutionContexts.Load(gid); ok {
-		savedCtx = ctx.(*ResolutionContext)
-	}
-
-	// Install a fresh context.
-	freshCtx := NewResolutionContext()
-	goroutineResolutionContexts.Store(gid, freshCtx)
-
-	// Return a restore function that reinstates the saved context or clears it.
-	return func() {
-		if savedCtx != nil {
-			goroutineResolutionContexts.Store(gid, savedCtx)
-		} else {
-			goroutineResolutionContexts.Delete(gid)
-		}
+// toResolutionNode converts a DependencyNode to a resolution.Node.
+func (node DependencyNode) toResolutionNode() resolution.Node {
+	return resolution.Node{
+		Key:      fmt.Sprintf("%s-%s", node.Stack, node.Component),
+		Label:    fmt.Sprintf("Component '%s' in stack '%s'", node.Component, node.Stack),
+		CallInfo: node.FunctionCall,
 	}
 }
 
@@ -132,17 +72,11 @@ func scopedResolutionContext() func() {
 func (ctx *ResolutionContext) Push(atmosConfig *schema.AtmosConfiguration, node DependencyNode) error {
 	defer perf.Track(atmosConfig, "exec.ResolutionContext.Push")()
 
-	key := fmt.Sprintf("%s-%s", node.Stack, node.Component)
-
-	// Check if we've already visited this node
-	if ctx.Visited[key] {
+	err := ctx.inner.Push(node.toResolutionNode())
+	if err != nil {
+		// Convert the generic cycle error to our stack-specific error format.
 		return ctx.buildCircularDependencyError(node)
 	}
-
-	// Mark as visited and add to call stack
-	ctx.Visited[key] = true
-	ctx.CallStack = append(ctx.CallStack, node)
-
 	return nil
 }
 
@@ -150,36 +84,29 @@ func (ctx *ResolutionContext) Push(atmosConfig *schema.AtmosConfiguration, node 
 func (ctx *ResolutionContext) Pop(atmosConfig *schema.AtmosConfiguration) {
 	defer perf.Track(atmosConfig, "exec.ResolutionContext.Pop")()
 
-	if len(ctx.CallStack) > 0 {
-		lastIdx := len(ctx.CallStack) - 1
-		node := ctx.CallStack[lastIdx]
-		key := fmt.Sprintf("%s-%s", node.Stack, node.Component)
-
-		// Remove from visited set
-		delete(ctx.Visited, key)
-
-		// Remove from call stack
-		ctx.CallStack = ctx.CallStack[:lastIdx]
-	}
+	ctx.inner.Pop()
 }
 
 // buildCircularDependencyError creates a detailed error message showing the dependency chain.
+// This preserves the existing error format for backward compatibility.
 func (ctx *ResolutionContext) buildCircularDependencyError(newNode DependencyNode) error {
 	var builder strings.Builder
 
 	builder.WriteString(fmt.Sprintf("%s\n\n", errUtils.ErrCircularDependency))
 	builder.WriteString("Dependency chain:\n")
 
-	// Show the full call stack
-	for i, node := range ctx.CallStack {
+	// Show the full call stack - convert resolution.Nodes back to stack-specific format.
+	for i, resNode := range ctx.inner.CallStack {
+		// Parse the key to extract component and stack.
+		component, stack := parseNodeKey(resNode.Key)
 		builder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s'\n",
-			i+1, node.Component, node.Stack))
-		builder.WriteString(fmt.Sprintf("     → %s\n", node.FunctionCall))
+			i+1, component, stack))
+		builder.WriteString(fmt.Sprintf("     → %s\n", resNode.CallInfo))
 	}
 
-	// Show where the cycle completes
+	// Show where the cycle completes.
 	builder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s' (cycle detected)\n",
-		len(ctx.CallStack)+1, newNode.Component, newNode.Stack))
+		len(ctx.inner.CallStack)+1, newNode.Component, newNode.Stack))
 	builder.WriteString(fmt.Sprintf("     → %s\n\n", newNode.FunctionCall))
 
 	builder.WriteString("To fix this issue:\n")
@@ -190,6 +117,15 @@ func (ctx *ResolutionContext) buildCircularDependencyError(newNode DependencyNod
 	return fmt.Errorf("%w: %s", errUtils.ErrCircularDependency, builder.String())
 }
 
+// parseNodeKey extracts stack and component from a key in format "stack-component".
+func parseNodeKey(key string) (component, stack string) {
+	parts := strings.SplitN(key, "-", 2)
+	if len(parts) == 2 {
+		return parts[1], parts[0]
+	}
+	return key, ""
+}
+
 // Clone creates a copy of the resolution context for use in concurrent operations.
 func (ctx *ResolutionContext) Clone() *ResolutionContext {
 	defer perf.Track(nil, "exec.ResolutionContext.Clone")()
@@ -198,15 +134,41 @@ func (ctx *ResolutionContext) Clone() *ResolutionContext {
 		return nil
 	}
 
-	newCtx := &ResolutionContext{
-		CallStack: make([]DependencyNode, len(ctx.CallStack)),
-		Visited:   make(map[string]bool, len(ctx.Visited)),
+	return &ResolutionContext{
+		inner: ctx.inner.Clone(),
+	}
+}
+
+// CallStack returns the dependency nodes in the call stack.
+// This provides backward compatibility for code that accesses CallStack directly.
+func (ctx *ResolutionContext) CallStack() []DependencyNode {
+	defer perf.Track(nil, "exec.ResolutionContext.CallStack")()
+
+	if ctx == nil || ctx.inner == nil {
+		return nil
 	}
 
-	copy(newCtx.CallStack, ctx.CallStack)
-	for k, v := range ctx.Visited {
-		newCtx.Visited[k] = v
+	nodes := make([]DependencyNode, len(ctx.inner.CallStack))
+	for i, resNode := range ctx.inner.CallStack {
+		component, stack := parseNodeKey(resNode.Key)
+		nodes[i] = DependencyNode{
+			Component:    component,
+			Stack:        stack,
+			FunctionType: "", // Not stored in resolution.Node.
+			FunctionCall: resNode.CallInfo,
+		}
+	}
+	return nodes
+}
+
+// Visited returns a map of visited nodes.
+// This provides backward compatibility for code that accesses Visited directly.
+func (ctx *ResolutionContext) Visited() map[string]bool {
+	defer perf.Track(nil, "exec.ResolutionContext.Visited")()
+
+	if ctx == nil || ctx.inner == nil {
+		return nil
 	}
 
-	return newCtx
+	return ctx.inner.Visited
 }
