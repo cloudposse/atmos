@@ -7,66 +7,133 @@ id: components-overview
 description: Introduction to Atmos components - the building blocks of your infrastructure
 ---
 import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
 
 <Intro>
-Components are the building blocks of your infrastructure. They are opinionated, reusable modules that solve specific infrastructure problems.
+Components are the building blocks of your infrastructure. They are opinionated, reusable units of infrastructure-as-code that solve specific problems—Terraform root modules, Helmfiles, or Packer templates.
 </Intro>
 
 ## What are Components?
 
-In Atmos, a **component** is a self-contained unit of infrastructure code that implements a specific piece of your architecture. Components are designed to be:
+In Atmos, a **component** consists of two parts:
 
-- **Reusable** across multiple environments and stacks
-- **Composable** so they can work together to build complex architectures
-- **Opinionated** with sensible defaults while remaining configurable
+1. **Implementation** — The infrastructure code itself (a Terraform root module, Helmfile, or Packer template)
+2. **Configuration** — The settings that customize how the component is deployed in each environment
+
+This separation of concerns is fundamental to Atmos. You write the implementation once, then configure it differently for each environment through [stacks](/stacks).
+
+## Component Configuration
+
+Components are configured in the `components` section of stack files. Here's what component configuration looks like:
+
+<File title="stacks/deploy/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc           # Points to components/terraform/vpc/
+      vars:
+        cidr_block: "10.0.0.0/16"
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+      settings:
+        spacelift:
+          workspace_enabled: true
+
+    eks-cluster:
+      metadata:
+        component: eks/cluster   # Points to components/terraform/eks/cluster/
+      vars:
+        cluster_name: prod-eks
+        kubernetes_version: "1.28"
+```
+</File>
+
+Each component configuration includes:
+
+| Section | Purpose |
+|---------|---------|
+| `metadata` | Component location, inheritance, and Atmos behavior |
+| `vars` | Input variables passed to the component |
+| `settings` | Atmos and integration settings (not passed to the component) |
+
+## Component Instances
+
+A **component instance** is a specific deployment of a component in a stack. The same component implementation can have many instances across your infrastructure:
+
+```yaml
+# Same "vpc" component, different instances
+components:
+  terraform:
+    # Instance: "vpc" in prod/us-east-1
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+
+    # Instance: "vpc-secondary" in prod/us-east-1 (using same component)
+    vpc-secondary:
+      metadata:
+        component: vpc           # Same implementation
+      vars:
+        cidr_block: "10.1.0.0/16"
+```
+
+Each instance:
+- Has its own Terraform state (or Helmfile release, Packer build)
+- Can have different variable values
+- Is independently deployable
+
+## Implementation vs Configuration
+
+| Aspect | Implementation | Configuration |
+|--------|---------------|---------------|
+| **Location** | `components/terraform/vpc/` | `stacks/prod/us-east-1.yaml` |
+| **Contains** | Terraform code, resources, modules | Variables, settings, metadata |
+| **Changes** | When infrastructure logic changes | When environment needs differ |
+| **Reuse** | Single implementation | Many configurations |
+
+This separation allows you to:
+- Write a component once and deploy it across many environments
+- Customize behavior through configuration, not code duplication
+- Maintain consistency while supporting environment-specific requirements
+- Update all instances by changing the implementation
 
 ## Component Types
 
 Atmos natively supports three component types:
 
-| Type | Description | Location |
-|------|-------------|----------|
-| **[Terraform/OpenTofu](/components/terraform)** | Infrastructure as Code using Terraform root modules | `components/terraform/` |
-| **[Helmfile](/components/helmfile)** | Kubernetes deployments using Helm charts | `components/helmfile/` |
-| **[Packer](/components/packer)** | Machine image building | `components/packer/` |
+| Type | Implementation | Description |
+|------|----------------|-------------|
+| **[Terraform/OpenTofu](/components/terraform)** | Terraform root modules | Provision cloud infrastructure |
+| **[Helmfile](/components/helmfile)** | Helmfile configurations | Deploy Helm charts to Kubernetes |
+| **[Packer](/components/packer)** | Packer templates | Build machine images |
 
-## How Components Work
+Each type has its own configuration schema, but they share common patterns for `metadata` and `settings`.
 
-Components are stored in your project's `components/` directory and are referenced by [stacks](/stacks). When you run Atmos commands like `atmos terraform apply`, Atmos:
+## Directory Structure
 
-1. Reads the stack configuration to determine which component to use
-2. Merges variables from the stack hierarchy
-3. Executes the component with the resolved configuration
+Components are stored in your project's `components/` directory:
 
 ```
 components/
-├── terraform/           # Terraform components
+├── terraform/           # Terraform root modules
 │   ├── vpc/
-│   ├── eks-cluster/
+│   ├── eks/
+│   │   └── cluster/
 │   └── rds/
-├── helmfile/            # Helmfile components
+├── helmfile/            # Helmfile configurations
 │   ├── nginx-ingress/
 │   └── cert-manager/
-└── packer/              # Packer components
+└── packer/              # Packer templates
     └── ubuntu-base/
 ```
 
-## Components vs Stack Configuration
-
-| Concept | Purpose | Example |
-|---------|---------|---------|
-| **Component** | The infrastructure code (what to build) | `components/terraform/vpc/` |
-| **Stack Configuration** | How to configure the component for an environment | `stacks/prod/us-east-1.yaml` |
-
-This separation allows you to:
-- Write a component once and use it across many environments
-- Customize behavior through configuration, not code duplication
-- Maintain consistency while supporting environment-specific requirements
-
 ## Next Steps
 
-- [Describe Components](/describe/component) — Inspect component configurations
+- [Describe Components](/describe/component) — Inspect fully-merged component configurations
 - [Component Library](/components/library) — Use pre-built components
-- [Terraform Components](/components/terraform) — Learn about Terraform components
-- [Helmfile Components](/components/helmfile) — Learn about Helmfile components
-- [Packer Components](/components/packer) — Learn about Packer components
+- [Terraform Components](/components/terraform) — Terraform root modules
+- [Helmfile Components](/components/helmfile) — Helmfile configurations
+- [Packer Components](/components/packer) — Packer templates
