@@ -40,6 +40,6 @@ When running `atmos describe component test-component -s test-ue2-dev`:
 
 ## Related
 
-- `docs/fixes/stack-level-default-identity.md` - Full issue documentation
+- `docs/fixes/stack-level-default-auth-identity.md` - Full issue documentation
 - `pkg/config/stack_auth_scanner.go` - The scanner implementation
 - `pkg/auth/manager_helpers.go` - Integration with auth manager

@@ -170,8 +170,8 @@ atmos list instances --identity=false
 # Set identity via environment variable
 ATMOS_IDENTITY=my-aws-identity atmos list stacks
 
-# Alternative environment variable name
-IDENTITY=my-aws-identity atmos list components
+# Using the environment variable with a different command
+ATMOS_IDENTITY=my-aws-identity atmos list components
 ```
 
 ### Stack-Level Default Identity

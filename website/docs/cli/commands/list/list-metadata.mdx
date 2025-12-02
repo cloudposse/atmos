@@ -41,8 +41,8 @@ The command is particularly useful for:
   <dd>Delimiter for csv/tsv output (default: `,` for csv, `\t` for tsv)</dd>
   <dt>`--stack string`</dt>
   <dd>Filter by stack pattern (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)</dd>
-  <dt>`--identity` / `-i`</dt>
-  <dd>Authenticate with a specific identity before listing metadata.<br/>Required when stack configurations use YAML template functions that require authentication.<br/>Can also be set via `ATMOS_IDENTITY` environment variable.</dd>
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before listing metadata.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list metadata --identity my-aws-identity`<br/><br/>Can also be set via `ATMOS_IDENTITY` environment variable.</dd>
 </dl>
 
 ## Examples
