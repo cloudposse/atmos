@@ -2,98 +2,149 @@ package function
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
-// EnvFunction implements the env function for environment variable lookup.
+// TagEnv is the YAML tag for the env function.
+const TagEnv = "!env"
+
+// EnvFunction implements the !env YAML function.
+// It retrieves environment variables with optional defaults.
 type EnvFunction struct {
 	BaseFunction
 }
 
-// NewEnvFunction creates a new env function handler.
+// NewEnvFunction creates a new EnvFunction.
 func NewEnvFunction() *EnvFunction {
 	defer perf.Track(nil, "function.NewEnvFunction")()
 
 	return &EnvFunction{
 		BaseFunction: BaseFunction{
-			FunctionName:    TagEnv,
+			FunctionName:    "env",
 			FunctionAliases: nil,
 			FunctionPhase:   PreMerge,
 		},
 	}
 }
 
-// parseEnvArgs parses the env function arguments into variable name and optional default.
-func parseEnvArgs(args string) (envVarName, envVarDefault string, err error) {
-	args = strings.TrimSpace(args)
-	if args == "" {
-		return "", "", fmt.Errorf("%w: env function requires at least one argument", ErrInvalidArguments)
-	}
-
-	parts, err := utils.SplitStringByDelimiter(args, ' ')
-	if err != nil {
-		return "", "", fmt.Errorf("%w: failed to parse args %q: %w", ErrInvalidArguments, args, err)
-	}
-
-	switch len(parts) {
-	case 2:
-		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
-	case 1:
-		return strings.TrimSpace(parts[0]), "", nil
-	default:
-		return "", "", fmt.Errorf("%w: env function accepts 1 or 2 arguments, got %d", ErrInvalidArguments, len(parts))
-	}
-}
-
-// lookupEnvFromContext checks the component's env section from stack manifests.
-func lookupEnvFromContext(execCtx *ExecutionContext, envVarName string) (string, bool) {
-	if execCtx == nil || execCtx.StackInfo == nil {
-		return "", false
-	}
-	envSection := execCtx.StackInfo.GetComponentEnvSection()
-	if envSection == nil {
-		return "", false
-	}
-	if val, exists := envSection[envVarName]; exists {
-		return fmt.Sprintf("%v", val), true
-	}
-	return "", false
-}
-
-// Execute processes the env function.
-// Usage:
-//
-//	!env VAR_NAME           - Get environment variable, return empty string if not set
-//	!env VAR_NAME default   - Get environment variable, return default if not set
+// Execute processes the !env function.
+// Syntax: !env VAR_NAME [default_value]
+// Returns the environment variable value, or the default if not set.
 func (f *EnvFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
 	defer perf.Track(nil, "function.EnvFunction.Execute")()
 
-	log.Debug("Executing env function", "args", args)
+	args = strings.TrimSpace(args)
+	if args == "" {
+		return "", fmt.Errorf("%w: !env requires at least one argument", ErrInvalidArguments)
+	}
 
-	envVarName, envVarDefault, err := parseEnvArgs(args)
+	envVarName, envVarDefault, err := f.parseEnvArgs(args)
 	if err != nil {
 		return "", err
 	}
 
-	// Check the component's env section from stack manifests first.
-	if val, found := lookupEnvFromContext(execCtx, envVarName); found {
+	// Check execution context for component env section first.
+	if val := f.getFromContext(envVarName, execCtx); val != "" {
 		return val, nil
 	}
 
 	// Fall back to OS environment variables.
-	if res, exists := os.LookupEnv(envVarName); exists {
-		return res, nil
+	if val, exists := os.LookupEnv(envVarName); exists {
+		return val, nil
 	}
 
-	if envVarDefault != "" {
-		return envVarDefault, nil
+	// Return default value if provided.
+	return envVarDefault, nil
+}
+
+// parseEnvArgs parses the arguments for the !env function.
+func (f *EnvFunction) parseEnvArgs(args string) (envVarName, envVarDefault string, err error) {
+	defer perf.Track(nil, "function.EnvFunction.parseEnvArgs")()
+
+	parts, err := splitStringByDelimiter(args, ' ')
+	if err != nil {
+		return "", "", errors.Join(ErrInvalidArguments, err)
 	}
 
-	return "", nil
+	switch len(parts) {
+	case 1:
+		return strings.TrimSpace(parts[0]), "", nil
+	case 2:
+		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
+	default:
+		return "", "", fmt.Errorf("%w: !env accepts 1 or 2 arguments, got %d", ErrInvalidArguments, len(parts))
+	}
+}
+
+// getFromContext gets a value from the execution context.
+func (f *EnvFunction) getFromContext(envVarName string, execCtx *ExecutionContext) string {
+	if execCtx == nil || execCtx.Env == nil {
+		return ""
+	}
+	return execCtx.Env[envVarName]
+}
+
+// stringSplitter handles splitting strings by delimiter with quote support.
+type stringSplitter struct {
+	result    []string
+	current   strings.Builder
+	inQuotes  bool
+	quoteChar rune
+	delim     rune
+}
+
+// splitStringByDelimiter splits a string by delimiter, respecting quoted sections.
+func splitStringByDelimiter(input string, delim rune) ([]string, error) {
+	defer perf.Track(nil, "function.splitStringByDelimiter")()
+
+	s := &stringSplitter{delim: delim}
+
+	for _, r := range input {
+		s.processRune(r)
+	}
+
+	if s.current.Len() > 0 {
+		s.result = append(s.result, s.current.String())
+	}
+
+	if s.inQuotes {
+		return nil, fmt.Errorf("%w: %s", ErrUnclosedQuote, input)
+	}
+
+	return s.result, nil
+}
+
+// processRune handles a single rune during string splitting.
+func (s *stringSplitter) processRune(r rune) {
+	switch {
+	case r == '"' || r == '\'':
+		s.handleQuote(r)
+	case r == s.delim && !s.inQuotes:
+		if s.current.Len() > 0 {
+			s.result = append(s.result, s.current.String())
+			s.current.Reset()
+		}
+	default:
+		s.current.WriteRune(r)
+	}
+}
+
+// handleQuote handles quote characters during string splitting.
+func (s *stringSplitter) handleQuote(r rune) {
+	if !s.inQuotes {
+		s.inQuotes = true
+		s.quoteChar = r
+		return
+	}
+	if r == s.quoteChar {
+		s.inQuotes = false
+		s.quoteChar = 0
+		return
+	}
+	s.current.WriteRune(r)
 }
