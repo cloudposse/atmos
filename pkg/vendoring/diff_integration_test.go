@@ -1,6 +1,6 @@
 package vendoring
 
-//go:generate mockgen -source=git_interface.go -destination=mock_git_interface.go -package=vendor
+//go:generate mockgen -source=git_interface.go -destination=mock_git_interface.go -package=vendoring
 
 import (
 	"errors"
@@ -193,7 +193,7 @@ spec:
 }
 
 func TestExecuteVendorDiffWithGitOps_DefaultFromVersion(t *testing.T) {
-	// This test verifies that when --from is not specified, it defaults to current version
+	// This test verifies that when --from is not specified, it defaults to current version.
 	vendorYAML := `apiVersion: atmos/v1
 kind: AtmosVendorConfig
 spec:
@@ -228,7 +228,7 @@ spec:
 	defer ctrl.Finish()
 	mockGit := NewMockGitOperations(ctrl)
 
-	// Expect the call with fromRef="1.5.0" (current version from vendor.yaml)
+	// Expect the call with fromRef="1.5.0" (current version from vendor.yaml).
 	mockGit.EXPECT().
 		GetDiffBetweenRefs(gomock.Any(), "https://github.com/cloudposse/terraform-aws-components", "1.5.0", "v2.0.0", 3, true).
 		Return([]byte("diff output"), nil)

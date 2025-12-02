@@ -71,12 +71,6 @@ func executeVendorUpdate(atmosConfig *schema.AtmosConfiguration, flags *updateFl
 		return fmt.Errorf("%w: %s", errUtils.ErrVendorConfigNotFound, vendorConfigFileName)
 	}
 
-	// TODO: Process vendor config and check for updates.
-	// This is a placeholder - will be implemented with vendor_version_check.go.
-	fmt.Printf("Checking for vendor updates in %s...\n", foundVendorConfigFile)
-	fmt.Printf("Flags: check=%v, pull=%v, component=%s, tags=%v, outdated=%v\n",
-		flags.Check, flags.Pull, flags.Component, flags.Tags, flags.Outdated)
-
 	// TODO: Implement actual update logic.
 	// 1. Process imports and get sources.
 	// 2. Filter sources by component/tags.
@@ -85,8 +79,9 @@ func executeVendorUpdate(atmosConfig *schema.AtmosConfiguration, flags *updateFl
 	// 5. Update YAML files if not --check.
 	// 6. Execute vendor pull if --pull.
 
-	// Use vendorConfig to avoid "declared and not used" error.
+	// Use vendorConfig and foundVendorConfigFile to avoid "declared and not used" error.
 	_ = vendorConfig
+	_ = foundVendorConfigFile
 
 	return errUtils.ErrNotImplemented
 }
@@ -96,9 +91,8 @@ func executeComponentVendorUpdate(atmosConfig *schema.AtmosConfiguration, flags 
 	defer perf.Track(atmosConfig, "vendor.executeComponentVendorUpdate")()
 
 	// TODO: Implement component vendor update.
-	// When implemented, use flags.ComponentType (default: "terraform").
-	fmt.Printf("Checking for updates in component.yaml for component %s (type: %s)...\n",
-		flags.Component, flags.ComponentType)
+	// Use flags.Component and flags.ComponentType (default: "terraform") to avoid unused variable warning.
+	_ = flags
 
 	return errUtils.ErrNotImplemented
 }

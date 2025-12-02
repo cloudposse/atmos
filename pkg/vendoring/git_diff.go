@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
+	"regexp"
 
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/viper"
@@ -165,14 +165,10 @@ func getGitDiffBetweenRefs(atmosConfig *schema.AtmosConfiguration, gitURI string
 	return output, nil
 }
 
+// ansiRegex matches ANSI escape codes (SGR sequences).
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
 // stripANSICodes removes ANSI escape codes from byte data.
 func stripANSICodes(data []byte) []byte {
-	// Simple ANSI code stripper - removes ESC[...m sequences
-	s := string(data)
-	s = strings.ReplaceAll(s, "\x1b[", "")
-
-	// More sophisticated stripping could use regex, but this covers basic cases
-	// For production, consider using a library like github.com/acarl005/stripansi
-
-	return []byte(s)
+	return ansiRegex.ReplaceAll(data, nil)
 }
