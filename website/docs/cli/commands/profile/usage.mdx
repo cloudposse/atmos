@@ -1,0 +1,158 @@
+---
+title: atmos profile
+sidebar_label: profile
+sidebar_class_name: command
+description: "Manage configuration profiles for environment-specific settings"
+---
+
+import Screengrab from '@site/src/components/Screengrab';
+import DocCardList from '@theme/DocCardList';
+import Intro from '@site/src/components/Intro';
+
+<Intro>
+Use these subcommands to discover, inspect, and manage configuration profiles. Profiles provide environment-specific configuration overrides for development, CI/CD, and production contexts without duplicating settings.
+</Intro>
+
+<Screengrab title="atmos profile --help" slug="atmos-profile--help" />
+
+## What are Profiles?
+
+Profiles are named collections of configuration overrides that modify Atmos behavior for different environments or use cases. Instead of maintaining separate `atmos.yaml` files or complex environment variable scripts, profiles let you switch contexts with a single flag.
+
+**Common profile examples:**
+- **developer**: Debug logging, wider terminal output, enhanced error messages
+- **ci**: Disabled colors, plain text output, no interactive features
+- **production**: Stricter validation, audit logging, security-focused settings
+
+## Profile Discovery
+
+Atmos discovers profiles from multiple locations in the following precedence order:
+
+1. **Configurable path**: `profiles.base_path` in `atmos.yaml`
+2. **Project-hidden**: `.atmos/profiles/` in your project
+3. **XDG user directory**: `~/.config/atmos/profiles/` (or `$XDG_CONFIG_HOME/atmos/profiles/`)
+4. **Project directory**: `profiles/` in your project root
+
+Each profile can be either:
+- An inline definition in `atmos.yaml`
+- A separate directory containing `atmos.yaml` and other configuration files
+
+## Profile Structure
+
+### Inline Profiles (in atmos.yaml)
+
+```yaml
+# atmos.yaml
+profiles:
+  developer:
+    logs:
+      level: Debug
+    settings:
+      terminal:
+        max_width: 120
+
+  ci:
+    logs:
+      level: Info
+    settings:
+      terminal:
+        color: false
+        pager: false
+```
+
+### Directory-Based Profiles
+
+```
+profiles/
+├── developer/
+│   ├── atmos.yaml      # Developer-specific overrides
+│   └── auth.yaml       # Developer auth settings
+├── ci/
+│   ├── atmos.yaml      # CI-specific overrides
+│   └── auth.yaml       # CI auth settings
+└── production/
+    ├── atmos.yaml      # Production overrides
+    └── auth.yaml       # Production auth settings
+```
+
+## Using Profiles
+
+Activate a profile using the `--profile` flag or `ATMOS_PROFILE` environment variable:
+
+```bash
+# Activate a single profile
+atmos --profile developer terraform plan vpc -s prod
+
+# Use environment variable
+ATMOS_PROFILE=developer atmos terraform plan vpc -s prod
+
+# Activate multiple profiles (applied left-to-right)
+atmos --profile ci,security terraform plan vpc -s prod
+```
+
+See the [--profile global flag](/cli/global-flags#core-global-flags) for complete usage details.
+
+## Subcommands
+
+<DocCardList />
+
+## Use Cases
+
+### Development Workflow
+
+Create a developer profile for enhanced debugging:
+
+```yaml
+# profiles/developer/atmos.yaml
+logs:
+  level: Debug
+settings:
+  terminal:
+    max_width: 140
+    pager: true
+```
+
+```bash
+# Use during development
+atmos --profile developer describe stacks
+```
+
+### CI/CD Pipelines
+
+Create a CI profile that ensures consistent, parseable output:
+
+```yaml
+# profiles/ci/atmos.yaml
+logs:
+  level: Warning
+  file: /var/log/atmos.log
+settings:
+  terminal:
+    color: false
+    pager: false
+```
+
+```bash
+# In CI pipeline
+export ATMOS_PROFILE=ci
+atmos terraform apply --auto-approve
+```
+
+### Team Collaboration
+
+Share consistent settings across team members:
+
+```
+.atmos/profiles/
+├── team/
+│   └── atmos.yaml      # Shared team settings
+└── security-review/
+    └── atmos.yaml      # Security audit settings
+```
+
+## See Also
+
+- [`atmos profile list`](/cli/commands/profile/profile-list) - List available profiles
+- [`atmos profile show`](/cli/commands/profile/profile-show) - Show profile details
+- [Global Flags](/cli/global-flags) - Using the `--profile` flag
+- [CLI Configuration](/cli/configuration) - Profile configuration in `atmos.yaml`
