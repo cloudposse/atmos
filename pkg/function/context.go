@@ -1,60 +1,52 @@
 package function
 
-import (
-	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
-)
+import "github.com/cloudposse/atmos/pkg/perf"
 
-// ExecutionContext provides the runtime context for function execution.
-// It contains all the information a function might need to resolve values.
+// ExecutionContext provides the minimal context needed for function execution.
+// This contains basic execution environment information.
+// Stack-specific context is provided via pkg/stack/processor.
 type ExecutionContext struct {
-	// AtmosConfig is the current Atmos configuration.
-	AtmosConfig *schema.AtmosConfiguration
+	// Env contains environment variables available for function execution.
+	Env map[string]string
 
-	// Stack is the current stack name being processed.
-	Stack string
+	// WorkingDir is the current working directory.
+	WorkingDir string
 
-	// Component is the current component name being processed.
-	Component string
-
-	// BaseDir is the base directory for relative path resolution.
-	BaseDir string
-
-	// File is the path to the file being processed.
-	File string
-
-	// StackInfo contains additional stack and component information.
-	StackInfo *schema.ConfigAndStacksInfo
+	// SourceFile is the file containing this function call.
+	SourceFile string
 }
 
-// NewExecutionContext creates a new ExecutionContext with the given parameters.
-func NewExecutionContext(atmosConfig *schema.AtmosConfiguration, stack, component string) *ExecutionContext {
-	defer perf.Track(atmosConfig, "function.NewExecutionContext")()
+// NewExecutionContext creates a new execution context with the given parameters.
+func NewExecutionContext(env map[string]string, workingDir, sourceFile string) *ExecutionContext {
+	defer perf.Track(nil, "function.NewExecutionContext")()
 
+	if env == nil {
+		env = make(map[string]string)
+	}
 	return &ExecutionContext{
-		AtmosConfig: atmosConfig,
-		Stack:       stack,
-		Component:   component,
+		Env:        env,
+		WorkingDir: workingDir,
+		SourceFile: sourceFile,
 	}
 }
 
-// WithFile returns a copy of the context with the file path set.
-func (ctx *ExecutionContext) WithFile(file string) *ExecutionContext {
-	newCtx := *ctx
-	newCtx.File = file
-	return &newCtx
+// GetEnv returns the value of an environment variable, or empty string if not found.
+func (c *ExecutionContext) GetEnv(key string) string {
+	defer perf.Track(nil, "function.ExecutionContext.GetEnv")()
+
+	if c == nil || c.Env == nil {
+		return ""
+	}
+	return c.Env[key]
 }
 
-// WithBaseDir returns a copy of the context with the base directory set.
-func (ctx *ExecutionContext) WithBaseDir(baseDir string) *ExecutionContext {
-	newCtx := *ctx
-	newCtx.BaseDir = baseDir
-	return &newCtx
-}
+// HasEnv returns true if the environment variable is set.
+func (c *ExecutionContext) HasEnv(key string) bool {
+	defer perf.Track(nil, "function.ExecutionContext.HasEnv")()
 
-// WithStackInfo returns a copy of the context with stack info set.
-func (ctx *ExecutionContext) WithStackInfo(stackInfo *schema.ConfigAndStacksInfo) *ExecutionContext {
-	newCtx := *ctx
-	newCtx.StackInfo = stackInfo
-	return &newCtx
+	if c == nil || c.Env == nil {
+		return false
+	}
+	_, ok := c.Env[key]
+	return ok
 }
