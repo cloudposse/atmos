@@ -238,6 +238,11 @@ module.exports = {
                     id: 'components/helmfile',
                     label: 'Helmfile',
                 },
+                {
+                    type: 'doc',
+                    id: 'components/packer',
+                    label: 'Packer',
+                },
             ]
         },
 

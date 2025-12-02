@@ -1,0 +1,58 @@
+---
+title: Using Packer
+sidebar_position: 5
+sidebar_label: Packer
+id: packer
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos natively supports opinionated workflows for [HashiCorp Packer](https://www.packer.io/). Packer automates the creation of machine images for multiple platforms, enabling you to build immutable infrastructure with consistent, versioned images.
+</Intro>
+
+For a complete list of supported commands, please see the Atmos [packer](/cli/commands/packer/usage) documentation.
+
+## Why Use Packer with Atmos?
+
+Packer components in Atmos allow you to:
+
+- **Build immutable infrastructure** — Create golden AMIs and machine images that are versioned and reproducible
+- **Patch images for compliance** — Apply security patches and compliance requirements consistently across your image library
+- **Manage images like any other component** — Use the same inheritance, imports, and configuration patterns you use for Terraform
+
+## Example: Build a Packer Component
+
+To build a Packer component using the `atmos` CLI, run the following commands:
+
+```shell
+atmos packer init myimage --stack=ue2-dev
+atmos packer build myimage --stack=ue2-dev
+```
+
+where:
+
+- `myimage` is the Packer component to build (from the `components/packer` folder)
+- `--stack=ue2-dev` is the stack context for the build
+
+Short versions of the command-line arguments can be used:
+
+```shell
+atmos packer init myimage -s ue2-dev
+atmos packer build myimage -s ue2-dev
+```
+
+## Example: Validate a Packer Template
+
+To validate a Packer template before building:
+
+```shell
+atmos packer validate myimage -s ue2-dev
+```
+
+## Example: Inspect a Packer Template
+
+To inspect a Packer template and see its configuration:
+
+```shell
+atmos packer inspect myimage -s ue2-dev
+```
