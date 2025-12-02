@@ -8,6 +8,7 @@ slug: /reference/yaml
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import KeyTakeaways from '@site/src/components/KeyTakeaways'
 
 <Intro>
 YAML is the configuration language for Atmos stacks. Understanding YAML's features, gotchas, and best practices is essential for writing maintainable stack configurations at scale.
@@ -946,16 +947,16 @@ See [Validation](/validation/validating) for comprehensive validation strategies
 | **JSON in YAML** | `{"key": "val"}` | Compact objects (use sparingly) |
 | **Comment** | `# comment` | Document configuration |
 
-## Key Takeaways
-
-✅ **Quote all string values** - Prevents type coercion surprises
-✅ **Quote Go templates** - Avoids YAML parsing conflicts with braces
-✅ **Use 2-space indentation** - Atmos standard, configure your editor
-✅ **Leverage anchors within files** - Use imports across files
-✅ **Prefer block style over flow style** - More readable and commentable
-✅ **Validate early and often** - Use schema validation and linters
-✅ **YAML is JSON-compatible** - But prefer YAML syntax for readability
-✅ **Watch for `NO`, `ON`, `OFF`** - Country codes and words that become booleans
+<KeyTakeaways>
+- **Quote all string values** - Prevents type coercion surprises
+- **Quote Go templates** - Avoids YAML parsing conflicts with braces
+- **Use 2-space indentation** - Atmos standard, configure your editor
+- **Leverage anchors within files** - Use imports across files
+- **Prefer block style over flow style** - More readable and commentable
+- **Validate early and often** - Use schema validation and linters
+- **YAML is JSON-compatible** - But prefer YAML syntax for readability
+- **Watch for `NO`, `ON`, `OFF`** - Country codes and words that become booleans
+</KeyTakeaways>
 
 ## See Also
 

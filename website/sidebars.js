@@ -91,6 +91,7 @@ module.exports = {
                 'learn/mindset',
                 'learn/concepts-overview',
                 'learn/yaml-guide',
+                'learn/stacks/learn-stacks',
             ]
         },
         {
@@ -186,6 +187,12 @@ module.exports = {
     ],
     cli: [
         {
+            type: 'doc',
+            id: 'cli/cli',
+            label: 'atmos (Interactive)',
+            className: 'sidebar-title',
+        },
+        {
             type: 'category',
             label: 'Configuration',
             className: 'sidebar-title',
@@ -194,8 +201,82 @@ module.exports = {
             link: {type: 'doc', id: 'cli/configuration-overview'},
             items: [
                 {
+                    type: 'category',
+                    label: 'CLI Configuration',
+                    collapsible: true,
+                    collapsed: false,
+                    link: {type: 'doc', id: 'cli/configuration/configuration'},
+                    items: [
+                        {type: 'doc', id: 'cli/configuration/commands', label: 'commands', className: 'command'},
+                        {
+                            type: 'category',
+                            label: 'components',
+                            className: 'command',
+                            collapsible: true,
+                            collapsed: true,
+                            link: {type: 'doc', id: 'cli/configuration/components/components'},
+                            items: [
+                                {type: 'doc', id: 'cli/configuration/components/terraform', label: 'terraform', className: 'command'},
+                                {type: 'doc', id: 'cli/configuration/components/helmfile', label: 'helmfile', className: 'command'},
+                                {type: 'doc', id: 'cli/configuration/components/packer', label: 'packer', className: 'command'},
+                            ]
+                        },
+                        {type: 'doc', id: 'cli/configuration/stacks', label: 'stacks', className: 'command'},
+                        {type: 'doc', id: 'cli/configuration/errors', label: 'errors', className: 'command'},
+                        {type: 'doc', id: 'cli/configuration/profiles', label: 'profiles', className: 'command'},
+                        {
+                            type: 'category',
+                            label: 'settings',
+                            className: 'command',
+                            collapsible: true,
+                            collapsed: false,
+                            link: {type: 'doc', id: 'cli/configuration/settings/settings'},
+                            items: [
+                                {
+                                    type: 'category',
+                                    label: 'terminal',
+                                    className: 'command',
+                                    collapsible: true,
+                                    collapsed: true,
+                                    link: {type: 'doc', id: 'cli/configuration/settings/terminal'},
+                                    items: [
+                                        {type: 'doc', id: 'cli/configuration/settings/mask', label: 'mask', className: 'command'},
+                                        {type: 'doc', id: 'cli/configuration/settings/markdown-styling', label: 'markdown', className: 'command'},
+                                        {type: 'doc', id: 'cli/configuration/settings/syntax-highlighting', label: 'syntax_highlighting', className: 'command'},
+                                    ]
+                                },
+                                {type: 'doc', id: 'cli/configuration/settings/pro', label: 'pro', className: 'command'},
+                                {type: 'doc', id: 'cli/telemetry', label: 'telemetry', className: 'command'},
+                            ]
+                        },
+                        {type: 'doc', id: 'cli/configuration/imports', label: 'import', className: 'command'},
+                        {type: 'doc', id: 'cli/configuration/logs', label: 'logs', className: 'command'},
+                        {type: 'doc', id: 'cli/configuration/profiler', label: 'profiler', className: 'command'},
+                        {type: 'doc', id: 'cli/configuration/aliases', label: 'aliases', className: 'command'},
+                        {type: 'doc', id: 'cli/configuration/templates', label: 'templates', className: 'command'},
+                        {type: 'doc', id: 'cli/configuration/integrations', label: 'integrations', className: 'command'},
+                        {type: 'doc', id: 'cli/configuration/schemas', label: 'schemas', className: 'command'},
+                        {type: 'doc', id: 'cli/configuration/workflows', label: 'workflows', className: 'command'},
+                        {type: 'doc', id: 'cli/configuration/vendor', label: 'vendor', className: 'command'},
+                        {type: 'doc', id: 'cli/configuration/stores', label: 'stores', className: 'command'},
+                    ]
+                },
+                {type: 'doc', id: 'cli/global-flags', label: 'Global Flags'},
+                {type: 'doc', id: 'cli/environment-variables', label: 'Environment Variables'},
+                {type: 'doc', id: 'cli/versioning', label: 'Versioning'},
+            ]
+        },
+        {
+            type: 'category',
+            label: 'Commands',
+            className: 'sidebar-title',
+            collapsible: false,
+            collapsed: false,
+            link: {type: 'doc', id: 'cli/commands/commands'},
+            items: [
+                {
                     type: 'autogenerated',
-                    dirName: 'cli',
+                    dirName: 'cli/commands',
                 },
             ]
         },
@@ -214,14 +295,12 @@ module.exports = {
 
         {
             type: 'category',
-            label: 'Components',
+            label: 'Component Library',
             className: 'sidebar-title',
             collapsible: false,
             collapsed: false,
             link: {type: 'doc', id: 'components/components-overview'},
             items: [
-                'describe/component',
-                'components/library',
                 {
                     type: 'category',
                     label: 'Terraform/OpenTofu',
@@ -230,9 +309,10 @@ module.exports = {
                     link: {type: 'doc', id: 'components/terraform/terraform'},
                     items: [
                         {type: 'doc', id: 'components/terraform/stack-config', label: 'Stack Configuration'},
-                        {type: 'doc', id: 'components/terraform/backends', label: 'Backends'},
+                        {type: 'doc', id: 'components/terraform/root-modules', label: 'Root Modules'},
+                        {type: 'doc', id: 'components/terraform/backends', label: 'State Backends'},
                         {type: 'doc', id: 'components/terraform/workspaces', label: 'Workspaces'},
-                        {type: 'doc', id: 'components/terraform/providers', label: 'Providers'},
+                        {type: 'doc', id: 'components/terraform/providers', label: 'Provider Generation'},
                         {type: 'doc', id: 'components/terraform/brownfield', label: 'Brownfield'},
                     ]
                 },
@@ -257,25 +337,53 @@ module.exports = {
             collapsed: false,
             link: {type: 'doc', id: 'stacks/stacks'},
             items: [
-                'describe/stacks',
-                'learn/stacks/define-components',
-                'stacks/imports',
-                'stacks/catalogs',
-                'stacks/inheritance',
-                'stacks/overrides',
-                'stacks/mixins',
-                'stacks/dependencies',
-                'stacks/hooks',
+                {type: 'doc', id: 'stacks/imports', label: 'import', className: 'command'},
+                {type: 'doc', id: 'stacks/vars', label: 'vars', className: 'command'},
+                {type: 'doc', id: 'stacks/env', label: 'env', className: 'command'},
                 {
                     type: 'category',
-                    label: 'Sharing State',
+                    label: 'settings',
+                    className: 'command',
                     collapsible: true,
                     collapsed: true,
-                    link: {type: 'doc', id: 'stacks/share-data'},
+                    link: {type: 'doc', id: 'stacks/settings/index'},
                     items: [
-                        'stacks/remote-state',
+                        {type: 'doc', id: 'stacks/settings/depends_on', label: 'depends_on', className: 'command'},
                     ]
                 },
+                {type: 'doc', id: 'stacks/metadata', label: 'metadata', className: 'command'},
+                {type: 'doc', id: 'stacks/hooks', label: 'hooks', className: 'command'},
+                {type: 'doc', id: 'stacks/overrides', label: 'overrides', className: 'command'},
+                {type: 'doc', id: 'stacks/command', label: 'command', className: 'command'},
+                {type: 'doc', id: 'stacks/backend', label: 'backend', className: 'command'},
+                {type: 'doc', id: 'stacks/providers', label: 'providers', className: 'command'},
+                {type: 'doc', id: 'stacks/auth', label: 'auth', className: 'command'},
+                {
+                    type: 'category',
+                    label: 'components',
+                    className: 'command',
+                    collapsible: true,
+                    collapsed: true,
+                    link: {type: 'doc', id: 'stacks/components/index'},
+                    items: [
+                        {type: 'doc', id: 'stacks/components/terraform', label: 'terraform', className: 'command'},
+                        {type: 'doc', id: 'stacks/components/helmfile', label: 'helmfile', className: 'command'},
+                        {type: 'doc', id: 'stacks/components/packer', label: 'packer', className: 'command'},
+                    ]
+                },
+            ]
+        },
+
+        {
+            type: 'category',
+            label: 'How-To Guides',
+            className: 'sidebar-title',
+            collapsible: false,
+            collapsed: false,
+            items: [
+                {type: 'doc', id: 'stacks/catalogs', label: 'Service Catalogs'},
+                {type: 'doc', id: 'stacks/inheritance', label: 'Inheritance'},
+                {type: 'doc', id: 'stacks/mixins', label: 'Mixins'},
             ]
         },
 
@@ -372,20 +480,6 @@ module.exports = {
             ]
         },
 
-        {
-            type: 'category',
-            label: 'Commands',
-            className: 'sidebar-title',
-            collapsible: false,
-            collapsed: false,
-            link: {type: 'doc', id: 'cli/commands/commands'},
-            items: [
-                {
-                    type: 'autogenerated',
-                    dirName: 'cli/commands',
-                },
-            ]
-        },
         {
             type: 'category',
             label: 'CI/CD (GitOps)',

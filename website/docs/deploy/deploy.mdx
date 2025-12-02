@@ -11,7 +11,7 @@ import Intro from '@site/src/components/Intro';
     Once you're done developing your components and configuring them with stacks, you can deploy them with a single command or in a CI/CD pipeline.
 </Intro>
 
-In Atmos, when we talk about "Deployment," it refers to taking the [fully rendered and deep-merged configuration](/cli/configuration/view-configuration) of a [stack](/learn/stacks) and provisioning an instance of one of the components. We call this a "component instance," and it's simply a component that has been deployed in a specific stack.
+In Atmos, when we talk about "Deployment," it refers to taking the [fully rendered and deep-merged configuration](/cli/commands/describe/config) of a [stack](/learn/stacks) and provisioning an instance of one of the components. We call this a "component instance," and it's simply a component that has been deployed in a specific stack.
 
 ### Deployment in Atmos
 
@@ -25,7 +25,7 @@ Deployment in Atmos can be approached in several ways.
 
 When deploying components, it's important to consider the dependencies between components. For example, a database component might depend on a network component. When this happens, it's important to ensure that the network component is deployed before the database component.
 
-Make sure to [configure dependencies](/stacks/dependencies) between components using the `settings.depends_on` section.
+Make sure to [configure dependencies](/stacks/settings/depends_on) between components using the `settings.depends_on` section.
 
 ### Managing Dependency Order Between Components
 

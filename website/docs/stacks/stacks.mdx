@@ -14,93 +14,72 @@ import DocCardList from '@theme/DocCardList'
 Stacks are YAML files that configure your environments. They define which components to deploy, with what settings, and how they relate to each other. This is where configuration lives—separate from your Terraform code.
 </Intro>
 
-<DocCardList />
+## Configuration Sections
 
-## When to Use Advanced Features
+Stack manifests support various configuration sections at different scopes:
 
-Not every project needs these advanced features. Here's a guide:
+| Section | Description | Scopes |
+|---------|-------------|--------|
+| [vars](/stacks/vars) | Variables passed to components | Global, component-type, component |
+| [env](/stacks/env) | Environment variables | Global, component-type, component |
+| [settings](/stacks/settings) | Integrations and metadata | Global, component-type, component |
+| [metadata](/stacks/metadata) | Component behavior and inheritance | Component only |
+| [hooks](/stacks/hooks) | Lifecycle event handlers | Global, component-type, component |
+| [command](/stacks/command) | Override default executable | Component-type, component |
+| [backend](/stacks/backend) | Terraform state storage | Component-type, component |
+| [providers](/stacks/providers) | Terraform provider configuration | Component-type, component |
+| [auth](/stacks/auth) | Authentication configuration | Global (atmos.yaml), component |
 
-### Start with Basics
+## Component Types
 
-If you're new to Atmos, stick to:
-- Simple imports for shared configuration
-- Single inheritance for component variations
-- Basic stack organization
+Atmos supports three component types, each with specific configuration options:
 
-Most projects can get very far with just these features.
+| Type | Purpose | Documentation |
+|------|---------|---------------|
+| [Terraform](/stacks/components/terraform) | Infrastructure as Code | Cloud resources, networking, IAM |
+| [Helmfile](/stacks/components/helmfile) | Kubernetes deployments | Helm chart releases |
+| [Packer](/stacks/components/packer) | Machine image building | AMIs, VM images |
 
-### Add Advanced Features When You Need Them
+## Composition and Reuse
 
-<dl>
-  <dt>**Multiple Inheritance**</dt>
-  <dd>When you have cross-cutting concerns that don't fit a single hierarchy (e.g., monitoring, backup, compliance)</dd>
+Build maintainable configurations using these patterns:
 
-  <dt>**Overrides**</dt>
-  <dd>When you need to completely replace a setting instead of merging it (e.g., list replacement, special-case configuration)</dd>
+| Pattern | Description |
+|---------|-------------|
+| [Imports](/stacks/imports) | Include configuration from other files |
+| [Catalogs](/stacks/catalogs) | Reusable component configurations |
+| [Inheritance](/stacks/inheritance) | Inherit settings between components |
+| [Overrides](/stacks/overrides) | Override inherited configuration |
+| [Mixins](/stacks/mixins) | Composable configuration snippets |
+| [depends_on](/stacks/settings/depends_on) | Define component dependencies |
 
-  <dt>**Dependencies**</dt>
-  <dd>When you have complex deployment orders or need to enforce component sequencing</dd>
+## Sharing State
 
-  <dt>**Hooks**</dt>
-  <dd>When you need to run custom logic before/after Atmos operations (e.g., notifications, validation, cleanup)</dd>
+Share data between components and stacks:
 
-  <dt>**Catalogs**</dt>
-  <dd>When you're building a component library for multiple teams or projects</dd>
-</dl>
+| Topic | Description |
+|-------|-------------|
+| [Remote State](/stacks/remote-state) | Access Terraform state from other components |
+| [Share Data](/stacks/share-data) | Share configuration between components |
 
-## Example: Advanced Stack Architecture
+## Describing Stacks
 
-Here's a glimpse of what's possible with advanced stack features:
+Use [`atmos describe stacks`](/cli/commands/describe/stacks) to view the fully computed, deep-merged configuration of any stack. This is invaluable for debugging and understanding what configuration will actually be applied.
 
-```yaml
-# stacks/catalog/monitoring-mixin.yaml
-components:
-  terraform:
-    monitoring/base:
-      metadata:
-        type: abstract
-      vars:
-        enable_cloudwatch: true
-        enable_xray: true
+```bash
+# View all stacks
+atmos describe stacks
 
-# stacks/catalog/backup-mixin.yaml
-components:
-  terraform:
-    backup/base:
-      metadata:
-        type: abstract
-      vars:
-        retention_days: 30
-        enable_point_in_time: true
+# Filter by specific stack
+atmos describe stacks --stack plat-ue2-prod
 
-# stacks/prod-us-east-1.yaml
-import:
-  - catalog/monitoring-mixin
-  - catalog/backup-mixin
+# Filter by component and section
+atmos describe stacks --components vpc --sections vars
 
-components:
-  terraform:
-    app:
-      metadata:
-        inherits:
-          - monitoring/base  # Multiple inheritance
-          - backup/base
-        depends_on:
-          - vpc              # Explicit dependencies
-          - rds
-      settings:
-        hooks:
-          apply:
-            before:
-              - command: echo "Deploying prod app"
-            after:
-              - command: notify-slack "Deployed app to prod"
-      vars:
-        instance_type: m5.xlarge
+# Output as JSON for processing with jq
+atmos describe stacks --format json | jq '.["plat-ue2-prod"]'
 ```
 
-This single stack configuration demonstrates:
-- Multiple inheritance (monitoring + backup mixins)
-- Explicit dependencies (vpc, rds must deploy first)
-- Hooks (notifications before/after deployment)
-- Clear component configuration
+The output shows the final resolved configuration after all imports, inheritance, and overrides have been applied. Use `--sections` to filter output to specific sections like `vars`, `env`, `settings`, `metadata`, `backend`, or `workspace`.
+
+<DocCardList />

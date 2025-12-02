@@ -1,0 +1,365 @@
+---
+title: Configure Authentication
+sidebar_position: 14
+sidebar_label: auth
+description: Use the auth section to configure credential management for cloud providers and external services.
+id: auth
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `auth` section configures how Atmos obtains and manages credentials for cloud providers and external services. Auth configuration is primarily defined in `atmos.yaml` but can be extended at the component level via `settings.auth`.
+</Intro>
+
+## Use Cases
+
+- **AWS SSO Integration:** Authenticate via AWS IAM Identity Center (SSO) for seamless credential management.
+- **Role Assumption Chains:** Configure multi-account access through role assumption.
+- **Credential Storage:** Securely store and retrieve credentials using system keyrings.
+- **Environment Injection:** Automatically inject credentials as environment variables for components.
+
+## Configuration Locations
+
+### Global Configuration (atmos.yaml)
+
+The primary auth configuration is defined in your `atmos.yaml`:
+
+```yaml
+# atmos.yaml
+auth:
+  providers:
+    aws-sso:
+      kind: aws-sso
+      start_url: https://acme.awsapps.com/start
+      region: us-east-1
+
+  identities:
+    prod-admin:
+      kind: aws
+      via:
+        provider: aws-sso
+      principal:
+        name: AdministratorAccess
+        account:
+          id: "123456789012"
+```
+
+### Component-Level Configuration
+
+Components can reference or extend auth configuration via `settings.auth`:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      settings:
+        auth:
+          identity: prod-admin
+```
+
+## Auth Configuration Structure
+
+### Providers
+
+Providers define how Atmos connects to authentication sources:
+
+```yaml
+auth:
+  providers:
+    my-sso:
+      kind: aws-sso
+      start_url: https://company.awsapps.com/start
+      region: us-east-1
+      default: true
+      session:
+        duration: 8h
+      console:
+        session_duration: 12h
+```
+
+**Provider Fields:**
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>Provider type (`aws-sso`, `static`).</dd>
+
+  <dt>`start_url`</dt>
+  <dd>AWS SSO portal URL.</dd>
+
+  <dt>`region`</dt>
+  <dd>AWS region for SSO.</dd>
+
+  <dt>`default`</dt>
+  <dd>Mark as default provider.</dd>
+
+  <dt>`session.duration`</dt>
+  <dd>CLI session duration.</dd>
+
+  <dt>`console.session_duration`</dt>
+  <dd>AWS Console session duration.</dd>
+</dl>
+
+### Identities
+
+Identities represent specific credentials or roles:
+
+```yaml
+auth:
+  identities:
+    dev-developer:
+      kind: aws
+      via:
+        provider: aws-sso
+      principal:
+        name: DeveloperAccess
+        account:
+          name: acme-dev
+          id: "111111111111"
+      env:
+        - key: AWS_PROFILE
+          value: dev-developer
+
+    prod-admin:
+      kind: aws
+      via:
+        provider: aws-sso
+      principal:
+        name: AdministratorAccess
+        account:
+          id: "222222222222"
+      default: true
+```
+
+**Identity Fields:**
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>Identity type (`aws`).</dd>
+
+  <dt>`via.provider`</dt>
+  <dd>Provider to use for authentication.</dd>
+
+  <dt>`via.identity`</dt>
+  <dd>Chain through another identity.</dd>
+
+  <dt>`principal.name`</dt>
+  <dd>Permission set or role name.</dd>
+
+  <dt>`principal.account.id`</dt>
+  <dd>Target AWS account ID.</dd>
+
+  <dt>`principal.account.name`</dt>
+  <dd>Target AWS account name.</dd>
+
+  <dt>`credentials`</dt>
+  <dd>Static credentials (use sparingly).</dd>
+
+  <dt>`env`</dt>
+  <dd>Environment variables to set.</dd>
+
+  <dt>`default`</dt>
+  <dd>Mark as default identity.</dd>
+
+  <dt>`alias`</dt>
+  <dd>Alternative name for the identity.</dd>
+
+  <dt>`session.duration`</dt>
+  <dd>Session duration override.</dd>
+</dl>
+
+### Keyring Configuration
+
+Configure how credentials are stored:
+
+```yaml
+auth:
+  keyring:
+    type: system  # system, file, or memory
+    spec:
+      # Type-specific configuration
+```
+
+**Keyring Types:**
+
+<dl>
+  <dt>`system`</dt>
+  <dd>Use OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service).</dd>
+
+  <dt>`file`</dt>
+  <dd>Store in encrypted file.</dd>
+
+  <dt>`memory`</dt>
+  <dd>Store in memory only (not persisted).</dd>
+</dl>
+
+## Examples
+
+### AWS SSO with Multiple Accounts
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    acme-sso:
+      kind: aws-sso
+      start_url: https://acme.awsapps.com/start
+      region: us-east-1
+      default: true
+
+  identities:
+    dev-admin:
+      kind: aws
+      via:
+        provider: acme-sso
+      principal:
+        name: AdministratorAccess
+        account:
+          name: acme-dev
+          id: "111111111111"
+
+    staging-admin:
+      kind: aws
+      via:
+        provider: acme-sso
+      principal:
+        name: AdministratorAccess
+        account:
+          name: acme-staging
+          id: "222222222222"
+
+    prod-admin:
+      kind: aws
+      via:
+        provider: acme-sso
+      principal:
+        name: AdministratorAccess
+        account:
+          name: acme-prod
+          id: "333333333333"
+      default: true
+```
+</File>
+
+### Role Assumption Chain
+
+Configure a chain where you first authenticate via SSO, then assume a role in another account:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    acme-sso:
+      kind: aws-sso
+      start_url: https://acme.awsapps.com/start
+      region: us-east-1
+
+  identities:
+    # First, authenticate to management account via SSO
+    mgmt-access:
+      kind: aws
+      via:
+        provider: acme-sso
+      principal:
+        name: ManagementAccess
+        account:
+          id: "000000000000"
+
+    # Then, assume role in target account from management
+    prod-deployer:
+      kind: aws
+      via:
+        identity: mgmt-access  # Chain through mgmt-access
+      principal:
+        name: arn:aws:iam::333333333333:role/TerraformDeployer
+```
+</File>
+
+### Component-Level Identity Selection
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    # This component needs admin access
+    iam-roles:
+      settings:
+        auth:
+          identity: prod-admin
+      vars:
+        # ...
+
+    # This component uses read-only access
+    monitoring:
+      settings:
+        auth:
+          identity: prod-readonly
+      vars:
+        # ...
+```
+</File>
+
+### Environment Variable Injection
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    prod-admin:
+      kind: aws
+      via:
+        provider: acme-sso
+      principal:
+        name: AdministratorAccess
+        account:
+          id: "333333333333"
+      env:
+        - key: AWS_PROFILE
+          value: prod-admin
+        - key: AWS_DEFAULT_REGION
+          value: us-east-1
+```
+</File>
+
+When using this identity, the specified environment variables are automatically set.
+
+## CLI Commands
+
+Atmos provides commands for managing authentication:
+
+```bash
+# Login to default provider
+atmos auth login
+
+# Login to specific provider
+atmos auth login --provider aws-sso
+
+# Configure user credentials
+atmos auth user configure
+
+# List available identities
+atmos auth list
+
+# Switch identity
+atmos auth switch prod-admin
+```
+
+## Best Practices
+
+1. **Use SSO Over Static Credentials:** AWS SSO provides short-lived credentials and centralized access management.
+
+2. **Define Environment-Specific Identities:** Create separate identities for dev, staging, and production with appropriate permissions.
+
+3. **Use Role Chains for Cross-Account:** Rather than configuring SSO access to every account, use role assumption chains from a central account.
+
+4. **Leverage System Keyring:** Use the system keyring for credential storage to benefit from OS-level security.
+
+5. **Set Appropriate Session Durations:** Balance security and convenience when configuring session durations.
+
+6. **Mark Default Identities:** Set `default: true` on commonly used identities to streamline workflows.
+
+## Related
+
+- [Environment Variables (env)](/stacks/env)
+- [Settings](/stacks/settings)
+- [Terraform Providers](/stacks/providers)

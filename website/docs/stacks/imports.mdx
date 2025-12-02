@@ -1,7 +1,7 @@
 ---
 title: Import Stack Configurations
 sidebar_position: 3
-sidebar_label: Imports
+sidebar_label: import
 id: imports
 ---
 import File from '@site/src/components/File'
@@ -96,6 +96,90 @@ Imports starting with `.` or `..` are relative to the current file's directory:
 - `../shared/_defaults` - imports from a sibling `shared` directory
 
 This is useful when you want to import files that are co-located with the current configuration.
+
+## Remote Imports
+
+Atmos supports importing stack configurations from remote sources using [go-getter](https://github.com/hashicorp/go-getter) URL schemes. This enables sharing configurations across repositories, teams, or organizations.
+
+### Supported Schemes
+
+<dl>
+  <dt>`git::` - Git Repositories</dt>
+  <dd>Import from Git repositories over HTTPS or SSH.</dd>
+
+  <dt>`github.com/` - GitHub Shorthand</dt>
+  <dd>Shorthand syntax for GitHub repositories.</dd>
+
+  <dt>`s3::` - Amazon S3</dt>
+  <dd>Import from S3 buckets using AWS credentials.</dd>
+
+  <dt>`gcs::` - Google Cloud Storage</dt>
+  <dd>Import from GCS buckets using Google Cloud credentials.</dd>
+
+  <dt>`https://` / `http://` - HTTP(S)</dt>
+  <dd>Import from any HTTP(S) URL.</dd>
+
+  <dt>`file://` - Local Files</dt>
+  <dd>Import from absolute local file paths.</dd>
+</dl>
+
+### Git Repository Examples
+
+Import from a Git repository:
+
+```yaml
+import:
+  # HTTPS with specific ref (branch, tag, or commit)
+  - git::https://github.com/acme/infrastructure.git//stacks/catalog/vpc?ref=v1.2.0
+
+  # SSH authentication
+  - git::git@github.com:acme/infrastructure.git//stacks/catalog/eks?ref=main
+
+  # GitHub shorthand
+  - github.com/acme/infrastructure//stacks/catalog/rds?ref=v2.0.0
+```
+
+The `//` separates the repository URL from the path within the repository. The `?ref=` parameter specifies the Git ref (branch, tag, or commit SHA).
+
+### S3 Examples
+
+Import from Amazon S3:
+
+```yaml
+import:
+  # Basic S3 import
+  - s3::https://s3.amazonaws.com/acme-configs/stacks/catalog/vpc.yaml
+
+  # With region specified
+  - s3::https://s3-us-west-2.amazonaws.com/acme-configs/stacks/catalog/eks.yaml
+```
+
+S3 imports use your AWS credentials from the environment or AWS config files.
+
+### HTTP(S) Examples
+
+Import from any HTTP(S) URL:
+
+```yaml
+import:
+  # Direct HTTPS import
+  - https://raw.githubusercontent.com/acme/configs/main/stacks/catalog/vpc.yaml
+
+  # From internal artifact server
+  - https://artifacts.internal.acme.com/stacks/v1.0.0/defaults.yaml
+```
+
+### Best Practices for Remote Imports
+
+1. **Pin Versions:** Always use `?ref=` with a specific tag or commit SHA for Git imports to ensure reproducible builds.
+
+2. **Cache Considerations:** Remote imports are cached locally. Use `atmos vendor pull` to refresh cached imports.
+
+3. **Authentication:** Configure appropriate credentials for private repositories or buckets via environment variables or credential files.
+
+4. **Fallback to Local:** Consider vendoring critical remote imports locally using `atmos vendor pull` for offline access and faster builds.
+
+For more details on go-getter URL formats, see the [go-getter documentation](https://github.com/hashicorp/go-getter#url-format).
 
 ## Conventions
 

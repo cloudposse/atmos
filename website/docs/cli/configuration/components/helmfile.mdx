@@ -1,0 +1,145 @@
+---
+title: Helmfile Configuration
+sidebar_position: 3
+sidebar_label: helmfile
+id: helmfile
+description: Configure Helmfile component behavior in atmos.yaml.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Configure how Atmos executes Helmfile commands for Kubernetes deployments, including EKS integration, kubeconfig management, and naming patterns for AWS profiles and cluster names.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  helmfile:
+    # Executable to run
+    command: helmfile
+
+    # Base path to Helmfile components
+    base_path: components/helmfile
+
+    # Enable EKS integration
+    use_eks: true
+
+    # Path for kubeconfig files
+    kubeconfig_path: /dev/shm
+
+    # Pattern for Helm AWS profile names
+    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+
+    # Pattern for EKS cluster names
+    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`command`</dt>
+  <dd>
+    Specifies the executable to run for Helmfile commands. Defaults to `helmfile`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_COMMAND`
+    **Command-line flag:** `--helmfile-command`
+
+    Examples:
+    - `helmfile` - Use Helmfile from PATH
+    - `/usr/local/bin/helmfile` - Use specific binary
+  </dd>
+
+  <dt>`base_path`</dt>
+  <dd>
+    Directory containing Helmfile component directories. Supports absolute and relative paths.
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_BASE_PATH`
+    **Command-line flag:** `--helmfile-dir`
+  </dd>
+
+  <dt>`use_eks`</dt>
+  <dd>
+    When `true`, Atmos configures AWS EKS integration for kubeconfig management.
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_USE_EKS`
+    **Default:** `true`
+  </dd>
+
+  <dt>`kubeconfig_path`</dt>
+  <dd>
+    Directory where Atmos stores generated kubeconfig files. Using `/dev/shm` (shared memory) is recommended for security as files are not persisted to disk.
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH`
+    **Default:** `/dev/shm`
+  </dd>
+
+  <dt>`helm_aws_profile_pattern`</dt>
+  <dd>
+    Pattern for generating AWS profile names used by Helm. Supports context variables:
+    - `{namespace}` - Organization namespace
+    - `{tenant}` - Tenant identifier
+    - `{environment}` - Environment (e.g., `ue1`, `uw2`)
+    - `{stage}` - Stage (e.g., `dev`, `prod`)
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN`
+
+    Example: `{namespace}-{tenant}-gbl-{stage}-helm` → `acme-platform-gbl-prod-helm`
+  </dd>
+
+  <dt>`cluster_name_pattern`</dt>
+  <dd>
+    Pattern for generating EKS cluster names. Supports the same context variables as `helm_aws_profile_pattern`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN`
+
+    Example: `{namespace}-{tenant}-{environment}-{stage}-eks-cluster` → `acme-platform-ue1-prod-eks-cluster`
+  </dd>
+</dl>
+
+## EKS Integration
+
+When `use_eks` is enabled, Atmos automatically:
+
+1. Generates kubeconfig files for EKS clusters
+2. Configures AWS credentials for Helm operations
+3. Sets up the correct cluster context before running Helmfile
+
+The kubeconfig is written to the path specified by `kubeconfig_path` with a filename based on the cluster name pattern.
+
+## Example: Multi-Environment Setup
+
+<File title="atmos.yaml">
+```yaml
+components:
+  helmfile:
+    command: helmfile
+    base_path: components/helmfile
+    use_eks: true
+    kubeconfig_path: /dev/shm
+    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+```
+</File>
+
+With this configuration, running `atmos helmfile apply nginx -s acme-ue1-prod` would:
+- Use AWS profile: `acme-platform-gbl-prod-helm`
+- Connect to cluster: `acme-platform-ue1-prod-eks-cluster`
+- Store kubeconfig at: `/dev/shm/acme-platform-ue1-prod-eks-cluster.kubeconfig`
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/helmfile/usage', label: 'atmos helmfile', description: 'Execute Helmfile commands'},
+  {type: 'link', href: '/cli/commands/helmfile/generate-varfile', label: 'atmos helmfile generate varfile', description: 'Generate variable files for Helmfile'},
+]} />
+
+## Related
+
+- [Component Configuration Overview](/cli/configuration/components)
+- [Helmfile Components](/components/helmfile)
+- [Stack Configuration](/cli/configuration/stacks)

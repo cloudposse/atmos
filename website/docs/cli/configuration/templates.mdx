@@ -1,0 +1,143 @@
+---
+title: Templates
+sidebar_position: 65
+sidebar_label: templates
+description: Configure Go templates, Sprig functions, and Gomplate datasources in Atmos stack manifests.
+id: templates
+slug: /cli/configuration/templates
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+Atmos supports Go templates in stack manifests, along with Sprig and Gomplate functions. Configure template processing and define datasources for dynamic configuration.
+</Intro>
+
+## Configuration
+
+Templates are configured in the `templates` section:
+
+<File title="atmos.yaml">
+```yaml
+# https://pkg.go.dev/text/template
+templates:
+  settings:
+    enabled: true
+    # https://masterminds.github.io/sprig
+    sprig:
+      enabled: true
+    # https://docs.gomplate.ca
+    # https://docs.gomplate.ca/functions
+    gomplate:
+      enabled: true
+      # Timeout in seconds to execute the datasources
+      timeout: 5
+      # https://docs.gomplate.ca/datasources
+      datasources:
+        # 'http' datasource
+        # https://docs.gomplate.ca/datasources/#using-file-datasources
+        ip:
+          url: "https://api.ipify.org?format=json"
+          # https://docs.gomplate.ca/datasources/#sending-http-headers
+          # https://docs.gomplate.ca/usage/#--datasource-header-h
+          headers:
+            accept:
+              - "application/json"
+        # 'file' datasources
+        # https://docs.gomplate.ca/datasources/#using-file-datasources
+        config-1:
+          url: "./config1.json"
+        config-2:
+          url: "file:///config2.json"
+```
+</File>
+
+## Settings
+
+<dl>
+  <dt>`templates.settings.enabled`</dt>
+  <dd>
+    A boolean flag to enable/disable the processing of Go templates in Atmos stack manifests. If set to `false`, Atmos will not process Go templates in stack manifests.
+  </dd>
+
+  <dt>`templates.settings.sprig.enabled`</dt>
+  <dd>
+    A boolean flag to enable/disable [Sprig Functions](https://masterminds.github.io/sprig/) in Atmos stack manifests.
+  </dd>
+
+  <dt>`templates.settings.gomplate.enabled`</dt>
+  <dd>
+    A boolean flag to enable/disable [Gomplate Functions](https://docs.gomplate.ca/functions/) and [Gomplate Datasources](https://docs.gomplate.ca/datasources) in Atmos stack manifests.
+  </dd>
+
+  <dt>`templates.settings.gomplate.timeout`</dt>
+  <dd>
+    Timeout in seconds to execute [Gomplate Datasources](https://docs.gomplate.ca/datasources).
+  </dd>
+</dl>
+
+## Datasources
+
+The `templates.settings.gomplate.datasources` setting is a map of [Gomplate Datasource](https://docs.gomplate.ca/datasources) definitions:
+
+- The keys of the map are the datasource names, which are used in Go templates in Atmos stack manifests
+- The values of the map are the datasource definitions
+
+### Datasource Schema
+
+Each datasource definition supports the following properties:
+
+<dl>
+  <dt>`url`</dt>
+  <dd>
+    The [Datasource URL](https://docs.gomplate.ca/datasources/#url-format). Can be an HTTP URL, file path, or other supported URL schemes.
+  </dd>
+
+  <dt>`headers`</dt>
+  <dd>
+    A map of [HTTP request headers](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers) for the [`http` datasource](https://docs.gomplate.ca/datasources/#sending-http-headers). The keys of the map are the header names. The values of the map are lists of values for the header.
+  </dd>
+</dl>
+
+### Using Datasources in Templates
+
+```yaml
+terraform:
+  vars:
+    tags:
+      provisioned_by_ip: '{{ (datasource "ip").ip }}'
+      config1_tag: '{{ (datasource "config-1").tag }}'
+      config2_service_name: '{{ (datasource "config-2").service.name }}'
+```
+
+## Available Template Functions
+
+Atmos supports the following template functions and data sources:
+
+- [Go `text/template` functions](https://pkg.go.dev/text/template#hdr-Functions)
+- [Atmos Template Functions](/functions/template)
+- [Sprig Functions](https://masterminds.github.io/sprig/)
+- [Gomplate Functions](https://docs.gomplate.ca/functions/)
+- [Gomplate Datasources](https://docs.gomplate.ca/datasources/)
+
+:::tip
+For more details, refer to [Atmos Stack Manifest Templating](/templates)
+:::
+
+## Function Conflicts
+
+:::warning
+Some functions are present in both [Sprig](https://masterminds.github.io/sprig/) and [Gomplate](https://docs.gomplate.ca/functions/).
+
+For example, the `env` function has the same name in [Sprig](https://masterminds.github.io/sprig/os.html) and [Gomplate](https://docs.gomplate.ca/functions/env/), but has different syntax and accepts different numbers of arguments.
+
+If you use the `env` function from one templating engine and enable both [Sprig](https://masterminds.github.io/sprig/) and [Gomplate](https://docs.gomplate.ca/functions/), it will be invalid in the other templating engine, and an error will be thrown.
+
+For this reason, you can use the `templates.settings.sprig.enabled` and `templates.settings.gomplate.enabled` settings to selectively enable/disable the [Sprig](https://masterminds.github.io/sprig/) and [Gomplate](https://docs.gomplate.ca/functions/) functions.
+:::
+
+## See Also
+
+- [CLI Configuration](/cli/configuration) — Overview of CLI configuration
+- [Stack Manifest Templating](/templates) — Complete guide to using templates in stacks
+- [Template Functions](/functions/template) — Atmos-specific template functions

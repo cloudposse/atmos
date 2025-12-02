@@ -1,0 +1,504 @@
+---
+title: Generate Terraform Providers
+sidebar_position: 16
+sidebar_label: providers
+description: Use the providers section to generate Terraform provider configuration files for your components.
+id: providers
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+The `providers` section generates Terraform provider configuration files (`providers_override.tf.json`) for your components. This allows you to manage provider settings declaratively in your stack configuration, with Atmos automatically generating the provider files when you run Terraform commands. This section is **Terraform-specific**.
+</Intro>
+
+## How It Works
+
+When you run any `atmos terraform` command, Atmos:
+1. Reads your `providers` configuration from the stack
+2. Generates a `providers_override.tf.json` file in the component directory
+3. Terraform uses this file to configure providers without modifying your source code
+
+This approach lets you define provider configuration once in your stacks and have Atmos generate the appropriate files for each environment.
+
+:::tip Generated Files
+Add `providers_override.tf.json` to your `.gitignore` since these files are generated automatically by Atmos and should not be committed to version control:
+
+```gitignore
+# Atmos generated files
+providers_override.tf.json
+```
+:::
+
+## Use Cases
+
+- **Provider Configuration:** Set region, credentials, and other provider-specific settings.
+- **Provider Aliases:** Configure multiple instances of the same provider for multi-region or multi-account deployments.
+- **Dynamic Configuration:** Use templates to configure providers based on stack context.
+- **Assume Role:** Configure cross-account access via role assumption.
+
+## Configuration Scopes
+
+### Component-Type Level
+
+Provider settings defined under `terraform` apply to all Terraform components:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml title="stacks/orgs/acme/plat/prod/_defaults.yaml"
+    terraform:
+      providers:
+        aws:
+          region: us-east-1
+          assume_role:
+            role_arn: "arn:aws:iam::123456789012:role/TerraformRole"
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/providers_override.tf.json"
+    {
+      "provider": {
+        "aws": {
+          "region": "us-east-1",
+          "assume_role": {
+            "role_arn": "arn:aws:iam::123456789012:role/TerraformRole"
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Component Level
+
+Provider settings within a component override the defaults:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml title="stacks/orgs/acme/plat/prod/us-east-1.yaml"
+    components:
+      terraform:
+        vpc:
+          providers:
+            aws:
+              region: us-west-2
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/providers_override.tf.json"
+    {
+      "provider": {
+        "aws": {
+          "region": "us-west-2"
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+## Merge Behavior
+
+Providers are deep-merged from the most general to the most specific level:
+
+1. **Component-type `terraform.providers:`** (applies to all Terraform components)
+2. **Component `components.terraform.<name>.providers`** (applies to a specific component)
+
+Provider configurations are merged at the provider level. If both levels define the same provider, the configurations are deep-merged with component-level values taking precedence.
+
+## Examples
+
+### Basic Provider Configuration
+
+<File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+```yaml
+terraform:
+  providers:
+    aws:
+      region: us-east-1
+```
+</File>
+
+### Multi-Region with Provider Aliases
+
+Configure multiple AWS regions using provider aliases:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml title="stacks/orgs/acme/plat/prod/global.yaml"
+    components:
+      terraform:
+        dns:
+          providers:
+            aws:
+              region: us-east-1
+            aws.uswest2:
+              region: us-west-2
+              alias: uswest2
+            aws.euwest1:
+              region: eu-west-1
+              alias: euwest1
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/dns/providers_override.tf.json"
+    {
+      "provider": {
+        "aws": [
+          {
+            "region": "us-east-1"
+          },
+          {
+            "alias": "uswest2",
+            "region": "us-west-2"
+          },
+          {
+            "alias": "euwest1",
+            "region": "eu-west-1"
+          }
+        ]
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem value="hcl" label="Terraform Code">
+    ```hcl title="components/terraform/dns/providers.tf"
+    provider "aws" {
+      # Configured by Atmos
+    }
+
+    provider "aws" {
+      alias = "uswest2"
+      # Configured by Atmos
+    }
+
+    provider "aws" {
+      alias = "euwest1"
+      # Configured by Atmos
+    }
+
+    resource "aws_route53_record" "primary" {
+      # Uses default provider
+    }
+
+    resource "aws_route53_record" "secondary" {
+      provider = aws.uswest2
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Cross-Account Access with Assume Role
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml title="stacks/orgs/acme/plat/prod/_defaults.yaml"
+    terraform:
+      providers:
+        aws:
+          region: us-east-1
+          assume_role:
+            role_arn: "arn:aws:iam::{{ .vars.account_id }}:role/TerraformRole"
+            session_name: "atmos-{{ .component }}"
+            external_id: "{{ .vars.external_id }}"
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/providers_override.tf.json"
+    {
+      "provider": {
+        "aws": {
+          "region": "us-east-1",
+          "assume_role": {
+            "role_arn": "arn:aws:iam::123456789012:role/TerraformRole",
+            "session_name": "atmos-vpc",
+            "external_id": "acme-external-id"
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Multiple Providers
+
+Configure multiple provider types:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml title="stacks/orgs/acme/plat/prod/_defaults.yaml"
+    terraform:
+      providers:
+        aws:
+          region: us-east-1
+
+        kubernetes:
+          config_path: "~/.kube/config"
+          config_context: "prod-cluster"
+
+        helm:
+          kubernetes:
+            config_path: "~/.kube/config"
+            config_context: "prod-cluster"
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/eks-addons/providers_override.tf.json"
+    {
+      "provider": {
+        "aws": {
+          "region": "us-east-1"
+        },
+        "kubernetes": {
+          "config_path": "~/.kube/config",
+          "config_context": "prod-cluster"
+        },
+        "helm": {
+          "kubernetes": {
+            "config_path": "~/.kube/config",
+            "config_context": "prod-cluster"
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Dynamic Provider Configuration
+
+Use templates for dynamic configuration:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml title="stacks/orgs/acme/_defaults.yaml"
+    terraform:
+      providers:
+        aws:
+          region: "{{ .vars.region }}"
+          assume_role:
+            role_arn: "arn:aws:iam::{{ .vars.account_id }}:role/{{ .vars.terraform_role_name }}"
+          default_tags:
+            tags:
+              Environment: "{{ .stage }}"
+              ManagedBy: "Atmos"
+              Component: "{{ .component }}"
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/providers_override.tf.json"
+    {
+      "provider": {
+        "aws": {
+          "region": "us-east-1",
+          "assume_role": {
+            "role_arn": "arn:aws:iam::123456789012:role/TerraformRole"
+          },
+          "default_tags": {
+            "tags": {
+              "Environment": "prod",
+              "ManagedBy": "Atmos",
+              "Component": "vpc"
+            }
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Component-Specific Provider Override
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml title="stacks/orgs/acme/plat/prod/us-east-1.yaml"
+    import:
+      - orgs/acme/plat/prod/_defaults
+
+    components:
+      terraform:
+        # Uses default provider configuration
+        vpc:
+          vars:
+            vpc_cidr: "10.0.0.0/16"
+
+        # Overrides provider for cross-account access
+        shared-services:
+          providers:
+            aws:
+              assume_role:
+                role_arn: "arn:aws:iam::999999999999:role/SharedServicesRole"
+          vars:
+            # ...
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/shared-services/providers_override.tf.json"
+    {
+      "provider": {
+        "aws": {
+          "region": "us-east-1",
+          "assume_role": {
+            "role_arn": "arn:aws:iam::999999999999:role/SharedServicesRole"
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Provider with Kubernetes from EKS
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml title="stacks/orgs/acme/plat/prod/us-east-1.yaml"
+    components:
+      terraform:
+        eks-addons:
+          providers:
+            aws:
+              region: us-east-1
+
+            kubernetes:
+              host: "{{ .vars.eks_cluster_endpoint }}"
+              cluster_ca_certificate: "{{ .vars.eks_cluster_ca_certificate }}"
+              exec:
+                api_version: "client.authentication.k8s.io/v1beta1"
+                command: "aws"
+                args:
+                  - "eks"
+                  - "get-token"
+                  - "--cluster-name"
+                  - "{{ .vars.eks_cluster_name }}"
+
+            helm:
+              kubernetes:
+                host: "{{ .vars.eks_cluster_endpoint }}"
+                cluster_ca_certificate: "{{ .vars.eks_cluster_ca_certificate }}"
+                exec:
+                  api_version: "client.authentication.k8s.io/v1beta1"
+                  command: "aws"
+                  args:
+                    - "eks"
+                    - "get-token"
+                    - "--cluster-name"
+                    - "{{ .vars.eks_cluster_name }}"
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/eks-addons/providers_override.tf.json"
+    {
+      "provider": {
+        "aws": {
+          "region": "us-east-1"
+        },
+        "kubernetes": {
+          "host": "https://ABCDEF1234567890.gr7.us-east-1.eks.amazonaws.com",
+          "cluster_ca_certificate": "LS0tLS1CRUdJTi...",
+          "exec": {
+            "api_version": "client.authentication.k8s.io/v1beta1",
+            "command": "aws",
+            "args": ["eks", "get-token", "--cluster-name", "prod-cluster"]
+          }
+        },
+        "helm": {
+          "kubernetes": {
+            "host": "https://ABCDEF1234567890.gr7.us-east-1.eks.amazonaws.com",
+            "cluster_ca_certificate": "LS0tLS1CRUdJTi...",
+            "exec": {
+              "api_version": "client.authentication.k8s.io/v1beta1",
+              "command": "aws",
+              "args": ["eks", "get-token", "--cluster-name", "prod-cluster"]
+            }
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+## Provider Configuration Reference
+
+### AWS Provider
+
+Common configuration options:
+
+```yaml
+providers:
+  aws:
+    region: us-east-1
+    profile: my-profile
+    assume_role:
+      role_arn: "arn:aws:iam::123456789012:role/Role"
+      session_name: "session-name"
+      external_id: "external-id"
+      duration_seconds: 3600
+    default_tags:
+      tags:
+        Environment: prod
+    allowed_account_ids:
+      - "123456789012"
+    forbidden_account_ids:
+      - "000000000000"
+```
+
+### Kubernetes Provider
+
+```yaml
+providers:
+  kubernetes:
+    host: "https://kubernetes.example.com"
+    cluster_ca_certificate: "base64-encoded-ca-cert"
+    token: "auth-token"
+    config_path: "~/.kube/config"
+    config_context: "context-name"
+    exec:
+      api_version: "client.authentication.k8s.io/v1beta1"
+      command: "aws"
+      args:
+        - "eks"
+        - "get-token"
+        - "--cluster-name"
+        - "my-cluster"
+```
+
+### Helm Provider
+
+```yaml
+providers:
+  helm:
+    kubernetes:
+      host: "https://kubernetes.example.com"
+      cluster_ca_certificate: "base64-encoded-ca-cert"
+      token: "auth-token"
+    repository_config_path: "~/.helm/repositories.yaml"
+    repository_cache: "~/.helm/cache"
+```
+
+## Best Practices
+
+1. **Use Assume Role:** Configure providers to assume roles rather than using long-lived credentials.
+
+2. **Centralize Common Configuration:** Define shared provider settings in catalog defaults and import them.
+
+3. **Use Default Tags:** Configure `default_tags` to ensure all resources are properly tagged.
+
+4. **Template Dynamic Values:** Use Go templates for values that vary by environment or component.
+
+5. **Restrict Account Access:** Use `allowed_account_ids` to prevent accidental deployments to wrong accounts.
+
+6. **Version Pin Providers:** While provider versions are managed in Terraform code, ensure your stack configuration is compatible with your provider versions.
+
+## Related
+
+- [Terraform Providers](/components/terraform/providers) - Detailed provider configuration reference
+- [Terraform Backend](/stacks/backend)
+- [Authentication](/stacks/auth)
+- [Variables (vars)](/stacks/vars)

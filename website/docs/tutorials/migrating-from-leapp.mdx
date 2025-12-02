@@ -1,0 +1,230 @@
+---
+title: Migrating from Leapp
+sidebar_label: Migrating from Leapp
+sidebar_position: 9
+id: migrating-from-leapp
+description: Guide for migrating from Leapp to Atmos Auth for AWS IAM Identity Center authentication.
+---
+> **Note**: This guide currently covers AWS IAM Identity Center (SSO) migrations only. Support for other authentication methods will be added in future updates.
+
+> **Note**: `atmos auth` requires minimum Atmos version `v1.194.1`
+
+This guide helps you migrate from Leapp to the native `atmos auth` authentication system.
+
+## Overview
+
+Leapp is a standalone credential management application with a graphical interface. Atmos Auth provides similar functionality but integrates authentication directly into your infrastructure workflow with configuration-as-code.
+
+## Quick Migration Example
+
+### What You See in Leapp
+
+![Leapp Session Example](/img/leapp-example.png)
+
+A typical Leapp session shows:
+- **Provider**: acme (in sidebar under "Integrations")
+- **Session**: core-identity
+- **Identity**: IdentityManagersTeamAccess
+- **Named Profile**: acme-identity
+- **Region**: US-EAST-1
+
+### Equivalent `atmos auth` Configuration
+
+```yaml
+auth:
+  providers:
+    acme-sso: # (1)
+      kind: aws/iam-identity-center
+      region: us-east-1 # (5)
+      start_url: https://acme.awsapps.com/start/ # (1.a)
+
+  identities:
+    acme-identity: # (4)
+      kind: aws/permission-set
+      via:
+        provider: acme-sso
+      principal:
+        name: "IdentityManagersTeamAccess" # (3)
+        account:
+          name: "core-identity" # (2)
+```
+
+**That's it!** The configuration maps directly from what you see in Leapp to your `atmos.yaml`. Now you can run `atmos auth login` and you're ready to go.
+
+## Step-by-Step Migration
+
+Need more detail? Here's how to migrate each piece of your Leapp configuration:
+
+<details>
+<summary>Understanding Leapp Terminology (Optional)</summary>
+
+In Leapp, authentication consists of:
+
+1. **Provider**: SSO integration (e.g., "acme") connecting to AWS IAM Identity Center
+2. **Session**: Individual AWS access configuration (account + permission set + provider)
+3. **Identity**: Permission set name (e.g., "IdentityManagersTeamAccess")
+4. **Named Profile**: Profile name used in AWS CLI
+5. **Region**: AWS region for the session
+
+</details>
+
+<details>
+<summary>Field Mapping Reference (Quick Lookup)</summary>
+
+| Leapp Field | `atmos auth` Location | Notes |
+|-------------|----------------------|-------|
+| (1) Provider name | `providers.<name>` | Use a descriptive name (e.g., `acme-sso`) |
+| (1.a) Start URL | `providers.<name>.start_url` | Found in AWS IAM Identity Center portal |
+| (5) Region | `providers.<name>.region` | From Leapp session's Region column |
+| (2) Session (account) | `identities.<name>.principal.account.name` | AWS account name |
+| (3) Identity (permission set) | `identities.<name>.principal.name` | Exact permission set name |
+| (4) Named Profile | `identities.<name>` (key) | Use descriptive naming: `account/role` |
+
+</details>
+
+### 1. Identify Your Provider Configuration
+
+In Leapp, find your provider in the left sidebar under "Integrations".
+
+**Create the provider in `atmos.yaml`:**
+
+```yaml
+auth:
+  providers:
+    <provider-name>:
+      kind: aws/iam-identity-center
+      region: <region>
+      start_url: <your-sso-start-url>
+```
+
+**Example:**
+```yaml
+auth:
+  providers:
+    acme-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://acme.awsapps.com/start/
+```
+
+### 2. Convert Each Session to an Identity
+
+For each session in Leapp you use, create an identity configuration:
+
+```yaml
+auth:
+  identities:
+    <account-name>/<descriptive-role-name>:
+      kind: aws/permission-set
+      via:
+        provider: <provider-name>
+      principal:
+        name: "<PermissionSetName>"
+        account:
+          name: "<account-name>"
+```
+
+**Example:**
+```yaml
+auth:
+  identities:
+    acme-identity:
+      kind: aws/permission-set
+      via:
+        provider: acme-sso
+      principal:
+        name: "IdentityManagersTeamAccess"
+        account:
+          name: "core-identity"
+```
+
+### 3. Set a Default Identity (Optional)
+
+Mark one identity as default for convenience:
+
+```yaml
+auth:
+  identities:
+    acme-identity:
+      default: true
+      kind: aws/permission-set
+      via:
+        provider: acme-sso
+      principal:
+        name: "IdentityManagersTeamAccess"
+        account:
+          name: "core-identity"
+```
+
+### 4. Test Your Configuration
+
+```bash
+# Validate configuration
+atmos auth validate
+
+# Login with default identity
+atmos auth login
+
+# Check authentication status
+atmos auth whoami
+
+# Use with Terraform
+atmos terraform plan <component> -s <stack>
+```
+
+## Using with Geodesic
+
+If you're using [Geodesic](https://github.com/cloudposse/geodesic), see the [Configuring Geodesic with Atmos Auth](/tutorials/configuring-geodesic) guide for complete setup instructions.
+
+## Troubleshooting
+
+### Issue: "Provider not found" error
+
+**Cause**: The provider name in `via.provider` doesn't match a defined provider.
+
+**Solution**: Ensure the provider name matches exactly:
+```yaml
+providers:
+  acme-sso:  # ← This name
+    kind: aws/iam-identity-center
+
+identities:
+  my-identity:
+    via:
+      provider: acme-sso  # ← Must match exactly
+```
+
+### Issue: "Permission set not found"
+
+**Cause**: The permission set name doesn't match what's configured in AWS IAM Identity Center.
+
+**Solution**: Use the exact permission set name from AWS:
+```yaml
+principal:
+  name: "IdentityManagersTeamAccess"  # ← Must match AWS exactly
+```
+
+### Issue: Authentication fails with MFA
+
+**Cause**: Atmos Auth handles MFA automatically during SSO login.
+
+**Solution**: No action needed. Follow the browser prompts during `atmos auth login`.
+
+## Next Steps
+
+- Read the [User Guide](/cli/commands/auth/usage) for detailed usage instructions
+- Review the [auth commands](/cli/commands/auth/login) reference
+- Explore [component-level authentication](/cli/commands/auth/usage#component-level-configuration) options
+
+## Getting Help
+
+If you encounter issues during migration:
+
+1. Run `atmos auth validate --verbose` to check configuration
+2. Check the [User Guide](/cli/commands/auth/usage) for common scenarios
+3. Review error messages carefully - they often indicate the exact issue
+4. Ensure your AWS IAM Identity Center configuration is correct
+
+---
+
+**Ready to migrate?** Start by identifying your Leapp provider and creating the equivalent configuration in `atmos.yaml`.

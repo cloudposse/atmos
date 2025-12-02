@@ -44,8 +44,9 @@ html[data-theme="dark"] .use-case-card--expanded {
 
 /* Header Section */
 .use-case-card__header {
-  display: flex;
-  align-items: center;
+  display: grid !important;
+  grid-template-columns: auto 1fr auto;
+  align-items: center !important;
   gap: 1rem;
   margin-bottom: 0.75rem;
 }
@@ -53,8 +54,12 @@ html[data-theme="dark"] .use-case-card--expanded {
 .use-case-card__icon {
   font-size: 2.25rem;
   color: #1e5bb8;
-  display: inline-flex;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
 }
 
 html[data-theme="dark"] .use-case-card__icon {
@@ -64,11 +69,11 @@ html[data-theme="dark"] .use-case-card__icon {
 .use-case-card__title {
   font-size: 1.25rem;
   font-weight: 600;
-  margin: 0;
+  margin: 0 !important;
   color: #1a1d23;
   text-align: left;
   line-height: 1.3;
-  flex: 1;
+  min-width: 0;
 }
 
 html[data-theme="dark"] .use-case-card__title {

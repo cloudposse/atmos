@@ -8,6 +8,7 @@ description: "Manage configuration profiles for environment-specific settings"
 import Screengrab from '@site/src/components/Screengrab';
 import DocCardList from '@theme/DocCardList';
 import Intro from '@site/src/components/Intro';
+import ActionCard from '@site/src/components/ActionCard';
 
 <Intro>
 Use these subcommands to discover, inspect, and manage configuration profiles. Profiles provide environment-specific configuration overrides for development, CI/CD, and production contexts without duplicating settings.
@@ -91,6 +92,10 @@ atmos --profile ci,security terraform plan vpc -s prod
 ```
 
 See the [--profile global flag](/cli/global-flags#core-global-flags) for complete usage details.
+
+<ActionCard title="Configure Profiles" ctaText="Learn More" ctaLink="/cli/configuration/profiles">
+  Learn how to define and organize profiles in your `atmos.yaml` for different environments and workflows.
+</ActionCard>
 
 ## Subcommands
 

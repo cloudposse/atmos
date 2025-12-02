@@ -7,6 +7,7 @@ id: imports-basics
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import KeyTakeaways from '@site/src/components/KeyTakeaways'
 
 <Intro>
 Imports are how you keep your stack configurations DRY (Don't Repeat Yourself). Instead of copying the same settings into every stack file, you define them once and import them where needed.
@@ -283,13 +284,13 @@ Confused about the difference?
 
 We'll cover inheritance in the next section. For now, focus on imports for file-level reuse.
 
-## Key Takeaways
-
-✅ **Imports bring configuration from other files** into the current stack
-✅ **Order matters** - later imports override earlier ones
-✅ **Deep merge** combines all settings into one unified structure
-✅ **Use for DRY configuration** - define once, import everywhere
-✅ **Organize in `_defaults/`** for clarity (optional convention)
+<KeyTakeaways>
+- **Imports bring configuration from other files** into the current stack
+- **Order matters** - later imports override earlier ones
+- **Deep merge** combines all settings into one unified structure
+- **Use for DRY configuration** - define once, import everywhere
+- **Organize in `_defaults/`** for clarity (optional convention)
+</KeyTakeaways>
 
 ## What's Next
 

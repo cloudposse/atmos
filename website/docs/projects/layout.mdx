@@ -9,7 +9,7 @@ import KeyPoints from '@site/src/components/KeyPoints'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-At the root of your project, you’ll typically find an `atmos.yaml` configuration file. This file defines how Atmos should discover your stack files for configuration and your Terraform root modules as components.
+Atmos discovers your **components** (Terraform root modules, Helmfile releases, etc.) and **stack configurations** based on paths you define in `atmos.yaml`. The folder structure is fully customizable—organize however makes sense for your project.
 </Intro>
 
 <KeyPoints>
@@ -36,7 +36,11 @@ Here's a simple layout, if you just have 3 deployments for things like dev, stag
     └── workflows/       # Folder for workflows that operate on top of stacks
 ```
 
-Alternatively, here’s a more complex layout for a larger project broken into multiple organizations, organizational units, and environments:
+:::tip[Customize Your Structure]
+The folder structure is fully customizable via `base_path` settings. If you only use Terraform (no Helmfile or other toolchains), you could use `base_path: "terraform"`, `base_path: "components"`, or even `base_path: "."`. The `components/terraform` convention exists because Atmos supports multiple toolchains, but organize however makes sense for your project.
+:::
+
+Alternatively, here's a more complex layout for a larger project broken into multiple organizations, organizational units, and environments:
 
 ```plaintext
 ├── components/                  # Folder containing all your components, usually organized by toolchain
@@ -83,104 +87,144 @@ To effectively organize an Atmos project, we want to ensure you have specific lo
 
 ## Components Folder
 
-This folder will contain all your components. Organize the components by toolchain. For example, if you have components for Terraform, place them in a Terraform subfolder (e.g. `components/terraform/vpc`).
+This folder contains your components, organized by toolchain. Each toolchain has its own `base_path` setting in `atmos.yaml`:
+
+- **Terraform/OpenTofu**: `components/terraform/` — Contains your Terraform root modules
+- **Helmfile**: `components/helmfile/` — Contains your Helmfile releases
+
+:::note[Terraform: Root Modules vs Child Modules]
+For Terraform users: Atmos only discovers **root modules**—the top-level configurations you deploy directly. Child modules (reusable modules called via `module "..." { source = "..." }`) can live anywhere and don't need to be configured in Atmos.
+:::
 
 ### Organizing Components for Version Management
 
-Beyond the basic toolchain organization, you can further structure your components folder to support different [version management patterns](/design-patterns/version-management). The way you organize component folders determines how you manage versions across environments.
+Folder structure has a tight relationship with version management. How you organize your components folder determines how you manage versions across environments.
 
-**Simple Folder Structure (Continuous Version Deployment)**
+We have [extensive documentation on version management](/design-patterns/version-management) covering strategies for balancing stability with velocity, avoiding anti-patterns, and choosing the right approach for your organization.
 
-All environments reference the same component folder and converge to the same version:
+#### [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment) (Recommended)
+
+All environments converge to the same component version. Simple and promotes consistency.
 
 ```plaintext
 components/
 └── terraform/
-    ├── vpc/              # Single version for all environments
-    ├── eks/              # Single version for all environments
-    └── rds/              # Single version for all environments
+    ├── vpc/
+    ├── eks/
+    └── rds/
 ```
 
-**Release Track/Channel Structure**
+#### [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)
 
-Components organized by maturity level or environment stage:
+Components organized by maturity level. Environments subscribe to tracks; you promote tracks, not pins.
 
 ```plaintext
 components/
 └── terraform/
-    ├── alpha/           # Alpha track (development)
+    ├── alpha/           # Development track
     │   ├── vpc/
     │   └── eks/
-    ├── beta/            # Beta track (staging)
+    ├── beta/            # Staging track
     │   ├── vpc/
     │   └── eks/
-    └── prod/            # Production track
+    └── stable/          # Production track
         ├── vpc/
         └── eks/
 ```
 
-**Versioned Folder Structure**
+#### [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)
 
-Components organized by explicit version numbers:
+Explicit SemVer versions for maximum control and rollback capability.
 
 ```plaintext
 components/
 └── terraform/
     └── vpc/
-        ├── 1.2/         # Major.minor version
-        ├── 1.3/         # Major.minor version
-        └── 2.0/         # Breaking change version
+        ├── 1.2/
+        ├── 1.3/
+        └── 2.0/
 ```
 
-**Environment-Specific Structure**
+#### [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)
 
-Each environment has its own component implementation:
+Simple approach for breaking changes—create a new folder when the interface changes.
 
 ```plaintext
 components/
 └── terraform/
-    ├── dev/
-    │   ├── vpc/
-    │   └── eks/
-    ├── staging/
-    │   ├── vpc/
-    │   └── eks/
-    └── prod/
-        ├── vpc/
-        └── eks/
+    ├── vpc/             # Current version
+    └── vpc-v2/          # Breaking change version
 ```
 
-:::tip Choose Your Version Management Strategy
-The component folder structure you choose determines how you manage versions across environments. See [Version Management Patterns](/design-patterns/version-management) for detailed guidance on choosing the right approach for your organization:
+:::tip[Choose Based on Your Needs]
+- **Simple projects**: Start with [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment)
+- **Progressive rollout**: Use [Release Tracks](/design-patterns/version-management/release-tracks-channels)
+- **Strict compliance**: Use [Version Pinning](/design-patterns/version-management/strict-version-pinning)
+- **External components**: See [Vendoring](/design-patterns/version-management/vendoring-components)
 
-- **[Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment)** - Recommended default with automatic convergence
-- **[Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)** - Progressive rollout through named channels
-- **[Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)** - Explicit version boundaries
-- **[Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)** - Maximum control with explicit versions
-
-Each pattern has different trade-offs between operational overhead, convergence speed, and rollback capabilities.
+See the [Version Management Overview](/design-patterns/version-management) for detailed guidance on trade-offs.
 :::
 
 ## Stack Configurations Folder
 
-Next, you’ll have your stacks configurations, which are organized into multiple subfolders depending on their purpose:
+Stack organization determines how you manage configuration across environments, tenants, and regions.
 
-### Schema Validations
+### Simple Structure
 
-This folder contains the [JSON or OPA schemas used to validate the stack configurations](/validation/validating).
+For projects with a few environments (dev, staging, prod):
 
-### Catalogs
+```plaintext
+stacks/
+├── catalog/             # Reusable component defaults
+│   └── vpc/
+│       └── defaults.yaml
+├── dev.yaml
+├── staging.yaml
+└── prod.yaml
+```
 
-This should be a separate top-level folder containing your stack configurations. Stack configurations are divided into several parts:
-- **Schemas Folder**: This folder contains the schemas used to validate the stack configurations.
-- **Catalog Folder**: This includes all reusable imports, which can be organized into subfolders based on logical groupings.
-- **Stacks Folder**: This contains the deployable stacks. Each stack is defined in a separate YAML file.
+### [Organizational Structure](/design-patterns/organizational-structure-configuration)
 
-We follow a few conventions in our reference architecture:
+For enterprise multi-org, multi-tenant, multi-region deployments:
 
-### Deployments
+```plaintext
+stacks/
+├── catalog/
+├── mixins/
+│   ├── region/
+│   └── stage/
+└── orgs/
+    └── acme/
+        ├── _defaults.yaml
+        ├── core/
+        │   └── _defaults.yaml
+        └── plat/
+            ├── dev/
+            │   └── us-east-1.yaml
+            └── prod/
+                └── us-east-1.yaml
+```
 
-We usually organize our stacks by organization, organizational unit, and environment. For example:
+See [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration) for complete implementation details.
 
-- **Orgs Folder**: Represents the AWS organizations to which you deploy. You might use a folder called deploy if you have a few simple stacks.
-- **Multi-Cloud Projects**: If your project involves multiple clouds, consider additional organizational strategies.
+### Stack Folder Conventions
+
+<dl>
+    <dt>`stacks/catalog/`</dt>
+    <dd>Reusable component defaults organized by component name. See [Component Catalog](/design-patterns/component-catalog).</dd>
+
+    <dt>`stacks/mixins/`</dt>
+    <dd>Reusable configuration fragments for regions, stages, and tenants.</dd>
+
+    <dt>`stacks/schemas/`</dt>
+    <dd>[JSON or OPA schemas](/validation/validating) used to validate stack configurations.</dd>
+
+    <dt>`stacks/workflows/`</dt>
+    <dd>Workflow definitions that operate on stacks. See [Workflows](/workflows).</dd>
+</dl>
+
+### Related Patterns
+
+- **[Component Catalog](/design-patterns/component-catalog)** — Centralized reusable component defaults
+- **[Defaults Pattern](/design-patterns/defaults-pattern)** — DRY configuration with `_defaults.yaml` inheritance
+- **[Layered Stack Configuration](/design-patterns/layered-stack-configuration)** — Separation of concerns across layers

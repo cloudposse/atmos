@@ -1,0 +1,128 @@
+---
+title: Root Modules
+sidebar_position: 2
+sidebar_label: Root Modules
+description: Learn why Atmos can change how you think about the Terraform modules that you use to build your infrastructure.
+id: root-modules
+---
+import DocCardList from '@theme/DocCardList'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Understand how Atmos manages Terraform root modules as components, and why additional tooling is needed at scale.
+</Intro>
+
+## What is Terraform?
+
+Terraform is a command-line utility or interpreter (like Perl or Ruby), that processes infrastructure configurations
+written in ["HashiCorp's Configuration Language" ("HCL")](https://en.wikipedia.org/wiki/HCL) to orchestrate infrastructure provisioning.
+Its chief role is to delineate and structure infrastructure definitions. Terraform by itself is not a framework.
+
+:::note Disambiguation
+The term "Terraform" is used in this documentation to refer to generic concepts such as providers, modules, stacks, the
+HCL-based domain-specific language and its interpreter. Atmos works with [OpenTofu](/cli/configuration/components#opentofu).
+:::
+
+<details>
+<summary>Fun Fact!</summary>
+
+HCL is backward compatible with JSON, although it's not a strict superset of JSON.
+HCL is more human-friendly and readable, while JSON is often used for machine-generated configurations.
+This means you can write Terraform configurations in HCL or JSON, and Terraform will understand them.
+This feature is particularly useful for programmatically generating configurations or integration with systems that already use JSON.
+</details>
+
+## How has Terraform HCL Evolved?
+
+Terraform's HCL started strictly as a configuration language, not a markup or programming language, although it has evolved
+considerably over the years.
+
+As Terraform progressed and HCL evolved, notably from version _0.12_ onwards, HCL began incorporating features typical
+of programming languages (albeit without a debugger!). This shift enriched infrastructure definitions, positioning HCL
+more as a [domain-specific programming language (DSL)](https://en.wikipedia.org/wiki/Domain-specific_language) for
+defining infrastructure than strictly a configuration language (aka data interchange formats like JSON). As a result,
+the complexity of configuring Terraform projects has risen, while Terraform's inherent capabilities to be configured
+haven't evolved at the same pace.
+
+- **Rich Expressions:** Introduced a richer expression syntax, removing the need for interpolations.
+
+- **For Loops and Conditionals:** Added for expressions and conditional expressions.
+
+- **Type System:** Introduced a more explicit type system for input and output values.
+
+## Why is additional tooling needed when using Terraform?
+
+**Every foundational tool begins simply.**
+
+As users grow more advanced and their ambitions expand, the need for advanced tooling emerges. These shifts demonstrate that core
+technologies naturally progress, spawning more advanced constructs to tackle increased intricacies and enhance efficiency -- all
+while retaining their core essence. Just as CSS, NodeJS, Docker, Helm, and many other tools have evolved to
+include higher-order utilities, Terraform, too, benefits from additional orchestration tools, given the complexities and challenges
+users face at different stages of adoption.
+
+Examples of tools like these are numerous, like:
+
+- **CSS has Sass:** Sass provides more expressive styling capabilities, variables, and functions, making stylesheets more maintainable and organized, especially for large projects.
+- **NodeJS has React:** React brings component-based architecture to JavaScript, enhancing the creation of interactive UIs, improving code reusability, and better supporting the development of large-scale applications.
+- **Docker has Docker Compose:** Docker Compose simplifies the management and orchestration of multi-container Docker applications, making it easier to define, run, and scale services collectively.
+- **Helm charts have Helmfiles:** While Helm charts define the blueprints of Kubernetes services, Helmfiles enable better orchestration, management, and deployment of multiple charts, similar to coordinating various instruments in a symphony.
+- **Kubernetes manifests have Kustomize:** Kustomize allows customization of Kubernetes manifests without changing their original form, facilitating dynamic configurations tailored to specific deployment scenarios.
+
+**These days, no one would dream of building a modern web app without a framework. Why should Terraform be any different?**
+
+When considering Terraform in the context of large-scale organizations or enterprises, it's clear that Terraform and its inherent language don't address all challenges. This is why teams progress through [10 stages of maturity](/intro/why-atmos). With hundreds, or even thousands, of components spread across hundreds of accounts, cloud providers, and managed by a vast number of DevOps engineers and developers, the complexity becomes overwhelming and difficult to manage.
+
+A lot of the same challenges faced by NodeJS, Docker, Helm and Kubernetes also exist in Terraform as well.
+
+**Challenges in Terraform are centered around Root Modules:**
+- **Large-Scale Architectures**: Providing better support for large-scale service-oriented architectures
+- **Composition**: Making it straightforward to compose architectures of multiple "root modules"
+- **Code Reusability and Maintainability**: Simplifying the definition and reuse of "root modules"
+- **Ordered Dependencies**: Handling orchestration, management, and deployment of multiple loosely coupled "root modules"
+- **Sharing State**: Sharing state between "root modules"
+- **CI/CD Automation**: Enhancing CI/CD automation, especially in monorepos, when there are no rollback capabilities
+
+These are not language problems. These are framework problems. Without a coherent framework, Terraform is hard to use at scale.
+Ultimately, the goal is to make Terraform more scalable, maintainable, and developer-friendly, especially in complex and large-scale environments.
+
+## Terraform Concepts
+
+<dl>
+<dt>Child Modules</dt>
+<dd>Child modules are reusable pieces of Terraform code that accept parameters (variables) for customization and emit outputs.
+    Outputs can be passed between child modules and used to connect them together.
+    They are stateless and can be invoked multiple times. Child modules can also call other child modules, making
+    them a primary method for reducing repetition in Terraform HCL code; it's how you DRY up your HCL code.</dd>
+
+<dt>Root Modules</dt>
+<dd>Root modules in Terraform are the topmost modules that can call child modules or directly use Terraform code.
+    The key distinction between root and child modules is that root modules maintain Terraform state,
+    typically stored in a remote state backend like S3. Root modules cannot call other root modules,
+    but they can access the outputs of any other root module using Remote State.</dd>
+
+<dt>State Backends</dt>
+<dd>State Backends are where the desired state of your infrastructure code is stored.
+    It's always defined exactly once per "root module". This where the computed state of your HCL code is stored,
+    and it is what `terraform apply` will execute. The most common state backend is object storage
+    like S3, but there are many other types of state backends available.</dd>
+
+<dt>Remote State</dt>
+<dd>Remote state refers to the concept of retrieving the outputs from other root modules.
+    Terraform natively supports passing information between "root modules" without any additional tooling,
+    a capability we rely on in Atmos.</dd>
+</dl>
+
+:::info Disambiguation
+
+- **Terraform Component** is a [Terraform Root Module](https://developer.hashicorp.com/terraform/language/modules#the-root-module) and stored typically in `components/terraform/$name` that consists of the resources defined in the `.tf` files in a working directory
+  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-advanced/components/terraform/vpc))
+
+- **Stack** provides configuration (variables and other settings) for a Terraform Component and is defined in one or more Atmos stack manifests
+  (a.k.a. stack config files)
+
+:::
+
+## Using Submodules (Child Modules)
+
+If your components rely on local submodules, our convention is to use a `modules/` subfolder of the component to store them.

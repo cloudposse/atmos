@@ -1,0 +1,309 @@
+---
+title: Configuring Components in Stacks
+sidebar_position: 1
+sidebar_label: Components
+description: Learn how to configure components in Atmos stack manifests, including metadata attributes and common configuration patterns.
+id: index
+---
+import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Components are the building blocks of your infrastructure, defined in the `components` section of stack manifests. Each component represents infrastructure-as-code (Terraform, Helmfile, or Packer) combined with its configuration. This page covers how to configure components in stacks and the common attributes available across all component types.
+</Intro>
+
+## Supported Component Types
+
+<DocCardList />
+
+## Component Schema
+
+A component consists of infrastructure-as-code business logic (e.g., a Terraform root module) combined with its configuration in a stack manifest.
+
+:::info Disambiguation
+
+- **Terraform Component** is simply a [Terraform Root Module](https://developer.hashicorp.com/terraform/language/modules#the-root-module)
+  that consists of the resources defined in the `.tf` files in a working directory
+  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/main/tests/fixtures/scenarios/complete/components/terraform/infra/vpc))
+
+- **Component Configuration** provides configuration (variables and other settings) for a type of component (e.g. a Terraform component)
+  and is defined in one or more YAML stack config files (which are called [Atmos stacks](/learn/stacks))
+:::
+
+## Common Configuration Sections
+
+All component types support these configuration sections:
+
+<dl>
+  <dt>[`vars`](/stacks/vars)</dt>
+  <dd>Variables passed to the component. Use [component validation](/validation/validating) to enforce policies.</dd>
+
+  <dt>[`env`](/stacks/env)</dt>
+  <dd>Environment variables set during execution.</dd>
+
+  <dt>[`settings`](/stacks/settings)</dt>
+  <dd>Integrations and custom metadata.</dd>
+
+  <dt>[`metadata`](/stacks/metadata)</dt>
+  <dd>Component behavior and inheritance. See [Metadata Attributes](#metadata-attributes) below.</dd>
+
+  <dt>[`command`](/stacks/command)</dt>
+  <dd>Override the default executable.</dd>
+
+  <dt>[`hooks`](/stacks/hooks)</dt>
+  <dd>Lifecycle event handlers.</dd>
+</dl>
+
+## Basic Component Structure
+
+Components are defined in stack manifests under the `components` section, organized by type:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+
+  helmfile:
+    nginx:
+      vars:
+        replicas: 3
+
+  packer:
+    ami-builder:
+      vars:
+        base_ami: ami-12345678
+```
+
+## Metadata Attributes
+
+The `metadata` section controls component behavior, inheritance, and type.
+
+### Component Types (`metadata.type`)
+
+The `metadata.type` parameter defines how a component behaves—whether it can be deployed directly or serves as a base configuration:
+
+<dl>
+  <dt>`real`</dt>
+  <dd>A `real` component is fully configured and ready to be provisioned. Think of it as a "concrete" class that can create resources directly in your infrastructure. This is the default type.</dd>
+
+  <dt>`abstract`</dt>
+  <dd>An `abstract` component is a blueprint that can't be deployed on its own. It defines reusable configurations that must be inherited by other components, similar to an <a href="https://en.wikipedia.org/wiki/Abstract_type">abstract base class</a> in programming.</dd>
+</dl>
+
+### Disabling Components (`metadata.enabled`)
+
+The `metadata.enabled` parameter controls whether a component is included in deployment. By default, components are enabled. Setting `metadata.enabled` to `false` skips the component entirely—no workspace is created, and no Terraform commands are executed.
+
+:::info
+Disabling a component does not cause deletion. It signals that the component is no longer managed by Atmos.
+:::
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        type: real
+        enabled: false
+      vars:
+        name: primary-vpc
+```
+
+### Locking Components (`metadata.locked`)
+
+The `metadata.locked` parameter prevents changes to a component while still allowing read operations. When locked, operations that would modify infrastructure (like `terraform apply`) are blocked, while read-only operations (like `terraform plan`) remain available.
+
+```yaml
+components:
+  terraform:
+    rds:
+      metadata:
+        locked: true
+      vars:
+        name: production-database
+```
+
+:::info
+Locking a component does not affect the Terraform state. It's intended to communicate intention and prevent accidental changes to sensitive infrastructure.
+:::
+
+### Component Versioning (`metadata.component`)
+
+The `metadata.component` parameter specifies which component implementation to use. This is how you manage component versions in Atmos—by pointing to different component folders.
+
+By default, if `metadata.component` is not specified, Atmos uses the component's name as the path. You can explicitly reference different versions or implementations:
+
+<Tabs>
+<TabItem value="continuous" label="Continuous Deployment">
+
+All environments point to the same component folder, with versions rolled out through release controls in your deployment pipeline:
+
+```yaml
+# All environments use components/terraform/vpc/
+components:
+  terraform:
+    vpc:
+      vars:
+        name: my-vpc
+```
+
+</TabItem>
+<TabItem value="channels" label="Release Channels">
+
+Environments subscribe to named release channels:
+
+```yaml
+# stacks/dev/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: alpha/vpc  # Subscribe to alpha track
+```
+
+```yaml
+# stacks/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: prod/vpc  # Subscribe to production track
+```
+
+</TabItem>
+<TabItem value="pinned" label="Version Pinning">
+
+Explicit version pinning using major.minor versioning:
+
+```yaml
+# stacks/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc/1.2  # Pinned version
+      vars:
+        name: prod-vpc
+```
+
+</TabItem>
+</Tabs>
+
+:::tip Version Management Patterns
+The `metadata.component` parameter is the foundation of [Version Management Patterns](/design-patterns/version-management) in Atmos. See [Version Management Patterns](/design-patterns/version-management) to learn how to choose and implement the right versioning strategy.
+:::
+
+## Type-Specific Configuration
+
+Each component type has additional configuration options:
+
+### Terraform-Specific
+
+- `backend` / `backend_type` - State storage configuration
+- `remote_state_backend` / `remote_state_backend_type` - Remote state access
+- `providers` - Provider configuration
+- `terraform_workspace` / `terraform_workspace_pattern` - Workspace settings
+
+See [Terraform Components](/stacks/components/terraform) for details.
+
+### Helmfile-Specific
+
+Helmfile components use the standard sections listed above. Helmfile-specific configuration is typically passed through `vars`.
+
+See [Helmfile Components](/stacks/components/helmfile) for details.
+
+### Packer-Specific
+
+Packer components use the standard sections listed above. Packer-specific configuration is typically passed through `vars`.
+
+See [Packer Components](/stacks/components/packer) for details.
+
+## Component-Type Defaults
+
+You can define default settings for all components of a type at the root level:
+
+```yaml
+# Defaults for all Terraform components in this stack
+terraform:
+  vars:
+    terraform_version: "1.5"
+  env:
+    TF_IN_AUTOMATION: "true"
+  backend_type: s3
+  backend:
+    s3:
+      bucket: my-terraform-state
+
+# Defaults for all Helmfile components
+helmfile:
+  vars:
+    timeout: 600
+  env:
+    HELM_CACHE_HOME: /tmp/helm-cache
+
+# Individual components inherit and can override these defaults
+components:
+  terraform:
+    vpc:
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+```
+
+## Component Directory Structure
+
+Atmos looks for component implementations in directories configured in `atmos.yaml`:
+
+```yaml
+# atmos.yaml
+components:
+  terraform:
+    base_path: components/terraform
+  helmfile:
+    base_path: components/helmfile
+  packer:
+    base_path: components/packer
+```
+
+Your project structure would look like:
+
+```
+├── atmos.yaml
+├── components/
+│   ├── terraform/
+│   │   ├── vpc/
+│   │   │   ├── main.tf
+│   │   │   ├── variables.tf
+│   │   │   └── outputs.tf
+│   │   └── eks/
+│   ├── helmfile/
+│   │   └── nginx/
+│   │       └── helmfile.yaml
+│   └── packer/
+│       └── ami-builder/
+│           └── template.pkr.hcl
+└── stacks/
+```
+
+## Best Practices
+
+1. **Use Abstract Components:** Create abstract base components in catalogs with common settings, then inherit from them in stack-specific components.
+
+2. **Use Type Defaults:** Define common settings at the component-type level to keep individual component configurations focused on unique values.
+
+3. **Organize by Purpose:** Group components logically in your directory structure (e.g., `networking/`, `databases/`, `monitoring/`).
+
+4. **Share with Catalogs:** Create reusable component configurations in `stacks/catalog/` that can be imported across environments.
+
+5. **Lock Critical Infrastructure:** Use `metadata.locked` to protect production databases and other sensitive components from accidental changes.
+
+## Related
+
+- [Stack Configuration Overview](/stacks)
+- [Terraform Components](/stacks/components/terraform)
+- [Helmfile Components](/stacks/components/helmfile)
+- [Packer Components](/stacks/components/packer)
+- [Version Management Patterns](/design-patterns/version-management)

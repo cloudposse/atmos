@@ -7,6 +7,7 @@ id: terraform-workspaces
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import KeyTakeaways from '@site/src/components/KeyTakeaways'
 
 <Intro>
 Terraform workspaces solve a simple problem: deploy the same code to multiple environments using one state backend. But as your infrastructure grows, workspaces create more problems than they solve. Atmos provides a better path forward.
@@ -82,11 +83,13 @@ All environments in one state backend means one mistake can affect all environme
 
 Atmos separates **code** (Terraform components) from **configuration** ([stack YAML files](/stacks/)). This gives you:
 
-✅ **Isolated state** - Each stack has its own [backend configuration](/stacks/remote-state)
-✅ **Environment-specific config** - No giant case statements
-✅ **Visible configuration** - Stacks are files you can search, version, review
-✅ **Component reuse** - Share code, customize config via [inheritance](/stacks/inheritance)
-✅ **Reduced blast radius** - Isolated state backends per environment
+<KeyTakeaways title="Atmos Advantages">
+- **Isolated state** - Each stack has its own [backend configuration](/stacks/remote-state)
+- **Environment-specific config** - No giant case statements
+- **Visible configuration** - Stacks are files you can search, version, review
+- **Component reuse** - Share code, customize config via [inheritance](/stacks/inheritance)
+- **Reduced blast radius** - Isolated state backends per environment
+</KeyTakeaways>
 
 ## Migration Strategy
 
@@ -536,14 +539,14 @@ components:
 - [ ] Update team documentation
 - [ ] Deprecate workspace commands
 
-## Key Benefits After Migration
-
-✅ **Explicit configuration** - No hidden workspace state
-✅ **Isolated backends** - Prod can't accidentally affect dev
-✅ **Environment-specific settings** - No complex conditionals
-✅ **Better code review** - Stack changes visible in YAML diffs
-✅ **Reusable components** - Same code, different configs
-✅ **Easier testing** - Deploy different component versions per stack
+<KeyTakeaways title="Benefits After Migration">
+- **Explicit configuration** - No hidden workspace state
+- **Isolated backends** - Prod can't accidentally affect dev
+- **Environment-specific settings** - No complex conditionals
+- **Better code review** - Stack changes visible in YAML diffs
+- **Reusable components** - Same code, different configs
+- **Easier testing** - Deploy different component versions per stack
+</KeyTakeaways>
 
 ## Common Questions
 

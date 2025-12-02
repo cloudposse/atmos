@@ -1,0 +1,193 @@
+---
+title: Terraform Configuration
+sidebar_position: 2
+sidebar_label: terraform
+id: terraform
+description: Configure Terraform and OpenTofu component behavior in atmos.yaml.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Configure how Atmos executes Terraform and OpenTofu commands, including the base path for components, auto-approve behavior, backend file generation, and initialization options.
+</Intro>
+
+:::note Disambiguation
+The term "Terraform" is used in this documentation to refer to generic concepts such as providers, modules, stacks, the HCL-based domain-specific language and its interpreter. Atmos works with both Terraform and OpenTofu.
+:::
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    # Executable to run (terraform, tofu, or absolute path)
+    command: terraform
+
+    # Base path to Terraform components
+    base_path: components/terraform
+
+    # Automatically add -auto-approve to apply commands
+    apply_auto_approve: false
+
+    # Run terraform init before deploy
+    deploy_run_init: true
+
+    # Add -reconfigure to init commands
+    init_run_reconfigure: true
+
+    # Generate backend.tf.json from stack configuration
+    auto_generate_backend_file: true
+
+    # Init command options
+    init:
+      pass_vars: false
+
+    # Plan command options
+    plan:
+      skip_planfile: false
+
+    # Interactive shell configuration
+    shell:
+      prompt: "Terraform Shell"
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`command`</dt>
+  <dd>
+    Specifies the executable to run for Terraform commands. Defaults to `terraform`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_COMMAND`
+    **Command-line flag:** `--terraform-command`
+
+    Examples:
+    - `terraform` - Use Terraform from PATH
+    - `tofu` - Use OpenTofu from PATH
+    - `/usr/local/bin/terraform-1.8` - Use specific version
+    - `/usr/local/bin/tofu-1.7.1` - Use specific OpenTofu version
+  </dd>
+
+  <dt>`base_path`</dt>
+  <dd>
+    Directory containing Terraform component directories. Supports absolute and relative paths.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_BASE_PATH`
+    **Command-line flag:** `--terraform-dir`
+  </dd>
+
+  <dt>`apply_auto_approve`</dt>
+  <dd>
+    When `true`, Atmos adds `-auto-approve` to `terraform apply` commands, skipping the confirmation prompt.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE`
+    **Default:** `false`
+  </dd>
+
+  <dt>`deploy_run_init`</dt>
+  <dd>
+    When `true`, Atmos runs `terraform init` before executing [`atmos terraform deploy`](/cli/commands/terraform/deploy).
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT`
+    **Command-line flag:** `--deploy-run-init`
+    **Default:** `true`
+  </dd>
+
+  <dt>`init_run_reconfigure`</dt>
+  <dd>
+    When `true`, Atmos adds `-reconfigure` to `terraform init` commands, updating backend configuration.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE`
+    **Command-line flag:** `--init-run-reconfigure`
+    **Default:** `true`
+  </dd>
+
+  <dt>`auto_generate_backend_file`</dt>
+  <dd>
+    When `true`, Atmos generates `backend.tf.json` from stack configuration before running Terraform commands.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE`
+    **Command-line flag:** `--auto-generate-backend-file`
+    **Default:** `true`
+  </dd>
+
+  <dt>`init.pass_vars`</dt>
+  <dd>
+    When `true`, Atmos passes the generated varfile to `terraform init` using `--var-file`. This is primarily useful with OpenTofu, which supports [passing varfiles to init](https://opentofu.org/docs/cli/commands/init/#general-options) for dynamic backend configuration.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS`
+    **Command-line flag:** `--init-pass-vars`
+    **Default:** `false`
+  </dd>
+
+  <dt>`plan.skip_planfile`</dt>
+  <dd>
+    When `true`, Atmos skips creating a plan file during `terraform plan`. The plan output is shown but not saved.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE`
+    **Command-line flag:** `--skip-planfile`
+    **Default:** `false`
+  </dd>
+
+  <dt>`shell.prompt`</dt>
+  <dd>
+    Custom prompt to display when running [`atmos terraform shell`](/cli/commands/terraform/shell).
+  </dd>
+</dl>
+
+## Using OpenTofu
+
+To use OpenTofu instead of Terraform, set the `command` to `tofu`:
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    command: tofu
+    base_path: components/terraform
+```
+</File>
+
+OpenTofu supports additional features like passing variables to `init` for dynamic backend configuration:
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    command: tofu
+    init:
+      pass_vars: true
+```
+</File>
+
+## Generated Files
+
+When `auto_generate_backend_file` is enabled, Atmos generates a `backend.tf.json` file in each component directory. Add this to your `.gitignore`:
+
+```gitignore
+# Atmos generated files
+backend.tf.json
+```
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/terraform/usage', label: 'atmos terraform', description: 'Execute Terraform/OpenTofu commands'},
+  {type: 'link', href: '/cli/commands/terraform/plan', label: 'atmos terraform plan', description: 'Generate and show execution plan'},
+  {type: 'link', href: '/cli/commands/terraform/apply', label: 'atmos terraform apply', description: 'Apply infrastructure changes'},
+  {type: 'link', href: '/cli/commands/terraform/deploy', label: 'atmos terraform deploy', description: 'Run init, plan, and apply in sequence'},
+  {type: 'link', href: '/cli/commands/terraform/shell', label: 'atmos terraform shell', description: 'Open an interactive shell'},
+  {type: 'link', href: '/cli/commands/terraform/generate-backends', label: 'atmos terraform generate backends', description: 'Generate backend configuration files'},
+  {type: 'link', href: '/cli/commands/terraform/generate-varfiles', label: 'atmos terraform generate varfiles', description: 'Generate variable files'},
+]} />
+
+## Related
+
+- [Component Configuration Overview](/cli/configuration/components)
+- [Stack Configuration](/cli/configuration/stacks)
+- [Terraform Components](/components/terraform)
+- [Terraform Backend](/stacks/backend)

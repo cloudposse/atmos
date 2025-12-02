@@ -7,12 +7,15 @@ id: connecting-components
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import KeyTakeaways from '@site/src/components/KeyTakeaways'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Components rarely work in isolation. Your application needs the VPC ID. Your database needs the subnet IDs. Your load balancer needs security group references. Atmos makes it easy to connect components and share data between them.
 </Intro>
 
-The key is **remote state**—components store their outputs in a backend (like S3), and other components read those outputs when needed.
+The key is **remote state**---components store their outputs in a backend (like S3), and other components read those outputs when needed.
 
 ## Why Components Need to Connect
 
@@ -23,7 +26,7 @@ Imagine building a typical web application infrastructure:
 3. **EKS cluster** needs subnet IDs to launch in the right network
 4. **Application** needs the EKS cluster endpoint to deploy
 
-Each component depends on outputs from previous components. This is called a **loosely coupled architecture**—components are independent but can reference each other's outputs.
+Each component depends on outputs from previous components. This is called a **loosely coupled architecture**---components are independent but can reference each other's outputs.
 
 ```mermaid
 graph LR
@@ -34,7 +37,7 @@ graph LR
 
 ## Your First Component Connection
 
-Let's connect a VPC component to an EKS cluster component.
+Let's connect a VPC component to an EKS cluster component using `!terraform.state`.
 
 **Step 1: VPC component outputs its ID**
 
@@ -52,47 +55,40 @@ output "private_subnet_ids" {
 ```
 </File>
 
-**Step 2: EKS component reads the VPC outputs**
+**Step 2: EKS component reads VPC outputs in the stack configuration**
 
-<File title="components/terraform/eks/remote_state.tf">
-```hcl
-# Read the VPC component's remote state
-module "vpc" {
-  source  = "cloudposse/stack-config/yaml//modules/remote-state"
-  version = "1.5.0"
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
 
-  component = "vpc"
-
-  context = module.this.context
-}
-
-# Now you can use the VPC outputs
-resource "aws_eks_cluster" "this" {
-  name = var.cluster_name
-
-  vpc_config {
-    subnet_ids = module.vpc.outputs.private_subnet_ids
-  }
-}
+    eks:
+      vars:
+        # Read VPC outputs using !terraform.state
+        vpc_id: !terraform.state vpc vpc_id
+        subnet_ids: !terraform.state vpc private_subnet_ids
 ```
 </File>
 
-The `remote-state` module handles all the complexity of reading Terraform state from the backend.
+The `!terraform.state` function reads outputs directly from the Terraform state backend. It's fast, simple, and the recommended way to connect components.
 
-## How Remote State Works
+## How It Works
 
 When you deploy a component with `atmos terraform apply`, Terraform:
 
 1. **Runs your configuration** (plan → apply)
 2. **Stores outputs in the state file**
-3. **Saves state to the backend** (S3, Terraform Cloud, etc.)
+3. **Saves state to the backend** (S3, GCS, Azure, etc.)
 
 Later, when another component needs those outputs:
 
-1. **Remote-state module queries the backend**
+1. **`!terraform.state` queries the backend directly**
 2. **Reads the state file**
 3. **Extracts the outputs**
-4. **Makes them available as `module.vpc.outputs.vpc_id`**
+4. **Makes them available in your stack configuration**
 
 ```mermaid
 sequenceDiagram
@@ -107,60 +103,6 @@ sequenceDiagram
     EKS->>EKS: Use outputs to create cluster
 ```
 
-## Remote State Configuration
-
-Atmos configures your Terraform backend automatically. You just need to define backend settings in your stack:
-
-<File title="stacks/dev.yaml">
-```yaml
-terraform:
-  backend_type: s3
-  backend:
-    s3:
-      bucket: my-terraform-state
-      key: terraform.tfstate
-      region: us-east-1
-      dynamodb_table: terraform-lock
-
-components:
-  terraform:
-    vpc:
-      backend:
-        s3:
-          workspace_key_prefix: vpc
-      vars:
-        cidr_block: "10.0.0.0/16"
-```
-</File>
-
-When you run `atmos terraform apply vpc -s dev`, Atmos generates a backend configuration automatically.
-
-## Reading Remote State in Stack Configuration
-
-You can also read remote state directly in your stack YAML using template functions:
-
-<File title="stacks/dev.yaml">
-```yaml
-components:
-  terraform:
-    vpc:
-      vars:
-        cidr_block: "10.0.0.0/16"
-
-    eks:
-      vars:
-        # Read VPC component output
-        vpc_id: '{{ (atmos.Component "vpc" .stack).outputs.vpc_id }}'
-        subnet_ids: '{{ (atmos.Component "vpc" .stack).outputs.private_subnet_ids }}'
-```
-</File>
-
-This resolves at runtime, so the EKS component automatically gets the latest VPC outputs.
-
-:::tip
-Use `atmos.Component` for configuration-time resolution. Use the `remote-state` module for Terraform-time resolution.
-:::
-
 ## Connecting Across Stacks
 
 Components can read outputs from other stacks, not just the current stack:
@@ -172,10 +114,10 @@ components:
     app:
       vars:
         # Read VPC from prod stack
-        vpc_id: '{{ (atmos.Component "vpc" "prod").outputs.vpc_id }}'
+        vpc_id: !terraform.state vpc prod vpc_id
 
         # Read database from shared-services stack
-        db_endpoint: '{{ (atmos.Component "rds" "shared-services").outputs.endpoint }}'
+        db_endpoint: !terraform.state rds shared-services endpoint
 ```
 </File>
 
@@ -199,15 +141,15 @@ components:
 
     subnets:
       vars:
-        vpc_id: '{{ (atmos.Component "vpc" .stack).outputs.vpc_id }}'
+        vpc_id: !terraform.state vpc vpc_id
 
     eks:
       vars:
-        subnet_ids: '{{ (atmos.Component "subnets" .stack).outputs.private_subnet_ids }}'
+        subnet_ids: !terraform.state subnets private_subnet_ids
 
     app:
       vars:
-        cluster_endpoint: '{{ (atmos.Component "eks" .stack).outputs.cluster_endpoint }}'
+        cluster_endpoint: !terraform.state eks cluster_endpoint
 ```
 </File>
 
@@ -227,8 +169,8 @@ components:
   terraform:
     app:
       vars:
-        db_endpoint: '{{ (atmos.Component "rds" "shared-services").outputs.endpoint }}'
-        db_name: '{{ (atmos.Component "rds" "shared-services").outputs.database_name }}'
+        db_endpoint: !terraform.state rds shared-services endpoint
+        db_name: !terraform.state rds shared-services database_name
 ```
 </File>
 
@@ -248,7 +190,7 @@ components:
   terraform:
     app:
       vars:
-        hosted_zone_id: '{{ (atmos.Component "route53" "global").outputs.zone_id }}'
+        hosted_zone_id: !terraform.state route53 global zone_id
 ```
 </File>
 
@@ -257,24 +199,24 @@ components:
 Be careful not to create circular references:
 
 ```yaml
-# ❌ BAD - Circular dependency
+# BAD - Circular dependency
 components:
   terraform:
     component-a:
       vars:
-        value_from_b: '{{ (atmos.Component "component-b" .stack).outputs.some_value }}'
+        value_from_b: !terraform.state component-b some_value
 
     component-b:
       vars:
-        value_from_a: '{{ (atmos.Component "component-a" .stack).outputs.other_value }}'
+        value_from_a: !terraform.state component-a other_value
 ```
 
-This creates a deadlock—neither component can deploy until the other exists.
+This creates a deadlock---neither component can deploy until the other exists.
 
 **Solution:** Break the cycle by using explicit values or adding an intermediate component:
 
 ```yaml
-# ✅ GOOD - No circular dependency
+# GOOD - No circular dependency
 components:
   terraform:
     shared-config:
@@ -283,11 +225,11 @@ components:
 
     component-a:
       vars:
-        value_from_shared: '{{ (atmos.Component "shared-config" .stack).outputs.value }}'
+        value_from_shared: !terraform.state shared-config value
 
     component-b:
       vars:
-        value_from_shared: '{{ (atmos.Component "shared-config" .stack).outputs.value }}'
+        value_from_shared: !terraform.state shared-config value
 ```
 
 ## Deployment Order
@@ -308,20 +250,24 @@ atmos terraform apply eks -s dev
 atmos terraform apply app -s dev
 ```
 
-Atmos doesn't automatically determine order—you control deployment sequence.
+Atmos doesn't automatically determine order---you control deployment sequence.
 
 :::tip
 Use [workflows](/workflows/) to automate multi-component deployments in the correct order.
 :::
 
-## Key Takeaways
+<KeyTakeaways>
+- **Components share data via remote state** - Outputs stored in backend
+- **Use `!terraform.state`** - The fastest, recommended way to read outputs
+- **Read across stacks** - Specify the stack name as the second parameter
+- **Avoid circular dependencies** - Deploy in correct order
+- **Loosely coupled architecture** - Components independent but connected
+</KeyTakeaways>
 
-✅ **Components share data via remote state** - Outputs stored in backend
-✅ **Use `remote-state` module** in Terraform for runtime resolution
-✅ **Use `atmos.Component`** in stack YAML for configuration-time resolution
-✅ **Read across stacks** - Not limited to current stack
-✅ **Avoid circular dependencies** - Deploy in correct order
-✅ **Loosely coupled architecture** - Components independent but connected
+<ActionCard title="Learn More About Sharing State">
+Explore all the ways to share data between components, including alternative methods.
+<PrimaryCTA to="/stacks/sharing-state">Sharing State Guide</PrimaryCTA>
+</ActionCard>
 
 ## What's Next
 

@@ -10,6 +10,7 @@ const path = require('path');
 const lightCodeTheme = require('prism-react-renderer').themes.vsDark;
 const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;
 const latestReleasePlugin = require('./plugins/fetch-latest-release');
+const rehypeDtIds = require('./plugins/rehype-dt-ids');
 
 const BASE_URL = '';
 
@@ -274,6 +275,9 @@ const config = {
             path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
         ],
         [
+            path.resolve(__dirname, 'plugins', 'fetch-github-stars'), {}
+        ],
+        [
             path.resolve(__dirname, 'plugins', 'blog-release-data'), {}
         ],
         [
@@ -308,6 +312,7 @@ const config = {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
                     exclude: ['README.md'],
+                    rehypePlugins: [rehypeDtIds],
                 },
                 blog: {
                     routeBasePath: 'changelog',
@@ -379,6 +384,11 @@ const config = {
                         label: 'Changelog',
                         position: 'left',
                         to: '/changelog'
+                    },
+                    // GitHub stars badge
+                    {
+                        type: 'custom-github-stars',
+                        position: 'right',
                     },
                     // Algolia search configuration
                     {

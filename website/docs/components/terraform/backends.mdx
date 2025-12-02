@@ -1,46 +1,55 @@
 ---
-title: Terraform/OpenTofu Backends
-sidebar_position: 2
-sidebar_label: Terraform/OpenTofu Backends
-description: Configure Terraform/OpenTofu Backends.
+title: State Backends
+sidebar_position: 3
+sidebar_label: State Backends
+description: Configure Terraform/OpenTofu state backends.
 id: backends
 ---
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 Backends define where [Terraform](https://opentofu.org/docs/language/state/) and
 [OpenTofu](https://opentofu.org/docs/language/state/) store its state.
 </Intro>
 
-Atmos supports all the backends supported by Terraform:
+## Supported Backends
 
-- [local](https://developer.hashicorp.com/terraform/language/settings/backends/local)
-- [s3](https://developer.hashicorp.com/terraform/language/settings/backends/s3)
-- [azurerm](https://developer.hashicorp.com/terraform/language/settings/backends/azurerm)
-- [gcs](https://developer.hashicorp.com/terraform/language/settings/backends/gcs)
-- [remote](https://developer.hashicorp.com/terraform/language/settings/backends/remote)
-- [consul](https://developer.hashicorp.com/terraform/language/settings/backends/consul)
-- [cos](https://developer.hashicorp.com/terraform/language/settings/backends/cos)
-- [http](https://developer.hashicorp.com/terraform/language/settings/backends/http)
-- [kubernetes](https://developer.hashicorp.com/terraform/language/settings/backends/kubernetes)
-- [oss](https://developer.hashicorp.com/terraform/language/settings/backends/oss)
-- [pg](https://developer.hashicorp.com/terraform/language/settings/backends/pg)
-- [cloud](https://developer.hashicorp.com/terraform/cli/cloud/settings)
+<Tabs>
+  <TabItem value="terraform" label="Terraform" default>
+    Atmos supports all the backends supported by Terraform:
 
-Atmos supports all the backends supported by OpenTofu:
+    - [local](https://developer.hashicorp.com/terraform/language/settings/backends/local)
+    - [s3](https://developer.hashicorp.com/terraform/language/settings/backends/s3)
+    - [azurerm](https://developer.hashicorp.com/terraform/language/settings/backends/azurerm)
+    - [gcs](https://developer.hashicorp.com/terraform/language/settings/backends/gcs)
+    - [remote](https://developer.hashicorp.com/terraform/language/settings/backends/remote)
+    - [consul](https://developer.hashicorp.com/terraform/language/settings/backends/consul)
+    - [cos](https://developer.hashicorp.com/terraform/language/settings/backends/cos)
+    - [http](https://developer.hashicorp.com/terraform/language/settings/backends/http)
+    - [kubernetes](https://developer.hashicorp.com/terraform/language/settings/backends/kubernetes)
+    - [oss](https://developer.hashicorp.com/terraform/language/settings/backends/oss)
+    - [pg](https://developer.hashicorp.com/terraform/language/settings/backends/pg)
+    - [cloud](https://developer.hashicorp.com/terraform/cli/cloud/settings)
+  </TabItem>
+  <TabItem value="opentofu" label="OpenTofu">
+    Atmos supports all the backends supported by OpenTofu:
 
-- [local](https://opentofu.org/docs/language/settings/backends/local)
-- [s3](https://opentofu.org/docs/language/settings/backends/s3)
-- [azurerm](https://opentofu.org/docs/language/settings/backends/azurerm)
-- [gcs](https://opentofu.org/docs/language/settings/backends/gcs)
-- [remote](https://opentofu.org/docs/language/settings/backends/remote)
-- [consul](https://opentofu.org/docs/language/settings/backends/consul)
-- [cos](https://opentofu.org/docs/language/settings/backends/cos)
-- [http](https://opentofu.org/docs/language/settings/backends/http)
-- [kubernetes](https://opentofu.org/docs/language/settings/backends/kubernetes)
-- [oss](https://opentofu.org/docs/language/settings/backends/oss)
-- [pg](https://opentofu.org/docs/language/settings/backends/pg)
+    - [local](https://opentofu.org/docs/language/settings/backends/local)
+    - [s3](https://opentofu.org/docs/language/settings/backends/s3)
+    - [azurerm](https://opentofu.org/docs/language/settings/backends/azurerm)
+    - [gcs](https://opentofu.org/docs/language/settings/backends/gcs)
+    - [remote](https://opentofu.org/docs/language/settings/backends/remote)
+    - [consul](https://opentofu.org/docs/language/settings/backends/consul)
+    - [cos](https://opentofu.org/docs/language/settings/backends/cos)
+    - [http](https://opentofu.org/docs/language/settings/backends/http)
+    - [kubernetes](https://opentofu.org/docs/language/settings/backends/kubernetes)
+    - [oss](https://opentofu.org/docs/language/settings/backends/oss)
+    - [pg](https://opentofu.org/docs/language/settings/backends/pg)
+  </TabItem>
+</Tabs>
 
 ## Local Backend
 

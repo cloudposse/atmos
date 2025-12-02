@@ -21,4 +21,4 @@ Here are some of the major differentiators of Atmos and topics worth exploring i
 * [Custom Commands](/cli/configuration/commands)
 * [Component Inheritance & Multiple Inheritance](/stacks/inheritance)
 * [JSON Schema & OPA Policy Enforcement](/validation/validating)
-* [Atmos Manifest JSON Schema](/cli/schemas)
+* [Atmos Manifest JSON Schema](/cli/configuration/schemas)

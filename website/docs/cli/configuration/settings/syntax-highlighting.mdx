@@ -1,0 +1,118 @@
+---
+title: Syntax Highlighting
+sidebar_position: 4
+sidebar_label: syntax_highlighting
+description: Configure syntax highlighting for terminal output
+id: syntax-highlighting
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Note from '@site/src/components/Note'
+
+<Intro>
+Atmos provides syntax highlighting for YAML and JSON output in the terminal. You can customize the color scheme, enable line numbers, and control line wrapping behavior.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  terminal:
+    syntax_highlighting:
+      enabled: true           # Enable/disable syntax highlighting
+      formatter: terminal     # Output formatter
+      theme: dracula          # Color scheme to use
+      line_numbers: false     # Show line numbers
+      wrap: false             # Wrap long lines
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`enabled`</dt>
+  <dd>
+    Enable or disable syntax highlighting for terminal output.
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`formatter`</dt>
+  <dd>
+    Output formatter to use for rendering highlighted code.
+
+    **Default:** `terminal`
+  </dd>
+
+  <dt>`theme`</dt>
+  <dd>
+    Color scheme for syntax highlighting. Atmos supports a wide range of themes.
+
+    **Default:** `dracula`
+
+    Popular themes:
+    - `dracula` - Dark theme with vibrant colors
+    - `monokai` - Classic dark theme
+    - `github` - Light theme matching GitHub's style
+    - `vim` - Vim's default color scheme
+    - `solarized-dark` - Solarized dark variant
+    - `solarized-light` - Solarized light variant
+    - `nord` - Arctic, bluish color palette
+
+    See the [full list of supported themes](https://xyproto.github.io/splash/docs/).
+  </dd>
+
+  <dt>`line_numbers`</dt>
+  <dd>
+    Show line numbers in syntax-highlighted output.
+
+    **Default:** `false`
+  </dd>
+
+  <dt>`wrap`</dt>
+  <dd>
+    Wrap long lines to fit terminal width.
+
+    **Default:** `false`
+  </dd>
+</dl>
+
+## Example Usage
+
+Syntax highlighting is automatically applied when using commands that output YAML or JSON:
+
+```bash
+# Display config in YAML format with syntax highlighting
+atmos describe config -f yaml
+
+# Display config in JSON format with syntax highlighting
+atmos describe config
+
+# View stack configuration
+atmos describe stacks -s plat-ue2-prod
+```
+
+<Note>
+When output is piped to another command, syntax highlighting is automatically disabled to ensure compatibility:
+
+```bash
+# Syntax highlighting is disabled when piping
+atmos describe config | grep base_path
+```
+</Note>
+
+## Automatic Behavior
+
+Syntax highlighting behavior adapts to the environment:
+
+- **Interactive terminal:** Full syntax highlighting with configured theme
+- **Piped output:** Highlighting automatically disabled
+- **Redirected to file:** Highlighting automatically disabled
+- **With `--force-color`:** Highlighting preserved even when piping
+
+## Related
+
+- [Terminal Settings](/cli/configuration/settings/terminal)
+- [Secret Masking](/cli/configuration/settings/mask)
+- [Markdown Styling](/cli/configuration/settings/markdown-styling)

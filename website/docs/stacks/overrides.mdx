@@ -1,7 +1,7 @@
 ---
 title: Override Configurations
 sidebar_position: 5
-sidebar_label: Overrides
+sidebar_label: overrides
 description: Use the 'Component Overrides' pattern to modify components' configuration and behavior in the current scope.
 id: overrides
 ---
@@ -16,12 +16,12 @@ deep-merging interferes with what you want to express. Use the `overrides` secti
 
 You can override the following sections in the component(s) configuration:
 
-- `command`
-- `env`
-- `hooks`
-- `providers`
-- `settings`
-- `vars`
+- [`command`](/stacks/command) - Override the executable for components
+- [`env`](/stacks/env) - Override environment variables
+- [`hooks`](/stacks/hooks) - Override lifecycle hooks
+- [`providers`](/stacks/providers) - Override Terraform provider configuration
+- [`settings`](/stacks/settings) - Override integrations and metadata
+- [`vars`](/stacks/vars) - Override input variables
 
 The `overrides` section can be used in the global scope or in the Terraform and Helmfile scopes.
 

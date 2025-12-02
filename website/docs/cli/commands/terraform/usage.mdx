@@ -8,6 +8,7 @@ import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
 
 <Intro>
 Use these subcommands to interact with Terraform and OpenTofu.
@@ -353,7 +354,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
     <dt>`--affected` <em>(optional)</em></dt>
     <dd>
         Execute the command on all the directly affected components, in all stacks or in a specific stack,
-        in dependency order (if [component dependencies](/stacks/dependencies/) are configured).
+        in dependency order (if [component dependencies](/stacks/settings/depends_on) are configured).
 
         __NOTE__: When using the `--affected` flag, Atmos supports all the flags from the [`atmos describe affected`](/cli/commands/describe/affected) CLI command.
 
@@ -371,7 +372,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
     <dd>
         For each directly affected component, detect the dependent components and process them in dependency order, recursively.
         Dependents are components that are indirectly affected, meaning that nothing in the current branch modifies their code
-        or configs, but they are configured as [dependencies](/stacks/dependencies/) of the components that are modified.
+        or configs, but they are configured as [dependencies](/stacks/settings/depends_on) of the components that are modified.
 
         ```shell
         atmos terraform plan --affected --include-dependents --logs-level=Debug
@@ -466,7 +467,7 @@ All native Terraform/OpenTofu flags are supported.
 ## Multi-Component Commands (Bulk Operations) Examples
 
 Let's assume that we have the following Atmos stack manifests in the `prod` and `nonprod` stacks,
-with [dependencies between the components](/stacks/dependencies/):
+with [dependencies between the components](/stacks/settings/depends_on):
 
 <File title="`prod` and `nonprod` stacks">
 ```yaml
@@ -775,6 +776,10 @@ Executing command="atmos terraform apply eks/karpenter -s prod" dependency of co
 Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" dependency of component=eks/karpenter in stack=prod
 ```
 </Terminal>
+
+<ActionCard title="Configure Terraform" ctaText="Learn More" ctaLink="/cli/configuration/components/terraform">
+  Learn how to configure Terraform components in your `atmos.yaml`, including backends, workspaces, and provider generation.
+</ActionCard>
 
 ## Subcommands
 

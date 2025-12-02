@@ -1,7 +1,7 @@
 ---
 title: Profiles
 sidebar_position: 10
-sidebar_label: Profiles
+sidebar_label: profiles
 description: Configure named profiles for environment-specific Atmos settings
 ---
 
@@ -9,6 +9,7 @@ import Intro from '@site/src/components/Intro';
 import KeyPoints from '@site/src/components/KeyPoints';
 import Note from '@site/src/components/Note';
 import File from '@site/src/components/File';
+import DocCardList from '@theme/DocCardList';
 
 <Intro>
 Profiles allow you to define named sets of configuration overrides that can be activated at runtime. Use profiles to switch between development, CI/CD, and production settings without modifying your base configuration.
@@ -278,9 +279,14 @@ Store personal profiles in your XDG config directory:
 
 These won't be committed to version control but are available across all projects.
 
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/profile/usage', label: 'atmos profile', description: 'Manage configuration profiles'},
+  {type: 'link', href: '/cli/commands/profile/profile-list', label: 'atmos profile list', description: 'List available profiles'},
+  {type: 'link', href: '/cli/commands/profile/profile-show', label: 'atmos profile show', description: 'Show profile details'},
+]} />
+
 ## See Also
 
-- [`atmos profile`](/cli/commands/profile/usage) - Profile management commands
-- [`atmos profile list`](/cli/commands/profile/profile-list) - List available profiles
-- [`atmos profile show`](/cli/commands/profile/profile-show) - Show profile details
 - [Global Flags](/cli/global-flags) - Using the `--profile` flag

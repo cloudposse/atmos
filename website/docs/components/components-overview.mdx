@@ -1,5 +1,5 @@
 ---
-title: Components Overview
+title: Component Library
 sidebar_position: 0
 sidebar_label: Overview
 sidebar_class_name: hidden
@@ -130,10 +130,63 @@ components/
     └── ubuntu-base/
 ```
 
+:::tip
+Get a head start by utilizing Cloud Posse's free [Terraform components for AWS](https://github.com/cloudposse/terraform-aws-components), available on GitHub.
+:::
+
+## Use-cases
+
+- **Developer Productivity** Create a component library of vetted terraform root modules that should be used by teams anytime they need to spin
+  up infrastructure for VPCs, clusters, and databases.
+- **Compliance and Governance:** Establish a component library to enforce infrastructure standards, security policies, and compliance requirements.
+  By using pre-approved modules, organizations can maintain control over their infrastructure's configuration, reducing the risk of non-compliance.
+- **Rapid Prototyping and Scalability:** Utilize a component library to quickly prototype and scale applications. Pre-built modules for common
+  infrastructure patterns allow teams to focus on application development rather than infrastructure setup, accelerating time-to-market and ensuring scalability from the outset.
+
+## Organizing Components
+
+There's no "one way" to organize your components—it's configurable based on your needs. Here's a simple example organizing by toolchain:
+
+```console
+└── components/
+    ├── helmfile/
+    │   └── example-app/
+    │       └── helmfile.yaml
+    └── terraform/
+        └── vpc/
+            ├── main.tf
+            ├── outputs.tf
+            └── variables.tf
+```
+
+For detailed guidance on folder structure including multi-cloud layouts, version management strategies, and enterprise patterns, see [Project Layout](/projects/layout).
+
+## Terraform Conventions
+
+For terraform, we recommend placing the terraform "root" modules in the `components/terraform` folder. If the root modules depend on other child modules that are not hosted by a registry, we recommend placing them in a subfolder called `modules/`.
+
+Make your Terraform components small, so they are easily reusable, but not so small that they only do to provide a single resource, which results in large, complicated configurations. A good rule of thumb is they should do one thing well. For example, provision a VPC along with all the subnets, NAT gateways, Internet gateways, NACLs, etc.
+
+Use multiple component to break infrastructure apart into smaller pieces based on how their lifecycles are connected. For example, a single component seldom provides a VPC and a Kubernetes cluster. That's because we should be able to destroy the Kubernetes cluster without destroying the VPC and all the other resources provisioned inside of the VPC (e.g. databases). The VPC, Kubernetes cluster and Databases all have different lifecycles. Similarly, we should be able to deploy a database and destroy it without also destroying all associated backups. Therefore the backups of a database should be a separate component from the database itself.
+
+## Describing Components
+
+When working with complex configurations that use [imports](/stacks/imports) and [inheritance](/stacks/inheritance), it can be challenging to understand the final deep-merged configuration for a component. Use the [`atmos describe component`](/cli/commands/describe/component) command to view the fully resolved configuration:
+
+```shell
+atmos describe component vpc -s ue2-prod
+```
+
+This is especially helpful when:
+- Debugging configuration issues
+- Understanding inherited values
+- Developing [validation policies](/validation/validating)
+- Verifying the final configuration before deployment
+
+For more powerful filtering options, consider [describing stacks](/describe/stacks) instead.
+
 ## Next Steps
 
-- [Describe Components](/describe/component) — Inspect fully-merged component configurations
-- [Component Library](/components/library) — Use pre-built components
 - [Terraform Components](/components/terraform) — Terraform root modules
 - [Helmfile Components](/components/helmfile) — Helmfile configurations
 - [Packer Components](/components/packer) — Packer templates

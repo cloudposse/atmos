@@ -1,7 +1,7 @@
 ---
 title: Error Handling & Monitoring
 sidebar_position: 8
-sidebar_label: Error Handling
+sidebar_label: errors
 id: errors
 description: Configure error formatting and Sentry integration to monitor Atmos failures across your organization
 ---
@@ -29,36 +29,17 @@ The `errors` section in `atmos.yaml` controls error formatting and Sentry integr
 <File title="atmos.yaml">
 ```yaml
 errors:
-  # Error formatting configuration
   format:
-    # Show detailed stack traces and context (default: false)
-    # Can also be set via ATMOS_VERBOSE environment variable
     verbose: false
 
-  # Sentry error reporting integration
   sentry:
-    # Enable/disable Sentry error reporting (default: false)
     enabled: true
-
-    # Sentry DSN (Data Source Name) - get this from your Sentry project settings
     dsn: "https://examplePublicKey@o0.ingest.sentry.io/0"
-
-    # Environment name for error grouping (e.g., "production", "staging", "ci")
     environment: "production"
-
-    # Release version for tracking errors by deployment
     release: "1.0.0"
-
-    # Sample rate: 1.0 = 100% of errors sent, 0.5 = 50% (default: 1.0)
     sample_rate: 1.0
-
-    # Enable debug mode for troubleshooting Sentry integration (default: false)
     debug: false
-
-    # Include surrounding code context in stack traces (default: true)
     capture_stack_context: true
-
-    # Custom tags for filtering and grouping errors in Sentry
     tags:
       team: "platform"
       service: "atmos"
@@ -66,25 +47,100 @@ errors:
 ```
 </File>
 
-## Error Formatting
+## Configuration Reference
 
-### Verbose Mode
+### Error Formatting
 
-Control the level of detail in error messages with the `errors.format.verbose` setting:
+<dl>
+  <dt>`format.verbose`</dt>
+  <dd>
+    Show detailed stack traces and context in error messages.
 
-**Compact Mode** (`verbose: false` - default):
-- Clean, user-friendly error messages
-- Actionable hints and suggestions
-- Essential context only
-- Perfect for end-users and CI logs
+    **Environment variable:** `ATMOS_VERBOSE`
+    **Default:** `false`
 
-**Verbose Mode** (`verbose: true`):
-- Full stack traces with file/line information
-- Complete error chain showing how the error propagated
-- Detailed context tables with all metadata
-- Useful for debugging complex issues
+    When `false` (compact mode):
+    - Clean, user-friendly error messages
+    - Actionable hints and suggestions
+    - Essential context only
 
-You can also enable verbose mode temporarily:
+    When `true` (verbose mode):
+    - Full stack traces with file/line information
+    - Complete error chain showing how the error propagated
+    - Detailed context tables with all metadata
+  </dd>
+</dl>
+
+### Sentry Integration
+
+<dl>
+  <dt>`sentry.enabled`</dt>
+  <dd>
+    Enable or disable Sentry error reporting.
+
+    **Default:** `false`
+  </dd>
+
+  <dt>`sentry.dsn`</dt>
+  <dd>
+    Sentry DSN (Data Source Name) from your Sentry project settings. This is the endpoint where errors are sent.
+
+    **Example:** `https://examplePublicKey@o0.ingest.sentry.io/0`
+  </dd>
+
+  <dt>`sentry.environment`</dt>
+  <dd>
+    Environment name for error grouping in Sentry (e.g., "production", "staging", "ci").
+
+    **Example:** `production`
+  </dd>
+
+  <dt>`sentry.release`</dt>
+  <dd>
+    Release version for tracking errors by deployment. Useful for identifying regressions.
+
+    **Example:** `1.0.0` or `commit-abc123`
+  </dd>
+
+  <dt>`sentry.sample_rate`</dt>
+  <dd>
+    Percentage of errors to send to Sentry. Use values between 0.0 and 1.0.
+
+    **Default:** `1.0` (100% of errors sent)
+    **Example:** `0.5` sends 50% of errors
+  </dd>
+
+  <dt>`sentry.debug`</dt>
+  <dd>
+    Enable debug mode for troubleshooting the Sentry integration. Outputs additional diagnostic information.
+
+    **Default:** `false`
+  </dd>
+
+  <dt>`sentry.capture_stack_context`</dt>
+  <dd>
+    Include surrounding code context in stack traces sent to Sentry.
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`sentry.tags`</dt>
+  <dd>
+    Custom key-value tags for filtering and grouping errors in Sentry. These appear as searchable attributes in the Sentry UI.
+
+    **Example:**
+    ```yaml
+    tags:
+      team: "platform"
+      service: "atmos"
+      datacenter: "us-east-1"
+    ```
+  </dd>
+</dl>
+
+## Enabling Verbose Mode
+
+You can enable verbose mode temporarily via environment variable:
 
 ```bash
 # Enable verbose errors for a single command
@@ -94,7 +150,7 @@ ATMOS_VERBOSE=true atmos terraform plan
 export ATMOS_VERBOSE=true
 ```
 
-### Error Message Structure
+## Error Message Structure
 
 Atmos formats errors as structured markdown with the following sections:
 
@@ -263,6 +319,57 @@ errors:
 
 ## Use Cases
 
+### Using Profiles for CI vs. Local Development (Recommended)
+
+The recommended approach is to use [Atmos profiles](/cli/configuration/profiles) to separate CI/CD error monitoring from local development. This keeps your base configuration clean and avoids the need for environment variables on every command.
+
+<File title="atmos.yaml">
+```yaml
+# Base configuration - Sentry disabled by default for local development
+errors:
+  format:
+    verbose: true  # Helpful for local debugging
+  sentry:
+    enabled: false
+
+# CI profile - enables Sentry for pipeline monitoring
+profiles:
+  ci:
+    errors:
+      format:
+        verbose: false  # Cleaner CI logs
+      sentry:
+        enabled: true
+        dsn: !env SENTRY_DSN
+        environment: !env CI_ENVIRONMENT
+        release: !env CI_COMMIT_SHA
+        tags:
+          pipeline: !env CI_PIPELINE_ID
+          branch: !env CI_COMMIT_BRANCH
+          team: "platform"
+```
+</File>
+
+Then in your CI/CD pipeline, activate the profile:
+
+```yaml
+# GitHub Actions example
+- name: Deploy infrastructure
+  env:
+    SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+    CI_ENVIRONMENT: production
+    CI_COMMIT_SHA: ${{ github.sha }}
+    CI_PIPELINE_ID: ${{ github.run_id }}
+    CI_COMMIT_BRANCH: ${{ github.ref_name }}
+  run: |
+    atmos terraform apply vpc -s prod/us-east-1 --profile ci
+```
+
+This approach provides:
+- **Local development:** Verbose errors, no Sentry noise, fast iteration
+- **CI/CD pipelines:** Clean logs, full Sentry monitoring, actionable alerts
+- **No environment variables needed locally:** Just run `atmos terraform plan` without any setup
+
 ### Monitoring CI/CD Pipelines
 
 Track infrastructure deployment failures across all your CI pipelines:
@@ -312,24 +419,20 @@ export TEAM_NAME="platform"
 atmos terraform apply vpc -s prod/us-east-1
 ```
 
-### Development vs. Production
+### Development vs. Production (Environment Variables)
 
-Reduce noise in development while maintaining full monitoring in production:
+If you prefer environment variables over profiles, you can reduce noise in development while maintaining full monitoring in production:
 
 <File title="atmos.yaml">
 ```yaml
 errors:
   format:
-    # More detail in development
     verbose: !env DEVELOPMENT false
 
   sentry:
-    # Only enable in production/staging
     enabled: !env SENTRY_ENABLED false
     dsn: !env SENTRY_DSN
     environment: !env ENVIRONMENT development
-
-    # Sample aggressively in dev, fully in prod
     sample_rate: !env SENTRY_SAMPLE_RATE 0.1
 ```
 </File>
@@ -390,7 +493,7 @@ export ENVIRONMENT=production
 
 ## Related Documentation
 
-- [Terminal Configuration](/cli/configuration/terminal) - Control color output and terminal behavior
+- [Terminal Configuration](/cli/configuration/settings/terminal) - Control color output and terminal behavior
 - [Common Errors](/troubleshoot/errors) - Solutions to common Atmos errors
 - [CLI Configuration](/cli/configuration) - Complete `atmos.yaml` reference
 
