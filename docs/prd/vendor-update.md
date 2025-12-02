@@ -918,7 +918,7 @@ internal/exec/
 
 errors/
   errors.go
-    - ErrVendorConfigFileNotFound
+    - ErrVendorConfigNotFound
     - ErrVersionCheckingNotSupported
     - ErrNoValidCommitsFound
     - ErrNoTagsFound
@@ -1092,7 +1092,7 @@ type GitVersionChecker interface {
 ```go
 // In errors/errors.go
 var (
-    ErrVendorConfigFileNotFound         = errors.New("vendor config file not found")
+    ErrVendorConfigNotFound             = errors.New("vendor config file not found")
     ErrVersionCheckingNotSupported      = errors.New("version checking not supported for this source type")
     ErrNoValidCommitsFound              = errors.New("no valid commits found")
     ErrNoTagsFound                      = errors.New("no tags found in repository")
@@ -1107,7 +1107,7 @@ var (
 
 | Scenario | Error | User Message | Recovery |
 |----------|-------|--------------|----------|
-| No vendor.yaml | `ErrVendorConfigFileNotFound` | "Vendor config file not found: vendor.yaml" | Check file path |
+| No vendor.yaml | `ErrVendorConfigNotFound` | "Vendor config file not found: vendor.yaml" | Check file path |
 | Git ls-remote fails | `ErrCheckingForUpdates` | "Failed to check updates for vpc: connection timeout" | Check network, try again |
 | No tags in repo | `ErrNoTagsFound` | "No version tags found in repository" | Use commit hash versioning |
 | Rate limit hit | `ErrGitHubRateLimitExceeded` | "GitHub rate limit exceeded. Use SSH or set GITHUB_TOKEN." | Wait or authenticate |

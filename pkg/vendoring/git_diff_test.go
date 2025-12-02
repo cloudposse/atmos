@@ -215,7 +215,7 @@ func TestStripANSICodes(t *testing.T) {
 		{
 			name:     "text with ANSI codes",
 			input:    "\x1b[31mred text\x1b[0m",
-			expected: "31mred text0m",
+			expected: "red text",
 		},
 		{
 			name:     "text without ANSI codes",
@@ -230,7 +230,7 @@ func TestStripANSICodes(t *testing.T) {
 		{
 			name:     "multiple ANSI codes",
 			input:    "\x1b[1m\x1b[31mbold red\x1b[0m\x1b[0m",
-			expected: "1m31mbold red0m0m",
+			expected: "bold red",
 		},
 	}
 

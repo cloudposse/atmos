@@ -532,7 +532,7 @@ func determineSourceType(sourceURI *string, vendorConfigFilePath string) (source
 		return result, fmt.Errorf("invalid source path '%s': %w", *sourceURI, err)
 	}
 	if err == nil {
-		sourceURI = &absPath
+		*sourceURI = absPath
 		result.UseLocalFileSystem = true
 		result.SourceIsLocalFile = u.FileExists(*sourceURI)
 	}
