@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	f "github.com/cloudposse/atmos/pkg/list/format"
@@ -159,6 +160,45 @@ func TestGetIdentityFromCommand(t *testing.T) {
 			},
 			expectedResult: "flag-identity",
 		},
+		{
+			name: "normalizes false to disabled sentinel value",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				_ = cmd.Flags().Set("identity", "false")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+			},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name: "normalizes off to disabled sentinel value",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				_ = cmd.Flags().Set("identity", "off")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+			},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name: "normalizes no to disabled sentinel value from viper",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+				viper.Set("identity", "no")
+			},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -167,6 +207,93 @@ func TestGetIdentityFromCommand(t *testing.T) {
 			cmd := tc.setupCmd()
 			result := getIdentityFromCommand(cmd)
 			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
+}
+
+// TestNormalizeIdentityValue tests the normalizeIdentityValue function.
+func TestNormalizeIdentityValue(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "empty string returns empty",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "regular identity returns unchanged",
+			input:    "my-identity",
+			expected: "my-identity",
+		},
+		{
+			name:     "false returns disabled sentinel",
+			input:    "false",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "FALSE returns disabled sentinel",
+			input:    "FALSE",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "False returns disabled sentinel",
+			input:    "False",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "0 returns disabled sentinel",
+			input:    "0",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "no returns disabled sentinel",
+			input:    "no",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "NO returns disabled sentinel",
+			input:    "NO",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "off returns disabled sentinel",
+			input:    "off",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "OFF returns disabled sentinel",
+			input:    "OFF",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "Off returns disabled sentinel",
+			input:    "Off",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "true returns unchanged",
+			input:    "true",
+			expected: "true",
+		},
+		{
+			name:     "1 returns unchanged",
+			input:    "1",
+			expected: "1",
+		},
+		{
+			name:     "yes returns unchanged",
+			input:    "yes",
+			expected: "yes",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := normalizeIdentityValue(tc.input)
+			assert.Equal(t, tc.expected, result)
 		})
 	}
 }
@@ -269,8 +396,8 @@ func TestValidateComponentFilter(t *testing.T) {
 			componentFilter: "",
 			expectError:     false,
 		},
-		// Note: Testing with actual component requires a valid atmosConfig setup
-		// which would be an integration test. Unit tests focus on the empty case.
+		// Note: Testing with actual component requires a valid atmosConfig setup.
+		// This would be an integration test. Unit tests focus on the empty case.
 	}
 
 	for _, tc := range testCases {
@@ -292,13 +419,13 @@ func TestValidateComponentFilter(t *testing.T) {
 func TestStackFlagCompletion(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 
-	// Test with empty args - this will try to list all stacks
-	// In unit test context without valid config, it should return ShellCompDirectiveNoFileComp
+	// Test with empty args - this will try to list all stacks.
+	// In unit test context without valid config, it should return ShellCompDirectiveNoFileComp.
 	_, directive := stackFlagCompletion(cmd, []string{}, "")
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 
-	// Test with component arg - this will try to list stacks for component
-	// In unit test context without valid config, it should return ShellCompDirectiveNoFileComp
+	// Test with component arg - this will try to list stacks for the component.
+	// In unit test context without valid config, it should return ShellCompDirectiveNoFileComp.
 	_, directive = stackFlagCompletion(cmd, []string{"mycomponent"}, "")
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
@@ -309,7 +436,7 @@ func TestNewCommonListParser_FlagsRegistered(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	parser.RegisterFlags(cmd)
 
-	// Verify expected flags exist
+	// Verify expected flags exist.
 	expectedFlags := []string{"format", "max-columns", "delimiter", "stack", "query"}
 	for _, flagName := range expectedFlags {
 		flag := cmd.Flags().Lookup(flagName)
@@ -326,7 +453,7 @@ func TestNewCommonListParser_WithAdditionalFlags(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	parser.RegisterFlags(cmd)
 
-	// Verify additional flags exist
+	// Verify additional flags exist.
 	uploadFlag := cmd.Flags().Lookup("upload")
 	assert.NotNil(t, uploadFlag, "Expected upload flag to be registered")
 	assert.Equal(t, "false", uploadFlag.DefValue)
