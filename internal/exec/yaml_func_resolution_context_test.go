@@ -15,10 +15,10 @@ func TestNewResolutionContext(t *testing.T) {
 	ctx := NewResolutionContext()
 
 	assert.NotNil(t, ctx)
-	assert.NotNil(t, ctx.CallStack)
-	assert.NotNil(t, ctx.Visited)
-	assert.Equal(t, 0, len(ctx.CallStack))
-	assert.Equal(t, 0, len(ctx.Visited))
+	assert.NotNil(t, ctx.CallStack())
+	assert.NotNil(t, ctx.Visited())
+	assert.Equal(t, 0, len(ctx.CallStack()))
+	assert.Equal(t, 0, len(ctx.Visited()))
 }
 
 func TestResolutionContextPushPop(t *testing.T) {
@@ -36,9 +36,9 @@ func TestResolutionContextPushPop(t *testing.T) {
 	err := ctx.Push(atmosConfig, node1)
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, len(ctx.CallStack))
-	assert.Equal(t, 1, len(ctx.Visited))
-	assert.True(t, ctx.Visited["dev-vpc"])
+	assert.Equal(t, 1, len(ctx.CallStack()))
+	assert.Equal(t, 1, len(ctx.Visited()))
+	assert.True(t, ctx.Visited()["dev-vpc"])
 
 	node2 := DependencyNode{
 		Component:    "rds",
@@ -51,23 +51,23 @@ func TestResolutionContextPushPop(t *testing.T) {
 	err = ctx.Push(atmosConfig, node2)
 	require.NoError(t, err)
 
-	assert.Equal(t, 2, len(ctx.CallStack))
-	assert.Equal(t, 2, len(ctx.Visited))
-	assert.True(t, ctx.Visited["dev-rds"])
+	assert.Equal(t, 2, len(ctx.CallStack()))
+	assert.Equal(t, 2, len(ctx.Visited()))
+	assert.True(t, ctx.Visited()["dev-rds"])
 
 	// Pop second node.
 	ctx.Pop(atmosConfig)
 
-	assert.Equal(t, 1, len(ctx.CallStack))
-	assert.Equal(t, 1, len(ctx.Visited))
-	assert.False(t, ctx.Visited["dev-rds"])
-	assert.True(t, ctx.Visited["dev-vpc"])
+	assert.Equal(t, 1, len(ctx.CallStack()))
+	assert.Equal(t, 1, len(ctx.Visited()))
+	assert.False(t, ctx.Visited()["dev-rds"])
+	assert.True(t, ctx.Visited()["dev-vpc"])
 
 	// Pop first node.
 	ctx.Pop(atmosConfig)
 
-	assert.Equal(t, 0, len(ctx.CallStack))
-	assert.Equal(t, 0, len(ctx.Visited))
+	assert.Equal(t, 0, len(ctx.CallStack()))
+	assert.Equal(t, 0, len(ctx.Visited()))
 }
 
 func TestResolutionContextDetectsDirectCycle(t *testing.T) {
@@ -213,16 +213,16 @@ func TestResolutionContextAllowsValidChain(t *testing.T) {
 	require.NoError(t, ctx.Push(atmosConfig, nodeC))
 
 	// Verify state.
-	assert.Equal(t, 3, len(ctx.CallStack))
-	assert.Equal(t, 3, len(ctx.Visited))
+	assert.Equal(t, 3, len(ctx.CallStack()))
+	assert.Equal(t, 3, len(ctx.Visited()))
 
 	// Pop and verify cleanup.
 	ctx.Pop(atmosConfig)
 	ctx.Pop(atmosConfig)
 	ctx.Pop(atmosConfig)
 
-	assert.Equal(t, 0, len(ctx.CallStack))
-	assert.Equal(t, 0, len(ctx.Visited))
+	assert.Equal(t, 0, len(ctx.CallStack()))
+	assert.Equal(t, 0, len(ctx.Visited()))
 }
 
 func TestResolutionContextClone(t *testing.T) {
@@ -242,10 +242,10 @@ func TestResolutionContextClone(t *testing.T) {
 	cloned := ctx.Clone()
 
 	// Verify cloned context has same state.
-	assert.Equal(t, len(ctx.CallStack), len(cloned.CallStack))
-	assert.Equal(t, len(ctx.Visited), len(cloned.Visited))
-	assert.Equal(t, ctx.CallStack[0], cloned.CallStack[0])
-	assert.True(t, cloned.Visited["dev-vpc"])
+	assert.Equal(t, len(ctx.CallStack()), len(cloned.CallStack()))
+	assert.Equal(t, len(ctx.Visited()), len(cloned.Visited()))
+	assert.Equal(t, ctx.CallStack()[0], cloned.CallStack()[0])
+	assert.True(t, cloned.Visited()["dev-vpc"])
 
 	// Modify original - should not affect clone.
 	node2 := DependencyNode{
@@ -256,8 +256,8 @@ func TestResolutionContextClone(t *testing.T) {
 	}
 	require.NoError(t, ctx.Push(atmosConfig, node2))
 
-	assert.Equal(t, 2, len(ctx.CallStack))
-	assert.Equal(t, 1, len(cloned.CallStack))
+	assert.Equal(t, 2, len(ctx.CallStack()))
+	assert.Equal(t, 1, len(cloned.CallStack()))
 }
 
 func TestResolutionContextCloneNil(t *testing.T) {
@@ -274,11 +274,12 @@ func TestGetOrCreateResolutionContext(t *testing.T) {
 	// First call should create new context.
 	ctx1 := GetOrCreateResolutionContext()
 	assert.NotNil(t, ctx1)
-	assert.Equal(t, 0, len(ctx1.CallStack))
+	assert.Equal(t, 0, len(ctx1.CallStack()))
 
-	// Second call should return same context.
+	// Second call should return context with same inner.
 	ctx2 := GetOrCreateResolutionContext()
-	assert.Equal(t, ctx1, ctx2)
+	// The wrapper might be different, but inner should be same.
+	assert.Equal(t, len(ctx1.CallStack()), len(ctx2.CallStack()))
 
 	// Add something to verify it's the same instance.
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -291,7 +292,7 @@ func TestGetOrCreateResolutionContext(t *testing.T) {
 	require.NoError(t, ctx1.Push(atmosConfig, node))
 
 	ctx3 := GetOrCreateResolutionContext()
-	assert.Equal(t, 1, len(ctx3.CallStack))
+	assert.Equal(t, 1, len(ctx3.CallStack()))
 }
 
 func TestClearResolutionContext(t *testing.T) {
@@ -314,30 +315,7 @@ func TestClearResolutionContext(t *testing.T) {
 
 	// Next call should create new empty context.
 	newCtx := GetOrCreateResolutionContext()
-	assert.NotEqual(t, ctx, newCtx)
-	assert.Equal(t, 0, len(newCtx.CallStack))
-}
-
-func TestGetGoroutineID(t *testing.T) {
-	gid := getGoroutineID()
-
-	// Should be a numeric string.
-	assert.NotEmpty(t, gid)
-	assert.True(t, len(gid) > 0)
-
-	// Should be parseable as number.
-	for _, c := range gid {
-		assert.True(t, c >= '0' && c <= '9', "Goroutine ID should be numeric")
-	}
-
-	// Different goroutines should have different IDs.
-	done := make(chan string, 1)
-	go func() {
-		done <- getGoroutineID()
-	}()
-
-	otherGID := <-done
-	assert.NotEqual(t, gid, otherGID, "Different goroutines should have different IDs")
+	assert.Equal(t, 0, len(newCtx.CallStack()))
 }
 
 func TestResolutionContextMixedFunctionTypes(t *testing.T) {
@@ -381,8 +359,8 @@ func TestResolutionContextPopEmptyStack(t *testing.T) {
 		ctx.Pop(atmosConfig)
 	})
 
-	assert.Equal(t, 0, len(ctx.CallStack))
-	assert.Equal(t, 0, len(ctx.Visited))
+	assert.Equal(t, 0, len(ctx.CallStack()))
+	assert.Equal(t, 0, len(ctx.Visited()))
 }
 
 func TestResolutionContextMultipleStacksSameComponent(t *testing.T) {
@@ -407,9 +385,9 @@ func TestResolutionContextMultipleStacksSameComponent(t *testing.T) {
 	require.NoError(t, ctx.Push(atmosConfig, node1))
 	require.NoError(t, ctx.Push(atmosConfig, node2))
 
-	assert.Equal(t, 2, len(ctx.CallStack))
-	assert.True(t, ctx.Visited["dev-vpc"])
-	assert.True(t, ctx.Visited["staging-vpc"])
+	assert.Equal(t, 2, len(ctx.CallStack()))
+	assert.True(t, ctx.Visited()["dev-vpc"])
+	assert.True(t, ctx.Visited()["staging-vpc"])
 }
 
 func TestResolutionContextDiamondDependency(t *testing.T) {
@@ -436,7 +414,7 @@ func TestResolutionContextDiamondDependency(t *testing.T) {
 	require.NoError(t, ctx.Push(atmosConfig, nodeC))
 	require.NoError(t, ctx.Push(atmosConfig, nodeD)) // D is allowed again after being popped.
 
-	assert.Equal(t, 3, len(ctx.CallStack))
+	assert.Equal(t, 3, len(ctx.CallStack()))
 }
 
 func TestBuildCircularDependencyErrorFormatting(t *testing.T) {
@@ -519,7 +497,7 @@ func TestGoroutineLocalContextIsolation(t *testing.T) {
 		ctx2 := GetOrCreateResolutionContext()
 
 		// Should be empty initially.
-		assert.Equal(t, 0, len(ctx2.CallStack))
+		assert.Equal(t, 0, len(ctx2.CallStack()))
 
 		// Add something to this goroutine's context.
 		node2 := DependencyNode{
@@ -531,8 +509,8 @@ func TestGoroutineLocalContextIsolation(t *testing.T) {
 		require.NoError(t, ctx2.Push(atmosConfig, node2))
 
 		// Should have 1 item.
-		assert.Equal(t, 1, len(ctx2.CallStack))
-		assert.Equal(t, "goroutine-component", ctx2.CallStack[0].Component)
+		assert.Equal(t, 1, len(ctx2.CallStack()))
+		assert.Equal(t, "goroutine-component", ctx2.CallStack()[0].Component)
 
 		// Clean up this goroutine's context.
 		ClearResolutionContext()
@@ -541,21 +519,32 @@ func TestGoroutineLocalContextIsolation(t *testing.T) {
 	<-done
 
 	// Main goroutine's context should still have its item.
-	assert.Equal(t, 1, len(ctx1.CallStack))
-	assert.Equal(t, "main-component", ctx1.CallStack[0].Component)
+	assert.Equal(t, 1, len(ctx1.CallStack()))
+	assert.Equal(t, "main-component", ctx1.CallStack()[0].Component)
 }
 
 func TestGetOrCreateResolutionContextMultipleCalls(t *testing.T) {
 	ClearResolutionContext()
 	defer ClearResolutionContext()
 
-	// Multiple calls should return the same instance.
+	// Multiple calls should return contexts with the same underlying data.
 	ctx1 := GetOrCreateResolutionContext()
 	ctx2 := GetOrCreateResolutionContext()
 	ctx3 := GetOrCreateResolutionContext()
 
-	assert.Same(t, ctx1, ctx2)
-	assert.Same(t, ctx2, ctx3)
+	// Push to one should be visible in all.
+	atmosConfig := &schema.AtmosConfiguration{}
+	node := DependencyNode{
+		Component:    "test",
+		Stack:        "test",
+		FunctionType: "test",
+		FunctionCall: "test",
+	}
+	require.NoError(t, ctx1.Push(atmosConfig, node))
+
+	assert.Equal(t, 1, len(ctx1.CallStack()))
+	assert.Equal(t, 1, len(ctx2.CallStack()))
+	assert.Equal(t, 1, len(ctx3.CallStack()))
 }
 
 func TestNewResolutionContextInitialization(t *testing.T) {
@@ -563,9 +552,51 @@ func TestNewResolutionContextInitialization(t *testing.T) {
 
 	// Check all fields are properly initialized.
 	assert.NotNil(t, ctx, "Context should not be nil")
-	assert.NotNil(t, ctx.CallStack, "CallStack should be initialized")
-	assert.NotNil(t, ctx.Visited, "Visited map should be initialized")
-	assert.Equal(t, 0, len(ctx.CallStack), "CallStack should be empty")
-	assert.Equal(t, 0, len(ctx.Visited), "Visited should be empty")
-	assert.Equal(t, 0, cap(ctx.CallStack), "CallStack should have zero capacity initially")
+	assert.NotNil(t, ctx.CallStack(), "CallStack should be initialized")
+	assert.NotNil(t, ctx.Visited(), "Visited map should be initialized")
+	assert.Equal(t, 0, len(ctx.CallStack()), "CallStack should be empty")
+	assert.Equal(t, 0, len(ctx.Visited()), "Visited should be empty")
+}
+
+func TestScopedResolutionContext(t *testing.T) {
+	ClearResolutionContext()
+	defer ClearResolutionContext()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Set up initial context with a node.
+	ctx := GetOrCreateResolutionContext()
+	node := DependencyNode{
+		Component:    "outer",
+		Stack:        "stack",
+		FunctionType: "test",
+		FunctionCall: "outer call",
+	}
+	require.NoError(t, ctx.Push(atmosConfig, node))
+	assert.Equal(t, 1, len(ctx.CallStack()))
+
+	// Create scoped context.
+	restore := scopedResolutionContext()
+
+	// New context should be fresh.
+	scopedCtx := GetOrCreateResolutionContext()
+	assert.Equal(t, 0, len(scopedCtx.CallStack()))
+
+	// Add nodes to scoped context.
+	innerNode := DependencyNode{
+		Component:    "inner",
+		Stack:        "stack",
+		FunctionType: "test",
+		FunctionCall: "inner call",
+	}
+	require.NoError(t, scopedCtx.Push(atmosConfig, innerNode))
+	assert.Equal(t, 1, len(scopedCtx.CallStack()))
+
+	// Restore original context.
+	restore()
+
+	// Original context should be back.
+	restoredCtx := GetOrCreateResolutionContext()
+	assert.Equal(t, 1, len(restoredCtx.CallStack()))
+	assert.Equal(t, "outer", restoredCtx.CallStack()[0].Component)
 }
