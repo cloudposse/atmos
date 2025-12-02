@@ -91,7 +91,7 @@ Profile configs are loaded during `InitCliConfig` **before** stacks are processe
 
 For `describe component`: The command simply wasn't merging stack-level auth config.
 
-For multi-stack commands: Stack configs are only processed when `processStacks=true`, creating a timing issue that required Approach 2 (Stack Scanning) to solve.
+For multi-stack commands: Stack configs are only processed when `processStacks=true`, creating a timing issue that required Approach 2 (Stack Loading) to solve.
 
 ## Solution
 
@@ -135,13 +135,13 @@ if err == nil {
 authManager, err := CreateAuthManagerFromIdentity(identityName, mergedAuthConfig)
 ```
 
-### Approach 2: Stack Scanning (for commands without specific component)
+### Approach 2: Stack Loading (for commands without specific component)
 
 For commands that operate on multiple stacks/components (e.g., `describe stacks`, `describe affected`),
-we perform a lightweight pre-scan of stack configurations to extract auth identity defaults:
+we perform a lightweight pre-load of stack configurations to extract auth identity defaults:
 
-1. **Stack auth scanner** (`pkg/config/stack_auth_scanner.go`):
-   - Scans stack manifest files for `auth.identities.*.default: true`
+1. **Stack auth loader** (`pkg/config/stack_auth_loader.go`):
+   - Loads stack manifest files for `auth.identities.*.default: true`
    - Uses minimal YAML parsing without template/function processing
    - Returns a map of identity names to their default status
 
@@ -158,8 +158,8 @@ we perform a lightweight pre-scan of stack configurations to extract auth identi
 ### Key Files Changed
 
 **New Files:**
-- `pkg/config/stack_auth_scanner.go` - Scanner for stack-level auth defaults
-- `pkg/config/stack_auth_scanner_test.go` - Unit tests for scanner
+- `pkg/config/stack_auth_loader.go` - Loader for stack-level auth defaults
+- `pkg/config/stack_auth_loader_test.go` - Unit tests for loader
 
 **Commands Using Component Auth Merge (Approach 1):**
 - `cmd/describe_component.go` - Uses terraform.go pattern with `ExecuteDescribeComponent` + `MergeComponentAuthFromConfig`
@@ -170,7 +170,7 @@ we perform a lightweight pre-scan of stack configurations to extract auth identi
 - `cmd/describe_affected.go` - Uses `CreateAuthManagerFromIdentityWithAtmosConfig`
 - `cmd/describe_dependents.go` - Uses `CreateAuthManagerFromIdentityWithAtmosConfig`
 - `cmd/list/instances.go` - Uses `CreateAndAuthenticateManagerWithAtmosConfig`
-- `internal/exec/workflow_utils.go` - Scans stack defaults when creating AuthManager
+- `internal/exec/workflow_utils.go` - Loads stack defaults when creating AuthManager
 
 **Updated Internal Execution:**
 - `internal/exec/terraform_nested_auth_helper.go` - Resolves AuthManager for nested component references in YAML functions using Approach 1
@@ -182,7 +182,7 @@ we perform a lightweight pre-scan of stack configurations to extract auth identi
 ## Testing
 
 ### Unit Tests
-- `pkg/config/stack_auth_scanner_test.go` - Scanner logic tests
+- `pkg/config/stack_auth_loader_test.go` - Loader logic tests
 - `pkg/auth/manager_helpers_test.go` - Integration with auth manager
 
 ### Integration Tests
@@ -195,7 +195,7 @@ we perform a lightweight pre-scan of stack configurations to extract auth identi
 - `atmos describe component` - Has specific component+stack
 - `atmos terraform *` (all terraform subcommands) - Has specific component+stack
 
-### CLI Commands Using Stack Scanning (Approach 2)
+### CLI Commands Using Stack Loading (Approach 2)
 - `atmos describe stacks` - Operates on multiple stacks/components
 - `atmos describe affected` - Operates on all affected components
 - `atmos describe dependents` - Operates on multiple stacks
@@ -207,4 +207,4 @@ we perform a lightweight pre-scan of stack configurations to extract auth identi
 - For nested component references, uses Approach 1 (Component Auth Merge) via `resolveAuthManagerForNestedComponent()`
 
 ### Workflows
-- Workflow execution scans for stack-level defaults when no explicit identity is specified (uses Approach 2)
+- Workflow execution loads stack-level defaults when no explicit identity is specified (uses Approach 2)

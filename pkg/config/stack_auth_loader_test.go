@@ -11,18 +11,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestScanStackAuthDefaults_EmptyIncludePaths(t *testing.T) {
+func TestLoadStackAuthDefaults_EmptyIncludePaths(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		IncludeStackAbsolutePaths: []string{},
 	}
 
-	defaults, err := ScanStackAuthDefaults(atmosConfig)
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
 
 	require.NoError(t, err)
 	assert.Empty(t, defaults)
 }
 
-func TestScanStackAuthDefaults_WithStackFiles(t *testing.T) {
+func TestLoadStackAuthDefaults_WithStackFiles(t *testing.T) {
 	// Create a temporary directory with stack files.
 	tmpDir := t.TempDir()
 
@@ -44,7 +44,7 @@ auth:
 		ExcludeStackAbsolutePaths: []string{},
 	}
 
-	defaults, err := ScanStackAuthDefaults(atmosConfig)
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
 
 	require.NoError(t, err)
 	assert.Len(t, defaults, 1)
@@ -52,7 +52,7 @@ auth:
 	assert.False(t, defaults["other-identity"]) // Not present or false.
 }
 
-func TestScanStackAuthDefaults_MultipleFiles(t *testing.T) {
+func TestLoadStackAuthDefaults_MultipleFiles(t *testing.T) {
 	// Create a temporary directory with multiple stack files.
 	tmpDir := t.TempDir()
 
@@ -81,7 +81,7 @@ auth:
 		ExcludeStackAbsolutePaths: []string{},
 	}
 
-	defaults, err := ScanStackAuthDefaults(atmosConfig)
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
 
 	require.NoError(t, err)
 	assert.Len(t, defaults, 2)
@@ -89,7 +89,7 @@ auth:
 	assert.True(t, defaults["identity-b"])
 }
 
-func TestScanStackAuthDefaults_ExcludePaths(t *testing.T) {
+func TestLoadStackAuthDefaults_ExcludePaths(t *testing.T) {
 	// Create a temporary directory with stack files.
 	tmpDir := t.TempDir()
 
@@ -118,7 +118,7 @@ auth:
 		ExcludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "exclude.yaml")},
 	}
 
-	defaults, err := ScanStackAuthDefaults(atmosConfig)
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
 
 	require.NoError(t, err)
 	assert.Len(t, defaults, 1)
@@ -126,7 +126,7 @@ auth:
 	assert.False(t, defaults["excluded-identity"]) // Not present.
 }
 
-func TestScanStackAuthDefaults_NoAuthSection(t *testing.T) {
+func TestLoadStackAuthDefaults_NoAuthSection(t *testing.T) {
 	// Create a temporary directory with a stack file without auth section.
 	tmpDir := t.TempDir()
 
@@ -143,13 +143,13 @@ vars:
 		ExcludeStackAbsolutePaths: []string{},
 	}
 
-	defaults, err := ScanStackAuthDefaults(atmosConfig)
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
 
 	require.NoError(t, err)
 	assert.Empty(t, defaults)
 }
 
-func TestScanStackAuthDefaults_InvalidYAML(t *testing.T) {
+func TestLoadStackAuthDefaults_InvalidYAML(t *testing.T) {
 	// Create a temporary directory with an invalid YAML file.
 	tmpDir := t.TempDir()
 
@@ -168,15 +168,15 @@ auth:
 	}
 
 	// Should not error, just skip the invalid file.
-	defaults, err := ScanStackAuthDefaults(atmosConfig)
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
 
 	require.NoError(t, err)
 	assert.Empty(t, defaults)
 }
 
-func TestScanStackAuthDefaults_YAMLWithTemplates(t *testing.T) {
+func TestLoadStackAuthDefaults_YAMLWithTemplates(t *testing.T) {
 	// Create a temporary directory with a stack file containing Go templates.
-	// The scanner should handle files that can't be parsed due to templates.
+	// The loader should handle files that can't be parsed due to templates.
 	tmpDir := t.TempDir()
 
 	// YAML with Go template syntax that prevents parsing.
@@ -195,7 +195,7 @@ auth:
 	}
 
 	// Should not error, just skip files with templates.
-	defaults, err := ScanStackAuthDefaults(atmosConfig)
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
 
 	require.NoError(t, err)
 	assert.Empty(t, defaults)
@@ -313,20 +313,20 @@ func TestMergeStackAuthDefaults_IdentityNotInConfig(t *testing.T) {
 	assert.False(t, authConfig.Identities["other-identity"].Default)
 }
 
-func TestScanFileForAuthDefaults_NonYAMLFile(t *testing.T) {
+func TestLoadFileForAuthDefaults_NonYAMLFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a non-YAML file.
 	err := os.WriteFile(filepath.Join(tmpDir, "readme.md"), []byte("# README"), 0o644)
 	require.NoError(t, err)
 
-	defaults, err := scanFileForAuthDefaults(filepath.Join(tmpDir, "readme.md"))
+	defaults, err := loadFileForAuthDefaults(filepath.Join(tmpDir, "readme.md"))
 
 	require.NoError(t, err)
 	assert.Empty(t, defaults)
 }
 
-func TestScanFileForAuthDefaults_YMLExtension(t *testing.T) {
+func TestLoadFileForAuthDefaults_YMLExtension(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a .yml file with default identity.
@@ -339,7 +339,7 @@ auth:
 	err := os.WriteFile(filepath.Join(tmpDir, "test.yml"), []byte(content), 0o644)
 	require.NoError(t, err)
 
-	defaults, err := scanFileForAuthDefaults(filepath.Join(tmpDir, "test.yml"))
+	defaults, err := loadFileForAuthDefaults(filepath.Join(tmpDir, "test.yml"))
 
 	require.NoError(t, err)
 	assert.Len(t, defaults, 1)
@@ -382,9 +382,9 @@ auth:
 	assert.Len(t, files, 1)
 }
 
-func TestScanFileForAuthDefaults_ReadError(t *testing.T) {
+func TestLoadFileForAuthDefaults_ReadError(t *testing.T) {
 	// Try to read a non-existent file.
-	defaults, err := scanFileForAuthDefaults("/nonexistent/path/test.yaml")
+	defaults, err := loadFileForAuthDefaults("/nonexistent/path/test.yaml")
 
 	require.Error(t, err)
 	assert.Nil(t, defaults)
@@ -439,7 +439,7 @@ func TestApplyStackDefaults_FalseDefault(t *testing.T) {
 	assert.True(t, authConfig.Identities["test-identity"].Default)
 }
 
-func TestScanStackAuthDefaults_FileReadError(t *testing.T) {
+func TestLoadStackAuthDefaults_FileReadError(t *testing.T) {
 	// Create a temporary directory.
 	tmpDir := t.TempDir()
 
@@ -463,7 +463,7 @@ auth:
 	}
 
 	// Should successfully scan valid file, skipping the directory.
-	defaults, err := ScanStackAuthDefaults(atmosConfig)
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
 
 	require.NoError(t, err)
 	// Should have found the default from the valid file.

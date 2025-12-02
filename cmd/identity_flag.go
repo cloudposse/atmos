@@ -131,7 +131,7 @@ func extractIdentityFromArgs(args []string) string {
 // This function delegates to auth.CreateAndAuthenticateManager to ensure consistent
 // authentication behavior across CLI commands and internal execution logic.
 //
-// Note: This function does not scan stack configs for default identities.
+// Note: This function does not load stack configs for default identities.
 // Use CreateAuthManagerFromIdentityWithAtmosConfig if you need stack-level default identity resolution.
 func CreateAuthManagerFromIdentity(
 	identityName string,
@@ -141,12 +141,12 @@ func CreateAuthManagerFromIdentity(
 }
 
 // CreateAuthManagerFromIdentityWithAtmosConfig creates and authenticates an AuthManager from an identity name.
-// This version accepts the full atmosConfig to enable scanning stack configs for default identities.
+// This version accepts the full atmosConfig to enable loading stack configs for default identities.
 //
 // When identityName is empty and atmosConfig is provided:
-//   - Scans stack configuration files for auth identity defaults
-//   - Merges stack-level defaults with atmos.yaml defaults
-//   - Stack defaults have lower priority than atmos.yaml defaults
+//   - Loads stack configuration files for auth identity defaults
+//   - Applies stack-level defaults on top of atmos.yaml defaults
+//   - When stack defaults are present, they override atmos.yaml identity defaults (stack > atmos.yaml)
 //
 // This solves the chicken-and-egg problem where:
 //   - We need to know the default identity to authenticate

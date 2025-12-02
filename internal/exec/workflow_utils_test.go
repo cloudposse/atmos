@@ -223,8 +223,8 @@ func TestCheckAndMergeDefaultIdentity(t *testing.T) {
 	}
 }
 
-// TestCheckAndMergeDefaultIdentity_WithStackScanning tests checkAndMergeDefaultIdentity with stack file scanning.
-func TestCheckAndMergeDefaultIdentity_WithStackScanning(t *testing.T) {
+// TestCheckAndMergeDefaultIdentity_WithStackLoading tests checkAndMergeDefaultIdentity with stack file loading.
+func TestCheckAndMergeDefaultIdentity_WithStackLoading(t *testing.T) {
 	// Create a temporary directory with stack files.
 	tmpDir := t.TempDir()
 
@@ -255,7 +255,7 @@ func TestCheckAndMergeDefaultIdentity_WithStackScanning(t *testing.T) {
 		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "*.yaml")},
 	}
 
-	// checkAndMergeDefaultIdentity should scan stack files and find the default.
+	// checkAndMergeDefaultIdentity should load stack files and find the default.
 	result := checkAndMergeDefaultIdentity(atmosConfig)
 	assert.True(t, result)
 
@@ -265,9 +265,9 @@ func TestCheckAndMergeDefaultIdentity_WithStackScanning(t *testing.T) {
 	assert.True(t, identity.Default)
 }
 
-// TestCheckAndMergeDefaultIdentity_ScanError tests behavior when stack scanning fails.
-func TestCheckAndMergeDefaultIdentity_ScanError(t *testing.T) {
-	// Create config with invalid include paths (will cause scan to return error).
+// TestCheckAndMergeDefaultIdentity_LoadError tests behavior when stack loading fails.
+func TestCheckAndMergeDefaultIdentity_LoadError(t *testing.T) {
+	// Create config with invalid include paths (will cause load to return error).
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth: schema.AuthConfig{
 			Identities: map[string]schema.Identity{
@@ -286,8 +286,8 @@ func TestCheckAndMergeDefaultIdentity_ScanError(t *testing.T) {
 	assert.True(t, result)
 }
 
-// TestCheckAndMergeDefaultIdentity_ScanErrorNoDefault tests behavior when stack scanning fails and no default in atmos.yaml.
-func TestCheckAndMergeDefaultIdentity_ScanErrorNoDefault(t *testing.T) {
+// TestCheckAndMergeDefaultIdentity_LoadErrorNoDefault tests behavior when stack loading fails and no default in atmos.yaml.
+func TestCheckAndMergeDefaultIdentity_LoadErrorNoDefault(t *testing.T) {
 	// Create config with invalid include paths and no default in atmos.yaml.
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth: schema.AuthConfig{

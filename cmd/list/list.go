@@ -2,12 +2,10 @@ package list
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // listCmd commands list stacks and components.
@@ -27,13 +25,10 @@ func init() {
 	// NOTE: NoOptDefVal is NOT used here to avoid Cobra parsing issues with commands
 	// that have positional arguments. When NoOptDefVal is set and a space-separated value
 	// is used (--identity value), Cobra misinterprets the value as a subcommand/positional arg.
+	//
+	// The ATMOS_IDENTITY environment variable binding is handled centrally by the global
+	// flag registry in pkg/flags/global_builder.go, so no explicit viper.BindEnv is needed here.
 	listCmd.PersistentFlags().StringP("identity", "i", "", "Specify the identity to authenticate with")
-
-	// Bind identity flag to ATMOS_IDENTITY and IDENTITY environment variables.
-	// This ensures users can set the identity via env var instead of --identity flag.
-	if err := viper.BindEnv("identity", "ATMOS_IDENTITY", "IDENTITY"); err != nil {
-		log.Trace("Failed to bind identity environment variables", "error", err)
-	}
 
 	// Attach all subcommands
 	listCmd.AddCommand(componentsCmd)

@@ -103,7 +103,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Create and authenticate AuthManager from --identity flag if specified.
 	// Uses merged auth config that includes both global and component-specific identities/defaults.
 	// This enables YAML template functions like !terraform.state to use authenticated credentials.
-	// Use WithAtmosConfig variant to enable stack-level default identity scanning.
+	// Use WithAtmosConfig variant to enable stack-level default identity loading.
 	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, &atmosConfig)
 	if err != nil {
 		// Special case: If user aborted (Ctrl+C), exit immediately without showing error.

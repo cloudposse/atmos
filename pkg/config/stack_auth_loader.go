@@ -15,7 +15,7 @@ import (
 // logKeyIdentity is the log key for identity-related messages.
 const logKeyIdentity = "identity"
 
-// stackAuthSection represents the minimal auth section structure for scanning.
+// stackAuthSection represents the minimal auth section structure for loading.
 type stackAuthSection struct {
 	Auth struct {
 		Identities map[string]struct {
@@ -24,11 +24,11 @@ type stackAuthSection struct {
 	} `yaml:"auth"`
 }
 
-// ScanStackAuthDefaults scans stack configuration files for auth identity defaults.
-// This is a lightweight scan that doesn't process templates or YAML functions.
+// LoadStackAuthDefaults loads stack configuration files for auth identity defaults.
+// This is a lightweight load that doesn't process templates or YAML functions.
 // It returns a map of identity names to their default status found in stack configs.
 //
-// The scan looks for:
+// The loader looks for:
 //
 //	auth:
 //	  identities:
@@ -38,27 +38,27 @@ type stackAuthSection struct {
 // This function is used to resolve stack-level default identities before full stack processing,
 // solving the chicken-and-egg problem where we need to know the default identity to authenticate,
 // but stack configs are only loaded after authentication is configured.
-func ScanStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]bool, error) {
-	defer perf.Track(atmosConfig, "config.ScanStackAuthDefaults")()
+func LoadStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]bool, error) {
+	defer perf.Track(atmosConfig, "config.LoadStackAuthDefaults")()
 
 	defaults := make(map[string]bool)
 
 	// If no include paths configured, return empty.
 	if len(atmosConfig.IncludeStackAbsolutePaths) == 0 {
-		log.Debug("No stack include paths configured, skipping auth default scan")
+		log.Debug("No stack include paths configured, skipping auth default load")
 		return defaults, nil
 	}
 
 	// Get all stack config files.
 	stackFiles := getAllStackFiles(atmosConfig.IncludeStackAbsolutePaths, atmosConfig.ExcludeStackAbsolutePaths)
 
-	log.Debug("Scanning stack files for auth defaults", "count", len(stackFiles))
+	log.Debug("Loading stack files for auth defaults", "count", len(stackFiles))
 
-	// Scan each file for auth defaults.
+	// Load each file for auth defaults.
 	for _, filePath := range stackFiles {
-		fileDefaults, err := scanFileForAuthDefaults(filePath)
+		fileDefaults, err := loadFileForAuthDefaults(filePath)
 		if err != nil {
-			log.Debug("Failed to scan file for auth defaults", "file", filePath, "error", err)
+			log.Debug("Failed to load file for auth defaults", "file", filePath, "error", err)
 			continue // Non-fatal: skip this file.
 		}
 
@@ -116,9 +116,9 @@ func getAllStackFiles(includePaths, excludePaths []string) []string {
 	return filtered
 }
 
-// scanFileForAuthDefaults reads a single YAML file and extracts auth identity defaults.
+// loadFileForAuthDefaults reads a single YAML file and extracts auth identity defaults.
 // Returns a map of identity name to default status.
-func scanFileForAuthDefaults(filePath string) (map[string]bool, error) {
+func loadFileForAuthDefaults(filePath string) (map[string]bool, error) {
 	defaults := make(map[string]bool)
 
 	// Only process YAML files.

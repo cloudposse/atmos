@@ -13,7 +13,7 @@ Previously, Atmos could not recognize default identities set in stack configs be
 
 ## The Solution
 
-Atmos now performs a lightweight pre-scan of stack config files to find auth
+Atmos now performs a lightweight pre-load of stack config files to find auth
 identity defaults BEFORE full stack processing. This allows stack-level defaults
 to be recognized.
 
@@ -41,5 +41,5 @@ When running `atmos describe component test-component -s test-ue2-dev`:
 ## Related
 
 - `docs/fixes/stack-level-default-auth-identity.md` - Full issue documentation
-- `pkg/config/stack_auth_scanner.go` - The scanner implementation
+- `pkg/config/stack_auth_loader.go` - The loader implementation
 - `pkg/auth/manager_helpers.go` - Integration with auth manager

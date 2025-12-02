@@ -72,7 +72,7 @@ func getRunnableDescribeStacksCmd(
 		}
 
 		// Get identity from flag and create AuthManager if provided.
-		// Use the WithAtmosConfig variant to enable stack-level default identity scanning.
+		// Use the WithAtmosConfig variant to enable stack-level default identity loading.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
 		authManager, err := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &atmosConfig.Auth, &atmosConfig)
 		if err != nil {

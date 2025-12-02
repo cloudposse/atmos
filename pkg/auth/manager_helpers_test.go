@@ -876,7 +876,7 @@ func TestAutoDetectDefaultIdentity_UserAbortPropagation(t *testing.T) {
 	assert.ErrorIs(t, wrappedErr, errUtils.ErrUserAborted, "Wrapped ErrUserAborted should still be identifiable")
 }
 
-// Tests for CreateAndAuthenticateManagerWithAtmosConfig and stack auth scanning.
+// Tests for CreateAndAuthenticateManagerWithAtmosConfig and stack auth loading.
 
 func TestCreateAndAuthenticateManagerWithAtmosConfig_NilAtmosConfig(t *testing.T) {
 	// When atmosConfig is nil, should behave exactly like CreateAndAuthenticateManager.
@@ -909,12 +909,12 @@ func TestCreateAndAuthenticateManagerWithAtmosConfig_NilAtmosConfig(t *testing.T
 	manager, err := CreateAndAuthenticateManagerWithAtmosConfig("", authConfig, "__SELECT__", nil)
 
 	assert.NoError(t, err, "Should not error when no default identity")
-	assert.Nil(t, manager, "Manager should be nil when no default identity and no stack scanning")
+	assert.Nil(t, manager, "Manager should be nil when no default identity and no stack loading")
 }
 
 func TestCreateAndAuthenticateManagerWithAtmosConfig_SkipsWhenAtmosConfigDefault(t *testing.T) {
 	// When an identity already has default: true in authConfig (from atmos.yaml),
-	// the stack scanning should be skipped to avoid unnecessary file I/O.
+	// the stack loading should be skipped to avoid unnecessary file I/O.
 	authConfig := &schema.AuthConfig{
 		Providers: map[string]schema.Provider{
 			"test-provider": {
@@ -957,7 +957,7 @@ func TestCreateAndAuthenticateManagerWithAtmosConfig_SkipsWhenAtmosConfigDefault
 	}
 }
 
-func TestScanAndMergeStackAuthDefaults_ExistingDefault_NoStackFiles(t *testing.T) {
+func TestLoadAndMergeStackAuthDefaults_ExistingDefault_NoStackFiles(t *testing.T) {
 	// When authConfig has a default and no stack files exist, default should be preserved.
 	authConfig := &schema.AuthConfig{
 		Identities: map[string]schema.Identity{
@@ -970,14 +970,14 @@ func TestScanAndMergeStackAuthDefaults_ExistingDefault_NoStackFiles(t *testing.T
 	}
 
 	// Should scan but find no files, so atmos.yaml default is preserved
-	scanAndMergeStackAuthDefaults(authConfig, atmosConfig)
+	loadAndMergeStackAuthDefaults(authConfig, atmosConfig)
 
 	// Identity should still have default: true (no stack files to override)
 	assert.True(t, authConfig.Identities["test-identity"].Default)
 }
 
-func TestScanAndMergeStackAuthDefaults_NoExistingDefault(t *testing.T) {
-	// When authConfig has no default, scanAndMergeStackAuthDefaults should scan.
+func TestLoadAndMergeStackAuthDefaults_NoExistingDefault(t *testing.T) {
+	// When authConfig has no default, loadAndMergeStackAuthDefaults should scan.
 	authConfig := &schema.AuthConfig{
 		Identities: map[string]schema.Identity{
 			"test-identity": {Kind: "aws/assume-role", Default: false},
@@ -990,13 +990,13 @@ func TestScanAndMergeStackAuthDefaults_NoExistingDefault(t *testing.T) {
 	}
 
 	// Should not error, just find no defaults
-	scanAndMergeStackAuthDefaults(authConfig, atmosConfig)
+	loadAndMergeStackAuthDefaults(authConfig, atmosConfig)
 
 	// Identity should still not have default set (no stack defaults found)
 	assert.False(t, authConfig.Identities["test-identity"].Default)
 }
 
-func TestScanAndMergeStackAuthDefaults_WithStackFiles(t *testing.T) {
+func TestLoadAndMergeStackAuthDefaults_WithStackFiles(t *testing.T) {
 	// Create a temporary directory with stack files.
 	tmpDir := t.TempDir()
 
@@ -1021,14 +1021,14 @@ func TestScanAndMergeStackAuthDefaults_WithStackFiles(t *testing.T) {
 	}
 
 	// Should scan and find the default
-	scanAndMergeStackAuthDefaults(authConfig, atmosConfig)
+	loadAndMergeStackAuthDefaults(authConfig, atmosConfig)
 
 	// Identity should now have default set from stack config
 	assert.True(t, authConfig.Identities["stack-identity"].Default)
 }
 
-func TestScanAndMergeStackAuthDefaults_ScanError(t *testing.T) {
-	// When scanning fails, should gracefully handle the error.
+func TestLoadAndMergeStackAuthDefaults_LoadError(t *testing.T) {
+	// When loading fails, should gracefully handle the error.
 	authConfig := &schema.AuthConfig{
 		Identities: map[string]schema.Identity{
 			"test-identity": {Kind: "aws/assume-role", Default: true},
@@ -1041,7 +1041,7 @@ func TestScanAndMergeStackAuthDefaults_ScanError(t *testing.T) {
 	}
 
 	// Should not panic, should gracefully return after logging error
-	scanAndMergeStackAuthDefaults(authConfig, atmosConfig)
+	loadAndMergeStackAuthDefaults(authConfig, atmosConfig)
 
 	// Default should be preserved (scan failed, so no change)
 	assert.True(t, authConfig.Identities["test-identity"].Default)

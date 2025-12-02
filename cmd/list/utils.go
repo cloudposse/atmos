@@ -140,13 +140,13 @@ func getIdentityFromCommand(cmd *cobra.Command) string {
 
 // createAuthManagerForList creates an AuthManager for list commands.
 // It uses the identity from --identity flag or ATMOS_IDENTITY env var.
-// If no identity is specified, it scans stack configs for default identity.
+// If no identity is specified, it loads stack configs for default identity.
 // Returns nil AuthManager if no auth is configured (which is valid for many use cases).
 func createAuthManagerForList(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
 	identityName := getIdentityFromCommand(cmd)
 
-	// Create AuthManager with stack-level default identity scanning.
-	// When identityName is empty, this scans stack configs for auth.identities.*.default: true.
+	// Create AuthManager with stack-level default identity loading.
+	// When identityName is empty, this loads stack configs for auth.identities.*.default: true.
 	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
 		identityName,
 		&atmosConfig.Auth,

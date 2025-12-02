@@ -74,8 +74,8 @@ func checkAndMergeDefaultIdentity(atmosConfig *schema.AtmosConfiguration) bool {
 		return false
 	}
 
-	// Always scan stack configs - stack defaults take precedence over atmos.yaml.
-	stackDefaults, err := config.ScanStackAuthDefaults(atmosConfig)
+	// Always load stack configs - stack defaults take precedence over atmos.yaml.
+	stackDefaults, err := config.LoadStackAuthDefaults(atmosConfig)
 	if err != nil {
 		// On error, fall back to checking atmos.yaml defaults.
 		for _, identity := range atmosConfig.Auth.Identities {

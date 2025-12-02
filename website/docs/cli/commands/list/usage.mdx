@@ -176,7 +176,7 @@ ATMOS_IDENTITY=my-aws-identity atmos list components
 
 ### Stack-Level Default Identity
 
-When neither the `--identity` flag nor environment variable is set, Atmos automatically scans your stack configuration files for a default identity configured with `default: true`:
+When neither the `--identity` flag nor environment variable is set, Atmos automatically loads your stack configuration files to find a default identity configured with `default: true`:
 
 ```yaml
 # In stacks/orgs/acme/_defaults.yaml
