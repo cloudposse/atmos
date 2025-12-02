@@ -285,3 +285,127 @@ func TestCheckAndMergeDefaultIdentity_ScanError(t *testing.T) {
 	result := checkAndMergeDefaultIdentity(atmosConfig)
 	assert.True(t, result)
 }
+
+// TestCheckAndMergeDefaultIdentity_ScanErrorNoDefault tests behavior when stack scanning fails and no default in atmos.yaml.
+func TestCheckAndMergeDefaultIdentity_ScanErrorNoDefault(t *testing.T) {
+	// Create config with invalid include paths and no default in atmos.yaml.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"test-identity": {
+					Kind:    "aws/assume-role",
+					Default: false, // No default in atmos.yaml.
+				},
+			},
+		},
+		// Invalid path that will cause glob to return error.
+		IncludeStackAbsolutePaths: []string{"/nonexistent/path/[invalid/glob"},
+	}
+
+	// Should return false because no default anywhere.
+	result := checkAndMergeDefaultIdentity(atmosConfig)
+	assert.False(t, result)
+}
+
+// TestCheckAndMergeDefaultIdentity_StackNoDefaults tests with stack files that have no defaults.
+func TestCheckAndMergeDefaultIdentity_StackNoDefaults(t *testing.T) {
+	// Create a temporary directory with stack files that have no defaults.
+	tmpDir := t.TempDir()
+
+	// Create a stack file without default identity.
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	err := os.MkdirAll(stacksDir, 0o755)
+	assert.NoError(t, err)
+
+	stackContent := `auth:
+  identities:
+    some-identity:
+      kind: aws/assume-role
+`
+	err = os.WriteFile(filepath.Join(stacksDir, "_defaults.yaml"), []byte(stackContent), 0o644)
+	assert.NoError(t, err)
+
+	// Create atmos config with identity but no default.
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Auth: schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"test-identity": {
+					Kind:    "aws/assume-role",
+					Default: false,
+				},
+			},
+		},
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "*.yaml")},
+	}
+
+	// Should return false because no default in either atmos.yaml or stack configs.
+	result := checkAndMergeDefaultIdentity(atmosConfig)
+	assert.False(t, result)
+}
+
+// TestCheckAndMergeDefaultIdentity_EmptyStackDefaults tests with empty stack defaults.
+func TestCheckAndMergeDefaultIdentity_EmptyStackDefaults(t *testing.T) {
+	// Create a temporary directory with empty stack files.
+	tmpDir := t.TempDir()
+
+	// Create an empty stack file.
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	err := os.MkdirAll(stacksDir, 0o755)
+	assert.NoError(t, err)
+
+	stackContent := `# Empty stack file
+`
+	err = os.WriteFile(filepath.Join(stacksDir, "_defaults.yaml"), []byte(stackContent), 0o644)
+	assert.NoError(t, err)
+
+	// Create atmos config with identity but no default.
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Auth: schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"test-identity": {
+					Kind:    "aws/assume-role",
+					Default: false,
+				},
+			},
+		},
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "*.yaml")},
+	}
+
+	// Should return false because no default anywhere.
+	result := checkAndMergeDefaultIdentity(atmosConfig)
+	assert.False(t, result)
+}
+
+// TestKnownWorkflowErrorsSlice tests that the KnownWorkflowErrors slice is properly defined.
+func TestKnownWorkflowErrorsSlice(t *testing.T) {
+	// Verify all expected errors are in the slice.
+	expectedErrors := []error{
+		ErrWorkflowNoSteps,
+		ErrInvalidWorkflowStepType,
+		ErrInvalidFromStep,
+		ErrWorkflowStepFailed,
+		ErrWorkflowNoWorkflow,
+		ErrWorkflowFileNotFound,
+		ErrInvalidWorkflowManifest,
+	}
+
+	assert.Equal(t, len(expectedErrors), len(KnownWorkflowErrors))
+
+	for _, expected := range expectedErrors {
+		found := false
+		for _, actual := range KnownWorkflowErrors {
+			if errors.Is(expected, actual) {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "Expected error %v to be in KnownWorkflowErrors", expected)
+	}
+}
+
+// TestWorkflowErrTitle tests the error title constant.
+func TestWorkflowErrTitle(t *testing.T) {
+	assert.Equal(t, "Workflow Error", WorkflowErrTitle)
+}

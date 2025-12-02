@@ -257,6 +257,86 @@ func TestGetComponentFilter(t *testing.T) {
 	}
 }
 
+// TestValidateComponentFilter tests the validateComponentFilter function.
+func TestValidateComponentFilter(t *testing.T) {
+	testCases := []struct {
+		name            string
+		componentFilter string
+		expectError     bool
+	}{
+		{
+			name:            "empty filter returns no error",
+			componentFilter: "",
+			expectError:     false,
+		},
+		// Note: Testing with actual component requires a valid atmosConfig setup
+		// which would be an integration test. Unit tests focus on the empty case.
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// For the empty filter case, we don't need a real config
+			if tc.componentFilter == "" {
+				err := validateComponentFilter(nil, tc.componentFilter)
+				if tc.expectError {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+				}
+			}
+		})
+	}
+}
+
+// TestStackFlagCompletion tests the stackFlagCompletion function behavior.
+func TestStackFlagCompletion(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+
+	// Test with empty args - this will try to list all stacks
+	// In unit test context without valid config, it should return ShellCompDirectiveNoFileComp
+	_, directive := stackFlagCompletion(cmd, []string{}, "")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+
+	// Test with component arg - this will try to list stacks for component
+	// In unit test context without valid config, it should return ShellCompDirectiveNoFileComp
+	_, directive = stackFlagCompletion(cmd, []string{"mycomponent"}, "")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestNewCommonListParser_FlagsRegistered tests that expected flags are registered.
+func TestNewCommonListParser_FlagsRegistered(t *testing.T) {
+	parser := newCommonListParser()
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	// Verify expected flags exist
+	expectedFlags := []string{"format", "max-columns", "delimiter", "stack", "query"}
+	for _, flagName := range expectedFlags {
+		flag := cmd.Flags().Lookup(flagName)
+		assert.NotNil(t, flag, "Expected flag %s to be registered", flagName)
+	}
+}
+
+// TestNewCommonListParser_WithAdditionalFlags tests parser with additional flags.
+func TestNewCommonListParser_WithAdditionalFlags(t *testing.T) {
+	parser := newCommonListParser(
+		flags.WithBoolFlag("upload", "", false, "Upload flag"),
+		flags.WithStringFlag("custom", "c", "default", "Custom flag"),
+	)
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	// Verify additional flags exist
+	uploadFlag := cmd.Flags().Lookup("upload")
+	assert.NotNil(t, uploadFlag, "Expected upload flag to be registered")
+	assert.Equal(t, "false", uploadFlag.DefValue)
+
+	customFlag := cmd.Flags().Lookup("custom")
+	assert.NotNil(t, customFlag, "Expected custom flag to be registered")
+	assert.Equal(t, "default", customFlag.DefValue)
+	assert.Equal(t, "c", customFlag.Shorthand)
+}
+
 // TestHandleNoValuesError tests the handleNoValuesError function.
 func TestHandleNoValuesError(t *testing.T) {
 	testCases := []struct {
