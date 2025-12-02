@@ -1,4 +1,4 @@
-# Stack-Level Default Identity Not Recognized
+# Stack-Level Default Auth Identity Not Recognized
 
 ## Issue Summary
 
