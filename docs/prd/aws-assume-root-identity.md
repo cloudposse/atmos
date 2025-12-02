@@ -12,7 +12,7 @@
 
 The `aws/assume-root` identity kind enables Atmos users to leverage AWS's centralized root access feature via the `sts:AssumeRoot` API. This allows organizations that have enabled centralized root access to perform privileged root-level operations (such as deleting root credentials in delegated accounts) through a single permission set in the management account, rather than managing individual root credentials across all member accounts.
 
-**Use Case**: Organizations implementing AWS best practices for centralized root access can use `atmos auth exec --identity core-audit/iam-audit-root-access` to assume root-level privileges on member accounts for specific task policies, enabling operations like credential auditing, root password management, and S3/SQS bucket policy unlocking.
+**Use Case**: Organizations implementing AWS best practices for centralized root access can use `atmos auth exec --identity core-audit/iam-audit-root-access` to assume root-level privileges on member accounts. This enables specific task policies for operations like credential auditing, root password management, and S3/SQS bucket policy unlocking.
 
 ## Problem Statement
 
@@ -143,10 +143,10 @@ auth:
 ```
 
 **Implementation**:
-- Add `"aws/assume-root"` case to `factory.NewIdentity()`
-- Create `awsIdentities.NewAssumeRootIdentity()` constructor
-- Add constant `IdentityKindAWSAssumeRoot = "aws/assume-root"` to `types/constants.go`
-
+**Implementation**:
+- Add `"aws/assume-root"` case to `factory.NewIdentity()`.
+- Create `awsIdentities.NewAssumeRootIdentity()` constructor.
+- Add constant `IdentityKindAWSAssumeRoot = "aws/assume-root"` to `types/constants.go`.
 ### FR-2: Principal Configuration
 
 **Requirement**: Support required and optional principal fields
@@ -168,6 +168,7 @@ auth:
 **Requirement**: Support all AWS-managed root task policies
 
 **Supported Task Policies**:
+
 | Task Policy ARN | Description |
 |-----------------|-------------|
 | `arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials` | Audit root user credentials (MFA, access keys, etc.) |
@@ -189,7 +190,10 @@ auth:
 1. Authenticate via parent identity (permission set with `sts:AssumeRoot`)
 2. Call `sts.AssumeRoot()` with target principal and task policy
 3. Extract temporary credentials from response
-4. Return `AWSCredentials` with scoped root access
+3. Extract temporary credentials from response
+4. Return `AWSCredentials` with scoped root access.
+
+**Error Handling**:
 
 **Error Handling**:
 - `AccessDenied`: Permission set lacks `sts:AssumeRoot` permission
@@ -549,7 +553,7 @@ func TestAssumeRoot_ShellEnvironment(t *testing.T)
 **Risk**: AWS SDK may not have `AssumeRoot` API support yet
 **Impact**: High
 **Probability**: Low (API is GA)
-**Mitigation**: Verify SDK v2 includes `sts.AssumeRoot()`; if not, use raw API call
+**Mitigation**: Verify SDK v2 includes `sts.AssumeRoot()`; if not, use raw API call.
 
 ### Risk 2: Centralized Root Access Prerequisites
 
