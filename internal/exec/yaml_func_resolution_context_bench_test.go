@@ -57,13 +57,7 @@ func BenchmarkGetOrCreateResolutionContext(b *testing.B) {
 	}
 }
 
-// BenchmarkGetGoroutineID benchmarks goroutine ID extraction.
-func BenchmarkGetGoroutineID(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = getGoroutineID()
-	}
-}
+// BenchmarkGetGoroutineID is removed - getGoroutineID is now internal to pkg/function/resolution.
 
 // BenchmarkResolutionContextClone benchmarks context cloning.
 func BenchmarkResolutionContextClone(b *testing.B) {
