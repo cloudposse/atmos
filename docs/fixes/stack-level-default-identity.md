@@ -212,6 +212,7 @@ we perform a lightweight pre-scan of stack configurations to extract auth identi
 - `atmos describe stacks` - Operates on multiple stacks/components
 - `atmos describe affected` - Operates on all affected components
 - `atmos describe dependents` - Operates on multiple stacks
+- `atmos list instances` - Lists all instances across stacks
 
 ### YAML Functions
 - `!terraform.state` - Now respects stack-level default identity (uses Approach 2)

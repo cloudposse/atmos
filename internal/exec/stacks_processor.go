@@ -1,6 +1,9 @@
 package exec
 
-import "github.com/cloudposse/atmos/pkg/schema"
+import (
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
 
 // StacksProcessor defines operations for processing stack manifests.
 //
@@ -18,6 +21,7 @@ type StacksProcessor interface {
 		processYamlFunctions bool,
 		includeEmptyStacks bool,
 		skip []string,
+		authManager auth.AuthManager,
 	) (map[string]any, error)
 }
 
@@ -38,6 +42,7 @@ func (d *DefaultStacksProcessor) ExecuteDescribeStacks(
 	processYamlFunctions bool,
 	includeEmptyStacks bool,
 	skip []string,
+	authManager auth.AuthManager,
 ) (map[string]any, error) {
 	return ExecuteDescribeStacks(
 		atmosConfig,
@@ -50,6 +55,6 @@ func (d *DefaultStacksProcessor) ExecuteDescribeStacks(
 		processYamlFunctions,
 		includeEmptyStacks,
 		skip,
-		nil, // AuthManager - not needed for internal stack processing
+		authManager,
 	)
 }
