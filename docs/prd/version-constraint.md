@@ -276,7 +276,20 @@ ATMOS_VERSION_ENFORCEMENT=silent atmos terraform plan
 
 **File Changes:**
 
-1. **`pkg/schema/version.go`** - Add `VersionConstraint` struct
+1. **`errors/errors.go`** - Add sentinel errors for version constraint validation
+   ```go
+   // Version constraint errors.
+   var (
+       // ErrVersionConstraint indicates the current Atmos version does not satisfy
+       // the version constraint specified in atmos.yaml.
+       ErrVersionConstraint = errors.New("version constraint not satisfied")
+
+       // ErrInvalidVersionConstraint indicates the version constraint syntax is invalid.
+       ErrInvalidVersionConstraint = errors.New("invalid version constraint")
+   )
+   ```
+
+2. **`pkg/schema/version.go`** - Add `VersionConstraint` struct
    ```go
    type VersionConstraint struct {
        Require     string `yaml:"require,omitempty" mapstructure:"require" json:"require,omitempty"`
@@ -290,7 +303,7 @@ ATMOS_VERSION_ENFORCEMENT=silent atmos terraform plan
    }
    ```
 
-2. **`pkg/version/constraint.go`** (new file) - Validation logic
+3. **`pkg/version/constraint.go`** (new file) - Validation logic (returns errors, no deep exits)
    ```go
    package version
 
@@ -321,7 +334,7 @@ ATMOS_VERSION_ENFORCEMENT=silent atmos terraform plan
    }
    ```
 
-3. **`pkg/version/constraint_test.go`** (new file) - Comprehensive tests
+4. **`pkg/version/constraint_test.go`** (new file) - Comprehensive tests
    ```go
    package version
 
@@ -426,7 +439,7 @@ ATMOS_VERSION_ENFORCEMENT=silent atmos terraform plan
    }
    ```
 
-4. **`cmd/cmd_utils.go`** - Add validation call in `initConfig()`
+5. **`cmd/cmd_utils.go`** - Add validation call in `initConfig()`
    ```go
    // Add after config is loaded, before any command execution
    func initConfig() error {
@@ -440,6 +453,8 @@ ATMOS_VERSION_ENFORCEMENT=silent atmos terraform plan
        return nil
    }
 
+   // validateVersionConstraint uses the Atmos error builder pattern.
+   // No deep exits - all errors are returned for proper propagation.
    func validateVersionConstraint(cfg *schema.AtmosConfiguration) error {
        constraint := cfg.Version.Constraint
 
@@ -464,34 +479,52 @@ ATMOS_VERSION_ENFORCEMENT=silent atmos terraform plan
            return nil
        }
 
-       // Validate constraint
+       // Validate constraint syntax
        satisfied, err := version.ValidateConstraint(constraint.Require)
        if err != nil {
-           // Invalid constraint syntax is always fatal
-           return fmt.Errorf("invalid version constraint in configuration: %w", err)
+           // Invalid constraint syntax is always fatal - use error builder
+           return errUtils.Build(errUtils.ErrInvalidVersionConstraint).
+               WithHint("Please use valid semver constraint syntax").
+               WithHint("Reference: https://github.com/hashicorp/go-version").
+               WithContext("constraint", constraint.Require).
+               WithExitCode(1).
+               Wrap(err)
        }
 
        if !satisfied {
-           // Build error message
-           msg := constraint.Message
-           if msg == "" {
-               msg = fmt.Sprintf(
-                   "This configuration requires Atmos version %s.\nPlease upgrade: https://atmos.tools/install",
-                   constraint.Require,
-               )
+           // Build hints for error message
+           hints := []string{
+               fmt.Sprintf("This configuration requires Atmos version %s", constraint.Require),
+               "Please upgrade: https://atmos.tools/install",
            }
 
-           fullMsg := fmt.Sprintf(
-               "Atmos version constraint not satisfied\n  Required: %s\n  Current:  %s\n\n%s",
-               constraint.Require,
-               version.Version,
-               msg,
-           )
+           // Add custom message as hint if provided
+           if constraint.Message != "" {
+               hints = append(hints, constraint.Message)
+           }
 
            if enforcement == "fatal" {
-               return fmt.Errorf(fullMsg)
+               // Use error builder for proper error handling
+               builder := errUtils.Build(errUtils.ErrVersionConstraint).
+                   WithContext("required", constraint.Require).
+                   WithContext("current", version.Version).
+                   WithExitCode(1)
+
+               for _, hint := range hints {
+                   builder = builder.WithHint(hint)
+               }
+
+               return builder.Err()
            } else if enforcement == "warn" {
-               ui.Warning(fullMsg)
+               // Warnings still go to UI, but no error returned
+               ui.Warning(fmt.Sprintf(
+                   "Atmos version constraint not satisfied\n  Required: %s\n  Current:  %s",
+                   constraint.Require,
+                   version.Version,
+               ))
+               if constraint.Message != "" {
+                   ui.Warning(constraint.Message)
+               }
            }
        }
 
@@ -499,7 +532,7 @@ ATMOS_VERSION_ENFORCEMENT=silent atmos terraform plan
    }
    ```
 
-5. **`pkg/datafetcher/schema/atmos/1.0.json`** - Update JSON schema
+6. **`pkg/datafetcher/schema/atmos/1.0.json`** - Update JSON schema
    ```json
    {
      "version": {
@@ -658,6 +691,46 @@ VERSION   PUBLISHED            TYPE      NOTES
 
 ⚠ Some versions shown are outside your configuration's constraint: >=2.5.0, <3.0.0
   Use --constraint-aware to filter results
+```
+
+## Error Handling
+
+### No Deep Exits
+
+This feature uses the **Atmos error builder pattern** for all error handling. There are **no deep exits** (`os.Exit()`, `log.Fatal()`, etc.) in the implementation.
+
+All errors are propagated up the call stack using Go's standard error return pattern, allowing:
+- Proper error wrapping with context
+- Consistent error formatting via the error builder
+- Exit codes set via `errUtils.WithExitCode()`
+- Testability without mocking `os.Exit()`
+
+```go
+// CORRECT: Use error builder pattern
+func validateVersionConstraint(cfg *schema.AtmosConfiguration) error {
+    // ... validation logic ...
+
+    if !satisfied {
+        return errUtils.Build(errUtils.ErrVersionConstraint).
+            WithHint(fmt.Sprintf("This configuration requires Atmos version %s", constraint.Require)).
+            WithHint("Please upgrade: https://atmos.tools/install").
+            WithContext("required", constraint.Require).
+            WithContext("current", version.Version).
+            WithExitCode(1).
+            Err()
+    }
+    return nil
+}
+
+// WRONG: Never use deep exits
+func validateVersionConstraint(cfg *schema.AtmosConfiguration) {
+    // ... validation logic ...
+
+    if !satisfied {
+        fmt.Fprintf(os.Stderr, "Version mismatch\n")
+        os.Exit(1)  // ❌ NEVER do this
+    }
+}
 ```
 
 ## Error Messages

@@ -506,6 +506,46 @@ errors:
 ```
 </File>
 
+## Version Constraints
+
+Enforce Atmos version requirements to ensure consistent behavior across teams and environments.
+
+See [Version Constraints](/cli/configuration/version-constraints) for complete documentation.
+
+<File title="atmos.yaml">
+```yaml
+version:
+  # Check for new releases (existing feature)
+  check:
+    enabled: true
+    frequency: "24h"
+
+  # Enforce version requirements (new feature)
+  constraint:
+    require: ">=1.100.0, <2.0.0"
+    enforcement: "fatal"
+    message: "Please upgrade Atmos to use this configuration."
+```
+</File>
+
+<dl>
+  <dt>`version.constraint.require`</dt>
+  <dd>
+    Semver constraint for required Atmos version. Uses Terraform-compatible syntax.
+    Examples: `>=1.100.0`, `>=1.100.0, <2.0.0`, `~>1.100`.
+  </dd>
+
+  <dt>`version.constraint.enforcement`</dt>
+  <dd>
+    Behavior when constraint fails: `fatal` (exit with error), `warn` (log warning), `silent` (skip validation). Default: `fatal`.
+  </dd>
+
+  <dt>`version.constraint.message`</dt>
+  <dd>
+    Custom message to display when the constraint is not satisfied.
+  </dd>
+</dl>
+
 ## Workflows
 
 <File title="atmos.yaml">
@@ -1054,6 +1094,7 @@ setting `ATMOS_STACKS_BASE_PATH` to a path in `/localhost` to your local develop
 | ATMOS_PROFILE_TYPE                                    | profiler.profile_type                           | Type of profile to collect when using `ATMOS_PROFILE_FILE`. Options: `cpu`, `heap`, `allocs`, `goroutine`, `block`, `mutex`, `threadcreate`, `trace`. Default: `cpu`                                                                                              |
 | ATMOS_SETTINGS_LIST_MERGE_STRATEGY                    | settings.list_merge_strategy                    | Specifies how lists are merged in Atmos stack manifests. The following strategies are supported: `replace`, `append`, `merge`                                                                                                                                       |
 | ATMOS_VERSION_CHECK_ENABLED                           | version.check.enabled                           | Enable/disable Atmos version checks for updates to the newest release                                                                                                                                                                                               |
+| ATMOS_VERSION_ENFORCEMENT                             | version.constraint.enforcement                  | Override the version constraint enforcement level. Values: `fatal`, `warn`, `silent`. See [Version Constraints](/cli/configuration/version-constraints)                                                                                                             |
 | ATMOS_GITHUB_TOKEN                                    | N/A                                             | Bearer token for GitHub API requests, enabling authentication for private repositories and higher rate limits                                                                                                                                                       |
 | ATMOS_GITHUB_USERNAME                                 | settings.github_username                        | GitHub username for OCI registry authentication to ghcr.io. Falls back to GITHUB_ACTOR (GitHub Actions) or GITHUB_USERNAME if not set. Required when pulling from GitHub Container Registry                                                                        |
 | ATMOS_BITBUCKET_TOKEN                                 | N/A                                             | App password for Bitbucket API requests is set to avoid rate limits. Unauthenticated Requests are limited to 60 requests per hour across all API resources.                                                                                                         |

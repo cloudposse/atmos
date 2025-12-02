@@ -417,7 +417,7 @@ Follow template (what/why/references).
 **Blog Posts (CI Enforced):**
 - PRs labeled `minor`/`major` MUST include blog post: `website/blog/YYYY-MM-DD-feature-name.mdx`
 - Use `.mdx` with YAML front matter, `<!--truncate-->` after intro
-- Tags: User-facing (`feature`/`enhancement`/`bugfix`) or Contributors (`contributors`)
+- **ONLY use existing tags** - check `website/blog/*.mdx` for valid tags before writing
 - Author: committer's GitHub username, add to `website/blog/authors.yml`
 
 **Blog Template:**
@@ -433,11 +433,14 @@ Brief intro.
 ## What Changed / Why This Matters / How to Use It / Get Involved
 ```
 
-**Tag Reference:**
-- Primary: `feature`, `enhancement`, `bugfix`, `contributors`
-- Technical (contributor): `atmos-core`, `refactoring`, `testing`, `ci-cd`, `developer-experience`
-- Technical (user): `terraform`, `helmfile`, `workflows`, `validation`, `performance`, `cloud-architecture`
-- General: `announcements`, `breaking-changes`
+**Existing Tags (use only these):**
+- Primary: `feature`, `enhancement`, `bugfix`
+- Secondary: `dx`, `security`, `documentation`, `core`, `breaking-change`
+
+**Finding valid tags:**
+```bash
+grep -h "^  - " website/blog/*.mdx | sort | uniq -c | sort -rn
+```
 
 Use `no-release` label for docs-only changes.
 

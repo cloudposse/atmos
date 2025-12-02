@@ -1,0 +1,250 @@
+---
+title: Version Constraints
+sidebar_position: 10
+sidebar_label: Version Constraints
+description: Enforce Atmos version requirements in your configuration
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Version constraints allow you to specify required Atmos version ranges in your `atmos.yaml` configuration, ensuring consistent behavior across teams, CI/CD pipelines, and different environments.
+</Intro>
+
+## Overview
+
+When your configuration relies on specific Atmos features or behaviors, version constraints ensure that:
+
+- Team members use compatible Atmos versions
+- CI/CD pipelines fail early if the wrong version is installed
+- Newer configurations don't silently fail on older Atmos versions
+- Breaking changes are caught before causing confusing errors
+
+## Configuration
+
+Add a `version.constraint` section to your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+version:
+  constraint:
+    require: ">=1.100.0"
+    enforcement: "fatal"
+    message: "Please upgrade Atmos to use this configuration."
+```
+</File>
+
+<dl>
+  <dt>`version.constraint.require`</dt>
+  <dd>
+    A semver constraint string specifying the required Atmos version(s). Uses the same syntax as Terraform version constraints. Multiple constraints are comma-separated and combined with AND logic.
+  </dd>
+
+  <dt>`version.constraint.enforcement`</dt>
+  <dd>
+    Controls behavior when the constraint is not satisfied:
+    <dl>
+      <dt>`fatal` (default)</dt>
+      <dd>Exit immediately with error code 1</dd>
+      <dt>`warn`</dt>
+      <dd>Show a warning but continue execution</dd>
+      <dt>`silent`</dt>
+      <dd>Skip validation entirely (useful for debugging)</dd>
+    </dl>
+  </dd>
+
+  <dt>`version.constraint.message`</dt>
+  <dd>
+    Optional custom message displayed when the constraint fails. Use this to provide team-specific upgrade instructions or context.
+  </dd>
+</dl>
+
+## Constraint Syntax
+
+Version constraints use [hashicorp/go-version](https://github.com/hashicorp/go-version) syntax, which is the same as Terraform:
+
+| Constraint | Meaning | Example |
+|------------|---------|---------|
+| `>=1.2.3` | Greater than or equal | `>=1.100.0` |
+| `<=1.2.3` | Less than or equal | `<=1.200.0` |
+| `>1.2.3` | Greater than (exclusive) | `>1.99.0` |
+| `<1.2.3` | Less than (exclusive) | `<2.0.0` |
+| `1.2.3` | Exact version | `1.200.0` |
+| `!=1.2.3` | Not equal (exclude version) | `!=1.150.0` |
+| `~>1.2` | Pessimistic (>=1.2.0, &lt;2.0.0) | `~>1.100` |
+| `~>1.2.3` | Pessimistic (>=1.2.3, &lt;1.3.0) | `~>1.100.0` |
+| Multiple | Comma-separated AND | `>=1.100.0, <2.0.0` |
+
+### Pessimistic Constraint Operator
+
+The pessimistic constraint operator `~>` allows only the rightmost version component to increment:
+
+- `~>1.100` allows `1.100.0`, `1.150.0`, `1.200.0`, but not `2.0.0`
+- `~>1.100.0` allows `1.100.0`, `1.100.1`, `1.100.9`, but not `1.101.0`
+
+## Examples
+
+### Minimum Version Requirement
+
+Ensure users have at least version 1.100.0:
+
+<File title="atmos.yaml">
+```yaml
+version:
+  constraint:
+    require: ">=1.100.0"
+```
+</File>
+
+### Version Range
+
+Require a specific major version range:
+
+<File title="atmos.yaml">
+```yaml
+version:
+  constraint:
+    require: ">=1.100.0, <2.0.0"
+    enforcement: "fatal"
+    message: |
+      This configuration requires Atmos 1.x.
+
+      To upgrade: brew upgrade atmos
+      Or download from: https://github.com/cloudposse/atmos/releases
+```
+</File>
+
+### Exclude Problematic Version
+
+Skip a version with known issues:
+
+<File title="atmos.yaml">
+```yaml
+version:
+  constraint:
+    require: ">=1.100.0, !=1.150.0, <2.0.0"
+```
+</File>
+
+### Soft Requirement (Warning Only)
+
+Warn about unsupported versions without blocking execution:
+
+<File title="atmos.yaml">
+```yaml
+version:
+  constraint:
+    require: ">=1.100.0, <1.150.0"
+    enforcement: "warn"
+    message: |
+      You are using an untested Atmos version.
+      This configuration is validated against Atmos 1.100.0-1.149.x.
+      Proceed at your own risk.
+```
+</File>
+
+### Combined with Version Checking
+
+Use both version constraints and update checking:
+
+<File title="atmos.yaml">
+```yaml
+version:
+  # Check for new releases periodically
+  check:
+    enabled: true
+    frequency: "24h"
+
+  # Require minimum version
+  constraint:
+    require: ">=1.100.0"
+    enforcement: "fatal"
+```
+</File>
+
+## Environment Variable Override
+
+Override the enforcement level at runtime using `ATMOS_VERSION_ENFORCEMENT`:
+
+```bash
+# Downgrade to warning
+ATMOS_VERSION_ENFORCEMENT=warn atmos terraform plan
+
+# Disable validation entirely
+ATMOS_VERSION_ENFORCEMENT=silent atmos terraform plan
+```
+
+**Precedence order:**
+1. `ATMOS_VERSION_ENFORCEMENT` environment variable (highest)
+2. `version.constraint.enforcement` in `atmos.yaml`
+3. Default value `"fatal"` (lowest)
+
+## Error Messages
+
+### Fatal Constraint Violation
+
+When enforcement is `fatal` and the constraint is not satisfied:
+
+<Terminal>
+```
+# Error
+
+**Error:** version constraint not satisfied
+
+## Explanation
+
+This configuration requires Atmos version >=1.100.0, but you are running 1.50.0
+
+## Hints
+
+💡 Please upgrade: https://atmos.tools/install
+
+## Context
+
+• required=>=1.100.0 current=1.50.0
+```
+</Terminal>
+
+### Warning
+
+When enforcement is `warn`:
+
+<Terminal>
+```
+⚠ Atmos version constraint not satisfied
+  Required: >=1.100.0, <2.0.0
+  Current:  2.0.0
+
+This stack configuration is tested with Atmos 1.x.
+```
+</Terminal>
+
+### Invalid Constraint Syntax
+
+Invalid constraint syntax is always a fatal error:
+
+<Terminal>
+```
+# Error
+
+**Error:** invalid version constraint
+
+## Hints
+
+💡 Please use valid semver constraint syntax
+💡 Reference: https://github.com/hashicorp/go-version
+
+## Context
+
+• constraint=invalid>>2.0
+```
+</Terminal>
+
+## Best Practices
+
+1. **Start with minimum version** - Use `>=X.Y.Z` to ensure feature availability
+2. **Add upper bound for stability** - Use `<X.0.0` to avoid unexpected breaking changes
+3. **Use `warn` during migrations** - Soft-enforce constraints while teams upgrade
+4. **Provide clear messages** - Include upgrade instructions specific to your organization
+5. **Test in CI first** - Validate constraint behavior before enforcing on developers

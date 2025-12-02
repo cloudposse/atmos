@@ -1,0 +1,67 @@
+---
+slug: version-constraint-validation
+title: "Enforce Atmos Version Requirements with Version Constraints"
+authors:
+  - osterman
+tags:
+  - feature
+  - dx
+date: 2025-12-01T00:00:00.000Z
+---
+
+Atmos now supports version constraint validation, allowing you to specify required Atmos version ranges in your `atmos.yaml` configuration. When your configuration requires specific features or behaviors, you can ensure all team members and CI/CD pipelines use compatible Atmos versions.
+
+<!--truncate-->
+
+## The Problem
+
+Teams using Atmos often face version consistency challenges:
+
+- **Feature availability** - Newer configurations may use features that don't exist in older Atmos versions
+- **Breaking changes** - Running an incompatible version can cause confusing errors
+- **Environment drift** - CI pipelines, local development, and containers may run different versions
+- **No clear signal** - Users don't know when upgrading is required vs. recommended
+
+## The Solution
+
+Add a `version.constraint` section to your `atmos.yaml`:
+
+```yaml
+version:
+  constraint:
+    require: ">=1.100.0, <2.0.0"
+    enforcement: "fatal"
+    message: "Please upgrade Atmos to continue."
+```
+
+Atmos validates the constraint at startup. If the current version doesn't satisfy the requirement:
+
+- **`fatal`** (default) - Exit with a helpful error message
+- **`warn`** - Show a warning and continue
+- **`silent`** - Skip validation (for debugging)
+
+## Constraint Syntax
+
+Uses the same syntax as Terraform version constraints:
+
+| Constraint | Meaning |
+|------------|---------|
+| `>=1.100.0` | Minimum version |
+| `<2.0.0` | Maximum version (exclusive) |
+| `>=1.100.0, <2.0.0` | Version range |
+| `~>1.100` | Pessimistic (>=1.100.0, &lt;2.0.0) |
+| `!=1.150.0` | Exclude specific version |
+
+## Override for Debugging
+
+Use the environment variable to temporarily bypass constraints:
+
+```bash
+ATMOS_VERSION_ENFORCEMENT=warn atmos terraform plan
+```
+
+## Get Started
+
+Add version constraints to your `atmos.yaml` today to ensure consistent Atmos versions across your team and infrastructure.
+
+See the [Version Constraints documentation](/cli/configuration/version-constraints) for complete details.
