@@ -7,6 +7,7 @@ id: native-terraform
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import TaskList from '@site/src/components/TaskList'
 import Terminal from '@site/src/components/Terminal'
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
@@ -816,6 +817,7 @@ When you run `atmos terraform plan vpc -s dev`, these environment variables are 
 
 ## Migration Checklist
 
+<TaskList>
 - [ ] Install Atmos CLI ([Installation Guide](/install))
 - [ ] Create `atmos.yaml` pointing to your Terraform code
 - [ ] Reorganize Terraform code into `components/terraform/<component>/`
@@ -826,6 +828,7 @@ When you run `atmos terraform plan vpc -s dev`, these environment variables are 
 - [ ] (Optional) Migrate `.tfvars` to YAML for full features
 - [ ] (Optional) Set up workflows to replace Makefiles
 - [ ] (Optional) Explore DRY configs with imports
+</TaskList>
 
 ---
 

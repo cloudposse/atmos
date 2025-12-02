@@ -8,6 +8,7 @@ id: terraform-workspaces
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import KeyTakeaways from '@site/src/components/KeyTakeaways'
+import TaskList from '@site/src/components/TaskList'
 
 <Intro>
 Terraform workspaces solve a simple problem: deploy the same code to multiple environments using one state backend. But as your infrastructure grows, workspaces create more problems than they solve. Atmos provides a better path forward.
@@ -528,6 +529,7 @@ components:
 
 ## Migration Checklist
 
+<TaskList>
 - [ ] Audit all `terraform.workspace` references in code
 - [ ] Convert workspace conditionals to variables
 - [ ] Create Atmos `atmos.yaml` configuration
@@ -538,6 +540,7 @@ components:
 - [ ] Update CI/CD pipelines
 - [ ] Update team documentation
 - [ ] Deprecate workspace commands
+</TaskList>
 
 <KeyTakeaways title="Benefits After Migration">
 - **Explicit configuration** - No hidden workspace state
