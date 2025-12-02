@@ -139,7 +139,7 @@ func getTemplateContent(atmosConfig *schema.AtmosConfiguration, templateURL, dir
 	if err != nil {
 		return "", err
 	}
-	defer removeTempDir(tempDir)
+	defer RemoveTempDir(tempDir)
 	body, err := os.ReadFile(templateFile)
 	if err != nil {
 		return "", err
@@ -241,7 +241,7 @@ func fetchAndParseYAML(atmosConfig *schema.AtmosConfiguration, pathOrURL string,
 	if err != nil {
 		return nil, err
 	}
-	defer removeTempDir(tempDir)
+	defer RemoveTempDir(tempDir)
 	return parseYAML(localPath)
 }
 

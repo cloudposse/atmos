@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -80,9 +81,9 @@ func init() {
 	// Add stack completion
 	addStackCompletion(vendorCmd)
 
-	// Bind flags to Viper for environment variable support
+	// Bind flags to Viper for environment variable support.
 	if err := vendorParser.BindToViper(viper.GetViper()); err != nil {
-		panic(err)
+		log.Error("Failed to bind vendor list flags to viper", "error", err)
 	}
 }
 
