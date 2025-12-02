@@ -183,10 +183,11 @@ we perform a lightweight pre-scan of stack configurations to extract auth identi
 - `cmd/describe_stacks.go` - Uses `CreateAuthManagerFromIdentityWithAtmosConfig`
 - `cmd/describe_affected.go` - Uses `CreateAuthManagerFromIdentityWithAtmosConfig`
 - `cmd/describe_dependents.go` - Uses `CreateAuthManagerFromIdentityWithAtmosConfig`
+- `cmd/list/instances.go` - Uses `CreateAndAuthenticateManagerWithAtmosConfig`
 - `internal/exec/workflow_utils.go` - Scans stack defaults when creating AuthManager
 
 **Updated Internal Execution:**
-- `internal/exec/terraform_nested_auth_helper.go` - Uses `CreateAndAuthenticateManagerWithAtmosConfig` (for YAML functions)
+- `internal/exec/terraform_nested_auth_helper.go` - Resolves AuthManager for nested component references in YAML functions using Approach 1
 
 **Updated Auth Helpers:**
 - `pkg/auth/manager_helpers.go` - New `CreateAndAuthenticateManagerWithAtmosConfig` function
@@ -215,11 +216,12 @@ we perform a lightweight pre-scan of stack configurations to extract auth identi
 - `atmos list instances` - Lists all instances across stacks
 
 ### YAML Functions
-- `!terraform.state` - Now respects stack-level default identity (uses Approach 2)
-- `!terraform.output` - Now respects stack-level default identity (uses Approach 2)
+- `!terraform.state` - Inherits AuthManager from parent command context
+- `!terraform.output` - Inherits AuthManager from parent command context
+- For nested component references, uses Approach 1 (Component Auth Merge) via `resolveAuthManagerForNestedComponent()`
 
 ### Workflows
-- Workflow execution now scans for stack-level defaults when no explicit identity is specified (uses Approach 2)
+- Workflow execution scans for stack-level defaults when no explicit identity is specified (uses Approach 2)
 
 ### Not Applicable
 - `atmos helmfile *` - Currently doesn't use Atmos Auth (uses external credentials)
