@@ -43,55 +43,42 @@ auth:
 
 ## Root Cause Analysis
 
-### The Timing Problem
+### Different Root Causes for Different Commands
 
-The issue is a **chicken-and-egg problem** in how default identities are resolved:
+The issue manifests differently depending on the command type:
 
-1. **Command execution flow** (`cmd/describe_component.go`):
-   ```go
-   // Load atmos configuration - processStacks = FALSE
-   atmosConfig, err := cfg.InitCliConfig(..., false)
+#### For `atmos describe component` - Missing Implementation
 
-   // Create AuthManager using ONLY atmos.yaml + profile auth config
-   authManager, err := CreateAuthManagerFromIdentity(identityName, &atmosConfig.Auth)
-   ```
+The `atmos describe component` command was **not following the same pattern** as `atmos terraform *` commands. While terraform commands already implemented Component Auth Merge (Approach 1), `describe component` was simply using global auth config directly:
 
-2. **`InitCliConfig(processStacks=false)`** only loads:
+**Old (broken) code in `cmd/describe_component.go`:**
+```go
+// Load atmos configuration - processStacks = FALSE
+atmosConfig, err := cfg.InitCliConfig(..., false)
+
+// Create AuthManager using ONLY atmos.yaml + profile auth config
+// Stack-level defaults were completely ignored!
+authManager, err := CreateAuthManagerFromIdentity(identityName, &atmosConfig.Auth)
+```
+
+The fix was to update `describe component` to follow the same Approach 1 pattern that `terraform` commands already used.
+
+#### For Multi-Stack Commands - Timing Problem (Chicken-and-Egg)
+
+For commands like `describe stacks`, `describe affected`, and `list instances` that operate on multiple stacks/components, there's a genuine **chicken-and-egg problem**:
+
+1. **`InitCliConfig(processStacks=false)`** only loads:
    - System atmos config
    - User atmos config (`~/.atmos/atmos.yaml`)
    - Project atmos config (`atmos.yaml`)
    - Profile configs (e.g., `profiles/managers/atmos.yaml`)
 
-3. **Stack configs are NOT loaded** at this point because:
+2. **Stack configs are NOT loaded** at this point because:
    - Processing stacks may require authentication (for YAML functions)
    - Authentication requires knowing the identity
    - Identity resolution happens before stack processing
 
-### Code Flow
-
-```
-describe component <component> -s <stack>
-    │
-    ▼
-InitCliConfig(processStacks=false)  ←── Only loads atmos.yaml + profiles
-    │
-    ▼
-CreateAuthManagerFromIdentity("")
-    │
-    ▼
-autoDetectDefaultIdentity(&atmosConfig.Auth)
-    │
-    ▼
-GetDefaultIdentity(forceSelect=false)
-    │
-    ▼
-for name, identity := range m.config.Identities {
-    if identity.Default { ... }  ←── Stack defaults NOT present!
-}
-    │
-    ▼
-No defaults found → prompts user (or errors in CI)
-```
+3. These commands cannot use Approach 1 (Component Auth Merge) because they don't have a specific component+stack pair to query upfront.
 
 ### Why Profile Config Works
 
@@ -100,12 +87,11 @@ Profile configs are loaded during `InitCliConfig` **before** stacks are processe
 - They're merged into `atmosConfig.Auth` immediately
 - The `AuthManager` sees them when checking for defaults
 
-### Why Stack Config Doesn't Work
+### Why Stack Config Didn't Work
 
-Stack configs are only processed when `processStacks=true`:
-- Stack manifests contain component-specific auth overrides
-- They're designed to be processed after base configuration
-- The auth section in stack config isn't available during identity resolution
+For `describe component`: The command simply wasn't merging stack-level auth config.
+
+For multi-stack commands: Stack configs are only processed when `processStacks=true`, creating a timing issue that required Approach 2 (Stack Scanning) to solve.
 
 ## Solution
 
