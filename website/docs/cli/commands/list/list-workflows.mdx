@@ -36,6 +36,8 @@ This command is useful for:
   <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
   <dt>`--delimiter string`</dt>
   <dd>Delimiter for csv/tsv output (default: `\t`)</dd>
+  <dt>`--identity` / `-i`</dt>
+  <dd>Authenticate with a specific identity before listing workflows.<br/>Required when stack configurations use YAML template functions that require authentication.<br/>Can also be set via `ATMOS_IDENTITY` environment variable.</dd>
 </dl>
 
 ## Examples
