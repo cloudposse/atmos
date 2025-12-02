@@ -109,28 +109,65 @@ Stack configs are only processed when `processStacks=true`:
 
 ## Solution
 
-### Approach: Pre-scan Stack Auth Defaults
+Two approaches are used depending on whether a specific component+stack pair is available:
 
-Before creating the `AuthManager`, perform a lightweight scan of stack configurations
-to extract auth identity defaults. This avoids full stack processing while still
-respecting stack-level default identity configuration.
+### Approach 1: Component Auth Merge (for commands with specific component+stack)
 
-### Implementation
+For commands like `describe component` and `terraform *` where both component and stack are known,
+we leverage the **existing stack inheritance and merge functionality**:
 
-1. **Add stack auth scanner** (`pkg/config/stack_auth_scanner.go`):
+1. Call `ExecuteDescribeComponent()` with `ProcessTemplates=false, ProcessYamlFunctions=false, AuthManager=nil`
+2. The component config output includes the merged auth section from stack inheritance
+3. Merge with global auth using `auth.MergeComponentAuthFromConfig()`
+4. Create auth manager with the merged config
+
+This approach is preferred because:
+- It uses the existing stack merge logic (no duplication)
+- The auth section includes all inherited defaults from stack hierarchy
+- Component-level auth overrides are respected
+
+**Example flow in `terraform.go` and `describe_component.go`:**
+```go
+// 1. Start with global auth config
+mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
+
+// 2. Get component config (includes stack-level auth with default flag)
+componentConfig, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+    Component:            component,
+    Stack:                stack,
+    ProcessTemplates:     false,
+    ProcessYamlFunctions: false, // Avoid circular dependency
+    AuthManager:          nil,   // No auth manager yet
+})
+
+// 3. Merge component auth (including stack defaults) with global auth
+if err == nil {
+    mergedAuthConfig, err = auth.MergeComponentAuthFromConfig(...)
+}
+
+// 4. Create auth manager with fully merged config
+authManager, err := CreateAuthManagerFromIdentity(identityName, mergedAuthConfig)
+```
+
+### Approach 2: Stack Scanning (for commands without specific component)
+
+For commands that operate on multiple stacks/components (e.g., `describe stacks`, `describe affected`),
+we perform a lightweight pre-scan of stack configurations to extract auth identity defaults:
+
+1. **Stack auth scanner** (`pkg/config/stack_auth_scanner.go`):
    - Scans stack manifest files for `auth.identities.*.default: true`
    - Uses minimal YAML parsing without template/function processing
    - Returns a map of identity names to their default status
 
-2. **Update `CreateAuthManagerFromIdentity`** (`pkg/auth/manager_helpers.go`):
-   - If no identity specified and no default in atmos.yaml
-   - Scan stack configs for auth defaults
-   - Merge discovered defaults into auth config before creating manager
+2. **Merge into auth config** before creating manager:
+   - Stack defaults take **precedence** over atmos.yaml defaults
+   - Follows Atmos inheritance model (more specific config overrides global)
 
-3. **Merge order** (lowest to highest priority):
-   - Atmos config defaults
-   - Stack config defaults
-   - CLI flag / environment variable
+### Precedence Order (lowest to highest priority)
+
+1. Atmos config defaults (`atmos.yaml`)
+2. Stack config defaults (scanned or from component merge)
+3. CLI flag (`--identity`) / environment variable (`ATMOS_IDENTITY`)
 
 ### Key Files Changed
 
@@ -138,16 +175,18 @@ respecting stack-level default identity configuration.
 - `pkg/config/stack_auth_scanner.go` - Scanner for stack-level auth defaults
 - `pkg/config/stack_auth_scanner_test.go` - Unit tests for scanner
 
-**Updated CLI Commands:**
-- `cmd/describe_component.go` - Uses `CreateAuthManagerFromIdentityWithAtmosConfig`
+**Commands Using Component Auth Merge (Approach 1):**
+- `cmd/describe_component.go` - Uses terraform.go pattern with `ExecuteDescribeComponent` + `MergeComponentAuthFromConfig`
+- `internal/exec/terraform.go` - Original implementation of this pattern
+
+**Commands Using Stack Scanning (Approach 2):**
 - `cmd/describe_stacks.go` - Uses `CreateAuthManagerFromIdentityWithAtmosConfig`
 - `cmd/describe_affected.go` - Uses `CreateAuthManagerFromIdentityWithAtmosConfig`
 - `cmd/describe_dependents.go` - Uses `CreateAuthManagerFromIdentityWithAtmosConfig`
+- `internal/exec/workflow_utils.go` - Scans stack defaults when creating AuthManager
 
 **Updated Internal Execution:**
-- `internal/exec/terraform.go` - Uses `CreateAndAuthenticateManagerWithAtmosConfig`
 - `internal/exec/terraform_nested_auth_helper.go` - Uses `CreateAndAuthenticateManagerWithAtmosConfig` (for YAML functions)
-- `internal/exec/workflow_utils.go` - Scans stack defaults when creating AuthManager
 
 **Updated Auth Helpers:**
 - `pkg/auth/manager_helpers.go` - New `CreateAndAuthenticateManagerWithAtmosConfig` function
@@ -165,19 +204,21 @@ respecting stack-level default identity configuration.
 
 ## Commands/Features Now Supporting Stack-Level Auth Defaults
 
-### CLI Commands
-- `atmos describe component`
-- `atmos describe stacks`
-- `atmos describe affected`
-- `atmos describe dependents`
-- `atmos terraform *` (all terraform subcommands)
+### CLI Commands Using Component Auth Merge (Approach 1)
+- `atmos describe component` - Has specific component+stack
+- `atmos terraform *` (all terraform subcommands) - Has specific component+stack
+
+### CLI Commands Using Stack Scanning (Approach 2)
+- `atmos describe stacks` - Operates on multiple stacks/components
+- `atmos describe affected` - Operates on all affected components
+- `atmos describe dependents` - Operates on multiple stacks
 
 ### YAML Functions
-- `!terraform.state` - Now respects stack-level default identity
-- `!terraform.output` - Now respects stack-level default identity
+- `!terraform.state` - Now respects stack-level default identity (uses Approach 2)
+- `!terraform.output` - Now respects stack-level default identity (uses Approach 2)
 
 ### Workflows
-- Workflow execution now scans for stack-level defaults when no explicit identity is specified
+- Workflow execution now scans for stack-level defaults when no explicit identity is specified (uses Approach 2)
 
 ### Not Applicable
 - `atmos helmfile *` - Currently doesn't use Atmos Auth (uses external credentials)
