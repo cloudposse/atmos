@@ -2,19 +2,87 @@
 title: View Configuration
 sidebar_position: 10
 sidebar_label: View Configuration
-description: View your configuration so you understand what's happening.
+description: View your Atmos CLI configuration to understand how Atmos is configured.
 id: view-configuration
 slug: /cli/configuration/view-configuration
 ---
 import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
-Atmos is a framework for defining cloud architectures in YAML. To understand what the fully-deep merged configuration will look like, you can describe it.
+Use `atmos describe config` to view your fully-merged CLI configuration. This shows how Atmos is configured after loading and merging all configuration sources.
 </Intro>
 
-In Stacks, you define configurations for all Components, setting up small units of infrastructure like VPCs, Clusters, and Databases. Atmos lets you combine these components into reusable, nestable Stacks using Imports. You can break down everything from simple websites to full-blown multi-account/multi-subscription cloud architectures into components.
+## View CLI Configuration
 
-Use the following commands to view your merged configurations:
+The `atmos describe config` command displays the complete, merged configuration that Atmos is using:
 
-- [**`atmos describe stacks`**](/cli/commands/describe/stacks) - View the fully-deep merged stack configurations
-- [**`atmos describe component`**](/cli/commands/describe/component) - View the merged configuration for a specific component
+```bash
+atmos describe config
+```
+
+<Screengrab title="atmos describe config" slug="atmos-describe-config" />
+
+This command shows:
+- Base paths for components, stacks, and workflows
+- Stack naming patterns and included paths
+- Terraform and Helmfile settings
+- Terminal and logging configuration
+- Active profiles and their overrides
+- Integration settings (Atlantis, Spacelift, etc.)
+
+## Output Formats
+
+View configuration in different formats:
+
+```bash
+# YAML output (default)
+atmos describe config
+
+# JSON output
+atmos describe config --format json
+
+# Query specific values
+atmos describe config --query '.stacks.base_path'
+```
+
+## Configuration Sources
+
+The displayed configuration is merged from multiple sources in precedence order:
+
+1. **Command-line flags** (highest priority)
+2. **Environment variables** (`ATMOS_*`)
+3. **Active profiles** (`--profile` or `ATMOS_PROFILE`)
+4. **Configuration files** (`atmos.yaml`)
+5. **Default values** (lowest priority)
+
+## Debugging Configuration Issues
+
+Use `atmos describe config` to troubleshoot:
+
+```bash
+# See where Atmos found its configuration file
+atmos describe config --query '.cli_config_path'
+
+# Check base paths
+atmos describe config --query '.base_path'
+atmos describe config --query '.stacks.base_path'
+atmos describe config --query '.components.terraform.base_path'
+
+# Verify profile settings are applied
+ATMOS_PROFILE=developer atmos describe config
+```
+
+## Related Commands
+
+| Command | Purpose |
+|---------|---------|
+| [`atmos describe config`](/cli/commands/describe/config) | View CLI configuration |
+| [`atmos describe stacks`](/cli/commands/describe/stacks) | View stack configurations |
+| [`atmos describe component`](/cli/commands/describe/component) | View component configurations |
+
+## See Also
+
+- [CLI Configuration](/cli/configuration) — Configure Atmos behavior
+- [Profiles](/cli/configuration/profiles) — Environment-specific configuration overrides
+- [Global Flags](/cli/global-flags) — Command-line flags that affect configuration
