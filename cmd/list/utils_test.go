@@ -1,12 +1,16 @@
 package list
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/flags"
+	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
+	f "github.com/cloudposse/atmos/pkg/list/format"
 )
 
 // TestNewCommonListParser tests the newCommonListParser helper function.
@@ -93,4 +97,224 @@ func TestAddStackCompletion_ExistingFlag(t *testing.T) {
 	// Verify flag still exists
 	stackFlag := cmd.PersistentFlags().Lookup("stack")
 	assert.NotNil(t, stackFlag)
+}
+
+// TestGetIdentityFromCommand tests the getIdentityFromCommand function.
+func TestGetIdentityFromCommand(t *testing.T) {
+	testCases := []struct {
+		name           string
+		setupCmd       func() *cobra.Command
+		setupViper     func()
+		expectedResult string
+	}{
+		{
+			name: "returns empty when no identity set",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+			},
+			expectedResult: "",
+		},
+		{
+			name: "returns flag value when flag is changed",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				_ = cmd.Flags().Set("identity", "my-identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+			},
+			expectedResult: "my-identity",
+		},
+		{
+			name: "returns viper value when flag not changed",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+				viper.Set("identity", "env-identity")
+			},
+			expectedResult: "env-identity",
+		},
+		{
+			name: "flag takes precedence over viper",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				_ = cmd.Flags().Set("identity", "flag-identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+				viper.Set("identity", "env-identity")
+			},
+			expectedResult: "flag-identity",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setupViper()
+			cmd := tc.setupCmd()
+			result := getIdentityFromCommand(cmd)
+			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
+}
+
+// TestSetDefaultCSVDelimiter tests the setDefaultCSVDelimiter function.
+func TestSetDefaultCSVDelimiter(t *testing.T) {
+	testCases := []struct {
+		name              string
+		initialDelimiter  string
+		format            string
+		expectedDelimiter string
+	}{
+		{
+			name:              "CSV format with default TSV delimiter changes to comma",
+			initialDelimiter:  f.DefaultTSVDelimiter,
+			format:            string(f.FormatCSV),
+			expectedDelimiter: f.DefaultCSVDelimiter,
+		},
+		{
+			name:              "CSV format with custom delimiter stays unchanged",
+			initialDelimiter:  "|",
+			format:            string(f.FormatCSV),
+			expectedDelimiter: "|",
+		},
+		{
+			name:              "TSV format with default TSV delimiter stays unchanged",
+			initialDelimiter:  f.DefaultTSVDelimiter,
+			format:            string(f.FormatTSV),
+			expectedDelimiter: f.DefaultTSVDelimiter,
+		},
+		{
+			name:              "JSON format with default TSV delimiter stays unchanged",
+			initialDelimiter:  f.DefaultTSVDelimiter,
+			format:            string(f.FormatJSON),
+			expectedDelimiter: f.DefaultTSVDelimiter,
+		},
+		{
+			name:              "empty format with default TSV delimiter stays unchanged",
+			initialDelimiter:  f.DefaultTSVDelimiter,
+			format:            "",
+			expectedDelimiter: f.DefaultTSVDelimiter,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			delimiter := tc.initialDelimiter
+			setDefaultCSVDelimiter(&delimiter, tc.format)
+			assert.Equal(t, tc.expectedDelimiter, delimiter)
+		})
+	}
+}
+
+// TestGetComponentFilter tests the getComponentFilter function.
+func TestGetComponentFilter(t *testing.T) {
+	testCases := []struct {
+		name           string
+		args           []string
+		expectedResult string
+	}{
+		{
+			name:           "empty args returns empty string",
+			args:           []string{},
+			expectedResult: "",
+		},
+		{
+			name:           "nil args returns empty string",
+			args:           nil,
+			expectedResult: "",
+		},
+		{
+			name:           "single arg returns first arg",
+			args:           []string{"component1"},
+			expectedResult: "component1",
+		},
+		{
+			name:           "multiple args returns first arg",
+			args:           []string{"component1", "component2", "component3"},
+			expectedResult: "component1",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := getComponentFilter(tc.args)
+			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
+}
+
+// TestHandleNoValuesError tests the handleNoValuesError function.
+func TestHandleNoValuesError(t *testing.T) {
+	testCases := []struct {
+		name                string
+		err                 error
+		componentFilter     string
+		expectedOutput      string
+		expectedError       error
+		expectLogFuncCalled bool
+	}{
+		{
+			name:                "NoValuesFoundError calls logFunc and returns empty",
+			err:                 &listerrors.NoValuesFoundError{},
+			componentFilter:     "test-component",
+			expectedOutput:      "",
+			expectedError:       nil,
+			expectLogFuncCalled: true,
+		},
+		{
+			name:                "other error returns the error unchanged",
+			err:                 errors.New("some other error"),
+			componentFilter:     "test-component",
+			expectedOutput:      "",
+			expectedError:       errors.New("some other error"),
+			expectLogFuncCalled: false,
+		},
+		{
+			name:                "wrapped NoValuesFoundError calls logFunc",
+			err:                 errors.Join(errors.New("wrapper"), &listerrors.NoValuesFoundError{}),
+			componentFilter:     "wrapped-component",
+			expectedOutput:      "",
+			expectedError:       nil,
+			expectLogFuncCalled: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			logFuncCalled := false
+			logFuncComponent := ""
+			logFunc := func(component string) {
+				logFuncCalled = true
+				logFuncComponent = component
+			}
+
+			output, err := handleNoValuesError(tc.err, tc.componentFilter, logFunc)
+
+			assert.Equal(t, tc.expectedOutput, output)
+			if tc.expectedError != nil {
+				assert.Error(t, err)
+				assert.Equal(t, tc.expectedError.Error(), err.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tc.expectLogFuncCalled, logFuncCalled)
+			if tc.expectLogFuncCalled {
+				assert.Equal(t, tc.componentFilter, logFuncComponent)
+			}
+		})
+	}
 }

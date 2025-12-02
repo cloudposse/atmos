@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -72,6 +73,16 @@ func TestIsKnownWorkflowError(t *testing.T) {
 			name:     "wrapped unknown error",
 			err:      errors.Join(errors.New("unknown"), errors.New("more context")),
 			expected: false,
+		},
+		{
+			name:     "ExitCodeError is known",
+			err:      errUtils.ExitCodeError{Code: 1},
+			expected: true,
+		},
+		{
+			name:     "wrapped ExitCodeError is known",
+			err:      errors.Join(errors.New("wrapper"), errUtils.ExitCodeError{Code: 2}),
+			expected: true,
 		},
 	}
 
