@@ -218,6 +218,7 @@ module.exports = {
             className: 'sidebar-title',
             collapsible: false,
             collapsed: false,
+            link: {type: 'doc', id: 'components/components-overview'},
             items: [
                 'describe/component',
                 'components/library',
