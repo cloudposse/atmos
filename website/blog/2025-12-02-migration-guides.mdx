@@ -1,0 +1,49 @@
+---
+slug: migration-guides
+title: "New Migration Guides: Your Path to Atmos"
+authors: [osterman]
+tags: [documentation, terraform, terragrunt, migration]
+---
+
+We've added comprehensive migration guides to help teams adopt Atmos regardless of their starting point.
+
+<!--truncate-->
+
+## Meeting You Where You Are
+
+Every team has a different starting point. Some are using vanilla Terraform with Makefiles. Others have invested heavily in Terragrunt. Many are using Terraform workspaces to manage environments. We've created dedicated guides for each scenario.
+
+## Three Migration Paths
+
+### From Native Terraform
+
+If you're already using Terraform with shell scripts, Makefiles, or just raw commands, you're 90% there. Your Terraform code doesn't need to change—Atmos gives you a documented, conventional way to manage your infrastructure.
+
+The guide follows a "Crawl, Walk, Run" approach:
+- **Crawl**: Get running in 20 minutes
+- **Walk**: Explore DRY configs and remote state
+- **Run**: Advanced features when you need them
+
+[Read the Native Terraform Migration Guide →](/migration/native-terraform)
+
+### From Terragrunt
+
+Terragrunt and Atmos solve similar problems—managing Terraform at scale with DRY configurations. The guide covers key differences in configuration format, reuse mechanisms, dependencies, and more.
+
+It also highlights capabilities unique to Atmos: native authentication, vendoring, custom commands, workflows, Terraform shell, affected detection, component validation, and configuration provenance.
+
+[Read the Terragrunt Migration Guide →](/migration/terragrunt)
+
+### From Terraform Workspaces
+
+Workspaces seem great at first, but they have fundamental limitations: shared state backends become single points of failure, configuration differentiation requires ugly conditionals, and there's no audit trail between environments.
+
+The guide explains how Atmos provides explicit state isolation, YAML-based configuration, and clear separation of concerns.
+
+[Read the Terraform Workspaces Migration Guide →](/migration/terraform-workspaces)
+
+## Why We Created These Guides
+
+Tool fatigue is real. Instead of duct-taping 25 different tools together, Atmos gives you one documented approach. These migration guides are designed to get you from "I've never used Atmos" to "I'm productive with Atmos" as quickly as possible.
+
+We believe you should get value in 20 minutes, not 20 hours.
