@@ -65,6 +65,40 @@ func IsKnownWorkflowError(err error) bool {
 	return false
 }
 
+// checkAndMergeDefaultIdentity checks if there's a default identity configured in atmos.yaml or stack configs.
+// If a default identity is found in stack configs, it merges it into atmosConfig.Auth.
+// Returns true if a default identity exists (either in atmos.yaml or stack configs).
+func checkAndMergeDefaultIdentity(atmosConfig *schema.AtmosConfiguration) bool {
+	if len(atmosConfig.Auth.Identities) == 0 {
+		return false
+	}
+
+	// Check if atmos.yaml already has a default identity.
+	for _, identity := range atmosConfig.Auth.Identities {
+		if identity.Default {
+			return true
+		}
+	}
+
+	// No default in atmos.yaml - scan stack configs.
+	stackDefaults, err := config.ScanStackAuthDefaults(atmosConfig)
+	if err != nil || len(stackDefaults) == 0 {
+		return false
+	}
+
+	// Merge stack defaults into auth config.
+	config.MergeStackAuthDefaults(&atmosConfig.Auth, stackDefaults)
+
+	// Check if we now have a default after merging.
+	for _, identity := range atmosConfig.Auth.Identities {
+		if identity.Default {
+			return true
+		}
+	}
+
+	return false
+}
+
 // ExecuteWorkflow executes an Atmos workflow.
 func ExecuteWorkflow(
 	atmosConfig schema.AtmosConfiguration,
@@ -125,6 +159,13 @@ func ExecuteWorkflow(
 	needsAuth := commandLineIdentity != "" || lo.SomeBy(steps, func(step schema.WorkflowStep) bool {
 		return strings.TrimSpace(step.Identity) != ""
 	})
+
+	// Also check if there's a default identity configured (in atmos.yaml or stack configs).
+	// This enables workflows to use default identity without explicit --identity flag.
+	if !needsAuth {
+		needsAuth = checkAndMergeDefaultIdentity(&atmosConfig)
+	}
+
 	if needsAuth {
 		// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
 		// This enables YAML template functions to access authenticated credentials.

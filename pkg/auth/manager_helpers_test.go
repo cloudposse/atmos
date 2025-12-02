@@ -875,3 +875,123 @@ func TestAutoDetectDefaultIdentity_UserAbortPropagation(t *testing.T) {
 	wrappedErr := fmt.Errorf("wrapped: %w", errUtils.ErrUserAborted)
 	assert.ErrorIs(t, wrappedErr, errUtils.ErrUserAborted, "Wrapped ErrUserAborted should still be identifiable")
 }
+
+// Tests for CreateAndAuthenticateManagerWithAtmosConfig and stack auth scanning.
+
+func TestCreateAndAuthenticateManagerWithAtmosConfig_NilAtmosConfig(t *testing.T) {
+	// When atmosConfig is nil, should behave exactly like CreateAndAuthenticateManager.
+	authConfig := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-provider": {
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://test.awsapps.com/start",
+			},
+		},
+		Identities: map[string]schema.Identity{
+			"test-identity": {
+				Kind:    "aws/permission-set",
+				Default: false, // No default
+				Via: &schema.IdentityVia{
+					Provider: "test-provider",
+				},
+				Principal: map[string]interface{}{
+					"name": "Access",
+					"account": map[string]interface{}{
+						"name": "account",
+					},
+				},
+			},
+		},
+	}
+
+	// No identity, no atmosConfig - should return nil (no default to find)
+	manager, err := CreateAndAuthenticateManagerWithAtmosConfig("", authConfig, "__SELECT__", nil)
+
+	assert.NoError(t, err, "Should not error when no default identity")
+	assert.Nil(t, manager, "Manager should be nil when no default identity and no stack scanning")
+}
+
+func TestCreateAndAuthenticateManagerWithAtmosConfig_SkipsWhenAtmosConfigDefault(t *testing.T) {
+	// When an identity already has default: true in authConfig (from atmos.yaml),
+	// the stack scanning should be skipped to avoid unnecessary file I/O.
+	authConfig := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-provider": {
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://test.awsapps.com/start",
+			},
+		},
+		Identities: map[string]schema.Identity{
+			"default-identity": {
+				Kind:    "aws/permission-set",
+				Default: true, // Already has default
+				Via: &schema.IdentityVia{
+					Provider: "test-provider",
+				},
+				Principal: map[string]interface{}{
+					"name": "Access",
+					"account": map[string]interface{}{
+						"name": "account",
+					},
+				},
+			},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{"/nonexistent/path/*.yaml"},
+	}
+
+	// Should find the default from authConfig without scanning (nonexistent path would fail)
+	manager, err := CreateAndAuthenticateManagerWithAtmosConfig("", authConfig, "__SELECT__", atmosConfig)
+
+	// Authentication will fail (no real SSO), but should have found the default identity
+	if err != nil {
+		// Should be auth error (failed to authenticate), not config error
+		assert.NotErrorIs(t, err, errUtils.ErrAuthNotConfigured, "Should not error with 'auth not configured'")
+		t.Logf("Authentication failed as expected in test environment: %v", err)
+	} else {
+		assert.NotNil(t, manager, "Manager should not be nil when default identity found")
+	}
+}
+
+func TestScanAndMergeStackAuthDefaults_ExistingDefault(t *testing.T) {
+	// When authConfig already has a default, scanAndMergeStackAuthDefaults should skip.
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"test-identity": {Kind: "aws/assume-role", Default: true},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{"/nonexistent/path/*.yaml"},
+	}
+
+	// Should not panic or error, just skip the scan
+	scanAndMergeStackAuthDefaults(authConfig, atmosConfig)
+
+	// Identity should still have default: true
+	assert.True(t, authConfig.Identities["test-identity"].Default)
+}
+
+func TestScanAndMergeStackAuthDefaults_NoExistingDefault(t *testing.T) {
+	// When authConfig has no default, scanAndMergeStackAuthDefaults should scan.
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"test-identity": {Kind: "aws/assume-role", Default: false},
+		},
+	}
+
+	// Empty paths - no files to scan
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{},
+	}
+
+	// Should not error, just find no defaults
+	scanAndMergeStackAuthDefaults(authConfig, atmosConfig)
+
+	// Identity should still not have default set (no stack defaults found)
+	assert.False(t, authConfig.Identities["test-identity"].Default)
+}
