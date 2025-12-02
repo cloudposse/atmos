@@ -1,54 +1,51 @@
 package function
 
 import (
-	"sync"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-var registerOnce sync.Once
+// DefaultRegistry creates a new registry with all default functions registered.
+// The shellExecutor parameter provides the implementation for the !exec function.
+// If shellExecutor is nil, the !exec function will not be available.
+func DefaultRegistry(shellExecutor ShellExecutor) *Registry {
+	defer perf.Track(nil, "function.DefaultRegistry")()
 
-// RegisterDefaults registers all default function handlers with the global registry.
-// This is called automatically when DefaultRegistry() is first accessed,
-// but can also be called explicitly to ensure functions are registered.
-func RegisterDefaults() {
-	defer perf.Track(nil, "function.RegisterDefaults")()
+	r := NewRegistry()
 
-	registerOnce.Do(func() {
-		registry := DefaultRegistry()
+	// Register pre-merge functions.
+	_ = r.Register(NewEnvFunction())
+	_ = r.Register(NewTemplateFunction())
+	_ = r.Register(NewGitRootFunction())
 
-		// PreMerge functions.
-		mustRegister(registry, NewEnvFunction())
-		mustRegister(registry, NewExecFunction())
-		mustRegister(registry, NewRandomFunction())
-		mustRegister(registry, NewTemplateFunction())
-		mustRegister(registry, NewGitRootFunction())
-		mustRegister(registry, NewIncludeFunction())
-		mustRegister(registry, NewIncludeRawFunction())
-		mustRegister(registry, NewLiteralFunction())
+	// Register exec function only if executor is provided.
+	if shellExecutor != nil {
+		_ = r.Register(NewExecFunction(shellExecutor))
+	}
 
-		// PostMerge functions.
-		mustRegister(registry, NewStoreFunction())
-		mustRegister(registry, NewStoreGetFunction())
-		mustRegister(registry, NewTerraformOutputFunction())
-		mustRegister(registry, NewTerraformStateFunction())
-		mustRegister(registry, NewAwsAccountIDFunction())
-		mustRegister(registry, NewAwsCallerIdentityArnFunction())
-		mustRegister(registry, NewAwsCallerIdentityUserIDFunction())
-		mustRegister(registry, NewAwsRegionFunction())
-	})
+	return r
 }
 
-// mustRegister registers a function and panics on error.
-func mustRegister(registry *Registry, fn Function) {
-	if err := registry.Register(fn); err != nil {
-		log.Error("Failed to register function", "name", fn.Name(), "error", err)
-		panic(err)
+// Tags returns a map of function tags to function names.
+// This is useful for detecting function calls in string values.
+func Tags() map[string]string {
+	defer perf.Track(nil, "function.Tags")()
+
+	return map[string]string{
+		TagEnv:      "env",
+		TagExec:     "exec",
+		TagTemplate: "template",
+		TagGitRoot:  "repo-root",
 	}
 }
 
-// init automatically registers defaults when the package is imported.
-func init() {
-	RegisterDefaults()
+// AllTags returns a list of all known function tags.
+func AllTags() []string {
+	defer perf.Track(nil, "function.AllTags")()
+
+	return []string{
+		TagEnv,
+		TagExec,
+		TagTemplate,
+		TagGitRoot,
+	}
 }

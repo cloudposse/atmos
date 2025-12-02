@@ -8,140 +8,149 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestEnvFunction_Execute_EdgeCases(t *testing.T) {
+func TestNewEnvFunction(t *testing.T) {
 	fn := NewEnvFunction()
 
+	assert.Equal(t, "env", fn.Name())
+	assert.Empty(t, fn.Aliases())
+	assert.Equal(t, PreMerge, fn.Phase())
+}
+
+func TestEnvFunctionExecute(t *testing.T) {
 	tests := []struct {
 		name        string
 		args        string
-		setupEnv    map[string]string
+		envVars     map[string]string
+		contextEnv  map[string]string
 		expected    any
 		expectError bool
 	}{
+		{
+			name:     "existing env var",
+			args:     "TEST_ENV_VAR",
+			envVars:  map[string]string{"TEST_ENV_VAR": "test_value"},
+			expected: "test_value",
+		},
+		{
+			name:     "missing env var returns empty",
+			args:     "NONEXISTENT_VAR",
+			expected: "",
+		},
+		{
+			name:     "missing env var with default",
+			args:     "NONEXISTENT_VAR default_value",
+			expected: "default_value",
+		},
+		{
+			name:     "existing env var ignores default",
+			args:     "TEST_ENV_VAR default",
+			envVars:  map[string]string{"TEST_ENV_VAR": "actual"},
+			expected: "actual",
+		},
+		{
+			name:       "context env takes precedence",
+			args:       "MY_VAR",
+			envVars:    map[string]string{"MY_VAR": "os_value"},
+			contextEnv: map[string]string{"MY_VAR": "context_value"},
+			expected:   "context_value",
+		},
 		{
 			name:        "empty args returns error",
 			args:        "",
 			expectError: true,
 		},
 		{
-			name:        "whitespace only returns error",
-			args:        "   ",
+			name:        "too many args returns error",
+			args:        "VAR default extra",
 			expectError: true,
-		},
-		{
-			name:     "existing env var",
-			args:     "TEST_ENV_VAR",
-			setupEnv: map[string]string{"TEST_ENV_VAR": "test_value"},
-			expected: "test_value",
-		},
-		{
-			name:     "missing env var returns empty",
-			args:     "NONEXISTENT_VAR_12345",
-			expected: "",
-		},
-		{
-			name:     "missing env var with default",
-			args:     "NONEXISTENT_VAR_12345 default_value",
-			expected: "default_value",
-		},
-		{
-			name:     "existing env var ignores default",
-			args:     "TEST_ENV_VAR fallback",
-			setupEnv: map[string]string{"TEST_ENV_VAR": "actual_value"},
-			expected: "actual_value",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set up environment variables.
-			for k, v := range tt.setupEnv {
+			for k, v := range tt.envVars {
 				t.Setenv(k, v)
 			}
 
-			result, err := fn.Execute(context.Background(), tt.args, nil)
+			fn := NewEnvFunction()
+
+			var execCtx *ExecutionContext
+			if tt.contextEnv != nil {
+				execCtx = &ExecutionContext{Env: tt.contextEnv}
+			}
+
+			result, err := fn.Execute(context.Background(), tt.args, execCtx)
+
 			if tt.expectError {
 				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestEnvFunction_Execute_TooManyArgs(t *testing.T) {
+func TestEnvFunctionWithQuotedArgs(t *testing.T) {
 	fn := NewEnvFunction()
 
-	// Test with too many arguments.
-	_, err := fn.Execute(context.Background(), "VAR default extra_arg", nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "accepts 1 or 2 arguments")
+	result, err := fn.Execute(context.Background(), `MY_VAR "default with spaces"`, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "default with spaces", result)
 }
 
-func TestParseEnvArgs(t *testing.T) {
+func TestSplitStringByDelimiter(t *testing.T) {
 	tests := []struct {
-		name            string
-		args            string
-		expectedName    string
-		expectedDefault string
-		expectError     bool
+		name        string
+		input       string
+		expected    []string
+		expectError bool
 	}{
 		{
-			name:            "single argument",
-			args:            "VAR_NAME",
-			expectedName:    "VAR_NAME",
-			expectedDefault: "",
+			name:     "simple split",
+			input:    "a b c",
+			expected: []string{"a", "b", "c"},
 		},
 		{
-			name:            "two arguments",
-			args:            "VAR_NAME default_value",
-			expectedName:    "VAR_NAME",
-			expectedDefault: "default_value",
+			name:     "quoted string",
+			input:    `a "b c" d`,
+			expected: []string{"a", "b c", "d"},
 		},
 		{
-			name:            "with extra whitespace",
-			args:            "  VAR_NAME   default_value  ",
-			expectedName:    "VAR_NAME",
-			expectedDefault: "default_value",
+			name:     "single quoted",
+			input:    `a 'b c' d`,
+			expected: []string{"a", "b c", "d"},
 		},
 		{
-			name:        "empty args",
-			args:        "",
+			name:     "empty input",
+			input:    "",
+			expected: nil,
+		},
+		{
+			name:        "unclosed quote",
+			input:       `a "b c`,
 			expectError: true,
+		},
+		{
+			name:     "multiple spaces",
+			input:    "a   b   c",
+			expected: []string{"a", "b", "c"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			name, def, err := parseEnvArgs(tt.args)
+			result, err := splitStringByDelimiter(tt.input, ' ')
+
 			if tt.expectError {
 				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.expectedName, name)
-				assert.Equal(t, tt.expectedDefault, def)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-func TestLookupEnvFromContext(t *testing.T) {
-	// Nil context.
-	val, found := lookupEnvFromContext(nil, "TEST")
-	assert.False(t, found)
-	assert.Empty(t, val)
-
-	// Nil stack info.
-	execCtx := &ExecutionContext{}
-	val, found = lookupEnvFromContext(execCtx, "TEST")
-	assert.False(t, found)
-	assert.Empty(t, val)
-}
-
-func TestEnvFunction_Metadata(t *testing.T) {
-	fn := NewEnvFunction()
-	require.NotNil(t, fn)
-	assert.Equal(t, TagEnv, fn.Name())
-	assert.Equal(t, PreMerge, fn.Phase())
 }
