@@ -90,16 +90,11 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 		return err
 	}
 
-	// Get identity from flag (if --identity flag is added to this command).
-	identityName := ""
-	if cmd.Flags().Changed("identity") {
-		identityName, _ = cmd.Flags().GetString("identity")
-	}
-
 	// Create AuthManager with stack-level default identity scanning.
-	// This enables stack-level auth.identities.*.default to be recognized.
+	// When identityName is empty, CreateAndAuthenticateManagerWithAtmosConfig scans stack configs
+	// for auth.identities.*.default: true to find the default identity automatically.
 	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
-		identityName,
+		"", // No explicit identity flag; rely on stack-level default resolution.
 		&atmosConfig.Auth,
 		cfg.IdentityFlagSelectValue,
 		&atmosConfig,
