@@ -358,3 +358,114 @@ func TestGetAllStackFiles_InvalidPattern(t *testing.T) {
 
 	assert.Empty(t, files)
 }
+
+func TestGetAllStackFiles_InvalidExcludePattern(t *testing.T) {
+	// Create a temporary directory with a stack file.
+	tmpDir := t.TempDir()
+
+	content := `
+auth:
+  identities:
+    test-identity:
+      default: true
+`
+	err := os.WriteFile(filepath.Join(tmpDir, "test.yaml"), []byte(content), 0o644)
+	require.NoError(t, err)
+
+	// Invalid exclude pattern should be skipped without error.
+	// The file should still be included.
+	files := getAllStackFiles(
+		[]string{filepath.Join(tmpDir, "*.yaml")},
+		[]string{"/nonexistent/path/[invalid/glob"},
+	)
+
+	assert.Len(t, files, 1)
+}
+
+func TestScanFileForAuthDefaults_ReadError(t *testing.T) {
+	// Try to read a non-existent file.
+	defaults, err := scanFileForAuthDefaults("/nonexistent/path/test.yaml")
+
+	require.Error(t, err)
+	assert.Nil(t, defaults)
+}
+
+func TestHasAnyDefault_AllFalse(t *testing.T) {
+	// Test when all defaults are false.
+	defaults := map[string]bool{
+		"identity-a": false,
+		"identity-b": false,
+	}
+
+	result := hasAnyDefault(defaults)
+	assert.False(t, result)
+}
+
+func TestHasAnyDefault_Empty(t *testing.T) {
+	// Test with empty map.
+	defaults := map[string]bool{}
+
+	result := hasAnyDefault(defaults)
+	assert.False(t, result)
+}
+
+func TestHasAnyDefault_OneTrue(t *testing.T) {
+	// Test when one default is true.
+	defaults := map[string]bool{
+		"identity-a": false,
+		"identity-b": true,
+	}
+
+	result := hasAnyDefault(defaults)
+	assert.True(t, result)
+}
+
+func TestApplyStackDefaults_FalseDefault(t *testing.T) {
+	// Test when stack defaults has an identity set to false.
+	// This should not change the identity's default status.
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"test-identity": {Kind: "aws/assume-role", Default: true},
+		},
+	}
+
+	// Stack defaults has identity set to false - should be skipped.
+	stackDefaults := map[string]bool{"test-identity": false}
+
+	// Call applyStackDefaults directly.
+	applyStackDefaults(authConfig, stackDefaults)
+
+	// Identity should keep its original default status.
+	assert.True(t, authConfig.Identities["test-identity"].Default)
+}
+
+func TestScanStackAuthDefaults_FileReadError(t *testing.T) {
+	// Create a temporary directory.
+	tmpDir := t.TempDir()
+
+	// Create a valid stack file.
+	validContent := `
+auth:
+  identities:
+    valid-identity:
+      default: true
+`
+	err := os.WriteFile(filepath.Join(tmpDir, "valid.yaml"), []byte(validContent), 0o644)
+	require.NoError(t, err)
+
+	// Create a directory named with .yaml extension (will fail to read as file).
+	err = os.Mkdir(filepath.Join(tmpDir, "invalid.yaml"), 0o755)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "*.yaml")},
+		ExcludeStackAbsolutePaths: []string{},
+	}
+
+	// Should successfully scan valid file, skipping the directory.
+	defaults, err := ScanStackAuthDefaults(atmosConfig)
+
+	require.NoError(t, err)
+	// Should have found the default from the valid file.
+	assert.True(t, defaults["valid-identity"])
+}

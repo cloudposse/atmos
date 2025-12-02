@@ -2,9 +2,13 @@ package exec
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestIsKnownWorkflowError tests the IsKnownWorkflowError function.
@@ -134,4 +138,139 @@ func TestFormatList(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestCheckAndMergeDefaultIdentity tests the checkAndMergeDefaultIdentity function.
+func TestCheckAndMergeDefaultIdentity(t *testing.T) {
+	tests := []struct {
+		name           string
+		atmosConfig    *schema.AtmosConfiguration
+		expectedResult bool
+	}{
+		{
+			name: "no identities configured",
+			atmosConfig: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Identities: map[string]schema.Identity{},
+				},
+			},
+			expectedResult: false,
+		},
+		{
+			name: "identities without default",
+			atmosConfig: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Identities: map[string]schema.Identity{
+						"test-identity": {
+							Kind:    "aws/assume-role",
+							Default: false,
+						},
+					},
+				},
+			},
+			expectedResult: false,
+		},
+		{
+			name: "identity with default true",
+			atmosConfig: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Identities: map[string]schema.Identity{
+						"test-identity": {
+							Kind:    "aws/assume-role",
+							Default: true,
+						},
+					},
+				},
+			},
+			expectedResult: true,
+		},
+		{
+			name: "multiple identities one with default",
+			atmosConfig: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Identities: map[string]schema.Identity{
+						"identity-1": {
+							Kind:    "aws/assume-role",
+							Default: false,
+						},
+						"identity-2": {
+							Kind:    "aws/assume-role",
+							Default: true,
+						},
+					},
+				},
+			},
+			expectedResult: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := checkAndMergeDefaultIdentity(tt.atmosConfig)
+			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+// TestCheckAndMergeDefaultIdentity_WithStackScanning tests checkAndMergeDefaultIdentity with stack file scanning.
+func TestCheckAndMergeDefaultIdentity_WithStackScanning(t *testing.T) {
+	// Create a temporary directory with stack files.
+	tmpDir := t.TempDir()
+
+	// Create a stack file with default identity.
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	err := os.MkdirAll(stacksDir, 0o755)
+	assert.NoError(t, err)
+
+	stackContent := `auth:
+  identities:
+    stack-default-identity:
+      default: true
+`
+	err = os.WriteFile(filepath.Join(stacksDir, "_defaults.yaml"), []byte(stackContent), 0o644)
+	assert.NoError(t, err)
+
+	// Create atmos config with identity but no default.
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tmpDir,
+		Auth: schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"stack-default-identity": {
+					Kind:    "aws/assume-role",
+					Default: false, // Not default in atmos.yaml.
+				},
+			},
+		},
+		IncludeStackAbsolutePaths: []string{filepath.Join(stacksDir, "*.yaml")},
+	}
+
+	// checkAndMergeDefaultIdentity should scan stack files and find the default.
+	result := checkAndMergeDefaultIdentity(atmosConfig)
+	assert.True(t, result)
+
+	// Verify that the identity was updated to have default=true.
+	identity, exists := atmosConfig.Auth.Identities["stack-default-identity"]
+	assert.True(t, exists)
+	assert.True(t, identity.Default)
+}
+
+// TestCheckAndMergeDefaultIdentity_ScanError tests behavior when stack scanning fails.
+func TestCheckAndMergeDefaultIdentity_ScanError(t *testing.T) {
+	// Create config with invalid include paths (will cause scan to return error).
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Identities: map[string]schema.Identity{
+				"test-identity": {
+					Kind:    "aws/assume-role",
+					Default: true, // Has default in atmos.yaml.
+				},
+			},
+		},
+		// Invalid path that will cause glob to return error.
+		IncludeStackAbsolutePaths: []string{"/nonexistent/path/[invalid/glob"},
+	}
+
+	// Should still return true because atmos.yaml has a default.
+	result := checkAndMergeDefaultIdentity(atmosConfig)
+	assert.True(t, result)
 }

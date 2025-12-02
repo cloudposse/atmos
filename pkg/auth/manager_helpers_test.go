@@ -995,3 +995,129 @@ func TestScanAndMergeStackAuthDefaults_NoExistingDefault(t *testing.T) {
 	// Identity should still not have default set (no stack defaults found)
 	assert.False(t, authConfig.Identities["test-identity"].Default)
 }
+
+func TestScanAndMergeStackAuthDefaults_WithStackFiles(t *testing.T) {
+	// Create a temporary directory with stack files.
+	tmpDir := t.TempDir()
+
+	// Create a stack file with default identity.
+	stackContent := `auth:
+  identities:
+    stack-identity:
+      default: true
+`
+	err := os.WriteFile(tmpDir+"/stack.yaml", []byte(stackContent), 0o644)
+	require.NoError(t, err)
+
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"stack-identity": {Kind: "aws/assume-role", Default: false},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                  tmpDir,
+		IncludeStackAbsolutePaths: []string{tmpDir + "/*.yaml"},
+	}
+
+	// Should scan and find the default
+	scanAndMergeStackAuthDefaults(authConfig, atmosConfig)
+
+	// Identity should now have default set from stack config
+	assert.True(t, authConfig.Identities["stack-identity"].Default)
+}
+
+func TestScanAndMergeStackAuthDefaults_ScanError(t *testing.T) {
+	// When scanning fails, should gracefully handle the error.
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"test-identity": {Kind: "aws/assume-role", Default: true},
+		},
+	}
+
+	// Invalid glob pattern - should fail gracefully
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{"/nonexistent/path/[invalid/glob"},
+	}
+
+	// Should not panic, should gracefully return after logging error
+	scanAndMergeStackAuthDefaults(authConfig, atmosConfig)
+
+	// Default should be preserved (scan failed, so no change)
+	assert.True(t, authConfig.Identities["test-identity"].Default)
+}
+
+func TestAuthenticateWithIdentity_SelectValue(t *testing.T) {
+	// Test the forceSelect branch in authenticateWithIdentity.
+	// When identityName matches selectValue, it should call GetDefaultIdentity(true).
+	authConfig := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-provider": {
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://test.awsapps.com/start",
+			},
+		},
+		Identities: map[string]schema.Identity{
+			"default-identity": {
+				Kind:    "aws/permission-set",
+				Default: true,
+				Via: &schema.IdentityVia{
+					Provider: "test-provider",
+				},
+				Principal: map[string]interface{}{
+					"name": "Access",
+					"account": map[string]interface{}{
+						"name": "account",
+					},
+				},
+			},
+		},
+	}
+
+	// Create manager
+	manager, err := createAuthManagerInstance(authConfig)
+	require.NoError(t, err)
+
+	// Call with identity matching select value - triggers forceSelect branch
+	err = authenticateWithIdentity(manager, "__SELECT__", "__SELECT__")
+	// Will fail because we don't have real SSO credentials
+	if err != nil {
+		// Should be an authentication error, not a config error
+		assert.NotErrorIs(t, err, errUtils.ErrAuthNotConfigured)
+	}
+}
+
+func TestResolveIdentityName_EmptyWithAuth(t *testing.T) {
+	// Test resolveIdentityName with empty identity but auth configured.
+	// Should attempt auto-detection.
+	authConfig := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"test-provider": {
+				Kind:     "aws/iam-identity-center",
+				Region:   "us-east-1",
+				StartURL: "https://test.awsapps.com/start",
+			},
+		},
+		Identities: map[string]schema.Identity{
+			"default-identity": {
+				Kind:    "aws/permission-set",
+				Default: true,
+				Via: &schema.IdentityVia{
+					Provider: "test-provider",
+				},
+				Principal: map[string]interface{}{
+					"name": "Access",
+					"account": map[string]interface{}{
+						"name": "account",
+					},
+				},
+			},
+		},
+	}
+
+	// Empty identity should auto-detect the default
+	resolved, err := resolveIdentityName("", authConfig)
+	require.NoError(t, err)
+	assert.Equal(t, "default-identity", resolved)
+}
