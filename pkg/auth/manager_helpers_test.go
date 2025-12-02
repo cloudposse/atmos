@@ -957,8 +957,8 @@ func TestCreateAndAuthenticateManagerWithAtmosConfig_SkipsWhenAtmosConfigDefault
 	}
 }
 
-func TestScanAndMergeStackAuthDefaults_ExistingDefault(t *testing.T) {
-	// When authConfig already has a default, scanAndMergeStackAuthDefaults should skip.
+func TestScanAndMergeStackAuthDefaults_ExistingDefault_NoStackFiles(t *testing.T) {
+	// When authConfig has a default and no stack files exist, default should be preserved.
 	authConfig := &schema.AuthConfig{
 		Identities: map[string]schema.Identity{
 			"test-identity": {Kind: "aws/assume-role", Default: true},
@@ -969,10 +969,10 @@ func TestScanAndMergeStackAuthDefaults_ExistingDefault(t *testing.T) {
 		IncludeStackAbsolutePaths: []string{"/nonexistent/path/*.yaml"},
 	}
 
-	// Should not panic or error, just skip the scan
+	// Should scan but find no files, so atmos.yaml default is preserved
 	scanAndMergeStackAuthDefaults(authConfig, atmosConfig)
 
-	// Identity should still have default: true
+	// Identity should still have default: true (no stack files to override)
 	assert.True(t, authConfig.Identities["test-identity"].Default)
 }
 

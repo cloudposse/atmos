@@ -12,6 +12,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// logKeyIdentity is the log key for identity-related messages.
+const logKeyIdentity = "identity"
+
 // stackAuthSection represents the minimal auth section structure for scanning.
 type stackAuthSection struct {
 	Auth struct {
@@ -63,7 +66,7 @@ func ScanStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]b
 		for identity, isDefault := range fileDefaults {
 			if isDefault {
 				defaults[identity] = true
-				log.Debug("Found default identity in stack config", "identity", identity, "file", filePath)
+				log.Debug("Found default identity in stack config", logKeyIdentity, identity, "file", filePath)
 			}
 		}
 	}
@@ -149,7 +152,8 @@ func scanFileForAuthDefaults(filePath string) (map[string]bool, error) {
 }
 
 // MergeStackAuthDefaults merges stack-level auth defaults into the auth config.
-// Stack defaults have lower priority than explicitly configured defaults in atmos.yaml.
+// Stack defaults have HIGHER priority than atmos.yaml defaults (following Atmos inheritance model).
+// This means stack config can override the default identity set in atmos.yaml.
 func MergeStackAuthDefaults(authConfig *schema.AuthConfig, stackDefaults map[string]bool) {
 	defer perf.Track(nil, "config.MergeStackAuthDefaults")()
 
@@ -157,7 +161,40 @@ func MergeStackAuthDefaults(authConfig *schema.AuthConfig, stackDefaults map[str
 		return
 	}
 
-	// For each identity in stackDefaults, set default if identity exists and doesn't have default set.
+	// Stack config takes precedence over atmos.yaml (following Atmos inheritance model).
+	// First, clear any existing defaults from atmos.yaml if stack has defaults.
+	if hasAnyDefault(stackDefaults) {
+		clearExistingDefaults(authConfig)
+	}
+
+	// Apply stack-level defaults.
+	applyStackDefaults(authConfig, stackDefaults)
+}
+
+// hasAnyDefault checks if any identity in the defaults map has default: true.
+func hasAnyDefault(defaults map[string]bool) bool {
+	for _, isDefault := range defaults {
+		if isDefault {
+			return true
+		}
+	}
+	return false
+}
+
+// clearExistingDefaults removes the default flag from all identities in the auth config.
+// This is used when stack config has defaults, which take precedence over atmos.yaml.
+func clearExistingDefaults(authConfig *schema.AuthConfig) {
+	for identityName, identity := range authConfig.Identities {
+		if identity.Default {
+			identity.Default = false
+			authConfig.Identities[identityName] = identity
+			log.Debug("Cleared atmos.yaml default (stack takes precedence)", logKeyIdentity, identityName)
+		}
+	}
+}
+
+// applyStackDefaults applies stack-level default flags to matching identities in the auth config.
+func applyStackDefaults(authConfig *schema.AuthConfig, stackDefaults map[string]bool) {
 	for identityName, isDefault := range stackDefaults {
 		if !isDefault {
 			continue
@@ -167,15 +204,12 @@ func MergeStackAuthDefaults(authConfig *schema.AuthConfig, stackDefaults map[str
 		if !exists {
 			// Identity doesn't exist in atmos.yaml config - skip.
 			// Stack defaults only set the default flag, they don't create identities.
-			log.Debug("Stack default identity not found in atmos config", "identity", identityName)
+			log.Debug("Stack default identity not found in atmos config", logKeyIdentity, identityName)
 			continue
 		}
 
-		// Only set default if not already set (atmos.yaml takes precedence).
-		if !identity.Default {
-			identity.Default = true
-			authConfig.Identities[identityName] = identity
-			log.Debug("Applied stack-level default to identity", "identity", identityName)
-		}
+		identity.Default = true
+		authConfig.Identities[identityName] = identity
+		log.Debug("Applied stack-level default to identity", logKeyIdentity, identityName)
 	}
 }

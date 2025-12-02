@@ -236,8 +236,9 @@ func TestMergeStackAuthDefaults_SetDefault(t *testing.T) {
 	assert.True(t, authConfig.Identities["test-identity"].Default)
 }
 
-func TestMergeStackAuthDefaults_DoesNotOverrideExisting(t *testing.T) {
-	// Identity already has default: false explicitly set.
+func TestMergeStackAuthDefaults_OverridesAtmosYamlDefault(t *testing.T) {
+	// Identity already has default: false in atmos.yaml.
+	// Stack config sets it to true - stack should take precedence.
 	authConfig := &schema.AuthConfig{
 		Identities: map[string]schema.Identity{
 			"test-identity": {Kind: "aws/assume-role", Default: false},
@@ -248,24 +249,47 @@ func TestMergeStackAuthDefaults_DoesNotOverrideExisting(t *testing.T) {
 
 	MergeStackAuthDefaults(authConfig, stackDefaults)
 
-	// Should set default since the existing value is false (the zero value).
+	// Stack takes precedence - should be true now.
 	assert.True(t, authConfig.Identities["test-identity"].Default)
 }
 
-func TestMergeStackAuthDefaults_PreservesExistingDefault(t *testing.T) {
-	// Identity already has default: true set.
+func TestMergeStackAuthDefaults_ClearsAtmosYamlDefault(t *testing.T) {
+	// atmos.yaml has identity-a as default.
+	// Stack config sets identity-b as default.
+	// Stack should take precedence - identity-a should lose default, identity-b should gain it.
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"identity-a": {Kind: "aws/assume-role", Default: true},
+			"identity-b": {Kind: "aws/assume-role", Default: false},
+		},
+	}
+
+	stackDefaults := map[string]bool{"identity-b": true}
+
+	MergeStackAuthDefaults(authConfig, stackDefaults)
+
+	// Stack takes precedence - identity-a should no longer be default.
+	assert.False(t, authConfig.Identities["identity-a"].Default)
+	// identity-b should now be default.
+	assert.True(t, authConfig.Identities["identity-b"].Default)
+}
+
+func TestMergeStackAuthDefaults_NoStackDefault_PreservesAtmosYaml(t *testing.T) {
+	// atmos.yaml has a default set.
+	// Stack config has no defaults.
+	// atmos.yaml default should be preserved.
 	authConfig := &schema.AuthConfig{
 		Identities: map[string]schema.Identity{
 			"test-identity": {Kind: "aws/assume-role", Default: true},
 		},
 	}
 
-	// Stack defaults has it set to false - should NOT override.
-	stackDefaults := map[string]bool{"test-identity": false}
+	// Empty stack defaults - no changes should be made.
+	stackDefaults := map[string]bool{}
 
 	MergeStackAuthDefaults(authConfig, stackDefaults)
 
-	// Should preserve existing default.
+	// atmos.yaml default should be preserved when stack has no defaults.
 	assert.True(t, authConfig.Identities["test-identity"].Default)
 }
 

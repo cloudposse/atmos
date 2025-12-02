@@ -270,25 +270,12 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 
 // scanAndMergeStackAuthDefaults scans stack configs for auth defaults and merges them into authConfig.
 // This is a helper function that handles the stack auth scanning logic.
+// Stack defaults take precedence over atmos.yaml defaults (following Atmos inheritance model).
 func scanAndMergeStackAuthDefaults(authConfig *schema.AuthConfig, atmosConfig *schema.AtmosConfiguration) {
 	defer perf.Track(atmosConfig, "auth.scanAndMergeStackAuthDefaults")()
 
-	// Check if any identity already has default set in atmos.yaml.
-	// If so, skip scanning to avoid unnecessary file I/O.
-	hasExistingDefault := false
-	for _, identity := range authConfig.Identities {
-		if identity.Default {
-			hasExistingDefault = true
-			break
-		}
-	}
-
-	if hasExistingDefault {
-		log.Debug("Default identity already set in atmos config, skipping stack scan")
-		return
-	}
-
-	// Scan stack configs for auth defaults.
+	// Always scan stack configs - stack defaults take precedence over atmos.yaml.
+	// This follows the Atmos inheritance model where more specific config overrides global.
 	log.Debug("Scanning stack configs for auth identity defaults")
 	stackDefaults, err := cfg.ScanStackAuthDefaults(atmosConfig)
 	if err != nil {
@@ -301,7 +288,7 @@ func scanAndMergeStackAuthDefaults(authConfig *schema.AuthConfig, atmosConfig *s
 		return
 	}
 
-	// Merge stack defaults into auth config.
+	// Merge stack defaults into auth config (stack takes precedence over atmos.yaml).
 	cfg.MergeStackAuthDefaults(authConfig, stackDefaults)
 	log.Debug("Merged stack auth defaults", "count", len(stackDefaults))
 }
