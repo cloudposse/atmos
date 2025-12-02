@@ -346,8 +346,8 @@ func TestRemoveTempDir(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			path := tt.setup()
 
-			// Call removeTempDir - it doesn't return anything
-			removeTempDir(path)
+			// Call RemoveTempDir - it doesn't return anything
+			RemoveTempDir(path)
 
 			// Verify directory was removed
 			_, err := os.Stat(path)

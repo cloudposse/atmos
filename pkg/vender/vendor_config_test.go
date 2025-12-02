@@ -9,8 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
+	e "github.com/cloudposse/atmos/pkg/vendoring"
 )
 
 func TestVendorConfigScenarios(t *testing.T) {

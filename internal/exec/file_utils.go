@@ -21,7 +21,10 @@ const (
 	uncPathPrefix               = "//" // UNC paths after filepath.ToSlash on Windows
 )
 
-func removeTempDir(path string) {
+// RemoveTempDir removes a temporary directory and logs a warning on error.
+func RemoveTempDir(path string) {
+	defer perf.Track(nil, "exec.RemoveTempDir")()
+
 	err := os.RemoveAll(path)
 	if err != nil {
 		log.Warn(err.Error())

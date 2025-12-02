@@ -18,6 +18,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -29,8 +30,10 @@ const (
 
 var defaultOCIFileSystem = filesystem.NewOSFileSystem()
 
-// processOciImage processes an OCI image and extracts its layers to the specified destination directory.
-func processOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string) error {
+// ProcessOciImage processes an OCI image and extracts its layers to the specified destination directory.
+func ProcessOciImage(atmosConfig *schema.AtmosConfiguration, imageName string, destDir string) error {
+	defer perf.Track(atmosConfig, "exec.ProcessOciImage")()
+
 	return processOciImageWithFS(atmosConfig, imageName, destDir, defaultOCIFileSystem)
 }
 
