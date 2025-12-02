@@ -225,12 +225,13 @@ module.exports = {
                     label: 'Terraform/OpenTofu',
                     collapsible: true,
                     collapsed: true,
+                    link: {type: 'doc', id: 'components/terraform/terraform'},
                     items: [
-                        {type: 'doc', id: 'components/terraform/terraform', label: 'Terraform Root Modules'},
-                        {type: 'doc', id: 'components/terraform/backends', label: 'Terraform Backends'},
-                        {type: 'doc', id: 'components/terraform/workspaces', label: 'Terraform Workspaces'},
-                        {type: 'doc', id: 'components/terraform/providers', label: 'Terraform Providers'},
-                        {type: 'doc', id: 'components/terraform/brownfield', label: 'Brownfield Considerations'},
+                        {type: 'doc', id: 'components/terraform/stack-config', label: 'Stack Configuration'},
+                        {type: 'doc', id: 'components/terraform/backends', label: 'Backends'},
+                        {type: 'doc', id: 'components/terraform/workspaces', label: 'Workspaces'},
+                        {type: 'doc', id: 'components/terraform/providers', label: 'Providers'},
+                        {type: 'doc', id: 'components/terraform/brownfield', label: 'Brownfield'},
                     ]
                 },
                 {

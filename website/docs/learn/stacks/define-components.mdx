@@ -1,7 +1,7 @@
 ---
 title: Configuring Components in Stacks
 sidebar_position: 2
-sidebar_label: Configure Components
+sidebar_label: Components
 id: define-components
 ---
 import Intro from '@site/src/components/Intro'
@@ -9,8 +9,18 @@ import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
 <Intro>
-Components are configured in the `components` section of stack files. This reference covers the schema for Terraform components, including `vars`, `metadata`, `settings`, and `env`. For Helmfile components, see [Using Helmfiles](/components/helmfile).
+Components are configured in the `components` section of stack files. Each component type (Terraform, Helmfile, Packer) has its own configuration schema, but they share common patterns for `metadata` and `settings`.
 </Intro>
+
+## Component Types
+
+Atmos supports multiple component types, each with its own stack configuration schema:
+
+| Type | Description | Stack Config Reference |
+|------|-------------|----------------------|
+| **Terraform/OpenTofu** | Provision cloud infrastructure | [Stack Configuration](/components/terraform/stack-config) |
+| **Helmfile** | Deploy Helm charts to Kubernetes | [Stack Configuration](/components/helmfile#stack-configuration) |
+| **Packer** | Build machine images | [Stack Configuration](/components/packer#stack-configuration) |
 
 ## Component Schema
 
@@ -29,116 +39,22 @@ To configure a Component in a [Stack](/learn/stacks), you define the component i
   and is defined in one or more YAML stack config files (which are called [Atmos stacks](/learn/stacks))
 :::
 
+## Common Attributes
 
-### Terraform Schema
-
-The schema of an Atmos Terraform Component in an Atmos Stack is as follows:
-
-```yaml
-components:
-  terraform:
-    # the slug of the component
-    example:
-
-      # configuration specific to atmos
-      metadata:
-        # Components can be of type "real" (default) or "abstract"
-        type: real
-        # This is the directory path of the component.
-        # In this example, we're referencing a component in the `components/terraform/stable/example` folder.
-        component: stable/example
-
-        # We can leverage multiple inheritance to sequentially deep merge multiple configurations
-        inherits:
-          - example-defaults
-
-        # Settings are where we store configuration related to integrations.
-        # It's a freeform map; anything can be placed here.
-        settings:
-          spacelift: {}
-
-      # Define the terraform variables, which will get deep-merged and exported to a `.tfvars` file by atmos.
-      vars:
-        enabled: true
-        name: superduper
-        nodes: 10
-```
-
-#### Terraform Attributes
+These attributes are available across all component types:
 
 <dl>
   <dt>`vars` (optional)</dt>
-  <dd>The `vars` section is a free-form map. Use [component validation](/validation/validating) to enforce policies.</dd>
-
-  <dt>`vars.namespace` (optional)</dt>
-  <dd>
-  This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
-
-  The namespace of all stacks. Typically, there will be one namespace for the organization.
-
-  Example:
-
-  ```yaml
-  vars:
-    namespace: acme
-  ```
-  </dd>
-
-  <dt>`vars.tenant` (optional)</dt>
-  <dd>
-  This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
-
-  In a multi-tenant configuration, the tenant represents a single `tenant`. By convention, we typically
-  recommend that every tenant have its own Organizational Unit (OU).
-
-  Example:
-
-  ```yaml
-  vars:
-    tenant: platform
-  ```
-  </dd>
-
-  <dt>`vars.stage` (optional)</dt>
-  <dd>
-  This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
-
-  The `stage` is where workloads run. See our [glossary](/terms) for disambiguation.
-
-  Example:
-
-  ```yaml
-  vars:
-    # Production stage
-    stage: prod
-  ```
-  </dd>
-
-  <dt>`vars.environment` (optional)</dt>
-  <dd>
-  This is an *optional* [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) convention.
-
-  The `environment` is used for location where things run. See our [glossary](/terms) for disambiguation.
-
-  Example:
-
-  ```yaml
-
-  vars:
-    # us-east-1
-    environment: ue1
-  ```
-  </dd>
+  <dd>The `vars` section is a free-form map of variables passed to the component. Use [component validation](/validation/validating) to enforce policies.</dd>
 
   <dt>`metadata` (optional)</dt>
-  <dd>The `metadata` section extends functionality of the component.</dd>
+  <dd>The `metadata` section extends functionality of the component. See [Metadata Attributes](#metadata-attributes) below.</dd>
 
   <dt>`settings`</dt>
   <dd>The `settings` block is a free-form map used to pass configuration information to [integrations](/integrations).</dd>
-
 </dl>
 
-
+## Metadata Attributes
 
 ### Types of Components
 
@@ -149,10 +65,10 @@ The type of component is expressed in the `metadata.type` parameter of a given c
 There are two types of components:
 <dl>
   <dt>`real`</dt>
-  <dd>Think of a `real` component as one that can be deployed. It’s fully configured and ready to be provisioned, similar to a "concrete" class in programming. Once defined, you can use it to create resources or services directly in your infrastructure.</dd>
+  <dd>Think of a `real` component as one that can be deployed. It's fully configured and ready to be provisioned, similar to a "concrete" class in programming. Once defined, you can use it to create resources or services directly in your infrastructure.</dd>
 
   <dt>`abstract`</dt>
-  <dd>An `abstract` component is more like a blueprint. It can’t be deployed on its own. Instead, it’s a base configuration that needs to be extended or inherited by other components. This is similar to an ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) in programming—it defines reusable configurations, but it’s not complete enough to be deployed directly.</dd>
+  <dd>An `abstract` component is more like a blueprint. It can't be deployed on its own. Instead, it's a base configuration that needs to be extended or inherited by other components. This is similar to an ["abstract base classes"](https://en.wikipedia.org/wiki/Abstract_type) in programming—it defines reusable configurations, but it's not complete enough to be deployed directly.</dd>
 </dl>
 
 ### Disabling Components with `metadata.enabled`
