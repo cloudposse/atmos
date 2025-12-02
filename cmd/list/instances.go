@@ -90,11 +90,18 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 		return err
 	}
 
+	// Get identity from --identity flag (inherited from parent list command) or ATMOS_IDENTITY env var.
+	// Precedence: flag > env var > stack-level default (scanned by CreateAndAuthenticateManagerWithAtmosConfig).
+	identityName := ""
+	if cmd.Flags().Changed("identity") {
+		identityName, _ = cmd.Flags().GetString("identity")
+	} else if envIdentity := viper.GetString("identity"); envIdentity != "" {
+		identityName = envIdentity
+	}
+
 	// Create AuthManager with stack-level default identity scanning.
-	// When identityName is empty, CreateAndAuthenticateManagerWithAtmosConfig scans stack configs
-	// for auth.identities.*.default: true to find the default identity automatically.
 	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
-		"", // No explicit identity flag; rely on stack-level default resolution.
+		identityName,
 		&atmosConfig.Auth,
 		cfg.IdentityFlagSelectValue,
 		&atmosConfig,
