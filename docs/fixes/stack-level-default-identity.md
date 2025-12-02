@@ -2,14 +2,14 @@
 
 ## Issue Summary
 
-When a default identity is configured only in stack config (e.g., `stacks/orgs/vbpt/_defaults`),
+When a default identity is configured only in stack config (e.g., `stacks/orgs/acme/_defaults`),
 the identity is not passed to `describe component` and other commands. Users are prompted to
 select an identity even though one is configured as default in their stack configuration.
 
 ## Symptoms
 
 ```bash
-❯ atmos describe component runs-on -s core-usw2-auto
+❯ atmos describe component <component> -s <stack>
 ┃ No default identity configured. Please choose an identity:
 ┃ > identity-1
 ┃   identity-2
@@ -18,25 +18,25 @@ select an identity even though one is configured as default in their stack confi
 
 Even when stack config has:
 ```yaml
-# stacks/orgs/vbpt/_defaults.yaml
+# stacks/orgs/acme/_defaults.yaml
 auth:
   identities:
-    vbpt-identity:
+    identity-1:
       default: true
 ```
 
 ## Workaround
 
-Setting the default in profile config works:
+Setting the default in the profile config works:
 ```yaml
 # profiles/managers/atmos.yaml
 auth:
   identities:
-    vbpt-identity:
+    identity-1:
       kind: aws/assume-role
       default: true
       via:
-        identity: vbpt-identity/permission-set
+        identity: identity-1/permission-set
       principal:
         assume_role: arn:aws:iam::123456789012:role/managers
 ```
@@ -70,7 +70,7 @@ The issue is a **chicken-and-egg problem** in how default identities are resolve
 ### Code Flow
 
 ```
-describe component runs-on -s core-usw2-auto
+describe component <component> -s <stack>
     │
     ▼
 InitCliConfig(processStacks=false)  ←── Only loads atmos.yaml + profiles
@@ -159,7 +159,7 @@ we perform a lightweight pre-scan of stack configurations to extract auth identi
    - Uses minimal YAML parsing without template/function processing
    - Returns a map of identity names to their default status
 
-2. **Merge into auth config** before creating manager:
+2. **Merge into auth config** before creating an auth manager:
    - Stack defaults take **precedence** over atmos.yaml defaults
    - Follows Atmos inheritance model (more specific config overrides global)
 
@@ -222,18 +222,3 @@ we perform a lightweight pre-scan of stack configurations to extract auth identi
 
 ### Workflows
 - Workflow execution scans for stack-level defaults when no explicit identity is specified (uses Approach 2)
-
-### Not Applicable
-- `atmos helmfile *` - Currently doesn't use Atmos Auth (uses external credentials)
-- `atmos packer *` - Currently doesn't use Atmos Auth (uses external credentials)
-
-## Related Issues
-
-- Commands affected: All describe commands, terraform commands, YAML functions
-- Version introduced: v1.200.0 (auth system)
-
-## References
-
-- Auth Manager implementation: `pkg/auth/manager.go`
-- Identity flag handling: `cmd/identity_flag.go`
-- Config loading: `pkg/config/config.go`
