@@ -1,0 +1,232 @@
+---
+title: Providers
+sidebar_position: 2
+sidebar_label: providers
+id: providers
+description: Configure authentication providers for AWS SSO, SAML, and GitHub OIDC in your `atmos.yaml`.
+---
+import DocCardList from '@theme/DocCardList'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Providers are the upstream systems that Atmos uses to obtain initial credentials. Configure providers in the `auth.providers` section of your `atmos.yaml`.
+</Intro>
+
+## AWS IAM Identity Center (SSO)
+
+The most common provider for AWS organizations using SSO.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start
+
+      # Optional session configuration
+      session:
+        duration: 4h               # Credential lifetime
+
+      console:
+        session_duration: 12h      # Web console session (max 12h)
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `aws/iam-identity-center`.</dd>
+
+  <dt>`region`</dt>
+  <dd>**Required.** AWS region for the Identity Center instance.</dd>
+
+  <dt>`start_url`</dt>
+  <dd>**Required.** Your AWS SSO start URL (e.g., `https://company.awsapps.com/start`).</dd>
+
+  <dt>`session.duration`</dt>
+  <dd>Optional. Session duration for CLI credentials (e.g., `1h`, `4h`). Default varies by provider.</dd>
+
+  <dt>`console.session_duration`</dt>
+  <dd>Optional. Web console session duration. Maximum 12 hours for AWS.</dd>
+</dl>
+
+## AWS SAML
+
+For organizations using SAML-based identity providers like Okta, Google Apps, or ADFS.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    okta-saml:
+      kind: aws/saml
+      region: us-east-1
+      url: https://company.okta.com/app/amazon_aws/abc123/sso/saml
+      idp_arn: arn:aws:iam::123456789012:saml-provider/okta-saml
+      driver: Browser              # Browser, GoogleApps, Okta, or ADFS
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `aws/saml`.</dd>
+
+  <dt>`region`</dt>
+  <dd>**Required.** AWS region.</dd>
+
+  <dt>`url`</dt>
+  <dd>**Required.** SAML SSO URL from your identity provider.</dd>
+
+  <dt>`idp_arn`</dt>
+  <dd>**Required.** ARN of the SAML provider in IAM.</dd>
+
+  <dt>`driver`</dt>
+  <dd>Optional. Authentication method: `Browser` (default, requires Playwright), `GoogleApps`, `Okta`, or `ADFS`.</dd>
+</dl>
+
+:::note
+The `aws/saml` provider requires the next identity to be of kind `aws/assume-role`, as the SAML authentication flow requires selecting a role to assume.
+:::
+
+## GitHub Actions OIDC
+
+For CI/CD pipelines running in GitHub Actions.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      region: us-east-1            # Required for GitHub OIDC
+      spec:
+        audience: sts.us-east-1.amazonaws.com
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `github/oidc`.</dd>
+
+  <dt>`region`</dt>
+  <dd>**Required.** AWS region for STS endpoint.</dd>
+
+  <dt>`spec.audience`</dt>
+  <dd>Optional. OIDC audience. Defaults to STS endpoint for the region.</dd>
+</dl>
+
+## Session Configuration
+
+Configure session durations for both CLI and console access at the provider level.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start
+
+      session:
+        duration: 4h              # CLI credential lifetime
+
+      console:
+        session_duration: 12h     # Web console session (max 12h for AWS)
+```
+</File>
+
+**Supported formats:** Integers (seconds), Go durations (`1h`, `8h`), or days (`1d`)
+
+## Multiple Providers
+
+You can configure multiple providers for different use cases:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    # Primary SSO for interactive use
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start
+
+    # SAML for legacy systems
+    okta-saml:
+      kind: aws/saml
+      region: us-east-1
+      url: https://company.okta.com/app/amazon_aws/abc123/sso/saml
+      idp_arn: arn:aws:iam::123456789012:saml-provider/okta
+
+    # GitHub OIDC for CI/CD
+    github-oidc:
+      kind: github/oidc
+      region: us-east-1
+```
+</File>
+
+Each provider can be referenced by name in identity configurations using the `via.provider` field.
+
+## Using Profiles for Different Environments
+
+Use [Atmos profiles](/cli/configuration/profiles) to define different provider configurations for various use cases:
+
+<File title="atmos.yaml">
+```yaml
+profiles:
+  # Profile for local development
+  dev:
+    auth:
+      providers:
+        company-sso:
+          kind: aws/iam-identity-center
+          region: us-east-1
+          start_url: https://company.awsapps.com/start
+
+  # Profile for CI/CD pipelines
+  ci:
+    auth:
+      providers:
+        github-oidc:
+          kind: github/oidc
+          region: us-east-1
+
+  # Profile for platform engineers with extended sessions
+  platform:
+    auth:
+      providers:
+        company-sso:
+          kind: aws/iam-identity-center
+          region: us-east-1
+          start_url: https://company.awsapps.com/start
+          session:
+            duration: 8h
+```
+</File>
+
+Activate a profile with `--profile` or the `ATMOS_PROFILE` environment variable:
+
+```bash
+# Use the CI profile in GitHub Actions
+ATMOS_PROFILE=ci atmos terraform apply myapp -s prod
+
+# Use the platform profile for extended sessions
+atmos --profile platform auth login
+```
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/auth/login', label: 'atmos auth login', description: 'Authenticate with a configured provider'},
+  {type: 'link', href: '/cli/commands/auth/validate', label: 'atmos auth validate', description: 'Validate provider configuration'},
+  {type: 'link', href: '/cli/commands/auth/console', label: 'atmos auth console', description: 'Open AWS console in browser'},
+  {type: 'link', href: '/cli/commands/auth/list', label: 'atmos auth list', description: 'List available identities and providers'},
+]} />
+
+## See Also
+
+- [Identities](/cli/configuration/auth/identities) — Configure identities that use these providers
+- [Profiles](/cli/configuration/profiles) — Environment-specific configuration overrides

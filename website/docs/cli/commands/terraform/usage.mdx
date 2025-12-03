@@ -451,7 +451,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 
         When set to `false` (or `0`, `no`, `off`), Atmos skips identity authentication entirely and uses standard cloud provider SDK credential resolution (e.g., environment variables, shared credentials file, instance metadata, OIDC). This is useful in CI/CD environments using external authentication mechanisms.
 
-        See [Disabling Identity Authentication](/cli/commands/auth/usage#disabling-identity-authentication) for more details.
+        See [Disabling Authentication](/cli/configuration/auth#disabling-authentication) for more details.
 
         **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
     </dd>

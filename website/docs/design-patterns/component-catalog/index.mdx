@@ -35,10 +35,13 @@ The foundation pattern that establishes a centralized library of component confi
 
 ### Advanced Patterns
 
-#### 1. [Configuration Catalog with Mixins](/design-patterns/component-catalog/with-mixins)
-Combines the Configuration Catalog pattern with mixins to create powerful, multi-layered configuration inheritance. This pattern is ideal for complex organizational structures where you need to share configuration across multiple dimensions (regions, environments, teams).
+#### 1. [Mixins](/design-patterns/component-catalog/mixins)
+Reusable configuration fragments that encapsulate settings you want to apply consistently. Define region defaults, stage defaults, or tenant defaults once in a mixin and import where needed.
 
-#### 2. [Configuration Catalog Template](/design-patterns/component-catalog/template)
+#### 2. [Component Archetypes](/design-patterns/component-catalog/with-mixins)
+Pre-configured component variants for specific use cases. Instead of configuring each instance from scratch, define archetypes like `s3-bucket/public`, `s3-bucket/logging`, or `s3-bucket/artifacts` that encapsulate best practices for that use case.
+
+#### 3. [Configuration Catalog Template](/design-patterns/component-catalog/template)
 Uses Go templates within catalog configurations to dynamically generate component settings. This pattern enables sophisticated configuration logic and reduces repetition when dealing with patterns in your infrastructure.
 
 ## Use-cases
@@ -147,7 +150,7 @@ components:
 
 stacks:
   base_path: "stacks"
-  name_pattern: "{tenant}-{environment}-{stage}"
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
   included_paths:
     # Tell Atmos to search for the top-level stack manifests in the `orgs` folder and its sub-folders
     - "orgs/**/*"
@@ -393,15 +396,16 @@ To address the limitations of the **Configuration Catalog** Design Pattern when 
 ## Related Patterns
 
 ### Configuration Catalog Variations
-- [Configuration Catalog with Mixins](/design-patterns/component-catalog/with-mixins) - Combine catalogs with mixins for multi-dimensional inheritance
+- [Mixins](/design-patterns/component-catalog/mixins) - Reusable configuration fragments
+- [Component Archetypes](/design-patterns/component-catalog/with-mixins) - Pre-configured variants for specific use cases
 - [Configuration Catalog Template](/design-patterns/component-catalog/template) - Use templates for dynamic configuration generation
 
 ### Alternative Approaches
-- [Component Inheritance](/design-patterns/component-inheritance) - Direct component inheritance without catalogs
+- [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance) - Direct component inheritance without catalogs
 - [Inline Configuration](/design-patterns/inline-component-configuration) - Configure components directly in stack files
 
 ### Organizational Patterns
-- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration) - Structure catalogs for complex organizations
+- [Organizational Structure Configuration](/design-patterns/stack-organization) - Structure catalogs for complex organizations
 
 ## References
 

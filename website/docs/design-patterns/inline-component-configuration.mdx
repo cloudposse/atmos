@@ -66,7 +66,7 @@ components:
 
 stacks:
   base_path: "stacks"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 
 schemas:
   jsonschema:
@@ -204,7 +204,7 @@ components:
 
 stacks:
   base_path: "stacks"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
   excluded_paths:
     # Tell Atmos that the `defaults` folder and all sub-folders don't contain top-level stack manifests
     - "defaults/**/*"
@@ -374,8 +374,8 @@ atmos terraform apply vpc -s prod
 ## Related Patterns
 
 - [Configuration Catalog](/design-patterns/component-catalog)
-- [Configuration Catalog with Mixins](/design-patterns/component-catalog/with-mixins)
+- [Component Archetypes](/design-patterns/component-catalog/with-mixins)
 - [Configuration Catalog Template](/design-patterns/component-catalog/template)
-- [Component Inheritance](/design-patterns/component-inheritance)
-- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
-- [Partial Component Configuration](/design-patterns/partial-component-configuration)
+- [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance)
+- [Organizational Structure Configuration](/design-patterns/stack-organization)
+- [Partial Component Configuration](/design-patterns/configuration-composition/partial-component-configuration)

@@ -1,0 +1,267 @@
+---
+title: Multiple Inheritance
+sidebar_position: 10
+sidebar_label: Multiple Inheritance
+description: Inherit from multiple abstract base components
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+The **Multiple Inheritance** pattern allows a component to inherit from multiple abstract base components, combining their configurations. This lets you compose components from reusable building blocks.
+</Intro>
+
+## Use-cases
+
+Use **Multiple Inheritance** when:
+
+- You have reusable configuration "traits" that apply to multiple components
+
+- You want to compose configuration from independent concerns (e.g., logging + monitoring + security)
+
+- Different teams own different aspects of component configuration
+
+## How It Works
+
+A component lists multiple base components in `metadata.inherits`. Configuration is merged in order—later entries override earlier ones:
+
+```yaml
+metadata:
+  inherits:
+    - base/defaults      # Applied first
+    - base/logging       # Applied second, overrides conflicts
+    - base/production    # Applied last, highest precedence
+```
+
+## Example: Composing from Traits
+
+Define abstract base components that represent different configuration concerns:
+
+<File title="stacks/catalog/base/defaults.yaml">
+```yaml
+components:
+  terraform:
+    base/defaults:
+      metadata:
+        type: abstract
+      vars:
+        enabled: true
+        tags:
+          managed_by: atmos
+```
+</File>
+
+<File title="stacks/catalog/base/logging.yaml">
+```yaml
+components:
+  terraform:
+    base/logging:
+      metadata:
+        type: abstract
+      vars:
+        logging_enabled: true
+        log_retention_days: 30
+```
+</File>
+
+<File title="stacks/catalog/base/production.yaml">
+```yaml
+components:
+  terraform:
+    base/production:
+      metadata:
+        type: abstract
+      vars:
+        multi_az: true
+        deletion_protection: true
+        tags:
+          environment: production
+```
+</File>
+
+Now compose a concrete component by inheriting from multiple bases:
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+import:
+  - catalog/base/defaults
+  - catalog/base/logging
+  - catalog/base/production
+
+components:
+  terraform:
+    rds:
+      metadata:
+        component: rds
+        inherits:
+          - base/defaults
+          - base/logging
+          - base/production
+      vars:
+        name: my-database
+        instance_class: db.r6g.large
+```
+</File>
+
+The resulting `rds` component has:
+
+```yaml
+# From base/defaults
+enabled: true
+tags:
+  managed_by: atmos
+  environment: production  # Merged from base/production
+
+# From base/logging
+logging_enabled: true
+log_retention_days: 30
+
+# From base/production
+multi_az: true
+deletion_protection: true
+
+# From inline vars
+name: my-database
+instance_class: db.r6g.large
+```
+
+## Example: Environment + Size Traits
+
+Combine environment settings with sizing presets:
+
+<File title="stacks/catalog/size/small.yaml">
+```yaml
+components:
+  terraform:
+    size/small:
+      metadata:
+        type: abstract
+      vars:
+        instance_class: db.t3.small
+        storage_size: 20
+        max_connections: 100
+```
+</File>
+
+<File title="stacks/catalog/size/large.yaml">
+```yaml
+components:
+  terraform:
+    size/large:
+      metadata:
+        type: abstract
+      vars:
+        instance_class: db.r6g.xlarge
+        storage_size: 500
+        max_connections: 1000
+```
+</File>
+
+<File title="stacks/catalog/env/dev.yaml">
+```yaml
+components:
+  terraform:
+    env/dev:
+      metadata:
+        type: abstract
+      vars:
+        deletion_protection: false
+        multi_az: false
+```
+</File>
+
+<File title="stacks/catalog/env/prod.yaml">
+```yaml
+components:
+  terraform:
+    env/prod:
+      metadata:
+        type: abstract
+      vars:
+        deletion_protection: true
+        multi_az: true
+        backup_retention_period: 30
+```
+</File>
+
+Compose different combinations:
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+import:
+  - catalog/size/small
+  - catalog/env/dev
+
+components:
+  terraform:
+    rds:
+      metadata:
+        component: rds
+        inherits:
+          - size/small
+          - env/dev
+      vars:
+        name: dev-database
+```
+</File>
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+import:
+  - catalog/size/large
+  - catalog/env/prod
+
+components:
+  terraform:
+    rds:
+      metadata:
+        component: rds
+        inherits:
+          - size/large
+          - env/prod
+      vars:
+        name: prod-database
+```
+</File>
+
+## Merge Behavior
+
+When the same key exists in multiple base components:
+
+| Data Type | Behavior |
+|-----------|----------|
+| Scalars (strings, numbers, bools) | Later value wins |
+| Maps/Objects | Deep merged, later values override |
+| Lists/Arrays | Later list replaces entirely |
+
+Example with maps:
+
+```yaml
+# base/defaults
+tags:
+  managed_by: atmos
+  team: platform
+
+# base/production
+tags:
+  environment: production
+
+# Result (deep merged)
+tags:
+  managed_by: atmos      # from defaults
+  team: platform         # from defaults
+  environment: production # from production
+```
+
+## Related Patterns
+
+- [Abstract Component](/design-patterns/inheritance-patterns/abstract-component) - Create non-deployable base components
+- [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance) - Single inheritance basics
+- [Component Catalog](/design-patterns/component-catalog) - Organize base components
+
+## References
+
+- [Component Inheritance](/stacks/inheritance)

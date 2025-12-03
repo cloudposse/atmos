@@ -41,12 +41,7 @@ The **Component Overrides** pattern provides the following benefits:
 
 :::note
 The **Component Overrides** Design Pattern can be applied to the configuration structures described by
-the [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
-and [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
-Atmos Design Patterns.
-
-In this example, we'll use the structure described by the [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
-Design Pattern.
+the [Layered Stack Configuration](/design-patterns/stack-organization/layered-stack-configuration) Atmos Design Pattern.
 :::
 
 In the following structure, we have many different Terraform components (Terraform root modules) in the `components/terraform` folder.
@@ -166,7 +161,7 @@ components:
 
 stacks:
   base_path: "stacks"
-  name_pattern: "{tenant}-{environment}-{stage}"
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
   included_paths:
     # Tell Atmos to search for the top-level stack manifests in the `orgs` folder and its sub-folders
     - "orgs/**/*"
@@ -396,11 +391,10 @@ corresponding layers.
 
 ## Related Patterns
 
-- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
-- [Partial Stack Configuration](/design-patterns/partial-stack-configuration)
-- [Layered Stack Configuration](/design-patterns/layered-stack-configuration)
+- [Organizational Structure Configuration](/design-patterns/stack-organization)
+- [Layered Stack Configuration](/design-patterns/stack-organization/layered-stack-configuration)
 - [Component Catalog](/design-patterns/component-catalog)
-- [Component Catalog with Mixins](/design-patterns/component-catalog/with-mixins)
+- [Component Archetypes](/design-patterns/component-catalog/with-mixins)
 
 ## References
 

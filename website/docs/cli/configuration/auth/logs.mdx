@@ -1,0 +1,147 @@
+---
+title: Auth Logs
+sidebar_position: 5
+sidebar_label: logs
+id: logs
+description: Configure auth-specific logging in your `atmos.yaml` for debugging authentication issues.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Configure auth-specific logging separately from main Atmos logs. This is useful for debugging authentication issues without enabling verbose logging for all Atmos operations.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  logs:
+    level: Info                   # Debug, Info, Warn, Error
+    file: /tmp/atmos-auth.log     # Optional file path
+```
+</File>
+
+<dl>
+  <dt>`level`</dt>
+  <dd>
+    Log level for auth operations. Options:
+    - `Debug` - Verbose output including credential flows
+    - `Info` - Standard information about auth operations
+    - `Warn` - Warnings only
+    - `Error` - Errors only
+  </dd>
+
+  <dt>`file`</dt>
+  <dd>Optional. Path to write auth logs. If not specified, logs go to stderr.</dd>
+</dl>
+
+## Log Levels
+
+### Debug
+
+Use `Debug` level when troubleshooting authentication issues:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  logs:
+    level: Debug
+```
+</File>
+
+Debug output includes:
+- Provider initialization details
+- Token refresh operations
+- Credential resolution steps
+- API call details (without secrets)
+
+### Info (Default)
+
+Standard logging for normal operations:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  logs:
+    level: Info
+```
+</File>
+
+Info output includes:
+- Authentication success/failure
+- Identity selection
+- Session expiration notices
+
+### Warn
+
+Only log warnings and errors:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  logs:
+    level: Warn
+```
+</File>
+
+Warn output includes:
+- Credential expiration warnings
+- Fallback behavior notices
+- Configuration deprecation warnings
+
+### Error
+
+Only log errors:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  logs:
+    level: Error
+```
+</File>
+
+## Writing to File
+
+For persistent logging or debugging in automated environments:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  logs:
+    level: Debug
+    file: /var/log/atmos-auth.log
+```
+</File>
+
+This is useful for:
+- CI/CD debugging
+- Post-mortem analysis
+- Audit logging
+
+:::note
+The log file path must be writable by the user running Atmos. Parent directories must exist.
+:::
+
+## Separating Auth Logs from Main Logs
+
+Auth logs are separate from main Atmos logs configured in the `logs` section:
+
+<File title="atmos.yaml">
+```yaml
+# Main Atmos logs
+logs:
+  level: Info
+  file: /var/log/atmos.log
+
+# Auth-specific logs (separate)
+auth:
+  logs:
+    level: Debug
+    file: /var/log/atmos-auth.log
+```
+</File>
+
+This allows you to enable verbose auth logging without affecting other Atmos output.

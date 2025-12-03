@@ -137,11 +137,6 @@ graph TD
     A[us-east-2.yaml] -->|imports| B[prod/_defaults.yaml]
     B -->|imports| C[core/_defaults.yaml]
     C -->|imports| D[acme/_defaults.yaml]
-
-    style A fill:#e1f5fe
-    style B fill:#fff3e0
-    style C fill:#fff3e0
-    style D fill:#fff3e0
 ```
 
 Each level explicitly imports its parent's defaults, creating a clear inheritance chain.
@@ -294,3 +289,9 @@ The `_defaults.yaml` pattern is a simple but effective naming convention that he
 - You have **complete control** over inheritance
 
 This convention has emerged from real-world usage as a best practice for organizing hierarchical configurations in a clear, maintainable way.
+
+## Related Patterns
+
+- [Multi-Region Configuration](/design-patterns/stack-organization/multi-region-configuration) - Uses `_defaults.yaml` for stage-level defaults
+- [Organizational Hierarchy Configuration](/design-patterns/stack-organization/organizational-hierarchy-configuration) - Full example of `_defaults.yaml` at every level
+- [Component Catalog](/design-patterns/component-catalog) - Another pattern for organizing reusable configuration

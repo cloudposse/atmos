@@ -7,6 +7,7 @@ id: pro
 slug: /cli/configuration/settings/pro
 ---
 
+import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
@@ -174,7 +175,9 @@ jobs:
           atmos pro unlock vpc -s prod/us-east-1
 ```
 
-## See Also
+## Related Commands
 
-- [`atmos pro lock`](/cli/commands/pro/lock) — Lock a stack to prevent concurrent modifications
-- [`atmos pro unlock`](/cli/commands/pro/unlock) — Unlock a previously locked stack
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/pro/lock', label: 'atmos pro lock', description: 'Lock a stack to prevent concurrent modifications'},
+  {type: 'link', href: '/cli/commands/pro/unlock', label: 'atmos pro unlock', description: 'Unlock a previously locked stack'},
+]} />

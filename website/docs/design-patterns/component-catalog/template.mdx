@@ -85,7 +85,7 @@ components:
 
 stacks:
   base_path: "stacks"
-  name_pattern: "{tenant}-{environment}-{stage}"
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
   included_paths:
     # Tell Atmos to search for the top-level stack manifests in the `orgs` folder and its sub-folders
     - "orgs/**/*"
@@ -185,17 +185,17 @@ The **Component Catalog Template** pattern has the following limitations and dra
 To address the limitations of the **Component Catalog Template** Design Pattern, consider using the following patterns:
 
 - [Component Catalog](/design-patterns/component-catalog)
-- [Component Catalog with Mixins](/design-patterns/component-catalog/with-mixins)
+- [Component Archetypes](/design-patterns/component-catalog/with-mixins)
 
 :::
 
 ## Related Patterns
 
 - [Component Catalog](/design-patterns/component-catalog)
-- [Component Catalog with Mixins](/design-patterns/component-catalog/with-mixins)
-- [Component Inheritance](/design-patterns/component-inheritance)
+- [Component Archetypes](/design-patterns/component-catalog/with-mixins)
+- [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance)
 - [Inline Component Configuration](/design-patterns/inline-component-configuration)
-- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
+- [Organizational Structure Configuration](/design-patterns/stack-organization)
 
 ## References
 

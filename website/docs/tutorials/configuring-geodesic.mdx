@@ -31,7 +31,7 @@ Geodesic is Cloud Posse's DevOps toolbox - a containerized environment with pre-
 - Atmos installed on your **host machine** (laptop/workstation) for authentication
 
 :::note Keychain Integration
-Atmos can optionally store refresh tokens in your operating system's keyring (macOS Keychain, Linux Secret Service, Windows Credential Manager) using `atmos auth user configure`. However, this keyring integration is **only available on the host machine**. Inside the Geodesic container, Atmos will use file-based credential storage following XDG conventions (e.g., `~/.config/atmos/aws/` in the container). See [Credential Storage](/cli/commands/auth/usage#credential-storage) for details.
+Atmos can optionally store refresh tokens in your operating system's keyring (macOS Keychain, Linux Secret Service, Windows Credential Manager) using `atmos auth user configure`. However, this keyring integration is **only available on the host machine**. Inside the Geodesic container, Atmos will use file-based credential storage following XDG conventions (e.g., `~/.config/atmos/aws/` in the container). See [Credential Storage](/cli/configuration/auth/keyring) for details.
 :::
 
 ## Configuration Steps
@@ -297,7 +297,7 @@ ls -la ~/.config/atmos/aws/
 ## Next Steps
 
 - Learn about [authentication workflows](/cli/commands/auth/usage)
-- Explore [component-level authentication](/cli/commands/auth/usage#component-level-configuration)
+- Explore [component-level authentication](/cli/configuration/auth/identities#component-level-overrides)
 - Review the [Leapp migration guide](/tutorials/migrating-from-leapp) if migrating
 
 ## Getting Help

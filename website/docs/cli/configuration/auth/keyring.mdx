@@ -1,0 +1,132 @@
+---
+title: Keyring
+sidebar_position: 4
+sidebar_label: keyring
+id: keyring
+description: Configure credential storage backends (system keyring, file, or memory) in your `atmos.yaml`.
+---
+import DocCardList from '@theme/DocCardList'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos supports three keyring backends for storing authentication credentials. Configure the keyring in the `auth.keyring` section of your `atmos.yaml`.
+</Intro>
+
+## System Keyring (Default)
+
+Uses your operating system's native secure credential storage:
+- **macOS**: Keychain
+- **Linux**: Secret Service (GNOME Keyring, KDE Wallet)
+- **Windows**: Windows Credential Manager
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  keyring:
+    type: system
+```
+</File>
+
+This is the default and recommended option for interactive use. Credentials are stored securely using the operating system's built-in credential management.
+
+## File Keyring
+
+AES-256 encrypted file-based storage with password protection.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  keyring:
+    type: file
+    spec:
+      path: ~/.atmos/keyring              # Optional custom path
+      password_env: ATMOS_KEYRING_PASSWORD # Optional env var name
+```
+</File>
+
+<dl>
+  <dt>`type`</dt>
+  <dd>**Required.** Must be `file`.</dd>
+
+  <dt>`spec.path`</dt>
+  <dd>Optional. Custom path for the keyring file. Defaults to XDG data directory.</dd>
+
+  <dt>`spec.password_env`</dt>
+  <dd>Optional. Environment variable name containing the keyring password. Defaults to `ATMOS_KEYRING_PASSWORD`.</dd>
+</dl>
+
+**Password resolution order:**
+1. Environment variable (`ATMOS_KEYRING_PASSWORD` or custom from `password_env`)
+2. Interactive prompt (if TTY available)
+3. Error if neither available
+
+### Use Cases
+
+File keyring is useful for:
+- Headless servers without system keyring support
+- Docker containers
+- CI/CD environments with persistent storage
+- Shared credentials across multiple machines
+
+## Memory Keyring
+
+In-memory storage with no persistence (credentials lost on exit).
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  keyring:
+    type: memory
+```
+</File>
+
+Best for:
+- Unit tests
+- Temporary credential caching
+- Environments where persistence is not desired
+
+:::warning
+Memory keyring does not persist credentials. You will need to re-authenticate after every Atmos restart.
+:::
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_KEYRING_TYPE`</dt>
+  <dd>Override keyring type (`system`, `file`, `memory`).</dd>
+
+  <dt>`ATMOS_KEYRING_PASSWORD`</dt>
+  <dd>Password for file keyring.</dd>
+</dl>
+
+## Choosing a Keyring Type
+
+| Type | Persistence | Security | Use Case |
+|------|-------------|----------|----------|
+| `system` | Yes | High (OS-managed) | Interactive workstations |
+| `file` | Yes | Medium (encrypted) | Servers, containers, CI/CD |
+| `memory` | No | Low (in-process) | Testing, temporary sessions |
+
+## Storing Credentials
+
+Use `atmos auth user configure` to store IAM user credentials in the keyring:
+
+```bash
+# Store credentials for an aws/user identity
+atmos auth user configure --identity emergency-user
+```
+
+This command prompts for access key ID and secret access key, then stores them securely in the configured keyring backend.
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/auth/user/configure', label: 'atmos auth user configure', description: 'Store IAM user credentials in the keyring'},
+  {type: 'link', href: '/cli/commands/auth/login', label: 'atmos auth login', description: 'Authenticate with a configured identity'},
+  {type: 'link', href: '/cli/commands/auth/logout', label: 'atmos auth logout', description: 'Clear cached credentials from the keyring'},
+]} />
+
+## See Also
+
+- [Profiles](/cli/configuration/profiles) — Use profiles to configure different keyring settings for CI vs local development

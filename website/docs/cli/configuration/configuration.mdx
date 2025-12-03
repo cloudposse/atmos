@@ -6,6 +6,7 @@ id: configuration
 description: Use the `atmos.yaml` configuration file to control the behavior of the Atmos CLI.
 ---
 
+import DocCardList from '@theme/DocCardList'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
@@ -392,8 +393,13 @@ atmos describe config
 
 See [`atmos describe config`](/cli/commands/describe/config) for more details.
 
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/describe/config', label: 'atmos describe config', description: 'Inspect your merged configuration'},
+]} />
+
 ## See Also
 
-- [`atmos describe config`](/cli/commands/describe/config) — Inspect your merged configuration
 - [Profiles](/cli/configuration/profiles) — Environment-specific configuration overrides
 - [Global Flags](/cli/global-flags) — Command-line flags that affect configuration

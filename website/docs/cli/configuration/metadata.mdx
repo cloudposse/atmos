@@ -1,0 +1,114 @@
+---
+title: Configuration Metadata
+sidebar_position: 12
+sidebar_label: metadata
+id: metadata
+description: Add metadata to your `atmos.yaml` configuration for documentation and organization.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `metadata` section of the `atmos.yaml` allows you to add descriptive metadata to your configuration. This metadata is useful for documentation, organization, and tooling integration.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+metadata:
+  # Name of the configuration or project
+  name: my-infrastructure
+
+  # Human-readable description
+  description: "Production infrastructure for ACME Corp"
+
+  # Semantic version of the configuration
+  version: "1.0.0"
+
+  # Labels for filtering and organization
+  tags:
+    - production
+    - aws
+    - terraform
+
+  # Mark configuration as deprecated
+  deprecated: false
+```
+</File>
+
+## Fields
+
+<dl>
+  <dt>`name`</dt>
+  <dd>A short identifier for the configuration or project. Useful for tooling that needs to reference configurations by name.</dd>
+
+  <dt>`description`</dt>
+  <dd>A human-readable description of what this configuration is for. Helps team members understand the purpose of the configuration.</dd>
+
+  <dt>`version`</dt>
+  <dd>Semantic version of the configuration. Useful for tracking changes and ensuring compatibility.</dd>
+
+  <dt>`tags`</dt>
+  <dd>A list of labels for categorization. Can be used for filtering, grouping, or documentation purposes.</dd>
+
+  <dt>`deprecated`</dt>
+  <dd>
+    When set to `true`, indicates this configuration should no longer be used.
+    Tooling may display warnings when deprecated configurations are used.
+    Default: `false`.
+  </dd>
+</dl>
+
+## Examples
+
+### Basic Project Metadata
+
+<File title="atmos.yaml">
+```yaml
+metadata:
+  name: acme-platform
+  description: "ACME Corp platform infrastructure"
+  version: "2.1.0"
+```
+</File>
+
+### Tagged Configuration
+
+Use tags to categorize and filter configurations:
+
+<File title="atmos.yaml">
+```yaml
+metadata:
+  name: dev-environment
+  description: "Development environment infrastructure"
+  tags:
+    - development
+    - non-production
+    - cost-optimized
+```
+</File>
+
+### Deprecated Configuration
+
+Mark a configuration as deprecated to warn users:
+
+<File title="atmos.yaml">
+```yaml
+metadata:
+  name: legacy-vpc
+  description: "Legacy VPC configuration - use vpc-v2 instead"
+  deprecated: true
+  tags:
+    - legacy
+    - migration-required
+```
+</File>
+
+## Use Cases
+
+- **Documentation**: Automatically generate documentation from metadata
+- **Tooling**: Build scripts that filter or process configurations based on tags
+- **Governance**: Track configuration versions and deprecation status
+- **Organization**: Group related configurations using tags
+- **Atmos Profiles**: When using [Atmos Profiles](/cli/configuration/profiles), metadata helps identify which configuration is active. The `name` field is particularly useful for distinguishing between different profile configurations (e.g., `dev-profile`, `prod-profile`, `ci-profile`)

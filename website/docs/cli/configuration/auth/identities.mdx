@@ -1,0 +1,338 @@
+---
+title: Identities
+sidebar_position: 3
+sidebar_label: identities
+id: identities
+description: Configure authentication identities including AWS permission sets, assume roles, and IAM users in your `atmos.yaml`.
+---
+import DocCardList from '@theme/DocCardList'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Identities represent the user accounts or roles available from provider credentials. Configure identities in the `auth.identities` section of your `atmos.yaml`.
+</Intro>
+
+## AWS Permission Set
+
+For AWS SSO permission sets.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: company-sso
+      principal:
+        name: AdminAccess
+        account:
+          name: development        # Account name (resolved via SSO)
+          # OR use account ID directly:
+          # id: "123456789012"
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `aws/permission-set`.</dd>
+
+  <dt>`default`</dt>
+  <dd>Optional. If `true`, this identity is used when no identity is specified.</dd>
+
+  <dt>`via.provider`</dt>
+  <dd>**Required.** Name of the provider to use for authentication.</dd>
+
+  <dt>`principal.name`</dt>
+  <dd>**Required.** Name of the permission set.</dd>
+
+  <dt>`principal.account.name`</dt>
+  <dd>Account name/alias (resolved via SSO ListAccounts API).</dd>
+
+  <dt>`principal.account.id`</dt>
+  <dd>Numeric account ID (used directly, no lookup required).</dd>
+</dl>
+
+## AWS Assume Role
+
+For assuming IAM roles, either directly from a provider or chained from another identity.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    prod-admin:
+      kind: aws/assume-role
+      via:
+        identity: base-admin       # Chain through another identity
+        # OR directly from provider:
+        # provider: okta-saml
+      principal:
+        assume_role: arn:aws:iam::999999999999:role/ProductionAdmin
+        session_name: atmos-prod   # Optional
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `aws/assume-role`.</dd>
+
+  <dt>`via.identity`</dt>
+  <dd>Name of another identity to chain from (mutually exclusive with `via.provider`).</dd>
+
+  <dt>`via.provider`</dt>
+  <dd>Name of a provider to use directly (mutually exclusive with `via.identity`).</dd>
+
+  <dt>`principal.assume_role`</dt>
+  <dd>**Required.** ARN of the IAM role to assume.</dd>
+
+  <dt>`principal.session_name`</dt>
+  <dd>Optional. Session name for CloudTrail auditing.</dd>
+</dl>
+
+## AWS User (Break-glass)
+
+For static IAM user credentials, typically used for emergency access.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    emergency-user:
+      kind: aws/user
+      credentials:
+        access_key_id: !env EMERGENCY_AWS_ACCESS_KEY_ID
+        secret_access_key: !env EMERGENCY_AWS_SECRET_ACCESS_KEY
+        region: us-east-1
+        mfa_arn: arn:aws:iam::123456789012:mfa/username  # Optional
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `aws/user`.</dd>
+
+  <dt>`credentials.access_key_id`</dt>
+  <dd>AWS access key ID. Use `!env` to reference environment variables.</dd>
+
+  <dt>`credentials.secret_access_key`</dt>
+  <dd>AWS secret access key. Use `!env` to reference environment variables.</dd>
+
+  <dt>`credentials.region`</dt>
+  <dd>AWS region for API calls.</dd>
+
+  <dt>`credentials.mfa_arn`</dt>
+  <dd>Optional. MFA device ARN. When set, Atmos prompts for TOTP code during authentication.</dd>
+</dl>
+
+:::tip
+Instead of storing credentials in configuration, use `atmos auth user configure` to store them securely in the system keyring.
+:::
+
+## Identity Chaining
+
+Identity chaining allows you to create complex authentication flows where one identity is used to obtain another.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start
+
+  identities:
+    # Base identity from SSO
+    base-admin:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: AdminAccess
+        account:
+          name: core-identity
+
+    # Cross-account role using base permissions
+    prod-admin:
+      kind: aws/assume-role
+      via:
+        identity: base-admin       # Chain through base-admin
+      principal:
+        assume_role: arn:aws:iam::999999999999:role/ProductionAdmin
+
+    # Further chain for specific access
+    prod-readonly:
+      kind: aws/assume-role
+      via:
+        identity: prod-admin       # Chain through prod-admin
+      principal:
+        assume_role: arn:aws:iam::999999999999:role/ReadOnlyAccess
+```
+</File>
+
+**Chain Rules:**
+- Chains can be arbitrarily deep: `provider → identity → identity → ... → identity`
+- `via.provider` and `via.identity` are mutually exclusive
+- `aws/user` identities don't require a `via` field
+- Circular dependencies are detected and rejected
+
+## Session Configuration
+
+Configure session durations at the identity level to override provider defaults.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    high-security:
+      kind: aws/user
+      session:
+        duration: 1h              # Override for this identity
+      credentials:
+        region: us-east-1
+        mfa_arn: arn:aws:iam::123456789012:mfa/emergency
+```
+</File>
+
+**IAM user limits:** 15m-12h (no MFA) or 15m-36h (with MFA)
+
+## Component-Level Overrides
+
+Override authentication settings for specific components in your stack configuration.
+
+<File title="stacks/catalog/myapp.yaml">
+```yaml
+components:
+  terraform:
+    myapp:
+      auth:
+        identities:
+          custom-role:
+            kind: aws/assume-role
+            via:
+              provider: company-sso
+            principal:
+              assume_role: arn:aws:iam::123456789012:role/MyAppRole
+```
+</File>
+
+Component auth configuration is deep-merged with global auth. Component identities override global identities with the same name.
+
+## Default Identity
+
+Mark one identity as the default to use when no identity is explicitly specified:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      default: true              # This identity is used by default
+      via:
+        provider: company-sso
+      principal:
+        name: AdminAccess
+        account:
+          name: development
+
+    prod-admin:
+      kind: aws/assume-role
+      via:
+        identity: dev-admin
+      principal:
+        assume_role: arn:aws:iam::999999999999:role/ProductionAdmin
+```
+</File>
+
+Only one identity should be marked as default. If multiple identities have `default: true`, the behavior is undefined.
+
+## Using Profiles for Role-Based Access
+
+Use [Atmos profiles](/cli/configuration/profiles) to define different identity configurations for various team roles:
+
+<File title="atmos.yaml">
+```yaml
+profiles:
+  # Profile for developers - limited to dev/staging
+  developer:
+    auth:
+      identities:
+        dev-access:
+          kind: aws/permission-set
+          default: true
+          via:
+            provider: company-sso
+          principal:
+            name: DeveloperAccess
+            account:
+              name: development
+
+  # Profile for DevOps/Platform engineers - cross-account access
+  platform:
+    auth:
+      identities:
+        platform-admin:
+          kind: aws/permission-set
+          default: true
+          via:
+            provider: company-sso
+          principal:
+            name: AdminAccess
+            account:
+              name: core-identity
+
+        prod-deploy:
+          kind: aws/assume-role
+          via:
+            identity: platform-admin
+          principal:
+            assume_role: arn:aws:iam::999999999999:role/ProductionDeploy
+
+  # Profile for CI/CD pipelines
+  ci:
+    auth:
+      identities:
+        github-deploy:
+          kind: aws/assume-role
+          default: true
+          via:
+            provider: github-oidc
+          principal:
+            assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
+```
+</File>
+
+Activate a profile based on your role:
+
+```bash
+# Developers use the developer profile
+atmos --profile developer terraform plan myapp -s dev
+
+# Platform engineers use the platform profile
+atmos --profile platform terraform apply myapp -s prod --identity prod-deploy
+
+# CI/CD uses the ci profile
+ATMOS_PROFILE=ci atmos terraform apply myapp -s prod
+```
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/auth/login', label: 'atmos auth login', description: 'Authenticate with a configured identity'},
+  {type: 'link', href: '/cli/commands/auth/whoami', label: 'atmos auth whoami', description: 'Show current authentication status'},
+  {type: 'link', href: '/cli/commands/auth/shell', label: 'atmos auth shell', description: 'Start a shell with identity credentials'},
+  {type: 'link', href: '/cli/commands/auth/exec', label: 'atmos auth exec', description: 'Execute a command with identity credentials'},
+  {type: 'link', href: '/cli/commands/auth/env', label: 'atmos auth env', description: 'Export credentials as environment variables'},
+  {type: 'link', href: '/cli/commands/auth/list', label: 'atmos auth list', description: 'List available identities'},
+  {type: 'link', href: '/cli/commands/auth/user/configure', label: 'atmos auth user configure', description: 'Store IAM user credentials in the keyring'},
+]} />
+
+## See Also
+
+- [Providers](/cli/configuration/auth/providers) — Configure the providers that identities use
+- [Keyring](/cli/configuration/auth/keyring) — Configure credential storage for IAM users
+- [Profiles](/cli/configuration/profiles) — Environment-specific configuration overrides

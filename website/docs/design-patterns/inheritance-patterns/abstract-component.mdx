@@ -1,0 +1,98 @@
+---
+title: Abstract Component
+sidebar_position: 9
+sidebar_label: Abstract Component
+description: Abstract Component Atmos Design Pattern
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import PillBox from '@site/src/components/PillBox'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+The **Abstract Component** pattern marks a component as a blueprint that cannot be deployed directly. Abstract components serve as base configurations that other components inherit from, preventing accidental deployment of incomplete or template configurations.
+</Intro>
+
+## Use-cases
+
+Use the **Abstract Component** pattern when:
+
+- You have base components that should never be deployed on their own
+
+- You want to prevent accidental `atmos terraform apply` on template configurations
+
+- You need a clear distinction between "blueprints" and "deployable" components
+
+## How It Works
+
+Set `metadata.type: abstract` to mark a component as non-deployable:
+
+<File title="stacks/catalog/vpc/defaults.yaml">
+```yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract  # Cannot be deployed directly
+      vars:
+        enabled: true
+        nat_gateway_enabled: true
+        max_subnet_count: 3
+```
+</File>
+
+Components that inherit from abstract components are deployable by default:
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc/defaults  # Inherits from abstract component
+      vars:
+        name: prod-vpc
+```
+</File>
+
+## Error on Deploy Attempt
+
+If you try to deploy an abstract component:
+
+```shell
+atmos terraform apply vpc/defaults -s prod
+```
+
+Atmos returns an error:
+
+```console
+abstract component 'vpc/defaults' cannot be provisioned since it's explicitly
+prohibited from being deployed by 'metadata.type: abstract' attribute
+```
+
+## When to Use Abstract vs Real
+
+| Type | Use When |
+|------|----------|
+| `abstract` | Base configurations, templates, shared defaults |
+| `real` (default) | Deployable components in actual stacks |
+
+:::tip
+If you don't specify `metadata.type`, the component defaults to `real` and can be deployed.
+:::
+
+## Related Patterns
+
+- [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance) - How components inherit from abstract bases
+- [Multiple Component Instances](/design-patterns/inheritance-patterns/multiple-component-instances) - Deploy multiple instances from one abstract base
+- [Component Catalog](/design-patterns/component-catalog) - Organize abstract and real components
+
+## References
+
+- [Component Inheritance](/stacks/inheritance)
