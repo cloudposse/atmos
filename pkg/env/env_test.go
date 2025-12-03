@@ -1,4 +1,4 @@
-package utils
+package env
 
 import (
 	"os"
@@ -9,6 +9,97 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestConvertEnvVars(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		expected []string
+	}{
+		{
+			name:     "empty map",
+			input:    map[string]any{},
+			expected: []string{},
+		},
+		{
+			name:     "nil values are skipped",
+			input:    map[string]any{"KEY1": nil, "KEY2": "value2"},
+			expected: []string{"KEY2=value2"},
+		},
+		{
+			name:     "null string values are skipped",
+			input:    map[string]any{"KEY1": "null", "KEY2": "value2"},
+			expected: []string{"KEY2=value2"},
+		},
+		{
+			name:     "various types converted to string",
+			input:    map[string]any{"STR": "value", "INT": 42, "BOOL": true},
+			expected: []string{"STR=value", "INT=42", "BOOL=true"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ConvertEnvVars(tt.input)
+			// Sort for consistent comparison since map iteration order is not guaranteed.
+			assert.ElementsMatch(t, tt.expected, result)
+		})
+	}
+}
+
+func TestEnvironToMap(t *testing.T) {
+	// This test verifies the function works with the real environment.
+	result := EnvironToMap()
+
+	// Should have at least some environment variables.
+	assert.NotEmpty(t, result, "Environment should not be empty")
+
+	// PATH should typically exist.
+	if path, ok := result["PATH"]; ok {
+		assert.NotEmpty(t, path, "PATH should not be empty")
+	}
+}
+
+func TestSplitStringAtFirstOccurrence(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		sep      string
+		expected [2]string
+	}{
+		{
+			name:     "normal split",
+			input:    "KEY=value",
+			sep:      "=",
+			expected: [2]string{"KEY", "value"},
+		},
+		{
+			name:     "value contains separator",
+			input:    "KEY=value=with=equals",
+			sep:      "=",
+			expected: [2]string{"KEY", "value=with=equals"},
+		},
+		{
+			name:     "no separator found",
+			input:    "KEYVALUE",
+			sep:      "=",
+			expected: [2]string{"KEYVALUE", ""},
+		},
+		{
+			name:     "empty value",
+			input:    "KEY=",
+			sep:      "=",
+			expected: [2]string{"KEY", ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := splitStringAtFirstOccurrence(tt.input, tt.sep)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
 
 func TestPrependToPath(t *testing.T) {
 	tests := []struct {
@@ -270,7 +361,7 @@ func TestCommandEnvToMap(t *testing.T) {
 				{Key: "aws_profile", Value: "val2"},
 			}},
 			want: map[string]string{
-				// Both keys should exist independently due to casing differences
+				// Both keys should exist independently due to casing differences.
 				"Aws_Profile": "val1",
 				"aws_profile": "val2",
 			},
@@ -312,4 +403,46 @@ func TestEnvironmentPathIntegration(t *testing.T) {
 	// Verify original PATH components are preserved.
 	assert.Contains(t, updatedPath, originalPath,
 		"Original PATH should be preserved: %s", updatedPath)
+}
+
+func TestFindPathIndex(t *testing.T) {
+	tests := []struct {
+		name        string
+		env         []string
+		expectedIdx int
+		expectedKey string
+	}{
+		{
+			name:        "PATH in uppercase",
+			env:         []string{"HOME=/home", "PATH=/usr/bin", "USER=test"},
+			expectedIdx: 1,
+			expectedKey: "PATH",
+		},
+		{
+			name:        "Path in mixed case",
+			env:         []string{"HOME=/home", "Path=/usr/bin", "USER=test"},
+			expectedIdx: 1,
+			expectedKey: "Path",
+		},
+		{
+			name:        "path in lowercase",
+			env:         []string{"HOME=/home", "path=/usr/bin", "USER=test"},
+			expectedIdx: 1,
+			expectedKey: "path",
+		},
+		{
+			name:        "no PATH",
+			env:         []string{"HOME=/home", "USER=test"},
+			expectedIdx: -1,
+			expectedKey: "PATH",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			idx, key := findPathIndex(tt.env)
+			assert.Equal(t, tt.expectedIdx, idx)
+			assert.Equal(t, tt.expectedKey, key)
+		})
+	}
 }
