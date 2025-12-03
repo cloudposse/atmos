@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -30,7 +31,7 @@ func TestMergeEnvVars(t *testing.T) {
 		"NEW_VAR=newvalue",
 	}
 
-	merged := mergeEnvVars(componentEnv)
+	merged := envpkg.MergeSystemEnv(componentEnv)
 
 	// Convert the merged list back to a map for easier assertions
 	mergedMap := make(map[string]string)
@@ -394,7 +395,7 @@ func TestMergeEnvVarsSimple(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := mergeEnvVarsSimple(tt.newEnvList)
+			result := envpkg.MergeSystemEnvSimple(tt.newEnvList)
 
 			// Convert result to map for easier comparison.
 			resultMap := make(map[string]string)
