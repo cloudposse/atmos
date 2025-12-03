@@ -92,11 +92,11 @@ If you must use template functions:
 
 If you have existing template functions, consider migrating to YAML functions:
 
-| Instead of (Template) | Use (YAML) |
-|----------------------|------------|
-| `{{ exec "command" }}` | `!exec command` |
-| `{{ env "VAR" }}` | `!env VAR` |
-| `{{ toJson .values }}` | Native YAML structures |
+| Instead of (Template)         | Use (YAML)                                |
+|-------------------------------|-------------------------------------------|
+| `{{ exec "command" }}`        | `!exec command`                           |
+| `{{ env "VAR" }}`             | `!env VAR`                                |
+| `{{ toJson .values }}`        | Native YAML structures                    |
 | Reading outputs via templates | `!terraform.output` or `!terraform.state` |
 
 ## Performance Considerations
