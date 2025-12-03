@@ -1,0 +1,289 @@
+---
+title: Sources
+description: Configure vendor sources in vendor.yaml to define components to vendor.
+sidebar_position: 2
+sidebar_label: sources
+id: sources
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+
+The `sources` key in `vendor.yaml` defines the list of components and artifacts to vendor. Each source specifies where to download from, what version, and where to place the files.
+
+## Schema
+
+```yaml
+spec:
+  sources:
+    - component: "vpc"
+      source: "github.com/org/repo.git//path?ref={{.Version}}"
+      version: "1.0.0"
+      targets:
+        - "components/terraform/vpc"
+      included_paths:
+        - "**/*.tf"
+      excluded_paths:
+        - "**/test/**"
+      tags:
+        - networking
+```
+
+## Attributes
+
+<dl>
+  <dt>`component`</dt>
+  <dd>
+  The `component` attribute in each source is optional. It's used in the `atmos vendor pull --component <component>` command if the component is passed in. In this case, Atmos will vendor only the specified component instead of vendoring all the artifacts configured in the `vendor.yaml` manifest.
+  </dd>
+
+  <dt>`version`</dt>
+  <dd>
+    The `version` attribute is used to specify the version of the artifact to download. The `version` attribute is used in the `source` and `targets` attributes as a template parameter using `{{ .Version }}`.
+  </dd>
+
+  <dt>`source`</dt>
+  <dd>
+    The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all the URL and archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from [OCI registries](https://opencontainers.org).
+
+    See [Vendor URL Syntax](/vendor/url-syntax) for complete documentation on supported URL formats, authentication, and subdirectory syntax.
+
+    **IMPORTANT:** Include the `{{ .Version }}` parameter in your `source` URI to ensure the correct version of the artifact is downloaded.
+
+    For example, for `http` and `https` sources, use the following format:
+
+    ```yaml
+    source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref={{.Version}}"
+    ```
+
+    <dl>
+      <dt>`ref`</dt>
+      <dd>
+        Pass the `ref` as a query string with either the tag, branch, or commit hash to download the correct version of the artifact. e.g. `?ref={{.Version}}` will pass the `version` attribute to the `ref` query string.
+      </dd>
+      <dt>`depth`</dt>
+      <dd>
+        Pass the `depth` as a query string to download only the specified number of commits from the repository. e.g. `?depth=1` will download only the latest commit.
+      </dd>
+    </dl>
+
+  </dd>
+
+  <dt>`targets`</dt>
+  <dd>
+  The `targets` in each source supports absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
+    are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths
+    will be considered relative to the `base_path`. Multiple targets can be specified.
+  </dd>
+
+  <dt>`included_paths` and `excluded_paths`</dt>
+  <dd>
+  `included_paths` and `excluded_paths` support [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for filenames/paths (double-star/globstar `**` is supported as well). For more details, see [Vendoring with Globs](#vendoring-with-globs) below.
+  </dd>
+
+  <dt>`tags`</dt>
+  <dd>
+  The `tags` in each source specifies a list of tags to apply to the component. This allows you to only vendor the components that have the specified tags by executing a command `atmos vendor pull --tags <tag1>,<tag2>`
+  </dd>
+</dl>
+
+## Template Parameters
+
+The `source` and `targets` attributes support [Go templates](https://pkg.go.dev/text/template) and [Sprig Functions](http://masterminds.github.io/sprig/).
+
+<dl>
+  <dt>`{{ .Component }}`</dt>
+  <dd>
+    Refers to the `component` attribute in the current section. The `component` attribute is used to specify the component name. This is useful to vendor components into folders by the same name.
+    ```yaml
+    targets:
+      - "components/terraform/{{ .Component }}"
+    ```
+  </dd>
+  <dt>`{{ .Version }}`</dt>
+  <dd>
+    Refers to the `version` attribute the current section. The `version` attribute is used to specify the version of the artifact to download. This is useful to version components into different folders.
+    ```yaml
+    targets:
+      - "components/terraform/{{ .Component }}/{{ .Version }}"
+    ```
+     When stacks need to pin to different versions of the same component, the `{{ .Version }}` template parameter can be used to ensure the components are vendored into different folders.
+  </dd>
+</dl>
+
+You can also use any of the [hundreds of go-template functions](/functions/template). For example, to extract the major and minor version from the `{{ .Version }}` attribute, use the following template:
+
+```yaml
+targets:
+  - "components/terraform/{{ .Component }}/{{ (first 2 (splitList \".\" .Version)) | join \".\" }}"
+```
+
+## Authenticating to Private Git Repositories
+
+Atmos provides **automatic token injection** for private repositories on GitHub, GitLab, and Bitbucket. This is the recommended approach for most users.
+
+:::tip Automatic Token Injection (Recommended)
+The easiest and most secure way to authenticate to private Git repositories is to use Atmos's automatic token injection.
+
+**Step 1:** Set the authentication token as an environment variable:
+```bash
+export GITHUB_TOKEN="your-personal-access-token"
+# or
+export ATMOS_GITHUB_TOKEN="your-personal-access-token"
+```
+
+**Step 2:** Use simple URLs in your `vendor.yaml` (no manual credentials):
+```yaml
+sources:
+  - component: "vpc"
+    source: "github.com/your-org/private-repo.git//terraform/vpc?ref={{.Version}}"
+    version: "1.0.0"
+    targets:
+      - "components/terraform/vpc"
+```
+
+**Step 3:** Atmos automatically injects the token when downloading.
+
+Supported environment variables:
+- **GitHub:** `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`
+- **GitLab:** `ATMOS_GITLAB_TOKEN` or `GITLAB_TOKEN`
+- **Bitbucket:** `ATMOS_BITBUCKET_TOKEN` or `BITBUCKET_TOKEN`
+
+**Token injection settings in `atmos.yaml`:**
+- `inject_github_token: true` (default: **true**) - Enables automatic GitHub token injection
+- `inject_gitlab_token: true` (default: **false**) - Enables automatic GitLab token injection
+- `inject_bitbucket_token: true` (default: **false**) - Enables automatic Bitbucket token injection
+:::
+
+:::note GitHub Actions Token Scope
+The `GITHUB_TOKEN` provided by GitHub Actions is only valid for the current repository, or repositories marked as `internal` within GitHub Enterprise organizations. For cross-repository access, provision a [fine grained personal access token](https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens?apiVersion=2022-11-28) with the necessary permissions.
+:::
+
+## Vendoring from OCI Registries
+
+Atmos supports vendoring from [OCI registries](https://opencontainers.org).
+
+To specify a repository in an OCI registry, use the `oci://<registry>/<repository>:tag` scheme.
+
+Artifacts from OCI repositories are downloaded as Docker image tarballs, then all the layers are processed, un-tarred and un-compressed,
+and the files are written into the directories specified by the `targets` attribute of each `source`.
+
+### OCI Authentication
+
+Atmos uses the following precedence order for OCI registry authentication:
+
+1. **Docker credentials** (highest precedence) - Credentials from `docker login` stored in `~/.docker/config.json`
+2. **Environment variables** - For GitHub Container Registry (ghcr.io):
+   - **Token:** `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`
+   - **Username:** `ATMOS_GITHUB_USERNAME`, `GITHUB_ACTOR`, or `GITHUB_USERNAME`
+3. **Anonymous** - Fallback for public images
+
+### Example
+
+<File title="vendor.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: example-vendor-config
+  description: Atmos vendoring manifest
+spec:
+  sources:
+    - component: "vpc"
+      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/{{ .Component }}:{{ .Version }}"
+      version: "latest"
+      targets:
+        - "components/terraform/{{ .Component }}"
+      included_paths:
+        - "**/*.tf"
+        - "**/*.tfvars"
+        - "**/*.md"
+      excluded_paths: []
+```
+</File>
+
+To vendor the `vpc` component, execute the following command:
+
+<Terminal>
+```bash
+atmos vendor pull -c vpc
+```
+</Terminal>
+
+## Vendoring with Globs
+
+In Atmos, **glob patterns** define which files and directories are included or excluded during vendoring. These patterns go beyond simple wildcard characters like `*`—they follow specific rules that dictate how paths are matched. Understanding the difference between **greedy** (`**`) and **non-greedy** (`*`) patterns, along with other advanced glob syntax, ensures precise control over vendoring behavior.
+
+### Understanding Wildcards, Ranges, and Recursion
+
+Glob patterns in Atmos provide flexible and powerful matching, that's simpler to understand than regular expressions:
+
+<dl>
+  <dt>`*` (single asterisk)</dt>
+  <dd>Matches any sequence of characters <strong>within a single path segment</strong>.</dd>
+  <dd>Example: `vendor/*.yaml` matches `vendor/config.yaml` but <strong>not</strong> `vendor/subdir/config.yaml`.</dd>
+
+  <dt>`**` (double asterisk, also known as a "greedy glob")</dt>
+  <dd>Matches across <strong>multiple path segments recursively</strong>.</dd>
+  <dd>Example: `vendor/**/*.yaml` matches `vendor/config.yaml`, `vendor/subdir/config.yaml`, and `vendor/deep/nested/config.yaml`.</dd>
+
+  <dt>`?` (question mark)</dt>
+  <dd>Matches <strong>exactly one character</strong> in a path segment.</dd>
+  <dd>Example: `file?.txt` matches `file1.txt` and `fileA.txt` but <strong>not</strong> `file10.txt`.</dd>
+
+  <dt>`[abc]` (character class)</dt>
+  <dd>Matches <strong>any single character</strong> inside the brackets.</dd>
+  <dd>Example: `file[123].txt` matches `file1.txt`, `file2.txt`, and `file3.txt`, but <strong>not</strong> `file4.txt` or `file12.txt`.</dd>
+
+  <dt>`[a-z]` (character range)</dt>
+  <dd>Matches <strong>any single character</strong> within the specified range.</dd>
+  <dd>Example: `file[a-c].txt` matches `filea.txt`, `fileb.txt`, and `filec.txt`.</dd>
+
+  <dt>`{a,b,c}` (brace expansion)</dt>
+  <dd>Matches <strong>any of the comma-separated patterns</strong>.</dd>
+  <dd>Example: `*.{jpg,png,gif}` matches `image.jpg`, `image.png`, and `image.gif`.</dd>
+</dl>
+
+This distinction is important when excluding specific directories or files while vendoring.
+
+### Example: Excluding a Subdirectory
+
+Consider the following configuration:
+
+```yaml
+included_paths:
+  - "**/demo-library/**"
+excluded_paths:
+  - "**/demo-library/**/stargazers/**"
+```
+
+How it works:
+- The `included_paths` rule `**/demo-library/**` ensures all files inside `demo-library` (at any depth) are vendored.
+- The `excluded_paths` rule `**/demo-library/**/stargazers/**` prevents any files inside `stargazers` subdirectories from being vendored.
+
+This means:
+- All files within `demo-library` except those inside any `stargazers` subdirectory are vendored.
+- Any other files outside `stargazers` are unaffected by this exclusion.
+
+### Example: Matching Multiple File Extensions
+
+```yaml
+included_paths:
+  - "**/demo-library/**/*.{tf,md}"
+```
+
+This is equivalent to writing:
+
+```yaml
+included_paths:
+  - "**/demo-library/**/*.tf"
+  - "**/demo-library/**/*.md"
+```
+
+The `{tf,md}` part expands to both `*.tf` and `*.md`, making the rule more concise.
+
+### Key Takeaways
+
+1. Use `**/` for recursive matching to include everything inside a directory.
+2. Use `*` for single-segment matches, which won't include deeper subdirectories.
+3. Use `{...}` to match multiple extensions or directories within a single pattern.
+4. Exclusion rules must match nested paths explicitly when trying to exclude deep directories.

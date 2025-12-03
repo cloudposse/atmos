@@ -339,7 +339,7 @@ Learn more: [`atmos list`](/cli/commands/list/stacks) | [`atmos describe compone
 
 ### 2. DRY Configuration
 
-Instead of copying `.tfvars` files, use YAML [imports](/stacks/imports) and [inheritance](/stacks/inheritance):
+Instead of copying `.tfvars` files, use YAML [imports](/stacks/imports) and [inheritance](/howto/inheritance):
 
 <File title="stacks/_defaults.yaml">
 ```yaml
@@ -482,7 +482,7 @@ atmos validate component vpc -s dev
 ```
 </Terminal>
 
-### [Component Inheritance](/stacks/inheritance)
+### [Component Inheritance](/howto/inheritance)
 
 Reuse component configurations:
 
@@ -840,12 +840,12 @@ When you run `atmos terraform plan vpc -s dev`, these environment variables are 
 **Walk**: Explore these next:
 - [DRY Configuration with Imports](/learn/inheritance-basics)
 - [Remote State Integration](/stacks/remote-state)
-- [Component Catalogs](/stacks/catalogs)
+- [Component Catalogs](/howto/catalogs)
 
 **Run**: When you're ready for advanced features:
 - [Workflows](/workflows)
 - [Validation with OPA](/validation/validating)
-- [Vendoring Components](/vendoring/vendor)
+- [Vendoring Components](/vendor/)
 
 ---
 

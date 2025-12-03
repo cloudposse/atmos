@@ -1,0 +1,180 @@
+---
+title: Imports
+description: Configure hierarchical imports in vendor.yaml to split vendor manifests.
+sidebar_position: 3
+sidebar_label: imports
+id: imports
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+
+The `imports` key in `vendor.yaml` allows you to split the main vendor manifest into smaller files for maintainability, or organize them by their roles in the infrastructure.
+
+## Schema
+
+```yaml
+spec:
+  imports:
+    - "vendor/networking"
+    - "vendor/security"
+    - "layers/data.yaml"
+    - "vendor/**/*"  # Glob pattern to import all manifests
+```
+
+## How It Works
+
+The `imports` section defines additional vendoring manifests that are merged into the main manifest. Hierarchical imports are supported at many levels (one vendoring manifest can import another, which in turn can import other manifests, etc.). Atmos processes all imports and all sources in the imported manifests in the order they are defined.
+
+:::note
+The imported file extensions are optional. Imports that do not include file extensions will default to the `.yaml` extension.
+:::
+
+## Glob Pattern Support
+
+Import paths support [POSIX-style glob patterns](https://en.wikipedia.org/wiki/Glob_(programming)) for matching multiple files:
+
+<dl>
+  <dt>`*` (single asterisk)</dt>
+  <dd>Matches any sequence of characters within a single directory level.</dd>
+  <dd>Example: `vendor/*.yaml` matches `vendor/networking.yaml` but not `vendor/aws/networking.yaml`.</dd>
+
+  <dt>`**` (double asterisk / globstar)</dt>
+  <dd>Matches across multiple directory levels recursively.</dd>
+  <dd>Example: `vendor/**/*.yaml` matches all `.yaml` files in `vendor/` and all subdirectories.</dd>
+
+  <dt>`?` (question mark)</dt>
+  <dd>Matches exactly one character.</dd>
+  <dd>Example: `vendor/layer?.yaml` matches `vendor/layer1.yaml`, `vendor/layerA.yaml`.</dd>
+
+  <dt>`{a,b}` (brace expansion)</dt>
+  <dd>Matches any of the comma-separated patterns.</dd>
+  <dd>Example: `vendor/{networking,security}.yaml` matches both files.</dd>
+</dl>
+
+### Example: Import All Manifests in a Directory
+
+```yaml
+spec:
+  imports:
+    - "vendor/**/*"  # Import all vendor manifests recursively
+```
+
+### Example: Import by Pattern
+
+```yaml
+spec:
+  imports:
+    - "layers/*.yaml"           # All YAML files in layers/
+    - "vendor/aws/**/*"         # All manifests under vendor/aws/
+    - "vendor/{networking,security}"  # Specific manifests
+```
+
+## Example: Organizing by Infrastructure Layer
+
+Import separate manifests for networking, security, data management, CI/CD, and other layers:
+
+```yaml
+imports:
+  - "layers/networking"
+  - "layers/security"
+  - "layers/data"
+  - "layers/analytics"
+  - "layers/firewalls"
+  - "layers/cicd"
+```
+
+## Example: Hierarchical Imports
+
+Hierarchical imports are supported at many levels. For example, consider the following vendoring configurations:
+
+<File title="vendor.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: example-vendor-config
+  description: Atmos vendoring manifest
+spec:
+  imports:
+    - "vendor/vendor2"
+    - "vendor/vendor3"
+
+  sources:
+    - component: "vpc"
+      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+      version: "latest"
+      targets:
+        - "components/terraform/infra/vpc3"
+    - component: "vpc-flow-logs-bucket"
+      source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref={{.Version}}"
+      version: "1.323.0"
+      targets:
+        - "components/terraform/infra/vpc-flow-logs-bucket/{{.Version}}"
+```
+</File>
+
+
+<File title="vendor/vendor2.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: example-vendor-config-2
+  description: Atmos vendoring manifest
+spec:
+  imports:
+    - "vendor/vendor4"
+
+  sources:
+    - component: "my-vpc1"
+      source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+      version: "1.0.2"
+      targets:
+        - "components/terraform/infra/my-vpc1"
+```
+</File>
+
+<File title="vendor/vendor4.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: example-vendor-config-4
+  description: Atmos vendoring manifest
+spec:
+  imports:
+    - "vendor/vendor5"
+
+  sources:
+    - component: "my-vpc4"
+      source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref={{.Version}}"
+      version: "1.319.0"
+      targets:
+        - "components/terraform/infra/my-vpc4"
+```
+</File>
+
+When you execute the `atmos vendor pull` command, Atmos processes the import chain and the sources in the imported manifests in the order they
+are defined:
+
+- First, the main `vendor.yaml` file is read based on search paths
+- The `vendor/vendor2` and `vendor/vendor3` manifests (defined in the main `vendor.yaml` file) are imported
+- The `vendor/vendor2` file is processed, and the `vendor/vendor4` manifest is imported
+- The `vendor/vendor4` file is processed, and the `vendor/vendor5` manifest is imported
+- Etc.
+- Then all the sources from all the imported manifests are processed and the artifacts are downloaded into the paths defined by the `targets`
+
+<Terminal>
+```shell
+> atmos vendor pull
+
+Processing vendor config file 'vendor.yaml'
+Pulling sources for the component 'my-vpc6' from 'github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.315.0' into 'components/terraform/infra/my-vpc6'
+Pulling sources for the component 'my-vpc5' from 'github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.317.0' into 'components/terraform/infra/my-vpc5'
+Pulling sources for the component 'my-vpc4' from 'github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.319.0' into 'components/terraform/infra/my-vpc4'
+Pulling sources for the component 'my-vpc1' from 'public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:1.0.2' into 'components/terraform/infra/my-vpc1'
+Pulling sources for the component 'my-vpc2' from 'github.com/cloudposse-terraform-components/aws-vpc.git?ref=1.320.0' into 'components/terraform/infra/my-vpc2'
+Pulling sources for the component 'vpc' from 'public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest' into 'components/terraform/infra/vpc3'
+Pulling sources for the component 'vpc-flow-logs-bucket' from 'github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref=1.323.0' into 'components/terraform/infra/vpc-flow-logs-bucket/1.323.0'
+```
+</Terminal>

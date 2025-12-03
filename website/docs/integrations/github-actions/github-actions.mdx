@@ -3,7 +3,8 @@ title: GitHub Actions
 sidebar_position: 1
 sidebar_label: GitHub Actions 🚀
 description: Use GitHub Actions with Atmos
-id: gitHub-actions
+id: github-actions
+slug: /integrations/github-actions
 ---
 import File from '@site/src/components/File'
 import DocCardList from '@theme/DocCardList'
@@ -34,7 +35,7 @@ GitHub Actions that utilize "plan file" storage depends on a few resources:
 
 This action can use any S3 Bucket to keep track of your planfiles. Just ensure the bucket is properly locked down since planfiles may contain secrets.
 
-For example, [vendor in](/vendoring/vendor) the [`s3-component`](https://docs.cloudposse.com/components/library/aws/s3-bucket/), then using an [Atmos stack configuration](/learn/stacks/), define a bucket using the [`s3-bucket` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/s3-bucket) with this catalog configuration:
+For example, [vendor in](/vendor/) the [`s3-component`](https://docs.cloudposse.com/components/library/aws/s3-bucket/), then using an [Atmos stack configuration](/learn/stacks/), define a bucket using the [`s3-bucket` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/s3-bucket) with this catalog configuration:
 
 <File title="stacks/catalog/s3-bucket/gitops.yaml">
 ```yaml

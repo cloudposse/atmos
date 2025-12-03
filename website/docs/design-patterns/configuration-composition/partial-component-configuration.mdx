@@ -16,7 +16,7 @@ The **Partial Component Configuration** Design Pattern describes the mechanism o
 
 The mechanism is similar to [Partial Classes in C#](https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/partial-classes-and-methods).
 
-This is not the same as Atmos [Component Inheritance](/stacks/inheritance) where more than one Atmos components
+This is not the same as Atmos [Component Inheritance](/howto/inheritance) where more than one Atmos components
 take part in the inheritance chain. The **Partial Component Configuration** pattern deals with just one Atmos component with its configuration split across a few configuration files.
 
 :::note
@@ -194,7 +194,7 @@ import:
   # Import the mixin for the required Kubernetes version to define the k8s version and addon versions for the EKS cluster in this stack.
   # This is an example of partial component configuration in Atmos where the config for the component is split across many Atmos stack manifests (stack config files).
   # It's similar to Partial Classes in C# (https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/partial-classes-and-methods).
-  # This is not the same as 'Atmos Component Inheritance' (https://atmos.tools/stacks/inheritance)
+  # This is not the same as 'Atmos Component Inheritance' (https://atmos.tools/howto/inheritance)
   # where more than one Atmos component participates in the inheritance chain.
   - catalog/eks/clusters/mixins/k8s-1-27
 ```
@@ -226,5 +226,5 @@ clusters in the other accounts and regions will stay at the current Kubernetes v
 
 ## References
 
-- [Catalogs](/stacks/catalogs)
-- [Mixins](/stacks/mixins)
+- [Catalogs](/howto/catalogs)
+- [Mixins](/howto/mixins)

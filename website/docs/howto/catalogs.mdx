@@ -1,7 +1,7 @@
 ---
 title: Stack Catalogs
-sidebar_position: 3
-sidebar_label: Service Catalogs
+sidebar_position: 1
+sidebar_label: catalogs
 id: catalogs
 description: Organize Stack configurations into catalogs for easy imports.
 ---
@@ -39,14 +39,14 @@ Here's an example of how Stack imports might be organized on disk.
 ```console
 └── stacks/
     ├── mixins/
-    │   └── region/
+    │   └── region/
     │       ├── us-east-1.yaml
     │       ├── us-west-2.yaml
     │       └── eu-west-1.yaml
-    │   └── stage/
+    │   └── stage/
     ├── teams/
-    │   └── frontend/
-    │       └── example-application/
+    │   └── frontend/
+    │       └── example-application/
     │           └── microservice/
     │               ├── prod.yaml
     │               ├── dev.yaml
@@ -66,7 +66,7 @@ Here's an example of how Stack imports might be organized on disk.
 
 ### Mixins
 
-We go into more detail on using [Mixins](/stacks/mixins) to manage snippets of reusable configuration. These Mixins are frequently used alongside the other conventions such as Teams and Organizations.
+We go into more detail on using [Mixins](/howto/mixins) to manage snippets of reusable configuration. These Mixins are frequently used alongside the other conventions such as Teams and Organizations.
 
 ### Teams
 
@@ -76,13 +76,13 @@ Here's what that might look like:
 ```console
 └── stacks/
     └── teams/
-        └── frontend/
-            └── ecom-store/
+        └── frontend/
+            └── ecom-store/
                 ├── checkout/
                 │    ├── prod.yaml
                 │    ├── dev.yaml
                 │    └── staging.yaml
-                └── cart/
+                └── cart/
                     ├── prod.yaml
                     ├── dev.yaml
                     └── staging.yaml
@@ -107,27 +107,27 @@ In sticking with this theme, a good filesystem layout for infrastructure looks l
 ```text
 └── stacks/
     └── orgs/
-        └── acme/
-            ├── ou1/
-            │   ├── account1/
-            │   │   ├── global-region.yaml
-            │   │   └── us-east-2.yaml
-            │   ├── account2/
-            │   │   ├── global-region.yaml
-            │   │   └── us-east-2.yaml
-            │   └── account3/
-            │       ├── global-region.yaml
-            │       └── us-east-2.yaml
-            └── ou2/
-                ├── dev/
-                │   ├── global-region.yaml
-                │   └── us-east-2.yaml
-                ├── prod/
-                │   ├── global-region.yaml
-                │   └── us-east-2.yaml
-                └── staging/
-                    ├── global-region.yaml
-                    └── us-east-2.yaml
+        └── acme/
+            ├── ou1/
+            │   ├── account1/
+            │   │   ├── global-region.yaml
+            │   │   └── us-east-2.yaml
+            │   ├── account2/
+            │   │   ├── global-region.yaml
+            │   │   └── us-east-2.yaml
+            │   └── account3/
+            │       ├── global-region.yaml
+            │       └── us-east-2.yaml
+            └── ou2/
+                ├── dev/
+                │   ├── global-region.yaml
+                │   └── us-east-2.yaml
+                ├── prod/
+                │   ├── global-region.yaml
+                │   └── us-east-2.yaml
+                └── staging/
+                    ├── global-region.yaml
+                    └── us-east-2.yaml
 ```
 
 :::info
@@ -142,25 +142,25 @@ Here's what that might look like:
 ```console
 └── orgs/
     └── acme/
-        └── platform/
-            ├── prod/
+        └── platform/
+            ├── prod/
             │   ├── us-east-1/
             │   │    ├── networking.yaml
             │   │    ├── compliance.yaml
             │   │    ├── backing-services.yaml
             │   │    └── teams.yaml
-            │   └── us-west-2/
+            │   └── us-west-2/
             │       ├── networking.yaml
             │       ├── compliance.yaml
             │       ├── backing-services.yaml
             │       └── teams.yaml
-            ├── staging/
+            ├── staging/
             │   └── us-west-1/
             │       ├── networking.yaml
             │       ├── compliance.yaml
             │       ├── backing-services.yaml
             │       └── teams.yaml
-            └── dev/
+            └── dev/
                 └── us-west-2/
                     ├── networking.yaml
                     ├── backing-services.yaml

@@ -99,7 +99,7 @@ Note, the logical representation is never influenced by file paths or directorie
 
 ## Schema
 
-A Stack file contains a manifest defined in YAML that follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema, and every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/stacks/imports) configurations and use [inheritance](/stacks/inheritance) to achieve DRY configuration.
+A Stack file contains a manifest defined in YAML that follows a simple, extensible schema. In fact, every Stack file follows exactly the same schema, and every setting in the configuration is optional. Enforcing a consistent schema ensures we can easily [import and deep-merge](/stacks/imports) configurations and use [inheritance](/howto/inheritance) to achieve DRY configuration.
 
 <File title="stack.yaml">
 ```yaml
@@ -198,4 +198,4 @@ resources". You might want to put these into a file like `stacks/global-region.y
 ### Hierarchical Layout
 
 We recommend using a hierarchical layout that follows the way AWS thinks about infrastructure. This works very well when you may have dozens or
-hundreds of accounts and regions that you operate in. Use [Catalogs](/stacks/catalogs) to organize your Stack configurations.
+hundreds of accounts and regions that you operate in. Use [Catalogs](/howto/catalogs) to organize your Stack configurations.

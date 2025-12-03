@@ -98,7 +98,7 @@ Unlike Terragrunt, Atmos eschews code generation for composing DRY Terraform roo
 
 #### Atmos provides prescriptive guidance
 
-Atmos delivers prescriptive guidance on [design patterns](/design-patterns/) and [component architecture](/stacks/inheritance) for Terraform root modules, establishing itself as an opinionated framework designed to enhance Terraform's capabilities. It offers [advanced features](/stacks/inheritance) tailored for both straightforward and intricate deployment scenarios.
+Atmos delivers prescriptive guidance on [design patterns](/design-patterns/) and [component architecture](/howto/inheritance) for Terraform root modules, establishing itself as an opinionated framework designed to enhance Terraform's capabilities. It offers [advanced features](/howto/inheritance) tailored for both straightforward and intricate deployment scenarios.
 
 </FAQItem>
 
@@ -111,7 +111,7 @@ The key motivation for integrating Terragrunt within Atmos would be to offer a s
 There are a few ways to accomplish it:
 
 1. Set the default `command` to call in the Atmos CLI Configuration for Terraform components.
-2. Override the `command` in the `settings` section for each component definition in the stack configuration (this respects inheritance, so the [`mixin`](/stacks/mixins) pattern can be used.)
+2. Override the `command` in the `settings` section for each component definition in the stack configuration (this respects inheritance, so the [`mixin`](/howto/mixins) pattern can be used.)
 
 </FAQItem>
 
@@ -133,7 +133,7 @@ Our recommended way of practicing GitOps with Terraform is with our turn-key [Gi
 
 <FAQItem question="Does Atmos work with Atlantis?">
 
-Yes, it does. See our [integration page](/integrations/atlantis).
+Yes, it does. See our [integration page](/cli/configuration/integrations/atlantis).
 
 </FAQItem>
 

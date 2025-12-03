@@ -2,6 +2,7 @@
 title: Import Stack Configurations
 sidebar_position: 3
 sidebar_label: import
+sidebar_class_name: command
 id: imports
 ---
 import File from '@site/src/components/File'
@@ -11,7 +12,7 @@ import Intro from '@site/src/components/Intro'
 Imports let you split stack configurations across multiple files and reuse them. Each import is deep-merged on top of previous imports, building up the final configuration.
 </Intro>
 
-Atmos also supports [inheritance](/stacks/inheritance) and [overrides](/stacks/overrides) to manage configuration variations without templating. When those methods don't fit your use-case, [templating](/templates) is available as an escape hatch.
+Atmos also supports [inheritance](/howto/inheritance) and [overrides](/stacks/overrides) to manage configuration variations without templating. When those methods don't fit your use-case, [templating](/templates) is available as an escape hatch.
 
 ## Use cases
 
@@ -23,8 +24,8 @@ Atmos also supports [inheritance](/stacks/inheritance) and [overrides](/stacks/o
 Overusing imports can make configurations harder to understand. We recommend limiting import levels to maintain clarity. Review our [best practices](/best-practices/stacks) for practical guidance.
 :::
 
-Imports may be used in Stack configurations together with [inheritance](/stacks/inheritance)
-and [mixins](/stacks/mixins) to produce an exceptionally DRY configuration in a way that is logically organized and easier to maintain by your team.
+Imports may be used in Stack configurations together with [inheritance](/howto/inheritance)
+and [mixins](/howto/mixins) to produce an exceptionally DRY configuration in a way that is logically organized and easier to maintain by your team.
 
 ## Configuration
 
@@ -185,7 +186,7 @@ For more details on go-getter URL formats, see the [go-getter documentation](htt
 
 We recommend placing all baseline "imports" in the `stacks/catalog` folder, however, they can exist anywhere.
 
-Use [mixins](/stacks/mixins) for reusable snippets of configurations that alter the behavior of Stacks in some way.
+Use [mixins](/howto/mixins) for reusable snippets of configurations that alter the behavior of Stacks in some way.
 
 ### The _defaults.yaml Pattern
 

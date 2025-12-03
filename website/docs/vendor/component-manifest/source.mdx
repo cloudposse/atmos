@@ -1,0 +1,163 @@
+---
+title: Source
+description: Configure the source section in component.yaml for component vendoring.
+sidebar_position: 2
+sidebar_label: source
+id: source
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+
+The `source` key in `component.yaml` defines where to download the component from and how to filter the files.
+
+## Schema
+
+```yaml
+spec:
+  source:
+    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}
+    version: 1.398.0
+    included_paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - "**/*.md"
+    excluded_paths:
+      - "**/context.tf"
+```
+
+## Attributes
+
+<dl>
+  <dt>`uri`</dt>
+  <dd>
+    Source `uri` supports the following protocols: OCI (https://opencontainers.org), Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP, and all URL and archive formats as described in [go-getter](https://github.com/hashicorp/go-getter).
+
+    See [Vendor URL Syntax](/vendor/url-syntax) for complete URL syntax documentation.
+
+    In `uri`, Golang templates are supported. If `version` is provided, `{{.Version}}` will be replaced with the `version` value before pulling the files from `uri`.
+
+    To vendor a module from a Git repo, use the following format:
+    ```
+    github.com/cloudposse/terraform-aws-ec2-instance.git//modules/name?ref={{.Version}}
+    ```
+  </dd>
+
+  <dt>`version`</dt>
+  <dd>
+    The version of the component to vendor. This value is substituted into `{{.Version}}` placeholders in the `uri`.
+  </dd>
+
+  <dt>`included_paths`</dt>
+  <dd>
+    Only include the files that match the `included_paths` patterns.
+    If `included_paths` is not specified, all files will be matched except those that match the patterns from `excluded_paths`.
+
+    `included_paths` support POSIX-style Globs for file names/paths (double-star/globstar `**` is supported).
+    - https://en.wikipedia.org/wiki/Glob_(programming)
+    - https://github.com/bmatcuk/doublestar#patterns
+  </dd>
+
+  <dt>`excluded_paths`</dt>
+  <dd>
+    Exclude the files that match any of the `excluded_paths` patterns.
+
+    `excluded_paths` support POSIX-style Globs for file names/paths (double-star/globstar `**` is supported).
+  </dd>
+</dl>
+
+## Vendoring Components from a Monorepo
+
+```yaml
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: vpc-flow-logs-bucket-vendor-config
+  description: Source and mixins config for vendoring of 'vpc-flow-logs-bucket' component
+spec:
+  source:
+    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
+    version: 1.398.0
+    included_paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - "**/*.md"
+    excluded_paths:
+      - "**/context.tf"
+```
+
+:::warning
+The `glob` library that Atmos uses to download remote artifacts does not treat the double-star `**` as including sub-folders.
+If the component's folder has sub-folders, and you need to vendor them, they have to be explicitly defined as in the following example.
+:::
+
+```yaml title="component.yaml"
+spec:
+  source:
+    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
+    version: 1.398.0
+    included_paths:
+      - "**/**"
+      # If the component's folder has the `modules` sub-folder, it needs to be explicitly defined
+      - "**/modules/**"
+```
+
+## Vendoring Modules as Components
+
+Any terraform module can also be used as a component, provided that Atmos backend
+generation ([`auto_generate_backend_file` is `true`](/cli/configuration/components)) is enabled. Use this strategy when you want to use the module
+directly, without needing to wrap it in a component to add additional functionality. This is essentially treating a terraform child module as a root
+module.
+
+To vendor a module as a component, simply create a `component.yaml` file stored inside the `components/_type_/_name_/` folder
+(e.g. `components/terraform/ec2-instance/component.yaml`).
+
+Note the usage of the `///` in the `uri`, which is to vendor from the root of the remote repository.
+
+```yaml
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: ec2-instance
+  description: Source for vendoring of 'ec2-instance' module as a component
+spec:
+  source:
+    # To vendor a module from a Git repo, use the following format: 'github.com/cloudposse/terraform-aws-ec2-instance.git///?ref={{.Version}}
+    uri: github.com/cloudposse/terraform-aws-ec2-instance.git///?ref={{.Version}}
+    version: 0.47.1
+    included_paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - "**/*.md"
+```
+
+## Vendoring from OCI Registries
+
+Atmos supports vendoring components from [OCI registries](https://opencontainers.org).
+
+To specify a repository in an OCI registry, use the `oci://<registry>/<repository>:tag` scheme.
+
+Components from OCI repositories are downloaded as Docker image tarballs, then all the layers are processed, un-tarred and un-compressed,
+and the component's source files are written into the component's directory.
+
+For example, to vendor the `vpc` component from the `public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc`
+[AWS public ECR registry](https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html), use the following `uri`:
+
+```yaml
+uri: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest"
+```
+
+Full example:
+
+```yaml
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: stable/aws/vpc
+  description: Config for vendoring of the 'stable/aws/vpc' component
+spec:
+  source:
+    uri: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+    version: "latest"
+    included_paths:
+      - "**/*.*"
+```

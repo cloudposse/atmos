@@ -1,7 +1,7 @@
 ---
 title: Inherit Configurations in Atmos Stacks
-sidebar_position: 4
-sidebar_label: Inheritance
+sidebar_position: 2
+sidebar_label: inheritance
 id: inheritance
 ---
 import File from '@site/src/components/File'
@@ -15,10 +15,10 @@ Inheritance lets components derive configuration from other components. A derive
 
 Atmos supports the following concepts and principles of **Component-Oriented Programming (COP)**:
 
-- [Single Inheritance](/stacks/inheritance#single-inheritance) - when an Atmos component inherits the configuration properties from
+- [Single Inheritance](/howto/inheritance#single-inheritance) - when an Atmos component inherits the configuration properties from
   another Atmos component
 
-- [Multiple Inheritance](/stacks/inheritance#multiple-inheritance) - when an Atmos component inherits the configuration from more than one Atmos
+- [Multiple Inheritance](/howto/inheritance#multiple-inheritance) - when an Atmos component inherits the configuration from more than one Atmos
   component
 
 These concepts and principles are implemented and used in Atmos by combining two features: [`import`](/stacks/imports)
@@ -261,7 +261,7 @@ the [C3 linearization](https://en.wikipedia.org/wiki/C3_linearization) algorithm
 In **Object-Oriented Programming (OOP)**, a mixin is a class that contains methods for use by other classes without having to be the parent class of
 those other classes.
 
-In **Component-Oriented Programming (COP)** implemented in Atmos, a [mixin](/stacks/mixins) is an abstract base component that is never
+In **Component-Oriented Programming (COP)** implemented in Atmos, a [mixin](/howto/mixins) is an abstract base component that is never
 meant to be provisioned and does not have any physical implementation - it just contains default settings/variables/properties for use by other Atmos
 components.
 

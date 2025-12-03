@@ -236,7 +236,7 @@ atmos terraform apply vpc -s ew1-dev
 
 ## Reducing Duplication with Mixins
 
-As your multi-region deployment grows, you may notice duplication across region stack files (e.g., the same `region`, `environment`, and `availability_zones` repeated). You can extract this into [Mixins](/stacks/mixins) to keep your configuration DRY.
+As your multi-region deployment grows, you may notice duplication across region stack files (e.g., the same `region`, `environment`, and `availability_zones` repeated). You can extract this into [Mixins](/howto/mixins) to keep your configuration DRY.
 
 For example, create a region mixin:
 
@@ -277,7 +277,7 @@ components:
 ```
 </File>
 
-See [Mixins](/stacks/mixins) for more details on this approach.
+See [Mixins](/howto/mixins) for more details on this approach.
 
 ## Related Patterns
 
@@ -287,6 +287,6 @@ See [Mixins](/stacks/mixins) for more details on this approach.
 
 ## References
 
-- [Catalogs](/stacks/catalogs)
-- [Mixins](/stacks/mixins)
+- [Catalogs](/howto/catalogs)
+- [Mixins](/howto/mixins)
 - [Stack Imports](/stacks/imports)

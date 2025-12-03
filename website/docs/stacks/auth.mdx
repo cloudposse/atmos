@@ -2,6 +2,7 @@
 title: Configure Authentication
 sidebar_position: 14
 sidebar_label: auth
+sidebar_class_name: command
 description: Use the auth section to configure credential management for cloud providers and external services.
 id: auth
 ---
@@ -9,7 +10,7 @@ import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `auth` section configures how Atmos obtains and manages credentials for cloud providers and external services. Auth configuration is primarily defined in `atmos.yaml` but can be extended at the component level via `settings.auth`.
+The `auth` section configures how Atmos obtains and manages credentials for cloud providers and external services. Auth configuration is primarily defined in `atmos.yaml` but can be extended at the component level via `auth` as a top-level key.
 </Intro>
 
 ## Use Cases
@@ -47,15 +48,14 @@ auth:
 
 ### Component-Level Configuration
 
-Components can reference or extend auth configuration via `settings.auth`:
+Components can reference or extend auth configuration via the `auth` top-level key:
 
 ```yaml
 components:
   terraform:
     vpc:
-      settings:
-        auth:
-          identity: prod-admin
+      auth:
+        identity: prod-admin
 ```
 
 ## Auth Configuration Structure
@@ -283,17 +283,15 @@ components:
   terraform:
     # This component needs admin access
     iam-roles:
-      settings:
-        auth:
-          identity: prod-admin
+      auth:
+        identity: prod-admin
       vars:
         # ...
 
     # This component uses read-only access
     monitoring:
-      settings:
-        auth:
-          identity: prod-readonly
+      auth:
+        identity: prod-readonly
       vars:
         # ...
 ```

@@ -34,7 +34,7 @@ To access the remote state of components, you can override
 any [Terraform Backend](/components/terraform/backends)
 configuration in the `backend` section using the `remote_state_backend` section. The `remote_state_backend` section
 is a first-class section, and it can be defined globally at any scope (organization, tenant, account, region), or per
-component, and then deep-merged using [Atmos Component Inheritance](/stacks/inheritance).
+component, and then deep-merged using [Atmos Component Inheritance](/howto/inheritance).
 
 For example, let's suppose we have the following S3 backend configuration for the entire organization
 (refer to [AWS S3 Backend](/components/terraform/backends#aws-s3-backend) for more details):

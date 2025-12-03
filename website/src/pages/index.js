@@ -112,7 +112,7 @@ function Home() {
             <div className="section__description">
               <h2>Start Your Project</h2>
               <p>Create a solid foundation with a well-structured folder layout, embracing best practices and conventions for a consistently organized project.</p>
-              <Link to="/stacks/catalogs" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
+              <Link to="/howto/catalogs" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
           <section className="alternate-section section--image-left">

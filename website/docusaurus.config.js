@@ -142,15 +142,23 @@ const config = {
                     },
                     {
                         from: '/core-concepts/stacks/inheritance/inheritance',
-                        to: '/stacks/inheritance'
+                        to: '/howto/inheritance'
                     },
                     {
                         from: '/core-concepts/stacks/inheritance',
-                        to: '/stacks/inheritance'
+                        to: '/howto/inheritance'
+                    },
+                    {
+                        from: '/stacks/inheritance',
+                        to: '/howto/inheritance'
                     },
                     {
                         from: '/core-concepts/stacks/inheritance/mixins',
-                        to: '/stacks/mixins'
+                        to: '/howto/mixins'
+                    },
+                    {
+                        from: '/stacks/mixins',
+                        to: '/howto/mixins'
                     },
                     {
                         from: '/core-concepts/stacks/overrides',
@@ -166,7 +174,11 @@ const config = {
                     },
                     {
                         from: '/core-concepts/stacks/catalogs',
-                        to: '/stacks/catalogs'
+                        to: '/howto/catalogs'
+                    },
+                    {
+                        from: '/stacks/catalogs',
+                        to: '/howto/catalogs'
                     },
                     // Redirects for workflow pages moved to top level
 //                     {
@@ -180,19 +192,39 @@ const config = {
                     // Redirects for vendoring pages moved to top level
                     {
                         from: '/core-concepts/vendor',
-                        to: '/vendoring/vendor'
+                        to: '/vendor/'
                     },
                     {
                         from: '/core-concepts/vendor/vendor',
-                        to: '/vendoring/vendor'
+                        to: '/vendor/'
+                    },
+                    {
+                        from: '/vendoring/vendor',
+                        to: '/vendor/'
+                    },
+                    {
+                        from: '/vendoring',
+                        to: '/vendor/'
                     },
                     {
                         from: '/core-concepts/vendor/vendor-package',
-                        to: '/vendoring/component-manifest'
+                        to: '/vendor/component-manifest/'
+                    },
+                    {
+                        from: '/vendoring/component-manifest',
+                        to: '/vendor/component-manifest/'
                     },
                     {
                         from: '/core-concepts/vendor/vendor-lock',
-                        to: '/vendoring/vendor-manifest'
+                        to: '/vendor/vendor-config'
+                    },
+                    {
+                        from: '/vendoring/vendor-manifest',
+                        to: '/vendor/vendor-config'
+                    },
+                    {
+                        from: '/vendor/config/vendor-config',
+                        to: '/vendor/vendor-config'
                     },
                     // Redirects for validation pages moved to top level
                     {

@@ -93,7 +93,7 @@ deep-merge and override all the `providers` configurations for a component in th
 - Current component scope (`component.terraform.<component>.providers` section)
 
 :::tip
-Refer to [Atmos Component Inheritance](/stacks/inheritance) for more information on all types of component inheritance
+Refer to [Atmos Component Inheritance](/howto/inheritance) for more information on all types of component inheritance
 supported by Atmos
 :::
 
@@ -174,7 +174,7 @@ For example:
 The above example uses a list of configuration blocks for the `aws` provider.
 
 Since it's a list, by default it doesn't work with deep-merging of stacks in the
-[inheritance](/stacks/inheritance) chain since lists are not deep-merged, they are replaced.
+[inheritance](/howto/inheritance) chain since lists are not deep-merged, they are replaced.
 
 If you want to use the above configuration in the inheritance chain and allow appending or merging of lists, consider
 configuring the `settings.list_merge_strategy` in the `atmos.yaml` CLI config file.

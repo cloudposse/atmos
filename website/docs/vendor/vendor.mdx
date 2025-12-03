@@ -1,8 +1,9 @@
 ---
 title: Vendoring
 description: Use Atmos vendoring to make copies of 3rd-party components, stacks, and other artifacts in your own repo.
-sidebar_position: 7
-sidebar_label: Vendor Dependencies
+sidebar_position: 1
+sidebar_label: vendor
+sidebar_class_name: hidden
 id: vendor
 ---
 import File from '@site/src/components/File'
@@ -30,15 +31,15 @@ Atmos vendoring streamlines component sharing and version control across an ente
 
 Atmos supports two different ways of vendoring components:
 
-- [**Vendor Manifest**](/vendoring/vendor-manifest) Using `vendor.yaml` vendoring manifest file containing a list of all dependencies.
-- [**Component Manifest**](/vendoring/component-manifest) Using `component.yaml` manifest file inside of a component directory. See below.
+- [**Vendor Configuration**](/vendor/vendor-config) Using `vendor.yaml` vendoring manifest file containing a list of all dependencies. **This is the recommended approach.**
+- [**Component Manifest**](/vendor/component-manifest) (Legacy) Using `component.yaml` manifest file inside of a component directory.
 
 The `vendor.yaml` vendoring manifest describes the vendoring config for all components, stacks and other artifacts for the entire infrastructure.
 The file is placed into the directory from which the `atmos vendor pull` command is executed. It's the recommended way to describe vendoring
 configurations.
 
-:::tip
-Refer to [`Atmos Vendoring`](/vendoring/vendor) for more details
+:::tip Recommended Approach
+Use the `vendor.yaml` [Vendor Configuration](/vendor/vendor-config) approach for centralized dependency management. The component manifest approach is considered legacy and should only be used for specific use cases.
 :::
 
 The `component.yaml` vendoring manifest is used to vendor components from remote repositories.

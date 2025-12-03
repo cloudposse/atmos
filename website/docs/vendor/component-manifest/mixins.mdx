@@ -1,0 +1,111 @@
+---
+title: Mixins
+description: Configure mixins in component.yaml to overlay additional files on vendored components.
+sidebar_position: 3
+sidebar_label: mixins
+id: mixins
+---
+import File from '@site/src/components/File'
+
+The `mixins` key in `component.yaml` allows you to download additional files and overlay them on the vendored component. This is useful for adding or replacing files that are not part of the original component source.
+
+## Schema
+
+```yaml
+spec:
+  mixins:
+    - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
+      filename: context.tf
+    - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/{{.Version}}/modules/datadog-agent/introspection.mixin.tf
+      version: 1.398.0
+      filename: introspection.mixin.tf
+```
+
+## Attributes
+
+<dl>
+  <dt>`uri`</dt>
+  <dd>
+    The URL to download the mixin file from. Supports the same protocols as the `source.uri` attribute: HTTP, HTTPS, Git, S3, GCP, and OCI.
+
+    Golang templates are supported in the URI. If `version` is provided, `{{.Version}}` will be replaced with the version value.
+  </dd>
+
+  <dt>`version`</dt>
+  <dd>
+    Optional version to substitute into `{{.Version}}` placeholders in the `uri`. Each mixin can have its own version independent of the main source version.
+  </dd>
+
+  <dt>`filename`</dt>
+  <dd>
+    The filename to save the downloaded file as in the component directory. This allows you to rename files or ensure they have the correct name.
+
+    Mixins override files from `source` with the same `filename` (e.g. `context.tf` will override `context.tf` from the `source`).
+  </dd>
+</dl>
+
+## How Mixins Work
+
+Mixins are processed **after** the main source is downloaded. All mixins are processed in the order they are declared in the list.
+
+This means:
+1. The component source files are downloaded first
+2. Each mixin file is downloaded and placed in the component directory
+3. If a mixin has the same filename as a source file, the mixin **overwrites** the source file
+
+## Example: Replacing context.tf
+
+A common use case is to replace the `context.tf` file from a component with a newer version:
+
+```yaml
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: vpc-flow-logs-bucket-vendor-config
+  description: Source and mixins config for vendoring of 'vpc-flow-logs-bucket' component
+spec:
+  source:
+    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
+    version: 1.398.0
+    included_paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - "**/*.md"
+    # Exclude context.tf since we'll replace it with a mixin
+    excluded_paths:
+      - "**/context.tf"
+
+  mixins:
+    # Download a newer version of context.tf
+    - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
+      filename: context.tf
+```
+
+## Example: Adding Multiple Mixins
+
+You can add multiple mixin files to a component:
+
+```yaml
+spec:
+  source:
+    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}
+    version: 1.398.0
+
+  mixins:
+    # Add context.tf
+    - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
+      filename: context.tf
+
+    # Add an introspection mixin from another component
+    - uri: https://raw.githubusercontent.com/cloudposse/terraform-aws-components/{{.Version}}/modules/datadog-agent/introspection.mixin.tf
+      version: 1.398.0
+      filename: introspection.mixin.tf
+
+    # Add a custom providers configuration
+    - uri: https://example.com/terraform/providers.tf
+      filename: providers.tf
+```
+
+:::tip
+When using mixins, consider excluding the files you intend to replace in the `excluded_paths` of the source configuration. This makes your intent clear and avoids downloading files that will be overwritten.
+:::

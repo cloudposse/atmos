@@ -187,7 +187,7 @@ security_group_ingress_cidrs: !template '{{ toJson .settings.allowed_ingress_cid
 The `!template` function and the `'{{ toJson .settings.allowed_ingress_cidrs }}'` expression allows you to
 use the global `allowed_ingress_cidrs` variable and the same template even if the components have different
 variable names for the allowed CIDR blocks (which would be difficult to implement using
-[Atmos inheritance](/stacks/inheritance) or other [Atmos design patterns](/design-patterns)).
+[Atmos inheritance](/howto/inheritance) or other [Atmos design patterns](/design-patterns)).
 
 :::tip
 To append additional CIDRs to the template itself, use the `list` and [Sprig](https://masterminds.github.io/sprig/lists.html)

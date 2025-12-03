@@ -21,7 +21,7 @@ One of the main principles of Atmos is the separation of configuration from code
 
 Atmos separates the components (logic) and stacks (configuration of the components for different environments) so they can be independently managed and evolved. In the case of using Terraform, the components are [Terraform root modules](https://developer.hashicorp.com/terraform/language/modules#the-root-module).
 
-In many cases, with enterprise-grade infrastructures (multi-org, multi-tenant, multi-account, multi-region, multi-team), the configuration is much more complicated than the code. That's what Atmos is trying to solve - to make the configuration manageable, reusable (by using [Imports](/stacks/imports), [Inheritance](/stacks/inheritance), and other Atmos features) and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself), and to make the code completely generic.
+In many cases, with enterprise-grade infrastructures (multi-org, multi-tenant, multi-account, multi-region, multi-team), the configuration is much more complicated than the code. That's what Atmos is trying to solve - to make the configuration manageable, reusable (by using [Imports](/stacks/imports), [Inheritance](/howto/inheritance), and other Atmos features) and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself), and to make the code completely generic.
 
 In this Quick Start guide, we describe how to provision infrastructure managed by Terraform into different AWS environments. Atmos manages the configurations for the environments.
 

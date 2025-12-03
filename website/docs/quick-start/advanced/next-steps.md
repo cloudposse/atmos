@@ -13,12 +13,12 @@ Atmos is a powerful enterprise-grade workflow automation tool with so **much mor
 Here are some of the major differentiators of Atmos and topics worth exploring in greater depth:
 
 * [Atmos Design Patterns](/design-patterns)
-* [Third-party Integrations](/integrations)
-* [Atmos Vendoring](/vendoring/vendor)
-* [Component Vendoring](/vendoring/component-manifest)
+* [Third-party Integrations](/integrations/github-actions)
+* [Atmos Vendoring](/vendor/)
+* [Component Vendoring](/vendor/component-manifest)
 * [Imports](/stacks/imports) (mixins, catalogs)
 * [Workflow Automation](/workflows)
 * [Custom Commands](/cli/configuration/commands)
-* [Component Inheritance & Multiple Inheritance](/stacks/inheritance)
+* [Component Inheritance & Multiple Inheritance](/howto/inheritance)
 * [JSON Schema & OPA Policy Enforcement](/validation/validating)
 * [Atmos Manifest JSON Schema](/cli/configuration/schemas)

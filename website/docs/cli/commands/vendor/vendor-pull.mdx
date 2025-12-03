@@ -9,7 +9,7 @@ import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-This command implements [Atmos Vendoring](/vendoring/vendor). Use this command to download sources from local and remote
+This command implements [Atmos Vendoring](/vendor/). Use this command to download sources from local and remote
 repositories for Terraform and Helmfile components and stacks.
 </Intro>
 
@@ -60,7 +60,7 @@ configurations.
 
 - The `source` attribute supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP), and all URL and
   archive formats as described in [go-getter](https://github.com/hashicorp/go-getter), and also the `oci://` scheme to download artifacts from
-  [OCI registries](https://opencontainers.org). See [Vendor URL Syntax](/vendoring/url-syntax) for complete documentation on supported URL formats and authentication.
+  [OCI registries](https://opencontainers.org). See [Vendor URL Syntax](/vendor/url-syntax) for complete documentation on supported URL formats and authentication.
 
 - The `targets` in the `sources` support absolute paths and relative paths (relative to the `vendor.yaml` file). Note: if the `targets` paths
   are set as relative, and if the `vendor.yaml` file is detected by Atmos using the `base_path` setting in `atmos.yaml`, the `targets` paths
@@ -73,7 +73,7 @@ configurations.
   specified tags by executing a command `atmos vendor pull --tags <tag1>,<tag2>`
 
 :::tip
-Refer to [`Atmos Vendoring`](/vendoring/vendor) for more details
+Refer to [`Atmos Vendoring`](/vendor/) for more details
 :::
 
 ## Vendoring using `component.yaml` manifest
@@ -89,7 +89,7 @@ Refer to [`Atmos Vendoring`](/vendoring/vendor) for more details
   file names/paths (double-star/globstar `**` is supported as well).
 
 :::tip
-Refer to [`Atmos Component Vendoring`](/vendoring/component-manifest) for more details
+Refer to [`Atmos Component Vendoring`](/vendor/component-manifest) for more details
 :::
 
 ## Vendoring from OCI Registries

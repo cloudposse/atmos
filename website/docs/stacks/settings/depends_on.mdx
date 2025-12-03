@@ -2,6 +2,7 @@
 title: Configure Dependencies Between Components
 sidebar_position: 2
 sidebar_label: depends_on
+sidebar_class_name: command
 id: depends_on
 ---
 
@@ -19,7 +20,7 @@ For example, a database component might depend on a network component.
 When this happens, it's important to ensure that the network component is deployed before the database component.
 
 :::important Support for Dependencies
-Support for dependencies is reliant on the [integration](/integrations) used and not all integrations support dependencies.
+Support for dependencies is reliant on the [integration](/integrations/github-actions) used and not all integrations support dependencies.
 
 For example, GitHub Actions do not support dependency order applies, while [Spacelift does](https://docs.spacelift.io/concepts/stack/stack-dependencies).
 :::

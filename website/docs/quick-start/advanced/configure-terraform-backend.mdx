@@ -258,7 +258,7 @@ needs to have a separate S3 bucket, DynamoDB table, and IAM role with different 
 access the Terraform backend only in the `dev` account, but not in `staging` and `prod`).
 
 Atmos supports this use-case by using deep-merging of stack manifests, [Imports](/stacks/imports)
-and [Inheritance](/stacks/inheritance), which makes the backend configuration reusable and DRY.
+and [Inheritance](/howto/inheritance), which makes the backend configuration reusable and DRY.
 
 We'll split the backend config between the Organization and the accounts.
 
