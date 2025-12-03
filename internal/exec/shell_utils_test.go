@@ -218,7 +218,7 @@ func TestConvertEnvMapToSlice(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertEnvMapToSlice(tt.input)
+			result := envpkg.ConvertMapToSlice(tt.input)
 			assert.Len(t, result, len(tt.expected))
 
 			// Convert result back to map for easier comparison.

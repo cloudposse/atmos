@@ -26,7 +26,6 @@ import (
 
 const (
 	atmosShellLevelEnvVar = "ATMOS_SHLVL"
-	envVarSeparator       = "="
 	logFieldCommand       = "command"
 	osWindows             = "windows"
 )
@@ -333,7 +332,7 @@ func ExecAuthShellCommand(
 	defer decrementAtmosShellLevel()
 
 	// Convert auth env vars map to slice format.
-	authEnvList := convertEnvMapToSlice(authEnvVars)
+	authEnvList := envpkg.ConvertMapToSlice(authEnvVars)
 
 	// Set environment variables to indicate the details of the Atmos auth shell configuration.
 	authEnvList = append(authEnvList, fmt.Sprintf("ATMOS_IDENTITY=%s", identityName))
@@ -447,15 +446,6 @@ func decrementAtmosShellLevel() {
 	if err := setAtmosShellLevel(newLevel); err != nil {
 		log.Warn("Failed to update ATMOS_SHLVL", "error", err)
 	}
-}
-
-// convertEnvMapToSlice converts environment variable map to slice format.
-func convertEnvMapToSlice(envMap map[string]string) []string {
-	envList := make([]string, 0, len(envMap))
-	for key, value := range envMap {
-		envList = append(envList, fmt.Sprintf("%s%s%s", key, envVarSeparator, value))
-	}
-	return envList
 }
 
 // determineShell determines which shell to use and what arguments to pass.
