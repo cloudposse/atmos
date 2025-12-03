@@ -47,13 +47,14 @@ func ExecuteShellCommand(
 	if err != nil {
 		return err
 	}
-	updatedEnv := append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
 	cmd := exec.Command(command, args...)
 	// Build environment: os.Environ() + global env (atmos.yaml) + command-specific env.
 	// Global env has lowest priority after system env, command-specific env overrides both.
-	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
-	cmd.Env = append(baseEnv, updatedEnv...)
+	cmdEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+	cmdEnv = append(cmdEnv, env...)
+	cmdEnv = append(cmdEnv, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
+	cmd.Env = cmdEnv
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

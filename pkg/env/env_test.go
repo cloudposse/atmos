@@ -570,3 +570,70 @@ func TestEnvironToMapFiltered(t *testing.T) {
 		})
 	}
 }
+
+func TestBuilder(t *testing.T) {
+	t.Run("empty builder", func(t *testing.T) {
+		result := NewBuilder().Build()
+		assert.Empty(t, result)
+	})
+
+	t.Run("builder with initial env", func(t *testing.T) {
+		initial := []string{"PATH=/usr/bin", "HOME=/home/user"}
+		result := NewBuilder(initial).Build()
+		assert.Equal(t, initial, result)
+	})
+
+	t.Run("builder does not mutate original", func(t *testing.T) {
+		initial := []string{"PATH=/usr/bin"}
+		builder := NewBuilder(initial)
+		builder.WithEnvVar("NEW", "value")
+		result := builder.Build()
+
+		assert.Len(t, initial, 1, "Original slice should not be modified")
+		assert.Len(t, result, 2, "Result should have 2 entries")
+	})
+
+	t.Run("WithEnv adds key=value string", func(t *testing.T) {
+		result := NewBuilder().
+			WithEnv("FOO=bar").
+			Build()
+		assert.Equal(t, []string{"FOO=bar"}, result)
+	})
+
+	t.Run("WithEnvVar adds key and value", func(t *testing.T) {
+		result := NewBuilder().
+			WithEnvVar("FOO", "bar").
+			Build()
+		assert.Equal(t, []string{"FOO=bar"}, result)
+	})
+
+	t.Run("WithEnvVarf adds formatted value", func(t *testing.T) {
+		result := NewBuilder().
+			WithEnvVarf("ATMOS_SHLVL", "%d", 2).
+			Build()
+		assert.Equal(t, []string{"ATMOS_SHLVL=2"}, result)
+	})
+
+	t.Run("WithEnvMap adds all map entries", func(t *testing.T) {
+		result := NewBuilder().
+			WithEnvMap(map[string]string{"KEY1": "val1", "KEY2": "val2"}).
+			Build()
+		assert.Len(t, result, 2)
+		assert.Contains(t, result, "KEY1=val1")
+		assert.Contains(t, result, "KEY2=val2")
+	})
+
+	t.Run("fluent chaining", func(t *testing.T) {
+		result := NewBuilder([]string{"PATH=/usr/bin"}).
+			WithEnvVar("HOME", "/home/user").
+			WithEnvVarf("LEVEL", "%d", 5).
+			WithEnv("DEBUG=true").
+			Build()
+
+		assert.Len(t, result, 4)
+		assert.Equal(t, "PATH=/usr/bin", result[0])
+		assert.Equal(t, "HOME=/home/user", result[1])
+		assert.Equal(t, "LEVEL=5", result[2])
+		assert.Equal(t, "DEBUG=true", result[3])
+	})
+}

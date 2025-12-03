@@ -177,7 +177,8 @@ func TestGlobalEnvPrecedence(t *testing.T) {
 
 	// Apply command-specific env (simulating stack/component env).
 	commandEnv := []string{"OVERRIDE_ME=command-value", "COMMAND_SPECIFIC=true"}
-	final := append(withGlobal, commandEnv...)
+	withGlobal = append(withGlobal, commandEnv...)
+	final := withGlobal
 
 	// Find the OVERRIDE_ME values in order.
 	var overrideValues []string

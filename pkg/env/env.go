@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	// pathPrefixLength is the length of "PATH=" prefix.
+	// PathPrefixLength is the length of "PATH=" prefix.
 	pathPrefixLength = 5
-	// envVarFormat is the format string for environment variables.
+	// EnvVarFormat is the format string for environment variables.
 	envVarFormat = "%s=%s"
 )
 
@@ -63,6 +63,8 @@ func splitStringAtFirstOccurrence(s string, sep string) [2]string {
 // CommandEnvToMap converts a slice of schema.CommandEnv to a map[string]string.
 // Keys are taken from the Key field; later entries overwrite earlier ones on duplicate keys.
 func CommandEnvToMap(envs []schema.CommandEnv) map[string]string {
+	defer perf.Track(nil, "env.CommandEnvToMap")()
+
 	m := make(map[string]string, len(envs))
 	for _, e := range envs {
 		m[e.Key] = e.Value
@@ -221,4 +223,65 @@ func EnvironToMapFiltered(excludeKeys []string, excludePrefixes []string) map[st
 		}
 	}
 	return envMap
+}
+
+// Builder provides a fluent API for constructing environment variable slices.
+type Builder struct {
+	env []string
+}
+
+// NewBuilder creates a new Builder with an optional initial environment slice.
+// If no initial slice is provided, starts with an empty slice.
+func NewBuilder(initial ...[]string) *Builder {
+	defer perf.Track(nil, "env.NewBuilder")()
+
+	var env []string
+	if len(initial) > 0 && initial[0] != nil {
+		// Copy to avoid mutating the original slice.
+		env = make([]string, len(initial[0]))
+		copy(env, initial[0])
+	}
+	return &Builder{env: env}
+}
+
+// WithEnv adds an environment variable in KEY=value format.
+func (b *Builder) WithEnv(keyValue string) *Builder {
+	defer perf.Track(nil, "env.Builder.WithEnv")()
+
+	b.env = append(b.env, keyValue)
+	return b
+}
+
+// WithEnvVar adds an environment variable with the given key and value.
+func (b *Builder) WithEnvVar(key, value string) *Builder {
+	defer perf.Track(nil, "env.Builder.WithEnvVar")()
+
+	b.env = append(b.env, fmt.Sprintf(envVarFormat, key, value))
+	return b
+}
+
+// WithEnvVarf adds an environment variable using a format string for the value.
+func (b *Builder) WithEnvVarf(key, format string, args ...any) *Builder {
+	defer perf.Track(nil, "env.Builder.WithEnvVarf")()
+
+	value := fmt.Sprintf(format, args...)
+	b.env = append(b.env, fmt.Sprintf(envVarFormat, key, value))
+	return b
+}
+
+// WithEnvMap adds all environment variables from a map.
+func (b *Builder) WithEnvMap(envMap map[string]string) *Builder {
+	defer perf.Track(nil, "env.Builder.WithEnvMap")()
+
+	for k, v := range envMap {
+		b.env = append(b.env, fmt.Sprintf(envVarFormat, k, v))
+	}
+	return b
+}
+
+// Build returns the constructed environment slice.
+func (b *Builder) Build() []string {
+	defer perf.Track(nil, "env.Builder.Build")()
+
+	return b.env
 }
