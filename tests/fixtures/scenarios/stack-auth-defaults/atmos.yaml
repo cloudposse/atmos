@@ -1,0 +1,39 @@
+# Test fixture for stack-level auth defaults
+# This tests the scenario where default identity is set ONLY in stack config,
+# not in atmos.yaml or profile config.
+
+base_path: "./"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths: []
+  name_pattern: "{tenant}-{environment}-{stage}"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+# Auth config with identities but NO default set here.
+# The default is set in the stack config instead.
+auth:
+  providers:
+    test-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://test.awsapps.com/start
+  identities:
+    test-identity:
+      kind: aws/permission-set
+      # NOTE: default: true is NOT set here - it's in the stack config
+      via:
+        provider: test-sso
+      principal:
+        name: TestAccess
+        account:
+          name: test-account
