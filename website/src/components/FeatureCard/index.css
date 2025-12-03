@@ -34,6 +34,15 @@ html[data-theme="dark"] .feature-card:hover {
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
 }
 
+.feature-card:focus-visible {
+  outline: 2px solid #1e5bb8;
+  outline-offset: 2px;
+}
+
+html[data-theme="dark"] .feature-card:focus-visible {
+  outline-color: #538ce9;
+}
+
 .feature-card--expanded {
   background: rgba(0, 0, 0, 0.03);
 }

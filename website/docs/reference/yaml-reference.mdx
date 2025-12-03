@@ -813,7 +813,10 @@ components:
     vpc:
       vars:
         # Production VPC requires 3 AZs for HA
-        availability_zones: 3
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
 
         # Enable NAT gateways in each AZ (higher cost but redundant)
         single_nat_gateway: false

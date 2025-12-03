@@ -34,6 +34,15 @@ html[data-theme="dark"] .use-case-card:hover {
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
 }
 
+.use-case-card:focus-visible {
+  outline: 2px solid #1e5bb8;
+  outline-offset: 2px;
+}
+
+html[data-theme="dark"] .use-case-card:focus-visible {
+  outline-color: #538ce9;
+}
+
 .use-case-card--expanded {
   background: rgba(0, 0, 0, 0.03);
 }
