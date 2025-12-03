@@ -8,7 +8,7 @@ import (
 )
 
 // MergeGlobalEnv merges atmos.yaml global env into an environment slice.
-// Global env has lowest priority and is prepended (can be overridden by command-specific env).
+// Global env has lowest priority and is appended (can be overridden by command-specific env).
 // The baseEnv slice typically comes from os.Environ().
 func MergeGlobalEnv(baseEnv []string, globalEnv map[string]string) []string {
 	defer perf.Track(nil, "env.MergeGlobalEnv")()
@@ -17,11 +17,11 @@ func MergeGlobalEnv(baseEnv []string, globalEnv map[string]string) []string {
 		return baseEnv
 	}
 
-	// Convert global env map to slice and prepend to base env.
+	// Convert global env map to slice and append to base env.
 	// This ensures global env can be overridden by any subsequent env vars.
 	globalEnvSlice := ConvertMapToSlice(globalEnv)
 
-	// Prepend global env: os.Environ() already contains the system env,
+	// Append global env: os.Environ() already contains the system env,
 	// and we want global env to come after system env but before command-specific env.
 	// So we append global env to base env (which is typically os.Environ()).
 	result := make([]string, 0, len(baseEnv)+len(globalEnvSlice))
