@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	"github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
@@ -159,7 +160,9 @@ func ExecuteWorkflow(
 			commandType = "atmos"
 		}
 
-		// Prepare environment variables if identity is specified for this step.
+		// Prepare environment variables: start with system env + global env from atmos.yaml.
+		// Global env has lowest priority and can be overridden by identity auth env vars.
+		baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 		var stepEnv []string
 		if stepIdentity != "" {
 			if authManager == nil {
@@ -185,16 +188,16 @@ func ExecuteWorkflow(
 			}
 
 			// Prepare shell environment with authentication credentials.
-			// Start with current OS environment and let PrepareShellEnvironment configure auth.
-			stepEnv, err = authManager.PrepareShellEnvironment(ctx, stepIdentity, os.Environ())
+			// Start with base environment (system + global) and let PrepareShellEnvironment configure auth.
+			stepEnv, err = authManager.PrepareShellEnvironment(ctx, stepIdentity, baseEnv)
 			if err != nil {
 				return fmt.Errorf("failed to prepare shell environment for identity %q in step %q: %w", stepIdentity, step.Name, err)
 			}
 
 			log.Debug("Prepared environment with identity", "identity", stepIdentity, "step", step.Name)
 		} else {
-			// No identity specified, use empty environment (subprocess inherits from parent).
-			stepEnv = []string{}
+			// No identity specified, use base environment (system + global env).
+			stepEnv = baseEnv
 		}
 
 		var err error

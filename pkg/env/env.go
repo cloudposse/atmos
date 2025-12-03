@@ -1,4 +1,7 @@
-package utils
+// Package env provides utilities for working with environment variables.
+// It includes functions for converting, merging, updating, and managing
+// environment variable slices used throughout atmos.
+package env
 
 import (
 	"fmt"
@@ -6,21 +9,21 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/schema"
-
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
-	// PathPrefixLength is the length of "PATH=" prefix.
+	// pathPrefixLength is the length of "PATH=" prefix.
 	pathPrefixLength = 5
-	// EnvVarFormat is the format string for environment variables.
+	// envVarFormat is the format string for environment variables.
 	envVarFormat = "%s=%s"
 )
 
 // ConvertEnvVars converts ENV vars from a map to a list of strings in the format ["key1=val1", "key2=val2", "key3=val3" ...].
+// Variables with nil or "null" values are skipped.
 func ConvertEnvVars(envVarsMap map[string]any) []string {
-	defer perf.Track(nil, "utils.ConvertEnvVars")()
+	defer perf.Track(nil, "env.ConvertEnvVars")()
 
 	res := []string{}
 
@@ -34,16 +37,27 @@ func ConvertEnvVars(envVarsMap map[string]any) []string {
 
 // EnvironToMap converts all the environment variables in the environment into a map of strings.
 func EnvironToMap() map[string]string {
-	defer perf.Track(nil, "utils.EnvironToMap")()
+	defer perf.Track(nil, "env.EnvironToMap")()
 
 	envMap := make(map[string]string)
-	for _, env := range os.Environ() {
-		pair := SplitStringAtFirstOccurrence(env, "=")
+	for _, e := range os.Environ() {
+		pair := splitStringAtFirstOccurrence(e, "=")
 		k := pair[0]
 		v := pair[1]
 		envMap[k] = v
 	}
 	return envMap
+}
+
+// splitStringAtFirstOccurrence splits a string at the first occurrence of a separator.
+// Returns [2]string with the part before and after the separator.
+// If separator is not found, returns the original string and empty string.
+func splitStringAtFirstOccurrence(s string, sep string) [2]string {
+	idx := strings.Index(s, sep)
+	if idx == -1 {
+		return [2]string{s, ""}
+	}
+	return [2]string{s[:idx], s[idx+len(sep):]}
 }
 
 // CommandEnvToMap converts a slice of schema.CommandEnv to a map[string]string.
@@ -59,7 +73,7 @@ func CommandEnvToMap(envs []schema.CommandEnv) map[string]string {
 // PrependToPath adds a directory to the beginning of the PATH environment variable.
 // Returns the new PATH value.
 func PrependToPath(currentPath, newDir string) string {
-	defer perf.Track(nil, "utils.PrependToPath")()
+	defer perf.Track(nil, "env.PrependToPath")()
 
 	if currentPath == "" {
 		return newDir
@@ -68,10 +82,10 @@ func PrependToPath(currentPath, newDir string) string {
 }
 
 // findPathIndex returns the index of the PATH entry (case-insensitive) and the key casing to use ("PATH" or "Path").
-func findPathIndex(env []string) (int, string) {
-	defer perf.Track(nil, "utils.findPathIndex")()
+func findPathIndex(envSlice []string) (int, string) {
+	defer perf.Track(nil, "env.findPathIndex")()
 
-	for i, envVar := range env {
+	for i, envVar := range envSlice {
 		if len(envVar) >= pathPrefixLength && strings.EqualFold(envVar[:pathPrefixLength], "PATH=") {
 			return i, envVar[:pathPrefixLength-1] // keep existing key's casing (exclude "=").
 		}
@@ -81,13 +95,13 @@ func findPathIndex(env []string) (int, string) {
 
 // UpdateEnvironmentPath updates the PATH in an environment slice.
 // Returns a new environment slice with the updated PATH.
-func UpdateEnvironmentPath(env []string, newDir string) []string {
-	defer perf.Track(nil, "utils.UpdateEnvironmentPath")()
+func UpdateEnvironmentPath(envSlice []string, newDir string) []string {
+	defer perf.Track(nil, "env.UpdateEnvironmentPath")()
 
-	idx, key := findPathIndex(env) // case-insensitive match for "PATH=".
+	idx, key := findPathIndex(envSlice) // case-insensitive match for "PATH=".
 	if idx >= 0 {
-		updated := make([]string, 0, len(env))
-		for i, envVar := range env {
+		updated := make([]string, 0, len(envSlice))
+		for i, envVar := range envSlice {
 			if i == idx {
 				currentPath := envVar[len(key)+1:] // Remove "KEY=" prefix
 				updated = append(updated, fmt.Sprintf(envVarFormat, key, PrependToPath(currentPath, newDir)))
@@ -98,49 +112,49 @@ func UpdateEnvironmentPath(env []string, newDir string) []string {
 		return updated
 	}
 	// If PATH wasn't found, add it with canonical "PATH" key.
-	return append(append([]string{}, env...), fmt.Sprintf(envVarFormat, "PATH", newDir))
+	return append(append([]string{}, envSlice...), fmt.Sprintf(envVarFormat, "PATH", newDir))
 }
 
 // GetPathFromEnvironment extracts the PATH value from an environment slice.
-func GetPathFromEnvironment(env []string) string {
-	defer perf.Track(nil, "utils.GetPathFromEnvironment")()
+func GetPathFromEnvironment(envSlice []string) string {
+	defer perf.Track(nil, "env.GetPathFromEnvironment")()
 
-	idx, key := findPathIndex(env)
+	idx, key := findPathIndex(envSlice)
 	if idx >= 0 {
-		return env[idx][len(key)+1:] // Remove "KEY=" prefix
+		return envSlice[idx][len(key)+1:] // Remove "KEY=" prefix
 	}
 	return ""
 }
 
 // EnsureBinaryInPath checks if a binary directory is in PATH and adds it if missing.
 // Returns updated environment with the binary directory prepended to PATH.
-func EnsureBinaryInPath(env []string, binaryPath string) []string {
-	defer perf.Track(nil, "utils.EnsureBinaryInPath")()
+func EnsureBinaryInPath(envSlice []string, binaryPath string) []string {
+	defer perf.Track(nil, "env.EnsureBinaryInPath")()
 
 	binaryDir := filepath.Dir(binaryPath)
-	currentPath := GetPathFromEnvironment(env)
+	currentPath := GetPathFromEnvironment(envSlice)
 
 	// Check if binary directory is already in PATH
 	if strings.Contains(currentPath, binaryDir) {
-		return env // Already in PATH
+		return envSlice // Already in PATH
 	}
 
-	return UpdateEnvironmentPath(env, binaryDir)
+	return UpdateEnvironmentPath(envSlice, binaryDir)
 }
 
 // UpdateEnvVar updates or adds an environment variable in an environment slice.
 // Returns a new environment slice with the variable updated.
-func UpdateEnvVar(env []string, key, value string) []string {
-	defer perf.Track(nil, "utils.UpdateEnvVar")()
+func UpdateEnvVar(envSlice []string, key, value string) []string {
+	defer perf.Track(nil, "env.UpdateEnvVar")()
 
 	keyPrefix := key + "="
 
 	// Look for existing variable (case-sensitive for non-PATH variables)
-	for i, envVar := range env {
+	for i, envVar := range envSlice {
 		if strings.HasPrefix(envVar, keyPrefix) {
 			// Update existing variable
-			updated := make([]string, 0, len(env))
-			for j, e := range env {
+			updated := make([]string, 0, len(envSlice))
+			for j, e := range envSlice {
 				if j == i {
 					updated = append(updated, fmt.Sprintf(envVarFormat, key, value))
 				} else {
@@ -152,5 +166,5 @@ func UpdateEnvVar(env []string, key, value string) []string {
 	}
 
 	// Variable not found, add it
-	return append(append([]string{}, env...), fmt.Sprintf(envVarFormat, key, value))
+	return append(append([]string{}, envSlice...), fmt.Sprintf(envVarFormat, key, value))
 }

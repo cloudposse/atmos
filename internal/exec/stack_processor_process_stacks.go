@@ -21,6 +21,19 @@ const (
 	errFormatWithFile = "%w in file '%s'"
 )
 
+// convertEnvMapStringToAny converts map[string]string to map[string]any.
+// This is needed because stack processing uses map[string]any for env sections.
+func convertEnvMapStringToAny(env map[string]string) map[string]any {
+	if env == nil {
+		return nil
+	}
+	result := make(map[string]any, len(env))
+	for k, v := range env {
+		result[k] = v
+	}
+	return result
+}
+
 // ProcessStackConfig processes a stack configuration.
 //
 //nolint:gocognit,nestif,revive,cyclop,funlen // Core stack processing logic with complex configuration handling.
@@ -198,7 +211,9 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndTerraformEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, terraformEnv})
+	// Include atmos.yaml global env as lowest priority in the merge chain.
+	atmosConfigEnv := convertEnvMapStringToAny(atmosConfig.Env)
+	globalAndTerraformEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, terraformEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +312,8 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndHelmfileEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, helmfileEnv})
+	// Include atmos.yaml global env as lowest priority in the merge chain.
+	globalAndHelmfileEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, helmfileEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +369,8 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndPackerEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, packerEnv})
+	// Include atmos.yaml global env as lowest priority in the merge chain.
+	globalAndPackerEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, packerEnv})
 	if err != nil {
 		return nil, err
 	}

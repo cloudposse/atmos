@@ -460,8 +460,9 @@ func TestExecAuthShellCommand_ExitCodePropagation(t *testing.T) {
 			envVars := map[string]string{
 				"TEST_VAR": "test_value",
 			}
+			atmosConfig := &schema.AtmosConfiguration{}
 
-			err := ExecAuthShellCommand(nil, "test-identity", "test-provider", envVars, "/bin/sh", tt.shellArgs)
+			err := ExecAuthShellCommand(atmosConfig, "test-identity", "test-provider", envVars, "/bin/sh", tt.shellArgs)
 
 			if tt.expectedCode == 0 {
 				assert.NoError(t, err)
