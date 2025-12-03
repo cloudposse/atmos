@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -20,19 +21,6 @@ const (
 	// ErrFormatWithFile is the error format string for errors with file context.
 	errFormatWithFile = "%w in file '%s'"
 )
-
-// convertEnvMapStringToAny converts map[string]string to map[string]any.
-// This is needed because stack processing uses map[string]any for env sections.
-func convertEnvMapStringToAny(env map[string]string) map[string]any {
-	if env == nil {
-		return nil
-	}
-	result := make(map[string]any, len(env))
-	for k, v := range env {
-		result[k] = v
-	}
-	return result
-}
 
 // ProcessStackConfig processes a stack configuration.
 //
@@ -220,7 +208,7 @@ func ProcessStackConfig(
 	}
 
 	// Include atmos.yaml global env as lowest priority in the merge chain.
-	atmosConfigEnv := convertEnvMapStringToAny(atmosConfig.Env)
+	atmosConfigEnv := envpkg.ConvertMapStringToAny(atmosConfig.Env)
 	globalAndTerraformEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, terraformEnv})
 	if err != nil {
 		return nil, err

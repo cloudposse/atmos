@@ -168,3 +168,53 @@ func UpdateEnvVar(envSlice []string, key, value string) []string {
 	// Variable not found, add it
 	return append(append([]string{}, envSlice...), fmt.Sprintf(envVarFormat, key, value))
 }
+
+// ConvertMapStringToAny converts a map[string]string to map[string]any.
+// Returns nil if the input map is nil.
+func ConvertMapStringToAny(env map[string]string) map[string]any {
+	defer perf.Track(nil, "env.ConvertMapStringToAny")()
+
+	if env == nil {
+		return nil
+	}
+	result := make(map[string]any, len(env))
+	for k, v := range env {
+		result[k] = v
+	}
+	return result
+}
+
+// EnvironToMapFiltered converts environment variables to a map, excluding specified keys and prefixes.
+// This is useful for terraform-exec which prohibits certain environment variables.
+func EnvironToMapFiltered(excludeKeys []string, excludePrefixes []string) map[string]string {
+	defer perf.Track(nil, "env.EnvironToMapFiltered")()
+
+	envMap := make(map[string]string)
+	for _, e := range os.Environ() {
+		pair := splitStringAtFirstOccurrence(e, "=")
+		k := pair[0]
+		v := pair[1]
+
+		// Check if key should be excluded.
+		excluded := false
+		for _, excludeKey := range excludeKeys {
+			if k == excludeKey {
+				excluded = true
+				break
+			}
+		}
+		if !excluded {
+			for _, prefix := range excludePrefixes {
+				if strings.HasPrefix(k, prefix) {
+					excluded = true
+					break
+				}
+			}
+		}
+
+		if !excluded {
+			envMap[k] = v
+		}
+	}
+	return envMap
+}
