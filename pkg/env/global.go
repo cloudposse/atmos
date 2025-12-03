@@ -3,7 +3,10 @@ package env
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -76,4 +79,84 @@ func ApplyGlobalEnvToSlice(envSlice []string, globalEnv map[string]string) []str
 	}
 
 	return result
+}
+
+// MergeSystemEnvWithGlobal merges system environment variables with global env from atmos.yaml
+// and component-specific env. Priority order: system env < global env < component env.
+// Special handling is applied for TF_CLI_ARGS_* variables where new values are prepended to existing values.
+func MergeSystemEnvWithGlobal(componentEnvList []string, globalEnv map[string]string) []string {
+	defer perf.Track(nil, "env.MergeSystemEnvWithGlobal")()
+
+	return mergeSystemEnvInternal(componentEnvList, globalEnv, true)
+}
+
+// MergeSystemEnv merges system environment variables with component-specific env.
+// Priority order: system env < component env.
+// Special handling is applied for TF_CLI_ARGS_* variables where new values are prepended to existing values.
+func MergeSystemEnv(componentEnvList []string) []string {
+	defer perf.Track(nil, "env.MergeSystemEnv")()
+
+	return mergeSystemEnvInternal(componentEnvList, nil, true)
+}
+
+// MergeSystemEnvSimpleWithGlobal merges system environment variables with global env from atmos.yaml
+// and new env without TF_CLI_ARGS_* special handling.
+// Priority order: system env < global env < new env list.
+func MergeSystemEnvSimpleWithGlobal(newEnvList []string, globalEnv map[string]string) []string {
+	defer perf.Track(nil, "env.MergeSystemEnvSimpleWithGlobal")()
+
+	return mergeSystemEnvInternal(newEnvList, globalEnv, false)
+}
+
+// MergeSystemEnvSimple merges system environment variables with new env without TF_CLI_ARGS_* special handling.
+// Priority order: system env < new env list.
+func MergeSystemEnvSimple(newEnvList []string) []string {
+	defer perf.Track(nil, "env.MergeSystemEnvSimple")()
+
+	return mergeSystemEnvInternal(newEnvList, nil, false)
+}
+
+// mergeSystemEnvInternal is the shared implementation for all MergeSystemEnv* functions.
+// It handles merging system env, optional global env, and component/new env.
+// If handleTFCliArgs is true, TF_CLI_ARGS_* variables get special handling (prepend instead of replace).
+func mergeSystemEnvInternal(envList []string, globalEnv map[string]string, handleTFCliArgs bool) []string {
+	envMap := make(map[string]string)
+
+	// Parse system environment variables.
+	for _, env := range os.Environ() {
+		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
+			envMap[parts[0]] = parts[1]
+		}
+	}
+
+	// Apply global env from atmos.yaml if provided (can override system env).
+	for k, v := range globalEnv {
+		envMap[k] = v
+	}
+
+	// Merge with new environment variables (highest priority).
+	for _, env := range envList {
+		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
+			if handleTFCliArgs && strings.HasPrefix(parts[0], "TF_CLI_ARGS_") {
+				// For TF_CLI_ARGS_* variables, prepend new values to existing values.
+				if existing, exists := envMap[parts[0]]; exists {
+					// Put the new, Atmos defined value first so it takes precedence.
+					envMap[parts[0]] = parts[1] + " " + existing
+				} else {
+					envMap[parts[0]] = parts[1]
+				}
+			} else {
+				// For all other environment variables, just override any existing value.
+				envMap[parts[0]] = parts[1]
+			}
+		}
+	}
+
+	// Convert back to slice.
+	merged := make([]string, 0, len(envMap))
+	for k, v := range envMap {
+		log.Trace("Setting ENV var", "key", k, "value", v)
+		merged = append(merged, k+"="+v)
+	}
+	return merged
 }
