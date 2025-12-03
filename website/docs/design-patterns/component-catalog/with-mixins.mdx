@@ -1,8 +1,8 @@
 ---
-title: Component Catalog with Mixins
+title: Configuration Catalog with Mixins
 sidebar_position: 6
-sidebar_label: Component Catalog with Mixins
-description: Component Catalog with Mixins Atmos Design Pattern
+sidebar_label: With Mixins
+description: Configuration Catalog with Mixins Atmos Design Pattern
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
@@ -11,14 +11,14 @@ import PillBox from '@site/src/components/PillBox'
 <PillBox>Atmos Design Pattern</PillBox>
 
 <Intro>
-The **Component Catalog with Mixins** Design Pattern is a variation of the [Component Catalog](/design-patterns/component-catalog) pattern, with the difference being that we first create parts of a component's configuration related to different environments (e.g. in `mixins` folder), then assemble environment-specific manifests from the parts, and then import the environment-specific manifests themselves into the top-level stacks.
+The **Configuration Catalog with Mixins** Design Pattern is a variation of the [Configuration Catalog](/design-patterns/component-catalog) pattern, with the difference being that we first create parts of a component's configuration related to different environments (e.g. in `mixins` folder), then assemble environment-specific manifests from the parts, and then import the environment-specific manifests themselves into the top-level stacks.
 </Intro>
 
 It's similar to how [Helm](https://helm.sh/) and [helmfile](https://helmfile.readthedocs.io/en/latest/#environment) handle environments.
 
 ## Use-cases
 
-Use the **Component Catalog** pattern when:
+Use the **Configuration Catalog** pattern when:
 
 - You have many components that are provisioned in multiple stacks (many OUs, accounts, regions) with different configurations for each stack
 
@@ -420,7 +420,6 @@ To address the limitations of the **Component Catalog with Mixins** Design Patte
 using the following patterns:
 
 - [Inline Component Configuration](/design-patterns/inline-component-configuration)
-- [Inline Component Customization](/design-patterns/inline-component-customization)
 - [Component Catalog](/design-patterns/component-catalog)
 
 :::
@@ -431,7 +430,6 @@ using the following patterns:
 - [Component Catalog Template](/design-patterns/component-catalog/template)
 - [Component Inheritance](/design-patterns/component-inheritance)
 - [Inline Component Configuration](/design-patterns/inline-component-configuration)
-- [Inline Component Customization](/design-patterns/inline-component-customization)
 - [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
 
 ## References

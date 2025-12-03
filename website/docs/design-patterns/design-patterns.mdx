@@ -55,11 +55,43 @@ Atmos Design Patterns empower infrastructure designers and cloud architects by p
 
 :::info Summary
 
-- Derived from Cloud Posse’s experience, Atmos Design Patterns address complex organizational infrastructure needs.
+- Derived from Cloud Posse's experience, Atmos Design Patterns address complex organizational infrastructure needs.
 - These patterns guide the creation of robust, flexible, and maintainable multi-account, enterprise-grade environments.
 - Standardizing these patterns enhances professional communication, collaboration, and efficiency.
 
 :::
+
+## Where to Start
+
+You may be wondering, "Where do I begin and what steps should I follow?" Here are some recommendations based on your situation.
+
+### Learning or Prototyping
+
+If you are just developing or kicking the tires on Atmos, start with:
+
+- [Inline Configuration](/design-patterns/inline-component-configuration) - The simplest way to define components directly in stack files
+
+### Production Infrastructure
+
+If you are architecting infrastructure to provision multi-account multi-region environments at scale, we suggest these Design Patterns:
+
+- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration) - Structure for complex organizations
+- [Configuration Catalog](/design-patterns/component-catalog) - Your library of reusable configuration defaults
+- [Inline Configuration](/design-patterns/inline-component-configuration) - Customize inherited defaults per environment
+- [Component Inheritance](/design-patterns/component-inheritance) - Reuse component configuration across stacks
+- [Abstract Component](/design-patterns/abstract-component) - Create base configurations that aren't deployed directly
+- [Multiple Component Instances](/design-patterns/multiple-component-instances) - Deploy multiple instances of the same component
+- [Partial Component Configuration](/design-patterns/partial-component-configuration) - Break large configurations into manageable parts
+- [Layered Stack Configuration](/design-patterns/layered-stack-configuration) - Layer configurations for progressive customization
+
+### Quick Start Repository
+
+The [Quick Start](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-advanced) repository presents a working example that uses these patterns:
+
+- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
+- [Configuration Catalog](/design-patterns/component-catalog)
+- [Partial Component Configuration](/design-patterns/partial-component-configuration)
+- [Inline Configuration](/design-patterns/inline-component-configuration)
 
 ## The Catalog of Design Patterns
 
@@ -75,5 +107,3 @@ You'll have knowledge and insights that can make your own designs more flexible,
 We view this collection of Design Patterns as neither exhaustive nor fixed. Instead, it serves as a documentation of our present ideas, insights and knowledge. Your input, whether in the form of comments, critiques, references, or suggestions for Design Patterns we may have overlooked, is highly encouraged and appreciated.
 
 :::
-
-<DocCardList/>

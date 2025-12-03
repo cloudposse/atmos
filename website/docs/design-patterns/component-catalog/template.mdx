@@ -1,8 +1,8 @@
 ---
-title: Component Catalog Template
+title: Configuration Catalog Template
 sidebar_position: 7
-sidebar_label: Component Catalog Template
-description: Component Catalog Template Atmos Design Pattern
+sidebar_label: With Templates
+description: Configuration Catalog Template Atmos Design Pattern
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
@@ -11,7 +11,7 @@ import PillBox from '@site/src/components/PillBox'
 <PillBox>Atmos Design Pattern</PillBox>
 
 <Intro>
-The **Component Catalog Template** Design Pattern is used when you have an unbounded number of a component's instances provisioned in one environment (the same organization, OU/tenant, account and region). New instances with different settings can be configured and provisioned anytime. The old instances must be kept unchanged and never destroyed.
+The **Configuration Catalog Template** Design Pattern is used when you have an unbounded number of a component's instances provisioned in one environment (the same organization, OU/tenant, account and region). New instances with different settings can be configured and provisioned anytime. The old instances must be kept unchanged and never destroyed.
 </Intro>
 
 This is achieved by using [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports) and
@@ -19,7 +19,7 @@ This is achieved by using [`Go` Templates in Imports](/stacks/imports#go-templat
 
 ## Use-cases
 
-Use the **Component Catalog Template** pattern when:
+Use the **Configuration Catalog Template** pattern when:
 
 - You have an unbounded number of a component's instances provisioned in one environment (the same organization, OU/tenant, account and region)
 
@@ -195,7 +195,6 @@ To address the limitations of the **Component Catalog Template** Design Pattern,
 - [Component Catalog with Mixins](/design-patterns/component-catalog/with-mixins)
 - [Component Inheritance](/design-patterns/component-inheritance)
 - [Inline Component Configuration](/design-patterns/inline-component-configuration)
-- [Inline Component Customization](/design-patterns/inline-component-customization)
 - [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
 
 ## References
