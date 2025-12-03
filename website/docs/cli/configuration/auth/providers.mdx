@@ -26,6 +26,12 @@ auth:
       region: us-east-1
       start_url: https://company.awsapps.com/start
 
+      # Automatically discover all accounts and permission sets
+      auto_provision_identities: true
+
+      # Optional: include AWS tags from permission sets as labels
+      include_tags: true
+
       # Optional session configuration
       session:
         duration: 4h               # Credential lifetime
@@ -44,6 +50,12 @@ auth:
 
   <dt>`start_url`</dt>
   <dd>**Required.** Your AWS SSO start URL (e.g., `https://company.awsapps.com/start`).</dd>
+
+  <dt>`auto_provision_identities`</dt>
+  <dd>Optional. When `true`, Atmos automatically discovers all AWS accounts and permission sets assigned to the user and creates identities for them. This eliminates the need to manually configure each identity. Default: `false`.</dd>
+
+  <dt>`include_tags`</dt>
+  <dd>Optional. When `true` (and `auto_provision_identities` is enabled), Atmos retrieves AWS tags from permission sets and includes them as labels on the auto-provisioned identities. Requires additional IAM permissions. Default: `false`.</dd>
 
   <dt>`session.duration`</dt>
   <dd>Optional. Session duration for CLI credentials (e.g., `1h`, `4h`). Default varies by provider.</dd>
