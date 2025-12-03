@@ -134,11 +134,17 @@ func ExecuteTerraformGenerateBackends(
 
 				// Component backend
 				if backendSection, ok = componentSection[cfg.BackendSectionName].(map[string]any); !ok {
+					log.Warn("Skipping backend generation: no 'backend' section configured. "+
+						"Set 'components.terraform.auto_generate_backend_file: false' in atmos.yaml to disable.",
+						"component", componentName, "stack", stackFileName)
 					continue
 				}
 
 				// Backend type
 				if backendTypeSection, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {
+					log.Warn("Skipping backend generation: no 'backend_type' configured. "+
+						"Set 'components.terraform.auto_generate_backend_file: false' in atmos.yaml to disable.",
+						"component", componentName, "stack", stackFileName)
 					continue
 				}
 
@@ -293,6 +299,14 @@ func ExecuteTerraformGenerateBackends(
 
 				if i, ok := componentSection[cfg.BackendTypeSectionName].(string); ok {
 					backendTypeSection = i
+				}
+
+				// Skip if backend_type is empty after template processing.
+				if backendTypeSection == "" {
+					log.Warn("Skipping backend generation: 'backend_type' is empty after template processing. "+
+						"Set 'components.terraform.auto_generate_backend_file: false' in atmos.yaml to disable.",
+						"component", componentName, "stack", stackName)
+					continue
 				}
 
 				var backendFilePath string

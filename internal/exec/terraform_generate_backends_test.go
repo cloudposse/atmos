@@ -1,14 +1,18 @@
 package exec
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 
+	charm "github.com/charmbracelet/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -777,5 +781,177 @@ func TestGenerateComponentBackendConfigFunction(t *testing.T) {
 		require.True(t, ok)
 
 		assert.Equal(t, "terraform.tfstate", local["path"])
+	})
+
+	t.Run("returns error for empty backend type", func(t *testing.T) {
+		backendConfig := map[string]any{
+			"bucket": "test-bucket",
+		}
+
+		result, err := generateComponentBackendConfig("", backendConfig, "", nil)
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, errUtils.ErrBackendTypeRequired)
+	})
+}
+
+// TestBackendGenerationSkipsComponentsWithoutBackend tests that components without backend config are skipped with warnings.
+func TestBackendGenerationSkipsComponentsWithoutBackend(t *testing.T) {
+	t.Run("skips component without backend section and logs warning", func(t *testing.T) {
+		// Set up a temp directory with stack files
+		tempDir := t.TempDir()
+
+		// Create stacks directory and a stack file with a component missing backend
+		stacksDir := filepath.Join(tempDir, "stacks")
+		err := os.MkdirAll(stacksDir, 0o755)
+		require.NoError(t, err)
+
+		// Create component directory
+		componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+		err = os.MkdirAll(componentDir, 0o755)
+		require.NoError(t, err)
+
+		// Create a minimal main.tf so the component exists
+		mainTF := filepath.Join(componentDir, "main.tf")
+		err = os.WriteFile(mainTF, []byte("# vpc component\n"), 0o644)
+		require.NoError(t, err)
+
+		// Create stack file with component that has NO backend section
+		stackContent := `
+vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      vars:
+        name: test-vpc
+`
+		stackFile := filepath.Join(stacksDir, "dev.yaml")
+		err = os.WriteFile(stackFile, []byte(stackContent), 0o644)
+		require.NoError(t, err)
+
+		// Capture log output
+		var logBuf bytes.Buffer
+		originalLogger := log.Default()
+		testLogger := log.NewAtmosLogger(charm.New(&logBuf))
+		testLogger.SetLevel(log.WarnLevel)
+		log.SetDefault(testLogger)
+		defer log.SetDefault(originalLogger)
+
+		// Create atmosConfig with absolute paths properly set for FindStacksMap
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+			},
+			Stacks: schema.Stacks{
+				BasePath:    "stacks",
+				NamePattern: "{stage}",
+			},
+			StacksBaseAbsolutePath:        stacksDir,
+			TerraformDirAbsolutePath:      filepath.Join(tempDir, "components", "terraform"),
+			IncludeStackAbsolutePaths:     []string{stacksDir},
+			StackConfigFilesAbsolutePaths: []string{stackFile},
+		}
+
+		// Execute backend generation (test both HCL and JSON formats)
+		err = ExecuteTerraformGenerateBackends(atmosConfig, "", "hcl", []string{}, []string{})
+		assert.NoError(t, err)
+
+		// Check that warning was logged
+		logOutput := logBuf.String()
+		assert.Contains(t, logOutput, "Skipping backend generation")
+		assert.Contains(t, logOutput, "auto_generate_backend_file")
+
+		// Verify no backend.tf or backend.tf.json was generated
+		backendTF := filepath.Join(componentDir, "backend.tf")
+		backendTFJSON := filepath.Join(componentDir, "backend.tf.json")
+		_, errTF := os.Stat(backendTF)
+		_, errJSON := os.Stat(backendTFJSON)
+		assert.True(t, os.IsNotExist(errTF), "backend.tf should not be created when backend section is missing")
+		assert.True(t, os.IsNotExist(errJSON), "backend.tf.json should not be created when backend section is missing")
+	})
+
+	t.Run("skips component without backend_type and logs warning", func(t *testing.T) {
+		// Set up a temp directory with stack files
+		tempDir := t.TempDir()
+
+		// Create stacks directory
+		stacksDir := filepath.Join(tempDir, "stacks")
+		err := os.MkdirAll(stacksDir, 0o755)
+		require.NoError(t, err)
+
+		// Create component directory
+		componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+		err = os.MkdirAll(componentDir, 0o755)
+		require.NoError(t, err)
+
+		// Create a minimal main.tf
+		mainTF := filepath.Join(componentDir, "main.tf")
+		err = os.WriteFile(mainTF, []byte("# vpc component\n"), 0o644)
+		require.NoError(t, err)
+
+		// Create stack file with component that has backend but NO backend_type
+		stackContent := `
+vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      backend:
+        bucket: test-bucket
+        key: terraform.tfstate
+      vars:
+        name: test-vpc
+`
+		stackFile := filepath.Join(stacksDir, "dev.yaml")
+		err = os.WriteFile(stackFile, []byte(stackContent), 0o644)
+		require.NoError(t, err)
+
+		// Capture log output
+		var logBuf bytes.Buffer
+		originalLogger := log.Default()
+		testLogger := log.NewAtmosLogger(charm.New(&logBuf))
+		testLogger.SetLevel(log.WarnLevel)
+		log.SetDefault(testLogger)
+		defer log.SetDefault(originalLogger)
+
+		// Create atmosConfig with absolute paths properly set for FindStacksMap
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+			},
+			Stacks: schema.Stacks{
+				BasePath:    "stacks",
+				NamePattern: "{stage}",
+			},
+			StacksBaseAbsolutePath:        stacksDir,
+			TerraformDirAbsolutePath:      filepath.Join(tempDir, "components", "terraform"),
+			IncludeStackAbsolutePaths:     []string{stacksDir},
+			StackConfigFilesAbsolutePaths: []string{stackFile},
+		}
+
+		// Execute backend generation
+		err = ExecuteTerraformGenerateBackends(atmosConfig, "", "hcl", []string{}, []string{})
+		assert.NoError(t, err)
+
+		// Check that warning was logged
+		logOutput := logBuf.String()
+		assert.Contains(t, logOutput, "Skipping backend generation")
+		assert.Contains(t, logOutput, "backend_type")
+		assert.Contains(t, logOutput, "auto_generate_backend_file")
+
+		// Verify no backend.tf or backend.tf.json was generated
+		backendTF := filepath.Join(componentDir, "backend.tf")
+		backendTFJSON := filepath.Join(componentDir, "backend.tf.json")
+		_, errTF := os.Stat(backendTF)
+		_, errJSON := os.Stat(backendTFJSON)
+		assert.True(t, os.IsNotExist(errTF), "backend.tf should not be created when backend_type is missing")
+		assert.True(t, os.IsNotExist(errJSON), "backend.tf.json should not be created when backend_type is missing")
 	})
 }

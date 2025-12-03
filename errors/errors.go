@@ -119,6 +119,7 @@ var (
 	ErrAzureNoAccountsInCache     = errors.New("no accounts found in cache")
 	ErrAzureNoAccountForTenant    = errors.New("no account found for tenant")
 	ErrBackendConfigRequired      = errors.New("backend configuration is required")
+	ErrBackendTypeRequired        = errors.New("backend_type is required")
 
 	// Git-related errors.
 	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")
