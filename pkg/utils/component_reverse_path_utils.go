@@ -64,22 +64,7 @@ func ExtractComponentInfoFromPath(
 	}
 
 	// None of the component types matched.
-	packerBasePath := atmosConfig.Components.Packer.BasePath
-	if packerBasePath == "" {
-		packerBasePath = "components/packer"
-	}
-
-	err = errUtils.Build(errUtils.ErrPathNotInComponentDir).
-		WithHintf("Path `%s` is not within any configured component directories\n\nConfigured component base paths:\n  - Terraform: `%s`\n  - Helmfile: `%s`\n  - Packer: `%s`",
-			absPath, atmosConfig.Components.Terraform.BasePath, atmosConfig.Components.Helmfile.BasePath, packerBasePath).
-		WithHint("Change to a component directory and use `.` or provide a path within one of the component directories above").
-		WithContext("path", absPath).
-		WithContext("terraform_base", atmosConfig.Components.Terraform.BasePath).
-		WithContext("helmfile_base", atmosConfig.Components.Helmfile.BasePath).
-		WithContext("packer_base", packerBasePath).
-		WithExitCode(2).
-		Err()
-	return nil, err
+	return nil, buildPathNotInComponentDirError(atmosConfig, absPath)
 }
 
 // validatePathIsNotConfigDirectory checks if the path points to a known configuration directory.
@@ -235,6 +220,25 @@ func buildComponentBaseError(absPath, basePath, componentType string) error {
 		WithContext("path", absPath).
 		WithContext("base_path", basePath).
 		WithContext("component_type", componentType).
+		WithExitCode(2).
+		Err()
+}
+
+// buildPathNotInComponentDirError creates a detailed error when a path is not within any component directory.
+func buildPathNotInComponentDirError(atmosConfig *schema.AtmosConfiguration, absPath string) error {
+	packerBasePath := atmosConfig.Components.Packer.BasePath
+	if packerBasePath == "" {
+		packerBasePath = "components/packer"
+	}
+
+	return errUtils.Build(errUtils.ErrPathNotInComponentDir).
+		WithHintf("Path `%s` is not within any configured component directories\n\nConfigured component base paths:\n  - Terraform: `%s`\n  - Helmfile: `%s`\n  - Packer: `%s`",
+			absPath, atmosConfig.Components.Terraform.BasePath, atmosConfig.Components.Helmfile.BasePath, packerBasePath).
+		WithHint("Change to a component directory and use `.` or provide a path within one of the component directories above").
+		WithContext("path", absPath).
+		WithContext("terraform_base", atmosConfig.Components.Terraform.BasePath).
+		WithContext("helmfile_base", atmosConfig.Components.Helmfile.BasePath).
+		WithContext("packer_base", packerBasePath).
 		WithExitCode(2).
 		Err()
 }
