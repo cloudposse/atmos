@@ -121,7 +121,7 @@ function Home() {
               <h2>Write your Components</h2>
               <p>Use your existing Terraform root modules or create new ones. Component libraries make sharing easy.
                  Use vendoring to pull down remote dependencies.</p>
-              <Link to="/components/components" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
+              <Link to="/components" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
           <section className="alternate-section section--image-right">

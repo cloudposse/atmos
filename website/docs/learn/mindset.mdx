@@ -82,7 +82,7 @@ Then, to implement this architecture with Atmos, you will usually follow these s
 <details>
 <summary>Why don't we just put everything into a single "Root module"?</summary>
 
-The goal should be to build a loosely coupled [service-oriented architecture (SOA)](https://en.wikipedia.org/wiki/Service-oriented_architecture). Like with modern app design, we should avoid monolithic infrastructure code. Decoupling our infrastructure into [components](/components/components) ensures resilience and maintainability.
+The goal should be to build a loosely coupled [service-oriented architecture (SOA)](https://en.wikipedia.org/wiki/Service-oriented_architecture). Like with modern app design, we should avoid monolithic infrastructure code. Decoupling our infrastructure into [components](/components) ensures resilience and maintainability.
 
 When we place all the infrastructure into a single "root module," we end up with a [Terralith](/terms/terralith), which is roughly [Stage-2 of the Terraform maturity path](/intro/why-atmos/stage-2). All your eggs are in one basket.
 
@@ -157,7 +157,7 @@ Large root modules are less reusable across teams due to varying requirements, r
 
     <ActionCard>
         Components form the essential building blocks of your architecture. They are the smallest unit of infrastructure in a typical software development lifecycle (SDLC).
-        <PrimaryCTA to="/components/components">Learn Atmos Components</PrimaryCTA>
+        <PrimaryCTA to="/components">Learn Atmos Components</PrimaryCTA>
     </ActionCard>
 </Step>
 
