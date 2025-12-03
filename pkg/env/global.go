@@ -136,20 +136,22 @@ func mergeSystemEnvInternal(envList []string, globalEnv map[string]string, handl
 
 	// Merge with new environment variables (highest priority).
 	for _, env := range envList {
-		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
-			if handleTFCliArgs && strings.HasPrefix(parts[0], "TF_CLI_ARGS_") {
-				// For TF_CLI_ARGS_* variables, prepend new values to existing values.
-				if existing, exists := envMap[parts[0]]; exists {
-					// Put the new, Atmos defined value first so it takes precedence.
-					envMap[parts[0]] = parts[1] + " " + existing
-				} else {
-					envMap[parts[0]] = parts[1]
-				}
-			} else {
-				// For all other environment variables, just override any existing value.
-				envMap[parts[0]] = parts[1]
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key, value := parts[0], parts[1]
+
+		// For TF_CLI_ARGS_* variables, prepend new values to existing values.
+		if handleTFCliArgs && strings.HasPrefix(key, "TF_CLI_ARGS_") {
+			if existing, exists := envMap[key]; exists {
+				// Put the new, Atmos defined value first so it takes precedence.
+				envMap[key] = value + " " + existing
+				continue
 			}
 		}
+		// For all other environment variables (or TF_CLI_ARGS_* without existing value), override.
+		envMap[key] = value
 	}
 
 	// Convert back to slice.
