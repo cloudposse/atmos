@@ -5,7 +5,7 @@
 **Feature**: `aws/assume-root` identity kind for centralized root access management
 **Status**: Proposed
 **Created**: 2025-12-02
-**Author**: Claude Code
+**Author**: Daniel Miller (@milldr)
 **Target Release**: TBD
 
 ## Executive Summary
@@ -35,7 +35,7 @@ atmos auth shell --identity organizational-root-access
 # Step 2: Assume root on member account (manually)
 eval $(aws sts assume-root \
   --target-principal <MEMBER_ACCOUNT_ID> \
-  --task-policy-arn arn=arn:aws:iam::aws:policy/root-task/IAMDeleteRootUserCredentials \
+  --task-policy-arn arn:aws:iam::aws:policy/root-task/IAMDeleteRootUserCredentials \
   --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \
   --output text | awk '{print "export AWS_ACCESS_KEY_ID="$1" AWS_SECRET_ACCESS_KEY="$2" AWS_SESSION_TOKEN="$3}')
 
@@ -143,10 +143,10 @@ auth:
 ```
 
 **Implementation**:
-**Implementation**:
 - Add `"aws/assume-root"` case to `factory.NewIdentity()`.
 - Create `awsIdentities.NewAssumeRootIdentity()` constructor.
 - Add constant `IdentityKindAWSAssumeRoot = "aws/assume-root"` to `types/constants.go`.
+
 ### FR-2: Principal Configuration
 
 **Requirement**: Support required and optional principal fields
@@ -190,10 +190,7 @@ auth:
 1. Authenticate via parent identity (permission set with `sts:AssumeRoot`)
 2. Call `sts.AssumeRoot()` with target principal and task policy
 3. Extract temporary credentials from response
-3. Extract temporary credentials from response
 4. Return `AWSCredentials` with scoped root access.
-
-**Error Handling**:
 
 **Error Handling**:
 - `AccessDenied`: Permission set lacks `sts:AssumeRoot` permission
