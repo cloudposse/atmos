@@ -1463,14 +1463,14 @@ sources:
           variable_value: type
     tags:
       final_value:
-        atlantis_project: <no value>
+        atlantis_project: tenant1-ue2-dev-infra-vpc
         atmos_component: '{{ .atmos_component }}'
         atmos_component_description: Infra/Vpc component provisioned in the stack "tenant1-ue2-dev"
         atmos_manifest: orgs/cp/tenant1/dev/us-east-2
         atmos_stack: tenant1-ue2-dev
         provisioned_by_user: user
         region: us-east-2
-        spacelift_stack: <no value>
+        spacelift_stack: tenant1-ue2-dev-infra-vpc
         terraform_component: infra/vpc
         terraform_workspace: tenant1-ue2-dev
       name: tags
@@ -1479,14 +1479,14 @@ sources:
           stack_file: orgs/cp/_defaults
           stack_file_section: terraform.vars
           variable_value:
-            atlantis_project: <no value>
+            atlantis_project: tenant1-ue2-dev-infra-vpc
             atmos_component: '{{ .atmos_component }}'
             atmos_component_description: Infra/Vpc component provisioned in the stack "tenant1-ue2-dev"
             atmos_manifest: orgs/cp/tenant1/dev/us-east-2
             atmos_stack: tenant1-ue2-dev
             provisioned_by_user: user
             region: us-east-2
-            spacelift_stack: <no value>
+            spacelift_stack: tenant1-ue2-dev-infra-vpc
             terraform_component: infra/vpc
             terraform_workspace: tenant1-ue2-dev
     tenant:
@@ -1518,14 +1518,14 @@ vars:
   stage: dev
   subnet_type_tag_key: type
   tags:
-    atlantis_project: <no value>
+    atlantis_project: tenant1-ue2-dev-infra-vpc
     atmos_component: '{{ .atmos_component }}'
     atmos_component_description: Infra/Vpc component provisioned in the stack "tenant1-ue2-dev"
     atmos_manifest: orgs/cp/tenant1/dev/us-east-2
     atmos_stack: tenant1-ue2-dev
     provisioned_by_user: user
     region: us-east-2
-    spacelift_stack: <no value>
+    spacelift_stack: tenant1-ue2-dev-infra-vpc
     terraform_component: infra/vpc
     terraform_workspace: tenant1-ue2-dev
   tenant: tenant1

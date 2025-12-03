@@ -29,6 +29,51 @@ atmos packer <sub-command> <atmos-component> --stack <atmos-stack> [atmos-flags]
 For more details on the Packer commands and options, refer to [Packer Commands](https://developer.hashicorp.com/packer/docs/commands).
 :::
 
+### Path-Based Component Resolution
+
+Atmos supports using filesystem paths instead of component names for convenience. This allows you to navigate to a component directory and use `.` to reference it:
+
+<Terminal>
+```shell
+# Navigate to component directory
+cd components/packer/aws/bastion
+
+# Use . to reference current directory
+atmos packer validate . -s prod
+atmos packer build . -s prod
+```
+</Terminal>
+
+This automatically resolves the path to the component name configured in your stack, eliminating the need to remember exact component names.
+
+**Supported path formats:**
+- `.` - Current directory
+- `./component` - Relative path from current directory
+- `../other-component` - Relative path to sibling directory
+- `/absolute/path/to/component` - Absolute path
+
+**Requirements:**
+- Must be inside a component directory under the configured base path
+- Must specify `--stack` flag
+- Component must exist in the specified stack configuration
+- **The component path must resolve to a unique component name** - If multiple components in the stack reference the same component path, you must use the unique component name instead of the path
+
+:::warning Path Resolution Limitation
+Path-based resolution only works when the component path resolves to a **single unique component** in the stack.
+
+For example, if both `bastion/prod` and `bastion/dev` reference `components/packer/aws/bastion`:
+```bash
+cd components/packer/aws/bastion
+atmos packer build . --stack prod  # ❌ Error: ambiguous - which component?
+```
+
+Instead, you must use the unique component names:
+```bash
+atmos packer build bastion/prod --stack prod  # ✓ Explicit and unambiguous
+atmos packer build bastion/dev --stack dev    # ✓ Explicit and unambiguous
+```
+:::
+
 ## Atmos Flags
 
 <dl>
@@ -53,6 +98,8 @@ For more details on the Packer commands and options, refer to [Packer Commands](
 </dl>
 
 ## Examples
+
+### Component Name Examples
 
 <Terminal>
 ```shell
@@ -79,6 +126,46 @@ atmos packer output aws/bastion -s prod --query '.builds[0].artifact_id'
 atmos packer output aws/bastion -s prod -q '.builds[0].artifact_id | split(":")[1]'
 ```
 </Terminal>
+
+### Path-Based Examples
+
+<Terminal>
+```shell
+# Navigate to component directory and use current directory
+cd components/packer/aws/bastion
+atmos packer validate . -s prod
+atmos packer build . -s prod
+
+# Use relative path from components/packer directory
+cd components/packer
+atmos packer init ./aws/bastion -s prod
+
+# Use from project root with relative path
+atmos packer build components/packer/aws/bastion -s prod
+
+# Combine with other flags
+cd components/packer/aws/bastion
+atmos packer validate . -s prod --template main.pkr.hcl
+atmos packer build . -s prod -t main.nonprod.pkr.hcl
+atmos packer output . -s prod --query '.builds[0].artifact_id'
+```
+</Terminal>
+
+## Arguments
+
+<dl>
+  <dt>`atmos-component` <em>(required)</em></dt>
+  <dd>
+    Atmos component name or filesystem path.<br/><br/>
+    Supports both:
+    <ul>
+      <li>Component names: <code>aws/bastion</code>, <code>gcp/web-server</code></li>
+      <li>Filesystem paths: <code>.</code> (current directory), <code>./aws/bastion</code>, <code>components/packer/aws/bastion</code></li>
+    </ul>
+    When using paths, Atmos automatically resolves the path to the component name based on your stack configuration.
+    See <a href="#path-based-component-resolution">Path-Based Component Resolution</a> above.
+  </dd>
+</dl>
 
 ## Subcommands
 

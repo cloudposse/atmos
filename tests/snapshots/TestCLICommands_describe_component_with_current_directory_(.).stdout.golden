@@ -981,14 +981,14 @@ sources:
           variable_value: dev
     tags:
       final_value:
-        atlantis_project: <no value>
+        atlantis_project: tenant1-ue2-dev-top-level-component1
         atmos_component: '{{ .atmos_component }}'
         atmos_component_description: Top-Level-Component1 component provisioned in the stack "tenant1-ue2-dev"
         atmos_manifest: orgs/cp/tenant1/dev/us-east-2
         atmos_stack: tenant1-ue2-dev
         provisioned_by_user: user
         region: us-east-2
-        spacelift_stack: <no value>
+        spacelift_stack: tenant1-ue2-dev-top-level-component1
         terraform_component: top-level-component1
         terraform_workspace: tenant1-ue2-dev
       name: tags
@@ -997,14 +997,14 @@ sources:
           stack_file: orgs/cp/_defaults
           stack_file_section: terraform.vars
           variable_value:
-            atlantis_project: <no value>
+            atlantis_project: tenant1-ue2-dev-top-level-component1
             atmos_component: '{{ .atmos_component }}'
             atmos_component_description: Top-Level-Component1 component provisioned in the stack "tenant1-ue2-dev"
             atmos_manifest: orgs/cp/tenant1/dev/us-east-2
             atmos_stack: tenant1-ue2-dev
             provisioned_by_user: user
             region: us-east-2
-            spacelift_stack: <no value>
+            spacelift_stack: tenant1-ue2-dev-top-level-component1
             terraform_component: top-level-component1
             terraform_workspace: tenant1-ue2-dev
     tenant:
@@ -1027,14 +1027,14 @@ vars:
   service_2_name: top-level-service-2
   stage: dev
   tags:
-    atlantis_project: <no value>
+    atlantis_project: tenant1-ue2-dev-top-level-component1
     atmos_component: '{{ .atmos_component }}'
     atmos_component_description: Top-Level-Component1 component provisioned in the stack "tenant1-ue2-dev"
     atmos_manifest: orgs/cp/tenant1/dev/us-east-2
     atmos_stack: tenant1-ue2-dev
     provisioned_by_user: user
     region: us-east-2
-    spacelift_stack: <no value>
+    spacelift_stack: tenant1-ue2-dev-top-level-component1
     terraform_component: top-level-component1
     terraform_workspace: tenant1-ue2-dev
   tenant: tenant1
