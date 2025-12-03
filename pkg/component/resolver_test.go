@@ -1,11 +1,15 @@
 package component
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestHandleComponentMatches_NoMatches tests the case when no component matches are found.
@@ -378,4 +382,450 @@ func TestBuildAmbiguousComponentError_VariousMatchCounts(t *testing.T) {
 			}
 		})
 	}
+}
+
+// mockStackLoader is a test implementation of StackLoader.
+type mockStackLoader struct {
+	stacksMap map[string]any
+	err       error
+}
+
+func (m *mockStackLoader) FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (
+	map[string]any,
+	map[string]map[string]any,
+	error,
+) {
+	if m.err != nil {
+		return nil, nil, m.err
+	}
+	return m.stacksMap, nil, nil
+}
+
+// TestNewResolver_WithMockLoader tests the NewResolver constructor with a mock loader.
+func TestNewResolver_WithMockLoader(t *testing.T) {
+	loader := &mockStackLoader{}
+	resolver := NewResolver(loader)
+
+	assert.NotNil(t, resolver)
+	assert.Equal(t, loader, resolver.stackLoader)
+}
+
+// TestResolveComponentFromPath_Success tests successful path resolution.
+func TestResolveComponentFromPath_Success(t *testing.T) {
+	// Create a temporary directory structure for testing.
+	tmpDir := t.TempDir()
+	terraformBase := filepath.Join(tmpDir, "components", "terraform")
+	componentDir := filepath.Join(terraformBase, "vpc")
+
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Change to the component directory.
+	t.Chdir(componentDir)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tmpDir,
+		TerraformDirAbsolutePath: terraformBase,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	stacksMap := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{
+							"environment": "dev",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	loader := &mockStackLoader{stacksMap: stacksMap}
+	resolver := NewResolver(loader)
+
+	// Test with "." (current directory).
+	result, err := resolver.ResolveComponentFromPath(atmosConfig, ".", "dev", "terraform")
+
+	require.NoError(t, err)
+	assert.Equal(t, "vpc", result)
+}
+
+// TestResolveComponentFromPath_TypeMismatch tests component type mismatch.
+func TestResolveComponentFromPath_TypeMismatch(t *testing.T) {
+	// Create a temporary directory structure for testing.
+	tmpDir := t.TempDir()
+	terraformBase := filepath.Join(tmpDir, "components", "terraform")
+	componentDir := filepath.Join(terraformBase, "vpc")
+
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Change to the component directory.
+	t.Chdir(componentDir)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tmpDir,
+		TerraformDirAbsolutePath: terraformBase,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	loader := &mockStackLoader{stacksMap: map[string]any{}}
+	resolver := NewResolver(loader)
+
+	// Test with wrong expected type.
+	_, err := resolver.ResolveComponentFromPath(atmosConfig, ".", "dev", "helmfile")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrComponentTypeMismatch)
+}
+
+// TestResolveComponentFromPath_NoStack tests resolution without stack validation.
+func TestResolveComponentFromPath_NoStack(t *testing.T) {
+	// Create a temporary directory structure for testing.
+	tmpDir := t.TempDir()
+	terraformBase := filepath.Join(tmpDir, "components", "terraform")
+	componentDir := filepath.Join(terraformBase, "vpc")
+
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Change to the component directory.
+	t.Chdir(componentDir)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tmpDir,
+		TerraformDirAbsolutePath: terraformBase,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	loader := &mockStackLoader{stacksMap: map[string]any{}}
+	resolver := NewResolver(loader)
+
+	// Test without stack (empty string) - should not validate against stack.
+	result, err := resolver.ResolveComponentFromPath(atmosConfig, ".", "", "terraform")
+
+	require.NoError(t, err)
+	assert.Equal(t, "vpc", result)
+}
+
+// TestResolveComponentFromPathWithoutTypeCheck tests resolution without type check.
+func TestResolveComponentFromPathWithoutTypeCheck(t *testing.T) {
+	// Create a temporary directory structure for testing.
+	tmpDir := t.TempDir()
+	terraformBase := filepath.Join(tmpDir, "components", "terraform")
+	componentDir := filepath.Join(terraformBase, "vpc")
+
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Change to the component directory.
+	t.Chdir(componentDir)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tmpDir,
+		TerraformDirAbsolutePath: terraformBase,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	stacksMap := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{},
+					},
+				},
+			},
+		},
+	}
+
+	loader := &mockStackLoader{stacksMap: stacksMap}
+	resolver := NewResolver(loader)
+
+	// Test resolution without type check.
+	result, err := resolver.ResolveComponentFromPathWithoutTypeCheck(atmosConfig, ".", "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, "vpc", result)
+}
+
+// TestResolveComponentFromPathWithoutTypeCheck_NoStack tests resolution without type check and no stack.
+func TestResolveComponentFromPathWithoutTypeCheck_NoStack(t *testing.T) {
+	// Create a temporary directory structure for testing.
+	tmpDir := t.TempDir()
+	terraformBase := filepath.Join(tmpDir, "components", "terraform")
+	componentDir := filepath.Join(terraformBase, "vpc")
+
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Change to the component directory.
+	t.Chdir(componentDir)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tmpDir,
+		TerraformDirAbsolutePath: terraformBase,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	loader := &mockStackLoader{stacksMap: map[string]any{}}
+	resolver := NewResolver(loader)
+
+	// Test without stack - should not validate against stack.
+	result, err := resolver.ResolveComponentFromPathWithoutTypeCheck(atmosConfig, ".", "")
+
+	require.NoError(t, err)
+	assert.Equal(t, "vpc", result)
+}
+
+// TestResolveComponentFromPathWithoutValidation tests resolution without stack validation.
+func TestResolveComponentFromPathWithoutValidation(t *testing.T) {
+	// Create a temporary directory structure for testing.
+	tmpDir := t.TempDir()
+	terraformBase := filepath.Join(tmpDir, "components", "terraform")
+	componentDir := filepath.Join(terraformBase, "vpc")
+
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Change to the component directory.
+	t.Chdir(componentDir)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tmpDir,
+		TerraformDirAbsolutePath: terraformBase,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	loader := &mockStackLoader{stacksMap: map[string]any{}}
+	resolver := NewResolver(loader)
+
+	// Test resolution without stack validation.
+	result, err := resolver.ResolveComponentFromPathWithoutValidation(atmosConfig, ".", "terraform")
+
+	require.NoError(t, err)
+	assert.Equal(t, "vpc", result)
+}
+
+// TestResolveComponentFromPathWithoutValidation_TypeMismatch tests type mismatch.
+func TestResolveComponentFromPathWithoutValidation_TypeMismatch(t *testing.T) {
+	// Create a temporary directory structure for testing.
+	tmpDir := t.TempDir()
+	terraformBase := filepath.Join(tmpDir, "components", "terraform")
+	componentDir := filepath.Join(terraformBase, "vpc")
+
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Change to the component directory.
+	t.Chdir(componentDir)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tmpDir,
+		TerraformDirAbsolutePath: terraformBase,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	loader := &mockStackLoader{stacksMap: map[string]any{}}
+	resolver := NewResolver(loader)
+
+	// Test with wrong expected type.
+	_, err := resolver.ResolveComponentFromPathWithoutValidation(atmosConfig, ".", "helmfile")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrComponentTypeMismatch)
+}
+
+// TestResolveComponentFromPath_InvalidPath tests resolution with invalid path.
+func TestResolveComponentFromPath_InvalidPath(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: "/tmp/nonexistent",
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	loader := &mockStackLoader{stacksMap: map[string]any{}}
+	resolver := NewResolver(loader)
+
+	// Test with path not in component directories.
+	_, err := resolver.ResolveComponentFromPath(atmosConfig, "/tmp/random", "dev", "terraform")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrPathNotInComponentDir)
+}
+
+// TestResolveComponentFromPath_StackNotFound tests resolution when stack is not found.
+func TestResolveComponentFromPath_StackNotFound(t *testing.T) {
+	// Create a temporary directory structure for testing.
+	tmpDir := t.TempDir()
+	terraformBase := filepath.Join(tmpDir, "components", "terraform")
+	componentDir := filepath.Join(terraformBase, "vpc")
+
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Change to the component directory.
+	t.Chdir(componentDir)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tmpDir,
+		TerraformDirAbsolutePath: terraformBase,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Empty stacks map - stack not found.
+	loader := &mockStackLoader{stacksMap: map[string]any{}}
+	resolver := NewResolver(loader)
+
+	_, err := resolver.ResolveComponentFromPath(atmosConfig, ".", "nonexistent-stack", "terraform")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
+}
+
+// TestResolveComponentFromPath_ComponentNotInStack tests resolution when component is not in stack.
+func TestResolveComponentFromPath_ComponentNotInStack(t *testing.T) {
+	// Create a temporary directory structure for testing.
+	tmpDir := t.TempDir()
+	terraformBase := filepath.Join(tmpDir, "components", "terraform")
+	componentDir := filepath.Join(terraformBase, "vpc")
+
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Change to the component directory.
+	t.Chdir(componentDir)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tmpDir,
+		TerraformDirAbsolutePath: terraformBase,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Stack exists but component is different.
+	stacksMap := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"eks": map[string]any{}, // Different component.
+				},
+			},
+		},
+	}
+
+	loader := &mockStackLoader{stacksMap: stacksMap}
+	resolver := NewResolver(loader)
+
+	_, err := resolver.ResolveComponentFromPath(atmosConfig, ".", "dev", "terraform")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrComponentNotInStack)
+}
+
+// TestLoadStackConfig_LoadError tests loadStackConfig when loader returns an error.
+func TestLoadStackConfig_LoadError(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	testErr := errUtils.ErrStackNotFound
+
+	loader := &mockStackLoader{err: testErr}
+	resolver := NewResolver(loader)
+
+	_, err := resolver.loadStackConfig(atmosConfig, "dev", "vpc")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
+}
+
+// TestLoadStackConfig_InvalidStackConfig tests loadStackConfig with invalid stack config type.
+func TestLoadStackConfig_InvalidStackConfig(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Stack config is not a map.
+	stacksMap := map[string]any{
+		"dev": "not-a-map",
+	}
+
+	loader := &mockStackLoader{stacksMap: stacksMap}
+	resolver := NewResolver(loader)
+
+	_, err := resolver.loadStackConfig(atmosConfig, "dev", "vpc")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidStackConfiguration)
+}
+
+// TestValidateComponentInStack_AliasMatch tests validation with component alias matching.
+func TestValidateComponentInStack_AliasMatch(t *testing.T) {
+	// Create a temporary directory structure for testing.
+	tmpDir := t.TempDir()
+	terraformBase := filepath.Join(tmpDir, "components", "terraform")
+	componentDir := filepath.Join(terraformBase, "vpc")
+
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tmpDir,
+		TerraformDirAbsolutePath: terraformBase,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Stack with aliased component.
+	stacksMap := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc-dev": map[string]any{
+						"component": "vpc", // Alias to "vpc".
+						"vars":      map[string]any{},
+					},
+				},
+			},
+		},
+	}
+
+	loader := &mockStackLoader{stacksMap: stacksMap}
+	resolver := NewResolver(loader)
+
+	// Validate "vpc" should resolve to "vpc-dev" alias.
+	result, err := resolver.validateComponentInStack(atmosConfig, "vpc", "dev", "terraform")
+
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-dev", result)
 }
