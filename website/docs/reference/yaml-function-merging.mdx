@@ -1,0 +1,88 @@
+---
+title: Type-Aware Merging of YAML Functions
+sidebar_position: 4
+sidebar_label: YAML Function Merging
+description: How Atmos handles merging YAML functions with concrete values in the inheritance chain
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos supports type-aware merging of YAML functions and concrete values, allowing them to coexist in the inheritance chain without type conflicts.
+</Intro>
+
+## The Problem: Type Conflicts During Merge
+
+When merging stack configurations, Atmos needs to handle both concrete values and YAML function references. Without special handling, the merge process would encounter type mismatches:
+
+```yaml
+# Base catalog (catalog/app/defaults.yaml)
+components:
+  terraform:
+    my-app:
+      vars:
+        database_url: "postgresql://localhost:5432/mydb"  # Concrete string value
+
+# Environment override (stacks/prod/app.yaml)
+components:
+  terraform:
+    my-app:
+      vars:
+        database_url: !env DATABASE_URL  # YAML function reference
+```
+
+The YAML function `!env DATABASE_URL` is a different type than the string `"postgresql://localhost:5432/mydb"`. Without special handling, merging these would cause a type conflict error.
+
+## The Solution: Type-Aware Merging
+
+Atmos handles this gracefully through **type-aware merging**:
+
+1. YAML functions are recognized and wrapped in a special type during parsing
+2. During merge, this allows YAML functions to replace concrete values (and vice versa) without type errors
+3. YAML functions are evaluated as the final step in stack processing, as they always have been
+
+This approach ensures that YAML functions can override static values throughout the inheritance chain.
+
+## Supported Functions
+
+The following YAML functions support type-aware merging:
+
+- [`!env`](/functions/yaml/env) - Environment variables
+- [`!exec`](/functions/yaml/exec) - External command execution
+- [`!store`](/functions/yaml/store) - Store value retrieval
+- [`!store.get`](/functions/yaml/store.get) - Store value retrieval (alias)
+- [`!template`](/functions/yaml/template) - Template rendering
+- [`!terraform.output`](/functions/yaml/terraform.output) - Terraform output values
+- [`!terraform.state`](/functions/yaml/terraform.state) - Terraform state values
+
+## Benefits
+
+- **Flexible Configuration Patterns** - Mix static values and YAML functions across inheritance layers without type conflicts
+- **Gradual Migration** - Migrate from static to dynamic configurations incrementally
+- **Team Collaboration** - Different teams can use different approaches (static vs. templated) in their layers
+- **Multi-Environment Support** - Use static values in dev/staging and YAML functions in production
+
+## Example: Mixed Static and Dynamic Values
+
+```yaml
+# catalog/base.yaml - Base component with static defaults
+components:
+  terraform:
+    my-service:
+      vars:
+        log_level: "info"
+        api_endpoint: "https://api.dev.example.com"
+
+# stacks/prod.yaml - Production uses dynamic values
+import:
+  - catalog/base
+
+components:
+  terraform:
+    my-service:
+      vars:
+        log_level: !env LOG_LEVEL
+        api_endpoint: !terraform.output api-gateway endpoint
+```
+
+In this example, the production stack overrides static defaults with YAML functions. Type-aware merging allows these different value types to coexist without errors.
