@@ -10,7 +10,7 @@ const path = require('path');
 const lightCodeTheme = require('prism-react-renderer').themes.vsDark;
 const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;
 const latestReleasePlugin = require('./plugins/fetch-latest-release');
-const rehypeDtIds = require('./plugins/rehype-dt-ids');
+const remarkStackExample = require('./plugins/remark-stack-example');
 
 const BASE_URL = '';
 const DEPLOYMENT_HOST = process.env.DEPLOYMENT_HOST || 'atmos.tools';
@@ -51,30 +51,8 @@ const config = {
                         to: '/changelog'
                     },
                     {
-                        from: '/introduction',
-                        to: '/intro'
-                    },
-                    // Redirects for introduction subpages
-                    {from: '/introduction/faq', to: '/faq'},
-                    {from: '/introduction/features', to: '/features'},
-                    {from: '/introduction/use-cases', to: '/use-cases'},
-                    {from: '/introduction/index', to: '/intro'},
-                    {from: '/introduction/why-atmos/why-atmos', to: '/intro/why-atmos'},
-                    // Redirects for integrations pages moved to cli/configuration
-                    {from: '/integrations/atlantis', to: '/cli/configuration/integrations/atlantis'},
-                    {from: '/integrations/integrations', to: '/cli/configuration/integrations'},
-                    {
                         from: '/reference/terraform-limitations',
-                        to: '/intro/why-atmos'
-                    },
-                    // Backend documentation reorganization
-                    {
-                        from: '/core-concepts/components/terraform/state-backend',
-                        to: '/components/terraform/remote-state'
-                    },
-                    {
-                        from: '/core-concepts/components/terraform/remote-state',
-                        to: '/components/terraform/remote-state'
+                        to: '/introduction/why-atmos'
                     },
                     // Component Catalog redirects for reorganization
                     {
@@ -344,9 +322,6 @@ const config = {
             path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
         ],
         [
-            path.resolve(__dirname, 'plugins', 'fetch-github-stars'), {}
-        ],
-        [
             path.resolve(__dirname, 'plugins', 'blog-release-data'), {}
         ],
         [
@@ -359,15 +334,6 @@ const config = {
                 generateLlmsFullTxt: true,
                 llmsTxtFilename: 'llms.txt',
                 llmsFullTxtFilename: 'llms-full.txt',
-                docsDir: 'docs',
-                includeBlog: true,
-                includeOrder: [
-                    'intro/*',
-                    'quick-start/*',
-                    'install/*',
-                    'learn/*',
-                    'cli/*',
-                ],
             },
         ],
         [
@@ -399,8 +365,8 @@ const config = {
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
-                    exclude: ['README.md', '**/_*/**', '**/_*'],
-                    rehypePlugins: [rehypeDtIds],
+                    exclude: ['README.md'],
+                    beforeDefaultRemarkPlugins: [remarkStackExample],
                 },
                 blog: {
                     routeBasePath: 'changelog',
@@ -454,7 +420,7 @@ const config = {
                     },
                     {
                         type: 'doc',
-                        docId: 'intro/index',
+                        docId: 'introduction/index',
                         position: 'left',
                         label: 'Learn',
                     },
@@ -478,16 +444,6 @@ const config = {
                         position: 'left',
                         to: '/changelog'
                     },
-                    {
-                        label: 'Roadmap',
-                        position: 'left',
-                        to: '/roadmap'
-                    },
-                    // GitHub stars badge
-                    {
-                        type: 'custom-github-stars',
-                        position: 'right',
-                    },
                     // Algolia search configuration
                     {
                         type: 'search',
@@ -500,7 +456,7 @@ const config = {
                         'aria-label': 'GitHub repository',
                     },
                     {
-                        to: 'https://cloudposse.com/services/support/',
+                        to: 'https://cloudposse.com/services/',
                         label: 'Get Help',
                         position: 'right',
                         className: 'button button--primary navbar-cta-button'
