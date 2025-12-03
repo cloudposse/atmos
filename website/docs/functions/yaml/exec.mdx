@@ -67,3 +67,8 @@ You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) i
 Atmos processes the templates first, and then executes the `!exec` function, allowing you to provide the parameters to
 the function dynamically.
 :::
+
+:::note Type-Aware Merging
+Atmos supports type-aware merging of YAML functions and concrete values, allowing them to coexist in the inheritance chain without type conflicts.
+See the full explanation: [YAML Function Merging](/reference/yaml-function-merging)
+:::

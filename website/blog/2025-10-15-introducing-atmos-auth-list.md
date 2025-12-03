@@ -1,9 +1,12 @@
 ---
 slug: introducing-atmos-auth-list
-title: "Introducing atmos auth list: Visualize Your Authentication Configuration"
-sidebar_label: "Introducing atmos auth list"
-authors: [osterman]
-tags: [atmos, authentication, providers, identities, cli]
+title: 'Introducing atmos auth list: Visualize Your Authentication Configuration'
+sidebar_label: Introducing atmos auth list
+authors:
+  - osterman
+tags:
+  - feature
+release: v1.196.0
 ---
 
 We're excited to announce a powerful new command for managing authentication in Atmos: `atmos auth list`. This command provides comprehensive visibility into your authentication configuration, making it easier than ever to understand and manage complex authentication chains across multiple cloud providers and identities.

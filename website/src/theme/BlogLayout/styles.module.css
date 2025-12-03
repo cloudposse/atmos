@@ -1,29 +1,40 @@
 /**
- * Blog layout styles using flexbox for collapsible sidebar support.
+ * BlogLayout styles for dynamic content width based on sidebar state.
  */
 
-.blogLayoutRow {
-  display: flex;
-  gap: 2rem;
+.mainExpanded {
+  flex: 1 1 0 !important;
+  width: auto !important;
+  max-width: none !important;
 }
 
-.blogMain {
-  flex: 1;
-  min-width: 0;
-  max-width: 100%;
+/* Main content transition for smooth sidebar expand/collapse */
+.mainContent {
+  transition: flex 0.3s ease, max-width 0.3s ease;
 }
 
-.blogToc {
-  width: 200px;
-  flex-shrink: 0;
+/* TOC container - anchored to right side, never moves */
+.tocWrapper {
+  flex: 0 0 calc(100% * 2 / 12) !important;
+  max-width: calc(100% * 2 / 12) !important;
+  margin-left: auto !important;
 }
 
+/* Mobile responsive styles */
 @media (max-width: 996px) {
-  .blogLayoutRow {
-    flex-direction: column;
+  .mainContent {
+    flex: 1 1 100% !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin-bottom: 4rem;
   }
 
-  .blogToc {
-    display: none;
+  .mainExpanded {
+    flex: 1 1 100% !important;
+    max-width: 100% !important;
+  }
+
+  .tocWrapper {
+    display: none !important;
   }
 }

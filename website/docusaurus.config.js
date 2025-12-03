@@ -166,6 +166,9 @@ const config = {
             path.resolve(__dirname, 'plugins', 'fetch-latest-release'), {}
         ],
         [
+            path.resolve(__dirname, 'plugins', 'blog-release-data'), {}
+        ],
+        [
             path.resolve(__dirname, 'plugins', 'docusaurus-plugin-llms-txt'),
             {
                 generateLlmsTxt: true,
