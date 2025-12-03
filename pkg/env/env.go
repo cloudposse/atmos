@@ -134,9 +134,13 @@ func EnsureBinaryInPath(envSlice []string, binaryPath string) []string {
 	binaryDir := filepath.Dir(binaryPath)
 	currentPath := GetPathFromEnvironment(envSlice)
 
-	// Check if binary directory is already in PATH
-	if strings.Contains(currentPath, binaryDir) {
-		return envSlice // Already in PATH
+	// Check if binary directory is already in PATH using exact match.
+	// We split by path separator to avoid substring false positives
+	// (e.g., "/usr/local/b" matching "/usr/local/bin").
+	for _, dir := range strings.Split(currentPath, string(os.PathListSeparator)) {
+		if dir == binaryDir {
+			return envSlice // Already in PATH
+		}
 	}
 
 	return UpdateEnvironmentPath(envSlice, binaryDir)

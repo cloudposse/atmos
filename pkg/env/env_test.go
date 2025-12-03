@@ -248,6 +248,34 @@ func TestEnsureBinaryInPath(t *testing.T) {
 	}
 }
 
+func TestEnsureBinaryInPath_SubstringFalsePositive(t *testing.T) {
+	// This test verifies that substring matching doesn't cause false positives.
+	// Bug: strings.Contains("/usr/local/bin", "/usr/local/b") returns true incorrectly.
+
+	// Create paths where one is a substring of another.
+	usrLocalBin := filepath.Join(string(filepath.Separator), "usr", "local", "bin")
+	usrLocalB := filepath.Join(string(filepath.Separator), "usr", "local", "b")
+	binDir := filepath.Join(string(filepath.Separator), "bin")
+
+	existingPath := usrLocalBin + string(os.PathListSeparator) + binDir
+	binaryInUsrLocalB := filepath.Join(usrLocalB, "mybinary")
+
+	env := []string{"PATH=" + existingPath}
+	result := EnsureBinaryInPath(env, binaryInUsrLocalB)
+
+	// The binary dir "/usr/local/b" is NOT in PATH (only "/usr/local/bin" is).
+	// So it SHOULD be added to PATH.
+	resultPath := GetPathFromEnvironment(result)
+
+	// Verify the new directory was prepended.
+	assert.True(t, strings.HasPrefix(resultPath, usrLocalB+string(os.PathListSeparator)),
+		"Expected %s to be prepended to PATH, got: %s", usrLocalB, resultPath)
+
+	// Verify original path is still there.
+	assert.Contains(t, resultPath, existingPath,
+		"Original PATH should be preserved")
+}
+
 func TestUpdateEnvVar(t *testing.T) {
 	tests := []struct {
 		name     string
