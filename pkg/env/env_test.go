@@ -446,3 +446,99 @@ func TestFindPathIndex(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertMapStringToAny(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]string
+		expected map[string]any
+	}{
+		{
+			name:     "nil map returns nil",
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name:     "empty map returns empty map",
+			input:    map[string]string{},
+			expected: map[string]any{},
+		},
+		{
+			name:     "single entry",
+			input:    map[string]string{"KEY": "value"},
+			expected: map[string]any{"KEY": "value"},
+		},
+		{
+			name:     "multiple entries",
+			input:    map[string]string{"KEY1": "value1", "KEY2": "value2"},
+			expected: map[string]any{"KEY1": "value1", "KEY2": "value2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ConvertMapStringToAny(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestEnvironToMapFiltered(t *testing.T) {
+	// Set test environment variables.
+	t.Setenv("TEST_FILTER_KEEP", "keep-value")
+	t.Setenv("TEST_FILTER_EXCLUDE", "exclude-value")
+	t.Setenv("TEST_PREFIX_EXCLUDED", "prefix-excluded")
+	t.Setenv("TEST_OTHER_VAR", "other-value")
+
+	tests := []struct {
+		name            string
+		excludeKeys     []string
+		excludePrefixes []string
+		checkKey        string
+		shouldExist     bool
+	}{
+		{
+			name:            "key not in exclude list is kept",
+			excludeKeys:     []string{"TEST_FILTER_EXCLUDE"},
+			excludePrefixes: []string{},
+			checkKey:        "TEST_FILTER_KEEP",
+			shouldExist:     true,
+		},
+		{
+			name:            "key in exclude list is filtered",
+			excludeKeys:     []string{"TEST_FILTER_EXCLUDE"},
+			excludePrefixes: []string{},
+			checkKey:        "TEST_FILTER_EXCLUDE",
+			shouldExist:     false,
+		},
+		{
+			name:            "key with excluded prefix is filtered",
+			excludeKeys:     []string{},
+			excludePrefixes: []string{"TEST_PREFIX_"},
+			checkKey:        "TEST_PREFIX_EXCLUDED",
+			shouldExist:     false,
+		},
+		{
+			name:            "key without excluded prefix is kept",
+			excludeKeys:     []string{},
+			excludePrefixes: []string{"TEST_PREFIX_"},
+			checkKey:        "TEST_OTHER_VAR",
+			shouldExist:     true,
+		},
+		{
+			name:            "empty filters keep all",
+			excludeKeys:     []string{},
+			excludePrefixes: []string{},
+			checkKey:        "TEST_FILTER_EXCLUDE",
+			shouldExist:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := EnvironToMapFiltered(tt.excludeKeys, tt.excludePrefixes)
+			_, exists := result[tt.checkKey]
+			assert.Equal(t, tt.shouldExist, exists, "Key %s existence mismatch", tt.checkKey)
+		})
+	}
+}
