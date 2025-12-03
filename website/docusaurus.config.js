@@ -158,7 +158,7 @@ const config = {
                     },
                     {
                         from: '/core-concepts/stacks/dependencies',
-                        to: '/stacks/dependencies'
+                        to: '/stacks/settings/depends_on'
                     },
                     {
                         from: '/core-concepts/stacks/hooks',
@@ -402,7 +402,7 @@ const config = {
                         'aria-label': 'GitHub repository',
                     },
                     {
-                        to: 'https://cloudposse.com/services/',
+                        to: 'https://cloudposse.com/services/support/',
                         label: 'Get Help',
                         position: 'right',
                         className: 'button button--primary navbar-cta-button'
