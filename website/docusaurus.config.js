@@ -10,6 +10,7 @@ const path = require('path');
 const lightCodeTheme = require('prism-react-renderer').themes.vsDark;
 const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;
 const latestReleasePlugin = require('./plugins/fetch-latest-release');
+const remarkStackExample = require('./plugins/remark-stack-example');
 
 const BASE_URL = '';
 
@@ -191,6 +192,7 @@ const config = {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
                     exclude: ['README.md'],
+                    beforeDefaultRemarkPlugins: [remarkStackExample],
                 },
                 blog: {
                     routeBasePath: 'changelog',
