@@ -2,7 +2,7 @@
 title: Component Overrides
 sidebar_position: 14
 sidebar_label: Component Overrides
-description: Component Overrides Atmos Design Pattern
+description: Use overrides to apply configuration to a specific group of components without affecting others
 ---
 import File from '@site/src/components/File'
 import PillBox from '@site/src/components/PillBox'
@@ -11,392 +11,154 @@ import Intro from '@site/src/components/Intro'
 <PillBox>Atmos Design Pattern</PillBox>
 
 <Intro>
-The **Component Overrides** Design Pattern describes the mechanism of modifying and overriding the configuration and behavior of groups of Atmos components in the current scope. This is achieved by using the `overrides` section in Atmos stack manifests.
+The **Component Overrides** pattern lets you apply configuration to a specific group of components without affecting other components in the same stack.
 </Intro>
 
-:::tip
-Refer to [Component Overrides](/stacks/overrides) for more information on the `overrides` section
-:::
+## The Problem
 
-## Use-cases
+When you set `vars` at the stack level, it applies to **every component** in the final merged stack:
 
-Use the **Component Overrides** pattern when:
-
-- You need to modify or override the configuration and behavior of groups of Atmos components. It is handy to "override" settings when dealing with multiple levels of inheritance.
-
-- Different people or teams need to manage groups of Atmos components
-
-- You want to keep the configurations of the groups of Atmos components [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
-
-# Benefits
-
-The **Component Overrides** pattern provides the following benefits:
-
-- Allows to modify or override the configuration and behavior of groups of Atmos components without affecting other groups of Atmos components
-
-- Makes the configurations of groups of Atmos components more straightforward to understand and [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
-
-
-## Example
-
-:::note
-The **Component Overrides** Design Pattern can be applied to the configuration structures described by
-the [Layered Stack Configuration](/design-patterns/stack-organization/layered-stack-configuration) Atmos Design Pattern.
-:::
-
-In the following structure, we have many different Terraform components (Terraform root modules) in the `components/terraform` folder.
-
-In the `stacks/catalog` folder, we define the defaults for each component using the [Component Catalog](/design-patterns/component-catalog) Atmos
-Design Pattern.
-
-In the `stacks/layers` folder, we define the following layers (groups of components), and import the related components into the layer manifests:
-
-- `load-balancers.yaml`
-- `data.yaml`
-- `dns.yaml`
-- `logs.yaml`
-- `notifications.yaml`
-- `firewalls.yaml`
-- `networking.yaml`
-- `eks.yaml`
-
-We use the `terraform.overrides` section in each layer manifest to override the configurations of all the components in the layer (all Terraform
-components in the layer will get the `Layer` and `Team` tags).
-
-Finally, we import all the layer manifests into the top-level stacks.
-
-```console
-   │   # Centralized stacks configuration (stack manifests)
-   ├── stacks
-   │   ├── catalog  # component-specific defaults
-   │   │   ├── alb
-   │   │   │   └── defaults.yaml
-   │   │   ├── aurora-postgres
-   │   │   │   └── defaults.yaml
-   │   │   ├── dns
-   │   │   │   └── defaults.yaml
-   │   │   ├── eks
-   │   │   │   └── defaults.yaml
-   │   │   ├── efs
-   │   │   │   └── defaults.yaml
-   │   │   ├── msk
-   │   │   │   └── defaults.yaml
-   │   │   ├── ses
-   │   │   │   └── defaults.yaml
-   │   │   ├── sns-topic
-   │   │   │   └── defaults.yaml
-   │   │   ├── network-firewall
-   │   │   │   └── defaults.yaml
-   │   │   ├── network-firewall-logs-bucket
-   │   │   │   └── defaults.yaml
-   │   │   ├── waf
-   │   │   │   └── defaults.yaml
-   │   │   ├── vpc
-   │   │   │   └── defaults.yaml
-   │   │   └── vpc-flow-logs-bucket
-   │   │       └── defaults.yaml
-   │   ├── layers  # grouping of components by category/function
-   │   │   ├── load-balancers.yaml
-   │   │   ├── data.yaml
-   │   │   ├── dns.yaml
-   │   │   ├── logs.yaml
-   │   │   ├── notifications.yaml
-   │   │   ├── firewalls.yaml
-   │   │   ├── networking.yaml
-   │   │   └── eks.yaml
-   │   ├── mixins
-   │   │   ├── tenant  # tenant-specific defaults
-   │   │   │   └── plat.yaml
-   │   │   ├── region  # region-specific defaults
-   │   │   │   ├── us-east-2.yaml
-   │   │   │   └── us-west-2.yaml
-   │   │   └── stage  # stage-specific defaults
-   │   │       ├── dev.yaml
-   │   │       ├── staging.yaml
-   │   │       └── prod.yaml
-   │   └── orgs  # Organizations
-   │       └── acme
-   │           ├── _defaults.yaml
-   │           └── plat  # 'plat' represents the "Platform" OU (a.k.a tenant)
-   │               ├── _defaults.yaml
-   │               ├── dev
-   │               │   ├── _defaults.yaml
-   │               │   ├── global-region.yaml
-   │               │   ├── us-east-2.yaml
-   │               │   └── us-west-2.yaml
-   │               ├── staging
-   │               │   ├── _defaults.yaml
-   │               │   ├── global-region.yaml
-   │               │   ├── us-east-2.yaml
-   │               │   └── us-west-2.yaml
-   │               └── prod
-   │                   ├── _defaults.yaml
-   │                   ├── global-region.yaml
-   │                   ├── us-east-2.yaml
-   │                   └── us-west-2.yaml
-   │   # Centralized components configuration
-   └── components
-       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
-           ├── alb
-           ├── aurora-postgres
-           ├── dns
-           ├── eks
-           ├── efs
-           ├── msk
-           ├── ses
-           ├── sns-topic
-           ├── network-firewall
-           ├── network-firewall-logs-bucket
-           ├── waf
-           ├── vpc
-           └── vpc-flow-logs-bucket
-```
-
-Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
-
-```yaml title="atmos.yaml"
-components:
-  terraform:
-    base_path: "components/terraform"
-
-stacks:
-  base_path: "stacks"
-  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
-  included_paths:
-    # Tell Atmos to search for the top-level stack manifests in the `orgs` folder and its sub-folders
-    - "orgs/**/*"
-  excluded_paths:
-    # Tell Atmos that the `defaults` folder and all sub-folders don't contain top-level stack manifests
-    - "defaults/**/*"
-
-schemas:
-  jsonschema:
-    base_path: "stacks/schemas/jsonschema"
-  opa:
-    base_path: "stacks/schemas/opa"
-  atmos:
-    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
-```
-
-Add the following configuration to the `stacks/layers/load-balancers.yaml` layer manifest:
-
-```yaml title="stacks/layers/load-balancers.yaml"
+```yaml title="stacks/deploy/prod.yaml"
 import:
-  # Import the related component manifests into this layer manifest
-  - catalog/alb/defaults
-  # Import other Load Balancer components
+  - teams/platform    # imports: vpc, eks, rds
+  - teams/security    # imports: waf, security-groups
 
-# Override the configurations of all the components in this layer
-# All Terraform components in this layer will get the 'Layer' and 'Team' tags
+vars:
+  environment: prod
+  # This tag applies to ALL components (vpc, eks, rds, waf, security-groups)
+  tags:
+    Team: Platform
+```
+
+But what if the Platform team and Security team each want their own `Team` tag? You can't use regular `vars` because it applies globally.
+
+## The Solution: Overrides
+
+The `overrides` section only applies to components defined in the **current manifest and its imports**—not the entire final stack.
+
+<File title="stacks/teams/platform.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+  - catalog/eks/defaults
+  - catalog/rds/defaults
+
+# Only applies to vpc, eks, rds (not security team's components)
 terraform:
   overrides:
     vars:
       tags:
-        Layer: load-balancers
-        Team: Load balancer managers
+        Team: Platform
 ```
+</File>
 
-Add the following configuration to the `stacks/layers/data.yaml` layer manifest:
-
-```yaml title="stacks/layers/data.yaml"
+<File title="stacks/teams/security.yaml">
+```yaml
 import:
-  # Import the related component manifests into this layer manifest
-  - catalog/aurora-postgres/defaults
-  - catalog/msk/defaults
-  - catalog/efs/defaults
-  # Import other Data components
+  - catalog/waf/defaults
+  - catalog/security-groups/defaults
 
-# Override the configurations of all the components in this layer
-# All Terraform components in this layer will get the 'Layer' and 'Team' tags
+# Only applies to waf, security-groups (not platform team's components)
+terraform:
+  overrides:
+    vars:
+      tags:
+        Team: Security
+```
+</File>
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+import:
+  - teams/platform   # vpc, eks, rds get Team: Platform
+  - teams/security   # waf, security-groups get Team: Security
+  - mixins/stage/prod
+
+vars:
+  environment: prod
+```
+</File>
+
+Now each team's components get their own `Team` tag, even though they're all in the same final stack.
+
+## When to Use Overrides
+
+| Scenario | Use `vars` | Use `overrides` |
+|----------|-----------|-----------------|
+| Setting values for ALL components | ✓ | |
+| Setting values for a SUBSET of components | | ✓ |
+| Team-specific configuration | | ✓ |
+| Layer-specific settings (network, data, compute) | | ✓ |
+
+## Overrides vs Inheritance
+
+- **Inheritance** (`vars`): Configuration flows down and applies to all components in the final stack
+- **Overrides**: Configuration is scoped to components in the current file and its imports only
+
+Think of it this way:
+- `vars` = "Apply this to everything"
+- `overrides` = "Apply this only to my components"
+
+## Example: Layer-Based Overrides
+
+When using [Layered Stack Configuration](/design-patterns/stack-organization/layered-stack-configuration), overrides let each layer tag its components:
+
+<File title="stacks/layers/network.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+  - catalog/transit-gateway/defaults
+
+terraform:
+  overrides:
+    vars:
+      tags:
+        Layer: network
+```
+</File>
+
+<File title="stacks/layers/data.yaml">
+```yaml
+import:
+  - catalog/rds/defaults
+  - catalog/elasticache/defaults
+
 terraform:
   overrides:
     vars:
       tags:
         Layer: data
-        Team: Data managers
 ```
+</File>
 
-Add the following configuration to the `stacks/layers/dns.yaml` layer manifest:
+## What You Can Override
 
-```yaml title="stacks/layers/dns.yaml"
-import:
-  # Import the related component manifests into this layer manifest
-  - catalog/dns/defaults
-  # Import other DNS components
+The `overrides` section supports:
 
-# Override the configurations of all the components in this layer
-# All Terraform components in this layer will get the 'Layer' and 'Team' tags
+- `vars` - Input variables
+- `env` - Environment variables
+- `settings` - Component settings
+- `command` - The executable to use (e.g., `tofu` instead of `terraform`)
+- `providers` - Terraform provider configuration
+- `hooks` - Lifecycle hooks
+
+```yaml
 terraform:
   overrides:
     vars:
       tags:
-        Layer: dns
-        Team: DNS managers
+        Team: Platform
+    settings:
+      spacelift:
+        autodeploy: true
+    command: tofu  # Use OpenTofu for these components
 ```
-
-Add the following configuration to the `stacks/layers/logs.yaml` layer manifest:
-
-```yaml title="stacks/layers/logs.yaml"
-import:
-  # Import the related component manifests into this layer manifest
-  - catalog/network-firewall-logs-bucket/defaults
-  - catalog/vpc-flow-logs-bucket/defaults
-  # Import other Logs components
-
-# Override the configurations of all the components in this layer
-# All Terraform components in this layer will get the 'Layer' and 'Team' tags
-terraform:
-  overrides:
-    vars:
-      tags:
-        Layer: logs
-        Team: Log managers
-```
-
-Add the following configuration to the `stacks/layers/notifications.yaml` layer manifest:
-
-```yaml title="stacks/layers/notifications.yaml"
-import:
-  # Import the related component manifests into this layer manifest
-  - catalog/ses/defaults
-  - catalog/sns-topic/defaults
-  # Import other Notification components
-
-# Override the configurations of all the components in this layer
-# All Terraform components in this layer will get the 'Layer' and 'Team' tags
-terraform:
-  overrides:
-    vars:
-      tags:
-        Layer: notifications
-        Team: Notification managers
-```
-
-Add the following configuration to the `stacks/layers/firewalls.yaml` layer manifest:
-
-```yaml title="stacks/layers/firewalls.yaml"
-import:
-  # Import the related component manifests into this layer manifest
-  - catalog/network-firewall/defaults
-  - catalog/waf/defaults
-  # Import other Firewall components
-
-# Override the configurations of all the components in this layer
-# All Terraform components in this layer will get the 'Layer' and 'Team' tags
-terraform:
-  overrides:
-    vars:
-      tags:
-        Layer: firewalls
-        Team: Firewall managers
-```
-
-Add the following configuration to the `stacks/layers/networking.yaml` layer manifest:
-
-```yaml title="stacks/layers/networking.yaml"
-import:
-  # Import the related component manifests into this layer manifest
-  - catalog/vpc/defaults
-  # Import other Networking components
-
-# Override the configurations of all the components in this layer
-# All Terraform components in this layer will get the 'Layer' and 'Team' tags
-terraform:
-  overrides:
-    vars:
-      tags:
-        Layer: networking
-        Team: Networking managers
-```
-
-Add the following configuration to the `stacks/layers/eks.yaml` layer manifest:
-
-```yaml title="stacks/layers/eks.yaml"
-import:
-  # Import the related component manifests into this layer manifest
-  - catalog/eks/defaults
-
-# Override the configurations of all the components in this layer
-# All Terraform components in this layer will get the 'Layer' and 'Team' tags
-terraform:
-  overrides:
-    vars:
-      tags:
-        Layer: eks
-        Team: EKS cluster managers
-```
-
-Import the required layers into the `stacks/orgs/acme/plat/dev/us-east-2.yaml` top-level stack manifest:
-
-```yaml title="stacks/orgs/acme/plat/dev/us-east-2.yaml"
-import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-east-2` manifests
-  # define the top-level Atmos stack `plat-ue2-dev`
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-east-2
-  # Import the layers (groups of components)
-  - layers/load-balancers
-  - layers/data
-  - layers/dns
-  - layers/logs
-  - layers/notifications
-  - layers/firewalls
-  - layers/networking
-  - layers/eks
-```
-
-Import the required layers into the `stacks/orgs/acme/plat/dev/us-west-2.yaml` top-level stack manifest:
-
-```yaml title="stacks/orgs/acme/plat/dev/us-west-2.yaml"
-import:
-  # The `orgs/acme/plat/dev/_defaults` and `mixins/region/us-west-2` manifests
-  # define the top-level Atmos stack `plat-uw2-dev`
-  - orgs/acme/plat/dev/_defaults
-  - mixins/region/us-west-2
-  # Import the layers (groups of components)
-  - layers/load-balancers
-  - layers/data
-  - layers/dns
-  - layers/logs
-  - layers/notifications
-  - layers/firewalls
-  - layers/networking
-  - layers/eks
-```
-
-Import the required layers into the `stacks/orgs/acme/plat/prod/us-east-2.yaml` top-level stack manifest:
-
-```yaml title="stacks/orgs/acme/plat/prod/us-east-2.yaml"
-import:
-  # The `orgs/acme/plat/prod/_defaults` and `mixins/region/us-east-2` manifests
-  # define the top-level Atmos stack `plat-ue2-prod`
-  - orgs/acme/plat/prod/_defaults
-  - mixins/region/us-east-2
-  # Import the layers (groups of components)
-  - layers/load-balancers
-  - layers/data
-  - layers/dns
-  - layers/logs
-  - layers/notifications
-  - layers/firewalls
-  - layers/networking
-  - layers/eks
-```
-
-Similarly, import the required layers into the other top-level stacks for the other organizations, OUs/tenants, accounts and regions.
-Make sure to import only the layers that define the component that need to be provisioned in the stacks.
-
-After the Atmos components are provisioned in the top-level stacks, all Terraform components will get the `Layer` and `Team` tags from the
-corresponding layers.
 
 ## Related Patterns
 
-- [Organizational Structure Configuration](/design-patterns/stack-organization)
-- [Layered Stack Configuration](/design-patterns/stack-organization/layered-stack-configuration)
-- [Component Catalog](/design-patterns/component-catalog)
-- [Component Archetypes](/design-patterns/component-catalog/with-mixins)
+- [Layered Stack Configuration](/design-patterns/stack-organization/layered-stack-configuration) - Group components by function
+- [Component Catalog](/design-patterns/component-catalog) - Define component defaults
 
 ## References
 
-- [Catalogs](/stacks/catalogs)
-- [Mixins](/stacks/mixins)
+- [Overrides Configuration](/stacks/overrides) - Complete reference documentation
