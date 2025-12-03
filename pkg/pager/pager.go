@@ -1,6 +1,7 @@
 package pager
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/charmbracelet/bubbles/viewport"
