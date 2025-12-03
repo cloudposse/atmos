@@ -498,109 +498,27 @@ func findAvailableShell() string {
 }
 
 // mergeEnvVars adds a list of environment variables to the system environment variables.
-//
-// This is necessary because:
-//  1. We need to preserve existing system environment variables (PATH, HOME, etc.)
-//  2. Atmos-specific variables (TF_CLI_ARGS, ATMOS_* vars) must take precedence
-//  3. For conflicts, such as TF_CLI_ARGS_*, we need special handling to ensure proper merging rather than simple overwriting
+// Delegates to envpkg.MergeSystemEnv which handles TF_CLI_ARGS_* special handling.
 func mergeEnvVars(componentEnvList []string) []string {
-	return mergeEnvVarsInternal(componentEnvList, nil)
+	return envpkg.MergeSystemEnv(componentEnvList)
 }
 
 // mergeEnvVarsWithGlobal is like mergeEnvVars but also includes global env from atmos.yaml.
-// Priority order: system env < global env (atmos.yaml) < component env.
+// Delegates to envpkg.MergeSystemEnvWithGlobal.
 func mergeEnvVarsWithGlobal(componentEnvList []string, globalEnv map[string]string) []string {
-	return mergeEnvVarsInternal(componentEnvList, globalEnv)
-}
-
-// mergeEnvVarsInternal is the shared implementation for mergeEnvVars and mergeEnvVarsWithGlobal.
-// It handles merging system env, optional global env, and component env with TF_CLI_ARGS_* special handling.
-func mergeEnvVarsInternal(componentEnvList []string, globalEnv map[string]string) []string {
-	envMap := make(map[string]string)
-
-	// Parse system environment variables.
-	for _, env := range os.Environ() {
-		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
-		}
-	}
-
-	// Apply global env from atmos.yaml if provided (can override system env).
-	for k, v := range globalEnv {
-		envMap[k] = v
-	}
-
-	// Merge with new, Atmos defined environment variables (highest priority).
-	for _, env := range componentEnvList {
-		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
-			// Special handling for Terraform CLI arguments environment variables.
-			if strings.HasPrefix(parts[0], "TF_CLI_ARGS_") {
-				// For TF_CLI_ARGS_* variables, we need to append new values to any existing values.
-				if existing, exists := envMap[parts[0]]; exists {
-					// Put the new, Atmos defined value first so it takes precedence.
-					envMap[parts[0]] = parts[1] + " " + existing
-				} else {
-					// No existing value, just set the new value.
-					envMap[parts[0]] = parts[1]
-				}
-			} else {
-				// For all other environment variables, just override any existing value.
-				envMap[parts[0]] = parts[1]
-			}
-		}
-	}
-
-	// Convert back to slice.
-	merged := make([]string, 0, len(envMap))
-	for k, v := range envMap {
-		log.Trace("Setting ENV var", "key", k, "value", v)
-		merged = append(merged, k+"="+v)
-	}
-	return merged
+	return envpkg.MergeSystemEnvWithGlobal(componentEnvList, globalEnv)
 }
 
 // mergeEnvVarsSimple adds a list of environment variables to the system environment variables without special handling.
+// Delegates to envpkg.MergeSystemEnvSimple.
 func mergeEnvVarsSimple(newEnvList []string) []string {
-	return mergeEnvVarsSimpleInternal(newEnvList, nil)
+	return envpkg.MergeSystemEnvSimple(newEnvList)
 }
 
 // mergeEnvVarsSimpleWithGlobal is like mergeEnvVarsSimple but includes global env from atmos.yaml.
-// Priority order: system env < global env (atmos.yaml) < new env list.
+// Delegates to envpkg.MergeSystemEnvSimpleWithGlobal.
 func mergeEnvVarsSimpleWithGlobal(newEnvList []string, globalEnv map[string]string) []string {
-	return mergeEnvVarsSimpleInternal(newEnvList, globalEnv)
-}
-
-// mergeEnvVarsSimpleInternal is the shared implementation for mergeEnvVarsSimple and mergeEnvVarsSimpleWithGlobal.
-// It handles merging system env, optional global env, and new env without TF_CLI_ARGS_* special handling.
-func mergeEnvVarsSimpleInternal(newEnvList []string, globalEnv map[string]string) []string {
-	envMap := make(map[string]string)
-
-	// Parse system environment variables.
-	for _, env := range os.Environ() {
-		if parts := strings.SplitN(env, envVarSeparator, 2); len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
-		}
-	}
-
-	// Apply global env from atmos.yaml if provided (can override system env).
-	for k, v := range globalEnv {
-		envMap[k] = v
-	}
-
-	// Merge with new environment variables (override any existing).
-	for _, env := range newEnvList {
-		if parts := strings.SplitN(env, envVarSeparator, 2); len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
-		}
-	}
-
-	// Convert back to slice.
-	merged := make([]string, 0, len(envMap))
-	for k, v := range envMap {
-		log.Trace("Setting ENV var", "key", k, "value", v)
-		merged = append(merged, k+envVarSeparator+v)
-	}
-	return merged
+	return envpkg.MergeSystemEnvSimpleWithGlobal(newEnvList, globalEnv)
 }
 
 // printShellEnterMessage prints a user-facing message when entering an Atmos-managed shell.
