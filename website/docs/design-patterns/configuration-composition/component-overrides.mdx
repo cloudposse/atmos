@@ -34,7 +34,11 @@ But what if the Platform team and Security team each want their own `Team` tag? 
 
 ## The Solution: Overrides
 
-The `overrides` section only applies to components defined in the **current manifest and its imports**—not the entire final stack.
+The `overrides` section is **scoped to the current file** and its imports. It doesn't leak into sibling imports or get inherited by files that import this one.
+
+:::tip Key Insight
+**Overrides are file-scoped and don't get inherited.** They only apply to components visible from that file's import tree.
+:::
 
 <File title="stacks/teams/platform.yaml">
 ```yaml
@@ -90,14 +94,31 @@ Now each team's components get their own `Team` tag, even though they're all in 
 | Team-specific configuration | | ✓ |
 | Layer-specific settings (network, data, compute) | | ✓ |
 
-## Overrides vs Inheritance
+## Overrides vs Vars
 
-- **Inheritance** (`vars`): Configuration flows down and applies to all components in the final stack
-- **Overrides**: Configuration is scoped to components in the current file and its imports only
+| Aspect | `vars` | `overrides` |
+|--------|--------|-------------|
+| **Scope** | Final merged stack (global) | Current file + its imports only |
+| **Inheritance** | Gets inherited by importing files | Does NOT get inherited |
+| **Visibility** | Affects ALL components | Only affects components "visible" from this file |
 
 Think of it this way:
-- `vars` = "Apply this to everything"
-- `overrides` = "Apply this only to my components"
+- `vars` = "Apply this to the final result"
+- `overrides` = "Apply this only to what I can see from here"
+
+```
+platform.yaml
+├── imports: vpc, eks, rds
+├── overrides: Team=Platform  ← only sees vpc, eks, rds
+│
+security.yaml
+├── imports: waf, firewall
+├── overrides: Team=Security  ← only sees waf, firewall
+│
+prod.yaml
+├── imports: platform.yaml, security.yaml
+├── vars: env=prod  ← sees ALL components (vpc, eks, rds, waf, firewall)
+```
 
 ## Example: Layer-Based Overrides
 
