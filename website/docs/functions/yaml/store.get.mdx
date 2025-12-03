@@ -78,6 +78,11 @@ If you need to retrieve values that follow the Atmos stack/component/key pattern
 [`!store`](/functions/yaml/store) function instead, as it provides better integration with Atmos component dependencies.
 :::
 
+:::note Type-Aware Merging
+Atmos supports type-aware merging of YAML functions and concrete values, allowing them to coexist in the inheritance chain without type conflicts.
+See the full explanation: [YAML Function Merging](/reference/yaml-function-merging)
+:::
+
 ### Using YQ Expressions
 
 You can use [YQ](https://mikefarah.gitbook.io/yq) expressions to extract specific values
@@ -85,13 +90,13 @@ from complex data structures:
 
 <File title="stack.yaml">
 ```yaml
-# Extract a field from a JSON object
+# Extract database host from app-config in Redis
 database_host: !store.get redis app-config | query .database.host
 
-# Get the first item from an array
+# Get the first availability zone from Azure Key Vault array
 primary_zone: !store.get azure-keyvault availability-zones | query .[0]
 
-# Extract nested values with a default
+# Extract API key from SSM config with empty object fallback
 api_key: !store.get ssm /external/config | default "{}" | query .api.key
 ```
 </File>

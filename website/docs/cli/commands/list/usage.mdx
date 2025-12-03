@@ -149,6 +149,54 @@ The appearance of the output table depends on whether `atmos` detects an interac
   - Produces a simpler, machine-readable format suitable for scripting or automation.
   - Ensures consistent structure for programmatic parsing.
 
+## Authentication
+
+All `atmos list` subcommands support authentication via the `--identity` flag or `ATMOS_IDENTITY` environment variable. This is useful when stack configurations use YAML template functions (e.g., `!terraform.state`, `!terraform.output`) that require cloud provider credentials.
+
+### Using the `--identity` Flag
+
+```shell
+# Use a specific identity
+atmos list stacks --identity my-aws-identity
+atmos list components -s tenant1-ue2-dev -i my-aws-identity
+
+# Disable authentication explicitly (use AWS SDK defaults)
+atmos list instances --identity=false
+```
+
+### Using Environment Variables
+
+```shell
+# Set identity via environment variable
+ATMOS_IDENTITY=my-aws-identity atmos list stacks
+
+# Using the environment variable with a different command
+ATMOS_IDENTITY=my-aws-identity atmos list components
+```
+
+### Stack-Level Default Identity
+
+When neither the `--identity` flag nor environment variable is set, Atmos automatically loads your stack configuration files to find a default identity configured with `default: true`:
+
+```yaml
+# In stacks/orgs/acme/_defaults.yaml
+auth:
+  identities:
+    my-default-identity:
+      default: true  # This identity will be used automatically
+```
+
+For more details on authentication, refer to [Authentication](/cli/commands/auth/usage).
+
+## Global Flags
+
+All `atmos list` subcommands support these flags inherited from the parent command:
+
+<dl>
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before executing the command.<br/>This is required when YAML template functions need to access remote resources requiring authentication.<br/>`atmos list stacks --identity my-aws-identity`</dd>
+</dl>
+
 ## Troubleshooting & Tips
 
 - **Blank Columns:** If a column appears empty, double-check the template variable name (`{{ .variable }}`) against the [YAML Template Syntax](#yaml-template-syntax) section for the specific command. Ensure the data context actually contains that variable for the items being listed.
